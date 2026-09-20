@@ -1,7 +1,7 @@
 import { LOGIN_STREAM, type PickMeta } from "@toyon/shared";
 import { Fragment, memo, type ReactNode, useMemo, useRef, useState } from "react";
 import { copyText } from "../../state/actions/deps.ts";
-import { openFile } from "../../state/actions/file.ts";
+import { openFile, openFolder } from "../../state/actions/file.ts";
 import { type ChatLink, messageItems, pathItems } from "../../state/actions/message.ts";
 import { archiveWorktrees } from "../../state/actions/worktree.ts";
 import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
@@ -52,6 +52,10 @@ function openChatLink(
   if (link?.kind !== "file" || !worktreeId) return;
   const target = link.file;
   e.preventDefault();
+  if (target.folder) {
+    openFolder(deps, { worktreeId, path: target.path });
+    return;
+  }
   // a message names a file because the agent touched it, so the view is left unsaid and the read
   // opens the diff when there is one, the file otherwise. A line is an address into the file.
   openFile(deps, {

@@ -34,7 +34,7 @@ export function pasteItems(paste: { text?: string; href?: string }, ui: ChipUi =
  * path on the daemon's disk outside it, so the menu is about the file rather than the address */
 export type ChatLink =
   | { kind: "out"; href: string }
-  | { kind: "file"; file: { path: string; line?: number } }
+  | { kind: "file"; file: { path: string; line?: number; folder?: true } }
   | { kind: "path"; path: string };
 
 /** a link out of the chat: the page outside the shell, and its address as text */
@@ -48,14 +48,20 @@ function linkItems(href: string): MenuItem[] {
 export function messageItems(
   item: { kind: "user" | "assistant" | "error"; text: string },
   worktreeId: string | null,
-  { dispatch }: Deps,
+  { dispatch, sock }: Deps,
   at: { link?: ChatLink | null; dir?: string | null } = {},
 ): MenuEntry[] {
   const link = at.link;
+  // a file or folder of this worktree can be shown in Finder; a path outside it names no worktree
+  // for the daemon to resolve it in
+  const reveal =
+    link?.kind === "file" && worktreeId
+      ? () => sock?.send({ t: "reveal", worktreeId, path: link.file.path })
+      : undefined;
   const lead: MenuItem[][] = !link
     ? []
     : link.kind === "file"
-      ? pathGroups(link.file.path, at.dir ?? null)
+      ? pathGroups(link.file.path, at.dir ?? null, reveal)
       : link.kind === "path"
         ? pathGroups(link.path, at.dir ?? null)
         : [linkItems(link.href)];
@@ -71,12 +77,13 @@ export function messageItems(
   return grouped([...lead, copy, again]);
 }
 
-/** a path a row names, as the groups every such row shares: the editors that can open it, then
- * the path as text. A relative path is read in `dir`, since the editors want a file on disk, and
- * the path copied is the one the row shows. */
-function pathGroups(path: string, dir: string | null): MenuItem[][] {
+/** a path a row names, as the groups every such row shares: the editors that can open it, and the
+ * Finder reveal when the caller can ask the daemon for one, then the path as text. A relative path
+ * is read in `dir`, since the editors want a file on disk, and the path copied is the one the row
+ * shows. */
+function pathGroups(path: string, dir: string | null, onReveal?: () => void): MenuItem[][] {
   const abs = path.startsWith("/") ? path : dir ? `${dir}/${path}` : null;
-  const open: MenuItem[] = abs ? editorItems(abs) : [];
+  const open: MenuItem[] = abs ? editorItems(abs, onReveal) : [];
   return [open, [{ id: "copy-path", label: "copy path", onClick: () => copyText(path) }]];
 }
 

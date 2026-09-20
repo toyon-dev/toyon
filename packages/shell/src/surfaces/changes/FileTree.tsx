@@ -102,9 +102,19 @@ export function FileTree({
 
   // The cursor is a path, since a working agent keeps adding rows above it. When its row is gone
   // (a folder over it closed), it stands on the nearest folder still showing.
-  const [cursor, setCursor] = useState<string | null>(null);
+  // A folder a chat link opened: the store has opened the folders over it, so its row shows, and
+  // the cursor starts there. Set during render rather than in an effect, since the keyboard is on
+  // its way to the tree from the same action and an effect would land after the focus that reads
+  // the cursor. A new worktree starts with none.
+  const reveal = useStore((s) => s.treeReveal);
+  const linked = reveal && reveal.worktreeId === worktreeId ? reveal : null;
+  const [cursor, setCursor] = useState<string | null>(() => linked?.path ?? null);
+  const [seen, setSeen] = useState({ worktreeId, linked });
+  if (seen.worktreeId !== worktreeId || seen.linked !== linked) {
+    setSeen({ worktreeId, linked });
+    setCursor(linked?.path ?? null);
+  }
   const [focused, setFocused] = useState(false);
-  useOnChange([worktreeId], () => setCursor(null));
   const sel = useMemo(() => {
     if (cursor === null) return -1;
     const at = rows.findIndex((r) => r.path === cursor);
@@ -243,8 +253,12 @@ export function FileTree({
       onKeyDown={onKeyDown}
       onFocus={() => {
         setFocused(true);
-        // the keyboard arriving picks up at the file in the editor, or the top
-        if (sel < 0) setCursor(openPath && rows.some((r) => r.path === openPath) ? openPath : (rows[0]?.path ?? null));
+        // the keyboard arriving with no cursor picks up at the file in the editor, or the top. A
+        // cursor whose row is not showing is kept: a chat link's folder is the cursor before the
+        // listing that holds it lands, and a row that closed over it stands in through `sel`.
+        if (cursor === null) {
+          setCursor(openPath && rows.some((r) => r.path === openPath) ? openPath : (rows[0]?.path ?? null));
+        }
       }}
       onBlur={(e) => !e.currentTarget.contains(e.relatedTarget) && setFocused(false)}
       // the row under a press becomes the cursor before the focus lands, so the mark never lights a

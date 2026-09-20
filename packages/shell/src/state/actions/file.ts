@@ -52,6 +52,12 @@ export function openFile({ dispatch }: Deps, { focus = true, ...target }: OpenRe
   dispatch({ a: "open-file", v: { ...target, focus, seq: nextSeq() } });
 }
 
+/** Show a folder in the files tab, open, with the tree's cursor on it. The editor reads files and
+ * has nothing to show for a folder; the tree is where one is looked into. */
+export function openFolder({ dispatch }: Deps, target: { worktreeId: string; path: string }) {
+  dispatch({ a: "tree-reveal", ...target });
+}
+
 /** a file in the changes panel: show it in the editor pane as its diff or as the file, open it
  * somewhere else, copy where it is, and for an uncommitted one, throw it away. `showing` is the view the pane already
  * has this file in, which the menu swaps rather than reads again; `ref` is the commit a history row

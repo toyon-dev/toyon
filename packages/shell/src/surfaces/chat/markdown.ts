@@ -57,7 +57,7 @@ purify.addHook("afterSanitizeAttributes", (node) => {
   const file = rendering?.fileRoot ? worktreeLink(rendering.fileRoot, href) : null;
   if (file) {
     node.classList.add("file-link");
-    node.setAttribute("data-tip", `${file.path}${file.line ? `:${file.line}` : ""}`);
+    node.setAttribute("data-tip", file.folder ? `${file.path}/` : `${file.path}${file.line ? `:${file.line}` : ""}`);
     node.setAttribute("data-tip-placement", "follow");
   } else if (href) {
     const path = outsidePath(href);

@@ -518,6 +518,9 @@ export interface State {
    * open file reveals, which the tree keeps to itself: a few jumps with ⌘P must not leave the
    * whole tree open. Dropped with the worktree. */
   treeOpen: Record<string, string[]>;
+  /** the folder a chat link last opened in the files tab, for the tree to put its cursor on. A
+   * request like `focusChanges`: a new object each time, so the same folder twice still moves. */
+  treeReveal: { worktreeId: string; path: string } | null;
   /** per repo: the ref palette's last reply, with the query it answered so a stale one is told
    * from the one the person is waiting on. Repo-scoped, since a ref is not a worktree's. */
   refs: Record<string, { query: string; refs: RefHit[] }>;
@@ -722,6 +725,7 @@ export function initialState(opts: InitialOpts): State {
     discoveredOpen: opts.storedDiscoveredOpen ?? {},
     archivedOpen: opts.storedArchivedOpen ?? {},
     treeOpen: opts.storedTreeOpen ?? {},
+    treeReveal: null,
     refs: {},
     chats: {},
     archived: {},
@@ -1141,6 +1145,8 @@ export type Action =
   | { a: "toggle-discovered" }
   /** a folder in the files tab opened or closed by hand */
   | { a: "tree-folder"; worktreeId: string; path: string; open: boolean }
+  /** a folder named in the chat: shown in the files tab, opened along with what holds it */
+  | { a: "tree-reveal"; worktreeId: string; path: string }
   /** the files were asked for under this key; the same key again asks nothing */
   | { a: "files-asked"; worktreeId: string; key: string }
   /** open or close the active project's archived section */
@@ -1601,6 +1607,24 @@ function reduce(s: State, action: Action): State {
       if (now.length > 0) treeOpen[action.worktreeId] = now;
       else delete treeOpen[action.worktreeId];
       return { ...s, treeOpen };
+    }
+    case "tree-reveal": {
+      const was = s.treeOpen[action.worktreeId] ?? [];
+      // the folder and every folder over it, outermost first, so the row is on screen
+      const chain: string[] = [];
+      for (let i = action.path.indexOf("/"); i !== -1; i = action.path.indexOf("/", i + 1)) {
+        chain.push(action.path.slice(0, i));
+      }
+      chain.push(action.path);
+      const opened = chain.filter((p) => !was.includes(p));
+      const treeOpen = opened.length ? { ...s.treeOpen, [action.worktreeId]: [...was, ...opened] } : s.treeOpen;
+      return {
+        ...withLayout(s, { changes: true, changesTab: "files" }),
+        changesAuto: false,
+        focusChanges: s.focusChanges + 1,
+        treeOpen,
+        treeReveal: { worktreeId: action.worktreeId, path: action.path },
+      };
     }
     case "files-asked":
       return withLocal(s, action.worktreeId, (l) => ({ ...l, filesFor: action.key }));

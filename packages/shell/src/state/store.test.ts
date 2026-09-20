@@ -1930,6 +1930,19 @@ describe("discovered worktrees", () => {
     expect(shut.treeOpen).toEqual({});
   });
 
+  test("a folder named in the chat opens in the files tab along with the folders over it", () => {
+    const one = run([{ a: "tree-folder", worktreeId: "w1", path: "src", open: true }]);
+    const shown = run([{ a: "tree-reveal", worktreeId: "w1", path: "src/ui/menu" }], one);
+    expect(shown.treeOpen.w1).toEqual(["src", "src/ui", "src/ui/menu"]);
+    expect([shown.layout.changes, shown.layout.changesTab]).toEqual([true, "files"]);
+    expect(shown.focusChanges).toBe(one.focusChanges + 1);
+    expect(shown.treeReveal).toEqual({ worktreeId: "w1", path: "src/ui/menu" });
+    // the same folder again still asks the tree to point at it
+    const again = run([{ a: "tree-reveal", worktreeId: "w1", path: "src/ui/menu" }], shown);
+    expect(again.treeOpen).toBe(shown.treeOpen);
+    expect(again.treeReveal).not.toBe(shown.treeReveal);
+  });
+
   test("a remembered tree survives a reload and goes with its worktree", () => {
     const from = initialState({ clientId: ME, storedTreeOpen: { m1: ["src"], gone: ["lib"] } });
     expect(run([helloR(wt("m1", "main"))], from).treeOpen).toEqual({ m1: ["src"] });

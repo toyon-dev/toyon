@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { isItem } from "../../ui/menu.ts";
+import type { Deps } from "./deps.ts";
 import { imageItems, messageItems, pasteItems } from "./message.ts";
 
 // A chip's menu is about the chip: what it holds goes onto the clipboard first, then the ways
@@ -44,6 +45,25 @@ describe("message menus", () => {
       "copy-path",
       "copy",
     ]);
+  });
+
+  test("a worktree file or folder with its checkout on disk: the editors, Finder, then the path", () => {
+    Object.defineProperty(globalThis, "location", { value: { hostname: "localhost" }, configurable: true });
+    const sent: unknown[] = [];
+    const sock = { send: (m: unknown) => sent.push(m) } as unknown as Deps["sock"];
+    const link = { kind: "file", file: { path: "src/ui", folder: true } } as const;
+    const items = messageItems(
+      { kind: "assistant", text: "see" },
+      "w",
+      { sock, dispatch: () => {} },
+      { link, dir: "/p" },
+    );
+    expect(ids(items)).toEqual(["open:zed", "open:vscode", "open:cursor", "reveal", "copy-path", "copy"]);
+    items
+      .filter(isItem)
+      .find((i) => i.id === "reveal")
+      ?.onClick();
+    expect(sent).toEqual([{ t: "reveal", worktreeId: "w", path: "src/ui" }]);
   });
 });
 

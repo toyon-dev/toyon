@@ -24,6 +24,8 @@ export const dirOf = (path: string) => path.slice(0, Math.max(0, path.lastIndexO
 export interface WorktreeLink {
   path: string;
   line?: number;
+  /** the link named a folder, with a trailing slash: it opens in the files tab, not the editor */
+  folder?: true;
 }
 
 /** An absolute link the agent wrote to a file in this worktree, reduced to the path the daemon
@@ -44,8 +46,12 @@ export function worktreeLink(root: string, ref: string): WorktreeLink | null {
 
   const base = root.replace(/\/+$/, "");
   if (!base || !decoded.startsWith(`${base}/`)) return null;
-  const path = decoded.slice(base.length + 1);
+  const folder = decoded.endsWith("/");
+  const path = decoded.slice(base.length + 1).replace(/\/+$/, "");
   if (!path || path.split("/").some((part) => part === "..")) return null;
+  // the daemon reads files, and a folder is not one: the link is worth nothing to the editor, so
+  // it carries no line, and the click opens it where folders open
+  if (folder) return { path, folder: true };
   const lineText = hashLine?.[1] ?? suffixLine?.[1];
   const line = lineText ? Number.parseInt(lineText, 10) : undefined;
   return line && line > 0 ? { path, line } : { path };

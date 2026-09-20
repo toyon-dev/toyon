@@ -37,6 +37,13 @@ describe("a file link in chat", () => {
     expect(worktreeLink(`${root}/`, "/Users/me/project/README.md")).toEqual({ path: "README.md" });
   });
 
+  test("names a folder by its trailing slash, which the editor cannot read", () => {
+    expect(worktreeLink(root, "/Users/me/project/src/ui/")).toEqual({ path: "src/ui", folder: true });
+    expect(worktreeLink(root, "/Users/me/project/src%20two/")).toEqual({ path: "src two", folder: true });
+    // the root itself is the whole tree, which the files tab already shows
+    expect(worktreeLink(root, "/Users/me/project/")).toBeNull();
+  });
+
   test("leaves web, relative and out-of-worktree links to the browser", () => {
     expect(worktreeLink(root, "https://example.com/App.tsx")).toBeNull();
     expect(worktreeLink(root, "src/App.tsx")).toBeNull();

@@ -24,7 +24,7 @@ import {
 import { isInstalledApp } from "../surfaces/util.ts";
 import type { PaneKind } from "../ui/Pane.tsx";
 import { previewBus, togglePick } from "./previewBus.ts";
-import { modifierHeld, type WalkModifier, walkModifier } from "./railPeek.ts";
+import { createWalkPeek } from "./railPeek.ts";
 import { railWalk } from "./railWalk.ts";
 import { unseenJump } from "./unseenJump.ts";
 
@@ -44,27 +44,19 @@ export function useChords() {
   const store = useStoreInstance();
   const sock = useSock();
   useEffect(() => {
-    // The walk's peek (railPeek.ts): the modifier the last walk press rode, while the collapsed
-    // rail is held open for it. The peek lasts exactly as long as that key is down: its keyup
-    // ends it, and so does the first key or pointer event that reports the key up, for a release
-    // that was never seen. Holding the modifier and pressing again keeps the same peek.
-    let peekMod: WalkModifier | null = null;
-    const endPeek = () => {
-      peekMod = null;
-      store.dispatch({ a: "rail-peek", on: false });
-    };
+    // The walk's peek (railPeek.ts): the collapsed rail held open for the modifier the walk rode,
+    // once the hold has earned it. A tap switches and shows nothing; the rail lasts exactly as long
+    // as that key stays down after that: its keyup ends it, and so does the first key or pointer
+    // event that reports the key up, for a release that was never seen.
+    const walkPeek = createWalkPeek((on) => store.dispatch({ a: "rail-peek", on }));
+    const endPeek = walkPeek.end;
     const peek = (e: KeyboardEvent) => {
       // a pinned rail is already wide; the peek is only for the strip
       if (store.getState().railOpen) return;
-      peekMod = walkModifier(e);
-      store.dispatch({ a: "rail-peek", on: true });
+      walkPeek.press(e);
     };
-    const onKeyUp = (e: KeyboardEvent) => {
-      if (peekMod && e.key === peekMod) endPeek();
-    };
-    const onMods = (e: KeyboardEvent | PointerEvent) => {
-      if (peekMod && !modifierHeld(e, peekMod)) endPeek();
-    };
+    const onKeyUp = (e: KeyboardEvent) => walkPeek.keyup(e.key);
+    const onMods = (e: KeyboardEvent | PointerEvent) => walkPeek.mods(e);
     const onKey = (e: KeyboardEvent) => {
       onMods(e);
       const s = store.getState();
@@ -306,6 +298,8 @@ export function useChords() {
       window.removeEventListener("pointermove", onMods);
       window.removeEventListener("pointerdown", onMods);
       window.removeEventListener("blur", endPeek);
+      // a hold still waiting to earn the rail must not open it after the listeners are gone
+      endPeek();
     };
   }, [store, sock]);
 

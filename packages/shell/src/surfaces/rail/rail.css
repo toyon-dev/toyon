@@ -180,8 +180,9 @@
        slide takes and how long it waits first. At rest the pair is the leave's, and leaving is
        forgiving: a flick off the rail on the way somewhere else does not shut it. Hover waits
        longer, for intent (below), so a pointer passing over the strip opens nothing. The walk's peek
-       is a key's: a key is instant, so it waits for nothing and slides in a few frames, the way an
-       alt-tab switcher shows. */
+       is a key's: its intent is read from the hold before the class arrives (app/railPeek.ts), so
+       once it does it waits for nothing and slides in a few frames, the way an alt-tab switcher
+       shows. */
     --rail-slide: 0.12s;
     --rail-wait: 120ms;
     width: 40px;

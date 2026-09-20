@@ -23,3 +23,69 @@ export function modifierHeld(e: Mods, mod: WalkModifier): boolean {
   if (mod === "Control") return e.ctrlKey;
   return e.metaKey;
 }
+
+/** How long the modifier stays down after a lone walk press before the rail shows for it. A tap
+ * of the chord is a switch and nothing else, the way a tap of alt-tab swaps windows without the
+ * switcher; the switcher is for a hand that is still holding, or that presses again to walk on. */
+export const PEEK_HOLD_MS = 200;
+
+type Timers = {
+  set: (fn: () => void, ms: number) => unknown;
+  clear: (handle: unknown) => void;
+};
+
+const realTimers: Timers = {
+  set: (fn, ms) => setTimeout(fn, ms),
+  clear: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>),
+};
+
+/** The peek's state: which modifier the hold rides, and whether the rail has been earned yet.
+ * `show` is called with the rail's answer, at most once per change. */
+export function createWalkPeek(show: (on: boolean) => void, timers: Timers = realTimers) {
+  let mod: WalkModifier | null = null;
+  let shown = false;
+  let pending: unknown = null;
+  const open = () => {
+    if (shown) return;
+    shown = true;
+    show(true);
+  };
+  const settle = () => {
+    if (pending === null) return;
+    timers.clear(pending);
+    pending = null;
+  };
+  const end = () => {
+    settle();
+    mod = null;
+    if (!shown) return;
+    shown = false;
+    show(false);
+  };
+  return {
+    /** a walk press: the first under a hold waits to see if the hold lasts, any later one under
+     * the same hold (a second step, or the key's own repeat) shows the rail now */
+    press(e: Mods) {
+      const held = mod !== null;
+      mod = walkModifier(e);
+      settle();
+      if (!mod) return;
+      if (held) open();
+      else {
+        pending = timers.set(() => {
+          pending = null;
+          open();
+        }, PEEK_HOLD_MS);
+      }
+    },
+    /** the release of a key by name, from a keyup */
+    keyup(key: string) {
+      if (mod && key === mod) end();
+    },
+    /** any later event that reports the modifiers, for a release that was never seen */
+    mods(e: Mods) {
+      if (mod && !modifierHeld(e, mod)) end();
+    },
+    end,
+  };
+}

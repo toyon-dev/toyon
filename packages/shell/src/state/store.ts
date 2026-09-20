@@ -578,7 +578,7 @@ export interface State {
   /** bumped to put the keyboard on the rail's current row */
   focusRail: number;
   /** the collapsed rail is peeked open by the worktree walk (⌥↑/↓, ⌃Tab), the way an alt-tab
-   * switcher shows while the modifier is down; app/keys.ts drops it on the release */
+   * switcher shows while the modifier is held past a tap; app/keys.ts drops it on the release */
   railPeek: boolean;
   /** a worktree marked unread while it was the one on screen: its ring stays until another row is
    * selected, where the moment of looking would otherwise clear it again (App.tsx) */

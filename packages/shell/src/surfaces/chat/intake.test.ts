@@ -35,6 +35,44 @@ describe("what the intake pulls out of a paste or drop", () => {
     expect(otherFiles(dt)).toEqual([]);
   });
 
+  test("the pasteboard's one picture listed in two encodings is one image, in the format the daemon takes", () => {
+    const dt = transfer([
+      { name: "image.tiff", type: "image/tiff" },
+      { name: "image.png", type: "image/png" },
+    ]);
+    expect(imageFiles(dt).map((f) => f.name)).toEqual(["image.png"]);
+  });
+
+  test("a picture in no format the daemon takes still comes through, once", () => {
+    const dt = transfer([
+      { name: "image.tiff", type: "image/tiff" },
+      { name: "image.bmp", type: "image/bmp" },
+    ]);
+    expect(imageFiles(dt).map((f) => f.name)).toEqual(["image.tiff"]);
+  });
+
+  test("a file copied in Finder is what was meant, not the browser's rendering of it", () => {
+    const dt = transfer([
+      { name: "image.png", type: "image/png" },
+      { name: "shot.png", type: "image/png" },
+    ]);
+    expect(imageFiles(dt).map((f) => f.name)).toEqual(["shot.png"]);
+  });
+
+  test("several copied files each keep their place", () => {
+    const dt = transfer([
+      { name: "a.png", type: "image/png" },
+      { name: "b.png", type: "image/png" },
+    ]);
+    expect(imageFiles(dt).map((f) => f.name)).toEqual(["a.png", "b.png"]);
+  });
+
+  test("one file listed under two flavours is one file", () => {
+    const entry = { name: "a.png", type: "image/png", size: 10, lastModified: 5 };
+    const dt = transfer([entry, { ...entry }]);
+    expect(imageFiles(dt)).toHaveLength(1);
+  });
+
   test("nothing to attach when the clipboard is only text", () => {
     const dt = transfer([], { "text/plain": "hello", "text/html": "<b>hello</b>" });
     expect(imageFiles(dt)).toEqual([]);

@@ -8,18 +8,42 @@ const ACCEPTED = new Set<string>(IMAGE_MIME_TYPES);
 /** past this a "text" file is not something anyone means to paste into a message */
 const MAX_TEXT_FILE_BYTES = 2 * 1024 * 1024;
 
-/** the image files in a paste or drop, in the order the OS lists them */
+/** the name a browser gives the pasteboard's picture when nothing copied had one: a screenshot, an
+ * image copied off a page. Chromium and Gecko write image.png; WebKit writes one per encoding the
+ * pasteboard holds. A file copied in Finder keeps its own name. */
+const PLACEHOLDER_NAME = /^image\.[a-z0-9]+$/i;
+
+const isPlaceholder = (f: File) => PLACEHOLDER_NAME.test(f.name);
+
+/** whether two entries are one file listed twice: a browser that fills both `items` and `files`,
+ * or lists a copied file under two flavours, hands the same file over under the same name */
+const sameEntry = (a: File, b: File) =>
+  a === b || (a.name === b.name && a.size === b.size && a.type === b.type && a.lastModified === b.lastModified);
+
+/**
+ * The image files in a paste, in the order the OS lists them, with each picture once. A pasteboard
+ * holds one picture, and a browser can list it several times: WebKit offers a screenshot as
+ * image.png and image.tiff, and a file copied in Finder arrives under its own name beside the
+ * browser's own rendering of it, called image.png. The copied file is what was meant, and one
+ * placeholder is the picture; the first in a format the daemon takes, so nothing is re-encoded
+ * that need not be.
+ */
 export function imageFiles(dt: DataTransfer | null): File[] {
   if (!dt) return [];
-  const out: File[] = [];
+  const listed: File[] = [];
   for (const item of Array.from(dt.items ?? [])) {
     if (item.kind !== "file" || !item.type.startsWith("image/")) continue;
     const f = item.getAsFile();
-    if (f) out.push(f);
+    if (f) listed.push(f);
   }
   // Safari fills files but not items for some drops
-  if (out.length === 0) for (const f of Array.from(dt.files ?? [])) if (f.type.startsWith("image/")) out.push(f);
-  return out;
+  if (listed.length === 0) for (const f of Array.from(dt.files ?? [])) if (f.type.startsWith("image/")) listed.push(f);
+  const out: File[] = [];
+  for (const f of listed) if (!out.some((seen) => sameEntry(seen, f))) out.push(f);
+  const named = out.filter((f) => !isPlaceholder(f));
+  if (named.length > 0) return named;
+  const one = out.find((f) => ACCEPTED.has(f.type)) ?? out[0];
+  return one ? [one] : [];
 }
 
 /** everything else the OS handed over: a file copied in Finder or dragged in arrives here, and a

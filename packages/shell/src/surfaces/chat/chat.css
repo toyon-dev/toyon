@@ -460,15 +460,19 @@
     color: var(--text2);
   }
   .tool-row {
+    /* the hint gives way but never grows: it is the one thing on the line allowed to shrink, so a
+     long path is what truncates, and the count after it keeps its place on the line */
     & .tool-hint {
-      flex: 1 1 auto;
+      flex: 0 1 auto;
       min-width: 0;
     }
     &.error .tool-name {
       color: var(--red);
     }
-    /* how many calls the row stands for, at the end of the line the way a count goes. It is the only
-   thing that tells this row from one that ran once, so it sits a tier above the hint it follows. */
+    /* how many calls the row stands for, one gap after the path it counts: most rows have no count,
+   so there is no column to line them up in, and a number at the far end of a wide row floats free
+   of its path. It is the only thing that tells this row from one that ran once, so it never shrinks
+   and sits a tier above the hint it follows. */
     & .tool-count {
       font-variant-numeric: tabular-nums;
       flex: 0 0 auto;

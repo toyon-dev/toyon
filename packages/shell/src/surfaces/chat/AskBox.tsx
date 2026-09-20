@@ -504,14 +504,6 @@ function PermissionBody({
         // biome-ignore lint/security/noDangerouslySetInnerHtml: html is DOMPurify-sanitized markdown
         <div className="ask-detail md" dangerouslySetInnerHTML={{ __html: html }} />
       )}
-      {plan && (
-        <div className="ask-plan hint">
-          the plan is in{" "}
-          <Button variant="inline" mono onClick={readPlan}>
-            {plan}
-          </Button>
-        </div>
-      )}
       <div className="ask-options">
         {ask.choices.map((c, i) => (
           <button

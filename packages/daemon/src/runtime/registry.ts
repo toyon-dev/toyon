@@ -181,7 +181,16 @@ function defaultAgent(wt: WorktreeInfo, d: RuntimeDeps, preview: () => PreviewSt
         d.state.save();
       }
       // an agent that sent no prose has nothing to write; its card is the whole plan
-      return markdown.trim() ? writePlanDoc(wt.path, markdown) : null;
+      const path = markdown.trim() ? await writePlanDoc(wt.path, markdown) : null;
+      // the record names the file so the composer can point at it after the card is gone; the
+      // record is read fresh, since the card's await may span a change to it
+      const fresh = path ? d.state.worktree(wt.id) : undefined;
+      if (fresh && path && fresh.plan !== path) {
+        fresh.plan = path;
+        d.state.save();
+        d.hub.emit("worktreesChanged");
+      }
+      return path;
     },
     planEdited: async (path, proposed) => planEdited(wt.path, path, proposed),
     option: (category) => d.state.requireWorktree(wt.id)[OPTION_FIELDS[category]],

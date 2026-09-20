@@ -679,6 +679,27 @@
   .composer-notice {
     overflow-wrap: anywhere;
   }
+  /* the plan this worktree runs on, at the top of the box in the shape of the branch row on the
+   commit box: an icon, the path in mono, the one verb at the right. It stays through approval,
+   since it is while the work runs from the plan that the card and its row have scrolled away. */
+  .composer-plan {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    margin-bottom: 6px;
+    & .composer-plan-path {
+      color: var(--text1);
+      font: var(--type-mono-sm);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    & .composer-plan-open {
+      flex: none;
+      margin-left: auto;
+    }
+  }
   /* Toyon's rule, under the call it refused. The agent is told only that its request was refused,
    so it reports one as the person declining; this line is where the person reads otherwise, and it
    wraps rather than truncating, since it is the whole reason the block is here */
@@ -1221,11 +1242,6 @@
     background: var(--sunken-floor);
     border-radius: var(--radius);
   }
-  /* a plan reads in the pane, so the box says which file it is and presses back open */
-  .ask-plan {
-    margin-top: 6px;
-  }
-
   /* ---- the ask in the transcript ----
    While the question is open its row is one line, "asking" and what is asked, with the accent's
    edge: in a long log it is what says the turn is waiting on you, and pressing it brings a parked

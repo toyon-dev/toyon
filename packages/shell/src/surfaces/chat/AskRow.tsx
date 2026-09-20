@@ -4,16 +4,13 @@
 // saying what is being asked, and pressing it brings the question back into the box. Once closed,
 // the row reads the answers back.
 
-import { openFile } from "../../state/actions/file.ts";
-import { useDispatch, useSock } from "../../state/context.tsx";
+import { useDispatch } from "../../state/context.tsx";
 import { useLocalField } from "../../state/selectors.ts";
-import { Button } from "../../ui/Button.tsx";
 import { CLOSED } from "./AskBox.tsx";
 import { type AskItem, answerText, askLine } from "./ask.ts";
 
 export function AskRow({ item, worktreeId }: { item: AskItem; worktreeId?: string | null }) {
   const dispatch = useDispatch();
-  const sock = useSock();
   const parked = useLocalField(worktreeId, "askParked");
   if (!item.outcome) {
     if (parked !== item.id) return null;
@@ -33,25 +30,13 @@ export function AskRow({ item, worktreeId }: { item: AskItem; worktreeId?: strin
   }
   const note = CLOSED[item.outcome];
   if (item.ask.kind === "permission") {
-    const { title, choices, plan } = item.ask;
+    // a plan's row reads like any other permission's: the file it was about is named at the top
+    // of the composer, which does not scroll away, so the row does not say it again
+    const { title, choices } = item.ask;
     const chosen = choices.find((c) => c.id === item.choiceId);
     return (
       <div className="ask-closed">
         <div className="ask-lead">{title}</div>
-        {/* each plan is its own file, so the row keeps the way back to the one it was about: on an
-            archived page the read comes from the archive, under the chat's own id */}
-        {plan && worktreeId && (
-          <div className="ask-plan hint">
-            the plan is in{" "}
-            <Button
-              variant="inline"
-              mono
-              onClick={() => openFile({ sock, dispatch }, { worktreeId, path: plan, view: "preview" })}
-            >
-              {plan}
-            </Button>
-          </div>
-        )}
         <div className="ask-answered">{chosen ? chosen.name : (note ?? "closed")}</div>
       </div>
     );

@@ -17,7 +17,7 @@ import {
 } from "@toyon/shared";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { previewBus, togglePick } from "../../app/previewBus.ts";
-import { listFiles } from "../../state/actions/file.ts";
+import { listFiles, openFile } from "../../state/actions/file.ts";
 import { terminalItems } from "../../state/actions/proc.ts";
 import { archiveWorktrees, shipOp } from "../../state/actions/worktree.ts";
 import { toInput } from "../../state/attach.ts";
@@ -29,6 +29,7 @@ import { Button, IconButton } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { TextArea } from "../../ui/Field.tsx";
 import { useOnChange } from "../../ui/hooks.ts";
+import { Icon } from "../../ui/Icon.tsx";
 import { InlinePicker } from "../../ui/InlinePicker.tsx";
 import { useListNav } from "../../ui/listNav.ts";
 import { useContextMenu } from "../../ui/menu.ts";
@@ -771,9 +772,28 @@ export function Composer({
   // that starts a worktree starts that worktree's session, so its count starts over
   const sentBefore = spawning ? [] : chat.map((c) => (c.kind === "user" ? c.attachments : undefined));
   const dir = active ? active.worktree.path : null;
+  const plan = active?.worktree.plan;
 
   return (
     <div className="composer chat-input">
+      {/* the plan this worktree runs on, from the card's arrival until a newer one replaces it:
+          the card and the row that reads it back scroll away while the work goes on, and this
+          row does not */}
+      {plan && active && (
+        <div className="hint composer-plan">
+          <Icon name="text" className="icon-inline" />
+          <span className="composer-plan-path">{plan}</span>
+          <Button
+            className="composer-plan-open"
+            data-tip="Read the plan in the editor pane"
+            onClick={() =>
+              openFile({ sock, dispatch }, { worktreeId: active.worktree.id, path: plan, view: "preview" })
+            }
+          >
+            open
+          </Button>
+        </div>
+      )}
       {boxId &&
         numbered(attachments, nextNumbers(sentBefore)).map(([item, n]) => {
           const detach = () => dispatch({ a: "detach", id: boxId, key: item.key });

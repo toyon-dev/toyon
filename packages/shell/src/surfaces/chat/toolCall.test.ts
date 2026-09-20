@@ -245,8 +245,9 @@ describe("toolLabel", () => {
       "writing the change",
     );
     expect(composing({ name: "Read File", title: "Read File", toolKind: "read", input: { locations: [] } })).toBe(
-      "writing the path",
+      "choosing a file",
     );
+    expect(composing({ name: "Grep", title: "grep", toolKind: "search", input: {} })).toBe("writing the search");
     // the input landing ends it: the row has a path to print
     expect(composing({ name: "Edit", title: "Edit x.ts", toolKind: "edit", input: { file_path: "/r/x.ts" } })).toBe("");
     // a call with nothing to write is whole on arrival, however empty its input

@@ -144,16 +144,18 @@ export function toolLabel(call: ToolCall, roots: string[] = []): ToolRowText {
 }
 
 /** what the row says while a kind's input streams in, in place of the path or command it has not
- * got yet: the thing being typed, so the line reads as a status and not as a file called
- * "writing". Only kinds whose input the agent writes out token by token are here; a think or a
- * mode switch has nothing to write, so an empty input there is the whole call, not a call still
- * being written. */
+ * got yet, so the line reads as a status and not as a file called "writing". "writing" where the
+ * agent is composing something (a command, a change, a search), "choosing" where the only thing
+ * streaming is which file: a read is not writing anything a person would call written, and
+ * "writing" under a file glyph reads as a file write. Only kinds whose input the agent types out
+ * token by token are here; a think or a mode switch has nothing to write, so an empty input there
+ * is the whole call, not a call still being written. */
 const WRITING: Partial<Record<ToolKind, string>> = {
-  read: "writing the path",
+  read: "choosing a file",
   edit: "writing the change",
-  delete: "writing the path",
-  move: "writing the paths",
-  search: "writing the pattern",
+  delete: "choosing a file",
+  move: "choosing the files",
+  search: "writing the search",
   execute: "writing the command",
   fetch: "writing the url",
 };

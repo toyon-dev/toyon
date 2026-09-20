@@ -2049,7 +2049,8 @@ describe("main against origin", () => {
   async function withUpstream(): Promise<string> {
     const repoId = await registered();
     const bare = join(dirname(w.repo), "origin.git");
-    sh(w.repo, "git", "init", "-q", "--bare", bare);
+    // -b main: the clone pushUpstream makes checks out origin's HEAD, which is init.defaultBranch unless named
+    sh(w.repo, "git", "init", "-q", "--bare", "-b", "main", bare);
     sh(w.repo, "git", "remote", "add", "origin", bare);
     sh(w.repo, "git", "commit", "--allow-empty", "-qm", "upstream moves on");
     sh(w.repo, "git", "push", "-q", "-u", "origin", "main");

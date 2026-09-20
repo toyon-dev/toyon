@@ -48,7 +48,7 @@
             .then((r) => (r.ok ? r.json() : null))
             .catch(() => null)
             .then((paired) => {
-              if (!paired || !paired.token) return hello();
+              if (!paired?.token) return hello();
               localStorage.setItem("toyon-token", paired.token);
               location.replace(`https://toyon.cloud/#add=${encodeURIComponent(location.origin)}`);
               // nothing paints while the page is leaving

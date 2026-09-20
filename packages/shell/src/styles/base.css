@@ -519,14 +519,22 @@
     & a {
       color: var(--blue);
     }
-    /* A file is a place inside Toyon, not a trip out to the web. It keeps the colour of the words
-       around it, so a sentence naming five files still reads as one sentence; the underline alone
-       says it can be opened, and goes solid under the pointer. Never a tier down: the one thing in
-       the line you can click must not be its dimmest word. */
+    /* A file is a place inside Toyon, not a trip out to the web. It is set in the mono face, which
+       is what a path wears everywhere else in the shell, and keeps the colour of the words around
+       it, so a sentence naming five files still reads as one sentence; the underline alone says it
+       can be opened, and goes solid under the pointer. Never a tier down: the one thing in the line
+       you can click must not be its dimmest word. No chip: a wash under an underlined word is two
+       devices on one word, and the agent's two spellings, bare or backticked, render the same. */
     & a.file-link {
+      font: var(--type-mono);
       color: inherit;
       text-decoration-color: color-mix(in srgb, currentColor 55%, transparent);
       text-underline-offset: 2px;
+      overflow-wrap: anywhere;
+    }
+    & a.file-link code {
+      background: none;
+      padding: 0;
     }
     :where([data-hover]) & a.file-link:hover {
       text-decoration-color: currentColor;

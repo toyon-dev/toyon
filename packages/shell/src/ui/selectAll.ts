@@ -40,6 +40,16 @@ export function useSelectAllWithin(ref: RefObject<HTMLElement | null>) {
   }, [ref]);
 }
 
+/** what is selected inside `el`, or null when the selection is empty, blank, or lies elsewhere.
+ * Blank lines around it are the block boundaries a drag crossed, not part of what was meant. */
+export function selectedText(el: Element): string | null {
+  const sel = window.getSelection();
+  if (!sel || sel.isCollapsed || sel.rangeCount === 0) return null;
+  if (!el.contains(sel.getRangeAt(0).commonAncestorContainer)) return null;
+  const text = sel.toString().replace(/^\n+|\n+$/g, "");
+  return text.trim() ? text : null;
+}
+
 export function selectContents(el: Element) {
   const range = document.createRange();
   range.selectNodeContents(el);

@@ -68,32 +68,33 @@ export function attachText(
   });
 }
 
-/** what ⌘L in the editor hands over: the text it selected, where from, and whose file that is */
-export interface Taken {
-  worktreeId: string;
-  source: PasteSource;
-  text: string;
-}
+/** what ⌘L hands over: the text it selected and whose file that is. The editor names the lines;
+ * a rendered document keeps none, so it names the file alone. */
+export type Taken = { worktreeId: string; text: string } & ({ source: PasteSource } | { name: string });
 
-/** ⌘L from the editor. A selection joins the box the chat is writing in, as a chip named for its
- * file and lines, and the keyboard goes to the box either way. Lines already waiting there are not
- * added twice, since pressing ⌘L again is how someone gets back to the box. */
+/** ⌘L from the editor or a rendered document. A selection joins the box the chat is writing in, as
+ * a chip named for its file, and the keyboard goes to the box either way. What is already waiting
+ * there is not added twice, since pressing ⌘L again is how someone gets back to the box: the same
+ * lines, or the same text out of the same document. */
 export function addToChat(store: Store, taken: Taken | null) {
   const s = store.getState();
   const active = worktreeById(s, s.activeId);
   const boxId = composerBoxOf(active);
   // the editor holds the active worktree's file; lines from any other checkout would mislead
   if (taken && boxId && taken.worktreeId === active?.worktree.id && taken.text.trim()) {
-    const { path, startLine, endLine, ref } = taken.source;
-    const waiting = (s.local[boxId]?.attachments ?? []).some(
-      (a) =>
-        a.kind === "paste" &&
+    const from = "source" in taken ? { source: taken.source } : { name: taken.name };
+    const waiting = (s.local[boxId]?.attachments ?? []).some((a) => {
+      if (a.kind !== "paste") return false;
+      if (!("source" in taken)) return a.name === taken.name && a.text === taken.text;
+      const { path, startLine, endLine, ref } = taken.source;
+      return (
         a.source?.path === path &&
         a.source.startLine === startLine &&
         a.source.endLine === endLine &&
-        a.source.ref === ref,
-    );
-    if (!waiting) attachText(store, boxId, taken.text, { source: taken.source });
+        a.source.ref === ref
+      );
+    });
+    if (!waiting) attachText(store, boxId, taken.text, from);
   }
   store.dispatch({ a: "focus-chat" });
 }

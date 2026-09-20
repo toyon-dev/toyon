@@ -1,3 +1,4 @@
+import { matchChord } from "@toyon/shared";
 import { type CSSProperties, useLayoutEffect, useRef, useState } from "react";
 import { openFile } from "../../state/actions/file.ts";
 import { useDispatch, useSock } from "../../state/context.tsx";
@@ -5,7 +6,7 @@ import { readingView } from "../../state/store.ts";
 import { Float } from "../../ui/Float.tsx";
 import { useOnChange } from "../../ui/hooks.ts";
 import { rowState } from "../../ui/rowState.ts";
-import { isSelectAll, selectContents } from "../../ui/selectAll.ts";
+import { isSelectAll, selectContents, selectedText } from "../../ui/selectAll.ts";
 import { useMarkdown } from "../chat/markdown.ts";
 import { assetPath, dirOf } from "../chat/markdownPaths.ts";
 import { outlineDepths } from "./outline.ts";
@@ -35,7 +36,8 @@ const JUMP_AIR = 16;
 
 /** a markdown file read rendered: the text the editor holds, so an agent writing it is seen as it
  * writes. `version` is the bytes on disk its relative images are served from; without one they are
- * left as written. */
+ * left as written. `onChat` takes what ⌘L selected, as the page draws it: the render keeps no
+ * lines, so the pane names the file alone. */
 export function MarkdownPreview({
   text,
   path,
@@ -43,6 +45,7 @@ export function MarkdownPreview({
   version,
   openSeq,
   focus,
+  onChat,
 }: {
   text: string;
   path: string;
@@ -50,6 +53,7 @@ export function MarkdownPreview({
   version: string | null | undefined;
   openSeq: number;
   focus: boolean;
+  onChat: (selected: string) => void;
 }) {
   const sock = useSock();
   const dispatch = useDispatch();
@@ -116,6 +120,18 @@ export function MarkdownPreview({
     if (isSelectAll(e) && body.current) {
       e.preventDefault();
       selectContents(body.current);
+      return;
+    }
+    // ⌘L with a selection is add-to-chat, as in the editor; with none it goes on to the window,
+    // where the chord reaches the box. Handled here it is also kept from the window: the box takes
+    // the caret before the window's listener runs, and the chord read from inside the box is a
+    // toggle that would close the chat just opened
+    if (matchChord(e)?.id === "composer" && body.current) {
+      const selected = selectedText(body.current);
+      if (!selected) return;
+      e.preventDefault();
+      e.stopPropagation();
+      onChat(selected);
     }
   };
   return (

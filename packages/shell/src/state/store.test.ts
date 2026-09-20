@@ -2291,6 +2291,18 @@ describe("add to chat", () => {
     addToChat(store, { worktreeId: "b", source, text: "x" });
     expect(store.getState().local.a?.attachments ?? []).toHaveLength(0);
   });
+  test("a selection out of a rendered document is named for its file, with no lines, once per text", () => {
+    const store = storeOn();
+    addToChat(store, { worktreeId: "a", name: "docs/PLAN.md", text: "a sentence of the plan" });
+    addToChat(store, { worktreeId: "a", name: "docs/PLAN.md", text: "a sentence of the plan" });
+    addToChat(store, { worktreeId: "a", name: "docs/PLAN.md", text: "another sentence" });
+    const got = store.getState().local.a?.attachments ?? [];
+    expect(got).toMatchObject([
+      { kind: "paste", name: "docs/PLAN.md", text: "a sentence of the plan", lines: 1 },
+      { kind: "paste", name: "docs/PLAN.md", text: "another sentence" },
+    ]);
+    expect(got[0]).not.toHaveProperty("source");
+  });
 });
 
 describe("attach a pick", () => {

@@ -187,6 +187,7 @@ export function EditorPane({
             version={history || kept ? undefined : disk.version}
             openSeq={editor.seq}
             focus={editor.focus}
+            onChat={(selected) => addToChat(store, { worktreeId, text: selected, name: path })}
           />
         ) : (
           <ErrorBoundary pane>

@@ -142,19 +142,16 @@ export function runCalls(run: ToolEntry[]): number {
   return run.reduce((n, e) => n + e.tools.length, 0);
 }
 
-/** whether a subagent is mid-call: one of its rows still running, or one being written */
-export function runLive(run: ToolEntry[]): boolean {
-  return run.some((e) => !!e.next || e.tools.some((t) => !t.done));
-}
-
 /** The subagents at work while the main agent waits on them, and their calls so far. A spawn that
  * runs in the background returns at once, so its row closes and is folded up the log before the
  * subagent has done anything; what says the subagent is still going is its calls landing under
  * that row, out of sight. Nothing marks its end either: the report comes as the main agent's next
  * move. So a subagent counts from its first call after the main agent's newest own item until the
- * main agent's next, and while it has a call in flight wherever that call sits. `calls` is what
- * those subagents have made in all, the number that ticks while they work. */
-export function subagentsAtWork(items: ChatItem[]): { agents: number; calls: number } {
+ * main agent's next, and while it has a call in flight wherever that call sits. `ids` are the
+ * spawn calls that started them, for the rows that shine while they work; `calls` is what those
+ * subagents have made in all, the number that ticks while they work. Only meaningful while the
+ * turn is on: a turn that ended on a subagent's call leaves the window open. */
+export function subagentsAtWork(items: ChatItem[]): { ids: Set<string>; calls: number } {
   const ids = new Set<string>();
   let heard = true;
   for (let i = items.length - 1; i >= 0; i--) {
@@ -165,10 +162,10 @@ export function subagentsAtWork(items: ChatItem[]): { agents: number; calls: num
     }
     if (heard || !item.done) ids.add(item.parentToolId);
   }
-  if (ids.size === 0) return { agents: 0, calls: 0 };
+  if (ids.size === 0) return { ids, calls: 0 };
   let calls = 0;
   for (const item of items) if (item.kind === "tool" && item.parentToolId && ids.has(item.parentToolId)) calls++;
-  return { agents: ids.size, calls };
+  return { ids, calls };
 }
 
 /** the entries hold fresh arrays on every render, so the rows compare their calls one by one:

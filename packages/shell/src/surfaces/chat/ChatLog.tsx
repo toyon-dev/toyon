@@ -199,8 +199,10 @@ export function ChatLog({
   // call that hangs shimmers like one that runs, and the seconds are what tell them apart.
   const moving = streaming >= 0 || items.some((i) => i.kind === "tool" && !i.done && !i.parentToolId);
   // the subagents the main agent is waiting on: named in the word, with their calls ticking beside
-  // it, since their rows are out of sight and this line is the one place that can say so
+  // it, since their rows are out of sight and this line is the one place that can say so. The
+  // spawn rows that started them shine for the same window.
   const fanout = useMemo(() => subagentsAtWork(items), [items]);
+  const agents = fanout.ids.size;
   // The rows under the transcript land a frame after the message that caused them: the agent goes
   // busy after the send is in the log, a queued message after the daemon takes it. They add height
   // without touching `items`, so the send they follow scrolls out from under them.
@@ -215,7 +217,14 @@ export function ChatLog({
         {lead}
         {entries.map((entry, i) =>
           "spawn" in entry ? (
-            <ToolRow key={entry.at} tools={[entry.spawn]} run={entry.run} roots={roots} worktreeId={id} />
+            <ToolRow
+              key={entry.at}
+              tools={[entry.spawn]}
+              run={entry.run}
+              working={busy && fanout.ids.has(entry.spawn.id)}
+              roots={roots}
+              worktreeId={id}
+            />
           ) : "tools" in entry ? (
             <ToolRow
               key={entry.at}
@@ -262,8 +271,8 @@ export function ChatLog({
               )
             ) : (
               <span>
-                {fanout.agents ? `${fanout.agents} ${fanout.agents === 1 ? "agent" : "agents"} working…` : "working…"}
-                {fanout.agents > 0 && (
+                {agents ? `${agents} ${agents === 1 ? "agent" : "agents"} working…` : "working…"}
+                {agents > 0 && (
                   <span className="working-num">
                     {fanout.calls} {fanout.calls === 1 ? "call" : "calls"}
                   </span>

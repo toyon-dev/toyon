@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { ToolKind } from "@toyon/shared";
 import type { ChatItem } from "../../state/store.ts";
-import { type ChatEntry, groupTools, openRow, runCalls, runLive, subagentsAtWork, type ToolItem } from "./group.ts";
+import { type ChatEntry, groupTools, openRow, runCalls, subagentsAtWork, type ToolItem } from "./group.ts";
 
 let n = 0;
 const tool = (kind: ToolKind, path: string, extra: Partial<ChatItem> = {}): ChatItem =>
@@ -344,31 +344,24 @@ describe("groupTools", () => {
   });
 });
 
-describe("runLive", () => {
-  const run = (items: ChatItem[]) => {
-    const first = groupTools(items, ["/wt"])[0]!;
-    return "spawn" in first ? first.run : [];
-  };
-
-  test("a subagent is live while one of its calls runs, or while it is writing one", () => {
-    const head = [spawn("task1", "Find the caller"), tool("read", "/wt/a.ts", { parentToolId: "task1" })];
-    expect(runLive(run(head))).toBe(false);
-    expect(runLive(run([...head, tool("read", "/wt/b.ts", { parentToolId: "task1", done: false })]))).toBe(true);
-    expect(runLive(run([...head, tool("read", "", { parentToolId: "task1", input: {}, done: false })]))).toBe(true);
-  });
-});
-
 describe("subagentsAtWork", () => {
   const sub = (id: string, extra: Partial<ChatItem> = {}) => tool("read", "/wt/a.ts", { parentToolId: id, ...extra });
+  const none = { ids: new Set<string>(), calls: 0 };
 
   test("nothing is at work in a log with no subagent calls, or with only the main agent's", () => {
-    expect(subagentsAtWork([])).toEqual({ agents: 0, calls: 0 });
-    expect(subagentsAtWork([text("Hi"), tool("read", "/wt/a.ts", { done: false })])).toEqual({ agents: 0, calls: 0 });
+    expect(subagentsAtWork([])).toEqual(none);
+    expect(subagentsAtWork([text("Hi"), tool("read", "/wt/a.ts", { done: false })])).toEqual(none);
   });
 
   test("a background subagent counts from its calls landing after the main agent's last own item", () => {
     const items = [spawn("task1", "Map the runtime"), text("Waiting on it."), sub("task1"), sub("task1")];
-    expect(subagentsAtWork(items)).toEqual({ agents: 1, calls: 2 });
+    expect(subagentsAtWork(items)).toEqual({ ids: new Set(["task1"]), calls: 2 });
+  });
+
+  test("a subagent stays at work between its calls, not only while one is in flight", () => {
+    const items = [spawn("task1", "Map the runtime"), text("Waiting on it."), sub("task1"), sub("task1")];
+    expect(subagentsAtWork(items).ids.has("task1")).toBe(true);
+    expect(subagentsAtWork([...items, sub("task1", { done: false })]).ids.has("task1")).toBe(true);
   });
 
   test("each subagent heard from since counts once, with every call it has made", () => {
@@ -381,14 +374,14 @@ describe("subagentsAtWork", () => {
       sub("task1"),
       sub("task2"),
     ];
-    expect(subagentsAtWork(items)).toEqual({ agents: 2, calls: 4 });
+    expect(subagentsAtWork(items)).toEqual({ ids: new Set(["task1", "task2"]), calls: 4 });
   });
 
   test("the main agent's next own item ends the count, unless a subagent's call is still in flight", () => {
     const heard = [spawn("task1", "Map the runtime"), sub("task1"), sub("task1")];
-    expect(subagentsAtWork([...heard, text("Here is what it found.")])).toEqual({ agents: 0, calls: 0 });
+    expect(subagentsAtWork([...heard, text("Here is what it found.")])).toEqual(none);
     const inFlight = [spawn("task1", "Map the runtime"), sub("task1"), sub("task1", { done: false })];
-    expect(subagentsAtWork([...inFlight, text("Meanwhile:")])).toEqual({ agents: 1, calls: 2 });
+    expect(subagentsAtWork([...inFlight, text("Meanwhile:")])).toEqual({ ids: new Set(["task1"]), calls: 2 });
   });
 
   test("a subagent from an earlier turn, long since reported on, is not at work", () => {
@@ -400,6 +393,6 @@ describe("subagentsAtWork", () => {
       spawn("task2", "Map the shell"),
       sub("task2"),
     ];
-    expect(subagentsAtWork(items)).toEqual({ agents: 1, calls: 1 });
+    expect(subagentsAtWork(items)).toEqual({ ids: new Set(["task2"]), calls: 1 });
   });
 });

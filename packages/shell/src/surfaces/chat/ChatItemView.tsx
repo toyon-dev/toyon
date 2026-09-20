@@ -16,7 +16,7 @@ import { grouped, type MenuEntry, useContextMenu } from "../../ui/menu.ts";
 import { rowState } from "../../ui/rowState.ts";
 import { attachmentUrl } from "../../ws.ts";
 import { AskRow } from "./AskRow.tsx";
-import { runCalls, runLive, sameRun, sameTools, type ThinkingItem, type ToolEntry, type ToolItem } from "./group.ts";
+import { runCalls, sameRun, sameTools, type ThinkingItem, type ToolEntry, type ToolItem } from "./group.ts";
 import { SentImageChip } from "./ImageChip.tsx";
 import { useMarkdown } from "./markdown.ts";
 import { worktreeLink } from "./markdownPaths.ts";
@@ -430,6 +430,7 @@ export const ToolRow = memo(
     run,
     next,
     live,
+    working,
     roots,
     worktreeId,
     marked,
@@ -442,6 +443,11 @@ export const ToolRow = memo(
      * again (group.ts), so this row shines for it instead of a row of its own appearing below */
     next?: ToolItem;
     live?: boolean;
+    /** the subagent this call started is still at work (subagentsAtWork in group.ts). Its rows sit
+     * under a closed fold, so this line's shine is what says so, and it holds across the gaps
+     * between the subagent's calls: a shine that came and went with each call would restart its
+     * sweep every time and strobe rather than travel. */
+    working?: boolean;
     roots?: string[];
     worktreeId?: string | null;
     /** the composer has walked back to the command this row ran */
@@ -457,10 +463,9 @@ export const ToolRow = memo(
     // the row is alive while its own last call runs, and while the agent writes the run's next
     // call: that one has no row until its path is in, and this row's shine is what says it is coming
     const alive = streaming || !!next;
-    // A spawn row shines for its subagent's calls too. A spawn run in the background returns at
-    // once, so its own call says nothing about the subagent, and the calls landing under the
-    // closed row are what say it is still going.
-    const running = alive || (!!run && runLive(run));
+    // A spawn row shines while its subagent works. A spawn run in the background returns at once,
+    // so its own call says nothing about the subagent; the log says when it is at work.
+    const running = alive || !!working;
     // The log decides which row opens itself, and it hands the row two answers: the turn's one
     // self-opening row (openRow in group.ts, reasoning only) and the newest `!` command, which is
     // open from the start because what it printed is the reason the person ran it. A subagent's
@@ -535,6 +540,7 @@ export const ToolRow = memo(
   },
   (a, b) =>
     a.live === b.live &&
+    a.working === b.working &&
     a.next === b.next &&
     a.roots === b.roots &&
     a.worktreeId === b.worktreeId &&

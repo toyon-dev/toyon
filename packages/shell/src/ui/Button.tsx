@@ -88,6 +88,11 @@ export function Button({
   children,
   ...rest
 }: Props) {
+  // an inline word has no box to hold steady, and the sentence it leads ("land: <subject>") needs
+  // the word to stay: it takes the shine that running text wears instead of a spinner over a gap.
+  // The shine goes on a span of its own because it paints through a background, and a disabled
+  // button's background is none
+  const shine = busy && variant === "inline";
   const cls = cx(
     "btn",
     VARIANT[variant],
@@ -100,8 +105,8 @@ export function Button({
   );
   return (
     <button className={cls} type={type} disabled={busy || disabled} aria-busy={busy || undefined} {...rest}>
-      {busy && <Spinner />}
-      {children}
+      {busy && !shine && <Spinner />}
+      {shine ? <span className="live-text">{children}</span> : children}
     </button>
   );
 }

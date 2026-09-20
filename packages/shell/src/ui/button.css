@@ -216,6 +216,14 @@
       color: var(--ink2);
     }
   }
+  /* busy inline: the word stays and shines (Button.tsx wraps it in `.live-text`), because the
+   sentence it leads reads "land: <subject>" and a spinner over a transparent word left a colon
+   with no owner. The underline goes with the press it promised; it is painted in a named colour,
+   so the transparent text above would not have taken it. */
+  .btn-inline.btn-busy:disabled {
+    text-decoration: none;
+    cursor: default;
+  }
 
   /* the one hover colour a surface class still names: the editor deep link, a bordered chip whose
      hover is the link blue because following it leaves the app. It is here rather than a tone

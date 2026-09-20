@@ -46,12 +46,14 @@
       flex-shrink: 0;
     }
   }
-  /* a root row that opens nothing gives most of the caret's column back: at depth 0 there is no rail
-   to the left of it, so a full column reads as an indent with nothing to explain it. A 2px stub
-   stays, which sets the name just inside the column the carets above it stand in. Only at depth 0,
-   because deeper the rails do explain the column, and a row that gave it back there would start on
-   the column its own folder sits in. */
-  .tree-row[aria-level="1"]:not([data-kind="folder"]) .tree-caret {
+  /* a root file gives most of the caret's column back: at depth 0 there is no rail to the left of
+   it, so a full column reads as an indent with nothing to explain it. A 2px stub stays, which sets
+   the name just inside the column the carets above it stand in. Only files, because a submodule or
+   an ignored folder sorts among the folders, and its name must start where theirs do or the block's
+   left edge goes ragged; the empty slot beside it says it opens nothing. Only at depth 0, because
+   deeper the rails do explain the column, and a row that gave it back there would start on the
+   column its own folder sits in. */
+  .tree-row[aria-level="1"][data-kind="file"] .tree-caret {
     width: 2px;
   }
   /* a shade lighter than the icon set's stroke: the caret repeats down a column of names, where the

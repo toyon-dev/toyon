@@ -27,6 +27,8 @@ jobs:
       # unprivileged user namespaces through AppArmor; the profile is the one `toyon doctor` prints
       - if: runner.os == 'Linux'
         run: |
+          # the image's package lists go stale and point at a .deb the mirror has since replaced
+          sudo apt-get update
           sudo apt-get install -y --no-install-recommends bubblewrap socat
           printf 'abi <abi/4.0>,\ninclude <tunables/global>\nprofile bwrap /usr/bin/bwrap flags=(unconfined) {\n  userns,\n  include if exists <local/bwrap>\n}\n' | sudo tee /etc/apparmor.d/bwrap >/dev/null
           sudo apparmor_parser -r /etc/apparmor.d/bwrap
@@ -56,6 +58,7 @@ jobs:
       # bubblewrap start; `toyon doctor` fails without them, on purpose
       - if: runner.os == 'Linux'
         run: |
+          sudo apt-get update
           sudo apt-get install -y --no-install-recommends bubblewrap socat
           printf 'abi <abi/4.0>,\ninclude <tunables/global>\nprofile bwrap /usr/bin/bwrap flags=(unconfined) {\n  userns,\n  include if exists <local/bwrap>\n}\n' | sudo tee /etc/apparmor.d/bwrap >/dev/null
           sudo apparmor_parser -r /etc/apparmor.d/bwrap

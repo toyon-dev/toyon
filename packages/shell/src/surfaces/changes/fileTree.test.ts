@@ -14,6 +14,24 @@ describe("buildTree", () => {
       ["README.md", "file", 0],
     ]);
   });
+
+  test("an ignored file is a file and a folder ignored whole is one row that holds nothing", () => {
+    const top = buildTree(["README.md"], [], [".env", "node_modules/"]);
+    expect(top.map((n) => [n.name, n.kind, n.ignored, n.children.length])).toEqual([
+      ["node_modules", "ignored", true, 0],
+      [".env", "file", true, 0],
+      ["README.md", "file", false, 0],
+    ]);
+  });
+
+  test("a folder with an ignored file beside a real one is not ignored, though the file is", () => {
+    const [src] = buildTree(["src/main.ts"], [], ["src/.env"]);
+    expect([src?.name, src?.ignored]).toEqual(["src", false]);
+    expect(src?.children.map((n) => [n.name, n.ignored])).toEqual([
+      [".env", true],
+      ["main.ts", false],
+    ]);
+  });
 });
 
 describe("visibleRows", () => {

@@ -162,6 +162,9 @@ export interface WorktreeLocal {
   files?: string[];
   /** the submodules, listed with the files: entries the tree shows but cannot open */
   submodules?: string[];
+  /** what git ignores, for the tree alone: a file to read, or a folder ignored whole (trailing
+   * slash) that stands as one row and opens nothing */
+  ignored?: string[];
   /** the listing key (actions/file.ts) the files were last asked for; the same key asks nothing */
   filesFor?: string;
   queue: string[];
@@ -2032,7 +2035,12 @@ function onServer(s: State, msg: StoreServerMsg): State {
       return next;
     }
     case "files":
-      return withLocal(s, msg.worktreeId, (l) => ({ ...l, files: msg.paths, submodules: msg.submodules }));
+      return withLocal(s, msg.worktreeId, (l) => ({
+        ...l,
+        files: msg.paths,
+        submodules: msg.submodules,
+        ignored: msg.ignored,
+      }));
     case "search-results":
       return withLocal(s, msg.worktreeId, (l) => ({
         ...l,

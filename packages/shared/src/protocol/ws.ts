@@ -172,8 +172,9 @@ export type ServerMsg =
       archiveIds?: string[];
       suggestion?: string;
     }
-  /** the files on disk now, and the submodules, which are entries but not files */
-  | { t: "files"; worktreeId: string; paths: string[]; submodules: string[] }
+  /** the files on disk now; the submodules, which are entries but not files; and what git ignores,
+   * a folder ignored whole named once with a trailing slash */
+  | { t: "files"; worktreeId: string; paths: string[]; submodules: string[]; ignored: string[] }
   | { t: "search-results"; worktreeId: string; query: string; hits: SearchHit[]; truncated: boolean }
   /** where a picked element with no recorded source may be written, best first; `sure` when the first
    * is clearly it. `seq` is the find-element's, so a file opened since is not taken over. */

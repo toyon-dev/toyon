@@ -259,6 +259,7 @@ describe("list-files", () => {
     const files = lastOf(replies, "files");
     expect(files?.paths.sort()).toEqual([".gitignore", "README.md", "docs/renamed.md"]);
     expect(files?.submodules).toEqual([]);
+    expect(files?.ignored).toEqual([".env"]);
   });
 });
 

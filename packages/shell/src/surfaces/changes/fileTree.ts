@@ -4,13 +4,18 @@
 import type { GitFileStatus } from "@toyon/shared";
 import { ancestors, naturalCompare } from "../util.ts";
 
-export type TreeKind = "file" | "folder" | "submodule";
+/** a file, a folder, a submodule (a folder that opens as nothing), or a folder git ignores whole:
+ * one row that stands for everything inside it, since nothing in it was listed */
+export type TreeKind = "file" | "folder" | "submodule" | "ignored";
 
 export interface TreeNode {
   path: string;
   name: string;
   kind: TreeKind;
   children: TreeNode[];
+  /** git ignores it: a file by rule, or a folder whole. A folder holding an ignored file beside a
+   * real one is not, and git names no folder holding only ignored files, it collapses it. */
+  ignored: boolean;
 }
 
 /** one line the tree draws: a node at its depth, and whether a folder is open */
@@ -20,30 +25,43 @@ export interface TreeRow {
   depth: number;
   kind: TreeKind;
   open: boolean;
+  ignored: boolean;
 }
 
-/** the tree's top level: folders first, then files, each in natural order (file2 before file10) */
-export function buildTree(paths: readonly string[], submodules: readonly string[] = []): TreeNode[] {
-  const root: TreeNode = { path: "", name: "", kind: "folder", children: [] };
+/**
+ * The tree's top level: folders first, then files, each in natural order (file2 before file10).
+ * `ignored` names an ignored file by its path and a folder ignored whole by its path with a
+ * trailing slash.
+ */
+export function buildTree(
+  paths: readonly string[],
+  submodules: readonly string[] = [],
+  ignored: readonly string[] = [],
+): TreeNode[] {
+  const root: TreeNode = { path: "", name: "", kind: "folder", children: [], ignored: false };
   const folders = new Map<string, TreeNode>([["", root]]);
   const folder = (path: string): TreeNode => {
     const found = folders.get(path);
     if (found) return found;
     const slash = path.lastIndexOf("/");
-    const node: TreeNode = { path, name: path.slice(slash + 1), kind: "folder", children: [] };
+    const node: TreeNode = { path, name: path.slice(slash + 1), kind: "folder", children: [], ignored: false };
     folder(slash === -1 ? "" : path.slice(0, slash)).children.push(node);
     folders.set(path, node);
     return node;
   };
-  const leaf = (path: string, kind: TreeKind) => {
+  const leaf = (path: string, kind: TreeKind, isIgnored = false) => {
     const slash = path.lastIndexOf("/");
     const parent = folder(slash === -1 ? "" : path.slice(0, slash));
-    parent.children.push({ path, name: path.slice(slash + 1), kind, children: [] });
+    parent.children.push({ path, name: path.slice(slash + 1), kind, children: [], ignored: isIgnored });
   };
   for (const p of paths) leaf(p, "file");
   for (const p of submodules) leaf(p, "submodule");
+  for (const p of ignored) {
+    if (p.endsWith("/")) leaf(p.slice(0, -1), "ignored", true);
+    else leaf(p, "file", true);
+  }
   const sort = (node: TreeNode) => {
-    // a submodule reads as a folder, so it sorts with them
+    // a submodule or an ignored folder reads as a folder, so it sorts with them
     const rank = (n: TreeNode) => (n.kind === "file" ? 1 : 0);
     node.children.sort((a, b) => rank(a) - rank(b) || naturalCompare(a.name, b.name));
     for (const c of node.children) if (c.kind === "folder") sort(c);
@@ -58,7 +76,7 @@ export function visibleRows(nodes: readonly TreeNode[], isOpen: (path: string) =
   const walk = (list: readonly TreeNode[], depth: number) => {
     for (const n of list) {
       const open = n.kind === "folder" && isOpen(n.path);
-      out.push({ path: n.path, name: n.name, depth, kind: n.kind, open });
+      out.push({ path: n.path, name: n.name, depth, kind: n.kind, open, ignored: n.ignored });
       if (open) walk(n.children, depth + 1);
     }
   };

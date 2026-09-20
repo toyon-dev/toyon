@@ -22,7 +22,18 @@ describe("parseListing", () => {
 
   test("a submodule is listed apart from the files", () => {
     const staged = z("160000 aaa 0\tvendor/lib", "100644 bbb 0\tREADME.md");
-    expect(parseListing(staged, "", "")).toEqual({ paths: ["README.md"], submodules: ["vendor/lib"] });
+    expect(parseListing(staged, "", "")).toEqual({ paths: ["README.md"], submodules: ["vendor/lib"], ignored: [] });
+  });
+
+  test("an ignored file and a folder ignored whole are listed apart, the folder by its slash", () => {
+    const listing = parseListing("", "", "", z(".env", "node_modules/", "packages/web/dist/"));
+    expect(listing.ignored).toEqual([".env", "node_modules/", "packages/web/dist/"]);
+    expect(listing.paths).toEqual([]);
+  });
+
+  test("what git lists under a folder it also lists whole is dropped", () => {
+    const ignored = z(".claude/settings.local.json", ".claude/", ".claude/.cc-writes/", ".clean", "a0");
+    expect(parseListing("", "", "", ignored).ignored).toEqual([".claude/", ".clean", "a0"]);
   });
 
   test("paths keep their spaces and tabs", () => {

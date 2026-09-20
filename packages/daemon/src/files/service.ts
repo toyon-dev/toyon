@@ -196,15 +196,18 @@ export class FileService {
     });
   }
 
-  /** the files on disk, tracked and untracked (respecting .gitignore), with the submodules apart */
+  /** the files on disk, tracked and untracked, with the submodules and what git ignores apart */
   async list(worktreeId: string): Promise<Listing> {
     const cwd = this.require(worktreeId).path;
-    const [staged, untracked, deleted] = await Promise.all([
+    // --directory names a folder ignored whole once and never walks it, so node_modules is one
+    // entry here rather than every file in it
+    const [staged, untracked, deleted, ignored] = await Promise.all([
       git(cwd, "ls-files", "-z", "-s"),
       git(cwd, "ls-files", "-z", "-o", "--exclude-standard"),
       git(cwd, "ls-files", "-z", "-d"),
+      git(cwd, "ls-files", "-z", "-o", "-i", "--exclude-standard", "--directory"),
     ]);
-    return parseListing(staged.out, untracked.out, deleted.out);
+    return parseListing(staged.out, untracked.out, deleted.out, ignored.out);
   }
 
   /** fixed-string, case-insensitive git grep over tracked + untracked (not ignored) files */

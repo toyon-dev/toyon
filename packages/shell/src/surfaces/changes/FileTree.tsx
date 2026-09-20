@@ -64,6 +64,7 @@ export function FileTree({
   const dispatch = useDispatch();
   const files = useLocalField(worktreeId, "files");
   const submodules = useLocalField(worktreeId, "submodules");
+  const ignored = useLocalField(worktreeId, "ignored");
   const git = useLocalField(worktreeId, "git");
   const status = git?.files ?? NO_STATUS;
 
@@ -92,7 +93,10 @@ export function FileTree({
     [open, revealed, worktreeId, dispatch],
   );
 
-  const tree = useMemo(() => buildTree(files ?? NO_PATHS, submodules ?? NO_PATHS), [files, submodules]);
+  const tree = useMemo(
+    () => buildTree(files ?? NO_PATHS, submodules ?? NO_PATHS, ignored ?? NO_PATHS),
+    [files, submodules, ignored],
+  );
   const rows = useMemo(() => visibleRows(tree, isOpen), [tree, isOpen]);
   const marked = useMemo(() => marks(status), [status]);
 
@@ -309,6 +313,12 @@ const TreeItem = memo(function TreeItem({
 }) {
   const cm = useContextMenu("tree");
   const submodule = row.kind === "submodule";
+  // what opens as nothing says why on hover; an ignored file needs no word, it opens as any file
+  const why = submodule
+    ? "A submodule: its files belong to its own repository"
+    : row.kind === "ignored"
+      ? "Ignored by git, so what is inside is not listed"
+      : null;
   return (
     // biome-ignore lint/a11y/useKeyWithClickEvents: the tree takes the keyboard for every row, as a listbox does
     // biome-ignore lint/a11y/useFocusableInteractive: the tree holds focus and moves its cursor over the rows
@@ -331,12 +341,12 @@ const TreeItem = memo(function TreeItem({
       onMouseEnter={() => onHover(row, true)}
       onMouseLeave={() => onHover(row, false)}
       {...cm.contextMenu(() => menu(row))}
-      {...(submodule ? tip("A submodule: its files belong to its own repository") : {})}
+      {...(why ? tip(why) : {})}
     >
       <span className="tree-caret row-dim">
         {row.kind === "folder" && <Icon name="caret" className={cx("icon-inline disc-caret", !row.open && "shut")} />}
       </span>
-      <span className={cx("tree-name", submodule && "row-dim")}>{row.name}</span>
+      <span className={cx("tree-name", (submodule || row.ignored) && "row-dim")}>{row.name}</span>
       {status ? (
         <span className={`xy ${xyClass(status.xy)}`}>{xyLetter(status.xy)}</span>
       ) : (

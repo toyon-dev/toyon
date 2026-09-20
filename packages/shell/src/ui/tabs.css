@@ -71,6 +71,14 @@
   .tabs-mono .tab {
     font: var(--type-mono-sm);
   }
+  /* a far tab sits at the strip's end with the recess between it and the rest; the list takes the
+   strip's width for it, since a list sized to its labels has no end to push to */
+  .tab-far {
+    margin-left: auto;
+  }
+  .tabs-list:has(.tab-far) {
+    flex: 1;
+  }
   /* a raw button: the tab's box is the strip's, the way a picker row's is the list's */
   .tab-btn {
     flex: 1;

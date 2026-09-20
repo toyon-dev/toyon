@@ -25,6 +25,9 @@ export type TabItem<Id extends string> = {
   fit?: boolean;
   /** the tab's name for a reader, where the label is an icon */
   ariaLabel?: string;
+  /** the tab stands apart at the strip's far end: the step that comes after the alternatives (the
+   * ask's send page after its questions), which beside them would read as one more of them */
+  far?: boolean;
 };
 
 export type TabsProps<Id extends string> = {
@@ -91,7 +94,7 @@ export function Tabs<Id extends string>({
           return (
             <div
               key={it.id}
-              className={cx("tab", open && !!it.trail && "tab-trailed", it.fit && "tab-fit")}
+              className={cx("tab", open && !!it.trail && "tab-trailed", it.fit && "tab-fit", it.far && "tab-far")}
               data-state={rowState({ current: open })}
               {...(it.menu ? cm.contextMenu(it.menu) : {})}
             >

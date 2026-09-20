@@ -1088,6 +1088,23 @@
   .ask-box:first-child .ask-tabs {
     margin-top: -10px;
   }
+  /* the pages, one per question and one for the send, stacked in one cell: the box stands as tall
+   as the tallest of them from the first paint, so walking the tabs moves nothing above the strip.
+   A page not open is kept and unseen, by visibility rather than display so it still has its height,
+   and an unseen page takes no focus and is read to nobody. */
+  .ask-pages {
+    display: grid;
+    min-width: 0;
+  }
+  .ask-page {
+    grid-area: 1 / 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .ask-page-off {
+    visibility: hidden;
+  }
   .ask-head {
     color: var(--text0);
   }
@@ -1160,11 +1177,24 @@
     margin-top: 8px;
     flex: none;
   }
+  /* the actions under a page, at the page's floor: every page stands at the tallest one's height,
+   and the slack goes above this row, so the send sits in one place whichever page is open. The
+   send and what goes with it on the left, the stop on the right, where the transcript's waiting
+   row kept it before the box took the ask and made that row say it twice. */
   .ask-foot {
     display: flex;
     align-items: center;
     gap: 8px;
-    margin-top: 10px;
+    margin-top: auto;
+    padding-top: 10px;
+  }
+  .ask-stop {
+    margin-left: auto;
+  }
+  /* the send page's rows: each question's answer read back after its header, and a press on the
+   row opens that question. Nothing is checked here, since the row is a way back, not a pick. */
+  .ask-sum {
+    color: var(--text0);
   }
   /* the dot on each tab: filled once that question has an answer */
   .ask-step {

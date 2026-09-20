@@ -87,9 +87,10 @@ export function canSubmit(questions: AskQuestion[], draft: AskAnswer[]): boolean
   return questions.every((q, i) => !q.required || answered(draft[i]));
 }
 
-/** the answer as the transcript reads it back once the ask is closed */
+/** the answer as it reads back, on the send page and in the transcript once the ask is closed. The
+ * agent's "(Recommended)" suffix was the box's badge, not part of the label, so it is not read back. */
 export function answerText(q: AskQuestion, a: AskAnswer | undefined): string {
-  const labels = (a?.selected ?? []).map((v) => q.options.find((o) => o.value === v)?.label ?? v);
+  const labels = (a?.selected ?? []).map((v) => stripRecommended(q.options.find((o) => o.value === v)?.label ?? v));
   const note = a?.note?.trim();
   if (labels.length === 0) return note || "skipped";
   return note ? `${labels.join(", ")}: ${note}` : labels.join(", ");
@@ -127,17 +128,31 @@ export function nextUnanswered(questions: AskQuestion[], draft: AskAnswer[], fro
   return -1;
 }
 
+/** the page after the questions, when there is more than one: the answers read back together, and
+ * the send. A lone question has no strip and no such page, since its pick is its send. */
+export function sendPage(questions: AskQuestion[]): number {
+  return questions.length > 1 ? questions.length : -1;
+}
+
+/** how many pages the arrows walk: the questions, and the send page when there is one */
+export function pageCount(questions: AskQuestion[]): number {
+  return questions.length + (sendPage(questions) === -1 ? 0 : 1);
+}
+
 /** where the box goes after a single-select pick: on to the next question still unanswered, its
- * cursor on that question's pick, or, with none left, stay put and send. One question is the
- * common shape, and asking for a second keystroke there would be theatre. */
+ * cursor on that question's pick, or, with none left, to the send page, where the answers are read
+ * back before they go. One question is the common shape and has no such page: asking for a second
+ * keystroke there would be theatre, so the last pick is the send. */
 export function advance(
   questions: AskQuestion[],
   draft: AskAnswer[],
   from: number,
 ): { current: number; cursor: number; send: boolean } {
   const next = nextUnanswered(questions, draft, from);
-  if (next === -1) return { current: from, cursor: cursorFor(questions[from], draft[from]), send: true };
-  return { current: next, cursor: cursorFor(questions[next], draft[next]), send: false };
+  if (next !== -1) return { current: next, cursor: cursorFor(questions[next], draft[next]), send: false };
+  const review = sendPage(questions);
+  if (review !== -1) return { current: review, cursor: 0, send: false };
+  return { current: from, cursor: cursorFor(questions[from], draft[from]), send: true };
 }
 
 const RECOMMENDED = /\s*\(recommended\)\s*$/i;

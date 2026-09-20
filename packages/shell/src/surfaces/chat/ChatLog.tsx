@@ -9,6 +9,7 @@ import { useOnChange } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { useSelectAllWithin } from "../../ui/selectAll.ts";
 import { isBusy, pickLabel } from "../util.ts";
+import { openAsk } from "./ask.ts";
 import { ChatItemView, ThoughtRow, ToolRow } from "./ChatItemView.tsx";
 import { groupTools, indexOfSeq, openRow, subagentsAtWork } from "./group.ts";
 import { isBlank } from "./recall.ts";
@@ -162,6 +163,14 @@ export function ChatLog({
   );
 
   const busy = !!active && isBusy(active);
+  // the ask in the box under the log, with the stop on its own floor: a row here saying the agent
+  // waits, with a second stop, said what the box already says. Parked, the box is the plain one
+  // again and the row is what says the turn is waiting on you.
+  const askParked = useLocalField(id, "askParked");
+  const askInBox = useMemo(() => {
+    const ask = openAsk(items);
+    return !!ask && askParked !== ask.id;
+  }, [items, askParked]);
   const wt = active?.worktree;
   // one array per worktree: a fresh one on every render would defeat the rows' memo. An archived
   // chat's paths are under the directory it had, which is gone but is still what they are relative to
@@ -255,7 +264,7 @@ export function ChatLog({
             />
           ),
         )}
-        {busy && active && (
+        {busy && active && !(active.agent === "waiting" && askInBox) && (
           <div className="working-row">
             {/* waiting is not activity: it is blocked on you, and the rail keeps that dot steady
                 for the same reason */}

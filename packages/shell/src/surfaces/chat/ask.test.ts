@@ -15,9 +15,11 @@ import {
   openAsk,
   openNote,
   ownChosen,
+  pageCount,
   recommended,
   rowForDigit,
   rowsOf,
+  sendPage,
   setNote,
   stripRecommended,
   walk,
@@ -187,18 +189,28 @@ describe("the keyboard's view of the ask", () => {
     expect(nextUnanswered(three, d, 0)).toBe(-1);
   });
 
-  test("a single-select pick moves on to what is left, and the last one sends", () => {
+  test("a single-select pick moves on to what is left, and the last one lands on the send page", () => {
     let d = choose(emptyDraft(two), 0, "jwt", false);
     expect(advance(two, d, 0)).toEqual({ current: 1, cursor: 0, send: false });
     d = choose(d, 1, "mysql", false);
-    // nothing left: stay on the question just answered, cursor on its pick, and go
-    expect(advance(two, d, 1)).toEqual({ current: 1, cursor: 2, send: true });
+    // nothing left: the answers are read back before they go, and enter there is the send
+    expect(advance(two, d, 1)).toEqual({ current: 2, cursor: 0, send: false });
     // one question is the common shape, and it answers as one keystroke
     expect(advance(one, choose(emptyDraft(one), 0, "cookies", false), 0)).toEqual({
       current: 0,
       cursor: 0,
       send: true,
     });
+  });
+
+  test("the send page follows the questions when there is more than one", () => {
+    expect(sendPage(one)).toBe(-1);
+    expect(pageCount(one)).toBe(1);
+    expect(sendPage(two)).toBe(2);
+    expect(pageCount(two)).toBe(3);
+    // the arrows reach it and stop there
+    expect(walk(1, 1, pageCount(two))).toBe(2);
+    expect(walk(2, 1, pageCount(two))).toBe(2);
   });
 });
 
@@ -221,5 +233,7 @@ describe("answerText", () => {
     expect(answerText(one[0]!, { selected: [], note: "neither" })).toBe("neither");
     expect(answerText(one[0]!, { selected: [] })).toBe("skipped");
     expect(answerText(one[0]!, undefined)).toBe("skipped");
+    // the suffix was the box's badge, and the read-back is the label alone
+    expect(answerText(q("a", ["Cookies (Recommended)"]), { selected: ["cookies (recommended)"] })).toBe("Cookies");
   });
 });

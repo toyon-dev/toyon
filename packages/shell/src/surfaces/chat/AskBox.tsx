@@ -17,6 +17,7 @@ import { Button } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { TextArea } from "../../ui/Field.tsx";
 import { useOnChange } from "../../ui/hooks.ts";
+import { Icon } from "../../ui/Icon.tsx";
 import { Kbd } from "../../ui/Kbd.tsx";
 import { KeyHints } from "../../ui/KeyHints.tsx";
 import { step } from "../../ui/listNav.ts";
@@ -26,6 +27,7 @@ import {
   type AskItem,
   advance,
   answered,
+  answerText,
   canSubmit,
   choose,
   cursorFor,
@@ -34,9 +36,11 @@ import {
   isOwnRow,
   openNote,
   ownChosen,
+  pageCount,
   recommended,
   rowForDigit,
   rowsOf,
+  sendPage,
   setNote,
   stripRecommended,
   walk,
@@ -111,6 +115,8 @@ function QuestionBody({
     [stored, item.id, questions],
   );
   const { draft, current } = held;
+  // the page after the questions, where they read back before they go; no question is open there
+  const review = current === sendPage(questions);
   const q = questions[current];
   const answer = draft[current];
   const multi = !!q?.multi;
@@ -208,16 +214,19 @@ function QuestionBody({
     if (isEnter(e) || (e.key === " " && multi)) {
       // a button the mouse just focused would press itself on enter too
       e.preventDefault();
-      return pick(cursor);
+      // on the send page enter is the send: the answers are read back above it, and this is the
+      // keystroke the page was walked to for
+      return review ? submit() : pick(cursor);
     }
     if (e.key === "ArrowUp" || e.key === "ArrowDown") {
       e.preventDefault();
+      if (!q) return;
       return setCursor(step(cursor, e.key === "ArrowUp" ? -1 : 1, rowsOf(q)));
     }
     if (e.key === "ArrowLeft" || e.key === "ArrowRight" || e.key === "Tab") {
       e.preventDefault();
       const back = e.key === "ArrowLeft" || (e.key === "Tab" && e.shiftKey);
-      return go(walk(current, back ? -1 : 1, questions.length));
+      return go(walk(current, back ? -1 : 1, pageCount(questions)));
     }
     if (e.key === "n" && q?.note) {
       e.preventDefault();
@@ -228,117 +237,201 @@ function QuestionBody({
       return send();
     }
     if (isDigit(e.key)) {
-      const row = rowForDigit(q, Number(e.key));
+      // the send page's rows are the questions, numbered the way the options are, and the digit
+      // opens that question the way it picks an option
+      const row = review ? (Number(e.key) <= questions.length ? Number(e.key) - 1 : -1) : rowForDigit(q, Number(e.key));
       if (row === -1) return;
       e.preventDefault();
-      return pick(row);
+      return review ? go(row) : pick(row);
     }
   };
 
-  const hints: Array<[string, string]> = [
-    ...(questions.length > 1 ? [["←→", "question"] as [string, string]] : []),
-    ["↑↓", "move"],
-    ["⏎", "choose"],
-    ...(q?.note ? [["n", "add a note"] as [string, string]] : []),
-    ["⌘⏎", "send"],
-    ["esc", "reply instead"],
-  ];
-  const under = q?.options[cursor];
-  const owning = ownChosen(answer, multi);
-  const noteOpen = answer?.note !== undefined;
+  /** the key strip of a page, the send page's when no question is given. Each page carries its
+   * own rather than the open page's, since a hidden page's strip still sets its height, and a
+   * strip that wrapped on one page and not another moved the box with the tab. */
+  const hintsFor = (qq?: (typeof questions)[number]): Array<[string, string]> =>
+    qq
+      ? [
+          ...(questions.length > 1 ? [["←→", "question"] as [string, string]] : []),
+          ["↑↓", "move"],
+          ["⏎", "choose"],
+          ...(qq.note ? [["n", "add a note"] as [string, string]] : []),
+          ["⌘⏎", "send"],
+          ["esc", "reply instead"],
+        ]
+      : [
+          ["←→", "question"],
+          ["⏎", "send"],
+          ["esc", "reply instead"],
+        ];
+
+  /** the actions under a page: the send, the note on the pick where the agent takes one and a
+   * pick is made, the skip, and the stop at the far end. Each page carries its own, and the key
+   * strip after it, so the page's height is the whole of what shows for it; the foot sits at the
+   * page's floor so the send is in one place whichever page is open. */
+  const foot = (qq?: (typeof questions)[number], a?: AskAnswer) => (
+    <div className="ask-foot">
+      <Button variant="outline" size="md" disabled={!canSubmit(questions, draft)} onClick={submit}>
+        send
+      </Button>
+      {qq?.note && a && a.selected.length > 0 && a.note === undefined && (
+        <Button tone="quiet" size="md" onClick={() => type(false)}>
+          <Kbd k="n" chip />
+          add a note
+        </Button>
+      )}
+      <Button tone="quiet" size="md" onClick={() => send()}>
+        <Kbd k="s" chip />
+        skip
+      </Button>
+      <Button
+        variant="outline"
+        tone="danger"
+        size="md"
+        className="ask-stop"
+        data-tip="Stop the agent (context up to here is kept)"
+        onClick={() => sock?.send({ t: "stop-agent", worktreeId })}
+      >
+        <Icon name="stop" className="icon-inline" /> stop
+      </Button>
+    </div>
+  );
+
+  /** one question's page: its text, its options, the "other" row, the typed answer's field once
+   * opened, and its own foot and key strip. Every page is in the DOM so the box stands at the
+   * tallest one's height; only the open page has the cursor, the preview and the field's ref. */
+  const page = (qq: (typeof questions)[number], i: number) => {
+    const open = i === current;
+    const a = draft[i];
+    const owning = ownChosen(a, !!qq.multi);
+    const under = open ? qq.options[cursor] : undefined;
+    return (
+      <div key={qq.id} className={cx("ask-page", !open && "ask-page-off")}>
+        <div className="ask-head">
+          <div className="ask-text">{qq.text || message}</div>
+        </div>
+        <div className="ask-options">
+          {qq.options.map((o, oi) => {
+            const on = a?.selected.includes(o.value);
+            return (
+              <button
+                key={o.value}
+                type="button"
+                className="picker-item ask-opt row-edge"
+                data-state={rowState({ cursor: open && !touch && oi === cursor, checked: on })}
+                // mousemove, not mouseenter, for the same reason the picker gives: a row arriving
+                // under a stationary pointer must not steal the highlight the keyboard is on
+                onMouseMove={() => oi !== cursor && setCursor(oi)}
+                onClick={() => {
+                  pick(oi);
+                  root.current?.focus();
+                }}
+              >
+                <Kbd k={String(oi + 1)} className="ask-num row-dim" />
+                <span className="ask-label">
+                  {stripRecommended(o.label)}
+                  {recommended(o.label) && <span className="badge-recommended">recommended</span>}
+                </span>
+                {o.description && <span className="ask-desc row-dim">{o.description}</span>}
+              </button>
+            );
+          })}
+          {/* the typed answer as one more row, numbered after the options so it lines up with them
+              and is reached the same way; it opens the field rather than moving on */}
+          {qq.note && (
+            <button
+              type="button"
+              className="picker-item ask-opt row-edge"
+              data-state={rowState({ cursor: open && !touch && cursor === qq.options.length, checked: owning })}
+              onMouseMove={() => cursor !== qq.options.length && setCursor(qq.options.length)}
+              onClick={() => pick(qq.options.length)}
+            >
+              <Kbd k={String(qq.options.length + 1)} className="ask-num row-dim" />
+              <span className="ask-label">{qq.note.label}</span>
+              <span className="ask-desc row-dim">your own answer</span>
+            </button>
+          )}
+        </div>
+        {under?.preview && <pre className="ask-preview">{under.preview}</pre>}
+        {qq.note && a?.note !== undefined && (
+          <TextArea
+            ref={open ? own : undefined}
+            bare
+            font="ui"
+            rows={2}
+            className="ask-own"
+            placeholder={owning ? `${qq.note.label}: your own answer` : "a note for the agent, sent with your pick"}
+            value={a.note}
+            onChange={(e) => write(setNote(draft, i, e.target.value), i)}
+          />
+        )}
+        {foot(qq, a)}
+        <KeyHints hints={hintsFor(qq)} className="ask-keys" />
+      </div>
+    );
+  };
 
   return (
     <div ref={root} className="ask-box" tabIndex={-1} onKeyDown={onKeyDown} onBlur={onBlur}>
       {/* the questions as tabs across the top: the headers are the agent's short names for them,
-          and the one open joins the question under it. A dot on each says which are answered. */}
+          and the one open joins the page under it. A dot on each says which are answered. The
+          send stands apart at the far end: it is the step after the questions, not one of them. */}
       {questions.length > 1 && (
         <div className="ask-tabs">
           <Tabs
             label="questions"
             owner="ask"
-            items={questions.map((qq, i) => ({
-              id: qq.id,
-              label: qq.header || `question ${i + 1}`,
-              lead: <span className={cx("dot ask-step", answered(draft[i]) && "answered")} />,
-            }))}
-            current={q?.id ?? ""}
+            items={[
+              ...questions.map((qq, i) => ({
+                id: String(i),
+                label: qq.header || `question ${i + 1}`,
+                lead: <span className={cx("dot ask-step", answered(draft[i]) && "answered")} />,
+              })),
+              { id: String(questions.length), label: "send", far: true },
+            ]}
+            current={String(current)}
             onPick={(id) => {
-              go(questions.findIndex((qq) => qq.id === id));
+              go(Number(id));
               // the tab took focus on the press; the keys belong to the root
               root.current?.focus();
             }}
           />
         </div>
       )}
-      <div className="ask-head">
-        {questions.length === 1 && q?.header && <div className="section-title ask-header">{q.header}</div>}
-        <div className="ask-text">{q?.text || message}</div>
-      </div>
-      <div className="ask-options">
-        {q?.options.map((o, oi) => {
-          const on = answer?.selected.includes(o.value);
-          return (
-            <button
-              key={o.value}
-              type="button"
-              className="picker-item ask-opt row-edge"
-              data-state={rowState({ cursor: !touch && oi === cursor, checked: on })}
-              // mousemove, not mouseenter, for the same reason the picker gives: a row arriving
-              // under a stationary pointer must not steal the highlight the keyboard is on
-              onMouseMove={() => oi !== cursor && setCursor(oi)}
-              onClick={() => {
-                pick(oi);
-                root.current?.focus();
-              }}
-            >
-              <Kbd k={String(oi + 1)} className="ask-num row-dim" />
-              <span className="ask-label">
-                {stripRecommended(o.label)}
-                {recommended(o.label) && <span className="badge-recommended">recommended</span>}
-              </span>
-              {o.description && <span className="ask-desc row-dim">{o.description}</span>}
-            </button>
-          );
-        })}
-        {/* the typed answer as one more row, numbered after the options so it lines up with them
-            and is reached the same way; it opens the field rather than moving on */}
-        {q?.note && (
-          <button
-            type="button"
-            className="picker-item ask-opt row-edge"
-            data-state={rowState({ cursor: !touch && cursor === q.options.length, checked: owning })}
-            onMouseMove={() => cursor !== q.options.length && setCursor(q.options.length)}
-            onClick={() => pick(q.options.length)}
-          >
-            <Kbd k={String(q.options.length + 1)} className="ask-num row-dim" />
-            <span className="ask-label">{q.note.label}</span>
-            <span className="ask-desc row-dim">your own answer</span>
-          </button>
+      <div className="ask-pages">
+        {questions.map(page)}
+        {sendPage(questions) !== -1 && (
+          <div className={cx("ask-page", !review && "ask-page-off")}>
+            <div className="ask-head">
+              <div className="ask-text">Send these answers?</div>
+            </div>
+            <div className="ask-options">
+              {questions.map((qq, i) => {
+                const has = answered(draft[i]);
+                return (
+                  <button
+                    key={qq.id}
+                    type="button"
+                    className="picker-item ask-opt ask-sum"
+                    onClick={() => {
+                      go(i);
+                      root.current?.focus();
+                    }}
+                  >
+                    <Kbd k={String(i + 1)} className="ask-num row-dim" />
+                    <span className="ask-label">
+                      <span className="row-dim">{qq.header || `question ${i + 1}`}</span>{" "}
+                      <span className={cx(!has && "row-dim")}>{has ? answerText(qq, draft[i]) : "no answer yet"}</span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            {foot()}
+            <KeyHints hints={hintsFor()} className="ask-keys" />
+          </div>
         )}
       </div>
-      {under?.preview && <pre className="ask-preview">{under.preview}</pre>}
-      {q?.note && noteOpen && (
-        <TextArea
-          ref={own}
-          bare
-          font="ui"
-          rows={2}
-          className="ask-own"
-          placeholder={owning ? `${q.note.label}: your own answer` : "a note for the agent, sent with your pick"}
-          value={answer?.note ?? ""}
-          onChange={(e) => write(setNote(draft, current, e.target.value), current)}
-        />
-      )}
-      <div className="ask-foot">
-        <Button variant="outline" size="md" disabled={!canSubmit(questions, draft)} onClick={submit}>
-          send
-        </Button>
-        <Button tone="quiet" size="md" onClick={() => send()}>
-          <Kbd k="s" chip />
-          skip
-        </Button>
-      </div>
-      <KeyHints hints={hints} className="ask-keys" />
     </div>
   );
 }

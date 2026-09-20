@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { ToolKind } from "@toyon/shared";
 import type { ChatItem } from "../../state/store.ts";
-import { type ChatEntry, groupTools, openRow, runCalls } from "./group.ts";
+import { type ChatEntry, groupTools, openRow, runCalls, type ToolItem } from "./group.ts";
 
 let n = 0;
 const tool = (kind: ToolKind, path: string, extra: Partial<ChatItem> = {}): ChatItem =>
@@ -41,6 +41,61 @@ describe("groupTools", () => {
   test("edits to one file, back to back, are one row", () => {
     const items = [tool("edit", "/wt/a.ts"), tool("edit", "/wt/a.ts"), tool("edit", "/wt/a.ts")];
     expect(shape(items, ["/wt"])).toEqual([{ at: 0, n: 3 }]);
+  });
+
+  /** a call the agent has opened but not finished typing: no path yet, so nothing to group on */
+  const writing = (kind: ToolKind, extra: Partial<ChatItem> = {}) =>
+    tool(kind, "", { input: {}, done: false, ...extra });
+
+  test("an edit still being written after a run of edits shines the run, and is no row yet", () => {
+    const items = [tool("edit", "/wt/a.ts"), tool("edit", "/wt/a.ts"), writing("edit")];
+    const entries = groupTools(items, ["/wt"]);
+    expect(entries.map(shapeOf)).toEqual([{ at: 0, n: 2 }]);
+    expect("tools" in entries[0]! && entries[0].next).toBe(items[2] as ToolItem);
+  });
+
+  test("the first edit of a run, with nothing of its kind above, is its own row while written", () => {
+    expect(shape([text("Now the sidebar:"), writing("edit")], ["/wt"])).toEqual([
+      { at: 0, n: 0 },
+      { at: 1, n: 1 },
+    ]);
+    expect(shape([writing("edit")], ["/wt"])).toEqual([{ at: 0, n: 1 }]);
+  });
+
+  test("words between the run and the call being written keep it a row of its own", () => {
+    const items = [tool("edit", "/wt/a.ts"), text("Now the sidebar:"), writing("edit")];
+    expect(shape(items, ["/wt"])).toEqual([
+      { at: 0, n: 1 },
+      { at: 1, n: 0 },
+      { at: 2, n: 1 },
+    ]);
+  });
+
+  test("a different kind being written after a run is a row of its own", () => {
+    const items = [tool("edit", "/wt/a.ts"), writing("read", { name: "Read" })];
+    expect(shape(items, ["/wt"])).toEqual([
+      { at: 0, n: 1 },
+      { at: 1, n: 1 },
+    ]);
+    // and so is the same kind under another tool name, or a kind that never groups
+    expect(shape([tool("edit", "/wt/a.ts"), writing("edit", { name: "Write" })], ["/wt"])).toHaveLength(2);
+    expect(shape([tool("execute", "ls"), writing("execute")], ["/wt"])).toHaveLength(2);
+  });
+
+  test("a subagent's call being written shines the run it is writing under, not the main flow's", () => {
+    const items = [
+      spawn("s1", "look around"),
+      tool("edit", "/wt/a.ts", { parentToolId: "s1" }),
+      tool("edit", "/wt/a.ts"),
+      writing("edit", { parentToolId: "s1" }),
+    ];
+    const entries = groupTools(items, ["/wt"]);
+    expect(entries.map(shapeOf)).toEqual([
+      { at: 0, n: 1, run: [{ at: 1, n: 1 }] },
+      { at: 2, n: 1 },
+    ]);
+    expect("spawn" in entries[0]! && entries[0].run[0]?.next).toBe(items[3] as ToolItem);
+    expect("tools" in entries[1]! && entries[1].next).toBeUndefined();
   });
 
   test("a different file starts a new row", () => {

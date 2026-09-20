@@ -419,6 +419,7 @@ export const ToolRow = memo(
   function ToolRow({
     tools,
     run,
+    next,
     live,
     roots,
     worktreeId,
@@ -428,6 +429,9 @@ export const ToolRow = memo(
     /** the subagent this call started: its calls, as rows, which this row folds. Empty while it
      * has made none yet, or for an agent that marks a spawn but never tags a child (acp/map.ts). */
     run?: ToolEntry[];
+    /** the call the agent is writing after this run, with no path yet: most likely this file
+     * again (group.ts), so this row shines for it instead of a row of its own appearing below */
+    next?: ToolItem;
     live?: boolean;
     roots?: string[];
     worktreeId?: string | null;
@@ -440,7 +444,10 @@ export const ToolRow = memo(
     // printing the same neighbourhood again (mergeDiffs.ts). No edit row opens itself any more, so
     // this is only ever read on a row somebody opened, and what they came for is what the run did.
     const net = useMemo(() => netOfCalls(tools.map((t) => toolBlocks(t, t.output ?? ""))), [tools]);
-    const running = !tools.at(-1)?.done;
+    const streaming = !tools.at(-1)?.done;
+    // the row is alive while its own last call runs, and while the agent writes the run's next
+    // call: that one has no row until its path is in, and this row's shine is what says it is coming
+    const running = streaming || !!next;
     // The log decides which row opens itself, and it hands the row two answers: the turn's one
     // self-opening row (openRow in group.ts, reasoning only) and the newest `!` command, which is
     // open from the start because what it printed is the reason the person ran it. A subagent's
@@ -451,7 +458,7 @@ export const ToolRow = memo(
     const text = toolLabel(head, roots);
     // the agent is still typing the call: the row says what it is typing, in the slot the path or
     // command will take, and the glyph alone names the kind, as on every row that has its detail
-    const writing = running ? composing(head) : "";
+    const writing = streaming ? composing(head) : "";
     const { label, icon } = text;
     const name = writing ? "" : text.name;
     const hint = writing || text.hint;
@@ -498,7 +505,7 @@ export const ToolRow = memo(
         {run && run.length > 0 && (
           <div className="spawn-run">
             {run.map((e) => (
-              <ToolRow key={e.at} tools={e.tools} roots={roots} worktreeId={worktreeId} />
+              <ToolRow key={e.at} tools={e.tools} next={e.next} roots={roots} worktreeId={worktreeId} />
             ))}
           </div>
         )}
@@ -514,6 +521,7 @@ export const ToolRow = memo(
   },
   (a, b) =>
     a.live === b.live &&
+    a.next === b.next &&
     a.roots === b.roots &&
     a.worktreeId === b.worktreeId &&
     a.marked === b.marked &&

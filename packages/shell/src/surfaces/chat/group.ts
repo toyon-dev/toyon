@@ -12,7 +12,14 @@ export type ToolItem = Extract<ChatItem, { kind: "tool" }>;
 export type ThinkingItem = Extract<ChatItem, { kind: "thinking" }>;
 
 /** a call, or a run of calls that print as one row */
-export type ToolEntry = { at: number; tools: ToolItem[] };
+export type ToolEntry = {
+  at: number;
+  tools: ToolItem[];
+  /** the call the agent is writing after this run, its path not in yet. It is most often the run's
+   * next call, so the row shines for it rather than a row of its own appearing below and folding in
+   * when the path lands. The count waits for the path: the row says two calls until it knows. */
+  next?: ToolItem;
+};
 
 /** a row of the transcript, and where it starts in the item list: React's key, and what says which
  * row the agent is on. A spawn is the call that started a subagent, with that subagent's own calls
@@ -40,6 +47,22 @@ function groupKey(item: ToolItem, roots: string[]): string {
   if (item.isError || !item.toolKind || !GROUPABLE.has(item.toolKind)) return "";
   const { hint } = toolLabel(item, roots);
   return hint ? `${item.parentToolId ?? ""}\n${item.toolKind}\n${item.name}\n${hint}` : "";
+}
+
+/** a call still being written, with no path to group on yet, that most likely joins the run right
+ * above it: the same kind and tool at the same depth, with nothing between. The daemon holds the
+ * path back until the whole input is in (acp/map.ts), so a row of its own would say "writing the
+ * change" for as long as the write takes and then vanish into the row above as its count ticks. */
+function follows(item: ToolItem, last: ChatEntry | undefined, roots: string[]): last is ToolEntry {
+  if (!last || !("tools" in last) || item.done || item.isError) return false;
+  if (!item.toolKind || !GROUPABLE.has(item.toolKind)) return false;
+  const head = last.tools[0]!;
+  return (
+    head.toolKind === item.toolKind &&
+    head.name === item.name &&
+    head.parentToolId === item.parentToolId &&
+    groupKey(head, roots) !== ""
+  );
 }
 
 /** the calls that started a subagent: any the adapter flagged as one, and any a later call names
@@ -82,6 +105,7 @@ export function groupTools(items: ChatItem[], roots: string[]): ChatEntry[] {
     if (home) {
       const last = home.run.at(-1);
       if (next && next === home.key && last) last.tools.push(item);
+      else if (!next && follows(item, last, roots)) last.next = item;
       else home.run.push({ at, tools: [item] });
       home.key = next;
       continue;
@@ -90,6 +114,10 @@ export function groupTools(items: ChatItem[], roots: string[]): ChatEntry[] {
     // an ungroupable call has an empty key, which matches nothing, itself included
     if (next && next === key && last && "tools" in last) {
       last.tools.push(item);
+      continue;
+    }
+    if (!next && follows(item, last, roots)) {
+      last.next = item;
       continue;
     }
     key = next;
@@ -112,7 +140,10 @@ export function sameTools(a: ToolItem[], b: ToolItem[]): boolean {
 /** the same, for a subagent's run: row by row, and each row call by call */
 export function sameRun(a: ToolEntry[] | undefined, b: ToolEntry[] | undefined): boolean {
   if (!a || !b) return a === b;
-  return a.length === b.length && a.every((e, i) => e.at === b[i]?.at && sameTools(e.tools, b[i]!.tools));
+  return (
+    a.length === b.length &&
+    a.every((e, i) => e.at === b[i]?.at && e.next === b[i]?.next && sameTools(e.tools, b[i]!.tools))
+  );
 }
 
 /** Which row of the turn opens itself while the agent works, or -1. Reasoning is the only thing that

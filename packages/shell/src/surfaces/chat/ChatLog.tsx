@@ -211,6 +211,7 @@ export function ChatLog({
             <ToolRow
               key={entry.at}
               tools={entry.tools}
+              next={entry.next}
               live={i === liveRow || i === newestShell}
               roots={roots}
               worktreeId={id}

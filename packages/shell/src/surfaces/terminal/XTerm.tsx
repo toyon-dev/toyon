@@ -143,7 +143,16 @@ export default function XTerm({
       }
       return true;
     });
+    // A snapshot is the pty's raw output replayed, queries included: the terminal answers the
+    // device-attribute, cursor-position and mode reports in it as if the program had just asked,
+    // and a full-screen program that asked once at startup reads the second round as keystrokes
+    // (vim takes the `$y` of a blink report as an operator, and `i` then never inserts). Nothing
+    // the terminal says while a snapshot is being written is a hand's, so none of it is sent. A
+    // count, not a flag: two opens in flight (a reconnect on the heels of a mount) replay two
+    // snapshots, and the first finishing must not let the second's answers through.
+    let replaying = 0;
     const input = term.onData((d) => {
+      if (replaying > 0) return;
       for (let i = 0; i < d.length; i += INPUT_CHUNK) {
         sock.send({ t: "term-input", worktreeId, stream, data: d.slice(i, i + INPUT_CHUNK) });
       }
@@ -163,7 +172,10 @@ export default function XTerm({
       } else if (m.t === "term-snapshot") {
         // the daemon replays raw output into a fresh terminal (a reopen, a reconnect, a respawn)
         term.reset();
-        term.write(m.data);
+        replaying++;
+        term.write(m.data, () => {
+          replaying--;
+        });
         dead = !m.alive;
         onAliveRef.current(m.alive);
         setUp(m.alive);

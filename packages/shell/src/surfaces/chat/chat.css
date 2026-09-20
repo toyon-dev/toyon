@@ -691,6 +691,12 @@
   .chat-dock .chat-input {
     --composer-min: 160px;
   }
+  /* the floor above is the box's, and attachments stand inside it: four image chips fill it on
+     their own and leave the textarea its default two rows. The lines are the field's own floor,
+     in its own line height, so the box grows with what is attached and the text never gives way */
+  .chat-input .composer-field textarea {
+    min-height: 5lh;
+  }
   /* the argument hint sits left of the key hints, where the eye lands after picking */
   /* the paste chip borrows the image chip's link row; its own line is the counts */
   .paste-chip {

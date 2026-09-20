@@ -223,8 +223,13 @@ describe("RuntimeRegistry", () => {
     await registry.start(wt, repo);
     // the fake numbers ports from 40001 in start order; web, the preview, starts second
     expect(registry.previewStanding(wt.id)).toEqual({ status: "running", url: "http://127.0.0.1:40002" });
-    await registry.sleep(wt.id);
-    expect(registry.previewStanding(wt.id)?.status).toBe("asleep");
+    await registry.sleep(wt.id, "nobody looked for 2 h");
+    // the agent reads why, the same as the boot line
+    expect(registry.previewStanding(wt.id)).toEqual({
+      status: "asleep",
+      url: "http://127.0.0.1:40002",
+      detail: "nobody looked for 2 h",
+    });
     // an unconfirmed repo has procs but nothing in them
     await registry.start(spare, { ...repo, needsSetup: true });
     expect(registry.previewStanding(spare.id)).toBeNull();
@@ -374,14 +379,17 @@ describe("RuntimeRegistry sleep and wake", () => {
     await registry.start(wt, repo);
     registry.openTerminal(wt.id, SHELL_STREAM, 80, 24);
     const proxy = proxies.get(wt.id)!;
-    await registry.sleep(wt.id);
+    await registry.sleep(wt.id, "nobody looked for 2 h");
     expect(procs.get(wt.id)?.asleep).toBe(true);
     expect(
       procs
         .get(wt.id)
         ?.states()
-        .map((p) => p.status),
-    ).toEqual(["asleep", "asleep"]);
+        .map((p) => [p.status, p.detail]),
+    ).toEqual([
+      ["asleep", "nobody looked for 2 h"],
+      ["asleep", "nobody looked for 2 h"],
+    ]);
     expect(registry.isAsleep(wt.id)).toBe(true);
     expect(registry.previewTarget(wt.id)).toBeNull();
     expect(proxy.stopped).toBe(false);
@@ -391,7 +399,7 @@ describe("RuntimeRegistry sleep and wake", () => {
     expect(registry.tiers()).toEqual({ awake: 0, asleep: 1 });
     // a second sleep changes nothing and says nothing
     const before = changed;
-    await registry.sleep(wt.id);
+    await registry.sleep(wt.id, "short of memory");
     expect(changed).toBe(before);
     await registry.wake(wt.id);
     expect(procs.get(wt.id)?.asleep).toBe(false);
@@ -412,7 +420,7 @@ describe("RuntimeRegistry sleep and wake", () => {
       const { registry, proxies, procs, state } = make({ worktrees: [a, { ...b, proxyPort: 1 }], ports });
       await registry.start(a, repo);
       const first = proxies.get(a.id)!;
-      await registry.sleep(a.id);
+      await registry.sleep(a.id, "nobody looked for 2 h");
       expect(first.stopped).toBe(true);
       expect(registry.get(a.id)?.proxy).toBeNull();
       expect(ports.held.size).toBe(0);
@@ -433,6 +441,8 @@ describe("RuntimeRegistry sleep and wake", () => {
       await registry.start(b, repo);
       await registry.start(c, repo);
       expect(procs.get(a.id)?.asleep).toBe(true);
+      // the boot line names who took it
+      expect(procs.get(a.id)?.states()[0]?.detail).toBe("its preview port went to c");
       expect(procs.get(b.id)?.asleep).toBe(false);
       expect(procs.get(c.id)?.asleep).toBe(false);
       expect(state.worktree(c.id)?.proxyPort).toBe(1);
@@ -462,7 +472,7 @@ describe("RuntimeRegistry sleep and wake", () => {
       expect(procs.get(s.id)).toBeUndefined();
       expect(procs.get(a.id)?.asleep).toBe(false);
       // and a spare, never shown, is the first to give its port up
-      await registry.sleep(a.id);
+      await registry.sleep(a.id, "nobody looked for 2 h");
       await registry.start(s, repo);
       expect(procs.get(s.id)?.started.length).toBe(2);
       await registry.start(a, repo);
@@ -513,7 +523,7 @@ describe("RuntimeRegistry sleep and wake", () => {
   test("a restart asked of an asleep proc's tab wakes the whole set", async () => {
     const { registry, procs } = make();
     await registry.start(wt, repo);
-    await registry.sleep(wt.id);
+    await registry.sleep(wt.id, "nobody looked for 2 h");
     await registry.restartStream(wt.id, "web");
     expect(procs.get(wt.id)?.restarts).toEqual([]);
     expect(procs.get(wt.id)?.asleep).toBe(false);
@@ -549,7 +559,7 @@ describe("RuntimeRegistry sleep and wake", () => {
     const fake = procs.get(wt.id)!;
     const t = await registry.awaitPreview(wt.id, 1000);
     expect(t?.port).toBe(fake.states().find((p) => p.name === "web")?.port);
-    await registry.sleep(wt.id);
+    await registry.sleep(wt.id, "nobody looked for 2 h");
     const t0 = Date.now();
     expect(await registry.awaitPreview(wt.id, 1000)).toBeNull();
     expect(Date.now() - t0).toBeLessThan(200);

@@ -213,7 +213,9 @@ export class IdlePolicy {
       .filter((w) => this.candidate(w.id))
       .sort((a, b) => this.entry(a.id).activeAt - this.entry(b.id).activeAt)[0];
     if (!pick) return;
-    this.sleep(pick.id, `${signal.why}; least recently used`);
+    // the numbers go to the log; the person reads the one reason that is theirs to act on
+    log.info("idle", `${signal.why}; ${pick.id} is the least recently used`);
+    this.sleep(pick.id, "short of memory");
   }
 
   /** what each awake worktree holds, for /health; never a reason to sleep one. The same minute
@@ -318,14 +320,14 @@ export class IdlePolicy {
       this.arm(id, this.sleepMs - idle);
       return;
     }
-    this.sleep(id, `idle ${humanMs(this.sleepMs)}`);
+    this.sleep(id, `nobody looked for ${humanMs(this.sleepMs)}`);
   }
 
+  /** `why` is for the person: it goes on the procs, where the boot line reads it */
   private sleep(id: string, why: string): void {
     this.disarm(id);
     this.entry(id).costKb = undefined;
-    log.info(id, `asleep: ${why}`);
-    fireAndForget(id, this.d.runtime.sleep(id), "sleep");
+    fireAndForget(id, this.d.runtime.sleep(id, why), "sleep");
   }
 
   /** wakes run one after another; a key already queued is not queued again */
@@ -345,8 +347,9 @@ export class IdlePolicy {
   }
 }
 
-function humanMs(ms: number): string {
-  if (ms >= 60 * 60_000 && ms % (60 * 60_000) === 0) return `${ms / (60 * 60_000)}h`;
+/** a window as a person reads it: "2 h", "5 min", "15 s" */
+export function humanMs(ms: number): string {
+  if (ms >= 60 * 60_000 && ms % (60 * 60_000) === 0) return `${ms / (60 * 60_000)} h`;
   if (ms >= 60_000) return `${Math.round(ms / 60_000)} min`;
-  return `${Math.round(ms / 1000)}s`;
+  return `${Math.round(ms / 1000)} s`;
 }

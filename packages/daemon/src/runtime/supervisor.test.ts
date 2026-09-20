@@ -191,8 +191,9 @@ describe("WorktreeProcs sleep and wake", () => {
     const st = await procs.start("web", SERVER);
     expect(await until(() => states.some((s) => s.status === "running"), 8000)).toBe(true);
     const pid = st.pid!;
-    await procs.sleep();
+    await procs.sleep("short of memory");
     expect(procs.asleep).toBe(true);
+    expect(st.detail).toBe("short of memory");
     expect(alive(pid)).toBe(false);
     // the shell hears asleep first, so its iframe is gone before the exit could make it knock
     expect(events.indexOf("asleep")).toBeGreaterThan(-1);
@@ -208,6 +209,8 @@ describe("WorktreeProcs sleep and wake", () => {
     const woken = states.at(-1)!;
     expect(woken.port).toBe(st.port);
     expect(woken.pid).not.toBe(pid);
+    // the reason it slept is not a reason it is up
+    expect(woken.detail).toBeUndefined();
     expect(alive(woken.pid!)).toBe(true);
     await procs.stopAll();
   }, 20_000);
@@ -216,7 +219,7 @@ describe("WorktreeProcs sleep and wake", () => {
     const events: string[] = [];
     const procs = new WorktreeProcs(process.cwd(), (p) => events.push(p.status), noop);
     await procs.start("web", "sleep 30");
-    await procs.sleep();
+    await procs.sleep("nobody looked for 2 h");
     procs.restart("web");
     await Bun.sleep(200);
     expect(events.filter((e) => e === "starting")).toHaveLength(1);

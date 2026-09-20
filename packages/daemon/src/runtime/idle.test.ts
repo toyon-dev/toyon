@@ -3,7 +3,7 @@ import type { AgentStatus, ProcState, RepoInfo, WorktreeInfo } from "@toyon/shar
 import { tmpRepo } from "../../test/helpers/tmp-repo.ts";
 import { Hub } from "../core/hub.ts";
 import { StateStore } from "../core/state.ts";
-import { type IdleDeps, IdlePolicy, sleepMsFrom } from "./idle.ts";
+import { humanMs, type IdleDeps, IdlePolicy, sleepMsFrom } from "./idle.ts";
 import type { MemorySignal } from "./memory.ts";
 
 const S = 10_000;
@@ -36,6 +36,8 @@ class FakeRuntime {
   agents = new Map<string, { status: AgentStatus; queueItems: string[] }>();
   holds = new Map<string, number>();
   slept: string[] = [];
+  /** the reason each sleep carried, by worktree */
+  why = new Map<string, string>();
   awaited: Array<[string, number]> = [];
   up(id: string, status: ProcState["status"] = "running") {
     this.procs.set(id, { asleep: false, states: [{ name: "web", command: "true", port: 1, status }] });
@@ -56,12 +58,13 @@ class FakeRuntime {
     if (agent && (agent.status !== "idle" || agent.queueItems.length > 0)) return true;
     return this.holdCount(id) > 0;
   }
-  async sleep(id: string) {
+  async sleep(id: string, why: string) {
     const p = this.procs.get(id);
     if (!p) return;
     p.asleep = true;
     for (const s of p.states) s.status = "asleep";
     this.slept.push(id);
+    this.why.set(id, why);
   }
   awake() {
     return [...this.procs].filter(([, p]) => !p.asleep).map(([id]) => ({ id, pgids: [Number(id.charCodeAt(0))] }));
@@ -147,6 +150,8 @@ describe("IdlePolicy clock", () => {
     expect(runtime.slept).toEqual([]);
     advance(2);
     expect(runtime.slept).toEqual(["a"]);
+    // the reason is in the person's words, so the boot line can say it as it is
+    expect(runtime.why.get("a")).toBe("nobody looked for 10 s");
   });
 
   test("a hidden tab's worktree sleeps like an unviewed one; a second tab keeps it awake", () => {
@@ -232,6 +237,10 @@ describe("IdlePolicy clock", () => {
     expect(sleepMsFrom("15000", true)).toBe(15_000);
     expect(sleepMsFrom("off", false)).toBeNull();
     expect(sleepMsFrom("nonsense", false)).toBe(2 * 60 * 60_000);
+    expect(humanMs(2 * 60 * 60_000)).toBe("2 h");
+    expect(humanMs(5 * 60_000)).toBe("5 min");
+    expect(humanMs(90 * 60_000)).toBe("90 min");
+    expect(humanMs(15_000)).toBe("15 s");
   });
 
   test("a removed worktree drops out; its timer never fires", () => {
@@ -302,6 +311,7 @@ describe("IdlePolicy under memory pressure", () => {
     runtime.holds.set("d", 1);
     await policy.checkPressure();
     expect(runtime.slept).toEqual(["b"]);
+    expect(runtime.why.get("b")).toBe("short of memory");
     await policy.checkPressure();
     expect(runtime.slept).toEqual(["b", "c"]);
     // nothing left that may sleep: a is shown and d is held

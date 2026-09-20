@@ -48,7 +48,7 @@ export function Boot({ worktree, log }: { worktree: OwnedWorktree; log: LogLine[
                   restart
                 </Button>
               )}
-              {p.detail && <div className="boot-detail">{p.detail}</div>}
+              {p.detail && p.status !== "asleep" && <div className="boot-detail">{p.detail}</div>}
             </li>
           ))}
         </ul>
@@ -91,7 +91,8 @@ function statusText(p: ProcState): string {
       return p.exitCode != null ? `crashed (exit ${p.exitCode})` : "crashed";
     case "stopped":
       return "stopped";
+    // the reason is the line itself: "asleep: nobody looked for 2 h", never a bare "asleep"
     case "asleep":
-      return "asleep; opens when you look";
+      return `asleep${p.detail ? `: ${p.detail}` : ""}; opens when you look`;
   }
 }

@@ -258,14 +258,17 @@ export class WorktreeProcs {
 
   /** Stop every proc but keep its port and its place: the worktree is not being looked at. The
    * `asleep` state goes out before the kill so a tab drops the iframe before the exit reaches it;
-   * an iframe left up would keep knocking on the proxy, and a knock is what wakes a worktree. */
-  async sleep(): Promise<void> {
+   * an iframe left up would keep knocking on the proxy, and a knock is what wakes a worktree.
+   * `why` rides on each proc as its detail, so the person reads why it is down rather than only
+   * that it is; the wake's respawn clears it. */
+  async sleep(why: string): Promise<void> {
     if (this.asleep || this.stopped) return;
     this.asleep = true;
     const exits: Promise<void>[] = [];
     for (const mp of this.procs.values()) {
       mp.state.status = "asleep";
       mp.state.pid = undefined;
+      mp.state.detail = why;
       this.onProc({ ...mp.state });
       exits.push(this.killProc(mp));
     }

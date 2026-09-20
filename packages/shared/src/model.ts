@@ -382,7 +382,8 @@ export interface ProcState {
   host?: string;
   /** the port it really bound when it ignored $PORT; the proxy and the sibling URLs follow this */
   boundPort?: number;
-  /** why it is unreachable, or what it is doing on the wrong port, for the person at the shell */
+  /** why it is unreachable, what it is doing on the wrong port, or why toyon put it to sleep
+   * ("nobody looked for 2 h", "short of memory"), for the person at the shell */
   detail?: string;
 }
 

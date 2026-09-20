@@ -345,16 +345,19 @@ export class RuntimeRegistry {
   /** Stop the worktree's procs and nothing else: the proxy, its port, the agent, the shell and
    * the login all stay, so its URL and its terminal are unchanged when it wakes. The one
    * exception is a port from a fixed range: the front forwards a handful, so an asleep copy holding
-   * one would keep a copy someone opens from starting, and it gives the port back first. */
-  async sleep(id: string): Promise<void> {
+   * one would keep a copy someone opens from starting, and it gives the port back first. `why` is
+   * the reason in the person's words ("nobody looked for 2 h"); it lands on each proc for the
+   * boot line, and in the log. */
+  async sleep(id: string, why: string): Promise<void> {
     const rt = this.runtimes.get(id);
     if (!rt?.procs || rt.procs.asleep) return;
+    log.info(id, `asleep: ${why}`);
     if (this.ports.ranged()) {
       rt.proxy?.stop();
       rt.proxy = null;
       this.returnLease(id);
     }
-    await rt.procs.sleep();
+    await rt.procs.sleep(why);
     this.deps.hub.emit("worktreesChanged");
   }
 
@@ -574,9 +577,12 @@ export class RuntimeRegistry {
       );
       const victim = oldestViewed(holders, this.deps.state);
       if (victim) {
-        log.info(victim.id, `asleep: its preview port went to ${wt.title}`);
         // the proxy and the lease go before the first await inside, which is all the port needs
-        fireAndForget(victim.id, this.sleep(victim.id), "sleep for a preview port");
+        fireAndForget(
+          victim.id,
+          this.sleep(victim.id, `its preview port went to ${wt.title || wt.branch}`),
+          "sleep for a preview port",
+        );
         port = this.ports.lease(wt.proxyPort);
       }
       if (port === null) {

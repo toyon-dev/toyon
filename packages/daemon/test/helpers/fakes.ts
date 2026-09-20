@@ -100,13 +100,19 @@ export class FakeProcs {
     for (const s of this.states_) s.status = "stopped";
   }
   asleep = false;
-  async sleep() {
+  async sleep(why: string) {
     this.asleep = true;
-    for (const s of this.states_) s.status = "asleep";
+    for (const s of this.states_) {
+      s.status = "asleep";
+      s.detail = why;
+    }
   }
   wake() {
     this.asleep = false;
-    for (const s of this.states_) s.status = "running";
+    for (const s of this.states_) {
+      s.status = "running";
+      s.detail = undefined;
+    }
   }
   pgids(): number[] {
     return [];

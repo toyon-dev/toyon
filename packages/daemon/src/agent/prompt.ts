@@ -64,7 +64,7 @@ export function previewContext(p: PreviewStanding | null): string | undefined {
       line = `The preview is running${at}, and the user sees it live beside this chat.`;
       break;
     case "asleep":
-      line = `The preview is asleep; it answers${at} once the user opens this worktree again.`;
+      line = `The preview is asleep${p.detail ? ` (${p.detail})` : ""}; it answers${at} once the user opens this worktree again.`;
       break;
     default:
       line = `The preview is ${p.status}${p.detail ? `: ${p.detail}` : ""}; nothing answers${at} until it is back.`;

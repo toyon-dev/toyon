@@ -71,9 +71,9 @@ export function useChords() {
       onMods(e);
       const s = store.getState();
       const { dispatch } = store;
-      // a walk that lands on a row is there to read and reply, so the composer is offered the
-      // caret. Who held it is read now: a carried terminal or editor remounts on the switch, and a
-      // frame later the body holds a caret that was theirs.
+      // a walk or a digit that lands on a row is there to read and reply, so the composer is offered
+      // the caret. Who held it is read now: a carried terminal or editor remounts on the switch, and
+      // a frame later the body holds a caret that was theirs.
       const land = (id: string) => {
         const held = document.activeElement;
         const offer = !held || held === document.body || !!held.closest(".rail, .chat-input");
@@ -114,7 +114,8 @@ export function useChords() {
           case "worktree": {
             const i = worktreeIndex(chord.digit, s.visible.length);
             const wt = i === null ? undefined : s.visible[i];
-            if (wt) dispatch({ a: "activate", id: wt.id });
+            // no peek: there is no held modifier to read the landed row against
+            if (wt) land(wt.id);
             break;
           }
           case "wt-prev":

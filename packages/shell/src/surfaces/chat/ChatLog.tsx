@@ -187,6 +187,11 @@ export function ChatLog({
   // difference: nothing while results keep landing, a number climbing when they stop. It measures
   // silence rather than the turn, so a running call counts too: a hung command is silence.
   const quiet = useQuietSeconds(items, busy);
+  // What in the log already says busy: the shimmer on a running call, or on a thought still
+  // arriving. The word under the log would say it again, so it shows only when nothing does, in
+  // the gap between two calls. The count stays either way: a call that hangs shimmers like one
+  // that runs, and the seconds are what tell them apart.
+  const moving = streaming >= 0 || items.some((i) => i.kind === "tool" && !i.done);
   // The rows under the transcript land a frame after the message that caused them: the agent goes
   // busy after the send is in the log, a queued message after the daemon takes it. They add height
   // without touching `items`, so the send they follow scrolls out from under them.
@@ -237,6 +242,14 @@ export function ChatLog({
                 for the same reason */}
             {active.agent === "waiting" ? (
               "waiting for your answer…"
+            ) : moving ? (
+              // the silence is the news, so it gets the word; under the threshold the row is the
+              // stop alone, since the shimmer above is saying the rest
+              quiet >= QUIET_AFTER && (
+                <span>
+                  quiet for<span className="working-quiet">{quiet}s</span>
+                </span>
+              )
             ) : (
               <span>
                 working…

@@ -1042,6 +1042,13 @@ describe("drafts", () => {
     s = run([server({ t: "backfill", worktreeId: "a", events: [{ seq: 0, event: said }] })], s);
     expect(s.local.a?.restoring).toBeUndefined();
   });
+  test("each send from a box counts, so the log can go to its end on every one", () => {
+    let s = run([hello(wt("a"))]);
+    expect(s.local.a?.sent).toBeUndefined();
+    s = run([{ a: "sent", id: "a" }], s);
+    s = run([{ a: "sent", id: "a" }], s);
+    expect(s.local.a?.sent).toBe(2);
+  });
   test("a refused restore puts the message back in the box, with the reason under it", () => {
     let s = run([hello(wt("b")), { a: "restoring", id: "a", text: "one more thing" }]);
     s = run([server({ t: "error", message: "that archived worktree is gone", worktreeId: "a" })], s);

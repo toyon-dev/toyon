@@ -174,6 +174,9 @@ export interface WorktreeLocal {
   /** a message sent from an archived page, shown as sent while the worktree comes back: gone when
    * its own message reaches the chat, and back in the box if the restore is refused */
   restoring?: string;
+  /** how many messages this tab has sent from here: the log goes to its end on each, wherever
+   * the reader had scrolled to, since the reply is what they are waiting for now */
+  sent?: number;
   /** live page state (route, title, recent errors) — ambient chat context */
   page: { url?: string; title?: string; errors: string[] };
   /** did the current agent turn edit anything / did the page HMR */
@@ -1063,6 +1066,8 @@ export type Action =
   | { a: "archive-worktrees"; ids: string[] }
   /** a message went from an archived page with the restore it asks for: show it as sent meanwhile */
   | { a: "restoring"; id: string; text: string }
+  /** this tab sent a message from the box: the log jumps to its end */
+  | { a: "sent"; id: string }
   /** a landing op went out for this worktree: show it working until the shipped frame */
   | { a: "shipping"; id: string; op: ShipOp }
   /** an "open project" request went to the daemon: adopt the repo it adds */
@@ -1353,6 +1358,8 @@ function reduce(s: State, action: Action): State {
       return s.archivedPage ? closeArchivedPage(s) : s;
     case "restoring":
       return withLocal(s, action.id, (l) => ({ ...l, restoring: action.text }));
+    case "sent":
+      return withLocal(s, action.id, (l) => ({ ...l, sent: (l.sent ?? 0) + 1 }));
     case "archive-worktrees": {
       const ids = action.ids.filter((id) => !s.archiving.includes(id) && worktreeById(s, id));
       if (ids.length === 0) return s;

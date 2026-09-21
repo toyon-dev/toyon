@@ -648,6 +648,7 @@ export function Composer({
       });
       if (attachments.length) dispatch({ a: "clear-attachments", id: boxId });
       dispatch({ a: "restoring", id: boxId, text: text.trim() });
+      dispatch({ a: "sent", id: boxId });
       setText("");
       return;
     }
@@ -745,7 +746,9 @@ export function Composer({
       sock?.send({ t: "chat", worktreeId: id, clientId, text: prompt, context, attachments: sent });
     }
     if (attachments.length) dispatch({ a: "clear-attachments", id: boxId });
+    // after the draft is cleared: a walk ending in a send puts the log back first, and the send wins
     setText("");
+    dispatch({ a: "sent", id: boxId });
     // the reply lands in the dock, so the dock comes back with the message that started it
     if (greenfield) dispatch({ a: "show-chat" });
   };

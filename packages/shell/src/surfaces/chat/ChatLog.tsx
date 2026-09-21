@@ -102,6 +102,14 @@ export function ChatLog({
     walkStart.current ??= { bottom: follow.pinned(), top: el.scrollTop };
     scrollToMarked();
   });
+  // A send goes to the end from wherever the reader was: the reply is what they are waiting for
+  // now, and the message just sent is its only anchor. Pinning here, before the message lands,
+  // is what keeps it in view once it does; the pill is for what arrives while they read, not this.
+  // Declared after the walk's effect so that a walk ending in a send jumps rather than restores.
+  const sent = useLocalField(id, "sent");
+  useOnChange([sent], () => {
+    if (sent) follow.jump();
+  });
   // A hit picked in the chats palette marks its row the same way. The chat may still be on its way
   // (a worktree this tab had not opened, an archived page), so the row arriving scrolls to it as
   // well as the pick does; `n` scrolls again when the same hit is picked twice.

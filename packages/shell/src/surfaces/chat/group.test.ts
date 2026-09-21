@@ -22,7 +22,12 @@ const text = (t: string): ChatItem => ({ kind: "assistant", text: t });
 const spawn = (id: string, description: string, extra: Partial<ChatItem> = {}): ChatItem =>
   tool("think", "", { id, name: "Task", title: description, input: { description }, subagent: true, ...extra });
 
-const thought = (t: string): ChatItem => ({ kind: "thinking", text: t }) as ChatItem;
+/** a thought with a body: a second line, so it is a card and not a one-line row (thought.ts) */
+const thought = (t: string): ChatItem =>
+  ({ kind: "thinking", text: t.trim() ? `${t}\n\nAnd the rest of the reasoning.` : t }) as ChatItem;
+
+/** a one-line thought, as Codex sends each step's reasoning summary */
+const headline = (t: string): ChatItem => ({ kind: "thinking", text: `\n\n**${t}**` }) as ChatItem;
 
 const DIFF = "@@ -1 +1 @@\n-a\n+b";
 
@@ -314,6 +319,18 @@ describe("groupTools", () => {
   test("the open row: an agent that models its reasoning as a call opens like a thought", () => {
     expect(open([tool("think", "/wt/a.ts", { output: "The caller next." })])).toBe(0);
     expect(open([tool("think", "/wt/a.ts", { done: false })])).toBe(0);
+  });
+
+  test("the open row: a one-line thought is a row, opens nothing, and closes the thought before it", () => {
+    expect(open([headline("Inspecting module documentation")])).toBe(-1);
+    expect(open([thought("Two places to look."), headline("Reading the second")])).toBe(-1);
+    expect(open([headline("Reading the second"), tool("read", "/wt/a.ts", { output: "x" })])).toBe(-1);
+  });
+
+  test("the open row: a guardian review is a call, not the agent's reasoning", () => {
+    const guardian = tool("think", "", { name: "", title: "Guardian Review", input: {}, output: "Status: Approved" });
+    expect(open([guardian])).toBe(-1);
+    expect(open([thought("Two places to look."), guardian])).toBe(0);
   });
 
   test("a call cut off before its input arrived is not a row", () => {

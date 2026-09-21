@@ -467,6 +467,11 @@
       flex: 0 1 auto;
       min-width: 0;
     }
+    /* a one-line thought on the row: prose, so it wears the message's face like a thought's body
+     does, at the row's own tier; in the mono it read as a command that had not run */
+    & .thought-line {
+      font: var(--type-ui);
+    }
     &.error .tool-name {
       color: var(--red);
     }

@@ -1,6 +1,7 @@
 import { emptyInput, isWrittenKind } from "@toyon/shared";
 import type { ChatItem } from "../../state/store.ts";
-import { toolLabel } from "./toolCall.ts";
+import { thoughtLine } from "./thought.ts";
+import { isGuardian, toolLabel } from "./toolCall.ts";
 
 /** An agent working through one file writes it in several calls, one hunk each, and the transcript
  * printed a line per call: four rows reading "edit menu.ts" with nothing to tell them apart. A run
@@ -199,14 +200,18 @@ export function openRow(entries: ChatEntry[]): number {
     const entry = entries[i]!;
     if ("spawn" in entry) continue;
     // an agent that models its reasoning as a call rather than streaming it (never Claude;
-    // acp/map.ts) reads the way a thought does
+    // acp/map.ts) reads the way a thought does. A guardian review is not the agent's reasoning:
+    // its row says the verdict, and the report under it is read by whoever wants the reason.
     if ("tools" in entry) {
-      if (entry.tools[0]?.toolKind === "think") return i;
+      const head = entry.tools[0];
+      if (head?.toolKind === "think" && !isGuardian(head)) return i;
       continue;
     }
+    // a one-line thought is a row with nothing to open (thoughtLine in thought.ts), and it is
+    // still the agent's next thought: what it said is on the line, and the thought before it closes
     if (entry.item.kind === "thinking") {
-      if (entry.item.text.trim()) return i;
-      continue;
+      if (!entry.item.text.trim()) continue;
+      return thoughtLine(entry.item.text) ? -1 : i;
     }
     if (says(entry.item)) return -1;
   }

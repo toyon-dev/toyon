@@ -24,8 +24,18 @@ import { netOfCalls } from "./mergeDiffs.ts";
 import { PasteChip } from "./PasteChip.tsx";
 import { PickChip } from "./PickChip.tsx";
 import { languageOf, type Piece, paintCode, paintDiff, pathInDiff } from "./syntax.ts";
-import { normalizeThoughtMarkdown } from "./thought.ts";
-import { callPath, composing, diffLines, type OutputBlock, relPath, toolBlocks, toolLabel } from "./toolCall.ts";
+import { normalizeThoughtMarkdown, thoughtLine } from "./thought.ts";
+import {
+  callPath,
+  composing,
+  diffLines,
+  guardianHint,
+  isGuardian,
+  type OutputBlock,
+  relPath,
+  toolBlocks,
+  toolLabel,
+} from "./toolCall.ts";
 import { toolRowItems } from "./toolRowItems.ts";
 
 /** the link at or around an element of a rendered message, and the worktree file it names when
@@ -380,6 +390,28 @@ export const ThoughtRow = memo(function ThoughtRow({
     if (!el || !isOpen || streaming) return;
     el.scrollTop = 0;
   };
+  // a finished thought of one line is the line, printed where the word would go, with nothing
+  // under it: a headline per step (Codex) folded into a card each was a column of lids
+  const line = streaming ? "" : thoughtLine(item.text);
+  if (line) {
+    return (
+      <Fold
+        className="tool-row"
+        auto={false}
+        leaf
+        label={line}
+        menu={() => grouped([[{ id: "copy", label: "copy thought", onClick: () => copyText(item.text) }]])}
+        summary={
+          <>
+            <Icon name="bulb" className="tool-icon" />
+            <span className="tool-hint thought-line">{line}</span>
+          </>
+        }
+      >
+        {null}
+      </Fold>
+    );
+  }
   return (
     <Fold
       className="tool-row"
@@ -470,8 +502,10 @@ export const ToolRow = memo(
     // command will take, and the glyph alone names the kind, as on every row that has its detail
     const writing = streaming ? composing(head) : "";
     const { label, icon } = text;
-    const name = writing ? "" : text.name;
-    const hint = writing || text.hint;
+    // a guardian review's line is its verdict, read off the report it printed (toolCall.ts)
+    const guardian = isGuardian(head);
+    const name = writing ? "" : guardian ? "Guardian" : text.name;
+    const hint = writing || (guardian ? guardianHint(head.output ?? "") : text.hint);
     // nothing under the line: no subagent rows, no net change, and no call that ran a command or
     // printed a block (ToolPart draws nothing for those). Read the same way ToolPart does, so the
     // row is a leaf exactly when opening it would show nothing.

@@ -1,6 +1,17 @@
 import { describe, expect, test } from "bun:test";
 import type { ToolKind } from "@toyon/shared";
-import { composing, diffLineKind, diffLines, parseToolOutput, relPath, toolBlocks, toolLabel } from "./toolCall.ts";
+import {
+  composing,
+  diffLineKind,
+  diffLines,
+  guardianHint,
+  isGuardian,
+  parseToolOutput,
+  relPath,
+  toolBlocks,
+  toolLabel,
+  unwrapShell,
+} from "./toolCall.ts";
 
 describe("parseToolOutput", () => {
   test("splits prose from a fenced block and drops the fences", () => {
@@ -131,21 +142,63 @@ describe("diffLineKind", () => {
 describe("toolLabel", () => {
   const wt = "/Users/k/.toyon/worktrees/cookbook/spare-0c0d";
 
-  test("an unnamed semantic call keeps its title as the row detail", () => {
-    expect(
-      toolLabel({
-        name: "",
-        title: "Read file '/repo/src/app.ts'",
-        toolKind: "read",
-        input: { locations: [{ path: "/repo/src/app.ts" }] },
-      }),
-    ).toEqual({
+  test("a call that names its file in ACP's locations reads as the file, not the sentence", () => {
+    // Codex's read: a prose title, the path in `locations`, no `file_path`
+    const call = {
+      name: "",
+      title: "Read file '/repo/src/app.ts'",
+      toolKind: "read" as const,
+      input: { locations: [{ path: "/repo/src/app.ts" }] },
+    };
+    expect(toolLabel(call, ["/repo"])).toEqual({
       label: "read",
       name: "",
       icon: "book",
-      hint: "Read file '/repo/src/app.ts'",
+      hint: "src/app.ts",
       command: "",
     });
+    expect(toolLabel(call).hint).toBe("/repo/src/app.ts");
+  });
+
+  test("an unnamed semantic call with no file keeps its title as the row detail", () => {
+    expect(toolLabel({ name: "", title: "List files in 'src'", toolKind: "read", input: { locations: [] } })).toEqual({
+      label: "read",
+      name: "",
+      icon: "book",
+      hint: "List files in 'src'",
+      command: "",
+    });
+  });
+
+  test("a command wrapped in its shell is the command inside, verb and all", () => {
+    const call = { name: "", title: "", toolKind: "execute" as const, input: {} };
+    const inner = "nl -ba utils.py | sed -n '286,375p'; git show --stat 83ac7847e";
+    expect(toolLabel({ ...call, input: { command: `/bin/zsh -lc "${inner}"` } })).toEqual({
+      label: "run",
+      name: "",
+      icon: "book",
+      hint: inner,
+      command: "",
+    });
+    expect(toolLabel({ ...call, input: { command: "/bin/zsh -lc 'git status'" } }).icon).toBe("branch");
+  });
+
+  test("a guardian review's line is its verdict, read off the report", () => {
+    const report = [
+      "Status: In progress",
+      "Action: exec /bin/zsh -lc 'pre-commit run pytest'",
+      "Status: Approved",
+      "Action: exec /bin/zsh -lc 'pre-commit run pytest'",
+      "Risk: medium",
+      "Authorization: high",
+      "Rationale: This reruns the repository's pytest pre-commit hook.",
+    ].join("\n");
+    expect(guardianHint(report)).toBe("approved, medium risk");
+    expect(guardianHint("Status: In progress\nAction: exec ls")).toBe("reviewing");
+    expect(guardianHint("")).toBe("reviewing");
+    expect(guardianHint("Status: Denied")).toBe("denied");
+    expect(isGuardian({ name: "", title: "Guardian Review", toolKind: "think", input: {} })).toBe(true);
+    expect(isGuardian({ name: "", title: "Compact conversation", toolKind: "think", input: {} })).toBe(false);
   });
 
   test("an agent that sends no name gets one from the call's kind", () => {
@@ -282,6 +335,24 @@ describe("toolLabel", () => {
   test("a file path is shown relative to the worktree", () => {
     const call = { name: "edit", title: "edit", toolKind: "edit" as const, input: { file_path: `${wt}/PLAN.md` } };
     expect(toolLabel(call, [wt])).toEqual({ label: "edit", name: "", icon: "edit", hint: "PLAN.md", command: "" });
+  });
+});
+
+describe("unwrapShell", () => {
+  test("strips a whole shell wrapper and gives a double-quoted command its escapes back", () => {
+    expect(unwrapShell("/bin/zsh -lc 'pre-commit run pytest'")).toBe("pre-commit run pytest");
+    expect(unwrapShell('/bin/zsh -lc "rg -n \\"@router\\" api"')).toBe('rg -n "@router" api');
+    expect(unwrapShell("bash -c 'echo hi'")).toBe("echo hi");
+    expect(unwrapShell("/usr/bin/sh -e -c 'make'")).toBe("make");
+  });
+
+  test("leaves anything that is not one quoted argument to a shell", () => {
+    expect(unwrapShell("sh")).toBe("sh");
+    expect(unwrapShell("shellcheck 'x.sh'")).toBe("shellcheck 'x.sh'");
+    expect(unwrapShell("bash run.sh")).toBe("bash run.sh");
+    expect(unwrapShell("zsh -c 'one' 'two'")).toBe("zsh -c 'one' 'two'");
+    expect(unwrapShell("git status")).toBe("git status");
+    expect(unwrapShell("")).toBe("");
   });
 });
 

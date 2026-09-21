@@ -76,6 +76,7 @@ const VERB_ICON: Record<string, IconName> = {
   cat: "book",
   head: "book",
   tail: "book",
+  nl: "book",
   less: "book",
   bat: "book",
   ls: "folder",
@@ -122,8 +123,42 @@ export interface ToolRowText {
   command: string;
 }
 
+/** The shell a command was wrapped in, where the adapter sent the wrapper along: Codex runs its
+ * shell tool as `/bin/zsh -lc '<command>'`, and printed whole that line is the same forty characters
+ * on every row with the command hidden behind them, and its verb reads as `zsh`. Only a whole
+ * wrapper goes: a shell, its flags, and one quoted string that is the entire argument, so a command
+ * that merely starts with `sh` keeps itself. A double-quoted string gets its escapes back. */
+const SHELL_WRAP = /^(?:\/(?:usr\/)?bin\/)?(?:ba|z|da)?sh\s+(?:-[a-zA-Z]+\s+)*(?:'([^']*)'|"((?:[^"\\]|\\.)*)")\s*$/;
+
+export function unwrapShell(command: string): string {
+  const m = SHELL_WRAP.exec(command.trim());
+  if (!m) return command;
+  if (m[1] !== undefined) return m[1];
+  return (m[2] ?? "").replace(/\\(["\\$`])/g, "$1");
+}
+
+/** Codex's guardian review, a think-kind call whose output is a report of `Key: value` lines: a
+ * Status per update (in progress, then the verdict), then the risk and the rationale. The row says
+ * the verdict and the risk, and the report is inside. */
+export const GUARDIAN_TITLE = "Guardian Review";
+
+export function isGuardian(call: ToolCall): boolean {
+  return call.toolKind === "think" && call.title === GUARDIAN_TITLE;
+}
+
+export function guardianHint(output: string): string {
+  const last = (key: string) => {
+    const hits = [...output.matchAll(new RegExp(`^${key}:[ \\t]*(.+)$`, "gm"))];
+    return hits.at(-1)?.[1]?.trim().toLowerCase() ?? "";
+  };
+  const status = last("Status");
+  const risk = last("Risk");
+  if (!status || status === "in progress") return "reviewing";
+  return risk ? `${status}, ${risk} risk` : status;
+}
+
 export function toolLabel(call: ToolCall, roots: string[] = []): ToolRowText {
-  const command = field(call, "command");
+  const command = unwrapShell(field(call, "command"));
   const v = filePathOf(call) || command || field(call, "path") || field(call, "pattern");
   const raw = v || (call.title && call.title !== call.name ? call.title : "");
   // Claude's Bash tool sends a sentence of its own ("Build the project"); it beats the command as
@@ -198,9 +233,18 @@ export function callPath(call: ToolCall): string {
   return filePathOf(call) || field(call, "path");
 }
 
-/** the file an edit or a read names: Claude says file_path, OpenCode filepath */
+/** the file an edit or a read names: Claude says file_path, OpenCode filepath, and an adapter that
+ * titles the call in prose ("Read file '/x'") still names it in ACP's own `locations`. The file is
+ * the row, not the sentence around it: relative, it is the same line Claude's read prints. */
 function filePathOf(call: ToolCall): string {
-  return field(call, "file_path") || field(call, "filepath") || field(call, "filePath");
+  return field(call, "file_path") || field(call, "filepath") || field(call, "filePath") || locationOf(call);
+}
+
+function locationOf(call: ToolCall): string {
+  const input = call.input as { locations?: unknown } | null;
+  const first = Array.isArray(input?.locations) ? input.locations[0] : undefined;
+  const path = first && typeof first === "object" ? (first as { path?: unknown }).path : undefined;
+  return typeof path === "string" ? path : "";
 }
 
 /** the worktree path is the same forty characters on every row and the part that identifies the

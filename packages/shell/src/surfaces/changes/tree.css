@@ -53,7 +53,8 @@
    left edge goes ragged; the empty slot beside it says it opens nothing. Only at depth 0, because
    deeper the rails do explain the column, and a row that gave it back there would start on the
    column its own folder sits in. */
-  .tree-row[aria-level="1"][data-kind="file"] .tree-caret {
+  .tree-row[aria-level="1"][data-kind="file"] .tree-caret,
+  .tree-row[data-root] .tree-caret {
     width: 2px;
   }
   /* a shade lighter than the icon set's stroke: the caret repeats down a column of names, where the
@@ -66,6 +67,19 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  /* the row a new file is named in: the row is the field's box, as a picker's strip is, and the
+     name starts where a file's name would at that depth */
+  .tree-new-name {
+    flex: 1;
+    min-width: 0;
+  }
+  /* why the name was not taken: a tree row under the name, so it starts where the name does, with
+     no row height of its own */
+  .tree-new-error {
+    display: flex;
+    padding-bottom: 4px;
+    font: var(--type-ui-sm);
   }
   /* a folder with a change somewhere inside: quieter than a letter, since the letter is on the file */
   .tree-changed {

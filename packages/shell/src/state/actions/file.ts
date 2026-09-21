@@ -1,6 +1,6 @@
-import { type GitFileStatus, isMarkdown } from "@toyon/shared";
+import { type FileServerMsg, type GitFileStatus, isMarkdown } from "@toyon/shared";
 import { grouped, type MenuEntry, type MenuItem } from "../../ui/menu.ts";
-import { type EditorView, EMPTY_LOCAL, type OpenFile, type State } from "../store.ts";
+import { type EditorView, EMPTY_LOCAL, type OpenFile, readingView, type State } from "../store.ts";
 import { copyText, type Deps } from "./deps.ts";
 import { editorItems } from "./editor.ts";
 
@@ -50,6 +50,39 @@ export type OpenRequest = Omit<OpenFile, "seq" | "focus"> & { focus?: boolean };
  * the file and keeps it in step with the disk from there. */
 export function openFile({ dispatch }: Deps, { focus = true, ...target }: OpenRequest) {
   dispatch({ a: "open-file", v: { ...target, focus, seq: nextSeq() } });
+}
+
+type Written = Extract<FileServerMsg, { t: "file-written" }>;
+/** the files being made, each waiting on the answer to its write */
+const creates = new Map<number, (msg: Written) => void>();
+
+/** Make an empty file and open it in the editor pane, where its text is typed. The write names no
+ * base, so a file already there is left alone and comes back as `changed`; the folders on the way
+ * are made with it. Resolves null once the file is open, or with why it was not made. */
+export function createFile(deps: Deps, target: { worktreeId: string; path: string }): Promise<string | null> {
+  const { sock } = deps;
+  if (!sock) return Promise.resolve("not connected to the daemon");
+  const seq = nextSeq();
+  return new Promise((resolve) => {
+    creates.set(seq, (msg) => {
+      if (msg.ok) {
+        openFile(deps, { ...target, view: readingView(target.path) });
+        resolve(null);
+      } else {
+        resolve(msg.reason === "changed" ? "a file is already there" : (msg.message ?? "the file was not made"));
+      }
+    });
+    sock.send({ t: "write-file", ...target, content: "", base: null, seq });
+  });
+}
+
+/** a file-written that answers a create is taken here, so the open file's own sync never sees it */
+export function settleCreate(msg: Written): boolean {
+  const take = creates.get(msg.seq);
+  if (!take) return false;
+  creates.delete(msg.seq);
+  take(msg);
+  return true;
 }
 
 /** Show a folder in the files tab, open, with the tree's cursor on it. The editor reads files and

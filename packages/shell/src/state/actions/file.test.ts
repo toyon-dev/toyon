@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { GitFileStatus } from "@toyon/shared";
 import type { DaemonSocket } from "../../ws.ts";
 import { type Action, EMPTY_LOCAL, type WorktreeLocal } from "../store.ts";
-import { listFiles, listingKey } from "./file.ts";
+import { createFile, listFiles, listingKey, settleCreate } from "./file.ts";
 
 describe("listingKey", () => {
   const head = "abc123";
@@ -64,5 +64,48 @@ describe("listFiles", () => {
     listFiles("w1", at({}), { ...deps, sock: null });
     expect(sent).toEqual([]);
     expect(actions).toEqual([]);
+  });
+});
+
+describe("createFile", () => {
+  const make = () => {
+    const sent: Array<{ t: string; seq: number }> = [];
+    const actions: Action[] = [];
+    const deps = {
+      sock: { send: (m: { t: string; seq: number }) => sent.push(m) } as unknown as DaemonSocket,
+      dispatch: (a: Action) => actions.push(a),
+    };
+    return { sent, actions, deps };
+  };
+  type Written = Parameters<typeof settleCreate>[0];
+  const answer = (seq: number, rest: object): Written =>
+    ({ t: "file-written", worktreeId: "w1", path: "src/a.ts", seq, ...rest }) as Written;
+
+  test("sends an empty write with no base, and opens the file once it is made", async () => {
+    const { sent, actions, deps } = make();
+    const made = createFile(deps, { worktreeId: "w1", path: "src/a.ts" });
+    expect(sent[0]).toMatchObject({ t: "write-file", worktreeId: "w1", path: "src/a.ts", content: "", base: null });
+    expect(settleCreate(answer(sent[0]!.seq, { ok: true, version: "v1" }))).toBe(true);
+    expect(await made).toBeNull();
+    expect(actions).toMatchObject([
+      { a: "open-file", v: { worktreeId: "w1", path: "src/a.ts", view: "file", focus: true } },
+    ]);
+  });
+
+  test("a file already there, or a refusal, comes back as the reason and opens nothing", async () => {
+    const { sent, actions, deps } = make();
+    const there = createFile(deps, { worktreeId: "w1", path: "src/a.ts" });
+    settleCreate(answer(sent[0]!.seq, { ok: false, reason: "changed", version: "v9" }));
+    expect(await there).toBe("a file is already there");
+    const refused = createFile(deps, { worktreeId: "w1", path: "src/a.ts" });
+    settleCreate(
+      answer(sent[1]!.seq, { ok: false, reason: "refused", version: null, message: "path escapes worktree" }),
+    );
+    expect(await refused).toBe("path escapes worktree");
+    expect(actions).toEqual([]);
+  });
+
+  test("an answer to a write nobody made here is left for the open file's sync", () => {
+    expect(settleCreate(answer(999_999, { ok: true, version: "v1" }))).toBe(false);
   });
 });

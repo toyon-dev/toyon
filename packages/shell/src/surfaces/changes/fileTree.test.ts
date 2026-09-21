@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { buildTree, marks, visibleRows } from "./fileTree.ts";
+import { buildTree, marks, newFilePath, visibleRows } from "./fileTree.ts";
 
 describe("buildTree", () => {
   test("folders come before files, each in natural order", () => {
@@ -69,5 +69,25 @@ describe("marks", () => {
     const m = marks([{ path: "src/new/", xy: "??" }]);
     expect(m.files.size).toBe(0);
     expect([...m.folders].sort()).toEqual(["src", "src/new"]);
+  });
+});
+
+describe("newFilePath", () => {
+  test("joins the name onto its folder, and onto nothing at the root", () => {
+    expect(newFilePath("src", "a.ts")).toEqual({ path: "src/a.ts" });
+    expect(newFilePath("", " a.ts ")).toEqual({ path: "a.ts" });
+  });
+
+  test("a name with folders in it is kept, since the write makes them; a leading slash is not a root", () => {
+    expect(newFilePath("src", "new/deep/a.ts")).toEqual({ path: "src/new/deep/a.ts" });
+    expect(newFilePath("src", "./a.ts")).toEqual({ path: "src/a.ts" });
+    expect(newFilePath("", "/a.ts")).toEqual({ path: "a.ts" });
+  });
+
+  test("nothing, a folder alone, and a climb out are each told apart", () => {
+    expect(newFilePath("src", "  ")).toEqual({ error: "name the file" });
+    expect(newFilePath("src", "new/")).toEqual({ error: "name a file: its folders are made with it" });
+    expect(newFilePath("src", "../a.ts")).toEqual({ error: "a plain path, inside the worktree" });
+    expect(newFilePath("src", "a//b.ts")).toEqual({ error: "a plain path, inside the worktree" });
   });
 });

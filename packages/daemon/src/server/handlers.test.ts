@@ -1410,6 +1410,26 @@ describe("handlers", () => {
     expect(await Bun.file(join(repo, "README.md")).text()).toBe("agent\n");
   });
 
+  test("a write with no base makes the file and the folders on the way, and never covers one already there", async () => {
+    const { services, ctx, replies, repo } = make();
+    const main = await mainOf(services, repo);
+    await dispatch(
+      { t: "write-file", worktreeId: main.id, path: "src/new/a.ts", content: "", base: null, seq: 1 },
+      ctx,
+      services,
+    );
+    expect(lastOf(replies, "file-written")).toMatchObject({ seq: 1, ok: true });
+    expect(await Bun.file(join(repo, "src/new/a.ts")).exists()).toBe(true);
+    // the files tab makes a file this way, and one that exists is left as it is
+    await dispatch(
+      { t: "write-file", worktreeId: main.id, path: "README.md", content: "", base: null, seq: 2 },
+      ctx,
+      services,
+    );
+    expect(lastOf(replies, "file-written")).toMatchObject({ seq: 2, ok: false, reason: "changed" });
+    expect(await Bun.file(join(repo, "README.md")).text()).toBe("hello\n");
+  });
+
   test("two writes on one base: exactly one lands", async () => {
     const { services, ctx, replies, repo } = make();
     const main = await mainOf(services, repo);

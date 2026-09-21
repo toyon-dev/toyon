@@ -84,6 +84,26 @@ export function visibleRows(nodes: readonly TreeNode[], isOpen: (path: string) =
   return out;
 }
 
+/** the folder a path sits in: "" at the root */
+export const parentOf = (path: string): string => {
+  const slash = path.lastIndexOf("/");
+  return slash === -1 ? "" : path.slice(0, slash);
+};
+
+/**
+ * The path a new file is made at, from the folder its row opened in and the name typed there. A
+ * name may carry folders of its own, since the write makes them on the way; what it may not do is
+ * name a folder alone or climb out of the worktree. `error` is what the row says under the name.
+ */
+export function newFilePath(dir: string, typed: string): { path: string } | { error: string } {
+  const name = typed.trim().replace(/^(\.\/|\/)+/, "");
+  if (name === "") return { error: "name the file" };
+  if (name.endsWith("/")) return { error: "name a file: its folders are made with it" };
+  const parts = name.split("/");
+  if (parts.some((p) => p === "" || p === "." || p === "..")) return { error: "a plain path, inside the worktree" };
+  return { path: dir ? `${dir}/${name}` : name };
+}
+
 /** what the tree marks: each changed file's status, and the folders with a change somewhere inside */
 export interface TreeMarks {
   files: Map<string, GitFileStatus>;

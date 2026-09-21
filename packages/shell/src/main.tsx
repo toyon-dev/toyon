@@ -5,6 +5,7 @@ import { App } from "./app/App.tsx";
 import { frameNow, installFrame, touchNow } from "./app/phone.ts";
 import { installPhoneHistory } from "./app/phoneHistory.ts";
 import { terminalBus } from "./app/terminalBus.ts";
+import { settleCreate } from "./state/actions/file.ts";
 import { createStore, StoreProvider } from "./state/context.tsx";
 import { FileSync } from "./state/fileSync.ts";
 import { migrateStorage, STORAGE } from "./state/keys.ts";
@@ -212,6 +213,8 @@ const sock = new DaemonSocket(
       return;
     }
     if (isFileMsg(msg)) {
+      // a write that made a new file from the files tab is answered to the create that sent it
+      if (msg.t === "file-written" && settleCreate(msg)) return;
       files.receive(msg);
       return;
     }

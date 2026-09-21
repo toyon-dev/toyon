@@ -4,18 +4,21 @@ import {
   type DragEvent,
   type KeyboardEvent,
   memo,
+  type ReactNode,
   type RefObject,
   useCallback,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { previewBus } from "../../app/previewBus.ts";
-import { listFiles, openFile } from "../../state/actions/file.ts";
+import { createFile, listFiles, openFile } from "../../state/actions/file.ts";
 import { treeItems, treeSpaceItems } from "../../state/actions/fileTree.ts";
 import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
 import { useLocalField } from "../../state/selectors.ts";
 import { readingView } from "../../state/store.ts";
 import { cx } from "../../ui/cx.ts";
+import { Field } from "../../ui/Field.tsx";
 import { useOnChange } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { jumpTo, step } from "../../ui/listNav.ts";
@@ -24,7 +27,7 @@ import { rowState } from "../../ui/rowState.ts";
 import { tip } from "../../ui/Tooltip.tsx";
 import { endPathDrag, PATH_MIME, startPathDrag } from "../chat/useIntake.ts";
 import { ancestors, xyClass, xyLetter } from "../util.ts";
-import { buildTree, marks, type TreeRow, visibleRows } from "./fileTree.ts";
+import { buildTree, marks, newFilePath, parentOf, type TreeRow, visibleRows } from "./fileTree.ts";
 import "./tree.css";
 
 const NO_PATHS: string[] = [];
@@ -35,8 +38,8 @@ const treeRowId = (i: number) => `tree-row-${i}`;
 
 /**
  * The files tab: every file in the worktree, for reading and for pointing the agent at. A row opens
- * the file in the editor pane, names it in the chat, or is dragged there; the tree never adds,
- * renames or deletes anything (its menu asks the agent to).
+ * the file in the editor pane, names it in the chat, or is dragged there. The tree makes an empty
+ * file itself, named in a row; renaming and deleting are the agent's (its menu asks it to).
  *
  * Folders are open for one of two reasons. The person opened them, which the store remembers per
  * worktree (`treeOpen`). Or the file in the editor sits inside them, which lasts while that file is
@@ -211,11 +214,60 @@ export function FileTree({
     }
   };
 
+  // The row a new file is named in, under its folder's row (at the top, for the root). The tree's
+  // own state, since nothing else reads it. `attempt` tells a write's late answer from a row that
+  // was closed or reopened while it was out, so it never lands its error on the wrong one.
+  const [making, setMaking] = useState<{ dir: string; error: string | null; busy: boolean } | null>(null);
+  const attempt = useRef(0);
+  const beginNew = useCallback(
+    (inDir: string) => {
+      if (inDir && !isOpen(inDir)) toggle(inDir);
+      attempt.current++;
+      setMaking({ dir: inDir, error: null, busy: false });
+    },
+    [isOpen, toggle],
+  );
+  const cancelNew = useCallback(() => {
+    attempt.current++;
+    setMaking(null);
+  }, []);
+  const submitNew = useCallback(
+    (typed: string) => {
+      if (!making || making.busy) return;
+      const at = newFilePath(making.dir, typed);
+      if ("error" in at) {
+        setMaking({ ...making, error: at.error });
+        return;
+      }
+      const mine = ++attempt.current;
+      setMaking({ ...making, error: null, busy: true });
+      createFile({ sock, dispatch }, { worktreeId, path: at.path }).then((error) => {
+        // the file is open in the pane by now, which took the keyboard and closed this row
+        if (error === null) setCursor(at.path);
+        if (mine !== attempt.current) return;
+        setMaking(error === null ? null : { ...making, error, busy: false });
+      });
+    },
+    [making, worktreeId, sock, dispatch],
+  );
+
   const cm = useContextMenu("tree");
   const menuFor = useCallback(
     (row: TreeRow): MenuEntry[] =>
-      treeItems({ worktreeId, dir, path: row.path, folder: row.kind !== "file" }, store, { sock, dispatch }),
-    [worktreeId, dir, store, sock, dispatch],
+      treeItems(
+        {
+          worktreeId,
+          dir,
+          path: row.path,
+          folder: row.kind !== "file",
+          // a submodule's files are another repository's, so a file made from its row sits beside it
+          newIn: row.kind === "folder" || row.kind === "ignored" ? row.path : parentOf(row.path),
+        },
+        store,
+        { sock, dispatch },
+        beginNew,
+      ),
+    [worktreeId, dir, store, sock, dispatch, beginNew],
   );
   const hover = useCallback(
     (row: TreeRow, entering: boolean) => {
@@ -270,32 +322,117 @@ export function FileTree({
       }}
       {...cm.contextMenu((from) => {
         const r = rows[sel];
-        return from === "keyboard" && r ? menuFor(r) : treeSpaceItems({ worktreeId, dir }, { sock, dispatch });
+        return from === "keyboard" && r
+          ? menuFor(r)
+          : treeSpaceItems({ worktreeId, dir }, store, { sock, dispatch }, beginNew);
       })}
     >
       {files === undefined ? (
         <div className="empty">listing files…</div>
-      ) : rows.length === 0 ? (
+      ) : rows.length === 0 && !making ? (
         <div className="empty">no files</div>
       ) : (
-        rows.map((row, i) => (
-          <TreeItem
-            key={row.path}
-            row={row}
-            id={treeRowId(i)}
-            status={marked.files.get(row.path)}
-            changedInside={row.kind !== "file" && marked.folders.has(row.path)}
-            current={focused ? i === sel : !openRef && row.path === openPath}
-            cursor={focused && i === sel}
-            onPress={press}
-            menu={menuFor}
-            onHover={hover}
-            onDragStart={dragStart}
-            onDragEnd={dragEnd}
-          />
-        ))
+        withNewRow(
+          rows.map((row, i) => (
+            <TreeItem
+              key={row.path}
+              row={row}
+              id={treeRowId(i)}
+              status={marked.files.get(row.path)}
+              changedInside={row.kind !== "file" && marked.folders.has(row.path)}
+              current={focused ? i === sel : !openRef && row.path === openPath}
+              cursor={focused && i === sel}
+              onPress={press}
+              menu={menuFor}
+              onHover={hover}
+              onDragStart={dragStart}
+              onDragEnd={dragEnd}
+            />
+          )),
+          making &&
+            (() => {
+              const at = making.dir === "" ? -1 : rows.findIndex((r) => r.path === making.dir);
+              return {
+                at,
+                node: (
+                  <NewFileRow
+                    key="new-file"
+                    depth={at >= 0 ? (rows[at]?.depth ?? 0) + 1 : 0}
+                    error={making.error}
+                    onSubmit={submitNew}
+                    onCancel={cancelNew}
+                  />
+                ),
+              };
+            })(),
+        )
       )}
     </div>
+  );
+}
+
+/** the rows with the naming row slotted in after its folder's row: index -1 puts it first */
+function withNewRow(items: ReactNode[], add: { at: number; node: ReactNode } | null): ReactNode[] {
+  if (!add) return items;
+  return [...items.slice(0, add.at + 1), add.node, ...items.slice(add.at + 1)];
+}
+
+/**
+ * The row a new file is named in: a file row at its folder's depth whose name is a field, with why
+ * the name was not taken under it. The keys stay in the field, since the tree's typeahead and
+ * arrows would read them, and Escape closes this row rather than climbing the ladder. Leaving the
+ * field closes the row as well: a name half typed is nothing to keep.
+ */
+function NewFileRow({
+  depth,
+  error,
+  onSubmit,
+  onCancel,
+}: {
+  depth: number;
+  error: string | null;
+  onSubmit: (typed: string) => void;
+  onCancel: () => void;
+}) {
+  const [typed, setTyped] = useState("");
+  const indent = { "--tree-depth": depth } as CSSProperties;
+  // a root file's caret column is a stub (tree.css); the rows here carry no level, so they say root
+  const root = depth === 0 || undefined;
+  return (
+    <>
+      {/* no treeitem role: the field is what the keyboard is in, and the row only seats it */}
+      <div className="row row-sm tree-row" data-kind="file" data-root={root} style={indent}>
+        <span className="tree-caret row-dim" />
+        <Field
+          bare
+          font="mono"
+          autoFocus
+          className="tree-new-name"
+          aria-label="new file name"
+          aria-invalid={error !== null || undefined}
+          placeholder="name"
+          value={typed}
+          onChange={(e) => setTyped(e.target.value)}
+          onKeyDown={(e) => {
+            e.stopPropagation();
+            if (e.key === "Enter") {
+              e.preventDefault();
+              onSubmit(typed);
+            } else if (e.key === "Escape") {
+              e.preventDefault();
+              onCancel();
+            }
+          }}
+          onBlur={onCancel}
+        />
+      </div>
+      {error && (
+        <div className="tree-row tree-new-error" data-root={root} style={indent}>
+          <span className="tree-caret" />
+          <span className="hint">{error}</span>
+        </div>
+      )}
+    </>
   );
 }
 

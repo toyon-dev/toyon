@@ -33,6 +33,7 @@ import type { OptionField } from "../agent/acp/options.ts";
 import { attachmentsDirFor, isAttachmentFile } from "../agent/attachments.ts";
 import { canonical } from "../agent/bounds.ts";
 import { PLANS_DIR } from "../agent/planDoc.ts";
+import { firstAskOf } from "../agent/recap.ts";
 import type { AgentRegistry } from "../agent/registry.ts";
 import { makeNamer, taskText } from "../agent/tasks.ts";
 import { coalesce, Transcript, type TranscriptEntry, transcriptPathFor } from "../agent/transcript.ts";
@@ -233,6 +234,9 @@ export class WorktreeService {
   >();
   /** the HEAD each clean, level worktree was last asked about a hand landing at: one reflog read per move */
   private handChecked = new Map<string, string>();
+  /** worktrees a name is being asked for: a turn that ends while the birth ask is still out does
+   * not send a second one */
+  private naming = new Set<string>();
   /** per repo, because discovery asks git once for the whole repo rather than once per worktree */
   private discoverCache = new Map<string, { rows: FoundWorktree[]; at: number }>();
   /** the last usage figures per worktree: live from the stream, else read once from the transcript
@@ -292,6 +296,15 @@ export class WorktreeService {
     d.hub.on("turnSettled", (worktreeId, turn) => {
       // what the turn wrote is the count the rail should show now, not whenever its cache runs out
       this.countsCache.delete(worktreeId);
+      // The name asked for at birth can come back empty: the ask went out on an agent that could
+      // not reach its API, or the answer was not a name. The turn that just finished ran on a live
+      // agent, so a row still on its placeholder is asked again, from the words the task started
+      // with. A turn that stopped short gets no ask; the next one that finishes does.
+      if (turn.end === "done") {
+        const wt = d.state.worktree(worktreeId);
+        const prompt = wt?.unnamed ? firstAskOf(d.runtime.agentFor(worktreeId)?.transcript() ?? []) : undefined;
+        if (wt && prompt) this.scheduleNaming(wt, prompt, wt.variant);
+      }
       // A proc that crashed or never answered gets another go once the agent has had a turn: the
       // boot pane's "ask the agent to fix it" ends here, and a fix nobody restarts after is not a
       // fix. A proc that is fine, or one you stopped yourself, is left alone, and so is one whose
@@ -688,27 +701,25 @@ export class WorktreeService {
   private scheduleNaming(wt: WorktreeInfo, prompt: string, variant?: Variant) {
     // nothing to name from: the slug stays rather than a name made up from an empty task
     if (!prompt.trim()) return;
-    if (!variant) {
-      fireAndForget(
-        wt.id,
-        (this.d.namer ?? makeNamer(this.d.runtime))(prompt, wt).then((name) => {
+    if (variant && variant.index !== 1) return; // sibling 1 names the whole group
+    if (this.naming.has(wt.id)) return;
+    this.naming.add(wt.id);
+    const asked = (this.d.namer ?? makeNamer(this.d.runtime))(prompt, wt);
+    const applied = variant
+      ? asked.then(async (name) => {
+          if (!name) return;
+          for (const sibling of [wt, ...siblingsOf(wt, this.d.state.worktrees)]) {
+            await this.rename(sibling.id, `${name} v${sibling.variant!.index}`).catch((e) => {
+              log.warn(sibling.id, "variant rename failed", e);
+            });
+          }
+        })
+      : asked.then((name) => {
           if (name) return this.rename(wt.id, name);
-        }),
-        "auto-naming",
-      );
-      return;
-    }
-    if (variant.index !== 1) return; // sibling 1 names the whole group
+        });
     fireAndForget(
       wt.id,
-      (this.d.namer ?? makeNamer(this.d.runtime))(prompt, wt).then(async (name) => {
-        if (!name) return;
-        for (const sibling of [wt, ...siblingsOf(wt, this.d.state.worktrees)]) {
-          await this.rename(sibling.id, `${name} v${sibling.variant!.index}`).catch((e) => {
-            log.warn(sibling.id, "variant rename failed", e);
-          });
-        }
-      }),
+      applied.finally(() => this.naming.delete(wt.id)),
       "auto-naming",
     );
   }

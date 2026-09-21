@@ -219,8 +219,9 @@ export interface WorktreeInfo {
    * spelled from this; the branch takes its slug. */
   title: string;
   /** the title is the prompt's first words, standing in until the agent or the person names it:
-   * the rail shows it a tier down so its changing is no surprise, and one never named stays that
-   * way as the cue to rename it */
+   * the rail shows it a tier down so its changing is no surprise. The agent is asked at birth and
+   * again after each finished turn while this stands, so an ask lost to an outage is not the last
+   * word; one never named stays this way as the cue to rename it */
   unnamed?: true;
   createdAt: number;
   /** merged into main and no new work since */

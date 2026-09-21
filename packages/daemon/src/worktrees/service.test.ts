@@ -46,18 +46,25 @@ function world() {
     ...f.factories,
   });
   const exec = new ExecService({ state, runtime });
+  // the namer's answer and how many times it was asked; `gate` holds an answer back, for a birth
+  // ask still out when a turn ends
+  const naming = { reply: null as string | null, calls: 0, gate: Promise.resolve() };
   const worktrees = new WorktreeService({
     state,
     hub,
     runtime,
     paths: t.paths,
     agents,
-    namer: async () => null,
+    namer: async () => {
+      naming.calls++;
+      await naming.gate;
+      return naming.reply;
+    },
     record: (id, command, text, exit) => exec.record(id, command, text, exit),
   });
   const turns = new TurnService({ state, hub, transcript: (id) => runtime.agentFor(id)?.transcript() ?? [] });
   const repos = new RepoRegistry({ state, hub, runtime, worktrees, ...noSelf(state, hub) });
-  return { ...t, state, hub, runtime, worktrees, turns, repos, registry: agents, ...f };
+  return { ...t, state, hub, runtime, worktrees, turns, repos, registry: agents, naming, ...f };
 }
 
 let w: World;
@@ -647,6 +654,66 @@ describe("spare pool", () => {
     expect(wt.branch).toBe("toyon/better-name");
     expect(wt.path).toBe(path);
     expect(sh(w.repo, "git", "branch", "--list", "toyon/better-name")).toContain("toyon/better-name");
+  });
+
+  test("a name that did not come at birth is asked for again when a turn finishes", async () => {
+    const repoId = await registered();
+    const wt = await w.worktrees.create(repoId, "make the header sticky");
+    await until(() => w.naming.calls === 1);
+    await settle();
+    expect(wt.unnamed).toBe(true);
+    // the turn ran on an agent that could reach its API; the ask is made from the task's words
+    w.naming.reply = "sticky header";
+    w.agents.get(wt.id)!.note({ type: "user-message", text: "make the header sticky", ts: 1 });
+    w.hub.emit("agentStatus", wt.id, "working");
+    w.hub.emit("agentStatus", wt.id, "idle");
+    await until(() => !wt.unnamed);
+    expect(w.naming.calls).toBe(2);
+    expect(wt.title).toBe("sticky header");
+    expect(wt.branch).toBe("toyon/sticky-header");
+    // named: a later turn asks nothing
+    w.naming.reply = "something else";
+    w.hub.emit("agentStatus", wt.id, "working");
+    w.hub.emit("agentStatus", wt.id, "idle");
+    await settle();
+    expect(w.naming.calls).toBe(2);
+    expect(wt.title).toBe("sticky header");
+  });
+
+  test("a turn that ends while the birth ask is still out does not ask twice, and a failed turn asks nothing", async () => {
+    const repoId = await registered();
+    let answer!: () => void;
+    w.naming.gate = new Promise<void>((r) => {
+      answer = r;
+    });
+    w.naming.reply = "slow name";
+    const wt = await w.worktrees.create(repoId, "make the header sticky");
+    await until(() => w.naming.calls === 1);
+    w.agents.get(wt.id)!.note({ type: "user-message", text: "make the header sticky", ts: 1 });
+    w.hub.emit("agentStatus", wt.id, "working");
+    w.hub.emit("agentStatus", wt.id, "idle");
+    await settle();
+    expect(w.naming.calls).toBe(1);
+    answer();
+    await until(() => !wt.unnamed);
+    expect(wt.title).toBe("slow name");
+    // a placeholder on a row whose turn failed waits for a turn that finishes
+    w.naming.reply = null;
+    const other = await w.worktrees.create(repoId, "tidy the footer");
+    await until(() => w.naming.calls === 2);
+    await settle();
+    expect(other.unnamed).toBe(true);
+    w.agents.get(other.id)!.note({ type: "user-message", text: "tidy the footer", ts: 1 });
+    w.hub.emit("agentStatus", other.id, "working");
+    w.hub.emit("agentStatus", other.id, "error");
+    await settle();
+    expect(w.naming.calls).toBe(2);
+    w.naming.reply = "footer";
+    w.hub.emit("agentStatus", other.id, "working");
+    w.hub.emit("agentStatus", other.id, "idle");
+    await until(() => !other.unnamed);
+    expect(w.naming.calls).toBe(3);
+    expect(other.title).toBe("footer");
   });
 
   test("worktrees sharing a title get branches that never collide", async () => {

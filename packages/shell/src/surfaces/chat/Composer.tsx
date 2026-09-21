@@ -542,15 +542,17 @@ export function Composer({
     return `message agent on ${title}; / for a command, ! for a shell command`;
   };
   const placeholderText = placeholderFor();
-  // under the verb, the verdict behind its label: ready with the facts, or what is left. Under a
-  // line with no word (a check running or failed, a PR merged or closed): the recap's sentence
-  // when one has been written, else the message the work would land with, the next most useful
-  // thing to read.
+  // under the verb, the verdict behind its label: ready with the facts, or what is left. Not when
+  // the verb's line is already the facts (no subject and no sentence to stand in front of them)
+  // and the verdict would only say them again: the word alone says ready. Under a line with no
+  // word (a check running or failed, a PR merged or closed): the recap's sentence when one has
+  // been written, else the message the work would land with, the next most useful thing to read.
+  const restated = !!landing && !landing.subject && !said && !landing.why && !landing.stale;
   const subline =
     text !== "" || ghost || !active
       ? null
       : verb
-        ? (verb.word === "land" || verb.word === "update" || verb.word === "check") && landing
+        ? (verb.word === "land" || verb.word === "update" || verb.word === "check") && landing && !restated
           ? verdictLine(landing, landCount)
           : null
         : pr || blocked

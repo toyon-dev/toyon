@@ -414,13 +414,15 @@ export function Composer({
   // what the inserted command still expects, drawn after the caret. Only while nothing has been
   // typed after it: once the arguments are being written, the hint is in the way rather than help.
   const argGhost = inserted && text === `/${inserted.name} ` ? inserted.hint : null;
-  // the same idea for a bare `!`: what the mode is, told once, at the moment someone finds it
+  // the same idea for a bare `!`: what the mode is, told once, at the moment someone finds it. Both
+  // halves, because the run wakes nobody: the output lands on the transcript, and the agent reads
+  // it with the next message, so a person waiting for a reply knows to send one.
   // A draft has no transcript to put the output on, so its command goes to the terminal instead
   const shellGhost =
     shellCmd === "" && active
       ? drafting
         ? " a command to run in the new worktree's terminal"
-        : ` a command to run in ${active.worktree.title}; its output goes on the transcript`
+        : ` a command to run in ${active.worktree.title}; the agent sees its output with your next message`
       : null;
   const ghost = argGhost ?? shellGhost;
   // the placeholder, and the quieter line under it while the box is empty.

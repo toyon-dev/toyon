@@ -548,6 +548,14 @@
       color: inherit;
       text-decoration: none;
     }
+    /* a link whose url is still arriving: the label holds the link's place and shines like any
+       other thing the agent is mid-way through, and takes the blue and the underline only once
+       there is somewhere to go */
+    & a.link-pending {
+      color: inherit;
+      text-decoration: none;
+      cursor: default;
+    }
     & blockquote {
       border-left: 3px solid var(--border1);
       margin: 0 0 8px;

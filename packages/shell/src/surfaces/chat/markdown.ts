@@ -2,6 +2,7 @@ import createDOMPurify from "dompurify";
 import { marked } from "marked";
 import { useEffect, useRef, useState } from "react";
 import { worktreeFileUrl } from "../../ws.ts";
+import { closePendingLink, PENDING_LINK } from "./linkTail.ts";
 import { assetPath, outsidePath, worktreeLink } from "./markdownPaths.ts";
 import { table } from "./markdownTable.ts";
 import { languageOf, paintCode } from "./syntax.ts";
@@ -41,6 +42,8 @@ export interface MarkdownOptions {
   base?: MarkdownBase;
   /** the absolute checkout root: links beneath it open in Toyon's editor */
   fileRoot?: string;
+  /** the text is still arriving: a link cut off at its end is held in place rather than shown raw */
+  streaming?: boolean;
 }
 
 // an instance of its own, so the hook below never reaches a sanitize another module runs
@@ -49,6 +52,12 @@ const purify = createDOMPurify(window);
 let rendering: MarkdownOptions | null = null;
 purify.addHook("afterSanitizeAttributes", (node) => {
   const href = node.tagName === "A" ? (node.getAttribute("href") ?? "") : "";
+  // a link whose url is still streaming: its label sits where the link will, and nothing to open yet
+  if (href === PENDING_LINK) {
+    node.removeAttribute("href");
+    node.classList.add("link-pending", "live-text");
+    return;
+  }
   // a link out leaves the shell standing: followed in place, it would navigate the whole app away
   if (/^https?:/i.test(href)) {
     node.setAttribute("target", "_blank");
@@ -84,8 +93,9 @@ purify.addHook("afterSanitizeAttributes", (node) => {
 /** markdown as sanitized HTML; with a base, a relative image is served from the worktree */
 export function renderMarkdown(text: string, options?: MarkdownOptions): string {
   rendering = options ?? null;
+  const source = options?.streaming ? closePendingLink(text) : text;
   try {
-    return purify.sanitize(marked.parse(text, { async: false }) as string);
+    return purify.sanitize(marked.parse(source, { async: false }) as string);
   } finally {
     rendering = null;
   }
@@ -100,10 +110,11 @@ export function useMarkdown(text: string, options?: MarkdownOptions): string {
   const dir = options?.base?.dir;
   const version = options?.base?.version;
   const fileRoot = options?.fileRoot;
+  const streaming = options?.streaming;
   useEffect(() => {
     const base =
       worktreeId !== undefined && dir !== undefined ? { worktreeId, dir, version: version ?? null } : undefined;
-    const at = base || fileRoot ? { base, fileRoot } : undefined;
+    const at = base || fileRoot || streaming ? { base, fileRoot, streaming } : undefined;
     const since = performance.now() - lastAt.current;
     if (since >= 100) {
       lastAt.current = performance.now();
@@ -115,6 +126,6 @@ export function useMarkdown(text: string, options?: MarkdownOptions): string {
       setHtml(renderMarkdown(text, at));
     }, 100 - since);
     return () => clearTimeout(t);
-  }, [text, worktreeId, dir, version, fileRoot]);
+  }, [text, worktreeId, dir, version, fileRoot, streaming]);
   return html;
 }

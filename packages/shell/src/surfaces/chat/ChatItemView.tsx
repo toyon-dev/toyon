@@ -70,6 +70,7 @@ function Markdown({
   marked,
   worktreeId,
   fileRoot,
+  streaming,
 }: {
   text: string;
   /** the row's menu, told which link the pointer was on, if any: the rendered markup is the row's,
@@ -78,8 +79,9 @@ function Markdown({
   marked?: boolean;
   worktreeId?: string | null;
   fileRoot?: string;
+  streaming?: boolean;
 }) {
-  const html = useMarkdown(text, fileRoot ? { fileRoot } : undefined);
+  const html = useMarkdown(text, { fileRoot, streaming });
   const sock = useSock();
   const dispatch = useDispatch();
   const cm = useContextMenu("chat");
@@ -652,12 +654,15 @@ export const ChatItemView = memo(function ChatItemView({
   worktreeId,
   onPickHover,
   marked,
+  streaming,
 }: {
   item: Exclude<ChatItem, ToolItem | ThinkingItem>;
   worktreeId?: string | null;
   onPickHover?: (p: PickMeta, entering: boolean) => void;
   /** the row the log marks: the message the composer has walked back to, or a search hit's */
   marked?: boolean;
+  /** the newest row of a turn still running: its text may end mid-way through something */
+  streaming?: boolean;
 }) {
   const store = useStoreInstance();
   const sock = useSock();
@@ -720,6 +725,7 @@ export const ChatItemView = memo(function ChatItemView({
           marked={marked}
           worktreeId={worktreeId}
           fileRoot={fileRoot()}
+          streaming={streaming}
         />
       );
     case "error":

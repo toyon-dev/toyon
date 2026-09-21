@@ -222,6 +222,7 @@ export function ChatLog({
               worktreeId={id}
               onPickHover={onPickHover}
               marked={entry.at === markAt}
+              streaming={working && i === entries.length - 1}
             />
           ),
         )}

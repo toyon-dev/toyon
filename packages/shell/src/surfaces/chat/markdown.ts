@@ -3,6 +3,7 @@ import { marked } from "marked";
 import { useEffect, useRef, useState } from "react";
 import { worktreeFileUrl } from "../../ws.ts";
 import { closePendingLink, PENDING_LINK } from "./linkTail.ts";
+import { dunder } from "./markdownDunder.ts";
 import { assetPath, outsidePath, worktreeLink } from "./markdownPaths.ts";
 import { table } from "./markdownTable.ts";
 import { languageOf, paintCode } from "./syntax.ts";
@@ -11,6 +12,7 @@ import { languageOf, paintCode } from "./syntax.ts";
 // so it is coloured by the same seven. marked hands the block over before it escapes it, and
 // returning false hands one back in a language we have no grammar for.
 marked.use({
+  extensions: [dunder],
   renderer: {
     code({ text, lang }) {
       const language = languageOf((lang ?? "").trim().toLowerCase().split(/\s+/)[0] ?? "", "");

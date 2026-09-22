@@ -248,11 +248,17 @@
     }
   }
   /* the agent's state while it has the turn, under the last thing it said: an aside in the log's
-   own voice, and the one italic in the transcript now that a thought is a row */
+   own voice, and the one italic in the transcript now that a thought is a row.
+   It starts at a tool row's text column, one glyph box and gap in from the log's edge: the row
+   becomes a tool row the moment a call opens, whose glyph takes the column and whose writing mark
+   takes the slot after it, so the mark stays put and the glyph appears on its left, instead of
+   the mark hopping a glyph's width to make room. The indent is on the row and not the mark, so
+   the row's text states keep the same edge as the mark they swap with. */
   .working-row {
     display: flex;
     align-items: center;
     gap: 10px;
+    padding-left: 19px;
     color: var(--text2);
     font-style: italic;
     /* the tool row's box, since this row stands where a tool row will: a call's row appears in its

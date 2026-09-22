@@ -1492,13 +1492,19 @@ describe("handlers", () => {
     expect(lastOf(replies, "file-written")).toMatchObject({ seq: 4, ok: false, reason: "refused" });
   });
 
-  test("a file a viewer draws is found in the worktree; anything else is not", async () => {
+  test("a file a viewer draws, or a rendered page reaches for, is found in the worktree; anything else is not", async () => {
     const { services, repo } = make();
     const main = await mainOf(services, repo);
     await Bun.write(join(repo, "pic.PNG"), new Uint8Array([0x89, 0x50, 0x4e, 0x47]));
     await Bun.write(join(repo, "notes.txt"), "hi");
+    await Bun.write(join(repo, "style.css"), "h1 { color: red }");
+    await Bun.write(join(repo, "app.js"), "alert(1)");
+    await Bun.write(join(repo, "page.html"), "<h1>hi</h1>");
     mkdirSync(join(repo, "dir.png"));
     expect(await services.files.viewableFile(main.id, "pic.PNG")).toEndWith("/pic.PNG");
+    expect(await services.files.viewableFile(main.id, "style.css")).toEndWith("/style.css");
+    expect(await services.files.viewableFile(main.id, "app.js")).toBeNull();
+    expect(await services.files.viewableFile(main.id, "page.html")).toBeNull();
     expect(await services.files.viewableFile(main.id, "notes.txt")).toBeNull();
     expect(await services.files.viewableFile(main.id, "gone.png")).toBeNull();
     expect(await services.files.viewableFile(main.id, "dir.png")).toBeNull();

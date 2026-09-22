@@ -60,12 +60,12 @@ import {
   isEditTool,
   isLead,
   isMain,
-  isMarkdown,
   isOwned,
   isProvisional,
   MANAGED_NONE,
   PROJECTS_FOLDER,
   railOrder,
+  renderedAs,
   resolveTheme,
   SHELL_STREAM,
   toyonDark,
@@ -431,8 +431,8 @@ function applyLayout(s: State, layout: Layout): State {
  * markdown file rendered, read-only */
 export type EditorView = "diff" | "file" | "preview";
 
-/** the view a file opens in to be read rather than compared: a markdown file rendered, anything else as text */
-export const readingView = (path: string): EditorView => (isMarkdown(path) ? "preview" : "file");
+/** the view a file opens in to be read rather than compared: markdown and html rendered, anything else as text */
+export const readingView = (path: string): EditorView => (renderedAs(path) ? "preview" : "file");
 
 /** the file as the editor last read or saved it */
 export interface EditorDisk {

@@ -1,4 +1,4 @@
-import { type FileServerMsg, type GitFileStatus, isMarkdown } from "@toyon/shared";
+import { type FileServerMsg, type GitFileStatus, renderedAs } from "@toyon/shared";
 import { grouped, type MenuEntry, type MenuItem } from "../../ui/menu.ts";
 import { type EditorView, EMPTY_LOCAL, type OpenFile, readingView, type State } from "../store.ts";
 import { copyText, type Deps } from "./deps.ts";
@@ -34,9 +34,9 @@ export function listFiles(worktreeId: string, s: Pick<State, "local">, { sock, d
 
 const VIEWS: EditorView[] = ["diff", "file", "preview"];
 
-/** the views a file has: a markdown file can be read rendered, and a file new to the branch has no diff */
+/** the views a file has: markdown and html can be read rendered, and a file new to the branch has no diff */
 export const viewsOf = (path: string, added: boolean): EditorView[] =>
-  VIEWS.filter((v) => !(v === "preview" && !isMarkdown(path)) && !(v === "diff" && added));
+  VIEWS.filter((v) => !(v === "preview" && !renderedAs(path)) && !(v === "diff" && added));
 
 let lastSeq = 0;
 /** pairs a request with its answer; one counter for the page, so no two opens share a number */

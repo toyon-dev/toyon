@@ -34,6 +34,8 @@ export default defineConfig({
       "/restart": target,
       // chat image thumbnails; the daemon serves them, so dev has to forward them like /ws
       "/attachments": target,
+      // a worktree's images, for the editor pane's viewer and the assets a rendered page draws
+      "/files": target,
     },
   },
 });

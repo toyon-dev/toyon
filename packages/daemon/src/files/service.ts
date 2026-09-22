@@ -5,7 +5,7 @@
 import { spawn } from "node:child_process";
 import type { Stats } from "node:fs";
 import { stat, unlink } from "node:fs/promises";
-import { type ElementTraits, FILE_MAX_CHARS, type SearchHit, viewerOf } from "@toyon/shared";
+import { type ElementTraits, FILE_MAX_CHARS, isPageAsset, type SearchHit, viewerOf } from "@toyon/shared";
 import { UserError } from "../core/errors.ts";
 import type { StateStore } from "../core/state.ts";
 import { GIT, git, run } from "../git/exec.ts";
@@ -137,11 +137,12 @@ export class FileService {
     };
   }
 
-  /** where a file the browser draws (an image) sits in the working tree, for the editor pane's
-   * viewer; null when the path names nothing a viewer takes, is not a file, or leaves the worktree */
+  /** where a file the browser draws sits in the working tree: an image for the editor pane's viewer,
+   * or a stylesheet, font or clip a rendered page reaches for beside itself; null when the path
+   * names neither, is not a file, or leaves the worktree */
   async viewableFile(worktreeId: string, path: string): Promise<string | null> {
     const r = this.readable(worktreeId);
-    if (!r || viewerOf(path) === null) return null;
+    if (!r || (viewerOf(path) === null && !isPageAsset(path))) return null;
     try {
       const target = resolveInside(r.path, path);
       return (await statFile(target)) ? target : null;

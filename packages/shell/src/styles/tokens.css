@@ -104,6 +104,9 @@
      contrast there is, in every theme, so these never follow the appearance */
     --qr-ink: #000000;
     --qr-paper: #ffffff;
+    /* an html page read in the editor pane is drawn as a browser tab would draw it, and a tab's
+     canvas is white in every theme: the page's own colours are the page's, not the shell's */
+    --page-paper: #ffffff;
     /* code sits on a wash of the text color instead of a background step: surface0 and surface1 are
      the same color in several themes (Rose Pine, Nord), so a chip painted in one of them would disappear
      into the column it sits on. Mixed at use time, so it follows the theme like everything else.

@@ -61,6 +61,16 @@
   .editor-preview {
     overflow-y: auto;
   }
+  /* an html file read rendered: the page fills the body and scrolls itself. A frame's canvas is
+   see-through, so a page that paints no ground would sit on the pane's dark one with the browser's
+   black default text; the paper under it is what a tab would give the same page */
+  .editor-frame {
+    display: block;
+    width: 100%;
+    height: 100%;
+    border: 0;
+    background: var(--page-paper);
+  }
   /* the document's outline: a strip of ticks down the left of the body, outside the scroll box so it
    holds still, centred on the body's height the way a page's margin notes are. It sits inside the
    document's own side padding, so it covers no text at any width. The padding is hit area: a 2px

@@ -1,4 +1,4 @@
-import { viewerOf } from "@toyon/shared";
+import { renderedAs, viewerOf } from "@toyon/shared";
 import { lazy, Suspense, useEffect, useMemo } from "react";
 import { writeCopiedSource } from "../../app/copiedSource.ts";
 import { previewBus } from "../../app/previewBus.ts";
@@ -23,6 +23,7 @@ import { Icon } from "../../ui/Icon.tsx";
 import { Pane } from "../../ui/Pane.tsx";
 import { worktreeFileUrl } from "../../ws.ts";
 import { FileViewer } from "./FileViewer.tsx";
+import { HtmlPreview } from "./HtmlPreview.tsx";
 import { MarkdownPreview } from "./MarkdownPreview.tsx";
 import { OpenInMenu } from "./OpenInMenu.tsx";
 import "./editor.css";
@@ -178,6 +179,16 @@ export function EditorPane({
           <div className="empty">not a text file: open it in another editor</div>
         ) : disk.tooLarge ? (
           <div className="empty">too large to open here: open it in another editor</div>
+        ) : view === "preview" && renderedAs(path) === "html" ? (
+          <HtmlPreview
+            text={disk.after}
+            path={path}
+            worktreeId={worktreeId}
+            // a copy only git holds has no bytes on disk for its assets to be served from
+            version={history || kept ? undefined : disk.version}
+            openSeq={editor.seq}
+            focus={editor.focus}
+          />
         ) : view === "preview" ? (
           <MarkdownPreview
             text={disk.after}

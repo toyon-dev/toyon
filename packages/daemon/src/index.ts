@@ -323,6 +323,8 @@ await repos.boot();
 drafts.prune((id) => !!state.worktree(id) || worktrees.hasArchived(id));
 // what was being looked at before the restart comes back on its own
 idle.boot();
+// a verdict the last daemon went down in the middle of runs again
+landing.boot();
 // the adapters are fetched on first boot (and after a version bump), not shipped: the default
 // agent first, so the first prompt waits on one download at most. One already on disk installs
 // without a change event, so the probe is asked here as well.
@@ -383,6 +385,8 @@ async function shutdown(signal: string, opts: { respawn?: boolean } = {}) {
   log.info("daemon", `${signal}: stopping dev servers`);
   // before the sockets close: what the tabs show now is what the next daemon brings back
   idle.shutdown();
+  // before the agents close: a verdict mid-question stays pending for the next daemon
+  landing.stop();
   repos.stopWatchers();
   prs.stop();
   sweep.stop();

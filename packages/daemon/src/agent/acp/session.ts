@@ -525,6 +525,10 @@ export class AcpSession implements AgentAdapter {
     }
   }
 
+  /** A side question. Null is the agent's answer when it has none to give (no quick model, a
+   * session already closed); a question that could not be put, the process dying under it or the
+   * adapter refusing the session, throws, since the caller has to tell the two apart: a landing
+   * verdict settles on the first and waits on the second. */
   async ask(system: string, prompt: string, opts: AskOpts = {}): Promise<string | null> {
     if (this.stopped) return null;
     this.asking++;
@@ -548,9 +552,6 @@ export class AcpSession implements AgentAdapter {
         caps: { close: conn.closeSupported, delete: conn.deleteSupported },
         tag: this.d.worktreeId,
       });
-    } catch (e) {
-      log.warn(this.d.worktreeId, "ask failed", e);
-      return null;
     } finally {
       this.asking--;
       this.maybeArmReaper();

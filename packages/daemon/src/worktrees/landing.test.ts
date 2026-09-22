@@ -365,6 +365,62 @@ describe("LandingService", () => {
     });
   });
 
+  test("a question that was never answered leaves no verdict, so the box offers the check again", async () => {
+    w = world({
+      check: "bun run check",
+      judge: async () => {
+        throw new Error("ACP connection closed");
+      },
+    });
+    w.dirty();
+    await w.settle();
+    expect(w.checks).toEqual(["bun run check"]);
+    expect(w.judged.length).toBe(1);
+    // pending while it ran, then nothing: never a ready word with no message behind it
+    expect(w.set.map((l) => l?.check)).toEqual(["pending", undefined]);
+    expect(w.wt()?.landing).toBeUndefined();
+  });
+
+  test("stop() mid-question leaves the verdict pending, and boot() finishes it", async () => {
+    let fail!: (e: Error) => void;
+    const dying = new Promise<LandVerdict | null>((_, reject) => {
+      fail = reject;
+    });
+    let answers = 0;
+    w = world({
+      judge: () => (answers++ === 0 ? dying : Promise.resolve({ ready: true, subject: "add the feature" })),
+    });
+    w.dirty();
+    await w.settle("done", 100, false);
+    for (let i = 0; i < 50 && w.judged.length === 0; i++) await Bun.sleep(10);
+    expect(w.wt()?.landing?.check).toBe("pending");
+    // the daemon goes down under the question: the agent's death is not an answer
+    w.service.stop();
+    fail(new Error("ACP connection closed"));
+    await Bun.sleep(30);
+    expect(w.set.map((l) => l?.check)).toEqual(["pending"]);
+    expect(w.wt()?.landing?.check).toBe("pending");
+    // the next daemon finds the pending mark and runs the verdict from the top
+    const next = new LandingService({
+      state: w.state,
+      hub: new Hub(),
+      worktrees: {
+        setLanding: (_id, landing) => {
+          w!.set.push(landing);
+          const row = w!.wt();
+          if (row) row.landing = landing;
+        },
+      },
+      transcript: () => [],
+      check: async () => ({ exit: 0, text: "" }),
+      judge: async () => ({ ready: true, subject: "add the feature" }),
+    });
+    const settledAt = w.settled();
+    next.boot();
+    await settledAt;
+    expect(w.wt()?.landing).toMatchObject({ at: 100, check: "none", ready: true, subject: "add the feature" });
+  });
+
   test("the fingerprint moves with the tree", async () => {
     w = world();
     const before = await treeFingerprint(w.wtPath);

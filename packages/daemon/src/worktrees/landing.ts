@@ -54,6 +54,10 @@ export class LandingService {
   private judging = new Map<string, number>();
   /** worktrees whose agent is mid-turn: a verdict by hand waits for it to end */
   private busy = new Set<string>();
+  /** the daemon is going down: a run in flight writes nothing more, and its pending mark is left
+   * for the next daemon to finish, since the check it was killed under and the question its agent
+   * died under are not answers */
+  private stopping = false;
 
   constructor(private d: LandingServiceDeps) {
     d.hub.on("turnSettled", (id, turn) => fireAndForget(id, this.settle(id, turn), "landing verdict"));
@@ -72,6 +76,21 @@ export class LandingService {
   private clear(worktreeId: string) {
     this.judging.delete(worktreeId);
     this.d.worktrees.setLanding(worktreeId, undefined);
+  }
+
+  /** The verdicts the last daemon left mid-run: a record still pending was written when its run
+   * started and never settled, because the process went down under the check or the question.
+   * Each runs again from the top, the check and the question both. */
+  boot() {
+    for (const wt of this.d.state.worktrees) {
+      if (wt.landing?.check !== "pending" || !canLand(wt)) continue;
+      fireAndForget(wt.id, this.run(wt, { at: wt.landing.at, ask: true, quiet: false }), "landing verdict resumed");
+    }
+  }
+
+  /** before the agents are closed: whatever is mid-run stays pending for boot() to finish */
+  stop() {
+    this.stopping = true;
   }
 
   private async settle(worktreeId: string, turn: LastTurn) {
@@ -160,8 +179,10 @@ export class LandingService {
     // the box says the check is running rather than going back to its plain placeholder: the gap
     // between the agent's last word and the verdict is where a person is reading
     this.d.worktrees.setLanding(worktreeId, { at: opts.at, check: "pending", ready: false, fingerprint: "", ...kept });
-    // still the run being judged: a newer run, or a new turn since, means this answer is stale
-    const live = () => this.judging.get(worktreeId) === opts.at && !!this.d.state.worktree(worktreeId);
+    // still the run being judged: a newer run, or a new turn since, means this answer is stale,
+    // and a daemon on its way down means the answer is not one
+    const live = () =>
+      !this.stopping && this.judging.get(worktreeId) === opts.at && !!this.d.state.worktree(worktreeId);
 
     let check: Landing["check"] = "none";
     let checkTail: string | undefined;
@@ -186,7 +207,12 @@ export class LandingService {
       try {
         verdict = await this.d.judge(wt, prompt);
       } catch (e) {
-        log.warn(worktreeId, "landing verdict failed", e);
+        if (!live()) return;
+        // the question was never put (the agent died, or would not open a session), which is not
+        // the model declining: no verdict is written, so the box offers the check and its press
+        // asks again, rather than a land word with no message behind it
+        log.warn(worktreeId, "landing verdict unanswered; no verdict written", e);
+        return this.clear(worktreeId);
       }
       if (!live()) return;
     }

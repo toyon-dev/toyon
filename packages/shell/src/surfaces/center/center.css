@@ -2,7 +2,10 @@
 @layer tokens, base, surfaces;
 @layer surfaces {
   /* ---- center ---- */
-  .center {
+  /* not the bare `.center`: monaco names the collapsed-region band inside its diff editor
+     `div.center`, and the column direction below reached it and stacked the band's label under
+     its icon, clipped to half a line */
+  .center-root {
     position: relative;
     /* takes what the docks leave and never gives below 320: a narrow phone's preview still shows
        what the docks are about. min-width 0 so a pane's content cannot widen it past that. */

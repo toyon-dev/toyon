@@ -132,9 +132,9 @@ export function PhoneFrame() {
       />
       {/* the desk's .docks row with one column in it, and here for the same reason (phone.css) */}
       <div className="phone-screen">
-        {/* .center is the isolation root every overlay counts its rungs inside, so the phone's
+        {/* .center-root is the isolation root every overlay counts its rungs inside, so the phone's
             column is one too, and the palette opens over this screen the way it does over the desk's */}
-        <div className="center">
+        <div className="center-root">
           {say !== null ? (
             <View wide>
               <p className="status-line">{say}</p>

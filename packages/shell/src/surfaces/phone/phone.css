@@ -68,7 +68,7 @@
 
   /* a pane on a screen is the column: the diff a changed file opens as, over whichever tab was
      open, until its close returns there */
-  .phone-screen > .center > .pane {
+  .phone-screen > .center-root > .pane {
     flex: 1;
     min-height: 0;
     min-width: 0;

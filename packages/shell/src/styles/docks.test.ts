@@ -30,7 +30,7 @@ describe("the docks row fits the window", () => {
     }
   });
   test("the centre keeps its floor and never gives", async () => {
-    const decls = declsOf(cssRules(await shellCss()), ".center");
+    const decls = declsOf(cssRules(await shellCss()), ".center-root");
     expect(decls.get("flex")).toMatch(/^1 0 \d+px$/);
     expect(decls.get("min-width")).toBe("0");
   });

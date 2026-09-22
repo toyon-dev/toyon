@@ -836,9 +836,10 @@
     pointer-events: auto;
   }
   /* what follows the word sits a tier under it, so the join between them is the step in colour and
-   not a colon (the subject after it carries a colon of its own) */
+   not a colon (the subject after it carries a colon of its own). One tier, not two: the word is on
+   text0, and the subject is the line's content, on the same tier as the subline under it */
   .composer-verb-line {
-    color: var(--text2);
+    color: var(--text1);
   }
   /* the chips wrap rather than clip: a dock is 380px and a long model name plus five chips is more */
   /* Spaced by what shows, not by the boxes: the top bar's tools put 24px between glyphs (a 20px gap

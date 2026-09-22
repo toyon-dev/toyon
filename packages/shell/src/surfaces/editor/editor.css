@@ -118,9 +118,13 @@
     & .editor-outline-row {
       min-height: var(--row-height-sm);
       font: var(--type-ui);
+      /* the document's title is the one row read first; weight says so, not an indent under it */
+      &[data-level="1"] {
+        font-weight: var(--weight-title);
+      }
     }
-    /* a title steps in under the heading above it, one step per open ancestor: an h2 with no h1
-     over it stands at the margin */
+    /* a section steps in under the heading above it, one step per open ancestor: the title opens
+     none, so an h2 stands at the margin with or without an h1 over it */
     & .editor-outline-label {
       padding-left: calc(var(--outline-depth, 0) * 16px);
       min-width: 0;

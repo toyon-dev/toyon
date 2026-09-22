@@ -160,12 +160,33 @@
     }
   }
   /* ⌘⇧G ref rows: the kind's icon rides inside the label, so the label is a flex line rather than
-   text; the icon says branch, remote or PR where a word would have cost the name its width */
+   text; the icon says branch, remote or PR where a word would have cost the name its width. The
+   hint is a commit subject or a PR's author, the one hint long enough to crowd its row, so the
+   name holds its width and the hint takes what is left, losing its end; a subject's start is what
+   names it. The icon is pinned at its size, since a flex line crushes it before the text. */
   .ref-row {
     & .picker-label {
+      flex: 0 1 auto;
       display: flex;
       align-items: center;
       gap: 6px;
+    }
+    & .icon-inline {
+      flex: none;
+    }
+    & .ref-name {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    & .picker-hint {
+      flex: 1 1 0;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      text-align: right;
     }
   }
   /* ⌘P file rows: marker | filename | dim directory | line counts */

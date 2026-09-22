@@ -144,6 +144,21 @@
       padding-inline: var(--picker-inset, 10px);
     }
   }
+  /* a group's head, the shape of the rail's "discovered · N": a quiet UI-face line on the rows'
+   text column, with a section's worth of air above it and none under the strip, where the first
+   group starts on the list's own margin */
+  .picker-group {
+    display: flex;
+    align-items: center;
+    height: var(--row-height-sm);
+    padding: 0 var(--picker-inset, 10px);
+    margin-top: 10px;
+    font: var(--type-ui-sm);
+    color: var(--text2);
+    &:first-child {
+      margin-top: 0;
+    }
+  }
   /* selection, one idiom everywhere: a 2px bar down the leading edge and a seat that stays neutral.
    The accent never colours the content, so a marked row, an open panel's button and a picked value
    all say the same thing and none of them borrows the shape of an error. */

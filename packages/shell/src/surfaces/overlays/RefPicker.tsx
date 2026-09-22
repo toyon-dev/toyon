@@ -8,10 +8,17 @@ import { PaletteRow } from "./PaletteRow.tsx";
 
 const NONE: RefHit[] = [];
 const ICON: Record<RefHit["kind"], IconName> = { branch: "branch", remote: "globe", pr: "pr" };
+/** the groups in the order they stand: PRs first, since a PR row carries the most (author, draft,
+ * fork) and is the one someone else opened; then the repo's own branches; remotes last, and only
+ * ever under a typed query */
+const ORDER: Record<RefHit["kind"], number> = { pr: 0, branch: 1, remote: 2 };
+const GROUP: Record<RefHit["kind"], string> = { pr: "pull requests", branch: "branches", remote: "remote branches" };
 
 /** ⌘⇧G: open a branch or a PR as a worktree. The rail lists directories; this is where the refs
- * live, behind search, so nine parked branches never crowd it. The daemon ranks, so the filter
- * here is the identity, and an empty query is the work that is open: unmerged local branches
+ * live, behind search, so nine parked branches never crowd it. The daemon ranks, and the filter
+ * here only gathers each kind under its own head, keeping the daemon's order inside a group: a
+ * PR row and a branch row are read differently, and mixed by recency alone they read as noise on
+ * a repo with a team on it. An empty query is the work that is open: unmerged local branches
  * nobody has out, and the open PRs. A ref already checked out somewhere is a switch, not an
  * open, since git would refuse a second worktree on the branch anyway. */
 export function RefPicker({ repoId }: { repoId: string }) {
@@ -21,7 +28,7 @@ export function RefPicker({ repoId }: { repoId: string }) {
   const results = useStore((s) => s.refs[repoId]);
   const rows = useStore((s) => s.rows);
   const nameOf = (id: string) => rows.find((r) => r.id === id)?.name ?? "a worktree";
-  const filter = useCallback((hits: RefHit[]) => hits, []);
+  const filter = useCallback((hits: RefHit[]) => [...hits].sort((a, b) => ORDER[a.kind] - ORDER[b.kind]), []);
   const onQuery = useCallback((q: string) => sock?.send({ t: "search-refs", repoId, query: q.trim() }), [sock, repoId]);
   // stale = the daemon has not answered this query yet; the previous rows stay up meanwhile
   const isStale = (q: string) => !results || results.query !== q.trim();
@@ -54,6 +61,8 @@ export function RefPicker({ repoId }: { repoId: string }) {
       }}
       onBack={() => dispatch({ a: "close" })}
       rowMenu={refItems}
+      groupOf={(h) => h.kind}
+      groupHead={(kind, n) => `${GROUP[kind as RefHit["kind"]]} · ${n}`}
       placeholder="open a branch or PR…"
       keys={(active) => ({
         nav: "moves",
@@ -68,7 +77,7 @@ export function RefPicker({ repoId }: { repoId: string }) {
           label={
             <>
               <Icon name={ICON[h.kind]} className="icon-inline" />
-              {h.name}
+              <span className="ref-name">{h.name}</span>
             </>
           }
           hint={hint(h)}

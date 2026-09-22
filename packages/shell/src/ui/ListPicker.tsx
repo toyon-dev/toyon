@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { useTouch } from "../state/selectors.ts";
 import { cx } from "./cx.ts";
 import { Field } from "./Field.tsx";
@@ -67,6 +67,8 @@ export function ListPicker<T>({
   footer,
   keys,
   rowMenu,
+  groupOf,
+  groupHead,
 }: {
   items: T[];
   /** narrow the list for a query (empty query → everything) */
@@ -125,6 +127,13 @@ export function ListPicker<T>({
   /** what a right-click on a row offers, for a picker whose rows are things and not only choices
    * (a project has a setup and a forget); a row with nothing gets the app's menu like any chrome */
   rowMenu?: (t: T) => MenuEntry[];
+  /** the group a row belongs to, for a list of more than one kind of thing (branches and PRs).
+   * A head is drawn where the group changes, so `filter` must already have put each group's rows
+   * together; the head is a label and never a row the keyboard stops on. With one group in the
+   * results no head is drawn, since the rows say what they are themselves. */
+  groupOf?: (t: T) => string;
+  /** the head for a group, given its key and how many rows it holds */
+  groupHead?: (group: string, n: number) => ReactNode;
 }) {
   const cm = useContextMenu("picker");
   const [q, setQ] = useState(initialQuery);
@@ -217,27 +226,38 @@ export function ListPicker<T>({
       {trailing}
     </div>
   );
+  const counts = new Map<string, number>();
+  if (groupOf) for (const t of results) counts.set(groupOf(t), (counts.get(groupOf(t)) ?? 0) + 1);
   const listEl = (
     <div className="picker-list" ref={listRef}>
-      {results.map((t, i) => (
-        <button
-          key={keyOf(t)}
-          className={cx("picker-item", rowClass?.(t))}
-          data-state={rowState({ cursor: i === clamped })}
-          title={rowTitle?.(t)}
-          // mousemove, not mouseenter: rows scrolling under a stationary pointer must not steal the highlight
-          onMouseMove={() => i !== clamped && nav.setIndex(i)}
-          onClick={() => {
-            nav.pick(t);
-            // a row that only narrowed the query leaves the picker open, and the click took the
-            // caret with it; the field is where the next keystroke belongs
-            inputRef.current?.focus();
-          }}
-          {...cm.contextMenu(() => rowMenu?.(t) ?? [])}
-        >
-          {row(t, i === clamped, q)}
-        </button>
-      ))}
+      {results.map((t, i) => {
+        const group = groupOf?.(t);
+        const head =
+          group !== undefined && counts.size > 1 && (i === 0 || groupOf?.(results[i - 1] as T) !== group) ? (
+            <div className="picker-group">{groupHead?.(group, counts.get(group) ?? 0) ?? group}</div>
+          ) : null;
+        return (
+          <Fragment key={keyOf(t)}>
+            {head}
+            <button
+              className={cx("picker-item", rowClass?.(t))}
+              data-state={rowState({ cursor: i === clamped })}
+              title={rowTitle?.(t)}
+              // mousemove, not mouseenter: rows scrolling under a stationary pointer must not steal the highlight
+              onMouseMove={() => i !== clamped && nav.setIndex(i)}
+              onClick={() => {
+                nav.pick(t);
+                // a row that only narrowed the query leaves the picker open, and the click took the
+                // caret with it; the field is where the next keystroke belongs
+                inputRef.current?.focus();
+              }}
+              {...cm.contextMenu(() => rowMenu?.(t) ?? [])}
+            >
+              {row(t, i === clamped, q)}
+            </button>
+          </Fragment>
+        );
+      })}
       {results.length === 0 && <div className="empty">{typeof empty === "function" ? empty(q) : empty}</div>}
       {footer?.(q, results)}
     </div>

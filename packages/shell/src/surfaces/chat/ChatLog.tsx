@@ -4,7 +4,7 @@ import { previewBus } from "../../app/previewBus.ts";
 import { useDispatch, useSock, useStoreInstance } from "../../state/context.tsx";
 import { useLocalField } from "../../state/selectors.ts";
 import { localOf } from "../../state/store.ts";
-import { Button, IconButton } from "../../ui/Button.tsx";
+import { IconButton } from "../../ui/Button.tsx";
 import { useOnChange, useTail } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { Spinner } from "../../ui/Spinner.tsx";
@@ -230,15 +230,17 @@ export function ChatLog({
             />
           ),
         )}
-        {busy && active && !(active.agent === "waiting" && askInBox) && (
+        {/* the row is status alone: the stop is the composer's, in the field's corner, which stays
+            put where this row scrolls off as soon as the log is read back. So while a call or a
+            thought shimmers above and the silence is short, there is no row: the shimmer says it. */}
+        {busy && active && !(active.agent === "waiting" && askInBox) && !(moving && quiet < QUIET_AFTER) && (
           <div className="working-row">
             {/* waiting is not activity: it is blocked on you, and the rail keeps that dot steady
                 for the same reason */}
             {active.agent === "waiting" ? (
               "waiting for your answer…"
             ) : moving ? (
-              // the silence is the news, so it gets the word; under the threshold the row is the
-              // stop alone, since the shimmer above is saying the rest
+              // the silence is the news, so it gets the word
               quiet >= QUIET_AFTER && (
                 <span>
                   quiet for<span className="working-num">{quiet}s</span>
@@ -274,28 +276,19 @@ export function ChatLog({
                 )}
               </span>
             )}
-            <Button
-              variant="outline"
-              tone="danger"
-              data-tip={`Stop the agent (context up to here is kept${queue.length ? "; queued messages go next" : ""})`}
-              data-tip-key="esc"
-              onClick={() => sock?.send({ t: "stop-agent", worktreeId: active.worktree.id })}
-            >
-              <Icon name="stop" className="icon-inline" /> stop
-            </Button>
           </div>
         )}
+        {/* a `!` command's stop stays by its row: it kills the command, not the agent, and the
+            composer's corner holds the agent's */}
         {shellRunning && active && (
           <div className="working-row">
             running…
-            <Button
-              variant="outline"
+            <IconButton
+              icon="stop"
               tone="danger"
-              data-tip="Kill the command; what it printed so far stays"
+              label="Kill the command; what it printed so far stays"
               onClick={() => sock?.send({ t: "exec-stop", worktreeId: active.worktree.id })}
-            >
-              <Icon name="stop" className="icon-inline" /> stop
-            </Button>
+            />
           </div>
         )}
         {/* only an agent that cannot take a message mid-turn leaves one waiting here. The rest go

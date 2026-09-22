@@ -261,6 +261,8 @@ export function Composer({
   // when it has one and is not mid-turn
   const canCompact = commands.some((c) => c.name === "compact");
   const midTurn = active?.agent === "working" || active?.agent === "waiting";
+  // the turn this box can stop, the same one its esc stops
+  const stoppable = midTurn && !!id && !drafting;
   // where the work stands: the last stop, read while the box is empty and the agent is not on it.
   // It is about the box you are looking at, and it goes when you type as a placeholder does.
   const lastTurn = active?.worktree.lastTurn;
@@ -917,7 +919,9 @@ export function Composer({
       {askUp && id ? (
         <AskBox key={askUp.id} item={askUp} worktreeId={id} rootRef={askRef} />
       ) : (
-        <div className={cx("composer-field", shellCmd !== null && "shell", walk && "recalled")}>
+        <div
+          className={cx("composer-field", shellCmd !== null && "shell", walk && "recalled", stoppable && "stopping")}
+        >
           <TextArea
             size="lg"
             bare
@@ -1063,6 +1067,20 @@ export function Composer({
                 </>
               )}
             </div>
+          )}
+          {/* the agent's stop, in the field's corner for as long as it has the turn: the box stays
+              put where a row under the log scrolls off as soon as the log is read back, and it
+              sits with the esc above that does the same. The glyph alone: the corner says what it
+              is, and a word made it the loudest thing in the box while a steer was being typed. */}
+          {stoppable && (
+            <IconButton
+              icon="stop"
+              tone="danger"
+              className="composer-stop"
+              label={`Stop the agent (context up to here is kept${queue.length ? "; queued messages go next" : ""})`}
+              hint="esc"
+              onClick={() => id && sock?.send({ t: "stop-agent", worktreeId: id })}
+            />
           )}
         </div>
       )}

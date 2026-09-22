@@ -13,11 +13,10 @@ import { type RefObject, useMemo, useRef, useState } from "react";
 import { openFile } from "../../state/actions/file.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { useLocalField, useTouch } from "../../state/selectors.ts";
-import { Button } from "../../ui/Button.tsx";
+import { Button, IconButton } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { TextArea } from "../../ui/Field.tsx";
 import { useOnChange } from "../../ui/hooks.ts";
-import { Icon } from "../../ui/Icon.tsx";
 import { Kbd } from "../../ui/Kbd.tsx";
 import { KeyHints } from "../../ui/KeyHints.tsx";
 import { step } from "../../ui/listNav.ts";
@@ -284,16 +283,13 @@ function QuestionBody({
         <Kbd k="s" chip />
         skip
       </Button>
-      <Button
-        variant="outline"
+      <IconButton
+        icon="stop"
         tone="danger"
-        size="md"
         className="ask-stop"
-        data-tip="Stop the agent (context up to here is kept)"
+        label="Stop the agent (context up to here is kept)"
         onClick={() => sock?.send({ t: "stop-agent", worktreeId })}
-      >
-        <Icon name="stop" className="icon-inline" /> stop
-      </Button>
+      />
     </div>
   );
 

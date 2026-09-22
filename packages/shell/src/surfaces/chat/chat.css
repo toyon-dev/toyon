@@ -279,8 +279,8 @@
   .working-word {
     margin-left: 6px;
   }
-  /* a number on the working line: the seconds of silence, or a fan-out's calls ticking. A number
-   that ticks holds its width, so the stop button beside it does not step when 9 becomes 10 */
+  /* a number on the working line: the seconds of silence, or a fan-out's calls ticking. It holds
+   its width, so the line does not step when 9 becomes 10 */
   .working-num {
     margin-left: 6px;
     font-variant-numeric: tabular-nums;
@@ -829,6 +829,17 @@
       box-shadow: 0 0 0 1.5px var(--border0);
     }
   }
+  /* the agent's stop, in the field's top-right corner while it has the turn. Absolute, so it comes
+   and goes with the turn without moving the knobs row's buttons. The field and its ghost keep the
+   corner clear together, since the ghost's wrap has to match the field's or it drifts off the caret. */
+  .composer-stop {
+    position: absolute;
+    top: 0;
+    right: 0;
+  }
+  .composer-field.stopping :is(textarea, .composer-ghost) {
+    padding-right: 24px;
+  }
   /* the verb leading the placeholder's line: the ghost lets presses through to the textarea under
    it, and the word is the one part of the ghost that takes them */
   .composer-verb {
@@ -1239,8 +1250,8 @@
   }
   /* the actions under a page, at the page's floor: every page stands at the tallest one's height,
    and the slack goes above this row, so the send sits in one place whichever page is open. The
-   send and what goes with it on the left, the stop on the right, where the transcript's waiting
-   row kept it before the box took the ask and made that row say it twice. */
+   send and what goes with it on the left, the stop on the right: the glyph alone, as in the
+   plain box's corner, since the ask replaces the field and its corner is the tab strip. */
   .ask-foot {
     display: flex;
     align-items: center;

@@ -174,7 +174,9 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
   s.hub.on("reposChanged", () => broadcast({ t: "repos", repos: s.state.repos }));
   s.hub.on("pendingChanged", () => broadcast({ t: "pending-repos", pending: s.repos.pending }));
   s.hub.on("proc", (worktreeId, proc) => broadcast({ t: "proc", worktreeId, proc }));
-  s.hub.on("log", (worktreeId, proc, line) => sendTo(worktreeId, { t: "log", worktreeId, proc, line }));
+  s.hub.on("log", (worktreeId, proc, line, retract) =>
+    sendTo(worktreeId, retract ? { t: "log", worktreeId, proc, line, retract } : { t: "log", worktreeId, proc, line }),
+  );
   s.hub.on("queue", (worktreeId, items) => sendTo(worktreeId, { t: "queue", worktreeId, items }));
   s.hub.on("shipping", (worktreeId, step) => sendTo(worktreeId, { t: "shipping", worktreeId, step }));
   s.hub.on("agentCommands", (worktreeId, commands) =>

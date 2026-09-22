@@ -1,4 +1,4 @@
-import type { LogLine, ProcState } from "@toyon/shared";
+import { applyLog, type LogLine, type ProcState } from "@toyon/shared";
 import { fireAndForget } from "../core/log.ts";
 import { LineSplitter } from "./lines.ts";
 import { listeningPorts, portFromLogs, reachableHost } from "./listeners.ts";
@@ -39,7 +39,7 @@ export interface ManagedProc {
 }
 
 export type ProcListener = (proc: ProcState) => void;
-export type LogListener = (proc: string, line: string) => void;
+export type LogListener = (proc: string, line: string, retract: number) => void;
 export type DataListener = (proc: string, data: string) => void;
 export type ExitListener = (proc: string, exitCode: number) => void;
 
@@ -110,7 +110,7 @@ export class WorktreeProcs {
         },
         (data) => {
           this.onData(name, data);
-          for (const line of mp.lines.feed(data)) this.pushLine(name, line);
+          for (const ev of mp.lines.feed(data)) this.pushLine(name, ev.line, ev.retract);
         },
         (code) => this.handleExit(mp, code),
       );
@@ -319,10 +319,10 @@ export class WorktreeProcs {
     return [...this.procs.values()].map((p) => ({ ...p.state }));
   }
 
-  private pushLine(proc: string, line: string) {
-    this.lines.push({ proc, line });
+  private pushLine(proc: string, line: string, retract = 0) {
+    this.lines = applyLog(this.lines, proc, line, retract);
     if (this.lines.length > LOG_RING_SIZE) this.lines.shift();
-    this.onLog(proc, line);
+    this.onLog(proc, line, retract);
   }
 }
 

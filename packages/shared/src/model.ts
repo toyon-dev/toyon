@@ -431,6 +431,22 @@ export interface LogLine {
   line: string;
 }
 
+/** Apply one log event to a transcript: drop the last `retract` lines of `proc` (a progress bar
+ * that climbed over its own frame), then add `line` when there is one. The daemon's ring and the
+ * shell's copy of it both read the same events, so they agree on what a redraw leaves. */
+export function applyLog(lines: LogLine[], proc: string, line: string, retract = 0): LogLine[] {
+  let out = lines;
+  for (let left = retract; left > 0; left--) {
+    let i = out.length - 1;
+    while (i >= 0 && out[i]?.proc !== proc) i--;
+    if (i < 0) break;
+    out = out === lines ? [...out] : out;
+    out.splice(i, 1);
+  }
+  if (!line) return out;
+  return [...out, { proc, line }];
+}
+
 /** "waiting" means blocked on a person (an open ask card), not on the model */
 export type AgentStatus = "idle" | "working" | "waiting" | "error";
 

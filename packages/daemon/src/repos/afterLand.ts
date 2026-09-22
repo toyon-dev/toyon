@@ -65,9 +65,9 @@ export class AfterLand {
     for (const command of commands) {
       this.tellMain(repo, `afterLand: ${command}`);
       let last = "";
-      const code = await runSetup(command, repo.path, (line) => {
-        last = line;
-        this.tellMain(repo, line);
+      const code = await runSetup(command, repo.path, (line, retract) => {
+        if (line) last = line;
+        this.tellMain(repo, line, retract);
       });
       if (code === 0) continue;
       // the last line is almost always the error the command printed; the rest is in the main
@@ -89,9 +89,9 @@ export class AfterLand {
   }
 
   /** a line in the main worktree's log pane, the one surface that belongs to the checkout itself */
-  private tellMain(repo: RepoInfo, line: string): void {
+  private tellMain(repo: RepoInfo, line: string, retract?: number): void {
     const main = this.mainOf(repo);
-    if (main) this.d.hub.emit("log", main.id, "land", line);
+    if (main) this.d.hub.emit("log", main.id, "land", line, retract);
   }
 
   private mainOf(repo: RepoInfo) {

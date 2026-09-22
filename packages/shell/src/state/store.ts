@@ -50,6 +50,7 @@ import type {
   WorktreeStatus,
 } from "@toyon/shared";
 import {
+  applyLog,
   builtinThemes,
   defaultThemePrefs,
   isEditTool,
@@ -1983,7 +1984,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
     case "log":
       return withLocal(s, msg.worktreeId, (l) => ({
         ...l,
-        log: [...l.log.slice(-400), { proc: msg.proc, line: msg.line }],
+        log: applyLog(l.log.slice(-400), msg.proc, msg.line, msg.retract),
       }));
     case "agent": {
       const ev = msg.event;

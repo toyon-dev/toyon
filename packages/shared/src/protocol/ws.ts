@@ -123,7 +123,9 @@ export type ServerMsg =
    * beside the rows in `trunks`, since main is not a row while a spare stands for it. */
   | { t: "worktrees"; rows: WorktreeStatus[]; trunks: Record<string, TrunkStatus> }
   | { t: "proc"; worktreeId: string; proc: WorktreeStatus["procs"][number] }
-  | { t: "log"; worktreeId: string; proc: string; line: string }
+  /** `retract` is how many of the proc's last lines this one redraws over; a redraw wiped as the
+   * process moved on is a retract with an empty line */
+  | { t: "log"; worktreeId: string; proc: string; line: string; retract?: number }
   | { t: "agent"; worktreeId: string; seq: number; event: AgentEvent }
   /** on subscribe: the transcript so far and the dev servers' recent output */
   | { t: "backfill"; worktreeId: string; events: Array<{ seq: number; event: AgentEvent }>; log?: LogLine[] }

@@ -15,7 +15,7 @@ const SETUP_ROWS = 30;
 export function runSetup(
   cmd: string,
   cwd: string,
-  onLine: (line: string) => void,
+  onLine: (line: string, retract: number) => void,
   extra: Record<string, string> = {},
 ): Promise<number> {
   return new Promise((resolve) => {
@@ -32,12 +32,12 @@ export function runSetup(
           ring: SETUP_RING,
         },
         (data) => {
-          for (const line of lines.feed(data)) onLine(line);
+          for (const ev of lines.feed(data)) onLine(ev.line, ev.retract);
         },
         resolve,
       );
     } catch (e) {
-      onLine(`could not run: ${e instanceof Error ? e.message : String(e)}`);
+      onLine(`could not run: ${e instanceof Error ? e.message : String(e)}`, 0);
       resolve(1);
     }
   });

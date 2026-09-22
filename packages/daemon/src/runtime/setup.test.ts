@@ -23,6 +23,21 @@ describe("runSetup", () => {
     expect(at[1]).toBeGreaterThanOrEqual(400);
   }, 10_000);
 
+  test("a bar that redraws by climbing reaches the listener as a retract", async () => {
+    const seen: Array<[string, number]> = [];
+    // a two-line frame, then the next frame drawn over it, then the bar wiped at exit
+    const cmd = "printf 'a 1\\nb 1\\n\\033[2A\\033[0Ja 2\\nb 2\\n\\033[2A\\033[0J'";
+    const code = await runSetup(cmd, process.cwd(), (l, r) => seen.push([l, r]));
+    expect(code).toBe(0);
+    expect(seen).toEqual([
+      ["a 1", 0],
+      ["b 1", 0],
+      ["a 2", 2],
+      ["b 2", 0],
+      ["", 2],
+    ]);
+  });
+
   test("a failing command reports its code, with its output as lines", async () => {
     const seen: string[] = [];
     const code = await runSetup("echo nope 1>&2; exit 7", process.cwd(), (l) => seen.push(l));

@@ -7,7 +7,8 @@ import { log } from "./log.ts";
 
 export interface HubEvents {
   proc: (worktreeId: string, proc: ProcState) => void;
-  log: (worktreeId: string, proc: string, line: string) => void;
+  /** one line of a proc's output; `retract` is how many of its last lines this one redraws over */
+  log: (worktreeId: string, proc: string, line: string, retract?: number) => void;
   agent: (worktreeId: string, seq: number, event: AgentEvent) => void;
   agentStatus: (worktreeId: string, status: AgentStatus) => void;
   /** the agent stopped (finished, was stopped, failed, or is blocked asking) and the record says how */

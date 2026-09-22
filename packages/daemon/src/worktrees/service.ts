@@ -1322,7 +1322,7 @@ export class WorktreeService {
       const code = await runSetup(
         cmd,
         wt.path,
-        (line) => this.d.hub.emit("log", wt.id, "setup", line),
+        (line, retract) => this.d.hub.emit("log", wt.id, "setup", line, retract),
         worktreeEnv(wt, repo),
       );
       if (code !== 0) this.d.hub.emit("log", wt.id, "setup", `setup failed (exit ${code}): ${cmd}`);

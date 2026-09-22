@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { agentDefault, defaultStandsFor, siblingsOf, type WorktreeInfo } from "./model.ts";
+import { agentDefault, applyLog, defaultStandsFor, siblingsOf, type WorktreeInfo } from "./model.ts";
 
 describe("siblingsOf", () => {
   const wt = (id: string, group?: string): WorktreeInfo =>
@@ -49,5 +49,32 @@ describe("agentDefault", () => {
       ]),
     ).toBeUndefined();
     expect(agentDefault([])).toBeUndefined();
+  });
+});
+
+describe("applyLog", () => {
+  const ready = { proc: "web", line: "ready" };
+  const fetching = { proc: "setup", line: "fetching" };
+  const bar = { proc: "setup", line: "[=>  ] 20%" };
+  const log = [ready, fetching, bar];
+
+  test("appends a plain line", () => {
+    expect(applyLog(log, "setup", "done")).toEqual([...log, { proc: "setup", line: "done" }]);
+  });
+
+  test("a retract replaces the proc's last lines and leaves the other proc's alone", () => {
+    expect(applyLog(log, "setup", "[==> ] 40%", 1)).toEqual([ready, fetching, { proc: "setup", line: "[==> ] 40%" }]);
+    expect(applyLog(log, "setup", "", 2)).toEqual([ready]);
+    expect(applyLog(log, "web", "listening", 1)).toEqual([fetching, bar, { proc: "web", line: "listening" }]);
+  });
+
+  test("a retract past what the proc wrote stops at its first line", () => {
+    expect(applyLog(log, "setup", "", 9)).toEqual([ready]);
+  });
+
+  test("never mutates the transcript it was given", () => {
+    const before = [...log];
+    applyLog(log, "setup", "x", 2);
+    expect(log).toEqual(before);
   });
 });

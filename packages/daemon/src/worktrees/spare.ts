@@ -241,8 +241,9 @@ export class SparePool {
           const code = await runSetup(
             cmd,
             wt.path,
-            (line) => {
-              tail.push(line);
+            (line, retract) => {
+              tail.splice(Math.max(0, tail.length - retract), retract);
+              if (line) tail.push(line);
               if (tail.length > 20) tail.shift();
             },
             worktreeEnv(wt, repo),

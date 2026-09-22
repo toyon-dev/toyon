@@ -101,6 +101,8 @@ export interface ToolCall {
   title?: string;
   input: unknown;
   toolKind?: ToolKind;
+  /** the call starts another agent (acp/map.ts): its input is the brief */
+  subagent?: boolean;
 }
 
 function field(call: ToolCall, key: string): string {
@@ -214,7 +216,12 @@ const WRITING: Record<WrittenKind, string> = {
  * `cutOff` in group.ts reads it by. */
 export function composing(call: ToolCall): string {
   const kind = call.toolKind;
-  return isWrittenKind(kind) && emptyInput(call.input) ? WRITING[kind] : "";
+  if (!emptyInput(call.input)) return "";
+  // a spawn's kind is "think", which is whole on arrival for every other call of that kind; the
+  // brief is what the agent writes here, and until it lands the row would say "Task" with a
+  // count of no calls, which reads as a subagent that never started
+  if (call.subagent) return "writing the brief";
+  return isWrittenKind(kind) ? WRITING[kind] : "";
 }
 
 /** the blocks to show under the row: the adapter repeats the description as the first line of the

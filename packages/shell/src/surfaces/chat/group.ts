@@ -179,10 +179,13 @@ export function subagentsAtWork(items: ChatItem[]): { ids: Set<string>; calls: n
  * stacked under it, so the shine on its line is the first thing the tailing log scrolls off the
  * top. The work in that window is the subagent's, and it is counted by subagentsAtWork. Read by
  * the adapter's flag, and by the children that name the call as their parent for a transcript
- * written before the flag was kept. */
+ * written before the flag was kept. A spawn whose brief has not arrived is the exception: the
+ * agent is writing it, which is its own work, and the row wears the writing mark for it. */
 export function ownCallRunning(items: ChatItem[]): boolean {
   const spawns = spawnIds(items);
-  return items.some((i) => i.kind === "tool" && !i.done && !i.parentToolId && !spawns.has(i.id));
+  return items.some(
+    (i) => i.kind === "tool" && !i.done && !i.parentToolId && (!spawns.has(i.id) || emptyInput(i.input)),
+  );
 }
 
 /** the entries hold fresh arrays on every render, so the rows compare their calls one by one:

@@ -575,7 +575,15 @@ export const ToolRow = memo(
       );
     const calls = run ? runCalls(run) : 0;
     const what = [label, hint].filter(Boolean).join(" ");
-    const count = run ? `${calls} ${calls === 1 ? "call" : "calls"}` : tools.length > 1 ? `×${tools.length}` : "";
+    // no count while the call is still being written: a spawn's "0 calls" beside the mark read as
+    // a subagent that had started and done nothing
+    const count = writing
+      ? ""
+      : run
+        ? `${calls} ${calls === 1 ? "call" : "calls"}`
+        : tools.length > 1
+          ? `×${tools.length}`
+          : "";
     const store = useStoreInstance();
     const sock = useSock();
     return (
@@ -589,7 +597,7 @@ export const ToolRow = memo(
         state={rowState({ cursor: marked })}
         auto={auto}
         leaf={leaf}
-        label={run ? `${what}, ${count}` : tools.length > 1 ? `${what}, ${tools.length} calls` : what}
+        label={run && count ? `${what}, ${count}` : tools.length > 1 ? `${what}, ${tools.length} calls` : what}
         menu={(fold) => {
           const w = worktreeById(store.getState(), worktreeId);
           const wt = w ? { id: w.worktree.id, dir: w.worktree.path } : null;

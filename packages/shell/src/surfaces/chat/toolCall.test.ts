@@ -315,6 +315,13 @@ describe("toolLabel", () => {
       composing({ name: "Compact conversation", title: "Compact conversation", toolKind: "think", input: {} }),
     ).toBe("");
     expect(composing({ name: "tool", title: "tool", input: {} })).toBe("");
+    // a spawn is a think that is written: the brief is its input, and the row waits on it
+    expect(composing({ name: "Task", title: "Task", toolKind: "think", input: {}, subagent: true })).toBe(
+      "writing the brief",
+    );
+    expect(
+      composing({ name: "Task", title: "Task", toolKind: "think", input: { description: "Map it" }, subagent: true }),
+    ).toBe("");
   });
 
   test("the glyph follows the command's verb where the kind only says `run`", () => {

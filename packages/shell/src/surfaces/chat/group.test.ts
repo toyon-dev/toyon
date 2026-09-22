@@ -445,4 +445,9 @@ describe("ownCallRunning", () => {
   test("a subagent's own call in flight is not the main agent's", () => {
     expect(ownCallRunning([spawn("task1", "Map the runtime"), sub("task1", { done: false })])).toBe(false);
   });
+
+  test("a spawn whose brief is still being written is the main agent's own motion", () => {
+    expect(ownCallRunning([spawn("task1", "", { done: false, input: {} })])).toBe(true);
+    expect(ownCallRunning([spawn("task1", "Map the runtime", { done: false })])).toBe(false);
+  });
 });

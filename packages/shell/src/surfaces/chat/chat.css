@@ -495,13 +495,16 @@
     &.error .tool-name {
       color: var(--red);
     }
-    /* the seconds a running call has taken, after the line that shines for it: the row's own tier
-   and not the shine's, since the number is the one still thing on the line and is read against
-   the sweep. It holds its width so the line does not step when 9 becomes 10. */
+    /* the seconds a running call has taken, after the line that shines for it. It is the count's
+   own treatment (below): a number after the hint, a tier up, never shrinking, so the two read
+   as one vocabulary. The tier is also what parts it from the hint: that is prose and often ends
+   in a number of its own ("since 0.5.0"), and at the hint's tier the seconds read as the
+   sentence's tail. The number holds still against the sweep and holds its width, so the line
+   does not step when 9 becomes 10. */
     & .tool-age {
       font-variant-numeric: tabular-nums;
       flex: 0 0 auto;
-      color: var(--text2);
+      color: var(--text1);
     }
     /* how many calls the row stands for, one gap after the path it counts: most rows have no count,
    so there is no column to line them up in, and a number at the far end of a wide row floats free

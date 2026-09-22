@@ -47,6 +47,10 @@ const GROUPABLE: ReadonlySet<string> = new Set(["read", "edit", "fetch"]);
  * folding them into one row would print the count on whichever depth happened to come first. */
 function groupKey(item: ToolItem, roots: string[]): string {
   if (item.isError || !item.toolKind || !GROUPABLE.has(item.toolKind)) return "";
+  // a call still being written has nothing to group on: its label falls back to the adapter's
+  // placeholder title ("Edit", "Preparing file…"), which would key every such call alike and keep
+  // `follows` from ever being asked
+  if (isWrittenKind(item.toolKind) && emptyInput(item.input)) return "";
   const { hint } = toolLabel(item, roots);
   return hint ? `${item.parentToolId ?? ""}\n${item.toolKind}\n${item.name}\n${hint}` : "";
 }

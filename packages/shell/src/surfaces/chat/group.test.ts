@@ -48,9 +48,11 @@ describe("groupTools", () => {
     expect(shape(items, ["/wt"])).toEqual([{ at: 0, n: 3 }]);
   });
 
-  /** a call the agent has opened but not finished typing: no path yet, so nothing to group on */
+  /** a call the agent has opened but not finished typing: no path yet, so nothing to group on. The
+   * adapter titles such a call after the tool, and the title is not the name, which is the shape
+   * the label's title fallback fires on (toolLabel) */
   const writing = (kind: ToolKind, extra: Partial<ChatItem> = {}) =>
-    tool(kind, "", { input: {}, done: false, ...extra });
+    tool(kind, "", { input: {}, done: false, title: "Preparing file…", ...extra });
 
   test("an edit still being written after a run of edits shines the run, and is no row yet", () => {
     const items = [tool("edit", "/wt/a.ts"), tool("edit", "/wt/a.ts"), writing("edit")];

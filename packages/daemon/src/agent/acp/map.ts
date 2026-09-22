@@ -308,12 +308,17 @@ function exitCodeOf(rawOutput: unknown): number {
   return typeof exit === "number" ? exit : 0;
 }
 
-/** what the chat shows under a finished tool row: the agent's content blocks, else its raw output */
+/** what the chat shows under a finished tool row: the agent's content blocks, else its raw output.
+ * A picture is a content block of its own (toolImages) and never words: a read of a screenshot
+ * has said everything once the picture is on the row, so its raw output, which is the same
+ * picture as a base64 dump, is not the fallback. */
 export function summarizeToolOutput(content: ToolCallContent[], rawOutput: unknown): string {
   const parts: string[] = [];
+  let pictured = false;
   for (const c of content) {
     if (c.type === "content") {
       if (c.content.type === "text") parts.push(c.content.text);
+      else if (c.content.type === "image") pictured = true;
     } else if (c.type === "diff") {
       // fenced as a diff so the chat colors it without a `--- path` header to key on: the row above
       // already names the file, and it named it with the worktree path spelled out in full
@@ -323,6 +328,7 @@ export function summarizeToolOutput(content: ToolCallContent[], rawOutput: unkno
     // terminal blocks refer to a client terminal, which we do not offer
   }
   if (parts.length > 0) return truncate(parts.join("\n"));
+  if (pictured) return "";
   if (typeof rawOutput === "string") return truncate(rawOutput);
   if (rawOutput && typeof rawOutput === "object") {
     const rec = rawOutput as Record<string, unknown>;

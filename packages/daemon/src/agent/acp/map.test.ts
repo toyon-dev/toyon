@@ -423,6 +423,17 @@ describe("summarizeToolOutput / truncate / stop reasons", () => {
     expect(summarizeToolOutput([], { n: 1 })).toBe('{\n "n": 1\n}');
     expect(summarizeToolOutput([], undefined)).toBe("");
   });
+  test("a picture is the output: the raw result behind it (the same picture as base64) is not printed", () => {
+    const image = {
+      type: "content" as const,
+      content: { type: "image" as const, data: "iVBOR", mimeType: "image/png" },
+    };
+    const raw = [{ type: "image", source: { type: "base64", data: "iVBOR" } }];
+    expect(summarizeToolOutput([image], raw)).toBe("");
+    expect(summarizeToolOutput([image, { type: "content", content: { type: "text", text: "1 file" } }], raw)).toBe(
+      "1 file",
+    );
+  });
   test("truncate keeps the head and says how much is missing", () => {
     expect(truncate("x".repeat(4010))).toMatch(/… \(10 more chars\)$/);
   });

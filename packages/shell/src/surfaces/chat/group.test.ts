@@ -1,7 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import type { ToolKind } from "@toyon/shared";
 import type { ChatItem } from "../../state/store.ts";
-import { type ChatEntry, groupTools, openRow, runCalls, subagentsAtWork, type ToolItem } from "./group.ts";
+import {
+  type ChatEntry,
+  groupTools,
+  openRow,
+  ownCallRunning,
+  runCalls,
+  subagentsAtWork,
+  type ToolItem,
+} from "./group.ts";
 
 let n = 0;
 const tool = (kind: ToolKind, path: string, extra: Partial<ChatItem> = {}): ChatItem =>
@@ -413,5 +421,28 @@ describe("subagentsAtWork", () => {
       sub("task2"),
     ];
     expect(subagentsAtWork(items)).toEqual({ ids: new Set(["task2"]), calls: 1 });
+  });
+});
+
+describe("ownCallRunning", () => {
+  const sub = (id: string, extra: Partial<ChatItem> = {}) => tool("read", "/wt/a.ts", { parentToolId: id, ...extra });
+
+  test("a call the main agent runs itself is its own motion, until it lands", () => {
+    expect(ownCallRunning([text("Hi"), tool("execute", "", { done: false })])).toBe(true);
+    expect(ownCallRunning([text("Hi"), tool("execute", "")])).toBe(false);
+  });
+
+  test("a spawn waiting on its subagent is not the main agent moving, whichever way it is marked", () => {
+    expect(ownCallRunning([spawn("task1", "Map the runtime", { done: false }), sub("task1", { done: false })])).toBe(
+      false,
+    );
+    // a transcript from before the flag was kept: the children are what say the call is a spawn
+    const unflagged = tool("think", "", { id: "task2", done: false, subagent: undefined });
+    expect(ownCallRunning([unflagged, sub("task2")])).toBe(false);
+    expect(ownCallRunning([unflagged])).toBe(true);
+  });
+
+  test("a subagent's own call in flight is not the main agent's", () => {
+    expect(ownCallRunning([spawn("task1", "Map the runtime"), sub("task1", { done: false })])).toBe(false);
   });
 });

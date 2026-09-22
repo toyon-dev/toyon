@@ -11,7 +11,7 @@ import { useSelectAllWithin } from "../../ui/selectAll.ts";
 import { isBusy, pickLabel } from "../util.ts";
 import { openAsk } from "./ask.ts";
 import { ChatItemView, ThoughtRow, ToolRow } from "./ChatItemView.tsx";
-import { groupTools, indexOfSeq, openRow, subagentsAtWork } from "./group.ts";
+import { groupTools, indexOfSeq, openRow, ownCallRunning, subagentsAtWork } from "./group.ts";
 import { isBlank } from "./recall.ts";
 
 /** seconds of silence before the working line starts counting */
@@ -172,9 +172,12 @@ export function ChatLog({
   // under the log would say it again, so it shows only when nothing does, in the gap between two
   // calls. A subagent's call does not count: it runs under a spawn row that closed when the spawn
   // returned and has since been folded up the log, so its shimmer is one nobody sees, and the word
-  // hiding for it would blink with every call the subagent makes. The count stays either way: a
-  // call that hangs shimmers like one that runs, and the seconds are what tell them apart.
-  const moving = streaming >= 0 || items.some((i) => i.kind === "tool" && !i.done && !i.parentToolId);
+  // hiding for it would blink with every call the subagent makes. Nor does the call that started
+  // a subagent and waits on it (ownCallRunning in group.ts): its row is open with the subagent's
+  // rows under it, and the shine on its line is what the tailing log scrolls off first. The count
+  // stays either way: a call that hangs shimmers like one that runs, and the seconds are what
+  // tell them apart.
+  const moving = streaming >= 0 || ownCallRunning(items);
   // the subagents the main agent is waiting on: named in the word, with their calls ticking beside
   // it, since their rows are out of sight and this line is the one place that can say so. The
   // spawn rows that started them shine for the same window.

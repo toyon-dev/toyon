@@ -431,13 +431,10 @@
     &.nested .tool-block.cmd {
       padding-left: 30px;
     }
-    /* the row that started the subagent: the same weight as a name the agent chose to print, since
-     the rows underneath belong to it and a spawn that reads like any other call loses them. Claude
-     prints the task as the hint, Codex its marker as the name, so both are lifted. */
-    &.spawn .tool-name,
-    &.spawn .tool-hint {
-      color: var(--text1);
-    }
+    /* the row that started the subagent sits at the log tier like every other closed call: the fork
+     glyph and the count after the line are what set it apart. A line brighter than its neighbours
+     is what a running call wears, so a finished spawn lifted a rung read as one still at work.
+     Open, the seat lifts it with everything else. */
     /* the subagent's rows, inside the row that started them. They are ordinary rows and keep the
      negative margins above, so the run gives them back the log's own padding and gap: a child then
      sits in the same column as a top-level row, and its indent is its own summary's. */

@@ -173,6 +173,18 @@ export function subagentsAtWork(items: ChatItem[]): { ids: Set<string>; calls: n
   return { ids, calls };
 }
 
+/** Whether a call of the main agent's own is in flight: one it is running itself, whose row
+ * shines for it. A subagent's call is not its own, and nor is the call that started a subagent
+ * and waits on it: that one does nothing itself, and its row is open with the subagent's rows
+ * stacked under it, so the shine on its line is the first thing the tailing log scrolls off the
+ * top. The work in that window is the subagent's, and it is counted by subagentsAtWork. Read by
+ * the adapter's flag, and by the children that name the call as their parent for a transcript
+ * written before the flag was kept. */
+export function ownCallRunning(items: ChatItem[]): boolean {
+  const spawns = spawnIds(items);
+  return items.some((i) => i.kind === "tool" && !i.done && !i.parentToolId && !spawns.has(i.id));
+}
+
 /** the entries hold fresh arrays on every render, so the rows compare their calls one by one:
  * without this a streamed token into the message above re-renders every call in the turn */
 export function sameTools(a: ToolItem[], b: ToolItem[]): boolean {

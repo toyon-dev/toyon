@@ -255,6 +255,13 @@
     gap: 10px;
     color: var(--text2);
     font-style: italic;
+    /* the tool row's box, since this row stands where a tool row will: a call's row appears in its
+     place as the call starts streaming and the mark comes back when the call has run. On its own the
+     mark is 13px and the word that joins it brings a 19.5px line box, against the 14px a tool row
+     takes of the column once its -5px margins meet the log's gap, so the tail stepped by a few
+     pixels each way. The same floor and the same overlap make every shape of this line one height. */
+    min-height: var(--row-height-sm);
+    margin-block: -5px;
   }
   /* the removal, said last in a chat that ended: a note in the log's column, in the log's voice for
      a line that is not a message, with the way back under it */

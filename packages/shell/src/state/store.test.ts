@@ -6,6 +6,7 @@ import {
   type Action,
   asksSetup,
   canCarry,
+  changesTabShown,
   changesTabStep,
   type Draft,
   type EditorDisk,
@@ -1994,6 +1995,22 @@ describe("an archived worktree's page", () => {
     expect(routeTarget(s)).toBeNull();
     // opened over a draft, it takes the draft's place
     expect(run([{ a: "open-draft" }, { a: "open-archived", id: "x" }], listed()).draft).toBeNull();
+  });
+
+  test("its changes panel is one list with no strip, and the kept tab is back when the page closes", () => {
+    const s = run(
+      [
+        { a: "changes-tab", v: "files" },
+        { a: "open-archived", id: "x" },
+      ],
+      listed(),
+    );
+    expect(changesTabShown(s)).toBe("history");
+    expect(changesTabStep(s, 1)).toBe("history");
+    // a chord naming a tab opens the panel without moving the tab the next live worktree shows
+    const asked = reducer(s, { a: "focus-changes", tab: "changes" });
+    expect([asked.layout.changes, asked.layout.changesTab]).toEqual([true, "files"]);
+    expect(changesTabShown(run([{ a: "activate", id: "a" }], asked))).toBe("files");
   });
 
   test("only for an item the project on screen lists", () => {

@@ -66,6 +66,10 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
   const clean = files.length === 0;
 
   const tab = useStore(changesTabShown);
+  // an archived page has no strip: the worktree's whole life is one list, what it left uncommitted
+  // over its history, each run of commits headed by the landing that carried it
+  const showChanges = archived !== null || tab === "changes";
+  const showHist = archived !== null || tab === "history";
   const setTab = useCallback((v: ChangesTab) => dispatch({ a: "changes-tab", v }), [dispatch]);
   const tabRef = useRef(tab);
   tabRef.current = tab;
@@ -109,15 +113,22 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
     if (cached) previewBus.post(shownId, { type: "highlight-file", path, ranges: shiftRanges(cached) });
   }, [ranges, shownId]);
 
+  // An archived worktree's uncommitted work is a snapshot commit over its kept head, and the status
+  // names that snapshot as its head. Its file rows open that commit's own diff, the uncommitted
+  // change alone, rather than the branch's whole unlanded tail.
+  const snapRef = archived && files.length > 0 ? (gitInfo?.head ?? null) : null;
   // walking the list opens each file as it arrives, and the keyboard stays here for the next arrow;
   // Enter is the one that takes it into the file
   const open = useCallback(
-    (path: string, focus = false) => shownId && openFile({ sock, dispatch }, { worktreeId: shownId, path, focus }),
-    [shownId, sock, dispatch],
+    (path: string, focus = false) =>
+      shownId && openFile({ sock, dispatch }, { worktreeId: shownId, path, focus, ref: snapRef ?? undefined }),
+    [shownId, snapRef, sock, dispatch],
   );
 
-  // one flat order across both sections, so ↑↓ crosses the section titles the way the eye does
-  const rows = useMemo(() => [...files, ...committed], [files, committed]);
+  // one flat order across both sections, so ↑↓ crosses the section titles the way the eye does. An
+  // archived page's unlanded commits are the "not landed" run of the history under it, files and
+  // all, so their flat file list is not repeated above them.
+  const rows = useMemo(() => (archived ? files : [...files, ...committed]), [archived, files, committed]);
   // the expanded commit's files sit in the same flat order, so the arrows walk into a commit and
   // out the other side without the list needing a notion of depth
   const histRows = useMemo(() => {
@@ -133,6 +144,10 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
   // whose branch is the default one, where every commit is inherited history.
   const aheadCount = useMemo(() => histRows.filter((r) => !r.file && r.commit.ahead).length, [histRows]);
   const firstLanded = useMemo(() => histRows.findIndex((r) => !r.file && !r.commit.ahead), [histRows]);
+  // the history's rows are numbered after the uncommitted ones when both are on the page, so one
+  // cursor walks from the last uncommitted file into the first commit
+  const above = archived ? rows.length : 0;
+  const total = (showChanges ? rows.length : 0) + (showHist ? histRows.length : 0);
   // an archived worktree's history is only its own commits, so the titles say instead which landing
   // carried each run of them, and which never landed
   const keptTitles = useMemo(() => {
@@ -170,12 +185,12 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
   const head = gitInfo?.head;
   const lastLog = useRef("");
   useEffect(() => {
-    if (tab !== "history" || !shownId) return;
+    if (!showHist || !shownId) return;
     const key = `${shownId}:${head ?? ""}`;
     if (lastLog.current === key) return;
     lastLog.current = key;
     sock?.send({ t: "git-log", worktreeId: shownId });
-  }, [tab, shownId, head, sock]);
+  }, [showHist, shownId, head, sock]);
   // a commit's files are fetched once and kept: the same shas are still there after a re-read
   const toggleCommit = useCallback(
     (sha: string) => {
@@ -196,14 +211,15 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
   // rather than off the top of the list.
   // (only the request is a dependency: the row list changes on every git-status, and focus is not
   // something to take again because a file was saved somewhere)
+  // the open file's index means a row only among the uncommitted ones, and only when it is open
+  // as they open it: a history commit's copy of the same path is another row
   const atOpen = useRef(-1);
-  atOpen.current = rows.findIndex((f) => f.path === openPath);
+  atOpen.current = showChanges && openRef === snapRef ? rows.findIndex((f) => f.path === openPath) : -1;
   useEffect(() => {
     if (!focusReq) return;
     // on the files tab the tree takes it, and picks up at the open file itself
     const files = tabRef.current === "files";
-    // the open file's index means a row only on the changes list; the history counts commits
-    if (tabRef.current === "changes" && atOpen.current >= 0) setSel(atOpen.current);
+    if (atOpen.current >= 0) setSel(atOpen.current);
     const f = requestAnimationFrame(() => (files ? treeRef : listRef).current?.focus());
     return () => cancelAnimationFrame(f);
   }, [focusReq]);
@@ -229,36 +245,39 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
   );
   // arrows only move over a commit: expanding every row they crossed would push the list around
   // under the person walking it. A file row opens on arrival, the way the changes list does.
+  // (`i` is the list's index: the history row is the one `above` rows down from it)
   const moveHist = useCallback(
     (i: number) => {
-      const r = histRows[i];
+      const r = histRows[i - above];
       if (!r) return;
       setSel(i);
       if (r.file) openAt(r.file.path);
     },
-    [histRows, openAt],
+    [histRows, above, openAt],
   );
   const enterHist = useCallback(
     (i: number) => {
-      const r = histRows[i];
+      const r = histRows[i - above];
       if (!r) return;
       setSel(i);
       if (r.file) openAt(r.file.path, true);
       else toggleCommit(r.commit.sha);
     },
-    [histRows, openAt, toggleCommit],
+    [histRows, above, openAt, toggleCommit],
   );
+  // a row past the uncommitted ones is the history's: every row on the history tab, and on an
+  // archived page the ones under its uncommitted files
+  const inHist = (i: number) => showHist && i >= above;
   const onKeyDown = (e: React.KeyboardEvent) => {
-    const hist = tab === "history";
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
-      const i = step(sel, e.key === "ArrowDown" ? 1 : -1, hist ? histRows.length : rows.length);
-      if (hist) moveHist(i);
+      const i = step(sel, e.key === "ArrowDown" ? 1 : -1, total);
+      if (inHist(i)) moveHist(i);
       else select(i);
     } else if (e.key === "Enter") {
       // the arrows preview; Enter opens the file with the keyboard in it, and Esc there comes back here
       e.preventDefault();
-      if (hist) enterHist(sel);
+      if (inHist(sel)) enterHist(sel);
       else select(sel, true);
     } else if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
       // ←/→ belong to the tree under them and never to the strip: a deep file in the files tree has
@@ -267,15 +286,15 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
       // closes it and lands on it: a stop on the parent first is a step nobody asked for in a tree
       // this shallow.
       e.preventDefault();
-      const r = histRows[sel];
-      if (!hist || !r) return;
+      const r = inHist(sel) ? histRows[sel - above] : undefined;
+      if (!r) return;
       if (e.key === "ArrowRight") {
         if (r.file) return;
         if (r.commit.sha !== openSha) toggleCommit(r.commit.sha);
-        else if (histRows[sel + 1]?.file) moveHist(sel + 1);
+        else if (histRows[sel - above + 1]?.file) moveHist(sel + 1);
       } else if (r.commit.sha === openSha) {
         // the commit's own row sits above its files, so its index survives the collapse
-        if (r.file) setSel(histRows.findIndex((x) => !x.file && x.commit.sha === r.commit.sha));
+        if (r.file) setSel(above + histRows.findIndex((x) => !x.file && x.commit.sha === r.commit.sha));
         toggleCommit(r.commit.sha);
       }
     } else if (e.key === "Escape") {
@@ -295,8 +314,10 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
   const kept = archived !== null;
   const menuUncommitted = useCallback(
     (path: string): MenuEntry[] =>
-      wtId ? fileItems({ id: wtId, dir }, path, { discard: !kept, kept }, { sock, dispatch }) : [],
-    [wtId, dir, kept, sock, dispatch],
+      wtId
+        ? fileItems({ id: wtId, dir }, path, { discard: !kept, kept, ref: snapRef ?? undefined }, { sock, dispatch })
+        : [],
+    [wtId, dir, kept, snapRef, sock, dispatch],
   );
   const menuCommitted = useCallback(
     (path: string): MenuEntry[] => (wtId ? fileItems({ id: wtId, dir }, path, { kept }, { sock, dispatch }) : []),
@@ -314,11 +335,11 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
   // for that row. A right-click reaches a row first and never gets here with a pointer.
   const cm = useContextMenu("changes");
   const selectedMenu = (): MenuEntry[] => {
-    if (tab === "changes") {
+    if (showChanges && sel < rows.length) {
       const f = rows[sel];
       return f ? (sel < files.length ? menuUncommitted : menuCommitted)(f.path) : [];
     }
-    const r = histRows[sel];
+    const r = inHist(sel) ? histRows[sel - above] : undefined;
     return r ? (r.file ? menuAtCommit(r.file.path) : commitItems(r.commit)) : [];
   };
   const clickRow = useCallback(
@@ -330,17 +351,17 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
   );
   const clickCommit = useCallback(
     (sha: string) => {
-      setSel(histRows.findIndex((r) => !r.file && r.commit.sha === sha));
+      setSel(above + histRows.findIndex((r) => !r.file && r.commit.sha === sha));
       toggleCommit(sha);
     },
-    [histRows, toggleCommit],
+    [histRows, above, toggleCommit],
   );
   const clickHistFile = useCallback(
     (path: string) => {
-      setSel(histRows.findIndex((r) => r.file?.path === path));
+      setSel(above + histRows.findIndex((r) => r.file?.path === path));
       openAt(path);
     },
-    [histRows, openAt],
+    [histRows, above, openAt],
   );
   // the preview shows the working tree, so a line in a commit has nowhere on the page to light up
   const noHover = useCallback(() => {}, []);
@@ -351,40 +372,38 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
       style={onScreen ? undefined : { width }}
     >
       {/* the count is the working tree's: the committed section under it keeps its own title */}
-      <Tabs<ChangesTab>
-        fill
-        owner="changes-tabs"
-        label="changes panel"
-        items={[
-          // every file, behind an icon sized to itself: the tree is there to look things up, and the
-          // two lists of work keep the strip
-          ...(archived
-            ? []
-            : [
-                {
-                  id: "files" as const,
-                  label: <Icon name="folder" className="icon-inline" />,
-                  fit: true,
-                  ariaLabel: "files",
-                  tip: tip("files", chord("files")),
-                },
-              ]),
-          {
-            id: "changes",
-            label:
-              files.length > 0 ? (
-                <>
-                  changes <span className="tab-count">{files.length}</span>
-                </>
-              ) : (
-                "changes"
-              ),
-          },
-          { id: "history", label: "history" },
-        ]}
-        current={tab}
-        onPick={setTab}
-      />
+      {!archived && (
+        <Tabs<ChangesTab>
+          fill
+          owner="changes-tabs"
+          label="changes panel"
+          items={[
+            // every file, behind an icon sized to itself: the tree is there to look things up, and
+            // the two lists of work keep the strip
+            {
+              id: "files",
+              label: <Icon name="folder" className="icon-inline" />,
+              fit: true,
+              ariaLabel: "files",
+              tip: tip("files", chord("files")),
+            },
+            {
+              id: "changes",
+              label:
+                files.length > 0 ? (
+                  <>
+                    changes <span className="tab-count">{files.length}</span>
+                  </>
+                ) : (
+                  "changes"
+                ),
+            },
+            { id: "history", label: "history" },
+          ]}
+          current={tab}
+          onPick={setTab}
+        />
+      )}
       {tab === "files" && shownId ? (
         <FileTree
           worktreeId={shownId}
@@ -395,12 +414,10 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
         />
       ) : (
         <div
-          className={cx("changes-list", tab === "history" && "history")}
+          className={cx("changes-list", showHist && "history")}
           role="listbox"
-          aria-label={tab === "history" ? "commits" : "changed files"}
-          aria-activedescendant={
-            focused && sel >= 0 && sel < (tab === "history" ? histRows.length : rows.length) ? rowId(sel) : undefined
-          }
+          aria-label={archived ? "kept work" : showHist ? "commits" : "changed files"}
+          aria-activedescendant={focused && sel >= 0 && sel < total ? rowId(sel) : undefined}
           tabIndex={0}
           ref={listRef}
           onKeyDown={onKeyDown}
@@ -424,17 +441,17 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
           onBlur={(e) => !e.currentTarget.contains(e.relatedTarget) && setFocused(false)}
           {...cm.contextMenu((from) => (from === "keyboard" ? selectedMenu() : []))}
         >
-          {tab === "changes" && files.length > 0 && (
+          {showChanges && files.length > 0 && (
             <>
               {/* the tab already says changes and how many; the title is only needed to tell this
-                section from the committed one under it */}
-              {committed.length > 0 && <div className="section-title">uncommitted · {files.length}</div>}
+                section from the committed one under it, or on an archived page from the history */}
+              {(committed.length > 0 || archived) && <div className="section-title">uncommitted · {files.length}</div>}
               {files.map((f, i) => (
                 <GitFileRow
                   key={f.path}
                   f={f}
                   id={rowId(i)}
-                  active={marked(i, !openRef && f.path === openPath)}
+                  active={marked(i, openRef === snapRef && f.path === openPath)}
                   selected={focused && sel === i}
                   onOpen={clickRow}
                   menu={menuUncommitted}
@@ -443,7 +460,7 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
               ))}
             </>
           )}
-          {tab === "changes" && committed.length > 0 && (
+          {showChanges && !archived && committed.length > 0 && (
             <>
               <div
                 className="section-title"
@@ -466,12 +483,8 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
               ))}
             </>
           )}
-          {tab === "changes" && clean && committed.length === 0 && (
-            <div className="empty">
-              {archived ? (archived.landed ? "all of it landed" : "nothing that is not on main") : "clean"}
-            </div>
-          )}
-          {tab === "history" &&
+          {showChanges && !archived && clean && committed.length === 0 && <div className="empty">clean</div>}
+          {showHist &&
             histRows.map((r, i) => (
               <Fragment key={r.file ? `${r.commit.sha}:${r.file.path}` : r.commit.sha}>
                 {archived && keptTitles.has(i) && <div className="section-title">{keptTitles.get(i)}</div>}
@@ -484,20 +497,25 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
                 {r.file ? (
                   <GitFileRow
                     f={r.file}
-                    id={rowId(i)}
-                    active={marked(i, openRef === r.commit.sha && r.file.path === openPath)}
-                    selected={focused && sel === i}
+                    id={rowId(above + i)}
+                    active={marked(above + i, openRef === r.commit.sha && r.file.path === openPath)}
+                    selected={focused && sel === above + i}
                     onOpen={clickHistFile}
                     menu={menuAtCommit}
                     onHover={noHover}
                   />
                 ) : (
-                  <CommitRow c={r.commit} id={rowId(i)} selected={focused && sel === i} onToggle={clickCommit} />
+                  <CommitRow
+                    c={r.commit}
+                    id={rowId(above + i)}
+                    selected={focused && sel === above + i}
+                    onToggle={clickCommit}
+                  />
                 )}
               </Fragment>
             ))}
-          {tab === "history" && commits === undefined && <div className="empty">reading history…</div>}
-          {tab === "history" && commits?.length === 0 && <div className="empty">no commits yet</div>}
+          {showHist && commits === undefined && <div className="empty">reading history…</div>}
+          {showHist && commits?.length === 0 && files.length === 0 && <div className="empty">no commits yet</div>}
         </div>
       )}
       {activeRow && !archived && (

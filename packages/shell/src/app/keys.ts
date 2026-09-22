@@ -12,6 +12,7 @@ import { useEffect } from "react";
 import { markUnread } from "../state/actions/worktree.ts";
 import { useSock, useStoreInstance } from "../state/context.tsx";
 import {
+  archivedPageOf,
   changesTabShown,
   changesTabStep,
   isChatCentred,
@@ -203,10 +204,13 @@ export function useChords() {
           // current worktree row); from inside that spot they close it. A press that shut a panel
           // already on screen took it from a hand that had come to type in it.
           // the two panel keys each name a tab, so a press from the other tab, or from the panel shut
-          // on it, lands on the one the key names rather than on wherever the panel was left
+          // on it, lands on the one the key names rather than on wherever the panel was left. An
+          // archived page's one list is its changes list.
           case "changes":
             dispatch(
-              s.layout.changes && changesTabShown(s) === "changes" && inside(".changes-list")
+              s.layout.changes &&
+                (changesTabShown(s) === "changes" || archivedPageOf(s) !== null) &&
+                inside(".changes-list")
                 ? { a: "toggle-changes" }
                 : { a: "focus-changes", tab: "changes" },
             );

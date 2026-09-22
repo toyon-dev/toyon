@@ -93,10 +93,11 @@
       flex-shrink: 0;
     }
   }
-  /* in the history list every file row belongs to the commit above it, so the indent is the list's
-   to give rather than something the row has to know about itself */
+  /* in the history list a file row after a commit belongs to the commit above it, so the indent is
+   the list's to give rather than something the row has to know about itself. An archived page's
+   uncommitted files sit above the first commit, and read flush like a changes list's. */
   .changes-list {
-    &.history .git-file {
+    &.history .log-row ~ .git-file {
       padding-left: 28px;
     }
   }

@@ -1012,19 +1012,22 @@ function activate(s: State, id: string | null): State {
 }
 
 /** the archived worktree whose page is up, if its project is the one on screen and it is still listed */
-/** the tab the changes panel shows: the kept one, except on an archived page, which has no checkout
- * to list, so its files tab reads as changes and the kept tab is back when the page closes */
+/** the tab the changes panel shows: the kept one, except on an archived page, which has no strip:
+ * its one list is the history, with what the worktree left uncommitted above it, and the kept tab
+ * is back when the page closes */
 export function changesTabShown(s: Pick<State, "layout" | "archivedPage" | "activeRepoId" | "archived">): ChangesTab {
-  return archivedPageOf(s) && s.layout.changesTab === "files" ? "changes" : s.layout.changesTab;
+  return archivedPageOf(s) ? "history" : s.layout.changesTab;
 }
 
-/** the tab `delta` steps from the one shown, wrapping; an archived page has no files tab to land on */
+/** the tab `delta` steps from the one shown, wrapping; an archived page has one list and no step */
 export function changesTabStep(
   s: Pick<State, "layout" | "archivedPage" | "activeRepoId" | "archived">,
   delta: 1 | -1,
 ): ChangesTab {
-  const order: readonly ChangesTab[] = archivedPageOf(s) ? CHANGES_TABS.filter((t) => t !== "files") : CHANGES_TABS;
-  return order[(order.indexOf(changesTabShown(s)) + delta + order.length) % order.length] ?? "changes";
+  const shown = changesTabShown(s);
+  if (archivedPageOf(s)) return shown;
+  const n = CHANGES_TABS.length;
+  return CHANGES_TABS[(CHANGES_TABS.indexOf(shown) + delta + n) % n] ?? "changes";
 }
 
 export function archivedPageOf(s: Pick<State, "archivedPage" | "activeRepoId" | "archived">): ArchivedWorktree | null {
@@ -1567,8 +1570,13 @@ function reduce(s: State, action: Action): State {
     case "toggle-changes":
       return { ...withLayout(s, { changes: !s.layout.changes }), changesAuto: false };
     case "focus-changes":
+      // an archived page has no strip, so a key naming a tab only opens the panel there: the kept
+      // tab is the one the next live worktree shows
       return {
-        ...withLayout(s, { changes: true, changesTab: action.tab ?? s.layout.changesTab }),
+        ...withLayout(s, {
+          changes: true,
+          changesTab: action.tab && !archivedPageOf(s) ? action.tab : s.layout.changesTab,
+        }),
         changesAuto: false,
         focusChanges: s.focusChanges + 1,
       };

@@ -138,7 +138,11 @@ export function mapUpdate(update: SessionUpdate, memos: ToolMemos, tag: string):
       const out = abandoned(memos, parentToolId);
       const text = textOf(update.content, tag, "message");
       if (text === null) return out;
-      out.push(parentToolId ? { type: "tool-delta", toolId: parentToolId, text } : { type: "text-delta", text });
+      out.push(
+        parentToolId
+          ? { type: "tool-delta", toolId: parentToolId, text }
+          : { type: "text-delta", text, ...(update.messageId ? { messageId: update.messageId } : {}) },
+      );
       return out;
     }
     case "agent_thought_chunk": {

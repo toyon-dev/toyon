@@ -165,7 +165,10 @@ export type AskOutcome = "answered" | "skipped" | "cancelled" | "expired";
 export type AgentEvent =
   | { type: "user-message"; text: string; ts: number; attachments?: AttachmentRef[] }
   | { type: "turn-start"; ts: number }
-  | { type: "text-delta"; text: string }
+  /** `messageId` names the agent's message the chunk belongs to, when it says. A message sent
+   * mid-reply lands in the transcript between that reply's chunks, and the id is what tells the
+   * rest of the reply apart from the answer to the message. */
+  | { type: "text-delta"; text: string; messageId?: string }
   | { type: "thinking-delta"; text: string }
   /** `parentToolId` is the call that spawned this one: a subagent's own tools arrive in the same
    * session as everything else, and only the id ties them to the row that started them. `subagent`

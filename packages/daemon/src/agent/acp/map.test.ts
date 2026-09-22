@@ -18,14 +18,16 @@ describe("mapUpdate", () => {
   test("message and thought chunks become deltas; non-text blocks are dropped", () => {
     expect(
       run([
-        { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "hi" } },
+        { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "hi" }, messageId: "m1" },
         { sessionUpdate: "agent_thought_chunk", content: { type: "text", text: "hm" } },
         { sessionUpdate: "agent_message_chunk", content: { type: "image", data: "", mimeType: "image/png" } },
         { sessionUpdate: "user_message_chunk", content: { type: "text", text: "me" } },
+        { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "!" }, messageId: null },
       ]),
     ).toEqual([
-      { type: "text-delta", text: "hi" },
+      { type: "text-delta", text: "hi", messageId: "m1" },
       { type: "thinking-delta", text: "hm" },
+      { type: "text-delta", text: "!" },
     ]);
   });
 

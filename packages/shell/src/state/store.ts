@@ -74,7 +74,8 @@ export type UsageFigures = { used: number; size: number; cost?: number };
 export type ChatItem =
   /** `seq` on the rows a chat search can land on: the transcript entry the row starts at */
   | { kind: "user"; text: string; attachments?: AttachmentRef[]; seq?: number }
-  | { kind: "assistant"; text: string; seq?: number }
+  /** `messageId` is the agent's message the row's latest chunk came from, when the agent says */
+  | { kind: "assistant"; text: string; seq?: number; messageId?: string }
   | { kind: "thinking"; text: string }
   | {
       kind: "tool";
@@ -2264,9 +2265,23 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
           ...stamp,
         },
       ];
-    case "text-delta":
-      if (last?.kind === "assistant") return [...items.slice(0, -1), { ...last, text: last.text + event.text }];
-      return [...items, { kind: "assistant", text: event.text, ...stamp }];
+    case "text-delta": {
+      const named = event.messageId ? { messageId: event.messageId } : {};
+      if (last?.kind === "assistant")
+        return [...items.slice(0, -1), { ...last, text: last.text + event.text, ...named }];
+      // a message sent while the reply streamed sits between that reply's chunks, and rendering
+      // the rest as a row of its own cuts a table or a fence in two. The rest goes back to its
+      // row, above the bubble; the answer to the message arrives under a new id and opens a row
+      // below it.
+      const at = event.messageId === undefined ? -1 : cutRow(items, event.messageId);
+      if (at !== -1) {
+        const next = items.slice();
+        const row = next[at] as Extract<ChatItem, { kind: "assistant" }>;
+        next[at] = { ...row, text: row.text + event.text };
+        return next;
+      }
+      return [...items, { kind: "assistant", text: event.text, ...stamp, ...named }];
+    }
     case "thinking-delta":
       if (last?.kind === "thinking") return [...items.slice(0, -1), { ...last, text: last.text + event.text }];
       return [...items, { kind: "thinking", text: event.text }];
@@ -2384,6 +2399,15 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
     default:
       return items;
   }
+}
+
+/** the prose row a chunk of `messageId` continues, when only the person's bubbles separate them;
+ * anything else between (a call, an error) means the message moved on */
+function cutRow(items: ChatItem[], messageId: string): number {
+  let at = items.length - 1;
+  while (at >= 0 && items[at]?.kind === "user") at--;
+  const row = items[at];
+  return row?.kind === "assistant" && row.messageId === messageId ? at : -1;
 }
 
 /** A card and the tool row it came from are one call, so the card takes the row's place: a

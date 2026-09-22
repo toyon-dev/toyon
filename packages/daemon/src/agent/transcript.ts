@@ -24,8 +24,15 @@ export function coalesce(entries: TranscriptEntry[]): TranscriptEntry[] {
   for (const entry of entries) {
     const last = out.at(-1);
     const { event } = entry;
-    if ((event.type === "text-delta" || event.type === "thinking-delta") && last?.event.type === event.type) {
-      out[out.length - 1] = { seq: last.seq, event: { type: event.type, text: last.event.text + event.text } };
+    if (event.type === "text-delta" && last?.event.type === "text-delta") {
+      // the run's id is its latest chunk's: that is the message a chunk after a bubble continues
+      const messageId = event.messageId ?? last.event.messageId;
+      out[out.length - 1] = {
+        seq: last.seq,
+        event: { type: "text-delta", text: last.event.text + event.text, ...(messageId ? { messageId } : {}) },
+      };
+    } else if (event.type === "thinking-delta" && last?.event.type === "thinking-delta") {
+      out[out.length - 1] = { seq: last.seq, event: { type: "thinking-delta", text: last.event.text + event.text } };
     } else if (event.type === "tool-delta" && last?.event.type === "tool-delta" && last.event.toolId === event.toolId) {
       // a watched command's output arrives a chunk at a time the same way
       out[out.length - 1] = { seq: last.seq, event: { ...event, text: last.event.text + event.text } };

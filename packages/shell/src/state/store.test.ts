@@ -411,6 +411,31 @@ describe("chat folding", () => {
       s.local.a?.chat.map((i) => (i.kind === "user" || i.kind === "assistant" ? `${i.kind}:${i.text}` : i.kind)),
     ).toEqual(["user:hi", "assistant:hello", "user:more", "assistant:x"]);
   });
+  test("the rest of a reply cut by a message sent mid-stream rejoins its row; the answer opens one below", () => {
+    const head = "| Route | Time |\n|---|---|\n| react | 6";
+    const s = run([
+      hello(wt("a")),
+      server({ t: "agent", worktreeId: "a", seq: 1, event: { type: "text-delta", text: head, messageId: "m1" } }),
+      server({ t: "agent", worktreeId: "a", seq: 2, event: { type: "user-message", text: "so far?", ts: 0 } }),
+      server({ t: "agent", worktreeId: "a", seq: 3, event: { type: "text-delta", text: "1s |", messageId: "m1" } }),
+      server({ t: "agent", worktreeId: "a", seq: 4, event: { type: "text-delta", text: "So far", messageId: "m2" } }),
+      server({ t: "agent", worktreeId: "a", seq: 5, event: { type: "text-delta", text: ": fine", messageId: "m2" } }),
+    ]);
+    expect(s.local.a?.chat).toEqual([
+      { kind: "assistant", text: `${head}1s |`, seq: 1, messageId: "m1" },
+      { kind: "user", text: "so far?", seq: 2 },
+      { kind: "assistant", text: "So far: fine", seq: 4, messageId: "m2" },
+    ]);
+    // a call between them means the message moved on: the chunk opens its own row
+    const moved = run([
+      hello(wt("a")),
+      agent("a", { type: "text-delta", text: "a", messageId: "m1" }),
+      agent("a", { type: "user-message", text: "q", ts: 0 }),
+      agent("a", { type: "tool-start", toolId: "t", name: "Read", input: {} }),
+      agent("a", { type: "text-delta", text: "b", messageId: "m1" }),
+    ]);
+    expect(moved.local.a?.chat.map((i) => i.kind)).toEqual(["assistant", "user", "tool", "assistant"]);
+  });
   test("an error that repeats the prose just streamed takes its place", () => {
     const limit = "You've hit your monthly spend limit";
     const s = run([

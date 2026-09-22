@@ -42,6 +42,15 @@ describe("coalesce", () => {
     ]);
   });
 
+  test("a folded run of prose keeps its latest chunk's message id", () => {
+    const entries = [
+      { seq: 0, event: { type: "text-delta", text: "a", messageId: "m1" } },
+      { seq: 1, event: { type: "text-delta", text: "b", messageId: "m2" } },
+      { seq: 2, event: { type: "text-delta", text: "c" } },
+    ] as const;
+    expect(coalesce([...entries])).toEqual([{ seq: 0, event: { type: "text-delta", text: "abc", messageId: "m2" } }]);
+  });
+
   test("a watched command's output chunks fold under their row; another row's chunk breaks the run", () => {
     const entries = [
       { seq: 0, event: { type: "tool-start", toolId: "a", name: "shell", input: { command: "git push" } } },

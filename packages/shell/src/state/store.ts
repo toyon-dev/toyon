@@ -2068,8 +2068,10 @@ function onServer(s: State, msg: StoreServerMsg): State {
     }
     case "shipped": {
       const id = msg.worktreeId;
-      // a suggestion lands in that worktree's composer and focuses it
-      const settled = msg.suggestion ? withLocal(activate(s, id), id, (l) => ({ ...l, draft: msg.suggestion! })) : s;
+      // a suggestion lands in that worktree's composer, where the failure line above it and the
+      // unread ring on its row say where to look. It does not select the worktree: the op ran for
+      // seconds, and the person may be reading another chat by the time it answers.
+      const settled = msg.suggestion ? withLocal(s, id, (l) => ({ ...l, draft: msg.suggestion! })) : s;
       const next = {
         ...settled,
         shipping: retireShipping(settled.shipping, (w) => w === id),

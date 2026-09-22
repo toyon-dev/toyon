@@ -1142,12 +1142,14 @@ describe("drafts", () => {
     s = run([hello(wt("a"))], s);
     expect(s.chats.r).toBeUndefined();
   });
-  test("a sync-conflict suggestion lands in that worktree's draft and focuses it", () => {
+  test("a sync-conflict suggestion lands in that worktree's draft without selecting it", () => {
     const s = run([
       hello(wt("main", "main"), wt("a")),
+      { a: "activate", id: "main" },
       server({ t: "shipped", worktreeId: "a", ok: false, message: "conflicts", suggestion: "Merge main and fix" }),
     ]);
-    expect(s.activeId).toBe("a");
+    // the op ran for seconds; whatever chat is being read stays on screen
+    expect(s.activeId).toBe("main");
     expect(s.local.a?.draft).toBe("Merge main and fix");
     // the failure is read on that worktree's chat, above the box the suggestion filled
     expect(localOf(s, "a").chat.at(-1)).toEqual({ kind: "error", text: "conflicts" });

@@ -48,6 +48,16 @@ export class FakeAgent implements AgentAdapter {
   send(text: string, opts: SendOpts = {}) {
     this.sent.push({ text, ...opts });
   }
+  /** whether the queue is held now, and how many times it was */
+  held = false;
+  holds = 0;
+  hold() {
+    this.held = true;
+    this.holds++;
+    return () => {
+      this.held = false;
+    };
+  }
   stop() {
     this.stops++;
   }

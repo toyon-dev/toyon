@@ -192,10 +192,10 @@ export async function squashMessage(worktreePath: string, defaultBr: string, sug
 /** Fast-forward the main checkout to its upstream ("pull"). Never a merge: a main that has
  * diverged from origin is a decision for a terminal, not a button. Fetches first, so the count
  * the button showed and the commits it brings are the same ones. */
-export async function pullMain(repoPath: string, defaultBr: string): Promise<ShipResult> {
+export async function pullMain(repoPath: string, defaultBr: string, w: LandWatch = UNWATCHED): Promise<ShipResult> {
   const cErr = await requireClean(repoPath);
   if (cErr) return cErr;
-  return fastForwardMain(repoPath, defaultBr);
+  return fastForwardMain(repoPath, defaultBr, w);
 }
 
 /** The same fast-forward without the clean check: after a PR merges, main here should move even

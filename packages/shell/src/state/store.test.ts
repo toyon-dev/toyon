@@ -4,6 +4,7 @@ import {
   MANAGED_NONE,
   PROTOCOL_VERSION,
   type RepoInfo,
+  type ShipOp,
   type TrunkStatus,
   type WorktreeStatus,
 } from "@toyon/shared";
@@ -879,16 +880,27 @@ describe("drafting a worktree", () => {
     const s = run([server({ t: "worktrees", rows, trunks: { r: trunk } })], found(...rows));
     expect(previewIdOf(s)).toBe("sp");
     expect(s.trunks.r).toEqual(trunk);
-    // a pull is pressed under the lead's box and shows working until the daemon answers on it
+    // a pull is pressed under the lead's box and shows working from the press; a frame built
+    // before the daemon had it does not take that back
     const pulling = run([{ a: "shipping", id: "main-rec", op: "pull-main" }], s);
-    expect(pulling.shipping["main-rec"]).toEqual({ op: "pull-main" });
+    expect(pulling.shipping["main-rec"]).toEqual({ op: "pull-main", sent: true });
     expect(run([server({ t: "worktrees", rows, trunks: { r: trunk } })], pulling).shipping["main-rec"]).toEqual({
       op: "pull-main",
+      sent: true,
     });
-    // the daemon names the step the op is on; a step for an op this tab never sent has no row to sit on
-    const stepped = run([server({ t: "shipping", worktreeId: "main-rec", step: "pulling main from origin" })], pulling);
+    // the daemon lists the op on the trunk with its step, and a tab that never pressed shows it too
+    const listed: TrunkStatus = { ...trunk, shipping: { op: "pull-main", step: "pulling main from origin" } };
+    const stepped = run([server({ t: "worktrees", rows, trunks: { r: listed } })], pulling);
     expect(stepped.shipping["main-rec"]).toEqual({ op: "pull-main", step: "pulling main from origin" });
-    expect(run([server({ t: "shipping", worktreeId: "sp", step: "committing" })], pulling)).toBe(pulling);
+    expect(run([server({ t: "worktrees", rows, trunks: { r: listed } })], s).shipping["main-rec"]).toEqual({
+      op: "pull-main",
+      step: "pulling main from origin",
+    });
+    // listed, it rests on the frame that stops listing it, not on the word, which comes first
+    const worded = run([server({ t: "shipped", worktreeId: "main-rec", ok: true, message: "pulled" })], stepped);
+    expect(worded.shipping).toBe(stepped.shipping);
+    expect(run([server({ t: "worktrees", rows, trunks: { r: trunk } })], worded).shipping).toEqual({});
+    // a press over before any frame listed it rests on the word
     expect(
       run([server({ t: "shipped", worktreeId: "main-rec", ok: true, message: "pulled" })], pulling).shipping,
     ).toEqual({});
@@ -2241,13 +2253,40 @@ describe("a landing op in flight", () => {
   const shipped = (id: string, ok = true): Action =>
     server({ t: "shipped", worktreeId: id, ok, message: ok ? "synced" : "conflicts" });
 
-  test("marks the worktree until its own shipped frame, ok or not", () => {
+  /** the row as the daemon lists it while the op runs */
+  const shipping = (id: string, op: ShipOp, step?: string): WorktreeStatus => ({
+    ...wt(id),
+    shipping: { op, ...(step ? { step } : {}) },
+  });
+
+  test("a press marks the worktree until its own shipped frame, ok or not", () => {
     let s = run([three(), sync("a")]);
-    expect(s.shipping).toEqual({ a: { op: "sync-main" } });
+    expect(s.shipping).toEqual({ a: { op: "sync-main", sent: true } });
     s = reducer(s, shipped("b"));
-    expect(s.shipping).toEqual({ a: { op: "sync-main" } });
+    expect(s.shipping).toEqual({ a: { op: "sync-main", sent: true } });
     s = reducer(s, shipped("a", false));
     expect(s.shipping).toEqual({});
+  });
+
+  test("the daemon's frame takes over the press, names its steps, and rests it when it stops listing it", () => {
+    let s = run([three(), sync("a"), worktrees(wt("main", "main"), shipping("a", "sync-main"), wt("b"))]);
+    expect(s.shipping).toEqual({ a: { op: "sync-main" } });
+    s = reducer(s, worktrees(wt("main", "main"), shipping("a", "sync-main", "rebasing onto main"), wt("b")));
+    expect(s.shipping).toEqual({ a: { op: "sync-main", step: "rebasing onto main" } });
+    // the word comes before the frame that ends it, and takes nothing back
+    const worded = reducer(s, shipped("a"));
+    expect(worded.shipping).toBe(s.shipping);
+    s = reducer(worded, worktrees(wt("main", "main"), wt("a"), wt("b")));
+    expect(s.shipping).toEqual({});
+  });
+
+  test("an op another tab pressed shows from the frame alone", () => {
+    const s = run([three(), worktrees(wt("main", "main"), wt("a"), shipping("b", "land", "committing"))]);
+    expect(s.shipping).toEqual({ b: { op: "land", step: "committing" } });
+    // and a press here on that row is the double press the daemon would refuse
+    expect(reducer(s, sync("b"))).toBe(s);
+    // a hello lists it the same way
+    expect(run([helloIn([], wt("main", "main"), shipping("b", "land"))]).shipping).toEqual({ b: { op: "land" } });
   });
 
   test("a second press while one is out is ignored, as is an unknown worktree", () => {

@@ -2,7 +2,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { WorktreeInfo } from "@toyon/shared";
+import type { Shipping, WorktreeInfo } from "@toyon/shared";
 import { CHECK_TOOL, SHELL_TOOL } from "@toyon/shared";
 import { FakeAgent } from "../../test/helpers/fakes.ts";
 import { ensureDirs, makePaths } from "../core/paths.ts";
@@ -16,7 +16,7 @@ import { ExecService } from "./service.ts";
 const home = mkdtempSync(join(tmpdir(), "toyon-exec-"));
 afterAll(() => rmSync(home, { recursive: true, force: true }));
 
-function world(liveAfterMs?: number) {
+function world(liveAfterMs?: number, shipping?: () => Shipping | undefined) {
   const dir = mkdtempSync(join(home, "wt-"));
   const paths = makePaths(mkdtempSync(join(home, "h-")));
   ensureDirs(paths);
@@ -39,9 +39,18 @@ function world(liveAfterMs?: number) {
     hold: (_id: string, tag: string) => holds.push(`+${tag}`),
     release: (_id: string, tag: string) => holds.push(`-${tag}`),
   };
-  const exec = new ExecService({ state, runtime: runtime as unknown as RuntimeRegistry, liveAfterMs });
+  const exec = new ExecService({ state, runtime: runtime as unknown as RuntimeRegistry, liveAfterMs, shipping });
   return { exec, agent, dir, holds };
 }
+
+describe("ExecService.run", () => {
+  test("a command typed while a landing op is out is refused before it runs", () => {
+    const { exec, agent, holds } = world(undefined, () => ({ op: "land", step: "rebasing onto main" }));
+    expect(() => exec.run("w1", "echo hi")).toThrow("a land is running here; run the command once it is done");
+    expect(agent.recorded).toEqual([]);
+    expect(holds).toEqual([]);
+  });
+});
 
 describe("ExecService.watch", () => {
   /** a step that prints its lines, waits, and ends the way the runner says */

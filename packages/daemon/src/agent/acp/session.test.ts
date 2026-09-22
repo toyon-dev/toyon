@@ -512,6 +512,53 @@ describe("AcpSession", () => {
     await w.session.close();
   });
 
+  test("a hold keeps what is sent in the queue, and the release runs it", async () => {
+    const fake = fakeAgent(say("ok"));
+    const w = world(fake);
+    const release = w.session.hold();
+    w.session.send("one");
+    await Bun.sleep(20);
+    expect(w.session.queueItems).toEqual(["one"]);
+    expect(w.session.status).toBe("idle");
+    expect(fake.prompts).toHaveLength(0);
+    release();
+    await w.idle();
+    expect(fake.prompts).toHaveLength(1);
+    expect(w.session.queueItems).toEqual([]);
+    await w.session.close();
+  });
+
+  test("a hold that begins mid-turn stops the queue after that turn, and steers nothing into it", async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    const fake = fakeAgent(
+      async (p, client) => {
+        if (p.prompt[0]!.type === "text" && p.prompt[0]!.text === "one") await gate;
+        return say(`re:${(p.prompt[0] as { text: string }).text}`)(p, client);
+      },
+      { steering: true },
+    );
+    const w = world(fake);
+    w.session.send("one");
+    await Bun.sleep(20);
+    const unhold = w.session.hold();
+    w.session.send("two");
+    await Bun.sleep(20);
+    expect(fake.steers).toHaveLength(0);
+    expect(w.session.queueItems).toEqual(["two"]);
+    release();
+    for (let i = 0; i < 100 && w.session.status === "working"; i++) await Bun.sleep(5);
+    expect(w.session.status).toBe("idle");
+    expect(w.session.queueItems).toEqual(["two"]);
+    expect(fake.prompts).toHaveLength(1);
+    unhold();
+    await w.idle();
+    expect(fake.prompts.map((p) => (p.prompt[0] as { text: string }).text)).toEqual(["one", "two"]);
+    await w.session.close();
+  });
+
   test("an agent that steers takes a mid-turn message into the running turn, not the queue", async () => {
     let release: () => void = () => {};
     const gate = new Promise<void>((r) => {

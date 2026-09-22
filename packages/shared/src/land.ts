@@ -2,7 +2,7 @@
 // commits arrive). Both live under `land` in the repo's settings, since a team picks one route and
 // never alternates; the defaults live here so the daemon and the setup pane never restate them.
 
-import type { ToyonConfig } from "./model.ts";
+import type { ShipOp, ToyonConfig } from "./model.ts";
 
 /** where a landed worktree's work ends up */
 export type LandRoute = "merge" | "push" | "pr";
@@ -54,6 +54,11 @@ export function landPolicy(config: Pick<ToyonConfig, "land">): LandPolicy {
     automerge: land === "pr" && config.land?.automerge === true,
     ...(config.land?.method ? { merge: config.land.method } : {}),
   };
+}
+
+/** a landing op as a sentence names it: "a land is already running here" */
+export function shipNoun(op: ShipOp): string {
+  return { land: "a land", commit: "a commit", "sync-main": "a sync", "pull-main": "a pull" }[op];
 }
 
 /** what the one land verb does here, for its tooltip and its menu row */

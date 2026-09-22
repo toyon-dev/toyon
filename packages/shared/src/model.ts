@@ -552,6 +552,21 @@ export interface TrunkStatus {
   /** why the checkout was not fast-forwarded when origin moved: uncommitted files sit on it, its
    * history diverged from origin's, or it has no upstream to follow */
   stale?: "dirty" | "diverged" | "no-upstream";
+  /** the landing op out on the checkout (a pull), while one is */
+  shipping?: Shipping;
+}
+
+/** the client messages that end in a `shipped` frame: the daemon's word for them */
+export type ShipOp = "sync-main" | "commit" | "pull-main" | "land";
+
+/** A landing op out on a row or a trunk, as the daemon has it: one per row at a time, since they
+ * run one at a time under the repo lock anyway, and a second press meanwhile is refused. Carried
+ * on every frame while it runs, so a tab that did not press it shows the same spinner, and gone
+ * from the frame after. `step` is what the op is doing now (committing, rebasing, pushing), so
+ * the wait says something. */
+export interface Shipping {
+  op: ShipOp;
+  step?: string;
 }
 
 /** A worktree that was removed. Removing archives: the directory and branch go, while the chat,
@@ -644,6 +659,8 @@ export interface WorktreeStatus {
   transcript?: string;
   /** the agent's own session id here, once it has opened one: what its CLI resumes outside toyon */
   sessionId?: string;
+  /** the landing op out on the row, while one is; a chat sent meanwhile waits in the queue */
+  shipping?: Shipping;
 }
 
 /** a row toyon owns, which is the one most of the shell reads: the chat, the composer, landing */

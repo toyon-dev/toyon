@@ -11,13 +11,14 @@ import {
   landPolicy,
   type OwnedWorktree,
   type RepoInfo,
+  type ShipOp,
   type WorktreeStatus,
 } from "@toyon/shared";
 import { isBusy } from "../../surfaces/util.ts";
 import { grouped, type MenuEntry, type MenuItem } from "../../ui/menu.ts";
 import type { DaemonSocket } from "../../ws.ts";
 import { profileNames, profileOf } from "../profiles.ts";
-import type { Action, ShipOp, State } from "../store.ts";
+import type { Action, State } from "../store.ts";
 import { copyText, type Deps } from "./deps.ts";
 import { revealItems } from "./editor.ts";
 

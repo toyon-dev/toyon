@@ -195,6 +195,9 @@ export class AcpSession implements AgentAdapter {
   private running = false;
   private interrupted = false;
   private stopped = false;
+  /** a landing op is out on the worktree: nothing starts a turn, and nothing is steered into one,
+   * until it releases; what is sent meanwhile waits in the queue */
+  private held = false;
   private conn: Conn | null = null;
   /** the spawn in flight, shared by whoever asks for the connection meanwhile */
   private connecting: Promise<Conn> | null = null;
@@ -356,7 +359,9 @@ export class AcpSession implements AgentAdapter {
     // sending during a turn means "while you are doing that": an agent that takes steering reads the
     // message as part of the work it is already on, which is the whole reason a person types then.
     // A stop already on its way is the exception — that turn is going away, so the message waits.
-    if ((this.running || this.own) && !this.interrupted && this.live?.conn.steering) {
+    // So does a hold: the tree is being rebased under the agent, and steering it now would have
+    // it read and write files git is rewriting.
+    if ((this.running || this.own) && !this.interrupted && !this.held && this.live?.conn.steering) {
       return fireAndForget(this.d.worktreeId, this.steer(item), "agent steer");
     }
     this.enqueue(item);
@@ -365,7 +370,18 @@ export class AcpSession implements AgentAdapter {
   private enqueue(item: QueueItem) {
     this.queue.push(item);
     this.queueChanged();
-    if (!this.running) fireAndForget(this.d.worktreeId, this.drain(), "agent drain");
+    if (!this.running && !this.held) fireAndForget(this.d.worktreeId, this.drain(), "agent drain");
+  }
+
+  hold(): () => void {
+    this.held = true;
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      this.held = false;
+      if (!this.running && this.queue.length > 0) fireAndForget(this.d.worktreeId, this.drain(), "agent drain");
+    };
   }
 
   /** A message that joins the turn in flight. The agent settles that turn once, at its real end, so
@@ -479,7 +495,8 @@ export class AcpSession implements AgentAdapter {
     this.setStatus("working");
     let item: QueueItem | null = null;
     try {
-      while (this.queue.length > 0) {
+      // a hold that began during a turn stops the queue after it: the release drains the rest
+      while (this.queue.length > 0 && !this.held) {
         item = this.queue.shift()!;
         this.queueChanged();
         try {

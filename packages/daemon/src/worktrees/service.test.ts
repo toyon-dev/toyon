@@ -1439,17 +1439,33 @@ describe("landing", () => {
     expect((await git(origin, "log", "-1", "--format=%s", "main")).out).toBe("init");
   });
 
-  test("the press names each step as it starts", async () => {
+  test("the press is the op out on the row, named step by step, with the agent's queue held", async () => {
     const repoId = await registered();
     const wt = await w.worktrees.create(repoId, "feature");
-    const steps: string[] = [];
-    w.hub.on("shipping", (id, step) => {
-      if (id === wt.id) steps.push(step);
+    const agent = w.runtime.agentFor(wt.id) as unknown as FakeAgent;
+    // what each frame would carry, and whether the queue was held when it went out
+    const seen: Array<{ step?: string; held: boolean }> = [];
+    w.hub.on("worktreesChanged", () => {
+      const out = w.worktrees.shippingOf(wt.id);
+      const last = seen.at(-1);
+      if (out && (!last || last.step !== out.step)) seen.push({ step: out.step, held: agent.held });
     });
     writeFileSync(join(wt.path, "feature.txt"), "x\n");
     sh(w.repo, "git", "commit", "-q", "--allow-empty", "-m", "main moved");
-    expect((await w.worktrees.land(wt.id, "add feature")).result.ok).toBe(true);
-    expect(steps).toEqual(["committing", "rebasing onto main", "merging into main"]);
+    const landing = w.worktrees.land(wt.id, "add feature");
+    // one op per row: a second press meanwhile is refused, whichever tab it came from
+    await expect(w.worktrees.commit(wt.id, "again")).rejects.toThrow("a land is already running here");
+    expect((await landing).result.ok).toBe(true);
+    expect(seen).toEqual([
+      { step: undefined, held: true },
+      { step: "committing", held: true },
+      { step: "rebasing onto main", held: true },
+      { step: "merging into main", held: true },
+    ]);
+    // over: off the frame, and the queue goes again
+    expect(w.worktrees.shippingOf(wt.id)).toBeUndefined();
+    expect(agent.held).toBe(false);
+    expect((await w.worktrees.rows()).find((r) => r.id === wt.id)?.shipping).toBeUndefined();
     // steps that passed at once left no rows behind
     expect(recorded(wt.id)).toEqual([]);
   });
@@ -1760,8 +1776,12 @@ describe("landing", () => {
     // create's setup and procs run behind it, and runtime.start emits once the proxy is up; a frame
     // from that landing inside a sync or commit below would be counted as theirs
     await until(() => w.runtime.get(wt.id)?.proxy != null);
+    // the frames an op pushes while it runs list it (its start, each step); the one that carries
+    // the fresh counts is the one with the op gone, and there is one of those
     let frames = 0;
-    w.hub.on("worktreesChanged", () => frames++);
+    w.hub.on("worktreesChanged", () => {
+      if (!w.worktrees.shippingOf(wt.id)) frames++;
+    });
     const row = async () => (await w.worktrees.rows()).find((s) => s.id === wt.id)!;
 
     sh(w.repo, "git", "commit", "--allow-empty", "-m", "main moves on");
@@ -2444,8 +2464,12 @@ describe("main against origin", () => {
     const main = w.state.worktrees.find((x) => x.repoId === repoId && x.kind === "main")!;
     // after the setup, or its own frame lands in the count and the pull is blamed for it
     await settle();
+    // the frame with the op gone is the one carrying the moved counts; the pull's own frames
+    // (its start, its step) precede it
     let frames = 0;
-    w.hub.on("worktreesChanged", () => frames++);
+    w.hub.on("worktreesChanged", () => {
+      if (!w.worktrees.shippingOf(main.id)) frames++;
+    });
     const result = await w.worktrees.pull(main.id);
     expect(result).toMatchObject({ ok: true, message: "pulled 1 commit(s) from origin" });
     expect(frames).toBe(1);

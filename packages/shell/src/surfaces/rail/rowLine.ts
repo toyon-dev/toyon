@@ -1,5 +1,4 @@
-import { isLead, isOwned, type WorktreeStatus } from "@toyon/shared";
-import type { ShipOp } from "../../state/store.ts";
+import { isLead, isOwned, type ShipOp, type WorktreeStatus } from "@toyon/shared";
 import { recapLine } from "../recap.ts";
 import { type DotState, dotClass, shipLabel, stateLabel } from "../util.ts";
 

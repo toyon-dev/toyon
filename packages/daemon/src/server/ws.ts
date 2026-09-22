@@ -182,7 +182,6 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
     sendTo(worktreeId, retract ? { t: "log", worktreeId, proc, line, retract } : { t: "log", worktreeId, proc, line }),
   );
   s.hub.on("queue", (worktreeId, items) => sendTo(worktreeId, { t: "queue", worktreeId, items }));
-  s.hub.on("shipping", (worktreeId, step) => sendTo(worktreeId, { t: "shipping", worktreeId, step }));
   s.hub.on("agentCommands", (worktreeId, commands) =>
     sendTo(worktreeId, { t: "agent-commands", worktreeId, commands }),
   );

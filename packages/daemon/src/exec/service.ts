@@ -6,7 +6,7 @@
 // command that stops to ask a question should fail on a closed stdin rather than sit forever
 // waiting for keystrokes nobody can type. Anything interactive belongs in the terminal pane.
 
-import { type AgentEvent, SHELL_TOOL } from "@toyon/shared";
+import { type AgentEvent, SHELL_TOOL, type Shipping, shipNoun } from "@toyon/shared";
 import type { Subprocess } from "bun";
 import type { AgentAdapter } from "../agent/adapter.ts";
 import { UserError } from "../core/errors.ts";
@@ -38,7 +38,16 @@ export class ExecService {
   private running = new Map<string, Map<string, Running>>();
   private n = 0;
 
-  constructor(private deps: { state: StateStore; runtime: RuntimeRegistry; liveAfterMs?: number }) {}
+  constructor(
+    private deps: {
+      state: StateStore;
+      runtime: RuntimeRegistry;
+      liveAfterMs?: number;
+      /** the landing op out on a worktree, if any: a command typed while one runs is refused,
+       * since it would run in a tree git is rewriting */
+      shipping?: (worktreeId: string) => Shipping | undefined;
+    },
+  ) {}
 
   /** the agent whose transcript a row goes on, or the refusal the caller reads as a toast */
   private agentFor(worktreeId: string): AgentAdapter {
@@ -49,8 +58,12 @@ export class ExecService {
     return agent;
   }
 
-  /** start the command; the result reaches the shell through the agent stream, not a reply */
+  /** start the command; the result reaches the shell through the agent stream, not a reply.
+   * Refused while a landing op is out here: a chat sent then waits in the queue, but a command
+   * has no queue, and the line under the box says when to send it again. */
   run(worktreeId: string, command: string): void {
+    const op = this.deps.shipping?.(worktreeId);
+    if (op) throw new UserError(`${shipNoun(op.op)} is running here; run the command once it is done`);
     fireAndForget(worktreeId, this.exec(worktreeId, command), `exec ${command}`);
   }
 

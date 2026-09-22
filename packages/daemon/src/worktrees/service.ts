@@ -25,6 +25,9 @@ import {
   type PrState,
   type RefKind,
   type RepoInfo,
+  type ShipOp,
+  type Shipping,
+  shipNoun,
   siblingsOf,
   type TrunkStatus,
   type WorktreeInfo,
@@ -244,6 +247,10 @@ const commandLine = (args: string[]) =>
 
 export class WorktreeService {
   readonly spare: SparePool;
+  /** the landing ops out, by the row or trunk each runs on: what every frame carries as the
+   * row's `shipping`, and what holds a chat sent meanwhile. In memory only: an op does not
+   * outlive the daemon, and what git was left mid-way is git's to report on the next press. */
+  private ops = new Map<string, Shipping>();
   /** every project's main checkout as it stands, and how it follows origin */
   readonly trunk: Trunk;
   private archive: WorktreeArchive;
@@ -1403,7 +1410,7 @@ export class WorktreeService {
    * sits on a worktree's chat. A worktree with no transcript yet runs the steps plain. */
   private landWatch(wt: WorktreeInfo): LandWatch {
     return {
-      step: (name) => this.d.hub.emit("shipping", wt.id, name),
+      step: (name) => this.step(wt.id, name),
       git: async (cwd, args) => {
         const where = cwd === wt.path ? "git" : `git -C ${cwd}`;
         const run = (onText: (text: string) => void, signal?: AbortSignal) => stepRun(cwd, args, onText, signal);
@@ -1453,6 +1460,47 @@ export class WorktreeService {
    * closing it is its own press. Returns any variant siblings to offer up. */
   async land(worktreeId: string, message?: string): Promise<{ result: ShipResult; archiveIds?: string[] }> {
     const { wt, repo } = this.landable(worktreeId, "land");
+    return this.ship(wt.id, "land", () => this.landOp(wt, repo, message));
+  }
+
+  /** the landing op out on a row or a trunk, for its frame and for what is refused meanwhile */
+  shippingOf(id: string): Shipping | undefined {
+    return this.ops.get(id);
+  }
+
+  /** Run a landing op as the one out on the row: on every frame while it runs, with the agent's
+   * queue held so a chat sent meanwhile waits rather than run under a rebase, and a second press
+   * refused. The refusal is by id, so a found row and a trunk count too; a row with no agent (a
+   * found worktree, main) has nothing to hold. */
+  private async ship<T>(id: string, op: ShipOp, run: () => Promise<T>): Promise<T> {
+    const out = this.ops.get(id);
+    if (out) throw new UserError(`${shipNoun(out.op)} is already running here`);
+    // held before the frame says so: a send that reads the frame must find the queue held
+    const release = this.d.runtime.agentFor(id)?.hold();
+    this.ops.set(id, { op });
+    this.d.hub.emit("worktreesChanged");
+    try {
+      return await run();
+    } finally {
+      this.ops.delete(id);
+      release?.();
+      this.d.hub.emit("worktreesChanged");
+    }
+  }
+
+  /** the op moved on: its frame says so, for whoever is waiting on it */
+  private step(id: string, name: string) {
+    const out = this.ops.get(id);
+    if (!out || out.step === name) return;
+    out.step = name;
+    this.d.hub.emit("worktreesChanged");
+  }
+
+  private async landOp(
+    wt: WorktreeInfo,
+    repo: RepoInfo,
+    message?: string,
+  ): Promise<{ result: ShipResult; archiveIds?: string[] }> {
     const policy = landPolicy(repo.config);
     const own = hasOwnBranch(wt);
     const w = this.landWatch(wt);
@@ -1466,7 +1514,7 @@ export class WorktreeService {
       // GitHub merged the PR and main here could not follow at the time (on another branch,
       // dirty, a fetch refused): the press is that retry, never a second PR of the same commit
       if (wt.pr?.state === "merged" && !wt.landed) {
-        const r = await this.prMerged(wt.id, undefined, w);
+        const r = await this.prMergedOp(wt.id, undefined, w);
         return { result: r.ok ? r : { ...r, message: `PR #${wt.pr.number} merged, but ${r.message}` } };
       }
       // the branch is measured against origin's main, fetched now: main here is not pulled on
@@ -1503,7 +1551,7 @@ export class WorktreeService {
       // the rebase dropped every commit: origin's main holds this work already, through a PR
       // merged where toyon did not see it. The row lands the way a merged PR lands it.
       if ((await aheadBehind(wt.path, base)).ahead === 0) {
-        const r = await this.prMerged(wt.id, mark, w);
+        const r = await this.prMergedOp(wt.id, mark, w);
         const on = `origin's ${repo.defaultBranch} has this work already`;
         return { result: { ...r, message: r.ok ? `${on}; ${r.message}` : `${on}, but ${r.message}` } };
       }
@@ -1603,8 +1651,22 @@ export class WorktreeService {
    * row is landed. A main that cannot fast-forward (edits in its way, or commits of its own) is
    * left, and the box says so; the land press tries again, as does main's own pull. `carried` is
    * the range the branch held before a rebase onto origin dropped it, when the press found the
-   * work on origin already; read here otherwise. The poll runs unwatched; a press names its step. */
-  async prMerged(worktreeId: string, carried?: LandingRange | null, w: LandWatch = UNWATCHED): Promise<ShipResult> {
+   * work on origin already; read here otherwise. The poll runs unwatched; a press names its step.
+   *
+   * `prMerged` is the poll's own entry: with nobody pressing, its landing is still shown on the
+   * row the way a press is, and it is left to the press when one is out, since that press lands
+   * the merged PR itself. */
+  async prMerged(worktreeId: string): Promise<ShipResult> {
+    const out = this.ops.get(worktreeId);
+    if (out) return { ok: false, message: `${shipNoun(out.op)} is already running here` };
+    return this.ship(worktreeId, "land", () => this.prMergedOp(worktreeId));
+  }
+
+  private async prMergedOp(
+    worktreeId: string,
+    carried?: LandingRange | null,
+    w: LandWatch = UNWATCHED,
+  ): Promise<ShipResult> {
     const { wt, repo } = this.d.state.requireWorktreeWithRepo(worktreeId);
     const result = await withRepoLock(repo.path, async () => {
       const mark = carried === undefined ? await landingMark(wt.path, repo.defaultBranch) : carried;
@@ -1638,12 +1700,15 @@ export class WorktreeService {
     const own = r.wt ? hasOwnBranch(r.wt) : false;
     // a found worktree has no chat for the rows to go on
     const w = r.wt ? this.landWatch(r.wt) : UNWATCHED;
-    const result = await withRepoLock(repo.path, () => takeMainIn(r.path, repo.defaultBranch, own, w));
-    if (result.ok) {
-      this.headMoved(worktreeId);
-      // the same work over a newer base: the sentence and the message still describe it
-      if (r.wt) await this.verdictSurvives(r.wt, { dropMessage: false });
-    }
+    const result = await this.ship(worktreeId, "sync-main", async () => {
+      const taken = await withRepoLock(repo.path, () => takeMainIn(r.path, repo.defaultBranch, own, w));
+      if (taken.ok) {
+        this.headMoved(worktreeId);
+        // the same work over a newer base: the sentence and the message still describe it
+        if (r.wt) await this.verdictSurvives(r.wt, { dropMessage: false });
+      }
+      return taken;
+    });
     return { result, defaultBranch: repo.defaultBranch };
   }
 
@@ -1652,19 +1717,23 @@ export class WorktreeService {
     const wt = this.d.state.requireWorktree(worktreeId);
     if (!isMain(wt)) throw new UserError("pull on main; a worktree syncs from main instead");
     const repo = this.d.state.requireRepo(wt.repoId);
-    const result = await withRepoLock(repo.path, () => pullMain(repo.path, repo.defaultBranch));
-    if (result.ok) {
-      this.invalidateCounts();
-      this.headMoved(worktreeId);
-    }
-    return result;
+    // main has no chat for git's rows, so the pull's steps are named and nothing more
+    const w: LandWatch = { step: (name) => this.step(worktreeId, name), git: UNWATCHED.git };
+    return this.ship(worktreeId, "pull-main", async () => {
+      const result = await withRepoLock(repo.path, () => pullMain(repo.path, repo.defaultBranch, w));
+      if (result.ok) {
+        this.invalidateCounts();
+        this.headMoved(worktreeId);
+      }
+      return result;
+    });
   }
 
   async commit(worktreeId: string, message: string): Promise<ShipResult> {
     const wt = this.d.state.requireWorktree(worktreeId);
     const m = message.trim();
     if (!m) throw new UserError("commit message required");
-    return this.commitRecorded(wt, m);
+    return this.ship(wt.id, "commit", () => this.commitRecorded(wt, m));
   }
 
   /** stored, not cached: the first frame of a page load reads it before git has been asked */
@@ -1681,8 +1750,13 @@ export class WorktreeService {
   }
 
   /** every project's trunk beside the rows frame (Trunk.all) */
-  trunks(opts: { quick?: boolean } = {}): Promise<Record<string, TrunkStatus>> {
-    return this.trunk.all(opts);
+  async trunks(opts: { quick?: boolean } = {}): Promise<Record<string, TrunkStatus>> {
+    const all = await this.trunk.all(opts);
+    for (const t of Object.values(all)) {
+      const shipping = this.ops.get(t.id);
+      if (shipping) t.shipping = shipping;
+    }
+    return all;
   }
 
   /** the figures for a row: what the stream said last, else what the transcript on disk ends with */
@@ -2062,6 +2136,7 @@ export class WorktreeService {
             usage: this.usageFor(wt.id),
             transcript: transcriptPathFor(this.d.paths.transcriptsDir, wt.id),
             sessionId: this.d.state.session(wt.id),
+            shipping: this.ops.get(wt.id),
           };
         }),
     );
@@ -2077,7 +2152,16 @@ export class WorktreeService {
           : quick
             ? this.countsQuick(f.id, quick)
             : await this.counts(f.id, f.path, repo.defaultBranch, !!f.branch);
-        return { ...f, procs: [], agent: "idle" as const, login: false, ahead, behind, dirty };
+        return {
+          ...f,
+          procs: [],
+          agent: "idle" as const,
+          login: false,
+          ahead,
+          behind,
+          dirty,
+          shipping: this.ops.get(f.id),
+        };
       }),
     );
   }

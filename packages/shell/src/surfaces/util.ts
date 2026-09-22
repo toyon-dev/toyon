@@ -7,9 +7,9 @@ import {
   previewOrigin,
   type RemoteView,
   type RepoInfo,
+  type ShipOp,
   type WorktreeStatus,
 } from "@toyon/shared";
-import type { ShipOp } from "../state/store.ts";
 
 /** Preview iframes hit the worktree's proxy port. Locally that is always loopback (the daemon
  * binds 127.0.0.1); in cloud mode the same port is a public TLS port on the host that served this

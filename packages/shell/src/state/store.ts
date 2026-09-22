@@ -41,6 +41,8 @@ import type {
   SearchHit,
   SelfState,
   ServerMsg,
+  ShipOp,
+  Shipping,
   TermServerMsg,
   Theme,
   ThemePrefs,
@@ -513,15 +515,16 @@ export interface State {
    * longer carries an id retires it here, an error frame brings every pending row back, and a
    * hello starts clean because a daemon that restarted mid-remove may still list it. */
   archiving: string[];
-  /** the landing op (sync, merge, ship, commit) this tab has sent for a worktree and the daemon
-   * has not answered. Not optimistic, unlike `archiving`: a remove's outcome is known and its
-   * failure rare, while these end in ordinary results (a conflict, a hook rejecting the message,
-   * nothing to commit) that are not errors to roll back from. So the row shows it working and
-   * the shipped frame says what happened. That frame retires the worktree's entry, an error
-   * frame (which carries no id) retires all of them, a snapshot without the worktree retires it
-   * (a merge can end in a remove), and a hello starts clean. `step` is the daemon's word on what
-   * the op is doing now (committing, rebasing, pushing), so the wait says something. */
-  shipping: Record<string, Shipping>;
+  /** the landing op (sync, land, pull, commit) out on each row or trunk, as the daemon lists it
+   * on its frames: any tab shows the spinner and the step, whichever pressed. This tab's own
+   * press joins the moment it is sent (`sent`), so the button shows busy before the frame that
+   * lists it, and stays until a frame does or the shipped word says the op was over before one
+   * could. Not optimistic, unlike `archiving`: these end in ordinary results (a conflict, a hook
+   * rejecting the message, nothing to commit) that are not errors to roll back from, and the
+   * shipped frame says what happened. An op the daemon listed rests on the frame that stops
+   * listing it, an error frame (which carries no id) rests all of them, and a hello starts from
+   * its own frame. */
+  shipping: Record<string, ShipEntry>;
   /** the active repo's rows toyon did not create, materialised here for the same reason as
    * `visible` */
   visibleDiscovered: WorktreeStatus[];
@@ -987,23 +990,43 @@ function landingIn(s: State, repoId: string | null, rows = s.rows): string | nul
   return (mine.find((w) => isProvisional(w.worktree)) ?? mine.find((w) => isMain(w.worktree)) ?? mine[0])?.id ?? null;
 }
 
-/** the client messages that end in a `shipped` frame: the daemon's word for them */
-export type ShipOp = "sync-main" | "commit" | "pull-main" | "land";
-
-/** a landing op this tab sent and the step the daemon says it is on */
-export interface Shipping {
-  op: ShipOp;
-  step?: string;
-}
+/** a landing op as this tab shows it: the daemon's, once a frame has listed it on the row, or
+ * this tab's own press until one does (`sent`), so the button shows busy from the press and not
+ * from the frame that follows it */
+export type ShipEntry = Shipping & { sent?: true };
 
 /** `shipping` minus the entries `done` says are over, the same object when none are, so a
  * selector on it stays stable across the proc events that push most snapshots */
-function retireShipping(shipping: Record<string, Shipping>, done: (id: string) => boolean): Record<string, Shipping> {
+function retireShipping(shipping: Record<string, ShipEntry>, done: (id: string) => boolean): Record<string, ShipEntry> {
   const entries = Object.entries(shipping);
   const keep = entries.filter(([id]) => !done(id));
   if (keep.length === entries.length) return shipping;
   return Object.fromEntries(keep);
 }
+
+/** `shipping` as a frame has it: every op the daemon lists on a row or a trunk, and this tab's
+ * own presses the daemon has not listed yet, which are still on their way (a frame built before
+ * the press reached it can arrive after). A press whose row is gone goes with it. The same object
+ * when nothing changed, for the selectors on it. */
+function shippingFrom(
+  prev: Record<string, ShipEntry>,
+  rows: WorktreeStatus[],
+  trunks: Record<string, TrunkStatus>,
+): Record<string, ShipEntry> {
+  const next: Record<string, ShipEntry> = {};
+  for (const w of rows) if (w.shipping) next[w.id] = w.shipping;
+  for (const t of Object.values(trunks)) if (t.shipping) next[t.id] = t.shipping;
+  for (const [id, e] of Object.entries(prev)) {
+    if (!e.sent || next[id]) continue;
+    if (rows.some((w) => w.id === id) || isTrunk({ trunks }, id)) next[id] = e;
+  }
+  const ids = Object.keys(next);
+  const same = ids.length === Object.keys(prev).length && ids.every((id) => sameShipping(prev[id], next[id]));
+  return same ? prev : next;
+}
+
+const sameShipping = (a: ShipEntry | undefined, b: ShipEntry | undefined) =>
+  !!a && !!b && a.op === b.op && a.step === b.step && a.sent === b.sent;
 
 /** select a worktree, and with it its repo (a chord or a rail click never leaves you scoped to
  * a project that is not the one on screen) */
@@ -1396,7 +1419,7 @@ function reduce(s: State, action: Action): State {
       // any row: a found worktree can be synced, and its dot shows the op the same way; and a
       // trunk, whose pull is pressed under the lead's box
       if (s.shipping[action.id] || !(rowById(s, action.id) || isTrunk(s, action.id))) return s;
-      return { ...s, shipping: { ...s.shipping, [action.id]: { op: action.op } } };
+      return { ...s, shipping: { ...s.shipping, [action.id]: { op: action.op, sent: true } } };
     }
     case "activate-repo": {
       if (!repoById(s, action.id)) return s;
@@ -1786,11 +1809,6 @@ function isTrunk(s: Pick<State, "trunks">, id: string): boolean {
   return Object.values(s.trunks).some((t) => t.id === id);
 }
 
-/** `shipping` less the ops whose target the daemon no longer lists, a row or a trunk */
-function retireGone(s: State, rows: WorktreeStatus[], trunks: State["trunks"]): Record<string, Shipping> {
-  return retireShipping(s.shipping, (id) => !rows.some((w) => w.id === id) && !isTrunk({ trunks }, id));
-}
-
 function onServer(s: State, msg: StoreServerMsg): State {
   switch (msg.t) {
     case "hello": {
@@ -1816,7 +1834,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
         activeRepoId: wt?.repoId ?? repoId ?? msg.repos[0]?.id ?? null,
         trunks: msg.trunks,
         archiving: s.archiving.length ? [] : s.archiving,
-        shipping: retireShipping(s.shipping, () => true),
+        shipping: shippingFrom({}, msg.rows, msg.trunks),
         local: pruneLocal(withDrafts(s.local, msg.drafts), msg.rows, s.archivedPage),
         lastActive: pruneLastActive(s.lastActive, msg.rows),
         treeOpen: pruneByRow(s.treeOpen, msg.rows),
@@ -1975,7 +1993,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
             rows: msg.rows,
             trunks: msg.trunks,
             archiving: archiving.length === s.archiving.length ? s.archiving : archiving,
-            shipping: retireGone(s, msg.rows, msg.trunks),
+            shipping: shippingFrom(s.shipping, msg.rows, msg.trunks),
             local: pruneLocal(s.local, msg.rows, s.archivedPage),
             treeOpen: pruneByRow(s.treeOpen, msg.rows),
           },
@@ -2095,21 +2113,18 @@ function onServer(s: State, msg: StoreServerMsg): State {
       if (!e?.line?.fiber || e.worktreeId !== msg.worktreeId || e.path !== msg.path) return next;
       return { ...next, editor: { ...e, line: placeLine(next, e.worktreeId, e.path, e.line) } };
     }
-    case "shipping": {
-      // the step reaches every subscriber; only the tab whose press is out has an op to put it on
-      const cur = s.shipping[msg.worktreeId];
-      if (!cur || cur.step === msg.step) return s;
-      return { ...s, shipping: { ...s.shipping, [msg.worktreeId]: { ...cur, step: msg.step } } };
-    }
     case "shipped": {
       const id = msg.worktreeId;
       // a suggestion lands in that worktree's composer, where the failure line above it and the
       // unread ring on its row say where to look. It does not select the worktree: the op ran for
       // seconds, and the person may be reading another chat by the time it answers.
       const settled = msg.suggestion ? withLocal(s, id, (l) => ({ ...l, draft: msg.suggestion! })) : s;
+      // An op the daemon listed comes to rest on the frame that stops listing it, which follows
+      // this word by a moment; retiring it here would let a frame built before it ended put the
+      // spinner back. A press it never listed (an op over before its frame) rests here.
       const next = {
         ...settled,
-        shipping: retireShipping(settled.shipping, (w) => w === id),
+        shipping: retireShipping(settled.shipping, (w) => w === id && settled.shipping[w]?.sent === true),
         openUrl: msg.ok && msg.url ? msg.url : settled.openUrl,
       };
       // What happened is read where the work is: a failure as a line on the worktree's chat, or

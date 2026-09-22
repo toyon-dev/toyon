@@ -13,6 +13,7 @@ import {
   installMethod,
   PREVIEW_PORTS,
   SHELL_DEV_PORT,
+  type Shipping,
 } from "@toyon/shared";
 import { loadManaged } from "@toyon/shared/managed-load";
 import pkg from "../package.json" with { type: "json" };
@@ -155,7 +156,8 @@ const runtime = new RuntimeRegistry({
   mainLeads: (repoId): boolean => worktrees.spare.current(repoId) === null,
 });
 const drafts = new DraftStore({ file: paths.draftsFile, hub });
-const exec = new ExecService({ state, runtime });
+// typed, since the two services name each other
+const exec = new ExecService({ state, runtime, shipping: (id): Shipping | undefined => worktrees.shippingOf(id) });
 const worktrees = new WorktreeService({
   state,
   hub,

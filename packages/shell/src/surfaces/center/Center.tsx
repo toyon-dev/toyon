@@ -33,6 +33,12 @@ const HAS_TOKEN = hasToken();
  * still knocking on the proxy, and a knock is what keeps a worktree from sleeping. Remounting
  * costs a flash, not a boot: the server is up. */
 const HIDDEN_FRAME_MS = 2 * 60_000;
+
+/** navigate a frame to its own src again: setting the attribute navigates even when the value is
+ * unchanged, which is the one reload that reaches a document with no bridge in it */
+function renavigate(el: HTMLIFrameElement | undefined) {
+  el?.setAttribute("src", el.src);
+}
 /** How long the app on screen stays there for the copy taking its place, while that one's frame is
  * still blank. Long enough for a server that is already up to answer, short enough that one which
  * never will gives way to the boot pane that says what its procs are doing. */
@@ -158,10 +164,21 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
   // went back up is blank again until its app answers. State, not a ref: the frame that has just
   // painted is the one to show, and nothing else here would re-render to show it.
   const [loadedFrames, setLoadedFrames] = useState<readonly string[]>([]);
+  // Frames whose last navigation brought no bridge: Chrome's own page for a port that refused
+  // (the proxy was down for a restart, and the app inside reloaded itself into the gap), or a
+  // document the proxy could not inject into. Nothing in there hears a message, so the reload the
+  // bridge would run has to be the src set again, which navigates even when the string is the
+  // same. A hello clears the mark; a `load` with no hello since the last one sets it. The order of
+  // the two is not fixed (the hello is a message task, the load an event task), so the hello is
+  // remembered until the load that follows it consumes it.
+  const deadFrames = useRef(new Set<string>());
+  const helloSinceLoad = useRef(new Set<string>());
 
   useEffect(() => {
-    previewBus.post = (id, m) =>
+    previewBus.post = (id, m) => {
+      if (m.type === "reload" && deadFrames.current.has(id)) return renavigate(frameRefs.current.get(id));
       frameRefs.current.get(id)?.contentWindow?.postMessage({ __toyon: true, ...m }, originRefs.current.get(id) ?? "*");
+    };
     previewBus.broadcast = (m) => {
       for (const [id, f] of frameRefs.current)
         f.contentWindow?.postMessage({ __toyon: true, ...m }, originRefs.current.get(id) ?? "*");
@@ -212,6 +229,8 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
             break;
           case "loaded":
             // this frame has a page on it now, so it is the one to show
+            deadFrames.current.delete(id);
+            helloSinceLoad.current.add(id);
             setLoadedFrames((l) => (l.includes(id) ? l : [...l, id]));
             previewBus.post(id, bridgeThemeMsg(themeRef.current));
             previewBus.post(id, { type: "zen", on: zenRef.current });
@@ -363,6 +382,15 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
     .filter(isOwned)
     .filter((w) => mounted.includes(w.id))
     .map((w) => ({ id: w.worktree.id, port: w.worktree.proxyPort, title: w.worktree.title }));
+  // a dead frame's server coming back (a proc turning `running` after a restart) is its cue to
+  // try again; a frame with a page on it is left alone, its app already reloads on its own
+  const runningKey = frames
+    .filter((f) => rows.find((w) => w.id === f.id)?.procs.some((p) => p.status === "running"))
+    .map((f) => f.id)
+    .join(" ");
+  useOnChange([runningKey], () => {
+    for (const id of runningKey.split(" ")) if (deadFrames.current.has(id)) renavigate(frameRefs.current.get(id));
+  });
 
   // The app on screen stays there while the one taking its place is still a blank frame, so a send
   // that starts a worktree does not blank the centre (frames.ts has the rules). The carry ends when
@@ -481,7 +509,13 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
                 } else {
                   frameRefs.current.delete(f.id);
                   originRefs.current.delete(f.id);
+                  deadFrames.current.delete(f.id);
+                  helloSinceLoad.current.delete(f.id);
                 }
+              }}
+              onLoad={() => {
+                if (helloSinceLoad.current.delete(f.id)) deadFrames.current.delete(f.id);
+                else deadFrames.current.add(f.id);
               }}
               src={previewUrl(f.id, f.port, remote)}
               title={f.title}

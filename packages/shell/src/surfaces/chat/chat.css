@@ -802,6 +802,11 @@
   .composer-verb {
     pointer-events: auto;
   }
+  /* what follows the word sits a tier under it, so the join between them is the step in colour and
+   not a colon (the subject after it carries a colon of its own) */
+  .composer-verb-line {
+    color: var(--text2);
+  }
   /* the chips wrap rather than clip: a dock is 380px and a long model name plus five chips is more */
   /* Spaced by what shows, not by the boxes: the top bar's tools put 24px between glyphs (a 20px gap
    plus each box's 2px), and a text chip already carries 8px of padding a side where an icon box

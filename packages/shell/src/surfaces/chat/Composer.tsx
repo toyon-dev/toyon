@@ -1047,7 +1047,10 @@ export function Composer({
                     >
                       {verb.word}
                     </Button>
-                    {`: ${verb.line}`}
+                    {/* a space, not a colon: the line is a commit subject more often than not, and a
+                        subject leads with its own `scope:`, so a colon after the word made two in a
+                        row and the eye could not tell which was the verb's */}{" "}
+                    <span className="composer-verb-line">{verb.line}</span>
                   </>
                 ) : (
                   placeholderText

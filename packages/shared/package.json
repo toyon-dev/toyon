@@ -8,6 +8,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./chords": "./src/chords.ts",
+    "./managed-load": "./src/managed-load.ts",
     "./ports": "./src/ports.ts",
     "./protocol/bridge": "./src/protocol/bridge.ts",
     "./qr": "./src/qr.ts",

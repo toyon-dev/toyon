@@ -8,11 +8,13 @@ import {
   addressedByPort,
   CHECK_TOOL,
   DAEMON_DEFAULT_PORT,
+  describeManaged,
   installCommand,
   installMethod,
   PREVIEW_PORTS,
   SHELL_DEV_PORT,
 } from "@toyon/shared";
+import { loadManaged } from "@toyon/shared/managed-load";
 import pkg from "../package.json" with { type: "json" };
 import { AgentAccounts } from "./agent/accounts.ts";
 import { spawnAcp } from "./agent/acp/transport.ts";
@@ -77,12 +79,15 @@ const {
 const pruned = pruneAssets(SHELL_DIST);
 if (pruned > 0) log.debug("daemon", `pruned ${pruned} assets from builds this one has outlived`);
 
+// before anything the policy governs: what whoever runs this machine has turned off, from a file
+// the person at the keyboard cannot edit. Read once; a restart picks up a newer one.
+const managed = await loadManaged();
 const paths = makePaths();
 ensureDirs(paths);
 const token = loadOrCreateToken(paths);
 const port = Number(process.env.TOYON_PORT ?? DAEMON_DEFAULT_PORT);
 // the public name: an edge's from the environment, a local front's from `toyon remote`
-const remote = loadRemote(paths.remoteFile);
+const remote = loadRemote(paths.remoteFile, process.env, managed.policy);
 // a front that addresses previews by port has each one declared to it, so they cannot be ephemeral
 if (remote && addressedByPort(remote.previews)) pinProxyPorts(PREVIEW_PORTS);
 
@@ -92,7 +97,9 @@ const bridge = new BridgeScript(BRIDGE_JS);
 // on Linux, whether bubblewrap can start, answered before the first agent listing
 const linuxSandbox = new LinuxSandbox();
 await linuxSandbox.refresh();
-const agents = loadAgentRegistry(paths.agentsFile, paths.agentsDir, linuxSandbox);
+const agents = loadAgentRegistry(paths.agentsFile, paths.agentsDir, linuxSandbox, managed.policy);
+// a default the policy took away is nobody's choice any more: the first-run screens ask again
+if (state.defaultAgent !== undefined && !agents.get(state.defaultAgent)) state.clearDefaultAgent();
 // A new worktree's picker lists every agent's models, and an agent nobody has run yet has listed
 // none: once it is installed, a throwaway session reads them. It runs in the daemon's scratch
 // directory, prepared like any other launch, so an agent in toyon's sandbox is confined there too.
@@ -135,6 +142,7 @@ const runtime = new RuntimeRegistry({
   state,
   paths,
   agents,
+  managed: managed.policy,
   accounts,
   attachments,
   bridgeScript: () => bridge.get(),
@@ -241,8 +249,9 @@ const update = new UpdateService({
   command: (version) => installCommand(method, version),
   install: runInstall,
   busy: () => runtime.anyBusy(),
-  // for whoever runs the machine: a company that vets what installs can turn this off for everyone
-  managed: process.env.TOYON_UPDATES === "off",
+  // for whoever runs the machine: a company that vets what installs turns this off for everyone,
+  // by policy or by the environment variable
+  managedBy: !managed.policy.updates ? "policy" : process.env.TOYON_UPDATES === "off" ? "env" : null,
 });
 
 const { branded, stop: stopServer } = startServer({
@@ -252,6 +261,7 @@ const { branded, stop: stopServer } = startServer({
   version: pkg.version,
   noteShellOrigin: (origin) => bridge.learnShellOrigin(origin),
   remote,
+  managed,
   services: {
     state,
     hub,
@@ -352,6 +362,15 @@ if (remote?.front === "edge") {
     console.log(`         ${previewsAt(remote)}`);
     console.log("         the token grants a shell on this machine; keep the link to yourself");
   }
+}
+// the policy in effect, one line per file that exists, so a boot log answers "why is X off"
+for (const src of managed.sources) {
+  if (src.state === "absent") continue;
+  const what =
+    src.state === "applied"
+      ? describeManaged(managed.policy).join(", ") || "nothing turned off"
+      : `${src.problem}; everything it governs is off`;
+  console.log(`         policy: ${src.path}: ${what}`);
 }
 
 // Wait for the dev servers to exit (SIGTERM, then SIGKILL after 3s) before leaving, so the

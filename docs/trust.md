@@ -20,9 +20,13 @@ Each chat has a permission mode, shown next to the prompt. **auto**, the default
 
 One limit worth knowing: a worktree's commits write into the main repository's shared `.git`, so that directory has to be writable, and the sandbox cannot tell a commit from a push. For Claude Code and OpenCode, `git push`, branch deletion, `git worktree` and `gh pr` are refused by rules in the configuration toyon gives each, checked before anything runs. That is a command filter, not a wall: it matches what the model types, and Codex has no equivalent list. Every agent is also told not to push. If your credentials are on the machine, a determined agent could still find a spelling that pushes.
 
+## Managed machines
+
+A company can turn parts of Toyon off for everyone on a machine with one root-owned policy file that IT pushes over MDM: updates, `toyon deploy`, remote access (or Tailscale only), which agents exist, custom agents, the port-80 listener, and the personal Claude plan sign-in. The person at the keyboard cannot change it, a file that will not read fails closed, and `toyon doctor` shows what is in effect and where it came from. The paths and keys are in [policy.md](policy.md).
+
 ## Telemetry
 
-None: nothing about you or your work is sent anywhere. Toyon's one call of its own is an update check every six hours against the registry npm is set up for, and `TOYON_UPDATES=off` stops it. The rest of the traffic is to the agents you sign into, to npm on first start to fetch the Claude Code and Codex adapters and again when you first pick OpenCode, to Fly when you deploy there, and to whatever your own dev servers and `git push` talk to.
+None: nothing about you or your work is sent anywhere. Toyon's one call of its own is an update check every six hours against the registry npm is set up for, and `TOYON_UPDATES=off` or the policy file stops it. The rest of the traffic is to the agents you sign into, to npm on first start to fetch the Claude Code and Codex adapters and again when you first pick OpenCode, to Fly when you deploy there, and to whatever your own dev servers and `git push` talk to.
 
 ## Reporting
 

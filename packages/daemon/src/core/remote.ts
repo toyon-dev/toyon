@@ -6,13 +6,27 @@
 
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
-import { checkPreviews, isRemoteHost, matchPreview, parseRemote, portPreviews, type Remote } from "@toyon/shared";
+import {
+  checkPreviews,
+  isRemoteHost,
+  MANAGED_DEFAULTS,
+  type ManagedPolicy,
+  matchPreview,
+  parseRemote,
+  portPreviews,
+  type Remote,
+} from "@toyon/shared";
 import { log } from "./log.ts";
 
 /** An edge front is declared by the platform's environment (`toyon deploy fly` writes it); a local
  * one by `remote.json`, which `toyon remote` writes. Edge without a usable name refuses to start:
- * it would otherwise answer on the internet with no Host rule at all. */
-export function loadRemote(file: string, env: Record<string, string | undefined> = process.env): Remote | null {
+ * it would otherwise answer on the internet with no Host rule at all. The managed policy governs
+ * the local file only: the edge is a machine the person deployed, not the managed laptop. */
+export function loadRemote(
+  file: string,
+  env: Record<string, string | undefined> = process.env,
+  managed: Pick<ManagedPolicy, "remote"> = MANAGED_DEFAULTS,
+): Remote | null {
   if (env.TOYON_CLOUD === "1") {
     const host = (env.TOYON_PUBLIC_HOST ?? "").toLowerCase();
     if (!isRemoteHost(host)) {
@@ -24,9 +38,20 @@ export function loadRemote(file: string, env: Record<string, string | undefined>
     return { host, previews, front: "edge" };
   }
   if (!existsSync(file)) return null;
+  if (managed.remote === "off") {
+    log.warn("remote", `${file} is ignored: remote access is turned off by your organization's policy`);
+    return null;
+  }
   const view = parseRemote(readFileSync(file, "utf8"));
   if (!view) {
     log.warn("remote", `${file} names no valid host or previews; remote access is off`);
+    return null;
+  }
+  if (managed.remote === "tailscale" && !view.host.endsWith(".ts.net")) {
+    log.warn(
+      "remote",
+      `${file} names ${view.host}; your organization's policy allows a tailnet name only, so remote access is off`,
+    );
     return null;
   }
   return { ...view, front: "local" };

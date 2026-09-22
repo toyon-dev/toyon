@@ -1015,6 +1015,33 @@ describe("AcpSession", () => {
     await w.session.close();
   });
 
+  test("the managed policy withholds a plan sign-in: the card leaves it out and says so, and asking for it is refused", async () => {
+    const fake = fakeAgent(async () => {
+      throw acp.RequestError.authRequired();
+    });
+    const spec = {
+      ...claudeSpec,
+      terminalLogins: { "claude-login": { args: ["--cli", "auth", "login", "--claudeai"], plan: true } },
+    };
+    const w = world(fake, spec, 60_000, undefined, { planSignIn: () => false });
+    w.session.send("a");
+    await w.idle();
+    const card = w.events.at(-1) as Extract<AgentEvent, { type: "agent-auth-required" }>;
+    expect(card.type).toBe("agent-auth-required");
+    expect(card.withheld).toBe(true);
+    expect(card.methods.map((m) => m.id)).toEqual(["api-key", "chat-gpt"]);
+    await expect(w.session.authenticate("claude-login")).rejects.toThrow("turned off by your organization's policy");
+    await w.session.close();
+    // with the policy allowing it, the same spec offers every method and the card says nothing
+    const open = world(fake, spec, 60_000, undefined, { planSignIn: () => true });
+    open.session.send("a");
+    await open.idle();
+    const card2 = open.events.at(-1) as Extract<AgentEvent, { type: "agent-auth-required" }>;
+    expect(card2.withheld).toBeUndefined();
+    expect(card2.methods.map((m) => m.id)).toEqual(["api-key", "chat-gpt", "claude-login"]);
+    await open.session.close();
+  });
+
   test("a terminal-auth _meta login runs the agent's binary with its own args, not the adapter's command line", async () => {
     const fake = fakeAgent(
       async () => {

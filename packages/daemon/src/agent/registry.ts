@@ -8,7 +8,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
-import type { AgentInfo } from "@toyon/shared";
+import { type AgentInfo, MANAGED_DEFAULTS, type ManagedPolicy } from "@toyon/shared";
 import { cloud } from "../core/cloud.ts";
 import { UserError } from "../core/errors.ts";
 import { log } from "../core/log.ts";
@@ -33,6 +33,8 @@ export type Confinement =
 
 const CONFINEMENTS: readonly Confinement[] = ["claude-settings", "adapter-sandbox", "toyon-sandbox", "none"];
 
+export const DEFAULT_AGENT_ID = "claude";
+
 export interface AgentSpec {
   id: string;
   name: string;
@@ -51,8 +53,9 @@ export interface AgentSpec {
   onDemand?: boolean;
   env?: Record<string, string>;
   /** terminal login methods run with other arguments than the adapter offers, by method id: `args`
-   * follow the adapter's own command line and `env` is added to the login's */
-  terminalLogins?: Record<string, { args: string[]; env?: Record<string, string> }>;
+   * follow the adapter's own command line and `env` is added to the login's. `plan` marks a sign-in
+   * with a consumer subscription, which a managed policy can withhold on company code. */
+  terminalLogins?: Record<string, { args: string[]; env?: Record<string, string>; plan?: boolean }>;
   confinement: Confinement;
   /** directories under the home directory the agent keeps its own state in: writable inside toyon's
    * sandbox, which confines everything else to the worktree */
@@ -92,7 +95,9 @@ export const BUILTIN_AGENTS: AgentSpec[] = [
     // picker, and a session left running once it is done. `auth login` is the same Anthropic flow
     // alone, the link and the pasted code, and it exits, which is how toyon knows it finished.
     // The method id and these arguments are claude-agent-acp's at the version pinned above.
-    terminalLogins: { "claude-login": { args: ["--cli", "auth", "login", "--claudeai"], env: { NO_BROWSER: "1" } } },
+    terminalLogins: {
+      "claude-login": { args: ["--cli", "auth", "login", "--claudeai"], env: { NO_BROWSER: "1" }, plan: true },
+    },
     confinement: "claude-settings",
     setup: (cwd, bounds) => writeClaudeLocalSettings(cwd, bounds).then(() => undefined),
     systemPrompt: "meta-append",
@@ -185,6 +190,15 @@ export class AgentRegistry {
 
   list(): AgentSpec[] {
     return [...this.specs.values()];
+  }
+
+  /** the agent a worktree gets when nobody named one: the persisted choice while it is still
+   * here, else Claude, else whatever the policy left first. A default that the policy took away
+   * would otherwise be a ghost the shell shows and nothing can run. */
+  defaultId(persisted: string | undefined): string {
+    if (persisted !== undefined && this.specs.has(persisted)) return persisted;
+    if (this.specs.has(DEFAULT_AGENT_ID)) return DEFAULT_AGENT_ID;
+    return this.list()[0]?.id ?? DEFAULT_AGENT_ID;
   }
 
   get(id: string): AgentSpec | undefined {
@@ -403,8 +417,31 @@ export function parseCustomAgents(raw: string): AgentSpec[] {
   return out;
 }
 
-/** builtins plus the user's file; a custom entry may shadow a builtin id on purpose */
-export function loadAgentRegistry(agentsFile: string, agentsDir: string, sandbox?: SandboxCheck): AgentRegistry {
-  const custom = existsSync(agentsFile) ? parseCustomAgents(readFileSync(agentsFile, "utf8")) : [];
-  return new AgentRegistry([...BUILTIN_AGENTS, ...custom], agentsDir, undefined, undefined, sandbox);
+/** what the managed policy says about which agents exist here */
+export type ManagedAgents = Pick<ManagedPolicy, "agents" | "customAgents">;
+
+/** the specs less what the policy withholds: every custom entry when custom agents are off, and
+ * any id not on the allowlist. An allowlisted id nothing here answers to is ignored. */
+export function managedSpecs(specs: AgentSpec[], managed: ManagedAgents): AgentSpec[] {
+  const kept = managed.customAgents ? specs : specs.filter((s) => s.builtin);
+  return managed.agents === null ? kept : kept.filter((s) => managed.agents?.includes(s.id));
+}
+
+/** builtins plus the user's file, less what the policy withholds; a custom entry may shadow a
+ * builtin id on purpose, which is one of the things the policy can forbid */
+export function loadAgentRegistry(
+  agentsFile: string,
+  agentsDir: string,
+  sandbox?: SandboxCheck,
+  managed: ManagedAgents = MANAGED_DEFAULTS,
+): AgentRegistry {
+  const custom =
+    managed.customAgents && existsSync(agentsFile) ? parseCustomAgents(readFileSync(agentsFile, "utf8")) : [];
+  return new AgentRegistry(
+    managedSpecs([...BUILTIN_AGENTS, ...custom], managed),
+    agentsDir,
+    undefined,
+    undefined,
+    sandbox,
+  );
 }

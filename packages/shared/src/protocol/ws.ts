@@ -7,6 +7,7 @@
 import { z } from "zod";
 import { ATTACHMENTS_PER_MESSAGE, limitMessage, overLimit } from "../attachment.ts";
 import type { RemoteView } from "../daemon.ts";
+import type { ManagedView } from "../managed.ts";
 import type {
   AgentConfigInfo,
   AgentInfo,
@@ -89,6 +90,9 @@ export type ServerMsg =
       update: UpdateState | null;
       /** the unsent text in every composer box that has some, by box id */
       drafts: Record<string, string>;
+      /** what whoever runs the machine has turned off, and from which file: the shell removes or
+       * greys the controls and says why, while the daemon and the CLI do the refusing */
+      managed: ManagedView;
     }
   | { t: "themes"; themes: Theme[]; prefs: ThemePrefs }
   /** the daemon fell behind the checkout it runs from, caught up, or started catching up */

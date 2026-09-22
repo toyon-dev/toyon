@@ -9,9 +9,11 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { launcherAddLink, PREVIEW_PORTS, portPreviews } from "@toyon/shared";
+import { loadManaged } from "@toyon/shared/managed-load";
 import type { Command } from "../args.ts";
 import { home } from "../daemon.ts";
 import { openUrl } from "../openUrl.ts";
+import { refusedByPolicy } from "../policy.ts";
 import { bunVersion, machineSources, writeMachineContext } from "./context.ts";
 
 type DeployCommand = Extract<Command, { kind: "deploy" }>;
@@ -294,6 +296,8 @@ async function destroy(cmd: DeployCommand, bin: string): Promise<number> {
 }
 
 export async function deploy(cmd: DeployCommand): Promise<number> {
+  const managed = await loadManaged();
+  if (!managed.policy.deploy) return refusedByPolicy("deploy", managed);
   const bin = Bun.which("fly") ?? Bun.which("flyctl");
   if (!bin) {
     console.error("toyon: flyctl is not installed; https://fly.io/docs/flyctl/install/ has it");

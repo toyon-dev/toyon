@@ -131,6 +131,7 @@ export type CommandState = Pick<
   | "defaultAgent"
   | "shipping"
   | "remote"
+  | "managed"
   | "frame"
   | "self"
   | "archivedPage"
@@ -160,6 +161,7 @@ export function useCommands(): Command[] {
   const defaultAgent = useStore((s) => s.defaultAgent);
   const shipping = useStore((s) => s.shipping);
   const remote = useStore((s) => s.remote);
+  const managed = useStore((s) => s.managed);
   const frame = useStore((s) => s.frame);
   const self = useStore((s) => s.self);
   const archivedPage = useStore((s) => s.archivedPage);
@@ -183,6 +185,7 @@ export function useCommands(): Command[] {
       defaultAgent,
       shipping,
       remote,
+      managed,
       frame,
       self,
       archivedPage,
@@ -208,6 +211,7 @@ export function useCommands(): Command[] {
     defaultAgent,
     shipping,
     remote,
+    managed,
     frame,
     self,
     archivedPage,

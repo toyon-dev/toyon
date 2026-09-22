@@ -118,6 +118,8 @@ Each chat has a permission mode, shown next to the prompt. **auto**, the default
 
 One limit worth knowing: the sandbox cannot tell a commit from a push. `git push`, branch deletion and `gh pr` are refused by rules in the configuration Toyon gives Claude Code and OpenCode, and every agent is told not to push. Codex has no equivalent list, and its shell commands can read Toyon's token. That is a command filter, not a wall: if your credentials are on the machine, a determined agent could still find a spelling that pushes. The whole boundary, per agent, is in [docs/trust.md](https://github.com/toyon-dev/toyon/blob/main/docs/trust.md).
 
+On a company machine, IT can turn updates, deploying, remote access, particular agents and the personal Claude sign-in off for everyone with one root-owned file, pushed the way Chrome's policies are; `toyon doctor` shows what is in effect. The file and its keys are in [docs/policy.md](https://github.com/toyon-dev/toyon/blob/main/docs/policy.md).
+
 ## Uninstall
 
 ```sh

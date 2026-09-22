@@ -1,7 +1,7 @@
 // One Runtime per worktree: its agent session (from the moment the worktree exists) plus, once
 // setup has run, its process group and preview proxy.
 
-import type { LogLine, ProcState, Remote, RepoInfo, WorktreeInfo } from "@toyon/shared";
+import type { LogLine, ManagedPolicy, ProcState, Remote, RepoInfo, WorktreeInfo } from "@toyon/shared";
 import { DEFAULT_PERMISSION_MODE, LOGIN_STREAM, SHELL_STREAM } from "@toyon/shared";
 import type { AgentAccounts } from "../agent/accounts.ts";
 import { OPTION_FIELDS } from "../agent/acp/options.ts";
@@ -45,6 +45,8 @@ export interface RuntimeDeps {
   state: StateStore;
   paths: Paths;
   agents: AgentRegistry;
+  /** what the managed policy lets an agent session offer; everything when absent (tests) */
+  managed?: Pick<ManagedPolicy, "planSignIn">;
   /** told what each agent session learns about its agent's credentials; absent in tests */
   accounts?: AgentAccounts;
   /** shared with the http layer that serves the images back; built from paths when absent */
@@ -135,7 +137,7 @@ export function terminalEnv(
   return { ...env, ...urls, TERM: "xterm-256color", COLORTERM: "truecolor", ...own };
 }
 
-export const DEFAULT_AGENT_ID = "claude";
+export { DEFAULT_AGENT_ID } from "../agent/registry.ts";
 
 /** what a proxy tells the registry about requests, and how it waits for a sleeping worktree */
 export interface ProxyWake {
@@ -165,7 +167,7 @@ function defaultAgent(
     spec: () => {
       const w = d.state.requireWorktree(wt.id);
       if (!w.agent) {
-        w.agent = d.state.defaultAgent ?? DEFAULT_AGENT_ID;
+        w.agent = d.agents.defaultId(d.state.defaultAgent);
         d.state.save();
         d.hub.emit("worktreesChanged");
       }
@@ -173,6 +175,7 @@ function defaultAgent(
     },
     connect: (app, spec, prepared) => spawnAcp(app, d.agents.launch(spec, prepared), wt.path, wt.id),
     launch: (spec) => d.agents.command(spec),
+    planSignIn: () => d.managed?.planSignIn ?? true,
     transcriptsDir: d.paths.transcriptsDir,
     attachments: d.attachments ?? new AttachmentStore(d.paths.attachmentsDir),
     getSessionId: () => d.state.session(wt.id),
@@ -857,7 +860,7 @@ export class RuntimeRegistry {
     if (rt) {
       for (const g of rt.procs?.groups() ?? []) live.push(g);
       if (rt.agent.pgid !== null) {
-        const agentId = this.deps.state.worktree(id)?.agent ?? this.deps.state.defaultAgent ?? DEFAULT_AGENT_ID;
+        const agentId = this.deps.state.worktree(id)?.agent ?? this.deps.agents.defaultId(this.deps.state.defaultAgent);
         live.push({ name: `agent:${agentId}`, pgid: rt.agent.pgid });
       }
       if (rt.shell?.alive) live.push({ name: "shell", pgid: rt.shell.pid });

@@ -88,6 +88,18 @@ describe("loadRemote", () => {
       front: "local",
     });
   });
+  test("the managed policy: off ignores the file, tailscale admits a tailnet name and no other", () => {
+    writeFileSync(file, '{ "host": "box.tail1234.ts.net", "previews": "https://box.tail1234.ts.net:{port}" }');
+    expect(loadRemote(file, {}, { remote: "off" })).toBeNull();
+    expect(loadRemote(file, {}, { remote: "tailscale" })?.host).toBe("box.tail1234.ts.net");
+    writeFileSync(file, '{ "host": "toyon.example.com" }');
+    expect(loadRemote(file, {}, { remote: "tailscale" })).toBeNull();
+    expect(loadRemote(file, {}, { remote: "any" })?.host).toBe("toyon.example.com");
+    // the edge is the deployed machine, not the laptop the policy manages
+    expect(loadRemote(file, { TOYON_CLOUD: "1", TOYON_PUBLIC_HOST: "app.fly.dev" }, { remote: "off" })?.front).toBe(
+      "edge",
+    );
+  });
 });
 
 describe("door", () => {

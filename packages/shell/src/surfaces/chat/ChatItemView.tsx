@@ -591,6 +591,7 @@ function AuthCard({ item }: { item: Extract<ChatItem, { kind: "auth" }> }) {
   const id = useStore((s) => s.activeId);
   const termOpen = useStore((s) => s.layout.term);
   const loginRunning = useStore((s) => s.rows.find((r) => r.id === s.activeId)?.login ?? false);
+  const policyProblem = useStore((s) => s.managed.problem);
   const [key, setKey] = useState("");
   const [keyFor, setKeyFor] = useState<string | null>(null);
   const started = useRef(false);
@@ -657,6 +658,13 @@ function AuthCard({ item }: { item: Extract<ChatItem, { kind: "auth" }> }) {
         <div className="hint auth-hint">
           paste the code into the login tab below and press Enter; it stays hidden as you paste. Your message sends once
           you are in.
+        </div>
+      )}
+      {!item.done && item.withheld && (
+        <div className="hint auth-hint">
+          {policyProblem
+            ? "the policy file on this machine is invalid, so signing in with a Claude plan is off until it is fixed; toyon doctor says why"
+            : "signing in with a Claude plan is managed by your organization"}
         </div>
       )}
       {!item.done && keyMethod && (

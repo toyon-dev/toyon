@@ -5,15 +5,19 @@
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { installCommand, installMethod, newer } from "@toyon/shared";
+import { loadManaged } from "@toyon/shared/managed-load";
 import pkg from "../package.json" with { type: "json" };
 import { base, health, readToken } from "./daemon.ts";
 import { here, packaged } from "./layout.ts";
+import { refusedByPolicy } from "./policy.ts";
 
 /** how long to watch for the new daemon before saying it is waiting on a reply */
 const WAIT_MS = 15_000;
 
 export async function update(): Promise<number> {
-  // the switch whoever runs the machine sets holds for the terminal too, not only the app
+  // the switches whoever runs the machine sets hold for the terminal too, not only the app
+  const managed = await loadManaged();
+  if (!managed.policy.updates) return refusedByPolicy("update", managed);
   if (process.env.TOYON_UPDATES === "off") {
     console.error("updates are turned off for this machine (TOYON_UPDATES=off)");
     return 1;

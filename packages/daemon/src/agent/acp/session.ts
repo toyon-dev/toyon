@@ -52,6 +52,9 @@ export interface AcpSessionDeps {
   connect: (app: acp.ClientApp, spec: AgentSpec, prepared: Prepared) => AcpLink;
   /** the adapter's own command line, unconfined (terminal-type login methods run it with extra args) */
   launch: (spec: AgentSpec) => { command: string; args: string[] };
+  /** whether a sign-in with a consumer plan may be offered: a managed policy says no on company
+   * code, so the card leaves it out and a request for it is refused. Yes when absent. */
+  planSignIn?: () => boolean;
   transcriptsDir: string;
   /** where attached images are written before the prompt carries them */
   attachments: AttachmentStore;
@@ -503,7 +506,7 @@ export class AcpSession implements AgentAdapter {
           type: "agent-auth-required",
           agent: this.conn.spec.id,
           agentName: this.conn.spec.name,
-          methods: this.conn.authMethods.map(authMethodInfo),
+          ...this.offeredMethods(this.conn),
           ...(rejected ? { rejected: true } : {}),
           ts: Date.now(),
         });
@@ -558,6 +561,9 @@ export class AcpSession implements AgentAdapter {
     const conn = await this.ensureConn("login");
     const method = conn.authMethods.find((m) => m.id === methodId);
     if (!method) throw new UserError(`${conn.spec.name} offers no login method "${methodId}"`);
+    if (this.planWithheld(conn, methodId)) {
+      throw new UserError("Signing in with a Claude plan is turned off by your organization's policy");
+    }
     const login = terminalLogin(method);
     if (login) {
       const l = this.d.launch(conn.spec);
@@ -599,6 +605,18 @@ export class AcpSession implements AgentAdapter {
     // back through send(), which records it again: the message is shown a second time, above the
     // turn the login finally lets it start
     if (item) this.send(item.text, item);
+  }
+
+  /** a plan sign-in the managed policy withholds: the spec marks the method, the policy says no */
+  private planWithheld(conn: Conn, methodId: string): boolean {
+    return this.d.planSignIn?.() === false && conn.spec.terminalLogins?.[methodId]?.plan === true;
+  }
+
+  /** the login methods the card may show, and whether one was left out for the policy's sake */
+  private offeredMethods(conn: Conn): { methods: AuthMethodInfo[]; withheld?: boolean } {
+    const kept = conn.authMethods.filter((m) => !this.planWithheld(conn, m.id));
+    const methods = kept.map(authMethodInfo);
+    return kept.length === conn.authMethods.length ? { methods } : { methods, withheld: true };
   }
 
   /** worth offering the login methods for: the agent has a credential and the provider refused it.

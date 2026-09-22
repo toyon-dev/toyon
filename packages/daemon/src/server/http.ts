@@ -49,6 +49,9 @@ export interface HttpOpts {
   noteShellOrigin: (origin: string | null) => void;
   /** the public name and its front (core/remote.ts), or null when the shell is only opened here */
   remote: Remote | null;
+  /** where the managed policy this daemon runs under came from, and a hash of it, so doctor can
+   * tell a daemon that booted before IT pushed a newer file */
+  managed: { source: string | null; hash: string | null };
   /** a worktree's preview handler, for `w<id>.<remote host>`; null when its proxy is not up */
   preview: (worktreeId: string) => PreviewHandler | null;
   /** the hello frame, for a page that asks before its socket exists */
@@ -83,6 +86,7 @@ export function createFetch(opts: HttpOpts) {
       pid: process.pid,
       branded: opts.branded(),
       remote: remote && { host: remote.host, previews: remote.previews },
+      managed: opts.managed,
       ...(opts.metrics() as object),
     });
 

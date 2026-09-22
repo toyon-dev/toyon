@@ -1,4 +1,11 @@
-import { type AgentInfo, CHORD_LABELS, CHORD_SECTIONS, chordsInSection, resolveTheme } from "@toyon/shared";
+import {
+  type AgentInfo,
+  CHORD_LABELS,
+  CHORD_SECTIONS,
+  chordsInSection,
+  describeManaged,
+  resolveTheme,
+} from "@toyon/shared";
 import { versionRow } from "../../app/versionRow.ts";
 import { agentItems } from "../../state/actions/agent.ts";
 import { projectItems } from "../../state/actions/project.ts";
@@ -100,6 +107,7 @@ export function KeysHelp() {
               row is always there, so someone asking "am I current" has one place to look. */}
           <div className="section-title keys-h">Toyon</div>
           <VersionRow />
+          <ManagedHint />
         </div>
       </div>
       <div className="keys-card">
@@ -130,7 +138,11 @@ function VersionRow() {
   const update = useStore((s) => s.update);
   const self = useStore((s) => s.self);
   const repos = useStore((s) => s.repos);
+  const updates = useStore((s) => s.managed.updates);
   const row = versionRow(version, install, update, self, repos);
+  // a restart onto what is already installed, or a checkout's rebuild, is not an update: only the
+  // presses that would ask the registry or install are the policy's to take away
+  const managed = !updates && (row.act === "update" || row.act === "check");
   const act = () => {
     if (row.act === "restart") sock?.send({ t: "restart-daemon" });
     else if (row.act === "rebuild" && self) sock?.send({ t: "run-after-land", repoId: self.repoId });
@@ -144,14 +156,26 @@ function VersionRow() {
         variant="field"
         mono
         busy={row.busy}
-        disabled={row.act === null}
+        disabled={row.act === null || managed}
         onClick={act}
-        {...tip(row.text, undefined, { detail: row.detail })}
+        {...tip(managed ? "updates are managed by your organization" : row.text, undefined, { detail: row.detail })}
       >
         {row.value}
       </Button>
     </div>
   );
+}
+
+/** One line when a managed policy is in effect, naming what it turns off, so a person who finds
+ * a control missing reads why here before filing a bug. A broken file says so instead, and
+ * points at doctor rather than at IT. */
+function ManagedHint() {
+  const managed = useStore((s) => s.managed);
+  if (managed.source === null) return null;
+  const text = managed.problem
+    ? `the policy file on this machine is invalid, so everything it governs is off; toyon doctor says why`
+    : `managed by your organization: ${describeManaged(managed).join(", ") || "nothing turned off"}`;
+  return <div className="hint">{text}</div>;
 }
 
 /** what the agent last reported about its own credentials; the row says nothing it was not told */

@@ -11,6 +11,7 @@ export * from "./daemon.ts";
 export * from "./diff.ts";
 export * from "./land.ts";
 export * from "./launcher.ts";
+export * from "./managed.ts";
 export * from "./model.ts";
 export * from "./pair.ts";
 export * from "./paste.ts";

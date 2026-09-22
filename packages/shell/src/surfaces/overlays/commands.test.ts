@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { OwnedWorktree, RepoInfo, Theme } from "@toyon/shared";
+import { MANAGED_NONE, type OwnedWorktree, type RepoInfo, type Theme } from "@toyon/shared";
 import { defaultLayout } from "../../state/store.ts";
 import { buildCommands, type Command, type CommandState, commandHits, filterCommands } from "./commands.ts";
 
@@ -52,6 +52,7 @@ describe("buildCommands", () => {
     defaultAgent: "claude",
     shipping: {},
     remote: null,
+    managed: MANAGED_NONE,
     frame: "desk",
     hostname: "localhost",
   } as unknown as CommandState;

@@ -15,6 +15,7 @@ export type AppState = Pick<
   | "rows"
   | "visible"
   | "remote"
+  | "managed"
   | "frame"
   | "self"
   | "archivedPage"
@@ -171,7 +172,14 @@ export function appItems(s: AppState, { sock, dispatch }: Deps): MenuEntry[] {
       });
     }
     const link = launcherAddLink(`https://${s.remote.host}`);
-    app.push({ id: "toyon-cloud", label: "add to toyon.cloud", onClick: () => window.open(link, "_blank") });
+    // a company that keeps its machines off toyon.cloud says so by policy; the row stays and
+    // says why, since a verb that vanishes teaches nothing
+    app.push({
+      id: "toyon-cloud",
+      label: "add to toyon.cloud",
+      ...(s.managed.deploy ? {} : { disabled: "managed by your organization" }),
+      onClick: () => window.open(link, "_blank"),
+    });
   }
   // a project with nothing to run has the chat as its centre, so there is no chat panel to toggle,
   // and no page for zen or the design pane's outlines to work on

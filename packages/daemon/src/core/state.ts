@@ -342,6 +342,12 @@ export class StateStore {
     this.state.defaultAgent = id;
     this.save();
   }
+  /** the chosen default is no longer an agent this daemon has: back to nobody having chosen */
+  clearDefaultAgent() {
+    if (this.state.defaultAgent === undefined) return;
+    delete this.state.defaultAgent;
+    this.save();
+  }
 
   get theme(): ThemePrefs | undefined {
     return this.state.theme;

@@ -203,4 +203,9 @@ environment
   TOYON_HOME              where state lives (default ~/.toyon)
   TOYON_PORT              the daemon's port (default 4141)
   TOYON_UPDATES           off stops Toyon checking for and installing updates on this machine
+
+policy
+  a root-owned file turns updates, deploy, remote access, agents and the plan sign-in off for
+  everyone on the machine: /Library/Application Support/toyon/policy.json or a dev.toyon
+  managed-preferences profile on macOS, /etc/toyon/policy.json on Linux; docs/policy.md has the keys
 `;

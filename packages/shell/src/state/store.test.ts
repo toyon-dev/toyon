@@ -1,5 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { type AgentEvent, PROTOCOL_VERSION, type RepoInfo, type TrunkStatus, type WorktreeStatus } from "@toyon/shared";
+import {
+  type AgentEvent,
+  MANAGED_NONE,
+  PROTOCOL_VERSION,
+  type RepoInfo,
+  type TrunkStatus,
+  type WorktreeStatus,
+} from "@toyon/shared";
 import { addToChat, attachPick } from "./attach.ts";
 import { createStore } from "./context.tsx";
 import {
@@ -127,6 +134,7 @@ const helloIn = (repos: RepoInfo[], ...w: WorktreeStatus[]): Action =>
     self: null,
     update: null,
     drafts: {},
+    managed: MANAGED_NONE,
   });
 const hello = (...w: WorktreeStatus[]): Action => helloIn([], ...w);
 const worktrees = (...w: WorktreeStatus[]): Action => server({ t: "worktrees", rows: w, trunks: trunksOf(w) });

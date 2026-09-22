@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { type ClientMsg, type FileServerMsg, PROTOCOL_VERSION, type ServerMsg } from "@toyon/shared";
+import { type ClientMsg, type FileServerMsg, MANAGED_NONE, PROTOCOL_VERSION, type ServerMsg } from "@toyon/shared";
 import { openFile } from "./actions/file.ts";
 import { createStore } from "./context.tsx";
 import { decide, FileSync } from "./fileSync.ts";
@@ -110,6 +110,7 @@ function harness() {
     self: null,
     update: null,
     drafts: {},
+    managed: MANAGED_NONE,
   });
   store.dispatch({ a: "connected", v: true });
   const last = <T extends ClientMsg["t"]>(t: T) => sent.findLast((m): m is Extract<ClientMsg, { t: T }> => m.t === t);

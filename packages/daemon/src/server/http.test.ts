@@ -46,6 +46,7 @@ const opts: HttpOpts = {
   metrics: () => ({ lag: 0 }),
   noteShellOrigin: (o) => learnedOrigins.push(o),
   remote: null,
+  managed: { source: null, hash: null },
   preview: () => null,
   bootstrap: async () => ({ t: "hello", repos: [{ id: "r1" }] }),
   restart: (now) => {
@@ -496,6 +497,7 @@ describe("static shell", () => {
     branded: () => false,
     noteShellOrigin: () => {},
     remote: null,
+    managed: { source: null, hash: null },
     preview: () => null,
     metrics: () => ({ lag: 0 }),
     bootstrap: async () => ({}),

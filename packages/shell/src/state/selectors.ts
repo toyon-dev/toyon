@@ -21,6 +21,9 @@ import {
 
 export const useActiveId = () => useStore((s) => s.activeId);
 
+/** what the managed policy turned off on this machine, for a control to go or grey by */
+export const useManaged = () => useStore((s) => s.managed);
+
 /** the socket has been down long enough to be worth saying so. It is down on first paint and for
  * a blink on every reconnect; painting either reads as the app still loading. */
 export const useOffline = (): boolean => useSettled(!useStore((s) => s.connected), 900);

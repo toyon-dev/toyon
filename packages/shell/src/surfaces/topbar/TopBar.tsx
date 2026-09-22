@@ -364,12 +364,14 @@ function SelfOffer() {
 }
 
 /** Toyon updates itself without a word; this shows only when that needs a person: an install that
- * failed, which a press tries again, or a pressed restart waiting on a reply. */
+ * failed, which a press tries again, or a pressed restart waiting on a reply. Where a managed
+ * policy turned updates off there is nothing to offer: a bar chip is removed, never greyed. */
 function UpdateOffer() {
   const update = useStore((s) => s.update);
+  const updates = useStore((s) => s.managed.updates);
   const sock = useSock();
   const notice = updateNotice(update);
-  if (!notice) return null;
+  if (!notice || !updates) return null;
   return (
     <Offer
       icon="reload"

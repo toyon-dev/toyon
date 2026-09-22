@@ -8,8 +8,8 @@
 // reload onto the new version by themselves. The install runs right before the restart, since it
 // replaces the page files those tabs load their code from.
 //
-// Only the registry npm is set up for is ever asked or installed from. TOYON_UPDATES=off turns all
-// of it off for the machine.
+// Only the registry npm is set up for is ever asked or installed from. TOYON_UPDATES=off, or the
+// managed policy, turns all of it off for the machine.
 
 import { type InstallMethod, newer, type UpdateState } from "@toyon/shared";
 import { UserError } from "../core/errors.ts";
@@ -34,8 +34,8 @@ export interface UpdateDeps {
   /** the version this process started as */
   running: string;
   method: InstallMethod;
-  /** TOYON_UPDATES=off: never check, never install */
-  managed: boolean;
+  /** never check, never install, and who said so: the managed policy file, or TOYON_UPDATES=off */
+  managedBy: "policy" | "env" | null;
   /** the version installed on disk; null when it cannot be read, or there is no install to read */
   installed: () => Promise<string | null>;
   /** the newest version the machine's registry has, null when it has none or does not answer, and
@@ -55,7 +55,7 @@ export interface UpdateDeps {
 
 /** what `toyon doctor` reads about updates */
 export interface UpdateStatus {
-  managed: boolean;
+  managedBy: "policy" | "env" | null;
   /** the registry the last check could not get toyon from */
   unreachable: string | null;
   latest: string | null;
@@ -122,7 +122,7 @@ export class UpdateService {
   /** Ask the registry. Nothing is asked when updates are off for the machine, or where this install
    * cannot update. */
   async check(): Promise<void> {
-    if (this.d.method === "none" || this.d.managed) return;
+    if (this.d.method === "none" || this.d.managedBy) return;
     const answer = await this.d.latest();
     if (answer.version === null) {
       this.unreachable = answer.registry;
@@ -136,7 +136,7 @@ export class UpdateService {
 
   /** A press on the failed chip: try again now, without waiting for the machine to settle. */
   async updateNow(): Promise<void> {
-    if (this.d.managed) throw new UserError("Updates are turned off for this machine (TOYON_UPDATES=off)");
+    this.refuseManaged();
     const target = this.target();
     if (target === null) throw new UserError("Toyon is up to date");
     if (this.needsInstall() && this.d.command(target) === null) {
@@ -151,7 +151,7 @@ export class UpdateService {
    * announces itself and installs when the machine settles; every other answer is thrown, since a
    * check that finds nothing announces nothing and the press would otherwise land in silence. */
   async checkNow(): Promise<void> {
-    if (this.d.managed) throw new UserError("Updates are turned off for this machine (TOYON_UPDATES=off)");
+    this.refuseManaged();
     if (this.d.method === "none") {
       throw new UserError(`Toyon ${this.d.running} runs from a checkout, which does not update itself`);
     }
@@ -189,11 +189,17 @@ export class UpdateService {
   }
 
   status(): UpdateStatus {
-    return { managed: this.d.managed, unreachable: this.unreachable, latest: this.latest };
+    return { managedBy: this.d.managedBy, unreachable: this.unreachable, latest: this.latest };
+  }
+
+  /** a press where updates are off for the machine: the toast names who turned them off */
+  private refuseManaged(): void {
+    if (this.d.managedBy === "policy") throw new UserError("Updates are turned off by your organization's policy");
+    if (this.d.managedBy === "env") throw new UserError("Updates are turned off for this machine (TOYON_UPDATES=off)");
   }
 
   private async auto(): Promise<void> {
-    if (this.wanted || this.installing || this.d.managed) return;
+    if (this.wanted || this.installing || this.d.managedBy) return;
     const target = this.target();
     if (target === null) return;
     if (this.needsInstall() && this.d.command(target) === null) return;

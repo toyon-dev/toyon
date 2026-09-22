@@ -203,6 +203,9 @@ export type AgentEvent =
       agentName: string;
       methods: AuthMethodInfo[];
       rejected?: boolean;
+      /** a method the agent offered is not in the list: the managed policy turned the plan sign-in
+       * off, and the card says so rather than leaving a person to wonder where the button went */
+      withheld?: boolean;
       ts: number;
     }
   | { type: "agent-auth-ok"; ts: number }

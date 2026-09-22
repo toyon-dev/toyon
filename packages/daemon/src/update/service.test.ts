@@ -15,7 +15,7 @@ function make(
     installed?: string | null;
     latest?: string | null;
     method?: InstallMethod;
-    managed?: boolean;
+    managedBy?: "policy" | "env" | null;
     installFails?: boolean;
   } = {},
 ) {
@@ -41,7 +41,7 @@ function make(
     state,
     running: "0.2.0",
     method,
-    managed: start.managed ?? false,
+    managedBy: start.managedBy ?? null,
     installed: async () => installed,
     latest: async () => {
       registryAsks++;
@@ -158,10 +158,10 @@ describe("UpdateService: what is out", () => {
     const { update, publish } = make();
     await update.check();
     expect(update.get()).toBeNull();
-    expect(update.status()).toEqual({ managed: false, unreachable: REGISTRY, latest: null });
+    expect(update.status()).toEqual({ managedBy: null, unreachable: REGISTRY, latest: null });
     publish("0.3.0");
     await update.check();
-    expect(update.status()).toEqual({ managed: false, unreachable: null, latest: "0.3.0" });
+    expect(update.status()).toEqual({ managedBy: null, unreachable: null, latest: "0.3.0" });
   });
 });
 
@@ -292,16 +292,27 @@ describe("UpdateService: a press on the version chip", () => {
   });
 });
 
-describe("UpdateService: TOYON_UPDATES=off", () => {
-  test("the registry is never asked, nothing installs, a press is refused, and doctor can say so", async () => {
-    const { update, advance, installs, registryAsks } = make({ latest: "0.3.0", managed: true });
+describe("UpdateService: updates off for the machine", () => {
+  test("TOYON_UPDATES=off: the registry is never asked, nothing installs, a press is refused, and doctor can say so", async () => {
+    const { update, advance, installs, registryAsks } = make({ latest: "0.3.0", managedBy: "env" });
     await update.check();
     advance(30 * MIN);
     await update.tick();
     expect(registryAsks()).toBe(0);
     expect(installs).toEqual([]);
-    expect(update.status().managed).toBe(true);
-    await expect(update.updateNow()).rejects.toThrow("turned off for this machine");
+    expect(update.status().managedBy).toBe("env");
+    await expect(update.updateNow()).rejects.toThrow("turned off for this machine (TOYON_UPDATES=off)");
+  });
+  test("the managed policy: the same silence, and the refusal names the policy", async () => {
+    const { update, advance, installs, registryAsks } = make({ latest: "0.3.0", managedBy: "policy" });
+    await update.check();
+    advance(30 * MIN);
+    await update.tick();
+    expect(registryAsks()).toBe(0);
+    expect(installs).toEqual([]);
+    expect(update.status().managedBy).toBe("policy");
+    await expect(update.updateNow()).rejects.toThrow("turned off by your organization's policy");
+    await expect(update.checkNow()).rejects.toThrow("turned off by your organization's policy");
   });
 });
 

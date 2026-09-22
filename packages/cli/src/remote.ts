@@ -11,10 +11,12 @@ import {
   portPreviews,
   type RemoteView,
 } from "@toyon/shared";
+import { loadManaged } from "@toyon/shared/managed-load";
 import type { Command } from "./args.ts";
 import { health, home, port, remoteFile } from "./daemon.ts";
 import { openUrl } from "./openUrl.ts";
 import { printPairCode } from "./pair.ts";
+import { refusedByPolicy } from "./policy.ts";
 import { serveTailnet, TailscaleError, tailscaleCli, unserveTailnet } from "./tailscale.ts";
 
 function saved(): RemoteView | null {
@@ -39,6 +41,16 @@ function save(r: RemoteView) {
 }
 
 export async function remote(cmd: Extract<Command, { kind: "remote" }>): Promise<number> {
+  const managed = await loadManaged();
+  if (managed.policy.remote === "off") return refusedByPolicy("remote", managed);
+  // a tailnet name is the one kind a tailscale-only policy admits; the daemon refuses any other
+  // at start, so refusing it here saves writing a file nothing will read
+  if (managed.policy.remote === "tailscale" && cmd.to !== null && cmd.to !== "off") {
+    console.error(
+      `toyon: your organization's policy allows remote access over Tailscale only (${managed.source}); \`toyon remote --tailscale\` sets it up`,
+    );
+    return 1;
+  }
   const h = await health();
 
   if (cmd.to === null && !cmd.tailscale) {

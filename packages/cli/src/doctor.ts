@@ -2,9 +2,10 @@
 // the terminal and named. Exit 1 when any line fails, so it can gate a bug report.
 
 import { existsSync, statSync } from "node:fs";
-import { WS_CLOSE_UNAUTHORIZED } from "@toyon/shared";
+import { describeManaged, type ManagedResolved, WS_CLOSE_UNAUTHORIZED } from "@toyon/shared";
+import { loadManaged } from "@toyon/shared/managed-load";
 import pkg from "../package.json" with { type: "json" };
-import { alive, base, health, home, logFile, port, readPid, readToken, tokenFile } from "./daemon.ts";
+import { alive, base, type Health, health, home, logFile, port, readPid, readToken, tokenFile } from "./daemon.ts";
 import {
   bwrapBlockedAdvice,
   bwrapStartError,
@@ -52,10 +53,25 @@ function handshake(token: string): Promise<"ok" | "unauthorized" | "blocked"> {
   });
 }
 
+/** The policy in effect: none, the file and what it turns off, or the failure that turned
+ * everything off. A second line when the running daemon booted under another version of it,
+ * since the daemon reads the file once and IT may have pushed a newer one since. */
+export function policyLines(m: ManagedResolved, daemon: Health["managed"] | undefined): Line[] {
+  const lines: Line[] = [];
+  if (m.problem !== null) lines.push(line(false, "policy", `${m.problem} (everything it governs is off)`));
+  else if (m.source === null) lines.push(line(true, "policy", "none"));
+  else lines.push(line(true, "policy", `${m.source}: ${describeManaged(m.policy).join(", ") || "nothing turned off"}`));
+  if (daemon && (daemon.source !== m.source || daemon.hash !== m.hash)) {
+    lines.push(line(false, "daemon", "read an older policy; `toyon restart` applies this one"));
+  }
+  return lines;
+}
+
 export async function doctor(): Promise<number> {
   const lines: Line[] = [];
   lines.push(line(true, "cli", `toyon ${pkg.version}, bun ${Bun.version}, ${process.platform} ${process.arch}`));
   lines.push(line(true, "home", home));
+  const managed = await loadManaged();
 
   const git = await toolVersion("git", ["--version"]);
   lines.push(git ? line(true, "git", git) : line(false, "git", "not found on PATH; Toyon needs git 2.x"));
@@ -73,6 +89,7 @@ export async function doctor(): Promise<number> {
   }
 
   const h = await health();
+  lines.push(...policyLines(managed, h?.managed));
   if (!h) {
     const pid = readPid();
     const stale = pid !== null && !alive(pid);
@@ -121,7 +138,9 @@ export async function doctor(): Promise<number> {
     }
     // updates only go through the registry npm is set up for, so a registry without toyon is said
     // here rather than gone around
-    if (h.updates?.managed) {
+    if (h.updates?.managedBy === "policy") {
+      lines.push(line(true, "updates", "off by your organization's policy"));
+    } else if (h.updates?.managedBy === "env") {
       lines.push(line(true, "updates", "off for this machine (TOYON_UPDATES=off)"));
     } else if (h.updates?.unreachable) {
       lines.push(

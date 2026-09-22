@@ -3,6 +3,8 @@
 
 import { homedir } from "node:os";
 import {
+  type ManagedResolved,
+  managedView,
   PROTOCOL_VERSION,
   parseClientMsg,
   type Remote,
@@ -19,7 +21,6 @@ import { fireAndForget, log } from "../core/log.ts";
 import { lag, type SocketStats } from "../core/metrics.ts";
 import { PairCodes } from "../core/pair.ts";
 import { setWaitingColors } from "../runtime/proxy.ts";
-import { DEFAULT_AGENT_ID } from "../runtime/registry.ts";
 import { dispatch, type Services } from "./handlers.ts";
 import { createFetch, type WsData } from "./http.ts";
 
@@ -43,6 +44,9 @@ export interface ServerOpts {
   noteShellOrigin: (origin: string | null) => void;
   /** the public name and its front (core/remote.ts), or null */
   remote: Remote | null;
+  /** the managed policy as read at boot: hello carries it, /health names its source and hash,
+   * and the branded listener binds only where it allows */
+  managed: ManagedResolved;
 }
 
 export function startServer(opts: ServerOpts): { server: Server<WsData>; branded: boolean; stop: () => void } {
@@ -273,7 +277,7 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
     ({
       t: "agents",
       agents: agentInfos(),
-      defaultAgent: s.state.defaultAgent ?? DEFAULT_AGENT_ID,
+      defaultAgent: s.agents.defaultId(s.state.defaultAgent),
       agentChosen: s.state.defaultAgent !== undefined,
     }) satisfies ServerMsg;
   s.hub.on("agentsChanged", () => broadcast(agentsMsg()));
@@ -306,7 +310,7 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
       themes: s.themes.themes,
       themePrefs: s.themes.prefs,
       agents: agentInfos(),
-      defaultAgent: s.state.defaultAgent ?? DEFAULT_AGENT_ID,
+      defaultAgent: s.agents.defaultId(s.state.defaultAgent),
       agentChosen: s.state.defaultAgent !== undefined,
       home: homedir(),
       folderDialog: process.platform === "darwin" && !cloud.enabled,
@@ -318,6 +322,7 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
       self: s.self.get(),
       update: s.update.get(),
       drafts: s.drafts.all(),
+      managed: managedView(opts.managed),
     } satisfies ServerMsg;
   };
 
@@ -336,6 +341,7 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
       metrics,
       noteShellOrigin: opts.noteShellOrigin,
       remote: opts.remote,
+      managed: { source: opts.managed.source, hash: opts.managed.hash },
       preview: (id) => s.runtime.get(id)?.proxy?.handler ?? null,
       bootstrap: helloFrame,
       restart: (now) => s.restarter.request({ now }),
@@ -440,9 +446,10 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
 
   const server = Bun.serve<WsData, string>({ ...serverConfig, port: opts.port });
   // best-effort port 80 so the branded http://toyon.localhost works portless (macOS allows
-  // unprivileged low-port binds; failure is fine, :4141 remains)
+  // unprivileged low-port binds; failure is fine, :4141 remains). A managed policy can keep it
+  // off: endpoint monitoring alerts on a new wildcard listener, and IT would rather not explain it.
   let brandedServer: Server<WsData> | null = null;
-  if (opts.port !== 80 && !cloud.enabled) {
+  if (opts.port !== 80 && !cloud.enabled && opts.managed.policy.brandedListener) {
     try {
       // wildcard bind is required for unprivileged :80 on macOS; the loopback peer check in
       // fetch() keeps it effectively local-only

@@ -169,7 +169,7 @@ function make() {
     method: "none",
     installed: async () => null,
     latest: async () => ({ version: null, registry: "" }),
-    managed: false,
+    managedBy: null,
     command: () => null,
     install: async () => ({ ok: true, line: "" }),
     restarter,

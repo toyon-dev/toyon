@@ -25,6 +25,7 @@ import type {
   ImageInput,
   InstallMethod,
   LogLine,
+  ManagedView,
   OwnedWorktree,
   PageEntry,
   PageLink,
@@ -59,6 +60,7 @@ import {
   isMarkdown,
   isOwned,
   isProvisional,
+  MANAGED_NONE,
   PROJECTS_FOLDER,
   railOrder,
   resolveTheme,
@@ -104,6 +106,8 @@ export type ChatItem =
       agentName: string;
       methods: AuthMethodInfo[];
       rejected?: boolean;
+      /** a method was left out by the managed policy, so the card says where the button went */
+      withheld?: boolean;
       done: boolean;
     }
   /** the agent asked something and is blocked until this is answered; `outcome` is what closed it,
@@ -639,6 +643,9 @@ export interface State {
   /** hello's `remote`: the public name, and how previews are addressed when the shell was opened
    * through it */
   remote: RemoteView | null;
+  /** hello's `managed`: what whoever runs the machine turned off, and from which file. The
+   * controls it governs go or grey here and say why; the refusing is the daemon's and the CLI's. */
+  managed: ManagedView;
   /** hello's `paired`: a phone has redeemed a code on this machine, so the bar stops offering one */
   paired: boolean;
   /** codes redeemed since this page loaded, so an open pairing card can tell its code was used */
@@ -788,6 +795,7 @@ export function initialState(opts: InitialOpts): State {
     home: "",
     folderDialog: false,
     remote: null,
+    managed: MANAGED_NONE,
     paired: false,
     pairings: 0,
     // the page never shows before hello, which is what says otherwise
@@ -1821,6 +1829,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
         home: msg.home,
         folderDialog: msg.folderDialog,
         remote: msg.remote,
+        managed: msg.managed,
         paired: msg.paired,
         gitIdentity: msg.gitIdentity,
         newProject:
@@ -2327,6 +2336,7 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
           agentName: event.agentName,
           methods: event.methods,
           ...(event.rejected ? { rejected: true } : {}),
+          ...(event.withheld ? { withheld: true } : {}),
           done: false,
         },
       ];

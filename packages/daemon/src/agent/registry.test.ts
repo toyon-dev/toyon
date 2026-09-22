@@ -3,7 +3,14 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { UserError } from "../core/errors.ts";
-import { AgentRegistry, type AgentSpec, BUILTIN_AGENTS, type Installer, parseCustomAgents } from "./registry.ts";
+import {
+  AgentRegistry,
+  type AgentSpec,
+  BUILTIN_AGENTS,
+  type Installer,
+  managedSpecs,
+  parseCustomAgents,
+} from "./registry.ts";
 import type { Prepared } from "./sandbox.ts";
 
 const prepared: Prepared = {
@@ -42,8 +49,9 @@ describe("claude's terminal login", () => {
     // claude-agent-acp names its no-browser login `claude-login` and takes `--cli auth login`: a new
     // adapter version is checked for both before this pin moves
     expect(claude.run).toMatchObject({ pkg: "@agentclientprotocol/claude-agent-acp", version: "0.75.1" });
+    // `plan` marks it as the consumer sign-in a managed policy can withhold
     expect(claude.terminalLogins).toEqual({
-      "claude-login": { args: ["--cli", "auth", "login", "--claudeai"], env: { NO_BROWSER: "1" } },
+      "claude-login": { args: ["--cli", "auth", "login", "--claudeai"], env: { NO_BROWSER: "1" }, plan: true },
     });
   });
 });
@@ -193,6 +201,33 @@ describe("agent registry", () => {
     expect(reg.get("claude")?.builtin).toBe(false);
     expect(parseCustomAgents("not json")).toEqual([]);
     expect(parseCustomAgents("[]")).toEqual([]);
+  });
+
+  test("the managed policy: an allowlist drops a builtin, and custom agents off drops the file's entries, a shadowing one included", () => {
+    const custom = parseCustomAgents(
+      JSON.stringify({ gemini: { command: "gemini" }, claude: { command: "my-claude" } }),
+    );
+    const all = [...BUILTIN_AGENTS, ...custom];
+    const ids = (specs: AgentSpec[]) => specs.map((s) => s.id);
+    expect(ids(managedSpecs(all, { agents: null, customAgents: true }))).toEqual(ids(all));
+    expect(ids(managedSpecs(all, { agents: ["claude", "codex"], customAgents: true }))).toEqual([
+      "claude",
+      "codex",
+      "claude",
+    ]);
+    // an id nothing answers to is ignored rather than refused
+    expect(ids(managedSpecs(all, { agents: ["codex", "nope"], customAgents: true }))).toEqual(["codex"]);
+    const builtinsOnly = managedSpecs(all, { agents: null, customAgents: false });
+    expect(builtinsOnly.every((s) => s.builtin)).toBe(true);
+    expect(ids(builtinsOnly)).not.toContain("gemini");
+    // the default follows what is left: the persisted choice while it exists, else claude, else the first
+    const reg = new AgentRegistry(managedSpecs(all, { agents: ["codex", "opencode"], customAgents: false }), tmp());
+    expect(reg.defaultId("codex")).toBe("codex");
+    expect(reg.defaultId("claude")).toBe("codex");
+    expect(reg.defaultId(undefined)).toBe("codex");
+    expect(new AgentRegistry(managedSpecs(all, { agents: null, customAgents: false }), tmp()).defaultId("gemini")).toBe(
+      "claude",
+    );
   });
 
   test("an agent in toyon's sandbox launches inside it; its own command line stays unwrapped for a login", () => {

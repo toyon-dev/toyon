@@ -35,17 +35,29 @@
    beside it is drawn in, where the ring is the only curve on a line of square glyphs. The pseudo
    is the top-left cell and the shadows draw the other three. A pair goes round clockwise: the
    head at full strength and one cell behind it at half, so the mark has a direction a single lit
-   cell does not; a third tier sat too close to the quiet cells to show at this size. Never all
-   four lit, because that is the stop glyph filled in and the stop button sits beside it. Four
-   steps with no easing, 120ms each, so it ticks rather than glides, which is what tells it apart
-   from the ring; with only four positions a slower tick reads as a flicker, not a turn. */
+   cell does not. Never all four lit, because that is the stop glyph filled in and the stop
+   button sits beside it.
+
+   It glides rather than ticks, at the shine's pace: this mark stands in the hint slot of a tool
+   row until the command arrives and the shine takes the slot over, and often sits on the line
+   under a shining row, so a hard-cut tick beside a travelling band read as a second rhythm. The
+   colours interpolate between frames, so the pair crossfades round the cells, and a lap is a
+   little longer than the band takes to cross a phrase.
+
+   The tiers are the shine's own ink and not currentColor at a strength: with the crossfade, a
+   quarter-strength quiet cell and a half-strength tail sit too close to the head to keep a
+   brightest cell mid-frame, and the pair reads as two cells swapping. text0 on text2 is the
+   contrast the band draws, and it lifts with a seated row the way the shine does. The ring
+   stays currentColor, since it sits in a control; this drawing only ever sits in the
+   transcript, beside prose drawn in these tiers. */
   .spinner-squares {
     position: relative;
     border: 0;
     border-radius: 0;
     animation: none;
-    --spinner-quiet: color-mix(in srgb, currentColor 25%, transparent);
-    --spinner-tail: color-mix(in srgb, currentColor 50%, transparent);
+    color: var(--text0);
+    --spinner-quiet: var(--text2);
+    --spinner-tail: var(--text1);
     &::before {
       content: "";
       position: absolute;
@@ -53,7 +65,7 @@
       top: 1px;
       width: 5px;
       height: 5px;
-      animation: squares 0.48s steps(1) infinite;
+      animation: squares 1.2s linear infinite;
     }
   }
   /* cells clockwise from the pseudo: 6px 0, 6px 6px, 0 6px */
@@ -85,6 +97,14 @@
         6px 0 var(--spinner-quiet),
         6px 6px var(--spinner-quiet),
         0 6px var(--spinner-tail);
+    }
+    /* the first frame again: without it the last quarter fades to the element's own no-shadow */
+    100% {
+      background: var(--spinner-tail);
+      box-shadow:
+        6px 0 currentColor,
+        6px 6px var(--spinner-quiet),
+        0 6px var(--spinner-quiet);
     }
   }
   /* no rotation: a full ring that breathes, borrowing the working dot's pulse. The squares hold

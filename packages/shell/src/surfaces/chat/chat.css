@@ -279,9 +279,8 @@
   .working-word {
     margin-left: 6px;
   }
-  /* the seconds of silence after the word: a number that ticks holds its width, so the stop button
-   beside it does not step when 9 becomes 10 */
-  /* a number on the working line: the seconds of silence, or a fan-out's calls ticking */
+  /* a number on the working line: the seconds of silence, or a fan-out's calls ticking. A number
+   that ticks holds its width, so the stop button beside it does not step when 9 becomes 10 */
   .working-num {
     margin-left: 6px;
     font-variant-numeric: tabular-nums;

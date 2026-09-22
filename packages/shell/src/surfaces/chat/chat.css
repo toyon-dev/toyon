@@ -495,6 +495,14 @@
     &.error .tool-name {
       color: var(--red);
     }
+    /* the seconds a running call has taken, after the line that shines for it: the row's own tier
+   and not the shine's, since the number is the one still thing on the line and is read against
+   the sweep. It holds its width so the line does not step when 9 becomes 10. */
+    & .tool-age {
+      font-variant-numeric: tabular-nums;
+      flex: 0 0 auto;
+      color: var(--text2);
+    }
     /* how many calls the row stands for, one gap after the path it counts: most rows have no count,
    so there is no column to line them up in, and a number at the far end of a wide row floats free
    of its path. It is the only thing that tells this row from one that ran once, so it never shrinks

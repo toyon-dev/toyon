@@ -11,12 +11,9 @@ import { Spinner } from "../../ui/Spinner.tsx";
 import { useSelectAllWithin } from "../../ui/selectAll.ts";
 import { isBusy, pickLabel } from "../util.ts";
 import { openAsk } from "./ask.ts";
-import { ChatItemView, ThoughtRow, ToolRow } from "./ChatItemView.tsx";
+import { ChatItemView, QUIET_AFTER, ThoughtRow, ToolRow } from "./ChatItemView.tsx";
 import { groupTools, indexOfSeq, openRow, ownCallRunning, subagentsAtWork } from "./group.ts";
 import { isBlank } from "./recall.ts";
-
-/** seconds of silence before the working line starts counting */
-const QUIET_AFTER = 3;
 
 /** Whole seconds since `items` last changed, ticking once a second while `busy`; 0 otherwise.
  * The stamp is taken in an effect keyed on `items`, so the render that lands a result still shows
@@ -169,16 +166,19 @@ export function ChatLog({
   // silence rather than the turn, so a running call counts too: a hung command is silence.
   const quiet = useQuietSeconds(items, busy);
   // What in the log already says busy where the reader is looking: the shimmer on a running call
-  // of the main agent's own, which is the newest row, or on a thought still arriving. The word
-  // under the log would say it again, so it shows only when nothing does, in the gap between two
-  // calls. A subagent's call does not count: it runs under a spawn row that closed when the spawn
-  // returned and has since been folded up the log, so its shimmer is one nobody sees, and the word
-  // hiding for it would blink with every call the subagent makes. Nor does the call that started
-  // a subagent and waits on it (ownCallRunning in group.ts): its row is open with the subagent's
-  // rows under it, and the shine on its line is what the tailing log scrolls off first. The count
-  // stays either way: a call that hangs shimmers like one that runs, and the seconds are what
-  // tell them apart.
-  const moving = streaming >= 0 || ownCallRunning(items);
+  // of the main agent's own, or on a thought still arriving. The word under the log would say it
+  // again, so it shows only when nothing does, in the gap between two calls. A running call's
+  // row carries its own count (ToolRow), so under it there is no line at all: "quiet" beside a
+  // line that shines contradicted it, and one count below could not say which of two calls
+  // running at once is the slow one. A stalled thought has no row to count on, so its silence is
+  // still said here. A subagent's call does not count as moving: it runs under a spawn row that
+  // closed when the spawn returned and has since been folded up the log, so its shimmer is one
+  // nobody sees, and the word hiding for it would blink with every call the subagent makes. Nor
+  // does the call that started a subagent and waits on it (ownCallRunning in group.ts): its row
+  // is open with the subagent's rows under it, and the shine on its line is what the tailing log
+  // scrolls off first.
+  const calling = ownCallRunning(items);
+  const moving = streaming >= 0 || calling;
   // the subagents the main agent is waiting on: named in the word, with their calls ticking beside
   // it, since their rows are out of sight and this line is the one place that can say so. The
   // spawn rows that started them shine for the same window.
@@ -231,53 +231,58 @@ export function ChatLog({
           ),
         )}
         {/* the row is status alone: the stop is the composer's, in the field's corner, which stays
-            put where this row scrolls off as soon as the log is read back. So while a call or a
-            thought shimmers above and the silence is short, there is no row: the shimmer says it. */}
-        {busy && active && !(active.agent === "waiting" && askInBox) && !(moving && quiet < QUIET_AFTER) && (
-          <div className="working-row">
-            {/* waiting is not activity: it is blocked on you, and the rail keeps that dot steady
+            put where this row scrolls off as soon as the log is read back. So while a call runs
+            above, or a thought shimmers and the silence is short, there is no row: the shimmer
+            says it, and the call's row counts its own wait. */}
+        {busy &&
+          active &&
+          !(active.agent === "waiting" && askInBox) &&
+          !calling &&
+          !(moving && quiet < QUIET_AFTER) && (
+            <div className="working-row">
+              {/* waiting is not activity: it is blocked on you, and the rail keeps that dot steady
                 for the same reason */}
-            {active.agent === "waiting" ? (
-              "waiting for your answer…"
-            ) : moving ? (
-              // the silence is the news, so it gets the word
-              quiet >= QUIET_AFTER && (
-                <span>
-                  quiet for<span className="working-num">{quiet}s</span>
-                </span>
-              )
-            ) : (
-              <span className="working-mark">
-                {/* the mark and not a word: "working" said what the mark says, and the row is
+              {active.agent === "waiting" ? (
+                "waiting for your answer…"
+              ) : moving ? (
+                // the silence is the news, so it gets the word
+                quiet >= QUIET_AFTER && (
+                  <span>
+                    quiet for<span className="working-num">{quiet}s</span>
+                  </span>
+                )
+              ) : (
+                <span className="working-mark">
+                  {/* the mark and not a word: "working" said what the mark says, and the row is
                     read a hundred times a session. A word stays only where it adds a fact the
                     mark cannot: who is working, or where the wait is. */}
-                <Spinner variant="squares" />
-                {agents ? (
-                  <>
-                    <span className="working-word">
-                      {agents} {agents === 1 ? "agent" : "agents"}
-                    </span>
-                    <span className="working-num">
-                      {fanout.calls} {fanout.calls === 1 ? "call" : "calls"}
-                    </span>
-                  </>
-                ) : (
-                  quiet >= QUIET_AFTER && (
+                  <Spinner variant="squares" />
+                  {agents ? (
                     <>
-                      {/* with no call open and nothing streaming, a silence this long is the model
+                      <span className="working-word">
+                        {agents} {agents === 1 ? "agent" : "agents"}
+                      </span>
+                      <span className="working-num">
+                        {fanout.calls} {fanout.calls === 1 ? "call" : "calls"}
+                      </span>
+                    </>
+                  ) : (
+                    quiet >= QUIET_AFTER && (
+                      <>
+                        {/* with no call open and nothing streaming, a silence this long is the model
                           holding the turn: its thinking is summarized, and the summary lands only
                           once the thought is done, so a long think is a hole in the log. Naming it
                           says where the wait is. Under the threshold a healthy turn would flick
                           the number on and off with every result; past it, the silence is the news */}
-                      <span className="working-word">thinking</span>
-                      <span className="working-num">{quiet}s</span>
-                    </>
-                  )
-                )}
-              </span>
-            )}
-          </div>
-        )}
+                        <span className="working-word">thinking</span>
+                        <span className="working-num">{quiet}s</span>
+                      </>
+                    )
+                  )}
+                </span>
+              )}
+            </div>
+          )}
         {/* a `!` command's stop stays by its row: it kills the command, not the agent, and the
             composer's corner holds the agent's */}
         {shellRunning && active && (

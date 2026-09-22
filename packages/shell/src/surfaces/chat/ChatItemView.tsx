@@ -10,7 +10,7 @@ import { type ChatItem, worktreeById } from "../../state/store.ts";
 import { Button } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { Field } from "../../ui/Field.tsx";
-import { useLiveHtml, useOnChange, useReveal, useTail } from "../../ui/hooks.ts";
+import { useElapsed, useLiveHtml, useOnChange, useReveal, useTail } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { grouped, type MenuEntry, useContextMenu } from "../../ui/menu.ts";
 import { rowState } from "../../ui/rowState.ts";
@@ -489,6 +489,12 @@ export const ThoughtRow = memo(function ThoughtRow({
   );
 });
 
+/** Seconds of silence before a count is put on it. Under this a healthy turn would flick a
+ * number on and off with every result; past it, the silence is the news. One threshold for the
+ * count on a running call's row and the word under the log, so the two never disagree about
+ * whether a wait is long. */
+export const QUIET_AFTER = 3;
+
 /** a call in the transcript, or a run of calls that did the same thing to the same file, or the
  * call that started a subagent with that subagent's rows folded under it */
 export const ToolRow = memo(
@@ -533,6 +539,14 @@ export const ToolRow = memo(
     // A spawn row shines while its subagent works. A spawn run in the background returns at once,
     // so its own call says nothing about the subagent; the log says when it is at work.
     const running = alive || !!working;
+    // How long the main agent's own call has run, on the row that shines for it. The shine says
+    // busy the same way whether the call is running or wedged, and a count climbing beside it is
+    // what tells them apart; on the row rather than under the log because two calls can run at
+    // once, and one number below could not say which of them is the slow one. A subagent's call
+    // and the spawn that waits on one keep no count: their work is counted under the log, where
+    // the fan-out line names the agents and ticks their calls.
+    const own = streaming && !run && !head.parentToolId;
+    const age = useElapsed(own);
     // The log decides which row opens itself, and it hands the row two answers: the turn's one
     // self-opening row (openRow in group.ts, reasoning only) and the newest `!` command, which is
     // open from the start because what it printed is the reason the person ran it. A subagent's
@@ -599,6 +613,7 @@ export const ToolRow = memo(
             ) : (
               hint && <span className={cx("tool-hint", running && "live-text")}>{hint}</span>
             )}
+            {age >= QUIET_AFTER && <span className="tool-age">{age}s</span>}
             {count && <span className="tool-count">{count}</span>}
           </>
         }

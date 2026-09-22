@@ -119,6 +119,25 @@ export function useHeld<T>(value: T | undefined, ms: number): T | undefined {
   return held;
 }
 
+/** Whole seconds since `on` last became true, ticking once a second while it holds; 0 while it
+ * is off. For a count read beside the thing it measures, which starts from the moment this
+ * render first saw it: nothing on the wire says when a call began, and a count that starts when
+ * the page starts watching is the same undercount after a reload as it is for a call that began
+ * before the tab was open, which is the honest number either way. */
+export function useElapsed(on: boolean): number {
+  const [secs, setSecs] = useState(0);
+  useEffect(() => {
+    if (!on) {
+      setSecs(0);
+      return;
+    }
+    const since = Date.now();
+    const t = setInterval(() => setSecs(Math.floor((Date.now() - since) / 1000)), 1000);
+    return () => clearInterval(t);
+  }, [on]);
+  return on ? secs : 0;
+}
+
 /** window.innerWidth, live */
 export function useWindowWidth(): number {
   const [w, setW] = useState(window.innerWidth);

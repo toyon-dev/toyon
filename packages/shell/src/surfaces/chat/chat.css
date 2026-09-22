@@ -267,6 +267,18 @@
       margin: 0;
     }
   }
+  /* the mark and the count sit on one line, the mark on the text's own midline */
+  .working-mark {
+    display: inline-flex;
+    align-items: center;
+    & .spinner {
+      vertical-align: 0;
+    }
+  }
+  /* the word after the mark, when there is one: the same gap the number keeps */
+  .working-word {
+    margin-left: 6px;
+  }
   /* the seconds of silence after the word: a number that ticks holds its width, so the stop button
    beside it does not step when 9 becomes 10 */
   /* a number on the working line: the seconds of silence, or a fan-out's calls ticking */

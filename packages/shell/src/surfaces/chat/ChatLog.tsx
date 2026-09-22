@@ -7,6 +7,7 @@ import { localOf } from "../../state/store.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
 import { useOnChange, useTail } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
+import { Spinner } from "../../ui/Spinner.tsx";
 import { useSelectAllWithin } from "../../ui/selectAll.ts";
 import { isBusy, pickLabel } from "../util.ts";
 import { openAsk } from "./ask.ts";
@@ -244,24 +245,33 @@ export function ChatLog({
                 </span>
               )
             ) : (
-              <span>
-                {/* with no call open and nothing streaming, a silence this long is the model
-                    holding the turn: its thinking is summarized, and the summary lands only once
-                    the thought is done, so a long think is a hole in the log. Naming it says
-                    where the wait is, which "working" does not. */}
-                {agents
-                  ? `${agents} ${agents === 1 ? "agent" : "agents"} working…`
-                  : quiet >= QUIET_AFTER
-                    ? "thinking…"
-                    : "working…"}
-                {agents > 0 && (
-                  <span className="working-num">
-                    {fanout.calls} {fanout.calls === 1 ? "call" : "calls"}
-                  </span>
+              <span className="working-mark">
+                {/* the mark and not a word: "working" said what the mark says, and the row is
+                    read a hundred times a session. A word stays only where it adds a fact the
+                    mark cannot: who is working, or where the wait is. */}
+                <Spinner variant="squares" />
+                {agents ? (
+                  <>
+                    <span className="working-word">
+                      {agents} {agents === 1 ? "agent" : "agents"}
+                    </span>
+                    <span className="working-num">
+                      {fanout.calls} {fanout.calls === 1 ? "call" : "calls"}
+                    </span>
+                  </>
+                ) : (
+                  quiet >= QUIET_AFTER && (
+                    <>
+                      {/* with no call open and nothing streaming, a silence this long is the model
+                          holding the turn: its thinking is summarized, and the summary lands only
+                          once the thought is done, so a long think is a hole in the log. Naming it
+                          says where the wait is. Under the threshold a healthy turn would flick
+                          the number on and off with every result; past it, the silence is the news */}
+                      <span className="working-word">thinking</span>
+                      <span className="working-num">{quiet}s</span>
+                    </>
+                  )
                 )}
-                {/* under the threshold a healthy turn would flick the number on and off with
-                    every result; past it, the silence is the news */}
-                {quiet >= QUIET_AFTER && <span className="working-num">{quiet}s</span>}
               </span>
             )}
             <Button

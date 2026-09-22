@@ -14,6 +14,7 @@ import { useLiveHtml, useOnChange, useReveal, useTail } from "../../ui/hooks.ts"
 import { Icon } from "../../ui/Icon.tsx";
 import { grouped, type MenuEntry, useContextMenu } from "../../ui/menu.ts";
 import { rowState } from "../../ui/rowState.ts";
+import { Spinner } from "../../ui/Spinner.tsx";
 import { attachmentUrl } from "../../ws.ts";
 import { AskRow } from "./AskRow.tsx";
 import { FullAttachment } from "./FullAttachment.tsx";
@@ -586,7 +587,14 @@ export const ToolRow = memo(
                 another agent, and the bulb is a thought's glyph: this row is a fork, not a thought */}
             <Icon name={run ? "spawn" : icon} className="tool-icon" />
             {name && <span className={cx("tool-name", running && "live-text")}>{name}</span>}
-            {hint && <span className={cx("tool-hint", running && "live-text")}>{hint}</span>}
+            {/* while the input streams the hint slot holds the mark, not the phrase: a phrase
+                there flashed once and was replaced by the command a beat later, two lines of
+                text for one event. The phrase still names the row for the fold's label. */}
+            {writing ? (
+              <Spinner variant="squares" />
+            ) : (
+              hint && <span className={cx("tool-hint", running && "live-text")}>{hint}</span>
+            )}
             {count && <span className="tool-count">{count}</span>}
           </>
         }

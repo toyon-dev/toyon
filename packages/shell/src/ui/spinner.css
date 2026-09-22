@@ -31,11 +31,79 @@
       transform: rotate(360deg);
     }
   }
-  /* no rotation: a full ring that breathes, borrowing the working dot's pulse */
+  /* The squares: four 5px cells in the ring's 13px box, the shape of the icon box every glyph
+   beside it is drawn in, where the ring is the only curve on a line of square glyphs. The pseudo
+   is the top-left cell and the shadows draw the other three. A pair goes round clockwise: the
+   head at full strength and one cell behind it at half, so the mark has a direction a single lit
+   cell does not; a third tier sat too close to the quiet cells to show at this size. Never all
+   four lit, because that is the stop glyph filled in and the stop button sits beside it. Four
+   steps with no easing, 120ms each, so it ticks rather than glides, which is what tells it apart
+   from the ring; with only four positions a slower tick reads as a flicker, not a turn. */
+  .spinner-squares {
+    position: relative;
+    border: 0;
+    border-radius: 0;
+    animation: none;
+    --spinner-quiet: color-mix(in srgb, currentColor 25%, transparent);
+    --spinner-tail: color-mix(in srgb, currentColor 50%, transparent);
+    &::before {
+      content: "";
+      position: absolute;
+      left: 1px;
+      top: 1px;
+      width: 5px;
+      height: 5px;
+      animation: squares 0.48s steps(1) infinite;
+    }
+  }
+  /* cells clockwise from the pseudo: 6px 0, 6px 6px, 0 6px */
+  @keyframes squares {
+    0% {
+      background: var(--spinner-tail);
+      box-shadow:
+        6px 0 currentColor,
+        6px 6px var(--spinner-quiet),
+        0 6px var(--spinner-quiet);
+    }
+    25% {
+      background: var(--spinner-quiet);
+      box-shadow:
+        6px 0 var(--spinner-tail),
+        6px 6px currentColor,
+        0 6px var(--spinner-quiet);
+    }
+    50% {
+      background: var(--spinner-quiet);
+      box-shadow:
+        6px 0 var(--spinner-quiet),
+        6px 6px var(--spinner-tail),
+        0 6px currentColor;
+    }
+    75% {
+      background: currentColor;
+      box-shadow:
+        6px 0 var(--spinner-quiet),
+        6px 6px var(--spinner-quiet),
+        0 6px var(--spinner-tail);
+    }
+  }
+  /* no rotation: a full ring that breathes, borrowing the working dot's pulse. The squares hold
+   one frame: one lit corner and three quiet, never four lit, for the reason above. */
   @media (prefers-reduced-motion: reduce) {
     .spinner {
       border-color: currentColor;
       animation: pulse 1.2s ease-in-out infinite;
+    }
+    .spinner-squares {
+      animation: none;
+      &::before {
+        animation: none;
+        background: currentColor;
+        box-shadow:
+          6px 0 var(--spinner-quiet),
+          6px 6px var(--spinner-quiet),
+          0 6px var(--spinner-quiet);
+      }
     }
   }
 }

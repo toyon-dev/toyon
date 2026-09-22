@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { SHELL_TOOL } from "@toyon/shared";
 import { type FakeAgent, fakeAgents, fakeFactories } from "../../test/helpers/fakes.ts";
@@ -11,6 +11,7 @@ import { Hub } from "../core/hub.ts";
 import { SelfWatch } from "../core/self.ts";
 import { StateStore } from "../core/state.ts";
 import { ExecService } from "../exec/service.ts";
+import { archiveRef, keepState } from "../git/archive.ts";
 import { GIT, git } from "../git/exec.ts";
 import { treeFingerprint } from "../git/status.ts";
 import { AfterLand } from "../repos/afterLand.ts";
@@ -454,6 +455,45 @@ describe("archive", () => {
     expect(w.worktrees.archived(repoId)).toMatchObject([{ id: wt.id, restorable: true }]);
     const back = await w.worktrees.restore(wt.id);
     expect(sh(back.path, "git", "rev-parse", "HEAD")).toBe(head);
+  });
+
+  test("a remove git cannot finish still archives the work and takes the directory", async () => {
+    const repoId = await registered();
+    const { wt, head } = await workedOn(repoId);
+    // a folder with no write bit: git deletes the worktree's record, fails on this file, and
+    // leaves the directory behind
+    mkdirSync(join(wt.path, "held"));
+    writeFileSync(join(wt.path, "held", "f"), "x\n");
+    chmodSync(join(wt.path, "held"), 0o555);
+    const archived = await w.worktrees.archiveWorktree(wt.id);
+    expect(archived?.id).toBe(wt.id);
+    expect(existsSync(wt.path)).toBe(false);
+    expect(w.state.worktree(wt.id)).toBeUndefined();
+    expect(sh(w.repo, "git", "branch", "--list", wt.branch)).toBe("");
+    const back = await w.worktrees.restore(wt.id);
+    expect(sh(back.path, "git", "rev-parse", "HEAD")).toBe(head);
+    expect(readFileSync(join(back.path, "wip.txt"), "utf8")).toBe("untracked\n");
+  });
+
+  test("a worktree whose record git dropped mid-remove archives on the next try with what the first kept", async () => {
+    const repoId = await registered();
+    const { wt, head } = await workedOn(repoId);
+    // the first try as git leaves it: the ref written, the worktree's record gone, the directory
+    // still there with a link to nowhere
+    const gitDir = sh(wt.path, "git", "rev-parse", "--absolute-git-dir");
+    const index = join(w.paths.archiveDir, `${wt.id}.index`);
+    expect(await keepState(w.repo, wt.path, archiveRef(wt.id), index)).toMatchObject({ head, dirty: 2 });
+    rmSync(gitDir, { recursive: true, force: true });
+    expect((await git(wt.path, "rev-parse", "HEAD")).ok).toBe(false);
+    const archived = await w.worktrees.archiveWorktree(wt.id);
+    expect(archived?.id).toBe(wt.id);
+    expect(existsSync(wt.path)).toBe(false);
+    expect(w.state.worktree(wt.id)).toBeUndefined();
+    expect(w.worktrees.archived(repoId)).toMatchObject([{ id: wt.id, restorable: true, dirty: 2 }]);
+    const back = await w.worktrees.restore(wt.id);
+    expect(sh(back.path, "git", "rev-parse", "HEAD")).toBe(head);
+    expect(readFileSync(join(back.path, "README.md"), "utf8")).toBe("edited\n");
+    expect(readFileSync(join(back.path, "wip.txt"), "utf8")).toBe("untracked\n");
   });
 
   test("a spare's removal archives nothing", async () => {

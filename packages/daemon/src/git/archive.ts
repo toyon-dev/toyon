@@ -9,6 +9,10 @@ import { parsePorcelain } from "./status.ts";
 /** outside refs/heads, so no branch list, ref picker or push ever shows it */
 export const archiveRef = (worktreeId: string) => `refs/toyon/archive/${worktreeId}`;
 
+/** the subject and author of a snapshot commit: what tells one apart from a commit the person made */
+const SNAPSHOT_SUBJECT = "toyon: uncommitted work";
+const SNAPSHOT_AUTHOR = "toyon";
+
 export interface KeptState {
   /** the commit the worktree was on */
   head: string;
@@ -58,7 +62,7 @@ async function snapshotCommit(wtPath: string, head: string, indexFile: string): 
       GIT,
       [
         "-c",
-        "user.name=toyon",
+        `user.name=${SNAPSHOT_AUTHOR}`,
         "-c",
         "user.email=toyon@localhost",
         "commit-tree",
@@ -66,7 +70,7 @@ async function snapshotCommit(wtPath: string, head: string, indexFile: string): 
         "-p",
         head,
         "-m",
-        "toyon: uncommitted work",
+        SNAPSHOT_SUBJECT,
       ],
       wtPath,
     );
@@ -74,6 +78,21 @@ async function snapshotCommit(wtPath: string, head: string, indexFile: string): 
   } finally {
     rmSync(indexFile, { force: true });
   }
+}
+
+/** The state `ref` already keeps, read back from the commit it names: the head, and the snapshot
+ * over it when that commit is one. For an archive whose earlier try wrote the ref and then lost the
+ * directory, so nothing can be read from there again. Null when the ref names nothing. */
+export async function keptAt(repoPath: string, ref: string): Promise<KeptState | null> {
+  const r = await git(repoPath, "log", "-1", "--format=%H%n%P%n%an%n%s", ref);
+  if (!r.ok) return null;
+  const [commit, parents, author, subject] = r.out.split("\n");
+  if (!commit) return null;
+  const snapshot = subject === SNAPSHOT_SUBJECT && author === SNAPSHOT_AUTHOR && parents && !parents.includes(" ");
+  if (!snapshot) return { head: commit };
+  const files = await git(repoPath, "diff", "--name-only", parents, commit);
+  const dirty = files.ok ? files.out.split("\n").filter(Boolean).length : 0;
+  return { head: parents, snapshot: commit, ...(dirty ? { dirty } : {}) };
 }
 
 /** Check a kept state out at `wtPath`: on a new branch at the kept head, or on an existing branch

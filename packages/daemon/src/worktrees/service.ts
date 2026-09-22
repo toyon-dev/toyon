@@ -3,6 +3,7 @@
 // spare pool do the work.
 
 import { cpSync, existsSync, readFileSync, rmSync } from "node:fs";
+import { rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import {
   type AgentEvent,
@@ -51,6 +52,7 @@ import {
   handLanding,
   type KeptState,
   keepState,
+  keptAt,
   type LandingRange,
   landingMark,
   landRef,
@@ -108,6 +110,17 @@ export type Variant = { group: string; index: number; of: number };
 /** what a grafted transcript keeps of a message: its text. The source's attachment store goes with
  * the source, so a stored ref would point at nothing, and a pick numbered in the source's session
  * would put the numbers the shell draws on chips out of step with the target session's own. */
+/** a directory and everything under it, off the event loop; false when something in it refused */
+async function deleteTree(path: string): Promise<boolean> {
+  try {
+    await rm(path, { recursive: true, force: true });
+    return true;
+  } catch (e) {
+    log.warn("rm", `could not delete ${path}`, e);
+    return false;
+  }
+}
+
 function withoutAttachments(event: AgentEvent): AgentEvent {
   if (event.type !== "user-message") return event;
   const { attachments: _attachments, ...rest } = event;
@@ -781,7 +794,7 @@ export class WorktreeService {
       // the plans are kept out of git, so the snapshot has none of them; they leave with the chat
       if (archive) this.keepPlans(wt);
       try {
-        await gitOrThrow(repo.path, "worktree", "remove", "--force", wt.path);
+        await this.removeDirectory(repo, wt);
       } catch (e) {
         rmSync(this.plansScratch(wt.id), { recursive: true, force: true });
         throw e;
@@ -813,10 +826,47 @@ export class WorktreeService {
   /** a worktree's commits and uncommitted work, under its archive ref, before its directory goes */
   private async keep(repo: RepoInfo, wt: WorktreeInfo): Promise<KeptState | null> {
     const index = join(this.d.paths.archiveDir, `${wt.id}.index`);
-    const kept = await keepState(repo.path, wt.path, archiveRef(wt.id), index);
+    const kept = (await keepState(repo.path, wt.path, archiveRef(wt.id), index)) ?? (await this.keepUnlinked(repo, wt));
     if (!kept) log.warn(wt.id, "could not keep its git state");
     else if (kept.lost) log.warn(wt.id, "could not keep its uncommitted changes: only its commits are archived");
     return kept;
+  }
+
+  /** What is left to keep of a worktree git no longer lists. A remove that could not delete every
+   * file still deleted git's record of the worktree, so the directory answers no git command and
+   * nothing can be read from it again; the ref that remove wrote first holds its state, and a
+   * worktree unlinked some other way still has its branch. Null while git lists the worktree,
+   * since then something else went wrong. */
+  private async keepUnlinked(repo: RepoInfo, wt: WorktreeInfo): Promise<KeptState | null> {
+    if (await this.listed(repo, wt)) return null;
+    const ref = archiveRef(wt.id);
+    const already = await keptAt(repo.path, ref);
+    if (already) return already;
+    const head = await commitOf(repo.path, `refs/heads/${wt.branch}`);
+    if (!head || !(await git(repo.path, "update-ref", ref, head)).ok) return null;
+    return { head };
+  }
+
+  /** whether git still lists a worktree at its path; both sides canonical, since /tmp is a link */
+  private async listed(repo: RepoInfo, wt: WorktreeInfo): Promise<boolean> {
+    const path = canonical(wt.path);
+    return (await listWorktrees(repo.path)).some((g) => canonical(g.path) === path);
+  }
+
+  /** The directory and git's record of it. Git deletes the record even when a file in the
+   * directory refuses to go (one under a folder with no write bit, say) and reports the remove as
+   * failed: what is left is a directory git no longer lists, which no later remove could take
+   * either. So a remove that fails with the record gone finishes here, and a directory that still
+   * will not go stays on disk, named in the log, rather than as a row that can never be archived. */
+  private async removeDirectory(repo: RepoInfo, wt: WorktreeInfo): Promise<void> {
+    const r = await git(repo.path, "worktree", "remove", "--force", wt.path);
+    if (r.ok) return;
+    if (await this.listed(repo, wt))
+      throw new Error(`git worktree remove --force ${wt.path} failed (${r.exit}): ${r.err}`);
+    if (await deleteTree(wt.path)) return;
+    // the directory is toyon's own, so its write bits are toyon's to set
+    await run("chmod", ["-R", "u+w", wt.path], dirname(wt.path));
+    if (!(await deleteTree(wt.path))) log.warn(wt.id, `its directory could not be deleted and stays at ${wt.path}`);
   }
 
   /** where a worktree's plans wait between its directory going and its chat moving into the archive */

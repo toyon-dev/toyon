@@ -100,6 +100,25 @@ export function useSettled(on: boolean, ms: number): boolean {
   return settled;
 }
 
+/** The last value that has held for `ms`; a new one takes over only once it has stayed that long,
+ * and until then the one before it stands. For a line naming the stage of something that runs in
+ * stages, most of them over before a name could be read: naming each as it starts flashes words
+ * through the line, and holding a stage until its successor has proved slow keeps every word shown
+ * one that was true for long enough to read. `undefined` takes over at once: nothing is not a name,
+ * and the next run starts from nothing rather than from the last run's tail. */
+export function useHeld<T>(value: T | undefined, ms: number): T | undefined {
+  const [held, setHeld] = useState<T | undefined>(undefined);
+  useEffect(() => {
+    if (value === undefined) {
+      setHeld(undefined);
+      return;
+    }
+    const t = setTimeout(() => setHeld(value), ms);
+    return () => clearTimeout(t);
+  }, [value, ms]);
+  return held;
+}
+
 /** window.innerWidth, live */
 export function useWindowWidth(): number {
   const [w, setW] = useState(window.innerWidth);

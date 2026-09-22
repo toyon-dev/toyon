@@ -28,7 +28,7 @@ import { canCarry, composerBoxOf, type Draft, trunkOf } from "../../state/store.
 import { Button, IconButton } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { TextArea } from "../../ui/Field.tsx";
-import { useOnChange } from "../../ui/hooks.ts";
+import { useHeld, useOnChange } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { InlinePicker } from "../../ui/InlinePicker.tsx";
 import { useListNav } from "../../ui/listNav.ts";
@@ -75,6 +75,9 @@ const NO_CHOICES: ModelChoice[] = [];
 /** one empty list for a worktree not yet listed, so the folder memo holds until the files arrive */
 const NO_PATHS: string[] = [];
 
+/** how long a landing step runs before the shining line names it: a git call that is over inside
+ * this is not a wait, and a name for it would be gone before it was read */
+const STEP_HOLD_MS = 1_500;
 /** the keys that move the caret along the text: pressing one in a recalled message is starting to edit it */
 const CARET_KEYS = new Set(["ArrowLeft", "ArrowRight", "Home", "End", "PageUp", "PageDown"]);
 
@@ -534,8 +537,13 @@ export function Composer({
                     ships: true,
                   }
                 : null;
-  // the word's own press is out: its line says the step and shines for it
+  // the word's own press is out: its line shines for it, and names the step only once the step
+  // has proved slow. A land on a small repo is a few git calls in well under a second, and naming
+  // each as it starts flashes three sentences through the line before one can be read; the
+  // sentence already there lighting up is the press taken, and a step that holds (a hook, a
+  // rebase with work in it, the network) is the one worth naming
   const landingNow = !!verb?.ships && op === "land";
+  const heldStep = useHeld(step, STEP_HOLD_MS);
   const blocked = landing ? landingLine(landing) : null;
   // the empty box's line, first match wins: what the box is for when it is not a worktree's, then
   // the next step on the work, then what the work is waiting on, then where the last turn left it,
@@ -1038,7 +1046,7 @@ export function Composer({
                   // clipped to the element's own text and a button inside it paints as a box of
                   // its own, so the word would go dark under a band on its parent, and a band per
                   // span is two lit spots on one line. The step names the wait; no dots after it.
-                  `${verb.word}: ${step ?? verb.line}`
+                  `${verb.word}: ${heldStep ?? verb.line}`
                 ) : verb ? (
                   <>
                     <Button

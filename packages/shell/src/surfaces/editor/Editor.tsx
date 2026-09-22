@@ -308,7 +308,12 @@ export default function Editor({
         renderMarginRevertIcon: false,
         // a place carried over from the other view, or a line to reveal, may sit in an unchanged
         // region that collapsing would hide; and an unchanged file collapses to nothing at all
-        hideUnchangedRegions: { enabled: !unchanged && !restored && lineRef.current === undefined },
+        hideUnchangedRegions: {
+          enabled: !unchanged && !restored && lineRef.current === undefined,
+          // a short gap between hunks shows as code: a fold row saves a couple of lines and costs
+          // a click and a jump, so only a real stretch is worth collapsing
+          minimumLineCount: 10,
+        },
       });
       diffEditor.setModel({ original: m.original, modified: m.modified });
       code = diffEditor.getModifiedEditor();

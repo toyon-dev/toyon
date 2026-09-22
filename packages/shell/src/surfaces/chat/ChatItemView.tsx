@@ -587,15 +587,15 @@ export const ToolRow = memo(
                 another agent, and the bulb is a thought's glyph: this row is a fork, not a thought */}
             <Icon name={run ? "spawn" : icon} className="tool-icon" />
             {name && <span className={cx("tool-name", running && "live-text")}>{name}</span>}
-            {/* while the input streams the hint slot holds the mark and the phrase, as the working
-                line does: an edit sits here for the whole replacement, and a mark alone for ten
-                seconds read as a stalled tool, which is what the phrase was written to answer. The
-                phrase does not shine; the mark beside it is the motion. */}
+            {/* while the input streams the hint slot holds the mark, and the phrase is its tip: on
+                the line it was replaced by the command a beat later, two lines of text for one
+                event, but an edit sits here for the whole replacement, and a mark alone for ten
+                seconds read as a stalled tool, so the phrase is there for whoever comes to ask.
+                It still names the row for the fold's label. */}
             {writing ? (
-              <>
+              <span className="tool-writing" data-tip={hint}>
                 <Spinner variant="squares" />
-                <span className="tool-hint">{hint}</span>
-              </>
+              </span>
             ) : (
               hint && <span className={cx("tool-hint", running && "live-text")}>{hint}</span>
             )}

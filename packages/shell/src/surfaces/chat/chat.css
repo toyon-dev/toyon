@@ -475,6 +475,11 @@
       flex: 0 1 auto;
       min-width: 0;
     }
+    /* the mark while a call's input streams, boxed so its tip has an anchor the size of the mark */
+    & .tool-writing {
+      display: inline-flex;
+      flex: 0 0 auto;
+    }
     /* a one-line thought on the row: prose, so it wears the message's face like a thought's body
      does, at the row's own tier; in the mono it read as a command that had not run */
     & .thought-line {

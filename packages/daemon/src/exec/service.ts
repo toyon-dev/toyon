@@ -191,9 +191,12 @@ export class ExecService {
   ): Promise<ExecResult> {
     // both pipes into one buffer in arrival order, which is as close to what a terminal would have
     // shown as two pipes allow; a separate stderr block would put the error under the output it
-    // interrupted
+    // interrupted. Each chunk also goes to the row as it arrives, so a hook's test run reads while
+    // it runs rather than all at once when it ends; a held start has no row to stream into, and
+    // its text rides in with the end when it failed
     let text = "";
     let truncated = false;
+    const live = !heldStart;
     const drain = async (stream: ReadableStream<Uint8Array> | number | undefined | null) => {
       if (!stream || typeof stream === "number") return;
       const decoder = new TextDecoder();
@@ -202,11 +205,11 @@ export class ExecService {
         const { done, value } = await reader.read();
         if (done) return;
         if (truncated) continue; // keep reading: a full pipe would block the command
-        text += decoder.decode(value, { stream: true });
-        if (text.length > OUTPUT_CAP) {
-          text = text.slice(0, OUTPUT_CAP);
-          truncated = true;
-        }
+        const chunk = decoder.decode(value, { stream: true });
+        const take = chunk.slice(0, OUTPUT_CAP - text.length);
+        text += take;
+        if (take.length < chunk.length) truncated = true;
+        if (live && take) agent.note({ type: "tool-delta", toolId, text: take });
       }
     };
     let exit: number | string | null = null;

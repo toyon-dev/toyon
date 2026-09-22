@@ -1103,8 +1103,10 @@ describe("handlers", () => {
       kind: "execute",
       input: { command: "printf hi; pwd -P" },
     });
-    await until(() => agent.recorded.length === 2);
-    const end = agent.recorded[1]!;
+    // what it prints streams in as deltas between the two rows, so wait for the end itself
+    const ends = () => agent.recorded.filter((e) => e.type === "tool-end");
+    await until(() => ends().length === 1);
+    const end = agent.recorded.at(-1)!;
     if (end.type !== "tool-end") throw new Error("expected a tool-end");
     expect(end.isError).toBe(false);
     // fenced, so the transcript draws it as a block; the cwd is the worktree
@@ -1112,8 +1114,8 @@ describe("handlers", () => {
     expect(end.toolId).toBe((agent.recorded[0] as { toolId: string }).toolId);
     // a failing command says so under its output rather than in the output
     await dispatch({ t: "exec", worktreeId: task.id, command: "echo nope >&2; exit 3" }, ctx, services);
-    await until(() => agent.recorded.length === 4);
-    expect(agent.recorded[3]).toMatchObject({ type: "tool-end", isError: true, output: "```\nnope\n```\nexit 3" });
+    await until(() => ends().length === 2);
+    expect(agent.recorded.at(-1)).toMatchObject({ type: "tool-end", isError: true, output: "```\nnope\n```\nexit 3" });
     await expect(dispatch({ t: "exec", worktreeId: "nope", command: "ls" }, ctx, services)).rejects.toBeInstanceOf(
       UserError,
     );
@@ -1130,8 +1132,10 @@ describe("handlers", () => {
     // let the shell get as far as the sleep, so the kill lands on a running command
     await Bun.sleep(300);
     await dispatch({ t: "exec-stop", worktreeId: task.id }, ctx, services);
-    await until(() => agent.recorded.length === 2);
-    const end = agent.recorded[1]!;
+    await until(() => agent.recorded.at(-1)?.type === "tool-end");
+    // "started" streamed in as a delta before the kill; the end carries it fenced
+    expect(agent.recorded.some((e) => e.type === "tool-delta" && e.text === "started\n")).toBe(true);
+    const end = agent.recorded.at(-1)!;
     if (end.type !== "tool-end") throw new Error("expected a tool-end");
     expect(end.isError).toBe(true);
     // zsh execs the last command of a -c string, so the signal can land on the sleep itself and

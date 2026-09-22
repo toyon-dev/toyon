@@ -139,14 +139,29 @@ describe("ExecService.exec", () => {
     expect(r.exit).toBe(3);
     expect(r.text).toContain("hi");
     expect(r.text).toContain("err");
-    expect(agent.recorded.map((e) => e.type)).toEqual(["tool-start", "tool-end"]);
+    // what it printed streams in between the two rows
+    expect(agent.recorded.map((e) => e.type).filter((t) => t !== "tool-delta")).toEqual(["tool-start", "tool-end"]);
     const start = agent.recorded[0];
     expect(start?.type === "tool-start" && start.name === SHELL_TOOL && start.input).toEqual({
       command: "echo hi; echo err 1>&2; exit 3",
     });
-    const end = agent.recorded[1];
+    const end = agent.recorded.at(-1);
     expect(end?.type === "tool-end" && end.isError).toBe(true);
     expect(end?.type === "tool-end" && end.output).toContain("exit 3");
+  });
+
+  test("what a command prints streams into its row as it goes, and the end replaces it", async () => {
+    const { exec, agent } = world();
+    const r = await exec.exec("w1", "echo one; sleep 0.05; echo two");
+    expect(r.exit).toBe(0);
+    const types = agent.recorded.map((e) => e.type);
+    expect(types[0]).toBe("tool-start");
+    expect(types.at(-1)).toBe("tool-end");
+    // the two lines are far enough apart to arrive as their own chunks
+    const deltas = agent.recorded.filter((e) => e.type === "tool-delta");
+    expect(deltas.length).toBeGreaterThanOrEqual(2);
+    expect(deltas.map((e) => (e.type === "tool-delta" ? e.text : "")).join("")).toBe("one\ntwo\n");
+    expect(agent.recorded.at(-1)).toMatchObject({ type: "tool-end", output: "```\none\ntwo\n```", isError: false });
   });
 
   test("a quiet run leaves no rows when it passes, and both when it fails", async () => {

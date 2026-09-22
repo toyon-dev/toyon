@@ -245,11 +245,29 @@ export interface OpenPr {
 }
 
 /** Push the branch to origin, tracking. Force with lease, since a branch already there was
- * rebased onto main since; the lease refuses when origin's copy moved under it. */
+ * rebased onto main since; the lease refuses when origin's copy moved under it.
+ *
+ * The lease is measured against `origin/<branch>` here, and that ref outlives the branch on
+ * GitHub: a merged PR deletes its head branch, nothing here fetches with --prune, and the next
+ * push from the same worktree is refused as "stale info" against a tip origin no longer has.
+ * When origin says the branch is gone, the ref is dropped and the push is a first push again;
+ * a branch that is there but moved keeps the refusal, since that is what the lease is for. */
 export async function pushBranch(worktreePath: string, branch: string): Promise<ShipResult> {
-  const push = await run(GIT, ["push", "-u", "--force-with-lease", "origin", branch], worktreePath, NO_PROMPT);
+  const args = ["push", "-u", "--force-with-lease", "origin", branch];
+  let push = await run(GIT, args, worktreePath, NO_PROMPT);
+  if (!push.ok && /stale info/.test(push.err) && (await goneFromOrigin(worktreePath, branch))) {
+    await git(worktreePath, "update-ref", "-d", `refs/remotes/origin/${branch}`);
+    push = await run(GIT, args, worktreePath, NO_PROMPT);
+  }
   if (!push.ok) return { ok: false, message: `push failed: ${push.err.slice(0, 300)}` };
   return { ok: true, message: `pushed ${branch}` };
+}
+
+/** origin answers and has no branch of that name; exit 2 is ls-remote's own "nothing matched",
+ * so an origin that cannot be reached (any other failure) reads as not gone */
+async function goneFromOrigin(worktreePath: string, branch: string): Promise<boolean> {
+  const r = await run(GIT, ["ls-remote", "--exit-code", "--heads", "origin", branch], worktreePath, NO_PROMPT);
+  return !r.ok && r.exit === 2;
 }
 
 /** Push the branch and open a PR through gh, or hand back the compare URL where gh is not

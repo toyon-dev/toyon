@@ -242,7 +242,15 @@ export function ChatLog({
               )
             ) : (
               <span>
-                {agents ? `${agents} ${agents === 1 ? "agent" : "agents"} working…` : "working…"}
+                {/* with no call open and nothing streaming, a silence this long is the model
+                    holding the turn: its thinking is summarized, and the summary lands only once
+                    the thought is done, so a long think is a hole in the log. Naming it says
+                    where the wait is, which "working" does not. */}
+                {agents
+                  ? `${agents} ${agents === 1 ? "agent" : "agents"} working…`
+                  : quiet >= QUIET_AFTER
+                    ? "thinking…"
+                    : "working…"}
                 {agents > 0 && (
                   <span className="working-num">
                     {fanout.calls} {fanout.calls === 1 ? "call" : "calls"}

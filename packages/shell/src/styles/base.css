@@ -24,6 +24,15 @@
        second, bluer answer over it reads as foreign */
     -webkit-tap-highlight-color: transparent;
   }
+  /* selected text sits on the picked seat, the tier the editor pane already selects in, so a
+     drag across the chat and one across a file read as the same act. The text is named too: the
+     platform highlight leaves the run in whatever tier it stood in, and a finished tool row's
+     skip tier under a wash of the system accent barely read. Ink, not text: the seat under a
+     selection is this one wherever the run started, so the tier does not ride with the row. */
+  ::selection {
+    background: var(--element1);
+    color: var(--ink0);
+  }
 
   /* Scrollbars are the platform's; color-scheme: dark on :root is what makes them dark. Do not style
    ::-webkit-scrollbar to theme them: matching any of those pseudo-elements swaps the platform

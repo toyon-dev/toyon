@@ -20,8 +20,10 @@ const LIFT: [string, string][] = [
 
 /** Rules that paint an element colour without being a seat. A control is not a seat: it carries no
  * passengers, and its own colours say its state (button.css says why it holds them still). Neither
- * is a drag handle, which carries nothing at all. */
+ * is a drag handle, which carries nothing at all, nor is the selection highlight: a pseudo-element
+ * over a run of text has no children for a redeclared tier to reach, so it names its ink itself. */
 const NOT_A_SEAT = [
+  "::selection",
   ".btn:hover",
   ".btn-icon:hover",
   "[data-touch] :is(.btn, .btn-icon):not(.btn-inline):active:not(:disabled)",

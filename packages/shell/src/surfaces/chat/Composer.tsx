@@ -532,6 +532,8 @@ export function Composer({
                     ships: true,
                   }
                 : null;
+  // the word's own press is out: its line says the step and shines for it
+  const landingNow = !!verb?.ships && op === "land";
   const blocked = landing ? landingLine(landing) : null;
   // the empty box's line, first match wins: what the box is for when it is not a worktree's, then
   // the next step on the work, then what the work is waiting on, then where the last turn left it,
@@ -1025,21 +1027,27 @@ export function Composer({
               control. */}
           {(subline || verb) && (
             <div className="composer-ghost" aria-hidden={verb ? undefined : "true"}>
-              <span className="composer-placeholder">
-                {verb ? (
+              <span className={cx("composer-placeholder", landingNow && "live-text")}>
+                {landingNow && verb ? (
+                  // the word's own press is out, so the line is prose and not a control: "land:
+                  // committing", shining as one sentence. One span, because the band is a gradient
+                  // clipped to the element's own text and a button inside it paints as a box of
+                  // its own, so the word would go dark under a band on its parent, and a band per
+                  // span is two lit spots on one line. The step names the wait; no dots after it.
+                  `${verb.word}: ${step ?? verb.line}`
+                ) : verb ? (
                   <>
                     <Button
                       variant="inline"
                       tone="strong"
                       className="composer-verb"
-                      busy={!!verb.ships && op === "land"}
-                      disabled={!!verb.ships && !!op && op !== "land"}
+                      disabled={!!verb.ships && !!op}
                       {...tip(verb.tip, undefined, { placement: "top" })}
                       onClick={verb.run}
                     >
                       {verb.word}
                     </Button>
-                    {`: ${verb.ships && op === "land" && step ? `${step}…` : verb.line}`}
+                    {`: ${verb.line}`}
                   </>
                 ) : (
                   placeholderText

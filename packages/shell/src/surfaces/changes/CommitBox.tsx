@@ -134,7 +134,8 @@ export function CommitBox({
               <Icon name="check" className="icon-inline" /> landed
             </span>
           )}
-          {step && <span>{step}…</span>}
+          {/* the step shines the way a running call's hint does; the word is the wait, so no dots */}
+          {step && <span className="live-text">{step}</span>}
         </span>
         <span className="commit-acts">
           {owned && dirty && (

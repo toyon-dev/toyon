@@ -66,11 +66,12 @@ function openChatLink(
     return;
   }
   // a message names a file because the agent touched it, so the view is left unsaid and the read
-  // opens the diff when there is one, the file otherwise. A line is an address into the file.
+  // opens the diff when there is one, the file otherwise. A line is an address into whichever it
+  // opens: the diff never folds around a line it is asked to show, so the line is in view either way.
   openFile(deps, {
     worktreeId,
     path: target.path,
-    ...(target.line ? { view: "file", line: { n: target.line } } : {}),
+    ...(target.line ? { line: { n: target.line } } : {}),
   });
 }
 

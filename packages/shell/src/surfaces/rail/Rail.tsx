@@ -293,14 +293,17 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
     </button>
   );
 
-  /* The count columns are reserved list-wide, so a row with no dirty files still leaves the dirty
-   * column empty and every number sits under the one above it. A column nobody uses is not drawn,
-   * and the name takes its width. */
+  /* The count columns are reserved list-wide, so every number sits under the one above it. A column
+   * nobody uses is not drawn, and the name takes its width. */
   const all = [...worktrees, ...discovered].map(countsOf);
-  const cols = {
-    dirty: all.some((w) => (w.dirty ?? 0) > 0),
-    behind: all.some((w) => (w.behind ?? 0) > 0),
-    ahead: all.some((w) => (w.ahead ?? 0) > 0),
+  const kinds = (["dirty", "behind", "ahead"] as const).filter((k) => all.some((w) => (w[k] ?? 0) > 0));
+  /** The columns a row draws. The name is the one item that stretches, so what follows it is
+   * anchored to the far edge: a trailing empty column is what keeps a row's number under the one
+   * above, and an empty column between the name and the row's first number holds nothing in place.
+   * That one is not drawn, so a long name runs on into it instead of stopping short of a blank. */
+  const drawn = (counts: ReturnType<typeof countsOf>) => {
+    const first = kinds.findIndex((k) => (counts[k] ?? 0) > 0);
+    return new Set(first < 0 ? [] : kinds.slice(first));
   };
 
   /** One row for both sections. Ownership decides what the row can do, not what it looks like: a
@@ -315,6 +318,7 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
     const owned = isOwned(w) ? w : null;
     const onLead = !!owned && isLead(owned.worktree);
     const counts = countsOf(w);
+    const cols = drawn(counts);
     const id = w.id;
     const menuOpen = menu?.owner === "rail" && menu.key === id;
     const showCheck = owned && graftMode && canGraft(owned.worktree) && id !== activeId;
@@ -482,7 +486,7 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
             nearly always in the hundreds, so as a number it only says "stale", and it says that
             from the quiet tier. The columns say which count is which, so no glyph does. */}
         <span className="rail-counts">
-          {cols.dirty && (
+          {cols.has("dirty") && (
             <span
               className="rail-count badge-dirty"
               data-tip={counts.dirty ? `${counts.dirty} uncommitted${onLead ? " on main" : ""}` : undefined}
@@ -490,7 +494,7 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
               {counts.dirty ? `~${count(counts.dirty)}` : ""}
             </span>
           )}
-          {cols.behind && (
+          {cols.has("behind") && (
             <span
               className="rail-count rail-behind row-dim"
               data-tip={counts.behind ? `${counts.behind} behind ${onLead ? "origin" : "main"}` : undefined}
@@ -498,7 +502,7 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
               {counts.behind ? count(counts.behind) : ""}
             </span>
           )}
-          {cols.ahead && (
+          {cols.has("ahead") && (
             <span
               className="rail-count badge-ahead"
               data-tip={counts.ahead ? `${counts.ahead} ahead of main` : undefined}

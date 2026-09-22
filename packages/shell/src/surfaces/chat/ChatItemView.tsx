@@ -10,7 +10,7 @@ import { type ChatItem, worktreeById } from "../../state/store.ts";
 import { Button } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { Field } from "../../ui/Field.tsx";
-import { useOnChange, useReveal, useTail } from "../../ui/hooks.ts";
+import { useLiveHtml, useOnChange, useReveal, useTail } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { grouped, type MenuEntry, useContextMenu } from "../../ui/menu.ts";
 import { rowState } from "../../ui/rowState.ts";
@@ -95,15 +95,18 @@ function Markdown({
   const sock = useSock();
   const dispatch = useDispatch();
   const cm = useContextMenu("chat");
+  // the DOMPurify-sanitized markup goes in through the hook, which keeps a selection through the
+  // re-renders of a message still streaming
+  const body = useRef<HTMLDivElement>(null);
+  useLiveHtml(body, html);
   return (
     // biome-ignore lint/a11y/useKeyWithClickEvents: the links inside are the controls; the root only routes their clicks
     <div
+      ref={body}
       className="msg-assistant md row-edge"
       data-state={rowState({ cursor: marked })}
       {...cm.contextMenu((_from, target) => menu(chatLink(target, fileRoot)))}
       onClick={(e) => openChatLink(e, fileRoot, worktreeId, { sock, dispatch })}
-      // biome-ignore lint/security/noDangerouslySetInnerHtml: html is DOMPurify-sanitized markdown output
-      dangerouslySetInnerHTML={{ __html: html }}
     />
   );
 }
@@ -382,6 +385,9 @@ export const ThoughtRow = memo(function ThoughtRow({
   // so it costs nothing on the closed rows of an old turn.
   const body = useRef<HTMLDivElement>(null);
   useTail(body);
+  // the DOMPurify-sanitized markup goes in through the hook, which keeps a selection through the
+  // re-renders of a thought still streaming
+  useLiveHtml(body, html);
   // A folded row keeps its body's scroll (the browser hides the contents rather than dropping
   // them), so a finished thought opened later to be read would open where the tail left it, on
   // its last line. A thought at rest is read from the start; one still streaming opens tailed.
@@ -437,8 +443,6 @@ export const ThoughtRow = memo(function ThoughtRow({
           ref={body}
           className="tool-out thought-out md"
           onClick={(e) => openChatLink(e, fileRoot, worktreeId, { sock, dispatch })}
-          // biome-ignore lint/security/noDangerouslySetInnerHtml: html is DOMPurify-sanitized markdown output
-          dangerouslySetInnerHTML={{ __html: html }}
         />
       </div>
     </Fold>

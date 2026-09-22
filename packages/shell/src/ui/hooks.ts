@@ -210,6 +210,56 @@ export function useTail(
   return { away, pinned: () => pinned.current, jump, read };
 }
 
+/** where a selection end sits inside `el`, as a count of the text before it */
+function textOffsetIn(el: HTMLElement, node: Node, offset: number): number {
+  const range = document.createRange();
+  range.selectNodeContents(el);
+  range.setEnd(node, offset);
+  return range.toString().length;
+}
+
+/** the text node and offset `at` characters into `el`, clamped to its end */
+function textPointIn(el: HTMLElement, at: number): [Node, number] {
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  let seen = 0;
+  let last: Text | null = null;
+  for (let t = walker.nextNode() as Text | null; t; t = walker.nextNode() as Text | null) {
+    if (seen + t.data.length >= at) return [t, at - seen];
+    seen += t.data.length;
+    last = t;
+  }
+  return last ? [last, last.data.length] : [el, 0];
+}
+
+/** Keep `el.innerHTML` at `html`, carrying the selection across each swap. Replacing the markup
+ * drops every node under `el`, and a selection end that sat in one collapses to a point before
+ * them, so a drag through a message still streaming restarted from its first character with every
+ * markdown tick, and a selection made in it vanished on the next. The ends inside `el` are held
+ * as counts of the text before them and put back on the new nodes: a stream appends, so the text
+ * before a point is the same text after the swap. React's own `dangerouslySetInnerHTML` gives no
+ * turn between the old nodes going and the new ones landing, so the swap is done here. */
+export function useLiveHtml(ref: RefObject<HTMLElement | null>, html: string) {
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const sel = window.getSelection();
+    const inside = (n: Node | null): n is Node => !!n && el.contains(n);
+    const anchor =
+      sel && sel.rangeCount > 0 && inside(sel.anchorNode) ? textOffsetIn(el, sel.anchorNode, sel.anchorOffset) : null;
+    const focus =
+      sel && sel.rangeCount > 0 && inside(sel.focusNode) ? textOffsetIn(el, sel.focusNode, sel.focusOffset) : null;
+    const held =
+      sel && (anchor !== null || focus !== null)
+        ? ([sel.anchorNode, sel.anchorOffset, sel.focusNode, sel.focusOffset] as const)
+        : null;
+    el.innerHTML = html;
+    if (!sel || !held) return;
+    const [a, ao] = anchor === null ? [held[0], held[1]] : textPointIn(el, anchor);
+    const [f, fo] = focus === null ? [held[2], held[3]] : textPointIn(el, focus);
+    if (a && f) sel.setBaseAndExtent(a, ao, f, fo);
+  }, [ref, html]);
+}
+
 /** Run `fn` when `deps` change (and once on mount), reading whatever is current at that moment.
  * An effect keyed on the signal it answers, which the exhaustive-dependencies rule cannot express:
  * listing everything the body reads would run it on updates it does not answer to. The commit box

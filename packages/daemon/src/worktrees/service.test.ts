@@ -1548,6 +1548,84 @@ describe("landing", () => {
     expect((await git(wt.path, "status", "--porcelain")).out).toBe("");
   });
 
+  /** a bare origin with main on it, and a second clone as the hands GitHub and other people are */
+  const withOrigin = (repoId: string) => {
+    const origin = join(w.repo, "..", "origin.git");
+    sh(w.repo, "git", "init", "-q", "--bare", "-b", "main", origin);
+    sh(w.repo, "git", "remote", "add", "origin", origin);
+    sh(w.repo, "git", "push", "-q", "-u", "origin", "main");
+    w.state.requireRepo(repoId).config.land = { route: "pr" };
+    const other = join(w.repo, "..", "other");
+    sh(w.repo, "git", "clone", "-q", origin, other);
+    sh(other, "git", "config", "user.email", "o@o");
+    sh(other, "git", "config", "user.name", "o");
+    return { origin, other };
+  };
+  /** GitHub squash-merges the branch onto origin's main; main here is not pulled */
+  const squashedOnOrigin = (other: string, from: string, branch: string) => {
+    sh(other, "git", "fetch", "-q", from, branch);
+    sh(other, "git", "merge", "-q", "--squash", "FETCH_HEAD");
+    sh(other, "git", "commit", "-q", "-m", "add feature (#1)");
+    sh(other, "git", "push", "-q", "origin", "main");
+  };
+
+  test("the pr route measures the branch against origin's main: a commit merged there is landed, not opened again", async () => {
+    const repoId = await registered();
+    const { origin, other } = withOrigin(repoId);
+    const wt = await w.worktrees.create(repoId, "feature");
+    writeFileSync(join(wt.path, "feature.txt"), "x\n");
+    sh(wt.path, "git", "add", "-A");
+    sh(wt.path, "git", "commit", "-q", "-m", "add feature");
+    const tip = (await git(wt.path, "rev-parse", "HEAD")).out;
+    // someone else's commit went in first, then the squash; main here still trails both
+    sh(other, "git", "commit", "-q", "--allow-empty", "-m", "elsewhere");
+    squashedOnOrigin(other, wt.path, wt.branch);
+    const before = (await git(w.repo, "rev-parse", "main")).out;
+    const { result } = await w.worktrees.land(wt.id);
+    expect(result.ok).toBe(true);
+    expect(result.message).toContain("origin's main has this work already");
+    // main here followed origin, the branch restarted from it, the landing is on the record, and
+    // nothing went up: no branch on origin, so no PR could have been opened on it
+    const main = (await git(w.repo, "rev-parse", "main")).out;
+    expect(main).toBe((await git(origin, "rev-parse", "main")).out);
+    expect((await git(wt.path, "rev-parse", "HEAD")).out).toBe(main);
+    expect(w.state.worktree(wt.id)).toMatchObject({ landed: true });
+    expect(w.state.worktree(wt.id)?.lands).toEqual([{ base: before, tip, at: expect.any(Number) }]);
+    expect((await git(origin, "branch", "--list", wt.branch)).out).toBe("");
+  });
+
+  test("a PR merged while main here could not follow lands on the next press, never as a second PR", async () => {
+    const repoId = await registered();
+    const { origin, other } = withOrigin(repoId);
+    const wt = await w.worktrees.create(repoId, "feature");
+    writeFileSync(join(wt.path, "feature.txt"), "x\n");
+    sh(wt.path, "git", "add", "-A");
+    sh(wt.path, "git", "commit", "-q", "-m", "add feature");
+    sh(wt.path, "git", "push", "-q", "-u", "origin", wt.branch);
+    const tip = (await git(wt.path, "rev-parse", "HEAD")).out;
+    w.worktrees.setPr(wt.id, { number: 7, url: "https://x/pull/7", state: "open", at: 1 });
+    squashedOnOrigin(other, origin, wt.branch);
+    // GitHub's answer comes while an edit on main stands in the fast-forward's way
+    writeFileSync(join(w.repo, "README.md"), "edited on main\n");
+    w.worktrees.setPr(wt.id, { number: 7, url: "https://x/pull/7", state: "merged", at: 2 });
+    const refused = await w.worktrees.prMerged(wt.id);
+    expect(refused.ok).toBe(false);
+    expect(w.state.worktree(wt.id)?.landed).toBeFalsy();
+    // the press is the retry, and says what is in the way; the branch on origin is untouched
+    const again = await w.worktrees.land(wt.id);
+    expect(again.result.ok).toBe(false);
+    expect(again.result.message).toMatch(/^PR #7 merged, but .*uncommitted changes/);
+    expect((await git(origin, "rev-parse", wt.branch)).out).toBe(tip);
+    sh(w.repo, "git", "checkout", "-q", "--", "README.md");
+    const landed = await w.worktrees.land(wt.id);
+    expect(landed.result.ok).toBe(true);
+    expect(landed.result.message).toContain("pulled");
+    const main = (await git(w.repo, "rev-parse", "main")).out;
+    expect(main).toBe((await git(origin, "rev-parse", "main")).out);
+    expect((await git(wt.path, "rev-parse", "HEAD")).out).toBe(main);
+    expect(w.state.worktree(wt.id)).toMatchObject({ landed: true, pr: { number: 7, state: "merged" } });
+  });
+
   test("with a PR open, land pushes the work the PR is missing rather than merging under it", async () => {
     const repoId = await registered();
     const origin = join(w.repo, "..", "origin.git");

@@ -290,10 +290,35 @@ async function mergeFailure(cwd: string, m: StepResult, conflictMessage: string)
   };
 }
 
+/** What a PR lands on, fetched: origin's copy of main, not the checkout here. Nobody pulls main
+ * here on the PR route, so it can trail origin by days, and a branch rebased onto it keeps a
+ * commit origin's main already took through a merge on GitHub; rebased onto the upstream instead,
+ * git drops that commit as already applied, and the press reads as nothing to ship rather than a
+ * second PR of the same change. Main with no upstream is its own base, as before. */
+export async function fetchTrunk(
+  worktreePath: string,
+  defaultBr: string,
+  w: LandWatch = UNWATCHED,
+): Promise<ShipResult & { base: string }> {
+  const [remote, up] = await Promise.all([
+    git(worktreePath, "config", "--get", `branch.${defaultBr}.remote`),
+    git(worktreePath, "rev-parse", "--abbrev-ref", `${defaultBr}@{upstream}`),
+  ]);
+  if (!remote.ok || !remote.out || !up.ok || !up.out) {
+    return { ok: true, base: defaultBr, message: `${defaultBr} has no upstream` };
+  }
+  w.step(`fetching ${up.out}`);
+  const f = await w.git(worktreePath, ["fetch", "--quiet", remote.out, defaultBr]);
+  if (!f.ok) return { ok: false, base: up.out, message: refused("fetch failed", f) };
+  return { ok: true, base: up.out, message: `fetched ${up.out}` };
+}
+
 export interface OpenPr {
   worktreePath: string;
   branch: string;
   defaultBr: string;
+  /** what the branch is counted against: main's fetched upstream (fetchTrunk), else main here */
+  base?: string;
   /** the PR's title and body: the suggested commit message when there is one */
   subject?: string;
   body?: string;
@@ -335,8 +360,9 @@ async function goneFromOrigin(worktreePath: string, branch: string): Promise<boo
 export async function openPr(o: OpenPr, w: LandWatch = UNWATCHED): Promise<ShipResult> {
   const cErr = await requireClean(o.worktreePath);
   if (cErr) return cErr;
-  const { ahead } = await aheadBehind(o.worktreePath, o.defaultBr);
-  if (ahead === 0) return { ok: false, message: `nothing to ship: no commits ahead of ${o.defaultBr}` };
+  const base = o.base ?? o.defaultBr;
+  const { ahead } = await aheadBehind(o.worktreePath, base);
+  if (ahead === 0) return { ok: false, message: `nothing to ship: no commits ahead of ${base}` };
   const remote = await git(o.worktreePath, "remote", "get-url", "origin");
   if (!remote.ok) return { ok: false, message: "no 'origin' remote: add one, or land by merging here" };
 

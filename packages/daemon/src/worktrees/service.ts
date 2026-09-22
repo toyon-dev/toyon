@@ -62,6 +62,7 @@ import { GIT, git, gitOrThrow, isGitRepo, NO_PROMPT, run } from "../git/exec.ts"
 import {
   commitWorktree,
   fastForwardMain,
+  fetchTrunk,
   type LandWatch,
   landLocally,
   mergePr,
@@ -1462,6 +1463,17 @@ export class WorktreeService {
       : undefined;
 
     if (policy.land === "pr") {
+      // GitHub merged the PR and main here could not follow at the time (on another branch,
+      // dirty, a fetch refused): the press is that retry, never a second PR of the same commit
+      if (wt.pr?.state === "merged" && !wt.landed) {
+        const r = await this.prMerged(wt.id, undefined, w);
+        return { result: r.ok ? r : { ...r, message: `PR #${wt.pr.number} merged, but ${r.message}` } };
+      }
+      // the branch is measured against origin's main, fetched now: main here is not pulled on
+      // this route and can trail origin by days
+      const trunk = await fetchTrunk(wt.path, repo.defaultBranch, w);
+      if (!trunk.ok) return { result: trunk };
+      const base = trunk.base;
       // nothing here touches the main checkout, and gh holds the network for seconds: outside the lock
       if (wt.pr?.state === "open") {
         // work since the PR opened goes to the PR, never under it: a merge now would take the
@@ -1471,7 +1483,7 @@ export class WorktreeService {
         if (!missing) return { result: await mergePr(wt.path, wt.pr.number, policy.merge, w) };
         const committed = await this.commitIfDirty(wt, message);
         if (committed && !committed.ok) return { result: committed };
-        const taken = await takeMainIn(wt.path, repo.defaultBranch, own, w);
+        const taken = await takeMainIn(wt.path, base, own, w);
         if (!taken.ok) return { result: taken };
         this.headMoved(wt.id);
         const pushed = await pushBranch(wt.path, wt.branch, w);
@@ -1483,14 +1495,24 @@ export class WorktreeService {
       }
       const committed = await this.commitIfDirty(wt, message);
       if (committed && !committed.ok) return { result: committed };
-      const taken = await takeMainIn(wt.path, repo.defaultBranch, own, w);
+      // read before the rebase: what the branch carried, in case the rebase finds it all on origin
+      const mark = await landingMark(wt.path, repo.defaultBranch);
+      const taken = await takeMainIn(wt.path, base, own, w);
       if (!taken.ok) return { result: taken };
       this.headMoved(wt.id);
+      // the rebase dropped every commit: origin's main holds this work already, through a PR
+      // merged where toyon did not see it. The row lands the way a merged PR lands it.
+      if ((await aheadBehind(wt.path, base)).ahead === 0) {
+        const r = await this.prMerged(wt.id, mark, w);
+        const on = `origin's ${repo.defaultBranch} has this work already`;
+        return { result: { ...r, message: r.ok ? `${on}; ${r.message}` : `${on}, but ${r.message}` } };
+      }
       const result = await openPr(
         {
           worktreePath: wt.path,
           branch: wt.branch,
           defaultBr: repo.defaultBranch,
+          base,
           subject: wt.landing?.subject,
           body: wt.landing?.body,
           automerge: policy.automerge,
@@ -1579,12 +1601,14 @@ export class WorktreeService {
 
   /** GitHub merged the worktree's PR: main here takes it, the branch restarts from main, and the
    * row is landed. A main that cannot fast-forward (edits in its way, or commits of its own) is
-   * left, and the box says so; main's own pull is the way through. */
-  async prMerged(worktreeId: string): Promise<ShipResult> {
+   * left, and the box says so; the land press tries again, as does main's own pull. `carried` is
+   * the range the branch held before a rebase onto origin dropped it, when the press found the
+   * work on origin already; read here otherwise. The poll runs unwatched; a press names its step. */
+  async prMerged(worktreeId: string, carried?: LandingRange | null, w: LandWatch = UNWATCHED): Promise<ShipResult> {
     const { wt, repo } = this.d.state.requireWorktreeWithRepo(worktreeId);
     const result = await withRepoLock(repo.path, async () => {
-      const mark = await landingMark(wt.path, repo.defaultBranch);
-      const pulled = await fastForwardMain(repo.path, repo.defaultBranch);
+      const mark = carried === undefined ? await landingMark(wt.path, repo.defaultBranch) : carried;
+      const pulled = await fastForwardMain(repo.path, repo.defaultBranch, w);
       if (!pulled.ok) return pulled;
       await this.noteLand(repo, wt, mark);
       await this.restartFromMain(wt, repo.defaultBranch);

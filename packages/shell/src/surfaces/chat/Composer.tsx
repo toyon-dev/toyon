@@ -475,53 +475,63 @@ export function Composer({
           tip: archiveTip,
           run: () => archiveWorktrees(sock, dispatch, [id]),
         }
-      : pr?.state === "open" && !prMissing
-        ? prCanMerge(pr)
-          ? {
-              word: "merge",
-              line: verbLine(said ?? prLine(pr)),
-              tip: `${prLine(pr)} Merge the PR now, by the method the repo allows.`,
-              run: land,
-              ships: true,
-            }
-          : {
-              word: "view",
-              line: verbLine(said ?? prLine(pr)),
-              tip: `${prLine(pr)} Open the PR on GitHub.`,
-              run: () => window.open(pr.url, "_blank"),
-            }
-        : pr?.state === "closed"
-          ? {
-              word: "archive",
-              line: prLine(pr),
-              tip: `${prLine(pr)} ${archiveTip}`,
-              run: () => archiveWorktrees(sock, dispatch, [id]),
-            }
-          : checkable
+      : pr?.state === "merged"
+        ? // GitHub took the PR and main here could not follow: the only word is the pull, never
+          // land, which would open the same commit as a second PR
+          {
+            word: "pull",
+            line: prLine(pr),
+            tip: `${prLine(pr)} Pull ${repo?.defaultBranch ?? "main"} here to take the merge; the row lands then.`,
+            run: land,
+            ships: true,
+          }
+        : pr?.state === "open" && !prMissing
+          ? prCanMerge(pr)
             ? {
-                word: "check",
-                line: verdict?.subject ?? verbLine(said ?? filesLine(landCount)),
-                tip: verdict?.stale
-                  ? `The work changed since this was written. ${hasCheck ? "Run the check again and refresh" : "Refresh"} the message.`
-                  : `${hasCheck ? "Run the repo's check here, then write" : "Write"} the recap and the commit message.`,
-                run: judge,
+                word: "merge",
+                line: verbLine(said ?? prLine(pr)),
+                tip: `${prLine(pr)} Merge the PR now, by the method the repo allows.`,
+                run: land,
+                ships: true,
               }
-            : landing?.ready && !landingLine(landing)
+            : {
+                word: "view",
+                line: verbLine(said ?? prLine(pr)),
+                tip: `${prLine(pr)} Open the PR on GitHub.`,
+                run: () => window.open(pr.url, "_blank"),
+              }
+          : pr?.state === "closed"
+            ? {
+                word: "archive",
+                line: prLine(pr),
+                tip: `${prLine(pr)} ${archiveTip}`,
+                run: () => archiveWorktrees(sock, dispatch, [id]),
+              }
+            : checkable
               ? {
-                  word: shipWord,
-                  line: landing.subject ?? verbLine(said ?? (landFacts(landing, landCount) || "ready")),
-                  tip: [
-                    landFacts(landing, landCount),
-                    behindFact(repo?.defaultBranch ?? "main", active?.behind),
-                    shipHow,
-                    landing.subject ? "Tab edits the message first." : "",
-                  ]
-                    .filter(Boolean)
-                    .join(" "),
-                  run: land,
-                  ships: true,
+                  word: "check",
+                  line: verdict?.subject ?? verbLine(said ?? filesLine(landCount)),
+                  tip: verdict?.stale
+                    ? `The work changed since this was written. ${hasCheck ? "Run the check again and refresh" : "Refresh"} the message.`
+                    : `${hasCheck ? "Run the repo's check here, then write" : "Write"} the recap and the commit message.`,
+                  run: judge,
                 }
-              : null;
+              : landing?.ready && !landingLine(landing)
+                ? {
+                    word: shipWord,
+                    line: landing.subject ?? verbLine(said ?? (landFacts(landing, landCount) || "ready")),
+                    tip: [
+                      landFacts(landing, landCount),
+                      behindFact(repo?.defaultBranch ?? "main", active?.behind),
+                      shipHow,
+                      landing.subject ? "Tab edits the message first." : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" "),
+                    run: land,
+                    ships: true,
+                  }
+                : null;
   const blocked = landing ? landingLine(landing) : null;
   // the empty box's line, first match wins: what the box is for when it is not a worktree's, then
   // the next step on the work, then what the work is waiting on, then where the last turn left it,

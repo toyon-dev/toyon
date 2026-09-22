@@ -510,8 +510,9 @@ export interface State {
    * nothing to commit) that are not errors to roll back from. So the row shows it working and
    * the shipped frame says what happened. That frame retires the worktree's entry, an error
    * frame (which carries no id) retires all of them, a snapshot without the worktree retires it
-   * (a merge can end in a remove), and a hello starts clean. */
-  shipping: Record<string, ShipOp>;
+   * (a merge can end in a remove), and a hello starts clean. `step` is the daemon's word on what
+   * the op is doing now (committing, rebasing, pushing), so the wait says something. */
+  shipping: Record<string, Shipping>;
   /** the active repo's rows toyon did not create, materialised here for the same reason as
    * `visible` */
   visibleDiscovered: WorktreeStatus[];
@@ -976,9 +977,15 @@ function landingIn(s: State, repoId: string | null, rows = s.rows): string | nul
 /** the client messages that end in a `shipped` frame: the daemon's word for them */
 export type ShipOp = "sync-main" | "commit" | "pull-main" | "land";
 
+/** a landing op this tab sent and the step the daemon says it is on */
+export interface Shipping {
+  op: ShipOp;
+  step?: string;
+}
+
 /** `shipping` minus the entries `done` says are over, the same object when none are, so a
  * selector on it stays stable across the proc events that push most snapshots */
-function retireShipping(shipping: Record<string, ShipOp>, done: (id: string) => boolean): Record<string, ShipOp> {
+function retireShipping(shipping: Record<string, Shipping>, done: (id: string) => boolean): Record<string, Shipping> {
   const entries = Object.entries(shipping);
   const keep = entries.filter(([id]) => !done(id));
   if (keep.length === entries.length) return shipping;
@@ -1373,7 +1380,7 @@ function reduce(s: State, action: Action): State {
       // any row: a found worktree can be synced, and its dot shows the op the same way; and a
       // trunk, whose pull is pressed under the lead's box
       if (s.shipping[action.id] || !(rowById(s, action.id) || isTrunk(s, action.id))) return s;
-      return { ...s, shipping: { ...s.shipping, [action.id]: action.op } };
+      return { ...s, shipping: { ...s.shipping, [action.id]: { op: action.op } } };
     }
     case "activate-repo": {
       if (!repoById(s, action.id)) return s;
@@ -1759,7 +1766,7 @@ function isTrunk(s: Pick<State, "trunks">, id: string): boolean {
 }
 
 /** `shipping` less the ops whose target the daemon no longer lists, a row or a trunk */
-function retireGone(s: State, rows: WorktreeStatus[], trunks: State["trunks"]): Record<string, ShipOp> {
+function retireGone(s: State, rows: WorktreeStatus[], trunks: State["trunks"]): Record<string, Shipping> {
   return retireShipping(s.shipping, (id) => !rows.some((w) => w.id === id) && !isTrunk({ trunks }, id));
 }
 
@@ -2065,6 +2072,12 @@ function onServer(s: State, msg: StoreServerMsg): State {
       const e = next.editor;
       if (!e?.line?.fiber || e.worktreeId !== msg.worktreeId || e.path !== msg.path) return next;
       return { ...next, editor: { ...e, line: placeLine(next, e.worktreeId, e.path, e.line) } };
+    }
+    case "shipping": {
+      // the step reaches every subscriber; only the tab whose press is out has an op to put it on
+      const cur = s.shipping[msg.worktreeId];
+      if (!cur || cur.step === msg.step) return s;
+      return { ...s, shipping: { ...s.shipping, [msg.worktreeId]: { ...cur, step: msg.step } } };
     }
     case "shipped": {
       const id = msg.worktreeId;

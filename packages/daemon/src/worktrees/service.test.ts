@@ -61,7 +61,7 @@ function world() {
       await naming.gate;
       return naming.reply;
     },
-    record: (id, command, text, exit) => exec.record(id, command, text, exit),
+    watch: (id, command, run) => exec.watch(id, command, run),
   });
   const turns = new TurnService({ state, hub, transcript: (id) => runtime.agentFor(id)?.transcript() ?? [] });
   const repos = new RepoRegistry({ state, hub, runtime, worktrees, ...noSelf(state, hub) });
@@ -1371,11 +1371,12 @@ describe("landing", () => {
 
   /** a pre-commit hook for the repo that prints its complaint and refuses; repo-local hooksPath so
    * a global one on this machine does not stand in for it */
-  const refusingHook = (lines: string[]) => {
-    const hooks = join(w.repo, ".toyon-test-hooks");
+  const refusingHook = (lines: string[], hook = "pre-commit") => {
+    // beside the checkout, not in it: an untracked hooks folder would dirty main and stop a landing
+    const hooks = join(w.repo, "..", "hooks");
     mkdirSync(hooks, { recursive: true });
     const body = lines.map((l) => `echo ${JSON.stringify(l)}`).join("\n");
-    writeFileSync(join(hooks, "pre-commit"), `#!/bin/sh\n${body}\necho "and on stderr" 1>&2\nexit 1\n`, {
+    writeFileSync(join(hooks, hook), `#!/bin/sh\n${body}\necho "and on stderr" 1>&2\nexit 1\n`, {
       mode: 0o755,
     });
     sh(w.repo, "git", "config", "core.hooksPath", hooks);
@@ -1406,6 +1407,51 @@ describe("landing", () => {
     expect(landed.result.ok).toBe(false);
     expect(recorded(wt.id).map((e) => e.type)).toEqual(["tool-start", "tool-end", "tool-start", "tool-end"]);
     expect(existsSync(join(w.repo, "feature.txt"))).toBe(false);
+  });
+
+  test("a push a pre-push hook refuses goes on the transcript whole, named for the checkout it ran in", async () => {
+    const repoId = await registered();
+    const origin = join(w.repo, "..", "origin.git");
+    sh(w.repo, "git", "init", "-q", "--bare", "-b", "main", origin);
+    sh(w.repo, "git", "remote", "add", "origin", origin);
+    sh(w.repo, "git", "push", "-q", "-u", "origin", "main");
+    w.state.requireRepo(repoId).config.land = { route: "push" };
+    refusingHook(["tests: 1 failed"], "pre-push");
+    const wt = await w.worktrees.create(repoId, "feature");
+    writeFileSync(join(wt.path, "feature.txt"), "x\n");
+    const { result } = await w.worktrees.land(wt.id, "add feature");
+    expect(result.ok).toBe(false);
+    expect(result.message).toBe(
+      "merged into main here, but push failed: what git and its hooks printed is on the chat",
+    );
+    const rows = recorded(wt.id);
+    expect(rows.map((e) => e.type)).toEqual(["tool-start", "tool-end"]);
+    const start = rows[0];
+    expect(start?.type === "tool-start" && start.input).toEqual({
+      command: `git -C ${w.state.requireRepo(repoId).path} push origin main`,
+    });
+    const end = rows[1];
+    expect(end?.type === "tool-end" && end.isError).toBe(true);
+    expect(end?.type === "tool-end" && end.output).toContain("tests: 1 failed\nand on stderr\n");
+    expect(end?.type === "tool-end" && end.output).toContain("exit 1");
+    // the landing here stood; origin has nothing of it
+    expect(w.state.worktree(wt.id)?.landed).toBe(true);
+    expect((await git(origin, "log", "-1", "--format=%s", "main")).out).toBe("init");
+  });
+
+  test("the press names each step as it starts", async () => {
+    const repoId = await registered();
+    const wt = await w.worktrees.create(repoId, "feature");
+    const steps: string[] = [];
+    w.hub.on("shipping", (id, step) => {
+      if (id === wt.id) steps.push(step);
+    });
+    writeFileSync(join(wt.path, "feature.txt"), "x\n");
+    sh(w.repo, "git", "commit", "-q", "--allow-empty", "-m", "main moved");
+    expect((await w.worktrees.land(wt.id, "add feature")).result.ok).toBe(true);
+    expect(steps).toEqual(["committing", "rebasing onto main", "merging into main"]);
+    // steps that passed at once left no rows behind
+    expect(recorded(wt.id)).toEqual([]);
   });
 
   test("a branch behind main is rebased first, so the landing carries no merge of main", async () => {

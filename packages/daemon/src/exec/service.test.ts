@@ -16,7 +16,7 @@ import { ExecService } from "./service.ts";
 const home = mkdtempSync(join(tmpdir(), "toyon-exec-"));
 afterAll(() => rmSync(home, { recursive: true, force: true }));
 
-function world() {
+function world(liveAfterMs?: number) {
   const dir = mkdtempSync(join(home, "wt-"));
   const paths = makePaths(mkdtempSync(join(home, "h-")));
   ensureDirs(paths);
@@ -39,15 +39,36 @@ function world() {
     hold: (_id: string, tag: string) => holds.push(`+${tag}`),
     release: (_id: string, tag: string) => holds.push(`-${tag}`),
   };
-  const exec = new ExecService({ state, runtime: runtime as unknown as RuntimeRegistry });
+  const exec = new ExecService({ state, runtime: runtime as unknown as RuntimeRegistry, liveAfterMs });
   return { exec, agent, dir, holds };
 }
 
-describe("ExecService.record", () => {
-  test("a command the daemon ran leaves the same two rows, fenced, with its exit", () => {
+describe("ExecService.watch", () => {
+  /** a step that prints its lines, waits, and ends the way the runner says */
+  const step =
+    (lines: string[], exit: number | string, waitMs = 0) =>
+    async (onText: (t: string) => void) => {
+      let text = "";
+      for (const line of lines) {
+        onText(`${line}\n`);
+        text += `${line}\n`;
+        if (waitMs) await Bun.sleep(waitMs);
+      }
+      return { exit, text };
+    };
+
+  test("a step that passes at once leaves nothing", async () => {
     const { exec, agent, holds } = world();
-    exec.record("w1", 'git commit -m "x"', "hook says no\n", 1);
+    const r = await exec.watch("w1", "git commit -m x", step(["[main abc] x"], 0));
+    expect(r).toMatchObject({ exit: 0, shown: false });
+    expect(agent.recorded).toEqual([]);
     expect(holds).toEqual([]);
+  });
+
+  test("a step that fails leaves the two rows, fenced, with its exit", async () => {
+    const { exec, agent } = world();
+    const r = await exec.watch("w1", 'git commit -m "x"', step(["hook says no"], 1));
+    expect(r.shown).toBe(true);
     expect(agent.recorded.map((e) => e.type)).toEqual(["tool-start", "tool-end"]);
     const start = agent.recorded[0];
     expect(start?.type === "tool-start" && start.name === SHELL_TOOL && start.input).toEqual({
@@ -58,9 +79,51 @@ describe("ExecService.record", () => {
     expect(end?.type === "tool-end" && end.output).toBe("```\nhook says no\n```\nexit 1");
   });
 
-  test("output past the cap is cut the way a live command's is", () => {
+  test("a step still running after the wait gets its row live, and the end replaces what streamed", async () => {
+    const { exec, agent } = world(10);
+    const r = await exec.watch("w1", "git push origin main", step(["tests 1/2", "tests 2/2"], 0, 30));
+    expect(r.shown).toBe(true);
+    expect(agent.recorded.map((e) => e.type)).toEqual(["tool-start", "tool-delta", "tool-delta", "tool-end"]);
+    // the first line printed before the row went up rides in with it
+    expect(agent.recorded[1]).toMatchObject({ type: "tool-delta", text: "tests 1/2\n" });
+    expect(agent.recorded[2]).toMatchObject({ type: "tool-delta", text: "tests 2/2\n" });
+    expect(agent.recorded[3]).toMatchObject({
+      type: "tool-end",
+      output: "```\ntests 1/2\ntests 2/2\n```",
+      isError: false,
+    });
+  });
+
+  test("the stop that kills a ! command aborts a watched step too, and its row says so", async () => {
+    const { exec, agent } = world(10);
+    const done = exec.watch(
+      "w1",
+      "git push origin main",
+      (onText, signal) =>
+        new Promise<{ exit: string; text: string }>((ok) => {
+          onText("tests 1/6 ok\n");
+          signal.addEventListener("abort", () => ok({ exit: "SIGTERM", text: "tests 1/6 ok\n" }));
+        }),
+    );
+    await Bun.sleep(40);
+    exec.stop("w1");
+    const r = await done;
+    expect(r).toMatchObject({ exit: "SIGTERM", shown: true });
+    const end = agent.recorded.at(-1);
+    expect(end?.type === "tool-end" && end.output).toBe("```\ntests 1/6 ok\n```\nkilled (SIGTERM)");
+  });
+
+  test("a step killed at the ceiling says so on its row", async () => {
     const { exec, agent } = world();
-    exec.record("w1", "big", "x".repeat(250_000), 1);
+    await exec.watch("w1", "git push origin main", step(["waiting on a lock"], "timeout"));
+    const end = agent.recorded[1];
+    expect(end?.type === "tool-end" && end.output).toBe("```\nwaiting on a lock\n```\nkilled (timeout)");
+    expect(end?.type === "tool-end" && end.isError).toBe(true);
+  });
+
+  test("output past the cap is cut the way a live command's is", async () => {
+    const { exec, agent } = world();
+    await exec.watch("w1", "big", step(["x".repeat(250_000)], 1));
     const end = agent.recorded[1];
     expect(end?.type === "tool-end" && end.output).toContain("output cut at 200 KB");
     expect(end?.type === "tool-end" ? (end.output?.length ?? 0) : 0).toBeLessThan(201_000);

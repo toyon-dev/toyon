@@ -41,6 +41,22 @@ describe("coalesce", () => {
       entries[6],
     ]);
   });
+
+  test("a watched command's output chunks fold under their row; another row's chunk breaks the run", () => {
+    const entries = [
+      { seq: 0, event: { type: "tool-start", toolId: "a", name: "shell", input: { command: "git push" } } },
+      { seq: 1, event: { type: "tool-delta", toolId: "a", text: "tests " } },
+      { seq: 2, event: { type: "tool-delta", toolId: "a", text: "1/2\n" } },
+      { seq: 3, event: { type: "tool-delta", toolId: "b", text: "other" } },
+      { seq: 4, event: { type: "tool-delta", toolId: "a", text: "2/2\n" } },
+    ] as const;
+    expect(coalesce([...entries])).toEqual([
+      entries[0],
+      { seq: 1, event: { type: "tool-delta", toolId: "a", text: "tests 1/2\n" } },
+      entries[3],
+      entries[4],
+    ]);
+  });
 });
 
 describe("Transcript", () => {

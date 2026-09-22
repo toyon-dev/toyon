@@ -50,6 +50,8 @@ export interface HubEvents {
   /** something the daemon ran on a worktree's behalf, unasked, stopped: `message` is read as a
    * daemon error on that worktree, where a failure nobody requested would otherwise sit in a log */
   failed: (worktreeId: string, message: string) => void;
+  /** a landing op on the worktree moved on to its next step, named for whoever is waiting on it */
+  shipping: (worktreeId: string, step: string) => void;
 }
 
 type Listener<K extends keyof HubEvents> = HubEvents[K];

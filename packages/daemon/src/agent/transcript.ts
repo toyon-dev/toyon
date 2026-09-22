@@ -26,6 +26,9 @@ export function coalesce(entries: TranscriptEntry[]): TranscriptEntry[] {
     const { event } = entry;
     if ((event.type === "text-delta" || event.type === "thinking-delta") && last?.event.type === event.type) {
       out[out.length - 1] = { seq: last.seq, event: { type: event.type, text: last.event.text + event.text } };
+    } else if (event.type === "tool-delta" && last?.event.type === "tool-delta" && last.event.toolId === event.toolId) {
+      // a watched command's output arrives a chunk at a time the same way
+      out[out.length - 1] = { seq: last.seq, event: { ...event, text: last.event.text + event.text } };
     } else {
       out.push(entry);
     }

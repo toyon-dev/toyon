@@ -62,6 +62,7 @@ import { GIT, git, gitOrThrow, isGitRepo, NO_PROMPT, run } from "../git/exec.ts"
 import {
   commitWorktree,
   fastForwardMain,
+  type LandWatch,
   landLocally,
   mergePr,
   openPr,
@@ -70,7 +71,9 @@ import {
   pushMain,
   type ShipResult,
   squashMessage,
+  stepRun,
   takeMainIn,
+  UNWATCHED,
 } from "../git/land.ts";
 import { withRepoLock } from "../git/lock.ts";
 import { logCommits, commitFiles as readCommitFiles } from "../git/log.ts";
@@ -224,10 +227,19 @@ export interface WorktreeServiceDeps {
   drafts?: Pick<DraftStore, "drop" | "text" | "set">;
   /** task → short kebab-case name (the worktree's own agent by default; tests inject a stub) */
   namer?: (prompt: string, wt: WorktreeInfo) => Promise<string | null>;
-  /** a command the service ran and the person should read whole, onto the worktree's transcript
-   * as the rows a `!` command leaves (ExecService.record) */
-  record?: (worktreeId: string, command: string, text: string, exit: number | string | null) => void;
+  /** a git step a landing runs, watched onto the worktree's transcript as the rows a `!` command
+   * leaves (ExecService.watch): live while it runs long, whole when it fails */
+  watch?: <T extends { exit: number | string | null; text: string }>(
+    worktreeId: string,
+    command: string,
+    run: (onText: (text: string) => void, signal: AbortSignal) => Promise<T>,
+  ) => Promise<T & { shown: boolean }>;
 }
+
+/** the row's command as a person would have typed it: a plain word as is, anything else quoted.
+ * A commit message shows its subject; the row is a record of what ran, not a line to paste. */
+const commandLine = (args: string[]) =>
+  args.map((a) => (/^[\w./:=@,+-]+$/.test(a) ? a : JSON.stringify(a.split("\n", 1)[0]))).join(" ");
 
 export class WorktreeService {
   readonly spare: SparePool;
@@ -1371,27 +1383,40 @@ export class WorktreeService {
     return this.commitRecorded(wt, this.commitMessage(wt, typed));
   }
 
-  /** the one commit, for land and the changes panel alike. A refusal with output (a hook that
-   * rejected the commit, and what it said) goes on the transcript whole: the line the person reads
-   * has room for a sentence, and the agent only learns of what is on the transcript. */
+  /** the one commit, for land and the changes panel alike. A refusal (a hook that rejected the
+   * commit, and what it said) goes on the transcript whole through the watch: the line the person
+   * reads has room for a sentence, and the agent only learns of what is on the transcript. */
   private async commitRecorded(wt: WorktreeInfo, message: string): Promise<ShipResult> {
-    const result = await commitWorktree(wt.path, message);
+    const result = await commitWorktree(wt.path, message, this.landWatch(wt));
     if (result.ok) {
       await this.verdictSurvives(wt, { dropMessage: true });
       this.headMoved(wt.id);
-      return result;
     }
-    if (!result.output?.trim() || !this.d.record) return result;
-    const subject = message.split("\n", 1)[0] ?? "";
-    try {
-      this.d.record(wt.id, `git commit -m ${JSON.stringify(subject)}`, result.output, result.exit ?? null);
-    } catch (e) {
-      // no transcript to write to (the agent is not up yet): the line under the box still says
-      // the commit failed, with git's first words
-      log.warn(wt.id, `could not put the refused commit on the transcript: ${e instanceof Error ? e.message : e}`);
-      return result;
-    }
-    return { ...result, message: "commit refused: what git and its hooks printed is on the chat" };
+    return result;
+  }
+
+  /** The watch a landing's steps run under: each step's name goes to the row's subscribers, so
+   * the press says what it is on instead of spinning, and each git command runs through
+   * ExecService.watch, so a hook's minutes read live on the chat and its refusal reaches the agent
+   * with the next message. A command in the main checkout is named with its `-C`, since the row
+   * sits on a worktree's chat. A worktree with no transcript yet runs the steps plain. */
+  private landWatch(wt: WorktreeInfo): LandWatch {
+    return {
+      step: (name) => this.d.hub.emit("shipping", wt.id, name),
+      git: async (cwd, args) => {
+        const where = cwd === wt.path ? "git" : `git -C ${cwd}`;
+        const run = (onText: (text: string) => void, signal?: AbortSignal) => stepRun(cwd, args, onText, signal);
+        if (!this.d.watch) return run(() => {});
+        try {
+          return await this.d.watch(wt.id, `${where} ${commandLine(args)}`, run);
+        } catch (e) {
+          // no transcript to write to (the agent is not up yet): the step runs plain, and the line
+          // under the box carries git's first words
+          log.warn(wt.id, `landing step runs unwatched: ${e instanceof Error ? e.message : e}`);
+          return run(() => {});
+        }
+      },
+    };
   }
 
   /** A commit by hand or a sync moves HEAD, and the next status read would mark the verdict stale
@@ -1429,6 +1454,7 @@ export class WorktreeService {
     const { wt, repo } = this.landable(worktreeId, "land");
     const policy = landPolicy(repo.config);
     const own = hasOwnBranch(wt);
+    const w = this.landWatch(wt);
     const suggested = wt.landing?.subject
       ? wt.landing.body
         ? `${wt.landing.subject}\n\n${wt.landing.body}`
@@ -1442,13 +1468,13 @@ export class WorktreeService {
         // PR as GitHub has it and strand what is here
         const dirty = (await statusFiles(wt.path)).length > 0;
         const missing = dirty || ((await aheadUpstream(wt.path)) ?? 0) > 0;
-        if (!missing) return { result: await mergePr(wt.path, wt.pr.number, policy.merge) };
+        if (!missing) return { result: await mergePr(wt.path, wt.pr.number, policy.merge, w) };
         const committed = await this.commitIfDirty(wt, message);
         if (committed && !committed.ok) return { result: committed };
-        const taken = await takeMainIn(wt.path, repo.defaultBranch, own);
+        const taken = await takeMainIn(wt.path, repo.defaultBranch, own, w);
         if (!taken.ok) return { result: taken };
         this.headMoved(wt.id);
-        const pushed = await pushBranch(wt.path, wt.branch);
+        const pushed = await pushBranch(wt.path, wt.branch, w);
         if (!pushed.ok) return { result: pushed };
         this.headMoved(wt.id);
         this.setLanding(wt.id, undefined);
@@ -1457,18 +1483,21 @@ export class WorktreeService {
       }
       const committed = await this.commitIfDirty(wt, message);
       if (committed && !committed.ok) return { result: committed };
-      const taken = await takeMainIn(wt.path, repo.defaultBranch, own);
+      const taken = await takeMainIn(wt.path, repo.defaultBranch, own, w);
       if (!taken.ok) return { result: taken };
       this.headMoved(wt.id);
-      const result = await openPr({
-        worktreePath: wt.path,
-        branch: wt.branch,
-        defaultBr: repo.defaultBranch,
-        subject: wt.landing?.subject,
-        body: wt.landing?.body,
-        automerge: policy.automerge,
-        method: policy.merge,
-      });
+      const result = await openPr(
+        {
+          worktreePath: wt.path,
+          branch: wt.branch,
+          defaultBr: repo.defaultBranch,
+          subject: wt.landing?.subject,
+          body: wt.landing?.body,
+          automerge: policy.automerge,
+          method: policy.merge,
+        },
+        w,
+      );
       if (result.ok) {
         this.setLanding(wt.id, undefined);
         if (result.pr) this.setPr(wt.id, { ...result.pr, at: Date.now() });
@@ -1485,22 +1514,22 @@ export class WorktreeService {
       // main here first takes what origin has, so the push at the end is not refused; a main
       // with no upstream has nothing to take
       if (policy.land === "push") {
-        const pulled = await fastForwardMain(repo.path, repo.defaultBranch);
+        const pulled = await fastForwardMain(repo.path, repo.defaultBranch, w);
         if (!pulled.ok && !/no upstream/.test(pulled.message)) return pulled;
       }
-      const taken = await takeMainIn(wt.path, repo.defaultBranch, own);
+      const taken = await takeMainIn(wt.path, repo.defaultBranch, own, w);
       if (!taken.ok) return taken;
       // read before the landing moves main and the branch restarts from it
       const mark = await landingMark(wt.path, repo.defaultBranch);
       const method = policy.merge ?? DEFAULT_MERGE_METHOD;
       const squash = method === "squash" ? await squashMessage(wt.path, repo.defaultBranch, suggested) : "";
-      const landed = await landLocally(wt.path, wt.branch, repo.path, repo.defaultBranch, method, squash);
+      const landed = await landLocally(wt.path, wt.branch, repo.path, repo.defaultBranch, method, squash, w);
       if (!landed.ok) return landed;
       mergedHere = true;
       await this.noteLand(repo, wt, mark);
       await this.restartFromMain(wt, repo.defaultBranch);
       if (policy.land === "push") {
-        const pushed = await pushMain(repo.path, repo.defaultBranch);
+        const pushed = await pushMain(repo.path, repo.defaultBranch, w);
         if (!pushed.ok) return { ...pushed, message: `merged into ${repo.defaultBranch} here, but ${pushed.message}` };
       }
       return landed;
@@ -1583,7 +1612,9 @@ export class WorktreeService {
     if (r.locked) throw new UserError(`${r.name} is held by another tool`);
     const repo = this.d.state.requireRepo(r.repoId);
     const own = r.wt ? hasOwnBranch(r.wt) : false;
-    const result = await withRepoLock(repo.path, () => takeMainIn(r.path, repo.defaultBranch, own));
+    // a found worktree has no chat for the rows to go on
+    const w = r.wt ? this.landWatch(r.wt) : UNWATCHED;
+    const result = await withRepoLock(repo.path, () => takeMainIn(r.path, repo.defaultBranch, own, w));
     if (result.ok) {
       this.headMoved(worktreeId);
       // the same work over a newer base: the sentence and the message still describe it

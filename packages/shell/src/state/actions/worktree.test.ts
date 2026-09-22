@@ -114,7 +114,7 @@ describe("a worktree's actions", () => {
     const items = worktreeItems(
       owned({ behind: 3 }),
       null,
-      { layout: { ...defaultLayout, changes: true }, shipping: { w1: "land" } },
+      { layout: { ...defaultLayout, changes: true }, shipping: { w1: { op: "land" } } },
       deps,
       here,
     );

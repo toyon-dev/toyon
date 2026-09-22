@@ -837,10 +837,14 @@ describe("drafting a worktree", () => {
     expect(s.trunks.r).toEqual(trunk);
     // a pull is pressed under the lead's box and shows working until the daemon answers on it
     const pulling = run([{ a: "shipping", id: "main-rec", op: "pull-main" }], s);
-    expect(pulling.shipping["main-rec"]).toBe("pull-main");
-    expect(run([server({ t: "worktrees", rows, trunks: { r: trunk } })], pulling).shipping["main-rec"]).toBe(
-      "pull-main",
-    );
+    expect(pulling.shipping["main-rec"]).toEqual({ op: "pull-main" });
+    expect(run([server({ t: "worktrees", rows, trunks: { r: trunk } })], pulling).shipping["main-rec"]).toEqual({
+      op: "pull-main",
+    });
+    // the daemon names the step the op is on; a step for an op this tab never sent has no row to sit on
+    const stepped = run([server({ t: "shipping", worktreeId: "main-rec", step: "pulling main from origin" })], pulling);
+    expect(stepped.shipping["main-rec"]).toEqual({ op: "pull-main", step: "pulling main from origin" });
+    expect(run([server({ t: "shipping", worktreeId: "sp", step: "committing" })], pulling)).toBe(pulling);
     expect(
       run([server({ t: "shipped", worktreeId: "main-rec", ok: true, message: "pulled" })], pulling).shipping,
     ).toEqual({});
@@ -2179,9 +2183,9 @@ describe("a landing op in flight", () => {
 
   test("marks the worktree until its own shipped frame, ok or not", () => {
     let s = run([three(), sync("a")]);
-    expect(s.shipping).toEqual({ a: "sync-main" });
+    expect(s.shipping).toEqual({ a: { op: "sync-main" } });
     s = reducer(s, shipped("b"));
-    expect(s.shipping).toEqual({ a: "sync-main" });
+    expect(s.shipping).toEqual({ a: { op: "sync-main" } });
     s = reducer(s, shipped("a", false));
     expect(s.shipping).toEqual({});
   });

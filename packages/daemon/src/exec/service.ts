@@ -23,10 +23,14 @@ const TIMEOUT_MS = 10 * 60_000;
 const KILL_GRACE_MS = 3_000;
 /** how long after the shell exits to keep reading for its children's last words */
 const DRAIN_GRACE_MS = 500;
+/** how long a landing step runs before its row goes up: an instant step that passes leaves
+ * nothing, and one still going after this (a hook, the network) is worth watching */
+const LIVE_AFTER_MS = 1_500;
 
+/** a command still going on a worktree: how to stop it, and the ceiling that stops it unasked */
 interface Running {
-  proc: Subprocess;
-  timer: ReturnType<typeof setTimeout>;
+  stop: () => void;
+  timer?: ReturnType<typeof setTimeout>;
 }
 
 export class ExecService {
@@ -34,7 +38,16 @@ export class ExecService {
   private running = new Map<string, Map<string, Running>>();
   private n = 0;
 
-  constructor(private deps: { state: StateStore; runtime: RuntimeRegistry }) {}
+  constructor(private deps: { state: StateStore; runtime: RuntimeRegistry; liveAfterMs?: number }) {}
+
+  /** the agent whose transcript a row goes on, or the refusal the caller reads as a toast */
+  private agentFor(worktreeId: string): AgentAdapter {
+    const wt = this.deps.state.requireWorktree(worktreeId);
+    if (wt.kind === "spare") throw new UserError("no shell for a spare worktree");
+    const agent = this.deps.runtime.agentFor(worktreeId);
+    if (!agent) throw new UserError("worktree still starting; try again in a moment");
+    return agent;
+  }
 
   /** start the command; the result reaches the shell through the agent stream, not a reply */
   run(worktreeId: string, command: string): void {
@@ -52,12 +65,10 @@ export class ExecService {
     opts: { quiet?: boolean } = {},
   ): Promise<ExecResult> {
     const wt = this.deps.state.requireWorktree(worktreeId);
-    if (wt.kind === "spare") throw new UserError("no shell for a spare worktree");
     // the lead's `!` runs in its terminal pane; a command sent for main by name would run in the
     // main checkout, which nothing else is allowed to do
     if (wt.kind === "main") throw new UserError("nothing runs on main: the plus starts a worktree for it");
-    const agent = this.deps.runtime.agentFor(worktreeId);
-    if (!agent) throw new UserError("worktree still starting; try again in a moment");
+    const agent = this.agentFor(worktreeId);
     const toolId = `${name}-${Date.now().toString(36)}-${++this.n}`;
     // a quiet run (the check again after a discard) is on the transcript only when it fails: the
     // rows are what lets "fix it" work, and a pass has nothing to fix
@@ -84,26 +95,64 @@ export class ExecService {
       return Promise.resolve({ exit: reason, text: "" });
     }
     const timer = setTimeout(() => this.kill(worktreeId, toolId), TIMEOUT_MS);
-    this.track(worktreeId, toolId, { proc, timer });
+    const stop = () => {
+      proc.kill("SIGTERM");
+      setTimeout(() => {
+        // still tracked means still running: collect() untracks on exit
+        if (this.running.get(worktreeId)?.has(toolId)) proc.kill("SIGKILL");
+      }, KILL_GRACE_MS);
+    };
+    this.track(worktreeId, toolId, { stop, timer });
     // a command is outstanding work: the dev servers it may be talking to stay up until it ends
     this.deps.runtime.hold(worktreeId, `exec:${toolId}`);
     return this.collect(worktreeId, toolId, proc, agent, opts.quiet ? start : undefined);
   }
 
-  /** a command the daemon ran itself (the commit a land or the changes panel asked for, refused by
-   * a hook) on the transcript as the rows a `!` command leaves, so its output reads on the chat and
-   * goes to the agent with the next message. Refuses the way `exec` does when there is no
-   * transcript to write to. */
-  record(worktreeId: string, command: string, text: string, exit: number | string | null): void {
-    const wt = this.deps.state.requireWorktree(worktreeId);
-    if (wt.kind === "spare") throw new UserError("no shell for a spare worktree");
-    const agent = this.deps.runtime.agentFor(worktreeId);
-    if (!agent) throw new UserError("worktree still starting; try again in a moment");
+  /** A git command the daemon runs itself (a landing's commit, rebase, merge or push), watched the
+   * way a `!` command is: its row goes on the transcript once it has run long enough to be worth
+   * watching or when it fails, and what it prints streams into the row while it runs, so a hook's
+   * test run reads live and its refusal reaches the agent with the next message. An instant step
+   * that passes leaves nothing: a row for every step of every land would bury the conversation.
+   * The row's stop aborts `signal`, the same press that kills a `!` command. Refuses the way
+   * `exec` does when there is no transcript to write to, before the command runs. */
+  async watch<T extends { exit: number | string | null; text: string }>(
+    worktreeId: string,
+    command: string,
+    run: (onText: (text: string) => void, signal: AbortSignal) => Promise<T>,
+  ): Promise<T & { shown: boolean }> {
+    const agent = this.agentFor(worktreeId);
     const toolId = `${SHELL_TOOL}-${Date.now().toString(36)}-${++this.n}`;
-    agent.note({ type: "tool-start", toolId, name: SHELL_TOOL, input: { command }, kind: "execute" });
-    const truncated = text.length > OUTPUT_CAP;
-    const shown = truncated ? text.slice(0, OUTPUT_CAP) : text;
-    agent.note({ type: "tool-end", toolId, output: formatOutput(shown, exit, truncated), isError: exit !== 0 });
+    const ctl = new AbortController();
+    this.track(worktreeId, toolId, { stop: () => ctl.abort() });
+    const start = { type: "tool-start", toolId, name: SHELL_TOOL, input: { command }, kind: "execute" } as const;
+    let text = "";
+    let truncated = false;
+    let up = false;
+    const raise = () => {
+      if (up) return;
+      up = true;
+      agent.note(start);
+      if (text) agent.note({ type: "tool-delta", toolId, text });
+    };
+    const timer = setTimeout(raise, this.deps.liveAfterMs ?? LIVE_AFTER_MS);
+    const onText = (chunk: string) => {
+      if (truncated) return;
+      const take = chunk.slice(0, OUTPUT_CAP - text.length);
+      text += take;
+      if (take.length < chunk.length) truncated = true;
+      if (up && take) agent.note({ type: "tool-delta", toolId, text: take });
+    };
+    let r: T;
+    try {
+      r = await run(onText, ctl.signal);
+    } finally {
+      clearTimeout(timer);
+      this.untrack(worktreeId, toolId);
+    }
+    if (!up && r.exit === 0) return { ...r, shown: false };
+    if (!up) agent.note(start);
+    agent.note({ type: "tool-end", toolId, output: formatOutput(text, r.exit, truncated), isError: r.exit !== 0 });
+    return { ...r, shown: true };
   }
 
   /** kill everything still running for the worktree; each records its own end as it goes */
@@ -129,13 +178,7 @@ export class ExecService {
   }
 
   private kill(worktreeId: string, toolId: string) {
-    const r = this.running.get(worktreeId)?.get(toolId);
-    if (!r) return;
-    r.proc.kill("SIGTERM");
-    setTimeout(() => {
-      // still tracked means still running: collect() untracks on exit
-      if (this.running.get(worktreeId)?.has(toolId)) r.proc.kill("SIGKILL");
-    }, KILL_GRACE_MS);
+    this.running.get(worktreeId)?.get(toolId)?.stop();
   }
 
   private async collect(

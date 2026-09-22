@@ -41,7 +41,9 @@ export function CommitBox({
   const id = active.id;
   // the op out for this worktree, if any: its button shows busy and the others wait, since the
   // daemon runs them one at a time under the repo lock anyway
-  const op = useStore((s) => s.shipping[id]);
+  const op = useStore((s) => s.shipping[id]?.op);
+  // what that op is doing now, read beside the branch while its button spins
+  const step = useStore((s) => s.shipping[id]?.step);
   const [msg, setMsg] = useState("");
   useOnChange([id], () => setMsg(""));
   const box = useRef<HTMLTextAreaElement>(null);
@@ -132,6 +134,7 @@ export function CommitBox({
               <Icon name="check" className="icon-inline" /> landed
             </span>
           )}
+          {step && <span>{step}…</span>}
         </span>
         <span className="commit-acts">
           {owned && dirty && (

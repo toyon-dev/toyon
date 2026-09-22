@@ -155,7 +155,7 @@ const worktrees = new WorktreeService({
   paths,
   agents,
   drafts,
-  record: (id, command, text, exit) => exec.record(id, command, text, exit),
+  watch: (id, command, run) => exec.watch(id, command, run),
 });
 // before the server: its agentStatus listener has to run ahead of the one that broadcasts the rows
 const turns = new TurnService({

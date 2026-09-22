@@ -324,7 +324,7 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
     const showCheck = owned && graftMode && canGraft(owned.worktree) && id !== activeId;
     // a landing op out from this row takes the dot's slot, and with it the row's word: the tip
     // and the line under the name say what the spinner is doing, not the state it covers
-    const op = shipShown(w, shipping[id]);
+    const op = shipShown(w, shipping[id]?.op);
     return (
       <button
         key={id}

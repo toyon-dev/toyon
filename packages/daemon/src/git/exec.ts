@@ -1,9 +1,13 @@
 // git process wrapper + repo-level queries, async on Bun.spawn so git never blocks the event loop.
 
+import { type ChildProcess, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import type { Readable } from "node:stream";
+import { fireAndForget } from "../core/log.ts";
 import { lastGit } from "../core/metrics.ts";
+import { killGroup } from "../runtime/kill.ts";
 
 const LOCKFILES = [
   "bun.lock",
@@ -188,6 +192,103 @@ export async function runLive(
       lastGit.at = Date.now();
     }
   }
+}
+
+/** what a watched command left: the two pipes apart, as `run` gives them, and together in
+ * arrival order, which is as close to what a terminal showed as two pipes allow */
+export type Watched = GitResult & { text: string };
+
+/**
+ * Like `run`, for a command whose output someone may be reading while it runs: a git step that
+ * runs hooks (a commit, a push), where a hook's test run prints for minutes. Both pipes are read
+ * as they arrive and each chunk goes to `onText` in order; `runLive` reports stderr line by line
+ * for a counter git redraws in place, which is a different reading. A command still running at
+ * `timeoutMs` is killed and comes back with `exit: "timeout"`, so a hook that waits on something
+ * nobody can answer cannot hold its caller forever; an abort on `signal` kills it the same way
+ * and comes back with the signal's name, for a stop pressed on its row.
+ *
+ * A node spawn, detached: git runs a hook as a child in its own group, and a signal to git alone
+ * left the hook's test suite running, holding the pipes and the row open until it was done on its
+ * own. Killing the group ends the suite with git.
+ */
+export function runWatched(
+  cmd: string,
+  args: string[],
+  cwd: string,
+  opts: {
+    env?: Record<string, string>;
+    onText?: (text: string) => void;
+    timeoutMs?: number;
+    signal?: AbortSignal;
+  } = {},
+): Promise<Watched> {
+  const started = Date.now();
+  return new Promise<Watched>((resolve) => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let timedOut = false;
+    let stop: (() => void) | undefined;
+    let settled = false;
+    const settle = (r: Watched) => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      if (stop) opts.signal?.removeEventListener("abort", stop);
+      if (cmd === GIT) {
+        lastGit.cmd = `git ${args.slice(0, 3).join(" ")}`;
+        lastGit.ms = Date.now() - started;
+        lastGit.at = Date.now();
+      }
+      resolve(r);
+    };
+    const failed = (msg: string) => settle({ ok: false, out: "", err: msg, exit: msg, text: msg });
+    let child: ChildProcess;
+    try {
+      child = spawn(cmd, args, {
+        cwd,
+        stdio: ["ignore", "pipe", "pipe"],
+        detached: true,
+        env: { ...process.env, ...SPAWN_ENV, ...opts.env },
+      });
+    } catch (e) {
+      failed(e instanceof Error ? e.message : String(e));
+      return;
+    }
+    child.on("error", (e) => failed(e.message));
+    const exited = new Promise<void>((r) => child.once("exit", () => r()));
+    const kill = () => {
+      if (child.pid) fireAndForget("git", killGroup(child.pid, exited), `stopping ${cmd} ${args[0] ?? ""}`);
+    };
+    if (opts.timeoutMs) {
+      timer = setTimeout(() => {
+        timedOut = true;
+        kill();
+      }, opts.timeoutMs);
+    }
+    if (opts.signal) {
+      stop = kill;
+      if (opts.signal.aborted) kill();
+      else opts.signal.addEventListener("abort", stop, { once: true });
+    }
+    let text = "";
+    const out: string[] = [];
+    const err: string[] = [];
+    const read = (stream: Readable | null, into: string[]) => {
+      const dec = new TextDecoder();
+      stream?.on("data", (b: Buffer) => {
+        const chunk = dec.decode(b, { stream: true });
+        into.push(chunk);
+        text += chunk;
+        opts.onText?.(chunk);
+      });
+    };
+    read(child.stdout, out);
+    read(child.stderr, err);
+    // close, not exit: the pipes stay open until the last child of the group lets go of them
+    child.on("close", (code, signal) => {
+      const exit = timedOut ? "timeout" : (signal ?? code);
+      settle({ ok: code === 0 && !timedOut, out: out.join("").trim(), err: err.join("").trim(), exit, text });
+    });
+  });
 }
 
 export async function git(cwd: string, ...args: string[]): Promise<GitResult> {

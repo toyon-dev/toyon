@@ -168,6 +168,9 @@ export type ServerMsg =
       | { ok: true; version: string }
       | { ok: false; reason: "changed" | "refused"; version: string | null; message?: string }
     ))
+  /** the step a landing op is on now (committing, rebasing, pushing), for the tab that pressed
+   * it to say instead of a bare spinner; the shipped frame ends the op */
+  | { t: "shipping"; worktreeId: string; step: string }
   | {
       t: "shipped";
       worktreeId: string;

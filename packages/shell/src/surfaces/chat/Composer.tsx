@@ -245,11 +245,13 @@ export function Composer({
   const dirty = git?.files.length ?? active?.dirty ?? 0;
   // commits the PR on origin does not have yet; counted only while one is open
   const unpushed = git?.unpushed ?? active?.unpushed ?? 0;
-  const op = useStore((s) => (id ? s.shipping[id] : undefined));
+  const op = useStore((s) => (id ? s.shipping[id]?.op : undefined));
+  // what the op out for this row is doing now, said behind the busy word instead of a bare spinner
+  const step = useStore((s) => (id ? s.shipping[id]?.step : undefined));
   // main against origin, said while a worktree is about to start from it: what the daemon says of
   // the checkout itself, since main is not a row while its spare stands in for it
   const trunk = useStore((s) => trunkOf(s, repoId));
-  const trunkOp = useStore((s) => (trunk ? s.shipping[trunk.id] : undefined));
+  const trunkOp = useStore((s) => (trunk ? s.shipping[trunk.id]?.op : undefined));
   const origin = trunk && repo && spawning ? originNote(repo.defaultBranch, trunk) : null;
   // a draft's own session may not have run yet: a worktree of this repo that runs the same agent
   // stands in, the lead first (commandSource says why that is sound)
@@ -1027,7 +1029,7 @@ export function Composer({
                     >
                       {verb.word}
                     </Button>
-                    {`: ${verb.line}`}
+                    {`: ${verb.ships && op === "land" && step ? `${step}…` : verb.line}`}
                   </>
                 ) : (
                   placeholderText

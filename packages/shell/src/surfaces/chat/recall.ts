@@ -30,19 +30,25 @@ export function sentHistory(chat: ChatItem[], commandsOnly: boolean): Sent[] {
   return out;
 }
 
-/** Up or down in the composer, or null when the key is not the walk's to take: in a box with
+/** what an arrow asks of the walk: a step either way, or ⌘ with it: the whole way to the first
+ * thing sent, or straight back to the box */
+export type WalkKey = "up" | "down" | "first" | "box";
+
+/** An arrow in the composer, or null when the key is not the walk's to take: in a box with
  * something typed in it an arrow moves the caret, as it does in any text box. `walk` is null while
  * the draft is the person's own. */
-export function stepWalk(chat: ChatItem[], walk: ComposerWalk | null, text: string, key: "up" | "down"): Step | null {
+export function stepWalk(chat: ChatItem[], walk: ComposerWalk | null, text: string, key: WalkKey): Step | null {
   if (!walk) {
-    if (key !== "up" || !isBlank(text)) return null;
-    const newest = sentHistory(chat, text === "!")[0];
-    return newest ? { walk: { at: newest.at, from: text }, text: newest.text } : null;
+    if ((key !== "up" && key !== "first") || !isBlank(text)) return null;
+    const list = sentHistory(chat, text === "!");
+    const entry = key === "up" ? list[0] : list.at(-1);
+    return entry ? { walk: { at: entry.at, from: text }, text: entry.text } : null;
   }
+  if (key === "box") return { walk: null, text: walk.from };
   // found by its place in the chat rather than kept as a position in this list, so a message that
   // lands mid-walk does not slide the walk onto a different entry
   const list = sentHistory(chat, walk.from === "!");
-  const next = list.findIndex((s) => s.at === walk.at) + (key === "up" ? 1 : -1);
+  const next = key === "first" ? list.length - 1 : list.findIndex((s) => s.at === walk.at) + (key === "up" ? 1 : -1);
   if (next < 0) return { walk: null, text: walk.from };
   const entry = list[next];
   // past the oldest the key is still the walk's, and nothing moves

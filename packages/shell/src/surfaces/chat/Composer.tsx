@@ -65,7 +65,7 @@ import { filterCommands, insertAt, triggerAt } from "./mentions.ts";
 import { isMode, mergeCommands, ownCommandOf, ownCommands } from "./ownCommands.ts";
 import { PasteChip } from "./PasteChip.tsx";
 import { PickChip } from "./PickChip.tsx";
-import { type Step, stepWalk } from "./recall.ts";
+import { type Step, stepWalk, type WalkKey } from "./recall.ts";
 import { shellCommandOf, shellContext } from "./shellMode.ts";
 import { dollars, tokens } from "./usage.ts";
 import { useComposerPaste } from "./useIntake.ts";
@@ -942,14 +942,16 @@ export function Composer({
                 }
                 if (nav.onKeyDown(e)) return;
               }
-              // ⌥↑/↓ and ⌥⇧↑/↓ walk the rail (app/keys.ts hears them after this handler), and a
-              // modified arrow is never a recall: with the box otherwise empty the walk would load
-              // the last message into the chat being left, to be found again on the way back
-              if ((e.key === "ArrowUp" || e.key === "ArrowDown") && !e.altKey && !e.ctrlKey && !e.metaKey) {
+              // ⌥↑/↓ and ⌥⇧↑/↓ walk the rail (app/keys.ts hears them after this handler), and an ⌥
+              // or ⌃ arrow is never a recall: with the box otherwise empty the walk would load the
+              // last message into the chat being left, to be found again on the way back. ⌘↑/↓ is
+              // the walk's whole length at once: the first thing sent, or straight back to the box.
+              if ((e.key === "ArrowUp" || e.key === "ArrowDown") && !e.altKey && !e.ctrlKey) {
+                const up = e.key === "ArrowUp";
                 // a message still waiting in the queue is the nearest thing sent and the likeliest to
                 // want changing: up in an empty box takes the newest one back, as its edit button does
                 const queued = queue.at(-1);
-                if (e.key === "ArrowUp" && !walk && text === "" && id && !drafting && queued !== undefined) {
+                if (up && !e.metaKey && !walk && text === "" && id && !drafting && queued !== undefined) {
                   e.preventDefault();
                   sock?.send({ t: "unqueue", worktreeId: id, index: queue.length - 1 });
                   walkTo({ walk: null, text: queued });
@@ -957,7 +959,8 @@ export function Composer({
                 }
                 // while walking the arrows are the walk's however many lines the entry has; in a box
                 // with something typed in it they move the caret
-                const step = id ? stepWalk(chat, walk ?? null, text, e.key === "ArrowUp" ? "up" : "down") : null;
+                const key: WalkKey = e.metaKey ? (up ? "first" : "box") : up ? "up" : "down";
+                const step = id ? stepWalk(chat, walk ?? null, text, key) : null;
                 if (step) {
                   e.preventDefault();
                   if (step.walk !== walk || step.text !== text) walkTo(step);

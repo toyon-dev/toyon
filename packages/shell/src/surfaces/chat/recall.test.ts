@@ -65,6 +65,24 @@ describe("stepWalk", () => {
     expect(stepWalk(chat, step.walk, step.text, "down")).toEqual({ walk: null, text: "!" });
   });
 
+  test("cmd-up goes the whole way to the first thing sent, from the box or mid-walk", () => {
+    const first = { walk: { at: 0, from: "" }, text: "one" };
+    expect(stepWalk(chat, null, "", "first")).toEqual(first);
+    expect(stepWalk(chat, null, "half a thought", "first")).toBeNull();
+    expect(stepWalk([reply("hello")], null, "", "first")).toBeNull();
+    const step = stepWalk(chat, null, "", "up")!;
+    expect(stepWalk(chat, step.walk, step.text, "first")).toEqual(first);
+    expect(stepWalk(chat, first.walk, first.text, "first")).toEqual(first);
+    expect(stepWalk(chat, null, "!", "first")).toEqual({ walk: { at: 2, from: "!" }, text: "!git status" });
+  });
+
+  test("cmd-down is straight back to the box, and nothing when there is no walk", () => {
+    const step = stepWalk(chat, null, "", "first")!;
+    expect(stepWalk(chat, step.walk, step.text, "box")).toEqual({ walk: null, text: "" });
+    expect(stepWalk(chat, null, "", "box")).toBeNull();
+    expect(stepWalk(chat, null, "half a thought", "box")).toBeNull();
+  });
+
   test("a message landing mid-walk leaves the walk on the entry it was on", () => {
     const step = stepWalk(chat, null, "", "up")!;
     const grown = [...chat, reply("working on it"), user("three")];

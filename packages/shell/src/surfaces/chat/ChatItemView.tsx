@@ -1,8 +1,8 @@
-import { LOGIN_STREAM, type PickMeta } from "@toyon/shared";
+import { LOGIN_STREAM, type PickMeta, type ToolImage } from "@toyon/shared";
 import { Fragment, memo, type ReactNode, useMemo, useRef, useState } from "react";
 import { copyText } from "../../state/actions/deps.ts";
 import { openFile, openFolder } from "../../state/actions/file.ts";
-import { type ChatLink, messageItems, pathItems } from "../../state/actions/message.ts";
+import { type ChatLink, imageItems, messageItems, pathItems } from "../../state/actions/message.ts";
 import { archiveWorktrees } from "../../state/actions/worktree.ts";
 import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
 import { openSource } from "../../state/openSource.ts";
@@ -16,6 +16,7 @@ import { grouped, type MenuEntry, useContextMenu } from "../../ui/menu.ts";
 import { rowState } from "../../ui/rowState.ts";
 import { attachmentUrl } from "../../ws.ts";
 import { AskRow } from "./AskRow.tsx";
+import { FullAttachment } from "./FullAttachment.tsx";
 import { runCalls, sameRun, sameTools, type ThinkingItem, type ToolEntry, type ToolItem } from "./group.ts";
 import { SentImageChip } from "./ImageChip.tsx";
 import { useMarkdown } from "./markdown.ts";
@@ -193,6 +194,35 @@ function ToolOut({ blocks, path, worktreeId }: { blocks: PaintedBlock[]; path: s
   );
 }
 
+/** a picture the call returned, at the band's width, where a read of a text file prints its lines.
+ * It is the receipt for a read of a screenshot, which has nothing to say in words; a press opens it
+ * at the window's size, as a sent image chip does. The file is the daemon's copy, so a picture the
+ * agent took under /tmp is here whatever became of the original. */
+function ToolPicture({ image, worktreeId }: { image: ToolImage; worktreeId: string }) {
+  const src = attachmentUrl(worktreeId, image.file);
+  const [full, setFull] = useState(false);
+  const cm = useContextMenu("chat");
+  return (
+    <>
+      <button
+        type="button"
+        className="tool-image"
+        data-tip="Open full size"
+        data-tip-placement="follow"
+        onClick={() => setFull(true)}
+        {...cm.contextMenu(() => imageItems(src, { open: () => setFull(true) }))}
+      >
+        <img src={src} alt={image.file} />
+      </button>
+      {full && (
+        <FullAttachment onClose={() => setFull(false)} menu={() => imageItems(src)}>
+          <img src={src} alt={image.file} />
+        </FullAttachment>
+      )}
+    </>
+  );
+}
+
 /** one call inside the row: what it ran, then what the agent wrote under it. A call with neither
  * draws nothing: output that is only whitespace, or only the description the summary line already
  * carries, parses to no blocks, and the panel they would have sat in was an empty bar under the
@@ -209,11 +239,19 @@ const ToolPart = memo(function ToolPart({
 }) {
   const blocks = useMemo(() => paintBlocks(toolBlocks(item, item.output ?? ""), callPath(item)), [item]);
   const command = toolLabel(item, roots).command;
-  if (!command && blocks.length === 0) return null;
+  const images = worktreeId ? (item.images ?? []) : [];
+  if (!command && blocks.length === 0 && images.length === 0) return null;
   return (
     <div className="tool-part">
       {command && <pre className="tool-block cmd">{command}</pre>}
       {blocks.length > 0 && <ToolOut blocks={blocks} path={openable(item, roots)} worktreeId={worktreeId} />}
+      {images.length > 0 && worktreeId && (
+        <div className="tool-out">
+          {images.map((img) => (
+            <ToolPicture key={img.file} image={img} worktreeId={worktreeId} />
+          ))}
+        </div>
+      )}
     </div>
   );
 });
@@ -517,7 +555,9 @@ export const ToolRow = memo(
     const leaf =
       !(run && run.length > 0) &&
       !net &&
-      tools.every((t) => !toolLabel(t, roots).command && toolBlocks(t, t.output ?? "").length === 0);
+      tools.every(
+        (t) => !toolLabel(t, roots).command && toolBlocks(t, t.output ?? "").length === 0 && !t.images?.length,
+      );
     const calls = run ? runCalls(run) : 0;
     const what = [label, hint].filter(Boolean).join(" ");
     const count = run ? `${calls} ${calls === 1 ? "call" : "calls"}` : tools.length > 1 ? `×${tools.length}` : "";

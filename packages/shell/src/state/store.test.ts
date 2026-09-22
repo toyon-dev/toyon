@@ -479,6 +479,16 @@ describe("chat folding", () => {
       ["t2", false],
     ]);
   });
+  test("tool-end keeps the pictures the call returned on the row", () => {
+    const images = [{ file: "0123456789abcdef.png", mimeType: "image/png", bytes: 4 }];
+    const s = run([
+      hello(wt("a")),
+      agent("a", { type: "tool-start", toolId: "t1", name: "Read", input: { file_path: "/tmp/shot.png" } }),
+      agent("a", { type: "tool-end", toolId: "t1", output: "", images }),
+    ]);
+    const tool = s.local.a?.chat.find((i) => i.kind === "tool");
+    expect(tool?.kind === "tool" && tool.images).toEqual(images);
+  });
   test("tool-delta streams into the spawning row, and its report supersedes what streamed", () => {
     const s = run([
       hello(wt("a")),

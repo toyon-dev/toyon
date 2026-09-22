@@ -44,6 +44,7 @@ import type {
   TermServerMsg,
   Theme,
   ThemePrefs,
+  ToolImage,
   ToolKind,
   TrunkStatus,
   UpdateState,
@@ -84,6 +85,8 @@ export type ChatItem =
       input: unknown;
       output?: string;
       isError?: boolean;
+      /** the pictures the call returned, drawn under the row where output would go */
+      images?: ToolImage[];
       done: boolean;
       toolKind?: ToolKind;
       title?: string;
@@ -2329,7 +2332,13 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
       if (idx === -1) return items;
       const next = items.slice();
       const tool = next[idx] as Extract<ChatItem, { kind: "tool" }>;
-      next[idx] = { ...tool, output: event.output, isError: event.isError, done: true };
+      next[idx] = {
+        ...tool,
+        output: event.output,
+        isError: event.isError,
+        ...(event.images?.length ? { images: event.images } : {}),
+        done: true,
+      };
       return next;
     }
     case "agent-error":

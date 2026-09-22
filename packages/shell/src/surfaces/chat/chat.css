@@ -499,6 +499,27 @@
       padding: 6px 12px;
       background: var(--surface1);
     }
+    /* the picture a call returned (ChatItemView.tsx, ToolPicture): as wide as the band and no
+       wider, and no taller than most of the transcript, since a screenshot taken at 2x would
+       otherwise run past the pane. The whole picture is the control, pressed for the full size. */
+    & .tool-image {
+      display: block;
+      align-self: flex-start;
+      max-width: 100%;
+      padding: 0;
+      border: 0;
+      background: none;
+      cursor: pointer;
+      & img {
+        display: block;
+        max-width: 100%;
+        max-height: 60cqh;
+        width: auto;
+        height: auto;
+        border-radius: var(--radius);
+        background: var(--surface2);
+      }
+    }
     & .tool-note {
       font: var(--type-mono-sm);
       margin: 0;

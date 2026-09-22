@@ -31,6 +31,35 @@ describe("mapUpdate", () => {
     ]);
   });
 
+  test("a picture in a call's content is handed to the sink and named on the end", () => {
+    const written: string[] = [];
+    const data = Buffer.from("png!").toString("base64");
+    const updates: SessionUpdate[] = [
+      { sessionUpdate: "tool_call", toolCallId: "r", title: "Read /tmp/shot.png", kind: "read", status: "pending" },
+      {
+        sessionUpdate: "tool_call_update",
+        toolCallId: "r",
+        status: "completed",
+        content: [
+          { type: "content", content: { type: "image", data, mimeType: "image/png" } },
+          { type: "content", content: { type: "image", data: "", mimeType: "image/png" } },
+        ],
+      },
+    ];
+    const memos: ToolMemos = new Map();
+    const events = updates.flatMap((u) => mapUpdate(u, memos, "t", (file) => written.push(file)));
+    expect(written).toEqual(["53ec22c455168e29.png"]);
+    expect(events.at(-1)).toEqual({
+      type: "tool-end",
+      toolId: "r",
+      output: "",
+      isError: false,
+      images: [{ file: "53ec22c455168e29.png", mimeType: "image/png", bytes: 4 }],
+    });
+    // without a sink nobody writes the file, so the end names none
+    expect(run(updates).at(-1)).toEqual({ type: "tool-end", toolId: "r", output: "", isError: false });
+  });
+
   test("tool_call then tool_call_update completed → one start and one end with the merged output", () => {
     const memos: ToolMemos = new Map();
     const events = run(

@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { PasteSource } from "@toyon/shared";
-import { AttachmentStore, attachmentsDirFor, type Stored } from "./attachments.ts";
+import { AttachmentStore, attachmentsDirFor, type Stored, toolImage } from "./attachments.ts";
 
 const dir = mkdtempSync(join(tmpdir(), "toyon-attachments-"));
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
@@ -52,6 +52,22 @@ describe("AttachmentStore", () => {
     expect(bytesOf(stored)).toBe("png!");
     expect(existsSync(join(attachmentsDirFor(dir, "wt-1"), "7.png"))).toBe(true);
     expect(store.fileFor("wt-1", "7.png")).toBe(join(dir, "wt-1", "7.png"));
+  });
+  test("a tool's picture is named by its bytes and written once", async () => {
+    const shot = toolImage(Buffer.from("png!").toString("base64"), "image/png");
+    expect(shot?.ref).toEqual({ file: "53ec22c455168e29.png", mimeType: "image/png", bytes: 4 });
+    expect(toolImage("", "image/png")).toBeNull();
+    expect(toolImage(Buffer.from("x").toString("base64"), "image/tiff")).toBeNull();
+    const file = shot!.ref.file;
+    const first = store.putToolImage("wt-1", file, shot!.bytes);
+    // named on the chat before the bytes land: the fetch waits on the write rather than 404ing
+    await store.whenWritten("wt-1", file);
+    await first;
+    expect(existsSync(join(attachmentsDirFor(dir, "wt-1"), file))).toBe(true);
+    await store.putToolImage("wt-1", file, Buffer.from("other"));
+    expect(await Bun.file(join(dir, "wt-1", file)).text()).toBe("png!");
+    expect(store.fileFor("wt-1", file)).toBe(join(dir, "wt-1", file));
+    await expect(store.putToolImage("wt-1", "../x.png", shot!.bytes)).rejects.toThrow("bad tool image");
   });
   test("jpeg gets .jpg; an empty payload is a user error", async () => {
     const jpeg = await store.put("wt-1", 8, { ...img, mimeType: "image/jpeg" });

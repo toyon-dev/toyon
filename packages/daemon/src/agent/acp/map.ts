@@ -11,8 +11,9 @@ import type {
   ToolCallContent,
   ToolKind,
 } from "@agentclientprotocol/sdk";
-import { type AgentCommand, type AgentEvent, emptyInput, isWrittenKind } from "@toyon/shared";
+import { type AgentCommand, type AgentEvent, emptyInput, isWrittenKind, type ToolImage } from "@toyon/shared";
 import { log } from "../../core/log.ts";
+import { toolImage } from "../attachments.ts";
 import { unifiedDiff } from "./diff.ts";
 import { currentValues, readOptions } from "./options.ts";
 
@@ -31,6 +32,10 @@ export interface ToolMemo {
 
 /** per-session memory of tool calls; cleared when the session's process goes away */
 export type ToolMemos = Map<string, ToolMemo>;
+
+/** where the bytes of a picture a call returned go: the mapper names the file and hands the bytes
+ * over, and the tool-end it emits refers to the file by name */
+export type ImageSink = (file: string, bytes: Buffer) => void;
 
 /** Which call spawned this one, out of the `_meta` each adapter stamps on its own updates.
  *
@@ -128,7 +133,7 @@ function abandoned(memos: ToolMemos, parent: string | undefined): AgentEvent[] {
   return out;
 }
 
-export function mapUpdate(update: SessionUpdate, memos: ToolMemos, tag: string): AgentEvent[] {
+export function mapUpdate(update: SessionUpdate, memos: ToolMemos, tag: string, sink?: ImageSink): AgentEvent[] {
   switch (update.sessionUpdate) {
     case "agent_message_chunk": {
       // the adapter forwards a subagent's prose like any other chunk and only declines to count it
@@ -179,7 +184,7 @@ export function mapUpdate(update: SessionUpdate, memos: ToolMemos, tag: string):
       });
       // some agents report a one-shot tool already finished
       if (update.status === "completed" || update.status === "failed")
-        out.push(endOf(update.toolCallId, memo, update.status));
+        out.push(endOf(update.toolCallId, memo, update.status, sink));
       return out;
     }
     case "tool_call_update": {
@@ -233,7 +238,7 @@ export function mapUpdate(update: SessionUpdate, memos: ToolMemos, tag: string):
       if (update.content) memo.content = [...memo.content, ...update.content];
       if (update.rawOutput !== undefined) memo.rawOutput = update.rawOutput;
       if ((update.status === "completed" || update.status === "failed") && !memo.ended) {
-        out.push(endOf(update.toolCallId, memo, update.status));
+        out.push(endOf(update.toolCallId, memo, update.status, sink));
       }
       return out;
     }
@@ -269,14 +274,31 @@ function textOf(content: { type: string; text?: string }, tag: string, what: str
   return null;
 }
 
-function endOf(toolId: string, memo: ToolMemo, status: "completed" | "failed"): AgentEvent {
+function endOf(toolId: string, memo: ToolMemo, status: "completed" | "failed", sink?: ImageSink): AgentEvent {
   memo.ended = true;
+  const images = sink ? toolImages(memo.content, sink) : [];
   return {
     type: "tool-end",
     toolId,
     output: summarizeToolOutput(memo.content, memo.rawOutput),
     isError: status === "failed" || exitCodeOf(memo.rawOutput) > 0,
+    ...(images.length ? { images } : {}),
   };
+}
+
+/** the pictures among a call's content blocks (a read of a screenshot is one image block and no
+ * text), each handed to the sink and named for the row. A block in a format the shell would not
+ * draw is left out; the row then reads as a call that printed nothing. */
+export function toolImages(content: ToolCallContent[], sink: ImageSink): ToolImage[] {
+  const out: ToolImage[] = [];
+  for (const c of content) {
+    if (c.type !== "content" || c.content.type !== "image") continue;
+    const img = toolImage(c.content.data, c.content.mimeType);
+    if (!img) continue;
+    sink(img.ref.file, img.bytes);
+    out.push(img.ref);
+  }
+  return out;
 }
 
 /** A command's exit code, where the agent reports one beside the output. OpenCode marks every shell

@@ -54,6 +54,16 @@ export interface ImageRef {
   file: string;
 }
 
+/** a picture a tool call returned: a read of a screenshot, a command that printed an image. The
+ * bytes live in the attachment store beside the message images, under a name made from the bytes
+ * themselves, so the transcript keeps a ref and the same picture read twice is one file. */
+export interface ToolImage {
+  /** basename under the store's <worktreeId>/ directory */
+  file: string;
+  mimeType: string;
+  bytes: number;
+}
+
 /** where a paste was copied from, when the shell's own editor copied it: the lines as they were
  * numbered at the moment of the copy, which later edits to the file do not move */
 export interface PasteSource {
@@ -189,7 +199,9 @@ export type AgentEvent =
    * as the main agent's own writing anywhere else, and the panel is where the rest of that call's
    * work already is. Superseded by the `tool-end` output, which is the report it finished with. */
   | { type: "tool-delta"; toolId: string; text: string }
-  | { type: "tool-end"; toolId: string; output?: string; isError?: boolean }
+  /** `images` are the pictures the call returned, which the row shows in place of output it has
+   * none of: a read of a png says nothing in words */
+  | { type: "tool-end"; toolId: string; output?: string; isError?: boolean; images?: ToolImage[] }
   | { type: "turn-end"; stopReason: string; ts: number }
   /** the agent's running figures after a reply: context tokens in use of the window's size, and
    * the session's spend so far when the agent prices itself (Claude does; a rate-limit notice

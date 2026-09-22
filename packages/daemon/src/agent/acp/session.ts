@@ -935,7 +935,11 @@ export class AcpSession implements AgentAdapter {
     }
     // the agent changed its own model or effort (a slash command can): keep the comparison honest
     if (params.update.sessionUpdate === "config_option_update") this.absorb(live, params.update.configOptions);
-    const events = mapUpdate(params.update, live.tools, this.d.worktreeId);
+    // a picture a call returned is written as the tool-end that names it goes out; the http side
+    // waits on the write, so the row's fetch never beats the bytes to the disk
+    const events = mapUpdate(params.update, live.tools, this.d.worktreeId, (file, bytes) =>
+      fireAndForget(this.d.worktreeId, this.d.attachments.putToolImage(this.d.worktreeId, file, bytes), "tool image"),
+    );
     if (!this.running) this.trackOwn(events);
     for (const ev of events) {
       // words or a call after a steer are the agent answering it. Output the pre-emption cut off can

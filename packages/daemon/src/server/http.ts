@@ -235,6 +235,8 @@ export function createFetch(opts: HttpOpts) {
         worktreeId && file && !extra
           ? [opts.attachments.fileFor(worktreeId, file), opts.archivedAttachment(worktreeId, file)]
           : [];
+      // a picture a tool returned is named on the chat before its bytes have landed
+      if (worktreeId && file) await opts.attachments.whenWritten(worktreeId, file);
       const path = places.find((p): p is string => !!p && existsSync(p));
       if (!path) return new Response("not found", { status: 404 });
       return new Response(Bun.file(path), { headers: { "cache-control": IMMUTABLE } });

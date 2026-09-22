@@ -8,7 +8,9 @@ import { callPath, relPath, toolLabel } from "./toolCall.ts";
 /** what a tool row in the transcript offers: the file it named, in the diff pane and elsewhere;
  * what it ran and what came back, as text; and the fold. The pane and the fold are different
  * verbs: the fold shows the row's own receipt inline, the pane shows the whole file below the
- * preview. A call on something outside the worktree has no file, so it starts at the copies. */
+ * preview. A call on a file outside the worktree (a screenshot under /tmp) has nothing for the
+ * pane, which reads inside the checkout alone, so it offers the editors on this machine and the
+ * path; a call that named no file starts at the copies. */
 export function toolRowItems(
   tools: ToolItem[],
   roots: string[],
@@ -30,6 +32,8 @@ export function toolRowItems(
       onClick: () => openFile(deps, { worktreeId: wt.id, path: rel, view }),
     });
     open.push(...editorItems(`${wt.dir}/${rel}`, () => sock?.send({ t: "reveal", worktreeId: wt.id, path: rel })));
+  } else if (rel.startsWith("/")) {
+    open.push(...editorItems(rel), { id: "copy-path", label: "copy path", onClick: () => copyText(rel) });
   }
   const copies: MenuItem[] = [];
   const command = toolLabel(head, roots).command;

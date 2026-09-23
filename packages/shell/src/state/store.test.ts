@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, setSystemTime, test } from "bun:test";
 import {
   type AgentEvent,
   MANAGED_NONE,
@@ -399,6 +399,21 @@ describe("per-worktree records", () => {
 });
 
 describe("chat folding", () => {
+  test("the chat carries when it last changed; an event that changed nothing leaves the stamp", () => {
+    try {
+      setSystemTime(new Date(1000));
+      const s = run([hello(wt("a")), agent("a", { type: "thinking-delta", text: "hm" })]);
+      expect(s.local.a?.chatAt).toBe(1000);
+      setSystemTime(new Date(5000));
+      // a chunk for a call that never opened a row
+      const same = run([agent("a", { type: "tool-delta", toolId: "nope", text: "x" })], s);
+      expect(same.local.a?.chatAt).toBe(1000);
+      const moved = run([agent("a", { type: "thinking-delta", text: "m" })], s);
+      expect(moved.local.a?.chatAt).toBe(5000);
+    } finally {
+      setSystemTime();
+    }
+  });
   test("text deltas append to the open assistant item; a user message starts a new one", () => {
     const s = run([
       hello(wt("a")),

@@ -170,6 +170,10 @@ const isChangesTab = (v: unknown): v is ChangesTab => CHANGES_TABS.includes(v as
 /** everything the shell tracks for one worktree; dropped when the worktree disappears */
 export interface WorktreeLocal {
   chat: ChatItem[];
+  /** when `chat` last changed, by this tab's clock: the log counts its silence from here, so the
+   * count survives switching worktrees and back. Kept here and not in the log, which is one
+   * component showing whichever worktree is active; the daemon's events carry no time of their own */
+  chatAt?: number;
   log: LogLine[];
   git?: GitInfo;
   /** the files on disk: quick open, the @ menu and the files tab ask for it */
@@ -1249,7 +1253,7 @@ function askSettled(l: WorktreeLocal, ev: AgentEvent): WorktreeLocal {
 /** a line of toyon's own on a worktree's chat: what the daemon answered about it, kept where the
  * work is read rather than shown for a moment somewhere else */
 function noteChat(s: State, id: string, item: ChatItem): State {
-  return withLocal(s, id, (l) => ({ ...l, chat: [...l.chat, item] }));
+  return withLocal(s, id, (l) => ({ ...l, chat: [...l.chat, item], chatAt: Date.now() }));
 }
 
 /** a failure answers on the worktree's chat, and opens the chat if it was shut: the answer is the
@@ -2036,6 +2040,8 @@ function onServer(s: State, msg: StoreServerMsg): State {
           // a message sent moves the conversation on from the hit a search landed on
           ...(ev.type === "user-message" ? withoutMark(base, "reveal") : base),
           chat,
+          // a delta that changed nothing (a chunk for a row that never opened) is not a sign of life
+          ...(chat !== l.chat ? { chatAt: Date.now() } : {}),
           turn,
           ...(model !== l.model ? { model } : {}),
           ...(effort !== l.effort ? { effort } : {}),
@@ -2067,6 +2073,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
       return withLocal(s, msg.worktreeId, ({ restoring, ...l }) => ({
         ...l,
         chat,
+        chatAt: Date.now(),
         log: msg.log ?? l.log,
         ...(usage ? { usage } : {}),
         ...(restoring !== undefined && !heard(restoring) ? { restoring } : {}),

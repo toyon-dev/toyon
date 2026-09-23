@@ -15,24 +15,21 @@ import { ChatItemView, QUIET_AFTER, ThoughtRow, ToolRow } from "./ChatItemView.t
 import { groupTools, indexOfSeq, openRow, ownCallRunning, runningRow, subagentsAtWork } from "./group.ts";
 import { isBlank } from "./recall.ts";
 
-/** Whole seconds since `items` last changed, ticking once a second while `busy`; 0 otherwise.
- * The stamp is taken in an effect keyed on `items`, so the render that lands a result still shows
- * the old count for up to a second; it forces a re-render only when a count was showing, so a
- * healthy turn streaming tokens pays nothing for this. */
-function useQuietSeconds(items: unknown, busy: boolean): number {
-  const since = useRef(Date.now());
+/** Whole seconds since the chat last changed (`since`, the worktree's `chatAt`), ticking once a
+ * second while `busy`; 0 otherwise. The stamp is the store's, not this component's: the log is one
+ * component showing whichever worktree is active, so a stamp kept here would start over on every
+ * switch back. The render that lands a result already sees the new stamp, so the count leaves in
+ * that render; a healthy turn streaming tokens pays nothing beyond the tick. */
+function useQuietSeconds(since: number | undefined, busy: boolean): number {
   const [now, setNow] = useState(() => Date.now());
-  useOnChange([items], () => {
-    const wasShowing = (now - since.current) / 1000 >= QUIET_AFTER;
-    since.current = Date.now();
-    if (wasShowing) setNow(since.current);
-  });
   useEffect(() => {
     if (!busy) return;
+    // the last tick may be from an earlier turn, so the first reading is taken fresh
+    setNow(Date.now());
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
   }, [busy]);
-  return busy ? Math.floor((now - since.current) / 1000) : 0;
+  return busy && since !== undefined ? Math.max(0, Math.floor((now - since) / 1000)) : 0;
 }
 
 /** the transcript for the active worktree: items, working indicator, waiting messages, jump-down pill.
@@ -169,7 +166,8 @@ export function ChatLog({
   // whether the agent is thinking or wedged, and this is the one signal that changes with the
   // difference: nothing while results keep landing, a number climbing when they stop. It measures
   // silence rather than the turn, so a running call counts too: a hung command is silence.
-  const quiet = useQuietSeconds(items, busy);
+  const chatAt = useLocalField(id, "chatAt");
+  const quiet = useQuietSeconds(chatAt, busy);
   // What in the log already says busy where the reader is looking: the shimmer on a running call
   // of the main agent's own, or a thought or reply still arriving. The word under the log would say it
   // again, so it shows only when nothing does, in the gap between two calls. A running call's

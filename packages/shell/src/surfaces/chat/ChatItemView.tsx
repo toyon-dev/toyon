@@ -493,7 +493,7 @@ export const ThoughtRow = memo(function ThoughtRow({
  * number on and off with every result; past it, the silence is the news. One threshold for the
  * count on a running call's row and the word under the log, so the two never disagree about
  * whether a wait is long. */
-export const QUIET_AFTER = 3;
+export const QUIET_AFTER = 6;
 
 /** a call in the transcript, or a run of calls that did the same thing to the same file, or the
  * call that started a subagent with that subagent's rows folded under it */

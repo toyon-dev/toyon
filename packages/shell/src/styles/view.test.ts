@@ -4,11 +4,10 @@ import { cssRules, shellCss } from "./cssRules.ts";
 /**
  * One column for every view of toyon's own, declared in one place.
  *
- * The centre once had two columns that were the same column with two numbers changed, a form's and
- * a status's, each with a container and a test of its own. A rule anywhere else that sets a view's
- * margins, measure or anchor is a second column, and two columns drift apart by whichever one
- * someone edits. So those numbers are read by the column's three rules and nowhere else. The gap is
- * not on the list: a part may keep the column's rhythm, as the form's knobs row does.
+ * A rule anywhere else that sets a view's margins, measure or anchor is a second column, and two
+ * columns drift apart by whichever one someone edits. So those numbers are read by the column's
+ * three rules and nowhere else. The gap is not on the list: a part may keep the column's rhythm,
+ * as the form's knobs row does.
  *
  * The column is anchored to the top and draws no ground; view.css says why for both.
  */

@@ -100,16 +100,12 @@
 
   /* ---- rows ----
    Every full-bleed list row: changed files, commits, worktrees, picker results, menu items. A band
-   you point at, not a chip you press, which is the whole difference from .btn and why there is no
-   radius and no inset here: the row reaches both edges of whatever holds it. A surface adds only
-   what is its own, a status letter or a diffstat or a dot.
+   you point at, not a chip you press: no radius and no inset, since the row reaches both edges of
+   whatever holds it. A surface adds only what is its own, a status letter or a diffstat or a dot.
 
-   Hover is a tier shift, not a colour: the seat lifts and everything on it lifts with it, because a
-   tier is measured against the surface under it and text that stays put while its seat rises goes
-   illegible (text2 on element0 is 1.4:1). .row-dim is a child that sits one rung below its row and rides
-   up with it; .row-quiet is a whole row a rung down, for the discovered list and collapsed tool
-   calls. Status colours are exempt on purpose: a green dot that shifts under the pointer reads as
-   the proc changing state. */
+   Hover is a tier shift, not a colour: the seat lifts and everything on it lifts with it (the
+   lifted seat, below). .row-dim is a child one rung below its row; .row-quiet is a whole row a
+   rung down, for the discovered list and collapsed tool calls. */
   .row {
     display: flex;
     align-items: center;
@@ -128,14 +124,12 @@
   /* ---- hover is a pointer's ----
    Every :hover in these stylesheets sits under :where([data-hover]), which the frame's root carries
    while the window has a pointer that hovers. On touch a hover is a tap's afterimage: the browser
-   leaves it on the last thing tapped until a tap lands somewhere else, so a button stayed lit after
-   it was pressed and a tool row went on looking open after it was shut. The :where adds nothing to
-   a selector's weight, so every hover rule wins and loses exactly where it did before. Touch gets a
-   press instead, lit while the finger is down and fading after (below, and button.css). */
+   leaves it on the last thing tapped until a tap lands somewhere else, so a button stays lit after
+   it is pressed. The :where adds nothing to a selector's weight. Touch gets a press instead, lit
+   while the finger is down and fading after (below, and button.css). */
 
-  /* .menu-open is the hover held: the row whose context menu is up keeps its lifted seat and its
-   lifted text after the pointer has left it for the menu, or the text falls back to text1 on a
-   seat that did not, and the row you are acting on is the hardest one to read */
+  /* .menu-open is the hover held: the row whose context menu is up keeps its lifted seat after the
+   pointer has left it for the menu */
   .row {
     :where([data-hover]) &:hover,
     &.menu-open {
@@ -162,22 +156,19 @@
   /* ---- the lifted seat ----
    A seat that lifts moves the ladder up a rung for everything standing on it: text1 becomes the
    read tier and text2 the scan tier, so a child that names text2 goes on being the quiet one
-   instead of becoming 1.06:1 on element1. It is one inherited declaration per seat rather than a
-   colour per child, which is what this kept costing: four rules had been written by hand in the
-   transcript alone, one per child someone noticed, and the pickers had four more with the file
-   row's directory as the fifth nobody wrote, so it went invisible the moment the row was picked.
+   instead of becoming 1.06:1 on element1. One inherited declaration per seat, never a colour per
+   child.
 
    The rungs move one step, not two: at text0 a filename and its directory read as one string
-   instead of a name with a location after it. text0 is not redeclared, because there is nothing
-   above it; a child that wants the top tier under the pointer names it and says why (the
-   transcript's hint does).
+   instead of a name with a location after it. text0 is not redeclared; a child that wants the top
+   tier under the pointer names it and says why.
 
    What must not ride is what is not measured against the surface under it: a control's own rest
-   and disabled tier, and a dot. Those name --ink0/1/2, which is the same colour held still.
+   and disabled tier, and a dot. Those name --ink0/1/2, the same colours held still.
 
-   The states are data-state words (ui/rowState.ts): current lifts the seat, cursor deliberately
-   does not, since on a file or a commit it is the keyboard cursor and moves no background. Any
-   other surface with a seat of its own opts in with the same two lines. */
+   The states are data-state words (ui/rowState.ts): current lifts the seat, cursor does not, since
+   on a file or a commit it is the keyboard cursor and moves no background. Any other surface with
+   a seat of its own opts in with the same two lines. */
   .row {
     :where([data-hover]) &:hover,
     &[data-state~="current"],
@@ -344,20 +335,15 @@
    it runs: a chat call still out, a top bar chip whose job is running. The words are the mark, so
    nothing stands beside them to say the same thing again.
 
-   The band is the text's own two tiers rather than a colour of its own: a state colour on a line
-   of prose would read as a warning on that line. It paints through the glyphs rather than over
-   them, and it is `text-fill-color` that is cleared rather than `color`, so an element that names
-   its own colour keeps it the moment the animation stops and nothing has to be put back.
+   The band is the text's own two tiers, not a state colour: a state colour on a line of prose
+   reads as a warning on that line. It is `text-fill-color` that is cleared rather than `color`,
+   so an element that names its own colour keeps it the moment the animation stops.
 
-   The lit part is a plateau and not a peak: ramping straight from one tier to the other and back
-   puts full brightness on a single column, and since the two tiers are a few steps apart only the
-   top of that ramp reads as lit at all, which is a band about three characters wide on a path.
-   Holding text0 across the middle tenth is what makes it a band you watch travel.
+   The lit part is a plateau, not a peak: with the two tiers a few steps apart, a straight ramp
+   reads as lit for about three characters. Holding text0 across the middle tenth makes it a band.
 
-   The dim tier is named as a tier: a hovered or open row seats its summary on element1 and moves
-   the ladder up with it, so text2 here is already the rung that stays legible there. It has to come
-   through the tier and not through `color`, because the shine paints through a gradient and reads
-   no colour it inherits. */
+   The dim tier is named as a tier so a lifted seat moves it too; it cannot come through `color`,
+   because the gradient reads no colour it inherits. */
   .live-text {
     background: linear-gradient(90deg, var(--text2) 30%, var(--text0) 45%, var(--text0) 55%, var(--text2) 70%);
     background-size: 300% 100%;

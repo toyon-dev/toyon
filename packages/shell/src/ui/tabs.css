@@ -2,17 +2,13 @@
 @layer tokens, base, surfaces;
 @layer base {
   /* the strip is a recess under the ground it heads, and the open tab is that ground showing
-   through: the lit tab is the open one, the way every tab bar has taught the eye, and the others
-   sit behind it. A recess rather than the tier above, because the tier above is lighter and that
-   put the open tab in the dark. The parent names the recess (`--tabs-strip`) beside its ground,
-   since the floor has a recess of its own (--sunken-floor) where the chrome has --sunken.
-   No rule under the strip: the recess meeting the ground is the edge. A rule there took the
-   colour of a picked row in several themes, and with the picked row first under the strip it
-   read as the row's top pixel under the closed tabs, where the open tab's ground covered it, so
-   the open tab looked a pixel taller. */
-  /* the dense tier by default: the strip's text is the small tier, and a pane head is on the same
-   rung as the terminal's lines. A parent may name the taller one (`--tabs-height`): the dock does,
-   since its strip heads a whole panel under the bar rather than a pane inside a column. */
+   through. A recess rather than the tier above, because the tier above is lighter and puts the
+   open tab in the dark. The parent names the recess (`--tabs-strip`) beside its ground, since the
+   floor has a recess of its own (--sunken-floor) where the chrome has --sunken. No rule under the
+   strip: in several themes a rule there matches a picked row's colour and reads as that row's top
+   pixel under the closed tabs, making the open tab a pixel taller.
+   The dense tier by default; a parent may name the taller one (`--tabs-height`), as the dock does
+   for a strip heading a whole panel. */
   .tabs {
     display: flex;
     align-items: stretch;

@@ -6,13 +6,11 @@ import { HOVER_GATE, shellCss } from "./cssRules.ts";
 /**
  * The frame is one decision, made in app/phone.ts, and everything else reads it.
  *
- * Two ways that used to drift, and would again. A width query in a stylesheet is a second copy of
- * the breakpoint, kept equal to the first by a test until the phone's root took its own token tier
- * and there was no query left to hold. And a rule under a width query is transparent to cssRules,
- * so it flattens into the same selector as the desk rule it was meant to qualify, and the docks and
- * chat-side tests go on asserting the phone's values while passing. Both go away by having no such
- * query at all: the frame is a branch in the markup, and what differs on a phone is on a class the
- * phone frame alone renders.
+ * A width query in a stylesheet is a second copy of the breakpoint. It is also transparent to
+ * cssRules: a rule under it flattens into the same selector as the desk rule it qualifies, and the
+ * docks and chat-side tests assert the phone's values while passing. So there is no such query at
+ * all: the frame is a branch in the markup, and what differs on a phone is on a class the phone
+ * frame alone renders.
  */
 
 const SRC = new URL("..", import.meta.url).pathname;

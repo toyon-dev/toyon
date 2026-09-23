@@ -105,8 +105,7 @@ export class SparePool {
   }
 
   /** an adopted spare, brought back to warm: reset onto main, then its procs and proxy up, since
-   * a spare with no preview is not warm (the draft tab shows it, and a claim hands it over as is;
-   * before this the procs waited for the first subscribe after the claim) */
+   * a spare with no preview is not warm (the draft tab shows it, and a claim hands it over as is) */
   private async revive(repoId: string): Promise<void> {
     await this.refresh(repoId);
     const wt = this.spareOf(repoId);

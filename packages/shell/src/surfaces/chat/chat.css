@@ -51,16 +51,14 @@
   }
 
   /* ---- the chat as the phone's screen ----
-     The same panel as the centre's, and for the same reason: the transcript and the box are what
-     a phone is for, so nothing here rebuilds either. Two things differ. It is a flex child of the
-     centre rather than a box pinned inside the frames wrap, since on a phone the screen is the
-     column. And the measure is the window: at 390px the centre's padding would leave a gutter on
-     each side of a line that has none to give.
+     The same panel as the centre's. Two things differ: it is a flex child of the centre rather
+     than a box pinned inside the frames wrap, since on a phone the screen is the column, and the
+     measure is the window, since at 390px the centre's padding would take a gutter from a line
+     that has none to give.
 
-     The floor is set here rather than on --composer-min in the tokens, because .composer reads the
-     name but each region declares it on the element it owns, and an element declaration beats an
-     inherited one. Three lines is the floor a reply is written in; the on-screen keyboard takes
-     the rest of the window and the transcript gives way to it. */
+     The floor is declared here and not as a token: each region sets --composer-min on the element
+     it owns, and an element declaration beats an inherited one, so a root value would be dead.
+     Three lines; the on-screen keyboard takes the rest and the transcript gives way to it. */
   .chat-screen {
     flex: 1;
     min-height: 0;
@@ -679,21 +677,15 @@
   }
 
   /* ---- the live mark ----
-   A row that is still running keeps its glyph: the kind is the one thing the row does not say in
-   words (toolCall.ts prints no name where the hint is a path), and a mark standing in for the glyph
-   took it away exactly while it mattered. So the state rides on the row's text instead, and it is
-   the only mark: a dot after the text would be a second thing on the row saying what the moving
-   text already says. */
+   A running row keeps its glyph, since the kind is the one thing the row does not say in words
+   (toolCall.ts prints no name where the hint is a path). The state rides on the row's text as
+   `.live-text` (base.css) and is the only mark. The answer is not marked: its words appearing is
+   the signal, and a band over the whole block would sweep back over sentences already read. */
 
-  /* the band is `.live-text` in base.css: a call's hint is written when it starts and says nothing
-   more until it ends, so a running call and a wedged one look the same without it. The answer is
-   not marked this way and does not need to be, since its words appearing is the signal, and a
-   band sweeping the whole block would travel back over the sentences already read to say what the
-   arriving ones say better. */
   /* the graft divider and the landed row are the blocked row's box with another edge: all three
-   are the daemon writing into the transcript itself, and only the last two are good news. The
-   landed row takes the aqua that says "landed" everywhere else, not the accent: on the red edge
-   the blocked row uses, a land read as a failure */
+   are the daemon writing into the transcript itself. The landed row takes the aqua that says
+   "landed" everywhere else, not the accent: on the blocked row's red edge, a land read as a
+   failure */
   .blocked-row,
   .graft-row,
   .landed-row {
@@ -1141,8 +1133,7 @@
   /* an image dragged over the chat: the whole panel takes it, so the whole panel lights up. A
    hairline rather than a dashed box: the drop is the obvious reading of a file over the chat, and
    the marker only has to confirm the target, not shout at it. The line is the accent at full
-   strength; it used to be the accent at 35%, which is a colour that appears in no swatch and so
-   read as a fourth hue rather than as the accent doing something. */
+   strength: a tint of it appears in no swatch and reads as a fourth hue. */
   .chat-dock {
     &.drop-over::after {
       content: "";

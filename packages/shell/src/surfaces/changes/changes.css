@@ -111,10 +111,10 @@
       width: 18px;
     }
   }
-  /* name first, then the directory it sits in. The name is what the eye is looking for, and it
-   leaves the part that can be cut at the end, where cutting it is free. (This column used to be
-   the whole path under `direction: rtl` to ellipsize from the left; bidi reorders the neutral
-   characters at each end of the run, which is how `.claude/` came out as `/claude.`) */
+  /* name first, then the directory it sits in: the name is what the eye is looking for, and the
+   part that can be cut sits at the end. Not one path under `direction: rtl` to ellipsize from the
+   left: bidi reorders the neutral characters at each end of the run, and `.claude/` comes out as
+   `/claude.` */
   .git-file {
     & .path {
       display: flex;

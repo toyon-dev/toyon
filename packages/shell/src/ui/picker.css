@@ -193,17 +193,11 @@
     flex-shrink: 0;
   }
   .picker-item {
-    /* the matched characters take the accent, so they are the same colour as the bar marking the row
-   you are on: one idea, why this row is here and which one is current, said in one colour. A
-   highlight inside a word is emphasis rather than status, so it never reads as a fault the way a
-   red border or a red icon does. In Toyon that makes it the berry, which is the most saturated
-   thing in the set and now has a home you see whenever you type; in the VS Code themes it comes
-   out blue, because vscodeToTheme maps their accent onto the orange slot.
-
-   Worth knowing when reading its contrast: this text lives on the highlighted row, which is
-   element1, not on surface0. The accent runs 2.6:1 there against 3.8:1 on the ground, and no red
-   fixes that. A red light enough for 3.4:1 on element1 has to reach L*66, where its chroma has collapsed from 93 to
-   67 and it is a salmon, which is worse everywhere else it appears. */
+    /* the matched characters take the accent, the same colour as the bar marking the row you are
+   on: why this row is here and which one is current, said in one colour. A highlight inside a
+   word is emphasis rather than status, so it never reads as a fault the way a red border does.
+   Its contrast is read on element1, the highlighted row, not on surface0: 2.6:1 there, and a red
+   light enough to fix that has lost its chroma and is a salmon everywhere else it appears. */
     & .hit {
       font-weight: inherit;
       color: var(--accent);

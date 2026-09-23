@@ -59,8 +59,7 @@
   .form-go {
     margin-left: auto;
   }
-  /* the file this form becomes, read at the start of the row that writes it: the form says what it
-     turns into, which is the one thing a card's frame used to imply and never said */
+  /* the file this form becomes, read at the start of the row that writes it */
   .form-sign {
     /* takes the free space rather than pushing with a margin: an auto margin here and another on
        the primary would split the row three ways and strand whatever sits between them */

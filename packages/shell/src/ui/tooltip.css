@@ -55,8 +55,8 @@
     gap: 12px;
     color: var(--text1);
   }
-  /* the figures are one piece: with a long branch beside them the box used to break "39k of
-   1000k" across two lines rather than grow, so the name is the side that wraps */
+  /* the figures are one piece: beside a long branch the box would break "39k of 1000k" across two
+   lines rather than grow, so the name is the side that wraps */
   .tooltip-aside {
     white-space: nowrap;
   }

@@ -24,18 +24,14 @@ export type ChipOption<T extends string> = {
 };
 
 /**
- * A chip holding one value out of a few, and the panel it opens into: the one the project pill
- * drops, with the value as the field's lead chip, a row per option with a line under its name
- * saying what it means, and the current one marked down its edge. A context menu is a list of
- * actions; a value you set gets the picker, so every chip with options reads as the switcher does.
- * No caret: the panel opens over the chip, not out of it, and the pill draws none either.
+ * A chip holding one value out of a few, and the panel it opens into: the same panel the project
+ * pill drops. A context menu is a list of actions; a value you set gets the picker, so every chip
+ * with options reads as the switcher does. No caret: the panel opens over the chip, not out of it.
  *
- * The panel lands over the chip the way the switcher lands over the pill, whichever way it opens:
- * a chip at the foot of the window (the composer's) gets the field strip at the panel's bottom and
- * the rows rising above it, and one against the window's right edge (the chat dock's) hangs the
- * panel from its right edge. Float measures the real box against the real chip and marks which way
- * it turned; chip-picker.css reorders the bands to match. The lead chip is a button, because it
- * covers the chip that opened the panel and a second click there closes it.
+ * The panel lands over the chip whichever way it opens: Float measures the real box against the
+ * real chip and marks which way it turned, and chip-picker.css reorders the bands to match. The
+ * lead chip is a button because it covers the chip that opened the panel, and a second click there
+ * closes it.
  */
 export function ChipPicker<T extends string>({
   value,

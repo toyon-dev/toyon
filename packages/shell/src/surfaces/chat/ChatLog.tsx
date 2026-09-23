@@ -165,21 +165,14 @@ export function ChatLog({
   const heardAt = usage?.heard !== undefined && chatAt !== undefined && usage.heard > chatAt ? usage.heard : undefined;
   const heard = useSecondsSince(busy ? heardAt : undefined);
   // What in the log already says busy where the reader is looking: the shimmer on a running call
-  // of the main agent's own, or a thought or reply still arriving. The word under the log would say it
-  // again, so it shows only when nothing does, in the gap between two calls. A running call's
-  // row carries its own count (ToolRow), so under it there is no line at all: "quiet" beside a
-  // line that shines contradicted it, and one count below could not say which of two calls
-  // running at once is the slow one. A stalled thought has no row to count on, so its silence is
-  // still said here. A subagent's call does not count as moving: it runs under a spawn row that
-  // closed when the spawn returned and has since been folded up the log, so its shimmer is one
-  // nobody sees, and the word hiding for it would blink with every call the subagent makes. Nor
-  // does the call that started a subagent and waits on it (ownCallRunning in group.ts): its row
-  // is open with the subagent's rows under it, and the shine on its line is what the tailing log
-  // scrolls off first.
+  // of the main agent's own (ownCallRunning in group.ts says which calls count), or a thought or
+  // reply still arriving. The word under the log shows only when nothing does, in the gap between
+  // two calls. A running call's row carries its own count (ToolRow), so under it there is no line
+  // at all: one count below could not say which of two calls running at once is the slow one. A
+  // stalled thought has no row to count on, so its silence is still said here.
   const calling = ownCallRunning(items);
   const moving = streaming >= 0 || calling;
-  // the one row whose call is executing, which is the row that counts its wait: the rows behind
-  // it in the batch shine for a call that has not started (runningRow in group.ts)
+  // the one row whose call is executing, which is the row that counts its wait (runningRow in group.ts)
   const countingRow = useMemo(() => runningRow(entries), [entries]);
   // when that call reached the head of the batch, stamped by the store (the row is rebuilt on
   // every switch of worktree, so a clock of its own would start over)

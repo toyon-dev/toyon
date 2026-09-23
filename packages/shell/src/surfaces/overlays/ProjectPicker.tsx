@@ -12,18 +12,14 @@ import { PaletteRow } from "./PaletteRow.tsx";
 import { defaultParent, looksLikePath, type Row, rowsFor } from "./projectPicker.ts";
 
 /** ⌘O / the top-left pill: switch the shell to another registered repo, type a path to open one,
- * or make one that is not there yet. The daemon keeps every project's procs running; switching only
- * changes what is on screen. Typing a path completes against the filesystem: repos are openable,
- * plain folders are drilled into (enter or tab), so a nested checkout is reachable without typing
- * it out, and a name or a git URL matching nothing becomes an offer to create or clone.
+ * or make one that is not there yet. Switching only changes what is on screen; the daemon keeps
+ * every project's procs running. A typed path completes against the filesystem, and a name or git
+ * URL matching nothing becomes an offer to create or clone.
  *
- * Three forms, one component. A click on the pill drops it out of the pill (`pill`) and takes the
- * bar over the way a browser's address bar does: the open project becomes a chip in the field, the
- * caret sits after it, and the rows are every project, the open one marked. A key or the palette opens
- * the same switcher over the preview (`center`), where the eyes are when nothing was clicked; the
- * pill sits at the far edge of the screen. `disk` is the centered form the field's folder button
- * opens, which starts in the home directory: more room for walking the filesystem, where the
- * anchored one would run out of screen. */
+ * Three forms, one component: `pill` drops out of the pill and takes the bar over like an address
+ * bar; `center` is the same switcher over the preview, where the eyes are when a key opened it;
+ * `disk` is the centred form the folder button opens, starting in the home directory, since the
+ * anchored one runs out of screen when walking the filesystem. */
 export function ProjectPicker({ form }: { form: ProjectsOverlay["form"] }) {
   const dispatch = useDispatch();
   const sock = useSock();

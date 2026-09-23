@@ -14,21 +14,17 @@
 @layer tokens {
   :root {
     color-scheme: dark;
-    /* Four families, numbered only within themselves. The numbering orders; the family says which
-   * question you are answering, and every bug this system has had was a rule answering the wrong
-   * one: borders living in the surface ramp, a surface value painting text, a hover tint and a
-   * chat bubble sharing a slot with no way to move either.
+    /* Four families, numbered only within themselves. The family says which question a rule is
+   * answering; the number orders within it.
    *
    *   surface0..2   the canvas, the chrome on it, things raised above both
    *   element0..1   under the pointer, and picked
    *   border0..1    the everyday rule, and one that holds an edge alone
    *   text0..2      what you read, what you scan, what you skip
    *
-   * Several of these carry the same value today. That is fine and it is the point: they are the
-   * same colour for different reasons, and naming them apart is what makes moving one possible.
-   * A tier is measured against the surface under it, so when a seat lifts, the text on it lifts
-   * too (see the lifted seat in base.css). That idiom is why there is no "text1 on element0" token,
-   * which is the tax VS Code and Dropbox both pay and an editor this size does not need. */
+   * Several carry the same value. They are the same colour for different reasons, and naming them
+   * apart is what makes moving one possible. There is no "text1 on element0" token: a seat that
+   * lifts moves the text tiers with it (the lifted seat in base.css). */
     --surface0: #32302d;
     --surface1: #3d3835;
     --surface2: #504943;
@@ -57,34 +53,23 @@
      chat log and the diff pane read the one value. */
     --diff-add-word: #6fae5f17;
     --diff-del-word: #c07f6a17;
-    /* The text ladder is text0 > text1 > text2, each step quieter than the last, and the numbers are
-     the whole point: "muted" and "dim" did not tell you which was which, and disabled kept landing
-     on the tier above it because nobody could see the order. text0 is what you read, text1 is what
-     you scan (labels, filenames, controls at rest), text2 is what you skip (hints, comments, the
-     tool log, and anything switched off). Three is enough: a fourth tier lived here for about an
-     hour and turned out to be covering for a control that was resting on the wrong rung.
+    /* The text ladder: text0 is what you read, text1 what you scan (labels, filenames, controls at
+     rest), text2 what you skip (hints, comments, the tool log, anything switched off).
 
      --text0/1/2 are the tier where you are standing, not a fixed colour: a seat that lifts
      redeclares them one rung up for everything inside it (base.css, the lifted seat), so a child
-     that names text2 goes on being the skip tier instead of becoming 1.06:1 on element1. That
-     redeclaration is the whole mechanism, and it is why nothing has to name a hover colour per
-     child; four of those had been written by hand, one per child that someone noticed.
+     that names text2 stays the skip tier instead of becoming 1.06:1 on element1.
 
      --ink0/1/2 are the same three colours held still, for a rule that means the colour and not the
-     tier. Two kinds of thing want them. A control says its own state and not its seat's: a resting
-     button inside a hovered row must not paint itself in the colour that same button uses under the
-     pointer, and a disabled one must stay disabled. And a mark that is read rather than run: a
-     status dot that shifted as the pointer crossed its row would read as the proc changing state.
-
-     The test is whether the thing is measured against the surface under it. Prose is, so it rides.
-     A control's rest tier and a dot are not, so they hold. */
+     tier: a control's rest and disabled tier, which says the control's own state and not its seat's,
+     and a status dot, which would read as the proc changing state if it shifted under the pointer.
+     The test is whether the thing is measured against the surface under it: prose is, so it rides;
+     a control's rest tier and a dot are not, so they hold. */
 
     /* what "you are on this one" is painted in: the active worktree, the open tool call, a checked
-     box. One hue for all of them, so a theme changes the whole idea of selected by
-     pointing this somewhere else. Toyon selects in its berry, a coral rather than a scarlet, which
-     is the difference between the mark reading as the plant and reading as a fault. The color is
-     the theme's to name (Theme.accent, orange unless it says otherwise) and applyTheme
-     overwrites this, so every other theme keeps selecting in orange. */
+     box. One hue for all of them, so a theme changes the whole idea of selected by pointing this
+     somewhere else. The colour is the theme's to name (Theme.accent, orange unless it says
+     otherwise) and applyTheme overwrites this. */
     --accent: var(--red);
     /* what a lost connection is painted in: the rail's dots while the daemon is down. Warm,
      because it is a fault, and never the accent, because it colours whole rows and a row in the
@@ -107,15 +92,12 @@
     /* an html page read in the editor pane is drawn as a browser tab would draw it, and a tab's
      canvas is white in every theme: the page's own colours are the page's, not the shell's */
     --page-paper: #ffffff;
-    /* code sits on a wash of the text color instead of a background step: surface0 and surface1 are
-     the same color in several themes (Rose Pine, Nord), so a chip painted in one of them would disappear
-     into the column it sits on. Mixed at use time, so it follows the theme like everything else.
-     This is the only mix left in the shell, and it is the case where a mix does not invent a
-     colour: 6% of the foreground over the ground lands on #3d3a35 here, which is surface1 to within a
-     couple of points. Everywhere else a state is a palette value or a step on the bg ramp, because
-     a colour at 35% of something is a colour that appears in no swatch and reads as a new hue
-     rather than as the same one doing a different job. It was two tokens, code-bg for the inline
-     chip and code-panel for the block, 6% and 4%: 1.3 L* apart, which is two names for one colour. */
+    /* code sits on a wash of the text colour instead of a background step: surface0 and surface1 are
+     the same colour in several themes (Rose Pine, Nord), so a chip painted in one of them would
+     disappear into the column it sits on. This is the only mix in the shell, and the one case where
+     a mix invents no colour: 6% of the foreground over the ground lands within a couple of points
+     of surface1. Everywhere else a state is a palette value or a step on the ramp, because a colour
+     at 35% of something appears in no swatch and reads as a new hue. */
     --code: color-mix(in srgb, var(--text0) 6%, transparent);
     /* the seven a theme names for code (themes.ts, syntaxOf, which fills in any it left out); both
      the chat log and the diff pane colour from these, so a file reads the same in either */
@@ -127,8 +109,7 @@
     --syntax-function: #6bc198;
     --syntax-variable: #81a99d;
     /* radii. The bare one is a control's, because that is the radius most rules ask for; xs is a
-       chip or a badge, md a box that floats, lg a card, and pill a pill. Spelled out, like every
-       other scale here: --r- read as a mystery beside --surface and --weight. */
+       chip or a badge, md a box that floats, lg a card, and pill a pill. */
     --radius-xs: 3px;
     --radius: 4px;
     --radius-md: 6px;
@@ -136,17 +117,13 @@
     --radius-pill: 999px;
 
     /* Row heights. Two tiers, because a list is either dense enough to scan or comfortable enough to
-     point at and there is no third thing; the app had five, none of them named, and the worktree
-     row alone asserted its height in three places. The -sm tier is mono: changed files, commits,
-     picker results, the tool log. The bare one is ui: worktrees, menu items. 22 is where the
-     tool log had already landed on its own, and it is the height at which a 12px mono row stops
-     reading as a paragraph and starts reading as rows. */
+     point at and there is no third thing. The -sm tier is mono: changed files, commits, picker
+     results, the tool log. The bare one is ui: worktrees, menu items. */
     --row-height-sm: 24px;
     --row-height: 32px;
-    /* the same two tiers under a thumb, swapped in on the phone frame's root (surfaces/phone/
-     phone.css). Their own values rather than a multiplier on the ones above: a row you point at and
-     a row you tap are sized by different things, so either has to be able to move without the
-     other. */
+    /* the same two tiers under a thumb; see the phone tier note at the end of this block. Their own
+     values rather than a multiplier: a row you point at and a row you tap are sized by different
+     things, so either has to move without the other. */
     --row-height-sm-phone: 36px;
     --row-height-phone: 52px;
     /* the horizontal padding of a full-bleed row: the text column every list sits on */
@@ -155,11 +132,7 @@
     /* The centre's views. Every view of toyon's own sits in one column: the margins it is laid out
      in, its measure, its gap, and where its first line sits. What a person types into and what the
      machine reports differ in their parts, not in the column, so there is one of these. The wide
-     measure is the one number that follows the content: output is read rather than written, and
-     its lines run longer than prose.
-     A measure has one reader and is still a token: it is the number that defines the column, and a
-     number that defines something belongs beside its other definitions, or the next view gets
-     typed with 540. */
+     measure is for output, which is read rather than written and runs longer than prose. */
     --view-inset: 24px;
     --view-top: 48px;
     /* the first run's drop: the name typed on the new-project view lands where that project's title
@@ -178,45 +151,38 @@
     --form-body: 96px;
     --form-body-lg: 120px;
 
-    /* Elevation. Two tiers, and the question each answers is what the thing is doing rather than how
-   * far off the page it looks:
+    /* Elevation. Two tiers, by what the thing is doing rather than how far off the page it looks:
    *
-   *   float     it appears over chrome you can still see and use, so it has to separate itself:
-   *             the context menu, the tooltip, an anchored picker
+   *   float     it appears over chrome you can still see and use: the context menu, the tooltip,
+   *             an anchored picker
    *   overlay   it has taken the screen and the app is dimmed behind a scrim
    *
-   * These are complete box-shadow values, which is why they are not --shadow-*: --shadow is
-   * the colour inside them, the same way --face-* is the family inside a --type-*.
-   *
-   * Two things deliberately stay off this: the worktree rail's peek, whose negative spread is a
-   * seam rather than a lift, and the jump-down pill, which is a control and not a surface. */
+   * Complete box-shadow values, which is why they are not --shadow-*: --shadow is the colour
+   * inside them. Off this on purpose: the rail's peek, whose negative spread is a seam rather than
+   * a lift, and the jump-down pill, which is a control and not a surface. */
     --elevation-float: 0 6px 20px var(--shadow);
     --elevation-overlay: 0 10px 36px var(--shadow);
     /* Nothing floats by z-index here: a box that covers what it does not own is a Float, drawn in
      the browser's top layer (ui/Float.tsx), where the one shown last is on top and no ancestor can
      trap or clip it. What is left is a component layering its own children, which isolates its own
      root and uses 1 or 2. styles/layers.test.ts holds that line. */
-    /* Four prefixes, one per kind, and the prefix is what tells you which kind you have:
+    /* Type prefixes, one per kind:
    *
-   *   --face-*    a font stack. Raw material: it belongs inside a --type-* value, and no rule sets
-   *               font-family on its own. Shared by several sets, which is why it is not a suffix.
-   *   --type-*    a complete set, as a `font` shorthand. This is what rules use.
-   *   --size-*    one bare size, and --weight-* one bare weight. Both are a single value pulled out
-   *               of a set for a consumer that cannot take the whole thing: JS in the first case,
-   *               a declaration that comes after the shorthand in the second.
-   *
-   * A suffix on --type-* is therefore always a tier, never a different species.
+   *   --face-*    a font stack. Belongs inside a --type-* value; no rule sets font-family alone.
+   *   --type-*    a complete set, as a `font` shorthand. This is what rules use, and a suffix on
+   *               it is always a tier, never a different species.
+   *   --size-*    one bare size, and --weight-* one bare weight, for a consumer that cannot take
+   *               the whole set: JS in the first case, a declaration after the shorthand in the
+   *               second.
    *
    * Editor.tsx and XTerm.tsx read --face-mono off the root because their editors want a string.
-   * -apple-system already resolves optical sizing on Apple platforms; naming "SF Pro Text"
-   * explicitly pins the Text cut and defeats the switch to Display at larger sizes. */
+   * -apple-system already resolves optical sizing on Apple platforms; naming "SF Pro Text" pins
+   * the Text cut and defeats the switch to Display at larger sizes. */
     --face-ui: -apple-system, "Segoe UI", sans-serif;
     --face-mono: ui-monospace, "SF Mono", Menlo, "DejaVu Sans Mono", monospace;
 
     /* Type is two families by two tiers, plus one rung above for the things that arrive. Each token
-   * is a whole `font` shorthand, so family, weight, size and leading move together and cannot be
-   * half-applied; the shell already wrote `font:` shorthands everywhere, so this is fewer
-   * declarations than naming the parts, not more.
+   * is a whole `font` shorthand, so family, weight, size and leading cannot be half-applied.
    *
    *   ui / mono        the app: rows, prose, menus, file paths, the tool log, the diff
    *   ui-sm / mono-sm  the frame: key chips, and the bars that describe state rather than hold it
@@ -225,16 +191,13 @@
    *                    name as the title of its first-run screen, where it must not move or resize
    *
    * mono sits a point under ui at the body tier because mono reads optically larger; at the small
-   * tier the correction is under a pixel and both are 11. There is no mono-lg: if one is ever
-   * needed, that is its name.
+   * tier the correction is under a pixel and both are 11.
    *
-   * No mono token states a leading. Every consumer is a row, an input or a stacked line whose height
-   * is padding plus one line box, so an absolute there would resize all of them; `normal` is the
-   * right one. Only the sans tiers carry a ratio, the 1.5 the shell inherits from the root.
+   * No mono token states a leading: every consumer is a row, an input or a stacked line whose
+   * height is padding plus one line box, so an absolute would resize all of them.
    *
-   * The one trap: `font` resets every font-variant-* longhand, so a rule using one of these has to
-   * re-declare font-variant-numeric: tabular-nums after it. Everything with a number that changes
-   * under you depends on that. */
+   * `font` resets every font-variant-* longhand, so a rule using one of these re-declares
+   * font-variant-numeric: tabular-nums after it wherever a number ticks. */
     --type-ui-sm: 400 11px / 1.4 var(--face-ui);
     --type-ui: 400 13px / 1.5 var(--face-ui);
     /* the two reading tiers held at arm's length. Written out rather than composed from a size, so
@@ -251,10 +214,8 @@
     --type-mono-sm: 400 var(--size-mono-sm) var(--face-mono);
     --type-mono: 400 var(--size-mono) var(--face-mono);
 
-    /* The two sizes above, on their own. Monaco and xterm parseFloat these, because a `font`
-     shorthand is not parseable and both editors want a number. They sit outside --type-* on
-     purpose: everything under that prefix is a complete set, and a suffix on it is always a tier,
-     so --type-mono-px would have read as a sibling of --type-mono-sm and it is not one. */
+    /* The two sizes above, on their own: Monaco and xterm parseFloat these, since a `font`
+     shorthand is not parseable and both editors want a number. */
     --size-mono: 12px;
     --size-mono-sm: 11px;
     --size-mono-phone: 13px;
@@ -266,20 +227,13 @@
     --weight-strong: 500;
     --weight-title: 600;
 
-    /* The -phone twins above are the phone tier: every value here that a thumb and a held screen
-     change. They are declared beside their desk values so the two read together, and swapped in
-     by the phone frame's own root (surfaces/phone/phone.css), never by a width query here. The
-     frame is decided once, in app/phone.ts, and a query in a stylesheet would be a second copy of
-     that decision to keep in step; on the frame's root the tier and the frame are one class. No
-     surface learns there is a phone at all: --row-height alone is read by twenty rules across
-     twelve stylesheets, and every one of them grows from the root above it.
+    /* The -phone twins above are the phone tier: every value a thumb and a held screen change,
+     declared beside their desk values and swapped in by the phone frame's own root
+     (surfaces/phone/phone.css), never by a width query here. The frame is decided once, in
+     app/phone.ts; a query in a stylesheet would be a second copy of that decision to keep in step.
+     No surface learns there is a phone at all: every rule reads the tier from the root above it.
 
-     Monaco and xterm parseFloat --size-mono. When a pane comes to the phone they must read it from
-     their own element, where the redirected value is, and not from documentElement, where it is
-     the desk's.
-
-     What is not a token: the composer's floor. .composer reads --composer-min (base.css) but each
-     region sets it on the element it owns, and an element declaration beats an inherited one, so a
-     value here would be dead on both. It belongs to the phone region's own rule. */
+     Monaco and xterm parseFloat --size-mono. On the phone they must read it from their own element,
+     where the redirected value is, and not from documentElement, where it is the desk's. */
   }
 }

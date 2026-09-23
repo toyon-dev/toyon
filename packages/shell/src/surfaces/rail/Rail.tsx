@@ -215,16 +215,10 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
   const archCounts = archived.some((a) => (a.dirty ?? 0) > 0);
 
   /** An archived worktree, kept with its chat. It runs nothing, so it reads a rung down like a found
-   * row and its dot's seat is blank: a seat rather than nothing, so its name starts where every
-   * other name does when the dot leads the row. One that archived itself has a clock there, whose
-   * hover says why. The gutter says how long ago it was archived. A
-   * click opens its page in the
-   * centre, the way a found row's does, and the restore button is there: a row that restored on
-   * its own click was too easy to hit on the way past. Its menu (the kebab or a right-click) has
-   * restore too, with the rest.
-   *
-   * One line, on both frames. The archive is the one section that only grows, and what the row does
-   * not say (what it cost, whether it merged) is on the page a tap away. */
+   * row, and its dot's seat is blank rather than absent so its name starts where every other name
+   * does. A click opens its page in the centre, and restore is there and in the menu, not on the
+   * row: a row that restored on its own click was too easy to hit on the way past. One line on both
+   * frames, since the archive only grows and the rest is on the page. */
   const archivedRow = (a: ArchivedWorktree) => (
     <button
       key={a.id}
@@ -310,10 +304,9 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
    * found worktree wears the same counts, since they are as real as anyone's, and its menu is the
    * short one. The dot is hollow, which is the one place the row says whose it is.
    *
-   * Nothing at the dot's end of the row does anything but switch. In the strip the pointer lands on
-   * the dot, the panel unfurls toward the centre under it, and a small drift while it opens used to
-   * land on the kebab or on a count's verb; the counts are read now and the kebab sits in the
-   * control column at the far edge, the column the plus and the caret already share. */
+   * Nothing at the dot's end of the row does anything but switch: in the strip the pointer lands on
+   * the dot and the panel unfurls under it, so a small drift while it opens must not land on a
+   * control. The counts are read, and the kebab sits in the control column at the far edge. */
   const railRow = (w: WorktreeStatus) => {
     const owned = isOwned(w) ? w : null;
     const onLead = !!owned && isLead(owned.worktree);

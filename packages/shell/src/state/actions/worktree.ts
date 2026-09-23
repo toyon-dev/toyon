@@ -178,7 +178,7 @@ export function worktreeItems(
   // a landing op already out for this worktree keeps the others on the list but off, with the
   // reason under them, until it answers
   const busy = idle ? undefined : "waiting on the one in progress";
-  // the count on the row is read, not pressed, so the sync it used to offer lives here
+  // the count on the row is read, not pressed, so the sync is offered here
   if (canSync(w) && (w.behind ?? 0) > 0) {
     land.push({
       id: "sync",

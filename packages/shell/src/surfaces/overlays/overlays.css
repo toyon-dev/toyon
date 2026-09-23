@@ -67,9 +67,8 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  /* Every row on the same height token the app's list rows sit on, with no vertical padding of
-   its own: a row holding a chip and a row holding only text used to differ by the chip's box, so
-   the cards read as unevenly spaced. Centring inside a fixed slot is what makes them one rhythm. */
+  /* every row on the list row height, with no vertical padding of its own: a row holding a chip and
+   a row holding only text differ by the chip's box otherwise, and the cards read as unevenly spaced */
   .keys-setting {
     display: flex;
     align-items: center;

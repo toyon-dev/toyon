@@ -4,110 +4,31 @@
 import type { DarkNow, Theme, ThemeColorKey, ThemePrefs, ThemeSyntaxToken } from "./model.ts";
 
 // Toyon's own theme, and the one it boots into. Heteromeles arbutifolia: a brown hillside, sage
-// leaves, a scarlet berry. Three decisions in here were expensive and are worth not relitigating.
+// leaves, a scarlet berry. The palette is derived in the order red, ground, text, and the
+// constraints that hold it:
 //
-// The ground is brown, and brown specifically rather than any other warm cast. A ground carries
-// its hue only if it carries saturation, and saturation on the ground has to agree with the text
-// or the text never settles onto it: every dark theme worth copying paints its text within a few
-// degrees of its own ground (One Dark and Nord 1 apart, Gruvbox 23) and a green floor under a
-// bone foreground was 37, on the far side of the yellow axis, pulling against it. Brown is on the
-// text's own side, so it can be tinted four times harder than Gruvbox's near-neutral gray and
-// still sit 20 degrees away. That tint is the difference between a warm gray and dirt: red runs
-// 14 points over blue here where Gruvbox's runs 3.
-//
-// Its depth is Gruvbox Dark Soft's, deliberately. A ground three times darker carries the same
-// accents at 1.5x the contrast ratio: the pupil opens for the dark field and the bright text
-// blooms in it, which is the whole reason the "soft" variant exists and why a near-black ground
-// hurts to read against for hours.
-//
-// The bone is tinted hard (s50). Tint is what stops a light foreground being a lamp; Gruvbox's
-// cream is half saturated, which is why it reads as a material the light falls on rather than as
-// the light itself. The berry is a coral rather than a scarlet for the same class of reason: at
-// this weight it reads as the plant, where a fire-engine red reads as a fault whatever it is
-// attached to. What it cannot be is quiet: pop is chroma standing clear of the ground's, and a
-// brown ground raises that floor from Gruvbox's 1.2 to 4.5, so the berry has to climb to stay the
-// loudest thing in a window. It sits at C71 against the ground's C4.5, a 16x step, and still
-// lands lighter and less blood-coloured than Gruvbox's own red.
-//
-// Which is why the palette is derived in that order: red, then ground, then text. sRGB will not
-// give you a light red (pure red is L*53, pure orange L*67), so the berry's lightness is a
-// ceiling rather than a choice, and everything else is fitted underneath it. The ground is pinned
-// at Gruvbox Dark Soft's L*20 rather than at whatever the accent would prefer: seven points lower
-// buys the berry a +47 step instead of +40 and cuts the light the chrome emits by a third, and is
-// still too dark to live in for a twenty-hour day. That was decided by sitting in both, not by
-// argument. Body text sits at L*88, and the two move together: dropping the ground under text
-// that stays at L*88 is what makes a dark theme bloom.
-//
-// The ground's chroma builds with its lightness, 2 at surface0 up to 5 at surface2, rather than
-// sitting flat. surface0 is the largest field on screen, and colour in it shifts the apparent hue
-// of everything on top by simultaneous contrast: the bone stops reading golden and neutrals pick
-// up a cool cast. Gruvbox spends almost nothing there (1.2) and saves its warmth for the surfaces
-// that catch light (6.6 at its top step), which is both why it reads clean and how a real surface
-// behaves. The brown is present at every step, and ahead of Gruvbox at every step; it is just
-// quietest where there is most of it.
-//
-// The three text tiers take Gruvbox's top and VS Code 2026's spread underneath it, spaced on
-// those rather than on legibility scores. A secondary tier only a few L* below the primary one
-// reads as more bright area rather than as a second rank, and the eye has to sort what matters
-// instead of being told. Gruvbox drops 24 L* from body to label and only 8 more to hint; 2026
-// drops 19 then 22, so its quiet tier is genuinely quiet and its loud tier stands alone. Body
-// stays at Gruvbox's level, which is the one that survives a long day, and everything under it
-// falls away faster: 9.6 to 4.3 to 2.6 against 2026's 9.9 to 5.5 to 2.5. A transcript is mostly
-// log, and log should be skimmable at a glance rather than legible word by word, and the two
-// halves fall away by the same amount, 46 L* from body to hint in each, so a light-mode
-// transcript triages the same way a dark one does. The tiers warm as they dim, hue* 97 to 85 to
-// 77, rather than cooling: a hint past pure yellow turns green, and the faintest text in the app
-// would be the only green thing in it. Gruvbox runs 92 to 81 to 73 for the same reason a dim warm
-// surface goes browner rather than greener. The dim tier is also near-neutral on purpose: chroma
-// at low luminance does not feed the channel that carries acuity, so a colored hint is harder to
-// read than a gray one at the same weight. Both lower tiers stay on the ground's side of the
-// yellow axis, red over green, for the same reason the ground is brown and not olive: at h60 red
-// and green are equal, which against a brown ground reads as green text however neutral the
-// numbers say it is.
-//
-// The status colours sit on their own hue rather than near it. Green, yellow and red are read as
-// names, not as shades: a status has to say "green" before it says anything else, and a green
-// sixteen degrees short of green is a lime, which reads as an off yellow and makes you look twice.
-// Red is dead on canonical at hue* 39; yellow sits at 98 and green at 132, both a few degrees
-// short of pure so they stay in a warm palette rather than turning into signal lamps. Gruvbox is
-// off by 21 and 31 in the same direction, and its lime is a signature rather than an accident;
-// this is the one place worth not copying it. The yellow is the exception and it is amber on
-// purpose. A pure yellow costs chroma twice: the sRGB ceiling at L*80 falls from C83 at hue* 82
-// to C77 at 98, and the eye reads a low-chroma yellow as dirty rather than as pale. So the M
-// keeps a hue near Gruvbox's and takes the saturation instead. Same for the green: at hue 132 it
-// sits 47 degrees from the yellow where Gruvbox's lime sits 22 from its own, which at 12px is the
-// difference between a +25 and an M being two colours or two shades, and green's gamut is wide
-// enough to hold full chroma there.
-//
-// The seven accents are meant to read as one family, which means no member sitting at a weight the
-// others do not. The warm four run C74-88 and the cool three C35-42, a deliberate split so the cool
-// side recedes on a warm ground; what must not happen is one warm colour dropping out of its own
-// group. Orange is held level with the red and yellow either side of it because it sits nineteen
-// degrees from the yellow, the tightest gap on the wheel: a quiet colour squeezed between two loud
-// ones in nearly the same hue does not read as its own colour, it reads as a tired version of its
-// neighbour.
-//
-// The berry is lifted to L*62 rather than sitting at its chroma peak. It paints the matched
-// characters in every picker as well as the 2px bar, and at 12px a colour at L*56 and 3.6:1 is a
-// squint. Five points of chroma buys nine points of contrast here, which is the right side of
-// that trade for something you read rather than glance at.
-//
-// The berry is held between hue* 34 and 40 rather than taken to the gamut edge. The edge in this
-// band sits at hue* 45, which is only twenty degrees off the dry-grass orange at hue* 66, so the
-// loudest available red is also the one that stops being a red. At hue* 39 it keeps thirty
-// degrees of separation and still reaches C83, level with Gruvbox's own red, against a ground of
-// C2.2. That is the whole trick: the pop is a ratio, and most of it was bought by taking colour
-// out of the ground rather than by putting more into the accent.
-//
-// The berry is not the accent, though. Red already means removed and broken in this app, and a
-// colour cannot say "you are here" and "this failed" in the same window: a red bar down a row
-// reads as a fault whatever it is attached to. So selection goes to the ceanothus, which means
-// nothing else and sits 175 degrees from the ground, five off its exact complement, which is the
-// most opposition the palette can offer. One cool mark on a warm ground is also the clearest
-// signal available that a person chose it. The berry keeps its own job and stays the most
-// saturated thing here by a distance, C83 against the accent's C38; it is still the plant's
-// colour, it just is not the cursor. Accents are at editor weight, not document weight,
-// because an `M` in the changes list has to carry at 12px.
+// - The berry's lightness is a ceiling, not a choice: sRGB has no light red (pure red is L*53),
+//   so it sits at L*62, where it still reads at 12px on element1, and everything else is fitted
+//   under it. Its hue is held between hue* 34 and 40 rather than at the gamut edge (45), which is
+//   only twenty degrees off the dry-grass orange and stops being a red.
+// - The ground is brown rather than any other warm cast because tint on the ground has to sit on
+//   the text's side of the yellow axis, or the text never settles onto it; and its depth is
+//   Gruvbox Dark Soft's L*20, since a near-black ground makes light text bloom and hurts to read
+//   against for hours. Its chroma builds with lightness (2 at surface0, 5 at surface2): surface0
+//   is the largest field on screen, and colour in it shifts the hue of everything on top.
+// - The berry's pop is a ratio against the ground's chroma, and most of it was bought by taking
+//   colour out of the ground, not by putting more into the accent.
+// - Body text sits at L*88 and the two lower tiers fall away fast (46 L* from body to hint), so a
+//   transcript triages at a glance. They warm as they dim (hue* 97 to 85 to 77): a hint past pure
+//   yellow turns green, and the faintest text in the app would be the only green thing in it.
+//   The dim tier is near-neutral, since chroma at low luminance does not feed acuity.
+// - Status colours sit on their canonical hues: a green sixteen degrees short of green is a lime
+//   and reads as an off yellow. The yellow is amber on purpose, since a pure yellow at L*80 has
+//   already lost its chroma and reads as dirty rather than pale.
+// - The seven accents read as one family: the warm four run C74-88 and the cool three C35-42, so
+//   the cool side recedes on a warm ground. Orange is held level with the red and yellow either
+//   side of it, nineteen degrees apart, or it reads as a tired version of its neighbour.
+// - Accents are at editor weight, not document weight: an `M` in the changes list carries at 12px.
 export const toyonDark: Theme = {
   id: "toyon-dark",
   family: "Toyon",

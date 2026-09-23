@@ -2,14 +2,9 @@ import { describe, expect, test } from "bun:test";
 import { type CssRule, cssRules, declsOf, shellCss } from "./cssRules.ts";
 
 /**
- * A seat that lifts moves the ladder with it. A row painted on element0 or element1 still carries
- * whatever was standing on it, and a child that goes on naming --text2 there does not go quiet, it
- * disappears: text2 on element1 is 1.06:1. That landed four times in the transcript alone, each
- * fixed with one more hand-written rule for the one child somebody noticed, and the pickers had
- * four of their own with the file row's directory as the fifth nobody wrote.
- *
- * The rule now is that the seat redeclares the tiers and every passenger rides for free. These two
- * tests hold the seat's end of that: it moves both rungs, and it moves them by one.
+ * A seat that lifts moves the ladder with it. A child that goes on naming --text2 on element1 does
+ * not go quiet, it disappears: 1.06:1. The seat redeclares the tiers and every passenger rides for
+ * free. These two tests hold the seat's end of that: it moves both rungs, and it moves them by one.
  */
 
 /** the two lines a seat declares, and the only two it may */

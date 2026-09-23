@@ -26,21 +26,15 @@ const NAME_MIN = 14;
 const NO_CHOICES: ModelChoice[] = [];
 
 /**
- * The new project, as one project in the centre: a title, where it goes, and the description that
- * starts it. Written rather than filled in, which is why there is no heading, no labels and no
- * boxes: the placeholder says what the title is for, the line under it says where the folder lands,
- * and create makes the project and sends the description as its first message.
+ * The new project: a title, where it goes, and the description that starts it. Written rather
+ * than filled in, so no heading, labels or boxes; create makes the project and sends the
+ * description as its first message.
  *
- * Nothing is made until create. Making one takes about a tenth of a second, so making it while the
- * name is still being typed would buy nothing anyone could feel and would leave a folder behind for
- * every name that was thought better of.
- *
- * The location is read as the folder's own name, with the path on hover and the folder button beside
- * it, so nobody has to know how to write a path. Where the daemon can open Finder in front of the
- * person, what comes back decides the rest: an ordinary folder is the location, an empty one becomes
- * the project itself, and one that is already a project is offered for opening. Git's name and email
- * sit above the title when git has none, since they are asked once ever and are not what this project
- * is about. The quiet line at the bottom is for someone who came here with a project already.
+ * Nothing is made until create: making one takes a tenth of a second, and making it earlier would
+ * leave a folder behind for every name thought better of. A folder picked in Finder decides the
+ * rest: an ordinary folder is the location, an empty one becomes the project, and one that is
+ * already a project is offered for opening. Git's name and email sit above the title when git has
+ * none, since they are asked once ever and are not what this project is about.
  */
 export function NewProject({ project }: { project: NewProjectState }) {
   const dispatch = useDispatch();

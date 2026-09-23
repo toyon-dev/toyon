@@ -21,27 +21,14 @@ import { rowLine } from "../rail/rowLine.ts";
 import { ago, dotClass } from "../util.ts";
 
 /**
- * The strip at the top of the phone.
+ * The strip at the top of the phone. The list and a worktree are a master and its detail, so the
+ * way between them is back, not tabs; a worktree's chat, app and changes are tabs within the
+ * detail, under this bar. The plus stands in for the lead's row, which the screen does not list.
  *
- * On the list: the project, which is the switcher when there is more than one, over how many
- * worktrees it has; the plus that starts new work, which is the lead row's box (a plain selection
- * of the lead, whose draft opens on its own; the lead has no row on the screen, since the plus is
- * what its row would say); and the menu. On a worktree: the way back, its title over its state, and the menu.
- * The list and the worktree are a master and its detail, so the way between them is back, not
- * tabs. What the worktree shows (its chat, its app, its changes) are tabs *within* the detail, a
- * control under this bar, and this bar stays what it is: the detail's header.
- *
- * The line under the title is the row's line from the list (rowLine): the state a desk says on
- * hover, said here because a thumb never hovers, and said in the same words the row used so the
- * screen reads as the row opened.
- *
- * Before the menu, what the rail owes you: a count of the rows waiting on an answer or finished
- * unseen, and a tap that goes to the next one the way the desk's chord does. The rows themselves
- * never move for it; the rail's order is a send's, and what needs you is said here and by the
- * dots, not by shuffling the list under a thumb.
- *
- * The menu is the palette. A phone has no chords, so every verb without a visible control is
- * reachable only through it, which makes that button the way to most of what toyon can do.
+ * The line under a worktree's title is the row's line from the list (rowLine), in the same words,
+ * so the screen reads as the row opened. The count before the menu says what needs you; the rows
+ * themselves never reorder for it, since the rail's order is a send's. The menu is the palette:
+ * with no chords, every verb without a visible control is reachable only through it.
  */
 export function PhoneBar({ screen, tabs }: { screen: "home" | "chat"; tabs?: ReactNode }) {
   const dispatch = useDispatch();

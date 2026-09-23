@@ -179,19 +179,16 @@ export function useReveal(scroller: string) {
 const TAIL_SLACK = 40;
 
 /** A scroller that tails what it holds, the way a terminal does: the end stays in view while the
- * reader is at the end, whatever grew and whatever made it grow, and the moment they scroll up it
- * stops following. Growth is watched in the layout, not in state: the box itself (a sibling that
- * grows takes height off it), every child (a streamed message's markdown lands behind its text,
- * a row opens, a picture arrives), and children as they come and go. A pin keyed on data has to
- * name every one of those and misses the next; the observers need no list. "At the end" is read
- * from the element when it scrolls, never from where a jump meant to land: a programmatic scroll
- * (a row's reveal, a walk) dispatches its event in the frame's scroll steps, which run before the
- * observers deliver, so a reader taken elsewhere is known to have left before anything could pull
- * them back. `away` is what the way back is for: `news` changed while the reader was up the
- * scroller. It is a value and not the layout because a row the reader opened themselves grows the
- * same way a message arriving does, and only one of those is news. `read` is for a caller that
- * moved the scroller itself and wants the answer now rather than on the event. The element is
- * read when the effect mounts, so it must be rendered from the first paint. */
+ * reader is at the end, and the moment they scroll up it stops following. Growth is watched in
+ * the layout (the box, every child, and children as they come and go), not in state: a pin keyed
+ * on data has to name every source of growth and misses the next. "At the end" is read from the
+ * element when it scrolls, never from where a jump meant to land: a programmatic scroll dispatches
+ * its event in the frame's scroll steps, before the observers deliver, so a reader taken elsewhere
+ * is known to have left before anything could pull them back. `away` says `news` changed while
+ * the reader was up the scroller; it is a value and not the layout because a row the reader opened
+ * themselves grows the same way a message arriving does. `read` is for a caller that moved the
+ * scroller itself and wants the answer now. The element is read when the effect mounts, so it
+ * must be rendered from the first paint. */
 export function useTail(
   ref: RefObject<HTMLElement | null>,
   news?: unknown,

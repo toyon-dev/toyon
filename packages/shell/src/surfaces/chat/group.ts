@@ -147,15 +147,12 @@ export function runCalls(run: ToolEntry[]): number {
   return run.reduce((n, e) => n + e.tools.length, 0);
 }
 
-/** The subagents at work while the main agent waits on them, and their calls so far. A spawn that
- * runs in the background returns at once, so its row closes and is folded up the log before the
- * subagent has done anything; what says the subagent is still going is its calls landing under
- * that row, out of sight. Nothing marks its end either: the report comes as the main agent's next
- * move. So a subagent counts from its first call after the main agent's newest own item until the
- * main agent's next, and while it has a call in flight wherever that call sits. `ids` are the
- * spawn calls that started them, for the rows that shine while they work; `calls` is what those
- * subagents have made in all, the number that ticks while they work. Only meaningful while the
- * turn is on: a turn that ended on a subagent's call leaves the window open. */
+/** The subagents at work while the main agent waits on them, and their calls so far. A background
+ * spawn returns at once, so nothing but its calls landing says the subagent is still going, and
+ * nothing marks its end but the main agent's next move. So a subagent counts from its first call
+ * after the main agent's newest own item until the main agent's next, and while it has a call in
+ * flight wherever that sits. Only meaningful while the turn is on: a turn that ended on a
+ * subagent's call leaves the window open. */
 export function subagentsAtWork(items: ChatItem[]): { ids: Set<string>; calls: number } {
   const ids = new Set<string>();
   let heard = true;
@@ -174,13 +171,11 @@ export function subagentsAtWork(items: ChatItem[]): { ids: Set<string>; calls: n
 }
 
 /** Whether a call of the main agent's own is in flight: one it is running itself, whose row
- * shines for it. A subagent's call is not its own, and nor is the call that started a subagent
- * and waits on it: that one does nothing itself, and its row is open with the subagent's rows
- * stacked under it, so the shine on its line is the first thing the tailing log scrolls off the
- * top. The work in that window is the subagent's, and it is counted by subagentsAtWork. Read by
- * the adapter's flag, and by the children that name the call as their parent for a transcript
- * written before the flag was kept. A spawn whose brief has not arrived is the exception: the
- * agent is writing it, which is its own work, and the row wears the writing mark for it. */
+ * shines for it. A subagent's call is not its own, and nor is the spawn that waits on one: its
+ * row is open with the subagent's rows stacked under it, so the shine on its line is the first
+ * thing the tailing log scrolls off the top, and the work in that window is counted by
+ * subagentsAtWork instead. A spawn whose brief has not arrived is the exception: the agent is
+ * writing it, which is its own work. */
 export function ownCallRunning(items: ChatItem[]): boolean {
   const spawns = spawnIds(items);
   return items.some(
@@ -189,13 +184,11 @@ export function ownCallRunning(items: ChatItem[]): boolean {
 }
 
 /** The row whose call is the one actually executing, or -1: the oldest own call still open. An
- * agent writes a batch of calls in one message and every row opens as its input lands, seconds
- * before any of them runs; then it works the batch in order, and a command holds the ones after
- * it. So a read written behind a slow command is open for the whole wait and does nothing in it,
- * and a count on its row would say the read was slow. Nothing on the wire says when a call starts
- * (no in_progress at start; acp/map.ts), so the head of the queue is the one that is running, and
- * the row after it starts its own count when this one closes. A subagent's call and the spawn
- * that waits on one are not candidates: their work is counted under the log (subagentsAtWork). */
+ * agent writes a batch of calls in one message and every row opens as its input lands, then works
+ * the batch in order, so a read written behind a slow command is open for the whole wait and a
+ * count on its row would say the read was slow. Nothing on the wire says when a call starts (no
+ * in_progress at start; acp/map.ts), so the head of the queue is the one running. A subagent's
+ * call and the spawn that waits on one are not candidates (subagentsAtWork). */
 export function runningRow(entries: ChatEntry[]): number {
   return entries.findIndex((e) => "tools" in e && !e.tools[0]!.parentToolId && !e.tools.at(-1)!.done);
 }

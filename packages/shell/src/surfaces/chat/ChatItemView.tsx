@@ -390,16 +390,13 @@ function Fold({
 }
 
 /** The agent's reasoning, folded like a call: it is addressed to nobody, and the message after it
- * says whatever in it mattered, so a paragraph of it in the flow read as an answer that had lost
- * its colour. The line is one word, the way a call's is a path: its first sentence was a sentence
- * of prose in a column of file names, and the wrong tier of thing to be ellipsised. It is the one
- * row that opens itself, and it stays open past the calls it set off, which print a line each and
- * put nothing in its place (openRow in group.ts). The body is the message's markdown, not a call's
- * mono: it is prose.
+ * says whatever in it mattered, so a paragraph of it in the flow reads as an answer that has lost
+ * its colour. The line is one word rather than its first sentence, which is prose in a column of
+ * file names. It is the one row that opens itself (openRow in group.ts). The body is markdown,
+ * not a call's mono: it is prose.
  *
- * The word and its shine answer a narrower question than the fold does: the agent is thinking
- * while this is the newest thing in the log, and a row still reading "Thinking" over a call that
- * has started says the wrong thing about where the agent is. */
+ * The word and its shine answer a narrower question than the fold does: a row still reading
+ * "Thinking" over a call that has started says the wrong thing about where the agent is. */
 export const ThoughtRow = memo(function ThoughtRow({
   item,
   open,
@@ -543,15 +540,10 @@ export const ToolRow = memo(
     // A spawn row shines while its subagent works. A spawn run in the background returns at once,
     // so its own call says nothing about the subagent; the log says when it is at work.
     const running = alive || !!working;
-    // How long the main agent's call has been executing, on the row that shines for it. The shine
-    // says busy the same way whether the call is running, queued or wedged, and a count climbing
-    // beside it is what tells them apart; so only the row at the head of the batch counts, and it
-    // counts from when it got there: a row that counted from the moment it opened would put the
-    // command's whole wait on the read written behind it. The log picks the row (runningRow in
-    // group.ts), since which one it is depends on the rows above, and the store keeps the stamp,
-    // since this row is rebuilt on every switch of worktree. A subagent's call and the spawn
-    // that waits on one keep no count: their work is counted under the log, where the fan-out
-    // line names the agents and ticks their calls.
+    // How long the call has been executing. The shine says busy the same way whether the call is
+    // running, queued or wedged; the count climbing beside it is what tells them apart, so only the
+    // row at the head of the batch counts, from when it got there (runningRow in group.ts picks
+    // it). The store keeps the stamp, since this row is rebuilt on every switch of worktree.
     const age = useSecondsSince(streaming ? since : undefined);
     // The log decides which row opens itself, and it hands the row two answers: the turn's one
     // self-opening row (openRow in group.ts, reasoning only) and the newest `!` command, which is

@@ -8,11 +8,9 @@ import { cssRules, shellCss } from "./cssRules.ts";
  * Anything that covers something it does not own is a `Float` (ui/Float.tsx): the browser's top
  * layer, where the box shown last is on top, no ancestor's transform or overflow can trap or clip
  * it, and no rule needs a z-index at all. What is left is a component layering its own children,
- * which isolates its root so its rungs are counted nowhere but inside it.
- *
- * The ladder that used to hold this line was a paragraph in tokens.css and a habit. It broke twice:
- * once when a centring transform trapped a dropdown, and once when two floats held the same rung and
- * the later one in the page won.
+ * which isolates its root so its rungs are counted nowhere but inside it. A global ladder breaks
+ * two ways: a centring transform traps a dropdown, and two floats on the same rung resolve by
+ * page order.
  */
 
 const SRC = new URL("..", import.meta.url).pathname;

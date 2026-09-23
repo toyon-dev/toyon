@@ -22,25 +22,14 @@ import "./phone.css";
 const HAS_TOKEN = hasToken();
 
 /**
- * The shell on a phone.
+ * The shell on a phone. It controls the agents and never sets a project up, imports or makes one:
+ * those happen where the daemon is, and none of the centre's own views mount here.
  *
- * The phone runs nothing; it talks to a daemon that is on the laptop over the tailnet or on a
- * machine in the cloud. What it controls is the agents: see what is waiting, answer, read, steer,
- * stop, start a worktree from main, watch the app, read the diff, land it. What it does not do is
- * set a project up, import one or make one: those happen where the daemon is. The centre's own
- * views are the desk's, and none of them mount here.
- *
- * One screen at a time, because the window is one column wide. The list, or a worktree: its chat,
- * its running app, or its changes, three tabs under the bar, and over any of them the diff a
- * changed file opens as. All of it the same components the desk uses, at the row height and type
- * size this frame's root swaps in (phone.css): the frame and its tier are one class, and cannot
- * disagree.
- *
- * Three things the centre would otherwise have brought, which this frame owes instead:
- * the menus and tips a row opens, the overlays (the palette, which on a device with no keyboard is
- * how anything without a visible control is reached), and a sentence for when there is nothing to
- * show. That last one matters more here than on a desk: a phone drops its connection every time it
- * is put in a pocket.
+ * One screen at a time: the list, or a worktree with three tabs under the bar and a diff over any
+ * of them. The same components as the desk, at the tier this frame's root swaps in (phone.css), so
+ * the frame and its tier cannot disagree. What the centre would otherwise bring, this frame owes
+ * instead: the menus and tips, the overlays, and a sentence for when there is nothing to show,
+ * which matters here because a phone drops its connection every time it goes in a pocket.
  */
 export function PhoneFrame() {
   const dispatch = useDispatch();

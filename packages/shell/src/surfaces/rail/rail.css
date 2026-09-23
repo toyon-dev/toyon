@@ -38,17 +38,12 @@
     text-align: left;
   }
 
-  /* The control column, at the panel's far edge. Every label in the panel starts at its inner
-   edge, and what sits in it says what the row is: the plus on main, where new work starts, the
-   caret on "discovered", the kebab on a worktree row while the pointer is on it, the checkbox while
-   a graft is being picked, and at rest the time since anyone sent something there, which costs the
-   name no width. It is also as far as the row gets from the dot, which matters: the peek unfurls
-   from under a pointer resting on the dot, and this is where a control can sit without a small
-   drift landing on it.
+  /* The control column, at the panel's far edge: the plus on main, the caret on "discovered", the
+   kebab under the pointer, the checkbox while a graft is picked, and at rest the time since anyone
+   sent there. It is as far as the row gets from the dot, which matters: the peek unfurls from under
+   a pointer resting on the dot, and a small drift must not land on a control.
    It is the row's far padding with the glyph laid over it, not a flex item: as an item the row's
-   gap sat between it and the label, and a glyph centred in the item read as pushed outward, since
-   the space on its label side was the gap on top of the column's own. The column's inner edge is
-   the text, so the glyph is centred between the panel edge and the text. */
+   gap sits between it and the label, and the glyph reads as pushed outward. */
   .rail {
     --rail-gut: 30px;
   }
@@ -345,24 +340,17 @@
     margin-right: 4px;
   }
   /* ---- discovered: worktrees git knows about that toyon did not create ---- */
-  /* The section belongs to the open panel and nothing of it reaches the strip: no header, no rows,
-   no rule. The strip is toyon's own worktrees, and a section you cannot read the label of is not
-   worth the pixels it would take. This is the one place the rail lays out differently in the two
-   states, and it is safe where the rail-list comment above is not: everything here sits below the
-   worktree rows, so nothing anyone aims at moves when it appears.
-   Marked by type and colour alone, like .section-title: a rule across the rail read as a
-   divider between two peers, and these rows are not main's peers.
-   They show on the panel's own timing. Otherwise the labels and their dots land in the strip the
-   instant the pointer touches it, a fifth of a second before the panel moves, and leave the same
-   way. Opacity carries the fade and rides the same wait and slide; display cannot ease, so the
-   discrete transition holds the rows in the flow until the fade out ends. The fade in starts from
-   a starting style nested in the open rule, where it has the rule's own specificity (a top-level
-   one loses the cascade to it and never applies). That starting style names opacity alone: with
-   display: none in it, Chromium starts no transition at all, in either direction, so the rows are
-   laid out, invisible, for the length of the wait.
-   The open rule flips display and opacity and nothing else. The layout sits here, at rest, because
-   the discrete transition keeps the rows in the flow after the pointer leaves, and anything the
-   open rule alone declared would drop out on that first frame while the rows were still visible. */
+  /* The section belongs to the open panel and nothing of it reaches the strip: a section you cannot
+   read the label of is not worth the pixels. It is the one place the rail lays out differently in
+   the two states, and safe because everything here sits below the worktree rows, so nothing anyone
+   aims at moves when it appears. Marked by type and colour alone: a rule across the rail reads as
+   a divider between peers, and these rows are not main's peers.
+   They show on the panel's own timing, or the labels land in the strip a fifth of a second before
+   the panel moves. Display cannot ease, so the discrete transition holds the rows in the flow
+   until the fade out ends. The starting style is nested in the open rule for its specificity, and
+   names opacity alone: with display: none in it, Chromium starts no transition in either
+   direction. The layout sits here, at rest, because the rows are still in the flow after the
+   pointer leaves, and anything the open rule alone declared would drop out on that first frame. */
   .rail-disc-head,
   .rail-disc-item {
     display: none;

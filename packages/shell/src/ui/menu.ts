@@ -3,10 +3,8 @@ import { type Placement, type Point, pointRect, type Rect } from "./place.ts";
 
 /**
  * One menu for the whole app. This module is the slot it lives in: opening a menu replaces
- * whatever was open, so a second one cannot exist, which is the rule that used to be six local
- * `useState`s and a window `click` listener that a right-click never fires. `<Menus />` in
- * Menu.tsx draws whatever is here and owns every way it closes; `useContextMenu` is the one way
- * a surface opens one.
+ * whatever was open, so a second one cannot exist. `<Menus />` in Menu.tsx draws whatever is here
+ * and owns every way it closes; `useContextMenu` is the one way a surface opens one.
  */
 
 export type MenuItem = {

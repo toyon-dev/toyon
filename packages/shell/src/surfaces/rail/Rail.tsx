@@ -392,7 +392,14 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
           // the row (withLauncher), and open-draft would reveal the chat dock, which is a layout
           // this frame cannot see and the other one would inherit.
           else if (onLead && !onScreen) dispatch({ a: "open-draft" });
-          else dispatch({ a: "activate", id });
+          else {
+            dispatch({ a: "activate", id });
+            // a click lands on a row to read and reply, like the walks in app/keys.ts, and the press
+            // already took the keyboard from any editor or terminal onto this button, so the
+            // composer is always offered the caret. Not on touch: the screen just switched to the
+            // chat, and a focused box would raise the keyboard over it.
+            if (owned && !touch) dispatch({ a: "walked" });
+          }
         }}
         {...cm.contextMenu(() => rowItems(w), id)}
       >

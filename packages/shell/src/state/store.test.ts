@@ -2376,10 +2376,11 @@ describe("usage", () => {
       ts: 0,
     });
     let s = run([hello(wt("a")), agent("a", usage(0.1)), agent("a", { type: "text-delta", text: "hi" })]);
-    expect(s.local.a?.usage).toEqual({ used: 1000, size: 4000, cost: 0.1 });
+    // a live figure is stamped on arrival, by the shell's clock
+    expect(s.local.a?.usage).toEqual({ used: 1000, size: 4000, cost: 0.1, heard: expect.any(Number) });
     expect(s.local.a?.chat).toEqual([{ kind: "assistant", text: "hi", seq: 0 }]);
     s = run([agent("a", usage(undefined, 2100))], s);
-    expect(s.local.a?.usage).toEqual({ used: 2100, size: 4000 });
+    expect(s.local.a?.usage).toEqual({ used: 2100, size: 4000, heard: expect.any(Number) });
     s = run(
       [
         server({

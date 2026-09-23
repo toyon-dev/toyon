@@ -154,6 +154,16 @@ export function ChatLog({
   // that lands a result already sees the new stamp, so the count leaves in that render.
   const chatAt = useLocalField(id, "chatAt");
   const quiet = useSecondsSince(busy ? chatAt : undefined);
+  // A silence has two halves that read differently: the request sitting in the provider's queue,
+  // and the model holding the turn with nothing to show. The agent's usage figure lands between
+  // them, reported the moment the model starts replying and before any of the reply, so a figure
+  // newer than the last item is the model's acknowledgement, and the count restarts there. The
+  // figure is not labelled: the one closing the previous reply can land just after a fast call's
+  // result and pass for the acknowledgement, and then the queue's wait is counted as the model's.
+  // Rare, and the healthy case (acknowledged within a second or two) shows no word at all.
+  const usage = useLocalField(id, "usage");
+  const heardAt = usage?.heard !== undefined && chatAt !== undefined && usage.heard > chatAt ? usage.heard : undefined;
+  const heard = useSecondsSince(busy ? heardAt : undefined);
   // What in the log already says busy where the reader is looking: the shimmer on a running call
   // of the main agent's own, or a thought or reply still arriving. The word under the log would say it
   // again, so it shows only when nothing does, in the gap between two calls. A running call's
@@ -262,15 +272,28 @@ export function ChatLog({
                         {fanout.calls} {fanout.calls === 1 ? "call" : "calls"}
                       </span>
                     </>
+                  ) : heardAt !== undefined ? (
+                    // gated on its own count, not the whole silence: a short think after a long
+                    // queue would otherwise flash a word for a wait that has just begun
+                    heard >= QUIET_AFTER && (
+                      <>
+                        {/* with no call open and nothing streaming, a silence this long after the
+                            model took the request is the model holding the turn: its thinking is
+                            summarized, and the summary lands only once the thought is done, so a
+                            long think is a hole in the log. Naming it says where the wait is. Under
+                            the threshold a healthy turn would flick the number on and off with
+                            every result; past it, the silence is the news */}
+                        <span className="working-word">thinking</span>
+                        <span className="working-num">{heard}s</span>
+                      </>
+                    )
                   ) : (
                     quiet >= QUIET_AFTER && (
                       <>
-                        {/* with no call open and nothing streaming, a silence this long is the model
-                          holding the turn: its thinking is summarized, and the summary lands only
-                          once the thought is done, so a long think is a hole in the log. Naming it
-                          says where the wait is. Under the threshold a healthy turn would flick
-                          the number on and off with every result; past it, the silence is the news */}
-                        <span className="working-word">thinking</span>
+                        {/* the model has not taken the request yet: the wait is the provider's
+                            queue, not the agent's, and the word says so before it can read as the
+                            model working hard */}
+                        <span className="working-word">waiting for the model</span>
                         <span className="working-num">{quiet}s</span>
                       </>
                     )

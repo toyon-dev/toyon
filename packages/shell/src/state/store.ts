@@ -72,7 +72,12 @@ import {
 } from "@toyon/shared";
 import { mergeLinks } from "./links.ts";
 
-export type UsageFigures = { used: number; size: number; cost?: number };
+/** `heard` is the shell's own clock when a live figure landed: the agent reports usage as soon as
+ * the model accepts a request, before any of the reply, so a figure newer than the last thing in
+ * the log says the wait has moved from the queue to the model. A backfilled figure carries none:
+ * its arrival says nothing about now. The shell's clock rather than the daemon's, since the two
+ * can sit on different machines. */
+export type UsageFigures = { used: number; size: number; cost?: number; heard?: number };
 
 export type ChatItem =
   /** `seq` on the rows a chat search can land on: the transcript entry the row starts at */
@@ -2048,7 +2053,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
         // what actually ran, for the model and effort chips: the agent's word, not the record's
         const model = ev.type === "session-info" && ev.model ? ev.model : l.model;
         const effort = ev.type === "session-info" && ev.effort ? ev.effort : l.effort;
-        const usage = ev.type === "usage" ? figuresOf(ev) : l.usage;
+        const usage = ev.type === "usage" ? { ...figuresOf(ev), heard: Date.now() } : l.usage;
         // a message an archived page sent is in the chat now, as the agent has it
         const { restoring: _sent, ...heard } = l;
         const base = askSettled(ev.type === "user-message" ? heard : l, ev);

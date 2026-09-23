@@ -414,6 +414,25 @@ describe("chat folding", () => {
       setSystemTime();
     }
   });
+  test("the head call of a batch carries when it got there; the next takes over when it closes", () => {
+    const start = (toolId: string): AgentEvent => ({ type: "tool-start", toolId, name: "Bash", input: {} });
+    try {
+      setSystemTime(new Date(1000));
+      let s = run([hello(wt("a")), agent("a", start("t1"))]);
+      expect(s.local.a?.running).toEqual({ id: "t1", at: 1000 });
+      setSystemTime(new Date(2000));
+      // a second call written behind the first is queued, not running: the stamp stays t1's
+      s = run([agent("a", start("t2"))], s);
+      expect(s.local.a?.running).toEqual({ id: "t1", at: 1000 });
+      setSystemTime(new Date(3000));
+      s = run([agent("a", { type: "tool-end", toolId: "t1", output: "", isError: false })], s);
+      expect(s.local.a?.running).toEqual({ id: "t2", at: 3000 });
+      s = run([agent("a", { type: "tool-end", toolId: "t2", output: "", isError: false })], s);
+      expect(s.local.a?.running).toBeUndefined();
+    } finally {
+      setSystemTime();
+    }
+  });
   test("text deltas append to the open assistant item; a user message starts a new one", () => {
     const s = run([
       hello(wt("a")),

@@ -174,6 +174,10 @@ export interface WorktreeLocal {
    * count survives switching worktrees and back. Kept here and not in the log, which is one
    * component showing whichever worktree is active; the daemon's events carry no time of their own */
   chatAt?: number;
+  /** the main agent's call that is executing (the oldest of its own still open: a batch runs in
+   * order, and nothing on the wire says when a call starts) and when it reached the head, by this
+   * tab's clock. The row counts its wait from here, for the same reason as `chatAt` */
+  running?: { id: string; at: number };
   log: LogLine[];
   git?: GitInfo;
   /** the files on disk: quick open, the @ menu and the files tab ask for it */
@@ -1235,6 +1239,17 @@ function withLocal(s: State, id: string, fn: (l: WorktreeLocal) => WorktreeLocal
   return { ...s, local: { ...s.local, [id]: fn(s.local[id] ?? EMPTY_LOCAL) } };
 }
 
+/** `running` for the chat as it stands: the head call keeps its stamp, a new head takes one now,
+ * and no open call clears it. The head moves only when a call opens or closes, so this is read on
+ * those events and on a transcript arriving whole, never on a streamed token. */
+function runningOf(chat: ChatItem[], was: WorktreeLocal["running"]): WorktreeLocal["running"] {
+  const head = chat.find(
+    (i): i is Extract<ChatItem, { kind: "tool" }> => i.kind === "tool" && !i.done && !i.parentToolId,
+  );
+  if (!head) return undefined;
+  return was?.id === head.id ? was : { id: head.id, at: Date.now() };
+}
+
 /** The box's answers and the parked ask belong to one ask. A new ask starts over and takes the box
  * back from a parked one; the close of the ask they belong to ends them; anything else leaves
  * them be. */
@@ -2026,6 +2041,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
       const id = msg.worktreeId;
       let next = withLocal(s, id, (l) => {
         const chat = applyEvent(l.chat, ev, msg.seq);
+        const running = ev.type === "tool-start" || ev.type === "tool-end" ? runningOf(chat, l.running) : l.running;
         let turn = l.turn;
         if (ev.type === "turn-start") turn = { edits: false, hmr: false };
         else if (ev.type === "tool-start" && isEditTool(ev)) turn = { ...turn, edits: true };
@@ -2042,6 +2058,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
           chat,
           // a delta that changed nothing (a chunk for a row that never opened) is not a sign of life
           ...(chat !== l.chat ? { chatAt: Date.now() } : {}),
+          ...(running !== l.running ? { running } : {}),
           turn,
           ...(model !== l.model ? { model } : {}),
           ...(effort !== l.effort ? { effort } : {}),
@@ -2074,6 +2091,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
         ...l,
         chat,
         chatAt: Date.now(),
+        running: runningOf(chat, l.running),
         log: msg.log ?? l.log,
         ...(usage ? { usage } : {}),
         ...(restoring !== undefined && !heard(restoring) ? { restoring } : {}),

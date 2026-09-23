@@ -119,23 +119,23 @@ export function useHeld<T>(value: T | undefined, ms: number): T | undefined {
   return held;
 }
 
-/** Whole seconds since `on` last became true, ticking once a second while it holds; 0 while it
- * is off. For a count read beside the thing it measures, which starts from the moment this
- * render first saw it: nothing on the wire says when a call began, and a count that starts when
- * the page starts watching is the same undercount after a reload as it is for a call that began
- * before the tab was open, which is the honest number either way. */
-export function useElapsed(on: boolean): number {
-  const [secs, setSecs] = useState(0);
+/** Whole seconds since `since` (a Date.now() stamp), ticking once a second while there is one; 0
+ * while there is none. The stamp is the caller's and not this hook's, and it belongs in the store
+ * against the thing it measures: a count that started when the component first saw it would start
+ * over whenever the component is rebuilt, which the log and its rows are on every switch of
+ * worktree. Nothing on the wire says when a call began, so a stamp taken when this tab heard of
+ * it is the same undercount after a reload as for a call that began before the tab was open. */
+export function useSecondsSince(since: number | undefined): number {
+  const [now, setNow] = useState(() => Date.now());
+  const on = since !== undefined;
   useEffect(() => {
-    if (!on) {
-      setSecs(0);
-      return;
-    }
-    const since = Date.now();
-    const t = setInterval(() => setSecs(Math.floor((Date.now() - since) / 1000)), 1000);
+    if (!on) return;
+    // the last tick may be from an earlier count, so the first reading is taken fresh
+    setNow(Date.now());
+    const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
   }, [on]);
-  return on ? secs : 0;
+  return on ? Math.max(0, Math.floor((now - since) / 1000)) : 0;
 }
 
 /** window.innerWidth, live */

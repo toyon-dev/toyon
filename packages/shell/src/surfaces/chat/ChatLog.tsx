@@ -1,11 +1,11 @@
 import { type ArchivedWorktree, type OwnedWorktree, type PickMeta, SHELL_TOOL } from "@toyon/shared";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef } from "react";
 import { previewBus } from "../../app/previewBus.ts";
 import { useDispatch, useSock, useStoreInstance } from "../../state/context.tsx";
 import { useLocalField } from "../../state/selectors.ts";
 import { localOf } from "../../state/store.ts";
 import { IconButton } from "../../ui/Button.tsx";
-import { useOnChange, useTail } from "../../ui/hooks.ts";
+import { useOnChange, useSecondsSince, useTail } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { Spinner } from "../../ui/Spinner.tsx";
 import { useSelectAllWithin } from "../../ui/selectAll.ts";
@@ -14,23 +14,6 @@ import { openAsk } from "./ask.ts";
 import { ChatItemView, QUIET_AFTER, ThoughtRow, ToolRow } from "./ChatItemView.tsx";
 import { groupTools, indexOfSeq, openRow, ownCallRunning, runningRow, subagentsAtWork } from "./group.ts";
 import { isBlank } from "./recall.ts";
-
-/** Whole seconds since the chat last changed (`since`, the worktree's `chatAt`), ticking once a
- * second while `busy`; 0 otherwise. The stamp is the store's, not this component's: the log is one
- * component showing whichever worktree is active, so a stamp kept here would start over on every
- * switch back. The render that lands a result already sees the new stamp, so the count leaves in
- * that render; a healthy turn streaming tokens pays nothing beyond the tick. */
-function useQuietSeconds(since: number | undefined, busy: boolean): number {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    if (!busy) return;
-    // the last tick may be from an earlier turn, so the first reading is taken fresh
-    setNow(Date.now());
-    const t = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(t);
-  }, [busy]);
-  return busy && since !== undefined ? Math.max(0, Math.floor((now - since) / 1000)) : 0;
-}
 
 /** the transcript for the active worktree: items, working indicator, waiting messages, jump-down pill.
  * `lead` is a line the conversation starts from: the first child of the log, so it sits on the
@@ -166,8 +149,11 @@ export function ChatLog({
   // whether the agent is thinking or wedged, and this is the one signal that changes with the
   // difference: nothing while results keep landing, a number climbing when they stop. It measures
   // silence rather than the turn, so a running call counts too: a hung command is silence.
+  // The stamp is the store's, not this component's: the log is one component showing whichever
+  // worktree is active, so a stamp kept here would start over on every switch back. The render
+  // that lands a result already sees the new stamp, so the count leaves in that render.
   const chatAt = useLocalField(id, "chatAt");
-  const quiet = useQuietSeconds(chatAt, busy);
+  const quiet = useSecondsSince(busy ? chatAt : undefined);
   // What in the log already says busy where the reader is looking: the shimmer on a running call
   // of the main agent's own, or a thought or reply still arriving. The word under the log would say it
   // again, so it shows only when nothing does, in the gap between two calls. A running call's
@@ -185,6 +171,9 @@ export function ChatLog({
   // the one row whose call is executing, which is the row that counts its wait: the rows behind
   // it in the batch shine for a call that has not started (runningRow in group.ts)
   const countingRow = useMemo(() => runningRow(entries), [entries]);
+  // when that call reached the head of the batch, stamped by the store (the row is rebuilt on
+  // every switch of worktree, so a clock of its own would start over)
+  const running = useLocalField(id, "running");
   // the subagents the main agent is waiting on: named in the word, with their calls ticking beside
   // it, since their rows are out of sight and this line is the one place that can say so. The
   // spawn rows that started them shine for the same window.
@@ -211,7 +200,7 @@ export function ChatLog({
               tools={entry.tools}
               next={entry.next}
               live={i === liveRow || i === newestShell}
-              counting={i === countingRow}
+              since={i === countingRow ? running?.at : undefined}
               roots={roots}
               worktreeId={id}
               // a `!` command is never grouped, so the walk's index is the row's own

@@ -10,7 +10,7 @@ import { type ChatItem, worktreeById } from "../../state/store.ts";
 import { Button } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { Field } from "../../ui/Field.tsx";
-import { useElapsed, useLiveHtml, useOnChange, useReveal, useTail } from "../../ui/hooks.ts";
+import { useLiveHtml, useOnChange, useReveal, useSecondsSince, useTail } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { grouped, type MenuEntry, useContextMenu } from "../../ui/menu.ts";
 import { rowState } from "../../ui/rowState.ts";
@@ -504,7 +504,7 @@ export const ToolRow = memo(
     next,
     live,
     working,
-    counting,
+    since,
     roots,
     worktreeId,
     marked,
@@ -522,8 +522,9 @@ export const ToolRow = memo(
      * between the subagent's calls: a shine that came and went with each call would restart its
      * sweep every time and strobe rather than travel. */
     working?: boolean;
-    /** this row's call is the one executing (runningRow in group.ts), so its wait is counted here */
-    counting?: boolean;
+    /** this row's call is the one executing (runningRow in group.ts), so its wait is counted
+     * here, from this stamp: when the call reached the head of the batch, by the store's clock */
+    since?: number;
     roots?: string[];
     worktreeId?: string | null;
     /** the composer has walked back to the command this row ran */
@@ -547,10 +548,11 @@ export const ToolRow = memo(
     // beside it is what tells them apart; so only the row at the head of the batch counts, and it
     // counts from when it got there: a row that counted from the moment it opened would put the
     // command's whole wait on the read written behind it. The log picks the row (runningRow in
-    // group.ts), since which one it is depends on the rows above. A subagent's call and the spawn
+    // group.ts), since which one it is depends on the rows above, and the store keeps the stamp,
+    // since this row is rebuilt on every switch of worktree. A subagent's call and the spawn
     // that waits on one keep no count: their work is counted under the log, where the fan-out
     // line names the agents and ticks their calls.
-    const age = useElapsed(!!counting && streaming);
+    const age = useSecondsSince(streaming ? since : undefined);
     // The log decides which row opens itself, and it hands the row two answers: the turn's one
     // self-opening row (openRow in group.ts, reasoning only) and the newest `!` command, which is
     // open from the start because what it printed is the reason the person ran it. A subagent's
@@ -650,7 +652,7 @@ export const ToolRow = memo(
   (a, b) =>
     a.live === b.live &&
     a.working === b.working &&
-    a.counting === b.counting &&
+    a.since === b.since &&
     a.next === b.next &&
     a.roots === b.roots &&
     a.worktreeId === b.worktreeId &&

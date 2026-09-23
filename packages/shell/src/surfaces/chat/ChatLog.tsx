@@ -12,7 +12,7 @@ import { useSelectAllWithin } from "../../ui/selectAll.ts";
 import { isBusy, pickLabel } from "../util.ts";
 import { openAsk } from "./ask.ts";
 import { ChatItemView, QUIET_AFTER, ThoughtRow, ToolRow } from "./ChatItemView.tsx";
-import { groupTools, indexOfSeq, openRow, ownCallRunning, subagentsAtWork } from "./group.ts";
+import { groupTools, indexOfSeq, openRow, ownCallRunning, runningRow, subagentsAtWork } from "./group.ts";
 import { isBlank } from "./recall.ts";
 
 /** Whole seconds since `items` last changed, ticking once a second while `busy`; 0 otherwise.
@@ -179,6 +179,9 @@ export function ChatLog({
   // scrolls off first.
   const calling = ownCallRunning(items);
   const moving = streaming >= 0 || calling;
+  // the one row whose call is executing, which is the row that counts its wait: the rows behind
+  // it in the batch shine for a call that has not started (runningRow in group.ts)
+  const countingRow = useMemo(() => runningRow(entries), [entries]);
   // the subagents the main agent is waiting on: named in the word, with their calls ticking beside
   // it, since their rows are out of sight and this line is the one place that can say so. The
   // spawn rows that started them shine for the same window.
@@ -205,6 +208,7 @@ export function ChatLog({
               tools={entry.tools}
               next={entry.next}
               live={i === liveRow || i === newestShell}
+              counting={i === countingRow}
               roots={roots}
               worktreeId={id}
               // a `!` command is never grouped, so the walk's index is the row's own

@@ -7,6 +7,7 @@ import {
   openRow,
   ownCallRunning,
   runCalls,
+  runningRow,
   subagentsAtWork,
   type ToolItem,
 } from "./group.ts";
@@ -449,5 +450,41 @@ describe("ownCallRunning", () => {
   test("a spawn whose brief is still being written is the main agent's own motion", () => {
     expect(ownCallRunning([spawn("task1", "", { done: false, input: {} })])).toBe(true);
     expect(ownCallRunning([spawn("task1", "Map the runtime", { done: false })])).toBe(false);
+  });
+});
+
+describe("runningRow", () => {
+  const sub = (id: string, extra: Partial<ChatItem> = {}) => tool("read", "/wt/a.ts", { parentToolId: id, ...extra });
+  const running = (items: ChatItem[]) => runningRow(groupTools(items, ["/wt"]));
+
+  test("no call open, no row", () => {
+    expect(running([])).toBe(-1);
+    expect(running([text("Hi"), tool("execute", "")])).toBe(-1);
+  });
+
+  test("a batch counts on its oldest open call: the reads behind a command wait for it", () => {
+    const batch = [
+      text("Hi"),
+      tool("execute", "", { name: "Bash", input: { command: "bun run check" }, done: false }),
+      tool("read", "/wt/a.png", { name: "Read", done: false }),
+      tool("read", "/wt/b.png", { name: "Read", done: false }),
+    ];
+    expect(running(batch)).toBe(1);
+    // the command lands and the first read is the one executing
+    const landed = batch.map((i, at) => (at === 1 ? { ...i, done: true } : i)) as ChatItem[];
+    expect(running(landed)).toBe(2);
+  });
+
+  test("a run of calls on one file counts while its newest call is open", () => {
+    const run = [tool("edit", "/wt/a.ts"), tool("edit", "/wt/a.ts", { done: false })];
+    expect(running(run)).toBe(0);
+  });
+
+  test("a spawn and its subagent's calls never count: their work is under the log", () => {
+    expect(running([spawn("task1", "Map the runtime", { done: false }), sub("task1", { done: false })])).toBe(-1);
+    const unflagged = tool("think", "", { id: "task2", done: false, subagent: undefined });
+    expect(running([unflagged, sub("task2", { done: false })])).toBe(-1);
+    // an orphan subagent call keeps its place in the flow but is still not the main agent's
+    expect(running([sub("gone", { done: false })])).toBe(-1);
   });
 });

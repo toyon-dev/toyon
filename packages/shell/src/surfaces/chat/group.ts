@@ -188,6 +188,18 @@ export function ownCallRunning(items: ChatItem[]): boolean {
   );
 }
 
+/** The row whose call is the one actually executing, or -1: the oldest own call still open. An
+ * agent writes a batch of calls in one message and every row opens as its input lands, seconds
+ * before any of them runs; then it works the batch in order, and a command holds the ones after
+ * it. So a read written behind a slow command is open for the whole wait and does nothing in it,
+ * and a count on its row would say the read was slow. Nothing on the wire says when a call starts
+ * (no in_progress at start; acp/map.ts), so the head of the queue is the one that is running, and
+ * the row after it starts its own count when this one closes. A subagent's call and the spawn
+ * that waits on one are not candidates: their work is counted under the log (subagentsAtWork). */
+export function runningRow(entries: ChatEntry[]): number {
+  return entries.findIndex((e) => "tools" in e && !e.tools[0]!.parentToolId && !e.tools.at(-1)!.done);
+}
+
 /** the entries hold fresh arrays on every render, so the rows compare their calls one by one:
  * without this a streamed token into the message above re-renders every call in the turn */
 export function sameTools(a: ToolItem[], b: ToolItem[]): boolean {

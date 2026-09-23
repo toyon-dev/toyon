@@ -152,9 +152,14 @@ export function ChatLog({
   const inTurn = working || active?.agent === "waiting";
   const liveRow = useMemo(() => (inTurn ? openRow(entries) : -1), [inTurn, entries]);
   // the live marks and the word are about now, not about what is open: the agent is thinking only
-  // while the thought is the newest thing in the log, and the thought stays open well past that
+  // while the thought is the newest thing in the log, and the thought stays open well past that.
+  // A reply arriving is the same motion: the words landing say busy where the reader is looking,
+  // so the row below stays out of it the way it does for a thought
   const last = entries.at(-1);
-  const streaming = working && last && "item" in last && last.item.kind === "thinking" ? entries.length - 1 : -1;
+  const streaming =
+    working && last && "item" in last && (last.item.kind === "thinking" || last.item.kind === "assistant")
+      ? entries.length - 1
+      : -1;
   // the newest `!` command is the one whose output is open; each one closes the one before it
   const newestShell = entries.findLastIndex((e) => "tools" in e && e.tools[0]?.name === SHELL_TOOL);
   // a `!` command still going: its row spins, and this is where the stop for it lives
@@ -166,7 +171,7 @@ export function ChatLog({
   // silence rather than the turn, so a running call counts too: a hung command is silence.
   const quiet = useQuietSeconds(items, busy);
   // What in the log already says busy where the reader is looking: the shimmer on a running call
-  // of the main agent's own, or on a thought still arriving. The word under the log would say it
+  // of the main agent's own, or a thought or reply still arriving. The word under the log would say it
   // again, so it shows only when nothing does, in the gap between two calls. A running call's
   // row carries its own count (ToolRow), so under it there is no line at all: "quiet" beside a
   // line that shines contradicted it, and one count below could not say which of two calls

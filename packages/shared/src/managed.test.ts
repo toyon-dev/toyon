@@ -106,9 +106,9 @@ describe("resolveManaged", () => {
 
 describe("managedSources", () => {
   test("macOS reads MDM's plists, the computer's and the user's, then the JSON file", () => {
-    expect(managedSources("darwin", "kim").map((s) => s.path)).toEqual([
+    expect(managedSources("darwin", "kyle").map((s) => s.path)).toEqual([
       "/Library/Managed Preferences/dev.toyon.plist",
-      "/Library/Managed Preferences/kim/dev.toyon.plist",
+      "/Library/Managed Preferences/kyle/dev.toyon.plist",
       "/Library/Application Support/toyon/policy.json",
     ]);
   });

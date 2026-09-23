@@ -70,7 +70,7 @@ In the app, the update chip does not appear, a greyed menu row reads "managed by
 ```
 $ toyon doctor
 ok   cli      toyon 0.4.1, bun 1.4.2, darwin arm64
-ok   home     /Users/kim/.toyon
+ok   home     /Users/kyle/.toyon
 ok   policy   /Library/Application Support/toyon/policy.json: updates off, deploy off, remote tailscale, agents claude, codex, custom agents off, plan sign-in off
 ok   git      git version 2.47.0
 ok   daemon   0.4.1 at http://127.0.0.1:4141, pid 41231

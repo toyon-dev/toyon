@@ -2,7 +2,15 @@ import { describe, expect, test } from "bun:test";
 import type { AgentEvent } from "@toyon/shared";
 import type { TranscriptEntry } from "../agent/transcript.ts";
 import type { StateStore } from "../core/state.ts";
-import { CHAT_HITS_PER_WORKTREE, type ChatFs, ChatSearch, saidRows, searchRows, snippet } from "./chats.ts";
+import {
+  CHAT_HITS_PER_WORKTREE,
+  type ChatFs,
+  ChatSearch,
+  needleWords,
+  saidRows,
+  searchRows,
+  snippet,
+} from "./chats.ts";
 
 const e = (seq: number, event: AgentEvent): TranscriptEntry => ({ seq, event });
 const said = (seq: number, text: string, ts: number) => e(seq, { type: "user-message", text, ts });
@@ -27,26 +35,54 @@ describe("saidRows", () => {
   });
 });
 
+describe("needleWords", () => {
+  test("lower-cased words, each once, and nothing under two characters", () => {
+    expect(needleWords("  Footer\nlink footer ")).toEqual(["footer", "link"]);
+    expect(needleWords("f")).toEqual([]);
+  });
+});
+
 describe("snippet", () => {
-  test("a long message is cut around the match, and the match is still where it says", () => {
-    const text = `${"a".repeat(120)} needle ${"b".repeat(120)}`;
-    const s = snippet(text, text.indexOf("needle"), 6);
+  test("a long message is cut around the first word, and each word is still where it says", () => {
+    const text = `${"a".repeat(120)} needle ${"b".repeat(60)} pin ${"c".repeat(120)}`;
+    const s = snippet(text, [
+      [text.indexOf("pin"), 3],
+      [text.indexOf("needle"), 6],
+    ]);
     expect(s.text.startsWith("…")).toBe(true);
     expect(s.text.endsWith("…")).toBe(true);
-    expect(s.text.slice(s.match[0], s.match[0] + s.match[1])).toBe("needle");
+    expect(s.match.map(([at, n]) => s.text.slice(at, at + n))).toEqual(["pin", "needle"]);
   });
   test("a short message is whole", () => {
-    expect(snippet("fix the needle", 8, 6)).toEqual({ text: "fix the needle", match: [8, 6] });
+    expect(snippet("fix the needle", [[8, 6]])).toEqual({ text: "fix the needle", match: [[8, 6]] });
+  });
+  test("a word past the cut is not marked", () => {
+    const text = `needle ${"b".repeat(300)} pin`;
+    const s = snippet(text, [
+      [0, 6],
+      [text.indexOf("pin"), 3],
+    ]);
+    expect(s.match).toEqual([[0, 6]]);
   });
 });
 
 describe("searchRows", () => {
   test("case does not matter, the newest comes first, and a chat gives up at its limit", () => {
     const rows = saidRows(Array.from({ length: 25 }, (_, i) => said(i, `the FOOTER, take ${i}`, i)));
-    const { hits, more } = searchRows(rows, "footer", { worktreeId: "a", archived: false });
+    const { hits, more } = searchRows(rows, ["footer"], { worktreeId: "a", archived: false });
     expect(hits).toHaveLength(CHAT_HITS_PER_WORKTREE);
     expect(more).toBe(true);
     expect(hits[0]).toMatchObject({ worktreeId: "a", seq: 24, role: "user", ts: 24 });
+  });
+  test("every word must be there, in any order, and each is marked where it first appears", () => {
+    const rows = saidRows([said(0, "the link in the footer", 1), said(1, "the footer alone", 2)]);
+    const { hits } = searchRows(rows, ["footer", "link"], { worktreeId: "a", archived: false });
+    expect(hits).toHaveLength(1);
+    expect(hits[0]).toMatchObject({ seq: 0, text: "the link in the footer" });
+    expect(hits[0]!.match).toEqual([
+      [16, 6],
+      [4, 4],
+    ]);
   });
 });
 

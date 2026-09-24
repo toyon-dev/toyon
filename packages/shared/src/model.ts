@@ -681,10 +681,11 @@ export interface ChatHit {
   /** a message's own seq, or the first seq of the run of prose it sits in */
   seq: number;
   role: "user" | "assistant";
-  /** the text around the first match, whitespace collapsed, with an ellipsis where it was cut */
+  /** the text around the first word matched, whitespace collapsed, with an ellipsis where it was cut */
   text: string;
-  /** where the match sits in `text`: its start and its length */
-  match: [number, number];
+  /** where each of the query's words sits in `text`, start and length, for the words that fit: the
+   * query's words all appear in the message, in any order, and a word past the cut is not marked */
+  match: Array<[number, number]>;
   /** when it was said: the message's stamp, or the start of the turn the prose is in; 0 unknown */
   ts: number;
 }

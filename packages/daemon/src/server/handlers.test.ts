@@ -750,7 +750,15 @@ describe("handlers", () => {
     if (reply?.t !== "chat-hits") throw new Error("expected a chat-hits reply");
     expect(reply).toMatchObject({ query: "footer", truncated: false });
     expect(reply.hits).toEqual([
-      { worktreeId: wt.id, archived: true, seq: 0, role: "user", text: "Tidy the footer links", match: [9, 6], ts: 1 },
+      {
+        worktreeId: wt.id,
+        archived: true,
+        seq: 0,
+        role: "user",
+        text: "Tidy the footer links",
+        match: [[9, 6]],
+        ts: 1,
+      },
     ]);
   });
 

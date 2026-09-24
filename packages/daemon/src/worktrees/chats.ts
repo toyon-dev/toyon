@@ -83,34 +83,58 @@ export function saidRows(entries: TranscriptEntry[]): SaidRow[] {
   return out;
 }
 
-/** the part of `text` around a match at `at`, and where the match sits in what is returned */
-export function snippet(text: string, at: number, length: number): Pick<ChatHit, "text" | "match"> {
-  const start = Math.max(0, Math.min(at - BEFORE, text.length - SNIPPET));
+/** The words a query is matched by: lower-cased, each once. A message matches when it has every one,
+ * in any order, so "footer link" finds "the link in the footer". Empty when the query is too short. */
+export function needleWords(query: string): string[] {
+  const needle = flat(query).toLowerCase();
+  if (needle.length < MIN_QUERY) return [];
+  return [...new Set(needle.split(" "))];
+}
+
+/** the part of `text` around the first of `ranges` (start and length, in `text`), and where each
+ * range sits in what is returned; a range the cut left out is dropped, one it crossed is clipped */
+export function snippet(text: string, ranges: Array<[number, number]>): Pick<ChatHit, "text" | "match"> {
+  const first = Math.min(...ranges.map(([at]) => at));
+  const start = Math.max(0, Math.min(first - BEFORE, text.length - SNIPPET));
   const end = Math.min(text.length, start + SNIPPET);
   const head = start > 0 ? "…" : "";
   const tail = end < text.length ? "…" : "";
-  return {
-    text: `${head}${text.slice(start, end)}${tail}`,
-    match: [at - start + head.length, Math.min(length, end - at)],
-  };
+  const match: Array<[number, number]> = [];
+  for (const [at, length] of ranges) {
+    if (at < start || at >= end) continue;
+    match.push([at - start + head.length, Math.min(length, end - at)]);
+  }
+  return { text: `${head}${text.slice(start, end)}${tail}`, match };
 }
 
-/** one chat's hits for a lower-cased needle, newest first; `more` when the limit left some out */
+/** one chat's hits for the query's words, newest first; `more` when the limit left some out */
 export function searchRows(
   rows: SaidRow[],
-  needle: string,
+  words: string[],
   chat: Pick<ChatHit, "worktreeId" | "archived">,
   limit = CHAT_HITS_PER_WORKTREE,
 ): { hits: ChatHit[]; more: boolean } {
   const hits: ChatHit[] = [];
+  if (words.length === 0) return { hits, more: false };
   for (let i = rows.length - 1; i >= 0; i--) {
     const row = rows[i]!;
-    const at = row.lower.indexOf(needle);
-    if (at < 0) continue;
+    const ranges = wordRanges(row.lower, words);
+    if (!ranges) continue;
     if (hits.length === limit) return { hits, more: true };
-    hits.push({ ...chat, seq: row.seq, role: row.role, ts: row.ts, ...snippet(row.text, at, needle.length) });
+    hits.push({ ...chat, seq: row.seq, role: row.role, ts: row.ts, ...snippet(row.text, ranges) });
   }
   return { hits, more: false };
+}
+
+/** each word where it first appears in `lower`, or null when one is absent */
+function wordRanges(lower: string, words: string[]): Array<[number, number]> | null {
+  const ranges: Array<[number, number]> = [];
+  for (const word of words) {
+    const at = lower.indexOf(word);
+    if (at < 0) return null;
+    ranges.push([at, word.length]);
+  }
+  return ranges;
 }
 
 export class ChatSearch {
@@ -122,8 +146,8 @@ export class ChatSearch {
 
   async search(repoId: string, query: string): Promise<{ hits: ChatHit[]; truncated: boolean }> {
     this.d.state.requireRepo(repoId);
-    const needle = flat(query).toLowerCase();
-    if (needle.length < MIN_QUERY) return { hits: [], truncated: false };
+    const words = needleWords(query);
+    if (words.length === 0) return { hits: [], truncated: false };
     // main has no chat of its own and a spare has not started one, so the chats are the worktrees
     const chats = [
       ...this.d.state.worktrees
@@ -135,7 +159,7 @@ export class ChatSearch {
     const found = await Promise.all(
       chats.map(async (c) => {
         const rows = await this.rowsOf(c.id, c.archived, c.path, read);
-        return searchRows(rows, needle, { worktreeId: c.id, archived: c.archived });
+        return searchRows(rows, words, { worktreeId: c.id, archived: c.archived });
       }),
     );
     // a chat no longer listed (restored, deleted, its worktree gone) is not read again

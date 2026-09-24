@@ -38,8 +38,9 @@ const archivedRow = (a: ArchivedWorktree): WorktreeRow => ({
   fields: [a.title, a.branch],
 });
 
-/** the indexes markHits lights, from a hit's start and length */
-const charsOf = ([start, length]: [number, number]) => Array.from({ length }, (_, i) => start + i);
+/** the indexes markHits lights, from each matched word's start and length */
+const charsOf = (ranges: Array<[number, number]>) =>
+  ranges.flatMap(([start, length]) => Array.from({ length }, (_, i) => start + i));
 
 /** ⌘G: what the project's chats say. ⌘F finds in the chat on screen; this looks through every
  * worktree's, the archived ones too, since "where did I ask for that" is mostly asked after the

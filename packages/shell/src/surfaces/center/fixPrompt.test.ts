@@ -56,5 +56,8 @@ describe("setupFixPrompt", () => {
     expect(setupFixPrompt(repo, ".toyon/settings.json")).toContain("write `.toyon/settings.json`");
     expect(text).toContain('"run": { "web": "<start command>" }');
     expect(text).toContain("Do not start any server yourself");
+    // a fresh worktree lacks the main checkout's gitignored caches; the agent has to be told
+    // where to copy them from, or it never writes the line
+    expect(text).toContain("$TOYON_ROOT");
   });
 });

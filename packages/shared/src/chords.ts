@@ -138,8 +138,8 @@ export const CHORDS: readonly Chord[] = [
   },
   { id: "worktree", key: "1-9" },
   // ⌥↑/↓ walk the rail the way ⌥↑/↓ walk Slack's channels, ⌃Tab and ⌘⇧[/] the way they walk a
-  // terminal's tabs; ⌘1-9 jumps by position. A focused Monaco keeps the ⌥ form, where ⌥↑/↓ is
-  // move-line (app/keys.ts), so ⌃Tab and ⌘⇧[/] are the walks that still work from inside the editor.
+  // terminal's tabs; ⌘1-9 jumps by position. A focused Monaco hands ⌥↑/↓ over as well: Editor.tsx
+  // unbinds its move-line so the walk is the same key from inside the editor.
   {
     id: "wt-prev",
     key: "ArrowUp",
@@ -168,7 +168,7 @@ export const CHORDS: readonly Chord[] = [
   // "git" or "branch" is taken before the page sees it
   { id: "refs", key: "g", shift: true },
   // U for URL: the address bar's list, since ⌘L is the chat's and ⌘G searches the chats. Only Firefox has
-  // a use for ⌘U (view source); a focused Monaco keeps it as cursor-undo (app/keys.ts).
+  // a use for ⌘U (view source); Monaco's cursor-undo on it is unbound (Editor.tsx).
   { id: "routes", key: "u" },
   // ⌘R reloads the preview, the frame the hand is looking at, not the shell around it. ⌘⇧R is left
   // to the browser: its hard reload takes the shell and every preview with it, which is what the

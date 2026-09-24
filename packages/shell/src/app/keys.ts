@@ -32,8 +32,8 @@ import { unseenJump } from "./unseenJump.ts";
 /** the keyboard is somewhere inside `selector` */
 const inside = (selector: string) => !!document.activeElement?.closest(selector);
 
-/** the ⌘ chords a focused Monaco keeps for itself; it keeps every ⌥ one too (see useChords) */
-const MONACO_OWNS = new Set<ChordId>(["design", "new", "routes", "chats"]);
+/** the chords a focused Monaco keeps for itself (see useChords) */
+const MONACO_OWNS = new Set<ChordId>(["design", "chats"]);
 
 /** the chords that act on the previewed page itself, and so mean nothing without one */
 const PAGE_CHORDS = new Set<ChordId>(["reload", "back", "forward"]);
@@ -96,16 +96,13 @@ export function useChords() {
       // ⌘W is only ever swallowed in an installed app, where it would close the window. A browser
       // tab takes it before the page sees it, and one that hands it over is asking about the tab.
       if (chord?.id === "close" && !isInstalledApp()) return;
-      // ⌘D, ⌘K and ⌘U are Monaco's (add cursor, chord prefix, cursor undo) while it has the keyboard, and
-      // so is every ⌥ chord: ⌥↑/↓ is move line and ⌥⇧↑/↓ copy line. Taking them from a focused editor
-      // made a design scan out of a second cursor, and would make a worktree switch out of a line move;
-      // the same walk on ⌃Tab binds nothing in Monaco and stays ours. ⌘L is taken from it anyway:
-      // expand-line-selection is the loss, and a hand in the editor that wants to answer the agent
-      // is who the chord is for. ⌘E, ⌘I and F1 are taken too, and Editor.tsx unbinds Monaco's own
-      // keys for them so the keydown gets here: the picker and the palette are the same chord
-      // wherever the hand is.
+      // ⌘D and ⌘G are Monaco's (add cursor, find next) while it has the keyboard: a hand fixing a
+      // line reaches for both, and taking ⌘D made a design scan out of a second cursor. Everything
+      // else is the same chord wherever the hand is: Editor.tsx unbinds Monaco's own keys for ⌘E,
+      // ⌘I, F1, ⌥↑/↓, ⌥⇧↑/↓ and ⌘U so the keydown gets here, and answers ⌘L and ⌘K itself, since
+      // Monaco keeps those two from the window (⌘K is the prefix of its chord family).
       const monaco = !!document.activeElement?.closest(".monaco-editor");
-      if (monaco && chord && (e.altKey || MONACO_OWNS.has(chord.id))) return;
+      if (monaco && chord && MONACO_OWNS.has(chord.id)) return;
       // the terminal and the editor type into a textarea of their own, so this covers them as well
       if (chord && chordOf(chord.id).textKeeps && isTyping(document.activeElement)) return;
       // with no page up (setup, a stopped app, an update waiting on a reload, a chat) ⌘R and ⌘←/→

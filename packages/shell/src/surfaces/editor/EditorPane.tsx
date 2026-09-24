@@ -239,6 +239,7 @@ export function EditorPane({
                     },
                   )
                 }
+                onNew={() => store.dispatch({ a: "open-draft" })}
                 onLineHover={
                   history
                     ? undefined

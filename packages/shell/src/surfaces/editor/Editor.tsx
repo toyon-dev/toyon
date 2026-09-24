@@ -70,11 +70,14 @@ registerGrammars(monaco);
 const THEME = "toyon";
 monaco.editor.defineTheme(THEME, toMonacoTheme(toyonDark));
 
-// ⌘E and ⌘I arm the element picker and F1 opens the palette wherever the keyboard is, so Monaco's
-// own bindings for them come off: find-with-selection on ⌘E, suggest's second key on ⌘I (⌃Space
-// still suggests), and Monaco's own palette on F1. A key Monaco does not bind is not stopped at
-// its input, so the keydown reaches useChords on the window.
+// The shell's chords that Monaco would otherwise keep for itself come off, so a hand in the editor
+// gets the same key as everywhere else: ⌘E and ⌘I arm the element picker (find-with-selection and
+// suggest's second key; ⌃Space still suggests), F1 opens the palette, ⌥↑/↓ and ⌥⇧↑/↓ walk the
+// worktrees (move-line and copy-line), ⌘U lists the routes (cursor undo). A key Monaco does not
+// bind is not stopped at its input, so the keydown reaches useChords on the window. ⌘K cannot come
+// off this way: it is the prefix of two dozen chords, so the editor answers it itself (below).
 const cmd = monaco.KeyMod.CtrlCmd;
+const alt = monaco.KeyMod.Alt;
 monaco.editor.addKeybindingRules(
   (
     [
@@ -83,6 +86,11 @@ monaco.editor.addKeybindingRules(
       ["focusSuggestion", cmd | monaco.KeyCode.KeyI],
       ["toggleSuggestionDetails", cmd | monaco.KeyCode.KeyI],
       ["editor.action.quickCommand", monaco.KeyCode.F1],
+      ["editor.action.moveLinesUpAction", alt | monaco.KeyCode.UpArrow],
+      ["editor.action.moveLinesDownAction", alt | monaco.KeyCode.DownArrow],
+      ["editor.action.copyLinesUpAction", alt | monaco.KeyMod.Shift | monaco.KeyCode.UpArrow],
+      ["editor.action.copyLinesDownAction", alt | monaco.KeyMod.Shift | monaco.KeyCode.DownArrow],
+      ["cursorUndo", cmd | monaco.KeyCode.KeyU],
     ] as const
   ).map(([command, keybinding]) => ({ keybinding, command: `-${command}` })),
 );
@@ -158,6 +166,7 @@ export default function Editor({
   onLineHover,
   onCopy,
   onChat,
+  onNew,
 }: {
   file: FileRef;
   /** the file as last read: the text is taken from it once, the diff's other side follows it */
@@ -177,6 +186,8 @@ export default function Editor({
   onCopy?: (path: string, lines: { startLine: number; endLine: number }, clipboard: DataTransfer) => void;
   /** ⌘L: the selection it took, or null when there was none and only the keyboard moves */
   onChat?: (path: string, taken: { startLine: number; endLine: number; text: string } | null) => void;
+  /** ⌘K: a new worktree, the chord the window would answer if Monaco let the key through */
+  onNew?: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   // setTheme is global: every editor follows, including ones created before the change
@@ -190,6 +201,8 @@ export default function Editor({
   copyRef.current = onCopy;
   const chatRef = useRef(onChat);
   chatRef.current = onChat;
+  const newRef = useRef(onNew);
+  newRef.current = onNew;
   const syncRef = useRef(sync);
   syncRef.current = sync;
   const readOnlyRef = useRef(readOnly);
@@ -372,6 +385,10 @@ export default function Editor({
 
     // ⌘S saves now rather than once typing rests
     code.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => syncRef.current.saveNow());
+    // ⌘K is the shell's new-worktree key. Monaco holds it as the prefix of its ⌘K ⌘C family and
+    // stops the keydown while it waits for the second key, so the window never sees it; a binding on
+    // the bare key resolves ahead of every chord and answers it here instead.
+    code.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyK, () => newRef.current?.());
 
     // line hover -> highlight what that line renders on the page
     let lastLine: number | null = null;

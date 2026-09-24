@@ -231,8 +231,9 @@ export function openRow(entries: ChatEntry[]): number {
       if (head?.toolKind === "think" && !isGuardian(head)) return i;
       continue;
     }
-    // a one-line thought is a row with nothing to open (thoughtLine in thought.ts), and it is
-    // still the agent's next thought: what it said is on the line, and the thought before it closes
+    // a thought read as a line (thoughtLine in thought.ts) opens nothing: what it said is on the
+    // line, and a column of headlines keeps the earlier ones for whoever asks. It is still the
+    // agent's next thought, and the thought before it closes
     if (entry.item.kind === "thinking") {
       if (!entry.item.text.trim()) continue;
       return thoughtLine(entry.item.text) ? -1 : i;

@@ -27,7 +27,7 @@ import { netOfCalls } from "./mergeDiffs.ts";
 import { PasteChip } from "./PasteChip.tsx";
 import { PickChip } from "./PickChip.tsx";
 import { languageOf, type Piece, paintCode, paintDiff, pathInDiff } from "./syntax.ts";
-import { normalizeThoughtMarkdown, thoughtLine } from "./thought.ts";
+import { normalizeThoughtMarkdown, thoughtLine, thoughtSteps } from "./thought.ts";
 import {
   callPath,
   composing,
@@ -434,7 +434,19 @@ export const ThoughtRow = memo(function ThoughtRow({
   worktreeId?: string | null;
   fileRoot?: string;
 }) {
-  const html = useMarkdown(normalizeThoughtMarkdown(item.text), fileRoot ? { fileRoot } : undefined);
+  // A thought written as a column of headlines (Codex, a summary part per step) is read by its
+  // newest one, while it streams too: each arrives whole, so there is no first-words case, and
+  // the line changing under the bulb is the agent moving on. The steps before it are the body,
+  // so what it thought on the way is a click away and the column does not print one row per lid.
+  // A single headline has no body, and its markup is "" rather than the line: the body's markup
+  // goes in keyed on the string (useLiveHtml), and the first headline becoming the body when the
+  // second lands is the string staying put while the body mounts.
+  const steps = thoughtSteps(item.text);
+  const earlier = steps.slice(0, -1);
+  const html = useMarkdown(
+    steps.length ? earlier.join("\n\n") : normalizeThoughtMarkdown(item.text),
+    fileRoot ? { fileRoot } : undefined,
+  );
   const sock = useSock();
   const dispatch = useDispatch();
   const word = streaming ? "Thinking" : "Thought";
@@ -455,25 +467,42 @@ export const ThoughtRow = memo(function ThoughtRow({
     if (!el || !isOpen || streaming) return;
     el.scrollTop = 0;
   };
+  const out = (
+    <div className="tool-part">
+      {/* biome-ignore lint/a11y/useKeyWithClickEvents: the links inside are the controls; the root only routes their clicks */}
+      <div
+        ref={body}
+        className="tool-out thought-out md"
+        onClick={(e) => openChatLink(e, fileRoot, worktreeId, { sock, dispatch })}
+      />
+    </div>
+  );
   // a finished thought of one line is the line, printed where the word would go, with nothing
   // under it: a headline per step (Codex) folded into a card each was a column of lids
-  const line = streaming ? "" : thoughtLine(item.text);
+  const line = steps.at(-1) ?? (streaming ? "" : thoughtLine(item.text));
   if (line) {
+    const leaf = earlier.length === 0;
     return (
       <Fold
         className="tool-row"
         auto={false}
-        leaf
+        leaf={leaf}
         label={line}
-        menu={() => grouped([[{ id: "copy", label: "copy thought", onClick: () => copyText(item.text) }]])}
+        onToggle={onToggle}
+        menu={(fold) =>
+          grouped([
+            [{ id: "copy", label: "copy thought", onClick: () => copyText(item.text) }],
+            ...(leaf ? [] : [[{ id: "fold", label: fold.open ? "collapse" : "expand", onClick: fold.toggle }]]),
+          ])
+        }
         summary={
           <>
             <Icon name="bulb" className="tool-icon" />
-            <span className="tool-hint thought-line">{line}</span>
+            <span className={cx("tool-hint thought-line", streaming && "live-text")}>{line}</span>
           </>
         }
       >
-        {null}
+        {leaf ? null : out}
       </Fold>
     );
   }
@@ -496,14 +525,7 @@ export const ThoughtRow = memo(function ThoughtRow({
         </>
       }
     >
-      <div className="tool-part">
-        {/* biome-ignore lint/a11y/useKeyWithClickEvents: the links inside are the controls; the root only routes their clicks */}
-        <div
-          ref={body}
-          className="tool-out thought-out md"
-          onClick={(e) => openChatLink(e, fileRoot, worktreeId, { sock, dispatch })}
-        />
-      </div>
+      {out}
     </Fold>
   );
 });

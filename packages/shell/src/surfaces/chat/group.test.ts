@@ -336,6 +336,9 @@ describe("groupTools", () => {
     expect(open([headline("Inspecting module documentation")])).toBe(-1);
     expect(open([thought("Two places to look."), headline("Reading the second")])).toBe(-1);
     expect(open([headline("Reading the second"), tool("read", "/wt/a.ts", { output: "x" })])).toBe(-1);
+    // a run of headlines with no call between lands in one thought, read by its newest
+    const column = { kind: "thinking", text: "\n\n**Reading the first**\n\n**Reading the second**" } as ChatItem;
+    expect(open([thought("Two places to look."), column])).toBe(-1);
   });
 
   test("the open row: a guardian review is a call, not the agent's reasoning", () => {

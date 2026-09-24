@@ -823,17 +823,17 @@ export function Composer({
           the card and the row that reads it back scroll away while the work goes on, and this
           row does not */}
       {plan && active && (
-        <div className="hint composer-plan">
+        <div className="composer-plan">
           <Icon name="text" className="icon-inline" />
-          <span className="composer-plan-path">{plan}</span>
           <Button
-            className="composer-plan-open"
+            variant="inline"
+            className="composer-plan-path"
             data-tip="Read the plan in the editor pane"
             onClick={() =>
               openFile({ sock, dispatch }, { worktreeId: active.worktree.id, path: plan, view: "preview" })
             }
           >
-            open
+            {plan}
           </Button>
         </div>
       )}

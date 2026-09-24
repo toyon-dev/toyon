@@ -729,24 +729,23 @@
     overflow-wrap: anywhere;
   }
   /* the plan this worktree runs on, at the top of the box in the shape of the branch row on the
-   commit box: an icon, the path in mono, the one verb at the right. It stays through approval,
-   since it is while the work runs from the plan that the card and its row have scrolled away. */
+   commit box: an icon and the path in mono. The path is the press that reads it, an inline word
+   in the row's own face, so the row carries the face and the colour and no verb sits beside it.
+   It stays through approval, since it is while the work runs from the plan that the card and its
+   row have scrolled away. */
   .composer-plan {
     display: flex;
     align-items: center;
     gap: 6px;
     min-width: 0;
     margin-bottom: 6px;
+    color: var(--text1);
+    font: var(--type-mono-sm);
     & .composer-plan-path {
-      color: var(--text1);
-      font: var(--type-mono-sm);
+      min-width: 0;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
-    }
-    & .composer-plan-open {
-      flex: none;
-      margin-left: auto;
     }
   }
   /* Toyon's rule, under the call it refused. The agent is told only that its request was refused,

@@ -245,6 +245,15 @@ export function ago(at: number): string {
   return `${Math.floor(days / 365)}y`;
 }
 
+/** A count of seconds still ticking, for a wait the reader is sitting through. Plain seconds up to
+ * 99, then minutes and seconds: past that a bare number is read by counting digits, not by feel,
+ * and the seconds keep ticking so the line still visibly moves. */
+export function elapsed(secs: number): string {
+  const s = Math.max(0, Math.floor(secs));
+  if (s < 100) return `${s}s`;
+  return `${Math.floor(s / 60)}m ${s % 60}s`;
+}
+
 /** Whose advertised slash commands stand in for a session that does not exist yet.
  *
  * ⌘K opens before there is a worktree, so it has no session to ask, but it does not need its own:

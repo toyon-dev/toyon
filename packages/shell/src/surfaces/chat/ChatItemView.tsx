@@ -16,6 +16,7 @@ import { grouped, type MenuEntry, useContextMenu } from "../../ui/menu.ts";
 import { rowState } from "../../ui/rowState.ts";
 import { Spinner } from "../../ui/Spinner.tsx";
 import { attachmentUrl } from "../../ws.ts";
+import { elapsed } from "../util.ts";
 import { AskRow } from "./AskRow.tsx";
 import { FullAttachment } from "./FullAttachment.tsx";
 import { runCalls, sameRun, sameTools, type ThinkingItem, type ToolEntry, type ToolItem } from "./group.ts";
@@ -619,7 +620,7 @@ export const ToolRow = memo(
             ) : (
               hint && <span className={cx("tool-hint", running && "live-text")}>{hint}</span>
             )}
-            {age >= QUIET_AFTER && <span className="tool-age">{age}s</span>}
+            {age >= QUIET_AFTER && <span className="tool-age">{elapsed(age)}</span>}
             {count && <span className="tool-count">{count}</span>}
           </>
         }

@@ -9,7 +9,7 @@ import { useOnChange, useSecondsSince, useTail } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { Spinner } from "../../ui/Spinner.tsx";
 import { useSelectAllWithin } from "../../ui/selectAll.ts";
-import { isBusy, pickLabel } from "../util.ts";
+import { elapsed, isBusy, pickLabel } from "../util.ts";
 import { openAsk } from "./ask.ts";
 import { ChatItemView, QUIET_AFTER, ThoughtRow, ToolRow } from "./ChatItemView.tsx";
 import { groupTools, indexOfSeq, openRow, ownCallRunning, runningRow, subagentsAtWork } from "./group.ts";
@@ -247,7 +247,7 @@ export function ChatLog({
                 // the silence is the news, so it gets the word
                 quiet >= QUIET_AFTER && (
                   <span>
-                    quiet for<span className="working-num">{quiet}s</span>
+                    quiet for<span className="working-num">{elapsed(quiet)}</span>
                   </span>
                 )
               ) : (
@@ -277,7 +277,7 @@ export function ChatLog({
                             the threshold a healthy turn would flick the number on and off with
                             every result; past it, the silence is the news */}
                         <span className="working-word">thinking</span>
-                        <span className="working-num">{heard}s</span>
+                        <span className="working-num">{elapsed(heard)}</span>
                       </>
                     )
                   ) : (
@@ -287,7 +287,7 @@ export function ChatLog({
                             queue, not the agent's, and the word says so before it can read as the
                             model working hard */}
                         <span className="working-word">waiting for the model</span>
-                        <span className="working-num">{quiet}s</span>
+                        <span className="working-num">{elapsed(quiet)}</span>
                       </>
                     )
                   )}

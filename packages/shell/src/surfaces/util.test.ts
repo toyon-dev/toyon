@@ -3,6 +3,7 @@ import type { ProcState, RepoInfo, WorktreeStatus } from "@toyon/shared";
 import {
   ancestors,
   commandSource,
+  elapsed,
   folderList,
   procTrouble,
   rowLabel,
@@ -28,6 +29,26 @@ const proc = (name: string, status: ProcState["status"], port = 3000): ProcState
   command: `run ${name}`,
   port,
   status,
+});
+
+describe("elapsed", () => {
+  test("plain seconds up to 99", () => {
+    expect(elapsed(0)).toBe("0s");
+    expect(elapsed(6)).toBe("6s");
+    expect(elapsed(99)).toBe("99s");
+  });
+
+  test("minutes and seconds from 100, seconds kept so the count still moves", () => {
+    expect(elapsed(100)).toBe("1m 40s");
+    expect(elapsed(171)).toBe("2m 51s");
+    expect(elapsed(600)).toBe("10m 0s");
+    expect(elapsed(3661)).toBe("61m 1s");
+  });
+
+  test("floors and never goes negative", () => {
+    expect(elapsed(5.9)).toBe("5s");
+    expect(elapsed(-3)).toBe("0s");
+  });
 });
 
 describe("rowLabel", () => {

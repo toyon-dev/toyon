@@ -24,7 +24,7 @@ In Toyon you point at a button in the page and ask for it to be bigger, watch it
 
 Each copy is a branch and a git worktree with your dependencies and `.env` files; one spare per project is kept warm.
 
-Point at anything on the page to talk about it or open the line that draws it, and the design pane maps it to your tokens and components.
+Point at anything on the page to talk about it or open the line that draws it, and the design pane maps it to your tokens and components. What the agent is told about the page, and the keys, are in [docs/preview.md](https://github.com/toyon-dev/toyon/blob/main/docs/preview.md).
 
 One Toyon holds every project you open, and the list of chats shows which one needs you.
 
@@ -65,7 +65,7 @@ Each agent signs in from the chat. Claude Code and Codex install on first start;
 |---|---|---|
 | Claude Code or Codex in a terminal | The same agent under your login, with your permission rules, hooks, slash commands and MCP servers | Each chat gets its own copy of the project with the app running, and nothing lands until you press |
 | Cursor, Zed or VS Code | Your editor and your checkout; any file opens back in your editor | The running app is the centre of every chat, wired to its source |
-| Lovable, v0 or Bolt | The loop: a chat and the page it changes | Your own project on your machine, with your database, Docker and private packages; each chat is a branch in your repository |
+| Lovable, v0 or Bolt | The loop: a chat and the page it changes, and pointing at an element to talk about it | Your own project on your machine, with your database, Docker and private packages; each chat is a branch in your repository |
 | Conductor or Superset | Many agents at once, each on its own copy | Built around the app instead of the agents; MIT, no account, no telemetry, lands on your machine without GitHub |
 
 ## Under the hood

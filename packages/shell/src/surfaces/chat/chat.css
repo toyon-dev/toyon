@@ -874,16 +874,27 @@
       box-shadow: 0 0 0 1.5px var(--border0);
     }
   }
-  /* the agent's stop, in the field's top-right corner while it has the turn. Absolute, so it comes
-   and goes with the turn without moving the knobs row's buttons. The field and its ghost keep the
-   corner clear together, since the ghost's wrap has to match the field's or it drifts off the caret. */
+  /* the agent's stop, in the box's top-right corner while it has the turn: anchored to the box and
+   not the field, so it holds one place whether a plan line or an attachment stands above the
+   field. Absolute, at the box's own padding, so it comes and goes with the turn without moving
+   the knobs row's buttons. Whatever is first in the box keeps the corner clear: the plan path
+   truncates short of it, a chip stops short of it, and the field and its ghost pad together,
+   since the ghost's wrap has to match the field's or it drifts off the caret. */
   .composer-stop {
     position: absolute;
-    top: 0;
-    right: 0;
+    top: 10px;
+    right: 10px;
   }
-  .composer-field.stopping :is(textarea, .composer-ghost) {
-    padding-right: 24px;
+  .composer.stopping {
+    & > .composer-plan {
+      padding-right: 24px;
+    }
+    & > .pick-chip:first-child {
+      margin-right: 24px;
+    }
+    &:not(:has(> .composer-plan, > .pick-chip)) .composer-field :is(textarea, .composer-ghost) {
+      padding-right: 24px;
+    }
   }
   /* the verb leading the placeholder's line: the ghost lets presses through to the textarea under
    it, and the word is the one part of the ghost that takes them */

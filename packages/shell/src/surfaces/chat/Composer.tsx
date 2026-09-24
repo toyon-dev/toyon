@@ -816,9 +816,11 @@ export function Composer({
   const sentBefore = spawning ? [] : chat.map((c) => (c.kind === "user" ? c.attachments : undefined));
   const dir = active ? active.worktree.path : null;
   const plan = active?.worktree.plan;
+  // the stop stands in for the field's esc, so it goes when an ask card takes the field's place
+  const stopShown = stoppable && !askUp;
 
   return (
-    <div className="composer chat-input">
+    <div className={cx("composer chat-input", stopShown && "stopping")}>
       {/* the plan this worktree runs on, from the card's arrival until a newer one replaces it:
           the card and the row that reads it back scroll away while the work goes on, and this
           row does not */}
@@ -918,12 +920,26 @@ export function Composer({
           }}
         />
       )}
+      {/* the agent's stop, in the box's top-right corner for as long as it has the turn: one place
+          whatever the box holds, where a corner of the field dropped a row under the plan line or an
+          attachment. The box stays put where a row under the log scrolls off as soon as the log is
+          read back, and it sits with the esc in the field that does the same. The glyph alone: the
+          corner says what it is, and a word made it the loudest thing in the box while a steer was
+          being typed. */}
+      {stopShown && (
+        <IconButton
+          icon="stop"
+          tone="danger"
+          className="composer-stop"
+          label={`Stop the agent (context up to here is kept${queue.length ? "; queued messages go next" : ""})`}
+          hint="esc"
+          onClick={() => id && sock?.send({ t: "stop-agent", worktreeId: id })}
+        />
+      )}
       {askUp && id ? (
         <AskBox key={askUp.id} item={askUp} worktreeId={id} rootRef={askRef} />
       ) : (
-        <div
-          className={cx("composer-field", shellCmd !== null && "shell", walk && "recalled", stoppable && "stopping")}
-        >
+        <div className={cx("composer-field", shellCmd !== null && "shell", walk && "recalled")}>
           <TextArea
             size="lg"
             bare
@@ -1069,20 +1085,6 @@ export function Composer({
                 </>
               )}
             </div>
-          )}
-          {/* the agent's stop, in the field's corner for as long as it has the turn: the box stays
-              put where a row under the log scrolls off as soon as the log is read back, and it
-              sits with the esc above that does the same. The glyph alone: the corner says what it
-              is, and a word made it the loudest thing in the box while a steer was being typed. */}
-          {stoppable && (
-            <IconButton
-              icon="stop"
-              tone="danger"
-              className="composer-stop"
-              label={`Stop the agent (context up to here is kept${queue.length ? "; queued messages go next" : ""})`}
-              hint="esc"
-              onClick={() => id && sock?.send({ t: "stop-agent", worktreeId: id })}
-            />
           )}
         </div>
       )}

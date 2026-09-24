@@ -1610,7 +1610,7 @@ describe("landing", () => {
     expect((await git(origin, "branch", "--list", wt.branch)).out).toBe("");
   });
 
-  test("a PR merged while main here could not follow lands on the next press, never as a second PR", async () => {
+  test("a PR merged while main here cannot follow is landed at once; main follows when it can", async () => {
     const repoId = await registered();
     const { origin, other } = withOrigin(repoId);
     const wt = await w.worktrees.create(repoId, "feature");
@@ -1619,27 +1619,35 @@ describe("landing", () => {
     sh(wt.path, "git", "commit", "-q", "-m", "add feature");
     sh(wt.path, "git", "push", "-q", "-u", "origin", wt.branch);
     const tip = (await git(wt.path, "rev-parse", "HEAD")).out;
+    const before = (await git(w.repo, "rev-parse", "main")).out;
     w.worktrees.setPr(wt.id, { number: 7, url: "https://x/pull/7", state: "open", at: 1 });
     squashedOnOrigin(other, origin, wt.branch);
     // GitHub's answer comes while an edit on main stands in the fast-forward's way
     writeFileSync(join(w.repo, "README.md"), "edited on main\n");
     w.worktrees.setPr(wt.id, { number: 7, url: "https://x/pull/7", state: "merged", at: 2 });
-    const refused = await w.worktrees.prMerged(wt.id);
-    expect(refused.ok).toBe(false);
-    expect(w.state.worktree(wt.id)?.landed).toBeFalsy();
-    // the press is the retry, and says what is in the way; the branch on origin is untouched
-    const again = await w.worktrees.land(wt.id);
-    expect(again.result.ok).toBe(false);
-    expect(again.result.message).toMatch(/^PR #7 merged, but .*uncommitted changes/);
-    expect((await git(origin, "rev-parse", wt.branch)).out).toBe(tip);
-    sh(w.repo, "git", "checkout", "-q", "--", "README.md");
-    const landed = await w.worktrees.land(wt.id);
-    expect(landed.result.ok).toBe(true);
-    expect(landed.result.message).toContain("pulled");
-    const main = (await git(w.repo, "rev-parse", "main")).out;
-    expect(main).toBe((await git(origin, "rev-parse", "main")).out);
-    expect((await git(wt.path, "rev-parse", "HEAD")).out).toBe(main);
+    const r = await w.worktrees.prMerged(wt.id);
+    // the merge on GitHub is the landing: the record has it and the branch restarted from main
+    // here, which stayed where it was and says why; the branch on origin is untouched
+    expect(r.ok).toBe(true);
+    expect(r.message).toMatch(/^PR #7 merged; main here was left where it is: .*uncommitted changes/);
     expect(w.state.worktree(wt.id)).toMatchObject({ landed: true, pr: { number: 7, state: "merged" } });
+    expect(w.state.worktree(wt.id)?.lands).toEqual([{ base: before, tip, at: expect.any(Number) }]);
+    expect((await git(w.repo, "rev-parse", "main")).out).toBe(before);
+    expect((await git(wt.path, "rev-parse", "HEAD")).out).toBe(before);
+    expect((await git(origin, "rev-parse", wt.branch)).out).toBe(tip);
+    expect((await w.worktrees.trunks())[repoId]).toMatchObject({ stale: "dirty" });
+    // a press now is not a second PR: the rebase onto origin finds nothing to send up, and the
+    // landing is recorded once
+    const again = await w.worktrees.land(wt.id);
+    expect(again.result.ok).toBe(true);
+    expect(again.result.message).toContain("main here was left where it is");
+    expect(w.state.worktree(wt.id)?.lands).toHaveLength(1);
+    // main cleared: its own pull takes the merge, and the row stays landed
+    sh(w.repo, "git", "checkout", "-q", "--", "README.md");
+    const main = w.state.worktrees.find((x) => x.repoId === repoId && x.kind === "main")!;
+    expect((await w.worktrees.pull(main.id)).ok).toBe(true);
+    expect((await git(w.repo, "rev-parse", "main")).out).toBe((await git(origin, "rev-parse", "main")).out);
+    expect(w.state.worktree(wt.id)?.landed).toBe(true);
   });
 
   test("with a PR open, land pushes the work the PR is missing rather than merging under it", async () => {

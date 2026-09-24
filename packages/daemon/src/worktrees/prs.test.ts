@@ -110,14 +110,20 @@ describe("PrService", () => {
     w.prs.stop();
   });
 
-  test("the window coming back asks about every open PR of the repo, and only those", async () => {
+  test("the window coming back asks about every open PR of the repo, and lands a merged one left unlanded", async () => {
     const w = world(
       [open(), open()],
-      [{}, { pr: open({ number: 13, state: "merged" }) }, { pr: open({ number: 14 }) }],
+      [
+        {},
+        { pr: open({ number: 13, state: "merged" }) },
+        { pr: open({ number: 14 }) },
+        { pr: open({ number: 15, state: "merged" }), landed: true },
+      ],
     );
     w.hub.emit("repoTick", "r1");
     await Bun.sleep(20);
     expect(w.asked.sort()).toEqual([12, 14]);
+    expect(w.merged).toEqual(["w2"]);
     w.prs.stop();
   });
 });

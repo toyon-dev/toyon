@@ -50,7 +50,7 @@ export const UNWATCHED: LandWatch = {
 
 /** the message for a step git refused: where its output went, or its first words when no
  * transcript took them. A step killed at the ceiling says so, since its output ends mid-run. */
-function refused(what: string, r: StepResult, n = 200): string {
+export function refused(what: string, r: StepResult, n = 200): string {
   if (r.exit === "timeout") {
     const minutes = Math.round(STEP_TIMEOUT_MS / 60_000);
     return `${what} gave up after ${minutes} minutes${r.shown ? "; what it printed is on the chat" : ""}`;

@@ -130,7 +130,7 @@ describe("prLine", () => {
     expect(prLine(pr({ automerge: true, review: "review_required" }))).toBe(
       "PR #12 open; GitHub merges it when it is approved and checks pass.",
     );
-    expect(prLine(pr({ state: "merged" }))).toBe("PR #12 merged; main here is behind origin.");
+    expect(prLine(pr({ state: "merged" }))).toBe("PR #12 merged.");
     expect(prLine(pr({ state: "closed" }))).toBe("PR #12 was closed without merging.");
   });
 

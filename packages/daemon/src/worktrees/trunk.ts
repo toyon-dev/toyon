@@ -8,7 +8,7 @@ import type { Hub } from "../core/hub.ts";
 import { fireAndForget, log } from "../core/log.ts";
 import type { StateStore } from "../core/state.ts";
 import { GIT, NO_PROMPT, run } from "../git/exec.ts";
-import { fastForwardFetched } from "../git/land.ts";
+import { fastForwardFetched, type LandWatch, refused, type TrunkFf, UNWATCHED } from "../git/land.ts";
 import { withRepoLock } from "../git/lock.ts";
 import { behindUpstream } from "../git/status.ts";
 
@@ -93,11 +93,27 @@ export class Trunk {
     await this.follow(main.id);
   }
 
+  /** Main onto origin now, for work that landed there (a PR GitHub merged): one fetch, then the
+   * fast-forward when main is clean and behind, with why it stood recorded for the trunk's note the
+   * way the periodic follow records it. The fetch holds the network for seconds and runs with no
+   * lock held; `w` names the steps on the row that asked. */
+  async pull(repoId: string, w: LandWatch = UNWATCHED): Promise<TrunkFf> {
+    const repo = this.d.state.repo(repoId);
+    const main = mainOf(this.d.state, repoId);
+    if (!repo || !main) return { ok: false, message: "no main checkout to pull" };
+    this.lastFetch.set(repo.path, Date.now());
+    w.step(`pulling ${repo.defaultBranch} from origin`);
+    const f = await w.git(repo.path, ["fetch", "--quiet"]);
+    if (!f.ok) return { ok: false, message: refused("fetch failed", f) };
+    this.d.invalidateCounts();
+    return this.follow(main.id);
+  }
+
   /** main onto what the last fetch brought, when it is clean and behind; else why not, on the trunk */
-  private async follow(mainId: string): Promise<void> {
+  private async follow(mainId: string): Promise<TrunkFf> {
     const main = this.d.state.worktree(mainId);
     const repo = main && this.d.state.repo(main.repoId);
-    if (!main || !repo) return;
+    if (!main || !repo) return { ok: false, message: "no main checkout to pull" };
     const ff = await withRepoLock(repo.path, () => fastForwardFetched(repo.path, repo.defaultBranch));
     const was = this.stale.get(repo.id);
     if (ff.stale) this.stale.set(repo.id, ff.stale);
@@ -107,6 +123,7 @@ export class Trunk {
       this.d.invalidateCounts();
       this.d.hub.emit("worktreesChanged");
     } else if (was !== ff.stale) this.d.hub.emit("worktreesChanged");
+    return ff;
   }
 
   /** Every project's main checkout as it stands: what the plus's row wears while a spare stands in

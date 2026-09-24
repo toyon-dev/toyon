@@ -1,7 +1,7 @@
 // What GitHub says about the PRs toyon opened: read after a PR opens or is merged, when the window
-// comes back (repoTick), and every few minutes while any PR of a repo is open. A merged PR is what
-// lands the worktree on the PR route: main here takes it and the row is marked landed, the same
-// ending as the local routes.
+// comes back (repoTick), and every few minutes while any PR of a repo is open. A merged PR is the
+// landing on the PR route, wherever it was merged from: the row is marked landed and main here
+// follows origin as far as it can, the same ending as the local routes.
 
 import type { PrState } from "@toyon/shared";
 import type { Hub } from "../core/hub.ts";
@@ -45,7 +45,13 @@ export class PrService {
 
   refreshRepo(repoId: string) {
     for (const wt of this.d.state.worktrees) {
-      if (wt.repoId === repoId && wt.pr?.state === "open") fireAndForget(wt.id, this.refresh(wt.id), "pr refresh");
+      if (wt.repoId !== repoId || !wt.pr) continue;
+      if (wt.pr.state === "open") fireAndForget(wt.id, this.refresh(wt.id), "pr refresh");
+      // merged while an op was out on the row, so its landing was left to that press: taken now,
+      // with nothing to ask GitHub
+      else if (wt.pr.state === "merged" && !wt.landed) {
+        fireAndForget(wt.id, this.d.worktrees.prMerged(wt.id), "pr landing");
+      }
     }
   }
 

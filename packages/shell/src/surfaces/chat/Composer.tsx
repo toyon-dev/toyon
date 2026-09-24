@@ -473,67 +473,62 @@ export function Composer({
     : landed
       ? {
           word: "archive",
-          line: `landed on ${repo?.defaultBranch ?? "main"}.`,
+          // a PR GitHub merged is named as the landing: it happened there, not by a press here,
+          // and main here following it is the trunk's own business
+          line:
+            active?.worktree.pr?.state === "merged"
+              ? prLine(active.worktree.pr)
+              : `landed on ${repo?.defaultBranch ?? "main"}.`,
           tip: archiveTip,
           run: () => archiveWorktrees(sock, dispatch, [id]),
         }
-      : pr?.state === "merged"
-        ? // GitHub took the PR and main here could not follow: the only word is the pull, never
-          // land, which would open the same commit as a second PR
-          {
-            word: "pull",
-            line: prLine(pr),
-            tip: `${prLine(pr)} Pull ${repo?.defaultBranch ?? "main"} here to take the merge; the row lands then.`,
-            run: land,
-            ships: true,
-          }
-        : pr?.state === "open" && !prMissing
-          ? prCanMerge(pr)
+      : pr?.state === "open" && !prMissing
+        ? prCanMerge(pr)
+          ? {
+              word: "merge",
+              line: verbLine(said ?? prLine(pr)),
+              tip: `${prLine(pr)} Merge the PR now, by the method the repo allows.`,
+              run: land,
+              ships: true,
+            }
+          : {
+              word: "view",
+              line: verbLine(said ?? prLine(pr)),
+              tip: `${prLine(pr)} Open the PR on GitHub.`,
+              run: () => window.open(pr.url, "_blank"),
+            }
+        : pr?.state === "closed"
+          ? {
+              word: "archive",
+              line: prLine(pr),
+              tip: `${prLine(pr)} ${archiveTip}`,
+              run: () => archiveWorktrees(sock, dispatch, [id]),
+            }
+          : checkable
             ? {
-                word: "merge",
-                line: verbLine(said ?? prLine(pr)),
-                tip: `${prLine(pr)} Merge the PR now, by the method the repo allows.`,
-                run: land,
-                ships: true,
+                word: "check",
+                line: verdict?.subject ?? verbLine(said ?? filesLine(landCount)),
+                tip: verdict?.stale
+                  ? `The work changed since this was written. ${hasCheck ? "Run the check again and refresh" : "Refresh"} the message.`
+                  : `${hasCheck ? "Run the repo's check here, then write" : "Write"} the recap and the commit message.`,
+                run: judge,
               }
-            : {
-                word: "view",
-                line: verbLine(said ?? prLine(pr)),
-                tip: `${prLine(pr)} Open the PR on GitHub.`,
-                run: () => window.open(pr.url, "_blank"),
-              }
-          : pr?.state === "closed"
-            ? {
-                word: "archive",
-                line: prLine(pr),
-                tip: `${prLine(pr)} ${archiveTip}`,
-                run: () => archiveWorktrees(sock, dispatch, [id]),
-              }
-            : checkable
+            : landing?.ready && !landingLine(landing)
               ? {
-                  word: "check",
-                  line: verdict?.subject ?? verbLine(said ?? filesLine(landCount)),
-                  tip: verdict?.stale
-                    ? `The work changed since this was written. ${hasCheck ? "Run the check again and refresh" : "Refresh"} the message.`
-                    : `${hasCheck ? "Run the repo's check here, then write" : "Write"} the recap and the commit message.`,
-                  run: judge,
+                  word: shipWord,
+                  line: landing.subject ?? verbLine(said ?? (landFacts(landing, landCount) || "ready")),
+                  tip: [
+                    landFacts(landing, landCount),
+                    behindFact(repo?.defaultBranch ?? "main", active?.behind),
+                    shipHow,
+                    landing.subject ? "Tab edits the message first." : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" "),
+                  run: land,
+                  ships: true,
                 }
-              : landing?.ready && !landingLine(landing)
-                ? {
-                    word: shipWord,
-                    line: landing.subject ?? verbLine(said ?? (landFacts(landing, landCount) || "ready")),
-                    tip: [
-                      landFacts(landing, landCount),
-                      behindFact(repo?.defaultBranch ?? "main", active?.behind),
-                      shipHow,
-                      landing.subject ? "Tab edits the message first." : "",
-                    ]
-                      .filter(Boolean)
-                      .join(" "),
-                    run: land,
-                    ships: true,
-                  }
-                : null;
+              : null;
   // the word's own press is out: its line shines for it, and names the step only once the step
   // has proved slow. A land on a small repo is a few git calls in well under a second, and naming
   // each as it starts flashes three sentences through the line before one can be read; the

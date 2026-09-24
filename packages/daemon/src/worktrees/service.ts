@@ -1511,12 +1511,9 @@ export class WorktreeService {
       : undefined;
 
     if (policy.land === "pr") {
-      // GitHub merged the PR and main here could not follow at the time (on another branch,
-      // dirty, a fetch refused): the press is that retry, never a second PR of the same commit
-      if (wt.pr?.state === "merged" && !wt.landed) {
-        const r = await this.prMergedOp(wt.id, undefined, w);
-        return { result: r.ok ? r : { ...r, message: `PR #${wt.pr.number} merged, but ${r.message}` } };
-      }
+      // GitHub merged the PR while an op was out on the row, so the poll left the landing to this
+      // press: it lands the merge, never a second PR of the same commit
+      if (wt.pr?.state === "merged" && !wt.landed) return { result: await this.prMergedOp(wt.id, undefined, w) };
       // the branch is measured against origin's main, fetched now: main here is not pulled on
       // this route and can trail origin by days
       const trunk = await fetchTrunk(wt.path, repo.defaultBranch, w);
@@ -1647,11 +1644,13 @@ export class WorktreeService {
     this.headMoved(wt.id);
   }
 
-  /** GitHub merged the worktree's PR: main here takes it, the branch restarts from main, and the
-   * row is landed. A main that cannot fast-forward (edits in its way, or commits of its own) is
-   * left, and the box says so; the land press tries again, as does main's own pull. `carried` is
-   * the range the branch held before a rebase onto origin dropped it, when the press found the
-   * work on origin already; read here otherwise. The poll runs unwatched; a press names its step.
+  /** GitHub merged the worktree's PR: that is the landing, wherever it was merged from. The record
+   * takes it and the branch restarts from main whatever state main here is in; main follows
+   * origin as the trunk's own housekeeping, and when it cannot (edits in its way, a fetch refused)
+   * the trunk's note says why and main's own pull is the retry. The row never waits on main: the
+   * work is on origin, which is what the PR route measures against. `carried` is the range the
+   * branch held before a rebase onto origin dropped it, when the press found the work on origin
+   * already; read here otherwise. The poll runs unwatched; a press names its steps.
    *
    * `prMerged` is the poll's own entry: with nobody pressing, its landing is still shown on the
    * row the way a press is, and it is left to the press when one is out, since that press lands
@@ -1668,20 +1667,22 @@ export class WorktreeService {
     w: LandWatch = UNWATCHED,
   ): Promise<ShipResult> {
     const { wt, repo } = this.d.state.requireWorktreeWithRepo(worktreeId);
-    const result = await withRepoLock(repo.path, async () => {
-      const mark = carried === undefined ? await landingMark(wt.path, repo.defaultBranch) : carried;
-      const pulled = await fastForwardMain(repo.path, repo.defaultBranch, w);
-      if (!pulled.ok) return pulled;
+    const br = repo.defaultBranch;
+    // read before main moves: a merge that kept the commits' hashes puts them on main, and the
+    // range would then read as nothing to keep
+    const mark = carried === undefined ? await landingMark(wt.path, br) : carried;
+    const pulled = await this.trunk.pull(repo.id, w);
+    await withRepoLock(repo.path, async () => {
       await this.noteLand(repo, wt, mark);
-      await this.restartFromMain(wt, repo.defaultBranch);
-      return pulled;
+      await this.restartFromMain(wt, br);
     });
-    if (result.ok) {
-      this.invalidateCounts();
-      this.setLanding(wt.id, undefined);
-      this.setLanded(wt.id, true);
-    }
-    return result;
+    this.invalidateCounts();
+    this.setLanding(wt.id, undefined);
+    this.setLanded(wt.id, true);
+    const took = pulled.ok
+      ? `${br} here ${pulled.moved ? "pulled it" : "has it"}`
+      : `${br} here was left where it is: ${pulled.message}`;
+    return { ok: true, message: wt.pr ? `PR #${wt.pr.number} merged; ${took}` : took };
   }
 
   /** take main into any row with a branch, a found worktree included: a rebase for toyon's own

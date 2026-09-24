@@ -11,7 +11,7 @@ const ended = (text: string) => (/[.!?]$/.test(text) ? text : `${text}.`);
  * done. Read while the PR stands between the work and main. */
 export function prLine(pr: PrState): string {
   const n = `PR #${pr.number}`;
-  if (pr.state === "merged") return `${n} merged; main here is behind origin.`;
+  if (pr.state === "merged") return `${n} merged.`;
   if (pr.state === "closed") return `${n} was closed without merging.`;
   if (pr.automerge) {
     const on = pr.review === "review_required" ? "it is approved and checks pass" : "checks pass";

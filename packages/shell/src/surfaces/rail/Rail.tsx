@@ -1,5 +1,7 @@
 import {
   type ArchivedWorktree,
+  baseIsRemote,
+  baseOf,
   canGraft,
   isLead,
   isOwned,
@@ -36,6 +38,7 @@ import { useContextMenu, useMenu } from "../../ui/menu.ts";
 import { Spinner } from "../../ui/Spinner.tsx";
 import { type TipPlacement, tip } from "../../ui/Tooltip.tsx";
 import { dollars, tokens } from "../chat/usage.ts";
+import { hhmm } from "../chips/baseNote.ts";
 import { recapLine } from "../recap.ts";
 import { ago, chord, dotClass, procTrouble, rowLabel, shipLabel, shipShown, stateLabel } from "../util.ts";
 import "./rail.css";
@@ -311,6 +314,11 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
     const owned = isOwned(w) ? w : null;
     const onLead = !!owned && isLead(owned.worktree);
     const counts = countsOf(w);
+    // what the counts are against: main here, or origin's main where the route lands there, in
+    // which case they are as true as the last fetch, and the tip says when that was
+    const rowRepo = repos.find((r) => r.id === w.repoId) ?? null;
+    const base = rowRepo ? baseOf(rowRepo) : "main";
+    const asOf = rowRepo && baseIsRemote(rowRepo) && trunk?.fetchedAt ? ` as of ${hhmm(trunk.fetchedAt)}` : "";
     const cols = drawn(counts);
     const id = w.id;
     const menuOpen = menu?.owner === "rail" && menu.key === id;
@@ -497,7 +505,9 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
           {cols.has("behind") && (
             <span
               className="rail-count rail-behind row-dim"
-              data-tip={counts.behind ? `${counts.behind} behind ${onLead ? "origin" : "main"}` : undefined}
+              data-tip={
+                counts.behind ? `${counts.behind} behind ${onLead ? "origin" : base}${onLead ? "" : asOf}` : undefined
+              }
             >
               {counts.behind ? count(counts.behind) : ""}
             </span>
@@ -505,7 +515,7 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
           {cols.has("ahead") && (
             <span
               className="rail-count badge-ahead"
-              data-tip={counts.ahead ? `${counts.ahead} ahead of main` : undefined}
+              data-tip={counts.ahead ? `${counts.ahead} ahead of ${base}` : undefined}
             >
               {counts.ahead ? `+${count(counts.ahead)}` : ""}
             </span>

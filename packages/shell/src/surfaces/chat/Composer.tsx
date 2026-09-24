@@ -7,6 +7,7 @@ import type {
   PermissionMode,
 } from "@toyon/shared";
 import {
+  baseOf,
   canLand,
   DEFAULT_PERMISSION_MODE,
   describeLand,
@@ -457,9 +458,12 @@ export function Composer({
   // the ship word and where it sends the work: onto main by the repo's route, or up to the open
   // PR when the branch on origin is behind what is here
   const shipWord = prMissing ? "update" : "land";
+  // what the branch is measured against and takes in: main here, or origin's main where the
+  // route lands there
+  const base = repo ? baseOf(repo) : "main";
   const shipHow =
     prMissing && pr
-      ? `Commit, take ${repo?.defaultBranch ?? "main"} in and push the branch; PR #${pr.number} takes the new commits.`
+      ? `Commit, take ${base} in and push the branch; PR #${pr.number} takes the new commits.`
       : `${describeLand(policy, repo?.defaultBranch)}.`;
   // The next step, when the work has one, is the first word of the empty box's line: a word in the
   // sentence, bright and never the accent, which reads as an error. What it rests on (the facts,
@@ -519,7 +523,7 @@ export function Composer({
                   line: landing.subject ?? verbLine(said ?? (landFacts(landing, landCount) || "ready")),
                   tip: [
                     landFacts(landing, landCount),
-                    behindFact(repo?.defaultBranch ?? "main", active?.behind),
+                    behindFact(base, active?.behind),
                     shipHow,
                     landing.subject ? "Tab edits the message first." : "",
                   ]

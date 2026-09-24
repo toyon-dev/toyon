@@ -372,7 +372,7 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
   },
 
   async "sync-main"(msg, ctx, s) {
-    const { result, defaultBranch } = await s.worktrees.sync(msg.worktreeId);
+    const { result, base } = await s.worktrees.sync(msg.worktreeId);
     // a prefilled prompt is for a conflict, and only where there is an agent to prompt: a dirty
     // tree is a plain refusal, and a found worktree has no composer for the suggestion to land in
     const prompt = !result.ok && result.conflict && s.state.worktree(msg.worktreeId);
@@ -381,8 +381,8 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
       ctx,
       msg.worktreeId,
       prompt
-        ? shipped(msg.worktreeId, false, `sync conflicts with ${defaultBranch}: prompt prefilled in chat`, {
-            suggestion: `Merge ${defaultBranch} into this branch and resolve the conflicts, then verify the app still works.`,
+        ? shipped(msg.worktreeId, false, `sync conflicts with ${base}: prompt prefilled in chat`, {
+            suggestion: `Merge ${base} into this branch and resolve the conflicts, then verify the app still works.`,
           })
         : shipped(msg.worktreeId, result.ok, result.message),
     );

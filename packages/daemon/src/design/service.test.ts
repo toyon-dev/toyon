@@ -15,7 +15,7 @@ function world() {
   // merely found in git (found) alike: neither carries a record the scan would read
   const readable = (id: string): ReadableWorktree | null =>
     id === "w1" || id === "found"
-      ? { id, repoId: "r1", path: t.repo, name: id, branch: "main", defaultBranch: "main" }
+      ? { id, repoId: "r1", path: t.repo, name: id, branch: "main", defaultBranch: "main", base: "main" }
       : null;
   return { ...t, design: new DesignService(readable) };
 }

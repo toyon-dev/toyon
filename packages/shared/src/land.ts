@@ -2,7 +2,7 @@
 // commits arrive). Both live under `land` in the repo's settings, since a team picks one route and
 // never alternates; the defaults live here so the daemon and the setup pane never restate them.
 
-import type { ShipOp, ToyonConfig } from "./model.ts";
+import type { RepoInfo, ShipOp, ToyonConfig } from "./model.ts";
 
 /** where a landed worktree's work ends up */
 export type LandRoute = "merge" | "push" | "pr";
@@ -54,6 +54,20 @@ export function landPolicy(config: Pick<ToyonConfig, "land">): LandPolicy {
     automerge: land === "pr" && config.land?.automerge === true,
     ...(config.land?.method ? { merge: config.land.method } : {}),
   };
+}
+
+/** The ref a repo's worktrees are measured against, born from, synced onto and landed onto. The
+ * route decides it, since the route already says where work ends up: main here on the merge
+ * route; main's upstream on the push and PR routes, where origin's main is what the work has to
+ * reach, so a main checkout that is dirty or on another branch can hide nothing from a row and
+ * block nothing. A repo with no upstream is its own base whatever the route. */
+export function baseOf(repo: Pick<RepoInfo, "defaultBranch" | "base">): string {
+  return repo.base ?? repo.defaultBranch;
+}
+
+/** the base is origin's copy of main, as of the last fetch, rather than the checkout here */
+export function baseIsRemote(repo: Pick<RepoInfo, "defaultBranch" | "base">): boolean {
+  return repo.base !== undefined && repo.base !== repo.defaultBranch;
 }
 
 /** a landing op as a sentence names it: "a land is already running here" */

@@ -5,9 +5,11 @@ import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import {
+  baseIsRemote,
   type ConfigFileKind,
   configSibling,
   isLocalConfigFile,
+  landPolicy,
   type PendingRepo,
   type RepoInfo,
   type ToyonConfig,
@@ -19,6 +21,7 @@ import { fireAndForget, log } from "../core/log.ts";
 import type { SelfWatch } from "../core/self.ts";
 import type { StateStore } from "../core/state.ts";
 import type { DraftStore } from "../drafts/store.ts";
+import { resolveBase } from "../git/base.ts";
 import { excludeFromGit, unexcludeFromGit } from "../git/exclude.ts";
 import { defaultBranch, git, isGitRepo, repoRoot } from "../git/exec.ts";
 import { isTracked, statusFiles, treeEmpty } from "../git/status.ts";
@@ -99,6 +102,7 @@ export class RepoRegistry {
       this.placeConfig(repo);
       this.applyConfigFile(repo, false);
       repo.remote = await hasOrigin(repo.path);
+      await this.settleBase(repo);
     }
     for (const wt of state.worktrees) reservePort(wt.proxyPort);
     state.save();
@@ -283,6 +287,7 @@ export class RepoRegistry {
       ...(made ? { made } : {}),
       remote: await hasOrigin(root),
     };
+    await this.settleBase(repo);
     this.d.state.addRepo(repo);
 
     // the repo's own checkout is the "main" pseudo-worktree
@@ -377,6 +382,7 @@ export class RepoRegistry {
     repo.guess = undefined;
     repo.assumed = undefined;
     this.d.state.save();
+    fireAndForget(repoId, this.refreshBase(repo), "base refresh");
     // (re)start procs for this repo's worktrees — spares included, or a spare warmed under the old
     // config would be handed to the next task with stale procs; agents stay. Every worktree, cold
     // ones too: the person is sitting in front of this repo's setup pane. Main only when it is
@@ -419,8 +425,33 @@ export class RepoRegistry {
       );
     }
     if (this.warmed.has(repoId)) fireAndForget(repoId, this.d.worktrees.spare.ensure(repoId), "spare warm-up");
+    // the route may have moved with the file, and the base with it
+    fireAndForget(repoId, this.refreshBase(repo), "base refresh");
     this.d.hub.emit("reposChanged");
     this.d.hub.emit("worktreesChanged");
+  }
+
+  /** the base written on the record from the route and main's upstream as they are now; true
+   * when it moved. Quiet: the callers say what follows. */
+  private async settleBase(repo: RepoInfo): Promise<boolean> {
+    const base = await resolveBase(repo.path, repo.defaultBranch, landPolicy(repo.config).land);
+    const next = base === repo.defaultBranch ? undefined : base;
+    if (repo.base === next) return false;
+    if (next) repo.base = next;
+    else delete repo.base;
+    return true;
+  }
+
+  /** The base resolved again, after the route or main's upstream may have changed, and when it
+   * moved, everything measured against it moves with it in one frame: every row's counts, the
+   * spare (reset onto the new base), and the shell's word for it. The one writer of `base`. */
+  async refreshBase(repo: RepoInfo): Promise<void> {
+    if (!(await this.settleBase(repo))) return;
+    this.d.state.save();
+    this.d.worktrees.invalidateCounts();
+    this.d.hub.emit("reposChanged");
+    this.d.hub.emit("repoTick", repo.id);
+    fireAndForget(repo.id, this.d.worktrees.spare.refresh(repo.id), "spare refresh");
   }
 
   /** An unconfirmed repo re-reads its guess after every agent turn: the agent may have written
@@ -471,6 +502,7 @@ export class RepoRegistry {
       this.d.runtime.stopProcs(wt.id).then(() => this.d.runtime.start(wt, repo)),
       "runtime restart",
     );
+    fireAndForget(repo.id, this.refreshBase(repo), "base refresh");
     this.d.hub.emit("reposChanged");
     this.d.hub.emit("worktreesChanged");
     return true;
@@ -526,7 +558,15 @@ export class RepoRegistry {
 
   private startWatcher(repo: RepoInfo) {
     if (this.watchers.has(repo.id)) return;
-    const stopRef = watchDefaultBranch(repo.path, repo.defaultBranch, () => {
+    const stopRef = watchDefaultBranch(repo.path, repo.defaultBranch, (which) => {
+      if (which === "upstream") {
+        // origin's main moved, or the upstream appeared with a first fetch: the base may have
+        // moved with it, and where the base is origin's main every row counts against it now.
+        // Under a local base only the trunk's own note changes. Never afterLand: nothing arrived
+        // in the checkout.
+        fireAndForget(repo.id, this.upstreamMoved(repo), "upstream moved");
+        return;
+      }
       this.d.worktrees.invalidateCounts();
       this.d.hub.emit("repoTick", repo.id);
       fireAndForget(repo.id, this.d.worktrees.spare.refresh(repo.id), "spare refresh");
@@ -554,6 +594,20 @@ export class RepoRegistry {
       stopCfg();
       stopWt();
     });
+  }
+
+  private async upstreamMoved(repo: RepoInfo): Promise<void> {
+    if (await this.settleBase(repo)) {
+      this.d.state.save();
+      this.d.hub.emit("reposChanged");
+    }
+    this.d.worktrees.invalidateCounts();
+    if (!baseIsRemote(repo)) {
+      this.d.hub.emit("worktreesChanged");
+      return;
+    }
+    this.d.hub.emit("repoTick", repo.id);
+    fireAndForget(repo.id, this.d.worktrees.spare.refresh(repo.id), "spare refresh");
   }
 
   private stopWatcher(repoId: string) {

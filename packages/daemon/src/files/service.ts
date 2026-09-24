@@ -120,7 +120,7 @@ export class FileService {
       const { before, after } = await fileAtCommit(r.path, ref, path);
       return { ...sides(before, after), version: null, writable: false };
     }
-    const before = await fileBefore(r.path, r.defaultBranch, path);
+    const before = await fileBefore(r.path, r.base, path);
     const st = await statFile(target);
     if (st && st.size > FILE_MAX_CHARS) {
       // never read whole: a version off the stat is enough for a file nothing will write
@@ -275,7 +275,7 @@ export class FileService {
   ): Promise<{ ranges: Array<[number, number]>; lineOffset: number }> {
     const r = this.require(worktreeId);
     resolveInside(r.path, path);
-    const ranges = await changedRanges(r.path, r.defaultBranch, path);
+    const ranges = await changedRanges(r.path, r.base, path);
     // a discovered worktree serves nothing, so there is no preview to ask about a preamble shift
     const lineOffset = await viteLineOffset(r.path, path, this.runtime.previewTarget(r.id));
     return { ranges, lineOffset };

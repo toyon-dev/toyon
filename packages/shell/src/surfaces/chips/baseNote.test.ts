@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { behindNote, canPull, originNote } from "./baseNote.ts";
+import { behindNote, canPull, hhmm, originNote } from "./baseNote.ts";
 
 describe("behindNote", () => {
   test("nothing when level with the default branch", () => {
@@ -31,5 +31,21 @@ describe("originNote", () => {
     expect(canPull({ stale: "diverged" })).toBe(false);
     expect(canPull({ stale: "dirty" })).toBe(true);
     expect(canPull({})).toBe(true);
+  });
+});
+
+describe("originNote when origin cannot be reached", () => {
+  test("a failed fetch stands ahead of any count, with when origin last answered", () => {
+    const at = new Date(2026, 8, 24, 14, 2).getTime();
+    expect(originNote("main", { behind: 0, dirty: 0, fetchFailed: "could not resolve host" })).toBe(
+      "could not reach origin: could not resolve host",
+    );
+    expect(originNote("main", { behind: 3, dirty: 2, stale: "dirty", fetchedAt: at, fetchFailed: "timed out" })).toBe(
+      "could not reach origin since 14:02: timed out",
+    );
+    expect(originNote("main", { behind: 3, dirty: 0, fetchedAt: at })).toBe("3 behind origin");
+  });
+  test("the clock reads hours and minutes, zero padded", () => {
+    expect(hhmm(new Date(2026, 0, 1, 9, 5).getTime())).toBe("09:05");
   });
 });

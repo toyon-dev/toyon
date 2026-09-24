@@ -1,4 +1,4 @@
-import type { CommitEntry, GitFileStatus } from "@toyon/shared";
+import { baseOf, type CommitEntry, type GitFileStatus } from "@toyon/shared";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { previewBus } from "../../app/previewBus.ts";
 import { commitItems } from "../../state/actions/commit.ts";
@@ -76,8 +76,12 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
   const treeRef = useRef<HTMLDivElement>(null);
   // names the second half of the history: the commits this branch inherited rather than made. Any
   // row has one: a found worktree's history reads the same way, it just has no commit box under it.
+  // It is the base the counts are against: main here, or origin's main where the route lands there.
   const activeRow = useActiveRow();
-  const defaultBranch = useStore((s) => repoById(s, activeRow?.repoId)?.defaultBranch ?? "main");
+  const base = useStore((s) => {
+    const repo = repoById(s, activeRow?.repoId);
+    return repo ? baseOf(repo) : "main";
+  });
   const commits = useLocalField(shownId, "commits");
   const filesBySha = useLocalField(shownId, "commitFiles");
   // only one commit is expanded at a time, which is also what lets a file row below it be opened
@@ -464,7 +468,7 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
             <>
               <div
                 className="section-title"
-                data-tip="Committed on this branch, not yet on main"
+                data-tip={`Committed on this branch, not yet on ${base}`}
                 data-tip-placement="follow"
               >
                 committed · {committed.length}
@@ -491,9 +495,7 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
                 {!archived && aheadCount > 0 && i === 0 && (
                   <div className="section-title">on this branch · {aheadCount}</div>
                 )}
-                {!archived && aheadCount > 0 && i === firstLanded && (
-                  <div className="section-title">{defaultBranch}</div>
-                )}
+                {!archived && aheadCount > 0 && i === firstLanded && <div className="section-title">{base}</div>}
                 {r.file ? (
                   <GitFileRow
                     f={r.file}

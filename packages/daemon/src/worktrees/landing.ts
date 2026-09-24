@@ -7,7 +7,7 @@
 // narrows the work without changing what the sentence and the message say about it. The sentence
 // is the turn's recap and stays with the turn.
 
-import { type AgentStatus, canLand, type Landing, type LastTurn, type WorktreeInfo } from "@toyon/shared";
+import { type AgentStatus, baseOf, canLand, type Landing, type LastTurn, type WorktreeInfo } from "@toyon/shared";
 import { answerPrompt, type LandVerdict, landPrompt } from "../agent/landing.ts";
 import { firstAskOf, turnsSince } from "../agent/recap.ts";
 import type { TranscriptEntry } from "../agent/transcript.ts";
@@ -158,7 +158,7 @@ export class LandingService {
     const repo = this.d.state.requireRepo(wt.repoId);
     const files = await statusFiles(wt.path);
     if (files.length > 0) return true;
-    const { ahead } = await aheadBehind(wt.path, repo.defaultBranch);
+    const { ahead } = await aheadBehind(wt.path, baseOf(repo));
     return ahead > 0;
   }
 
@@ -201,8 +201,8 @@ export class LandingService {
         title: wt.title,
         firstAsk: firstAskOf(entries),
         turns: turnsSince(entries, 0),
-        diffStat: await diffSummary(wt.path, repo.defaultBranch),
-        recentSubjects: await recentSubjects(wt.path, repo.defaultBranch),
+        diffStat: await diffSummary(wt.path, baseOf(repo)),
+        recentSubjects: await recentSubjects(wt.path, baseOf(repo)),
       });
       try {
         verdict = await this.d.judge(wt, prompt);

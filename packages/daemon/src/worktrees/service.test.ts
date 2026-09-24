@@ -89,6 +89,13 @@ async function registered(): Promise<string> {
 
 const settle = () => new Promise((r) => setTimeout(r, 50));
 
+/** the route set on the record and the base that follows from it, as a settings save leaves them */
+async function setRoute(repoId: string, route: "merge" | "push" | "pr") {
+  const repo = w.state.requireRepo(repoId);
+  repo.config.land = { ...repo.config.land, route };
+  await w.repos.refreshBase(repo);
+}
+
 /** wait for background work to reach a state, where a fixed settle loses the race under load */
 async function until(done: () => boolean, ms = 15_000): Promise<void> {
   const stop = Date.now() + ms;
@@ -1532,7 +1539,7 @@ describe("landing", () => {
     sh(w.repo, "git", "init", "-q", "--bare", "-b", "main", origin);
     sh(w.repo, "git", "remote", "add", "origin", origin);
     sh(w.repo, "git", "push", "-q", "-u", "origin", "main");
-    w.state.requireRepo(repoId).config.land = { route: "push" };
+    await setRoute(repoId, "push");
     const wt = await w.worktrees.create(repoId, "feature");
     writeFileSync(join(wt.path, "feature.txt"), "x\n");
     const { result } = await w.worktrees.land(wt.id, "add feature");
@@ -1554,7 +1561,7 @@ describe("landing", () => {
 
   test("the pr route refuses without an origin", async () => {
     const repoId = await registered();
-    w.state.requireRepo(repoId).config.land = { route: "pr" };
+    await setRoute(repoId, "pr");
     const wt = await w.worktrees.create(repoId, "feature");
     writeFileSync(join(wt.path, "feature.txt"), "x\n");
     const { result } = await w.worktrees.land(wt.id, "add feature");
@@ -1565,12 +1572,12 @@ describe("landing", () => {
   });
 
   /** a bare origin with main on it, and a second clone as the hands GitHub and other people are */
-  const withOrigin = (repoId: string) => {
+  const withOrigin = async (repoId: string) => {
     const origin = join(w.repo, "..", "origin.git");
     sh(w.repo, "git", "init", "-q", "--bare", "-b", "main", origin);
     sh(w.repo, "git", "remote", "add", "origin", origin);
     sh(w.repo, "git", "push", "-q", "-u", "origin", "main");
-    w.state.requireRepo(repoId).config.land = { route: "pr" };
+    await setRoute(repoId, "pr");
     const other = join(w.repo, "..", "other");
     sh(w.repo, "git", "clone", "-q", origin, other);
     sh(other, "git", "config", "user.email", "o@o");
@@ -1587,7 +1594,7 @@ describe("landing", () => {
 
   test("the pr route measures the branch against origin's main: a commit merged there is landed, not opened again", async () => {
     const repoId = await registered();
-    const { origin, other } = withOrigin(repoId);
+    const { origin, other } = await withOrigin(repoId);
     const wt = await w.worktrees.create(repoId, "feature");
     writeFileSync(join(wt.path, "feature.txt"), "x\n");
     sh(wt.path, "git", "add", "-A");
@@ -1612,7 +1619,7 @@ describe("landing", () => {
 
   test("a PR merged while main here cannot follow is landed at once; main follows when it can", async () => {
     const repoId = await registered();
-    const { origin, other } = withOrigin(repoId);
+    const { origin, other } = await withOrigin(repoId);
     const wt = await w.worktrees.create(repoId, "feature");
     writeFileSync(join(wt.path, "feature.txt"), "x\n");
     sh(wt.path, "git", "add", "-A");
@@ -1633,7 +1640,9 @@ describe("landing", () => {
     expect(w.state.worktree(wt.id)).toMatchObject({ landed: true, pr: { number: 7, state: "merged" } });
     expect(w.state.worktree(wt.id)?.lands).toEqual([{ base: before, tip, at: expect.any(Number) }]);
     expect((await git(w.repo, "rev-parse", "main")).out).toBe(before);
-    expect((await git(wt.path, "rev-parse", "HEAD")).out).toBe(before);
+    // the base is origin's main, which the PR landed on: the branch restarts from there, and
+    // main here standing still hides none of it from the row
+    expect((await git(wt.path, "rev-parse", "HEAD")).out).toBe((await git(origin, "rev-parse", "main")).out);
     expect((await git(origin, "rev-parse", wt.branch)).out).toBe(tip);
     expect((await w.worktrees.trunks())[repoId]).toMatchObject({ stale: "dirty" });
     // a press now is not a second PR: the rebase onto origin finds nothing to send up, and the
@@ -1656,7 +1665,7 @@ describe("landing", () => {
     sh(w.repo, "git", "init", "-q", "--bare", "-b", "main", origin);
     sh(w.repo, "git", "remote", "add", "origin", origin);
     sh(w.repo, "git", "push", "-q", "-u", "origin", "main");
-    w.state.requireRepo(repoId).config.land = { route: "pr" };
+    await setRoute(repoId, "pr");
     const wt = await w.worktrees.create(repoId, "feature");
     // the branch as the first press left it: on origin, tracking, with a PR open on it
     writeFileSync(join(wt.path, "feature.txt"), "x\n");
@@ -2449,15 +2458,22 @@ describe("main against origin", () => {
     return repoId;
   }
 
-  test("main's row counts what it trails on origin; a worktree's row still counts against main", async () => {
+  test("main's row counts what it trails on origin; a worktree's row counts against the route's base", async () => {
     const repoId = await withUpstream();
     const wt = await w.worktrees.create(repoId, "feature");
     w.worktrees.invalidateCounts();
-    const rows = await w.worktrees.rows();
+    let rows = await w.worktrees.rows();
     const main = rows.find((r) => r.worktree && r.worktree.kind === "main")!;
     expect(main.behind).toBe(1);
     expect(main.ahead).toBeUndefined();
+    // the merge route lands on main here, so main here is what the row is measured against
     expect(rows.find((r) => r.id === wt.id)?.behind).toBe(0);
+    // the push route lands on origin's main: the same row trails it by the commit main here lacks
+    await setRoute(repoId, "push");
+    expect(w.state.requireRepo(repoId).base).toBe("origin/main");
+    rows = await w.worktrees.rows();
+    expect(rows.find((r) => r.id === wt.id)?.behind).toBe(1);
+    expect(rows.find((r) => r.id === main.id)?.behind).toBe(1);
   });
 
   test("a main with no upstream has no count", async () => {
@@ -2508,6 +2524,60 @@ describe("main against origin", () => {
       namer: async () => null,
     });
   const headOf = (path: string) => sh(path, "git", "rev-parse", "HEAD").trim();
+
+  test("a route change in the settings file moves the base, and every count with it", async () => {
+    const repoId = await withUpstream();
+    const wt = await w.worktrees.create(repoId, "feature");
+    expect((await w.worktrees.gitStatus(wt.id))?.behind).toBe(0);
+    let ticks = 0;
+    w.hub.on("repoTick", () => ticks++);
+    writeFileSync(join(w.repo, "toyon.json"), JSON.stringify({ run: { web: "true" }, land: { route: "pr" } }));
+    w.repos.reloadConfig(repoId);
+    await until(() => w.state.requireRepo(repoId).base === "origin/main");
+    expect(ticks).toBeGreaterThan(0);
+    expect((await w.worktrees.gitStatus(wt.id))?.behind).toBe(1);
+    // and back: main here is the base again, which the row is level with
+    writeFileSync(join(w.repo, "toyon.json"), JSON.stringify({ run: { web: "true" } }));
+    w.repos.reloadConfig(repoId);
+    await until(() => w.state.requireRepo(repoId).base === undefined);
+    expect((await w.worktrees.gitStatus(wt.id))?.behind).toBe(0);
+  });
+
+  test("on the push route a main checkout that is dirty and on another branch blocks no count, sync or birth", async () => {
+    const repoId = await withUpstream();
+    await setRoute(repoId, "push");
+    // main here is nobody's business from here on: checked out elsewhere, with an edit in it
+    sh(w.repo, "git", "switch", "-q", "-c", "elsewhere");
+    writeFileSync(join(w.repo, "README.md"), "edited on main\n");
+    const wt = await w.worktrees.create(repoId, "feature");
+    // born from origin's main, not the checkout here, and tracking nothing
+    expect(headOf(wt.path)).toBe(sh(w.repo, "git", "rev-parse", "origin/main").trim());
+    expect((await git(wt.path, "rev-parse", "--abbrev-ref", `${wt.branch}@{upstream}`)).ok).toBe(false);
+    expect(await w.worktrees.gitStatus(wt.id)).toMatchObject({ files: [], ahead: 0, behind: 0 });
+    // origin moves on: the sync's own fetch finds it, and the row takes it in
+    const c = pushUpstream("c");
+    const { result } = await w.worktrees.sync(wt.id);
+    expect(result.ok).toBe(true);
+    expect(headOf(wt.path)).toBe(c);
+    expect(await w.worktrees.gitStatus(wt.id)).toMatchObject({ ahead: 0, behind: 0 });
+    // main here stayed where it was, on its other branch, edit and all
+    expect(sh(w.repo, "git", "branch", "--show-current").trim()).toBe("elsewhere");
+    expect(readFileSync(join(w.repo, "README.md"), "utf8")).toBe("edited on main\n");
+  });
+
+  test("a fetch that fails is on the trunk, beside when origin last answered", async () => {
+    const repoId = await withUpstream();
+    const main = w.state.worktrees.find((x) => x.repoId === repoId && x.kind === "main")!;
+    expect((await w.worktrees.pull(main.id)).ok).toBe(true);
+    const answered = (await w.worktrees.trunks())[repoId]!;
+    expect(answered.fetchedAt).toBeGreaterThan(0);
+    expect(answered.fetchFailed).toBeUndefined();
+    rmSync(join(dirname(w.repo), "origin.git"), { recursive: true, force: true });
+    expect((await w.worktrees.pull(main.id)).ok).toBe(false);
+    const failed = (await w.worktrees.trunks())[repoId]!;
+    expect(failed.fetchedAt).toBe(answered.fetchedAt);
+    expect(failed.fetchFailed).toMatch(/does not appear to be a git repos/);
+  });
 
   test("syncTrunk fast-forwards a clean main behind origin, and fetches once a minute at most", async () => {
     const repoId = await withUpstream();

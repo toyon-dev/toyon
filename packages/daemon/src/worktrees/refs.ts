@@ -6,7 +6,7 @@
 // The ranking is pure so its rules have tests without a repo; the class around it owns the two
 // things that cost something, the git calls and gh.
 
-import type { RefHit, RepoInfo } from "@toyon/shared";
+import { baseOf, type RefHit, type RepoInfo } from "@toyon/shared";
 import { canonical } from "../agent/bounds.ts";
 import { log } from "../core/log.ts";
 import type { StateStore } from "../core/state.ts";
@@ -48,7 +48,7 @@ export class RefSearch {
     const repo = this.d.state.requireRepo(repoId);
     const [refs, merged, prs] = await Promise.all([
       listRefs(repo.path),
-      mergedBranches(repo.path, repo.defaultBranch),
+      mergedBranches(repo.path, baseOf(repo)),
       this.openPrs(repo),
     ]);
     return rankRefs({ refs, merged, prs, query, defaultBranch: repo.defaultBranch, rowIdForPath: this.rowIdForPath });

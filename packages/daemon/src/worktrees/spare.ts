@@ -16,7 +16,7 @@
 
 import { existsSync } from "node:fs";
 import { basename, join } from "node:path";
-import type { RepoInfo, WorktreeInfo } from "@toyon/shared";
+import { baseOf, type RepoInfo, type WorktreeInfo } from "@toyon/shared";
 import type { Hub } from "../core/hub.ts";
 import { fireAndForget, log } from "../core/log.ts";
 import type { Paths } from "../core/paths.ts";
@@ -155,9 +155,7 @@ export class SparePool {
     let cut = () => {};
     const added = (async () => {
       if (existsSync(wt.path)) return;
-      await withRepoLock(repo.path, () =>
-        gitOrThrow(repo.path, "worktree", "add", "--detach", wt.path, repo.defaultBranch),
-      );
+      await withRepoLock(repo.path, () => gitOrThrow(repo.path, "worktree", "add", "--detach", wt.path, baseOf(repo)));
     })();
     const done = (async () => {
       try {
@@ -176,8 +174,8 @@ export class SparePool {
           wt.phase = "warming";
           this.d.state.save();
           this.d.hub.emit("worktreesChanged");
-          // main may have moved while the finish waited; refresh() passes a spare that is not ready
-          await withRepoLock(repo.path, () => git(wt.path, "reset", "--hard", repo.defaultBranch));
+          // the base may have moved while the finish waited; refresh() passes a spare that is not ready
+          await withRepoLock(repo.path, () => git(wt.path, "reset", "--hard", baseOf(repo)));
         }
         await this.d.setupAndStart(wt, repo); // CoW deps + setup + warm servers
         // claimed while finishing: the task's procs are up, and the pool has moved on
@@ -221,14 +219,15 @@ export class SparePool {
     this.d.hub.emit("worktreesChanged");
   }
 
-  /** main moved: reset the spare onto it; re-run setup only when a lockfile changed. A spare not
-   * ready gets its reset at the start of its finish instead. */
+  /** the base moved (main here, or origin's main once the route lands there): reset the spare
+   * onto it; re-run setup only when a lockfile changed. A spare not ready gets its reset at the
+   * start of its finish instead. */
   async refresh(repoId: string): Promise<void> {
     const wt = this.spareOf(repoId);
     if (wt?.phase !== "ready" || this.refreshing.has(repoId)) return;
     const repo = this.d.state.requireRepo(repoId);
     const run = (async () => {
-      await withRepoLock(repo.path, () => git(wt.path, "reset", "--hard", repo.defaultBranch));
+      await withRepoLock(repo.path, () => git(wt.path, "reset", "--hard", baseOf(repo)));
       const h = lockfileHash(wt.path);
       if (h !== wt.lockfile) {
         wt.lockfile = h;

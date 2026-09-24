@@ -42,6 +42,9 @@ export class Trunk {
   private lastFetch = new Map<string, number>();
   /** per repo, why main was last left where it was when origin had moved (see TrunkStatus) */
   private stale = new Map<string, TrunkStatus["stale"]>();
+  /** per repo, when origin last answered and whether the last fetch failed: what every count
+   * against origin is as true as, so the rows carry it (see TrunkStatus) */
+  private fetches = new Map<string, { at?: number; failed?: string }>();
 
   constructor(private d: TrunkDeps) {}
 
@@ -58,6 +61,8 @@ export class Trunk {
       fireAndForget(
         "fetch",
         run(GIT, ["fetch", "--quiet"], path, NO_PROMPT).then(async (r) => {
+          const main = this.d.state.worktree(mainId);
+          if (main) this.noteFetch(main.repoId, r);
           if (!r.ok) {
             log.warn("fetch", `could not fetch ${path}: ${r.err.slice(0, 200)}`);
             return;
@@ -85,12 +90,26 @@ export class Trunk {
     if (Date.now() - last < OPEN_FETCH_MIN_MS) return;
     this.lastFetch.set(repo.path, Date.now());
     const f = await run(GIT, ["fetch", "--quiet"], repo.path, NO_PROMPT);
+    this.noteFetch(repo.id, f);
     if (!f.ok) {
       log.warn("fetch", `could not fetch ${repo.path}: ${f.err.slice(0, 200)}`);
       return;
     }
     this.d.invalidateCounts();
     await this.follow(main.id);
+  }
+
+  /** A fetch ran, in here or on a row's behalf (fetchBase before a land or a sync): the time
+   * origin last answered, or git's first line about why it did not, ride on the trunk from here.
+   * A frame goes out when the fact changes, since the rows' "as of" and the composer's note
+   * both read it. */
+  noteFetch(repoId: string, r: { ok: boolean; err: string }): void {
+    const was = this.fetches.get(repoId) ?? {};
+    const next: { at?: number; failed?: string } = r.ok
+      ? { at: Date.now() }
+      : { ...(was.at ? { at: was.at } : {}), failed: r.err.split("\n").find((l) => l.trim()) ?? "fetch failed" };
+    this.fetches.set(repoId, next);
+    if (was.failed !== next.failed || was.at !== next.at) this.d.hub.emit("worktreesChanged");
   }
 
   /** Main onto origin now, for work that landed there (a PR GitHub merged): one fetch, then the
@@ -104,6 +123,7 @@ export class Trunk {
     this.lastFetch.set(repo.path, Date.now());
     w.step(`pulling ${repo.defaultBranch} from origin`);
     const f = await w.git(repo.path, ["fetch", "--quiet"]);
+    this.noteFetch(repo.id, f);
     if (!f.ok) return { ok: false, message: refused("fetch failed", f) };
     this.d.invalidateCounts();
     return this.follow(main.id);
@@ -138,12 +158,15 @@ export class Trunk {
         if (!main) return;
         const { behind, dirty } = await this.d.counts(main, repo.defaultBranch, quick);
         const stale = this.stale.get(repo.id);
+        const fetched = this.fetches.get(repo.id);
         out[repo.id] = {
           id: main.id,
           ...(behind !== undefined ? { behind } : {}),
           dirty: dirty ?? 0,
           empty: main.empty === true,
           ...(stale ? { stale } : {}),
+          ...(fetched?.at ? { fetchedAt: fetched.at } : {}),
+          ...(fetched?.failed ? { fetchFailed: fetched.failed } : {}),
         };
       }),
     );

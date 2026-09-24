@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
-import { writeFileSync } from "node:fs";
+import { existsSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { sh, tmpRepo } from "../../test/helpers/tmp-repo.ts";
 import { GIT } from "../git/exec.ts";
@@ -72,5 +72,61 @@ test("worktrees added and removed outside toyon each fire; commits do not", asyn
     expect(changes).toBe(beforeCommit);
   } finally {
     w.cleanup();
+  }
+}, 20000);
+
+test("origin's main moving is an upstream move, a commit here a local one", async () => {
+  const u = tmpRepo();
+  try {
+    const bare = join(dirname(u.repo), "origin.git");
+    sh(u.repo, GIT, "init", "-q", "--bare", "-b", "main", bare);
+    sh(u.repo, GIT, "remote", "add", "origin", bare);
+    sh(u.repo, GIT, "push", "-q", "-u", "origin", "main");
+    const moves: string[] = [];
+    const stop = watchDefaultBranch(u.repo, "main", (which) => moves.push(which));
+    await settle(400); // baseline reads, and the watchers arm
+    // someone else pushes: origin moved, nothing here did, and a fetch is how this repo learns
+    const clone = join(dirname(u.repo), "clone");
+    sh(dirname(u.repo), GIT, "clone", "-q", bare, clone);
+    sh(clone, GIT, "-c", "user.name=o", "-c", "user.email=o@o", "commit", "-q", "--allow-empty", "-m", "theirs");
+    sh(clone, GIT, "push", "-q", "origin", "main");
+    sh(u.repo, GIT, "fetch", "-q");
+    await settle(2500);
+    expect(moves).toEqual(["upstream"]);
+    sh(u.repo, GIT, "commit", "-q", "--allow-empty", "-m", "mine");
+    await settle(2500);
+    expect(moves).toEqual(["upstream", "local"]);
+    stop();
+  } finally {
+    u.cleanup();
+  }
+}, 20000);
+
+test("a remote never fetched is watched from its first fetch, which is itself an upstream move", async () => {
+  const u = tmpRepo();
+  try {
+    // origin populated from a copy and tracking configured by hand: no refs/remotes exists yet
+    const bare = join(dirname(u.repo), "origin.git");
+    sh(dirname(u.repo), GIT, "clone", "-q", "--bare", u.repo, bare);
+    sh(u.repo, GIT, "remote", "add", "origin", bare);
+    sh(u.repo, GIT, "config", "branch.main.remote", "origin");
+    sh(u.repo, GIT, "config", "branch.main.merge", "refs/heads/main");
+    expect(existsSync(join(u.repo, ".git", "refs", "remotes"))).toBe(false);
+    const moves: string[] = [];
+    const stop = watchDefaultBranch(u.repo, "main", (which) => moves.push(which));
+    await settle(400);
+    sh(u.repo, GIT, "fetch", "-q");
+    await settle(2500);
+    expect(moves).toEqual(["upstream"]);
+    const clone = join(dirname(u.repo), "clone");
+    sh(dirname(u.repo), GIT, "clone", "-q", bare, clone);
+    sh(clone, GIT, "-c", "user.name=o", "-c", "user.email=o@o", "commit", "-q", "--allow-empty", "-m", "theirs");
+    sh(clone, GIT, "push", "-q", "origin", "main");
+    sh(u.repo, GIT, "fetch", "-q");
+    await settle(2500);
+    expect(moves).toEqual(["upstream", "upstream"]);
+    stop();
+  } finally {
+    u.cleanup();
   }
 }, 20000);

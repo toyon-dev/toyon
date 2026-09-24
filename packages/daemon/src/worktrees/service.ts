@@ -9,6 +9,8 @@ import {
   type AgentEvent,
   type ArchivedWorktree,
   type AttachmentInput,
+  baseIsRemote,
+  baseOf,
   type CommitEntry,
   canArchive,
   canGraft,
@@ -65,12 +67,11 @@ import { GIT, git, gitOrThrow, isGitRepo, NO_PROMPT, run } from "../git/exec.ts"
 import {
   commitWorktree,
   fastForwardMain,
-  fetchTrunk,
+  fetchBase,
   type LandWatch,
   landLocally,
   mergePr,
   openPr,
-  pullMain,
   pushBranch,
   pushMain,
   type ShipResult,
@@ -152,6 +153,9 @@ export interface ReadableWorktree {
   /** another tool holds it (a live agent session); nothing here may write to it */
   locked?: boolean;
   defaultBranch: string;
+  /** the ref every count, diff and sync here is against: main here, or origin's main where the
+   * route lands work there (baseOf) */
+  base: string;
   /** absent for a discovered worktree: there is nothing to mutate and nothing that owns it */
   wt?: WorktreeInfo;
 }
@@ -420,8 +424,10 @@ export class WorktreeService {
     const { id, dir } = freeSlot(join(this.d.paths.worktreesDir, repo.name));
     const wtPath = join(this.d.paths.worktreesDir, repo.name, dir);
     const branch = `toyon/${dir}`;
+    // born on the base, which under a remote base is a remote-tracking ref: --no-track, or git
+    // would set the new branch's upstream to origin/main and a push of it would go there
     await withRepoLock(repo.path, () =>
-      gitOrThrow(repo.path, "worktree", "add", "-b", branch, wtPath, repo.defaultBranch),
+      gitOrThrow(repo.path, "worktree", "add", "--no-track", "-b", branch, wtPath, baseOf(repo)),
     );
 
     const wt: WorktreeInfo = {
@@ -1023,7 +1029,7 @@ export class WorktreeService {
     const rec = this.archive.get(archiveId);
     const repo = rec && this.repoOf(rec);
     if (!rec?.kept || !repo) return null;
-    return new ArchivedGit(repo.path, rec.kept, rec.worktree.lands ?? [], repo.defaultBranch);
+    return new ArchivedGit(repo.path, rec.kept, rec.worktree.lands ?? [], baseOf(repo));
   }
 
   /** what an archived worktree left, for the changes panel on its page; nothing is on disk, so
@@ -1444,9 +1450,9 @@ export class WorktreeService {
    * the commits after this one, and the verdict gone with the work it described. */
   private async landedByHand(wt: WorktreeInfo, mark: LandingRange) {
     const repo = this.d.state.requireRepo(wt.repoId);
-    log.info(wt.id, `landed on ${repo.defaultBranch} outside toyon: ${mark.base.slice(0, 7)}..${mark.tip.slice(0, 7)}`);
+    log.info(wt.id, `landed on ${baseOf(repo)} outside toyon: ${mark.base.slice(0, 7)}..${mark.tip.slice(0, 7)}`);
     await this.noteLand(repo, wt, mark);
-    await this.restartFromMain(wt, repo.defaultBranch);
+    await this.restartFromMain(wt, baseOf(repo));
     this.setLanding(wt.id, undefined);
     this.setLanded(wt.id, true);
   }
@@ -1510,15 +1516,15 @@ export class WorktreeService {
         : wt.landing.subject
       : undefined;
 
+    const base = baseOf(repo);
     if (policy.land === "pr") {
       // GitHub merged the PR while an op was out on the row, so the poll left the landing to this
       // press: it lands the merge, never a second PR of the same commit
       if (wt.pr?.state === "merged" && !wt.landed) return { result: await this.prMergedOp(wt.id, undefined, w) };
       // the branch is measured against origin's main, fetched now: main here is not pulled on
       // this route and can trail origin by days
-      const trunk = await fetchTrunk(wt.path, repo.defaultBranch, w);
-      if (!trunk.ok) return { result: trunk };
-      const base = trunk.base;
+      const fetched = await this.fetchBase(wt, repo, w);
+      if (!fetched.ok) return { result: fetched };
       // nothing here touches the main checkout, and gh holds the network for seconds: outside the lock
       if (wt.pr?.state === "open") {
         // work since the PR opened goes to the PR, never under it: a merge now would take the
@@ -1541,7 +1547,7 @@ export class WorktreeService {
       const committed = await this.commitIfDirty(wt, message);
       if (committed && !committed.ok) return { result: committed };
       // read before the rebase: what the branch carried, in case the rebase finds it all on origin
-      const mark = await landingMark(wt.path, repo.defaultBranch);
+      const mark = await landingMark(wt.path, base);
       const taken = await takeMainIn(wt.path, base, own, w);
       if (!taken.ok) return { result: taken };
       this.headMoved(wt.id);
@@ -1584,17 +1590,17 @@ export class WorktreeService {
         const pulled = await fastForwardMain(repo.path, repo.defaultBranch, w);
         if (!pulled.ok && !/no upstream/.test(pulled.message)) return pulled;
       }
-      const taken = await takeMainIn(wt.path, repo.defaultBranch, own, w);
+      const taken = await takeMainIn(wt.path, base, own, w);
       if (!taken.ok) return taken;
       // read before the landing moves main and the branch restarts from it
-      const mark = await landingMark(wt.path, repo.defaultBranch);
+      const mark = await landingMark(wt.path, base);
       const method = policy.merge ?? DEFAULT_MERGE_METHOD;
-      const squash = method === "squash" ? await squashMessage(wt.path, repo.defaultBranch, suggested) : "";
+      const squash = method === "squash" ? await squashMessage(wt.path, base, suggested) : "";
       const landed = await landLocally(wt.path, wt.branch, repo.path, repo.defaultBranch, method, squash, w);
       if (!landed.ok) return landed;
       mergedHere = true;
       await this.noteLand(repo, wt, mark);
-      await this.restartFromMain(wt, repo.defaultBranch);
+      await this.restartFromMain(wt, base);
       if (policy.land === "push") {
         const pushed = await pushMain(repo.path, repo.defaultBranch, w);
         if (!pushed.ok) return { ...pushed, message: `merged into ${repo.defaultBranch} here, but ${pushed.message}` };
@@ -1634,14 +1640,23 @@ export class WorktreeService {
     this.d.state.save();
   }
 
-  /** A branch toyon owns restarts from main once its work is there: the next message here builds
-   * on main as it is, and the counts read zero rather than the commits a squash or a rebase on
-   * GitHub left with different hashes. An adopted branch keeps its history. */
-  private async restartFromMain(wt: WorktreeInfo, defaultBr: string) {
+  /** A branch toyon owns restarts from the base once its work is there: the next message here
+   * builds on the base as it is, and the counts read zero rather than the commits a squash or a
+   * rebase on GitHub left with different hashes. An adopted branch keeps its history. */
+  private async restartFromMain(wt: WorktreeInfo, base: string) {
     if (!hasOwnBranch(wt)) return;
-    const r = await git(wt.path, "reset", "--hard", defaultBr);
-    if (!r.ok) log.warn(wt.id, `could not restart ${wt.branch} from ${defaultBr}: ${r.err}`);
+    const r = await git(wt.path, "reset", "--hard", base);
+    if (!r.ok) log.warn(wt.id, `could not restart ${wt.branch} from ${base}: ${r.err}`);
     this.headMoved(wt.id);
+  }
+
+  /** the base fetched before a land or a sync measures against it (fetchBase), with the fetch on
+   * the trunk's record either way, since every count against origin is as true as it */
+  private async fetchBase(wt: WorktreeInfo, repo: RepoInfo, w: LandWatch): Promise<ShipResult> {
+    if (!baseIsRemote(repo)) return { ok: true, message: `${baseOf(repo)} here is the base` };
+    const r = await fetchBase(wt.path, repo, w);
+    this.trunk.noteFetch(repo.id, { ok: r.ok, err: r.message });
+    return r;
   }
 
   /** GitHub merged the worktree's PR: that is the landing, wherever it was merged from. The record
@@ -1668,13 +1683,14 @@ export class WorktreeService {
   ): Promise<ShipResult> {
     const { wt, repo } = this.d.state.requireWorktreeWithRepo(worktreeId);
     const br = repo.defaultBranch;
-    // read before main moves: a merge that kept the commits' hashes puts them on main, and the
-    // range would then read as nothing to keep
-    const mark = carried === undefined ? await landingMark(wt.path, br) : carried;
+    // read before the base moves: a merge that kept the commits' hashes puts them on it, and
+    // the range would then read as nothing to keep
+    const mark = carried === undefined ? await landingMark(wt.path, baseOf(repo)) : carried;
     const pulled = await this.trunk.pull(repo.id, w);
     await withRepoLock(repo.path, async () => {
       await this.noteLand(repo, wt, mark);
-      await this.restartFromMain(wt, br);
+      // origin's main, fetched by the pull, whatever the checkout here could do with it
+      await this.restartFromMain(wt, baseOf(repo));
     });
     this.invalidateCounts();
     this.setLanding(wt.id, undefined);
@@ -1689,7 +1705,7 @@ export class WorktreeService {
    * branch, a merge for one it found or adopted. The one git write allowed without take-over,
    * because both refuse a dirty tree before touching it and abort on a conflict, so the directory
    * is left as it was found in every case but success. */
-  async sync(worktreeId: string): Promise<{ result: ShipResult; defaultBranch: string }> {
+  async sync(worktreeId: string): Promise<{ result: ShipResult; base: string }> {
     const r = this.readable(worktreeId);
     if (!r) throw new UserError("that worktree is gone");
     if (r.wt && isMain(r.wt)) throw new UserError("sync from a worktree, not main");
@@ -1702,7 +1718,13 @@ export class WorktreeService {
     // a found worktree has no chat for the rows to go on
     const w = r.wt ? this.landWatch(r.wt) : UNWATCHED;
     const result = await this.ship(worktreeId, "sync-main", async () => {
-      const taken = await withRepoLock(repo.path, () => takeMainIn(r.path, repo.defaultBranch, own, w));
+      // the base as it is now, not as of the last fetch: outside the lock, since the fetch
+      // holds the network for seconds and touches no checkout
+      if (r.wt) {
+        const fetched = await this.fetchBase(r.wt, repo, w);
+        if (!fetched.ok) return fetched;
+      }
+      const taken = await withRepoLock(repo.path, () => takeMainIn(r.path, r.base, own, w));
       if (taken.ok) {
         this.headMoved(worktreeId);
         // the same work over a newer base: the sentence and the message still describe it
@@ -1710,10 +1732,13 @@ export class WorktreeService {
       }
       return taken;
     });
-    return { result, defaultBranch: repo.defaultBranch };
+    return { result, base: r.base };
   }
 
-  /** fast-forward main to its upstream; every worktree's `behind` moves with it */
+  /** Fast-forward main to its upstream, the trunk's own way (a fetch, then the fast-forward under
+   * the lock, the fetch on the record); under a local base every worktree's `behind` moves with
+   * it. Never a merge: a main that has diverged from origin is a decision for a terminal, not a
+   * button, and a dirty main is refused before the fetch rather than after it. */
   async pull(worktreeId: string): Promise<ShipResult> {
     const wt = this.d.state.requireWorktree(worktreeId);
     if (!isMain(wt)) throw new UserError("pull on main; a worktree syncs from main instead");
@@ -1721,7 +1746,13 @@ export class WorktreeService {
     // main has no chat for git's rows, so the pull's steps are named and nothing more
     const w: LandWatch = { step: (name) => this.step(worktreeId, name), git: UNWATCHED.git };
     return this.ship(worktreeId, "pull-main", async () => {
-      const result = await withRepoLock(repo.path, () => pullMain(repo.path, repo.defaultBranch, w));
+      if ((await statusFiles(repo.path)).length > 0) {
+        return {
+          ok: false,
+          message: `${repo.defaultBranch} has uncommitted changes: commit or stash them there first`,
+        };
+      }
+      const result = await this.trunk.pull(repo.id, w);
       if (result.ok) {
         this.invalidateCounts();
         this.headMoved(worktreeId);
@@ -1789,6 +1820,10 @@ export class WorktreeService {
   recount(repoId: string) {
     this.countsCache.clear();
     this.d.hub.emit("repoTick", repoId);
+    // the rows count against origin's main, so the window coming back is when to ask origin
+    // again; the trunk fetches once a minute at most
+    const repo = this.d.state.repo(repoId);
+    if (repo && baseIsRemote(repo)) fireAndForget(repoId, this.trunk.sync(repoId), "trunk sync");
   }
 
   /** something under `.git/worktrees` changed: git's list is no longer what we last read */
@@ -1848,19 +1883,19 @@ export class WorktreeService {
     return rows;
   }
 
-  /** the badge numbers for one row. `baseline` is main, where HEAD is the default branch and
-   * ahead/behind are zero by definition; a detached worktree has no branch to count either. */
+  /** the badge numbers for one row, against the base. Main is not `countable`: it is counted
+   * against its upstream by the trunk, and a detached worktree has no branch to count either. */
   private async counts(
     id: string,
     path: string,
-    defaultBranch: string,
+    base: string,
     countable: boolean,
   ): Promise<{ ahead?: number; behind?: number; unpushed?: number; dirty?: number }> {
     const cached = this.countsCache.get(id);
     if (cached && Date.now() - cached.at < 10_000) return cached;
     if (this.going.has(id)) return cached ?? {};
     try {
-      const ab = countable ? await aheadBehind(path, defaultBranch) : await this.trunk.behind(id, path);
+      const ab = countable ? await aheadBehind(path, base) : await this.trunk.behind(id, path);
       const dirty = (await statusFiles(path)).length;
       const unpushed = await this.unpushed(id, path);
       // the removal started while those reads were in flight: the number is the tree being
@@ -1891,7 +1926,7 @@ export class WorktreeService {
     const repo = wt && this.d.state.repo(wt.repoId);
     if (!wt || !repo) return {};
     this.countsCache.delete(worktreeId);
-    return this.counts(wt.id, wt.path, repo.defaultBranch, true);
+    return this.counts(wt.id, wt.path, baseOf(repo), true);
   }
 
   /** Resolve an id for reading: a worktree toyon runs, the spare included (it is the row new work
@@ -1900,8 +1935,17 @@ export class WorktreeService {
   readable(id: string): ReadableWorktree | null {
     const wt = this.d.state.worktree(id);
     if (wt) {
-      const { defaultBranch } = this.d.state.requireRepo(wt.repoId);
-      return { id, repoId: wt.repoId, path: wt.path, name: wt.title, branch: wt.branch, defaultBranch, wt };
+      const repo = this.d.state.requireRepo(wt.repoId);
+      return {
+        id,
+        repoId: wt.repoId,
+        path: wt.path,
+        name: wt.title,
+        branch: wt.branch,
+        defaultBranch: repo.defaultBranch,
+        base: baseOf(repo),
+        wt,
+      };
     }
     const disc = this.discoveredById(id);
     const repo = disc && this.d.state.repo(disc.repoId);
@@ -1914,6 +1958,7 @@ export class WorktreeService {
       branch: disc.branch,
       locked: disc.locked,
       defaultBranch: repo.defaultBranch,
+      base: baseOf(repo),
     };
   }
 
@@ -1926,17 +1971,17 @@ export class WorktreeService {
     if (!r) return this.archivedStatus(worktreeId);
     try {
       // only main is its own baseline; every other worktree, discovered ones included, has a
-      // branch worth counting against the default one
+      // branch worth counting against the base
       const isMain = r.wt?.kind === "main";
       const [files, ab, unpushed, head] = await Promise.all([
         statusFilesWithCounts(r.path),
-        isMain ? Promise.resolve({}) : aheadBehind(r.path, r.defaultBranch),
+        isMain ? Promise.resolve({}) : aheadBehind(r.path, r.base),
         this.unpushed(worktreeId, r.path),
         git(r.path, "rev-parse", "HEAD"),
       ]);
       const counts = { ...ab, ...(unpushed === undefined ? {} : { unpushed }) };
       const ahead = (counts as { ahead?: number }).ahead ?? 0;
-      const committed = !isMain && ahead > 0 ? await committedFiles(r.path, r.defaultBranch) : undefined;
+      const committed = !isMain && ahead > 0 ? await committedFiles(r.path, r.base) : undefined;
       if (r.wt?.landed && (files.length > 0 || ahead > 0)) {
         this.setLanded(r.wt.id, false);
         // new work after a merged PR is a new PR later; the old one is history
@@ -1955,7 +2000,7 @@ export class WorktreeService {
         this.handChecked.get(r.wt.id) !== head.out
       ) {
         this.handChecked.set(r.wt.id, head.out);
-        const mark = await handLanding(r.path, r.wt.branch, r.defaultBranch, r.wt.lands?.at(-1)?.tip);
+        const mark = await handLanding(r.path, r.wt.branch, r.base, r.wt.lands?.at(-1)?.tip);
         if (mark) {
           await this.landedByHand(r.wt, mark);
           return this.gitStatus(worktreeId);
@@ -2009,7 +2054,7 @@ export class WorktreeService {
    * never pays for it. */
   async gitLog(worktreeId: string): Promise<CommitEntry[]> {
     const r = this.readable(worktreeId);
-    if (r) return logCommits(r.path, r.defaultBranch);
+    if (r) return logCommits(r.path, r.base);
     return (await this.archivedGit(worktreeId)?.log()) ?? [];
   }
 
@@ -2114,10 +2159,10 @@ export class WorktreeService {
         .filter((wt) => this.isRow(wt))
         .map(async (wt) => {
           const rt = this.d.runtime.get(wt.id);
-          const { defaultBranch } = this.d.state.requireRepo(wt.repoId);
+          const repo = this.d.state.requireRepo(wt.repoId);
           const { ahead, behind, unpushed, dirty } = quick
             ? this.countsQuick(wt.id, quick)
-            : await this.counts(wt.id, wt.path, defaultBranch, !isMain(wt));
+            : await this.counts(wt.id, wt.path, baseOf(repo), !isMain(wt));
           return {
             id: wt.id,
             repoId: wt.repoId,
@@ -2152,7 +2197,7 @@ export class WorktreeService {
           ? {}
           : quick
             ? this.countsQuick(f.id, quick)
-            : await this.counts(f.id, f.path, repo.defaultBranch, !!f.branch);
+            : await this.counts(f.id, f.path, baseOf(repo), !!f.branch);
         return {
           ...f,
           procs: [],

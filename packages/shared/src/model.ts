@@ -72,6 +72,11 @@ export interface RepoInfo {
   made?: "folder" | "git";
   /** an `origin` remote exists, read at register and boot: what decides whether a PR is offered */
   remote?: boolean;
+  /** the ref this repo's worktrees are measured against, born from, synced onto and landed onto,
+   * when it is not the default branch here: main's upstream (`origin/main`) on the routes where
+   * work ends up on origin. Absent on the merge route, and with no upstream, which reads as the
+   * default branch (`baseOf`), so a record from before the field needs nothing. */
+  base?: string;
 }
 
 /** Toyon running out of a checkout that is also one of its own projects: what landing work on
@@ -552,6 +557,12 @@ export interface TrunkStatus {
   /** why the checkout was not fast-forwarded when origin moved: uncommitted files sit on it, its
    * history diverged from origin's, or it has no upstream to follow */
   stale?: "dirty" | "diverged" | "no-upstream";
+  /** when origin last answered a fetch; absent until one has. A count against origin is as true
+   * as this fetch, so the rail says so beside the count. */
+  fetchedAt?: number;
+  /** the last fetch failed, and git's first line about it. Stands ahead of any count, since
+   * "0 behind" means nothing while origin cannot be reached; gone with the next fetch that answers. */
+  fetchFailed?: string;
   /** the landing op out on the checkout (a pull), while one is */
   shipping?: Shipping;
 }

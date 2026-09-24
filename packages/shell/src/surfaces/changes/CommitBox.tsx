@@ -1,4 +1,12 @@
-import { canSync, describeLand, isOwned, canLand as landable, landPolicy, type WorktreeStatus } from "@toyon/shared";
+import {
+  baseOf,
+  canSync,
+  describeLand,
+  isOwned,
+  canLand as landable,
+  landPolicy,
+  type WorktreeStatus,
+} from "@toyon/shared";
 import { useRef, useState } from "react";
 import { copyText } from "../../state/actions/deps.ts";
 import { shipOp } from "../../state/actions/worktree.ts";
@@ -95,7 +103,8 @@ export function CommitBox({
   const canUpdate = !!owned && prMissing && !checkFailed;
   const repo = useStore((s) => s.repos.find((r) => r.id === active.repoId) ?? null);
   const landTip = describeLand(landPolicy(repo?.config ?? {}), repo?.defaultBranch);
-  const base = repo?.defaultBranch ?? "main";
+  // what the counts here are against: main here, or origin's main where the route lands there
+  const base = repo ? baseOf(repo) : "main";
   const behindLine = canSync(active) ? behindNote(base, behind) : null;
   const canMerge = prOpen && !prMissing && prCanMerge(pr);
   // the word a land runs under here: the one the row offered, since what the row can do does not
@@ -152,12 +161,12 @@ export function CommitBox({
           <Icon name="branch" className="icon-inline" />
           <span className="branch-name">{active.branch ?? "detached"}</span>
           {ahead > 0 && (
-            <span className="badge-ahead" data-tip={`${ahead} commit(s) ahead of main`}>
+            <span className="badge-ahead" data-tip={`${ahead} commit(s) ahead of ${base}`}>
               {ahead} ahead
             </span>
           )}
           {owned?.landed && (
-            <span className="badge-landed" data-tip="Merged into main">
+            <span className="badge-landed" data-tip={`Merged into ${base}`}>
               <Icon name="check" className="icon-inline" /> landed
             </span>
           )}

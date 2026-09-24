@@ -3,7 +3,7 @@
 // rather than merged with it, so a branch reads as if it started from today's main and every
 // method after that is one command; a branch someone adopted keeps its history and is merged with.
 
-import type { MergeMethod, PrState, TrunkStatus } from "@toyon/shared";
+import { baseIsRemote, baseOf, type MergeMethod, type PrState, type RepoInfo, type TrunkStatus } from "@toyon/shared";
 import { GIT, git, NO_PROMPT, run, runWatched, type Watched } from "./exec.ts";
 import { gh, ghMethod, prNumberOf } from "./gh.ts";
 import { aheadBehind, behindUpstream, statusFiles } from "./status.ts";
@@ -189,15 +189,6 @@ export async function squashMessage(worktreePath: string, defaultBr: string, sug
   return subjects.out.trim() || "land";
 }
 
-/** Fast-forward the main checkout to its upstream ("pull"). Never a merge: a main that has
- * diverged from origin is a decision for a terminal, not a button. Fetches first, so the count
- * the button showed and the commits it brings are the same ones. */
-export async function pullMain(repoPath: string, defaultBr: string, w: LandWatch = UNWATCHED): Promise<ShipResult> {
-  const cErr = await requireClean(repoPath);
-  if (cErr) return cErr;
-  return fastForwardMain(repoPath, defaultBr, w);
-}
-
 /** The same fast-forward without the clean check: after a PR merges, main here should move even
  * with unrelated edits in the checkout, and git itself refuses when an edit would be overwritten */
 export async function fastForwardMain(
@@ -290,34 +281,36 @@ async function mergeFailure(cwd: string, m: StepResult, conflictMessage: string)
   };
 }
 
-/** What a PR lands on, fetched: origin's copy of main, not the checkout here. Nobody pulls main
- * here on the PR route, so it can trail origin by days, and a branch rebased onto it keeps a
- * commit origin's main already took through a merge on GitHub; rebased onto the upstream instead,
- * git drops that commit as already applied, and the press reads as nothing to ship rather than a
- * second PR of the same change. Main with no upstream is its own base, as before. */
-export async function fetchTrunk(
+/** The base fetched, so what follows (a count, a rebase) is against origin as it is now and not
+ * as of the last fetch: a branch rebased onto a stale copy keeps a commit origin's main already
+ * took through a merge on GitHub, where onto the fetched one git drops it as already applied.
+ * The one branch, not the whole remote: a fetch of a hot monorepo is seconds nobody pressed
+ * for. Nothing to do while the base is main here. */
+export async function fetchBase(
   worktreePath: string,
-  defaultBr: string,
+  repo: Pick<RepoInfo, "defaultBranch" | "base">,
   w: LandWatch = UNWATCHED,
-): Promise<ShipResult & { base: string }> {
-  const [remote, up] = await Promise.all([
-    git(worktreePath, "config", "--get", `branch.${defaultBr}.remote`),
-    git(worktreePath, "rev-parse", "--abbrev-ref", `${defaultBr}@{upstream}`),
+): Promise<ShipResult> {
+  const base = baseOf(repo);
+  if (!baseIsRemote(repo)) return { ok: true, message: `${base} here is the base` };
+  const [remote, merge] = await Promise.all([
+    git(worktreePath, "config", "--get", `branch.${repo.defaultBranch}.remote`),
+    git(worktreePath, "config", "--get", `branch.${repo.defaultBranch}.merge`),
   ]);
-  if (!remote.ok || !remote.out || !up.ok || !up.out) {
-    return { ok: true, base: defaultBr, message: `${defaultBr} has no upstream` };
+  if (!remote.ok || !remote.out || !merge.ok || !merge.out) {
+    return { ok: false, message: `${repo.defaultBranch} no longer tracks a branch to fetch ${base} from` };
   }
-  w.step(`fetching ${up.out}`);
-  const f = await w.git(worktreePath, ["fetch", "--quiet", remote.out, defaultBr]);
-  if (!f.ok) return { ok: false, base: up.out, message: refused("fetch failed", f) };
-  return { ok: true, base: up.out, message: `fetched ${up.out}` };
+  w.step(`fetching ${base}`);
+  const f = await w.git(worktreePath, ["fetch", "--quiet", remote.out, merge.out]);
+  if (!f.ok) return { ok: false, message: refused("fetch failed", f) };
+  return { ok: true, message: `fetched ${base}` };
 }
 
 export interface OpenPr {
   worktreePath: string;
   branch: string;
   defaultBr: string;
-  /** what the branch is counted against: main's fetched upstream (fetchTrunk), else main here */
+  /** what the branch is counted against: main's fetched upstream (baseOf), else main here */
   base?: string;
   /** the PR's title and body: the suggested commit message when there is one */
   subject?: string;

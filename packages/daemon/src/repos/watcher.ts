@@ -1,6 +1,6 @@
-// Watches a repo's default branch ref and fires when it moves (commit, merge,
-// pull). fs events are noisy (.git/index churn etc.), so changes are debounced
-// and confirmed via rev-parse before firing.
+// Watches a repo's default branch, here and on its upstream, and fires when either moves (a
+// commit, a merge, a pull; a fetch, a push from elsewhere). fs events are noisy (.git/index churn
+// etc.), so changes are debounced and confirmed via rev-parse before firing.
 
 import { existsSync, type FSWatcher, watch } from "node:fs";
 import { basename, join } from "node:path";
@@ -8,16 +8,28 @@ import { CONFIG_DIR, CONFIG_FILES } from "@toyon/shared";
 import { fireAndForget, log } from "../core/log.ts";
 import { git } from "../git/exec.ts";
 
-export function watchDefaultBranch(repoPath: string, branch: string, onMove: () => void): () => void {
+/** which copy of the default branch moved: the checkout's own, or the remote-tracking one */
+export type RefMove = "local" | "upstream";
+
+export function watchDefaultBranch(repoPath: string, branch: string, onMove: (which: RefMove) => void): () => void {
   // null until the first read: the initial position is fetched asynchronously, and a change
-  // before it lands is simply the new baseline
-  let last: string | null = null;
+  // before it lands is simply the new baseline. The upstream reads as "" while there is none, so
+  // its first fetch appearing is a move (the base may follow it) and never a baseline.
+  const last: Record<RefMove, string | null> = { local: null, upstream: null };
+  const read = async (): Promise<Record<RefMove, string>> => {
+    const [local, up] = await Promise.all([
+      git(repoPath, "rev-parse", branch),
+      git(repoPath, "rev-parse", "--verify", "--quiet", `${branch}@{upstream}`),
+    ]);
+    return { local: local.out, upstream: up.ok ? up.out : "" };
+  };
   fireAndForget(
     repoPath,
-    git(repoPath, "rev-parse", branch).then((r) => {
-      // a failed read leaves last null: the first successful check then sets the baseline
+    read().then((now) => {
+      // a failed local read leaves last null: the first successful check then sets the baseline
       // without firing (an empty string would make every later commit look like a move)
-      if (r.out) last ??= r.out;
+      if (now.local) last.local ??= now.local;
+      last.upstream ??= now.upstream;
     }),
     "ref watcher baseline",
   );
@@ -25,30 +37,81 @@ export function watchDefaultBranch(repoPath: string, branch: string, onMove: () 
 
   const check = async () => {
     timer = null;
-    const now = (await git(repoPath, "rev-parse", branch)).out;
-    if (!now) return;
-    if (last !== null && now !== last) onMove();
-    last = now;
+    const now = await read();
+    if (!now.local) return;
+    // upstream first: the base may move with it, and the local event's readers count against
+    // the base
+    if (last.upstream !== null && now.upstream !== last.upstream) onMove("upstream");
+    if (last.local !== null && now.local !== last.local) onMove("local");
+    last.local = now.local;
+    last.upstream = now.upstream;
   };
   const schedule = () => {
     if (timer) clearTimeout(timer);
     timer = setTimeout(() => fireAndForget(repoPath, check(), "ref watcher check"), 1000);
   };
 
+  let stopped = false;
   const watchers: FSWatcher[] = [];
-  const tryWatch = (p: string) => {
+  const tryWatch = (p: string, listener: Parameters<typeof watch>[1] = schedule): FSWatcher | null => {
     try {
-      watchers.push(watch(p, schedule));
+      const w = watch(p, listener);
+      w.on("error", (e) => log.warn(repoPath, `ref watcher error on ${p}`, e));
+      watchers.push(w);
+      return w;
     } catch (e) {
       // a bare repo or a missing refs dir: the other path usually exists
       log.debug(repoPath, `not watching ${p}`, e);
+      return null;
     }
   };
-  // loose refs live in .git/refs/heads/<branch>; packed-refs + HEAD in .git/
-  tryWatch(join(repoPath, ".git"));
-  tryWatch(join(repoPath, ".git", "refs", "heads"));
+  // The refs live in the common git dir, which is not `<repo>/.git` when the repo is itself a
+  // linked worktree (that `.git` is a file). Loose refs sit in refs/heads/<branch> and
+  // refs/remotes/<remote>/<branch>; packed-refs and HEAD in the dir itself.
+  fireAndForget(
+    repoPath,
+    (async () => {
+      const [common, remote] = await Promise.all([
+        git(repoPath, "rev-parse", "--path-format=absolute", "--git-common-dir"),
+        git(repoPath, "config", "--get", `branch.${branch}.remote`),
+      ]);
+      if (stopped) return;
+      const gitDir = common.ok && common.out ? common.out : join(repoPath, ".git");
+      tryWatch(gitDir);
+      tryWatch(join(gitDir, "refs", "heads"));
+      if (!remote.ok || !remote.out) return;
+      // refs/remotes/<remote> is made by the first fetch, so a fresh remote has no directory to
+      // watch yet: the two levels above arm it when it appears, the way the settings watcher
+      // arms .toyon/, and re-arm it when git recreates it
+      const remotes = join(gitDir, "refs", "remotes");
+      const mine = join(remotes, remote.out);
+      let inner: FSWatcher | null = null;
+      let mid: FSWatcher | null = null;
+      const armInner = () => {
+        inner?.close();
+        inner = existsSync(mine) ? tryWatch(mine) : null;
+      };
+      const armMid = () => {
+        mid?.close();
+        mid = existsSync(remotes)
+          ? tryWatch(remotes, (_event, filename) => {
+              if (!filename || filename === remote.out) armInner();
+              schedule();
+            })
+          : null;
+        armInner();
+      };
+      tryWatch(join(gitDir, "refs"), (_event, filename) => {
+        if (!filename || filename === "remotes") armMid();
+        schedule();
+      });
+      armMid();
+    })(),
+    "ref watcher setup",
+  );
 
   return () => {
+    stopped = true;
     for (const w of watchers) w.close();
     if (timer) clearTimeout(timer);
   };

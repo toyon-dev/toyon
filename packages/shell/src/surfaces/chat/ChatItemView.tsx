@@ -1,4 +1,4 @@
-import { LOGIN_STREAM, type PickMeta, type ToolImage } from "@toyon/shared";
+import { CHECK_TOOL, LOGIN_STREAM, type PickMeta, SHELL_TOOL, type ShipOp, type ToolImage } from "@toyon/shared";
 import { Fragment, memo, type ReactNode, useMemo, useRef, useState } from "react";
 import { copyText } from "../../state/actions/deps.ts";
 import { openFile, openFolder } from "../../state/actions/file.ts";
@@ -7,7 +7,7 @@ import { archiveWorktrees } from "../../state/actions/worktree.ts";
 import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
 import { openSource } from "../../state/openSource.ts";
 import { type ChatItem, worktreeById } from "../../state/store.ts";
-import { Button } from "../../ui/Button.tsx";
+import { Button, IconButton } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { Field } from "../../ui/Field.tsx";
 import { useLiveHtml, useOnChange, useReveal, useSecondsSince, useTail } from "../../ui/hooks.ts";
@@ -138,11 +138,28 @@ function paintBlocks(blocks: OutputBlock[], path: string) {
 
 /** the panel under a row: the agent's prose as prose, its fenced blocks as blocks, and a diff
  * coloured by line rather than printed as backticks. */
-function ToolOut({ blocks, path, worktreeId }: { blocks: PaintedBlock[]; path: string; worktreeId?: string | null }) {
+function ToolOut({
+  blocks,
+  path,
+  worktreeId,
+  tail,
+}: {
+  blocks: PaintedBlock[];
+  path: string;
+  worktreeId?: string | null;
+  /** the output of a process printing to the person (a `!` command, a landing's git step, the
+   * repo's check): capped at the log's body share and tailed inside, the way a thought is, so
+   * the command line above it and the composer under it stay on screen for the whole run. An
+   * agent's own call keeps its full height: its row opens only when read, and it was opened to
+   * be read whole. */
+  tail?: boolean;
+}) {
   const sock = useSock();
   const dispatch = useDispatch();
+  const body = useRef<HTMLDivElement>(null);
+  useTail(body);
   return (
-    <div className="tool-out">
+    <div className={cx("tool-out", tail && "tool-cap")} ref={body}>
       {blocks.map((b, i) =>
         b.diff ? (
           // biome-ignore lint/suspicious/noArrayIndexKey: blocks are positional and never reordered
@@ -234,10 +251,12 @@ const ToolPart = memo(function ToolPart({
   item,
   roots,
   worktreeId,
+  tail,
 }: {
   item: ToolItem;
   roots?: string[];
   worktreeId?: string | null;
+  tail?: boolean;
 }) {
   const blocks = useMemo(() => paintBlocks(toolBlocks(item, item.output ?? ""), callPath(item)), [item]);
   const command = toolLabel(item, roots).command;
@@ -246,7 +265,9 @@ const ToolPart = memo(function ToolPart({
   return (
     <div className="tool-part">
       {command && <pre className="tool-block cmd">{command}</pre>}
-      {blocks.length > 0 && <ToolOut blocks={blocks} path={openable(item, roots)} worktreeId={worktreeId} />}
+      {blocks.length > 0 && (
+        <ToolOut blocks={blocks} path={openable(item, roots)} worktreeId={worktreeId} tail={tail} />
+      )}
       {images.length > 0 && worktreeId && (
         <div className="tool-out">
           {images.map((img) => (
@@ -493,6 +514,14 @@ export const ThoughtRow = memo(function ThoughtRow({
  * whether a wait is long. */
 export const QUIET_AFTER = 6;
 
+/** the landing op a shell row's stop would end, as its label names it */
+const SHIP_THE: Record<ShipOp, string> = {
+  land: "the land",
+  commit: "the commit",
+  "sync-main": "the sync",
+  "pull-main": "the pull",
+};
+
 /** a call in the transcript, or a run of calls that did the same thing to the same file, or the
  * call that started a subagent with that subagent's rows folded under it */
 export const ToolRow = memo(
@@ -585,6 +614,11 @@ export const ToolRow = memo(
           : "";
     const store = useStoreInstance();
     const sock = useSock();
+    // A `!` command's stop sits on its own row, since it kills the command and not the agent,
+    // whose stop is the composer's corner. A landing's git steps run as the same rows, so the
+    // press then ends the landing, and the label says which it is.
+    const op = useStore((s) => (worktreeId ? s.shipping[worktreeId]?.op : undefined));
+    const stoppable = streaming && head.name === SHELL_TOOL ? worktreeId : null;
     return (
       <Fold
         className={cx(
@@ -622,6 +656,24 @@ export const ToolRow = memo(
             )}
             {age >= QUIET_AFTER && <span className="tool-age">{elapsed(age)}</span>}
             {count && <span className="tool-count">{count}</span>}
+            {stoppable && (
+              <IconButton
+                icon="stop"
+                tone="danger"
+                className="tool-stop"
+                label={
+                  op
+                    ? `Stop ${SHIP_THE[op]}: this step is killed, and what it printed so far stays`
+                    : "Kill the command; what it printed so far stays"
+                }
+                onClick={(e) => {
+                  // the press is the button's, not the summary's: a click on the line opens the row
+                  e.preventDefault();
+                  e.stopPropagation();
+                  sock?.send({ t: "exec-stop", worktreeId: stoppable });
+                }}
+              />
+            )}
           </>
         }
       >
@@ -637,7 +689,15 @@ export const ToolRow = memo(
         {net ? (
           <NetPart text={net} item={head} roots={roots} worktreeId={worktreeId} />
         ) : (
-          tools.map((t) => <ToolPart key={t.id} item={t} roots={roots} worktreeId={worktreeId} />)
+          tools.map((t) => (
+            <ToolPart
+              key={t.id}
+              item={t}
+              roots={roots}
+              worktreeId={worktreeId}
+              tail={head.name === SHELL_TOOL || head.name === CHECK_TOOL}
+            />
+          ))
         )}
       </Fold>
     );

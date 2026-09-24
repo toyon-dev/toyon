@@ -142,8 +142,6 @@ export function ChatLog({
       : -1;
   // the newest `!` command is the one whose output is open; each one closes the one before it
   const newestShell = entries.findLastIndex((e) => "tools" in e && e.tools[0]?.name === SHELL_TOOL);
-  // a `!` command still going: its row spins, and this is where the stop for it lives
-  const shellRunning = items.some((i) => i.kind === "tool" && i.name === SHELL_TOOL && !i.done);
   // How long the log has been silent, in whole seconds. Between two calls nothing is in flight and
   // no row is live, and that gap is most of a turn; a mark that moves would say "busy" the same way
   // whether the agent is thinking or wedged, and this is the one signal that changes with the
@@ -295,19 +293,6 @@ export function ChatLog({
               )}
             </div>
           )}
-        {/* a `!` command's stop stays by its row: it kills the command, not the agent, and the
-            composer's corner holds the agent's */}
-        {shellRunning && active && (
-          <div className="working-row">
-            running…
-            <IconButton
-              icon="stop"
-              tone="danger"
-              label="Kill the command; what it printed so far stays"
-              onClick={() => sock?.send({ t: "exec-stop", worktreeId: active.worktree.id })}
-            />
-          </div>
-        )}
         {/* only an agent that cannot take a message mid-turn leaves one waiting here. The rest go
             into the turn as they are sent, and read as an ordinary message in the place they landed. */}
         {id &&

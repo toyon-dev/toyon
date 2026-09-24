@@ -570,9 +570,11 @@ export function Composer({
   // and the verdict would only say them again: the word alone says ready. Under a line with no
   // word (a check running or failed, a PR merged or closed): the recap's sentence when one has
   // been written, else the message the work would land with, the next most useful thing to read.
+  // Not while the land is out: "Ready" under "land: committing" is a verdict on a press already
+  // taken, and the line above says where it stands now.
   const restated = !!landing && !landing.subject && !said && !landing.why && !landing.stale;
   const subline =
-    text !== "" || ghost || !active
+    text !== "" || ghost || !active || landingNow
       ? null
       : verb
         ? (verb.word === "land" || verb.word === "update" || verb.word === "check") && landing && !restated

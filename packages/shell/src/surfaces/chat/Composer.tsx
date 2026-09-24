@@ -28,7 +28,7 @@ import { canCarry, composerBoxOf, type Draft, trunkOf } from "../../state/store.
 import { Button, IconButton } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { TextArea } from "../../ui/Field.tsx";
-import { useHeld, useOnChange } from "../../ui/hooks.ts";
+import { STEP_HOLD_MS, useHeld, useOnChange } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { InlinePicker } from "../../ui/InlinePicker.tsx";
 import { useListNav } from "../../ui/listNav.ts";
@@ -75,9 +75,6 @@ const NO_CHOICES: ModelChoice[] = [];
 /** one empty list for a worktree not yet listed, so the folder memo holds until the files arrive */
 const NO_PATHS: string[] = [];
 
-/** how long a landing step runs before the shining line names it: a git call that is over inside
- * this is not a wait, and a name for it would be gone before it was read */
-const STEP_HOLD_MS = 1_500;
 /** the keys that move the caret along the text: pressing one in a recalled message is starting to edit it */
 const CARET_KEYS = new Set(["ArrowLeft", "ArrowRight", "Home", "End", "PageUp", "PageDown"]);
 

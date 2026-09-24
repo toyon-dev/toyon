@@ -119,6 +119,11 @@ export function useHeld<T>(value: T | undefined, ms: number): T | undefined {
   return held;
 }
 
+/** how long a landing step runs before a shining line names it: a git call that is over inside
+ * this is not a wait, and a name for it would be gone before it was read. One number for the
+ * composer's line and the commit box's, so the two say the same step at the same moment. */
+export const STEP_HOLD_MS = 1_500;
+
 /** Whole seconds since `since` (a Date.now() stamp), ticking once a second while there is one; 0
  * while there is none. The stamp is the caller's and not this hook's, and it belongs in the store
  * against the thing it measures: a count that started when the component first saw it would start

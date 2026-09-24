@@ -5,7 +5,7 @@ import { shipOp } from "../../state/actions/worktree.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { Button } from "../../ui/Button.tsx";
 import { TextArea } from "../../ui/Field.tsx";
-import { useOnChange } from "../../ui/hooks.ts";
+import { STEP_HOLD_MS, useHeld, useOnChange } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { useContextMenu } from "../../ui/menu.ts";
 import { tip } from "../../ui/Tooltip.tsx";
@@ -39,11 +39,14 @@ export function CommitBox({
   const cm = useContextMenu("changes");
   const owned = isOwned(active) ? active.worktree : null;
   const id = active.id;
-  // the op out for this worktree, if any: its button shows busy and the others wait, since the
-  // daemon runs them one at a time under the repo lock anyway
+  // the op out for this worktree, if any: the word pressed stands as prose while it runs and the
+  // other buttons wait, since the daemon runs them one at a time under the repo lock anyway
   const op = useStore((s) => s.shipping[id]?.op);
-  // what that op is doing now, read beside the branch while its button spins
+  // what that op is doing now, named after the word only once it has proved slow: a land on a
+  // small repo is a few git calls in well under a second, and naming each as it starts flashes
+  // three words through the line before one can be read
   const step = useStore((s) => s.shipping[id]?.step);
+  const heldStep = useHeld(step, STEP_HOLD_MS);
   const [msg, setMsg] = useState("");
   useOnChange([id], () => setMsg(""));
   const box = useRef<HTMLTextAreaElement>(null);
@@ -94,6 +97,30 @@ export function CommitBox({
   const landTip = describeLand(landPolicy(repo?.config ?? {}), repo?.defaultBranch);
   const base = repo?.defaultBranch ?? "main";
   const behindLine = canSync(active) ? behindNote(base, behind) : null;
+  const canMerge = prOpen && !prMissing && prCanMerge(pr);
+  // the word a land runs under here: the one the row offered, since what the row can do does not
+  // change while the op runs. Pull is the composer's word for the same op on a merged PR.
+  const landWord = canLand
+    ? "land"
+    : canUpdate
+      ? "update"
+      : canMerge
+        ? "merge"
+        : pr?.state === "merged"
+          ? "pull"
+          : "land";
+  // the op's line, standing where its button was: the word lit is the press taken, and the step
+  // follows it once held, the way the composer's line reads. A commit's step is its own word's,
+  // so there the step stands alone. Prose and not a busy button: the band already says busy, and
+  // a spinner beside a shining word was two marks for one wait.
+  const running =
+    op === "commit"
+      ? (heldStep ?? "commit")
+      : op === "land"
+        ? heldStep
+          ? `${landWord}: ${heldStep}`
+          : landWord
+        : null;
 
   return (
     <div className="composer commit-box">
@@ -134,46 +161,49 @@ export function CommitBox({
               <Icon name="check" className="icon-inline" /> landed
             </span>
           )}
-          {/* the step shines the way a running call's hint does; the word is the wait, so no dots */}
-          {step && <span className="live-text">{step}</span>}
         </span>
         <span className="commit-acts">
-          {owned && dirty && (
-            <Button
-              busy={op === "commit"}
-              disabled={(!typed && !suggested) || !!op}
-              onClick={commit}
-              {...tip(suggested && !typed ? "Commit with the suggested message" : "git add -A && git commit", "⌘⏎")}
-            >
-              commit
-            </Button>
-          )}
-          {owned && canLand && (
-            <Button tone="primary" busy={op === "land"} disabled={!!op} data-tip={landTip} onClick={land}>
-              land
-            </Button>
-          )}
-          {canUpdate && pr && (
-            <Button
-              tone="primary"
-              busy={op === "land"}
-              disabled={!!op}
-              data-tip={`Commit, take ${base} in and push the branch; PR #${pr.number} takes the new commits`}
-              onClick={land}
-            >
-              update
-            </Button>
-          )}
-          {prOpen && !prMissing && prCanMerge(pr) && (
-            <Button
-              tone="primary"
-              busy={op === "land"}
-              disabled={!!op}
-              data-tip="Merge the PR now, by the method the repo allows"
-              onClick={land}
-            >
-              merge
-            </Button>
+          {running ? (
+            // one span of plain text, no dots: the band is a gradient clipped to the element's own
+            // text, and a button inside it paints as a box of its own
+            <span className="live-text">{running}</span>
+          ) : (
+            <>
+              {owned && dirty && (
+                <Button
+                  disabled={(!typed && !suggested) || !!op}
+                  onClick={commit}
+                  {...tip(suggested && !typed ? "Commit with the suggested message" : "git add -A && git commit", "⌘⏎")}
+                >
+                  commit
+                </Button>
+              )}
+              {owned && canLand && (
+                <Button tone="primary" disabled={!!op} data-tip={landTip} onClick={land}>
+                  land
+                </Button>
+              )}
+              {canUpdate && pr && (
+                <Button
+                  tone="primary"
+                  disabled={!!op}
+                  data-tip={`Commit, take ${base} in and push the branch; PR #${pr.number} takes the new commits`}
+                  onClick={land}
+                >
+                  update
+                </Button>
+              )}
+              {canMerge && (
+                <Button
+                  tone="primary"
+                  disabled={!!op}
+                  data-tip="Merge the PR now, by the method the repo allows"
+                  onClick={land}
+                >
+                  merge
+                </Button>
+              )}
+            </>
           )}
           {pr && (
             <Button
@@ -196,15 +226,18 @@ export function CommitBox({
         <div className="composer-notes">
           <div className="hint composer-note">
             <span>{behindLine}</span>
-            <Button
-              variant="outline"
-              busy={op === "sync-main"}
-              disabled={!!op || dirty}
-              data-tip={dirty ? "commit or discard the changes here first" : `Merge ${base} into this worktree`}
-              onClick={() => shipOp(sock, dispatch, { t: "sync-main", worktreeId: id })}
-            >
-              sync
-            </Button>
+            {op === "sync-main" ? (
+              <span className="live-text">{heldStep ? `sync: ${heldStep}` : "sync"}</span>
+            ) : (
+              <Button
+                variant="outline"
+                disabled={!!op || dirty}
+                data-tip={dirty ? "commit or discard the changes here first" : `Merge ${base} into this worktree`}
+                onClick={() => shipOp(sock, dispatch, { t: "sync-main", worktreeId: id })}
+              >
+                sync
+              </Button>
+            )}
           </div>
         </div>
       )}

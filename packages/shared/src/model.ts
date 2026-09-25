@@ -199,6 +199,9 @@ export interface LandMark {
   base: string;
   tip: string;
   at: number;
+  /** the pull request this landing was: what says a merged PR has been taken, whatever the tree
+   * looks like since */
+  pr?: number;
 }
 
 export interface WorktreeInfo {

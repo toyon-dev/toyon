@@ -3,7 +3,7 @@
 // landing on the PR route, wherever it was merged from: the row is marked landed and main here
 // follows origin as far as it can, the same ending as the local routes.
 
-import type { PrState } from "@toyon/shared";
+import { type PrState, prTaken } from "@toyon/shared";
 import type { Hub } from "../core/hub.ts";
 import { fireAndForget, log } from "../core/log.ts";
 import type { StateStore } from "../core/state.ts";
@@ -49,7 +49,7 @@ export class PrService {
       if (wt.pr.state === "open") fireAndForget(wt.id, this.refresh(wt.id), "pr refresh");
       // merged while an op was out on the row, so its landing was left to that press: taken now,
       // with nothing to ask GitHub
-      else if (wt.pr.state === "merged" && !wt.landed) {
+      else if (wt.pr.state === "merged" && !prTaken(wt)) {
         fireAndForget(wt.id, this.d.worktrees.prMerged(wt.id), "pr landing");
       }
     }
@@ -69,7 +69,7 @@ export class PrService {
       const now = this.d.state.worktree(worktreeId);
       if (!fresh || !now || now.pr?.number !== pr.number) return fresh;
       this.d.worktrees.setPr(worktreeId, fresh);
-      if (fresh.state === "merged" && !now.landed) {
+      if (fresh.state === "merged" && !prTaken(now)) {
         const r = await this.d.worktrees.prMerged(worktreeId);
         if (!r.ok) log.info(worktreeId, `PR #${pr.number} merged; main here did not follow: ${r.message}`);
       }

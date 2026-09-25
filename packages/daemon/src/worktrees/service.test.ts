@@ -1255,7 +1255,7 @@ describe("landing", () => {
   /** how many parents main's tip has: two for a merge commit, one otherwise */
   const parents = async () => (await git(w.repo, "log", "-1", "--format=%P")).out.split(" ").filter(Boolean).length;
 
-  test("a committed branch lands under a merge commit, marks landed, and restarts from main", async () => {
+  test("a committed branch lands under a merge commit, marks landed, and restarts from main; an edit unmarks it until discarded", async () => {
     const repoId = await registered();
     const wt = await w.worktrees.create(repoId, "feature");
     writeFileSync(join(wt.path, "feature.txt"), "x\n");
@@ -1269,10 +1269,19 @@ describe("landing", () => {
     expect(w.state.worktree(wt.id)?.landed).toBe(true);
     // the branch now equals main: nothing ahead, nothing behind, a clean base for what comes next
     expect((await git(wt.path, "rev-parse", "HEAD")).out).toBe((await git(w.repo, "rev-parse", "main")).out);
-    // new work clears the badge through gitStatus
+    // an edit clears the mark through gitStatus, and discarding it brings the mark back: the
+    // base has the work either way, and only what is here says whether there is more
     writeFileSync(join(wt.path, "more.txt"), "y\n");
     await w.worktrees.gitStatus(wt.id);
-    expect(w.state.worktree(wt.id)?.landed).toBe(false);
+    expect(w.state.worktree(wt.id)?.landed).toBeUndefined();
+    rmSync(join(wt.path, "more.txt"));
+    await w.worktrees.gitStatus(wt.id);
+    expect(w.state.worktree(wt.id)?.landed).toBe(true);
+    // a commit past the landing is new work, and the mark is gone for good
+    writeFileSync(join(wt.path, "more.txt"), "y\n");
+    expect((await w.worktrees.commit(wt.id, "more")).ok).toBe(true);
+    await w.worktrees.gitStatus(wt.id);
+    expect(w.state.worktree(wt.id)?.landed).toBeUndefined();
   });
 
   test("a commit by hand keeps the verdict on the tree it saw, without the message that is in git now", async () => {
@@ -1356,7 +1365,7 @@ describe("landing", () => {
     writeFileSync(join(wt.path, "more.txt"), "y\n");
     expect((await w.worktrees.commit(wt.id, "more")).ok).toBe(true);
     await w.worktrees.gitStatus(wt.id);
-    expect(row.landed).toBe(false);
+    expect(row.landed).toBeUndefined();
     const second = (await git(wt.path, "rev-parse", "HEAD")).out;
     expect((await git(w.repo, "merge", "--no-ff", "-m", "land more", wt.branch)).ok).toBe(true);
     await w.worktrees.gitStatus(wt.id);
@@ -1638,7 +1647,7 @@ describe("landing", () => {
     expect(r.ok).toBe(true);
     expect(r.message).toMatch(/^PR #7 merged; main here was left where it is: .*uncommitted changes/);
     expect(w.state.worktree(wt.id)).toMatchObject({ landed: true, pr: { number: 7, state: "merged" } });
-    expect(w.state.worktree(wt.id)?.lands).toEqual([{ base: before, tip, at: expect.any(Number) }]);
+    expect(w.state.worktree(wt.id)?.lands).toEqual([{ base: before, tip, at: expect.any(Number), pr: 7 }]);
     expect((await git(w.repo, "rev-parse", "main")).out).toBe(before);
     // the base is origin's main, which the PR landed on: the branch restarts from there, and
     // main here standing still hides none of it from the row
@@ -1657,6 +1666,86 @@ describe("landing", () => {
     expect((await w.worktrees.pull(main.id)).ok).toBe(true);
     expect((await git(w.repo, "rev-parse", "main")).out).toBe((await git(origin, "rev-parse", "main")).out);
     expect(w.state.worktree(wt.id)?.landed).toBe(true);
+  });
+
+  test("an adopted branch squashed on GitHub stays landed, PR and all, until a new commit", async () => {
+    const repoId = await registered();
+    const { origin, other } = await withOrigin(repoId);
+    sh(w.repo, "git", "branch", "theirs");
+    const wt = await w.worktrees.openRef(repoId, "branch", "theirs");
+    writeFileSync(join(wt.path, "feature.txt"), "x\n");
+    sh(wt.path, "git", "add", "-A");
+    sh(wt.path, "git", "commit", "-q", "-m", "add feature");
+    sh(wt.path, "git", "push", "-q", "-u", "origin", "theirs");
+    const tip = (await git(wt.path, "rev-parse", "HEAD")).out;
+    w.worktrees.setPr(wt.id, { number: 7, url: "https://x/pull/7", state: "open", at: 1 });
+    squashedOnOrigin(other, origin, "theirs");
+    w.worktrees.setPr(wt.id, { number: 7, url: "https://x/pull/7", state: "merged", at: 2 });
+    expect((await w.worktrees.prMerged(wt.id)).ok).toBe(true);
+    // the branch keeps its own commit, so it reads as ahead of origin's main for good; the
+    // landed tip is what says the work is there
+    expect((await git(wt.path, "rev-parse", "HEAD")).out).toBe(tip);
+    expect(w.state.worktree(wt.id)?.lands).toMatchObject([{ tip, pr: 7 }]);
+    expect(await w.worktrees.gitStatus(wt.id)).toMatchObject({ ahead: 1, behind: 1 });
+    expect(w.state.worktree(wt.id)).toMatchObject({ landed: true, pr: { number: 7, state: "merged" } });
+    // a second poll records nothing more
+    expect((await w.worktrees.prMerged(wt.id)).ok).toBe(true);
+    expect(w.state.worktree(wt.id)?.lands).toHaveLength(1);
+    // new work past the landing: not landed, and the PR is history
+    writeFileSync(join(wt.path, "more.txt"), "y\n");
+    sh(wt.path, "git", "add", "-A");
+    sh(wt.path, "git", "commit", "-q", "-m", "more");
+    await w.worktrees.gitStatus(wt.id);
+    expect(w.state.worktree(wt.id)?.landed).toBeUndefined();
+    expect(w.state.worktree(wt.id)?.pr).toBeUndefined();
+  });
+
+  test("a merged PR whose commits the base already has still records the landing", async () => {
+    const repoId = await registered();
+    const { origin, other } = await withOrigin(repoId);
+    const wt = await w.worktrees.create(repoId, "feature");
+    writeFileSync(join(wt.path, "feature.txt"), "x\n");
+    sh(wt.path, "git", "add", "-A");
+    sh(wt.path, "git", "commit", "-q", "-m", "add feature");
+    sh(wt.path, "git", "push", "-q", "-u", "origin", wt.branch);
+    const tip = (await git(wt.path, "rev-parse", "HEAD")).out;
+    const before = (await git(origin, "rev-parse", "main")).out;
+    w.worktrees.setPr(wt.id, { number: 7, url: "https://x/pull/7", state: "open", at: 1 });
+    // GitHub takes the branch as it is (a rebase merge with nothing to rebase), and the trunk's
+    // own fetch sees origin's main move before the poll hears of the merge
+    sh(other, "git", "fetch", "-q", "origin", wt.branch);
+    sh(other, "git", "merge", "-q", "--ff-only", "FETCH_HEAD");
+    sh(other, "git", "push", "-q", "origin", "main");
+    sh(w.repo, "git", "fetch", "-q");
+    w.worktrees.setPr(wt.id, { number: 7, url: "https://x/pull/7", state: "merged", at: 2 });
+    expect((await w.worktrees.prMerged(wt.id)).ok).toBe(true);
+    expect(w.state.worktree(wt.id)?.lands).toEqual([{ base: before, tip, at: expect.any(Number), pr: 7 }]);
+    expect(w.state.worktree(wt.id)).toMatchObject({ landed: true });
+  });
+
+  test("a merged PR lands a worktree with uncommitted edits without losing them", async () => {
+    const repoId = await registered();
+    const { origin, other } = await withOrigin(repoId);
+    const wt = await w.worktrees.create(repoId, "feature");
+    writeFileSync(join(wt.path, "feature.txt"), "x\n");
+    sh(wt.path, "git", "add", "-A");
+    sh(wt.path, "git", "commit", "-q", "-m", "add feature");
+    sh(wt.path, "git", "push", "-q", "-u", "origin", wt.branch);
+    w.worktrees.setPr(wt.id, { number: 7, url: "https://x/pull/7", state: "open", at: 1 });
+    squashedOnOrigin(other, origin, wt.branch);
+    // mid-edit when GitHub's answer comes
+    writeFileSync(join(wt.path, "README.md"), "half a thought\n");
+    w.worktrees.setPr(wt.id, { number: 7, url: "https://x/pull/7", state: "merged", at: 2 });
+    expect((await w.worktrees.prMerged(wt.id)).ok).toBe(true);
+    // the branch restarted from origin's main with the edit still in the tree, and the row
+    // waits on the edit before it reads as landed
+    expect((await git(wt.path, "rev-parse", "HEAD")).out).toBe((await git(origin, "rev-parse", "main")).out);
+    expect(readFileSync(join(wt.path, "README.md"), "utf8")).toBe("half a thought\n");
+    expect(w.state.worktree(wt.id)?.lands).toHaveLength(1);
+    expect(w.state.worktree(wt.id)?.landed).toBeUndefined();
+    sh(wt.path, "git", "checkout", "-q", "--", "README.md");
+    await w.worktrees.gitStatus(wt.id);
+    expect(w.state.worktree(wt.id)).toMatchObject({ landed: true, pr: { number: 7, state: "merged" } });
   });
 
   test("with a PR open, land pushes the work the PR is missing rather than merging under it", async () => {

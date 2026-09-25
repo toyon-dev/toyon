@@ -280,7 +280,9 @@ export function Composer({
   // closing the worktree; the conversation stays until then, so a follow-up is a message like any
   // other), then a PR standing between the work and main, then a verdict on work to land
   const atRest = !drafting && !greenfield && blank && !midTurn && !!active;
-  const hasLanded = !!active?.worktree.landed && dirty === 0 && (git?.ahead ?? 0) === 0;
+  // the daemon's rule decides landed; the live status only withholds it while an edit is in
+  // the box's own frame ahead of the daemon's next read
+  const hasLanded = !!active?.worktree.landed && dirty === 0;
   const landed = atRest && hasLanded;
   const pr = atRest && !landed ? active.worktree.pr : undefined;
   // work since the PR opened, uncommitted or committed here only: what the PR is missing, and

@@ -2,7 +2,7 @@
 // commits arrive). Both live under `land` in the repo's settings, since a team picks one route and
 // never alternates; the defaults live here so the daemon and the setup pane never restate them.
 
-import type { RepoInfo, ShipOp, ToyonConfig } from "./model.ts";
+import type { RepoInfo, ShipOp, ToyonConfig, WorktreeInfo } from "./model.ts";
 
 /** where a landed worktree's work ends up */
 export type LandRoute = "merge" | "push" | "pr";
@@ -68,6 +68,39 @@ export function baseOf(repo: Pick<RepoInfo, "defaultBranch" | "base">): string {
 /** the base is origin's copy of main, as of the last fetch, rather than the checkout here */
 export function baseIsRemote(repo: Pick<RepoInfo, "defaultBranch" | "base">): boolean {
   return repo.base !== undefined && repo.base !== repo.defaultBranch;
+}
+
+/** what a row's git says, for the landed rule: whether the tree is clean, where HEAD is, and how
+ * many commits it holds that the base lacks */
+export interface LandedFacts {
+  clean: boolean;
+  head: string;
+  ahead: number;
+}
+
+type Landed = Pick<WorktreeInfo, "lands" | "pr">;
+
+/** A row is landed when the base has its work: a recorded landing, a clean tree, and nothing
+ * since that landing's tip. HEAD is the tip itself (an adopted branch after a squash on GitHub
+ * keeps its commits and reads as ahead for good) or sits on the base (a branch toyon owns,
+ * restarted from it). One rule for every path that lands, and never inferred from an ahead
+ * count alone. */
+export function landedNow(wt: Landed, f: LandedFacts): boolean {
+  const last = wt.lands?.at(-1);
+  return !!last && f.clean && (f.head === last.tip || f.ahead === 0);
+}
+
+/** the row went on past its last landing: commits over the tip that the base lacks, which is
+ * new work rather than the landed work still sitting there */
+export function movedPastLand(wt: Landed, f: LandedFacts): boolean {
+  const last = wt.lands?.at(-1);
+  return !!last && f.head !== last.tip && f.ahead > 0;
+}
+
+/** the PR the row carries has been landed: a recorded landing names it. What a merged PR is
+ * gated on, so a tree dirtied after the merge never lands it twice. */
+export function prTaken(wt: Landed): boolean {
+  return !!wt.pr && (wt.lands ?? []).some((l) => l.pr === wt.pr?.number);
 }
 
 /** a landing op as a sentence names it: "a land is already running here" */

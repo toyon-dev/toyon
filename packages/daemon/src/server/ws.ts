@@ -21,6 +21,7 @@ import { UserError } from "../core/errors.ts";
 import { fireAndForget, log } from "../core/log.ts";
 import { lag, type SocketStats } from "../core/metrics.ts";
 import { PairCodes } from "../core/pair.ts";
+import type { OpenedFile } from "../files/open.ts";
 import { setWaitingColors } from "../runtime/proxy.ts";
 import { dispatch, type Services } from "./handlers.ts";
 import { createFetch, type WsData } from "./http.ts";
@@ -49,6 +50,12 @@ export interface ServerOpts {
    * and the branded listener binds only where it allows */
   managed: ManagedResolved;
 }
+
+/** the frame a shell shows an outside open as */
+const openedFrame = (o: OpenedFile): ServerMsg =>
+  o.kind === "file"
+    ? { t: "open-path", worktreeId: o.worktreeId, path: o.path }
+    : { t: "open-loose", id: o.id, name: o.name, text: o.text, tooLarge: o.tooLarge, version: o.version };
 
 export function startServer(opts: ServerOpts): { server: Server<WsData>; branded: boolean; stop: () => void } {
   const { services: s, token, version } = opts;
@@ -211,6 +218,13 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
   // a save or a discard in one tab: the writer's changes list and every other tab's follow from the
   // same push, and an editor open on the file re-reads it from there
   s.hub.on("filesChanged", refreshGitStatus);
+  // a file opened from outside: every shell up now is told, and the open is done with; with none
+  // up it waits for the next socket (below), since the launcher opens the window after the file
+  s.hub.on("opened", (o) => {
+    if (sockets.size === 0) return;
+    broadcast(openedFrame(o));
+    s.opens.delivered();
+  });
   // A shell in toyon's terminal writes files and commits with nothing else noticing, so once its
   // output has gone quiet the worktree is recounted: the rail's badges and, when it is open, its
   // changes list. Quiet rather than per chunk, since a build prints thousands of them.
@@ -352,6 +366,7 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
       managed: { source: opts.managed.source, hash: opts.managed.hash },
       preview: (id) => s.runtime.get(id)?.proxy?.handler ?? null,
       bootstrap: helloFrame,
+      open: (path) => s.opens.open(path),
       restart: (now) => s.restarter.request({ now }),
       restartWait: () => ({ waiting: s.restarter.waitingOn(), asking: s.restarter.asking() }),
       pair: new PairCodes(),
@@ -378,6 +393,9 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
         }
         sockets.add(ws);
         send(ws, await helloFrame());
+        // what was opened from outside while no shell was up: the Dock icon's file, arriving
+        // before the window it also opened
+        for (const o of s.opens.takePending()) send(ws, openedFrame(o));
       },
       close(ws: ServerWebSocket<WsData>) {
         if (ws.data.preview) ws.data.preview.handler.close(ws.data.preview.data);

@@ -41,6 +41,7 @@ import { loadOrCreateToken, StateStore } from "./core/state.ts";
 import { DesignService } from "./design/service.ts";
 import { DraftStore } from "./drafts/store.ts";
 import { ExecService } from "./exec/service.ts";
+import { OpenService } from "./files/open.ts";
 import { FileService } from "./files/service.ts";
 import { viewPr } from "./git/gh.ts";
 import { AfterLand } from "./repos/afterLand.ts";
@@ -216,6 +217,14 @@ await self.start();
 // the policy comes after; a land cannot arrive before boot, so the closure never runs early
 const afterLand = new AfterLand({ state, hub, self, settled: () => idle.settled() });
 const repos = new RepoRegistry({ state, hub, runtime, worktrees, afterLand, self, drafts });
+// the door for a path from outside the shell; a grant never names anything under the daemon's home
+const opens = new OpenService({
+  state,
+  hub,
+  register: (path) => repos.register(path),
+  found: () => worktrees.discovered(),
+  refused: [paths.home],
+});
 // which worktrees run: the ones being looked at, plus what a turn or a command holds; the rest
 // sleep on the clock, or sooner when the OS says memory is short
 const idle = new IdlePolicy({
@@ -285,6 +294,7 @@ const { branded, stop: stopServer } = startServer({
     worktrees,
     turns,
     files,
+    opens,
     design,
     routes,
     runtime,

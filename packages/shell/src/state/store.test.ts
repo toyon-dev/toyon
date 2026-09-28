@@ -1510,6 +1510,9 @@ describe("the editor's open file", () => {
     // a handle writes; more than the pane shows opens empty and locked whatever came with it
     const handle = { kind: "file" } as unknown as FileSystemFileHandle;
     expect(run([hello(wt("a")), loose({ source: { kind: "handle", handle } })]).editor?.disk?.writable).toBe(true);
+    // the daemon's grant writes too
+    const granted = run([hello(wt("a")), loose({ source: { kind: "grant", id: "g1", version: "v1" } })]);
+    expect(granted.editor?.disk?.writable).toBe(true);
     const big = run([hello(wt("a")), loose({ text: "", tooLarge: true, source: { kind: "handle", handle } })]);
     expect(big.editor?.disk).toMatchObject({ writable: false, tooLarge: true });
     // a save the browser refused locks the text, since no fresh read will come to unlock it

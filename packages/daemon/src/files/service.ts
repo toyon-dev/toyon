@@ -96,6 +96,24 @@ function sides(before: string, after: string) {
   return { before, after, binary: false, tooLarge: false };
 }
 
+/** Save `content` over `target`, an absolute path the caller has bounded, only if the file is
+ * still `base` (null: no file). Whoever wrote since gets `changed` back instead of their edit
+ * overwritten. */
+export function writeOver(target: string, content: string, base: string | null): Promise<FileWrite> {
+  return withLock(fileLockKey(target), async () => {
+    const current = await readBytes(target);
+    if (current && decodeText(current) === null) throw new UserError("not saved: the file is not text");
+    const next = encodeText(content, current !== null && hasBom(current));
+    const version = versionOf(next);
+    const now = current && versionOf(current);
+    // a write that already landed, sent again after its answer was lost to a reconnect
+    if (now === version) return { ok: true, version };
+    if (now !== base) return { ok: false, reason: "changed", version: now };
+    await Bun.write(target, next);
+    return { ok: true, version };
+  });
+}
+
 /** a file as git kept it, for a worktree whose directory is gone: never on disk, never written */
 export function keptRead(before: string, after: string): FileRead {
   return { ...sides(before, after), version: null, writable: false };
@@ -182,19 +200,7 @@ export class FileService {
    * another tab that wrote since gets `changed` back instead of its edit overwritten. */
   async write(worktreeId: string, path: string, content: string, base: string | null): Promise<FileWrite> {
     const wt = this.requireOwned(worktreeId);
-    const target = resolveInside(wt.path, path);
-    return withLock(fileLockKey(target), async () => {
-      const current = await readBytes(target);
-      if (current && decodeText(current) === null) throw new UserError("not saved: the file is not text");
-      const next = encodeText(content, current !== null && hasBom(current));
-      const version = versionOf(next);
-      const now = current && versionOf(current);
-      // a write that already landed, sent again after its answer was lost to a reconnect
-      if (now === version) return { ok: true, version };
-      if (now !== base) return { ok: false, reason: "changed", version: now };
-      await Bun.write(target, next);
-      return { ok: true, version };
-    });
+    return writeOver(resolveInside(wt.path, path), content, base);
   }
 
   /** drop uncommitted changes to one file: back to HEAD, or deleted if untracked */

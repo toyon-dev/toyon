@@ -487,8 +487,13 @@ export interface OpenFile {
 export type FileRef = Pick<OpenFile, "worktreeId" | "path" | "ref">;
 
 /** Where a loose file's save goes. A handle is what a drop carries in Chromium: the browser writes
- * the file where it lives, after its one permission prompt. Bytes alone are read-only. */
-export type LooseSource = { kind: "handle"; handle: FileSystemFileHandle } | { kind: "bytes" };
+ * the file where it lives, after its one permission prompt. A grant is the daemon's, for a file
+ * opened from the Dock or the terminal: the save goes over the wire, over the `version` last
+ * seen. Bytes alone are read-only. */
+export type LooseSource =
+  | { kind: "handle"; handle: FileSystemFileHandle }
+  | { kind: "grant"; id: string; version: string | null }
+  | { kind: "bytes" };
 
 /** what a caller opens from outside every worktree: a dropped file, by name, with its text read */
 export interface OpenLoose {
@@ -1142,9 +1147,12 @@ export const isSubPicker = (o: Overlay) =>
   o.kind === "agent-page" ||
   o.kind === "choose-folder";
 
-/** what reaches the reducer: terminal frames are routed to the pane, and file answers to fileSync,
- * before dispatch (main.tsx) */
-export type StoreServerMsg = Exclude<ServerMsg, TermServerMsg | FileServerMsg>;
+/** what reaches the reducer: terminal frames are routed to the pane, file answers to fileSync, and
+ * a file opened from outside the shell to its opener, before dispatch (main.tsx) */
+export type StoreServerMsg = Exclude<
+  ServerMsg,
+  TermServerMsg | FileServerMsg | { t: "open-path" | "open-loose" | "loose-written" }
+>;
 
 export type Action =
   | { a: "server"; msg: StoreServerMsg }
@@ -1560,7 +1568,7 @@ function reduce(s: State, action: Action): State {
         before: v.text,
         after: v.text,
         version: null,
-        writable: v.source.kind === "handle" && !v.tooLarge,
+        writable: v.source.kind !== "bytes" && !v.tooLarge,
         binary: false,
         tooLarge: v.tooLarge,
       };

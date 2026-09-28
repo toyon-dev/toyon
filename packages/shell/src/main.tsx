@@ -9,6 +9,8 @@ import { settleCreate } from "./state/actions/file.ts";
 import { createStore, StoreProvider } from "./state/context.tsx";
 import { FileSync } from "./state/fileSync.ts";
 import { migrateStorage, STORAGE } from "./state/keys.ts";
+import { settleLoose } from "./state/looseSync.ts";
+import { isOpenedMsg, openFromOutside } from "./state/openOutside.ts";
 import { initialState, isLayout, type Layout } from "./state/store.ts";
 import { ErrorBoundary, markStaleBuild } from "./ui/ErrorBoundary.tsx";
 import "./styles/tokens.css";
@@ -216,6 +218,15 @@ const sock = new DaemonSocket(
       // a write that made a new file from the files tab is answered to the create that sent it
       if (msg.t === "file-written" && settleCreate(msg)) return;
       files.receive(msg);
+      return;
+    }
+    // a granted file's save is answered to the loose sync that sent it
+    if (msg.t === "loose-written") {
+      settleLoose(msg);
+      return;
+    }
+    if (isOpenedMsg(msg)) {
+      openFromOutside(store, sock, msg);
       return;
     }
     store.dispatch({ a: "server", msg });

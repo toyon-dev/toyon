@@ -6,7 +6,7 @@ import { fileItems, viewsOf } from "../../state/actions/file.ts";
 import { addToChat } from "../../state/attach.ts";
 import { useDispatch, useFileSync, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
 import type { FileSync } from "../../state/fileSync.ts";
-import { looseSync, NO_SYNC } from "../../state/looseSync.ts";
+import { browserEnv, looseSync, NO_SYNC } from "../../state/looseSync.ts";
 import { useTheme } from "../../state/selectors.ts";
 import {
   archivedPageOf,
@@ -99,11 +99,14 @@ export function EditorPane({
   const sync = useMemo(
     () =>
       loose
-        ? looseSync(loose.source, path, (message) =>
-            dispatch({ a: "editor-refused", file: { worktreeId, path }, message }),
+        ? looseSync(
+            loose.source,
+            path,
+            (message) => dispatch({ a: "editor-refused", file: { worktreeId, path }, message }),
+            browserEnv(sock ? (m) => sock.send(m) : null),
           )
         : (files?.bind({ worktreeId, path, ...(ref ? { ref } : {}) }) ?? NO_SYNC),
-    [files, worktreeId, path, ref, loose, dispatch],
+    [files, worktreeId, path, ref, loose, dispatch, sock],
   );
   const cached = useStore((s) => localOf(s, worktreeId).changedRanges[path]);
   // warm the line-offset/ranges cache so line-hover highlights align; a git-status wipes the

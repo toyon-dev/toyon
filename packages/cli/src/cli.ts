@@ -3,7 +3,7 @@
 // (stop, doctor, logs, version) are the operator surface a stranger needs to make it go away
 // again. Runs under bun from the source tree; the npm shim replaces this shebang.
 
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { newer } from "@toyon/shared";
 import pkg from "../package.json" with { type: "json" };
@@ -69,7 +69,22 @@ async function open(cmd: Extract<Command, { kind: "open" }>): Promise<number> {
     return 1;
   }
 
-  if (register) {
+  // a file is opened in the shell: in its worktree when it sits in one, on its own otherwise. The
+  // daemon holds it for the window this goes on to open.
+  const file = explicit && existsSync(target) && statSync(target).isFile();
+  if (file) {
+    const res = await fetch(`${base}/open`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: JSON.stringify({ path: target }),
+    });
+    if (!res.ok) {
+      console.error(`could not open ${target}: ${await res.text()}`);
+      return 1;
+    }
+    const opened = (await res.json()) as { kind: string };
+    console.log(opened.kind === "file" ? `toyon: opening ${target} in its project` : `toyon: opening ${target}`);
+  } else if (register) {
     const res = await fetch(`${base}/register`, {
       method: "POST",
       headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },

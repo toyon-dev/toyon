@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { looseSync, NO_SYNC, type WritableHandle } from "./looseSync.ts";
+import type { ClientMsg } from "@toyon/shared";
+import { looseSync, NO_SYNC, settleLoose, type WritableHandle } from "./looseSync.ts";
 
 function fakeTimers() {
   let id = 0;
@@ -80,16 +81,18 @@ function harness(answer: PermissionState = "granted") {
     { kind: "handle", handle: handle as unknown as WritableHandle },
     "notes.md",
     (why) => refused.push(why),
-    { timers, win: null },
+    { timers, win: null, send: null },
   );
   const b = buffer("a");
   sync.attach(b);
   return { handle, timers, refused, sync, b };
 }
 
+const NO_ENV = { timers: fakeTimers(), win: null, send: null };
+
 describe("a loose file's save", () => {
   test("bytes alone save nowhere", () => {
-    expect(looseSync({ kind: "bytes" }, "notes.md", () => {})).toBe(NO_SYNC);
+    expect(looseSync({ kind: "bytes" }, "notes.md", () => {}, NO_ENV)).toBe(NO_SYNC);
   });
 
   test("the one prompt comes with the first keystroke; the text follows once typing rests", async () => {
@@ -141,5 +144,79 @@ describe("a loose file's save", () => {
     sync.attach(null);
     await settle();
     expect(handle.written).toEqual(["typed"]);
+  });
+});
+
+/** a granted file's sync over a captured socket */
+function granted() {
+  const timers = fakeTimers();
+  const sent: Extract<ClientMsg, { t: "write-loose" }>[] = [];
+  const refused: string[] = [];
+  const sync = looseSync({ kind: "grant", id: "g1", version: "v1" }, "notes.md", (why) => refused.push(why), {
+    timers,
+    win: null,
+    send: (m) => m.t === "write-loose" && sent.push(m),
+  });
+  const b = buffer("a");
+  sync.attach(b);
+  return { timers, sent, refused, sync, b };
+}
+
+describe("a granted file's save", () => {
+  test("goes over the wire once typing rests, over the version last seen", () => {
+    const { timers, sent, sync, b } = granted();
+    b.value = "ab";
+    sync.edited();
+    expect(sent).toEqual([]);
+    timers.pass();
+    expect(sent).toMatchObject([{ id: "g1", content: "ab", base: "v1" }]);
+    // the answer names the version the next save is over
+    expect(settleLoose({ t: "loose-written", id: "g1", seq: sent[0]!.seq, ok: true, version: "v2" })).toBe(true);
+    b.value = "abc";
+    sync.saveNow();
+    expect(sent[1]).toMatchObject({ content: "abc", base: "v2" });
+  });
+
+  test("one write out at a time: typing meanwhile is sent after the answer, as the newest text", () => {
+    const { sent, sync, b } = granted();
+    b.value = "1";
+    sync.saveNow();
+    b.value = "12";
+    sync.saveNow();
+    b.value = "123";
+    sync.saveNow();
+    expect(sent).toHaveLength(1);
+    settleLoose({ t: "loose-written", id: "g1", seq: sent[0]!.seq, ok: true, version: "v2" });
+    expect(sent).toHaveLength(2);
+    expect(sent[1]).toMatchObject({ content: "123", base: "v2" });
+  });
+
+  test("a file changed under the editor, or a refusal, locks the text and drops what waited", () => {
+    const { sent, refused, sync, b } = granted();
+    b.value = "mine";
+    sync.saveNow();
+    b.value = "mine2";
+    sync.saveNow();
+    settleLoose({ t: "loose-written", id: "g1", seq: sent[0]!.seq, ok: false, reason: "changed", version: "v9" });
+    expect(refused).toEqual(["read-only: notes.md changed on disk; open it again to edit"]);
+    expect(sent).toHaveLength(1);
+    sync.saveNow();
+    expect(sent).toHaveLength(1);
+    const other = granted();
+    other.sync.saveNow();
+    settleLoose({
+      t: "loose-written",
+      id: "g1",
+      seq: other.sent[0]!.seq,
+      ok: false,
+      reason: "refused",
+      version: null,
+      message: "not saved: the file is not text",
+    });
+    expect(other.refused).toEqual(["not saved: the file is not text"]);
+  });
+
+  test("an answer nobody waits on is not taken", () => {
+    expect(settleLoose({ t: "loose-written", id: "g1", seq: 999_999, ok: true, version: "v" })).toBe(false);
   });
 });

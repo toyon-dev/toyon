@@ -49,6 +49,11 @@ const opts: HttpOpts = {
   managed: { source: null, hash: null },
   preview: () => null,
   bootstrap: async () => ({ t: "hello", repos: [{ id: "r1" }] }),
+  open: async (path) => {
+    if (path === "/bad.bin") throw new UserError("bad.bin is not a text file");
+    if (path === "/boom") throw new Error("disk on fire");
+    return { kind: "loose", id: "g1", name: "notes.md", text: "# hi", tooLarge: false, version: "v1" };
+  },
   restart: (now) => {
     restartsAsked++;
     restartNow = now;
@@ -343,6 +348,34 @@ describe("/ws", () => {
   });
 });
 
+describe("/open", () => {
+  const post = (body: unknown, auth = "Bearer secret") =>
+    req("/open", { method: "POST", body: JSON.stringify(body), headers: { authorization: auth } });
+  test("needs the bearer token, and a path", async () => {
+    expect((await fetch(post({ path: "/x" }, "Bearer nope"), srv()))?.status).toBe(401);
+    expect((await fetch(post({}), srv()))?.status).toBe(400);
+  });
+  test("a refusal is 400 in the daemon's words; an internal failure is a generic 500", async () => {
+    const bad = await fetch(post({ path: "/bad.bin" }), srv());
+    expect(bad?.status).toBe(400);
+    expect(await bad?.text()).toBe("bad.bin is not a text file");
+    const boom = await fetch(post({ path: "/boom" }), srv());
+    expect(boom?.status).toBe(500);
+    expect(await boom?.text()).not.toContain("disk");
+  });
+  test("success says what the path became", async () => {
+    const r = await fetch(post({ path: "/notes.md" }), srv());
+    expect(await r?.json()).toEqual({
+      kind: "loose",
+      id: "g1",
+      name: "notes.md",
+      text: "# hi",
+      tooLarge: false,
+      version: "v1",
+    });
+  });
+});
+
 describe("/register", () => {
   const post = (body: unknown, auth = "Bearer secret") =>
     req("/register", { method: "POST", body: JSON.stringify(body), headers: { authorization: auth } });
@@ -494,6 +527,7 @@ describe("static shell", () => {
     attachments: new AttachmentStore(attachmentsDir),
     archivedAttachment: () => null,
     worktreeFile: async () => null,
+    open: opts.open,
     branded: () => false,
     noteShellOrigin: () => {},
     remote: null,

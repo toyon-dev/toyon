@@ -165,6 +165,7 @@ export const HELP = `toyon: one chat per git worktree, every worktree running li
 
 usage
   toyon [path]            start the daemon if it is not running, register the repo at path
+                          (or open the file at path: in its project, or on its own)
                           (default: the current directory) and open the shell
   toyon stop              stop the daemon and every dev server and agent it runs
   toyon restart           stop the daemon and start it again from what is installed now; every

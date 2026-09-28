@@ -3,6 +3,7 @@
 // status inline today, and changing that backpressure is a later job, not this file's.
 
 import type { AgentCommand, AgentEvent, AgentStatus, LastTurn, ProcState } from "@toyon/shared";
+import type { OpenedFile } from "../files/open.ts";
 import { log } from "./log.ts";
 
 export interface HubEvents {
@@ -53,6 +54,8 @@ export interface HubEvents {
   draftChanged: (boxId: string, text: string, clientId?: string) => void;
   /** the editor saved or discarded a file: every tab's changes list, and any editor open on it, re-reads */
   filesChanged: (worktreeId: string) => void;
+  /** a file was opened from outside the shell (the Dock icon, `toyon <file>`): a shell should show it */
+  opened: (opened: OpenedFile) => void;
   /** something the daemon ran on a worktree's behalf, unasked, stopped: `message` is read as a
    * daemon error on that worktree, where a failure nobody requested would otherwise sit in a log */
   failed: (worktreeId: string, message: string) => void;

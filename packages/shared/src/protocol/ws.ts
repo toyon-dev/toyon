@@ -181,6 +181,18 @@ export type ServerMsg =
   /** The answer to blame-file, with its `seq`: who last touched each line of the file as it is now,
    * or as `ref` left it. Empty when git cannot say: an untracked file, or an archived worktree. */
   | ({ t: "file-blame"; worktreeId: string; path: string; ref?: string; seq: number } & FileBlame)
+  /** a path opened from outside the shell (the Dock icon, `toyon <file>`) that sits in a worktree:
+   * the pane opens it there */
+  | { t: "open-path"; worktreeId: string; path: string }
+  /** a file opened from outside every project, granted on the daemon under `id`: the pane opens
+   * it loose, text in hand, and saves it through write-loose. `version` names the bytes read;
+   * `tooLarge` is more than the pane shows, opened empty and read-only */
+  | { t: "open-loose"; id: string; name: string; text: string; tooLarge: boolean; version: string | null }
+  /** the answer to write-loose, exactly one per write, as file-written answers a write-file */
+  | ({ t: "loose-written"; id: string; seq: number } & (
+      | { ok: true; version: string }
+      | { ok: false; reason: "changed" | "refused"; version: string | null; message?: string }
+    ))
   | {
       t: "shipped";
       worktreeId: string;
@@ -580,6 +592,15 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
     t: z.literal("write-file"),
     worktreeId: id,
     path: relPath,
+    content: z.string().max(FILE_MAX_CHARS),
+    base: z.string().max(64).nullable(),
+    seq,
+  }),
+  /** save a granted file's text only over `base`, the version open-loose or the last save named.
+   * Answered by exactly one `loose-written`. */
+  z.object({
+    t: z.literal("write-loose"),
+    id,
     content: z.string().max(FILE_MAX_CHARS),
     base: z.string().max(64).nullable(),
     seq,

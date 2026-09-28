@@ -23,6 +23,7 @@ import { StateStore } from "../core/state.ts";
 import { DesignService } from "../design/service.ts";
 import { DraftStore } from "../drafts/store.ts";
 import { ExecService } from "../exec/service.ts";
+import { OpenService } from "../files/open.ts";
 import { FileService } from "../files/service.ts";
 import { GIT } from "../git/exec.ts";
 import { AfterLand } from "../repos/afterLand.ts";
@@ -118,6 +119,13 @@ function make() {
   const afterLand = new AfterLand({ state, hub, self });
   const repos = new RepoRegistry({ state, hub, runtime, worktrees, afterLand, self });
   const files = new FileService(state, runtime, (id) => worktrees.readable(id));
+  const opens = new OpenService({
+    state,
+    hub,
+    register: (path) => repos.register(path),
+    found: () => worktrees.discovered(),
+    refused: [t.paths.home],
+  });
   const design = new DesignService((id) => worktrees.readable(id));
   const exec = new ExecService({ state, runtime });
   // a PR list that throws: gh is absent on most machines that run this, and its absence must be a
@@ -195,6 +203,7 @@ function make() {
     worktrees,
     turns,
     files,
+    opens,
     design,
     routes,
     runtime,
@@ -1051,6 +1060,25 @@ describe("handlers", () => {
       ok: false,
       reason: "refused",
       message: expect.stringContaining("escapes"),
+    });
+  });
+
+  test("write-loose saves a granted file over its version, and answers a lost grant in words", async () => {
+    const { services, ctx, replies, repo } = make();
+    const outside = join(dirname(repo), "notes.md");
+    writeFileSync(outside, "one\n");
+    const opened = await services.opens.open(outside);
+    if (opened.kind !== "loose") throw new Error("a file outside every project is granted");
+    await dispatch({ t: "write-loose", id: opened.id, content: "two\n", base: opened.version, seq: 7 }, ctx, services);
+    expect(replies.at(-1)).toMatchObject({ t: "loose-written", id: opened.id, seq: 7, ok: true });
+    expect(readFileSync(outside, "utf8")).toBe("two\n");
+    await dispatch({ t: "write-loose", id: "gone", content: "x", base: null, seq: 8 }, ctx, services);
+    expect(replies.at(-1)).toMatchObject({
+      t: "loose-written",
+      seq: 8,
+      ok: false,
+      reason: "refused",
+      message: expect.stringContaining("no longer open here"),
     });
   });
 

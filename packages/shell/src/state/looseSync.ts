@@ -1,7 +1,10 @@
-// A loose file's save: the browser writes the file where it lives, through the handle the drop
-// carried. Nothing here reaches the daemon, and nothing reads the file back: the handle names one
-// file and the browser is the only one writing it, so the text in the editor is the file.
+// A loose file's save. Through a handle, the browser writes the file where it lives, and nothing
+// here reaches the daemon. Through a grant, the daemon writes it, over the version the shell last
+// saw, the way a worktree file is saved. Nothing reads the file back either way: one thing writes
+// it, so the text in the editor is the file.
 
+import { type ClientMsg, FILE_MAX_CHARS, type ServerMsg } from "@toyon/shared";
+import { nextSeq } from "./actions/file.ts";
 import type { EditorSync, SyncBuffer, Timers } from "./fileSync.ts";
 import { SAVE_DELAY } from "./fileSync.ts";
 import type { LooseSource } from "./store.ts";
@@ -15,17 +18,34 @@ export interface WritableHandle extends FileSystemFileHandle {
 /** an editor with nothing behind it: it holds the text and saves nowhere */
 export const NO_SYNC: EditorSync = { attach: () => {}, edited: () => {}, saveNow: () => {} };
 
-/** the browser's clocks and window; a test hands in its own */
+/** the browser's clocks and window, and the socket a grant saves over; a test hands in its own */
 export interface LooseEnv {
   timers: Timers;
   /** where the page going is heard; absent in tests */
   win: Pick<Window, "addEventListener" | "removeEventListener"> | null;
+  /** to the daemon; null with no socket, and a grant then saves nowhere */
+  send: ((msg: ClientMsg) => void) | null;
 }
 
-const BROWSER: LooseEnv = {
+/** the browser's own, with whatever socket the pane has */
+export const browserEnv = (send: LooseEnv["send"]): LooseEnv => ({
   timers: { set: (fn, ms) => setTimeout(fn, ms), clear: (id) => clearTimeout(id as ReturnType<typeof setTimeout>) },
   win: typeof window === "undefined" ? null : window,
-};
+  send,
+});
+
+type Written = Extract<ServerMsg, { t: "loose-written" }>;
+/** the grant saves out, each waiting on its answer */
+const saves = new Map<number, (msg: Written) => void>();
+
+/** a loose-written the socket routed here rather than to the store */
+export function settleLoose(msg: Written): boolean {
+  const take = saves.get(msg.seq);
+  if (!take) return false;
+  saves.delete(msg.seq);
+  take(msg);
+  return true;
+}
 
 /**
  * What the editor talks to for a loose file. Bytes alone are read-only and this is `NO_SYNC`. A
@@ -37,9 +57,10 @@ export function looseSync(
   source: LooseSource,
   name: string,
   refused: (why: string) => void,
-  env: LooseEnv = BROWSER,
+  env: LooseEnv,
 ): EditorSync {
-  if (source.kind !== "handle") return NO_SYNC;
+  if (source.kind === "bytes") return NO_SYNC;
+  if (source.kind === "grant") return grantSync(source, name, refused, env);
   const handle = source.handle as WritableHandle;
   let buffer: SyncBuffer | null = null;
   let timer: unknown;
@@ -100,6 +121,85 @@ export function looseSync(
       void permission().then((ok) => {
         if (!ok) fail();
       });
+      cancel();
+      timer = env.timers.set(saveNow, SAVE_DELAY);
+    },
+    saveNow,
+  };
+}
+
+/**
+ * A granted file's save: one write out at a time over the socket, each over the version the last
+ * answer named, the next one's text held until then. A file that changed under the editor, or a
+ * write the daemon refused, locks the text: there is no fresh read to settle it with, and opening
+ * the file again from where it came is the way back in.
+ */
+function grantSync(
+  source: Extract<LooseSource, { kind: "grant" }>,
+  name: string,
+  refused: (why: string) => void,
+  env: LooseEnv,
+): EditorSync {
+  let buffer: SyncBuffer | null = null;
+  let timer: unknown;
+  let base = source.version;
+  let out = false;
+  let pending: string | null = null;
+  let dead = false;
+
+  const cancel = () => {
+    if (timer !== undefined) env.timers.clear(timer);
+    timer = undefined;
+  };
+  const fail = (why: string) => {
+    if (dead) return;
+    dead = true;
+    cancel();
+    pending = null;
+    refused(why);
+  };
+  const send = (content: string) => {
+    if (!env.send) return;
+    const seq = nextSeq();
+    out = true;
+    saves.set(seq, (msg) => {
+      out = false;
+      if (msg.ok) base = msg.version;
+      else if (msg.reason === "changed") fail(`read-only: ${name} changed on disk; open it again to edit`);
+      else fail(msg.message ?? `not saved: ${name}`);
+      if (pending !== null && !dead) {
+        const next = pending;
+        pending = null;
+        send(next);
+      }
+    });
+    env.send({ t: "write-loose", id: source.id, content, base, seq });
+  };
+  const saveNow = () => {
+    if (!buffer || dead) return;
+    cancel();
+    const text = buffer.text();
+    // a save of more is refused before any handler can say which save it was; the pane says why
+    if (text.length > FILE_MAX_CHARS) return;
+    if (out) pending = text;
+    else send(text);
+  };
+  const onHide = () => {
+    if (timer !== undefined) saveNow();
+  };
+  return {
+    attach(b) {
+      if (b) {
+        buffer = b;
+        env.win?.addEventListener("pagehide", onHide);
+        return;
+      }
+      if (timer !== undefined) saveNow();
+      buffer = null;
+      env.win?.removeEventListener("pagehide", onHide);
+    },
+    edited() {
+      if (!buffer || dead) return;
       cancel();
       timer = env.timers.set(saveNow, SAVE_DELAY);
     },

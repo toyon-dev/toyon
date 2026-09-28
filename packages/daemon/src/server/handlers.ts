@@ -19,6 +19,7 @@ import type { StateStore } from "../core/state.ts";
 import type { DesignService } from "../design/service.ts";
 import type { DraftStore } from "../drafts/store.ts";
 import type { ExecService } from "../exec/service.ts";
+import type { OpenService } from "../files/open.ts";
 import { type FileService, keptRead } from "../files/service.ts";
 import type { AfterLand } from "../repos/afterLand.ts";
 import { browsePath, describeFolder } from "../repos/browse.ts";
@@ -45,6 +46,8 @@ export interface Services {
   /** how each worktree's agent last stopped, and whether anyone has looked since */
   turns: TurnService;
   files: FileService;
+  /** files opened from outside the shell: the grants on files in no worktree, and their saves */
+  opens: Pick<OpenService, "open" | "write" | "takePending" | "delivered">;
   /** the worktree's own design system, scanned from its source */
   design: DesignService;
   /** the route bar's list: which preview pages each repo is used on */
@@ -529,6 +532,17 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     } catch (e) {
       // answered either way, as a read is: an unanswered write would hold the file's next save forever
       if (!(e instanceof UserError)) log.error(msg.worktreeId, "write-file failed", e);
+      ctx.reply({ ...head, ok: false, reason: "refused", version: null, message: errorText(e) });
+    }
+  },
+
+  async "write-loose"(msg, ctx, s) {
+    const head = { t: "loose-written", id: msg.id, seq: msg.seq } as const;
+    try {
+      ctx.reply({ ...head, ...(await s.opens.write(msg.id, msg.content, msg.base)) });
+    } catch (e) {
+      // answered either way, as a worktree write is: an unanswered save would hold the next forever
+      if (!(e instanceof UserError)) log.error("open", "write-loose failed", e);
       ctx.reply({ ...head, ok: false, reason: "refused", version: null, message: errorText(e) });
     }
   },

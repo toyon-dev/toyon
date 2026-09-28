@@ -10,6 +10,7 @@ import { UserError } from "../core/errors.ts";
 import { log } from "../core/log.ts";
 import type { PairCodes } from "../core/pair.ts";
 import { door, grantCookie, passPreview, previewGrant, sameSecret } from "../core/remote.ts";
+import type { Opened } from "../files/open.ts";
 import type { RepoRegistry } from "../repos/registry.ts";
 import type { PreviewData, PreviewHandler } from "../runtime/proxy.ts";
 
@@ -56,6 +57,9 @@ export interface HttpOpts {
   preview: (worktreeId: string) => PreviewHandler | null;
   /** the hello frame, for a page that asks before its socket exists */
   bootstrap: () => Promise<unknown>;
+  /** a path from outside the shell (the Dock icon, `toyon <path>`): a repo registers, a file
+   * opens in its worktree or is granted; a `UserError` is the person's to read */
+  open: (path: string) => Promise<Opened>;
   /** ask for a restart; answers a refusal, or null having restarted or queued behind a reply.
    * `now` does not queue. */
   restart: (now: boolean) => string | null;
@@ -220,6 +224,24 @@ export function createFetch(opts: HttpOpts) {
         if (e instanceof UserError) return new Response(e.message, { status: 400 });
         log.error("http", "register failed", e);
         return new Response("register failed; see daemon log", { status: 500 });
+      }
+    }
+
+    // CLI and the Dock icon: open a path, whatever it is. A shell connected now is told at once; one
+    // that connects within the next while is told then, since the launcher opens the window after
+    // this returns.
+    if (url.pathname === "/open" && req.method === "POST") {
+      if (!sameSecret(req.headers.get("authorization"), `Bearer ${opts.token}`)) {
+        return new Response("unauthorized", { status: 401 });
+      }
+      const body = (await req.json().catch(() => ({}))) as { path?: string };
+      if (!body.path) return new Response("missing path", { status: 400 });
+      try {
+        return Response.json(await opts.open(body.path));
+      } catch (e) {
+        if (e instanceof UserError) return new Response(e.message, { status: 400 });
+        log.error("http", "open failed", e);
+        return new Response("open failed; see daemon log", { status: 500 });
       }
     }
 

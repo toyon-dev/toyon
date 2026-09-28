@@ -208,6 +208,7 @@ export function EditorPane({
                 key={`${worktreeId}\n${ref ?? ""}\n${path}`}
                 file={{ worktreeId, path, ...(ref ? { ref } : {}) }}
                 disk={disk}
+                blame={editor.blame}
                 view={view}
                 openSeq={editor.seq}
                 line={line}

@@ -15,8 +15,9 @@ import tsWorker from "monaco-editor/language/typescript/ts.worker.js?worker";
 import { useEffect, useRef } from "react";
 import { selectedLines } from "../../app/copiedSource.ts";
 import type { EditorSync, SyncBuffer } from "../../state/fileSync.ts";
-import type { EditorDisk, EditorView, FileRef } from "../../state/store.ts";
+import type { EditorBlame, EditorDisk, EditorView, FileRef } from "../../state/store.ts";
 import { useOnChange } from "../../ui/hooks.ts";
+import { blameLine } from "./blameLine.ts";
 import { registerGrammars } from "./grammar.ts";
 import { minimalEdit } from "./minimalEdit.ts";
 import { toMonacoTheme } from "./monacoTheme.ts";
@@ -135,6 +136,8 @@ function tokenizeThrough(model: monaco.editor.ITextModel, line: number) {
 /** the editor put over the models for one view */
 interface Instance {
   code: monaco.editor.IStandaloneCodeEditor;
+  /** draw the blame after the caret's line, or take it away, from what is known now */
+  paint(): void;
   dispose(): void;
 }
 
@@ -151,11 +154,23 @@ interface Session {
   revealedFor: number | null;
   /** the open that has been given the keyboard */
   focusedFor: number | null;
+  /** the file as the daemon last read it, in the model's line endings: the blame names its lines */
+  diskText: string;
+  /** the text is not that read, line for line: a keystroke moves the lines under it, so the blame
+   * stays away until the text is that read again (an undo) or saved and read anew */
+  dirty: boolean;
+}
+
+/** whether the model's text is not `text`: the lengths first, since a keystroke changes them, and
+ * the whole text only when they agree */
+function differs(model: monaco.editor.ITextModel, text: string): boolean {
+  return model.getValueLength() !== text.length || model.getValue() !== text;
 }
 
 export default function Editor({
   file,
   disk,
+  blame,
   view,
   openSeq,
   line,
@@ -171,6 +186,8 @@ export default function Editor({
   file: FileRef;
   /** the file as last read: the text is taken from it once, the diff's other side follows it */
   disk: EditorDisk;
+  /** who last touched each line, for the version of the file it names; shown after the caret's line */
+  blame: EditorBlame | null;
   view: EditorView;
   /** which open this is: a line to reveal and the keyboard are each handed over once per open */
   openSeq: number;
@@ -209,6 +226,10 @@ export default function Editor({
   readOnlyRef.current = readOnly;
   const lineRef = useRef(line);
   lineRef.current = line;
+  const blameRef = useRef(blame);
+  blameRef.current = blame;
+  const diskRef = useRef(disk);
+  diskRef.current = disk;
   const session = useRef<Session | null>(null);
   const instance = useRef<Instance | null>(null);
 
@@ -234,7 +255,16 @@ export default function Editor({
     // pushed its options, so the editor's `bracketPairColorization` never reaches them
     for (const m of [modified, original])
       m.updateOptions({ bracketColorizationOptions: { enabled: false, independentColorPoolPerBracketType: false } });
-    session.current = { modified, original, place: null, revealedFor: null, focusedFor: null };
+    const sess: Session = {
+      modified,
+      original,
+      place: null,
+      revealedFor: null,
+      focusedFor: null,
+      diskText: modified.getValue(),
+      dirty: false,
+    };
+    session.current = sess;
     let applying = false;
     const buffer: SyncBuffer = {
       text: () => modified.getValue(),
@@ -256,6 +286,8 @@ export default function Editor({
     };
     const edits = modified.onDidChangeContent(() => {
       if (!applying) s.edited();
+      sess.dirty = differs(modified, sess.diskText);
+      instance.current?.paint();
     });
     // Where the keyboard came from, so closing the pane from inside the editor can hand it back. It
     // is tracked as it moves rather than read at teardown: this cleanup runs after React has taken
@@ -295,6 +327,17 @@ export default function Editor({
     const m = session.current;
     if (m && m.original.getValue() !== disk.before) m.original.setValue(disk.before);
   });
+
+  // a fresh read: the blame that follows it names these lines, so the text is measured against it
+  useOnChange([disk], () => {
+    const m = session.current;
+    if (!m) return;
+    m.diskText = disk.after.replace(/\r\n|\r|\n/g, m.modified.getEOL());
+    m.dirty = differs(m.modified, m.diskText);
+    instance.current?.paint();
+  });
+
+  useOnChange([blame], () => instance.current?.paint());
 
   // one editor per view, over the same models
   useOnChange([view], () => {
@@ -446,14 +489,48 @@ export default function Editor({
       run: () => chatRef.current?.(file.path, null),
     });
 
+    // Who last touched the caret's line, drawn after it. Only while the text is the read the blame
+    // followed: a blame for another version, or text typed since, would put a name on the wrong
+    // line, so then there is none. The caret walks past the ghost as if it were not there.
+    const ghosts = code.createDecorationsCollection();
+    const paint = () => {
+      const b = blameRef.current;
+      const pos = code.getPosition();
+      const text = b && b.version === diskRef.current.version && !m.dirty && pos ? blameLine(b, pos.lineNumber) : null;
+      if (!text || !pos) {
+        ghosts.clear();
+        return;
+      }
+      const col = m.modified.getLineMaxColumn(pos.lineNumber);
+      ghosts.set([
+        {
+          range: new monaco.Range(pos.lineNumber, col, pos.lineNumber, col),
+          options: {
+            after: {
+              content: text,
+              inlineClassName: "editor-blame",
+              cursorStops: monaco.editor.InjectedTextCursorStops.None,
+            },
+            stickiness: monaco.editor.TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges,
+            showIfCollapsed: true,
+          },
+        },
+      ]);
+    };
+    paint();
+    const subCursor = code.onDidChangeCursorPosition(paint);
+
     const mine: Instance = {
       code,
+      paint,
       dispose: () => {
         clearTimeout(safety);
         cancelAnimationFrame(painted);
         scrolled.dispose();
         subMove.dispose();
         subLeave.dispose();
+        subCursor.dispose();
+        ghosts.clear();
         chatAction.dispose();
         focusAction.dispose();
         el.removeEventListener("copy", tagCopy, true);

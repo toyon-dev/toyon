@@ -20,6 +20,7 @@ import type {
   ConnectFailure,
   DarkNow,
   DesignIndex,
+  FileBlame,
   FileServerMsg,
   GitFileStatus,
   ImageInput,
@@ -500,6 +501,14 @@ export interface EditorFile extends Omit<OpenFile, "view"> {
   /** a save refused outright, in the daemon's words: nothing typed here is saved until the file
    * is opened again, which reads it fresh */
   refused?: string;
+  /** who last touched each line, for the version of the file it was asked for; null until the
+   * first answer. The editor shows it only while `disk` is still that version. */
+  blame: EditorBlame | null;
+}
+
+/** a file's blame, named for the read it followed */
+export interface EditorBlame extends FileBlame {
+  version: string | null;
 }
 
 /** a line the page reported, mapped back to the file once the offset for its path is known */
@@ -1155,6 +1164,8 @@ export type Action =
   | { a: "editor-view"; v: EditorView }
   /** fileSync: a save was refused for good, and why; the pane says so above the text */
   | { a: "editor-refused"; file: FileRef; message: string }
+  /** fileSync: who last touched each line of the open file, for the version its read found */
+  | { a: "editor-blame"; file: FileRef; blame: EditorBlame }
   /** the composer's answer to something that could not be done to this box, read until the next keystroke */
   | { a: "notice"; id: string; text: string }
   /** the answers so far to the ask on this worktree's box, and the question it is on */
@@ -1503,6 +1514,7 @@ function reduce(s: State, action: Action): State {
           ...(line ? { line } : {}),
           focus: v.focus,
           conflict: same?.conflict ?? null,
+          blame: same?.blame ?? null,
         },
       };
     }
@@ -1540,6 +1552,10 @@ function reduce(s: State, action: Action): State {
     case "editor-refused": {
       const e = s.editor;
       return e && sameFile(e, action.file) ? { ...s, editor: { ...e, refused: action.message } } : s;
+    }
+    case "editor-blame": {
+      const e = s.editor;
+      return e && sameFile(e, action.file) ? { ...s, editor: { ...e, blame: action.blame } } : s;
     }
     case "notice":
       // the answer is under the box, so the box has to be on screen

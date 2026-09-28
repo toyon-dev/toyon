@@ -856,6 +856,22 @@ export interface CommitEntry {
   landedAt?: number;
 }
 
+/** a commit as a line's blame names it: who, when, and what the commit said */
+export interface BlameCommit {
+  sha: string;
+  author: string;
+  /** author date, epoch ms */
+  at: number;
+  subject: string;
+}
+
+/** Who last touched each line of a file. `lines[i]` indexes `commits` for line i+1, or is -1 for
+ * a line not committed yet; empty for a file git cannot blame (untracked, or not there). */
+export interface FileBlame {
+  commits: BlameCommit[];
+  lines: number[];
+}
+
 // ---- Themes ----
 
 /** always #rrggbb or #rrggbbaa — CSS and Monaco both take 8-digit hex as-is */

@@ -2,7 +2,7 @@
 // compile error. Handlers marshal (pick fields, shape replies) and call a service; they do not
 // run git or decide policy.
 
-import type { ClientMsg, ServerMsg, WorktreeInfo } from "@toyon/shared";
+import type { ClientMsg, FileBlame, ServerMsg, WorktreeInfo } from "@toyon/shared";
 import { isLead, pickTheme, SHELL_STREAM } from "@toyon/shared";
 import type { AgentAccounts } from "../agent/accounts.ts";
 import type { AttachmentStore } from "../agent/attachments.ts";
@@ -344,6 +344,19 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
       const nothing = { before: "", after: "", version: null, writable: false, binary: false, tooLarge: false };
       ctx.reply({ ...head, ...nothing, error: errorText(e) });
     }
+  },
+
+  async "blame-file"(msg, ctx, s) {
+    const head = { t: "file-blame", worktreeId: msg.worktreeId, path: msg.path, ref: msg.ref, seq: msg.seq } as const;
+    let blame: FileBlame = { commits: [], lines: [] };
+    try {
+      // an archived worktree's files are only in git, and its page reads them read-only: no ghost there
+      if (s.worktrees.readable(msg.worktreeId)) blame = await s.files.blame(msg.worktreeId, msg.path, msg.ref);
+    } catch (e) {
+      // the read of the same path already said why on the chat; the ghost simply stays away
+      log.warn(msg.worktreeId, "blame-file failed", errorText(e));
+    }
+    ctx.reply({ ...head, ...blame });
   },
 
   async "git-log"(msg, ctx, s) {

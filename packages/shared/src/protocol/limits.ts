@@ -16,7 +16,7 @@ import type { FileServerMsg, ServerMsg, TermServerMsg } from "./ws.ts";
  * an unknown `t` there is a zod failure the person reads as a wall of discriminator values. The
  * same goes for a new required field on an existing kind.
  */
-export const PROTOCOL_VERSION = 74;
+export const PROTOCOL_VERSION = 75;
 
 /** the largest file the editor opens or saves, in characters (a read counts bytes, which is never
  * fewer). A larger one opens read-only with nothing in it, and a save of more is refused before any
@@ -44,5 +44,5 @@ export function isTermMsg(m: ServerMsg): m is TermServerMsg {
 
 /** the editor's file answers, which go to the shell's file sync rather than through the store */
 export function isFileMsg(m: ServerMsg): m is FileServerMsg {
-  return m.t === "file-read" || m.t === "file-written";
+  return m.t === "file-read" || m.t === "file-written" || m.t === "file-blame";
 }

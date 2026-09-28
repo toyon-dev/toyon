@@ -28,6 +28,21 @@
       color: var(--text2);
       background-image: linear-gradient(var(--diff-del), var(--diff-del));
     }
+    /* who last touched the caret's line, drawn after it: the quiet tier in the UI face, so it reads
+     as a note on the line and not as code that could be selected. The leading is the line's own:
+     the face's would float the note off the code's baseline. Monaco colours the span with the
+     token class of the code it sits in, from an unlayered sheet that beats any layered rule
+     whatever its specificity, so the tier has to be important to reach it. */
+    & .monaco-editor .editor-blame {
+      color: var(--text2) !important;
+      font: var(--type-ui-sm);
+      line-height: inherit;
+    }
+    /* Monaco cuts a long injected text into spans of fifty characters, so the gap from the code
+     sits on the first alone: a gap on each would open holes inside the words */
+    & .monaco-editor :is(.editor-blame:first-child, :not(.editor-blame) + .editor-blame) {
+      padding-left: 24px;
+    }
   }
   /* a row between the head and the text when the text alone would mislead: changed on disk under
    unsaved edits, or not saveable from here. Its own row, so it never covers the lines it is about */

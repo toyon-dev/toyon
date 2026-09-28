@@ -397,3 +397,34 @@ describe("the open file and the disk", () => {
     expect(again.value).toBe("mine");
   });
 });
+
+describe("who last touched each line", () => {
+  test("a read asks for the blame of the version it found, and the answer lands on the open file", () => {
+    const h = harness();
+    h.open("x.ts");
+    expect(h.count("blame-file")).toBe(0);
+    h.read({ after: "a" });
+    const q = h.last("blame-file");
+    expect(q).toMatchObject({ worktreeId: "a", path: "x.ts" });
+    h.sync.receive({ t: "file-blame", worktreeId: "a", path: "x.ts", seq: q?.seq ?? -1, commits: [], lines: [-1] });
+    expect(h.store.getState().editor?.blame).toEqual({ commits: [], lines: [-1], version: "v1" });
+  });
+
+  test("only the newest ask is heard, and none is made for a file with no text", () => {
+    const h = harness();
+    h.open("x.ts");
+    h.read({ after: "a" });
+    const stale = h.last("blame-file");
+    h.tick();
+    h.read({ after: "b", version: "v2" });
+    const fresh = h.last("blame-file");
+    expect(fresh?.seq).not.toBe(stale?.seq);
+    h.sync.receive({ t: "file-blame", worktreeId: "a", path: "x.ts", seq: stale?.seq ?? -1, commits: [], lines: [0] });
+    expect(h.store.getState().editor?.blame).toBeNull();
+    h.sync.receive({ t: "file-blame", worktreeId: "a", path: "x.ts", seq: fresh?.seq ?? -1, commits: [], lines: [-1] });
+    expect(h.store.getState().editor?.blame).toMatchObject({ version: "v2" });
+    h.tick();
+    h.read({ after: "", version: "v3", binary: true });
+    expect(h.count("blame-file")).toBe(2);
+  });
+});

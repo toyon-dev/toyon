@@ -78,6 +78,9 @@ interface Tracked {
   conflict: Theirs | null;
   buffer: SyncBuffer | null;
   timer: unknown;
+  /** the blame asked for after the last read, and the version that read found; answered out of
+   * step with the reads, since nothing waits on it */
+  blame: { seq: number; version: string | null } | null;
 }
 
 const keyOf = (f: { worktreeId: string; path: string; ref?: string }) => `${f.worktreeId}\n${f.ref ?? ""}\n${f.path}`;
@@ -126,8 +129,13 @@ export class FileSync {
   /** a file frame the socket routed here rather than to the store */
   receive(msg: FileServerMsg) {
     const t = this.files.get(keyOf(msg));
-    const out = t?.out;
-    if (!t || !out || out.seq !== msg.seq) return;
+    if (!t) return;
+    if (msg.t === "file-blame") {
+      this.blamed(t, msg);
+      return;
+    }
+    const out = t.out;
+    if (!out || out.seq !== msg.seq) return;
     t.out = null;
     if (msg.t === "file-read") this.read(t, msg);
     else if (out.write !== undefined) this.written(t, out.write, msg);
@@ -200,6 +208,7 @@ export class FileSync {
         conflict: null,
         buffer: null,
         timer: undefined,
+        blame: null,
       };
       this.files.set(key, t);
     }
@@ -268,6 +277,8 @@ export class FileSync {
     t.writable = writable;
     if (t.open) {
       this.d.store.dispatch({ a: "editor-read", file, disk: { before, after, version, writable, binary, tooLarge } });
+      // a file with text has lines to blame; one gone from disk, or with none the editor shows, has not
+      if (!binary && !tooLarge && (version !== null || file.ref)) this.askBlame(t, version);
     }
     const theirs = { after: t.buffer ? t.buffer.normalize(after) : after, version };
     if (!t.base) {
@@ -294,6 +305,24 @@ export class FileSync {
         return;
     }
     this.setConflict(t, null);
+  }
+
+  /** who last touched each line, asked after every read so the answer names the version it is for.
+   * Outside the one-request rule: nothing waits on it, and the newest ask is the only one kept. */
+  private askBlame(t: Tracked, version: string | null) {
+    const seq = nextSeq();
+    t.blame = { seq, version };
+    const { worktreeId, path, ref } = t.file;
+    this.d.send({ t: "blame-file", worktreeId, path, ref, seq });
+  }
+
+  private blamed(t: Tracked, msg: Extract<FileServerMsg, { t: "file-blame" }>) {
+    const asked = t.blame;
+    if (!asked || asked.seq !== msg.seq) return;
+    t.blame = null;
+    if (!t.open) return;
+    const { commits, lines } = msg;
+    this.d.store.dispatch({ a: "editor-blame", file: t.file, blame: { commits, lines, version: asked.version } });
   }
 
   private written(t: Tracked, sent: string, msg: Extract<FileServerMsg, { t: "file-written" }>) {

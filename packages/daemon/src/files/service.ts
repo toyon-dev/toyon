@@ -5,9 +5,17 @@
 import { spawn } from "node:child_process";
 import type { Stats } from "node:fs";
 import { stat, unlink } from "node:fs/promises";
-import { type ElementTraits, FILE_MAX_CHARS, isPageAsset, type SearchHit, viewerOf } from "@toyon/shared";
+import {
+  type ElementTraits,
+  FILE_MAX_CHARS,
+  type FileBlame,
+  isPageAsset,
+  type SearchHit,
+  viewerOf,
+} from "@toyon/shared";
 import { UserError } from "../core/errors.ts";
 import type { StateStore } from "../core/state.ts";
+import { blameFile } from "../git/blame.ts";
 import { GIT, git, run } from "../git/exec.ts";
 import { fileLockKey, withLock } from "../git/lock.ts";
 import { fileAtCommit } from "../git/log.ts";
@@ -135,6 +143,14 @@ export class FileService {
       version: bytes && versionOf(bytes),
       writable: owned && !text.binary && !text.tooLarge,
     };
+  }
+
+  /** who last touched each line: the working tree's copy, or the file as `ref` left it */
+  async blame(worktreeId: string, path: string, ref?: string): Promise<FileBlame> {
+    const r = this.require(worktreeId);
+    // bound the path as a read would, then hand git the relative form it wants
+    resolveInside(r.path, path);
+    return blameFile(r.path, path, ref);
   }
 
   /** where a file the browser draws sits in the working tree: an image for the editor pane's viewer,

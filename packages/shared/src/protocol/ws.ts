@@ -19,6 +19,7 @@ import type {
   ChosenFolder,
   CommitEntry,
   DesignIndex,
+  FileBlame,
   GitFileStatus,
   InstallMethod,
   LogLine,
@@ -177,6 +178,9 @@ export type ServerMsg =
       | { ok: true; version: string }
       | { ok: false; reason: "changed" | "refused"; version: string | null; message?: string }
     ))
+  /** The answer to blame-file, with its `seq`: who last touched each line of the file as it is now,
+   * or as `ref` left it. Empty when git cannot say: an untracked file, or an archived worktree. */
+  | ({ t: "file-blame"; worktreeId: string; path: string; ref?: string; seq: number } & FileBlame)
   | {
       t: "shipped";
       worktreeId: string;
@@ -223,7 +227,7 @@ export type ServerMsg =
 /** the terminal stream: bytes for xterm, which the shell routes around its store */
 export type TermServerMsg = Extract<ServerMsg, { t: "term-data" | "term-snapshot" | "term-exit" }>;
 /** the editor's file answers, which the shell's file sync pairs with its requests */
-export type FileServerMsg = Extract<ServerMsg, { t: "file-read" | "file-written" }>;
+export type FileServerMsg = Extract<ServerMsg, { t: "file-read" | "file-written" | "file-blame" }>;
 
 // ---- client → daemon: schemas are the source of truth ----
 
@@ -537,6 +541,9 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   /** the file as the working tree has it, beside what it was at the merge-base with main; `ref`
    * reads it as that commit left it instead. Answered by exactly one `file-read`. */
   z.object({ t: z.literal("read-file"), worktreeId: id, path: relPath, ref: sha.optional(), seq }),
+  /** who last touched each line of the file, for the ghost after the caret's line; `ref` blames the
+   * file as that commit left it. Answered by exactly one `file-blame`. */
+  z.object({ t: z.literal("blame-file"), worktreeId: id, path: relPath, ref: sha.optional(), seq }),
   /** the branch's commits for the history tab */
   z.object({ t: z.literal("git-log"), worktreeId: id }),
   /** the files one commit touched, on expanding it in the history tab */

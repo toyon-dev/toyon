@@ -500,7 +500,7 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
   },
 
   async judge(msg, _ctx, s) {
-    await s.landing.judge(msg.worktreeId);
+    await s.landing.judge(msg.worktreeId, msg.note);
   },
 
   async "write-file"(msg, ctx, s) {

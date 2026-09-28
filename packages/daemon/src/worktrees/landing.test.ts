@@ -319,6 +319,22 @@ describe("LandingService", () => {
     expect(w.wt()?.lastTurn?.recap?.text).toBe("Feature in.");
   });
 
+  test("judge() carries the note typed after the verb into the question", async () => {
+    w = world({ check: "bun run check", verdict: { ready: true, subject: "add the feature" } });
+    w.dirty();
+    const settledAt = w.settled();
+    await w.service.judge("w1", "  relates to the sync ticket  ");
+    await settledAt;
+    expect(w.judged).toHaveLength(1);
+    expect(w.judged[0]).toContain("Note from the user for the commit message");
+    expect(w.judged[0]).toContain("relates to the sync ticket");
+    // a blank note is no note
+    const again = w.settled();
+    await w.service.judge("w1", "   ");
+    await again;
+    expect(w.judged[1]).not.toContain("Note from the user");
+  });
+
   test("judge() is refused mid-turn and with nothing to land", async () => {
     w = world({ verdict: { ready: true, subject: "add the feature" } });
     await expect(w.service.judge("w1")).rejects.toThrow("nothing to check");

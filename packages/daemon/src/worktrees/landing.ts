@@ -57,6 +57,8 @@ interface Run {
   ask: boolean;
   /** the check's rows on the transcript only when it fails */
   quiet: boolean;
+  /** what the person typed after the verb: a fact the commit message is asked to carry */
+  note?: string | undefined;
 }
 
 export class LandingService {
@@ -146,13 +148,19 @@ export class LandingService {
   /** The verdict by hand: the same check and the same question, for a tree that moved under the
    * last one, a turn that stopped short of one, or a row that never had one. Refused while the
    * agent is mid-turn, since the tree is changing, and with nothing to land. The run goes on in the
-   * background; the box reads pending from the first frame. */
-  async judge(worktreeId: string): Promise<void> {
+   * background; the box reads pending from the first frame. A note typed after the verb goes to
+   * the model with the question, so the message can say what the diff alone does not. */
+  async judge(worktreeId: string, note?: string): Promise<void> {
     const wt = this.d.state.requireWorktree(worktreeId);
     if (!canLand(wt)) throw new UserError("nothing to land from here");
     if (this.busy.has(worktreeId)) throw new UserError("wait for the turn to end");
     if (!(await this.hasWork(wt))) throw new UserError("nothing to check: no changes here");
-    fireAndForget(worktreeId, this.run(wt, { at: Date.now(), ask: true, quiet: false }), "landing verdict by hand");
+    const trimmed = note?.trim();
+    fireAndForget(
+      worktreeId,
+      this.run(wt, { at: Date.now(), ask: true, quiet: false, ...(trimmed ? { note: trimmed } : {}) }),
+      "landing verdict by hand",
+    );
   }
 
   /** The check alone, after a discard narrowed the work: the sentence and the message still
@@ -213,6 +221,7 @@ export class LandingService {
         turns: turnsSince(entries, 0),
         diffStat: await diffSummary(wt.path, baseOf(repo)),
         recentSubjects: await recentSubjects(wt.path, baseOf(repo)),
+        ...(opts.note ? { note: opts.note } : {}),
       });
       try {
         verdict = await this.d.judge(wt, prompt);

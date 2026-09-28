@@ -451,8 +451,10 @@ export function Composer({
   const land = () => {
     if (id) shipOp(sock, dispatch, { t: "land", worktreeId: id });
   };
-  const judge = () => {
-    if (id) sock?.send({ t: "judge", worktreeId: id });
+  // a note typed after `/check` rides with the question, so the message can carry what the diff
+  // does not show; the seat's word asks with none
+  const judge = (note?: string) => {
+    if (id) sock?.send({ t: "judge", worktreeId: id, ...(note ? { note } : {}) });
   };
   const hasCheck = !!repo?.config.check?.trim();
   // work with no verdict, or one the tree moved under: the check is the next step, and the word
@@ -643,7 +645,7 @@ export function Composer({
   const refuse = (text: string) => boxId && dispatch({ a: "notice", id: boxId, text });
   // the seat's verb by name. The seat only offers it from an empty box, so this reads the facts
   // under it rather than the seat, and says why when there is nothing for the word to do.
-  const runSeat = (name: "check" | "land" | "archive") => {
+  const runSeat = (name: "check" | "land" | "archive", args = "") => {
     if (!active || !id) return;
     if (name === "archive") {
       if (hasLanded || prClosed) archiveWorktrees(sock, dispatch, [id]);
@@ -654,7 +656,7 @@ export function Composer({
       if (spawning || !canLand(active.worktree)) refuse("nothing to check from here");
       else if (midTurn) refuse("wait for the turn to end");
       else if (landCount === 0) refuse("nothing to check: no changes here");
-      else judge();
+      else judge(args || undefined);
       return;
     }
     const stuck = verdict ? landingLine(verdict) : null;
@@ -701,11 +703,12 @@ export function Composer({
     }
     // one of toyon's own commands: the chip's or the seat's action, run from here rather than sent.
     // A description after a mode goes on as the message, in that mode; a bare one only sets it,
-    // and what is attached stays for the next message the way it does for `!`.
+    // and what is attached stays for the next message the way it does for `!`. What follows
+    // `check` is a note for the commit message; the other verbs take nothing.
     const typed = ownCommandOf(text, ownRows);
     const mode = typed && isMode(typed.name) ? typed.name : undefined;
     if (typed && !mode) {
-      runSeat(typed.name as "check" | "land" | "archive");
+      runSeat(typed.name as "check" | "land" | "archive", typed.args);
       setText("");
       return;
     }

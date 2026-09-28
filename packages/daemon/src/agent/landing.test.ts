@@ -80,6 +80,22 @@ describe("landPrompt", () => {
     expect(p.indexOf("make a dark mode")).toBeLessThan(p.indexOf("fix the flash"));
   });
 
+  test("a note from the person is named as the message's own, and left out when blank", () => {
+    const input = {
+      title: "dark mode",
+      turns: [turn(["make a dark mode"], "Done.")],
+      diffStat: "",
+      recentSubjects: [],
+    };
+    const p = landPrompt({ ...input, note: "relates to the sync ticket" });
+    expect(p).toContain(
+      "Note from the user for the commit message, to be reflected in its wording: relates to the sync ticket",
+    );
+    expect(p.indexOf("Note from the user")).toBeLessThan(p.indexOf("User asked"));
+    expect(landPrompt({ ...input, note: "  " })).not.toContain("Note from the user");
+    expect(landPrompt(input)).not.toContain("Note from the user");
+  });
+
   test("the answer question carries the same turns and no diff", () => {
     const p = answerPrompt({
       title: "dark mode",

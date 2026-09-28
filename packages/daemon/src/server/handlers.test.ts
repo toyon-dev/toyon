@@ -142,8 +142,8 @@ function make() {
   // right call reaches it
   const landingCalls: string[] = [];
   const landing = {
-    judge: async (id: string) => {
-      landingCalls.push(`judge ${id}`);
+    judge: async (id: string, note?: string) => {
+      landingCalls.push(`judge ${id}${note ? ` note=${note}` : ""}`);
     },
     recheck: (id: string) => {
       landingCalls.push(`recheck ${id}`);
@@ -1615,5 +1615,8 @@ describe("the verdict by hand", () => {
     const wt = await services.worktrees.create(r.id, "tidy the footer");
     await dispatch({ t: "judge", worktreeId: wt.id }, ctx, services);
     expect(landingCalls).toEqual([`judge ${wt.id}`]);
+    // the note typed after the verb reaches the question
+    await dispatch({ t: "judge", worktreeId: wt.id, note: "relates to the sync ticket" }, ctx, services);
+    expect(landingCalls.at(-1)).toBe(`judge ${wt.id} note=relates to the sync ticket`);
   });
 });

@@ -19,7 +19,11 @@ export const isMode = (name: string): name is PermissionMode => PERMISSION_MODES
 export function ownCommands(landLine: string): AgentCommand[] {
   return [
     ...PERMISSION_MODES.map((m) => ({ name: m.id, description: m.description, hint: "[<description>]" })),
-    { name: "check", description: "run the repo's check here and write the recap and the commit message" },
+    {
+      name: "check",
+      description: "run the repo's check here and write the recap and the commit message",
+      hint: "[<note for the commit message>]",
+    },
     { name: "land", description: landLine },
     { name: "archive", description: "archive this worktree once its work has landed" },
   ];

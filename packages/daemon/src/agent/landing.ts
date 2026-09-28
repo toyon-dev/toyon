@@ -32,6 +32,9 @@ export interface LandInput {
   diffStat: string;
   /** the newest subjects on the branch, so the message reads like the repo's own */
   recentSubjects: string[];
+  /** what the person typed after the check verb: a fact for the message that the diff does not
+   * show (the ticket it answers, what it relates to, why now) */
+  note?: string | undefined;
 }
 
 const LAND_TURNS = 4;
@@ -42,6 +45,10 @@ export function landPrompt(i: LandInput): string {
   if (i.firstAsk) head.push(`First request: ${clip(i.firstAsk, 300)}`);
   if (i.recentSubjects.length)
     head.push(`Recent commit subjects:\n${i.recentSubjects.map((s) => `  ${s}`).join("\n")}`);
+  // the note outranks the transcript for the message: it is the one thing the person asked the
+  // message to say, so it is named as such rather than left among the turns
+  if (i.note?.trim())
+    head.push(`Note from the user for the commit message, to be reflected in its wording: ${clip(i.note.trim(), 500)}`);
   const diff = `Diff summary:\n${i.diffStat.trim() || "(none)"}`;
   let blocks = i.turns.slice(-LAND_TURNS).map(turnBlock);
   const size = () => [...head, "", ...blocks, "", diff].join("\n\n").length;

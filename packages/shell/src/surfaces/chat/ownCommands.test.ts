@@ -16,6 +16,15 @@ describe("ownCommands", () => {
     expect(own.find((c) => c.name === "plan")?.hint).toBe("[<description>]");
     expect(own.find((c) => c.name === "archive")?.hint).toBeUndefined();
   });
+
+  test("check takes a note for the commit message; land and archive take nothing", () => {
+    expect(own.find((c) => c.name === "check")?.hint).toBe("[<note for the commit message>]");
+    expect(own.find((c) => c.name === "land")?.hint).toBeUndefined();
+    expect(ownCommandOf("/check relates to the sync ticket", own)).toEqual({
+      name: "check",
+      args: "relates to the sync ticket",
+    });
+  });
 });
 
 describe("mergeCommands", () => {

@@ -553,8 +553,9 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   z.object({ t: z.literal("discard-file"), worktreeId: id, path: relPath }),
   /** run the repo's check here and write the recap and the commit message, by hand: for a verdict
    * the tree moved under, a turn that stopped short of one, or none at all. Answered by the
-   * worktree's landing on the rows frame; refused while its agent is mid-turn. */
-  z.object({ t: z.literal("judge"), worktreeId: id }),
+   * worktree's landing on the rows frame; refused while its agent is mid-turn. A `note` is what
+   * the person typed after the verb, for the commit message to carry. */
+  z.object({ t: z.literal("judge"), worktreeId: id, note: z.string().max(500).optional() }),
   z.object({ t: z.literal("reveal"), worktreeId: id, path: relPath.optional() }),
   z.object({ t: z.literal("stop-agent"), worktreeId: id }),
   /** the person is looking at this worktree right now: clears the rail's unseen ring */

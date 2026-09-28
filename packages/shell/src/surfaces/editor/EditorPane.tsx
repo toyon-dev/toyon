@@ -1,5 +1,5 @@
 import { renderedAs, viewerOf } from "@toyon/shared";
-import { lazy, Suspense, useEffect, useMemo } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { writeCopiedSource } from "../../app/copiedSource.ts";
 import { previewBus } from "../../app/previewBus.ts";
 import { fileItems, viewsOf } from "../../state/actions/file.ts";
@@ -134,6 +134,9 @@ export function EditorPane({
   // browser has no bytes the daemon can serve
   const grant = loose?.source.kind === "grant" ? loose.source : null;
   const viewer = history || kept || (loose && !grant) ? null : viewerOf(path);
+  // a picture at the window's size: the header's button and the picture itself both open it, so
+  // the pane holds the switch and the viewer draws the float
+  const [fullSize, setFullSize] = useState(false);
   // a line the page reported is only placed once its offset is known
   const line = editor.line && !editor.line.fiber ? editor.line.n : undefined;
   return (
@@ -179,6 +182,20 @@ export function EditorPane({
                 <Icon name={VIEW_ICONS[v]} className="icon-inline" /> {v}
               </Button>
             ))}
+          {/* a picture sits where a text file's views do: the pane is a strip of the window, and a
+              screenshot is read at its own size */}
+          {viewer === "image" && (
+            <Button
+              variant="outline"
+              tone="quiet"
+              mono
+              className="deep-link"
+              onClick={() => setFullSize(true)}
+              data-tip="Full size: see the picture over the window"
+            >
+              <Icon name="zen" className="icon-inline" /> full size
+            </Button>
+          )}
           {/* a dropped file's place on disk is the browser's secret, so there is nowhere to open it;
               a granted one is opened by its place, and the reveal is a worktree file's alone */}
           {!kept && absPath !== null && (
@@ -201,6 +218,8 @@ export function EditorPane({
             path={path}
             openSeq={editor.seq}
             focus={editor.focus}
+            full={fullSize}
+            onFull={setFullSize}
           />
         ) : disk.binary ? (
           <div className="empty">not a text file: open it in another editor</div>

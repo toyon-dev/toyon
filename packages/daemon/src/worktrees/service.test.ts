@@ -1973,6 +1973,34 @@ describe("landing", () => {
     expect((await git(w.repo, "log", "-1", "--format=%s", "main^2")).out).toBe("add the feature");
   });
 
+  test("a branch switched by hand in the worktree is the row's branch: a status reads it and a land lands it", async () => {
+    const repoId = await registered();
+    const wt = await w.worktrees.create(repoId, "feature");
+    const born = wt.branch;
+    sh(wt.path, "git", "switch", "-q", "-c", "mine");
+    writeFileSync(join(wt.path, "mine.txt"), "x\n");
+    sh(wt.path, "git", "add", "-A");
+    sh(wt.path, "git", "commit", "-qm", "on mine");
+    const tip = (await git(wt.path, "rev-parse", "HEAD")).out;
+    await w.worktrees.gitStatus(wt.id);
+    expect(w.state.worktree(wt.id)?.branch).toBe("mine");
+    // a land takes the checkout's branch, not the one the row was born with, which is still on
+    // main with nothing to land; the checkout is not reset under the switch
+    const { result } = await w.worktrees.land(wt.id);
+    expect(result.ok).toBe(true);
+    expect((await git(w.repo, "log", "-1", "--format=%s", "main^2")).out).toBe("on mine");
+    expect((await git(w.repo, "merge-base", "--is-ancestor", tip, "main")).ok).toBe(true);
+    // a branch not toyon's keeps its history rather than restarting from main
+    expect((await git(wt.path, "rev-parse", "HEAD")).out).toBe(tip);
+    expect((await git(wt.path, "branch", "--show-current")).out).toBe("mine");
+    expect(w.state.worktree(wt.id)).toMatchObject({ branch: "mine", landed: true });
+    expect((await git(w.repo, "branch", "--list", born)).out).toContain(born);
+    // detached: the record keeps its branch, and the land says so
+    sh(wt.path, "git", "switch", "-q", "--detach");
+    await w.worktrees.gitStatus(wt.id);
+    expect(w.state.worktree(wt.id)?.branch).toBe("mine");
+  });
+
   test("land syncs main in first when the branch is behind, and a dirty main checkout refuses", async () => {
     const repoId = await registered();
     const wt = await w.worktrees.create(repoId, "feature");

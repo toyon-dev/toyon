@@ -1500,7 +1500,27 @@ export class WorktreeService {
    * closing it is its own press. Returns any variant siblings to offer up. */
   async land(worktreeId: string, message?: string): Promise<{ result: ShipResult; archiveIds?: string[] }> {
     const { wt, repo } = this.landable(worktreeId, "land");
-    return this.ship(wt.id, "land", () => this.landOp(wt, repo, message));
+    // inside the op, so the press is the one out on the row from its first tick
+    return this.ship(wt.id, "land", async () => {
+      await this.followBranch(wt);
+      return this.landOp(wt, repo, message);
+    });
+  }
+
+  /** The record's branch is whatever the checkout is on. A hand switches branches in a worktree
+   * the way it edits files there, and every count is read from HEAD already; a land that merged
+   * the record's branch while HEAD was on another would report a landing of nothing and then
+   * reset the branch with the work. A detached HEAD leaves the record as it was: there is no
+   * branch to follow, and the land refuses on its own. Read here on every status and before a
+   * landing, since a switch moves no file the watcher sees. */
+  private async followBranch(wt: WorktreeInfo, current?: string): Promise<void> {
+    if (wt.kind === "main") return;
+    const branch = current ?? (await git(wt.path, "branch", "--show-current")).out;
+    if (!branch || branch === wt.branch) return;
+    log.info(wt.id, `on ${branch} now, not ${wt.branch}: the row follows the checkout`);
+    wt.branch = branch;
+    this.d.state.save();
+    this.d.hub.emit("worktreesChanged");
   }
 
   /** the landing op out on a row or a trunk, for its frame and for what is refused meanwhile */
@@ -2096,12 +2116,14 @@ export class WorktreeService {
       // only main is its own baseline; every other worktree, discovered ones included, has a
       // branch worth counting against the base
       const isMain = r.wt?.kind === "main";
-      const [files, ab, unpushed, head] = await Promise.all([
+      const [files, ab, unpushed, head, current] = await Promise.all([
         statusFilesWithCounts(r.path),
         isMain ? Promise.resolve({}) : aheadBehind(r.path, r.base),
         this.unpushed(worktreeId, r.path),
         git(r.path, "rev-parse", "HEAD"),
+        git(r.path, "branch", "--show-current"),
       ]);
+      if (r.wt && current.ok) await this.followBranch(r.wt, current.out);
       const counts = { ...ab, ...(unpushed === undefined ? {} : { unpushed }) };
       const ahead = (counts as { ahead?: number }).ahead ?? 0;
       const committed = !isMain && ahead > 0 ? await committedFiles(r.path, r.base) : undefined;

@@ -85,7 +85,7 @@ A Postgres database per copy, copied from a template and dropped when the copy g
 
 A migration step in `setup` needs the same `DATABASE_URL` in front of it, since `setup` does not see what `run` sets.
 
-A Neon branch per copy is the same recipe with a branch in place of a copy: instant, copy-on-write, data included.
+A Neon branch per copy is the same recipe with a branch in place of a copy: instant, copy-on-write, data included. The commands need to know the project: run `neon link` once in the checkout, or add `--project-id` to each. The `neonctl` package installs both `neon` and `neonctl`.
 
 ```json
 {

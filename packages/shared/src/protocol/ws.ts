@@ -185,9 +185,18 @@ export type ServerMsg =
    * the pane opens it there */
   | { t: "open-path"; worktreeId: string; path: string }
   /** a file opened from outside every project, granted on the daemon under `id`: the pane opens
-   * it loose, text in hand, and saves it through write-loose. `version` names the bytes read;
-   * `tooLarge` is more than the pane shows, opened empty and read-only */
-  | { t: "open-loose"; id: string; name: string; text: string; tooLarge: boolean; version: string | null }
+   * it loose, text in hand, and saves it through write-loose. `path` is where it lives, for the
+   * open-in menu; `version` names the bytes read; `tooLarge` is more than the pane shows, opened
+   * empty and read-only */
+  | {
+      t: "open-loose";
+      id: string;
+      name: string;
+      path: string;
+      text: string;
+      tooLarge: boolean;
+      version: string | null;
+    }
   /** the answer to write-loose, exactly one per write, as file-written answers a write-file */
   | ({ t: "loose-written"; id: string; seq: number } & (
       | { ok: true; version: string }

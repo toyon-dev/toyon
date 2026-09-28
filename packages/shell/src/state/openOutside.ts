@@ -49,7 +49,7 @@ export function openFromOutside(store: Store, sock: DaemonSocket | null, msg: Op
       name: msg.name,
       text: msg.text,
       tooLarge: msg.tooLarge,
-      source: { kind: "grant", id: msg.id, version: msg.version },
+      source: { kind: "grant", id: msg.id, path: msg.path, version: msg.version },
       seq: nextSeq(),
     },
   });

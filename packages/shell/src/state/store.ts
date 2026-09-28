@@ -492,7 +492,7 @@ export type FileRef = Pick<OpenFile, "worktreeId" | "path" | "ref">;
  * seen. Bytes alone are read-only. */
 export type LooseSource =
   | { kind: "handle"; handle: FileSystemFileHandle }
-  | { kind: "grant"; id: string; version: string | null }
+  | { kind: "grant"; id: string; path: string; version: string | null }
   | { kind: "bytes" };
 
 /** what a caller opens from outside every worktree: a dropped file, by name, with its text read */

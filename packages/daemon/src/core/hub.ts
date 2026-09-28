@@ -56,6 +56,9 @@ export interface HubEvents {
   filesChanged: (worktreeId: string) => void;
   /** a file was opened from outside the shell (the Dock icon, `toyon <file>`): a shell should show it */
   opened: (opened: OpenedFile) => void;
+  /** a path from outside was refused, in the words the person should read: the Dock icon has no
+   * screen of its own, so a shell says it */
+  openRefused: (message: string) => void;
   /** something the daemon ran on a worktree's behalf, unasked, stopped: `message` is read as a
    * daemon error on that worktree, where a failure nobody requested would otherwise sit in a log */
   failed: (worktreeId: string, message: string) => void;

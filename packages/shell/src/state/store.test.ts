@@ -1511,7 +1511,10 @@ describe("the editor's open file", () => {
     const handle = { kind: "file" } as unknown as FileSystemFileHandle;
     expect(run([hello(wt("a")), loose({ source: { kind: "handle", handle } })]).editor?.disk?.writable).toBe(true);
     // the daemon's grant writes too
-    const granted = run([hello(wt("a")), loose({ source: { kind: "grant", id: "g1", version: "v1" } })]);
+    const granted = run([
+      hello(wt("a")),
+      loose({ source: { kind: "grant", id: "g1", path: "/h/notes.md", version: "v1" } }),
+    ]);
     expect(granted.editor?.disk?.writable).toBe(true);
     const big = run([hello(wt("a")), loose({ text: "", tooLarge: true, source: { kind: "handle", handle } })]);
     expect(big.editor?.disk).toMatchObject({ writable: false, tooLarge: true });

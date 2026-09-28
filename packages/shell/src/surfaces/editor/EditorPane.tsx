@@ -93,7 +93,14 @@ export function EditorPane({
     const w = worktreeById(s, worktreeId)?.worktree;
     return w ? w.path : archivedPageOf(s)?.path;
   });
-  const absPath = wtPath ? `${wtPath}/${path}` : path;
+  // a granted file lives where the daemon opened it; a dropped one has no place the browser will name
+  const absPath = loose
+    ? loose.source.kind === "grant"
+      ? loose.source.path
+      : null
+    : wtPath
+      ? `${wtPath}/${path}`
+      : path;
   // a commit's copy: read-only, and none of the working-tree wiring below applies to it
   const history = ref !== undefined;
   const sync = useMemo(
@@ -170,9 +177,13 @@ export function EditorPane({
                 <Icon name={VIEW_ICONS[v]} className="icon-inline" /> {v}
               </Button>
             ))}
-          {/* a loose file's place on disk is the browser's secret, so there is nowhere to open it */}
-          {!kept && !loose && (
-            <OpenInMenu absPath={absPath} onReveal={() => sock?.send({ t: "reveal", worktreeId, path })} />
+          {/* a dropped file's place on disk is the browser's secret, so there is nowhere to open it;
+              a granted one is opened by its place, and the reveal is a worktree file's alone */}
+          {!kept && absPath !== null && (
+            <OpenInMenu
+              absPath={absPath}
+              onReveal={loose ? undefined : () => sock?.send({ t: "reveal", worktreeId, path })}
+            />
           )}
         </>
       }

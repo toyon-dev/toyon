@@ -6,6 +6,8 @@ import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, wr
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { home, port } from "./daemon.ts";
+// the bundle's executable, compiled on the machine at install (why it is what it is: launcher.m)
+import launcherSource from "./launcher.m" with { type: "text" };
 import { daemonEntry, iconSvg } from "./layout.ts";
 
 const CHROMIUMS = ["Google Chrome", "Arc", "Brave Browser", "Microsoft Edge", "Chromium"];
@@ -101,12 +103,27 @@ export function installApp(appUrl: string) {
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleExecutable</key><string>Toyon</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
+  <!-- takes any file or folder dropped on it, without becoming the default opener for anything -->
+  <key>CFBundleDocumentTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleTypeName</key><string>Anything</string>
+      <key>CFBundleTypeRole</key><string>Editor</string>
+      <key>LSHandlerRank</key><string>Alternate</string>
+      <key>LSItemContentTypes</key>
+      <array>
+        <string>public.item</string>
+        <string>public.folder</string>
+      </array>
+    </dict>
+  </array>
 </dict></plist>
 `,
   );
   // The launch logic is a shell script; the bundle's main executable is a tiny Mach-O that execs
-  // it. Gatekeeper on recent macOS refuses script-main-executable bundles as "damaged" even when
-  // ad-hoc signed; a real binary is accepted. Falls back to the script if clang is unavailable.
+  // it, with the paths dropped on the Dock icon as its arguments. Gatekeeper on recent macOS
+  // refuses script-main-executable bundles as "damaged" even when ad-hoc signed; a real binary is
+  // accepted. Falls back to the script if clang is unavailable, and that cannot take a drop.
   const launcher = join(resources, "launch.sh");
   writeFileSync(
     launcher,
@@ -129,6 +146,22 @@ if ! curl -s --max-time 1 http://127.0.0.1:${port}/health >/dev/null 2>&1; then
 fi
 
 TOKEN=$(cat "$HOME/.toyon/token" 2>/dev/null)
+
+# what was dropped on the icon, or opened with it: each path goes to the daemon, which opens a
+# project, a file in one, or a file on its own, and holds it for the window opened below. A
+# refusal is logged in the daemon's words, since nothing here has a screen (the daemon says it in
+# the shell too); a success is logged as its status alone, since the reply carries the file's text.
+for P in "$@"; do
+  BODY=$("$BUN" -e 'console.log(JSON.stringify({ path: process.argv[1] }))' "$P" 2>/dev/null) || continue
+  REPLY=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H "Authorization: Bearer $TOKEN" \\
+    -H "content-type: application/json" --data "$BODY" http://127.0.0.1:${port}/open 2>/dev/null)
+  if [ "$REPLY" != "200" ]; then
+    REPLY="$REPLY $(curl -s -X POST -H "Authorization: Bearer $TOKEN" -H "content-type: application/json" \\
+      --data "$BODY" http://127.0.0.1:${port}/open 2>&1 | head -c 300)"
+  fi
+  echo "$(date '+%Y-%m-%d %H:%M:%S') open $P: $REPLY" >> "$HOME/.toyon/launcher.log"
+done
+
 URL="http://toyon.localhost:${port}/#token=$TOKEN"
 MANIFEST_ID="${manifestId}"
 CACHE_DIR="$HOME/.toyon/pwa"
@@ -162,27 +195,9 @@ exec open "$URL"
   );
   chmodSync(launcher, 0o755);
   const stub = join(macos, "Toyon");
-  const cSrc = join(home, "launcher.c");
-  writeFileSync(
-    cSrc,
-    `#include <mach-o/dyld.h>
-#include <stdio.h>
-#include <stdint.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <libgen.h>
-int main(int argc, char **argv) {
-  char self[4096]; uint32_t n = sizeof(self);
-  if (_NSGetExecutablePath(self, &n) != 0) return 1;
-  char script[4600];
-  snprintf(script, sizeof(script), "%s/../Resources/launch.sh", dirname(self));
-  execl("/bin/bash", "bash", script, (char *)0);
-  return 1;
-}
-`,
-  );
-  const cc = spawnSync("clang", ["-O2", "-o", stub, cSrc], { stdio: "ignore" });
+  const src = join(home, "launcher.m");
+  writeFileSync(src, launcherSource);
+  const cc = spawnSync("clang", ["-O2", "-fobjc-arc", "-framework", "Cocoa", "-o", stub, src], { stdio: "ignore" });
   if (cc.status !== 0) {
     // no compiler: ship the script as the executable (works on older macOS)
     writeFileSync(stub, `#!/bin/bash\nexec /bin/bash "$(dirname "$0")/../Resources/launch.sh"\n`);

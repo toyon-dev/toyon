@@ -32,6 +32,8 @@ function setup() {
   const found: { id: string; path: string }[] = [];
   const emitted: OpenedFile[] = [];
   hub.on("opened", (o) => emitted.push(o));
+  const refusals: string[] = [];
+  hub.on("openRefused", (m) => refusals.push(m));
   let now = 1_000_000;
   const opens = new OpenService({
     state,
@@ -51,7 +53,7 @@ function setup() {
     writeFileSync(p, content);
     return p;
   };
-  return { t, state, opens, registered, found, emitted, root, outside, tick: (ms: number) => (now += ms) };
+  return { t, state, opens, registered, found, emitted, refusals, root, outside, tick: (ms: number) => (now += ms) };
 }
 
 describe("what a path opens as", () => {
@@ -120,16 +122,23 @@ describe("what a path opens as", () => {
     const { opens, outside, emitted } = setup();
     const p = outside("notes/todo.md", "# todo\n");
     const o = (await opens.open(p)) as Extract<Opened, { kind: "loose" }>;
-    expect(o).toMatchObject({ kind: "loose", name: "todo.md", text: "# todo\n", tooLarge: false });
+    expect(o).toMatchObject({
+      kind: "loose",
+      name: "todo.md",
+      path: realpathSync(p),
+      text: "# todo\n",
+      tooLarge: false,
+    });
     expect(o.version).not.toBeNull();
     expect(o.id).toHaveLength(10);
     expect(emitted).toEqual([o]);
   });
 
-  test("a binary is refused; a file under the daemon's home is refused", async () => {
-    const { t, opens, outside } = setup();
+  test("a binary is refused; a file under the daemon's home is refused; each refusal is said to the shells", async () => {
+    const { t, opens, outside, refusals } = setup();
     const bin = outside("pic.bin", new Uint8Array([0xff, 0xfe, 0x00, 0x01]));
     await expect(opens.open(bin)).rejects.toThrow("pic.bin is not a text file");
+    expect(refusals).toEqual(["pic.bin is not a text file"]);
     const inHome = join(t.paths.home, "secret.txt");
     writeFileSync(inHome, "s");
     await expect(opens.open(inHome)).rejects.toThrow(UserError);

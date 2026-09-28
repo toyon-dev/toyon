@@ -55,7 +55,7 @@ export interface ServerOpts {
 const openedFrame = (o: OpenedFile): ServerMsg =>
   o.kind === "file"
     ? { t: "open-path", worktreeId: o.worktreeId, path: o.path }
-    : { t: "open-loose", id: o.id, name: o.name, text: o.text, tooLarge: o.tooLarge, version: o.version };
+    : { t: "open-loose", id: o.id, name: o.name, path: o.path, text: o.text, tooLarge: o.tooLarge, version: o.version };
 
 export function startServer(opts: ServerOpts): { server: Server<WsData>; branded: boolean; stop: () => void } {
   const { services: s, token, version } = opts;
@@ -225,6 +225,8 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
     broadcast(openedFrame(o));
     s.opens.delivered();
   });
+  // a refused open names no worktree, so the shell says it under the composer on screen
+  s.hub.on("openRefused", (message) => broadcast({ t: "error", message }));
   // A shell in toyon's terminal writes files and commits with nothing else noticing, so once its
   // output has gone quiet the worktree is recounted: the rail's badges and, when it is open, its
   // changes list. Quiet rather than per chunk, since a build prints thousands of them.

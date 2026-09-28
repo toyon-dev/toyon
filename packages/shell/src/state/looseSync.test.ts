@@ -152,11 +152,16 @@ function granted() {
   const timers = fakeTimers();
   const sent: Extract<ClientMsg, { t: "write-loose" }>[] = [];
   const refused: string[] = [];
-  const sync = looseSync({ kind: "grant", id: "g1", version: "v1" }, "notes.md", (why) => refused.push(why), {
-    timers,
-    win: null,
-    send: (m) => m.t === "write-loose" && sent.push(m),
-  });
+  const sync = looseSync(
+    { kind: "grant", id: "g1", path: "/h/notes.md", version: "v1" },
+    "notes.md",
+    (why) => refused.push(why),
+    {
+      timers,
+      win: null,
+      send: (m) => m.t === "write-loose" && sent.push(m),
+    },
+  );
   const b = buffer("a");
   sync.attach(b);
   return { timers, sent, refused, sync, b };

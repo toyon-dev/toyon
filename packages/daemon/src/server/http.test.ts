@@ -52,7 +52,7 @@ const opts: HttpOpts = {
   open: async (path) => {
     if (path === "/bad.bin") throw new UserError("bad.bin is not a text file");
     if (path === "/boom") throw new Error("disk on fire");
-    return { kind: "loose", id: "g1", name: "notes.md", text: "# hi", tooLarge: false, version: "v1" };
+    return { kind: "loose", id: "g1", name: "notes.md", path, text: "# hi", tooLarge: false, version: "v1" };
   },
   restart: (now) => {
     restartsAsked++;
@@ -369,6 +369,7 @@ describe("/open", () => {
       kind: "loose",
       id: "g1",
       name: "notes.md",
+      path: "/notes.md",
       text: "# hi",
       tooLarge: false,
       version: "v1",

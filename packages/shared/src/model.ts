@@ -921,12 +921,10 @@ export interface Theme {
   /** editor token colors; missing entries inherit Monaco's base theme */
   syntax?: Partial<Record<ThemeSyntaxToken, ThemeColor>>;
   /** The colour that carries "you are on this one": the active worktree, an `on` tab, a checked
-   * box. Its own hex rather than one of the seven, because every one of those already means a
-   * state somewhere (red is a crash, green is working, orange is the lost connection), and a
-   * selection painted in a status hue reads as that status. A theme that names none selects in
-   * its orange, which is what most imported themes were doing anyway; Toyon selects in the
-   * terracotta its keywords wear, the berry's hue at less weight, told from the error red by
-   * weight. */
+   * box. Its own hex rather than a key into the seven, because a theme may bring a brand colour
+   * that is none of them (an imported VS Code theme's badge or focus border), and because red is
+   * a crash and green is working, so a selection painted in either reads as that status. A theme
+   * that names none selects in its orange; Toyon and the other built-ins name none. */
   accent?: ThemeColor;
   /** id of this theme's opposite-kind sibling (Gruvbox Dark ↔ Gruvbox Light); guessed by name when absent */
   pair?: string;

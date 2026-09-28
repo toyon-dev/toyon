@@ -68,17 +68,17 @@
 
     /* what "you are on this one" is painted in: the active worktree, the open tool call, a checked
      box. One hue for all of them, so a theme changes the whole idea of selected by pointing this
-     somewhere else. Never one of the seven above: each of those is a state somewhere (red is a
-     crash, green is working), and a selection in a status hue reads as that status. The colour is
-     the theme's to name (Theme.accent, its orange unless it says otherwise) and applyTheme
-     overwrites this. Toyon's is the terracotta its keywords wear: the berry's hue with less
-     weight, told from the berry by weight rather than by hue. */
-    --accent: #df714e;
-    /* what a lost connection is painted in: the rail's dots while the daemon is down. Warm,
-     because it is a fault, and never the accent, because it colours whole rows and a row in the
-     accent reads as selected. applyTheme overwrites this too (faultOf): orange unless the theme
-     selects in its orange, then red. */
-    --fault: var(--orange);
+     somewhere else. Its own value rather than one of the seven above, because a theme may bring
+     a brand colour that is none of them (an imported VS Code theme's badge or focus border), and
+     because red is a crash and green is working, so a selection in either reads as that status.
+     The colour is the theme's to name (Theme.accent, its orange unless it says otherwise) and
+     applyTheme overwrites this. Toyon names none and selects in its orange, the dry grass. */
+    --accent: var(--orange);
+    /* what a lost connection is painted in: the rail's dots while the daemon is down. Never the
+     accent, because it colours whole rows and a row in the accent reads as selected. applyTheme
+     overwrites this too (faultOf): orange unless the theme selects in its orange, then red, which
+     is Toyon's case. Red doubles as a crashed proc there; both say something is down. */
+    --fault: var(--red);
     /* overlay backdrop + box-shadow color: alpha hex so light themes can soften them */
     /* where you type: four L* under the chrome it sits in, darker in both halves. Not a ramp
      position, because the surface ramp reverses direction between them and a recess does not. */

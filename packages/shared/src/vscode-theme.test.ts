@@ -97,8 +97,12 @@ describe("color helpers", () => {
     // the fault paints whole rows, so it steps off the accent: red here, orange where a theme
     // selects in something of its own
     expect(v["--fault"]).toBe(gruvboxDarkSoft.colors.red);
-    expect(themeToCssVars(toyonDark)["--accent"]).toBe("#df714e");
-    expect(themeToCssVars(toyonDark)["--fault"]).toBe(toyonDark.colors.orange);
+    expect(themeToCssVars(toyonDark)["--accent"]).toBe(toyonDark.colors.orange);
+    expect(themeToCssVars(toyonDark)["--fault"]).toBe(toyonDark.colors.red);
+    // a theme with a colour of its own keeps orange for the fault
+    const own = { ...gruvboxDarkSoft, accent: "#7daea3" };
+    expect(themeToCssVars(own)["--accent"]).toBe("#7daea3");
+    expect(themeToCssVars(own)["--fault"]).toBe(gruvboxDarkSoft.colors.orange);
     // a hand-written theme file: a word is not a colour, so it selects in its orange
     const words = { ...gruvboxDarkSoft, accent: "rebeccapurple" };
     expect(themeToCssVars(words)["--accent"]).toBe(gruvboxDarkSoft.colors.orange);

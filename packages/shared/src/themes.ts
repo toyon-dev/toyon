@@ -11,11 +11,11 @@ import type { DarkNow, Theme, ThemeColorKey, ThemePrefs, ThemeSyntaxToken } from
 //   so it sits at L*62, where it still reads at 12px on element1, and everything else is fitted
 //   under it. Its hue is held between hue* 34 and 40 rather than at the gamut edge (45), which is
 //   only twenty degrees off the dry-grass orange and stops being a red.
-// - The berry is the fault colour and not the accent. Selection is the terracotta the keyword
-//   wears in code, the same hex: the berry's hue at L*60 and two thirds of its chroma, so a
-//   current row sits on the berry's side of the palette without wearing the one colour that means
-//   broken, and the two tell apart at 12px by weight rather than by hue. Code never shows the
-//   accent and the chrome never shows a keyword, so the one colour does both without meeting.
+// - The berry is the error colour and not the accent. Toyon names no accent and selects in its
+//   orange, the dry grass, as every other built-in does: the one warm hue that is not the berry,
+//   nineteen degrees off it and a different fruit at 12px. The cost is that the lost-daemon ring
+//   moves to red and shares it with a crashed proc, which is the cheaper collision, since both
+//   say something is down.
 // - The ground is brown rather than any other warm cast because tint on the ground has to sit on
 //   the text's side of the yellow axis, or the text never settles onto it; and its depth is
 //   Gruvbox Dark Soft's L*20, since a near-black ground makes light text bloom and hurts to read
@@ -41,7 +41,6 @@ export const toyonDark: Theme = {
   kind: "dark",
   source: "builtin",
   pair: "toyon-light",
-  accent: "#df714e",
   colors: {
     surface0: "#32302d",
     surface1: "#3d3835",
@@ -83,10 +82,7 @@ export const toyonDark: Theme = {
 // The same hillside at noon: bone paper instead of understory floor, and every accent taken down
 // to ink weight so it holds on paper the way the dark half's holds on soil. The hues do not move
 // between the two, only their lightness, which is what keeps a theme switch from feeling like a
-// different app. The accent is the one colour not taken all the way down, and so the one place
-// it parts from the keyword: at ink weight the terracotta is a brick a step from the error red,
-// so it holds at L*58, which an edge, a dot and a control word carry on paper and body text
-// never has to.
+// different app.
 export const toyonLight: Theme = {
   id: "toyon-light",
   family: "Toyon",
@@ -94,7 +90,6 @@ export const toyonLight: Theme = {
   kind: "light",
   source: "builtin",
   pair: "toyon-dark",
-  accent: "#d76c52",
   colors: {
     surface0: "#f8f2e8",
     surface1: "#efe8dc",

@@ -42,6 +42,11 @@ export function worktreeFileUrl(worktreeId: string, path: string, version: strin
   return `/files/${worktreeId}/${rel}?token=${getToken()}&v=${encodeURIComponent(version ?? "")}`;
 }
 
+/** where the daemon serves a granted file for the viewer, by the id the open came with */
+export function looseFileUrl(id: string, version: string | null): string {
+  return `/loose/${encodeURIComponent(id)}?token=${getToken()}&v=${encodeURIComponent(version ?? "")}`;
+}
+
 /** Ask the daemon to restart over plain HTTP, for a page whose socket stopped at a protocol mismatch.
  * Answers the daemon's refusal, or null once it has taken the request. `now` goes without waiting
  * out the chats mid-reply. */

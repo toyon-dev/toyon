@@ -550,6 +550,13 @@
       color: var(--text0);
       text-decoration-color: currentColor;
     }
+    /* a link the daemon could not open: the underline says so at the word that was pressed, and
+       the reason is in its tip. The word keeps its tier; only the line under it turns. */
+    & a.file-link-refused,
+    :where([data-hover]) & a.file-link-refused:hover {
+      text-decoration-color: var(--red);
+      text-decoration-style: wavy;
+    }
     /* a link whose url is still arriving: the label holds the link's place and shines like any
        other thing the agent is mid-way through, and takes the blue and the underline only once
        there is somewhere to go */

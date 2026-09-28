@@ -42,6 +42,9 @@ export interface HttpOpts {
   /** a file in a worktree the browser draws (an image), for the editor pane's viewer; null when
    * the path is not one */
   worktreeFile: (worktreeId: string, path: string) => Promise<string | null>;
+  /** a granted file the browser draws, by its grant id, for the same viewer; null when the id is
+   * not a grant or the file is no picture */
+  looseFile: (id: string) => string | null;
   /** whether the portless http://toyon.localhost listener came up (known after bind) */
   branded: () => boolean;
   /** event-loop lag + per-socket traffic, for /health */
@@ -277,6 +280,17 @@ export function createFetch(opts: HttpOpts) {
         // a malformed escape names no file: the 404 below
       }
       const path = worktreeId && rel ? await opts.worktreeFile(worktreeId, rel) : null;
+      if (!path) return new Response("not found", { status: 404 });
+      return new Response(Bun.file(path), {
+        headers: { "cache-control": NO_STORE, "x-content-type-options": "nosniff" },
+      });
+    }
+
+    // a granted file the browser draws (a picture opened from the Dock, the terminal or a link in
+    // the chat), by its grant id, served as a worktree's file is
+    if (url.pathname.startsWith("/loose/")) {
+      if (!sameSecret(url.searchParams.get("token"), opts.token)) return new Response("unauthorized", { status: 401 });
+      const path = opts.looseFile(url.pathname.slice("/loose/".length));
       if (!path) return new Response("not found", { status: 404 });
       return new Response(Bun.file(path), {
         headers: { "cache-control": NO_STORE, "x-content-type-options": "nosniff" },

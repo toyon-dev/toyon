@@ -36,6 +36,8 @@ export default defineConfig({
       "/attachments": target,
       // a worktree's images, for the editor pane's viewer and the assets a rendered page draws
       "/files": target,
+      // a granted file's picture, opened from outside every worktree, for the same viewer
+      "/loose": target,
     },
   },
 });

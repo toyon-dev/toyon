@@ -403,7 +403,15 @@ describe("the open file and the disk", () => {
     expect(h.count("read-file")).toBe(1);
     h.store.dispatch({
       a: "open-loose",
-      v: { worktreeId: "a", name: "x.ts", text: "x", tooLarge: false, source: { kind: "bytes" }, seq: 99 },
+      v: {
+        worktreeId: "a",
+        name: "x.ts",
+        text: "x",
+        binary: false,
+        tooLarge: false,
+        source: { kind: "bytes" },
+        seq: 99,
+      },
     });
     h.win.fire("focus");
     expect(h.count("read-file")).toBe(1);

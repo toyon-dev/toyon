@@ -152,14 +152,30 @@ describe("what a path opens as", () => {
     expect(emitted).toEqual([o]);
   });
 
-  test("a binary is refused; a file under the daemon's home is refused; each refusal is said to the shells", async () => {
-    const { t, opens, outside, refusals } = setup();
+  test("a binary is granted empty and marked; a picture is served by its grant, anything else is not", async () => {
+    const { opens, outside, refusals } = setup();
     const bin = outside("pic.bin", new Uint8Array([0xff, 0xfe, 0x00, 0x01]));
-    await expect(opens.open(bin)).rejects.toThrow("pic.bin is not a text file");
-    expect(refusals).toEqual(["pic.bin is not a text file"]);
+    const o = (await opens.open(bin)) as Extract<Opened, { kind: "loose" }>;
+    expect(o).toMatchObject({ kind: "loose", name: "pic.bin", text: "", binary: true, tooLarge: false });
+    expect(opens.viewable(o.id)).toBeNull();
+    const png = outside("shot.png", new Uint8Array([0x89, 0x50, 0x4e, 0x47]));
+    const p = (await opens.open(png)) as Extract<Opened, { kind: "loose" }>;
+    expect(p.binary).toBe(true);
+    expect(opens.viewable(p.id)).toBe(realpathSync(png));
+    const md = outside("plain.md", "# hi\n");
+    const m = (await opens.open(md)) as Extract<Opened, { kind: "loose" }>;
+    expect(m.binary).toBe(false);
+    expect(opens.viewable(m.id)).toBeNull();
+    expect(opens.viewable("never")).toBeNull();
+    expect(refusals).toEqual([]);
+  });
+
+  test("a file under the daemon's home is refused, and the refusal is said to the shells", async () => {
+    const { t, opens, refusals } = setup();
     const inHome = join(t.paths.home, "secret.txt");
     writeFileSync(inHome, "s");
     await expect(opens.open(inHome)).rejects.toThrow(UserError);
+    expect(refusals).toEqual(["secret.txt is inside Toyon's own folder, which is not for editing"]);
     // a symlink out of the home to a granted place is still the home's file
     symlinkSync(inHome, join(t.paths.home, "..", "aside.txt"));
     await expect(opens.open(join(t.paths.home, "..", "aside.txt"))).rejects.toThrow(UserError);

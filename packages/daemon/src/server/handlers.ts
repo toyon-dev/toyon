@@ -48,7 +48,7 @@ export interface Services {
   turns: TurnService;
   files: FileService;
   /** files opened from outside the shell: the grants on files in no worktree, and their saves */
-  opens: Pick<OpenService, "open" | "file" | "write" | "takePending" | "delivered">;
+  opens: Pick<OpenService, "open" | "file" | "viewable" | "write" | "takePending" | "delivered">;
   /** the worktree's own design system, scanned from its source */
   design: DesignService;
   /** the route bar's list: which preview pages each repo is used on */
@@ -540,9 +540,16 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
   },
 
   // a link in the chat to a file outside this worktree: the same open the Dock icon gets, answered
-  // to the shell that clicked; a refusal is the socket's error frame, read under the composer
-  async "open-outside"(msg, ctx, s) {
-    ctx.reply(openedFrame(await s.opens.file(msg.path)));
+  // to the shell that clicked
+  async "open-by-path"(msg, ctx, s) {
+    try {
+      ctx.reply(openedFrame(await s.opens.file(msg.path)));
+    } catch (e) {
+      // answered by seq, so the shell reads the refusal at the link that was pressed; the socket's
+      // error frame would name no link
+      if (!(e instanceof UserError)) log.error("open", "open-by-path failed", e);
+      ctx.reply({ t: "open-refused", seq: msg.seq, message: errorText(e) });
+    }
   },
 
   async "write-loose"(msg, ctx, s) {
@@ -773,7 +780,16 @@ function looseCwd(s: Services, id: string, stream: string): string | null {
 export const openedFrame = (o: OpenedFile): ServerMsg =>
   o.kind === "file"
     ? { t: "open-path", worktreeId: o.worktreeId, path: o.path }
-    : { t: "open-loose", id: o.id, name: o.name, path: o.path, text: o.text, tooLarge: o.tooLarge, version: o.version };
+    : {
+        t: "open-loose",
+        id: o.id,
+        name: o.name,
+        path: o.path,
+        text: o.text,
+        binary: o.binary,
+        tooLarge: o.tooLarge,
+        version: o.version,
+      };
 
 export async function dispatch(msg: ClientMsg, ctx: HandlerCtx, s: Services): Promise<void> {
   const h = handlers[msg.t] as Handler<typeof msg.t>;

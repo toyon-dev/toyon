@@ -7,7 +7,7 @@
 import type { Stats } from "node:fs";
 import { stat } from "node:fs/promises";
 import { basename, resolve } from "node:path";
-import { FILE_MAX_CHARS } from "@toyon/shared";
+import { FILE_MAX_CHARS, viewerOf } from "@toyon/shared";
 import { canonical, within } from "../agent/bounds.ts";
 import { UserError } from "../core/errors.ts";
 import type { Hub } from "../core/hub.ts";
@@ -21,7 +21,18 @@ import { type FileWrite, writeOver } from "./service.ts";
 export type Opened =
   | { kind: "repo"; repoId: string }
   | { kind: "file"; worktreeId: string; path: string }
-  | { kind: "loose"; id: string; name: string; path: string; text: string; tooLarge: boolean; version: string | null };
+  | {
+      kind: "loose";
+      id: string;
+      name: string;
+      path: string;
+      /** empty when `binary` or `tooLarge` */
+      text: string;
+      /** not text: a picture draws in the pane from its grant, anything else says so there */
+      binary: boolean;
+      tooLarge: boolean;
+      version: string | null;
+    };
 
 /** what a shell is told to show; a repo opening is the repos frame, as a register always was */
 export type OpenedFile = Exclude<Opened, { kind: "repo" }>;
@@ -120,13 +131,30 @@ export class OpenService {
     // never read whole: a version off the stat is enough for a file nothing will write
     if (size > FILE_MAX_CHARS) {
       this.grants.set(id, path);
-      return { kind: "loose", id, name, path, text: "", tooLarge: true, version: `${size}-${mtimeMs}` };
+      return { kind: "loose", id, name, path, text: "", binary: false, tooLarge: true, version: `${size}-${mtimeMs}` };
     }
     const bytes = new Uint8Array(await Bun.file(path).arrayBuffer());
     const text = decodeText(bytes);
-    if (text === null) throw new UserError(`${name} is not a text file`);
     this.grants.set(id, path);
-    return { kind: "loose", id, name, path, text, tooLarge: false, version: versionOf(bytes) };
+    // a binary is granted as a worktree file that is not text is opened: the pane draws a picture
+    // from the grant and says anything else is not text, rather than the open refusing at the door
+    return {
+      kind: "loose",
+      id,
+      name,
+      path,
+      text: text ?? "",
+      binary: text === null,
+      tooLarge: false,
+      version: versionOf(bytes),
+    };
+  }
+
+  /** where a granted file the browser draws sits, for the pane's viewer; null for a text file, a
+   * file that is no picture, and an id this daemon never granted */
+  viewable(id: string): string | null {
+    const path = this.grants.get(id);
+    return path && viewerOf(path) ? path : null;
   }
 
   /** save over a granted file, only over the version the shell last saw (as a worktree write is) */

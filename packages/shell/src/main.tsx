@@ -10,7 +10,7 @@ import { createStore, StoreProvider } from "./state/context.tsx";
 import { FileSync } from "./state/fileSync.ts";
 import { migrateStorage, STORAGE } from "./state/keys.ts";
 import { settleLoose } from "./state/looseSync.ts";
-import { isOpenedMsg, openFromOutside } from "./state/openOutside.ts";
+import { isOpenedMsg, openFromOutside, refusedFromOutside } from "./state/openOutside.ts";
 import { initialState, isLayout, type Layout } from "./state/store.ts";
 import { ErrorBoundary, markStaleBuild } from "./ui/ErrorBoundary.tsx";
 import "./styles/tokens.css";
@@ -227,6 +227,10 @@ const sock = new DaemonSocket(
     }
     if (isOpenedMsg(msg)) {
       openFromOutside(store, sock, msg);
+      return;
+    }
+    if (msg.t === "open-refused") {
+      refusedFromOutside(store, msg);
       return;
     }
     store.dispatch({ a: "server", msg });

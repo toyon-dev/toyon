@@ -36,7 +36,7 @@ export function pasteItems(paste: { text?: string; href?: string }, ui: ChipUi =
 export type ChatLink =
   | { kind: "out"; href: string }
   | { kind: "file"; file: { path: string; line?: number; folder?: true } }
-  | { kind: "outside"; path: string; line?: number }
+  | { kind: "outside"; href: string; path: string; line?: number }
   | { kind: "path"; path: string };
 
 /** a link out of the chat: the page outside the shell, and its address as text */

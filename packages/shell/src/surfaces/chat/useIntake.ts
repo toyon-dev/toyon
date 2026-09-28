@@ -212,6 +212,9 @@ async function dropOnCentre(store: Store, dropped: Dropped[]) {
       worktreeId,
       name: first.file.name,
       ...read,
+      // a dropped binary is turned away above: the browser holds its bytes, and the daemon has no
+      // grant to draw it from
+      binary: false,
       source: handle ? { kind: "handle", handle } : { kind: "bytes" },
       seq: nextSeq(),
     },

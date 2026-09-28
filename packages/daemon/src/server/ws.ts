@@ -364,6 +364,7 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
       attachments: s.attachments,
       archivedAttachment: (id, file) => s.worktrees.archivedAttachment(id, file),
       worktreeFile: (id, path) => s.files.viewableFile(id, path),
+      looseFile: (id) => s.opens.viewable(id),
       branded: () => branded,
       metrics,
       noteShellOrigin: opts.noteShellOrigin,

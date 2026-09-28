@@ -238,6 +238,9 @@ export interface WorktreeLocal {
    * with nothing to do, an attachment over the limit, a refusal from the daemon with no worktree to
    * answer on. Read under the field until the next keystroke or attachment answers it. */
   notice?: string;
+  /** the last link in this chat the daemon could not open, and why: read at the link, in the
+   * message that holds it, until the next link is pressed */
+  refusedLink?: { href: string; message: string };
   /** the answers being put together to the agent's open question, and which question the box is
    * on: kept here so switching worktrees and parking the ask keep them; gone when the ask closes */
   ask?: AskDraft;
@@ -500,8 +503,10 @@ export interface OpenLoose {
   /** the pane's plumbing keys on a worktree, so the one on screen lends its id */
   worktreeId: string;
   name: string;
-  /** empty when `tooLarge` */
+  /** empty when `binary` or `tooLarge` */
   text: string;
+  /** not text: read-only, drawn from the grant when it is a picture, said to be no text otherwise */
+  binary: boolean;
   /** more than the pane shows: opened read-only with nothing in it, as a worktree file that size is */
   tooLarge: boolean;
   source: LooseSource;
@@ -1148,10 +1153,11 @@ export const isSubPicker = (o: Overlay) =>
   o.kind === "choose-folder";
 
 /** what reaches the reducer: terminal frames are routed to the pane, file answers to fileSync, and
- * a file opened from outside the shell to its opener, before dispatch (main.tsx) */
+ * a file opened from outside the shell, or refused to a link that asked, to its opener, before
+ * dispatch (main.tsx) */
 export type StoreServerMsg = Exclude<
   ServerMsg,
-  TermServerMsg | FileServerMsg | { t: "open-path" | "open-loose" | "loose-written" }
+  TermServerMsg | FileServerMsg | { t: "open-path" | "open-loose" | "open-refused" | "loose-written" }
 >;
 
 export type Action =
@@ -1210,6 +1216,9 @@ export type Action =
   | { a: "editor-blame"; file: FileRef; blame: EditorBlame }
   /** the composer's answer to something that could not be done to this box, read until the next keystroke */
   | { a: "notice"; id: string; text: string }
+  /** the daemon could not open a link pressed in this chat, or (null) a link was just pressed and
+   * the last refusal is done with */
+  | { a: "link-refused"; id: string; v: { href: string; message: string } | null }
   /** the answers so far to the ask on this worktree's box, and the question it is on */
   | { a: "ask-draft"; id: string; ask: AskDraft }
   /** set the open ask aside: the plain box comes back, the ask stays open for the agent */
@@ -1568,8 +1577,8 @@ function reduce(s: State, action: Action): State {
         before: v.text,
         after: v.text,
         version: null,
-        writable: v.source.kind !== "bytes" && !v.tooLarge,
-        binary: false,
+        writable: v.source.kind !== "bytes" && !v.tooLarge && !v.binary,
+        binary: v.binary,
         tooLarge: v.tooLarge,
       };
       return {
@@ -1634,6 +1643,8 @@ function reduce(s: State, action: Action): State {
     case "notice":
       // the answer is under the box, so the box has to be on screen
       return withLocal(revealChat(s), action.id, (l) => ({ ...l, notice: action.text }));
+    case "link-refused":
+      return withLocal(s, action.id, ({ refusedLink: _was, ...l }) => (action.v ? { ...l, refusedLink: action.v } : l));
     case "ask-draft":
       return withLocal(s, action.id, (l) => ({ ...l, ask: action.ask }));
     case "ask-park":

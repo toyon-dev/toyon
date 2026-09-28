@@ -22,7 +22,7 @@ import { ErrorBoundary } from "../../ui/ErrorBoundary.tsx";
 import { useSettled } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { Pane } from "../../ui/Pane.tsx";
-import { worktreeFileUrl } from "../../ws.ts";
+import { looseFileUrl, worktreeFileUrl } from "../../ws.ts";
 import { FileViewer } from "./FileViewer.tsx";
 import { HtmlPreview } from "./HtmlPreview.tsx";
 import { MarkdownPreview } from "./MarkdownPreview.tsx";
@@ -129,9 +129,11 @@ export function EditorPane({
   // a file with nothing on the other side has no diff to switch to; a loose file has no other side
   const added = disk?.before === "";
   const others = viewsOf(path, added).filter((v) => v !== view && !(loose && v === "diff"));
-  // a file the browser draws is drawn from the working tree; one only in git (a commit's copy, an
-  // archived page) or from outside it has no bytes to serve
-  const viewer = history || kept || loose ? null : viewerOf(path);
+  // a file the browser draws is drawn from the working tree, or from its grant when it was opened
+  // from outside; one only in git (a commit's copy, an archived page) or dropped in from the
+  // browser has no bytes the daemon can serve
+  const grant = loose?.source.kind === "grant" ? loose.source : null;
+  const viewer = history || kept || (loose && !grant) ? null : viewerOf(path);
   // a line the page reported is only placed once its offset is known
   const line = editor.line && !editor.line.fiber ? editor.line.n : undefined;
   return (
@@ -195,7 +197,7 @@ export function EditorPane({
         ) : viewer ? (
           <FileViewer
             kind={viewer}
-            src={worktreeFileUrl(worktreeId, path, disk.version)}
+            src={grant ? looseFileUrl(grant.id, grant.version) : worktreeFileUrl(worktreeId, path, disk.version)}
             path={path}
             openSeq={editor.seq}
             focus={editor.focus}
@@ -339,8 +341,9 @@ function EditorNote({ editor, disk, files }: { editor: EditorFile; disk: EditorD
       </div>
     );
   }
-  // a file from outside with no handle to save through: the browser gave its bytes and kept its place
-  if (editor.loose && !disk.writable && !disk.tooLarge) {
+  // a file from outside with no handle to save through: the browser gave its bytes and kept its
+  // place. A picture or other binary is read-only wherever it sits, and says so below instead.
+  if (editor.loose && !disk.writable && !disk.tooLarge && !disk.binary) {
     return (
       <div className="editor-note">
         <span className="hint">read-only: {path} is not in a project; drop it on a folder in files to add it</span>

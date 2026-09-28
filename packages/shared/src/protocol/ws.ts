@@ -186,17 +186,21 @@ export type ServerMsg =
   | { t: "open-path"; worktreeId: string; path: string }
   /** a file opened from outside every project, granted on the daemon under `id`: the pane opens
    * it loose, text in hand, and saves it through write-loose. `path` is where it lives, for the
-   * open-in menu; `version` names the bytes read; `tooLarge` is more than the pane shows, opened
-   * empty and read-only */
+   * open-in menu; `version` names the bytes read; `binary` is not text, opened empty and read-only
+   * and drawn from `/loose/<id>` when it is a picture; `tooLarge` is more than the pane shows,
+   * opened empty and read-only */
   | {
       t: "open-loose";
       id: string;
       name: string;
       path: string;
       text: string;
+      binary: boolean;
       tooLarge: boolean;
       version: string | null;
     }
+  /** the answer to an open-by-path the daemon could not do, read at the link that asked */
+  | { t: "open-refused"; seq: number; message: string }
   /** the answer to write-loose, exactly one per write, as file-written answers a write-file */
   | ({ t: "loose-written"; id: string; seq: number } & (
       | { ok: true; version: string }
@@ -607,8 +611,8 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   }),
   /** a link in the chat to a file outside this worktree, by its absolute path: opened as the Dock
    * icon opens one, in the worktree it sits in or loose under a grant. Answered by one `open-path`
-   * or `open-loose` to this socket, or by an `error` naming the refusal. */
-  z.object({ t: z.literal("open-outside"), path: relPath }),
+   * or `open-loose` to this socket, or by one `open-refused` carrying the seq. */
+  z.object({ t: z.literal("open-by-path"), path: relPath, seq }),
   /** save a granted file's text only over `base`, the version open-loose or the last save named.
    * Answered by exactly one `loose-written`. */
   z.object({

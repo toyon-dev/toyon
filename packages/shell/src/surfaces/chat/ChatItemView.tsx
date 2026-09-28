@@ -5,6 +5,7 @@ import { openFile, openFolder } from "../../state/actions/file.ts";
 import { type ChatLink, imageItems, messageItems, pathItems } from "../../state/actions/message.ts";
 import { archiveWorktrees } from "../../state/actions/worktree.ts";
 import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
+import { openByPath } from "../../state/openOutside.ts";
 import { openSource } from "../../state/openSource.ts";
 import { type ChatItem, worktreeById } from "../../state/store.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
@@ -63,7 +64,7 @@ function chatLink(target: Element, root: string | undefined): ChatLink | null {
   const file = root ? worktreeLink(root, href) : null;
   if (file) return { kind: "file", file };
   const outside = outsidePath(href);
-  return outside ? { kind: "outside", ...outside } : { kind: "out", href };
+  return outside ? { kind: "outside", href, ...outside } : { kind: "out", href };
 }
 
 function openChatLink(
@@ -73,11 +74,11 @@ function openChatLink(
   deps: { dispatch: ReturnType<typeof useDispatch>; sock: ReturnType<typeof useSock> },
 ) {
   const link = chatLink(e.target as Element, root);
-  if (link?.kind === "outside") {
+  if (link?.kind === "outside" && worktreeId) {
     // the daemon answers with the open, in whichever worktree the file sits in or loose under a
     // grant, and the same code the Dock icon's opens go through puts it in the pane
     e.preventDefault();
-    deps.sock?.send({ t: "open-outside", path: link.path });
+    openByPath(deps, worktreeId, link);
     return;
   }
   if (link?.kind !== "file" || !worktreeId) return;
@@ -122,6 +123,31 @@ function Markdown({
   // re-renders of a message still streaming
   const body = useRef<HTMLDivElement>(null);
   useLiveHtml(body, html);
+  const refused = useStore((s) => (worktreeId ? s.local[worktreeId]?.refusedLink : undefined));
+  // a link the daemon could not open is answered at the link: its underline turns, and the reason
+  // takes the tip. The markup is the row's and is swapped whole on every render, so the mark is
+  // put back after each swap (keyed on the html, which the body never reads); the tip it replaces
+  // is kept on the element to be put back too.
+  useOnChange([html, refused], () => {
+    const el = body.current;
+    if (!el) return;
+    for (const a of el.querySelectorAll<HTMLAnchorElement>("a.file-link")) {
+      const hit = refused !== undefined && a.getAttribute("href") === refused.href;
+      a.classList.toggle("file-link-refused", hit);
+      if (hit) {
+        a.dataset.tipWas ??= a.dataset.tip ?? "";
+        a.dataset.tip = refused.message;
+        a.dataset.tipPlacement = "bottom";
+        // the pointer is still on the link it pressed, and the press hid the tip: a fresh
+        // mouseover brings it up again, now with the answer
+        a.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+      } else if (a.dataset.tipWas !== undefined) {
+        a.dataset.tip = a.dataset.tipWas;
+        a.dataset.tipPlacement = "follow";
+        delete a.dataset.tipWas;
+      }
+    }
+  });
   return (
     // biome-ignore lint/a11y/useKeyWithClickEvents: the links inside are the controls; the root only routes their clicks
     <div

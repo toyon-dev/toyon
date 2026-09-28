@@ -1493,7 +1493,16 @@ describe("the editor's open file", () => {
   test("a loose file opens with its text as the disk, and no read of the daemon's touches it", () => {
     const loose = (v: Partial<OpenLoose> = {}): Action => ({
       a: "open-loose",
-      v: { worktreeId: "a", name: "notes.md", text: "# hi", tooLarge: false, source: { kind: "bytes" }, seq: 3, ...v },
+      v: {
+        worktreeId: "a",
+        name: "notes.md",
+        text: "# hi",
+        binary: false,
+        tooLarge: false,
+        source: { kind: "bytes" },
+        seq: 3,
+        ...v,
+      },
     });
     const s = run([hello(wt("a")), loose()]);
     expect(s.editor).toMatchObject({

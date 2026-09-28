@@ -40,19 +40,28 @@ const workbenchKeys: Record<ThemeColorKey, string[]> = {
   blue: ["terminal.ansiBlue", "textLink.foreground"],
   aqua: ["terminal.ansiCyan", "terminal.ansiBrightCyan"],
   purple: ["terminal.ansiMagenta", "terminal.ansiBrightMagenta"],
-  // the accent: first candidate that actually stands out from the editor background (focusBorder is
-  // often a subtle border; badges/buttons/links carry the brand color)
+  // ANSI has no orange, so this is whatever the theme paints a warning or a modified file in, and
+  // its yellow when it paints neither
   orange: [
-    "activityBarBadge.background",
-    "button.background",
-    "progressBar.background",
-    "focusBorder",
-    "textLink.foreground",
+    "charts.orange",
+    "editorWarning.foreground",
+    "gitDecoration.modifiedResourceForeground",
     "terminal.ansiYellow",
   ],
   diffAdd: ["diffEditor.insertedLineBackground", "diffEditor.insertedTextBackground"],
   diffDel: ["diffEditor.removedLineBackground", "diffEditor.removedTextBackground"],
 };
+
+// the accent: the brand colour, which a badge, a button or a link carries and focusBorder often
+// does not (it is a subtle border in many themes). The first that actually stands out from the
+// editor background wins; a theme with none selects in its orange.
+const brandKeys = [
+  "activityBarBadge.background",
+  "button.background",
+  "progressBar.background",
+  "focusBorder",
+  "textLink.foreground",
+];
 
 /** VS Code Dark Modern / Light Modern, only the keys we read */
 const defaults: Record<"dark" | "light", Record<string, string>> = {
@@ -146,12 +155,12 @@ export function vscodeToTheme(json: unknown, opts: { id: string; name?: string; 
   const blue = accent("blue"),
     aqua = accent("aqua"),
     purple = accent("purple");
-  const orange =
-    workbenchKeys.orange
-      .map((k) => (typeof colors[k] === "string" ? normalizeHex(colors[k]!) : null))
-      .filter((c): c is string => !!c)
-      .map((c) => opaque(c, surface0))
-      .find((c) => contrastRatio(c, surface0) >= 2.5) ?? accent("yellow");
+  const orange = accent("orange");
+  const brand = brandKeys
+    .map((k) => (typeof colors[k] === "string" ? normalizeHex(colors[k]!) : null))
+    .filter((c): c is string => !!c)
+    .map((c) => opaque(c, surface0))
+    .find((c) => contrastRatio(c, surface0) >= 2.5);
 
   const theme: Theme = {
     id: opts.id,
@@ -180,6 +189,7 @@ export function vscodeToTheme(json: unknown, opts: { id: string; name?: string; 
       diffDel: lookup(workbenchKeys.diffDel) ?? hex8(red, 0.12),
     },
   };
+  if (brand) theme.accent = brand;
 
   const syntax = pickSyntax(t.tokenColors);
   if (syntax) theme.syntax = syntax;

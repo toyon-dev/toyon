@@ -29,6 +29,12 @@ import type { DarkNow, Theme, ThemeColorKey, ThemePrefs, ThemeSyntaxToken } from
 //   the cool side recedes on a warm ground. Orange is held level with the red and yellow either
 //   side of it, nineteen degrees apart, or it reads as a tired version of its neighbour.
 // - Accents are at editor weight, not document weight: an `M` in the changes list carries at 12px.
+// - Selection is not the berry. The berry is the one thing in the app that means stop and look (a
+//   crash, a failed turn, a deny), and a current row painted in it read as broken. Selection goes
+//   to the ceanothus, the blue-violet that flowers on the same hillside: hue 285 in OKLCH, halfway
+//   between the link blue (249) and the purple (327) so it reads as neither, at the cool three's
+//   chroma so it recedes on the warm ground the way they do, and at L*64, a little above the
+//   berry, since a cool hue needs the lightness to carry an edge at 2px.
 export const toyonDark: Theme = {
   id: "toyon-dark",
   family: "Toyon",
@@ -36,7 +42,7 @@ export const toyonDark: Theme = {
   kind: "dark",
   source: "builtin",
   pair: "toyon-light",
-  accent: "red",
+  accent: "#9692e5",
   colors: {
     surface0: "#32302d",
     surface1: "#3d3835",
@@ -86,7 +92,7 @@ export const toyonLight: Theme = {
   kind: "light",
   source: "builtin",
   pair: "toyon-dark",
-  accent: "red",
+  accent: "#5b54a1",
   colors: {
     surface0: "#f8f2e8",
     surface1: "#efe8dc",
@@ -932,8 +938,8 @@ export function themeToCssVars(theme: Theme): Record<string, string> {
   out["--ink1"] = theme.colors.text1;
   out["--ink2"] = theme.colors.text2;
   for (const [token, color] of Object.entries(syntaxOf(theme))) out[`--syntax-${token}`] = color;
-  out["--accent"] = theme.colors[accentKey(theme)];
-  out["--fault"] = theme.colors[faultKey(theme)];
+  out["--accent"] = accentOf(theme);
+  out["--fault"] = faultOf(theme);
   out["--sunken"] = sunkenOf(theme);
   out["--sunken-floor"] = sunkenFloorOf(theme);
   out["--scrim"] = hex8(theme.colors.surface0, 0.7);
@@ -943,18 +949,20 @@ export function themeToCssVars(theme: Theme): Record<string, string> {
   return out;
 }
 
-/** the palette color a theme selects in; orange unless the theme says otherwise */
-export function accentKey(theme: Theme): ThemeColorKey {
-  return theme.accent ?? "orange";
+/** The colour a theme selects in: its own accent when it names a usable hex, its orange otherwise.
+ * A theme file is written by hand, so the value is checked rather than trusted: a word or a
+ * colour function would reach the stylesheet as-is and paint every current row in it. */
+export function accentOf(theme: Theme): string {
+  return normalizeHex(theme.accent ?? "") ?? theme.colors.orange;
 }
 
 /** The colour of a connection we have lost: the rail while the daemon is down. It has to be a warm
  * hue that is not the accent, because the fault paints whole rows and rows painted in the accent
- * read as selected. Orange where the theme selects in something else; red where orange is the
- * accent, which most imported themes leave it as. Red doubles as `crashed` there, and that is the
- * cheaper collision: a crashed proc is a fault too, and its dot is not shown while offline. */
-export function faultKey(theme: Theme): ThemeColorKey {
-  return accentKey(theme) === "orange" ? "red" : "orange";
+ * read as selected. Orange, unless the theme selects in its orange, then red. Red doubles as
+ * `crashed` there, and that is the cheaper collision: a crashed proc is a fault too, and its dot
+ * is not shown while offline. */
+export function faultOf(theme: Theme): string {
+  return accentOf(theme) === normalizeHex(theme.colors.orange) ? theme.colors.red : theme.colors.orange;
 }
 
 /** A mode that follows something rather than naming a slot, and so survives picking a theme that

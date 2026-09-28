@@ -9,7 +9,7 @@
 // own foreground rather than on a constant from another palette.
 
 import type { Theme } from "@toyon/shared";
-import { accentKey, hex8, syntaxOf, wordTint } from "@toyon/shared";
+import { accentOf, hex8, syntaxOf, wordTint } from "@toyon/shared";
 import type * as monaco from "monaco-editor";
 
 /** monaco wants token colours bare, workbench colours with the hash */
@@ -21,7 +21,7 @@ export function toMonacoTheme(t: Theme): monaco.editor.IStandaloneThemeData {
   // to Monaco's built-in scheme here and to the chat log's own fallback there, and the same file
   // would come out in two colours depending on which surface you read it in
   const s = syntaxOf(t);
-  const accent = c[accentKey(t)];
+  const accent = accentOf(t);
 
   // Longest dot-prefix wins and undefined fields fall through to the shorter match, so each entry
   // below covers its whole family: `string` also carries `string.escape` and `string.invalid`,

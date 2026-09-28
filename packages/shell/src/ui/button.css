@@ -145,8 +145,8 @@
   .tone-danger {
     color: var(--red);
   }
-  /* the brightest text tier: the word a line leads with when it is the thing to press, where the
-   accent would read as an error (Toyon's accent is red) */
+  /* the brightest text tier: the word a line leads with when it is the thing to press. Not the
+   accent, because the accent marks what is selected and this word is not selected, it is offered. */
   .tone-strong {
     color: var(--text0);
   }

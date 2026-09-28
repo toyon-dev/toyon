@@ -890,9 +890,8 @@ export interface Theme {
   source: "builtin" | "file" | "vscode";
   /** The authored palette, in families: surfaces, interaction states, lines and text are four
    * different questions, and the numbering only orders within one. The seven hues are the
-   * interchange format every colour scheme since ANSI has shipped. Only the accent, the scrim and
-   * the shadow are derived, in themeToCssVars, because those are the three a theme was never
-   * really deciding. */
+   * interchange format every colour scheme since ANSI has shipped. Only the scrim and the shadow
+   * are derived, in themeToCssVars, because those are the two a theme was never really deciding. */
   colors: {
     /** surfaces: the canvas, the chrome that sits on it, and things raised above both */
     surface0: ThemeColor;
@@ -921,10 +920,13 @@ export interface Theme {
   };
   /** editor token colors; missing entries inherit Monaco's base theme */
   syntax?: Partial<Record<ThemeSyntaxToken, ThemeColor>>;
-  /** which palette color carries "you are on this one": the active worktree, an `on` tab, a
-   * checked box. Gruvbox and the rest select in orange; Toyon selects in its berry. Defaults to
-   * orange, which is what an imported VS Code theme gets. */
-  accent?: ThemeColorKey;
+  /** The colour that carries "you are on this one": the active worktree, an `on` tab, a checked
+   * box. Its own hex rather than one of the seven, because every one of those already means a
+   * state somewhere (red is a crash, green is working, orange is the lost connection), and a
+   * selection painted in a status hue reads as that status. A theme that names none selects in
+   * its orange, which is what most imported themes were doing anyway; Toyon selects in the
+   * ceanothus, a blue-violet off every hue the rail's dots use. */
+  accent?: ThemeColor;
   /** id of this theme's opposite-kind sibling (Gruvbox Dark ↔ Gruvbox Light); guessed by name when absent */
   pair?: string;
   /** picker row label shared by a dark/light pair ("Gruvbox"); derived from the name when absent */

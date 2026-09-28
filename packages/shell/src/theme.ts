@@ -3,7 +3,7 @@
 // colors before the daemon's hello arrives.
 
 import type { ShellToBridgeMsg, Theme } from "@toyon/shared";
-import { accentKey, contrastFg, themeToCssVars, toyonDark } from "@toyon/shared";
+import { accentOf, contrastFg, themeToCssVars, toyonDark } from "@toyon/shared";
 import { STORAGE } from "./state/keys.ts";
 
 export function cachedTheme(): Theme {
@@ -32,7 +32,7 @@ export function applyTheme(theme: Theme, opts: { remember?: boolean } = {}) {
 
 /** what the bridge needs to paint its overlays in the shell's accent */
 export function bridgeThemeMsg(theme: Theme): ShellToBridgeMsg {
-  const accent = theme.colors[accentKey(theme)];
+  const accent = accentOf(theme);
   return { type: "theme", accent, accentFg: contrastFg(accent) };
 }
 

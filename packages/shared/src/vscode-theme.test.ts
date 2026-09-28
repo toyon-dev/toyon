@@ -39,7 +39,9 @@ describe("vscodeToTheme", () => {
     expect(t.colors.border1).toBe("#2a3038");
     expect(t.colors.text1).toBe("#8a94a0");
     expect(t.colors.text2).toBe("#5c6670");
-    expect(t.colors.orange).toBe("#ff9f43");
+    // the brand colour is the accent, not the orange: focusBorder here, and it stands out enough
+    expect(t.accent).toBe("#ff9f43");
+    expect(t.colors.orange).toBe("#ffd866"); // no warning or modified colour, so the yellow
     expect(t.colors.purple).toBe("#d19bff");
     expect(t.colors.diffAdd).toBe("#8bd64920");
     expect(themeToCssVars(t)["--scrim"]).toBe(hex8("#101418", 0.7)); // derived, not carried
@@ -61,6 +63,8 @@ describe("vscodeToTheme", () => {
     expect(t.colors.surface1).toBe("#fdf6e3"); // sideBar falls through to editor.background
     expect(t.colors.red).toBe("#dc322f");
     expect(t.colors.blue).toBe("#0451a5"); // Light Modern default
+    expect(t.accent).toBeUndefined(); // no brand colour named: selects in its orange
+    expect(themeToCssVars(t)["--accent"]).toBe(t.colors.orange);
     expect(t.colors.diffAdd).toBe(hex8("#859900", 0.12));
     expect(themeToCssVars(t)["--shadow"]).toBe("#0000002e"); // derived from kind
     expect(t.syntax).toBeUndefined();
@@ -89,10 +93,16 @@ describe("color helpers", () => {
     expect(v["--diff-add"]).toBe("#b8bb261f");
     // the word weight is the line tint's own alpha scaled, so a theme names one and gets both
     expect(v["--diff-add-word"]).toBe("#b8bb2611");
-    expect(v["--accent"]).toBe(gruvboxDarkSoft.colors.orange); // no accent key: orange, as every theme did
-    // the fault paints whole rows, so it steps off the accent: red here, orange where a theme selects in red
+    expect(v["--accent"]).toBe(gruvboxDarkSoft.colors.orange); // no accent named: its orange
+    // the fault paints whole rows, so it steps off the accent: red here, orange where a theme
+    // selects in something of its own
     expect(v["--fault"]).toBe(gruvboxDarkSoft.colors.red);
+    expect(themeToCssVars(toyonDark)["--accent"]).toBe("#9692e5");
     expect(themeToCssVars(toyonDark)["--fault"]).toBe(toyonDark.colors.orange);
+    // a hand-written theme file: a word is not a colour, so it selects in its orange
+    const words = { ...gruvboxDarkSoft, accent: "rebeccapurple" };
+    expect(themeToCssVars(words)["--accent"]).toBe(gruvboxDarkSoft.colors.orange);
+    expect(themeToCssVars(words)["--fault"]).toBe(gruvboxDarkSoft.colors.red);
     // + accent, fault, the two sunken tones, scrim, shadow, a word weight per diff tint, the three
     // inks (the text ladder held still), and the seven syntax colours
     expect(Object.keys(v).length).toBe(themeColorKeys.length + 18);

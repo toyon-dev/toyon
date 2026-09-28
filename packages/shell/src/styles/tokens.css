@@ -68,13 +68,15 @@
 
     /* what "you are on this one" is painted in: the active worktree, the open tool call, a checked
      box. One hue for all of them, so a theme changes the whole idea of selected by pointing this
-     somewhere else. The colour is the theme's to name (Theme.accent, orange unless it says
-     otherwise) and applyTheme overwrites this. */
-    --accent: var(--red);
+     somewhere else. Never one of the seven above: each of those is a state somewhere (red is a
+     crash, green is working), and a selection in a status hue reads as that status. The colour is
+     the theme's to name (Theme.accent, its orange unless it says otherwise) and applyTheme
+     overwrites this. Toyon's is the ceanothus, a blue-violet off every hue the dots use. */
+    --accent: #9692e5;
     /* what a lost connection is painted in: the rail's dots while the daemon is down. Warm,
      because it is a fault, and never the accent, because it colours whole rows and a row in the
-     accent reads as selected. applyTheme overwrites this too (faultKey): orange unless the theme
-     selects in orange, then red. */
+     accent reads as selected. applyTheme overwrites this too (faultOf): orange unless the theme
+     selects in its orange, then red. */
     --fault: var(--orange);
     /* overlay backdrop + box-shadow color: alpha hex so light themes can soften them */
     /* where you type: four L* under the chrome it sits in, darker in both halves. Not a ramp

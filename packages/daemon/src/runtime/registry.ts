@@ -18,6 +18,7 @@ import type { Hub } from "../core/hub.ts";
 import { fireAndForget, log } from "../core/log.ts";
 import type { Paths } from "../core/paths.ts";
 import type { GroupEntry, StateStore } from "../core/state.ts";
+import { type ForwardOpts, type ForwardTarget, type ProcForwarder, startForward } from "./forward.ts";
 import { reclaimGroup } from "./kill.ts";
 import { bootId, type PsRow, psGroups } from "./memory.ts";
 import { type Orphan, orphansIn, strayAdapters } from "./orphans.ts";
@@ -34,6 +35,9 @@ export interface Runtime {
   procs: WorktreeProcs | null;
   proxy: WorktreeProxy | null;
   previewName: string | undefined;
+  /** one per non-preview proc, by name: the fixed address its siblings and the shell reach it
+   * at. Bound before any proc spawns, kept through sleep, gone with the procs. */
+  forwards: Map<string, ProcForwarder>;
   /** null until a pane first opens it; survives hiding the pane, dies with the worktree */
   shell: PtyHandle | null;
   /** the agent's terminal login while it runs, and after it fails so its tab can say why */
@@ -80,6 +84,7 @@ export interface RuntimeDeps {
     onProcess: () => void,
   ) => AgentAdapter;
   makeProcs?: (wt: WorktreeInfo, deps: RuntimeDeps) => WorktreeProcs;
+  makeForward?: (opts: ForwardOpts) => ProcForwarder;
   makeProxy?: (
     wt: WorktreeInfo,
     previewName: string | undefined,
@@ -96,21 +101,30 @@ export interface RuntimeDeps {
   ) => PtyHandle;
 }
 
-/** the sibling-URL variables a proc (or a shell) gets for the procs already up: `<NAME>_URL` and
- * `VITE_<NAME>_URL` per non-preview proc, plus `API_URL` for the one named api */
-export function procUrlEnv(states: ProcState[], previewName: string | undefined): Record<string, string> {
+/** the sibling-URL variables a proc (or a shell) gets: `<NAME>_URL` and `VITE_<NAME>_URL` per
+ * non-preview proc, plus `API_URL` for the one named api. A proc with a forwarder is reached
+ * there, whether or not it is up yet; one without is reached where it runs, once it does. */
+export function procUrlEnv(
+  states: ProcState[],
+  previewName: string | undefined,
+  forwards: ReadonlyMap<string, number> = new Map(),
+): Record<string, string> {
   const env: Record<string, string> = {};
-  for (const st of states) {
-    if (st.name === previewName) continue;
-    const urlVar = `${st.name.toUpperCase().replace(/[^A-Z0-9]/g, "_")}_URL`;
-    // a proc that ignored $PORT is reachable where it actually bound, not where it was told to
-    const url = `http://127.0.0.1:${st.boundPort ?? st.port}`;
+  const add = (name: string, port: number) => {
+    const urlVar = `${name.toUpperCase().replace(/[^A-Z0-9]/g, "_")}_URL`;
+    const url = `http://127.0.0.1:${port}`;
     env[urlVar] = url;
     env[`VITE_${urlVar}`] = url;
-    if (st.name === "api") {
+    if (name === "api") {
       env.API_URL = url;
       env.VITE_API_URL = url;
     }
+  };
+  for (const [name, port] of forwards) add(name, port);
+  for (const st of states) {
+    if (st.name === previewName || forwards.has(st.name)) continue;
+    // a proc that ignored $PORT is reachable where it actually bound, not where it was told to
+    add(st.name, st.boundPort ?? st.port);
   }
   return env;
 }
@@ -271,13 +285,25 @@ function previewProcOf(procs: WorktreeProcs, previewName: string | undefined): P
   return procs.states().find((p) => p.name === previewName) ?? procs.states()[0];
 }
 
-/** where the proxy forwards: the preview proc once it answers on its port (at the port it actually
- * bound when that differs from the one it was given). Null while it is starting or asleep, so the
- * proxy waits for it rather than forwarding to a port nothing is on yet. */
-function previewTargetOf(procs: WorktreeProcs, previewName: string | undefined): ProxyTarget | null {
-  const st = previewProcOf(procs, previewName);
+/** where a proc answers once it does (at the port it actually bound when that differs from the
+ * one it was given); null while it is starting or asleep, so a proxy or a forwarder waits for it
+ * rather than dialing a port nothing is on yet */
+function targetOf(st: ProcState | undefined): ForwardTarget | null {
   if (st?.status !== "running") return null;
   return { port: st.boundPort ?? st.port, host: st.host ?? "127.0.0.1" };
+}
+
+/** where the proxy forwards: the preview proc */
+function previewTargetOf(procs: WorktreeProcs, previewName: string | undefined): ProxyTarget | null {
+  return targetOf(previewProcOf(procs, previewName));
+}
+
+/** the forwarder port per proc that has one, for the URL variables; `except` is the proc being
+ * started, which gets no address of its own */
+function forwardPorts(forwards: ReadonlyMap<string, ProcForwarder>, except?: string): Map<string, number> {
+  const ports = new Map<string, number>();
+  for (const [name, f] of forwards) if (name !== except) ports.set(name, f.port);
+  return ports;
 }
 
 /** the worktree among `ids` a tab showed longest ago; a spare, never shown, goes first */
@@ -527,6 +553,7 @@ export class RuntimeRegistry {
       procs: null,
       proxy: null,
       previewName: undefined,
+      forwards: new Map(),
       shell: null,
       login: null,
     };
@@ -558,22 +585,30 @@ export class RuntimeRegistry {
     const previewName = run.preview;
     rt.previewName = previewName;
 
-    // start non-preview procs first so the preview proc can get their URLs. Every proc gets the
-    // profile env; a `$API_URL` in it resolves against whatever siblings are already up, so the
-    // api proc itself sees it unexpanded and the preview proc sees the address. The worktree's own
-    // variables ride along, and the profile env may reference them the same way it references a
-    // sibling's URL
-    const envFor = () => {
-      const urls = { ...procUrlEnv(procs.states(), previewName), ...worktreeEnv(wt, repo) };
+    // a forwarder per non-preview proc, bound before anything spawns, so every proc's env names
+    // its siblings at addresses that hold for the worktree's life: a proc that restarts on another
+    // port, or sleeps and wakes, is reached at the same place, and nothing has to respawn for it
+    for (const name of Object.keys(run.procs)) {
+      if (name !== previewName) rt.forwards.set(name, this.openForward(wt.id, procs, name));
+    }
+    // start non-preview procs first, the preview last. Every proc gets the profile env; a
+    // `$API_URL` in it resolves against the siblings' addresses, and the api proc itself gets no
+    // address of its own, so it sees the reference unexpanded. The worktree's own variables ride
+    // along, and the profile env may reference them the same way it references a sibling's URL
+    const envFor = (name: string) => {
+      const urls = {
+        ...procUrlEnv(procs.states(), previewName, forwardPorts(rt.forwards, name)),
+        ...worktreeEnv(wt, repo),
+      };
       return { ...urls, ...expandEnv(run.env, urls) };
     };
     this.starting.add(wt.id);
     try {
       for (const [name, cmd] of Object.entries(run.procs)) {
-        if (name !== previewName) await procs.start(name, cmd, envFor());
+        if (name !== previewName) await procs.start(name, cmd, envFor(name));
       }
       if (previewName && run.procs[previewName]) {
-        await procs.start(previewName, run.procs[previewName]!, envFor());
+        await procs.start(previewName, run.procs[previewName]!, envFor(previewName));
       }
     } finally {
       this.starting.delete(wt.id);
@@ -582,11 +617,35 @@ export class RuntimeRegistry {
     if (!this.deps.state.worktree(wt.id) || this.runtimes.get(wt.id) !== rt) {
       // removed while the procs were starting: don't leave them running
       this.returnLease(wt.id);
+      this.stopForwards(rt);
       await procs.stopAll();
       return;
     }
     this.openProxy(rt, live, port);
     this.deps.hub.emit("worktreesChanged");
+  }
+
+  /** the forwarder in front of one proc: it dials the proc where it answers, waits while the proc
+   * is starting or the worktree is waking, and a connection while asleep is the wake */
+  private openForward(id: string, procs: WorktreeProcs, name: string): ProcForwarder {
+    const stateOf = () => procs.states().find((p) => p.name === name);
+    return (this.deps.makeForward ?? startForward)({
+      port: 0,
+      target: () => targetOf(stateOf()),
+      coming: () => {
+        const st = stateOf();
+        return st ? st.status === "starting" || st.status === "asleep" : this.starting.has(id);
+      },
+      onConnect: () => {
+        this.deps.hub.emit("forwardConnect", id, name);
+        fireAndForget(id, this.wake(id), "wake on connect");
+      },
+    });
+  }
+
+  private stopForwards(rt: Runtime) {
+    for (const f of rt.forwards.values()) f.stop();
+    rt.forwards.clear();
   }
 
   /** the proxy on the port just leased; the record keeps the port, and the rows frame sent once
@@ -657,6 +716,7 @@ export class RuntimeRegistry {
     rt.procs = null;
     rt.proxy = null;
     proxy?.stop();
+    this.stopForwards(rt);
     this.returnLease(id);
     await procs?.stopAll();
     this.recordGroups(id);
@@ -671,6 +731,7 @@ export class RuntimeRegistry {
     this.runtimes.delete(id);
     this.stopping.set(id, rt);
     rt.proxy?.stop();
+    this.stopForwards(rt);
     this.returnLease(id);
     const login = rt.login;
     rt.login = null;
@@ -794,7 +855,11 @@ export class RuntimeRegistry {
   shellEnv(wt: WorktreeInfo): Record<string, string> {
     const rt = this.runtimes.get(wt.id);
     const repo = this.deps.state.requireRepo(wt.repoId);
-    return terminalEnv(process.env, worktreeEnv(wt, repo), procUrlEnv(rt?.procs?.states() ?? [], rt?.previewName));
+    return terminalEnv(
+      process.env,
+      worktreeEnv(wt, repo),
+      procUrlEnv(rt?.procs?.states() ?? [], rt?.previewName, forwardPorts(rt?.forwards ?? new Map())),
+    );
   }
 
   terminalInput(id: string, stream: string, data: string) {

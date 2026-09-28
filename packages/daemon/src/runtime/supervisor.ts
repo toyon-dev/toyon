@@ -230,10 +230,22 @@ export class WorktreeProcs {
     this.procs.get(name)?.pty?.resize(cols, rows);
   }
 
+  /** Stop one proc and keep its place: its port, its env and its tab stay for a later restart, and
+   * the exit handler reads `stopped` and schedules nothing. */
+  async stop(name: string): Promise<void> {
+    const mp = this.procs.get(name);
+    if (!mp) return;
+    mp.restarts = 0;
+    mp.state.status = "stopped";
+    mp.state.pid = undefined;
+    this.onProc({ ...mp.state });
+    await this.killProc(mp);
+  }
+
   restart(name: string) {
     const mp = this.procs.get(name);
-    // asleep, every proc comes back together through wake(); one on its own would leave the
-    // siblings' URLs in its env pointing at nothing
+    // asleep, every proc comes back together through wake(): one up on its own would be a copy
+    // half awake, which no tier the policy reads has a word for
     if (!mp || this.asleep) return;
     mp.restarts = 0;
     if (mp.state.status === "crashed") {

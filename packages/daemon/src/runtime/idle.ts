@@ -77,6 +77,7 @@ export class IdlePolicy {
     this.sleepMs = d.sleepMs === undefined ? DEFAULT_SLEEP_MS : d.sleepMs;
     this.now = d.now ?? Date.now;
     d.hub.on("previewRequest", (id) => this.touch(id));
+    d.hub.on("forwardConnect", (id) => this.touch(id));
     // a turn starting or ending is activity either way: the clock starts over when it ends
     d.hub.on("agentStatus", (id) => this.stamp(id));
     d.hub.on("holdsChanged", (id) => this.stamp(id));

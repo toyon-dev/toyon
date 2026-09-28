@@ -21,6 +21,9 @@ export interface HubEvents {
   termExit: (worktreeId: string, stream: string, exitCode: number) => void;
   /** an http request reached the worktree's preview: someone, or something, is using it */
   previewRequest: (worktreeId: string) => void;
+  /** a connection reached the forwarder in front of one of the worktree's procs: its page, or a
+   * shell, is using that proc, which is the same sign of use a preview request is */
+  forwardConnect: (worktreeId: string, proc: string) => void;
   /** outstanding work on the worktree (a turn, a command) started or finished; `count` is what is left */
   holdsChanged: (worktreeId: string, count: number) => void;
   /** the worktree list or any per-worktree status changed */

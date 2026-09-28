@@ -219,6 +219,60 @@ describe("RuntimeRegistry", () => {
     expect(registry.previewTarget("nope")).toBeNull();
   });
 
+  describe("forwarders", () => {
+    test("one per non-preview proc, bound before any proc starts, and the preview's URLs name them", async () => {
+      const { registry, procs, forwards } = make();
+      await registry.start(wt, repo);
+      expect(forwards.map((f) => f.port)).toEqual([registry.get(wt.id)!.forwards.get("api")!.port]);
+      const started = procs.get(wt.id)!.started;
+      // the api proc gets no address of its own; the preview reaches api through its forwarder
+      expect(started[0]?.env.API_URL).toBeUndefined();
+      expect(started[1]?.env.API_URL).toBe(`http://127.0.0.1:${forwards[0]!.port}`);
+      expect(started[1]?.env.VITE_API_URL).toBe(started[1]?.env.API_URL);
+      // the shell reaches it the same way
+      expect(registry.shellEnv(wt).API_URL).toBe(started[1]?.env.API_URL);
+    });
+
+    test("a forwarder dials the proc where it answers, and nothing while it is starting", async () => {
+      const { registry, procs, forwards } = make();
+      await registry.start(wt, repo);
+      const f = forwards[0]!;
+      const api = procs
+        .get(wt.id)!
+        .states()
+        .find((p) => p.name === "api")!;
+      expect(f.target()).toEqual({ host: "127.0.0.1", port: api.port });
+      await registry.sleep(wt.id, "test");
+      expect(f.target()).toBeNull();
+      expect(f.coming()).toBe(true);
+      expect(f.stopped).toBe(false);
+    });
+
+    test("a connection while asleep wakes the worktree and counts as use", async () => {
+      const { registry, forwards, hub } = make();
+      const used: string[] = [];
+      hub.on("forwardConnect", (id, proc) => used.push(`${id}/${proc}`));
+      await registry.start(wt, repo);
+      await registry.sleep(wt.id, "test");
+      forwards[0]!.connect();
+      await Bun.sleep(0);
+      expect(registry.isAsleep(wt.id)).toBe(false);
+      expect(used).toEqual([`${wt.id}/api`]);
+    });
+
+    test("stopProcs and stop end the forwarders; the next start binds new ones", async () => {
+      const { registry, forwards } = make();
+      await registry.start(wt, repo);
+      await registry.stopProcs(wt.id);
+      expect(forwards[0]!.stopped).toBe(true);
+      expect(registry.get(wt.id)!.forwards.size).toBe(0);
+      await registry.start(wt, repo);
+      expect(forwards.length).toBe(2);
+      await registry.stop(wt.id);
+      expect(forwards[1]!.stopped).toBe(true);
+    });
+  });
+
   test("previewStanding() follows the preview proc, and says setup while the tree is being made", async () => {
     const { registry } = make();
     expect(registry.previewStanding(wt.id)).toBeNull();
@@ -269,14 +323,15 @@ describe("terminal env", () => {
 
 describe("RuntimeRegistry terminals", () => {
   test("openTerminal spawns once, in the worktree, with the sibling URLs", async () => {
-    const { registry, terminals } = make();
+    const { registry, terminals, forwards } = make();
     await registry.start(wt, repo);
     const first = registry.openTerminal(wt.id, SHELL_STREAM, 80, 24);
     expect(first).toEqual({ snapshot: "", alive: true });
     const spawned = terminals.get(wt.id)!;
     expect(spawned.length).toBe(1);
     expect(spawned[0]!.opts.cwd).toBe(wt.path);
-    expect(spawned[0]!.opts.env.API_URL).toBe("http://127.0.0.1:40001");
+    // the api's address is its forwarder, the same one its siblings have
+    expect(spawned[0]!.opts.env.API_URL).toBe(`http://127.0.0.1:${forwards[0]!.port}`);
     expect(spawned[0]!.opts.env.TERM).toBe("xterm-256color");
     expect(spawned[0]!.opts.env.TOYON_WORKTREE).toBe(wt.id);
     expect(spawned[0]!.opts.env.TOYON_ROOT).toBe(repo.path);

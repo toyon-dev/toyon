@@ -115,6 +115,25 @@ describe("WorktreeProcs supervision", () => {
     await procs.stopAll();
   }, 10_000);
 
+  test("stop(name) takes one proc down and keeps its place for a restart", async () => {
+    const states: string[] = [];
+    const procs = new WorktreeProcs(process.cwd(), (p) => states.push(p.status), noop);
+    const st = await procs.start("web", "sleep 30");
+    await procs.start("api", "sleep 30");
+    await procs.stop("web");
+    expect(alive(st.pid!)).toBe(false);
+    expect(procs.states().map((p) => `${p.name}:${p.status}`)).toEqual(["web:stopped", "api:starting"]);
+    // no crash was read into the exit, so nothing is scheduled; a restart is the same proc again
+    await Bun.sleep(300);
+    expect(states).not.toContain("crashed");
+    procs.restart("web");
+    expect(await until(() => procs.states()[0]?.status === "starting" && procs.states()[0]?.pid !== undefined)).toBe(
+      true,
+    );
+    expect(procs.states()[0]?.port).toBe(st.port);
+    await procs.stopAll();
+  }, 10_000);
+
   test("restarting a hand-stopped proc puts it back under supervision", async () => {
     const states: string[] = [];
     const procs = new WorktreeProcs(process.cwd(), (p) => states.push(p.status), noop);

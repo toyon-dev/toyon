@@ -2,6 +2,7 @@ import type { AgentCommand, AgentEvent, AgentStatus, LogLine, ProcState, Worktre
 import { AgentAccounts, type AgentAccountsDeps } from "../../src/agent/accounts.ts";
 import type { AgentAdapter, AskOpts, AskReply, SendOpts } from "../../src/agent/adapter.ts";
 import { AgentRegistry, type AgentSpec } from "../../src/agent/registry.ts";
+import type { ForwardOpts, ProcForwarder } from "../../src/runtime/forward.ts";
 import type { PreviewHandler, WorktreeProxy } from "../../src/runtime/proxy.ts";
 import type { PtyHandle, PtyOpts } from "../../src/runtime/pty.ts";
 import type { RuntimeDeps } from "../../src/runtime/registry.ts";
@@ -143,6 +144,12 @@ export class FakeProcs {
   restart(name: string) {
     this.restarts.push(name);
   }
+  stops: string[] = [];
+  async stop(name: string) {
+    this.stops.push(name);
+    const s = this.states_.find((p) => p.name === name);
+    if (s) s.status = "stopped";
+  }
   recentLogs(): LogLine[] {
     return [];
   }
@@ -173,6 +180,31 @@ export class FakeProcs {
     );
     this.ptys.set(name, t);
     return t;
+  }
+}
+
+/** a forwarder that binds nothing: its port counts up from 50000, and it remembers what it was
+ * told, so a test can read where a connection would go and play one arriving */
+export class FakeForwarder implements ProcForwarder {
+  static next = 50000;
+  readonly port = FakeForwarder.next++;
+  stopped = false;
+  retargets = 0;
+  constructor(readonly opts: ForwardOpts) {}
+  target() {
+    return this.opts.target();
+  }
+  coming() {
+    return this.opts.coming();
+  }
+  connect() {
+    this.opts.onConnect?.();
+  }
+  retarget() {
+    this.retargets++;
+  }
+  stop() {
+    this.stopped = true;
   }
 }
 
@@ -274,9 +306,16 @@ export function fakeFactories() {
   const agents = new Map<string, FakeAgent>();
   const procs = new Map<string, FakeProcs>();
   const proxies = new Map<string, FakeProxy>();
+  /** every forwarder made, in order; the registry keeps them by worktree and proc name */
+  const forwards: FakeForwarder[] = [];
   /** every terminal spawned per worktree, in order (a dead one is respawned on the next open) */
   const terminals = new Map<string, FakeTerminal[]>();
-  const factories: Pick<RuntimeDeps, "makeAgent" | "makeProcs" | "makeProxy" | "makeTerminal"> = {
+  const factories: Pick<RuntimeDeps, "makeAgent" | "makeProcs" | "makeForward" | "makeProxy" | "makeTerminal"> = {
+    makeForward: (opts) => {
+      const f = new FakeForwarder(opts);
+      forwards.push(f);
+      return f;
+    },
     makeTerminal: (wt, opts, onData, onExit) => {
       const t = new FakeTerminal(opts, onData, onExit);
       terminals.set(wt.id, [...(terminals.get(wt.id) ?? []), t]);
@@ -299,5 +338,5 @@ export function fakeFactories() {
       return p;
     },
   };
-  return { factories, agents, procs, proxies, terminals };
+  return { factories, agents, procs, proxies, forwards, terminals };
 }

@@ -59,13 +59,21 @@ export const CHORD_LABELS: Record<ChordId, ChordLabel> = {
   "wt-next": { label: "next worktree", section: "Worktrees", advertise: { key: "Tab", when: "pwa" } },
   "wt-unseen-prev": { label: "previous worktree worth a look", section: "Worktrees", hidden: true },
   "wt-unseen-next": { label: "next worktree worth a look", section: "Worktrees" },
+  "wt-archive": { label: "archive worktree", section: "Worktrees" },
   "mark-unread": { label: "mark worktree unread", section: "Worktrees" },
   project: { label: "open project", section: "Worktrees" },
   refs: { label: "open a branch or PR", section: "Worktrees" },
 };
 
-/** named keys as they are drawn: KeyboardEvent.key spells the arrows out, and Tab stays a word */
-const KEY_NAMES: Record<string, string> = { ArrowUp: "↑", ArrowDown: "↓", ArrowLeft: "←", ArrowRight: "→", Tab: "Tab" };
+/** named keys as they are drawn: KeyboardEvent.key spells the arrows and ⌫ out, and Tab stays a word */
+const KEY_NAMES: Record<string, string> = {
+  ArrowUp: "↑",
+  ArrowDown: "↓",
+  ArrowLeft: "←",
+  ArrowRight: "→",
+  Backspace: "⌫",
+  Tab: "Tab",
+};
 
 /** "⌘⇧P" style label, showing the chord's advertised alias when the environment calls for it
  * (F1 on Firefox, ⌘N and ⌃Tab in an installed PWA). Other aliases stay unadvertised. */

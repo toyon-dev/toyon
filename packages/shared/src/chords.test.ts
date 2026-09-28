@@ -2,12 +2,16 @@ import { describe, expect, test } from "bun:test";
 import { CHORD_LABELS, CHORD_SECTIONS, chordLabel, chordsInSection } from "./chord-labels.ts";
 import { CHORDS, chordOf, matchChord, worktreeChord, worktreeIndex, ZEN_CHORDS } from "./chords.ts";
 
-const ev = (key: string, o: Partial<{ meta: boolean; shift: boolean; ctrl: boolean; alt: boolean }> = {}) => ({
+const ev = (
+  key: string,
+  o: Partial<{ meta: boolean; shift: boolean; ctrl: boolean; alt: boolean; code: string }> = {},
+) => ({
   key,
   metaKey: o.meta ?? true,
   shiftKey: o.shift ?? false,
   ctrlKey: o.ctrl ?? false,
   altKey: o.alt ?? false,
+  code: o.code,
 });
 
 describe("matchChord", () => {
@@ -95,6 +99,7 @@ describe("matchChord", () => {
     expect(matchChord(ev("ArrowUp", { meta: false, alt: true, shift: true }))).toEqual({ id: "wt-unseen-prev" });
     expect(matchChord(ev("ArrowDown", { meta: false, alt: true, shift: true }))).toEqual({ id: "wt-unseen-next" });
     expect(matchChord(ev("k", { meta: false, alt: true, shift: true }))).toBeNull();
+    expect(matchChord(ev("˚", { meta: false, alt: true, code: "KeyK" }))).toBeNull(); // ⌥K types a symbol
     // ⌥←/→ is the panel's tabs, with no ⇧ form
     expect(matchChord(ev("ArrowLeft", { meta: false, alt: true }))).toEqual({ id: "panel-tab-prev" });
     expect(matchChord(ev("ArrowRight", { meta: false, alt: true }))).toEqual({ id: "panel-tab-next" });
@@ -152,9 +157,27 @@ describe("matchChord", () => {
     expect(ZEN_CHORDS.has("back")).toBe(true);
     expect(ZEN_CHORDS.has("forward")).toBe(true);
   });
-  test("⌘⇧U marks the worktree unread, as it does a message in Mail", () => {
-    expect(matchChord(ev("U", { shift: true }))).toEqual({ id: "mark-unread" });
-    expect(matchChord(ev("u", { shift: true }))).toEqual({ id: "mark-unread" });
+  test("⌥⌫ archives the worktree on screen, the ⌥ family's take-away; a field keeps its word delete", () => {
+    expect(matchChord(ev("Backspace", { meta: false, alt: true }))).toEqual({ id: "wt-archive" });
+    expect(matchChord(ev("Backspace", { meta: false, alt: true }), { guest: true })).toEqual({ id: "wt-archive" });
+    expect(chordOf("wt-archive").textKeeps).toBe(true);
+    expect(matchChord(ev("Backspace", { meta: false, alt: true, shift: true }))).toBeNull();
+    expect(matchChord(ev("Backspace"))).toBeNull(); // ⌘⌫ deletes to the line's start
+    expect(matchChord(ev("Backspace", { alt: true }))).toBeNull(); // ⌘⌥⌫ is nobody's
+    expect(matchChord(ev("Backspace", { meta: false }))).toBeNull();
+    expect(matchChord(ev("Delete", { meta: false, alt: true }))).toBeNull(); // ⌥⌦ is forward word delete
+  });
+  test("⌥U marks the worktree unread, by the physical key since macOS reports the letter as dead", () => {
+    expect(matchChord(ev("Dead", { meta: false, alt: true, code: "KeyU" }))).toEqual({ id: "mark-unread" });
+    expect(matchChord(ev("u", { meta: false, alt: true }))).toEqual({ id: "mark-unread" }); // a layout with no accent there
+    expect(matchChord(ev("Dead", { meta: false, alt: true, code: "KeyU" }), { guest: true })).toEqual({
+      id: "mark-unread",
+    });
+    expect(chordOf("mark-unread").textKeeps).toBe(true); // in a field ⌥U starts an umlaut
+    expect(matchChord(ev("Dead", { meta: false, alt: true, shift: true, code: "KeyU" }))).toBeNull();
+    expect(matchChord(ev("Dead", { alt: true, code: "KeyU" }))).toBeNull(); // ⌘⌥U is nobody's
+    expect(matchChord(ev("U", { shift: true }))).toBeNull(); // Mail's key is not ours
+    expect(matchChord(ev("Dead", { meta: false, alt: true, code: "KeyI" }))).toBeNull(); // ⌥I is only an accent
   });
   test("keys the table doesn't own pass through", () => {
     expect(matchChord(ev("f"))).toBeNull(); // ⌘F stays the page's own find
@@ -209,7 +232,8 @@ describe("labels", () => {
     expect(chordLabel("wt-next")).toBe("⌥↓");
     expect(chordLabel("wt-unseen-prev")).toBe("⌥⇧↑");
     expect(chordLabel("wt-unseen-next")).toBe("⌥⇧↓");
-    expect(chordLabel("mark-unread")).toBe("⌘⇧U");
+    expect(chordLabel("mark-unread")).toBe("⌥U");
+    expect(chordLabel("wt-archive")).toBe("⌥⌫");
     expect(chordLabel("routes")).toBe("⌘U");
     expect(chordLabel("changes")).toBe("⌘B"); // the ⌃⇧G alias is not advertised
     expect(chordLabel("refs")).toBe("⌘⇧G");
@@ -235,6 +259,7 @@ describe("labels", () => {
     }
     expect(chordsInSection("Worktrees")).toContain("wt-unseen-next");
     expect(chordsInSection("Worktrees")).toContain("wt-next");
+    expect(chordsInSection("Worktrees")).toContain("wt-archive");
   });
   test("worktreeChord / worktreeIndex agree: ⌘9 is always the last", () => {
     expect(worktreeChord(0, 3)).toBe("⌘1");

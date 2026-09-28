@@ -1,7 +1,7 @@
 // Lazy-loaded xterm.js terminal for one of a worktree's streams (React.lazy, like the editor: the
 // bundle only downloads when a pane is first opened). Frames come straight off the socket via terminalBus.
 
-import { hex8, matchChord, streamKey, type Theme } from "@toyon/shared";
+import { chordOf, hex8, matchChord, streamKey, type Theme } from "@toyon/shared";
 import { FitAddon } from "@xterm/addon-fit";
 import { type ITheme, Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
@@ -133,8 +133,10 @@ export default function XTerm({
         return false;
       }
       // a toyon chord is the shell's: xterm skips it and the event bubbles up to useChords. The
-      // terminal is a guest keyboard, so ⌃R stays the shell program's history search.
-      if (matchChord(e, { guest: true })) return false;
+      // terminal is a guest keyboard, so ⌃R stays the shell program's history search, and a chord
+      // every text field keeps (⌥⌫, ⌥←/→) is the program's word delete and word jump here.
+      const chord = matchChord(e, { guest: true });
+      if (chord && !chordOf(chord.id).textKeeps) return false;
       // a full-screen program (vim, less) is on the alternate buffer and owns Escape
       if (e.key === "Escape" && term.buffer.active.type !== "alternate") {
         e.preventDefault();

@@ -15,7 +15,7 @@ import {
   type ShipOp,
   type WorktreeStatus,
 } from "@toyon/shared";
-import { isBusy } from "../../surfaces/util.ts";
+import { chord, isBusy } from "../../surfaces/util.ts";
 import { grouped, type MenuEntry, type MenuItem } from "../../ui/menu.ts";
 import type { DaemonSocket } from "../../ws.ts";
 import { profileNames, profileOf } from "../profiles.ts";
@@ -203,6 +203,7 @@ export function worktreeItems(
   change.push({
     id: "unread",
     label: "mark as unread",
+    key: chord("mark-unread"),
     disabled: w.unseen ? "already unread" : undefined,
     onClick: () => markUnread(sock, dispatch, id),
   });
@@ -233,6 +234,7 @@ export function worktreeItems(
     gone.push({
       id: "archive",
       label: hasWork(w) ? "archive…" : "archive",
+      key: chord("wt-archive"),
       danger: true,
       onClick: () => acts.archive(w),
     });

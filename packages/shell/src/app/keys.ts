@@ -9,7 +9,7 @@ import {
   ZEN_CHORDS,
 } from "@toyon/shared";
 import { useEffect } from "react";
-import { markUnread } from "../state/actions/worktree.ts";
+import { markUnread, worktreeActions } from "../state/actions/worktree.ts";
 import { useSock, useStoreInstance } from "../state/context.tsx";
 import {
   archivedPageOf,
@@ -141,6 +141,13 @@ export function useChords() {
               markUnread(sock, dispatch, s.activeId);
             }
             break;
+          case "wt-archive": {
+            // the worktree on screen, through the same confirm its menu line gives it. Not under
+            // an archived page, which sits over the row the key would otherwise take.
+            const w = s.draft || s.archivedPage ? undefined : s.visible.find((w) => w.id === s.activeId);
+            if (w) worktreeActions(sock, dispatch).archive(w);
+            break;
+          }
           case "new":
             // main's box, with the caret in it; from main itself this is only the caret
             dispatch({ a: "open-draft" });

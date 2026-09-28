@@ -121,6 +121,8 @@ export const bridgeToShellSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("key"),
     key: z.string(),
+    /** the physical key, for a lettered ⌥ chord whose `key` macOS reports as "Dead" */
+    code: z.string().optional(),
     meta: z.boolean(),
     ctrl: z.boolean().optional(),
     shift: z.boolean().optional(),

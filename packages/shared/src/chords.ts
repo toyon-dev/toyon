@@ -28,6 +28,7 @@ export type ChordId =
   | "wt-next"
   | "wt-unseen-prev"
   | "wt-unseen-next"
+  | "wt-archive"
   | "mark-unread"
   | "project"
   | "refs"
@@ -52,9 +53,12 @@ export interface Chord {
    * cycles windows), where every editor settled on the ⌃ form. ⌘ still counts when it does arrive
    * (an installed app window with nothing to cycle to). */
   ctrl?: true;
-  /** bound and advertised as ⌥ with no ⌘: only for the arrow rows. ⌥ with a letter is how macOS
-   * types a symbol and ⌥ with ⌘ is Monaco's cursor family, but an arrow types nothing, so ⌥↑/↓ can
-   * be the next-and-previous pair the way it is in Slack. */
+  /** bound and advertised as ⌥ with no ⌘: the rail's modifier. An arrow or ⌫ types nothing under
+   * it, so ⌥↑/↓ can be the next-and-previous pair the way it is in Slack. A letter under ⌥ is how
+   * macOS types a symbol or starts an accent (⌥U begins an umlaut), so the browser reports "Dead"
+   * or the symbol rather than the letter, and a lettered ⌥ row is matched on the physical key;
+   * every text field keeps it (`textKeeps`), since there it is the accent it always was. ⌥ with
+   * ⌘ is Monaco's cursor family and never ours. */
   alt?: true;
   /** the same chord again on ⌃, with a key and ⇧ of its own: ⌃Tab and ⌃⇧Tab walk the worktrees
    * the way they walk a terminal's tabs. Every browser tab takes ⌃Tab before the page; an
@@ -154,9 +158,16 @@ export const CHORDS: readonly Chord[] = [
   // that already knows it.
   { id: "wt-unseen-prev", key: "ArrowUp", alt: true, shift: true },
   { id: "wt-unseen-next", key: "ArrowDown", alt: true, shift: true },
-  // ⌘⇧U is Mail's mark-as-unread: the ring goes back on the worktree on screen, to come back to.
-  // Monaco binds only ⌘U (cursor undo) and ⌘K ⌘U, so a focused editor lets it through.
-  { id: "mark-unread", key: "u", shift: true },
+  // ⌥⌫ archives the worktree on screen, the one ⌥↑/↓ just walked to: the same modifier, and the
+  // key that takes a thing away. It asks first when the row has work, as the menu's line does.
+  // Anywhere text is typed it stays the word delete it is there, the way ⌥←/→ stay the word jump.
+  // ⌘⌫ is not bound: it deletes to the line's start in a field and moves to the trash in Finder,
+  // and a reflex for either landing on a worktree is the wrong surprise.
+  { id: "wt-archive", key: "Backspace", alt: true, textKeeps: true },
+  // ⌥U puts the unseen ring back on the worktree on screen, to come back to: the rail's modifier
+  // again, beside ⌥↑/↓ and ⌥⌫, rather than Mail's ⌘⇧U. Under ⌥ the letter is a dead key on macOS,
+  // so it is matched on the physical key, and a field keeps it as the umlaut it starts there.
+  { id: "mark-unread", key: "u", alt: true, textKeeps: true },
   // ⌘O is "Open..." in VS Code on macOS and in vscode.dev, which takes it from the browser's own
   // open-file dialog the same way. ⌘⇧O opens it too. It is go-to-symbol in VS Code and Monaco, and a
   // focused editor still answers it that way, because Monaco stops the keydown for a key it binds.
@@ -202,11 +213,12 @@ export const ZEN_CHORDS: ReadonlySet<ChordId> = new Set<ChordId>(["zen", "close"
 export type ChordMatch = { id: Exclude<ChordId, "worktree"> } | { id: "worktree"; digit: number };
 
 /** Normalised chord detection for a keydown: ⌘ (no ⌃/⌥) for most rows, ⌃ alone for the rows that
- * ask for it and for a row's ⌃ alias, ⌘⇧ for a row's ⌘⇧ alias, ⌥ alone for the arrow rows, no
- * modifier at all for a row's bare alias; letters
- * case-insensitive so a browser that reports "F" for ⌘⇧F and one that reports "f" agree; shift must
- * match the table exactly (⌘⇧B is not ⌘B). `guest` is a keydown from a keyboard with uses of its own
- * (a terminal, a previewed page), which keeps every `hostOnly` alias. */
+ * ask for it and for a row's ⌃ alias, ⌘⇧ for a row's ⌘⇧ alias, ⌥ alone for the ⌥ rows (a lettered
+ * one by its `code`, since macOS reports the key as "Dead" or a symbol), no modifier at all for a
+ * row's bare alias; letters case-insensitive so a browser that reports "F" for ⌘⇧F and one that
+ * reports "f" agree; shift must match the table exactly (⌘⇧B is not ⌘B). `guest` is a keydown from
+ * a keyboard with uses of its own (a terminal, a previewed page), which keeps every `hostOnly`
+ * alias. */
 export function matchChord(
   e: {
     key: string;
@@ -214,12 +226,18 @@ export function matchChord(
     shiftKey: boolean;
     ctrlKey?: boolean;
     altKey?: boolean;
+    code?: string;
   },
   { guest = false }: { guest?: boolean } = {},
 ): ChordMatch | null {
   if (e.altKey) {
     if (e.metaKey || e.ctrlKey) return null;
-    const c = CHORDS.find((c) => c.alt && c.key === e.key && !!c.shift === e.shiftKey);
+    const c = CHORDS.find(
+      (c) =>
+        c.alt &&
+        !!c.shift === e.shiftKey &&
+        (c.key === e.key || (c.key.length === 1 && e.code === `Key${c.key.toUpperCase()}`)),
+    );
     return c && c.id !== "worktree" ? { id: c.id } : null;
   }
   // a bare key is the kind a program in the terminal or a previewed page binds itself (F1 is help

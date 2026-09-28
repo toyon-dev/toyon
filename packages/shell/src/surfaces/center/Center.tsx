@@ -217,6 +217,7 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
             window.dispatchEvent(
               new KeyboardEvent(d.up ? "keyup" : "keydown", {
                 key: d.key,
+                code: d.code,
                 metaKey: d.meta,
                 ctrlKey: !!d.ctrl,
                 shiftKey: !!d.shift,

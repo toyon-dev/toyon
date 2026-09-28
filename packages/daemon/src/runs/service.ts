@@ -6,6 +6,7 @@
 
 import { describeDuration, type RunKind, type RunState } from "@toyon/shared";
 import type { Hub } from "../core/hub.ts";
+import { withSlot } from "../core/limiter.ts";
 import { fireAndForget, log } from "../core/log.ts";
 import type { StateStore } from "../core/state.ts";
 import { reclaimGroup } from "../runtime/kill.ts";
@@ -13,8 +14,18 @@ import { reclaimGroup } from "../runtime/kill.ts";
 /** how often a run the last daemon left is asked whether it is still there */
 const DETACHED_POLL_MS = 5_000;
 
+/** a cap on how many runs hold a key at once: a run asked for under one is `queued` until a slot
+ * frees, and holds it until it is over */
+export interface Slot {
+  key: string;
+  max: number;
+}
+
 /** what the code that runs the process reports through, once it has asked for the run */
 export interface RunHandle {
+  /** resolves once the run may spawn: at once without a slot, else when one frees. False when
+   * the run was dropped or replaced while it waited, so the caller spawns nothing. */
+  admitted: Promise<boolean>;
   /** a queued run's process is starting now; the elapsed time counts from here */
   start(): void;
   /** the process is up: its group, for the next daemon, and how to kill it, for a press */
@@ -31,6 +42,8 @@ interface Live {
   stop?: () => void;
   /** the reason a stop was pressed with, for the terminated entry the finish writes */
   stopWhy?: string;
+  /** gives the slot back, for a run that took one; a run over any way lets go of it */
+  release?: () => void;
 }
 
 export interface RunServiceDeps {
@@ -51,27 +64,62 @@ export class RunService {
 
   /** Ask for a run: it stands on the row from this moment, running unless `queued`, in place of
    * any earlier run of its kind there. Nothing is done to a process behind that earlier entry;
-   * `drop` first when it is still going. */
-  begin(worktreeId: string, kind: RunKind, opts: { timeoutMs: number; stage?: string; queued?: boolean }): RunHandle {
+   * `drop` first when it is still going. Under a `slot` it stands queued until one frees, and the
+   * caller spawns only once `admitted` says so: a check is the repo's whole typecheck and test
+   * run, and a batch of variants settling together would run one per worktree, each slower than
+   * the last, so at most `max` of a key run at once and the row says the rest are waiting. */
+  begin(
+    worktreeId: string,
+    kind: RunKind,
+    opts: { timeoutMs: number; stage?: string; queued?: boolean; slot?: Slot },
+  ): RunHandle {
     const key = keyOf(worktreeId, kind);
     const run: RunState = {
       kind,
-      status: opts.queued ? "queued" : "running",
+      status: opts.queued || opts.slot ? "queued" : "running",
       since: Date.now(),
       timeoutMs: opts.timeoutMs,
       ...(opts.stage ? { stage: opts.stage } : {}),
     };
     const live: Live = { run };
+    // the earlier entry's row is gone with this write, so the slot it held goes too
+    this.live.get(key)?.release?.();
     this.live.set(key, live);
     this.write(worktreeId, run);
     const mine = () => this.live.get(key) === live;
+    const start = () => {
+      if (!mine() || run.status !== "queued") return;
+      run.status = "running";
+      run.since = Date.now();
+      this.write(worktreeId, run);
+    };
+    let admitted = Promise.resolve(true);
+    if (opts.slot) {
+      let admit: (ok: boolean) => void = () => {};
+      admitted = new Promise<boolean>((r) => {
+        admit = r;
+      });
+      const held = new Promise<void>((r) => {
+        live.release = r;
+      });
+      fireAndForget(
+        worktreeId,
+        withSlot(opts.slot.key, opts.slot.max, () => {
+          // dropped or replaced while it waited: the slot goes straight on to the next in line
+          if (!mine()) {
+            admit(false);
+            return;
+          }
+          start();
+          admit(true);
+          return held;
+        }),
+        `${kind} slot`,
+      );
+    }
     return {
-      start: () => {
-        if (!mine() || run.status !== "queued") return;
-        run.status = "running";
-        run.since = Date.now();
-        this.write(worktreeId, run);
-      },
+      admitted,
+      start,
       spawned: (pgid, stop) => {
         if (!mine()) return;
         live.stop = stop;
@@ -184,11 +232,15 @@ export class RunService {
     live.run.why = why;
     delete live.run.pid;
     delete live.stop;
+    live.release?.();
+    delete live.release;
     this.write(worktreeId, live.run);
   }
 
   private remove(worktreeId: string, kind: RunKind) {
-    if (!this.live.delete(keyOf(worktreeId, kind))) return;
+    const key = keyOf(worktreeId, kind);
+    this.live.get(key)?.release?.();
+    if (!this.live.delete(key)) return;
     const wt = this.d.state.worktree(worktreeId);
     if (wt?.runs) {
       wt.runs = wt.runs.filter((r) => r.kind !== kind);

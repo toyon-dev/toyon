@@ -53,6 +53,11 @@ export interface LandingServiceDeps {
 const TAIL_CHARS = 400;
 /** how much of the diff summary the question carries */
 const DIFF_CHARS = 2_000;
+/** how many of one repo's checks run at once. Four checks on one machine take longer than four
+ * in a row, and every verdict is late instead of one; two keeps a second row moving while the
+ * first is checked. Per repo, since a check's cost is the repo's, and the person waiting is
+ * looking at one project. */
+export const CHECK_SLOTS = 2;
 
 /** one run of the verdict: what it is for, and whether the model is asked or only the check runs */
 interface Run {
@@ -213,12 +218,22 @@ export class LandingService {
 
     let check: Landing["check"] = "none";
     let checkTail: string | undefined;
+    let waited = 0;
     const command = repo.config.check?.trim();
     if (command) {
       const ceiling = timeoutFor(repo.config, "check");
       // a check from an earlier run of the verdict is still going: its answer is moot now
       this.d.runs.drop(worktreeId, "check");
-      const run = this.d.runs.begin(worktreeId, "check", { timeoutMs: ceiling });
+      const run = this.d.runs.begin(worktreeId, "check", {
+        timeoutMs: ceiling,
+        slot: { key: repo.path, max: CHECK_SLOTS },
+      });
+      // queued behind the repo's other checks until a slot frees; one dropped meanwhile (a new
+      // turn, a newer run) never spawns, and one admitted for a run that has since gone stale
+      // gives its slot straight back
+      if (!(await run.admitted)) return;
+      if (!live()) return run.finish(null);
+      waited = Date.now() - started;
       let r: ExecResult;
       try {
         r = await this.d.check(worktreeId, command, { quiet: opts.quiet, timeoutMs: ceiling, onSpawn: run.spawned });
@@ -282,10 +297,11 @@ export class LandingService {
     // the sentence goes on the turn it describes; setLanding saves and broadcasts the record with it
     const record = this.d.state.worktree(worktreeId)?.lastTurn;
     if (record && verdict?.recap) record.recap = { at: Date.now(), text: verdict.recap };
-    // how long the word took to appear: the check and the side question are the two costs here
+    // how long the word took to appear: the check and the side question are the two costs here,
+    // and a wait for a slot behind the repo's other checks is named so a slow verdict has a reason
     log.info(
       worktreeId,
-      `landing: check ${check}${landing.why ? ", doubted" : ""}${opts.ask ? "" : ", check only"}, ${Date.now() - started}ms`,
+      `landing: check ${check}${landing.why ? ", doubted" : ""}${opts.ask ? "" : ", check only"}, ${Date.now() - started}ms${waited > 100 ? ` (waited ${waited}ms for a check slot)` : ""}`,
     );
     this.d.worktrees.setLanding(worktreeId, landing);
   }

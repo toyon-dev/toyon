@@ -30,6 +30,10 @@ interface Opts {
   recap?: (prompt: string) => Promise<string | null>;
   /** what the worktree's agent has on its transcript */
   transcript?: TranscriptEntry[];
+  /** more worktrees of the same repo, w2 and on, each on its own branch */
+  extra?: number;
+  /** a check that runs until the test ends it by worktree id, so several can be in flight */
+  slow?: boolean;
 }
 
 /** a transcript of one finished turn: the ask, the reply, and how it ended */
@@ -70,12 +74,21 @@ function world(opts: Opts = {}) {
     title: "feature",
     createdAt: 0,
   };
-  const state = new StateStore(t.paths, { repos: [repo], worktrees: [wt], sessions: {} });
+  const extras: WorktreeInfo[] = [];
+  for (let i = 2; i <= 1 + (opts.extra ?? 0); i++) {
+    const path = join(t.repo, "..", `wt${i}`);
+    sh(t.repo, GIT, "worktree", "add", "-q", "-b", `toyon/feature${i}`, path);
+    extras.push({ ...wt, id: `w${i}`, path, branch: `toyon/feature${i}`, proxyPort: i, title: `feature ${i}` });
+  }
+  const state = new StateStore(t.paths, { repos: [repo], worktrees: [wt, ...extras], sessions: {} });
   const hub = new Hub();
   const set: Array<Landing | undefined> = [];
   const checks: string[] = [];
   /** whether each check was asked to keep its rows off the transcript unless it failed */
   const quiet: boolean[] = [];
+  /** the worktrees whose check has started, in order, and how to end a slow one */
+  const started: string[] = [];
+  const ends = new Map<string, () => void>();
   /** the ceiling each check was given */
   const ceilings: Array<number | undefined> = [];
   /** the check run's status on the record as each check was called */
@@ -106,13 +119,15 @@ function world(opts: Opts = {}) {
           },
         }
       : {}),
-    check: async (_id, command, o) => {
+    check: async (id, command, o) => {
       checks.push(command);
       quiet.push(!!o?.quiet);
       ceilings.push(o?.timeoutMs);
       // what the row says while the check is out: read here, since the stub is over at once
       runsSeen.push(state.worktree("w1")?.runs?.find((r) => r.kind === "check")?.status);
       o?.onSpawn?.(4242, () => {});
+      started.push(id);
+      if (opts.slow) await new Promise<void>((end) => ends.set(id, end));
       return { exit: opts.exit ?? 0, text: opts.output ?? "" };
     },
     ...(opts.verdict === "none"
@@ -135,7 +150,7 @@ function world(opts: Opts = {}) {
     const done = () => set.some((l) => l === undefined || l.check !== "pending");
     for (let i = 0; wait && i < 50 && !done(); i++) await Bun.sleep(10);
   };
-  const dirty = () => writeFileSync(join(wtPath, "feature.txt"), `${Date.now()}\n`);
+  const dirty = (id = "w1") => writeFileSync(join(state.requireWorktree(id).path, "feature.txt"), `${Date.now()}\n`);
   /** a run asked for by hand or a recheck has settled once a verdict past pending was set */
   const settled = async () => {
     const n = set.length;
@@ -164,7 +179,9 @@ function world(opts: Opts = {}) {
     settled,
     recapSettled,
     dirty,
-    wt: () => state.worktree("w1"),
+    started,
+    end: (id: string) => ends.get(id)?.(),
+    wt: (id = "w1") => state.worktree(id),
   };
 }
 
@@ -381,6 +398,49 @@ describe("LandingService", () => {
     await w.service.judge("w1", "   ");
     await again;
     expect(w.judged[1]).not.toContain("Note from the user");
+  });
+
+  test("one repo's checks run at most CHECK_SLOTS at once; the rest stand queued and start as one ends", async () => {
+    w = world({ check: "bun run check", verdict: "none", extra: 2, slow: true });
+    const ids = ["w1", "w2", "w3"];
+    const status = (id: string) => w?.wt(id)?.runs?.find((r) => r.kind === "check")?.status;
+    for (const id of ids) w.dirty(id);
+    for (const id of ids) await w.service.judge(id);
+    await Bun.sleep(30);
+    expect(w.started).toEqual(["w1", "w2"]);
+    expect(ids.map(status)).toEqual(["running", "running", "queued"]);
+    expect(ids.map((id) => w?.wt(id)?.landing?.check)).toEqual(["pending", "pending", "pending"]);
+    w.end("w1");
+    await Bun.sleep(30);
+    expect(w.started).toEqual(["w1", "w2", "w3"]);
+    expect(w.wt("w1")?.landing?.check).toBe("pass");
+    expect(status("w3")).toBe("running");
+    w.end("w2");
+    w.end("w3");
+    for (let i = 0; i < 50 && ids.some((id) => w?.wt(id)?.landing?.check === "pending"); i++) await Bun.sleep(10);
+    expect(ids.map((id) => w?.wt(id)?.landing?.check)).toEqual(["pass", "pass", "pass"]);
+    expect(ids.map(status)).toEqual([undefined, undefined, undefined]);
+  });
+
+  test("a run that goes stale while it stands queued never spawns its check", async () => {
+    w = world({ check: "bun run check", verdict: "none", extra: 2, slow: true });
+    const ids = ["w1", "w2", "w3"];
+    for (const id of ids) w.dirty(id);
+    for (const id of ids) await w.service.judge(id);
+    await Bun.sleep(30);
+    expect(w.started).toEqual(["w1", "w2"]);
+    // a new turn on w3 while it stands in line: its verdict and its run are cleared, and the
+    // check it was waiting to run is about a tree that is changing
+    w.hub.emit("agentStatus", "w3", "working");
+    expect(w.wt("w3")?.landing).toBeUndefined();
+    expect(w.wt("w3")?.runs).toBeUndefined();
+    w.end("w1");
+    w.end("w2");
+    for (let i = 0; i < 50 && ["w1", "w2"].some((id) => w?.wt(id)?.landing?.check === "pending"); i++)
+      await Bun.sleep(10);
+    expect(w.started).toEqual(["w1", "w2"]);
+    expect(w.wt("w3")?.landing).toBeUndefined();
+    expect(w.wt("w3")?.runs).toBeUndefined();
   });
 
   test("judge() is refused mid-turn and with nothing to land", async () => {

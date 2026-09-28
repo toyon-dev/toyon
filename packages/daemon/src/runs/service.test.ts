@@ -11,7 +11,7 @@ import { RunService } from "./service.ts";
 const home = mkdtempSync(join(tmpdir(), "toyon-runs-"));
 afterAll(() => rmSync(home, { recursive: true, force: true }));
 
-function world(opts: { runs?: RunState[]; alive?: (pid: number) => boolean } = {}) {
+function world(opts: { runs?: RunState[]; alive?: (pid: number) => boolean; ids?: string[] } = {}) {
   const paths = makePaths(mkdtempSync(join(home, "h-")));
   ensureDirs(paths);
   const wt: WorktreeInfo = {
@@ -25,7 +25,8 @@ function world(opts: { runs?: RunState[]; alive?: (pid: number) => boolean } = {
     createdAt: 0,
     ...(opts.runs ? { runs: opts.runs } : {}),
   };
-  const state = new StateStore(paths, { repos: [], worktrees: [wt], sessions: {} });
+  const worktrees = (opts.ids ?? ["w1"]).map((id) => ({ ...wt, id }));
+  const state = new StateStore(paths, { repos: [], worktrees, sessions: {} });
   const hub = new Hub();
   const killed: number[] = [];
   const runs = new RunService({
@@ -36,9 +37,12 @@ function world(opts: { runs?: RunState[]; alive?: (pid: number) => boolean } = {
       killed.push(pid);
     },
   });
-  const row = () => state.worktree("w1")?.runs;
+  const row = (id = "w1") => state.worktree(id)?.runs;
   return { runs, row, killed, state };
 }
+
+/** the check run's status on a row, or nothing when none stands there */
+const checkStatus = (w: ReturnType<typeof world>, id: string) => w.row(id)?.find((r) => r.kind === "check")?.status;
 
 describe("RunService", () => {
   test("a run stands on the record from begin to finish, with its stage and pid", () => {
@@ -54,6 +58,31 @@ describe("RunService", () => {
     h.finish(0);
     expect(w.row()).toBeUndefined();
     expect(w.runs.of("w1", "setup")).toBeUndefined();
+  });
+
+  test("a slot admits at most max of a key at once, the rest queued in order; one dropped while queued never starts", async () => {
+    const ids = ["w1", "w2", "w3", "w4"];
+    const w = world({ ids });
+    const slot = { key: "/repo", max: 2 };
+    const h = ids.map((id) => w.runs.begin(id, "check", { timeoutMs: 1000, slot }));
+    expect(await h[0]?.admitted).toBe(true);
+    expect(await h[1]?.admitted).toBe(true);
+    await Bun.sleep(1);
+    expect(ids.map((id) => checkStatus(w, id))).toEqual(["running", "running", "queued", "queued"]);
+    // the third is dropped where it stands; when a slot frees it is passed over for the fourth
+    w.runs.drop("w3", "check");
+    expect(checkStatus(w, "w3")).toBeUndefined();
+    h[0]?.finish(0);
+    expect(await h[2]?.admitted).toBe(false);
+    expect(await h[3]?.admitted).toBe(true);
+    expect(ids.map((id) => checkStatus(w, id))).toEqual([undefined, "running", undefined, "running"]);
+    // a run over at the ceiling lets go of its slot like one that finished
+    h[1]?.finish("timeout");
+    h[3]?.finish(0);
+    const next = w.runs.begin("w1", "check", { timeoutMs: 1000, slot });
+    expect(await next.admitted).toBe(true);
+    expect(checkStatus(w, "w1")).toBe("running");
+    next.finish(0);
   });
 
   test("a queued run counts its time from when it starts", async () => {

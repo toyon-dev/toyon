@@ -294,13 +294,15 @@ export function openRow(entries: ChatEntry[]): number {
   return -1;
 }
 
-/** a message still waiting for its first words has nothing to read yet, so it closes nothing, and
- * nor does a question still open: it is asked in the box, not the log, and the thought that led to
- * it is what the person reads while deciding. Every other item is there to be read the moment it
- * lands, an answered question included. */
+/** a message still waiting for its first words has nothing to read yet, so it closes nothing. A
+ * question does, open or answered: the agent is told to write it to be read on its own, and the
+ * turn ends on the card, so a thought open over it says the same thing twice with the reasoning
+ * summary on top. A permission still open closes nothing: its card is the command and a gate on
+ * the call, and why the agent wants it is the thought under whose calls it sits. Every other item
+ * is there to be read the moment it lands. */
 function says(item: Exclude<ChatItem, { kind: "tool" | "thinking" }>): boolean {
   if (item.kind === "assistant") return !!item.text.trim();
-  if (item.kind === "ask") return !!item.outcome;
+  if (item.kind === "ask") return item.ask.kind === "question" || !!item.outcome;
   return true;
 }
 

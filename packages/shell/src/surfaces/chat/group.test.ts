@@ -306,7 +306,7 @@ describe("groupTools", () => {
     expect(open([think, text("Checking the caller.")])).toBe(-1);
   });
 
-  test("a question still open leaves the thought before it open; answered, it closes it", () => {
+  test("a question closes the thought before it, open or answered; an open permission does not", () => {
     const think = thought("Two ways to do this.");
     const ask = (outcome?: "answered"): ChatItem => ({
       kind: "ask",
@@ -314,8 +314,14 @@ describe("groupTools", () => {
       ask: { kind: "question", message: "Which?", questions: [] },
       ...(outcome ? { outcome } : {}),
     });
-    expect(open([think, ask()])).toBe(0);
+    expect(open([think, ask()])).toBe(-1);
     expect(open([think, ask("answered")])).toBe(-1);
+    const permission: ChatItem = {
+      kind: "ask",
+      id: "k2",
+      ask: { kind: "permission", title: "Run rm -rf dist", choices: [] },
+    };
+    expect(open([think, permission])).toBe(0);
   });
 
   test("the open row: the next thought takes it, but only once it has words of its own", () => {

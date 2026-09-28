@@ -54,6 +54,11 @@ describe("SYSTEM_APPEND", () => {
     expect(SYSTEM_APPEND).toContain("only where you would otherwise have stopped and waited");
     expect(SYSTEM_APPEND).toContain("is a sentence in your reply, not a question");
   });
+  test("asks for the question to carry its own context, since the card is read before any prose", () => {
+    // a model that goes from reasoning straight into the tool writes no prose first; the card's
+    // only context is then its reasoning summary, folded as a thought, or nothing
+    expect(SYSTEM_APPEND).toContain("the question itself states what you propose and why");
+  });
 });
 
 describe("ambientBlock", () => {

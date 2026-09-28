@@ -1274,8 +1274,25 @@
     grid-column: 2;
     color: var(--text0);
   }
+  /* a row's own description, drawn only where there is no cursor for the block below to follow */
   .ask-desc {
     grid-column: 2;
+  }
+  /* the description of the row the cursor is on, under the list in the label's column: every
+     row's is here, stacked in one cell and unseen but the current one, so the block is as tall as
+     the longest and walking the rows moves nothing under it */
+  .ask-about {
+    display: grid;
+    margin: 4px 0 0;
+    padding-left: 22px;
+    color: var(--text2);
+    overflow-wrap: anywhere;
+  }
+  .ask-about-line {
+    grid-area: 1 / 1;
+  }
+  .ask-about-off {
+    visibility: hidden;
   }
   .ask-preview {
     margin: 6px 0 0;
@@ -1294,8 +1311,8 @@
   }
   /* the actions under a page, at the page's floor: every page stands at the tallest one's height,
    and the slack goes above this row, so the send sits in one place whichever page is open. The
-   send and what goes with it on the left, the stop on the right: the glyph alone, as in the
-   plain box's corner, since the ask replaces the field and its corner is the tab strip. */
+   agent's stop is the box's corner control, over the ask as over the plain field: down here at
+   the row's far end it was the send's opposite on the send's own line. */
   .ask-foot {
     display: flex;
     align-items: center;
@@ -1303,8 +1320,14 @@
     margin-top: auto;
     padding-top: 10px;
   }
-  .ask-stop {
-    margin-left: auto;
+  /* whatever is first in the box keeps the corner clear for the stop (Composer): the question
+     when it heads the box, the tab strip's list when the strip does, so the far tab does not
+     sit under the glyph */
+  .composer.stopping .ask-box > .ask-pages:first-child .ask-head {
+    padding-right: 24px;
+  }
+  .composer.stopping .ask-tabs .tabs-list {
+    padding-right: 24px;
   }
   /* the send page's rows: each question's answer read back after its header, and a press on the
    row opens that question. Nothing is checked here, since the row is a way back, not a pick. */

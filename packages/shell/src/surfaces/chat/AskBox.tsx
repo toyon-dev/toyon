@@ -13,7 +13,7 @@ import { type RefObject, useMemo, useRef, useState } from "react";
 import { openFile } from "../../state/actions/file.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { useLocalField, useTouch } from "../../state/selectors.ts";
-import { Button, IconButton } from "../../ui/Button.tsx";
+import { Button } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { TextArea } from "../../ui/Field.tsx";
 import { useOnChange } from "../../ui/hooks.ts";
@@ -250,14 +250,18 @@ function QuestionBody({
   /** the key strip of a page, the send page's when no question is given. Each page carries its
    * own rather than the open page's, since a hidden page's strip still sets its height, and a
    * strip that wrapped on one page and not another moved the box with the tab. */
+  /** on a lone single-select question the pick is the send (advance): there is no page after it
+   * to walk to, so enter on a row answers the ask outright */
+  const pickSends = (qq: (typeof questions)[number]) => questions.length === 1 && !qq.multi;
+
   const hintsFor = (qq?: (typeof questions)[number]): Array<[string, string]> =>
     qq
       ? [
           ...(questions.length > 1 ? [["←→", "question"] as [string, string]] : []),
           ["↑↓", "move"],
-          ["⏎", "choose"],
+          ["⏎", pickSends(qq) ? "send" : "choose"],
           ...(qq.note ? [["n", "add a note"] as [string, string]] : []),
-          ["⌘⏎", "send"],
+          ...(pickSends(qq) ? [] : [["⌘⏎", "send"] as [string, string]]),
           ["esc", "reply instead"],
         ]
       : [
@@ -266,15 +270,19 @@ function QuestionBody({
           ["esc", "reply instead"],
         ];
 
-  /** the actions under a page: the send, the note on the pick where the agent takes one and a
-   * pick is made, the skip, and the stop at the far end. Each page carries its own, and the key
-   * strip after it, so the page's height is the whole of what shows for it; the foot sits at the
-   * page's floor so the send is in one place whichever page is open. */
+  /** the actions under a page: the send where a pick alone is not one (several questions, a
+   * multi-select, or the typed answer's field open, whose enter a mouse does not have), the note
+   * on the pick where the agent takes one and a pick is made, and the skip. Each page carries its
+   * own, and the key strip after it, so the page's height is the whole of what shows for it; the
+   * foot sits at the page's floor so the send is in one place whichever page is open. The agent's
+   * stop is not here: it keeps the box's corner, as it does over the plain field. */
   const foot = (qq?: (typeof questions)[number], a?: AskAnswer) => (
     <div className="ask-foot">
-      <Button variant="outline" size="md" disabled={!canSubmit(questions, draft)} onClick={submit}>
-        send
-      </Button>
+      {(!qq || !pickSends(qq) || a?.note !== undefined) && (
+        <Button variant="outline" size="md" disabled={!canSubmit(questions, draft)} onClick={submit}>
+          send
+        </Button>
+      )}
       {qq?.note && a && a.selected.length > 0 && a.note === undefined && (
         <Button tone="quiet" size="md" onClick={() => type(false)}>
           <Kbd k="n" chip />
@@ -285,13 +293,6 @@ function QuestionBody({
         <Kbd k="s" chip />
         skip
       </Button>
-      <IconButton
-        icon="stop"
-        tone="danger"
-        className="ask-stop"
-        label="Stop the agent (context up to here is kept)"
-        onClick={() => sock?.send({ t: "stop-agent", worktreeId })}
-      />
     </div>
   );
 
@@ -330,7 +331,7 @@ function QuestionBody({
                   {stripRecommended(o.label)}
                   {recommended(o.label) && <span className="badge-recommended">recommended</span>}
                 </span>
-                {o.description && <span className="ask-desc row-dim">{o.description}</span>}
+                {touch && o.description && <span className="ask-desc row-dim">{o.description}</span>}
               </button>
             );
           })}
@@ -346,10 +347,30 @@ function QuestionBody({
             >
               <Kbd k={String(qq.options.length + 1)} className="ask-num row-dim" />
               <span className="ask-label">{qq.note.label}</span>
-              <span className="ask-desc row-dim">your own answer</span>
+              {touch && <span className="ask-desc row-dim">your own answer</span>}
             </button>
           )}
         </div>
+        {/* the descriptions under the list rather than one per row: the row you are on has its
+            description read here, the way a picker's hint follows the cursor, so the list is its
+            labels and the agent's restatements do not stack the box tall. Every description is in
+            the block, unseen, stacked in one cell, so the block stands at the tallest one's height
+            and the box does not step as the cursor moves. A finger has no cursor to follow, so on
+            touch each row keeps its own description (above) and there is no block. */}
+        {!touch && (
+          <div className="ask-about">
+            {[...qq.options.map((o) => o.description ?? ""), ...(qq.note ? ["your own answer"] : [])].map((d, oi) => (
+              <div
+                // biome-ignore lint/suspicious/noArrayIndexKey: the rows are positional, as the digits that reach them are
+                key={oi}
+                className={cx("ask-about-line", !(open && oi === cursor) && "ask-about-off")}
+                aria-hidden={!(open && oi === cursor)}
+              >
+                {d}
+              </div>
+            ))}
+          </div>
+        )}
         {under?.preview && <pre className="ask-preview">{under.preview}</pre>}
         {qq.note && a?.note !== undefined && (
           <TextArea

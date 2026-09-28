@@ -860,7 +860,9 @@ export function Composer({
   const dir = active ? active.worktree.path : null;
   const plan = active?.worktree.plan;
   // the stop stands in for the field's esc, so it goes when an ask card takes the field's place
-  const stopShown = stoppable && !askUp;
+  // the ask too: it replaces the field, not the corner, and a stop beside the ask's send read as
+  // the send's opposite on one line
+  const stopShown = stoppable;
 
   return (
     <div className={cx("composer chat-input", stopShown && "stopping")}>
@@ -975,7 +977,8 @@ export function Composer({
           tone="danger"
           className="composer-stop"
           label={`Stop the agent (context up to here is kept${queue.length ? "; queued messages go next" : ""})`}
-          hint="esc"
+          // under an ask, esc parks the question rather than stopping the turn
+          hint={askUp ? undefined : "esc"}
           onClick={() => id && sock?.send({ t: "stop-agent", worktreeId: id })}
         />
       )}

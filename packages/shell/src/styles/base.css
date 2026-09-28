@@ -721,9 +721,10 @@
   .badge-changed {
     color: var(--yellow);
   }
-  /* the option the agent would pick, read off its label: a suggestion, so the arrival green rather
-     than the accent, which would read as the one already chosen */
+  /* the option the agent would pick, read off its label: a suggestion, said at the quiet tier. Not
+     the accent, which would read as the one already chosen, and not the green, which says a check
+     passed everywhere else and made the agent's guess read as the right answer */
   .badge-recommended {
-    color: var(--green);
+    color: var(--text2);
   }
 }

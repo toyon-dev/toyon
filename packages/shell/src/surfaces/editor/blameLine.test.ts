@@ -4,8 +4,14 @@ import { blameCommit, blameLine } from "./blameLine.ts";
 const DAY = 86_400_000;
 const blame = {
   commits: [
-    { sha: "a".repeat(40), author: "Kyle Shay", at: Date.now() - 3 * DAY, subject: "chat: keep attachments" },
-    { sha: "b".repeat(40), author: "", at: Date.now() - 2 * DAY, subject: "" },
+    {
+      sha: "a".repeat(40),
+      author: "Kyle Shay",
+      email: "k@x",
+      at: Date.now() - 3 * DAY,
+      subject: "chat: keep attachments",
+    },
+    { sha: "b".repeat(40), author: "", email: "", at: Date.now() - 2 * DAY, subject: "" },
   ],
   lines: [0, -1, 1],
 };

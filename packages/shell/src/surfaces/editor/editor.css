@@ -65,11 +65,25 @@
     box-shadow: var(--elevation-float);
     overflow-wrap: anywhere;
   }
+  /* who, then their address a tier under on the same line, as a commit's own header reads */
+  .editor-blame-who {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+  }
+  .editor-blame-mail {
+    color: var(--text1);
+    font: var(--type-ui-sm);
+  }
+  /* the sha and the date at the two ends, one size in their two faces and set on one baseline:
+   the mono is a hair shorter than the UI face at a shared size, so only the baseline lines them up */
   .editor-blame-meta {
     display: flex;
     justify-content: space-between;
+    align-items: baseline;
     gap: 16px;
     color: var(--text1);
+    font: var(--type-ui-sm);
   }
   .editor-blame-sha {
     font: var(--type-mono-sm);

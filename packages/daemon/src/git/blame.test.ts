@@ -27,6 +27,7 @@ describe("blameFile", () => {
     expect(b.commits.map((c) => c.subject)).toEqual(["add a", "add three"]);
     expect(b.commits.map((c) => c.sha)).toEqual([first, second]);
     expect(b.commits[0]?.author).toBe("t");
+    expect(b.commits[0]?.email).toBe("t@t");
     expect(b.commits[0]?.at).toBeGreaterThan(1_600_000_000_000);
     expect(b.lines).toEqual([0, 0, 1, -1]);
   });
@@ -79,8 +80,8 @@ describe("parseBlame", () => {
     ].join("\n");
     expect(parseBlame(out)).toEqual({
       commits: [
-        { sha, author: "Kyle", at: 1_700_000_000_000, subject: "first: one" },
-        { sha: other, author: "Someone Else", at: 1_700_001_000_000, subject: "" },
+        { sha, author: "Kyle", email: "k@x", at: 1_700_000_000_000, subject: "first: one" },
+        { sha: other, author: "Someone Else", email: "s@x", at: 1_700_001_000_000, subject: "" },
       ],
       lines: [0, 1, 0],
     });

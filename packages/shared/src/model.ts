@@ -860,6 +860,8 @@ export interface CommitEntry {
 export interface BlameCommit {
   sha: string;
   author: string;
+  /** the author's address as the commit carries it, without the brackets */
+  email: string;
   /** author date, epoch ms */
   at: number;
   subject: string;

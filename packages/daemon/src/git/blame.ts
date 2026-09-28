@@ -35,7 +35,7 @@ export function parseBlame(out: string): FileBlame {
     if (idx === undefined && sha !== UNCOMMITTED) {
       idx = commits.length;
       index.set(sha, idx);
-      commits.push({ sha, author: "", at: 0, subject: "" });
+      commits.push({ sha, author: "", email: "", at: 0, subject: "" });
     }
     const c = idx === undefined ? null : commits[idx];
     for (; i < rows.length && !rows[i]?.startsWith("\t"); i++) {
@@ -45,6 +45,7 @@ export function parseBlame(out: string): FileBlame {
       const value = sp < 0 ? "" : row.slice(sp + 1);
       if (!c) continue;
       if (key === "author") c.author = value;
+      else if (key === "author-mail") c.email = value.replace(/^<(.*)>$/, "$1");
       else if (key === "author-time") c.at = Number(value) * 1000 || 0;
       else if (key === "summary") c.subject = value;
     }

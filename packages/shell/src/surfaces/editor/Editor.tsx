@@ -141,7 +141,9 @@ interface BlameCard {
   /** the note's box, which the card hangs under */
   anchor: Rect;
 }
-const CARD_DELAY = 120;
+/** Monaco's own hover rest, not the tooltip's shorter one: the note sits in the text a pointer
+ * crosses on its way anywhere, and a card on every crossing would flicker over the code */
+const CARD_DELAY = 300;
 const CARD_PLACEMENT: Placement = { side: "bottom", align: "start", offset: 6, flip: "side", margin: 8 };
 const CARD_DATE = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: "numeric" });
 
@@ -640,6 +642,10 @@ export default function Editor({
       <div ref={ref} className="editor-monaco" />
       {card && (
         <Float className="editor-blame-card" anchor={() => card.anchor} placement={CARD_PLACEMENT} aria-hidden>
+          <span className="editor-blame-who">
+            <span>{card.commit.author || card.commit.sha.slice(0, 7)}</span>
+            {card.commit.email && <span className="editor-blame-mail">{card.commit.email}</span>}
+          </span>
           <span>{card.commit.subject || "no message"}</span>
           <span className="editor-blame-meta">
             <span className="editor-blame-sha">{card.commit.sha.slice(0, 7)}</span>

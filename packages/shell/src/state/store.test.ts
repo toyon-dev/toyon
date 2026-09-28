@@ -2201,6 +2201,33 @@ describe("an archived worktree's page", () => {
     const left = run([{ a: "close-archived" }, worktrees(wt("main", "main"), wt("a"))], s);
     expect(left.local.x).toBeUndefined();
   });
+
+  test("an attachment waiting in its box outlives the page the way words do", () => {
+    const image = {
+      kind: "image" as const,
+      key: "img1",
+      name: "shot.png",
+      mimeType: "image/png" as const,
+      data: "AAAA",
+      width: 1,
+      height: 1,
+      bytes: 4,
+    };
+    const s = run(
+      [
+        { a: "open-archived", id: "x" },
+        { a: "attach", id: "x", items: [image] },
+      ],
+      listed(),
+    );
+    expect(s.local.x?.attachments).toHaveLength(1);
+    // the attachment is only in this tab until it is sent, so leaving the page must not drop it
+    const left = run([{ a: "close-archived" }, worktrees(wt("main", "main"), wt("a"))], s);
+    expect(left.local.x?.attachments).toHaveLength(1);
+    // taken off again, the box is empty and the next frame lets it go
+    const emptied = run([{ a: "detach", id: "x", key: "img1" }, worktrees(wt("main", "main"), wt("a"))], left);
+    expect(emptied.local.x).toBeUndefined();
+  });
 });
 
 // The rail sorts `visible` (railOrder.ts has the rules); `rows` stays as the daemon sent it, since

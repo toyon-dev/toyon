@@ -1771,14 +1771,14 @@ function pruneByRow<T>(byId: Record<string, T>, rows: WorktreeStatus[]): Record<
 }
 
 /** drop per-worktree records for rows the daemon no longer lists, found rows included: theirs
- * hold git status and history too, and a push arrives on every proc event. Any box with words in
- * it stays, since an archived worktree keeps its draft under the same id and the daemon says when
- * one is gone for good. */
+ * hold git status and history too, and a push arrives on every proc event. Any box with words or
+ * an attachment in it stays, since an archived worktree keeps its draft under the same id and the
+ * daemon says when one is gone for good; the attachment lives only here until it is sent. */
 function pruneLocal(local: State["local"], rows: WorktreeStatus[], archivedPage: string | null): State["local"] {
   const keep = new Set(rows.map((w) => w.id));
   // the archived page's chat is under an id no row has, for as long as the page is up
   if (archivedPage) keep.add(archivedPage);
-  const kept = ([id, l]: [string, WorktreeLocal]) => keep.has(id) || !!l.draft;
+  const kept = ([id, l]: [string, WorktreeLocal]) => keep.has(id) || !!l.draft || l.attachments.length > 0;
   const entries = Object.entries(local);
   if (entries.every(kept)) return local;
   return Object.fromEntries(entries.filter(kept));

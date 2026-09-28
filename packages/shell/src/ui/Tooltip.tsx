@@ -40,9 +40,10 @@ export type TipOptions = {
    * branch under its state, so every row's tip has the same shape whatever the row itself shows.
    * The text is the answer and leads; the name says whose, and takes the aside on its line. */
   name?: string;
-  /** the aside on the name's line, held against the box's far edge from the row, whichever edge
-   * that is for the tip's placement: what this has cost, apart from what it is and what it is
-   * doing. A worktree row puts its agent's spend and context here. Drawn only with a name. */
+  /** the figures, on a line of their own at the foot of the box under a rule: what this has cost,
+   * apart from what it is and what it is doing. A worktree row puts its agent's spend and context
+   * here. On the name's line they ran into the branch, and with a sentence of detail under them
+   * the three read as one paragraph. Drawn only with a name. */
   aside?: string;
   /** the other verb of the same gesture, on a key of its own, as a row under the text in the quiet
    * tier: the inspector's button says ⌘E adds the element to chat under its own ⌘I. The two keys
@@ -55,7 +56,7 @@ export type TipAlso = { text: string; key: string };
 
 export function tip(text: string, key?: string, { placement, detail, dot, name, aside, also }: TipOptions = {}) {
   const named = name ? `${text}: ${name}` : text;
-  const label = [named, name ? aside : undefined, detail].filter(Boolean).join(", ");
+  const label = [named, detail, name ? aside : undefined].filter(Boolean).join(", ");
   return {
     "data-tip": text,
     "data-tip-key": key,
@@ -112,7 +113,10 @@ function placementOf(el: HTMLElement): TipPlacement {
  * following one. A following tip hangs off the pointer's lower right, the way a cursor tip always
  * has, and swaps to its left when the right runs out; centring it on the pointer put the arrow over
  * the middle of a box that can be three hundred pixels wide, with the text going both ways from it.
- * A side tip centres on its anchor and never swaps ends, so only the side it grows on can turn. */
+ * A tip above or below centres on its control and never swaps ends, so only the side it grows on
+ * can turn. One beside its anchor tops out level with it: a rail row's tip is several lines, and
+ * centred on a row it stood over the rows on either side with its first line, the state, away
+ * from the row it names. It drops to the row's foot when the window's does not leave room. */
 export function tipPlacement(p: TipPlacement): Placement {
   if (p === "follow") {
     return {
@@ -124,6 +128,7 @@ export function tipPlacement(p: TipPlacement): Placement {
       margin: MARGIN,
     };
   }
+  if (p === "left" || p === "right") return { side: p, align: "start", offset: GAP, flip: "both", margin: MARGIN };
   return { side: p, align: "center", offset: GAP, flip: "side", margin: MARGIN };
 }
 
@@ -302,16 +307,9 @@ export function Tooltips() {
       ) : (
         head
       )}
-      {anchor.name && (
-        // the name stays against the row it describes: a tip standing to the row's left ends
-        // with the name and holds the aside at the far edge, which is its first
-        <div className="tooltip-name">
-          {anchor.placement === "left" && anchor.aside && <span className="tooltip-aside">{anchor.aside}</span>}
-          <span>{anchor.name}</span>
-          {anchor.placement !== "left" && anchor.aside && <span className="tooltip-aside">{anchor.aside}</span>}
-        </div>
-      )}
+      {anchor.name && <div className="tooltip-name">{anchor.name}</div>}
       {anchor.detail && <div className="tooltip-detail">{anchor.detail}</div>}
+      {anchor.name && anchor.aside && <div className="tooltip-foot">{anchor.aside}</div>}
     </Float>
   );
 }

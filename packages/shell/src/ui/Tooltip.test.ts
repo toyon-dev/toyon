@@ -16,11 +16,23 @@ function at(r: { left: number; top: number; width: number; height: number }, pla
 }
 
 describe("tooltip placement", () => {
-  test("a side placement centres on the anchor's height and sits clear of its edge", () => {
+  test("a side placement tops out level with the anchor and sits clear of its edge", () => {
     const r = at({ left: 700, top: 100, width: 300, height: 40 }, "left");
     expect(r.side).toBe("left");
     expect(r.left + BOX.w).toBeLessThan(700);
-    expect(r.top).toBe(105);
+    expect(r.top).toBe(100);
+  });
+
+  test("a side placement drops to the anchor's foot when the window leaves no room below", () => {
+    const r = at({ left: 700, top: VP.h - 30, width: 300, height: 20 }, "left");
+    expect(r.side).toBe("left");
+    expect(r.top + BOX.h).toBe(VP.h - 10);
+  });
+
+  test("a placement above or below stays centred on its control", () => {
+    const r = at({ left: 400, top: 300, width: 40, height: 20 }, "top");
+    expect(r.side).toBe("top");
+    expect(r.left).toBe(420 - BOX.w / 2);
   });
 
   test("right flips to left when the right edge has no room", () => {

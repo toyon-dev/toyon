@@ -174,7 +174,7 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
     isOwned(d) && isLead(d.worktree)
       ? [repoOf(d)?.name, rowLabel(d, repoOf(d))].filter(Boolean).join(" · ")
       : (d.branch ?? d.name);
-  // the aside: what the agent has cost and filled so far, on the branch's line and nowhere else,
+  // the aside: what the agent has cost and filled so far, at the foot of the tip and nowhere else,
   // so the figures are found in one place
   const figuresOf = (d: WorktreeStatus) => {
     const u = d.usage;

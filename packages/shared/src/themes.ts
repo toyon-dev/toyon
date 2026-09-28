@@ -7,14 +7,15 @@ import type { DarkNow, Theme, ThemeColorKey, ThemePrefs, ThemeSyntaxToken } from
 // leaves, a scarlet berry. The palette is derived in the order red, ground, text, and the
 // constraints that hold it:
 //
-// - The berry is the fault colour and not the accent. It sits at L*50 on its own hue, deep
-//   enough to read as a stop beside the coral above it and still 3:1 on the ground. Its hue is
-//   held between hue* 34 and 40 rather than at the gamut edge (45), which is only twenty degrees
-//   off the dry-grass orange and stops being a red.
-// - Selection is the coral: the berry's hue at L*70 and half its chroma, the flesh of the fruit
-//   rather than its skin. A current row sits on the berry's side of the palette without wearing
-//   the one colour that means broken, and the two tell apart at 12px by depth, since a salmon and
-//   a red are not read as one hue the way two reds are.
+// - The berry's lightness is a ceiling, not a choice: sRGB has no light red (pure red is L*53),
+//   so it sits at L*62, where it still reads at 12px on element1, and everything else is fitted
+//   under it. Its hue is held between hue* 34 and 40 rather than at the gamut edge (45), which is
+//   only twenty degrees off the dry-grass orange and stops being a red.
+// - The berry is the fault colour and not the accent. Selection is the terracotta the keyword
+//   wears in code, the same hex: the berry's hue at L*60 and two thirds of its chroma, so a
+//   current row sits on the berry's side of the palette without wearing the one colour that means
+//   broken, and the two tell apart at 12px by weight rather than by hue. Code never shows the
+//   accent and the chrome never shows a keyword, so the one colour does both without meeting.
 // - The ground is brown rather than any other warm cast because tint on the ground has to sit on
 //   the text's side of the yellow axis, or the text never settles onto it; and its depth is
 //   Gruvbox Dark Soft's L*20, since a near-black ground makes light text bloom and hurts to read
@@ -40,7 +41,7 @@ export const toyonDark: Theme = {
   kind: "dark",
   source: "builtin",
   pair: "toyon-light",
-  accent: "#f78f7e",
+  accent: "#df714e",
   colors: {
     surface0: "#32302d",
     surface1: "#3d3835",
@@ -52,7 +53,7 @@ export const toyonDark: Theme = {
     text0: "#e6dcb6",
     text1: "#9e927e",
     text2: "#6a6055",
-    red: "#df3423",
+    red: "#ff4929",
     orange: "#fa891e",
     yellow: "#fcbe03",
     green: "#78c945",
@@ -82,9 +83,10 @@ export const toyonDark: Theme = {
 // The same hillside at noon: bone paper instead of understory floor, and every accent taken down
 // to ink weight so it holds on paper the way the dark half's holds on soil. The hues do not move
 // between the two, only their lightness, which is what keeps a theme switch from feeling like a
-// different app. The coral is the one colour not taken all the way down: at ink weight it is a
-// brick, a step from the error red and no longer a coral, so it holds at L*56, which an edge, a
-// dot and a control word carry on paper and body text never has to.
+// different app. The accent is the one colour not taken all the way down, and so the one place
+// it parts from the keyword: at ink weight the terracotta is a brick a step from the error red,
+// so it holds at L*58, which an edge, a dot and a control word carry on paper and body text
+// never has to.
 export const toyonLight: Theme = {
   id: "toyon-light",
   family: "Toyon",
@@ -92,7 +94,7 @@ export const toyonLight: Theme = {
   kind: "light",
   source: "builtin",
   pair: "toyon-dark",
-  accent: "#e65745",
+  accent: "#d76c52",
   colors: {
     surface0: "#f8f2e8",
     surface1: "#efe8dc",
@@ -104,7 +106,7 @@ export const toyonLight: Theme = {
     text0: "#463627",
     text1: "#6e5e51",
     text2: "#b4aa9f",
-    red: "#a30c02",
+    red: "#b02e15",
     orange: "#b15b02",
     yellow: "#ac7e02",
     green: "#3c8c03",

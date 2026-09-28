@@ -38,7 +38,7 @@ const post = (msg: BridgeToShellMsg) => {
 post({ type: "loaded", url: location.href, title: document.title });
 
 // picker/highlight overlay colors follow the shell theme (sent on load and on theme change)
-let accent = "#f78f7e";
+let accent = "#df714e";
 let accentFg = "#1d2021";
 
 // vite announces applied hot updates on window — relay so the shell knows

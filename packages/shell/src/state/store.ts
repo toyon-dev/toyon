@@ -101,6 +101,9 @@ export type ChatItem =
       parentToolId?: string;
       /** this call is the spawn itself (a Task), so its children have somewhere to sit */
       subagent?: boolean;
+      /** the call's own process has exited and what it started is still running: the row is not
+       * done, and says why not */
+      background?: boolean;
     }
   | { kind: "error"; text: string }
   | { kind: "blocked"; tool: string; path: string; reason: string }
@@ -2359,6 +2362,7 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
         ...(event.title ? { title: event.title } : {}),
         ...(event.input !== undefined ? { input: event.input } : {}),
         ...(event.kind ? { toolKind: event.kind } : {}),
+        ...(event.background ? { background: true } : {}),
       };
       return next;
     }

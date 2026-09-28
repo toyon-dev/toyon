@@ -578,6 +578,17 @@ describe("chat folding", () => {
     ]);
   });
 
+  test("tool-update marks a row whose shell has exited while what it started runs on", () => {
+    const s = run([
+      hello(wt("a")),
+      agent("a", { type: "tool-start", toolId: "t1", name: "shell", input: { command: "bun dev &" } }),
+      agent("a", { type: "tool-update", toolId: "t1", background: true }),
+    ]);
+    expect(s.local.a?.chat).toEqual([
+      { kind: "tool", id: "t1", name: "shell", input: { command: "bun dev &" }, done: false, background: true },
+    ]);
+  });
+
   test("an auth request becomes a card, and auth-ok closes every card still open", () => {
     const methods = [{ id: "api-key", name: "API Key", kind: "agent" as const, needsKey: true }];
     const required = agent("a", { type: "agent-auth-required", agent: "codex", agentName: "Codex", methods, ts: 0 });

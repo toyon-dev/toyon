@@ -695,7 +695,8 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
 
   "exec-stop"(msg, _ctx, s) {
     requireRun(s, msg.worktreeId);
-    s.exec.stop(msg.worktreeId);
+    // the kill waits out a grace before it escalates; the row says when the command is gone
+    fireAndForget(msg.worktreeId, s.exec.stop(msg.worktreeId, msg.toolId), "exec stop");
   },
 
   async "search-refs"(msg, ctx, s) {

@@ -401,7 +401,8 @@ async function shutdown(signal: string, opts: { respawn?: boolean } = {}) {
   routes.flush();
   drafts.flush();
   const deadline = new Promise<void>((resolve) => setTimeout(resolve, 5000));
-  await Promise.race([runtime.shutdown(), deadline]);
+  // the `!` commands too: each runs in a group of its own, which the daemon's exit would not reach
+  await Promise.race([Promise.all([runtime.shutdown(), exec.stopAll()]), deadline]);
   // whatever is still alive at the deadline is what the next daemon has to reclaim
   state.flushGroups();
   // a crash leaves the file behind on purpose: `toyon stop` checks the pid is alive before trusting it

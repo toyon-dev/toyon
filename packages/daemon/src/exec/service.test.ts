@@ -16,7 +16,7 @@ import { ExecService } from "./service.ts";
 const home = mkdtempSync(join(tmpdir(), "toyon-exec-"));
 afterAll(() => rmSync(home, { recursive: true, force: true }));
 
-function world(liveAfterMs?: number, shipping?: () => Shipping | undefined) {
+function world(liveAfterMs?: number, shipping?: () => Shipping | undefined, timeoutMs?: number) {
   const dir = mkdtempSync(join(home, "wt-"));
   const paths = makePaths(mkdtempSync(join(home, "h-")));
   ensureDirs(paths);
@@ -39,8 +39,57 @@ function world(liveAfterMs?: number, shipping?: () => Shipping | undefined) {
     hold: (_id: string, tag: string) => holds.push(`+${tag}`),
     release: (_id: string, tag: string) => holds.push(`-${tag}`),
   };
-  const exec = new ExecService({ state, runtime: runtime as unknown as RuntimeRegistry, liveAfterMs, shipping });
+  const exec = new ExecService({
+    state,
+    runtime: runtime as unknown as RuntimeRegistry,
+    liveAfterMs,
+    timeoutMs,
+    shipping,
+  });
   return { exec, agent, dir, holds };
+}
+
+/** waits, a little at a time, for the transcript to reach the state the test is after */
+async function until(agent: FakeAgent, ok: () => boolean, ms = 5_000) {
+  const deadline = Date.now() + ms;
+  while (!ok() && Date.now() < deadline) await Bun.sleep(20);
+  if (!ok()) throw new Error(`gave up waiting; recorded: ${agent.recorded.map((e) => e.type).join(", ")}`);
+}
+
+/** the pid a command echoed with `$!`: the last line of digits in what it printed */
+function pidIn(text: string): number {
+  const line = text
+    .split("\n")
+    .map((l) => l.trim())
+    .findLast((l) => /^\d+$/.test(l));
+  if (!line) throw new Error(`no pid in ${JSON.stringify(text)}`);
+  return Number.parseInt(line, 10);
+}
+
+/** the same, read off the deltas of the command's row */
+function backgroundPid(agent: FakeAgent, toolId: string): number {
+  return pidIn(
+    agent.recorded
+      .filter((e) => e.type === "tool-delta" && e.toolId === toolId)
+      .map((e) => (e.type === "tool-delta" ? e.text : ""))
+      .join(""),
+  );
+}
+
+/** true while a process answers a signal */
+function alive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function toolIdOf(agent: FakeAgent, at = 0): string {
+  const e = agent.recorded[at];
+  if (e?.type !== "tool-start") throw new Error(`expected a tool-start at ${at}`);
+  return e.toolId;
 }
 
 describe("ExecService.run", () => {
@@ -195,5 +244,92 @@ describe("ExecService.exec", () => {
     expect(agent.recorded.filter((e) => e.type === "tool-end").every((e) => e.type === "tool-end" && !e.isError)).toBe(
       true,
     );
+  });
+});
+
+// The command runs in a process group of its own, so a kill reaches what it started and not the
+// shell alone. `$!` is how a test learns the pid of what the shell put in the background: the
+// last line of digits, since a login shell may say something first (zsh renices a background
+// job, and in a sandbox that is refused on stderr).
+describe("ExecService: the process group", () => {
+  test("the ceiling kills everything the command started, and the row says timeout", async () => {
+    const { exec, agent, holds } = world(undefined, undefined, 300);
+    const r = await exec.exec("w1", "sleep 30 & echo $!; wait");
+    expect(r.exit).not.toBe(0);
+    await until(agent, () => agent.recorded.at(-1)?.type === "tool-end");
+    const pid = backgroundPid(agent, toolIdOf(agent));
+    expect(alive(pid)).toBe(false);
+    const end = agent.recorded.at(-1);
+    expect(end?.type === "tool-end" && end.output).toContain(`${pid}`);
+    expect(end?.type === "tool-end" && end.output).toEndWith("```\nkilled (timeout)");
+    expect(end?.type === "tool-end" && end.isError).toBe(true);
+    expect(holds.map((h) => h.slice(0, 6))).toEqual(["+exec:", "-exec:"]);
+  });
+
+  test("a stop names its row: the other command keeps running until its own", async () => {
+    const { exec, agent } = world();
+    const first = exec.exec("w1", "echo one; sleep 30");
+    const second = exec.exec("w1", "echo two; sleep 30");
+    await until(agent, () => agent.recorded.filter((e) => e.type === "tool-delta").length === 2);
+    await exec.stop("w1", toolIdOf(agent, 0));
+    await first;
+    const ends = () => agent.recorded.filter((e) => e.type === "tool-end");
+    await until(agent, () => ends().length === 1);
+    expect(ends()[0]).toMatchObject({ toolId: toolIdOf(agent, 0), isError: true });
+    // the second is untouched
+    await Bun.sleep(50);
+    expect(ends().length).toBe(1);
+    await exec.stop("w1");
+    await second;
+    await until(agent, () => ends().length === 2);
+    expect(ends()[1]).toMatchObject({ toolId: toolIdOf(agent, 1) });
+  });
+
+  test("what the shell leaves running keeps the row open, marked, while the answer comes back at once", async () => {
+    const { exec, agent, holds } = world();
+    const r = await exec.exec("w1", "sleep 1.5 & echo $!");
+    // the shell's own exit is the answer, before what it started is done
+    expect(r.exit).toBe(0);
+    const toolId = toolIdOf(agent);
+    const pid = backgroundPid(agent, toolId);
+    expect(alive(pid)).toBe(true);
+    expect(agent.recorded.at(-1)).toEqual({ type: "tool-update", toolId, background: true });
+    expect(holds).toEqual([`+exec:${toolId}`]);
+    // the row ends on its own once the group is gone, as the shell's exit, not as a kill
+    await until(agent, () => agent.recorded.at(-1)?.type === "tool-end");
+    expect(alive(pid)).toBe(false);
+    const end = agent.recorded.at(-1);
+    expect(end).toMatchObject({ type: "tool-end", isError: false });
+    expect(end?.type === "tool-end" && end.output).toContain(`${pid}`);
+    expect(end?.type === "tool-end" && end.output).toEndWith("```");
+    expect(holds).toEqual([`+exec:${toolId}`, `-exec:${toolId}`]);
+  });
+
+  test("the stop on a row left running kills the group, and the row says so", async () => {
+    const { exec, agent } = world();
+    await exec.exec("w1", "sleep 30 & echo $!");
+    const toolId = toolIdOf(agent);
+    const pid = backgroundPid(agent, toolId);
+    expect(agent.recorded.at(-1)).toMatchObject({ type: "tool-update", background: true });
+    await exec.stop("w1", toolId);
+    await until(agent, () => agent.recorded.at(-1)?.type === "tool-end");
+    expect(alive(pid)).toBe(false);
+    const end = agent.recorded.at(-1);
+    expect(end).toMatchObject({ type: "tool-end", isError: true });
+    expect(end?.type === "tool-end" && end.output).toContain(`${pid}`);
+    expect(end?.type === "tool-end" && end.output).toEndWith("```\nkilled (SIGTERM)");
+  });
+
+  test("a quiet run that leaves something running answers now and is still under the ceiling", async () => {
+    // a ceiling past the drain grace the answer waits out, so the pid is alive when it is read
+    const { exec, agent, holds } = world(undefined, undefined, 1_500);
+    const r = await exec.exec("w1", "sleep 30 & echo $! >&2; exit 1", CHECK_TOOL, { quiet: true });
+    expect(r.exit).toBe(1);
+    // the rows are written at once: there is no live row to hold open for what was left
+    expect(agent.recorded.map((e) => e.type)).toEqual(["tool-start", "tool-end"]);
+    const pid = pidIn(r.text);
+    expect(alive(pid)).toBe(true);
+    await until(agent, () => holds.length === 2);
+    expect(alive(pid)).toBe(false);
   });
 });

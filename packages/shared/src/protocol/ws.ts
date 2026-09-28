@@ -680,8 +680,9 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   /** run one command in the worktree (a `!` message from the composer): no reply frame, the result
    * arrives on the agent stream as a tool-start / tool-end pair under SHELL_TOOL */
   z.object({ t: z.literal("exec"), worktreeId: id, command: shellCommand.min(1) }),
-  /** kill whatever `exec` is still running in the worktree */
-  z.object({ t: z.literal("exec-stop"), worktreeId: id }),
+  /** kill the command running under this row: its whole process group, so what it started goes
+   * with it. Two commands at once each have a stop of their own. */
+  z.object({ t: z.literal("exec-stop"), worktreeId: id, toolId: id }),
   /** the ref palette: local branches, remote branches and open PRs matching the query; replies
    * `refs`. An empty query lists the work that is open. */
   z.object({ t: z.literal("search-refs"), repoId: id, query: z.string().max(200) }),

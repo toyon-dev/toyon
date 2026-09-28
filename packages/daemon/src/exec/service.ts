@@ -12,6 +12,7 @@ import type { AgentAdapter } from "../agent/adapter.ts";
 import { UserError } from "../core/errors.ts";
 import { fireAndForget, log } from "../core/log.ts";
 import type { StateStore } from "../core/state.ts";
+import { groupAlive, groupGone, killGroup } from "../runtime/kill.ts";
 import type { RuntimeRegistry } from "../runtime/registry.ts";
 
 /** what one command may leave on the transcript. Every subscriber replays the whole file, so a
@@ -19,18 +20,24 @@ import type { RuntimeRegistry } from "../runtime/registry.ts";
 const OUTPUT_CAP = 200_000;
 /** nothing typed at a prompt should still be running an hour later with no one watching it */
 const TIMEOUT_MS = 10 * 60_000;
-/** SIGTERM first; a command that ignores it gets SIGKILL after this */
-const KILL_GRACE_MS = 3_000;
 /** how long after the shell exits to keep reading for its children's last words */
 const DRAIN_GRACE_MS = 500;
+/** how often a group the shell left behind is asked whether it is still there */
+const BACKGROUND_POLL_MS = 250;
 /** how long a landing step runs before its row goes up: an instant step that passes leaves
  * nothing, and one still going after this (a hook, the network) is worth watching */
 const LIVE_AFTER_MS = 1_500;
 
 /** a command still going on a worktree: how to stop it, and the ceiling that stops it unasked */
 interface Running {
-  stop: () => void;
+  /** kills it; resolves once the kill has done what it can, which is not always once it is gone */
+  stop: () => Promise<void>;
   timer?: ReturnType<typeof setTimeout>;
+  /** the ceiling fired: the row says so, rather than naming the signal that did the killing */
+  timedOut?: boolean;
+  /** what ended the group, once a stop or the ceiling has: a stop that found it already gone
+   * leaves the shell's own exit to say what happened */
+  signal?: string;
 }
 
 export class ExecService {
@@ -43,6 +50,7 @@ export class ExecService {
       state: StateStore;
       runtime: RuntimeRegistry;
       liveAfterMs?: number;
+      timeoutMs?: number;
       /** the landing op out on a worktree, if any: a command typed while one runs is refused,
        * since it would run in a tree git is rewriting */
       shipping?: (worktreeId: string) => Shipping | undefined;
@@ -70,7 +78,9 @@ export class ExecService {
   /** the same run, for a caller that needs the answer too: the repo's check after a turn reads
    * the exit code, and the transcript still gets the rows so the output is in the conversation.
    * Synchronous up to the spawn, so a refusal (a spare, an agent not up yet) throws to the
-   * handler as a UserError rather than surfacing as a rejected promise nobody awaits. */
+   * handler as a UserError rather than surfacing as a rejected promise nobody awaits. The answer
+   * is the shell's: it comes back when the shell exits, even where something the shell started
+   * runs on and keeps the row open (collect). */
   exec(
     worktreeId: string,
     command: string,
@@ -100,6 +110,10 @@ export class ExecService {
         stdin: "ignore",
         stdout: "pipe",
         stderr: "pipe",
+        // its own process group, so a stop or the ceiling reaches what the command started and
+        // not the shell alone: a signal to the shell left a test runner's workers, or a server
+        // put in the background with `&`, running on with the pipes and the row held open
+        detached: true,
       });
     } catch (e) {
       const reason = e instanceof Error ? e.message : String(e);
@@ -107,18 +121,25 @@ export class ExecService {
       agent.note({ type: "tool-end", toolId, output: `could not run: ${reason}`, isError: true });
       return Promise.resolve({ exit: reason, text: "" });
     }
-    const timer = setTimeout(() => this.kill(worktreeId, toolId), TIMEOUT_MS);
-    const stop = () => {
-      proc.kill("SIGTERM");
-      setTimeout(() => {
-        // still tracked means still running: collect() untracks on exit
-        if (this.running.get(worktreeId)?.has(toolId)) proc.kill("SIGKILL");
-      }, KILL_GRACE_MS);
+    const pid = proc.pid;
+    let killing: Promise<void> | undefined;
+    const running: Running = {
+      // SIGTERM to the group, SIGKILL after the grace; one sequence however many presses
+      stop: () => {
+        killing ??= killGroup(pid, groupGone(pid)).then((signal) => {
+          if (signal) running.signal = signal;
+        });
+        return killing;
+      },
     };
-    this.track(worktreeId, toolId, { stop, timer });
+    running.timer = setTimeout(() => {
+      running.timedOut = true;
+      fireAndForget(worktreeId, running.stop(), `exec ${toolId} at the ceiling`);
+    }, this.deps.timeoutMs ?? TIMEOUT_MS);
+    this.track(worktreeId, toolId, running);
     // a command is outstanding work: the dev servers it may be talking to stay up until it ends
     this.deps.runtime.hold(worktreeId, `exec:${toolId}`);
-    return this.collect(worktreeId, toolId, proc, agent, opts.quiet ? start : undefined);
+    return this.collect(worktreeId, toolId, proc, running, agent, opts.quiet ? start : undefined);
   }
 
   /** A git command the daemon runs itself (a landing's commit, rebase, merge or push), watched the
@@ -136,7 +157,7 @@ export class ExecService {
     const agent = this.agentFor(worktreeId);
     const toolId = `${SHELL_TOOL}-${Date.now().toString(36)}-${++this.n}`;
     const ctl = new AbortController();
-    this.track(worktreeId, toolId, { stop: () => ctl.abort() });
+    this.track(worktreeId, toolId, { stop: async () => ctl.abort() });
     const start = { type: "tool-start", toolId, name: SHELL_TOOL, input: { command }, kind: "execute" } as const;
     let text = "";
     let truncated = false;
@@ -168,9 +189,18 @@ export class ExecService {
     return { ...r, shown: true };
   }
 
-  /** kill everything still running for the worktree; each records its own end as it goes */
-  stop(worktreeId: string): void {
-    for (const toolId of this.running.get(worktreeId)?.keys() ?? []) this.kill(worktreeId, toolId);
+  /** kill one command by its row, or everything still running for the worktree; each records its
+   * own end as it goes. Resolves once the kills have done what they can. */
+  async stop(worktreeId: string, toolId?: string): Promise<void> {
+    const byTool = this.running.get(worktreeId);
+    const targets = toolId === undefined ? [...(byTool?.values() ?? [])] : [byTool?.get(toolId)];
+    await Promise.all(targets.map((r) => r?.stop()));
+  }
+
+  /** every command on every worktree, for the daemon going down: each runs in a group of its own
+   * now, which the daemon's own exit would not reach */
+  async stopAll(): Promise<void> {
+    await Promise.all([...this.running.keys()].map((id) => this.stop(id)));
   }
 
   private track(worktreeId: string, toolId: string, r: Running) {
@@ -190,14 +220,18 @@ export class ExecService {
     return r;
   }
 
-  private kill(worktreeId: string, toolId: string) {
-    this.running.get(worktreeId)?.get(toolId)?.stop();
+  /** the command is over, one way or another: nothing to stop, no ceiling, no hold */
+  private settle(worktreeId: string, toolId: string) {
+    const r = this.untrack(worktreeId, toolId);
+    if (r) clearTimeout(r.timer);
+    this.deps.runtime.release(worktreeId, `exec:${toolId}`);
   }
 
   private async collect(
     worktreeId: string,
     toolId: string,
     proc: Subprocess,
+    running: Running,
     agent: AgentAdapter,
     /** the start row still to write, for a quiet run: written with the end only when it failed */
     heldStart?: AgentEvent,
@@ -230,21 +264,53 @@ export class ExecService {
       const drained = Promise.all([drain(proc.stdout), drain(proc.stderr)]);
       const status = await proc.exited;
       // a child the command left behind (a server started with `&`) inherits the pipes and holds
-      // them open after the shell is gone; the row is the shell's, so it ends with what has
-      // arrived rather than waiting on something nobody asked to watch
+      // them open after the shell is gone; the answer is the shell's, so it comes back with what
+      // has arrived rather than waiting on something nobody asked to watch
       await Promise.race([drained, Bun.sleep(DRAIN_GRACE_MS)]);
       exit = proc.signalCode ?? status;
     } catch (e) {
       log.warn(worktreeId, "exec: reading output failed", e);
-    } finally {
-      const r = this.untrack(worktreeId, toolId);
-      if (r) clearTimeout(r.timer);
-      this.deps.runtime.release(worktreeId, `exec:${toolId}`);
     }
-    if (heldStart && exit === 0) return { exit, text };
-    if (heldStart) agent.note(heldStart);
-    agent.note({ type: "tool-end", toolId, output: formatOutput(text, exit, truncated), isError: exit !== 0 });
+    const end = (how: number | string | null) =>
+      agent.note({ type: "tool-end", toolId, output: formatOutput(text, how, truncated), isError: how !== 0 });
+    // The shell is gone; what it started may not be. It is still the command's process group, so
+    // the stop and the ceiling reach it, and a live row stays up for it, marked, streaming what it
+    // prints, until the group is gone too. A held start's rows say what the shell said, now: the
+    // check's answer is in, and there is no live row to hold open.
+    const lingers = running.signal === undefined && groupAlive(proc.pid);
+    if (!lingers) this.settle(worktreeId, toolId);
+    if (heldStart) {
+      if (exit !== 0) {
+        agent.note(heldStart);
+        end(running.timedOut ? "timeout" : exit);
+      }
+      if (lingers)
+        fireAndForget(
+          worktreeId,
+          this.linger(running, proc.pid).then(() => this.settle(worktreeId, toolId)),
+          `exec ${toolId} left running`,
+        );
+      return { exit, text };
+    }
+    if (!lingers) {
+      end(running.timedOut ? "timeout" : exit);
+      return { exit, text };
+    }
+    agent.note({ type: "tool-update", toolId, background: true });
+    fireAndForget(
+      worktreeId,
+      this.linger(running, proc.pid).then(() => {
+        this.settle(worktreeId, toolId);
+        end(running.timedOut ? "timeout" : (running.signal ?? exit));
+      }),
+      `exec ${toolId} in the background`,
+    );
     return { exit, text };
+  }
+
+  /** resolves once nothing is left of the group, or once a kill has given up on what is */
+  private async linger(running: Running, pgid: number): Promise<void> {
+    while (running.signal === undefined && groupAlive(pgid)) await Bun.sleep(BACKGROUND_POLL_MS);
   }
 }
 

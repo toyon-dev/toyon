@@ -577,7 +577,11 @@ export const ToolRow = memo(
     // printing the same neighbourhood again (mergeDiffs.ts). No edit row opens itself any more, so
     // this is only ever read on a row somebody opened, and what they came for is what the run did.
     const net = useMemo(() => netOfCalls(tools.map((t) => toolBlocks(t, t.output ?? ""))), [tools]);
-    const streaming = !tools.at(-1)?.done;
+    const last = tools.at(-1) ?? head;
+    const streaming = !last.done;
+    // a `!` command whose shell has exited while something it started runs on: the row stays live
+    // for that, and the word says why a row whose exit is in still shines
+    const background = streaming && !!last.background;
     // the row is alive while its own last call runs, and while the agent writes the run's next
     // call: that one has no row until its path is in, and this row's shine is what says it is coming
     const alive = streaming || !!next;
@@ -617,7 +621,7 @@ export const ToolRow = memo(
         (t) => !toolLabel(t, roots).command && toolBlocks(t, t.output ?? "").length === 0 && !t.images?.length,
       );
     const calls = run ? runCalls(run) : 0;
-    const what = [label, hint].filter(Boolean).join(" ");
+    const what = [label, hint].filter(Boolean).join(" ") + (background ? ", in the background" : "");
     // no count while the call is still being written: a spawn's "0 calls" beside the mark read as
     // a subagent that had started and done nothing
     const count = writing
@@ -633,7 +637,7 @@ export const ToolRow = memo(
     // whose stop is the composer's corner. A landing's git steps run as the same rows, so the
     // press then ends the landing, and the label says which it is.
     const op = useStore((s) => (worktreeId ? s.shipping[worktreeId]?.op : undefined));
-    const stoppable = streaming && head.name === SHELL_TOOL ? worktreeId : null;
+    const stoppable = streaming && head.name === SHELL_TOOL && worktreeId ? { worktreeId, toolId: last.id } : null;
     return (
       <Fold
         className={cx(
@@ -670,6 +674,7 @@ export const ToolRow = memo(
             ) : (
               hint && <span className={cx("tool-hint", running && "live-text")}>{hint}</span>
             )}
+            {background && <span className="tool-status">in the background</span>}
             {age >= QUIET_AFTER && <span className="tool-age">{elapsed(age)}</span>}
             {count && <span className="tool-count">{count}</span>}
             {stoppable && (
@@ -680,13 +685,15 @@ export const ToolRow = memo(
                 label={
                   op
                     ? `Stop ${SHIP_THE[op]}: this step is killed, and what it printed so far stays`
-                    : "Kill the command; what it printed so far stays"
+                    : background
+                      ? "Kill what the command left running; what it printed so far stays"
+                      : "Kill the command and everything it started; what it printed so far stays"
                 }
                 onClick={(e) => {
                   // the press is the button's, not the summary's: a click on the line opens the row
                   e.preventDefault();
                   e.stopPropagation();
-                  sock?.send({ t: "exec-stop", worktreeId: stoppable });
+                  sock?.send({ t: "exec-stop", ...stoppable });
                 }}
               />
             )}

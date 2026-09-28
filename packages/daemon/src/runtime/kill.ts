@@ -6,20 +6,22 @@ const KILL_GRACE_MS = 3000;
 const EXIT_GRACE_MS = 200;
 
 /** SIGTERM the process group, SIGKILL after 3s. Resolves once `exited` settles (or shortly after
- * the SIGKILL), so a shutdown can wait for its children instead of orphaning them. The process
- * must own its group: spawned `detached`, or setsid()'d by a pty. */
-export async function killGroup(pid: number, exited: Promise<void>): Promise<void> {
-  if (!signalGroup(pid, "SIGTERM")) return;
-  if (await within(exited, KILL_GRACE_MS)) return;
+ * the SIGKILL), so a shutdown can wait for its children instead of orphaning them, with the signal
+ * that ended the group, or nothing when it was already gone. The process must own its group:
+ * spawned `detached`, or setsid()'d by a pty. */
+export async function killGroup(pid: number, exited: Promise<void>): Promise<NodeJS.Signals | undefined> {
+  if (!signalGroup(pid, "SIGTERM")) return undefined;
+  if (await within(exited, KILL_GRACE_MS)) return "SIGTERM";
   signalGroup(pid, "SIGKILL");
   await within(exited, EXIT_GRACE_MS);
+  return "SIGKILL";
 }
 
 /** the same policy for a node child, which carries its own exit event and liveness */
-export function killProcessGroup(child: ChildProcess | undefined): Promise<void> {
+export async function killProcessGroup(child: ChildProcess | undefined): Promise<void> {
   const pid = child?.pid;
-  if (!child || !pid || child.exitCode !== null || child.signalCode !== null) return Promise.resolve();
-  return killGroup(pid, new Promise<void>((r) => child.once("exit", () => r())));
+  if (!child || !pid || child.exitCode !== null || child.signalCode !== null) return;
+  await killGroup(pid, new Promise<void>((r) => child.once("exit", () => r())));
 }
 
 /** false when the group is already gone, so there is nothing to wait for */
@@ -47,20 +49,26 @@ async function within(p: Promise<void>, ms: number): Promise<boolean> {
 /** how often a group that is not this process's child is asked whether it is still there */
 const GONE_POLL_MS = 100;
 
+/** true while anything in the group answers a signal */
+export function groupAlive(pgid: number): boolean {
+  try {
+    process.kill(-pgid, 0);
+    return true;
+  } catch (e) {
+    // ESRCH: gone. Anything else (EPERM) means something in it is alive
+    return (e as NodeJS.ErrnoException).code !== "ESRCH";
+  }
+}
+
 /** Resolves once nothing in the group answers a signal. For a group this process did not spawn,
- * which gives no exit event. Polls only as long as killGroup can be waiting on it: past that it
- * resolves regardless, so a group that will not die never keeps a timer alive. */
+ * which gives no exit event, or one whose leader has exited while its children hold on. Polls
+ * only as long as killGroup can be waiting on it: past that it resolves regardless, so a group
+ * that will not die never keeps a timer alive. */
 export function groupGone(pgid: number): Promise<void> {
   const deadline = Date.now() + KILL_GRACE_MS + EXIT_GRACE_MS + 500;
   return new Promise<void>((resolve) => {
     const poll = () => {
-      try {
-        process.kill(-pgid, 0);
-      } catch (e) {
-        // ESRCH: gone. Anything else (EPERM) means something in it is alive
-        if ((e as NodeJS.ErrnoException).code === "ESRCH") return resolve();
-      }
-      if (Date.now() >= deadline) return resolve();
+      if (!groupAlive(pgid) || Date.now() >= deadline) return resolve();
       setTimeout(poll, GONE_POLL_MS).unref?.();
     };
     poll();
@@ -68,6 +76,6 @@ export function groupGone(pgid: number): Promise<void> {
 }
 
 /** the group policy for a group left by another daemon: no child, no exit event */
-export function reclaimGroup(pgid: number): Promise<void> {
-  return killGroup(pgid, groupGone(pgid));
+export async function reclaimGroup(pgid: number): Promise<void> {
+  await killGroup(pgid, groupGone(pgid));
 }

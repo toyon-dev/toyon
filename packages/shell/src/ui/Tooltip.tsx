@@ -230,12 +230,18 @@ export function Tooltips() {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Shift" && e.key !== "Control" && e.key !== "Alt" && e.key !== "Meta") hide();
     };
+    /** A scroll that moves the control moves the tip off it, so the tip goes. One elsewhere leaves
+     * it: the chat log scrolls itself as a reply streams in, and a tip over a rail row was closing
+     * every few seconds while any agent talked. */
+    const onScroll = (e: Event) => {
+      if (current && e.target instanceof Node && e.target.contains(current)) hide();
+    };
 
     document.addEventListener("mouseover", onOver);
     document.addEventListener("mouseout", onOut);
     document.addEventListener("mousedown", hide);
     document.addEventListener("keydown", onKey);
-    document.addEventListener("scroll", hide, true);
+    document.addEventListener("scroll", onScroll, true);
     document.addEventListener("focusin", onFocus);
     document.addEventListener("focusout", onBlur);
     window.addEventListener("blur", hide);
@@ -245,7 +251,7 @@ export function Tooltips() {
       document.removeEventListener("mouseout", onOut);
       document.removeEventListener("mousedown", hide);
       document.removeEventListener("keydown", onKey);
-      document.removeEventListener("scroll", hide, true);
+      document.removeEventListener("scroll", onScroll, true);
       document.removeEventListener("focusin", onFocus);
       document.removeEventListener("focusout", onBlur);
       window.removeEventListener("blur", hide);
@@ -290,8 +296,9 @@ export function Tooltips() {
     // shown again whenever it moves to another control, which puts it back above whatever opened
     // while it stood: a tip about a menu row is over that menu
     <Float
-      // a tip with figures at its foot is a card about a row, and every row's card is one width
-      className={cx("tooltip", anchor.name && anchor.aside && "tooltip-card")}
+      // a tip with a name is a card about a row, and every row's card is one width, with or
+      // without figures at its foot: main's has none and stood narrow among the rest
+      className={cx("tooltip", anchor.name && "tooltip-card")}
       role="tooltip"
       boxRef={box}
       handle={handle}

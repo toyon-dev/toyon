@@ -663,16 +663,18 @@ export default function Editor({
     <>
       <div ref={ref} className="editor-monaco" />
       {card && (
-        <Float className="editor-blame-card" anchor={() => card.anchor} placement={CARD_PLACEMENT} aria-hidden>
-          <span className="editor-blame-who">
+        // the tooltip's own card, in its parts: who at the head with their address as the name,
+        // what the commit said as the detail, and the sha and the date as the figures at the foot
+        <Float className="tooltip tooltip-card" anchor={() => card.anchor} placement={CARD_PLACEMENT} aria-hidden>
+          <div className="tooltip-head">
             <span>{card.commit.author || card.commit.sha.slice(0, 7)}</span>
-            {card.commit.email && <span className="editor-blame-mail">{card.commit.email}</span>}
-          </span>
-          <span>{card.commit.subject || "no message"}</span>
-          <span className="editor-blame-meta">
+            {card.commit.email && <span className="tooltip-name">{card.commit.email}</span>}
+          </div>
+          <div className="tooltip-detail">{card.commit.subject || "no message"}</div>
+          <div className="tooltip-foot">
             <span className="editor-blame-sha">{card.commit.sha.slice(0, 7)}</span>
             <span>{CARD_DATE.format(card.commit.at)}</span>
-          </span>
+          </div>
         </Float>
       )}
     </>

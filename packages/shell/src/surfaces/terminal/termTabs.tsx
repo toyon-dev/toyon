@@ -4,6 +4,7 @@ import { useDispatch, useSock } from "../../state/context.tsx";
 import { IconButton } from "../../ui/Button.tsx";
 import type { TabItem } from "../../ui/Tabs.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
+import { procLabel } from "../util.ts";
 
 /** the pane's header as tab items: the shell first, the agent's login while it has one, then the
  * procs in config order. Each proc carries the `.dot` the rail uses for its status. Restart is a
@@ -51,7 +52,15 @@ export function useTermTabs({
       id: p.name,
       label: p.name,
       lead: <span className={`dot ${p.status}`} />,
-      tip: tip(`${p.command}\n${p.status} on :${p.port}`, undefined, { placement: "top" }),
+      // the rail row's card, for a proc: its state with the dot, its name, its command as the
+      // detail and its port as the figure at the foot
+      tip: tip(procLabel(p.status), undefined, {
+        placement: "top",
+        dot: p.status,
+        name: p.name,
+        detail: p.command,
+        aside: [`:${p.port}`],
+      }),
       menu: () => procItems(p, worktreeId, deps),
       trail: trail(p.name, `Restart ${p.name}`),
     })),

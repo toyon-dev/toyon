@@ -4,6 +4,7 @@ import {
   isLead,
   isOwned,
   type ProcState,
+  type ProcStatus,
   previewOrigin,
   type RemoteView,
   type RepoInfo,
@@ -112,6 +113,21 @@ const DOT_LABEL: Record<DotState, string> = {
 export function stateLabel(w: WorktreeStatus, needsSetup = false): string {
   const d = dotClass(w);
   return d === "idle" && needsSetup ? "Not set up" : DOT_LABEL[d];
+}
+
+/** a proc's status in words, for its tab's tip: the same words the rail's dot uses where the two
+ * share a state, and its own for the two states only a proc has */
+const PROC_LABEL: Record<ProcStatus, string> = {
+  starting: "Starting",
+  running: "Running",
+  unreachable: "Not answering",
+  crashed: "Crashed",
+  stopped: "Stopped",
+  asleep: "Asleep",
+};
+
+export function procLabel(status: ProcStatus): string {
+  return PROC_LABEL[status];
 }
 
 /** the git op a row is showing in its dot's slot, when one is out: the op was started from this

@@ -42,18 +42,18 @@
     margin-left: 12px;
     color: var(--text1);
   }
-  /* the text and the name on one line, the state at the row's edge and the branch at the far one,
-   so the sentence starts a line down from the state whatever the branch measures. The state is
-   the piece that never wraps; the branch gives way, and the box's wrap rule breaks it anywhere.
-   The gap is the key's, the least the two ever get when this is the widest line. */
+  /* the text and the name on one line, the branch straight after the state with a row's gap and
+   nothing between: the two read as one phrase, "Landed, toyon/x", and the far edge stays the
+   foot's alone. The state is the piece that never wraps; the branch gives way, and the box's
+   wrap rule breaks it anywhere. */
   .tooltip-head {
     display: flex;
-    justify-content: space-between;
+    justify-content: flex-start;
     /* the two share a face and a line height, so their first lines' baselines meet from the top;
      baseline alignment would have hung the name off the dot's bottom edge, since the state is a
      flex box below, and it is the state's box that has no text baseline of its own */
     align-items: flex-start;
-    gap: 12px;
+    gap: 8px;
     /* the dot centred on the state's line, as the row centres its own: `middle` sat it on the
      x-height, a pixel under the row's dot in this face, and the tip's dot restates the row's */
     & > :first-child {
@@ -88,6 +88,9 @@
   .tooltip-foot {
     display: flex;
     justify-content: space-between;
+    /* a figure set in the mono is a hair shorter than the UI face at a shared size, so only the
+     baseline lines the two up */
+    align-items: baseline;
     gap: 12px;
     margin: 4px -8px 0;
     padding: 4px 8px 0;

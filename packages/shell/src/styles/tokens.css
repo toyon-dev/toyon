@@ -40,7 +40,7 @@
     --ink1: var(--text1);
     --ink2: var(--text2);
     --green: #78c945;
-    --red: #ff4929;
+    --red: #df3423;
     --yellow: #fcbe03;
     --blue: #69a9e8;
     --aqua: #4dc7a7;
@@ -71,8 +71,9 @@
      somewhere else. Never one of the seven above: each of those is a state somewhere (red is a
      crash, green is working), and a selection in a status hue reads as that status. The colour is
      the theme's to name (Theme.accent, its orange unless it says otherwise) and applyTheme
-     overwrites this. Toyon's is the ceanothus, a blue-violet off every hue the dots use. */
-    --accent: #9692e5;
+     overwrites this. Toyon's is the coral: the berry's hue at L*70 and half its chroma, told
+     from the berry by depth rather than by hue. */
+    --accent: #f78f7e;
     /* what a lost connection is painted in: the rail's dots while the daemon is down. Warm,
      because it is a fault, and never the accent, because it colours whole rows and a row in the
      accent reads as selected. applyTheme overwrites this too (faultOf): orange unless the theme

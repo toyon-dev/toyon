@@ -924,8 +924,8 @@ export interface Theme {
    * box. Its own hex rather than one of the seven, because every one of those already means a
    * state somewhere (red is a crash, green is working, orange is the lost connection), and a
    * selection painted in a status hue reads as that status. A theme that names none selects in
-   * its orange, which is what most imported themes were doing anyway; Toyon selects in the
-   * ceanothus, a blue-violet off every hue the rail's dots use. */
+   * its orange, which is what most imported themes were doing anyway; Toyon selects in a coral,
+   * the berry's hue a step lighter, told from the error red by depth. */
   accent?: ThemeColor;
   /** id of this theme's opposite-kind sibling (Gruvbox Dark ↔ Gruvbox Light); guessed by name when absent */
   pair?: string;

@@ -510,7 +510,8 @@
     &.error .tool-name {
       color: var(--red);
     }
-    /* the seconds a running call has taken, after the line that shines for it. It is the count's
+    /* the seconds a running call has taken, or a working subagent has been silent, after the line
+   that shines for it. It is the count's
    own treatment (below): a number after the hint, a tier up, never shrinking, so the two read
    as one vocabulary. The tier is also what parts it from the hint: that is prose and often ends
    in a number of its own ("since 0.5.0"), and at the hint's tier the seconds read as the

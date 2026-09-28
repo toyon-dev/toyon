@@ -177,11 +177,13 @@ export function ChatLog({
   // reply still arriving, or a spawn row floating at the foot. The word under the log shows only
   // when nothing does, in the gap between two calls. A running call's row carries its own count
   // (ToolRow), so under it there is no line at all: one count below could not say which of two
-  // calls running at once is the slow one. A stalled thought has no row to count on, so its
-  // silence is still said here, and so is a fan-out's: the floating rows say who is working, and
-  // the seconds under them say that nobody has been heard from.
+  // calls running at once is the slow one. A floating spawn row counts the same way, from the
+  // log's stamp: a subagent's calls land in the log, so its silence is the log's, and the row that
+  // says who is working is where the reader looks for how long. A stalled thought has no row to
+  // count on, so its silence alone is still said here.
   const calling = ownCallRunning(items);
-  const moving = streaming >= 0 || calling || floating.length > 0;
+  const fanned = floating.length > 0;
+  const moving = streaming >= 0 || calling || fanned;
   // the one row whose call is executing, which is the row that counts its wait (runningRow in group.ts)
   const countingRow = useMemo(() => runningRow(entries), [entries]);
   // when that call reached the head of the batch, stamped by the store (the row is rebuilt on
@@ -230,16 +232,25 @@ export function ChatLog({
         {/* the subagents at work, under everything that landed since they started: the same row,
             with the same key, so it keeps its fold and moves rather than remounts when it settles */}
         {floating.map((entry) => (
-          <ToolRow key={entry.at} tools={[entry.spawn]} run={entry.run} working roots={roots} worktreeId={id} />
+          <ToolRow
+            key={entry.at}
+            tools={[entry.spawn]}
+            run={entry.run}
+            working
+            since={chatAt}
+            roots={roots}
+            worktreeId={id}
+          />
         ))}
         {/* the row is status alone: the stop is the composer's, in the field's corner, which stays
             put where this row scrolls off as soon as the log is read back. So while a call runs
-            above, or a thought shimmers and the silence is short, there is no row: the shimmer
-            says it, and the call's row counts its own wait. */}
+            above, a spawn row floats, or a thought shimmers and the silence is short, there is no
+            row: the shimmer says it, and the call's or the spawn's row counts its own wait. */}
         {busy &&
           active &&
           !(active.agent === "waiting" && askInBox) &&
           !calling &&
+          !fanned &&
           !(moving && quiet < QUIET_AFTER) && (
             <div className="working-row">
               {/* waiting is not activity: it is blocked on you, and the rail keeps that dot steady

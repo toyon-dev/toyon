@@ -573,7 +573,9 @@ export const ToolRow = memo(
      * rather than travel. */
     working?: boolean;
     /** this row's call is the one executing (runningRow in group.ts), so its wait is counted
-     * here, from this stamp: when the call reached the head of the batch, by the store's clock */
+     * here, from this stamp: when the call reached the head of the batch, by the store's clock.
+     * A floating spawn row counts from the log's last event instead (ChatLog): a subagent's calls
+     * land in the log, so the seconds say how long nobody has been heard from. */
     since?: number;
     roots?: string[];
     worktreeId?: string | null;
@@ -596,8 +598,9 @@ export const ToolRow = memo(
     // How long the call has been executing. The shine says busy the same way whether the call is
     // running, queued or wedged; the count climbing beside it is what tells them apart, so only the
     // row at the head of the batch counts, from when it got there (runningRow in group.ts picks
-    // it). The store keeps the stamp, since this row is rebuilt on every switch of worktree.
-    const age = useSecondsSince(streaming ? since : undefined);
+    // it). The store keeps the stamp, since this row is rebuilt on every switch of worktree. A
+    // background spawn's own call returned at once, so its row counts while it is at work instead.
+    const age = useSecondsSince(streaming || working ? since : undefined);
     // The log decides which row opens itself, and it hands the row two answers: the turn's one
     // self-opening row (openRow in group.ts, reasoning only) and the newest `!` command, which is
     // open from the start because what it printed is the reason the person ran it. A subagent's

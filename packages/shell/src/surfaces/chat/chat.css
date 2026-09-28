@@ -576,8 +576,11 @@
       background: var(--surface1);
     }
     /* the picture a call returned (ChatItemView.tsx, ToolPicture): as wide as the band and no
-       wider, and no taller than the band's cap, so a screenshot taken at 2x is seen whole rather
-       than scrolled inside the band. The whole picture is the control, pressed for the full size. */
+       wider, and short enough to be seen whole inside the band's cap rather than scrolled in it,
+       so a screenshot taken at 2x reads at a glance. The band holds more than the picture: the
+       command that produced it, a note under that, and the panels' padding come to about 80px at
+       one line each, so the picture is given the cap less that room, and a command or note that
+       wraps once still fits. The whole picture is the control, pressed for the full size. */
     & .tool-image {
       display: block;
       align-self: flex-start;
@@ -589,7 +592,7 @@
       & img {
         display: block;
         max-width: 100%;
-        max-height: var(--body-cap);
+        max-height: calc(var(--body-cap) - 96px);
         width: auto;
         height: auto;
         border-radius: var(--radius);

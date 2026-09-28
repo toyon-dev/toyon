@@ -51,9 +51,10 @@ import {
 import { toolRowItems } from "./toolRowItems.ts";
 
 /** the link at or around an element of a rendered message, and the worktree file it names when
- * the checkout root is known; null when the element is not in a link */
+ * the checkout root is known; a backticked absolute path counts, as the path it names; null when
+ * the element is in neither */
 function chatLink(target: Element, root: string | undefined): ChatLink | null {
-  const a = target.closest("a");
+  const a = target.closest("a, code[data-path]");
   if (!a) return null;
   const path = a.getAttribute("data-path");
   if (path) return { kind: "path", path };

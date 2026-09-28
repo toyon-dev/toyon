@@ -69,3 +69,14 @@ export function outsidePath(ref: string): string | null {
     return null;
   }
 }
+
+/** A code span that names an absolute path, as the agent wrote it: a root-absolute word with no
+ * space in it. The agent is told to write a path it cannot link in backticks, so this is how a
+ * file outside the worktree usually reaches the transcript, and the span earns the path menu a
+ * demoted link gets. A route like `/api/users` reads the same and passes too; the menu it gains
+ * is a copy and an editor, neither of which acts until picked. Null for a lone slash, a
+ * protocol-relative address and anything with whitespace, which is a command and not a path. */
+export function codePath(text: string): string | null {
+  if (text.length < 2 || !text.startsWith("/") || text.startsWith("//") || /\s/.test(text)) return null;
+  return text;
+}

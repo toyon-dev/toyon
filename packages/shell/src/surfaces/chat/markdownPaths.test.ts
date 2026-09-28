@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { assetPath, dirOf, outsidePath, worktreeLink } from "./markdownPaths.ts";
+import { assetPath, codePath, dirOf, outsidePath, worktreeLink } from "./markdownPaths.ts";
 
 describe("a markdown file's relative references", () => {
   test("resolve against the file's folder", () => {
@@ -64,5 +64,22 @@ describe("a path outside the worktree", () => {
     expect(outsidePath("src/App.tsx")).toBeNull();
     expect(outsidePath("//example.com/a")).toBeNull();
     expect(outsidePath("/bad%")).toBeNull();
+  });
+});
+
+describe("a path in a code span", () => {
+  test("is a root-absolute word", () => {
+    expect(codePath("/tmp/claude-501/docfind/chat-typed.png")).toBe("/tmp/claude-501/docfind/chat-typed.png");
+    expect(codePath("/Users/me/notes/plan.md:12")).toBe("/Users/me/notes/plan.md:12");
+    expect(codePath("/etc")).toBe("/etc");
+  });
+
+  test("is not a lone slash, a command, a relative name or a protocol-relative address", () => {
+    expect(codePath("/")).toBeNull();
+    expect(codePath("/usr/bin/grep -rn foo")).toBeNull();
+    expect(codePath("chat-open.png")).toBeNull();
+    expect(codePath("src/App.tsx")).toBeNull();
+    expect(codePath("//example.com/a")).toBeNull();
+    expect(codePath("")).toBeNull();
   });
 });

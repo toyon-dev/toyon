@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { worktreeFileUrl } from "../../ws.ts";
 import { closePendingLink, PENDING_LINK } from "./linkTail.ts";
 import { dunder } from "./markdownDunder.ts";
-import { assetPath, outsidePath, worktreeLink } from "./markdownPaths.ts";
+import { assetPath, codePath, outsidePath, worktreeLink } from "./markdownPaths.ts";
 import { table } from "./markdownTable.ts";
 import { languageOf, paintCode } from "./syntax.ts";
 
@@ -84,6 +84,13 @@ purify.addHook("afterSanitizeAttributes", (node) => {
         node.append(code);
       }
     }
+  }
+  // a backticked absolute path is the same word as a demoted link's, and takes the same menu. A
+  // fenced block is code and not a path, and the code a demoted link was just wrapped in already
+  // sits inside the anchor that carries its path.
+  if (node.tagName === "CODE" && !node.closest("pre, a")) {
+    const path = codePath(node.textContent ?? "");
+    if (path) node.setAttribute("data-path", path);
   }
   const base = rendering?.base;
   if (node.tagName === "IMG" && base) {

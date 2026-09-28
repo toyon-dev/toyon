@@ -1,21 +1,33 @@
 import { type RefObject, useLayoutEffect, useRef, useState } from "react";
-import { IconButton } from "../../ui/Button.tsx";
-import { Field } from "../../ui/Field.tsx";
-import { useOnChange } from "../../ui/hooks.ts";
+import { IconButton } from "./Button.tsx";
+import { Field } from "./Field.tsx";
 import { isFind, type Match, matchOffsets, nearestIndex, segmentsOf, spanOf, stepped } from "./find.ts";
+import { useOnChange } from "./hooks.ts";
+import "./find.css";
 
 /** the two highlight names the stylesheet paints: every match, and the one the reader is on */
-const ALL = "editor-find";
-const CURRENT = "editor-find-current";
+const ALL = "find";
+const CURRENT = "find-current";
 
 /** the CSS highlight API paints a range with no change to the DOM under it; an engine without it
  * still gets the count, the stepping and the scroll, with only the wash missing */
 const CAN_PAINT = typeof CSS !== "undefined" && "highlights" in CSS;
 
+/** the text that is drawn: a folded row's body is in the DOM and off the screen, and a match in
+ * it would count and scroll to nothing */
+function shown(node: Text): boolean {
+  const el = node.parentElement;
+  if (!el) return false;
+  return typeof el.checkVisibility === "function" ? el.checkVisibility() : true;
+}
+
 function textNodesOf(root: Node): Text[] {
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
   const nodes: Text[] = [];
-  for (let n = walker.nextNode(); n; n = walker.nextNode()) if ((n as Text).data.length > 0) nodes.push(n as Text);
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+    const t = n as Text;
+    if (t.data.length > 0 && shown(t)) nodes.push(t);
+  }
   return nodes;
 }
 
@@ -74,23 +86,22 @@ function reveal(root: HTMLElement, range: Range) {
  * Find in the document on screen, as the editor has for a file: a box over the top corner of the
  * text, the count, and the next and previous steps. Every match is washed and the current one
  * darker, the way Monaco marks them. The document is live under it (an agent may still be writing
- * the file), so the matches are read again from the rendered text whenever `html` changes, with
- * the reader kept on the match they were on and the scroll left alone.
+ * the file, or the conversation), so the matches are read again whenever its DOM changes, with the
+ * reader kept on the match they were on and the scroll left alone.
  *
+ * `root` is the box that scrolls and `body` the element the text is read from; they may be one.
  * `seq` ticks when ⌘F is pressed again with the box already open, which puts the caret back in it
  * with its text selected; a `seed` beside it is what the document had selected at that press.
  */
 export function DocumentFind({
   root,
   body,
-  html,
   seed,
   seq,
   onClose,
 }: {
   root: RefObject<HTMLElement | null>;
   body: RefObject<HTMLElement | null>;
-  html: string;
   seed: string;
   seq: number;
   /** the match the reader was on when the box closed, for the document to keep as its selection */
@@ -108,6 +119,8 @@ export function DocumentFind({
   // whether the next paint also scrolls: a new query and a step do, a document changing under the
   // reader does not
   const show = useRef(false);
+  // the document changing under the box: one re-read per frame however many nodes moved
+  const [tick, setTick] = useState(0);
 
   useOnChange([seq], () => {
     if (seed) setQuery(seed);
@@ -115,7 +128,26 @@ export function DocumentFind({
     field.current?.select();
   });
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: `html` is the document changing under the search, which is what re-reads it
+  useLayoutEffect(() => {
+    const el = body.current;
+    if (!el) return;
+    let raf = 0;
+    const observer = new MutationObserver(() => {
+      if (!raf)
+        raf = requestAnimationFrame(() => {
+          raf = 0;
+          setTick((t) => t + 1);
+        });
+    });
+    // a fold opening or closing is an attribute, and changes what is shown without moving a node
+    observer.observe(el, { childList: true, characterData: true, subtree: true, attributes: true });
+    return () => {
+      observer.disconnect();
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, [body]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `tick` is the document changing under the search, which is what re-reads it
   useLayoutEffect(() => {
     const el = body.current;
     if (!el) return;
@@ -133,7 +165,7 @@ export function DocumentFind({
     live.current = { found: next, at: index };
     setFound(next);
     setAt(index);
-  }, [query, html]);
+  }, [query, tick]);
 
   useLayoutEffect(() => {
     paint(found.ranges, at);
@@ -157,7 +189,7 @@ export function DocumentFind({
   const close = () => onClose(found.ranges[at] ?? null);
 
   return (
-    <div className="editor-find">
+    <div className="find">
       <Field
         ref={field}
         autoFocus
@@ -165,11 +197,11 @@ export function DocumentFind({
         onChange={(e) => setQuery(e.target.value)}
         placeholder="find…"
         aria-label="find in this document"
-        className="editor-find-field"
+        className="find-field"
         spellCheck={false}
         onKeyDown={(e) => {
-          // the pane's Escape would close the pane; here the box goes first, and the document keeps
-          // the match as its selection
+          // the surface's Escape would close a pane or leave a page; here the box goes first, and
+          // the document keeps the match as its selection
           if (e.key === "Escape") {
             e.preventDefault();
             e.stopPropagation();
@@ -196,14 +228,14 @@ export function DocumentFind({
           }
         }}
       />
-      <span className="editor-find-count" aria-live="polite">
+      <span className="find-count" aria-live="polite">
         {query ? (count === 0 ? "no matches" : `${at + 1}/${count}`) : ""}
       </span>
       <IconButton
         icon="caret"
         label="Previous match"
         hint="⇧↩"
-        className="editor-find-prev"
+        className="find-prev"
         disabled={count === 0}
         onClick={() => step(-1)}
       />

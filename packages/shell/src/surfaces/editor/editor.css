@@ -120,46 +120,6 @@
   .editor-preview {
     overflow-y: auto;
   }
-  /* find in the document: a strip over the top corner of the text, where the editor's own sits,
-   outside the scroll box so it holds still. It is drawn after the box in the same body, so it
-   paints over the text with no rung of its own. Stood in from the right edge by the scrollbar. */
-  .editor-find {
-    position: absolute;
-    top: 8px;
-    right: 20px;
-    display: flex;
-    align-items: center;
-    gap: 2px;
-    padding: 4px;
-    background: var(--surface1);
-    border: 1px solid var(--border1);
-    border-radius: var(--radius-md);
-    box-shadow: var(--elevation-float);
-  }
-  .editor-find-field {
-    width: 180px;
-  }
-  /* "3/12": the count holds its width as the numbers tick, so the steps beside it never move */
-  .editor-find-count {
-    font: var(--type-ui-sm);
-    font-variant-numeric: tabular-nums;
-    color: var(--text1);
-    min-width: 48px;
-    padding: 0 6px;
-    text-align: right;
-    white-space: nowrap;
-  }
-  /* the one caret, turned to point up for the step back */
-  .editor-find-prev svg {
-    scale: 1 -1;
-  }
-  /* every match washed, the current one darker: the editor's own find colours, in the same measure */
-  ::highlight(editor-find) {
-    background-color: color-mix(in srgb, var(--accent) 18%, transparent);
-  }
-  ::highlight(editor-find-current) {
-    background-color: color-mix(in srgb, var(--accent) 38%, transparent);
-  }
   /* an html file read rendered: the page fills the body and scrolls itself. A frame's canvas is
    see-through, so a page that paints no ground would sit on the pane's dark one with the browser's
    black default text; the paper under it is what a tab would give the same page */

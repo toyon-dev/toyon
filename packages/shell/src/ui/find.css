@@ -1,0 +1,45 @@
+/* DocumentFind: the find box over a document, and the wash on its matches. */
+@layer tokens, base, surfaces;
+@layer base {
+  /* a strip over the top corner of the text, where the editor's own sits, in whatever box the
+     surface gives it (one that holds the scroll box, so the strip holds still while the document
+     moves under it). Drawn after the scroll box in the same parent, it paints over the text with no
+     rung of its own. Stood in from the right edge by the scrollbar. */
+  .find {
+    position: absolute;
+    top: 8px;
+    right: 20px;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 4px;
+    background: var(--surface1);
+    border: 1px solid var(--border1);
+    border-radius: var(--radius-md);
+    box-shadow: var(--elevation-float);
+  }
+  .find-field {
+    width: 180px;
+  }
+  /* "3/12": the count holds its width as the numbers tick, so the steps beside it never move */
+  .find-count {
+    font: var(--type-ui-sm);
+    font-variant-numeric: tabular-nums;
+    color: var(--text1);
+    min-width: 48px;
+    padding: 0 6px;
+    text-align: right;
+    white-space: nowrap;
+  }
+  /* the one caret, turned to point up for the step back */
+  .find-prev svg {
+    scale: 1 -1;
+  }
+  /* every match washed, the current one darker: the editor's own find colours, in the same measure */
+  ::highlight(find) {
+    background-color: color-mix(in srgb, var(--accent) 18%, transparent);
+  }
+  ::highlight(find-current) {
+    background-color: color-mix(in srgb, var(--accent) 38%, transparent);
+  }
+}

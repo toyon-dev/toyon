@@ -14,10 +14,16 @@ export function isSelectAll(e: {
   return e.key === "a" && (e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey;
 }
 
-/** A surface with no focus seat of its own: a click on its text drops focus on the body, and the
- * chord arrives at the window with nothing saying where the hand is. The last press says: while
- * it landed inside `ref` and nothing has taken the keyboard since, select-all means this surface. */
-export function useSelectAllWithin(ref: RefObject<HTMLElement | null>) {
+/** A key that means this surface while the hand is on it. The keyboard inside `ref` says so
+ * outright. A surface with no focus seat of its own is the other case: a click on its text drops
+ * focus on the body, and the key arrives at the window with nothing saying where the hand is. The
+ * last press says: while it landed inside `ref` and nothing has taken the keyboard since, the key
+ * means this surface. `act` is handed the element, and the event has been claimed. */
+export function useKeyWithin(
+  ref: RefObject<HTMLElement | null>,
+  match: (e: KeyboardEvent) => boolean,
+  act: (el: HTMLElement, e: KeyboardEvent) => void,
+) {
   useEffect(() => {
     let pointed = false;
     const onDown = (e: PointerEvent) => {
@@ -25,11 +31,12 @@ export function useSelectAllWithin(ref: RefObject<HTMLElement | null>) {
     };
     const onKey = (e: KeyboardEvent) => {
       const el = ref.current;
-      if (!pointed || !el || !isSelectAll(e)) return;
+      if (!el || e.defaultPrevented || !match(e)) return;
       const held = document.activeElement;
-      if (held && held !== document.body && !el.contains(held)) return;
+      const inside = held && held !== document.body ? el.contains(held) : pointed;
+      if (!inside) return;
       e.preventDefault();
-      selectContents(el);
+      act(el, e);
     };
     window.addEventListener("pointerdown", onDown, true);
     window.addEventListener("keydown", onKey);
@@ -37,7 +44,12 @@ export function useSelectAllWithin(ref: RefObject<HTMLElement | null>) {
       window.removeEventListener("pointerdown", onDown, true);
       window.removeEventListener("keydown", onKey);
     };
-  }, [ref]);
+  }, [ref, match, act]);
+}
+
+/** select-all on a surface that is read and not edited: the surface, not the shell around it */
+export function useSelectAllWithin(ref: RefObject<HTMLElement | null>) {
+  useKeyWithin(ref, isSelectAll, selectContents);
 }
 
 /** what is selected inside `el`, or null when the selection is empty, blank, or lies elsewhere.

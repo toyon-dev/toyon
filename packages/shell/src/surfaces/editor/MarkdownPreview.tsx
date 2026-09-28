@@ -3,14 +3,14 @@ import { type CSSProperties, useLayoutEffect, useRef, useState } from "react";
 import { openFile } from "../../state/actions/file.ts";
 import { useDispatch, useSock } from "../../state/context.tsx";
 import { readingView } from "../../state/store.ts";
+import { DocumentFind } from "../../ui/DocumentFind.tsx";
 import { Float } from "../../ui/Float.tsx";
+import { isFind } from "../../ui/find.ts";
 import { useOnChange } from "../../ui/hooks.ts";
 import { rowState } from "../../ui/rowState.ts";
 import { isSelectAll, selectContents, selectedText } from "../../ui/selectAll.ts";
 import { useMarkdown } from "../chat/markdown.ts";
 import { assetPath, dirOf } from "../chat/markdownPaths.ts";
-import { DocumentFind } from "./DocumentFind.tsx";
-import { isFind } from "./find.ts";
 import { outlineDepths } from "./outline.ts";
 
 /** a heading the render produced, and the element it is, for the outline to read and scroll to.
@@ -174,7 +174,7 @@ export function MarkdownPreview({
           dangerouslySetInnerHTML={{ __html: html }}
         />
       </div>
-      {find && <DocumentFind root={ref} body={body} html={html} seed={find.seed} seq={find.seq} onClose={closeFind} />}
+      {find && <DocumentFind root={ref} body={body} seed={find.seed} seq={find.seq} onClose={closeFind} />}
       <Outline heads={heads} at={at} onJump={jump} />
     </>
   );

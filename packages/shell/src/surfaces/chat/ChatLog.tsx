@@ -1,19 +1,30 @@
 import { type ArchivedWorktree, type OwnedWorktree, type PickMeta, SHELL_TOOL } from "@toyon/shared";
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { previewBus } from "../../app/previewBus.ts";
 import { useDispatch, useSock, useStoreInstance } from "../../state/context.tsx";
 import { useLocalField } from "../../state/selectors.ts";
 import { localOf } from "../../state/store.ts";
 import { IconButton } from "../../ui/Button.tsx";
+import { DocumentFind } from "../../ui/DocumentFind.tsx";
+import { isFind } from "../../ui/find.ts";
 import { useOnChange, useSecondsSince, useTail } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { Spinner } from "../../ui/Spinner.tsx";
-import { useSelectAllWithin } from "../../ui/selectAll.ts";
+import { selectedText, useKeyWithin, useSelectAllWithin } from "../../ui/selectAll.ts";
 import { elapsed, isBusy, pickLabel } from "../util.ts";
 import { openAsk } from "./ask.ts";
 import { ChatItemView, QUIET_AFTER, ThoughtRow, ToolRow } from "./ChatItemView.tsx";
 import { groupTools, indexOfSeq, openRow, ownCallRunning, placeSpawns, runningRow, spawnsAtWork } from "./group.ts";
 import { isBlank } from "./recall.ts";
+import { chatPanel } from "./useIntake.ts";
+
+/** the panel the log sits in, whichever placement mounted it: ⌘F from the composer under the log
+ * means the conversation above it, as it does in Slack */
+const panelRef = {
+  get current() {
+    return chatPanel.el;
+  },
+};
 
 /** no spawn at work: one frozen set, so a turn that is over keys the same placement every render */
 const NONE: ReadonlySet<string> = new Set();
@@ -44,6 +55,24 @@ export function ChatLog({
   const logRef = useRef<HTMLDivElement>(null);
   // a hand resting on the transcript: select-all is the conversation, not the shell around it
   useSelectAllWithin(logRef);
+  // and so is find: the browser's would read the rail and the panes with it, and count what is
+  // not on screen. A selection in the log at the press is what is looked for. The box, once open,
+  // answers ⌘F itself, so a press with the caret in it never reaches here.
+  const [find, setFind] = useState<{ seed: string; seq: number } | null>(null);
+  const openFind = useCallback(() => {
+    const seed = (logRef.current && selectedText(logRef.current)) ?? "";
+    setFind((f) => ({ seed: seed || f?.seed || "", seq: (f?.seq ?? 0) + 1 }));
+  }, []);
+  useKeyWithin(panelRef, isFind, openFind);
+  const closeFind = (current: Range | null) => {
+    setFind(null);
+    // the box goes, the match stays, as the reader's selection
+    if (current) {
+      const sel = window.getSelection();
+      sel?.removeAllRanges();
+      sel?.addRange(current);
+    }
+  };
 
   // the log tails the conversation: the newest line stays in view until the reader scrolls up,
   // and a pill offers the way back once something new is said. Another chat opens at its end.
@@ -338,6 +367,7 @@ export function ChatLog({
           </div>
         )}
       </div>
+      {find && <DocumentFind root={logRef} body={logRef} seed={find.seed} seq={find.seq} onClose={closeFind} />}
       {follow.away && (
         <button className="jump-down" onClick={() => follow.jump(true)} data-tip="Jump to latest">
           <Icon name="caret" className="icon-inline" /> new messages

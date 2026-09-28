@@ -1226,9 +1226,6 @@
   .ask-head {
     color: var(--text0);
   }
-  .ask-header {
-    margin-bottom: 2px;
-  }
   /* the question itself wraps; a long one is still one question */
   .ask-text {
     overflow-wrap: anywhere;
@@ -1342,7 +1339,9 @@
   /* ---- the ask in the transcript ----
    While the question is open its row is one line, "asking" and what is asked, with the accent's
    edge: in a long log it is what says the turn is waiting on you, and pressing it brings a parked
-   question back into the box. Closed, the row reads the answers back in the quiet tier. */
+   question back into the box. A permission's verdict, or a question
+     closed with no answer, reads back in the quiet tier; a question the person answered is a
+     message pair, the agent's prose and the person's bubble, and takes no row of its own. */
   .ask-row {
     min-height: 0;
     padding: 4px 8px;

@@ -3,6 +3,8 @@ import type { AskQuestion } from "@toyon/shared";
 import type { ChatItem } from "../../state/store.ts";
 import {
   advance,
+  answeredQuestion,
+  answerLines,
   answerText,
   askLine,
   canSubmit,
@@ -224,6 +226,46 @@ describe("recommended", () => {
     expect(stripRecommended("No, local main only")).toBe("No, local main only");
     // only a suffix: a label that says the word mid-sentence keeps it
     expect(recommended("The (Recommended) option is gone")).toBe(false);
+  });
+});
+
+describe("answerLines", () => {
+  test("a lone question is its answer; several carry their headers as labels", () => {
+    expect(answerLines(one, [{ selected: ["jwt"] }])).toEqual(["JWT"]);
+    const headed = [q("fix", ["Yes, update it", "No"], { header: "Fix" }), q("where", ["Here"])];
+    expect(answerLines(headed, [{ selected: ["yes, update it"] }, { selected: [], note: "in docs" }])).toEqual([
+      "Fix · Yes, update it",
+      "in docs",
+    ]);
+    // the note rides its pick on a colon, so the label takes a different mark
+    expect(answerLines(headed, [{ selected: ["no"], note: "later" }, { selected: [] }])).toEqual([
+      "Fix · No: later",
+      "skipped",
+    ]);
+    expect(answerLines(headed, undefined)).toEqual(["Fix · skipped", "skipped"]);
+  });
+});
+
+describe("answeredQuestion", () => {
+  test("is the answered question ask alone: not a permission, not one closed without an answer", () => {
+    const ask = { kind: "question" as const, message: "Which?", questions: one };
+    const answers = [{ selected: ["jwt"] }];
+    expect(answeredQuestion({ kind: "ask", id: "k", ask, outcome: "answered", answers })).toEqual({
+      message: "Which?",
+      questions: one,
+      answers,
+    });
+    expect(answeredQuestion({ kind: "ask", id: "k", ask })).toBeNull();
+    expect(answeredQuestion({ kind: "ask", id: "k", ask, outcome: "skipped" })).toBeNull();
+    expect(
+      answeredQuestion({
+        kind: "ask",
+        id: "k",
+        ask: { kind: "permission", title: "Write a.ts", choices: [{ id: "y", name: "Allow", kind: "allow_once" }] },
+        outcome: "answered",
+        choiceId: "y",
+      }),
+    ).toBeNull();
   });
 });
 

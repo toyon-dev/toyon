@@ -18,6 +18,7 @@ import { Spinner } from "../../ui/Spinner.tsx";
 import { attachmentUrl } from "../../ws.ts";
 import { elapsed } from "../util.ts";
 import { AskRow } from "./AskRow.tsx";
+import { answeredQuestion, answerLines } from "./ask.ts";
 import { FullAttachment } from "./FullAttachment.tsx";
 import {
   runCalls,
@@ -961,8 +962,33 @@ export const ChatItemView = memo(function ChatItemView({
       );
     case "auth":
       return <AuthCard item={item} />;
-    case "ask":
-      return <AskRow item={item} worktreeId={worktreeId} />;
+    case "ask": {
+      // a question the person answered was the agent's turn speaking and the person replying, and
+      // the log reads it as that: the message in the agent's prose, the answer in the person's
+      // bubble. Dimming it as a tool exchange put the sentence that decided the turn in the quiet
+      // tier under the prose it caused.
+      const said = answeredQuestion(item);
+      if (!said) return <AskRow item={item} worktreeId={worktreeId} />;
+      const answer = answerLines(said.questions, said.answers).join("\n");
+      // the bubble offers copy alone: a pick re-sent as prose is not the choice, so it takes no
+      // "edit in composer" and no place in the walk
+      const bubble = { kind: "assistant" as const, text: answer };
+      return (
+        <>
+          <Markdown
+            text={said.message}
+            menu={(link) =>
+              messageItems({ kind: "assistant", text: said.message }, worktreeId ?? null, deps, { link, dir: dirOf() })
+            }
+            worktreeId={worktreeId}
+            fileRoot={fileRoot()}
+          />
+          <div className="msg-user" {...cm.contextMenu(() => messageItems(bubble, worktreeId ?? null, deps))}>
+            {answer}
+          </div>
+        </>
+      );
+    }
     case "blocked":
       // the reason is on the row rather than in a tooltip: the agent is told only that its request
       // was refused, so it reports a refusal as the person declining, and the row is the only place

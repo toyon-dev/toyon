@@ -105,6 +105,28 @@ export function answerText(q: AskQuestion, a: AskAnswer | undefined): string {
   return note ? `${labels.join(", ")}: ${note}` : labels.join(", ");
 }
 
+/** what the person said, once an ask is answered: the transcript reads the exchange back as a
+ * message pair, the agent's message and then this in the person's bubble. A lone question is its
+ * answer alone; several are one line each, the header a label on its answer, since the agent
+ * reads them back by position and the person by name. The label is set off by a middot rather
+ * than a colon, because the answer's own colon is what joins a note to its pick. */
+export function answerLines(questions: AskQuestion[], answers: AskAnswer[] | undefined): string[] {
+  return questions.map((q, i) => {
+    const text = answerText(q, answers?.[i]);
+    return questions.length > 1 && q.header ? `${q.header} · ${text}` : text;
+  });
+}
+
+/** the ask the transcript shows as a message pair: a question the person answered. A permission is
+ * allow or deny, not conversation, and an ask closed without an answer has nothing of theirs to
+ * read back; both stay a quiet row. */
+export function answeredQuestion(
+  item: AskItem,
+): { message: string; questions: AskQuestion[]; answers: AskAnswer[] | undefined } | null {
+  if (item.outcome !== "answered" || item.ask.kind !== "question") return null;
+  return { message: item.ask.message, questions: item.ask.questions, answers: item.answers };
+}
+
 /** the row a digit means: the nth of the question on screen, the "other" row counted, or -1 */
 export function rowForDigit(q: AskQuestion | undefined, digit: number): number {
   return digit >= 1 && digit <= rowsOf(q) ? digit - 1 : -1;

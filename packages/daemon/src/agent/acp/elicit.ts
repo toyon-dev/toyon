@@ -21,6 +21,9 @@ import type { AskAnswer, AskOption, AskQuestion } from "@toyon/shared";
  * leaves it un-namespaced on purpose so every bridge can use the same one, which is why matching
  * on it rather than on `_claude/...` keeps this agent-agnostic. */
 const CUSTOM_ANSWER_META = "_askUserQuestionCustomAnswer";
+/** the Codex bridge does not use that marker: its request_user_input "Other" field carries
+ * `{ questionId, isOtherAnswer: true }` under its own `codex` key */
+const CODEX_META = "codex";
 /** where the Claude bridge parks an option's longer sample, the one field EnumOption has no slot for */
 const OPTION_PREVIEW_META = "_claude/askUserQuestionOption";
 
@@ -45,7 +48,10 @@ function text(value: unknown): string | undefined {
 
 /** the question a free-text field answers, when the field is one */
 function customAnswerFor(prop: ElicitationPropertySchema): string | null {
-  return text(field(meta(prop, CUSTOM_ANSWER_META), "questionId")) ?? null;
+  const claude = text(field(meta(prop, CUSTOM_ANSWER_META), "questionId"));
+  if (claude) return claude;
+  const codex = meta(prop, CODEX_META);
+  return field(codex, "isOtherAnswer") === true ? (text(field(codex, "questionId")) ?? null) : null;
 }
 
 function optionsOf(titled: EnumOption[]): AskOption[] {

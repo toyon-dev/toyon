@@ -94,6 +94,52 @@ describe("parseForm", () => {
     expect(parsed?.questions[0]?.note).toEqual({ label: "Other" });
   });
 
+  test("Codex's request_user_input form is a card, its Other field the note", () => {
+    // the wire as @agentclientprotocol/codex-acp builds it: the question keyed by its own id, the
+    // recommended option marked in its label, the free-text companion under a `codex` meta key
+    const parsed = parseForm(
+      form(
+        {
+          new_name: {
+            title: "New name",
+            description: "Which new name do you prefer for note.txt?",
+            type: "string",
+            _meta: { codex: { isOther: true, isSecret: false } },
+            oneOf: [
+              { const: "apple.txt (Recommended)", title: "apple.txt (Recommended)", description: "Fruit-themed." },
+              { const: "berry.txt", title: "berry.txt", description: "Also fruit-themed." },
+            ],
+          } as ElicitationPropertySchema,
+          new_name__other: {
+            type: "string",
+            title: "Other",
+            description: "Type your own answer instead of choosing an option above.",
+            _meta: { codex: { questionId: "new_name", isOtherAnswer: true, isSecret: false } },
+          } as ElicitationPropertySchema,
+        },
+        "Which new name do you prefer for note.txt?",
+        [],
+      ),
+    );
+    expect(parsed?.questions).toEqual([
+      {
+        id: "new_name",
+        text: "Which new name do you prefer for note.txt?",
+        header: "New name",
+        options: [
+          { value: "apple.txt (Recommended)", label: "apple.txt (Recommended)", description: "Fruit-themed." },
+          { value: "berry.txt", label: "berry.txt", description: "Also fruit-themed." },
+        ],
+        note: { label: "Other" },
+      },
+    ]);
+    // the bridge lets the Other field win over the pick, so the label rides in it
+    expect(toContent(parsed!, [{ selected: ["berry.txt"], note: "lowercase please" }])).toEqual({
+      new_name: "berry.txt",
+      new_name__other: "berry.txt: lowercase please",
+    });
+  });
+
   test("a multi-select question is read from items.anyOf", () => {
     const parsed = parseForm(form({ question_0: multi("Targets", ["web", "ios", "android"]) }));
     expect(parsed?.questions[0]?.multi).toBe(true);

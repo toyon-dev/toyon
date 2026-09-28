@@ -47,6 +47,13 @@ describe("SYSTEM_APPEND", () => {
     expect(SYSTEM_APPEND).toContain("absolute path");
     expect(SYSTEM_APPEND).toContain("built-in editor");
   });
+  test("sends an offer that waits on a yes through the question tool, and a suggestion through prose", () => {
+    // a turn that ends "I can do that if you want" makes the person type the yes; the card answers
+    // with one key. Only that case: a card on every reply would turn the work into confirmations
+    expect(SYSTEM_APPEND).toContain("question tool");
+    expect(SYSTEM_APPEND).toContain("only where you would otherwise have stopped and waited");
+    expect(SYSTEM_APPEND).toContain("is a sentence in your reply, not a question");
+  });
 });
 
 describe("ambientBlock", () => {

@@ -6,18 +6,20 @@
 // caret and anything unsaved survive both. When to save, and whether to take what changed on disk,
 // is fileSync's; this component holds the text and reports edits.
 
-import type { Theme } from "@toyon/shared";
+import type { BlameCommit, Theme } from "@toyon/shared";
 import { toyonDark } from "@toyon/shared";
 import * as monaco from "monaco-editor";
 // monaco 0.56 exports map: "./*.js" -> "./esm/vs/*.js"
 import editorWorker from "monaco-editor/editor/editor.worker.js?worker";
 import tsWorker from "monaco-editor/language/typescript/ts.worker.js?worker";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { selectedLines } from "../../app/copiedSource.ts";
 import type { EditorSync, SyncBuffer } from "../../state/fileSync.ts";
 import type { EditorBlame, EditorDisk, EditorView, FileRef } from "../../state/store.ts";
+import { Float } from "../../ui/Float.tsx";
 import { useOnChange } from "../../ui/hooks.ts";
-import { blameLine } from "./blameLine.ts";
+import type { Placement, Rect } from "../../ui/place.ts";
+import { blameCommit, blameLine } from "./blameLine.ts";
 import { registerGrammars } from "./grammar.ts";
 import { minimalEdit } from "./minimalEdit.ts";
 import { toMonacoTheme } from "./monacoTheme.ts";
@@ -133,6 +135,33 @@ function tokenizeThrough(model: monaco.editor.ITextModel, line: number) {
   );
 }
 
+/** the commit the blame note names, shown over the note while the pointer rests on it */
+interface BlameCard {
+  commit: BlameCommit;
+  /** the note's box, which the card hangs under */
+  anchor: Rect;
+}
+const CARD_DELAY = 120;
+const CARD_PLACEMENT: Placement = { side: "bottom", align: "start", offset: 6, flip: "side", margin: 8 };
+const CARD_DATE = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: "numeric" });
+
+/** the box all the note's spans cover: Monaco cuts a long injected text into several */
+function noteRect(root: HTMLElement): Rect | null {
+  let rect: Rect | null = null;
+  for (const span of root.querySelectorAll(".editor-blame")) {
+    const b = span.getBoundingClientRect();
+    rect = rect
+      ? {
+          left: Math.min(rect.left, b.left),
+          top: Math.min(rect.top, b.top),
+          right: Math.max(rect.right, b.right),
+          bottom: Math.max(rect.bottom, b.bottom),
+        }
+      : { left: b.left, top: b.top, right: b.right, bottom: b.bottom };
+  }
+  return rect;
+}
+
 /** the editor put over the models for one view */
 interface Instance {
   code: monaco.editor.IStandaloneCodeEditor;
@@ -232,6 +261,7 @@ export default function Editor({
   diskRef.current = disk;
   const session = useRef<Session | null>(null);
   const instance = useRef<Instance | null>(null);
+  const [card, setCard] = useState<BlameCard | null>(null);
 
   // The session, for as long as this file is open: the pane keys this component by file, so another
   // file is another mount. `sync` is taken once here, so an edit still owed to disk on the way out
@@ -433,6 +463,17 @@ export default function Editor({
     // the bare key resolves ahead of every chord and answers it here instead.
     code.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyK, () => newRef.current?.());
 
+    // The card over the blame note, after the tooltip's own rest. The note is Monaco's span, which
+    // carries no attributes of its own, so the pointer is read off the editor's mouse events rather
+    // than delegated through data-tip. It leaves as the pointer does, and with the note.
+    let cardTimer: ReturnType<typeof setTimeout> | undefined;
+    let onNote = false;
+    const dropCard = () => {
+      clearTimeout(cardTimer);
+      cardTimer = undefined;
+      onNote = false;
+      setCard(null);
+    };
     // line hover -> highlight what that line renders on the page
     let lastLine: number | null = null;
     const subMove = code.onMouseMove((e) => {
@@ -441,10 +482,25 @@ export default function Editor({
         lastLine = hovered;
         hoverRef.current?.(hovered);
       }
+      const over = e.target.element?.classList.contains("editor-blame") ?? false;
+      if (over === onNote) return;
+      if (!over) {
+        dropCard();
+        return;
+      }
+      onNote = true;
+      cardTimer = setTimeout(() => {
+        const b = blameRef.current;
+        const pos = code.getPosition();
+        const commit = b && pos ? blameCommit(b, pos.lineNumber) : null;
+        const anchor = noteRect(el);
+        if (commit && anchor) setCard({ commit, anchor });
+      }, CARD_DELAY);
     });
     const subLeave = code.onMouseLeave(() => {
       lastLine = null;
       hoverRef.current?.(null);
+      dropCard();
     });
 
     // Both views copy out of `code`: the file view is that editor, and the diff view's deleted lines
@@ -494,6 +550,8 @@ export default function Editor({
     // line, so then there is none. The caret walks past the ghost as if it were not there.
     const ghosts = code.createDecorationsCollection();
     const paint = () => {
+      // the note the card was about is redrawn or gone either way
+      dropCard();
       const b = blameRef.current;
       const pos = code.getPosition();
       const text = b && b.version === diskRef.current.version && !m.dirty && pos ? blameLine(b, pos.lineNumber) : null;
@@ -530,6 +588,7 @@ export default function Editor({
         subMove.dispose();
         subLeave.dispose();
         subCursor.dispose();
+        dropCard();
         ghosts.clear();
         chatAction.dispose();
         focusAction.dispose();
@@ -576,5 +635,18 @@ export default function Editor({
     instance.current?.code.focus();
   });
 
-  return <div ref={ref} className="editor-monaco" />;
+  return (
+    <>
+      <div ref={ref} className="editor-monaco" />
+      {card && (
+        <Float className="editor-blame-card" anchor={() => card.anchor} placement={CARD_PLACEMENT} aria-hidden>
+          <span>{card.commit.subject || "no message"}</span>
+          <span className="editor-blame-meta">
+            <span className="editor-blame-sha">{card.commit.sha.slice(0, 7)}</span>
+            <span>{CARD_DATE.format(card.commit.at)}</span>
+          </span>
+        </Float>
+      )}
+    </>
+  );
 }

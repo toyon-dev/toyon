@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { blameLine } from "./blameLine.ts";
+import { blameCommit, blameLine } from "./blameLine.ts";
 
 const DAY = 86_400_000;
 const blame = {
@@ -11,20 +11,28 @@ const blame = {
 };
 
 describe("blameLine", () => {
-  test("who, how long ago, and the subject, separated by middots", () => {
-    expect(blameLine(blame, 1)).toBe("Kyle Shay · 3d · chat: keep attachments");
+  test("who and how long ago; the subject is the card's", () => {
+    expect(blameLine(blame, 1)).toBe("Kyle Shay, 3d");
   });
 
   test("a line only the working tree has says so", () => {
     expect(blameLine(blame, 2)).toBe("not committed yet");
   });
 
-  test("a commit with no author or subject is its sha and its age", () => {
-    expect(blameLine(blame, 3)).toBe("bbbbbbb · 2d");
+  test("a commit with no author is its sha", () => {
+    expect(blameLine(blame, 3)).toBe("bbbbbbb, 2d");
   });
 
   test("a line the blame does not reach, or a file with none, is nothing", () => {
     expect(blameLine(blame, 4)).toBeNull();
     expect(blameLine({ commits: [], lines: [] }, 1)).toBeNull();
+  });
+});
+
+describe("blameCommit", () => {
+  test("the commit a committed line names, and none for a typed or unreached line", () => {
+    expect(blameCommit(blame, 1)?.subject).toBe("chat: keep attachments");
+    expect(blameCommit(blame, 2)).toBeNull();
+    expect(blameCommit(blame, 4)).toBeNull();
   });
 });

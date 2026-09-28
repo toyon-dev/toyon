@@ -28,14 +28,17 @@
       color: var(--text2);
       background-image: linear-gradient(var(--diff-del), var(--diff-del));
     }
-    /* who last touched the caret's line, drawn after it: the quiet tier in the UI face, so it reads
-     as a note on the line and not as code that could be selected. The leading is the line's own:
-     the face's would float the note off the code's baseline. Monaco colours the span with the
-     token class of the code it sits in, from an unlayered sheet that beats any layered rule
-     whatever its specificity, so the tier has to be important to reach it. */
+    /* who last touched the caret's line, drawn after it in the code's own face and a tier under it:
+     the colour alone says it is a note and not code, and the mono keeps it on the line's grid. The
+     second tier, not the quiet one: this is read, not skimmed, and the quiet tier sits under the
+     readable floor on the editor's ground. The leading is the line's own, since the type shorthand
+     resets it. Monaco colours the span with the token class of the code it sits in, from an
+     unlayered sheet that beats any layered rule whatever its specificity, so the tier has to be
+     important to reach it. */
     & .monaco-editor .editor-blame {
-      color: var(--text2) !important;
-      font: var(--type-ui-sm);
+      /* biome-ignore lint/complexity/noImportantStyles: Monaco's unlayered token colour is above every layer here */
+      color: var(--text1) !important;
+      font: var(--type-mono-sm);
       line-height: inherit;
     }
     /* Monaco cuts a long injected text into spans of fifty characters, so the gap from the code
@@ -43,6 +46,33 @@
     & .monaco-editor :is(.editor-blame:first-child, :not(.editor-blame) + .editor-blame) {
       padding-left: 24px;
     }
+  }
+  /* the commit the note names, over it while the pointer rests there: what it said, then its sha
+   and its date a tier under. The tooltip's box, since it is one: read, never pressed */
+  .editor-blame-card {
+    pointer-events: none;
+    width: max-content;
+    max-width: 360px;
+    padding: 6px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font: var(--type-ui);
+    color: var(--text0);
+    background: var(--surface1);
+    border: 1px solid var(--border1);
+    border-radius: var(--radius-md);
+    box-shadow: var(--elevation-float);
+    overflow-wrap: anywhere;
+  }
+  .editor-blame-meta {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    color: var(--text1);
+  }
+  .editor-blame-sha {
+    font: var(--type-mono-sm);
   }
   /* a row between the head and the text when the text alone would mislead: changed on disk under
    unsaved edits, or not saveable from here. Its own row, so it never covers the lines it is about */

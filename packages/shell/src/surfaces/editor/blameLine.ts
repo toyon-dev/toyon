@@ -1,10 +1,18 @@
-// The ghost after the caret's line: who last touched it, how long ago, and what that commit said.
+// The note after the caret's line, who and when, and the commit the card over it names.
 
-import type { FileBlame } from "@toyon/shared";
+import type { BlameCommit, FileBlame } from "@toyon/shared";
 import { ago } from "../util.ts";
 
-/** One line of blame as the ghost reads it. Null for a line the blame does not reach (a file git
- * cannot blame, or a line past its end) and "not committed yet" for one only the working tree has. */
+/** The commit a line's blame names: null for a line the blame does not reach (a file git cannot
+ * blame, or a line past its end) or one only the working tree has. */
+export function blameCommit(blame: FileBlame, line: number): BlameCommit | null {
+  const idx = blame.lines[line - 1];
+  if (idx === undefined || idx < 0) return null;
+  return blame.commits[idx] ?? null;
+}
+
+/** One line of blame as the note reads it: who and how long ago, and "not committed yet" for a
+ * line only the working tree has. What the commit said is the card's, on hover. */
 export function blameLine(blame: FileBlame, line: number): string | null {
   const idx = blame.lines[line - 1];
   if (idx === undefined) return null;
@@ -12,7 +20,5 @@ export function blameLine(blame: FileBlame, line: number): string | null {
   const c = blame.commits[idx];
   if (!c) return null;
   // a commit with no author named is still a commit: its sha stands in
-  const parts = [c.author || c.sha.slice(0, 7), ago(c.at)];
-  if (c.subject) parts.push(c.subject);
-  return parts.join(" · ");
+  return `${c.author || c.sha.slice(0, 7)}, ${ago(c.at)}`;
 }

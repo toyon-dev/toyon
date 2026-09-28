@@ -7,6 +7,7 @@ import {
   canSync,
   describeLand,
   isLead,
+  isMain,
   isProvisional,
   landPolicy,
   type OwnedWorktree,
@@ -79,6 +80,17 @@ export function worktreeActions(sock: DaemonSocket | null, dispatch: Dispatch) {
     /** run under another profile: only its procs restart, so no confirm */
     setProfile(w: OwnedWorktree, profile: string) {
       sock?.send({ t: "set-worktree-profile", worktreeId: w.worktree.id, profile });
+    },
+    /** run the shared tier here: its procs start beside the page, nothing stops, so no confirm */
+    ownProcs(w: OwnedWorktree) {
+      sock?.send({ t: "own-procs", worktreeId: w.worktree.id });
+    },
+    shareProcs(w: OwnedWorktree) {
+      const names = (w.worktree.owns ?? []).join(", ");
+      const ok = window.confirm(
+        `Stop this worktree's own ${names} and use main's?\n\nWhat they hold that main's do not (a database of their own) is not carried over.`,
+      );
+      if (ok) sock?.send({ t: "share-procs", worktreeId: w.worktree.id });
     },
     archive(w: OwnedWorktree) {
       if (!canArchive(w.worktree)) return;
@@ -160,6 +172,25 @@ export function worktreeItems(
       label: `run with ${name}`,
       checked: name === current,
       onClick: () => acts.setProfile(w, name),
+    });
+  }
+  // what runs on main for this row, and what it took over: the row says which, and offers the
+  // other. Never on main, which runs the shared tier for everyone.
+  if (!isMain(w.worktree) && w.borrowed?.length) {
+    run.push({
+      id: "own-procs",
+      label: `run ${w.borrowed.join(", ")} here`,
+      detail: "on main now",
+      onClick: () => acts.ownProcs(w),
+    });
+  }
+  if (!isMain(w.worktree) && w.worktree.owns?.length) {
+    run.push({
+      id: "share-procs",
+      label: `use main's ${w.worktree.owns.join(", ")}…`,
+      detail: "runs here now",
+      danger: true,
+      onClick: () => acts.shareProcs(w),
     });
   }
   if (canRename(w.worktree)) change.push({ id: "rename", label: "rename…", onClick: () => acts.rename(w) });

@@ -242,6 +242,16 @@ export class WorktreeProcs {
     await this.killProc(mp);
   }
 
+  /** Stop one proc and forget it: its port goes back and its tab closes, as if the run never
+   * named it. What a worktree hands back to main, or main hands to the spare. */
+  async drop(name: string): Promise<void> {
+    const mp = this.procs.get(name);
+    if (!mp) return;
+    await this.stop(name);
+    this.procs.delete(name);
+    releasePort(mp.state.port);
+  }
+
   restart(name: string) {
     const mp = this.procs.get(name);
     // asleep, every proc comes back together through wake(): one up on its own would be a copy

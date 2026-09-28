@@ -79,14 +79,14 @@ A project with a page and an API behind it:
   "setup": ["npm install"],
   "run": {
     "web": "vite --port $PORT --strictPort",
-    "api": "node --watch server.js"
+    "api": { "cmd": "node --watch server.js", "from": "trunk" }
   },
   "check": "npm test",
   "land": { "route": "pr" }
 }
 ```
 
-Each command gets its own `$PORT`, and the addresses of the others as `<NAME>_URL` (`API_URL` here), so the page can proxy to its API. The preview shows `web`.
+Each command gets its own `$PORT`, and the addresses of the others as `<NAME>_URL` (`API_URL` here), so the page can proxy to its API. The preview shows `web`. A command marked `from: "trunk"` runs once, in the main checkout, and every copy's page reaches that one until the copy's own changes touch it; then the copy starts its own. A copy that only changes the page costs one Vite.
 
 Copies start when you open them, and stop their servers when nobody has looked at them for a while; the chat and the agent keep going. `toyon stop` stops the daemon and everything it runs. `toyon doctor` says what is running and why a page cannot connect. Every setting, the port rules and the sleep delay are in [docs/settings.md](https://github.com/toyon-dev/toyon/blob/main/docs/settings.md).
 

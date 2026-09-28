@@ -94,8 +94,13 @@
 
   .setup-proc {
     display: flex;
+    flex-wrap: wrap;
     gap: 6px;
     align-items: center;
+  }
+  /* the shared choice reads under its command, the width of the row */
+  .setup-shared {
+    flex-basis: 100%;
   }
   .setup-name {
     width: 90px;

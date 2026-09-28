@@ -76,6 +76,11 @@ class FakeRuntime {
   isAsleep(id: string) {
     return this.procs.get(id)?.asleep ?? false;
   }
+  /** worktrees reaching main's shared tier rather than running it */
+  borrowing = new Set<string>();
+  borrows(id: string) {
+    return this.borrowing.has(id);
+  }
 }
 
 let cleanup = () => {};
@@ -297,6 +302,33 @@ describe("IdlePolicy and the spare", () => {
 
 describe("IdlePolicy under memory pressure", () => {
   const tight: MemorySignal = { tight: true, why: "memory pressure warn with 9% available" };
+
+  test("main is shown while a worktree reaching its shared tier is, wakes with it, and sleeps after it", () => {
+    const m = row("m", { kind: "main" });
+    const { policy, runtime, advance, woken, hub } = make({ worktrees: [m, row("a")] });
+    runtime.borrowing.add("a");
+    policy.view("tab", "a");
+    expect(woken).toEqual(["a", "m"]);
+    advance(S * 3);
+    expect(runtime.slept).toEqual([]);
+    policy.view("tab", null);
+    advance(S + 1);
+    // the borrower goes first; main is never put to sleep under an awake borrower
+    expect(runtime.slept).toEqual(["a"]);
+    // what the registry emits once a copy is asleep, which is when main's clock can arm
+    hub.emit("worktreesChanged");
+    advance(S + 1);
+    expect(runtime.slept).toEqual(["a", "m"]);
+  });
+
+  test("a worktree running the shared tier itself leaves main to its own clock", () => {
+    const m = row("m", { kind: "main" });
+    const { policy, runtime, advance, woken } = make({ worktrees: [m, row("a")] });
+    policy.view("tab", "a");
+    expect(woken).toEqual(["a"]);
+    advance(S + 1);
+    expect(runtime.slept).toEqual(["m"]);
+  });
 
   test("the least recently used idle worktree sleeps, one per check; viewed and held ones never", async () => {
     const { policy, runtime, hub, advance } = make({

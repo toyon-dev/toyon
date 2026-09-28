@@ -6,6 +6,7 @@
 
 import { z } from "zod";
 import { ATTACHMENTS_PER_MESSAGE, limitMessage, overLimit } from "../attachment.ts";
+import { runShared } from "../config.ts";
 import type { RemoteView } from "../daemon.ts";
 import type { ManagedView } from "../managed.ts";
 import type {
@@ -324,6 +325,20 @@ const runProfileSchema = z.object({
   env: z.record(z.string().max(100), z.string().max(2_000)).optional(),
   preview: procName.optional(),
 });
+/** a proc: the command alone, or the long form that marks it the trunk's to run for everyone */
+const runEntrySchema = z.union([
+  shellCommand,
+  z.object({
+    cmd: shellCommand,
+    from: z.literal("trunk").optional(),
+    paths: z.array(z.string().max(500)).max(50).optional(),
+  }),
+]);
+/** the proc a run's preview shows: the one named, else `web`, else the first */
+function previewOf(procs: string[], preferred: string | undefined): string | undefined {
+  if (preferred && procs.includes(preferred)) return preferred;
+  return procs.includes("web") ? "web" : procs[0];
+}
 
 export const landConfigSchema = z.object({
   route: z.enum(["merge", "push", "pr"]).optional(),
@@ -336,7 +351,7 @@ export const toyonConfigSchema = z
     $schema: z.string().max(2_000).optional(),
     setup: z.array(shellCommand).max(50).optional(),
     teardown: z.array(shellCommand).max(50).optional(),
-    run: z.record(declaredProcName, shellCommand),
+    run: z.record(declaredProcName, runEntrySchema),
     check: shellCommand.optional(),
     afterLand: z.array(shellCommand).max(50).optional(),
     land: landConfigSchema.optional(),
@@ -348,6 +363,23 @@ export const toyonConfigSchema = z
     // auto-merge is GitHub's; on a local route it would promise something nothing does
     if (c.land?.automerge !== undefined && c.land.route !== "pr")
       ctx.addIssue({ code: "custom", path: ["land", "automerge"], message: 'automerge needs "route": "pr"' });
+    // the preview is the one proc every worktree runs itself: a page served from main would show
+    // main's code in a worktree's frame
+    const shared = (name: string | undefined) => name !== undefined && runShared(c.run[name] ?? "");
+    const top = previewOf(Object.keys(c.run), c.preview);
+    if (shared(top)) {
+      ctx.addIssue({ code: "custom", path: ["run", top!], message: `the preview "${top}" cannot be from the trunk` });
+    }
+    for (const [name, p] of Object.entries(c.profiles ?? {})) {
+      const preview = previewOf(p.run, p.preview ?? c.preview);
+      if (shared(preview) && preview !== top) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["profiles", name, "preview"],
+          message: `the preview "${preview}" cannot be from the trunk`,
+        });
+      }
+    }
     // a profile may only name processes that exist, and the default must be a profile: caught here
     // so a typo is a refusal at confirm/reload time, not a worktree that silently runs nothing
     if (!c.profiles) {
@@ -436,6 +468,11 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   z.object({ t: z.literal("set-worktree-effort"), worktreeId: id, effort: z.string().max(100) }),
   /** run this worktree under another of the repo's profiles: its procs restart, the agent stays */
   z.object({ t: z.literal("set-worktree-profile"), worktreeId: id, profile: z.string().max(100) }),
+  /** run the named shared-tier procs here rather than reaching main's; every borrowed one when
+   * `names` is absent */
+  z.object({ t: z.literal("own-procs"), worktreeId: id, names: z.array(procName).max(50).optional() }),
+  /** stop the shared-tier procs this worktree runs itself and reach main's again */
+  z.object({ t: z.literal("share-procs"), worktreeId: id }),
   /** archive a worktree: its directory and branch go, its chat and work are kept, and the rail's
    * archived section offers to restore it */
   z.object({ t: z.literal("archive-worktree"), worktreeId: id }),

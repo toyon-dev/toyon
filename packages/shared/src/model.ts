@@ -23,6 +23,18 @@ export interface LandConfig {
   method?: "merge" | "squash" | "rebase";
 }
 
+/** a proc in the long form. `from: "trunk"` makes it the shared tier: the main checkout runs it
+ * once, on main's code, and every worktree reaches that one through a forwarder until its own
+ * changed files match `paths`, when it starts its own. `paths` are globs relative to the root;
+ * absent, they are inferred from the command, and `[]` means the proc never flips (a database
+ * container whose databases are per worktree). Main ignores `from`. */
+export interface RunProc {
+  cmd: string;
+  from?: "trunk";
+  paths?: string[];
+}
+export type RunEntry = string | RunProc;
+
 /** a repo's settings file (see config.ts for where it lives), shared and local merged */
 export interface ToyonConfig {
   /** the JSON schema an editor validates the file against; toyon itself ignores it */
@@ -34,8 +46,9 @@ export interface ToyonConfig {
    * removal goes on; a restored worktree runs `setup` again. */
   teardown?: string[];
   /** what keeps running: name -> foreground shell command, each a process with its own terminal
-   * tab; one serving HTTP must listen on $PORT */
-  run: Record<string, string>;
+   * tab; one serving HTTP must listen on $PORT. The object form marks a proc the trunk runs for
+   * every worktree. */
+  run: Record<string, RunEntry>;
   /** a command that must exit 0 before a worktree is offered to land: run in the worktree after
    * every finished turn, its output on the transcript */
   check?: string;
@@ -256,6 +269,9 @@ export interface WorktreeInfo {
   agent?: string;
   /** which of the repo's profiles this worktree runs (the repo's defaultProfile when absent) */
   profile?: string;
+  /** the shared-tier procs this worktree runs itself rather than reaching on main: set when its
+   * changes touched one, or when asked, and never shrinking on its own */
+  owns?: string[];
   /** what the agent may do here without asking; DEFAULT_PERMISSION_MODE when absent */
   mode?: PermissionMode;
   /** the model id the agent is asked to run here (one of its advertised choices); its own default
@@ -649,6 +665,8 @@ export interface WorktreeStatus {
   worktree?: WorktreeInfo;
   /** empty for a row toyon does not run */
   procs: ProcState[];
+  /** the shared-tier procs this row reaches on main rather than running; absent when none */
+  borrowed?: string[];
   /** "idle" for a row toyon does not run */
   agent: AgentStatus;
   /** the agent's terminal login is running here, or failed and still shows why: the login tab */

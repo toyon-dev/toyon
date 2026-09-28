@@ -150,6 +150,11 @@ export class FakeProcs {
     const s = this.states_.find((p) => p.name === name);
     if (s) s.status = "stopped";
   }
+  dropped: string[] = [];
+  async drop(name: string) {
+    this.dropped.push(name);
+    this.states_ = this.states_.filter((p) => p.name !== name);
+  }
   recentLogs(): LogLine[] {
     return [];
   }

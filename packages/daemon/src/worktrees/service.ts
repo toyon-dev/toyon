@@ -310,13 +310,14 @@ export class WorktreeService {
         const main = this.mainOf(repoId);
         if (text && main) this.d.drafts?.set(main.id, text);
       },
-      // main ran while it was the lead (the setup pane's preview, an empty project's); the spare
-      // is the trunk's running copy from here, so main's procs stop rather than run beside it
+      // main ran its page while it was the lead (the setup pane's preview, an empty project's);
+      // the spare is the trunk's running page from here, so main's page stops rather than run
+      // beside it, and main keeps only the shared tier the spare and every worktree reach on it
       ready: (repoId) => {
         const main = this.mainOf(repoId);
         if (!main) return;
         if (this.d.runtime.get(main.id)?.procs) {
-          fireAndForget(main.id, this.d.runtime.stopProcs(main.id), "main stops for the spare");
+          fireAndForget(main.id, this.d.runtime.stopPage(main.id), "main's page stops for the spare");
         }
         // words typed into main's box while it stood in (the spare warming, or one that failed
         // under someone's fingers) go with the row: main's box is out of sight from here
@@ -675,6 +676,31 @@ export class WorktreeService {
     // slow, and nothing above depends on it: outside the lock, like create()'s own setup
     this.launch(wt, repo, repo.path, { setupCommands: false });
     return wt;
+  }
+
+  /** Run the named shared-tier procs here rather than reaching main's; every borrowed one when
+   * `names` is absent. The record says so before anything starts, so a flip cut short comes back
+   * with the post-turn restart. */
+  async ownProcs(worktreeId: string, names?: string[]): Promise<void> {
+    const { wt, repo } = this.d.state.requireWorktreeWithRepo(worktreeId);
+    if (wt.kind === "main") throw new UserError("main runs the shared tier for everyone already");
+    const run = resolveRun(repo, wt);
+    const take = (names ?? run.borrowed).filter((n) => run.borrowed.includes(n));
+    if (take.length === 0) throw new UserError("nothing here runs on main");
+    wt.owns = [...(wt.owns ?? []), ...take];
+    this.d.state.save();
+    this.d.hub.emit("worktreesChanged");
+    await this.d.runtime.own(wt.id, take);
+  }
+
+  /** the shared-tier procs this worktree ran itself stop, and main's are reached again */
+  async shareProcs(worktreeId: string): Promise<void> {
+    const { wt } = this.d.state.requireWorktreeWithRepo(worktreeId);
+    if (!wt.owns?.length) throw new UserError("nothing here runs its own copy of the shared tier");
+    delete wt.owns;
+    this.d.state.save();
+    this.d.hub.emit("worktreesChanged");
+    await this.d.runtime.share(wt.id);
   }
 
   /** a profile name the repo actually has, or undefined for "the default"; a typo is a refusal */
@@ -2339,6 +2365,7 @@ export class WorktreeService {
             branch: wt.branch,
             worktree: wt,
             procs: rt?.procs?.states() ?? [],
+            borrowed: rt?.borrowed.size ? [...rt.borrowed] : undefined,
             agent: rt?.agent.status ?? "idle",
             login: !!rt?.login,
             ahead,

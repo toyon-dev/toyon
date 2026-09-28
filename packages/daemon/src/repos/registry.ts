@@ -388,9 +388,12 @@ export class RepoRegistry {
     // ones too: the person is sitting in front of this repo's setup pane. Main only when it is
     // running, since it runs only as the lead and the spare below takes over from it.
     this.warmed.add(repoId);
-    for (const wt of this.d.state.worktrees.filter(
+    // main first: what the others borrow from it is then the earliest to answer again
+    const rows = this.d.state.worktrees.filter(
       (w) => w.repoId === repoId && (w.kind !== "main" || this.d.runtime.get(w.id)?.procs),
-    )) {
+    );
+    rows.sort((a, b) => Number(b.kind === "main") - Number(a.kind === "main"));
+    for (const wt of rows) {
       fireAndForget(
         wt.id,
         this.d.runtime.stopProcs(wt.id).then(() => this.d.runtime.start(wt, repo)),

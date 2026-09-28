@@ -12,7 +12,7 @@ import { type MemorySignal, memoryTight, sampleCosts } from "./memory.ts";
 import type { RuntimeRegistry } from "./registry.ts";
 
 export interface IdleDeps {
-  runtime: Pick<RuntimeRegistry, "get" | "busy" | "sleep" | "awake" | "awaitPreview">;
+  runtime: Pick<RuntimeRegistry, "get" | "busy" | "sleep" | "awake" | "awaitPreview" | "borrows">;
   state: StateStore;
   hub: Hub;
   /** bring a worktree up: cold or asleep it comes back, up already nothing happens, unknown
@@ -116,6 +116,12 @@ export class IdlePolicy {
     const wt = this.record(id);
     this.stamp(id);
     this.d.wake(id);
+    // what it borrows runs on main, so main comes up with it, at once: the page's first request
+    // is what waits on main's api, and a forwarder holds it only so long
+    if (wt && this.d.runtime.borrows(id)) {
+      const main = this.mainOf(wt.repoId);
+      if (main) this.d.wake(main.id);
+    }
     // the repo's spare comes up behind it, so a first message never waits on one and the boot
     // the person is watching never shares its core with one they are not
     if (wt && wt.kind !== "spare") {
@@ -194,10 +200,28 @@ export class IdlePolicy {
   isViewed(id: string): boolean {
     if ((this.entries.get(id)?.viewers.size ?? 0) > 0) return true;
     const wt = this.d.state.worktree(id);
-    if (wt?.kind !== "spare") return false;
-    return this.d.state.worktrees.some(
-      (w) => w.repoId === wt.repoId && (this.entries.get(w.id)?.viewers.size ?? 0) > 0,
+    // a spare is shown when any sibling is; main is shown when any sibling reaching its shared
+    // tier is, since that sibling's page is main's api on screen
+    if (wt?.kind === "spare") {
+      return this.d.state.worktrees.some(
+        (w) => w.repoId === wt.repoId && (this.entries.get(w.id)?.viewers.size ?? 0) > 0,
+      );
+    }
+    if (wt?.kind === "main") {
+      return this.borrowersOf(wt.repoId).some((w) => (this.entries.get(w.id)?.viewers.size ?? 0) > 0);
+    }
+    return false;
+  }
+
+  /** the repo's worktrees that reach main's shared tier rather than running their own */
+  private borrowersOf(repoId: string) {
+    return this.d.state.worktrees.filter(
+      (w) => w.repoId === repoId && w.kind !== "main" && this.d.runtime.borrows(w.id),
     );
+  }
+
+  private mainOf(repoId: string) {
+    return this.d.state.worktrees.find((w) => w.repoId === repoId && w.kind === "main");
   }
 
   /** each awake worktree's resident memory at the last sample, KB */
@@ -246,16 +270,23 @@ export class IdlePolicy {
     return this.d.state.worktrees.find((w) => w.repoId === repoId && w.kind === "spare");
   }
 
-  /** activity on a worktree: its clock starts over, and so does its repo's spare's */
+  /** activity on a worktree: its clock starts over, and so do its repo's spare's and, when it
+   * reaches main's shared tier, main's */
   private stamp(id: string): void {
     this.entry(id).activeAt = this.now();
     this.reconsider(id);
     const wt = this.d.state.worktree(id);
     if (!wt || wt.kind === "spare") return;
     const spare = this.spareOf(wt.repoId);
-    if (!spare) return;
-    this.entry(spare.id).activeAt = this.now();
-    this.reconsider(spare.id);
+    if (spare) {
+      this.entry(spare.id).activeAt = this.now();
+      this.reconsider(spare.id);
+    }
+    const main = wt.kind !== "main" && this.d.runtime.borrows(id) ? this.mainOf(wt.repoId) : undefined;
+    if (main) {
+      this.entry(main.id).activeAt = this.now();
+      this.reconsider(main.id);
+    }
   }
 
   /** everything but the clock: nobody looking, nothing running or queued, procs up and settled */
@@ -269,6 +300,14 @@ export class IdlePolicy {
     // a spare rests with its repo: a sibling mid-turn may claim it any moment
     if (wt.kind === "spare") {
       return !this.d.state.worktrees.some((w) => w.repoId === wt.repoId && w.id !== id && this.busy(w.id));
+    }
+    // main's shared tier is what its awake borrowers' pages call: put to sleep under them, the
+    // next request wakes it, and the pressure check would pick it again
+    if (wt.kind === "main") {
+      return !this.borrowersOf(wt.repoId).some((w) => {
+        const p = this.d.runtime.get(w.id)?.procs;
+        return p && !p.asleep;
+      });
     }
     return true;
   }

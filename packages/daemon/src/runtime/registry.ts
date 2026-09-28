@@ -23,7 +23,7 @@ import { reclaimGroup } from "./kill.ts";
 import { bootId, type PsRow, psGroups } from "./memory.ts";
 import { type Orphan, orphansIn, strayAdapters } from "./orphans.ts";
 import { type PortLease, proxyPorts } from "./ports.ts";
-import { expandEnv, resolveRun } from "./profile.ts";
+import { EMPTY_RUN, expandEnv, type ResolvedRun, resolveRun } from "./profile.ts";
 import { type ProxyTarget, startProxy, type WorktreeProxy } from "./proxy.ts";
 import { type PtyHandle, type PtyOpts, PtyStream } from "./pty.ts";
 import { WorktreeProcs } from "./supervisor.ts";
@@ -38,6 +38,11 @@ export interface Runtime {
   /** one per non-preview proc, by name: the fixed address its siblings and the shell reach it
    * at. Bound before any proc spawns, kept through sleep, gone with the procs. */
   forwards: Map<string, ProcForwarder>;
+  /** the shared tier of the run in effect: what main runs for everyone */
+  shared: Set<string>;
+  /** the shared procs this worktree reaches on main rather than running; shrinks as it takes
+   * them over, and is empty on main */
+  borrowed: Set<string>;
   /** null until a pane first opens it; survives hiding the pane, dies with the worktree */
   shell: PtyHandle | null;
   /** the agent's terminal login while it runs, and after it fails so its tab can say why */
@@ -164,6 +169,8 @@ export interface ProxyWake {
  * refresh. */
 const PREVIEW_WAKE_MS = 8_000;
 const PREVIEW_POLL_MS = 100;
+/** how long a proc a worktree takes over from main may take to answer: the supervisor's own ceiling */
+const PROC_UP_MS = 60_000;
 
 function defaultAgent(
   wt: WorktreeInfo,
@@ -554,6 +561,8 @@ export class RuntimeRegistry {
       proxy: null,
       previewName: undefined,
       forwards: new Map(),
+      shared: new Set(),
+      borrowed: new Set(),
       shell: null,
       login: null,
     };
@@ -561,58 +570,40 @@ export class RuntimeRegistry {
     return rt;
   }
 
-  /** start the worktree's procs and proxy under the repo's config, narrowed by the worktree's
-   * profile; no-op if already running */
+  /** Start the worktree's procs and proxy under the repo's config, narrowed by the worktree's
+   * profile; no-op if already running. Main is two tiers: the shared one (`from: "trunk"`) it
+   * runs whatever stands in for it, once for every worktree of the repo, and its page and proxy
+   * only as the lead (setup unconfirmed, an empty project, a warm-up that failed), which keeps the
+   * setup pane and the first-run preview working. A main that ran the shared tier alone and leads
+   * now gets its page. A worktree runs everything but what it borrows. */
   async start(wt: WorktreeInfo, repo: RepoInfo): Promise<void> {
     if (!this.deps.state.worktree(wt.id)) return; // removed while setup was running
     const rt = this.ensureAgent(wt);
-    if (rt.procs) return;
-    // main's copy of the app is the spare's while there is one; main itself runs only as the lead
-    // (setup unconfirmed, an empty project, a warm-up that failed), which keeps the setup pane and
-    // the first-run preview working
-    if (wt.kind === "main" && this.deps.mainLeads && !this.deps.mainLeads(wt.repoId)) return;
+    // unconfirmed detection: no procs until the user confirms the setup pane
+    const run = repo.needsSetup ? EMPTY_RUN : resolveRun(repo, wt);
+    const leads = wt.kind !== "main" || !this.deps.mainLeads || this.deps.mainLeads(wt.repoId);
+    if (rt.procs) {
+      if (leads && wt.kind === "main" && !rt.proxy) await this.startPage(rt, wt, repo, run);
+      return;
+    }
+    if (!leads && run.shared.length === 0) return;
 
     // before anything starts, so running out of preview ports leaves nothing half up. The record
     // keeps the port it got, and the rows frame sent once the proxy is up carries it to the shell
     const live = this.deps.state.requireWorktree(wt.id);
-    const port = this.leasePort(live);
-    if (port === null) return;
+    let port: number | null = null;
+    if (leads) {
+      port = this.leasePort(live);
+      if (port === null) return;
+    }
 
     const procs = (this.deps.makeProcs ?? defaultProcs)(wt, this.deps);
     rt.procs = procs;
-    // unconfirmed detection: no procs until the user confirms the setup pane
-    const run = repo.needsSetup ? { procs: {}, env: {}, preview: undefined } : resolveRun(repo, wt);
-    const previewName = run.preview;
-    rt.previewName = previewName;
-
-    // a forwarder per non-preview proc, bound before anything spawns, so every proc's env names
-    // its siblings at addresses that hold for the worktree's life: a proc that restarts on another
-    // port, or sleeps and wakes, is reached at the same place, and nothing has to respawn for it
-    for (const name of Object.keys(run.procs)) {
-      if (name !== previewName) rt.forwards.set(name, this.openForward(wt.id, procs, name));
-    }
-    // start non-preview procs first, the preview last. Every proc gets the profile env; a
-    // `$API_URL` in it resolves against the siblings' addresses, and the api proc itself gets no
-    // address of its own, so it sees the reference unexpanded. The worktree's own variables ride
-    // along, and the profile env may reference them the same way it references a sibling's URL
-    const envFor = (name: string) => {
-      const urls = {
-        ...procUrlEnv(procs.states(), previewName, forwardPorts(rt.forwards, name)),
-        ...worktreeEnv(wt, repo),
-      };
-      return { ...urls, ...expandEnv(run.env, urls) };
-    };
-    this.starting.add(wt.id);
-    try {
-      for (const [name, cmd] of Object.entries(run.procs)) {
-        if (name !== previewName) await procs.start(name, cmd, envFor(name));
-      }
-      if (previewName && run.procs[previewName]) {
-        await procs.start(previewName, run.procs[previewName]!, envFor(previewName));
-      }
-    } finally {
-      this.starting.delete(wt.id);
-    }
+    rt.previewName = leads ? run.preview : undefined;
+    rt.shared = new Set(run.shared);
+    rt.borrowed = new Set(run.borrowed);
+    const spawn = leads ? Object.keys(run.procs).filter((n) => !rt.borrowed.has(n)) : run.shared;
+    await this.bringUp(rt, wt, repo, run, spawn);
 
     if (!this.deps.state.worktree(wt.id) || this.runtimes.get(wt.id) !== rt) {
       // removed while the procs were starting: don't leave them running
@@ -621,24 +612,129 @@ export class RuntimeRegistry {
       await procs.stopAll();
       return;
     }
+    if (port !== null) this.openProxy(rt, live, port);
+    this.deps.hub.emit("worktreesChanged");
+  }
+
+  /** main's page beside the shared tier it already runs: the spare that stood in for it is gone */
+  private async startPage(rt: Runtime, wt: WorktreeInfo, repo: RepoInfo, run: ResolvedRun): Promise<void> {
+    const procs = rt.procs!;
+    const live = this.deps.state.requireWorktree(wt.id);
+    const port = this.leasePort(live);
+    if (port === null) return;
+    rt.previewName = run.preview;
+    const up = new Set(procs.states().map((p) => p.name));
+    await this.bringUp(
+      rt,
+      wt,
+      repo,
+      run,
+      Object.keys(run.procs).filter((n) => !up.has(n)),
+    );
+    if (this.runtimes.get(wt.id) !== rt) return;
     this.openProxy(rt, live, port);
     this.deps.hub.emit("worktreesChanged");
   }
 
-  /** the forwarder in front of one proc: it dials the proc where it answers, waits while the proc
-   * is starting or the worktree is waking, and a connection while asleep is the wake */
-  private openForward(id: string, procs: WorktreeProcs, name: string): ProcForwarder {
-    const stateOf = () => procs.states().find((p) => p.name === name);
+  /** Spawn `spawn` of the run's procs, the preview last, with a forwarder in front of every
+   * non-preview proc the worktree runs or borrows, bound before anything spawns, so every proc's
+   * env names its siblings at addresses that hold for the worktree's life: a proc that restarts on
+   * another port, or sleeps and wakes, or runs on main until this worktree takes it over, is
+   * reached at the same place, and nothing has to respawn for it. */
+  private async bringUp(
+    rt: Runtime,
+    wt: WorktreeInfo,
+    repo: RepoInfo,
+    run: ResolvedRun,
+    spawn: string[],
+  ): Promise<void> {
+    const procs = rt.procs!;
+    const previewName = rt.previewName;
+    for (const name of [...spawn, ...rt.borrowed]) {
+      if (name !== previewName && !rt.forwards.has(name)) rt.forwards.set(name, this.openForward(wt, procs, name));
+    }
+    this.starting.add(wt.id);
+    try {
+      for (const name of spawn) {
+        if (name !== previewName) await procs.start(name, run.procs[name]!, this.envFor(rt, wt, repo, run, name));
+      }
+      if (previewName && spawn.includes(previewName)) {
+        await procs.start(previewName, run.procs[previewName]!, this.envFor(rt, wt, repo, run, previewName));
+      }
+    } finally {
+      this.starting.delete(wt.id);
+    }
+  }
+
+  /** Every proc gets the profile env; a `$API_URL` in it resolves against the siblings'
+   * addresses, and the api proc itself gets no address of its own, so it sees the reference
+   * unexpanded. The worktree's own variables ride along, and the profile env may reference them
+   * the same way it references a sibling's URL. */
+  private envFor(
+    rt: Runtime,
+    wt: WorktreeInfo,
+    repo: RepoInfo,
+    run: ResolvedRun,
+    name: string,
+  ): Record<string, string> {
+    const urls = {
+      ...procUrlEnv(rt.procs?.states() ?? [], rt.previewName, forwardPorts(rt.forwards, name)),
+      ...worktreeEnv(wt, repo),
+    };
+    return { ...urls, ...expandEnv(run.env, urls) };
+  }
+
+  /** the id of the repo's main checkout, whose shared tier a worktree borrows */
+  private mainIdOf(repoId: string): string | undefined {
+    return this.deps.state.worktrees.find((w) => w.repoId === repoId && w.kind === "main")?.id;
+  }
+
+  /** whether the worktree reaches any of the shared tier on main rather than running it */
+  borrows(id: string): boolean {
+    return (this.runtimes.get(id)?.borrowed.size ?? 0) > 0;
+  }
+
+  /** The forwarder in front of one proc: it dials the proc where it answers, waits while the proc
+   * is starting or the worktree is waking, and a connection while asleep is the wake. A borrowed
+   * proc is main's until the worktree runs one of its own, from which moment only its own counts,
+   * so a crash of its own reads as a crash and never as main's page. */
+  private openForward(wt: WorktreeInfo, procs: WorktreeProcs, name: string): ProcForwarder {
+    const own = () => procs.states().find((p) => p.name === name);
+    const trunk = () => {
+      if (!this.runtimes.get(wt.id)?.borrowed.has(name)) return undefined;
+      const mainId = this.mainIdOf(wt.repoId);
+      return mainId
+        ? this.runtimes
+            .get(mainId)
+            ?.procs?.states()
+            .find((p) => p.name === name)
+        : undefined;
+    };
+    const waiting = (st: ProcState | undefined) => st?.status === "starting" || st?.status === "asleep";
     return (this.deps.makeForward ?? startForward)({
       port: 0,
-      target: () => targetOf(stateOf()),
+      target: () => {
+        const o = own();
+        return o ? targetOf(o) : targetOf(trunk());
+      },
       coming: () => {
-        const st = stateOf();
-        return st ? st.status === "starting" || st.status === "asleep" : this.starting.has(id);
+        const o = own();
+        if (o) return waiting(o);
+        if (this.starting.has(wt.id)) return true;
+        if (!this.runtimes.get(wt.id)?.borrowed.has(name)) return false;
+        const t = trunk();
+        if (t) return waiting(t);
+        // main cold, or coming up: its shared tier is on its way once it is woken
+        const mainId = this.mainIdOf(wt.repoId);
+        return mainId !== undefined && !this.runtimes.get(mainId)?.procs?.states().length;
       },
       onConnect: () => {
-        this.deps.hub.emit("forwardConnect", id, name);
-        fireAndForget(id, this.wake(id), "wake on connect");
+        this.deps.hub.emit("forwardConnect", wt.id, name);
+        fireAndForget(wt.id, this.wake(wt.id), "wake on connect");
+        if (!own() && this.runtimes.get(wt.id)?.borrowed.has(name)) {
+          const mainId = this.mainIdOf(wt.repoId);
+          if (mainId) fireAndForget(mainId, this.wake(mainId), "wake the trunk for a borrower");
+        }
       },
     });
   }
@@ -646,6 +742,88 @@ export class RuntimeRegistry {
   private stopForwards(rt: Runtime) {
     for (const f of rt.forwards.values()) f.stop();
     rt.forwards.clear();
+  }
+
+  /** Main's page and proxy go and its shared tier stays: the spare is the trunk's running page
+   * from here, and what it and every worktree borrow is what main keeps running. With nothing
+   * shared, main is left as if never started. */
+  async stopPage(id: string): Promise<void> {
+    const rt = this.runtimes.get(id);
+    if (!rt?.procs) return;
+    rt.proxy?.stop();
+    rt.proxy = null;
+    this.returnLease(id);
+    rt.previewName = undefined;
+    for (const st of rt.procs.states()) {
+      if (rt.shared.has(st.name)) continue;
+      rt.forwards.get(st.name)?.stop();
+      rt.forwards.delete(st.name);
+      await rt.procs.drop(st.name);
+    }
+    if (rt.procs.states().length === 0) {
+      this.stopForwards(rt);
+      await rt.procs.stopAll();
+      rt.procs = null;
+    }
+    this.deps.hub.emit("worktreesChanged");
+  }
+
+  /** the named proc once it answers on its port, or null when nothing is coming */
+  async awaitProc(id: string, name: string, ms: number): Promise<ForwardTarget | null> {
+    const deadline = Date.now() + ms;
+    for (;;) {
+      const st = this.runtimes
+        .get(id)
+        ?.procs?.states()
+        .find((p) => p.name === name);
+      if (st?.status === "running") return targetOf(st);
+      if (st?.status !== "starting" || Date.now() >= deadline) return null;
+      await Bun.sleep(PREVIEW_POLL_MS);
+    }
+  }
+
+  /** The worktree runs the named shared procs itself from here: each starts beside its siblings
+   * with the env a first start gives, and its forwarder turns to it once it answers, cutting the
+   * pairs on main's so the page reconnects. `owns` on the record is the caller's to persist first,
+   * so a crashed flip recovers through the post-turn restart every proc has. */
+  async own(id: string, names: string[]): Promise<void> {
+    const rt = this.runtimes.get(id);
+    const wt = this.deps.state.worktree(id);
+    if (!rt?.procs || !wt) return;
+    const run = resolveRun(this.deps.state.requireRepo(wt.repoId), wt);
+    const started: string[] = [];
+    for (const name of names) {
+      if (!rt.borrowed.has(name) || !run.procs[name]) continue;
+      rt.borrowed.delete(name);
+      await rt.procs.start(
+        name,
+        run.procs[name]!,
+        this.envFor(rt, wt, this.deps.state.requireRepo(wt.repoId), run, name),
+      );
+      started.push(name);
+    }
+    if (started.length === 0) return;
+    log.info(id, `owns ${started.join(", ")}`);
+    this.deps.hub.emit("worktreesChanged");
+    for (const name of started) {
+      await this.awaitProc(id, name, PROC_UP_MS);
+      rt.forwards.get(name)?.retarget();
+    }
+  }
+
+  /** the shared procs the worktree ran itself go, and main's are reached again */
+  async share(id: string): Promise<void> {
+    const rt = this.runtimes.get(id);
+    const wt = this.deps.state.worktree(id);
+    if (!rt?.procs || !wt) return;
+    const run = resolveRun(this.deps.state.requireRepo(wt.repoId), wt);
+    for (const name of run.borrowed) {
+      if (rt.borrowed.has(name)) continue;
+      rt.borrowed.add(name);
+      await rt.procs.drop(name);
+      rt.forwards.get(name)?.retarget();
+    }
+    this.deps.hub.emit("worktreesChanged");
   }
 
   /** the proxy on the port just leased; the record keeps the port, and the rows frame sent once

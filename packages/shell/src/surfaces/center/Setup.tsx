@@ -12,12 +12,15 @@ import {
   type MergeMethod,
   PR_MERGERS,
   type RepoInfo,
+  runCmd,
+  runShared,
 } from "@toyon/shared";
 import { useEffect, useState } from "react";
 import { useSock, useStore, useStoreInstance } from "../../state/context.tsx";
 import { openSource } from "../../state/openSource.ts";
 import { trunkOf } from "../../state/store.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
+import { Check } from "../../ui/Check.tsx";
 import { ChipPicker } from "../../ui/ChipPicker.tsx";
 import { Field, TextArea } from "../../ui/Field.tsx";
 import { FormRow } from "../../ui/FormRow.tsx";
@@ -26,11 +29,13 @@ import { tip } from "../../ui/Tooltip.tsx";
 import { View } from "../../ui/View.tsx";
 import { setupFixPrompt } from "./fixPrompt.ts";
 
-type Proc = { id: number; name: string; cmd: string };
+/** `shared`: main runs it once for every worktree (`from: "trunk"` in the file); on by default
+ * for every guessed proc but the page, so the cheap thing is what a first confirm writes */
+type Proc = { id: number; name: string; cmd: string; shared: boolean };
 
 /** rows are added and removed while the form is open, so each carries an identity of its own */
 let nextProcId = 1;
-const proc = (name: string, cmd: string): Proc => ({ id: nextProcId++, name, cmd });
+const proc = (name: string, cmd: string, shared = false): Proc => ({ id: nextProcId++, name, cmd, shared });
 
 /** committed or kept local: the one setup answer that is about the file rather than the project.
  * Said as the outcome, since the file names alone (settings.json, settings.local.json) do not say
@@ -66,7 +71,10 @@ export function Setup({ repo, onClose }: { repo: RepoInfo; onClose?: () => void 
   // read once: the form remounts on a fresh guess (see Center), so mount is the guess
   const [guessed] = useState(() => Object.keys(repo.config.run).length > 0);
   const [procs, setProcs] = useState<Proc[]>(() => {
-    const detected = Object.entries(repo.config.run).map(([name, cmd]) => proc(name, cmd));
+    // a guess has no long form yet: every proc but the page starts shared, and a file says
+    const detected = Object.entries(repo.config.run).map(([name, entry], i) =>
+      proc(name, runCmd(entry), repo.needsSetup ? i > 0 : runShared(entry)),
+    );
     return detected.length > 0 ? detected : [proc("web", "")];
   });
   const [install, setInstall] = useState(() => (repo.config.setup ?? []).join("\n"));
@@ -127,7 +135,9 @@ export function Setup({ repo, onClose }: { repo: RepoInfo; onClose?: () => void 
       config: {
         ...edited(),
         run: Object.fromEntries(
-          procs.filter((p) => p.name.trim() && p.cmd.trim()).map((p) => [p.name.trim(), p.cmd.trim()]),
+          procs
+            .filter((p) => p.name.trim() && p.cmd.trim())
+            .map((p, i) => [p.name.trim(), p.shared && i > 0 ? { cmd: p.cmd.trim(), from: "trunk" } : p.cmd.trim()]),
         ),
       },
       kind,
@@ -167,6 +177,16 @@ export function Setup({ repo, onClose }: { repo: RepoInfo; onClose?: () => void 
         onChange={(e) => edit(i, { cmd: e.target.value })}
       />
       {multi && <IconButton icon="close" label="Remove" onClick={() => setProcs(procs.filter((_, j) => j !== i))} />}
+      {multi && i > 0 && (
+        <Check
+          className="setup-shared"
+          checked={p.shared}
+          onChange={(e) => edit(i, { shared: e.target.checked })}
+          tip="Main runs it once for every worktree; a worktree whose changes touch it runs its own"
+        >
+          shared from main
+        </Check>
+      )}
     </div>
   );
 

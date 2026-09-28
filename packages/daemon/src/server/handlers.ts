@@ -254,6 +254,14 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     s.worktrees.setProfile(msg.worktreeId, msg.profile);
   },
 
+  async "own-procs"(msg, _ctx, s) {
+    await s.worktrees.ownProcs(msg.worktreeId, msg.names);
+  },
+
+  async "share-procs"(msg, _ctx, s) {
+    await s.worktrees.shareProcs(msg.worktreeId);
+  },
+
   "set-worktree-mode"(msg, _ctx, s) {
     s.worktrees.setMode(msg.worktreeId, msg.mode);
   },

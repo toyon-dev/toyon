@@ -57,13 +57,15 @@ function make(
     viewed?: (id: string) => boolean;
     shown?: (id: string) => boolean;
     mainLeads?: (repoId: string) => boolean;
+    /** the repo on the record, for what the registry resolves on its own (a take-over reads it) */
+    repo?: RepoInfo;
   } = {},
 ) {
   const t = tmpRepo();
   cleanup = t.cleanup;
   // copies: the store hands out live records, and a port leased in one test must not reach the next
   const worktrees = (opts.worktrees ?? [wt, spare]).map((w) => ({ ...w }));
-  const state = new StateStore(t.paths, { repos: [repo], worktrees, sessions: {} });
+  const state = new StateStore(t.paths, { repos: [opts.repo ?? repo], worktrees, sessions: {} });
   // the ledger write pending lands before the temp home goes
   cleanup = () => {
     state.flushGroups();
@@ -270,6 +272,108 @@ describe("RuntimeRegistry", () => {
       expect(forwards.length).toBe(2);
       await registry.stop(wt.id);
       expect(forwards[1]!.stopped).toBe(true);
+    });
+  });
+
+  describe("the shared tier", () => {
+    const tiered: RepoInfo = {
+      ...repo,
+      config: {
+        run: { web: "true", api: { cmd: "true", from: "trunk" }, db: { cmd: "true", from: "trunk", paths: [] } },
+      },
+    };
+    const main: WorktreeInfo = { ...wt, id: "m", kind: "main", branch: "main", path: "/nowhere/m", title: "m" };
+    const names = (p: { started: Array<{ name: string }> } | undefined) => p?.started.map((s) => s.name);
+
+    test("main behind a spare runs the shared tier alone: no page, no proxy, no port", async () => {
+      const { registry, procs, proxies, forwards } = make({ worktrees: [main, wt], mainLeads: () => false });
+      await registry.start(main, tiered);
+      expect(names(procs.get(main.id))).toEqual(["api", "db"]);
+      expect(proxies.get(main.id)).toBeUndefined();
+      expect(registry.get(main.id)?.previewName).toBeUndefined();
+      expect([...registry.get(main.id)!.forwards.keys()]).toEqual(["api", "db"]);
+      expect(forwards.length).toBe(2);
+      // nothing shared: as before, main behind a spare runs nothing
+      const { registry: r2, procs: p2 } = make({ worktrees: [main], mainLeads: () => false });
+      await r2.start(main, repo);
+      expect(p2.get(main.id)).toBeUndefined();
+    });
+
+    test("a worktree spawns only its page and reaches the shared tier on main through its forwarders", async () => {
+      const { registry, procs, forwards } = make({ worktrees: [main, wt], mainLeads: () => false });
+      await registry.start(main, tiered);
+      await registry.start(wt, tiered);
+      expect(names(procs.get(wt.id))).toEqual(["web"]);
+      expect(registry.borrows(wt.id)).toBe(true);
+      const own = registry.get(wt.id)!.forwards;
+      expect(procs.get(wt.id)!.started[0]?.env.API_URL).toBe(`http://127.0.0.1:${own.get("api")!.port}`);
+      const mainApi = procs
+        .get(main.id)!
+        .states()
+        .find((p) => p.name === "api")!;
+      const f = forwards.find((x) => x.port === own.get("api")!.port)!;
+      expect(f.target()).toEqual({ host: "127.0.0.1", port: mainApi.port });
+      // main asleep: the forwarder waits, and a connection is main's wake as well as the worktree's
+      await registry.sleep(main.id, "test");
+      expect(f.target()).toBeNull();
+      expect(f.coming()).toBe(true);
+      f.connect();
+      await Bun.sleep(0);
+      expect(registry.isAsleep(main.id)).toBe(false);
+    });
+
+    test("own() runs a shared proc here and turns its forwarder to it; share() hands it back", async () => {
+      const { registry, procs, forwards, state } = make({
+        worktrees: [main, wt],
+        mainLeads: () => false,
+        repo: tiered,
+      });
+      await registry.start(main, tiered);
+      await registry.start(wt, tiered);
+      const f = forwards.find((x) => x.port === registry.get(wt.id)!.forwards.get("api")!.port)!;
+      state.requireWorktree(wt.id).owns = ["api"];
+      await registry.own(wt.id, ["api"]);
+      expect(names(procs.get(wt.id))).toEqual(["web", "api"]);
+      const ownApi = procs
+        .get(wt.id)!
+        .states()
+        .find((p) => p.name === "api")!;
+      expect(f.target()).toEqual({ host: "127.0.0.1", port: ownApi.port });
+      expect(f.retargets).toBe(1);
+      expect(registry.borrows(wt.id)).toBe(true); // db is still main's
+      delete state.requireWorktree(wt.id).owns;
+      await registry.share(wt.id);
+      expect(procs.get(wt.id)!.dropped).toEqual(["api"]);
+      expect(f.retargets).toBe(2);
+      const mainApi = procs
+        .get(main.id)!
+        .states()
+        .find((p) => p.name === "api")!;
+      expect(f.target()).toEqual({ host: "127.0.0.1", port: mainApi.port });
+    });
+
+    test("stopPage() drops main's page and proxy and keeps its shared tier; leading again brings the page back", async () => {
+      let leads = true;
+      const { registry, procs, proxies } = make({ worktrees: [main], mainLeads: () => leads });
+      await registry.start(main, tiered);
+      expect(names(procs.get(main.id))).toEqual(["api", "db", "web"]);
+      const first = proxies.get(main.id)!;
+      leads = false;
+      await registry.stopPage(main.id);
+      expect(first.stopped).toBe(true);
+      expect(procs.get(main.id)!.dropped).toEqual(["web"]);
+      expect(
+        procs
+          .get(main.id)!
+          .states()
+          .map((p) => p.name),
+      ).toEqual(["api", "db"]);
+      expect(registry.get(main.id)?.proxy).toBeNull();
+      leads = true;
+      await registry.start(main, tiered);
+      expect(names(procs.get(main.id))).toEqual(["api", "db", "web", "web"]);
+      expect(proxies.get(main.id)).not.toBe(first);
+      expect(registry.get(main.id)?.previewName).toBe("web");
     });
   });
 

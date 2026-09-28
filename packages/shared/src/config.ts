@@ -3,6 +3,8 @@
 // Each place holds a shared file (committed if the team wants it) and a local one beside it that
 // overrides it for one person and is kept out of git by name.
 
+import type { RunEntry } from "./model.ts";
+
 export const CONFIG_FILES = {
   folder: { shared: ".toyon/settings.json", local: ".toyon/settings.local.json" },
   root: { shared: "toyon.json", local: "toyon.local.json" },
@@ -10,6 +12,21 @@ export const CONFIG_FILES = {
 
 /** the folder a repo's settings live in when they are not at the root */
 export const CONFIG_DIR = ".toyon";
+
+/** the command of a `run` entry, whichever form it takes */
+export function runCmd(entry: RunEntry): string {
+  return typeof entry === "string" ? entry : entry.cmd;
+}
+
+/** whether a `run` entry is the shared tier's: the trunk runs it for every worktree */
+export function runShared(entry: RunEntry): boolean {
+  return typeof entry !== "string" && entry.from === "trunk";
+}
+
+/** the paths a shared proc flips on, as written; undefined means infer them from the command */
+export function runPaths(entry: RunEntry): string[] | undefined {
+  return typeof entry === "string" ? undefined : entry.paths;
+}
 
 /** a local file: one person's, never committed */
 export function isLocalConfigFile(rel: string): boolean {

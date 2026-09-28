@@ -25,7 +25,7 @@ The first open guesses a file from `package.json` and asks you to confirm it. Ot
 
 - **`setup`**: commands run once, in order, when a copy is created.
 - **`teardown`**: commands run once, in order, when a copy is removed or archived, before its directory goes. A restored copy runs `setup` again.
-- **`run`**: the commands that keep running, by name. Each one is a process with its own terminal tab.
+- **`run`**: the commands that keep running, by name. Each one is a process with its own terminal tab. A value is the command, or `{ "cmd": ..., "from": "trunk", "paths": [...] }` for one the main checkout runs for every copy; see "Sharing the backend".
 - **`preview`**: which of them the preview shows. `web` when there is one, otherwise the first.
 - **`check`**: a command that must exit 0 before a copy is offered to land. It runs in the copy after every finished turn, and its output shows in the chat.
 - **`land`**: how work lands.
@@ -43,6 +43,24 @@ Anything Toyon runs should stay in the foreground, listen on `$PORT`, and reload
 - Each command also gets the addresses of the others that are already up: `<NAME>_URL` and `VITE_<NAME>_URL`, plus `API_URL` for one named `api`. A profile's `env` can use them (`"BACKEND": "$API_URL"`).
 - A tool that takes its port from a flag gets the flag from the first guess: `--port $PORT --strictPort` for Vite, `--port $PORT` for Astro.
 - If a server still comes up on some other port, the preview follows it there and the process log says which flag to add. If it never listens at all, the preview says so instead of waiting.
+
+## Sharing the backend
+
+Most changes touch the page and not the API behind it. A `run` entry with `"from": "trunk"` is the shared tier: the main checkout runs it once, on main's code, and every copy's page reaches that one at its usual `<NAME>_URL`. A copy whose own changes touch that command's files starts its own and the address quietly points there instead; a copy that only changes the page never pays for an API of its own. The page itself is never shared.
+
+```json
+{
+  "run": {
+    "web": "vite --port $PORT --strictPort",
+    "api": { "cmd": "node --watch server.js", "from": "trunk", "paths": ["server/**"] },
+    "db": { "cmd": "docker compose up db", "from": "trunk", "paths": [] }
+  }
+}
+```
+
+`paths` are globs from the root that make a copy run its own. Left out, they are read off the command (`server.js`, a `cd` into a folder) and anything outside the page's folder counts; `[]` means the copy never runs its own, which suits a database container whose databases are per copy (below). Lockfiles, `.env` files, compose files and migration folders count for every shared command. A copy's row menu also offers the switch by hand, either way.
+
+Main's shared tier is awake while any copy using it is, and sleeps with them. The setup pane marks every command but the page as shared on the first confirm.
 
 ## Keeping copies apart
 

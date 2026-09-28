@@ -127,6 +127,22 @@ describe("parseClientMsg", () => {
     if (!r.ok) expect(r.reason).toMatch(/profiles\.a\.run: "nope" is not in run/);
   });
 
+  test("a run entry may take the long form, and the preview is never the trunk's", () => {
+    const cfg = (config: unknown) => parseClientMsg({ t: "confirm-config", repoId: "r", config, kind: "local" });
+    expect(cfg({ run: { web: "w", api: { cmd: "a", from: "trunk", paths: ["server/**"] } } }).ok).toBe(true);
+    expect(cfg({ run: { web: "w", api: { cmd: "a" } } }).ok).toBe(true);
+    const bad = [
+      { run: { web: { cmd: "w", from: "trunk" }, api: "a" } },
+      { run: { api: { cmd: "a", from: "trunk" } } },
+      { run: { web: "w", api: { cmd: "a", from: "trunk" } }, preview: "api" },
+      { run: { web: "w", api: { cmd: "a", from: "trunk" } }, profiles: { p: { run: ["api"] } }, defaultProfile: "p" },
+      { run: { web: "w", api: { cmd: "a", from: "main" } } },
+    ];
+    for (const c of bad) expect(cfg(c).ok, JSON.stringify(c)).toBe(false);
+    const r = cfg(bad[0]);
+    if (!r.ok) expect(r.reason).toMatch(/cannot be from the trunk/);
+  });
+
   test("a paste must have text, and there are caps on size and on each kind's count", () => {
     const chat = (attachments: unknown) => parseClientMsg({ t: "chat", worktreeId: "a", text: "hi", attachments });
     const paste = (text: string) => ({ kind: "paste", text });

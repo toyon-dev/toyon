@@ -302,6 +302,7 @@ export class WorktreeService {
       runtime: d.runtime,
       paths: d.paths,
       setupAndStart: (wt, repo) => this.setupAndStart(wt, repo),
+      teardown: (wt, repo) => this.teardown(wt, repo),
       discard: async (id) => {
         await this.discardWorktree(id);
       },

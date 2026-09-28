@@ -1,4 +1,4 @@
-import { closeSync, type Dirent, existsSync, openSync, readdirSync, readFileSync, readSync } from "node:fs";
+import { closeSync, type Dirent, existsSync, openSync, readdirSync, readFileSync, readSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { CONFIG_FILES, issueReason, landConfigSchema, type ToyonConfig, toyonConfigSchema } from "@toyon/shared";
 import { applyEdits, type JSONPath, modify, type ParseError, parse, printParseErrorCode } from "jsonc-parser";
@@ -330,6 +330,61 @@ function head(path: string): string {
     // a directory by the file's name, or one this user cannot read: it says nothing either way
     return "";
   }
+}
+
+/** what the page proc draws from, beside whatever its command names: a change here is the page's */
+const PAGE_PATHS = ["src/**", "public/**", "index.html", "vite.config.*", "next.config.*", "astro.config.*"];
+
+/** The paths a command runs on, read off the command and the tree: a `cd` into a folder, any
+ * token that is a file or folder of the repo (`server/index.js`, `./start.sh`), the first segment
+ * of a Python module path (`uvicorn app.main:app` names `app/`), and a shell script's own
+ * contents one level down. A folder is its whole subtree. What toyon cannot place is left out,
+ * and a shared proc with nothing here flips on anything outside the page. */
+export function inferPaths(cmd: string, repoPath: string, depth = 1): string[] {
+  const out = new Set<string>();
+  const add = (rel: string) => {
+    const clean = rel.replace(/\/+$/, "");
+    if (!clean) return;
+    let dir = false;
+    try {
+      dir = statSync(join(repoPath, clean)).isDirectory();
+    } catch {
+      // gone between the check and the stat: nothing to add
+      return;
+    }
+    out.add(dir ? `${clean}/**` : clean);
+  };
+  const tokens = cmd
+    .split(/[\s;&|]+/)
+    .map((t) => t.replace(/^["']|["']$/g, ""))
+    .filter(Boolean);
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i]!;
+    if (t === "cd") {
+      const dir = tokens[i + 1];
+      if (dir && !dir.startsWith("-") && existsSync(join(repoPath, dir))) add(dir);
+      continue;
+    }
+    if (t.startsWith("-") || t.startsWith("$")) continue;
+    const mod = /^([A-Za-z_]\w*)(?:\.\w+)*:\w+$/.exec(t);
+    if (mod?.[1] && existsSync(join(repoPath, mod[1]))) {
+      add(mod[1]);
+      continue;
+    }
+    const rel = t.replace(/^\.\//, "");
+    if (rel.startsWith("/") || rel.startsWith("..") || rel.includes("=")) continue;
+    if (!existsSync(join(repoPath, rel))) continue;
+    add(rel);
+    if (depth > 0 && rel.endsWith(".sh")) {
+      for (const p of inferPaths(head(join(repoPath, rel)), repoPath, depth - 1)) out.add(p);
+    }
+  }
+  return [...out];
+}
+
+/** the page's paths: what its command names, and the folders a front end lives in */
+export function previewPaths(cmd: string, repoPath: string): string[] {
+  return [...new Set([...inferPaths(cmd, repoPath), ...PAGE_PATHS])];
 }
 
 /** Tools that take their port from a flag and never read $PORT, with the flag each one wants. A

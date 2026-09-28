@@ -55,6 +55,7 @@ import { ThemeStore } from "./themes/store.ts";
 import { latestVersion, runInstall } from "./update/infra.ts";
 import { readVersion } from "./update/installed.ts";
 import { UpdateService } from "./update/service.ts";
+import { BackendShare } from "./worktrees/backend.ts";
 import { ChatSearch } from "./worktrees/chats.ts";
 import { LandingService } from "./worktrees/landing.ts";
 import { PrService } from "./worktrees/prs.ts";
@@ -167,6 +168,8 @@ const worktrees = new WorktreeService({
   drafts,
   watch: (id, command, run) => exec.watch(id, command, run),
 });
+// a worktree whose changes touch a proc it reaches on main takes that proc over
+new BackendShare({ state, hub, runtime, own: (id, names) => worktrees.ownProcs(id, names) });
 // before the server: its agentStatus listener has to run ahead of the one that broadcasts the rows
 const turns = new TurnService({
   state,

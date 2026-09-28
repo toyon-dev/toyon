@@ -21,12 +21,15 @@ import type { Hub } from "../core/hub.ts";
 import { fireAndForget, log } from "../core/log.ts";
 import type { Paths } from "../core/paths.ts";
 import type { StateStore } from "../core/state.ts";
+import { commitOf } from "../git/archive.ts";
 import { git, gitOrThrow, lockfileHash } from "../git/exec.ts";
 import { withRepoLock } from "../git/lock.ts";
+import { filesBetween } from "../git/status.ts";
 import { STAGGER_MS } from "../runtime/idle.ts";
 import { allocateProxyPort, releasePort } from "../runtime/ports.ts";
 import { type RuntimeRegistry, worktreeEnv } from "../runtime/registry.ts";
 import { runSetup } from "../runtime/setup.ts";
+import { migrationMatch, rootMatch } from "./backend.ts";
 import { freeSlot } from "./naming.ts";
 
 /** the warm-up under way for a repo: the git worktree, then the whole of it. `cut` ends the wait
@@ -44,6 +47,8 @@ export interface SparePoolDeps {
   paths: Paths;
   /** clone deps, run setup, start the runtime (WorktreeService owns it) */
   setupAndStart: (wt: WorktreeInfo, repo: RepoInfo) => Promise<void>;
+  /** the repo's teardown commands, before setup runs again on a spare main has moved under */
+  teardown?: (wt: WorktreeInfo, repo: RepoInfo) => Promise<void>;
   /** discard a worktree, spares allowed (WorktreeService owns it) */
   discard: (worktreeId: string) => Promise<void>;
   /** a warm-up failed under someone's fingers: whatever was typed into the spare's box goes to the
@@ -227,11 +232,17 @@ export class SparePool {
     if (wt?.phase !== "ready" || this.refreshing.has(repoId)) return;
     const repo = this.d.state.requireRepo(repoId);
     const run = (async () => {
+      const before = await commitOf(wt.path, "HEAD");
       await withRepoLock(repo.path, () => git(wt.path, "reset", "--hard", baseOf(repo)));
+      const after = await commitOf(wt.path, "HEAD");
       const h = lockfileHash(wt.path);
-      if (h !== wt.lockfile) {
+      // deps, env, containers or a migration landed on main: what setup made for this copy (a
+      // database cloned from main's) is behind, so it is torn down and made again
+      const moved = before && after && before !== after ? await filesBetween(wt.path, before, after) : [];
+      if (h !== wt.lockfile || moved.some((f) => rootMatch(f.path) || migrationMatch(f.path))) {
         wt.lockfile = h;
         this.d.state.save();
+        await this.d.teardown?.(wt, repo);
         for (const cmd of repo.config.setup ?? []) {
           // nobody is watching a spare, so its output goes to the daemon log rather than the hub
           const tail: string[] = [];

@@ -58,7 +58,7 @@ Most changes touch the page and not the API behind it. A `run` entry with `"from
 }
 ```
 
-`paths` are globs from the root that make a copy run its own. Left out, they are read off the command (`server.js`, a `cd` into a folder) and anything outside the page's folder counts; `[]` means the copy never runs its own, which suits a database container whose databases are per copy (below). Lockfiles, `.env` files, compose files and migration folders count for every shared command. A copy's row menu also offers the switch by hand, either way.
+`paths` are globs from the root that make a copy run its own. Left out, they are read off the command (`server.js`, a `cd` into a folder), and a command that names nothing flips on anything outside the page's folders. `[]` means the copy never runs its own, which suits a database container whose databases are per copy (below). Lockfiles, `.env` files, compose files and migration folders count for every command that can flip. A copy's row menu also offers the switch by hand, either way.
 
 Main's shared tier is awake while any copy using it is, and sleeps with them. The setup pane marks every command but the page as shared on the first confirm.
 

@@ -164,6 +164,16 @@ export function Composer({
   const text = useLocalField(boxId, "draft");
   const attachments = useLocalField(boxId, "attachments");
   const notice = useLocalField(boxId, "notice");
+  // a proc the worktree took over from main, said once under the box when it happens: the page's
+  // api is this branch's from here, which whoever is reading the preview would not otherwise learn
+  const owns = active?.worktree.owns?.join(", ") ?? "";
+  const ownsSeen = useRef({ id, owns });
+  useOnChange([id, owns], () => {
+    const seen = ownsSeen.current;
+    ownsSeen.current = { id, owns };
+    if (seen.id !== id || seen.owns === owns || !owns || !boxId || archived) return;
+    dispatch({ a: "notice", id: boxId, text: `Running its own ${owns} here now: this branch changed it.` });
+  });
   // up and down in a blank box walk back through what was sent from it (recall.ts): this is where
   // they have got to, and the draft holds that entry until it is touched
   const mark = useLocalField(boxId, "mark");

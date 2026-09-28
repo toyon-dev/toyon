@@ -1,14 +1,16 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { configFileKind, configSibling } from "@toyon/shared";
 import {
   configBody,
   configTarget,
   configText,
   detectConfig,
+  inferPaths,
   mergePatch,
+  previewPaths,
   procCommand,
   readConfigFile,
 } from "./config.ts";
@@ -23,13 +25,42 @@ function repo(files: Record<string, string>): string {
   const dir = mkdtempSync(join(tmpdir(), "toyon-cfg-"));
   dirs.push(dir);
   for (const [name, body] of Object.entries(files)) {
-    if (name.endsWith("/")) mkdirSync(join(dir, name));
-    else writeFileSync(join(dir, name), body);
+    if (name.endsWith("/")) mkdirSync(join(dir, name), { recursive: true });
+    else {
+      mkdirSync(dirname(join(dir, name)), { recursive: true });
+      writeFileSync(join(dir, name), body);
+    }
   }
   return dir;
 }
 const pkg = (scripts: Record<string, string>, extra: Record<string, unknown> = {}) =>
   JSON.stringify({ name: "x", scripts, ...extra });
+
+describe("inferPaths", () => {
+  test("reads folders and files off the command, a cd, a Python module, and a script one level down", () => {
+    const dir = repo({
+      "server/index.js": "",
+      "app/main.py": "",
+      "start.sh": "cd api && bun run dev\n",
+      "api/package.json": "{}",
+      "worker.js": "",
+    });
+    expect(inferPaths("node --watch server/index.js", dir)).toEqual(["server/index.js"]);
+    expect(inferPaths("cd server && node index.js", dir)).toEqual(["server/**"]);
+    expect(inferPaths("uvicorn app.main:app --port $PORT", dir)).toEqual(["app/**"]);
+    expect(inferPaths("./start.sh", dir)).toEqual(["start.sh", "api/**"]);
+    expect(inferPaths("node worker.js && node server/index.js", dir)).toEqual(["worker.js", "server/index.js"]);
+    // what is not in the tree says nothing: a binary, a flag, a variable
+    expect(inferPaths("vite --port $PORT --strictPort", dir)).toEqual([]);
+    expect(inferPaths("cd ../elsewhere && make", dir)).toEqual([]);
+  });
+
+  test("the page's paths add the folders a front end lives in", () => {
+    const dir = repo({ "web/index.html": "" });
+    expect(previewPaths("cd web && vite", dir)).toEqual(["web/**", ...previewPaths("vite", dir)]);
+    expect(previewPaths("vite", dir)).toContain("src/**");
+  });
+});
 
 describe("detectConfig", () => {
   test("dev script → web, dev:api → api, runner from the lockfile", () => {

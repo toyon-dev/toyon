@@ -11,10 +11,12 @@ import {
   type AgentStatus,
   baseOf,
   canLand,
+  describeDuration,
   keepsCopiesApart,
   type Landing,
   type LastTurn,
   type RepoInfo,
+  timeoutFor,
   type WorktreeInfo,
 } from "@toyon/shared";
 import { answerPrompt, type LandVerdict, landPrompt } from "../agent/landing.ts";
@@ -24,9 +26,10 @@ import { UserError } from "../core/errors.ts";
 import type { Hub } from "../core/hub.ts";
 import { fireAndForget, log } from "../core/log.ts";
 import type { StateStore } from "../core/state.ts";
-import type { ExecResult } from "../exec/service.ts";
+import type { ExecOpts, ExecResult } from "../exec/service.ts";
 import { git } from "../git/exec.ts";
 import { aheadBehind, committedFiles, statusFiles, treeFingerprint } from "../git/status.ts";
+import type { RunService } from "../runs/service.ts";
 import { migrationMatch } from "./backend.ts";
 import type { WorktreeService } from "./service.ts";
 
@@ -34,10 +37,12 @@ export interface LandingServiceDeps {
   state: StateStore;
   hub: Hub;
   worktrees: Pick<WorktreeService, "setLanding">;
+  /** the wait on the check, as the row carries it: how long, what it printed last, whether it was killed */
+  runs: Pick<RunService, "begin" | "drop">;
   transcript: (worktreeId: string) => readonly TranscriptEntry[];
   /** run the repo's check in the worktree and report how it ended: its rows on the transcript,
-   * or only when it fails with `quiet` */
-  check: (worktreeId: string, command: string, opts?: { quiet?: boolean }) => Promise<ExecResult>;
+   * or only when it fails with `quiet`; killed at `timeoutMs` */
+  check: (worktreeId: string, command: string, opts?: ExecOpts) => Promise<ExecResult>;
   /** the verdict and message from the worktree's own agent, or null; without it the check decides */
   judge?: (wt: WorktreeInfo, prompt: string) => Promise<LandVerdict | null>;
   /** the sentence alone, for a finished turn with nothing to land; without it the line is the facts */
@@ -87,6 +92,9 @@ export class LandingService {
 
   private clear(worktreeId: string) {
     this.judging.delete(worktreeId);
+    // a check still running is about a tree that is changing: killed, since nothing will read its
+    // answer, and a suite that takes twenty minutes is not left to run for nobody
+    this.d.runs.drop(worktreeId, "check");
     this.d.worktrees.setLanding(worktreeId, undefined);
   }
 
@@ -207,10 +215,24 @@ export class LandingService {
     let checkTail: string | undefined;
     const command = repo.config.check?.trim();
     if (command) {
-      const r = await this.d.check(worktreeId, command, { quiet: opts.quiet });
+      const ceiling = timeoutFor(repo.config, "check");
+      // a check from an earlier run of the verdict is still going: its answer is moot now
+      this.d.runs.drop(worktreeId, "check");
+      const run = this.d.runs.begin(worktreeId, "check", { timeoutMs: ceiling });
+      let r: ExecResult;
+      try {
+        r = await this.d.check(worktreeId, command, { quiet: opts.quiet, timeoutMs: ceiling, onSpawn: run.spawned });
+      } catch (e) {
+        this.d.runs.drop(worktreeId, "check");
+        throw e;
+      }
+      run.finish(r.exit);
       if (!live()) return;
       check = r.exit === 0 ? "pass" : "fail";
-      if (check === "fail") checkTail = tail(r.text) || `exit ${r.exit}`;
+      if (r.exit === "timeout") {
+        // the first line of the tail is what the placeholder says, so the ceiling goes first
+        checkTail = [`gave up after ${describeDuration(ceiling)}`, tail(r.text)].filter(Boolean).join("\n");
+      } else if (check === "fail") checkTail = tail(r.text) || `exit ${r.exit}`;
     }
 
     let verdict: LandVerdict | null = null;

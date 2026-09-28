@@ -195,8 +195,51 @@ export async function runLive(
 }
 
 /** what a watched command left: the two pipes apart, as `run` gives them, and together in
- * arrival order, which is as close to what a terminal showed as two pipes allow */
-export type Watched = GitResult & { text: string };
+ * arrival order, which is as close to what a terminal showed as two pipes allow. A command
+ * killed at its ceiling (`exit: "timeout"`) carries the ceiling, so the message can say it. */
+export type Watched = GitResult & { text: string; ceilingMs?: number };
+
+/** a trace2 event as git writes it to the fd it was given: the two fields the hook watch reads */
+interface Trace2Event {
+  event?: string;
+  sid?: string;
+  child_class?: string;
+  child_id?: number;
+  hook_name?: string;
+}
+
+/** Which hook git is in, read off its own trace: git says when it starts a child and what class
+ * it is, and a hook's name comes with it. `sid` nests with a slash for a git run by a hook (a
+ * `git diff` inside pre-commit), whose own children are not this command's hooks. `onHook` gets
+ * the name as the hook starts and `undefined` as it ends; anything on the pipe that is not a
+ * line of JSON is skipped, since the pipe is git's to write and a hook's stray write to fd 3
+ * is not an error here. */
+function watchHooks(stream: Readable | null, onHook: (hook: string | undefined) => void): void {
+  if (!stream) return;
+  const dec = new TextDecoder();
+  let buf = "";
+  const open = new Map<number, string>();
+  stream.on("data", (b: Buffer) => {
+    buf += dec.decode(b, { stream: true });
+    const lines = buf.split("\n");
+    buf = lines.pop() ?? "";
+    for (const line of lines) {
+      let ev: Trace2Event;
+      try {
+        ev = JSON.parse(line);
+      } catch {
+        continue; // not one of git's lines
+      }
+      if (typeof ev.sid !== "string" || ev.sid.includes("/") || typeof ev.child_id !== "number") continue;
+      if (ev.event === "child_start" && ev.child_class === "hook" && ev.hook_name) {
+        open.set(ev.child_id, ev.hook_name);
+        onHook(ev.hook_name);
+      } else if (ev.event === "child_exit" && open.delete(ev.child_id)) {
+        onHook(open.size > 0 ? [...open.values()].pop() : undefined);
+      }
+    }
+  });
+}
 
 /**
  * Like `run`, for a command whose output someone may be reading while it runs: a git step that
@@ -210,6 +253,10 @@ export type Watched = GitResult & { text: string };
  * A node spawn, detached: git runs a hook as a child in its own group, and a signal to git alone
  * left the hook's test suite running, holding the pipes and the row open until it was done on its
  * own. Killing the group ends the suite with git.
+ *
+ * `onSpawn` gets the child's pid, which is its group, and the kill a stop presses. `onHook` asks
+ * for git's own trace on a fourth pipe (GIT_TRACE2_EVENT names the fd), which is how the wait on
+ * a commit can say which hook it is in: nothing on stdout or stderr says so.
  */
 export function runWatched(
   cmd: string,
@@ -220,6 +267,8 @@ export function runWatched(
     onText?: (text: string) => void;
     timeoutMs?: number;
     signal?: AbortSignal;
+    onSpawn?: (pid: number, kill: () => void) => void;
+    onHook?: (hook: string | undefined) => void;
   } = {},
 ): Promise<Watched> {
   const started = Date.now();
@@ -245,9 +294,9 @@ export function runWatched(
     try {
       child = spawn(cmd, args, {
         cwd,
-        stdio: ["ignore", "pipe", "pipe"],
+        stdio: opts.onHook ? ["ignore", "pipe", "pipe", "pipe"] : ["ignore", "pipe", "pipe"],
         detached: true,
-        env: { ...process.env, ...SPAWN_ENV, ...opts.env },
+        env: { ...process.env, ...SPAWN_ENV, ...opts.env, ...(opts.onHook ? { GIT_TRACE2_EVENT: "3" } : {}) },
       });
     } catch (e) {
       failed(e instanceof Error ? e.message : String(e));
@@ -258,6 +307,8 @@ export function runWatched(
     const kill = () => {
       if (child.pid) fireAndForget("git", killGroup(child.pid, exited), `stopping ${cmd} ${args[0] ?? ""}`);
     };
+    if (child.pid) opts.onSpawn?.(child.pid, kill);
+    if (opts.onHook) watchHooks(child.stdio[3] as Readable | null, opts.onHook);
     if (opts.timeoutMs) {
       timer = setTimeout(() => {
         timedOut = true;
@@ -286,7 +337,14 @@ export function runWatched(
     // close, not exit: the pipes stay open until the last child of the group lets go of them
     child.on("close", (code, signal) => {
       const exit = timedOut ? "timeout" : (signal ?? code);
-      settle({ ok: code === 0 && !timedOut, out: out.join("").trim(), err: err.join("").trim(), exit, text });
+      settle({
+        ok: code === 0 && !timedOut,
+        out: out.join("").trim(),
+        err: err.join("").trim(),
+        exit,
+        text,
+        ...(timedOut && opts.timeoutMs ? { ceilingMs: opts.timeoutMs } : {}),
+      });
     });
   });
 }

@@ -9,7 +9,9 @@ import {
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { Button } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
+import { useSecondsSince } from "../../ui/hooks.ts";
 import { View } from "../../ui/View.tsx";
+import { RUN_STATUS_TIP, runLine, runOf, runStopTip, runTicking } from "../runs.ts";
 import { procFixPrompt } from "./fixPrompt.ts";
 
 /** the line before any proc exists. A spare says how far along it is, since the plus is looked at
@@ -34,6 +36,13 @@ export function Boot({ worktree, log }: { worktree: OwnedWorktree; log: LogLine[
   const restart = (p: ProcState) => sock?.send({ t: "term-restart", worktreeId: worktree.id, stream: p.name });
   const bad = procs.some((p) => p.status === "crashed" || p.status === "unreachable");
   const clientId = useStore((s) => s.clientId);
+  // the setup command going now, as the wait on it: which one of the list, how long against its
+  // ceiling, and whether the daemon is still watching it. A terminated one has said what it gave
+  // up after in the tail below, and the line goes back to what comes next.
+  const setup = runOf(worktree, "setup");
+  const setupRun = setup && setup.status !== "terminated" ? setup : null;
+  const setupSecs = useSecondsSince(runTicking(setupRun ?? undefined) ? setupRun?.since : undefined);
+  const setupStoppable = setupRun && (setupRun.status === "running" || setupRun.status === "detached");
   // the diagnosis is specific enough to hand over: the agent gets it, the command, the tail and
   // the rule, and the daemon restarts the proc when its turn ends. The lead has no task yet, so its
   // fix is the worktree its box would start: the provisional row itself, made the task, or a
@@ -48,7 +57,15 @@ export function Boot({ worktree, log }: { worktree: OwnedWorktree; log: LogLine[
   return (
     <View wide>
       {procs.length === 0 ? (
-        <div className="status-line">{startingText(worktree.worktree.phase)}</div>
+        <div className="status-line">
+          {setupRun ? (
+            <span className="live-text" data-tip={RUN_STATUS_TIP[setupRun.status]}>
+              {runLine("setup", setupRun, setupSecs)}
+            </span>
+          ) : (
+            startingText(worktree.worktree.phase)
+          )}
+        </div>
       ) : (
         <ul className="boot-procs">
           {procs.map((p) => (
@@ -67,6 +84,17 @@ export function Boot({ worktree, log }: { worktree: OwnedWorktree; log: LogLine[
             </li>
           ))}
         </ul>
+      )}
+      {setupStoppable && (
+        <div className="status-actions">
+          <Button
+            variant="outline"
+            data-tip={runStopTip("setup")}
+            onClick={() => sock?.send({ t: "run-stop", worktreeId: worktree.id, kind: "setup" })}
+          >
+            stop setup
+          </Button>
+        </div>
       )}
       {bad && (
         <div className="status-actions">

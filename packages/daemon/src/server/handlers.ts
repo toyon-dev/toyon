@@ -24,6 +24,7 @@ import type { AfterLand } from "../repos/afterLand.ts";
 import { browsePath, describeFolder } from "../repos/browse.ts";
 import type { RepoRegistry } from "../repos/registry.ts";
 import type { RouteService } from "../routes/service.ts";
+import type { RunService } from "../runs/service.ts";
 import type { IdlePolicy } from "../runtime/idle.ts";
 import { DEFAULT_AGENT_ID, type RuntimeRegistry } from "../runtime/registry.ts";
 import { daylightNow } from "../themes/daylight.ts";
@@ -53,6 +54,8 @@ export interface Services {
   idle: IdlePolicy;
   /** one-off commands from the composer's `!` mode */
   exec: ExecService;
+  /** the setup, check and commit runs out on each worktree, and the stop on them */
+  runs: Pick<RunService, "stop">;
   /** the ref palette: branches and PRs a worktree could be opened on */
   refs: RefSearch;
   /** the chats palette: what a project's chats say, live worktrees and archived ones */
@@ -697,6 +700,11 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     requireRun(s, msg.worktreeId);
     // the kill waits out a grace before it escalates; the row says when the command is gone
     fireAndForget(msg.worktreeId, s.exec.stop(msg.worktreeId, msg.toolId), "exec stop");
+  },
+
+  "run-stop"(msg, _ctx, s) {
+    requireRun(s, msg.worktreeId);
+    if (!s.runs.stop(msg.worktreeId, msg.kind)) throw new UserError(`no ${msg.kind} is running here`);
   },
 
   async "search-refs"(msg, ctx, s) {

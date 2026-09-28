@@ -8,6 +8,7 @@ import { z } from "zod";
 import { ATTACHMENTS_PER_MESSAGE, limitMessage, overLimit } from "../attachment.ts";
 import { runShared } from "../config.ts";
 import type { RemoteView } from "../daemon.ts";
+import { MAX_DURATION_MS, MIN_DURATION_MS, parseDuration } from "../duration.ts";
 import type { ManagedView } from "../managed.ts";
 import type {
   AgentConfigInfo,
@@ -346,6 +347,23 @@ export const landConfigSchema = z.object({
   method: z.enum(["merge", "squash", "rebase"]).optional(),
 });
 
+/** a ceiling as the file writes it: one number and one unit, inside the bounds a guard makes sense at */
+const duration = z
+  .string()
+  .max(20)
+  .superRefine((text, ctx) => {
+    const ms = parseDuration(text);
+    if (ms === null)
+      return ctx.addIssue({ code: "custom", message: `"${text}" is not a duration like 30m, 90s or 1h` });
+    if (ms < MIN_DURATION_MS) ctx.addIssue({ code: "custom", message: `"${text}" is under 10s` });
+    else if (ms > MAX_DURATION_MS) ctx.addIssue({ code: "custom", message: `"${text}" is over 24h` });
+  });
+export const timeoutsSchema = z.object({
+  setup: duration.optional(),
+  check: duration.optional(),
+  commit: duration.optional(),
+});
+
 export const toyonConfigSchema = z
   .object({
     $schema: z.string().max(2_000).optional(),
@@ -355,6 +373,7 @@ export const toyonConfigSchema = z
     check: shellCommand.optional(),
     afterLand: z.array(shellCommand).max(50).optional(),
     land: landConfigSchema.optional(),
+    timeouts: timeoutsSchema.optional(),
     preview: procName.optional(),
     profiles: z.record(procName, runProfileSchema).optional(),
     defaultProfile: procName.optional(),
@@ -683,6 +702,9 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   /** kill the command running under this row: its whole process group, so what it started goes
    * with it. Two commands at once each have a stop of their own. */
   z.object({ t: z.literal("exec-stop"), worktreeId: id, toolId: id }),
+  /** kill the run of that kind out on the worktree (its setup command, its check, its commit with
+   * the hooks in it); the run's own end reports it as terminated */
+  z.object({ t: z.literal("run-stop"), worktreeId: id, kind: z.enum(["setup", "check", "commit"]) }),
   /** the ref palette: local branches, remote branches and open PRs matching the query; replies
    * `refs`. An empty query lists the work that is open. */
   z.object({ t: z.literal("search-refs"), repoId: id, query: z.string().max(200) }),

@@ -46,6 +46,7 @@ import { viewPr } from "./git/gh.ts";
 import { AfterLand } from "./repos/afterLand.ts";
 import { RepoRegistry } from "./repos/registry.ts";
 import { RouteService } from "./routes/service.ts";
+import { RunService } from "./runs/service.ts";
 import { BridgeScript } from "./runtime/bridge-script.ts";
 import { IdlePolicy } from "./runtime/idle.ts";
 import { pinProxyPorts } from "./runtime/ports.ts";
@@ -157,6 +158,9 @@ const runtime = new RuntimeRegistry({
   mainLeads: (repoId): boolean => worktrees.spare.current(repoId) === null,
 });
 const drafts = new DraftStore({ file: paths.draftsFile, hub });
+// the setup, check and commit runs as every row carries them: one book for the three services
+// that write it
+const runs = new RunService({ state, hub });
 // typed, since the two services name each other
 const exec = new ExecService({ state, runtime, shipping: (id): Shipping | undefined => worktrees.shippingOf(id) });
 const worktrees = new WorktreeService({
@@ -167,6 +171,7 @@ const worktrees = new WorktreeService({
   agents,
   drafts,
   watch: (id, command, run) => exec.watch(id, command, run),
+  runs,
 });
 // a worktree whose changes touch a proc it reaches on main takes that proc over
 new BackendShare({ state, hub, runtime, own: (id, names) => worktrees.ownProcs(id, names) });
@@ -186,6 +191,7 @@ const landing = new LandingService({
   state,
   hub,
   worktrees,
+  runs,
   transcript: (id) => runtime.agentFor(id)?.transcript() ?? [],
   check: (id, command, opts) => exec.exec(id, command, CHECK_TOOL, opts),
   judge: makeLander(runtime, agents, state),
@@ -279,6 +285,7 @@ const { branded, stop: stopServer } = startServer({
     runtime,
     idle,
     exec,
+    runs,
     refs,
     chats,
     drafts,
@@ -328,6 +335,9 @@ await repos.boot();
 drafts.prune((id) => !!state.worktree(id) || worktrees.hasArchived(id));
 // what was being looked at before the restart comes back on its own
 idle.boot();
+// what the last daemon left running is still on the rows, detached, until it ends; before the
+// verdicts, whose checks start again from the top
+runs.boot();
 // a verdict the last daemon went down in the middle of runs again
 landing.boot();
 // the adapters are fetched on first boot (and after a version bump), not shipped: the default
@@ -392,6 +402,7 @@ async function shutdown(signal: string, opts: { respawn?: boolean } = {}) {
   idle.shutdown();
   // before the agents close: a verdict mid-question stays pending for the next daemon
   landing.stop();
+  runs.stopWatching();
   repos.stopWatchers();
   prs.stop();
   sweep.stop();

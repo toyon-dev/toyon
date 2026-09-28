@@ -448,11 +448,11 @@
     gap: 8px;
     /* the count ticks with the status; `font` on the hint resets the variant */
     font-variant-numeric: tabular-nums;
-    & > .btn {
+    & > .btn,
+    & > .btn-icon {
       margin-left: auto;
     }
   }
-
   /* ---- the status letter ----
      git's own letter for a file (M, A, D, R, ?) on a changed-file row and a ⌘P row alike: yellow
      for a change, and green or red where the file itself arrived or left. The width is each list's

@@ -43,6 +43,50 @@ export interface SharedServices {
   envUrl?: { name: string; file: string };
 }
 
+/** The ceilings on what toyon runs for a worktree, as durations ("30m", "90s", "1h"). A run
+ * still going at its ceiling is killed, so a hook that waits on a prompt nobody can answer
+ * cannot hold a press forever; a suite that takes twenty minutes needs a ceiling above that. */
+export interface Timeouts {
+  /** each `setup` command on its own */
+  setup?: string;
+  /** the `check` command */
+  check?: string;
+  /** a commit, hooks included: the pre-commit suite is what runs long here */
+  commit?: string;
+}
+
+/** the ceiling every kind of run has when the settings name none: past this a command left
+ * running is nearly always stuck, and the suites that legitimately run longer say so in `timeouts` */
+export const DEFAULT_TIMEOUT_MS = 10 * 60_000;
+
+/** the runs a worktree can have out that a person waits on and a ceiling guards */
+export type RunKind = "setup" | "check" | "commit";
+
+/** Where a run stands. `queued`: asked for, not started (the one before it is still being
+ * stopped, or the agent it reports through is not up yet). `running`: under the daemon's watch.
+ * `detached`: a daemon restarted under it and found it still alive; it goes on unwatched until it
+ * ends or is stopped. `terminated`: killed, at the ceiling or by a press, and `why` says which. */
+export type RunStatus = "queued" | "running" | "detached" | "terminated";
+
+/** One run of setup, the check or a commit on a worktree: what the wait on it can say. One per
+ * kind at a time; a new one of the same kind takes the old one's place. */
+export interface RunState {
+  kind: RunKind;
+  status: RunStatus;
+  /** when it was asked for; the elapsed time counts from here */
+  since: number;
+  /** the ceiling it runs under */
+  timeoutMs: number;
+  /** what it is on: the setup command and its place in the list, or the hook a commit is in.
+   * What it prints is not here: the transcript row streams that, and a frame rebuilds every row
+   * in every tab. */
+  stage?: string;
+  /** its process group, so a daemon that comes back under it can ask whether it is still there */
+  pid?: number;
+  /** why it ended, once terminated */
+  why?: string;
+}
+
 /** a repo's settings file (see config.ts for where it lives), shared and local merged */
 export interface ToyonConfig {
   /** the JSON schema an editor validates the file against; toyon itself ignores it */
@@ -65,6 +109,8 @@ export interface ToyonConfig {
    * hand. Nothing waits on them, and a failure stops the rest. */
   afterLand?: string[];
   land?: LandConfig;
+  /** how long each kind of run may take before it is killed; DEFAULT_TIMEOUT_MS each when unset */
+  timeouts?: Timeouts;
   /** proc that the preview iframe should show (defaults to "web", else first proc) */
   preview?: string;
   /** named subsets of procs a worktree can run (full stack vs frontend-against-staging) */
@@ -298,6 +344,10 @@ export interface WorktreeInfo {
   /** whether the work here is ready to land, and the message it would land with. Written after a
    * finished turn once the check has run; gone when the tree changes or a new turn starts. */
   landing?: Landing;
+  /** the setup, check or commit out here, while one is, and a terminated one until the next of its
+   * kind. Written at each change of status and stage, and kept across a restart so the next
+   * daemon can say what it found still running. */
+  runs?: RunState[];
   /** when the person last sent something here, a chat message or a `!` command. The rail sorts on
    * it, so a row rises because someone worked in it and never because its agent did. Absent on a
    * row nothing has been sent to since the field landed. */

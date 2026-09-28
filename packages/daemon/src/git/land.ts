@@ -3,7 +3,15 @@
 // rather than merged with it, so a branch reads as if it started from today's main and every
 // method after that is one command; a branch someone adopted keeps its history and is merged with.
 
-import { baseIsRemote, baseOf, type MergeMethod, type PrState, type RepoInfo, type TrunkStatus } from "@toyon/shared";
+import {
+  baseIsRemote,
+  baseOf,
+  describeDuration,
+  type MergeMethod,
+  type PrState,
+  type RepoInfo,
+  type TrunkStatus,
+} from "@toyon/shared";
 import { GIT, git, NO_PROMPT, run, runWatched, type Watched } from "./exec.ts";
 import { gh, ghMethod, prNumberOf } from "./gh.ts";
 import { aheadBehind, behindUpstream, statusFiles } from "./status.ts";
@@ -19,8 +27,17 @@ export interface ShipResult {
 }
 
 /** no step of a landing runs longer than this: a hook that waits on something nobody can answer
- * would otherwise hold the press, and the repo lock with it, forever */
+ * would otherwise hold the press, and the repo lock with it, forever. A commit runs under the
+ * settings' own ceiling instead (`timeouts.commit`), since its pre-commit hook is where a suite
+ * that takes twenty minutes legitimately runs. */
 export const STEP_TIMEOUT_MS = 10 * 60_000;
+
+/** how one step is run beyond the command: its ceiling, and what the wait on it may report */
+export interface StepOpts {
+  timeoutMs?: number;
+  onSpawn?: (pid: number, kill: () => void) => void;
+  onHook?: (hook: string | undefined) => void;
+}
 
 /** what a step left, and whether what it printed is on the chat already, so the message can
  * point there rather than quote it */
@@ -41,7 +58,9 @@ export const stepRun = (
   args: string[],
   onText?: (text: string) => void,
   signal?: AbortSignal,
-): Promise<Watched> => runWatched(GIT, args, cwd, { env: NO_PROMPT, onText, timeoutMs: STEP_TIMEOUT_MS, signal });
+  opts: StepOpts = {},
+): Promise<Watched> =>
+  runWatched(GIT, args, cwd, { env: NO_PROMPT, onText, signal, ...opts, timeoutMs: opts.timeoutMs ?? STEP_TIMEOUT_MS });
 
 export const UNWATCHED: LandWatch = {
   step() {},
@@ -52,8 +71,8 @@ export const UNWATCHED: LandWatch = {
  * transcript took them. A step killed at the ceiling says so, since its output ends mid-run. */
 export function refused(what: string, r: StepResult, n = 200): string {
   if (r.exit === "timeout") {
-    const minutes = Math.round(STEP_TIMEOUT_MS / 60_000);
-    return `${what} gave up after ${minutes} minutes${r.shown ? "; what it printed is on the chat" : ""}`;
+    const after = describeDuration(r.ceilingMs ?? STEP_TIMEOUT_MS);
+    return `${what} gave up after ${after}${r.shown ? "; what it printed is on the chat" : ""}`;
   }
   return `${what}: ${r.shown ? "what git and its hooks printed is on the chat" : r.err.slice(0, n)}`;
 }

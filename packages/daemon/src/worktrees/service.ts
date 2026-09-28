@@ -17,6 +17,7 @@ import {
   canLand,
   canRename,
   DEFAULT_MERGE_METHOD,
+  describeDuration,
   type GitFileStatus,
   hasOwnBranch,
   isMain,
@@ -37,6 +38,7 @@ import {
   shipNoun,
   siblingsOf,
   type TrunkStatus,
+  timeoutFor,
   type WorktreeInfo,
   type WorktreeStatus,
 } from "@toyon/shared";
@@ -80,6 +82,7 @@ import {
   pushBranch,
   pushLanding,
   type ShipResult,
+  STEP_TIMEOUT_MS,
   squashMessage,
   stepRun,
   takeMainIn,
@@ -98,6 +101,7 @@ import {
 } from "../git/status.ts";
 import { listWorktrees } from "../git/worktrees.ts";
 import { isInside } from "../repos/create.ts";
+import { RunService } from "../runs/service.ts";
 import { allocateProxyPort, releasePort } from "../runtime/ports.ts";
 import { resolveRun } from "../runtime/profile.ts";
 import { DEFAULT_AGENT_ID, type RuntimeRegistry, worktreeEnv } from "../runtime/registry.ts";
@@ -247,6 +251,9 @@ export interface WorktreeServiceDeps {
     command: string,
     run: (onText: (text: string) => void, signal: AbortSignal) => Promise<T>,
   ) => Promise<T & { shown: boolean }>;
+  /** the setup and commit runs as the rows carry them; the daemon shares one with the landing
+   * service and the handlers, a test may leave it to the service */
+  runs?: RunService;
 }
 
 /** the row's command as a person would have typed it: a plain word as is, anything else quoted.
@@ -256,6 +263,8 @@ const commandLine = (args: string[]) =>
 
 export class WorktreeService {
   readonly spare: SparePool;
+  /** the setup and commit runs out on each worktree: how long, what they are on, whether killed */
+  readonly runs: RunService;
   /** the landing ops out, by the row or trunk each runs on: what every frame carries as the
    * row's `shipping`, and what holds a chat sent meanwhile. In memory only: an op does not
    * outlive the daemon, and what git was left mid-way is git's to report on the next press. */
@@ -286,6 +295,7 @@ export class WorktreeService {
   private usage = new Map<string, WorktreeStatus["usage"] | null>();
 
   constructor(private d: WorktreeServiceDeps) {
+    this.runs = d.runs ?? new RunService({ state: d.state, hub: d.hub });
     this.archive = new WorktreeArchive(d.paths.archiveDir);
     this.trunk = new Trunk({
       state: d.state,
@@ -896,6 +906,7 @@ export class WorktreeService {
         wt.path,
         (line) => this.d.hub.emit("log", wt.id, "setup", line),
         worktreeEnv(wt, repo),
+        { timeoutMs: timeoutFor(repo.config, "setup") },
       );
       if (code !== 0) log.warn(wt.id, `teardown failed (exit ${code}): ${cmd}`);
     }
@@ -1382,15 +1393,24 @@ export class WorktreeService {
       else log.warn(wt.id, `could not copy ${f}`, r.err);
     }
     // `bun install` and friends can take a minute: async, so every preview and agent stream keeps
-    // flowing while a new worktree warms up
-    for (const cmd of setupCommands ? (repo.config.setup ?? []) : []) {
+    // flowing while a new worktree warms up. Each command runs under the settings' setup ceiling
+    // and stands on the row while it does, so the wait for it says how long and on what.
+    const cmds = setupCommands ? (repo.config.setup ?? []) : [];
+    const ceiling = timeoutFor(repo.config, "setup");
+    for (const [i, cmd] of cmds.entries()) {
+      const stage = cmds.length > 1 ? `${cmd} (${i + 1} of ${cmds.length})` : cmd;
+      const run = this.runs.begin(wt.id, "setup", { timeoutMs: ceiling, stage });
       const code = await runSetup(
         cmd,
         wt.path,
         (line, retract) => this.d.hub.emit("log", wt.id, "setup", line, retract),
         worktreeEnv(wt, repo),
+        { timeoutMs: ceiling, onSpawn: run.spawned },
       );
-      if (code !== 0) this.d.hub.emit("log", wt.id, "setup", `setup failed (exit ${code}): ${cmd}`);
+      run.finish(code);
+      if (code === "timeout") {
+        this.d.hub.emit("log", wt.id, "setup", `setup gave up after ${describeDuration(ceiling)}: ${cmd}`);
+      } else if (code !== 0) this.d.hub.emit("log", wt.id, "setup", `setup failed (exit ${code}): ${cmd}`);
     }
     await this.d.runtime.start(wt, repo);
   }
@@ -1494,22 +1514,41 @@ export class WorktreeService {
    * the press says what it is on instead of spinning, and each git command runs through
    * ExecService.watch, so a hook's minutes read live on the chat and its refusal reaches the agent
    * with the next message. A command in the main checkout is named with its `-C`, since the row
-   * sits on a worktree's chat. A worktree with no transcript yet runs the steps plain. */
+   * sits on a worktree's chat. A worktree with no transcript yet runs the steps plain.
+   *
+   * A commit is the step with a suite in it (pre-commit), so it runs under the settings' commit
+   * ceiling rather than the step's, and stands on the row as a run while it does: which hook git
+   * is in, from git's own trace, and the last line the hook printed. */
   private landWatch(wt: WorktreeInfo): LandWatch {
+    const repo = this.d.state.requireRepo(wt.repoId);
     return {
       step: (name) => this.step(wt.id, name),
       git: async (cwd, args) => {
         const where = cwd === wt.path ? "git" : `git -C ${cwd}`;
-        const run = (onText: (text: string) => void, signal?: AbortSignal) => stepRun(cwd, args, onText, signal);
-        if (!this.d.watch) return run(() => {});
-        try {
-          return await this.d.watch(wt.id, `${where} ${commandLine(args)}`, run);
-        } catch (e) {
-          // no transcript to write to (the agent is not up yet): the step runs plain, and the line
-          // under the box carries git's first words
-          log.warn(wt.id, `landing step runs unwatched: ${e instanceof Error ? e.message : e}`);
-          return run(() => {});
-        }
+        const commit = args[0] === "commit";
+        const ceiling = commit ? timeoutFor(repo.config, "commit") : STEP_TIMEOUT_MS;
+        const handle = commit ? this.runs.begin(wt.id, "commit", { timeoutMs: ceiling }) : null;
+        const run = (onText: (text: string) => void, signal?: AbortSignal) =>
+          stepRun(cwd, args, onText, signal, {
+            timeoutMs: ceiling,
+            ...(handle
+              ? { onSpawn: handle.spawned, onHook: (hook) => handle.stage(hook ? `${hook} hook` : undefined) }
+              : {}),
+          });
+        const watched = async () => {
+          if (!this.d.watch) return run(() => {});
+          try {
+            return await this.d.watch(wt.id, `${where} ${commandLine(args)}`, run);
+          } catch (e) {
+            // no transcript to write to (the agent is not up yet): the step runs plain, and the line
+            // under the box carries git's first words
+            log.warn(wt.id, `landing step runs unwatched: ${e instanceof Error ? e.message : e}`);
+            return run(() => {});
+          }
+        };
+        const r = await watched();
+        handle?.finish(r.exit);
+        return r;
       },
     };
   }

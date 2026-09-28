@@ -3,7 +3,8 @@
 // Each place holds a shared file (committed if the team wants it) and a local one beside it that
 // overrides it for one person and is kept out of git by name.
 
-import type { RunEntry, ToyonConfig } from "./model.ts";
+import { parseDuration } from "./duration.ts";
+import { DEFAULT_TIMEOUT_MS, type RunEntry, type RunKind, type ToyonConfig } from "./model.ts";
 
 export const CONFIG_FILES = {
   folder: { shared: ".toyon/settings.json", local: ".toyon/settings.local.json" },
@@ -12,6 +13,14 @@ export const CONFIG_FILES = {
 
 /** the folder a repo's settings live in when they are not at the root */
 export const CONFIG_DIR = ".toyon";
+
+/** the ceiling a kind of run has under these settings, in milliseconds: what `timeouts` says, else
+ * the default. The schema has refused a duration that does not parse, so one that reaches here
+ * and still does not is treated as unset rather than as zero. */
+export function timeoutFor(config: Pick<ToyonConfig, "timeouts">, kind: RunKind): number {
+  const text = config.timeouts?.[kind];
+  return (text ? parseDuration(text) : null) ?? DEFAULT_TIMEOUT_MS;
+}
 
 /** the command of a `run` entry, whichever form it takes */
 export function runCmd(entry: RunEntry): string {

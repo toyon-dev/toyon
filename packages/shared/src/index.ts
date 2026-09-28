@@ -9,6 +9,7 @@ export * from "./chords.ts";
 export * from "./config.ts";
 export * from "./daemon.ts";
 export * from "./diff.ts";
+export * from "./duration.ts";
 export * from "./land.ts";
 export * from "./launcher.ts";
 export * from "./managed.ts";

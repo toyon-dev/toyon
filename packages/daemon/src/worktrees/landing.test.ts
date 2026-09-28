@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { AgentEvent, Landing, LastTurn, RepoInfo, WorktreeInfo } from "@toyon/shared";
+import type { AgentEvent, Landing, LastTurn, RepoInfo, Timeouts, WorktreeInfo } from "@toyon/shared";
 import { sh, tmpRepo } from "../../test/helpers/tmp-repo.ts";
 import type { LandVerdict } from "../agent/landing.ts";
 import type { TranscriptEntry } from "../agent/transcript.ts";
@@ -9,6 +9,7 @@ import { Hub } from "../core/hub.ts";
 import { StateStore } from "../core/state.ts";
 import { GIT } from "../git/exec.ts";
 import { treeFingerprint } from "../git/status.ts";
+import { RunService } from "../runs/service.ts";
 import { LandingService } from "./landing.ts";
 
 // A real git worktree on a branch, a hub the test drives, and the check and the judge as stubs:
@@ -16,8 +17,11 @@ import { LandingService } from "./landing.ts";
 
 interface Opts {
   check?: string;
-  exit?: number;
+  /** how the check ends: its code, or `timeout` for one killed at the ceiling */
+  exit?: number | string;
   output?: string;
+  /** the settings' ceilings, when the test names one */
+  timeouts?: Timeouts;
   /** the judge's answer; "none" leaves the service without a judge at all */
   verdict?: LandVerdict | null | "none";
   /** a judge of the test's own, for an answer that has to arrive late */
@@ -48,7 +52,11 @@ function world(opts: Opts = {}) {
     path: t.repo,
     name: "repo",
     defaultBranch: "main",
-    config: { run: {}, ...(opts.check ? { check: opts.check } : {}) },
+    config: {
+      run: {},
+      ...(opts.check ? { check: opts.check } : {}),
+      ...(opts.timeouts ? { timeouts: opts.timeouts } : {}),
+    },
     configFile: ".toyon/settings.json",
     needsSetup: false,
   };
@@ -68,12 +76,18 @@ function world(opts: Opts = {}) {
   const checks: string[] = [];
   /** whether each check was asked to keep its rows off the transcript unless it failed */
   const quiet: boolean[] = [];
+  /** the ceiling each check was given */
+  const ceilings: Array<number | undefined> = [];
+  /** the check run's status on the record as each check was called */
+  const runsSeen: Array<string | undefined> = [];
   const judged: string[] = [];
   /** the prompts the answer question was asked with */
   const recapped: string[] = [];
+  const runs = new RunService({ state, hub });
   const service = new LandingService({
     state,
     hub,
+    runs,
     worktrees: {
       setLanding: (id, landing) => {
         set.push(landing);
@@ -95,6 +109,10 @@ function world(opts: Opts = {}) {
     check: async (_id, command, o) => {
       checks.push(command);
       quiet.push(!!o?.quiet);
+      ceilings.push(o?.timeoutMs);
+      // what the row says while the check is out: read here, since the stub is over at once
+      runsSeen.push(state.worktree("w1")?.runs?.find((r) => r.kind === "check")?.status);
+      o?.onSpawn?.(4242, () => {});
       return { exit: opts.exit ?? 0, text: opts.output ?? "" };
     },
     ...(opts.verdict === "none"
@@ -133,6 +151,9 @@ function world(opts: Opts = {}) {
     wtPath,
     state,
     hub,
+    runs,
+    ceilings,
+    runsSeen,
     service,
     set,
     checks,
@@ -195,6 +216,33 @@ describe("LandingService", () => {
     expect(w.wt()?.landing?.why).toBeUndefined();
     expect(w.wt()?.landing?.fingerprint).toBe(await treeFingerprint(w.wtPath));
     expect(w.wt()?.lastTurn?.recap?.text).toBe("Adding the feature; it is in.");
+  });
+
+  test("the check runs under the settings' ceiling and stands on the row while it does", async () => {
+    w = world({ check: "bun run check", timeouts: { check: "30m" }, verdict: { ready: true, subject: "s" } });
+    w.dirty();
+    await w.settle();
+    expect(w.ceilings).toEqual([30 * 60_000]);
+    expect(w.runsSeen).toEqual(["running"]);
+    // over on its own: gone from the row, and the verdict is the word
+    expect(w.wt()?.runs).toBeUndefined();
+    expect(w.wt()?.landing?.check).toBe("pass");
+  });
+
+  test("a check killed at its ceiling is a failed verdict that says what it gave up after", async () => {
+    w = world({ check: "bun run check", exit: "timeout", output: "tests 3/9\n", timeouts: { check: "30m" } });
+    w.dirty();
+    await w.settle();
+    expect(w.judged).toEqual([]);
+    expect(w.wt()?.landing).toMatchObject({ check: "fail", checkTail: "gave up after 30 minutes\ntests 3/9" });
+    // the run stays on the row as terminated, with the same reason, until the next check
+    expect(w.wt()?.runs).toEqual([
+      expect.objectContaining({ kind: "check", status: "terminated", why: "gave up after 30 minutes" }),
+    ]);
+    // a new turn drops it with the verdict
+    w.hub.emit("agentStatus", "w1", "working");
+    expect(w.wt()?.runs).toBeUndefined();
+    expect(w.wt()?.landing).toBeUndefined();
   });
 
   test("a verdict with no sentence leaves the turn to its facts", async () => {
@@ -432,6 +480,7 @@ describe("LandingService", () => {
     const next = new LandingService({
       state: w.state,
       hub: new Hub(),
+      runs: w.runs,
       worktrees: {
         setLanding: (_id, landing) => {
           w!.set.push(landing);

@@ -29,7 +29,7 @@ import { canCarry, composerBoxOf, type Draft, trunkOf } from "../../state/store.
 import { Button, IconButton } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { TextArea } from "../../ui/Field.tsx";
-import { STEP_HOLD_MS, useHeld, useOnChange } from "../../ui/hooks.ts";
+import { STEP_HOLD_MS, useHeld, useOnChange, useSecondsSince } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { InlinePicker } from "../../ui/InlinePicker.tsx";
 import { useListNav } from "../../ui/listNav.ts";
@@ -59,6 +59,7 @@ import {
   verbLine,
   verdictLine,
 } from "../recap.ts";
+import { runLine, runOf, runTicking } from "../runs.ts";
 import { chord, commandSource, folderList, pickLabel, procTrouble } from "../util.ts";
 import { AskBox } from "./AskBox.tsx";
 import { openAsk } from "./ask.ts";
@@ -560,7 +561,21 @@ export function Composer({
   // rebase with work in it, the network) is the one worth naming
   const landingNow = !!verb?.ships && op === "land";
   const heldStep = useHeld(step, STEP_HOLD_MS);
-  const blocked = landing ? landingLine(landing, dirty, quick, agentInfo?.name) : null;
+  // the run behind the line, when one is going: the land's commit while the press is out, else
+  // the check. Its stage, its time against its ceiling and its status ride after the words, the
+  // way the commit box says them; the count ticks here from the daemon's stamp
+  const commitRun = runOf(active, "commit");
+  const checkRun = runOf(active, "check");
+  const shownRun = landingNow ? commitRun : checkRun;
+  const runSecs = useSecondsSince(runTicking(shownRun) ? shownRun?.since : undefined);
+  const blocked = !landing
+    ? null
+    : landing.check === "pending" && checkRun && checkRun.status !== "terminated"
+      ? runLine("Checking the work", checkRun, runSecs)
+      : landingLine(landing, dirty, quick, agentInfo?.name);
+  const landLine = verb && landingNow ? `${verb.word}: ${heldStep ?? verb.line}` : null;
+  const landingText =
+    landLine && commitRun && commitRun.status !== "terminated" ? runLine(landLine, commitRun, runSecs) : landLine;
   // the empty box's line, first match wins: what the box is for when it is not a worktree's, then
   // the next step on the work, then what the work is waiting on, then where the last turn left it,
   // then how to start
@@ -1075,13 +1090,13 @@ export function Composer({
           {(subline || verb) && (
             <div className="composer-ghost" aria-hidden={verb ? undefined : "true"}>
               <span className={cx("composer-placeholder", landingNow && "live-text")}>
-                {landingNow && verb ? (
+                {landingText ? (
                   // the word's own press is out, so the line is prose and not a control: "land:
                   // committing", shining as one sentence. One span, because the band is a gradient
                   // clipped to the element's own text and a button inside it paints as a box of
                   // its own, so the word would go dark under a band on its parent, and a band per
                   // span is two lit spots on one line. The step names the wait; no dots after it.
-                  `${verb.word}: ${heldStep ?? verb.line}`
+                  landingText
                 ) : verb ? (
                   <>
                     <Button

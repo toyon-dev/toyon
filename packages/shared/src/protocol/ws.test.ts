@@ -16,6 +16,21 @@ describe("toyonConfigSchema", () => {
     expect(toyonConfigSchema.safeParse({ run: {}, check: "bun run check" }).success).toBe(true);
     expect(toyonConfigSchema.safeParse({ run: {}, check: ["bun run check"] }).success).toBe(false);
   });
+
+  test("a timeout is a duration with one unit, inside the bounds a ceiling makes sense at", () => {
+    expect(
+      toyonConfigSchema.safeParse({ run: {}, timeouts: { check: "30m", commit: "1h", setup: "90s" } }).success,
+    ).toBe(true);
+    const words = toyonConfigSchema.safeParse({ run: {}, timeouts: { check: "thirty minutes" } });
+    expect(words.success).toBe(false);
+    expect(words.error && issueReason(words.error, "invalid")).toBe(
+      'timeouts.check: "thirty minutes" is not a duration like 30m, 90s or 1h',
+    );
+    const low = toyonConfigSchema.safeParse({ run: {}, timeouts: { commit: "2s" } });
+    expect(low.error && issueReason(low.error, "invalid")).toBe('timeouts.commit: "2s" is under 10s');
+    expect(toyonConfigSchema.safeParse({ run: {}, timeouts: { setup: "25h" } }).success).toBe(false);
+    expect(toyonConfigSchema.safeParse({ run: {}, timeouts: { check: 30 } }).success).toBe(false);
+  });
 });
 
 describe("parseClientMsg", () => {

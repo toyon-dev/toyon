@@ -17,7 +17,8 @@ The first open guesses a file from `package.json` and asks you to confirm it. Ot
   },
   "check": "npm test",
   "land": { "route": "pr" },
-  "afterLand": ["npm run build"]
+  "afterLand": ["npm run build"],
+  "timeouts": { "check": "30m" }
 }
 ```
 
@@ -33,6 +34,7 @@ The first open guesses a file from `package.json` and asks you to confirm it. Ot
   - `method`: `merge` for a merge commit, `squash` for one commit, `rebase` for the commits as they are. Locally it defaults to a merge commit; on the `pr` route it follows what the repository allows, squash first.
   - `automerge`: `pr` only. GitHub merges the pull request itself once its rules allow.
 - **`afterLand`**: commands run in the main checkout, in order, once work has landed: the build, the migration, the install you would otherwise remember to run. Nothing waits on them, and a failure stops the rest: the line that stopped it reads on the chat. Work that lands while they are running gets one more run once they finish.
+- **`timeouts`**: how long each kind of run may take before Toyon kills it, as `setup`, `check` and `commit`, each a duration like `"30m"`, `"90s"` or `"1h"`. Ten minutes each when unset. `setup` is per command; `commit` covers a commit with the hooks it runs, which is where a pre-commit suite lives. A suite that takes twenty minutes needs `"check": "30m"` and, if a hook runs it again, `"commit": "30m"`. While one runs, the word that waits on it says what it is on, how long it has been against the ceiling, and whether the daemon is still watching it; a run killed at the ceiling says what it gave up after.
 - **`profiles`** and **`defaultProfile`**: named ways to run the project, such as the full stack or the page against staging. Each profile lists which `run` commands it starts, an `env` merged into each of them, and its own `preview`. `defaultProfile` is required once there are profiles, and each chat picks one from its profile menu.
 
 ## The contract

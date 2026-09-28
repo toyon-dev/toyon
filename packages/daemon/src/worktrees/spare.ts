@@ -16,7 +16,7 @@
 
 import { existsSync } from "node:fs";
 import { basename, join } from "node:path";
-import { baseOf, type RepoInfo, type WorktreeInfo } from "@toyon/shared";
+import { baseOf, type RepoInfo, timeoutFor, type WorktreeInfo } from "@toyon/shared";
 import type { Hub } from "../core/hub.ts";
 import { fireAndForget, log } from "../core/log.ts";
 import type { Paths } from "../core/paths.ts";
@@ -256,6 +256,7 @@ export class SparePool {
               if (tail.length > 20) tail.shift();
             },
             worktreeEnv(wt, repo),
+            { timeoutMs: timeoutFor(repo.config, "setup") },
           );
           if (code !== 0) log.warn(wt.id, `spare setup failed (exit ${code}): ${cmd}`, tail.join("\n"));
         }

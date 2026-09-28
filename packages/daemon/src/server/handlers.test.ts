@@ -200,6 +200,7 @@ function make() {
     runtime,
     idle,
     exec,
+    runs: worktrees.runs,
     refs,
     chats,
     drafts,

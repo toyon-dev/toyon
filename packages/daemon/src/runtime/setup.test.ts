@@ -56,6 +56,43 @@ describe("runSetup", () => {
     expect(seen[0]).toBe(dir);
   });
 
+  test("a command still running at the ceiling is killed and says so", async () => {
+    const seen: string[] = [];
+    const t0 = Date.now();
+    const code = await runSetup(
+      "echo begun; sleep 30; echo never",
+      process.cwd(),
+      (l) => seen.push(l),
+      {},
+      {
+        timeoutMs: 300,
+      },
+    );
+    expect(code).toBe("timeout");
+    expect(Date.now() - t0).toBeLessThan(5_000);
+    expect(seen).toEqual(["begun"]);
+  }, 10_000);
+
+  test("the stop handed out at spawn ends the command, which then reports the signal's code", async () => {
+    let stop: (() => void) | undefined;
+    let pid = 0;
+    const done = runSetup(
+      "sleep 30",
+      process.cwd(),
+      () => {},
+      {},
+      {
+        onSpawn: (p, s) => {
+          pid = p;
+          stop = s;
+        },
+      },
+    );
+    expect(pid).toBeGreaterThan(0);
+    stop?.();
+    expect(await done).not.toBe(0);
+  }, 10_000);
+
   test("the extra env reaches the command, so a setup step can name its worktree", async () => {
     const seen: string[] = [];
     await runSetup("echo db_$TOYON_WORKTREE", process.cwd(), (l) => seen.push(l), { TOYON_WORKTREE: "w1" });

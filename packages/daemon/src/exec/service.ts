@@ -6,7 +6,7 @@
 // command that stops to ask a question should fail on a closed stdin rather than sit forever
 // waiting for keystrokes nobody can type. Anything interactive belongs in the terminal pane.
 
-import { type AgentEvent, SHELL_TOOL, type Shipping, shipNoun } from "@toyon/shared";
+import { type AgentEvent, describeDuration, SHELL_TOOL, type Shipping, shipNoun } from "@toyon/shared";
 import type { Subprocess } from "bun";
 import type { AgentAdapter } from "../agent/adapter.ts";
 import { UserError } from "../core/errors.ts";
@@ -38,6 +38,16 @@ interface Running {
   /** what ended the group, once a stop or the ceiling has: a stop that found it already gone
    * leaves the shell's own exit to say what happened */
   signal?: string;
+}
+
+/** how one `exec` runs beyond the command */
+export interface ExecOpts {
+  /** the rows on the transcript only when the command fails */
+  quiet?: boolean;
+  /** the ceiling, for a command the settings give one (the repo's check); TIMEOUT_MS otherwise */
+  timeoutMs?: number;
+  /** the command is up: its process group, and the kill a stop presses */
+  onSpawn?: (pgid: number, stop: () => void) => void;
 }
 
 export class ExecService {
@@ -81,12 +91,7 @@ export class ExecService {
    * handler as a UserError rather than surfacing as a rejected promise nobody awaits. The answer
    * is the shell's: it comes back when the shell exits, even where something the shell started
    * runs on and keeps the row open (collect). */
-  exec(
-    worktreeId: string,
-    command: string,
-    name: string = SHELL_TOOL,
-    opts: { quiet?: boolean } = {},
-  ): Promise<ExecResult> {
+  exec(worktreeId: string, command: string, name: string = SHELL_TOOL, opts: ExecOpts = {}): Promise<ExecResult> {
     const wt = this.deps.state.requireWorktree(worktreeId);
     // the lead's `!` runs in its terminal pane; a command sent for main by name would run in the
     // main checkout, which nothing else is allowed to do
@@ -132,14 +137,19 @@ export class ExecService {
         return killing;
       },
     };
+    const ceiling = opts.timeoutMs ?? this.deps.timeoutMs ?? TIMEOUT_MS;
     running.timer = setTimeout(() => {
       running.timedOut = true;
       fireAndForget(worktreeId, running.stop(), `exec ${toolId} at the ceiling`);
-    }, this.deps.timeoutMs ?? TIMEOUT_MS);
+    }, ceiling);
     this.track(worktreeId, toolId, running);
     // a command is outstanding work: the dev servers it may be talking to stay up until it ends
     this.deps.runtime.hold(worktreeId, `exec:${toolId}`);
-    return this.collect(worktreeId, toolId, proc, running, agent, opts.quiet ? start : undefined);
+    // the group goes in the same ledger as the dev servers: a daemon killed under it leaves the
+    // group running with nobody over it, and the next daemon reclaims what the ledger names
+    this.deps.runtime.noteGroup(worktreeId, `exec:${toolId}`, pid);
+    opts.onSpawn?.(pid, () => fireAndForget(worktreeId, running.stop(), `exec ${toolId} stopped`));
+    return this.collect(worktreeId, toolId, proc, running, agent, ceiling, opts.quiet ? start : undefined);
   }
 
   /** A git command the daemon runs itself (a landing's commit, rebase, merge or push), watched the
@@ -149,7 +159,7 @@ export class ExecService {
    * that passes leaves nothing: a row for every step of every land would bury the conversation.
    * The row's stop aborts `signal`, the same press that kills a `!` command. Refuses the way
    * `exec` does when there is no transcript to write to, before the command runs. */
-  async watch<T extends { exit: number | string | null; text: string }>(
+  async watch<T extends { exit: number | string | null; text: string; ceilingMs?: number }>(
     worktreeId: string,
     command: string,
     run: (onText: (text: string) => void, signal: AbortSignal) => Promise<T>,
@@ -185,7 +195,12 @@ export class ExecService {
     }
     if (!up && r.exit === 0) return { ...r, shown: false };
     if (!up) agent.note(start);
-    agent.note({ type: "tool-end", toolId, output: formatOutput(text, r.exit, truncated), isError: r.exit !== 0 });
+    agent.note({
+      type: "tool-end",
+      toolId,
+      output: formatOutput(text, r.exit, truncated, r.ceilingMs),
+      isError: r.exit !== 0,
+    });
     return { ...r, shown: true };
   }
 
@@ -220,11 +235,13 @@ export class ExecService {
     return r;
   }
 
-  /** the command is over, one way or another: nothing to stop, no ceiling, no hold */
-  private settle(worktreeId: string, toolId: string) {
+  /** the command is over, one way or another: nothing to stop, no ceiling, no hold, and its
+   * group out of the ledger */
+  private settle(worktreeId: string, toolId: string, pgid: number) {
     const r = this.untrack(worktreeId, toolId);
     if (r) clearTimeout(r.timer);
     this.deps.runtime.release(worktreeId, `exec:${toolId}`);
+    this.deps.runtime.forgetGroup(worktreeId, pgid);
   }
 
   private async collect(
@@ -233,6 +250,7 @@ export class ExecService {
     proc: Subprocess,
     running: Running,
     agent: AgentAdapter,
+    ceiling: number,
     /** the start row still to write, for a quiet run: written with the end only when it failed */
     heldStart?: AgentEvent,
   ): Promise<ExecResult> {
@@ -263,6 +281,13 @@ export class ExecService {
     try {
       const drained = Promise.all([drain(proc.stdout), drain(proc.stderr)]);
       const status = await proc.exited;
+      // The ceiling was the shell's, and the shell is out: what it left running with `&` is a
+      // server and not a hang, so a live row holds it with its stop and no timer. A quiet run has
+      // no row to press, so its ceiling stands, since nothing else could ever end what it left.
+      if (live && !running.timedOut) {
+        clearTimeout(running.timer);
+        running.timer = undefined;
+      }
       // a child the command left behind (a server started with `&`) inherits the pipes and holds
       // them open after the shell is gone; the answer is the shell's, so it comes back with what
       // has arrived rather than waiting on something nobody asked to watch
@@ -271,14 +296,15 @@ export class ExecService {
     } catch (e) {
       log.warn(worktreeId, "exec: reading output failed", e);
     }
+    const pgid = proc.pid;
     const end = (how: number | string | null) =>
-      agent.note({ type: "tool-end", toolId, output: formatOutput(text, how, truncated), isError: how !== 0 });
+      agent.note({ type: "tool-end", toolId, output: formatOutput(text, how, truncated, ceiling), isError: how !== 0 });
     // The shell is gone; what it started may not be. It is still the command's process group, so
-    // the stop and the ceiling reach it, and a live row stays up for it, marked, streaming what it
-    // prints, until the group is gone too. A held start's rows say what the shell said, now: the
-    // check's answer is in, and there is no live row to hold open.
-    const lingers = running.signal === undefined && groupAlive(proc.pid);
-    if (!lingers) this.settle(worktreeId, toolId);
+    // the stop reaches it, and a live row stays up for it, marked, streaming what it prints, until
+    // the group is gone too. A held start's rows say what the shell said, now: the check's answer
+    // is in, and there is no live row to hold open.
+    const lingers = running.signal === undefined && groupAlive(pgid);
+    if (!lingers) this.settle(worktreeId, toolId, pgid);
     if (heldStart) {
       if (exit !== 0) {
         agent.note(heldStart);
@@ -287,20 +313,20 @@ export class ExecService {
       if (lingers)
         fireAndForget(
           worktreeId,
-          this.linger(running, proc.pid).then(() => this.settle(worktreeId, toolId)),
+          this.linger(running, pgid).then(() => this.settle(worktreeId, toolId, pgid)),
           `exec ${toolId} left running`,
         );
-      return { exit, text };
+      return { exit: running.timedOut ? "timeout" : exit, text };
     }
     if (!lingers) {
       end(running.timedOut ? "timeout" : exit);
-      return { exit, text };
+      return { exit: running.timedOut ? "timeout" : exit, text };
     }
     agent.note({ type: "tool-update", toolId, background: true });
     fireAndForget(
       worktreeId,
-      this.linger(running, proc.pid).then(() => {
-        this.settle(worktreeId, toolId);
+      this.linger(running, pgid).then(() => {
+        this.settle(worktreeId, toolId, pgid);
         end(running.timedOut ? "timeout" : (running.signal ?? exit));
       }),
       `exec ${toolId} in the background`,
@@ -314,20 +340,22 @@ export class ExecService {
   }
 }
 
-/** what a command left: its exit status (a signal name when killed, a reason when it never ran)
- * and what it printed, both pipes in arrival order */
+/** what a command left: its exit status (`timeout` at the ceiling, a signal name when killed, a
+ * reason when it never ran) and what it printed, both pipes in arrival order */
 export interface ExecResult {
   exit: number | string | null;
   text: string;
 }
 
 /** the output as the transcript renders it: the text fenced, so it draws as a block rather than
- * as prose, and a line under it for anything the text alone would not say */
-export function formatOutput(text: string, exit: number | string | null, truncated: boolean): string {
+ * as prose, and a line under it for anything the text alone would not say. A command killed at
+ * its ceiling gave up, and the line says after how long when the ceiling is known. */
+export function formatOutput(text: string, exit: number | string | null, truncated: boolean, ceiling?: number): string {
   const body = text.replace(/\n+$/, "");
   const notes: string[] = [];
   if (truncated) notes.push(`output cut at ${Math.round(OUTPUT_CAP / 1000)} KB`);
-  if (typeof exit === "string") notes.push(`killed (${exit})`);
+  if (exit === "timeout") notes.push(ceiling ? `gave up after ${describeDuration(ceiling)}` : "gave up at the ceiling");
+  else if (typeof exit === "string") notes.push(`killed (${exit})`);
   else if (exit !== 0) notes.push(`exit ${exit}`);
   const parts: string[] = [];
   if (body.trim()) parts.push(`\`\`\`\n${body}\n\`\`\``);

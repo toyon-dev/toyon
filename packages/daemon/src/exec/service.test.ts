@@ -33,11 +33,15 @@ function world(liveAfterMs?: number, shipping?: () => Shipping | undefined, time
   const state = new StateStore(paths, { repos: [], worktrees: [wt], sessions: {} });
   const agent = new FakeAgent("w1");
   const holds: string[] = [];
+  /** the ledger as the runtime would keep it: what is in it now, by pgid */
+  const ledger = new Map<number, string>();
   const runtime = {
     agentFor: () => agent,
     shellEnv: () => ({ PATH: process.env.PATH ?? "" }),
     hold: (_id: string, tag: string) => holds.push(`+${tag}`),
     release: (_id: string, tag: string) => holds.push(`-${tag}`),
+    noteGroup: (_id: string, name: string, pgid: number) => ledger.set(pgid, name),
+    forgetGroup: (_id: string, pgid: number) => ledger.delete(pgid),
   };
   const exec = new ExecService({
     state,
@@ -46,7 +50,7 @@ function world(liveAfterMs?: number, shipping?: () => Shipping | undefined, time
     timeoutMs,
     shipping,
   });
-  return { exec, agent, dir, holds };
+  return { exec, agent, dir, holds, ledger };
 }
 
 /** waits, a little at a time, for the transcript to reach the state the test is after */
@@ -171,12 +175,19 @@ describe("ExecService.watch", () => {
     expect(end?.type === "tool-end" && end.output).toBe("```\ntests 1/6 ok\n```\nkilled (SIGTERM)");
   });
 
-  test("a step killed at the ceiling says so on its row", async () => {
+  test("a step killed at the ceiling says what it gave up after on its row", async () => {
     const { exec, agent } = world();
-    await exec.watch("w1", "git push origin main", step(["waiting on a lock"], "timeout"));
+    await exec.watch("w1", "git push origin main", async (onText) => {
+      onText("waiting on a lock\n");
+      return { exit: "timeout", text: "waiting on a lock\n", ceilingMs: 30 * 60_000 };
+    });
     const end = agent.recorded[1];
-    expect(end?.type === "tool-end" && end.output).toBe("```\nwaiting on a lock\n```\nkilled (timeout)");
+    expect(end?.type === "tool-end" && end.output).toBe("```\nwaiting on a lock\n```\ngave up after 30 minutes");
     expect(end?.type === "tool-end" && end.isError).toBe(true);
+    // a step that names no ceiling still says it gave up, not that something killed it
+    await exec.watch("w1", "git push origin main", step(["waiting on a lock"], "timeout"));
+    const plain = agent.recorded[3];
+    expect(plain?.type === "tool-end" && plain.output).toBe("```\nwaiting on a lock\n```\ngave up at the ceiling");
   });
 
   test("output past the cap is cut the way a live command's is", async () => {
@@ -233,6 +244,32 @@ describe("ExecService.exec", () => {
     expect(agent.recorded[1]).toMatchObject({ type: "tool-end", isError: true });
   });
 
+  test("the spawn hands out the group and a stop, and the group is in the ledger while it runs", async () => {
+    const { exec, agent, ledger } = world();
+    let pgid = 0;
+    let stop: (() => void) | undefined;
+    const done = exec.exec("w1", "echo begun; sleep 30; echo never", CHECK_TOOL, {
+      onSpawn: (p, s) => {
+        pgid = p;
+        stop = s;
+      },
+    });
+    expect(pgid).toBeGreaterThan(0);
+    expect(ledger.get(pgid)).toBe(`exec:${toolIdOf(agent)}`);
+    await until(agent, () => agent.recorded.some((e) => e.type === "tool-delta"));
+    stop?.();
+    expect((await done).exit).toBe("SIGTERM");
+    expect(ledger.size).toBe(0);
+  }, 10_000);
+
+  test("a command still running at its own ceiling is killed, and the row says what it gave up after", async () => {
+    const { exec, agent } = world();
+    const timed = await exec.exec("w1", "sleep 30", CHECK_TOOL, { timeoutMs: 1000 });
+    expect(timed.exit).toBe("timeout");
+    const end = agent.recorded.at(-1);
+    expect(end?.type === "tool-end" && end.output).toBe("gave up after 1 second");
+  }, 15_000);
+
   test("a command that passes is not an error, and run() is the same call without the answer", async () => {
     const { exec, agent } = world();
     expect((await exec.exec("w1", "true")).exit).toBe(0);
@@ -261,10 +298,26 @@ describe("ExecService: the process group", () => {
     expect(alive(pid)).toBe(false);
     const end = agent.recorded.at(-1);
     expect(end?.type === "tool-end" && end.output).toContain(`${pid}`);
-    expect(end?.type === "tool-end" && end.output).toEndWith("```\nkilled (timeout)");
+    expect(end?.type === "tool-end" && end.output).toEndWith("```\ngave up after 1 second");
     expect(end?.type === "tool-end" && end.isError).toBe(true);
     expect(holds.map((h) => h.slice(0, 6))).toEqual(["+exec:", "-exec:"]);
   });
+
+  test("the ceiling is the shell's: what it left running with & is held with its stop and no timer", async () => {
+    const { exec, agent, ledger } = world(undefined, undefined, 300);
+    const r = await exec.exec("w1", "sleep 1.5 & echo $!");
+    expect(r.exit).toBe(0);
+    const toolId = toolIdOf(agent);
+    const pid = backgroundPid(agent, toolId);
+    expect(agent.recorded.at(-1)).toEqual({ type: "tool-update", toolId, background: true });
+    // past the ceiling: still there, still in the ledger, since it is a server and not a hang
+    await Bun.sleep(500);
+    expect(alive(pid)).toBe(true);
+    expect(ledger.size).toBe(1);
+    await until(agent, () => agent.recorded.at(-1)?.type === "tool-end");
+    expect(agent.recorded.at(-1)).toMatchObject({ type: "tool-end", isError: false });
+    expect(ledger.size).toBe(0);
+  }, 10_000);
 
   test("a stop names its row: the other command keeps running until its own", async () => {
     const { exec, agent } = world();

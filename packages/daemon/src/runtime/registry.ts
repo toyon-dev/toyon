@@ -342,6 +342,8 @@ export class RuntimeRegistry {
   /** runtimes stop() has taken out of `runtimes` and is still killing: the ledger keeps their
    * groups until the kills are through, or a daemon dying mid-stop would have nothing to reclaim */
   private stopping = new Map<string, Runtime>();
+  /** groups other services run on a worktree and ask the ledger to carry (noteGroup), by pgid */
+  private extraGroups = new Map<string, Map<number, string>>();
 
   constructor(private deps: RuntimeDeps) {
     // a proc came up or went (a crash, a restart, a wake); an exit while asleep or stopped says
@@ -368,6 +370,26 @@ export class RuntimeRegistry {
 
   holdCount(id: string): number {
     return this.holds.get(id)?.size ?? 0;
+  }
+
+  /** A group of another service's (a `!` command's shell) goes in the worktree's ledger entry
+   * beside the procs, so a daemon killed under it leaves something the next one reclaims. Live
+   * only while `forgetGroup` has not been called for it; a rebuild from the procs keeps it. */
+  noteGroup(id: string, name: string, pgid: number): void {
+    let groups = this.extraGroups.get(id);
+    if (!groups) {
+      groups = new Map();
+      this.extraGroups.set(id, groups);
+    }
+    groups.set(pgid, name);
+    this.recordGroups(id);
+  }
+
+  forgetGroup(id: string, pgid: number): void {
+    const groups = this.extraGroups.get(id);
+    if (!groups?.delete(pgid)) return;
+    if (groups.size === 0) this.extraGroups.delete(id);
+    this.recordGroups(id);
   }
 
   /** Work someone is waiting on: an agent that is not idle or still owes a person something (a
@@ -1114,6 +1136,7 @@ export class RuntimeRegistry {
     }
     const loose = this.looseShells.get(id);
     if (loose?.alive) live.push({ name: "shell", pgid: loose.pid });
+    for (const [pgid, name] of this.extraGroups.get(id) ?? []) live.push({ name, pgid });
     const before = new Map(this.deps.state.groups(id).map((g) => [g.pgid, g]));
     const now = Date.now();
     const next: GroupEntry[] = live.map((g) => ({ ...g, startedAt: before.get(g.pgid)?.startedAt ?? now }));

@@ -11,14 +11,15 @@ import { useRef, useState } from "react";
 import { copyText } from "../../state/actions/deps.ts";
 import { shipOp } from "../../state/actions/worktree.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
-import { Button } from "../../ui/Button.tsx";
+import { Button, IconButton } from "../../ui/Button.tsx";
 import { TextArea } from "../../ui/Field.tsx";
-import { STEP_HOLD_MS, useHeld, useOnChange } from "../../ui/hooks.ts";
+import { STEP_HOLD_MS, useHeld, useOnChange, useSecondsSince } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { useContextMenu } from "../../ui/menu.ts";
 import { tip } from "../../ui/Tooltip.tsx";
 import { behindNote } from "../chips/baseNote.ts";
 import { checkTip, messageGap, prCanMerge } from "../recap.ts";
+import { RUN_STATUS_TIP, runFacts, runOf, runStopTip, runTicking } from "../runs.ts";
 
 /** The foot of the changes panel, built like the chat composer: a message box over a row that says
  * where you are on the left and what you can do on the right. The message box shows the suggested
@@ -55,6 +56,13 @@ export function CommitBox({
   // three words through the line before one can be read
   const step = useStore((s) => s.shipping[id]?.step);
   const heldStep = useHeld(step, STEP_HOLD_MS);
+  // the run the box's line is about: the op's commit while one is out, else the check. A run
+  // that lasts is where a person waits, so the line carries what it is on, how long against its
+  // ceiling, and whether it is still watched; the count ticks here, from the daemon's stamp
+  const commitRun = runOf(active, "commit");
+  const checkRun = runOf(active, "check");
+  const shownRun = op ? commitRun : checkRun;
+  const runSecs = useSecondsSince(runTicking(shownRun) ? shownRun?.since : undefined);
   const [msg, setMsg] = useState("");
   useOnChange([id], () => setMsg(""));
   const box = useRef<HTMLTextAreaElement>(null);
@@ -146,7 +154,7 @@ export function CommitBox({
   // follows it once held, the way the composer's line reads. A commit's step is its own word's,
   // so there the step stands alone. Prose and not a busy button: the band already says busy, and
   // a spinner beside a shining word was two marks for one wait.
-  const running =
+  const pressed =
     op === "commit"
       ? (heldStep ?? "commit")
       : op === "land"
@@ -154,6 +162,30 @@ export function CommitBox({
           ? `${landWord}: ${heldStep}`
           : landWord
         : null;
+  const running = pressed;
+  // The run behind the word, under the rule where a line has the box's whole width: its stage,
+  // its time against the ceiling and its status ("pre-commit hook · 4m 13s of 30m"), with the
+  // stop at the end. Not on the knobs row, which is narrow and holds the word beside buttons: the
+  // line wrapped there four deep in a narrow dock. A terminated run is over, and the verdict or
+  // the shipped word says what it gave up after; the check over with the message still being
+  // written says so.
+  const facts = !shownRun
+    ? checking && !op
+      ? "writing the message"
+      : null
+    : shownRun.status === "terminated"
+      ? null
+      : runFacts(shownRun, runSecs).join(" · ");
+  // the one stop the box offers: on the run its line is about, while there is a process to kill
+  const stoppable = shownRun && (shownRun.status === "running" || shownRun.status === "detached") ? shownRun : null;
+  const stop = stoppable && (
+    <IconButton
+      icon="stop"
+      tone="danger"
+      label={runStopTip(stoppable.kind)}
+      onClick={() => sock?.send({ t: "run-stop", worktreeId: id, kind: stoppable.kind })}
+    />
+  );
 
   return (
     <div className="composer commit-box">
@@ -273,24 +305,34 @@ export function CommitBox({
         </span>
       </div>
       {/* how far this trails main and the sync, said the way the composer says it: land stays the
-          one lit verb in the row above, and a count has a line to itself however narrow the dock */}
-      {behindLine && (
+          one lit verb in the row above, and a count has a line to itself however narrow the dock.
+          Above it, the run behind the word: what it is on and how long, its stop at the end. What
+          it prints is on the chat, on the row that streams it. */}
+      {(behindLine || facts) && (
         <div className="composer-notes">
-          <div className="hint composer-note">
-            <span>{behindLine}</span>
-            {op === "sync-main" ? (
-              <span className="live-text">{heldStep ? `sync: ${heldStep}` : "sync"}</span>
-            ) : (
-              <Button
-                variant="outline"
-                disabled={!!op || dirty}
-                data-tip={dirty ? "commit or discard the changes here first" : `Merge ${base} into this worktree`}
-                onClick={() => shipOp(sock, dispatch, { t: "sync-main", worktreeId: id })}
-              >
-                sync
-              </Button>
-            )}
-          </div>
+          {facts && (
+            <div className="hint composer-note" data-tip={shownRun ? RUN_STATUS_TIP[shownRun.status] : undefined}>
+              <span>{facts}</span>
+              {stop}
+            </div>
+          )}
+          {behindLine && (
+            <div className="hint composer-note">
+              <span>{behindLine}</span>
+              {op === "sync-main" ? (
+                <span className="live-text">{heldStep ? `sync: ${heldStep}` : "sync"}</span>
+              ) : (
+                <Button
+                  variant="outline"
+                  disabled={!!op || dirty}
+                  data-tip={dirty ? "commit or discard the changes here first" : `Merge ${base} into this worktree`}
+                  onClick={() => shipOp(sock, dispatch, { t: "sync-main", worktreeId: id })}
+                >
+                  sync
+                </Button>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>

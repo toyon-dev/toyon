@@ -6,6 +6,7 @@ import {
   landConfigSchema,
   type SharedServices,
   type ToyonConfig,
+  timeoutsSchema,
   toyonConfigSchema,
 } from "@toyon/shared";
 import { applyEdits, type JSONPath, modify, type ParseError, parse, printParseErrorCode } from "jsonc-parser";
@@ -88,7 +89,12 @@ function unknownKeys(raw: Record<string, unknown>): string[] {
         .filter((k) => !(k in landConfigSchema.shape))
         .map((k) => `land.${k}`)
     : [];
-  return [...top, ...land];
+  const timeouts = isObject(raw.timeouts)
+    ? Object.keys(raw.timeouts)
+        .filter((k) => !(k in timeoutsSchema.shape))
+        .map((k) => `timeouts.${k}`)
+    : [];
+  return [...top, ...land, ...timeouts];
 }
 
 /** RFC 7396, the local file over the shared one: objects merge key by key all the way down, null

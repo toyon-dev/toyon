@@ -1440,6 +1440,20 @@ export class WorktreeService {
     if (f) this.setLanded(wt, landedNow(wt, f));
   }
 
+  /** The record after a landing, in one frame: the verdict goes and the landed mark comes
+   * together. Sent one frame apart, the row between them carried work with no verdict, which the
+   * box reads as a check to run, so its word flashed through "check" on the way to "archive". */
+  private async settleLanded(wt: WorktreeInfo): Promise<void> {
+    const f = wt.kind === "main" ? null : await this.landedFacts(wt);
+    delete wt.landing;
+    if (f) {
+      if (landedNow(wt, f)) wt.landed = true;
+      else delete wt.landed;
+    }
+    this.d.state.save();
+    this.d.hub.emit("worktreesChanged");
+  }
+
   private async landedFacts(wt: WorktreeInfo): Promise<LandedFacts | null> {
     const repo = this.d.state.repo(wt.repoId);
     if (!repo) return null;
@@ -1579,8 +1593,7 @@ export class WorktreeService {
     log.info(wt.id, `landed on ${baseOf(repo)} outside toyon: ${mark.base.slice(0, 7)}..${mark.tip.slice(0, 7)}`);
     await this.noteLand(repo, wt, mark);
     await this.restartFromMain(wt, baseOf(repo));
-    this.setLanding(wt.id, undefined);
-    await this.refreshLanded(wt);
+    await this.settleLanded(wt);
   }
 
   /** The one press. Commit what is uncommitted, take main in (a rebase for toyon's own branch),
@@ -1751,8 +1764,7 @@ export class WorktreeService {
       // the old ahead. The verdict was about work that is on main now; the landed mark is what
       // the box reads next.
       this.invalidateCounts();
-      this.setLanding(wt.id, undefined);
-      await this.refreshLanded(wt);
+      await this.settleLanded(wt);
     }
     if (!result.ok) return { result };
     const archiveIds = siblingsOf(wt, this.d.state.worktrees).map((w) => w.id);
@@ -1823,8 +1835,7 @@ export class WorktreeService {
       await this.restartFromMain(wt, base);
     });
     this.invalidateCounts();
-    this.setLanding(wt.id, undefined);
-    await this.refreshLanded(wt);
+    await this.settleLanded(wt);
     const followed = await this.trunk.catchUp(repo.id);
     const here = followed.ok
       ? `${repo.defaultBranch} here ${followed.moved ? "pulled it" : "has it"}`
@@ -1928,8 +1939,7 @@ export class WorktreeService {
       await this.restartFromMain(wt, base);
     });
     this.invalidateCounts();
-    this.setLanding(wt.id, undefined);
-    await this.refreshLanded(wt);
+    await this.settleLanded(wt);
     const took = pulled.ok
       ? `${br} here ${pulled.moved ? "pulled it" : "has it"}`
       : `${br} here was left where it is: ${pulled.message}`;

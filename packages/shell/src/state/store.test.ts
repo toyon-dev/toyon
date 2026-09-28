@@ -1280,6 +1280,19 @@ describe("git status", () => {
     ]);
     expect(s.layout.changes).toBe(false);
   });
+  test("a row the daemon marks landed drops the files its land committed; an edit after dirties it again", () => {
+    const dirty = server({ t: "git-status", worktreeId: "a", files: [{ xy: " M", path: "x" }] });
+    const s = run([hello(wt("main", "main"), wt("a")), dirty]);
+    expect(s.local.a?.git?.files).toHaveLength(1);
+    const row = wt("a");
+    const landed: WorktreeStatus = { ...row, worktree: row.worktree && { ...row.worktree, landed: true } };
+    const on = reducer(s, worktrees(wt("main", "main"), landed));
+    expect(on.local.a?.git?.files).toEqual([]);
+    // the mark already on: a status after it is newer than it and stands
+    const edited = reducer(on, dirty);
+    expect(edited.local.a?.git?.files).toHaveLength(1);
+    expect(reducer(edited, worktrees(wt("main", "main"), landed)).local.a?.git?.files).toHaveLength(1);
+  });
   test("focus-changes opens a shut panel and asks for the keyboard every time", () => {
     const shut = run([hello(wt("main", "main")), server({ t: "git-status", worktreeId: "main", files: [] })]);
     expect(shut.layout.changes).toBe(false);

@@ -467,9 +467,12 @@ export function Composer({
   const gap = messageGap(verdict, dirty, quick);
   // work with no verdict, one the tree moved under, or one whose question went unanswered with a
   // commit to write: the check is the next step, and the word for it sits where `land` will once
-  // it passes. A check running or failed keeps its own line.
+  // it passes. A check running or failed keeps its own line. Not while a press is out on the row:
+  // the land clears the verdict as its work reaches main, and a check of what just landed is not
+  // the next step.
   const checkable =
     atRest &&
+    !op &&
     !spawning &&
     canLand(active.worktree) &&
     !hasLanded &&

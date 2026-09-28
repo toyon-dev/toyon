@@ -1784,6 +1784,22 @@ function pruneLocal(local: State["local"], rows: WorktreeStatus[], archivedPage:
   return Object.fromEntries(entries.filter(kept));
 }
 
+/** A row the daemon has just marked landed was read clean for the mark, so a changes list held
+ * from before the frame is older than the mark: the land committed those files. Kept, the box
+ * reads it as work left over and offers a check of what is on main until the next status push.
+ * An edit after the mark arrives as a later push and dirties the list again. */
+function landedClean(local: State["local"], before: WorktreeStatus[], rows: WorktreeStatus[]): State["local"] {
+  let out = local;
+  for (const w of rows) {
+    if (!w.worktree?.landed || before.some((b) => b.id === w.id && b.worktree?.landed)) continue;
+    const l = out[w.id];
+    if (!l?.git || l.git.files.length === 0) continue;
+    if (out === local) out = { ...local };
+    out[w.id] = { ...l, git: { ...l.git, files: [] } };
+  }
+  return out;
+}
+
 /** the daemon's drafts laid into the boxes, where this tab has not written something of its own:
  * that is what it typed while the socket was down, and it goes to the daemon next */
 function withDrafts(local: State["local"], drafts: Record<string, string>): State["local"] {
@@ -2021,7 +2037,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
             trunks: msg.trunks,
             archiving: archiving.length === s.archiving.length ? s.archiving : archiving,
             shipping: shippingFrom(s.shipping, msg.rows, msg.trunks),
-            local: pruneLocal(s.local, msg.rows, s.archivedPage),
+            local: landedClean(pruneLocal(s.local, msg.rows, s.archivedPage), s.rows, msg.rows),
             treeOpen: pruneByRow(s.treeOpen, msg.rows),
           },
           activeId,

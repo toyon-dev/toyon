@@ -1558,6 +1558,22 @@ describe("landing", () => {
     expect(recorded(wt.id)).toEqual([]);
   });
 
+  test("the verdict goes and the landed mark comes in one frame, so no frame reads as work unchecked", async () => {
+    const repoId = await registered();
+    const wt = await w.worktrees.create(repoId, "feature");
+    writeFileSync(join(wt.path, "feature.txt"), "x\n");
+    w.worktrees.setLanding(wt.id, { at: 1, check: "none", ready: true, subject: "add feature", fingerprint: "f" });
+    // what each frame would carry of the record
+    const seen: Array<{ verdict: boolean; landed: boolean }> = [];
+    w.hub.on("worktreesChanged", () => {
+      const r = w.state.worktree(wt.id);
+      seen.push({ verdict: !!r?.landing, landed: !!r?.landed });
+    });
+    expect((await w.worktrees.land(wt.id)).result.ok).toBe(true);
+    expect(seen.filter((f) => !f.verdict && !f.landed)).toEqual([]);
+    expect(seen.at(-1)).toEqual({ verdict: false, landed: true });
+  });
+
   test("a branch behind main is rebased first, so the landing carries no merge of main", async () => {
     const repoId = await registered();
     const wt = await w.worktrees.create(repoId, "feature");

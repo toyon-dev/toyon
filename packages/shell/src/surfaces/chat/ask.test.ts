@@ -21,6 +21,7 @@ import {
   rowsOf,
   sendPage,
   setNote,
+  shellChord,
   stripRecommended,
   walk,
 } from "./ask.ts";
@@ -235,5 +236,27 @@ describe("answerText", () => {
     expect(answerText(one[0]!, undefined)).toBe("skipped");
     // the suffix was the box's badge, and the read-back is the label alone
     expect(answerText(q("a", ["Cookies (Recommended)"]), { selected: ["cookies (recommended)"] })).toBe("Cookies");
+  });
+});
+
+describe("shellChord", () => {
+  const key = (key: string, mods: Partial<{ metaKey: boolean; ctrlKey: boolean; altKey: boolean }> = {}) => ({
+    key,
+    metaKey: false,
+    ctrlKey: false,
+    altKey: false,
+    ...mods,
+  });
+  test("a chat switch or a rail walk is not a pick, however the card reads the bare key", () => {
+    expect(shellChord(key("1", { metaKey: true }))).toBe(true);
+    expect(shellChord(key("ArrowDown", { altKey: true }))).toBe(true);
+    expect(shellChord(key("Tab", { ctrlKey: true }))).toBe(true);
+    expect(shellChord(key("1"))).toBe(false);
+    expect(shellChord(key("Enter"))).toBe(false);
+  });
+  test("the send chord is the card's own", () => {
+    expect(shellChord(key("Enter", { metaKey: true }))).toBe(false);
+    expect(shellChord(key("NumpadEnter", { ctrlKey: true }))).toBe(false);
+    expect(shellChord(key("Enter", { altKey: true }))).toBe(true);
   });
 });

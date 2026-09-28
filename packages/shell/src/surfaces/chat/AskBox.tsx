@@ -41,6 +41,7 @@ import {
   rowsOf,
   sendPage,
   setNote,
+  shellChord,
   stripRecommended,
   walk,
 } from "./ask.ts";
@@ -200,6 +201,7 @@ function QuestionBody({
       }
       return;
     }
+    if (shellChord(e)) return;
     if (e.key === "Escape") {
       // the app-wide esc would close a pane or stop the turn
       e.preventDefault();
@@ -472,6 +474,7 @@ function PermissionBody({
   };
 
   const onKeyDown = (e: React.KeyboardEvent) => {
+    if (shellChord(e)) return;
     if (e.key === "Escape") {
       e.preventDefault();
       e.stopPropagation();

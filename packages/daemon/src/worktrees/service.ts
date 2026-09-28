@@ -23,6 +23,7 @@ import {
   isProvisional,
   type LandedFacts,
   type Landing,
+  type LandPolicy,
   landedNow,
   landPolicy,
   movedPastLand,
@@ -70,14 +71,14 @@ import { excludeBlock } from "../git/exclude.ts";
 import { GIT, git, gitOrThrow, isGitRepo, NO_PROMPT, run } from "../git/exec.ts";
 import {
   commitWorktree,
-  fastForwardMain,
   fetchBase,
   type LandWatch,
+  landingCommit,
   landLocally,
   mergePr,
   openPr,
   pushBranch,
-  pushMain,
+  pushLanding,
   type ShipResult,
   squashMessage,
   stepRun,
@@ -1611,18 +1612,14 @@ export class WorktreeService {
       return { result };
     }
 
+    if (policy.land === "push") return this.landPush(wt, repo, policy, message, suggested, w);
+
     let mergedHere = false;
     let committedHere = false;
     const result = await withRepoLock(repo.path, async (): Promise<ShipResult> => {
       const committed = await this.commitIfDirty(wt, message);
       if (committed && !committed.ok) return committed;
       committedHere = committed !== null;
-      // main here first takes what origin has, so the push at the end is not refused; a main
-      // with no upstream has nothing to take
-      if (policy.land === "push") {
-        const pulled = await fastForwardMain(repo.path, repo.defaultBranch, w);
-        if (!pulled.ok && !/no upstream/.test(pulled.message)) return pulled;
-      }
       const taken = await takeMainIn(wt.path, base, own, w);
       if (!taken.ok) return taken;
       // read before the landing moves main and the branch restarts from it
@@ -1634,10 +1631,6 @@ export class WorktreeService {
       mergedHere = true;
       await this.noteLand(repo, wt, mark);
       await this.restartFromMain(wt, base);
-      if (policy.land === "push") {
-        const pushed = await pushMain(repo.path, repo.defaultBranch, w);
-        if (!pushed.ok) return { ...pushed, message: `merged into ${repo.defaultBranch} here, but ${pushed.message}` };
-      }
       return landed;
     });
     if (mergedHere) {
@@ -1654,8 +1647,82 @@ export class WorktreeService {
     // the row says what the press did, not where the work sits: "is on main" read as the press
     // having found it there and done nothing
     const did = committedHere ? "committed and merged" : "merged";
-    const then = policy.land === "push" ? " and pushed" : "";
-    return { result: { ...result, message: `${did} into ${repo.defaultBranch}${then}` }, archiveIds };
+    return { result: { ...result, message: `${did} into ${repo.defaultBranch}` }, archiveIds };
+  }
+
+  /** The push route: the landing built in the worktree and pushed straight to main on origin, so
+   * nothing about the main checkout can block it. The branch takes the base in, fetched now; the
+   * repo's method makes the landing commit here (landingCommit), so the repo's hooks run on what
+   * reaches main, in the worktree and with its environment; and that commit goes to origin's
+   * main. Origin moving in between is met once, fetch, rebase, rebuild, push again; a second
+   * rejection asks for another press. Nothing here holds the repo lock but the record and the
+   * restart: the worktree and the network are all the route touches, as on the PR route. Main
+   * here follows as the trunk's housekeeping, and its note says why when it cannot. */
+  private async landPush(
+    wt: WorktreeInfo,
+    repo: RepoInfo,
+    policy: LandPolicy,
+    message: string | undefined,
+    suggested: string | undefined,
+    w: LandWatch,
+  ): Promise<{ result: ShipResult; archiveIds?: string[] }> {
+    const base = baseOf(repo);
+    const own = hasOwnBranch(wt);
+    const method = policy.merge ?? DEFAULT_MERGE_METHOD;
+    const committed = await this.commitIfDirty(wt, message);
+    if (committed && !committed.ok) return { result: committed };
+    // read before the fetch, the rebase and the method rewrite the branch: the commits it carried,
+    // kept under the landing's ref. One read stands for a second attempt, whose branch is by then
+    // the first attempt's landing commit.
+    const read = await landingMark(wt.path, base);
+    if (!read) return { result: { ok: false, message: `nothing to land: no commits ahead of ${base}` } };
+    let sha = "";
+    // the rebase dropped every commit: origin's main holds this work already, pushed by a hand
+    // toyon did not see. Nothing to build or push; the row lands on the record as it stands.
+    let already = false;
+    for (let attempt = 0; ; attempt++) {
+      const fetched = await this.fetchBase(wt, repo, w);
+      if (!fetched.ok) return { result: fetched };
+      const taken = await takeMainIn(wt.path, base, own, w);
+      if (!taken.ok) return { result: taken };
+      this.headMoved(wt.id);
+      if ((await aheadBehind(wt.path, base)).ahead === 0) {
+        already = true;
+        sha = (await commitOf(wt.path, base)) ?? "";
+        break;
+      }
+      const squash = method === "squash" ? await squashMessage(wt.path, base, suggested) : "";
+      const built = await landingCommit(wt.path, wt.branch, base, method, squash, own, w);
+      this.headMoved(wt.id);
+      if (!built.ok || !built.sha) return { result: built };
+      sha = built.sha;
+      const pushed = await pushLanding(wt.path, sha, repo.defaultBranch, w);
+      if (pushed.ok) break;
+      if (!pushed.moved) return { result: pushed };
+      if (attempt > 0) {
+        return { result: { ok: false, message: `${base} moved twice while this landed; land again` } };
+      }
+    }
+    // origin's main is the pushed commit now, and the remote-tracking ref should say so from the
+    // push itself; a fetch refspec that covers less than the branch is caught by reading it back
+    if ((await commitOf(wt.path, base)) !== sha) await this.fetchBase(wt, repo, w);
+    await withRepoLock(repo.path, async () => {
+      await this.noteLand(repo, wt, read);
+      await this.restartFromMain(wt, base);
+    });
+    this.invalidateCounts();
+    this.setLanding(wt.id, undefined);
+    await this.refreshLanded(wt);
+    const followed = await this.trunk.catchUp(repo.id);
+    const here = followed.ok
+      ? `${repo.defaultBranch} here ${followed.moved ? "pulled it" : "has it"}`
+      : `${repo.defaultBranch} here was left where it is: ${followed.message}`;
+    const how = { merge: "merged into", squash: "squashed onto", rebase: "rebased onto" }[method];
+    const did = already
+      ? `origin's ${repo.defaultBranch} has this work already`
+      : `${committed ? `committed and ${how}` : how} ${repo.defaultBranch} and pushed`;
+    const archiveIds = siblingsOf(wt, this.d.state.worktrees).map((s) => s.id);
+    return { result: { ok: true, message: `${did}; ${here}` }, archiveIds };
   }
 
   /** A landing onto the record, oldest first, with its tip kept under a ref: the branch restarts from

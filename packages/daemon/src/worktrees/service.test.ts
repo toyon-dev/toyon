@@ -1431,28 +1431,28 @@ describe("landing", () => {
     sh(w.repo, "git", "init", "-q", "--bare", "-b", "main", origin);
     sh(w.repo, "git", "remote", "add", "origin", origin);
     sh(w.repo, "git", "push", "-q", "-u", "origin", "main");
-    w.state.requireRepo(repoId).config.land = { route: "push" };
+    await setRoute(repoId, "push");
     refusingHook(["tests: 1 failed"], "pre-push");
     const wt = await w.worktrees.create(repoId, "feature");
     writeFileSync(join(wt.path, "feature.txt"), "x\n");
     const { result } = await w.worktrees.land(wt.id, "add feature");
     expect(result.ok).toBe(false);
-    expect(result.message).toBe(
-      "merged into main here, but push failed: what git and its hooks printed is on the chat",
-    );
+    expect(result.message).toBe("push failed: what git and its hooks printed is on the chat");
     const rows = recorded(wt.id);
     expect(rows.map((e) => e.type)).toEqual(["tool-start", "tool-end"]);
+    // the push runs in the worktree, so its row is the plain command
     const start = rows[0];
     expect(start?.type === "tool-start" && start.input).toEqual({
-      command: `git -C ${w.state.requireRepo(repoId).path} push origin main`,
+      command: expect.stringMatching(/^git push origin [0-9a-f]{40}:refs\/heads\/main$/),
     });
     const end = rows[1];
     expect(end?.type === "tool-end" && end.isError).toBe(true);
     expect(end?.type === "tool-end" && end.output).toContain("tests: 1 failed\nand on stderr\n");
     expect(end?.type === "tool-end" && end.output).toContain("exit 1");
-    // the landing here stood; origin has nothing of it
-    expect(w.state.worktree(wt.id)?.landed).toBe(true);
+    // nothing landed: origin has nothing of it, and the work stands committed on the branch
+    expect(w.state.worktree(wt.id)?.landed).toBeUndefined();
     expect((await git(origin, "log", "-1", "--format=%s", "main")).out).toBe("init");
+    expect(await w.worktrees.gitStatus(wt.id)).toMatchObject({ files: [], ahead: 1 });
   });
 
   test("the press is the op out on the row, named step by step, with the agent's queue held", async () => {
@@ -1541,31 +1541,200 @@ describe("landing", () => {
     expect((await git(wt.path, "log", "-1", "--format=%s")).out).toBe("theirs");
   });
 
-  test("the push route pushes main to origin, and refuses when origin moved under it", async () => {
-    const repoId = await registered();
+  /** a bare origin main tracks, on the push route, and a second clone as the hands other people are */
+  const pushRoute = async (repoId: string) => {
     const origin = join(w.repo, "..", "origin.git");
     // -b main: a clone of origin checks out its HEAD, which is init.defaultBranch unless named
     sh(w.repo, "git", "init", "-q", "--bare", "-b", "main", origin);
     sh(w.repo, "git", "remote", "add", "origin", origin);
     sh(w.repo, "git", "push", "-q", "-u", "origin", "main");
     await setRoute(repoId, "push");
-    const wt = await w.worktrees.create(repoId, "feature");
-    writeFileSync(join(wt.path, "feature.txt"), "x\n");
-    const { result } = await w.worktrees.land(wt.id, "add feature");
-    expect(result.ok).toBe(true);
-    expect(result.message).toContain("pushed");
-    expect((await git(origin, "log", "-1", "--format=%s", "main^2")).out).toBe("add feature");
-    // origin moves on through someone else; the next land takes it in first and still pushes
     const other = join(w.repo, "..", "other");
     sh(w.repo, "git", "clone", "-q", origin, other);
     sh(other, "git", "config", "user.email", "o@o");
     sh(other, "git", "config", "user.name", "o");
-    sh(other, "git", "commit", "-q", "--allow-empty", "-m", "elsewhere");
-    sh(other, "git", "push", "-q", "origin", "main");
+    return { origin, other };
+  };
+  /** a pre-push hook that pushes a commit from the other clone under the push: once, or every time */
+  const raceHook = (other: string, once: boolean) => {
+    const flag = join(w.repo, "..", "raced");
+    // beside the checkout and named as the hooks path, since a global hooks path would hide one
+    // written into .git/hooks
+    const hooks = join(w.repo, "..", "racehooks");
+    mkdirSync(hooks, { recursive: true });
+    sh(w.repo, "git", "config", "core.hooksPath", hooks);
+    writeFileSync(
+      join(hooks, "pre-push"),
+      [
+        "#!/bin/sh",
+        "unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_PREFIX",
+        once ? `if [ -e "${flag}" ]; then exit 0; fi` : "",
+        `touch "${flag}"`,
+        `cd "${other}" && git fetch -q origin main && git reset -q --hard FETCH_HEAD`,
+        "git commit -q --allow-empty -m elsewhere && git push -q origin main",
+        "exit 0",
+        "",
+      ].join("\n"),
+      { mode: 0o755 },
+    );
+    return () => {
+      rmSync(join(hooks, "pre-push"), { force: true });
+      rmSync(flag, { force: true });
+      sh(w.repo, "git", "config", "--unset", "core.hooksPath");
+    };
+  };
+
+  test("the push route lands from the worktree onto origin's main, and meets origin moving under it once", async () => {
+    const repoId = await registered();
+    const { origin, other } = await pushRoute(repoId);
+    const wt = await w.worktrees.create(repoId, "feature");
+    writeFileSync(join(wt.path, "feature.txt"), "x\n");
+    const { result } = await w.worktrees.land(wt.id, "add feature");
+    expect(result.ok).toBe(true);
+    expect(result.message).toBe("committed and merged into main and pushed; main here pulled it");
+    expect((await git(origin, "log", "-1", "--format=%s", "main^2")).out).toBe("add feature");
+    expect((await git(w.repo, "rev-parse", "main")).out).toBe((await git(origin, "rev-parse", "main")).out);
+    expect((await git(wt.path, "rev-parse", "HEAD")).out).toBe((await git(origin, "rev-parse", "main")).out);
+    expect(w.state.worktree(wt.id)).toMatchObject({ landed: true });
+    // origin moves under the next press, after the push has read origin: refused once, then the
+    // land fetches, rebases, rebuilds and pushes again, and both landings are on origin's main
+    const undo = raceHook(other, true);
     writeFileSync(join(wt.path, "more.txt"), "y\n");
     const again = await w.worktrees.land(wt.id, "add more");
     expect(again.result.ok).toBe(true);
-    expect((await git(origin, "log", "--format=%s", "-n", "5")).out.split("\n")).toContain("elsewhere");
+    const subjects = (await git(origin, "log", "--first-parent", "--format=%s", "-n", "4")).out.split("\n");
+    expect(subjects[1]).toBe("elsewhere");
+    expect((await git(origin, "log", "-1", "--format=%s", "main^2")).out).toBe("add more");
+    undo();
+    // origin that moves under every push is not raced for ever: the second rejection stops, with
+    // the branch clean, committed and ready for the next press
+    const always = raceHook(other, false);
+    writeFileSync(join(wt.path, "third.txt"), "z\n");
+    const twice = await w.worktrees.land(wt.id, "add a third");
+    expect(twice.result.ok).toBe(false);
+    expect(twice.result.message).toContain("land again");
+    expect((await git(wt.path, "status", "--porcelain")).out).toBe("");
+    expect((await git(wt.path, "branch", "--show-current")).out).toBe(wt.branch);
+    always();
+    expect((await w.worktrees.land(wt.id)).result.ok).toBe(true);
+    expect((await git(origin, "log", "-1", "--format=%s", "main^2")).out).toBe("add a third");
+  });
+
+  test("the push route needs nothing of the main checkout", async () => {
+    const repoId = await registered();
+    const { origin } = await pushRoute(repoId);
+    // main here is checked out elsewhere with an edit in it, and stays that way throughout
+    sh(w.repo, "git", "switch", "-q", "-c", "elsewhere");
+    writeFileSync(join(w.repo, "README.md"), "edited on main\n");
+    const wt = await w.worktrees.create(repoId, "feature");
+    writeFileSync(join(wt.path, "feature.txt"), "x\n");
+    const { result } = await w.worktrees.land(wt.id, "add feature");
+    expect(result.ok).toBe(true);
+    expect(result.message).toMatch(/main here was left where it is: main checkout is on 'elsewhere'/);
+    expect((await git(origin, "log", "-1", "--format=%s", "main^2")).out).toBe("add feature");
+    expect(w.state.worktree(wt.id)).toMatchObject({ landed: true });
+    expect(readFileSync(join(w.repo, "README.md"), "utf8")).toBe("edited on main\n");
+    expect((await git(w.repo, "branch", "--show-current")).out).toBe("elsewhere");
+    // main cleared: its own pull takes the landing, and the row stays landed
+    sh(w.repo, "git", "checkout", "-q", "--", "README.md");
+    sh(w.repo, "git", "switch", "-q", "main");
+    const main = w.state.worktrees.find((x) => x.repoId === repoId && x.kind === "main")!;
+    expect((await w.worktrees.pull(main.id)).ok).toBe(true);
+    expect((await git(w.repo, "rev-parse", "main")).out).toBe((await git(origin, "rev-parse", "main")).out);
+    await w.worktrees.gitStatus(wt.id);
+    expect(w.state.worktree(wt.id)?.landed).toBe(true);
+  });
+
+  test("the push route by squash lands one commit with the suggested message, from toyon's own branch or an adopted one", async () => {
+    const repoId = await registered();
+    const { origin } = await pushRoute(repoId);
+    w.state.requireRepo(repoId).config.land = { route: "push", method: "squash" };
+    const wt = await w.worktrees.create(repoId, "feature");
+    for (const n of [1, 2]) {
+      writeFileSync(join(wt.path, `f${n}.txt`), "x\n");
+      sh(wt.path, "git", "add", "-A");
+      sh(wt.path, "git", "commit", "-qm", `step ${n}`);
+    }
+    const tip = (await git(wt.path, "rev-parse", "HEAD")).out;
+    w.worktrees.setLanding(wt.id, {
+      at: 1,
+      check: "none",
+      ready: true,
+      subject: "add the feature",
+      body: "Two steps.",
+      fingerprint: "f",
+    });
+    const { result } = await w.worktrees.land(wt.id);
+    expect(result.ok).toBe(true);
+    expect(result.message).toBe("squashed onto main and pushed; main here pulled it");
+    expect((await git(origin, "log", "--format=%s", "-n", "3")).out.split("\n")).toEqual(["add the feature", "init"]);
+    expect((await git(origin, "log", "-1", "--format=%b")).out).toBe("Two steps.");
+    expect((await git(wt.path, "rev-parse", "HEAD")).out).toBe((await git(origin, "rev-parse", "main")).out);
+    // the two commits it carried are kept under the landing's ref
+    expect(w.state.worktree(wt.id)?.lands).toMatchObject([{ tip }]);
+    expect((await git(w.repo, "rev-parse", `refs/toyon/lands/${wt.id}/0`)).out).toBe(tip);
+    // an adopted branch is squashed from a detached base and keeps its own commits
+    sh(w.repo, "git", "branch", "theirs");
+    const adopted = await w.worktrees.openRef(repoId, "branch", "theirs");
+    for (const n of [1, 2]) {
+      writeFileSync(join(adopted.path, `theirs${n}.txt`), "t\n");
+      sh(adopted.path, "git", "add", "-A");
+      sh(adopted.path, "git", "commit", "-qm", `theirs ${n}`);
+    }
+    const theirs = (await git(adopted.path, "rev-parse", "HEAD")).out;
+    w.worktrees.setLanding(adopted.id, { at: 1, check: "none", ready: true, subject: "add theirs", fingerprint: "f" });
+    expect((await w.worktrees.land(adopted.id)).result.ok).toBe(true);
+    expect((await git(origin, "log", "-1", "--format=%s", "main")).out).toBe("add theirs");
+    expect((await git(origin, "log", "-1", "--format=%P", "main")).out.split(" ")).toHaveLength(1);
+    expect((await git(adopted.path, "rev-parse", "HEAD")).out).toBe(theirs);
+    expect((await git(adopted.path, "branch", "--show-current")).out).toBe("theirs");
+    expect(w.state.worktree(adopted.id)).toMatchObject({ landed: true });
+  });
+
+  test("the push route finds its work on origin already and lands the row without a push", async () => {
+    const repoId = await registered();
+    const { origin, other } = await pushRoute(repoId);
+    w.state.requireRepo(repoId).config.land = { route: "push", method: "squash" };
+    const wt = await w.worktrees.create(repoId, "feature");
+    writeFileSync(join(wt.path, "feature.txt"), "x\n");
+    sh(wt.path, "git", "add", "-A");
+    sh(wt.path, "git", "commit", "-qm", "add feature");
+    const tip = (await git(wt.path, "rev-parse", "HEAD")).out;
+    // a hand pushed the branch's own commit onto origin's main, hash and all: the rebase drops
+    // it, and a squash of nothing would refuse
+    sh(other, "git", "fetch", "-q", wt.path, wt.branch);
+    sh(other, "git", "merge", "-q", "--ff-only", "FETCH_HEAD");
+    sh(other, "git", "push", "-q", "origin", "main");
+    const { result } = await w.worktrees.land(wt.id);
+    expect(result.ok).toBe(true);
+    expect(result.message).toBe("origin's main has this work already; main here pulled it");
+    expect((await git(origin, "rev-parse", "main")).out).toBe(tip);
+    expect((await git(wt.path, "rev-parse", "HEAD")).out).toBe(tip);
+    expect(w.state.worktree(wt.id)).toMatchObject({ landed: true });
+    expect(w.state.worktree(wt.id)?.lands).toHaveLength(1);
+  });
+
+  test("the push route names its steps", async () => {
+    const repoId = await registered();
+    const { other } = await pushRoute(repoId);
+    const wt = await w.worktrees.create(repoId, "feature");
+    const seen: Array<string | undefined> = [];
+    w.hub.on("worktreesChanged", () => {
+      const out = w.worktrees.shippingOf(wt.id);
+      if (out && (seen.length === 0 || seen.at(-1) !== out.step)) seen.push(out.step);
+    });
+    sh(other, "git", "commit", "-q", "--allow-empty", "-m", "elsewhere");
+    sh(other, "git", "push", "-q", "origin", "main");
+    writeFileSync(join(wt.path, "feature.txt"), "x\n");
+    expect((await w.worktrees.land(wt.id, "add feature")).result.ok).toBe(true);
+    expect(seen).toEqual([
+      undefined,
+      "committing",
+      "fetching origin/main",
+      "rebasing onto origin/main",
+      "merging into origin/main",
+      "pushing main",
+    ]);
   });
 
   test("the pr route refuses without an origin", async () => {

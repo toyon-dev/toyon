@@ -14,7 +14,11 @@ export type MergeMethod = "merge" | "squash" | "rebase";
  * left to the method row, which is the one it is a choice on */
 export const LAND_ROUTES: ReadonlyArray<{ id: LandRoute; name: string; description: string }> = [
   { id: "merge", name: "here", description: "onto main in this checkout; nothing is pushed" },
-  { id: "push", name: "here and push", description: "onto main here, then main is pushed to origin" },
+  {
+    id: "push",
+    name: "push",
+    description: "onto main on origin, straight from the worktree; main here follows",
+  },
   { id: "pr", name: "pull request", description: "the branch is pushed and a pull request opened on GitHub" },
 ];
 
@@ -118,7 +122,7 @@ export function describeLand(policy: LandPolicy, defaultBranch = "main"): string
     case "merge":
       return `Commit and ${how} ${defaultBranch} here`;
     case "push":
-      return `Commit, ${how} ${defaultBranch} and push it`;
+      return `Commit, ${how} ${defaultBranch} on origin and push it`;
     case "pr":
       return policy.automerge
         ? "Commit, push the branch and open a PR that GitHub merges when its rules allow"

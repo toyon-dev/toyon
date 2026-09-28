@@ -1,5 +1,5 @@
-// Landing operations: commit, take main in, land locally by a method, push main, open or merge a
-// PR. Each returns a ShipResult the shell reads out where the work is. Toyon-owned branches are rebased onto main
+// Landing operations: commit, take main in, land locally by a method, build and push a landing
+// onto origin's main, open or merge a PR. Each returns a ShipResult the shell reads out where the work is. Toyon-owned branches are rebased onto main
 // rather than merged with it, so a branch reads as if it started from today's main and every
 // method after that is one command; a branch someone adopted keeps its history and is merged with.
 
@@ -189,23 +189,6 @@ export async function squashMessage(worktreePath: string, defaultBr: string, sug
   return subjects.out.trim() || "land";
 }
 
-/** The same fast-forward without the clean check: after a PR merges, main here should move even
- * with unrelated edits in the checkout, and git itself refuses when an edit would be overwritten */
-export async function fastForwardMain(
-  repoPath: string,
-  defaultBr: string,
-  w: LandWatch = UNWATCHED,
-): Promise<ShipResult> {
-  const current = await git(repoPath, "branch", "--show-current");
-  if (current.out !== defaultBr) {
-    return { ok: false, message: `main checkout is on '${current.out}', not ${defaultBr}; switch it first` };
-  }
-  w.step(`pulling ${defaultBr} from origin`);
-  const f = await w.git(repoPath, ["fetch", "--quiet"]);
-  if (!f.ok) return { ok: false, message: refused("fetch failed", f) };
-  return fastForwardFetched(repoPath, defaultBr);
-}
-
 /** what a fast-forward onto the last fetch found: `moved` when main took commits, and why it was
  * left where it was otherwise, in the trunk's own words (see TrunkStatus.stale) */
 export type TrunkFf = ShipResult & { moved?: boolean; stale?: TrunkStatus["stale"] };
@@ -245,18 +228,94 @@ export async function fastForwardFetched(repoPath: string, defaultBr: string): P
   return { ok: true, moved: true, message: `pulled ${behind} commit(s) from origin` };
 }
 
-/** push main to origin after a local land; a rejection means origin moved in between */
-export async function pushMain(repoPath: string, defaultBr: string, w: LandWatch = UNWATCHED): Promise<ShipResult> {
+/** What the push route lands: the branch's work over the base as one commit the repo's method
+ * shapes, made in the worktree as a real commit so the repo's hooks run on what reaches main
+ * (plumbing would skip commit-msg and pre-commit). HEAD holds the base already (takeMainIn), so
+ * no merge here can conflict. A squash of toyon's own branch is the branch itself moved onto one
+ * commit, since it restarts from the base after landing anyway; an adopted branch keeps its
+ * history, so its squash, like every merge commit, is made on a detached HEAD at the base and the
+ * branch is switched back to on every exit, a refused hook included. `sha` is what to push. */
+export async function landingCommit(
+  worktreePath: string,
+  branch: string,
+  base: string,
+  method: MergeMethod,
+  message: string,
+  own: boolean,
+  w: LandWatch = UNWATCHED,
+): Promise<ShipResult & { sha?: string }> {
+  const head = await git(worktreePath, "rev-parse", "HEAD");
+  if (!head.ok) return { ok: false, message: `no HEAD to land: ${head.err.slice(0, 200)}` };
+  if (method === "rebase") return { ok: true, sha: head.out, message: `${branch} as it is` };
+  if (method === "squash" && own) {
+    w.step(`squashing onto ${base}`);
+    const r = await git(worktreePath, "reset", "--soft", base);
+    if (!r.ok) return { ok: false, message: `could not squash onto ${base}: ${r.err.slice(0, 200)}` };
+    const c = await w.git(worktreePath, ["commit", "-m", message]);
+    if (!c.ok) {
+      await git(worktreePath, "reset", "--soft", head.out);
+      return { ok: false, message: refused("squash commit refused", c) };
+    }
+    const sha = await git(worktreePath, "rev-parse", "HEAD");
+    return { ok: true, sha: sha.out, message: `squashed ${branch} onto ${base}` };
+  }
+  const detached = await git(worktreePath, "checkout", "-q", "--detach", base);
+  if (!detached.ok) return { ok: false, message: `could not check out ${base}: ${detached.err.slice(0, 200)}` };
+  try {
+    if (method === "squash") {
+      w.step(`squashing onto ${base}`);
+      const s = await w.git(worktreePath, ["merge", "--squash", branch]);
+      if (!s.ok) return { ok: false, message: refused("squash refused", s) };
+      const c = await w.git(worktreePath, ["commit", "-m", message]);
+      if (!c.ok) return { ok: false, message: refused("squash commit refused", c) };
+    } else {
+      w.step(`merging into ${base}`);
+      // the subject git would write on main itself; on a detached HEAD it says "into HEAD"
+      const m = await w.git(worktreePath, ["merge", "--no-ff", "-m", `Merge branch '${branch}'`, branch]);
+      if (!m.ok) return { ok: false, message: refused("merge refused", m) };
+    }
+    const sha = await git(worktreePath, "rev-parse", "HEAD");
+    return { ok: true, sha: sha.out, message: `${method === "squash" ? "squashed" : "merged"} ${branch} onto ${base}` };
+  } finally {
+    // a refused commit leaves the squash staged, and a refused merge leaves one in progress:
+    // both go with the detached HEAD, which the tree was clean under, before the branch is back
+    await git(worktreePath, "reset", "-q", "--hard");
+    await git(worktreePath, "switch", "-q", branch);
+  }
+}
+
+/** the remote and branch main tracks: where the base is fetched from and the landing pushed to */
+export async function trackedRemote(
+  worktreePath: string,
+  defaultBr: string,
+): Promise<{ remote: string; merge: string } | null> {
+  const [remote, merge] = await Promise.all([
+    git(worktreePath, "config", "--get", `branch.${defaultBr}.remote`),
+    git(worktreePath, "config", "--get", `branch.${defaultBr}.merge`),
+  ]);
+  if (!remote.ok || !remote.out || !merge.ok || !merge.out) return null;
+  return { remote: remote.out, merge: merge.out };
+}
+
+/** The landing commit pushed straight to main on origin, from the worktree. `moved` is git's own
+ * word for a tip origin no longer has, which the route meets by fetching and building again; a
+ * hook's output is on the same pipe, and a hook that prints "rejected" about a file is not origin
+ * moving. */
+export async function pushLanding(
+  worktreePath: string,
+  sha: string,
+  defaultBr: string,
+  w: LandWatch = UNWATCHED,
+): Promise<ShipResult & { moved?: true }> {
+  const tracked = await trackedRemote(worktreePath, defaultBr);
+  if (!tracked) return { ok: false, message: `${defaultBr} tracks no remote branch to push to` };
   w.step(`pushing ${defaultBr}`);
-  const p = await w.git(repoPath, ["push", "origin", defaultBr]);
-  if (p.ok) return { ok: true, message: `pushed ${defaultBr} to origin` };
-  // git's own words for a tip origin no longer has; a hook's output is on the same pipe, and a
-  // hook that prints "rejected" about a file is not origin moving
-  const moved = /\[rejected\]|fetch first|non-fast-forward/.test(p.err);
-  return {
-    ok: false,
-    message: moved ? `${defaultBr} on origin moved; pull ${defaultBr} and land again` : refused("push failed", p, 300),
-  };
+  const p = await w.git(worktreePath, ["push", tracked.remote, `${sha}:${tracked.merge}`]);
+  if (p.ok) return { ok: true, message: `pushed ${defaultBr} to ${tracked.remote}` };
+  const moved = /\[rejected\]|fetch first|non-fast-forward|cannot lock ref/.test(p.err);
+  return moved
+    ? { ok: false, moved: true, message: `${defaultBr} on ${tracked.remote} moved while landing` }
+    : { ok: false, message: refused("push failed", p, 300) };
 }
 
 /** A conflict leaves a merge in progress that must be aborted; any other failure (dirty index,
@@ -293,15 +352,10 @@ export async function fetchBase(
 ): Promise<ShipResult> {
   const base = baseOf(repo);
   if (!baseIsRemote(repo)) return { ok: true, message: `${base} here is the base` };
-  const [remote, merge] = await Promise.all([
-    git(worktreePath, "config", "--get", `branch.${repo.defaultBranch}.remote`),
-    git(worktreePath, "config", "--get", `branch.${repo.defaultBranch}.merge`),
-  ]);
-  if (!remote.ok || !remote.out || !merge.ok || !merge.out) {
-    return { ok: false, message: `${repo.defaultBranch} no longer tracks a branch to fetch ${base} from` };
-  }
+  const tracked = await trackedRemote(worktreePath, repo.defaultBranch);
+  if (!tracked) return { ok: false, message: `${repo.defaultBranch} no longer tracks a branch to fetch ${base} from` };
   w.step(`fetching ${base}`);
-  const f = await w.git(worktreePath, ["fetch", "--quiet", remote.out, merge.out]);
+  const f = await w.git(worktreePath, ["fetch", "--quiet", tracked.remote, tracked.merge]);
   if (!f.ok) return { ok: false, message: refused("fetch failed", f) };
   return { ok: true, message: `fetched ${base}` };
 }

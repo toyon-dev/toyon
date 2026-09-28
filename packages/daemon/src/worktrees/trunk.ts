@@ -129,6 +129,16 @@ export class Trunk {
     return this.follow(main.id);
   }
 
+  /** Main onto what is fetched already, for a landing pushed straight to origin from a worktree:
+   * the route's own fetch brought origin's main, so no second fetch, only the fast-forward under
+   * the lock when main is clean and behind, with why it stood recorded otherwise. Housekeeping
+   * the landing does not wait on to be a landing. */
+  async catchUp(repoId: string): Promise<TrunkFf> {
+    const main = mainOf(this.d.state, repoId);
+    if (!main) return { ok: false, message: "no main checkout to pull" };
+    return this.follow(main.id);
+  }
+
   /** main onto what the last fetch brought, when it is clean and behind; else why not, on the trunk */
   private async follow(mainId: string): Promise<TrunkFf> {
     const main = this.d.state.worktree(mainId);

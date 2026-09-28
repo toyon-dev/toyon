@@ -13,12 +13,15 @@ import { tip } from "../../ui/Tooltip.tsx";
 export function useTermTabs({
   worktreeId,
   procs,
+  borrowed,
   login,
   current,
   onRestart,
 }: {
   worktreeId: string;
   procs: ProcState[];
+  /** the shared-tier procs this worktree reaches on main: a tab each, with nothing to stream */
+  borrowed: string[];
   login: boolean;
   current: string;
   onRestart: (stream: string) => void;
@@ -51,6 +54,15 @@ export function useTermTabs({
       tip: tip(`${p.command}\n${p.status} on :${p.port}`, undefined, { placement: "top" }),
       menu: () => procItems(p, worktreeId, deps),
       trail: trail(p.name, `Restart ${p.name}`),
+    })),
+    // a borrowed proc has no output here: its tab says where it runs, and the body offers to run it here
+    ...borrowed.map((name) => ({
+      id: name,
+      label: name,
+      lead: <span className="dot borrowed" />,
+      tip: tip(`${name} runs on main for every worktree; this one reaches it at its usual address`, undefined, {
+        placement: "top",
+      }),
     })),
   ];
 }

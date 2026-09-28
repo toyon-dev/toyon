@@ -10,6 +10,7 @@ import {
   detectConfig,
   detectServices,
   inferPaths,
+  isLocalDatabase,
   mergePatch,
   previewPaths,
   procCommand,
@@ -46,12 +47,36 @@ describe("detectServices", () => {
     });
     // the first env file with one wins; a mention in a comment or a longer name is not one
     expect(
-      detectServices(repo({ ".env": "# DATABASE_URL=x\nMY_DATABASE_URL=y\n", ".env.local": "export DB_URL=z\n" })),
+      detectServices(
+        repo({
+          ".env": "# DATABASE_URL=postgres://localhost/x\nMY_DATABASE_URL=postgres://localhost/y\n",
+          ".env.local": "export DB_URL=postgres://localhost/z\n",
+        }),
+      ),
     ).toEqual({ envUrl: { name: "DB_URL", file: ".env.local" } });
-    expect(detectServices(repo({ "compose.yaml": "", ".env": "MONGODB_URI=m\n" }))).toEqual({
+    expect(detectServices(repo({ "compose.yaml": "", ".env": "MONGODB_URI=mongodb://db:27017/app\n" }))).toEqual({
       compose: "compose.yaml",
       envUrl: { name: "MONGODB_URI", file: ".env" },
     });
+  });
+
+  test("a hosted database is shared on purpose, so it is not reported", () => {
+    expect(
+      detectServices(repo({ ".env": "DATABASE_URL=postgres://user:pw@ep-x.eu-central-1.aws.neon.tech/app\n" })),
+    ).toBeUndefined();
+    expect(detectServices(repo({ ".env": 'DATABASE_URL="postgres://staging.example.com/app"\n' }))).toBeUndefined();
+    for (const local of [
+      "postgres://localhost/app",
+      "postgres://127.0.0.1:5432/app",
+      "postgresql://user@[::1]/app",
+      "postgres://db:5432/app",
+      "mysql://host.docker.internal/app",
+      "sqlite:///./dev.db",
+      "file:./dev.db",
+    ]) {
+      expect(isLocalDatabase(local), local).toBe(true);
+    }
+    expect(isLocalDatabase("postgres://db.internal.example/app")).toBe(false);
   });
 });
 

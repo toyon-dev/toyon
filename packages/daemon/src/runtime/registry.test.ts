@@ -89,6 +89,14 @@ function make(
   return { state, hub, registry, ...f };
 }
 
+describe("worktreeEnv", () => {
+  test("a worktree gets its id; main, which never ran setup, gets an empty one", () => {
+    expect(worktreeEnv(wt, repo)).toEqual({ TOYON_WORKTREE: "w1", TOYON_ROOT: "/nowhere" });
+    expect(worktreeEnv({ ...wt, kind: "main" }, repo).TOYON_WORKTREE).toBe("");
+    expect(worktreeEnv(spare, repo).TOYON_WORKTREE).toBe("s1");
+  });
+});
+
 describe("oldestViewed", () => {
   const rows: Record<string, WorktreeInfo> = {
     old: { ...wt, id: "old", viewedAt: 100 },

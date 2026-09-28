@@ -44,10 +44,12 @@ export function keepApartPrompt(repo: RepoInfo, file: string, services: SharedSe
   return [
     `Toyon runs several worktrees of this repo (${repo.name}) at once, each with its own copy of the code, and right now they would all share ${what}: a migration run in one worktree changes the database every other worktree is using.`,
     "",
-    `Give each worktree its own. Every command Toyon runs gets \`TOYON_WORKTREE\` (the worktree's id) and \`TOYON_ROOT\` (the main checkout). Edit \`${file}\` so that:`,
-    '- `setup` makes the worktree\'s own database, cloned from the main checkout\'s so it starts with the same schema and data (Postgres: `createdb -T <db> "<db>_$TOYON_WORKTREE"`; a compose stack: bring it up under `-p "<name>_$TOYON_WORKTREE"` and seed it the way the README does).',
-    "- `teardown` drops it again (`dropdb --if-exists ...`, or `docker compose -p ... down -v`).",
-    "- the running commands point at it: put the per-worktree URL in front of the command in `run`, or in a profile's `env`, using `$TOYON_WORKTREE` in the name. `setup` does not see what `run` sets, so a migration step in `setup` needs the URL in front of it too.",
+    `Give each worktree its own. Every command Toyon runs gets \`TOYON_WORKTREE\` (the worktree's id, empty in the main checkout, which never runs setup) and \`TOYON_ROOT\` (the main checkout). Edit \`${file}\` so that:`,
+    '- `setup` makes the worktree\'s own database with the same schema and seed data. Postgres refuses to copy a database with connections open, so copy from a template nothing serves: `createdb -T <db>_template "<db>_$TOYON_WORKTREE"`, making `<db>_template` once from the seed if it does not exist. Keep it seed-sized, since every worktree copies it. On Neon, `neonctl branches create --name "wt_$TOYON_WORKTREE" --parent main` instead. A compose stack: bring it up under `-p "<name>_$TOYON_WORKTREE"` and seed it the way the README does.',
+    "- `teardown` drops it again (`dropdb --if-exists ...`, `neonctl branches delete ...`, or `docker compose -p ... down -v`).",
+    // split so the `${...}` reads as the shell syntax it is, not a template hole
+    "- the running commands point at it, with the base database in the main checkout: put the URL in front of the command in `run`, or in a profile's `env`, named `<db>$" +
+      "{TOYON_WORKTREE:+_$TOYON_WORKTREE}`. `setup` does not see what `run` sets, so a migration step in `setup` needs the URL in front of it too.",
     '- a database container the worktrees share (each with its own database inside it) is marked `{ "cmd": ..., "from": "trunk", "paths": [] }` in `run`, so the main checkout runs it once for everyone.',
     "",
     "Read the README and the existing env files for the database's name and credentials. Do not run any migration yourself, and do not start any server; Toyon picks the file up as soon as it is written.",

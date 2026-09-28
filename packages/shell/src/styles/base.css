@@ -260,6 +260,12 @@
       background: var(--surface2);
       opacity: 0.6;
     }
+    /* runs on main for this worktree: up, but not here, so the idle colour with a ring rather
+   than a fill, the way a thing that is present by reference reads */
+    &.borrowed {
+      background: transparent;
+      box-shadow: inset 0 0 0 1.5px var(--ink2);
+    }
     &.landed {
       background: var(--aqua);
     }

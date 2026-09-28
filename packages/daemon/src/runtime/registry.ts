@@ -1,7 +1,7 @@
 // One Runtime per worktree: its agent session (from the moment the worktree exists) plus, once
 // setup has run, its process group and preview proxy.
 
-import type { LogLine, ManagedPolicy, ProcState, Remote, RepoInfo, WorktreeInfo } from "@toyon/shared";
+import type { LogLine, ManagedPolicy, ProcState, Remote, RepoInfo, WorktreeInfo, WorktreeKind } from "@toyon/shared";
 import { DEFAULT_PERMISSION_MODE, LOGIN_STREAM, SHELL_STREAM } from "@toyon/shared";
 import type { AgentAccounts } from "../agent/accounts.ts";
 import { OPTION_FIELDS } from "../agent/acp/options.ts";
@@ -134,11 +134,14 @@ export function procUrlEnv(
   return env;
 }
 
-/** what every command toyon runs for a worktree can read about where it is: the id, so a project
+/** What every command toyon runs for a worktree can read about where it is: the id, so a project
  * can name a database or a compose project of its own, and the main checkout, so a setup step can
- * copy what git never brings over and toyon does not know to (a local SQLite file, a secrets dir) */
-export function worktreeEnv(wt: { id: string }, repo: { path: string }): Record<string, string> {
-  return { TOYON_WORKTREE: wt.id, TOYON_ROOT: repo.path };
+ * copy what git never brings over and toyon does not know to (a local SQLite file, a secrets dir).
+ * On main the id is empty: main never runs setup, so nothing named for an id exists there, and
+ * `app${TOYON_WORKTREE:+_$TOYON_WORKTREE}` names the base database on main and a copy's own
+ * everywhere else. */
+export function worktreeEnv(wt: { id: string; kind?: WorktreeKind }, repo: { path: string }): Record<string, string> {
+  return { TOYON_WORKTREE: wt.kind === "main" ? "" : wt.id, TOYON_ROOT: repo.path };
 }
 
 /** a terminal's environment: the daemon's own minus PORT and the supervisor's FORCE_COLOR=0 (a

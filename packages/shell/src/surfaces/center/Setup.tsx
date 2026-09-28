@@ -30,8 +30,8 @@ import { tip } from "../../ui/Tooltip.tsx";
 import { View } from "../../ui/View.tsx";
 import { keepApartPrompt, setupFixPrompt } from "./fixPrompt.ts";
 
-/** `shared`: main runs it once for every worktree (`from: "trunk"` in the file); on by default
- * for every guessed proc but the page, so the cheap thing is what a first confirm writes */
+/** `shared`: main runs it once for every worktree (`from: "trunk"` in the file); off unless the
+ * file says so, since whether a worktree's backend edit shows is then a guess about paths */
 type Proc = { id: number; name: string; cmd: string; shared: boolean };
 
 /** rows are added and removed while the form is open, so each carries an identity of its own */
@@ -72,9 +72,10 @@ export function Setup({ repo, onClose }: { repo: RepoInfo; onClose?: () => void 
   // read once: the form remounts on a fresh guess (see Center), so mount is the guess
   const [guessed] = useState(() => Object.keys(repo.config.run).length > 0);
   const [procs, setProcs] = useState<Proc[]>(() => {
-    // a guess has no long form yet: every proc but the page starts shared, and a file says
-    const detected = Object.entries(repo.config.run).map(([name, entry], i) =>
-      proc(name, runCmd(entry), repo.needsSetup ? i > 0 : runShared(entry)),
+    // sharing is opted into per proc: a fresh confirm runs everything in every worktree, the way
+    // it always has, and a file says which procs the trunk runs for everyone
+    const detected = Object.entries(repo.config.run).map(([name, entry]) =>
+      proc(name, runCmd(entry), runShared(entry)),
     );
     return detected.length > 0 ? detected : [proc("web", "")];
   });

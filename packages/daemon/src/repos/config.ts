@@ -354,9 +354,23 @@ const DB_URL_NAMES = [
   "MONGO_URL",
 ];
 
-/** What the worktrees would share: a compose stack at the root, a database an env file points
- * at. Read off the tree, never the settings, so it holds whether or not the settings keep the
- * copies apart; the pane compares the two. */
+/** whether a database URL names something on this machine: loopback, a bare host the way a
+ * compose service is named, docker's host alias, or a file. A hosted database (staging on Neon,
+ * a team's shared dev server) is shared on purpose, and no worktree could have its own. */
+export function isLocalDatabase(url: string): boolean {
+  const v = url.trim().replace(/^["']|["']$/g, "");
+  if (/^(sqlite|file):/i.test(v) || v.startsWith("/") || v.startsWith("./")) return true;
+  const m = /^[a-z][a-z0-9+.-]*:\/\/(?:[^@/]*@)?(\[[^\]]*\]|[^:/?#]+)/i.exec(v);
+  if (!m?.[1]) return false;
+  const host = m[1].toLowerCase();
+  if (host === "[::1]" || host === "localhost" || host === "host.docker.internal") return true;
+  if (/^127\.|^0\.0\.0\.0$/.test(host) || host.endsWith(".localhost")) return true;
+  return !host.includes(".");
+}
+
+/** What the worktrees would share: a compose stack at the root, a local database an env file
+ * points at. Read off the tree, never the settings, so it holds whether or not the settings keep
+ * the copies apart; the pane compares the two. */
 export function detectServices(repoPath: string): SharedServices | undefined {
   const out: SharedServices = {};
   const compose = COMPOSE_FILES.find((f) => existsSync(join(repoPath, f)));
@@ -364,11 +378,14 @@ export function detectServices(repoPath: string): SharedServices | undefined {
   for (const file of ENV_FILES) {
     const text = head(join(repoPath, file));
     if (!text) continue;
-    const name = DB_URL_NAMES.find((n) => new RegExp(`^\\s*(?:export\\s+)?${n}\\s*=`, "m").test(text));
-    if (name) {
-      out.envUrl = { name, file };
-      break;
+    for (const name of DB_URL_NAMES) {
+      const m = new RegExp(`^\\s*(?:export\\s+)?${name}\\s*=(.*)$`, "m").exec(text);
+      if (m?.[1] !== undefined && isLocalDatabase(m[1])) {
+        out.envUrl = { name, file };
+        break;
+      }
     }
+    if (out.envUrl) break;
   }
   return out.compose || out.envUrl ? out : undefined;
 }

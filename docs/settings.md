@@ -60,7 +60,7 @@ Most changes touch the page and not the API behind it. A `run` entry with `"from
 
 `paths` are globs from the root that make a copy run its own. Left out, they are read off the command (`server.js`, a `cd` into a folder), and a command that names nothing flips on anything outside the page's folders. `[]` means the copy never runs its own, which suits a database container whose databases are per copy (below). Lockfiles, `.env` files, compose files and migration folders count for every command that can flip. A copy's row menu also offers the switch by hand, either way.
 
-Main's shared tier is awake while any copy using it is, and sleeps with them. The setup pane marks every command but the page as shared on the first confirm.
+Main's shared tier is awake while any copy using it is, and sleeps with them. Nothing is shared until you say so: the setup pane has a "shared from main" box under each command but the page, off until you tick it.
 
 ## Keeping copies apart
 
@@ -68,22 +68,34 @@ Toyon does not know what a database is. Each copy runs your setup and your comma
 
 Every command, setup step, teardown step and terminal gets two variables to keep them apart:
 
-- `TOYON_WORKTREE`: the copy's id, for naming a database or a compose project of its own.
+- `TOYON_WORKTREE`: the copy's id, for naming a database or a compose project of its own. Empty in the main checkout, which never runs `setup`, so `app${TOYON_WORKTREE:+_$TOYON_WORKTREE}` names the base database there and a copy's own everywhere else.
 - `TOYON_ROOT`: the main checkout, for copying over what git leaves behind.
 
-A Postgres database per copy, cloned from the main checkout's and dropped when the copy goes:
+A Postgres database per copy, copied from a template and dropped when the copy goes. The copy is made while the spare warms, so it is there before you type; it takes as long and as much disk as the template is big, so keep the template seed-sized rather than a production dump. Postgres refuses to copy a database with connections open, which is why the template is its own database that nothing serves:
 
 ```json
 {
-  "setup": ["npm install", "createdb -T app \"app_$TOYON_WORKTREE\""],
+  "setup": ["npm install", "createdb -T app_template \"app_$TOYON_WORKTREE\""],
   "teardown": ["dropdb --if-exists \"app_$TOYON_WORKTREE\""],
   "run": {
-    "web": "DATABASE_URL=\"postgres://localhost/app_$TOYON_WORKTREE\" npm run dev"
+    "web": "DATABASE_URL=\"postgres://localhost/app${TOYON_WORKTREE:+_$TOYON_WORKTREE}\" npm run dev"
   }
 }
 ```
 
 A migration step in `setup` needs the same `DATABASE_URL` in front of it, since `setup` does not see what `run` sets.
+
+A Neon branch per copy is the same recipe with a branch in place of a copy: instant, copy-on-write, data included.
+
+```json
+{
+  "setup": ["neonctl branches create --name \"wt_$TOYON_WORKTREE\" --parent main"],
+  "teardown": ["neonctl branches delete \"wt_$TOYON_WORKTREE\""],
+  "run": {
+    "web": "DATABASE_URL=\"$(neonctl connection-string \"wt_$TOYON_WORKTREE\")\" npm run dev"
+  }
+}
+```
 
 A compose stack per copy, under its own project name. Ports the stack publishes on the host still collide, so leave them unpublished or take them from the environment:
 

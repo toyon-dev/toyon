@@ -10,6 +10,8 @@ import { useTermTabs } from "./termTabs.tsx";
 import "./terminal.css";
 
 const XTerm = lazy(() => import("./XTerm.tsx"));
+/** one frozen empty list, so a row with nothing borrowed never re-runs the effects keyed on it */
+const EMPTY_NAMES: string[] = [];
 
 /** the terminal pane under the preview: one tab per stream the worktree runs, its shell first and
  * then its dev servers. Every tab is a real pty, so a proc tab takes keystrokes the way the shell
@@ -34,6 +36,7 @@ export function TerminalPane({
   const focusReq = useStore((s) => s.focusTerm);
   const active = useActive();
   const procs = active?.procs ?? [];
+  const borrowed = active?.borrowed ?? EMPTY_NAMES;
   const login = active?.login ?? false;
   const stream = useLocalField(worktreeId, "termStream");
   // a `!` command from a draft's box, typed into this shell once it answers
@@ -43,10 +46,13 @@ export function TerminalPane({
   const [exit, setExit] = useState<{ code?: number } | null>(null);
   // a proc that leaves the config (a profile switch), or a login that finished, would strand the
   // tab on a stream nobody runs
+  const onMain = borrowed.includes(stream);
   useEffect(() => {
-    const runs = stream === SHELL_STREAM || (stream === LOGIN_STREAM ? login : procs.some((p) => p.name === stream));
+    const runs =
+      stream === SHELL_STREAM ||
+      (stream === LOGIN_STREAM ? login : procs.some((p) => p.name === stream) || borrowed.includes(stream));
     if (!runs) dispatch({ a: "term-stream", id: worktreeId, stream: SHELL_STREAM });
-  }, [procs, login, stream, worktreeId, dispatch]);
+  }, [procs, borrowed, login, stream, worktreeId, dispatch]);
   const pick = (next: string) => {
     if (next === stream) return;
     setExit(null);
@@ -76,7 +82,7 @@ export function TerminalPane({
     }
     setExit({ code });
   };
-  const tabs = useTermTabs({ worktreeId, procs, login, current: stream, onRestart: restart });
+  const tabs = useTermTabs({ worktreeId, procs, borrowed, login, current: stream, onRestart: restart });
   // Read as the pane mounts: its first terminal takes the keyboard only if the pane was asked for.
   // Any later one, a tab picked or a restart, was asked for itself.
   const carried = useRef(!opened);
@@ -95,6 +101,19 @@ export function TerminalPane({
       closeHint={chord("terminal")}
     >
       <div className="term-body">
+        {/* nothing streams for a proc that runs on main: the body says so, where the output would be */}
+        {onMain && (
+          <CrashCard
+            pane
+            title={`${stream} runs on main`}
+            body="Every worktree reaches main's copy until its own changes touch it, or until asked."
+            action={
+              <Button variant="outline" onClick={() => sock?.send({ t: "own-procs", worktreeId, names: [stream] })}>
+                run it here
+              </Button>
+            }
+          />
+        )}
         <ErrorBoundary pane>
           <Suspense fallback={<div className="empty">loading terminal…</div>}>
             <XTerm
@@ -116,7 +135,7 @@ export function TerminalPane({
       </div>
       {/* over the body rather than in place of it, so the host keeps its size and xterm's fit never
           measures an empty box; the restart is the one move, and it is where you are looking */}
-      {exit !== null && (
+      {exit !== null && !onMain && (
         <CrashCard
           pane
           title={

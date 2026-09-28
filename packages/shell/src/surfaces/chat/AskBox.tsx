@@ -46,6 +46,7 @@ import {
   walk,
 } from "./ask.ts";
 import { renderMarkdown } from "./markdown.ts";
+import { useCodeCopy } from "./useCodeCopy.tsx";
 
 type Root = RefObject<HTMLDivElement>;
 
@@ -472,6 +473,8 @@ function PermissionBody({
   // a plan is a file toyon wrote to the worktree, read in the pane as the document it is; only an
   // ask with no file behind it still carries its markdown
   const html = useMemo(() => (ask.detail && !plan ? renderMarkdown(ask.detail) : ""), [ask.detail, plan]);
+  const detail = useRef<HTMLDivElement>(null);
+  const codeCopy = useCodeCopy(detail);
   const readPlan = () => {
     // the caret stays on the ask, which is what the agent is blocked on
     if (plan && active === worktreeId)
@@ -511,8 +514,12 @@ function PermissionBody({
         <div className="ask-text">{ask.title}</div>
       </div>
       {html && (
-        // biome-ignore lint/security/noDangerouslySetInnerHtml: html is DOMPurify-sanitized markdown
-        <div className="ask-detail md" dangerouslySetInnerHTML={{ __html: html }} />
+        // the markup goes into a child of the detail so the detail keeps a child of its own beside it
+        <div ref={detail} className="ask-detail md">
+          {/* biome-ignore lint/security/noDangerouslySetInnerHtml: html is DOMPurify-sanitized markdown */}
+          <div dangerouslySetInnerHTML={{ __html: html }} />
+          {codeCopy}
+        </div>
       )}
       <div className="ask-options">
         {ask.choices.map((c, i) => (

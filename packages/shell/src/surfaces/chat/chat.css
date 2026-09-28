@@ -234,6 +234,8 @@
     color: var(--text0);
     max-width: 100%;
     overflow-wrap: break-word;
+    /* the box a fenced block's copy control (.code-copy) is placed in */
+    position: relative;
     /* a search hit's prose, marked the way a walked-back message is: the edge and a lifted seat.
      The seat reaches into the log's gutter, its margin paying for its padding, so marking the row
      moves no text; its corners are square, so the edge stands on a straight side. */
@@ -252,6 +254,14 @@
       white-space: normal;
       line-height: 1.6;
     }
+  }
+  /* the copy for a fenced block, in the block's top-right corner while the pointer is on the block.
+     useCodeCopy measures the corner and sets top and right; the box it is placed in is the message,
+     thought or ask detail holding the block, each positioned for it. Inside the block's own
+     padding, so a first line long enough to reach the corner runs under it, the way the block's
+     overlay scrollbar would. */
+  .code-copy {
+    position: absolute;
   }
   .msg-error {
     color: var(--red);
@@ -646,6 +656,8 @@
       font: var(--type-ui);
       line-height: 1.6;
       color: var(--text1);
+      /* the box a fenced block's copy control (.code-copy) is placed in */
+      position: relative;
     }
     & .tool-block {
       font: var(--type-mono-sm);
@@ -1372,6 +1384,8 @@
     padding: 8px 10px;
     background: var(--sunken-floor);
     border-radius: var(--radius);
+    /* the box a fenced block's copy control (.code-copy) is placed in; it scrolls with the prose */
+    position: relative;
   }
   /* ---- the ask in the transcript ----
    While the question is open its row is one line, "asking" and what is asked, with the accent's

@@ -26,6 +26,7 @@ export type IconName =
   | "external"
   | "plus"
   | "download"
+  | "copy"
   | "layers"
   | "pull"
   | "text"
@@ -86,6 +87,8 @@ const ICON_PATHS: Record<IconName, string> = {
   external: "M9 3h4v4 M13 3 8 8 M11.5 9.5V13H3V4.5h3.5",
   plus: "M8 3.5v9 M3.5 8h9",
   download: "M8 2.5v7.4 M4.9 6.8 8 9.9l3.1-3.1 M3 13h10",
+  // two sheets, the front one whole and the back one showing its top-left edge behind it
+  copy: "M5.5 5.5h8v8h-8z M10.5 5.5v-3h-8v8h3",
   // plain down arrow: bring main's commits into this worktree (download has the tray, and means
   // saving a file)
   pull: "M8 3.2v7.4 M4.9 7.4 8 10.6l3.1-3.2",

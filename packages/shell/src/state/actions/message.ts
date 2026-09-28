@@ -44,14 +44,19 @@ function linkItems(href: string): MenuItem[] {
   return [openOutItem(href), { id: "copy-link", label: "copy link", onClick: () => copyText(href) }];
 }
 
-/** a message in the transcript: what was under the pointer first, when that was a link, then its
- * text as text, and for one the person wrote, back into the composer to be said again with a
- * change. `dir` is the worktree's directory, which a file link's editors need. */
+/** a fenced block the menu was opened on: its text alone, without the prose around it */
+export function codeItems(code: string | null | undefined): MenuItem[] {
+  return code ? [{ id: "copy-code", label: "copy code", onClick: () => copyText(code) }] : [];
+}
+
+/** a message in the transcript: what was under the pointer first, when that was a fenced block
+ * or a link, then its text as text, and for one the person wrote, back into the composer to be
+ * said again with a change. `dir` is the worktree's directory, which a file link's editors need. */
 export function messageItems(
   item: { kind: "user" | "assistant" | "error"; text: string },
   worktreeId: string | null,
   { dispatch, sock }: Deps,
-  at: { link?: ChatLink | null; dir?: string | null } = {},
+  at: { link?: ChatLink | null; code?: string | null; dir?: string | null } = {},
 ): MenuEntry[] {
   const link = at.link;
   // a file or folder of this worktree can be shown in Finder; a path outside it names no worktree
@@ -76,7 +81,7 @@ export function messageItems(
       onClick: () => dispatch({ a: "set-draft", id: worktreeId, text: item.text }),
     });
   }
-  return grouped([...lead, copy, again]);
+  return grouped([codeItems(at.code), ...lead, copy, again]);
 }
 
 /** a path a row names, as the groups every such row shares: the editors that can open it, and the

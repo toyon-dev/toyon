@@ -2,7 +2,7 @@ import { LOGIN_STREAM, type PickMeta, SHELL_TOOL, type ShipOp, type ToolImage } 
 import { Fragment, memo, type ReactNode, useMemo, useRef, useState } from "react";
 import { copyText } from "../../state/actions/deps.ts";
 import { openFile, openFolder } from "../../state/actions/file.ts";
-import { type ChatLink, imageItems, messageItems, pathItems } from "../../state/actions/message.ts";
+import { type ChatLink, codeItems, imageItems, messageItems, pathItems } from "../../state/actions/message.ts";
 import { archiveWorktrees } from "../../state/actions/worktree.ts";
 import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
 import { openByPath } from "../../state/openOutside.ts";
@@ -50,6 +50,7 @@ import {
   toolLabel,
 } from "./toolCall.ts";
 import { toolRowItems } from "./toolRowItems.ts";
+import { codeAt, useCodeCopy } from "./useCodeCopy.tsx";
 
 /** the link at or around an element of a rendered message: the worktree file it names when the
  * checkout root is known, a file elsewhere on the daemon's disk, or a page out; a backticked
@@ -107,9 +108,10 @@ function Markdown({
   streaming,
 }: {
   text: string;
-  /** the row's menu, told which link the pointer was on, if any: the rendered markup is the row's,
-   * so a link inside it has no handler of its own */
-  menu: (link: ChatLink | null) => MenuEntry[];
+  /** the row's menu, told which link the pointer was on, if any, and the text of the fenced block
+   * it was in, if any: the rendered markup is the row's, so nothing inside it has a handler of
+   * its own */
+  menu: (link: ChatLink | null, code: string | null) => MenuEntry[];
   marked?: boolean;
   worktreeId?: string | null;
   fileRoot?: string;
@@ -148,15 +150,21 @@ function Markdown({
       }
     }
   });
+  // the markup goes into a child of the row so the row keeps a child of its own beside it
+  const root = useRef<HTMLDivElement>(null);
+  const codeCopy = useCodeCopy(root);
   return (
     // biome-ignore lint/a11y/useKeyWithClickEvents: the links inside are the controls; the root only routes their clicks
     <div
-      ref={body}
+      ref={root}
       className="msg-assistant md row-edge"
       data-state={rowState({ cursor: marked })}
-      {...cm.contextMenu((_from, target) => menu(chatLink(target, fileRoot)))}
+      {...cm.contextMenu((_from, target) => menu(chatLink(target, fileRoot), codeAt(target)))}
       onClick={(e) => openChatLink(e, fileRoot, worktreeId, { sock, dispatch })}
-    />
+    >
+      <div ref={body} />
+      {codeCopy}
+    </div>
   );
 }
 
@@ -387,8 +395,9 @@ function Fold({
   label: string;
   summary: ReactNode;
   /** what a right-click on the row offers; told whether the row is open, and how to fold it, or
-   * that there is nothing to fold */
-  menu: (fold: { open: boolean; leaf: boolean; toggle: () => void }) => MenuEntry[];
+   * that there is nothing to fold, and the element under the pointer, for a body whose markup
+   * holds things of its own (a fenced block in a thought) */
+  menu: (fold: { open: boolean; leaf: boolean; toggle: () => void }, target: Element) => MenuEntry[];
   children: ReactNode;
 }) {
   const [pinned, setPinned] = useState<boolean | null>(null);
@@ -425,7 +434,7 @@ function Fold({
         // resize the open itself causes does not pull the body back to its end
         tail.read();
       }}
-      {...cm.contextMenu(() => menu({ open, leaf: !!leaf, toggle }))}
+      {...cm.contextMenu((_from, target) => menu({ open, leaf: !!leaf, toggle }, target))}
       // clicking the output selects text and leaves focus on the body, so the card takes it: that is
       // what makes Escape close the row you are reading, not only the one whose chip you clicked
       tabIndex={-1}
@@ -501,14 +510,20 @@ export const ThoughtRow = memo(function ThoughtRow({
   // re-renders of a thought still streaming
   const body = useRef<HTMLDivElement>(null);
   useLiveHtml(body, html);
+  // the markup goes into a child of the band so the band keeps a child of its own beside it
+  const root = useRef<HTMLDivElement>(null);
+  const codeCopy = useCodeCopy(root);
   const out = (
     <div className="tool-part">
       {/* biome-ignore lint/a11y/useKeyWithClickEvents: the links inside are the controls; the root only routes their clicks */}
       <div
-        ref={body}
+        ref={root}
         className="tool-out thought-out md"
         onClick={(e) => openChatLink(e, fileRoot, worktreeId, { sock, dispatch })}
-      />
+      >
+        <div ref={body} />
+        {codeCopy}
+      </div>
     </div>
   );
   // a finished thought of one line is the line, printed where the word would go, with nothing
@@ -523,8 +538,9 @@ export const ThoughtRow = memo(function ThoughtRow({
         leaf={leaf}
         growing={streaming}
         label={line}
-        menu={(fold) =>
+        menu={(fold, target) =>
           grouped([
+            codeItems(codeAt(target)),
             [{ id: "copy", label: "copy thought", onClick: () => copyText(item.text) }],
             ...(leaf ? [] : [[{ id: "fold", label: fold.open ? "collapse" : "expand", onClick: fold.toggle }]]),
           ])
@@ -546,8 +562,9 @@ export const ThoughtRow = memo(function ThoughtRow({
       auto={!!open}
       growing={streaming}
       label={word}
-      menu={(fold) =>
+      menu={(fold, target) =>
         grouped([
+          codeItems(codeAt(target)),
           [{ id: "copy", label: "copy thought", onClick: () => copyText(item.text) }],
           [{ id: "fold", label: fold.open ? "collapse" : "expand", onClick: fold.toggle }],
         ])
@@ -980,7 +997,7 @@ export const ChatItemView = memo(function ChatItemView({
       return (
         <Markdown
           text={item.text}
-          menu={(link) => messageItems(item, worktreeId ?? null, deps, { link, dir: dirOf() })}
+          menu={(link, code) => messageItems(item, worktreeId ?? null, deps, { link, code, dir: dirOf() })}
           marked={marked}
           worktreeId={worktreeId}
           fileRoot={fileRoot()}
@@ -1013,8 +1030,12 @@ export const ChatItemView = memo(function ChatItemView({
         <>
           <Markdown
             text={said.message}
-            menu={(link) =>
-              messageItems({ kind: "assistant", text: said.message }, worktreeId ?? null, deps, { link, dir: dirOf() })
+            menu={(link, code) =>
+              messageItems({ kind: "assistant", text: said.message }, worktreeId ?? null, deps, {
+                link,
+                code,
+                dir: dirOf(),
+              })
             }
             worktreeId={worktreeId}
             fileRoot={fileRoot()}

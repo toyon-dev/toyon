@@ -53,6 +53,16 @@ export interface ServerOpts {
 export function startServer(opts: ServerOpts): { server: Server<WsData>; branded: boolean; stop: () => void } {
   const { services: s, token, version } = opts;
   const sockets = new Set<ServerWebSocket<WsData>>();
+  // every socket that was let in, shell or preview: what the daemon's own idle stop counts. A
+  // preview page open on its own, with no shell, is still someone using it.
+  const linked = new Set<ServerWebSocket<WsData>>();
+  const link = (ws: ServerWebSocket<WsData>) => {
+    linked.add(ws);
+    s.idleExit.clients(linked.size);
+  };
+  const unlink = (ws: ServerWebSocket<WsData>) => {
+    if (linked.delete(ws)) s.idleExit.clients(linked.size);
+  };
 
   const raw = (ws: ServerWebSocket<WsData>, json: string) => {
     try {
@@ -379,6 +389,7 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
       async open(ws: ServerWebSocket<WsData>) {
         const preview = ws.data.preview;
         if (preview) {
+          link(ws);
           preview.handler.open(ws, preview.data);
           return;
         }
@@ -387,6 +398,7 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
           return;
         }
         sockets.add(ws);
+        link(ws);
         send(ws, await helloFrame());
         // what was opened from outside while no shell was up: the Dock icon's file, arriving
         // before the window it also opened
@@ -398,6 +410,7 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
         // idle timeout and pings give it up, and whatever it was showing is released with it
         else s.idle.drop(ws.data);
         sockets.delete(ws);
+        unlink(ws);
       },
       async message(ws: ServerWebSocket<WsData>, raw: string | Buffer) {
         if (ws.data.preview) {

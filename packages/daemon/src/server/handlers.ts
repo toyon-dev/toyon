@@ -12,6 +12,7 @@ import { coalesce } from "../agent/transcript.ts";
 import type { FolderDialog } from "../core/dialog.ts";
 import { UserError } from "../core/errors.ts";
 import type { Hub } from "../core/hub.ts";
+import type { IdleExit } from "../core/idleExit.ts";
 import { fireAndForget, log } from "../core/log.ts";
 import type { Restarter } from "../core/restarter.ts";
 import type { SelfWatch } from "../core/self.ts";
@@ -55,6 +56,8 @@ export interface Services {
   runtime: RuntimeRegistry;
   /** which worktrees run: the ones tabs show, and what a turn or a command holds */
   idle: IdlePolicy;
+  /** the daemon's own stop, once nothing has been connected or working for a while */
+  idleExit: Pick<IdleExit, "clients">;
   /** one-off commands from the composer's `!` mode */
   exec: ExecService;
   /** the setup, check and commit runs out on each worktree, and the stop on them */

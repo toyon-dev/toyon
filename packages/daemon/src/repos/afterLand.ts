@@ -36,6 +36,11 @@ export class AfterLand {
     return this.running.has(repoId);
   }
 
+  /** whether any repo's run is going */
+  anyBusy(): boolean {
+    return this.running.size > 0;
+  }
+
   /** Start the repo's `afterLand`, unless it has none. A land that arrives while a run is going
    * neither starts a second run beside it (two builds writing one dist at once) nor is dropped:
    * the run in flight may have read the checkout before the new commit reached it, so the repo is

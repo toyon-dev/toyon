@@ -208,6 +208,7 @@ function make() {
     routes,
     runtime,
     idle,
+    idleExit: { clients: () => {} },
     exec,
     runs: worktrees.runs,
     refs,

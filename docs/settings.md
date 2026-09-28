@@ -158,3 +158,5 @@ What this costs in disk depends on the filesystem. On APFS, btrfs and XFS an ent
 Copies start when you open them, not when the daemon boots. A copy nobody has looked at for two hours stops running its servers (five minutes on a deployed machine), and sooner when the machine runs low on memory. It starts again when you open it or visit its preview. The chat and the agent keep going either way.
 
 `TOYON_PROC_SLEEP_MS` sets the delay in milliseconds, and `off` turns the clock off.
+
+The daemon stops itself too. Once no window or preview has been open and nothing has been working for half an hour, it exits, and the next `toyon` or Dock launch starts one again. An agent mid-turn, a command, a clone or a build after a land all count as working, so nothing is cut off. A daemon reached over the network, one on a deployed machine, or one you ran yourself in a terminal never stops on its own; `TOYON_STOP_AFTER_MS` sets the delay in milliseconds anywhere, and `off` turns it off.

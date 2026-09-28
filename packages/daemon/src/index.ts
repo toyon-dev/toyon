@@ -30,6 +30,7 @@ import { locateAssets, pruneAssets } from "./core/assets.ts";
 import { cloud } from "./core/cloud.ts";
 import { folderDialog } from "./core/dialog.ts";
 import { Hub } from "./core/hub.ts";
+import { IdleExit, stopAfterFrom } from "./core/idleExit.ts";
 import { fireAndForget, log } from "./core/log.ts";
 import { startLagSampler } from "./core/metrics.ts";
 import { ensureDirs, makePaths } from "./core/paths.ts";
@@ -278,6 +279,21 @@ const update = new UpdateService({
   // by policy or by the environment variable
   managedBy: !managed.policy.updates ? "policy" : process.env.TOYON_UPDATES === "off" ? "env" : null,
 });
+// the daemon's own stop: a window quit from the Dock leaves no terminal to stop it from, so once
+// nothing has been connected or working for the window it goes on its own, and the next open
+// starts one again. Never on a machine reached remotely or a deployed one, where it is the point,
+// and never for a daemon someone ran in a terminal, which is theirs to stop.
+const attached = process.stdin.isTTY === true || process.stdout.isTTY === true;
+const stopAfter = stopAfterFrom(process.env.TOYON_STOP_AFTER_MS, { remote: remote !== null, terminal: attached });
+const idleExit = new IdleExit({
+  hub,
+  busy: () => runtime.anyBusy() || repos.pending.length > 0 || afterLand.anyBusy() || update.get()?.installing === true,
+  // a beat later, for the same reason as a restart: the log line has to leave first
+  exit: () => {
+    setTimeout(() => fireAndForget("daemon", shutdown("idle"), "idle stop"), 100);
+  },
+  afterMs: stopAfter,
+});
 
 const { branded, stop: stopServer } = startServer({
   port,
@@ -299,6 +315,7 @@ const { branded, stop: stopServer } = startServer({
     routes,
     runtime,
     idle,
+    idleExit,
     exec,
     runs,
     refs,
@@ -397,6 +414,9 @@ if (remote?.front === "edge") {
     console.log("         the token grants a shell on this machine; keep the link to yourself");
   }
 }
+// the one case where the person can read it: a service run has no terminal, and its log says
+// when it stopped
+if (attached && stopAfter === null) console.log("         attached to a terminal; runs until stopped");
 // the policy in effect, one line per file that exists, so a boot log answers "why is X off"
 for (const src of managed.sources) {
   if (src.state === "absent") continue;
@@ -415,6 +435,7 @@ async function shutdown(signal: string, opts: { respawn?: boolean } = {}) {
   if (shuttingDown) return;
   shuttingDown = true;
   log.info("daemon", `${signal}: stopping dev servers`);
+  idleExit.stop();
   // before the sockets close: what the tabs show now is what the next daemon brings back
   idle.shutdown();
   // before the agents close: a verdict mid-question stays pending for the next daemon

@@ -11,6 +11,7 @@ import { type ChatItem, worktreeById } from "../../state/store.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { Field } from "../../ui/Field.tsx";
+import { FullAttachment } from "../../ui/FullAttachment.tsx";
 import { useLiveHtml, useOnChange, useReveal, useSecondsSince, useTail } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { grouped, type MenuEntry, useContextMenu } from "../../ui/menu.ts";
@@ -20,7 +21,6 @@ import { attachmentUrl } from "../../ws.ts";
 import { elapsed } from "../util.ts";
 import { AskRow } from "./AskRow.tsx";
 import { answeredQuestion, answerLines } from "./ask.ts";
-import { FullAttachment } from "./FullAttachment.tsx";
 import {
   runCalls,
   runningInRun,
@@ -262,7 +262,7 @@ function ToolPicture({ image, worktreeId }: { image: ToolImage; worktreeId: stri
         <img src={src} alt={image.file} />
       </button>
       {full && (
-        <FullAttachment onClose={() => setFull(false)} menu={() => imageItems(src)}>
+        <FullAttachment owner="chat" onClose={() => setFull(false)} menu={() => imageItems(src)}>
           <img src={src} alt={image.file} />
         </FullAttachment>
       )}

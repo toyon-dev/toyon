@@ -1,28 +1,32 @@
 import type { ReactNode } from "react";
-import { IconButton } from "../../ui/Button.tsx";
-import { Float } from "../../ui/Float.tsx";
-import { type MenuEntry, useContextMenu } from "../../ui/menu.ts";
+import { IconButton } from "./Button.tsx";
+import { Float } from "./Float.tsx";
+import { type MenuEntry, useContextMenu } from "./menu.ts";
+import "./full-attachment.css";
 
 /**
- * What an attachment chip holds, at the window's size, over everything: the image, a paste's text.
+ * What a chip or a pane holds, at the window's size, over everything: the image, a paste's text.
  *
  * Shown here rather than opened as a tab, because the installed app has no browser chrome: a window
  * navigated to the daemon's copy has no address bar, no back and no Escape, and nothing left on the
  * page leads to the shell. Escape, the close button, or a press beside the thing takes it down.
  *
- * `menu` is the chip's own, offered anywhere in this view: the float is drawn inside the chip's
- * message row, so without one a right-click here would open the row's menu about a message.
+ * `menu` is the opener's own, offered anywhere in this view: the float is drawn inside the opener's
+ * row, so without one a right-click here would open the row's menu about a message. `owner` names
+ * the surface that opened it, the way its other menus do.
  */
 export function FullAttachment({
+  owner,
   onClose,
   menu,
   children,
 }: {
+  owner: string;
   onClose: () => void;
   menu?: () => MenuEntry[];
   children: ReactNode;
 }) {
-  const cm = useContextMenu("chat");
+  const cm = useContextMenu(owner);
   return (
     <Float
       className="attach-full scrim"

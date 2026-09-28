@@ -4,9 +4,9 @@ import { imageItems } from "../../state/actions/message.ts";
 import { IconButton } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { Float } from "../../ui/Float.tsx";
+import { FullAttachment } from "../../ui/FullAttachment.tsx";
 import { useContextMenu } from "../../ui/menu.ts";
 import type { Placement, Rect } from "../../ui/place.ts";
-import { FullAttachment } from "./FullAttachment.tsx";
 import { fmtBytes } from "./images.ts";
 
 /** an attached image as a chip: thumbnail, its session number, name and size. In the composer it
@@ -61,7 +61,7 @@ export function ImageChip({
       {onRemove && <IconButton icon="close" label="Remove image" tone="quiet" onClick={onRemove} />}
       <ImagePeek chip={chip} src={src} alt={name} width={width} height={height} />
       {full && (
-        <FullAttachment onClose={() => setFull(false)} menu={() => imageItems(src)}>
+        <FullAttachment owner="chat" onClose={() => setFull(false)} menu={() => imageItems(src)}>
           <img src={src} alt={name} />
         </FullAttachment>
       )}

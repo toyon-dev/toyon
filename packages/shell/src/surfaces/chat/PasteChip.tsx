@@ -3,9 +3,9 @@ import { useEffect, useState } from "react";
 import { pasteItems } from "../../state/actions/message.ts";
 import { IconButton } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
+import { FullAttachment } from "../../ui/FullAttachment.tsx";
 import { Icon } from "../../ui/Icon.tsx";
 import { useContextMenu } from "../../ui/menu.ts";
-import { FullAttachment } from "./FullAttachment.tsx";
 
 /** A block of pasted text, collapsed. Same chip family as the picked element and the image: a
  * close button only when it can be removed, so the transcript's copy is inert. */
@@ -74,7 +74,7 @@ export function PasteChip({
       )}
       {onRemove && <IconButton icon="close" label="Remove attachment" tone="quiet" onClick={onRemove} />}
       {full && href && (
-        <FullAttachment onClose={() => setFull(false)} menu={() => pasteItems(paste)}>
+        <FullAttachment owner="chat" onClose={() => setFull(false)} menu={() => pasteItems(paste)}>
           <FullPaste href={href} />
         </FullAttachment>
       )}

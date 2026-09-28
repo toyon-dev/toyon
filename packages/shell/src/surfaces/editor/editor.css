@@ -208,7 +208,10 @@
       white-space: nowrap;
     }
   }
-  /* an image file, drawn whole: never larger than the body, never scaled past its own size */
+  /* an image file, drawn whole: never larger than the body, never scaled past its own size. The
+     whole body is the control, pressed for the window's size, and it is the box the picture is
+     measured against: a button sized to the picture has no height for the picture's max-height to
+     be a percentage of, and a tall one ran off the bottom of the pane */
   .editor-image {
     position: absolute;
     inset: 0;
@@ -216,6 +219,9 @@
     align-items: center;
     justify-content: center;
     padding: 16px;
+    border: 0;
+    background: none;
+    cursor: pointer;
     & img {
       max-width: 100%;
       max-height: 100%;

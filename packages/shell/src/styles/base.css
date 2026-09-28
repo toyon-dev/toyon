@@ -502,11 +502,16 @@
       margin: 10px 0 4px;
       color: var(--text0);
     }
+    /* A fenced block is read, not edited, so a long line wraps rather than clipping. The chat
+       column is narrow beside a preview, the overlay scrollbar hides until scrolled, and a clipped
+       line looks whole; the editor pane is where a line keeps its column. Leading indentation
+       survives, only the continuation loses it. */
     & pre {
       background: var(--code);
       border-radius: var(--radius-md);
       padding: 8px 10px;
-      overflow-x: auto;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
       margin: 0 0 8px;
       font: var(--type-mono);
     }
@@ -515,7 +520,6 @@
       padding: 0;
       font-size: inherit;
       line-height: inherit;
-      overflow-wrap: normal;
     }
     & a {
       color: var(--blue);

@@ -987,10 +987,16 @@ export function Composer({
             ref={composerRef}
             value={text}
             onChange={(e) => {
-              setText(e.target.value);
-              setCaret(e.target.selectionStart ?? e.target.value.length);
+              const value = e.target.value;
+              const at = e.target.selectionStart ?? value.length;
+              setText(value);
+              setCaret(at);
               nav.setIndex(0);
-              setDismissed(null);
+              // the menu is for what is being typed: text that arrives whole, pasted or dropped,
+              // was not asking for it, so the trigger it lands on stays dismissed until a keystroke
+              const { inputType } = e.nativeEvent as InputEvent;
+              const whole = inputType === "insertFromPaste" || inputType === "insertFromDrop";
+              setDismissed(whole ? (triggerAt(value, at)?.from ?? null) : null);
             }}
             // arrow keys and clicks move the caret without changing the text, and the menu follows it;
             // a click in a recalled message is starting to edit it

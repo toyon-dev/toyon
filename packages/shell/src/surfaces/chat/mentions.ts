@@ -26,7 +26,9 @@ export function triggerAt(text: string, caret: number): Trigger | null {
   if (text.startsWith("/")) {
     const end = text.indexOf(" ");
     const nameEnd = end === -1 ? text.length : end;
-    if (caret <= nameEnd) return { kind: "command", query: text.slice(1, caret), from: 0, to: nameEnd };
+    // a second slash makes it a path (`/Users/me/app.ts`), and no command is named with one
+    const isPath = text.indexOf("/", 1) !== -1 && text.indexOf("/", 1) < nameEnd;
+    if (!isPath && caret <= nameEnd) return { kind: "command", query: text.slice(1, caret), from: 0, to: nameEnd };
   }
   const at = text.lastIndexOf("@", Math.max(0, caret - 1));
   if (at === -1 || at >= caret) return null;

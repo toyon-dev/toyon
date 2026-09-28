@@ -52,6 +52,14 @@ describe("triggerAt: slash commands", () => {
   test("an mcp name is one token, colons and all", () => {
     expect(at("/mcp:linear:issue")).toEqual({ kind: "command", query: "mcp:linear:issue", from: 0, to: 17 });
   });
+
+  test("a second slash in the name is a path, not a command", () => {
+    expect(at("/Users/me/app.ts")).toBeNull();
+    expect(at("/src/")).toBeNull();
+    expect(triggerAt("/src/app.ts is slow", 4)).toBeNull();
+    // the slash has to fall inside the name: one in the arguments changes nothing
+    expect(triggerAt("/review src/app.ts", 4)).toEqual({ kind: "command", query: "rev", from: 0, to: 7 });
+  });
 });
 
 describe("triggerAt: shell commands", () => {

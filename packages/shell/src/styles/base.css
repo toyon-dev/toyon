@@ -397,6 +397,8 @@
     padding: 10px;
     /* the offset parent for the @ and slash menu */
     position: relative;
+    /* the chat's stop stands over the field's corner on its own rung, counted in here alone */
+    isolation: isolate;
     /* the box is the panel's (Field's `bare`); this is only how the textarea fills it */
     & textarea {
       flex: 1;

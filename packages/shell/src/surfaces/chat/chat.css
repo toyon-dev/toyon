@@ -888,11 +888,15 @@
    field. Absolute, at the box's own padding, so it comes and goes with the turn without moving
    the knobs row's buttons. Whatever is first in the box keeps the corner clear: the plan path
    truncates short of it, a chip stops short of it, and the field and its ghost pad together,
-   since the ghost's wrap has to match the field's or it drifts off the caret. */
+   since the ghost's wrap has to match the field's or it drifts off the caret. The field after it
+   is positioned too, and a later positioned sibling paints over an earlier one, so with nothing
+   above the field the textarea's padding sat over the button: no hover reached it and a press
+   focused the field. One rung up, counted inside the box, which isolates for it (base .composer). */
   .composer-stop {
     position: absolute;
     top: 10px;
     right: 10px;
+    z-index: 1;
   }
   .composer.stopping {
     & > .composer-plan {

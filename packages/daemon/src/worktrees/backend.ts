@@ -4,7 +4,7 @@
 // once per burst, and hands the take-over to the service, which persists it and starts the proc.
 // A take-over is one way: what a worktree runs itself stays its own until asked.
 
-import { type RepoInfo, SHELL_STREAM, type WorktreeInfo } from "@toyon/shared";
+import { baseOf, type RepoInfo, SHELL_STREAM, type WorktreeInfo } from "@toyon/shared";
 import type { Hub } from "../core/hub.ts";
 import { fireAndForget, log } from "../core/log.ts";
 import type { StateStore } from "../core/state.ts";
@@ -56,7 +56,7 @@ export function touching(files: string[], paths: string[], declared: boolean, pa
 /** the worktree's changed files: uncommitted, and, when asked, committed ahead of main */
 async function changedFiles(wt: WorktreeInfo, repo: RepoInfo, committed: boolean): Promise<string[]> {
   const files = new Set((await statusFiles(wt.path)).map((f) => f.path));
-  if (committed) for (const f of await committedFiles(wt.path, repo.defaultBranch)) files.add(f.path);
+  if (committed) for (const f of await committedFiles(wt.path, baseOf(repo))) files.add(f.path);
   return [...files];
 }
 

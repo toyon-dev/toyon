@@ -260,7 +260,7 @@ export class LandingService {
    * the settings give no worktree its own */
   private async sharedMigration(wt: WorktreeInfo, repo: RepoInfo): Promise<string | undefined> {
     if (!repo.services || keepsCopiesApart(repo.config)) return undefined;
-    const files = [...(await statusFiles(wt.path)), ...(await committedFiles(wt.path, repo.defaultBranch))];
+    const files = [...(await statusFiles(wt.path)), ...(await committedFiles(wt.path, baseOf(repo)))];
     if (!files.some((f) => migrationMatch(f.path))) return undefined;
     return "this changes migrations, and the worktrees share the database";
   }

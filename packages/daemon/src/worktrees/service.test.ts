@@ -268,6 +268,23 @@ describe("create / remove", () => {
     expect(w.runtime.get(wt.id)).toBeUndefined();
   });
 
+  test("remove runs the repo's teardown in the directory first, and a failing step does not keep it", async () => {
+    const repoId = await registered();
+    const repo = w.state.requireRepo(repoId);
+    // the first step records where it ran and as whom; the second fails, and the removal goes on
+    repo.config = {
+      ...repo.config,
+      teardown: [`printf '%s' "$TOYON_WORKTREE" > "$TOYON_ROOT/TORN_DOWN"`, "exit 3"],
+    };
+    w.state.save();
+    const wt = await w.worktrees.create(repoId, "task");
+    await settle();
+    await w.worktrees.archiveWorktree(wt.id);
+    expect(readFileSync(join(w.repo, "TORN_DOWN"), "utf8")).toBe(wt.id);
+    expect(existsSync(wt.path)).toBe(false);
+    expect(w.state.worktree(wt.id)).toBeUndefined();
+  });
+
   test("removing an adopted worktree keeps the person's branch", async () => {
     await registered();
     await settle();

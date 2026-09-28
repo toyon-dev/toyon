@@ -70,6 +70,7 @@ export function Setup({ repo, onClose }: { repo: RepoInfo; onClose?: () => void 
     return detected.length > 0 ? detected : [proc("web", "")];
   });
   const [install, setInstall] = useState(() => (repo.config.setup ?? []).join("\n"));
+  const [teardown, setTeardown] = useState(() => (repo.config.teardown ?? []).join("\n"));
   const [check, setCheck] = useState(() => repo.config.check ?? "");
   // how work lands: the route only matters with somewhere to push, the method always
   const [land, setLand] = useState<LandRoute>(() => landPolicy(repo.config).land);
@@ -91,15 +92,17 @@ export function Setup({ repo, onClose }: { repo: RepoInfo; onClose?: () => void 
 
   const edit = (i: number, patch: Partial<Proc>) => setProcs(procs.map((p, j) => (j === i ? { ...p, ...patch } : p)));
 
-  const setupLines = () =>
-    install
+  const lines = (text: string) =>
+    text
       .split("\n")
       .map((l) => l.trim())
       .filter(Boolean);
+  const setupLines = () => lines(install);
+  const teardownLines = () => lines(teardown);
   // keys the pane does not edit (preview, profiles) survive a hand-written file; a value at its
   // default leaves the file rather than being written out, so the file stays as short as it was
   const edited = (): typeof repo.config => {
-    const { check: _check, land: _land, ...rest } = repo.config;
+    const { check: _check, land: _land, teardown: _teardown, ...rest } = repo.config;
     const route = repo.remote ? land : DEFAULT_LAND_ROUTE;
     // a merge commit is what a local route does unset, so picking it writes nothing; on the PR
     // route unset means the repo's allowed methods, so any pick there is written
@@ -112,6 +115,7 @@ export function Setup({ repo, onClose }: { repo: RepoInfo; onClose?: () => void 
     return {
       ...rest,
       setup: setupLines(),
+      ...(teardownLines().length > 0 ? { teardown: teardownLines() } : {}),
       ...(check.trim() ? { check: check.trim() } : {}),
       ...(Object.keys(landing).length > 0 ? { land: landing } : {}),
     };
@@ -177,6 +181,17 @@ export function Setup({ repo, onClose }: { repo: RepoInfo; onClose?: () => void 
           value={install}
           placeholder="bun install"
           onChange={(e) => setInstall(e.target.value)}
+        />
+      </FormRow>
+
+      <FormRow label="remove" hint="once when a worktree goes, before its directory does; one command per line">
+        <TextArea
+          size="md"
+          rule
+          rows={Math.max(1, teardown.split("\n").length)}
+          value={teardown}
+          placeholder='dropdb --if-exists "app_$TOYON_WORKTREE"'
+          onChange={(e) => setTeardown(e.target.value)}
         />
       </FormRow>
 

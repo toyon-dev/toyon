@@ -29,6 +29,10 @@ export interface ToyonConfig {
   $schema?: string;
   /** shell commands run once when a worktree is created */
   setup?: string[];
+  /** shell commands run once when a worktree goes, before its directory does: the database or
+   * compose project a setup step made for it alone is dropped here. A failure is logged and the
+   * removal goes on; a restored worktree runs `setup` again. */
+  teardown?: string[];
   /** what keeps running: name -> foreground shell command, each a process with its own terminal
    * tab; one serving HTTP must listen on $PORT */
   run: Record<string, string>;

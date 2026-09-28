@@ -24,6 +24,7 @@ The first open guesses a file from `package.json` and asks you to confirm it. Ot
 ## Keys
 
 - **`setup`**: commands run once, in order, when a copy is created.
+- **`teardown`**: commands run once, in order, when a copy is removed or archived, before its directory goes. A restored copy runs `setup` again.
 - **`run`**: the commands that keep running, by name. Each one is a process with its own terminal tab.
 - **`preview`**: which of them the preview shows. `web` when there is one, otherwise the first.
 - **`check`**: a command that must exit 0 before a copy is offered to land. It runs in the copy after every finished turn, and its output shows in the chat.
@@ -47,16 +48,17 @@ Anything Toyon runs should stay in the foreground, listen on `$PORT`, and reload
 
 Toyon does not know what a database is. Each copy runs your setup and your commands on its own, so a database, a compose stack or a cache they all point at is shared, migrations included. Nothing warns before three copies run migrations against one Postgres.
 
-Every command, setup step and terminal gets two variables to keep them apart:
+Every command, setup step, teardown step and terminal gets two variables to keep them apart:
 
 - `TOYON_WORKTREE`: the copy's id, for naming a database or a compose project of its own.
 - `TOYON_ROOT`: the main checkout, for copying over what git leaves behind.
 
-A Postgres database per copy:
+A Postgres database per copy, cloned from the main checkout's and dropped when the copy goes:
 
 ```json
 {
-  "setup": ["npm install", "createdb \"app_$TOYON_WORKTREE\""],
+  "setup": ["npm install", "createdb -T app \"app_$TOYON_WORKTREE\""],
+  "teardown": ["dropdb --if-exists \"app_$TOYON_WORKTREE\""],
   "run": {
     "web": "DATABASE_URL=\"postgres://localhost/app_$TOYON_WORKTREE\" npm run dev"
   }
@@ -69,6 +71,7 @@ A compose stack per copy, under its own project name. Ports the stack publishes 
 
 ```json
 {
+  "teardown": ["docker compose -p \"app_$TOYON_WORKTREE\" down -v"],
   "run": {
     "db": "docker compose -p \"app_$TOYON_WORKTREE\" up",
     "web": "npm run dev"
@@ -84,7 +87,7 @@ A SQLite file copied from the main checkout:
 }
 ```
 
-`node_modules` and the `.env` files come along on their own. Nothing drops a database when a copy is archived; that is yours to clean up.
+`node_modules` and the `.env` files come along on their own. Without a `teardown`, nothing drops a database when a copy goes; that is yours to clean up.
 
 ## Sleep
 

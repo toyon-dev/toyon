@@ -335,6 +335,7 @@ export const toyonConfigSchema = z
   .object({
     $schema: z.string().max(2_000).optional(),
     setup: z.array(shellCommand).max(50).optional(),
+    teardown: z.array(shellCommand).max(50).optional(),
     run: z.record(declaredProcName, shellCommand),
     check: shellCommand.optional(),
     afterLand: z.array(shellCommand).max(50).optional(),

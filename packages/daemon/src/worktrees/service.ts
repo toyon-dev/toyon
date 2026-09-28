@@ -815,6 +815,7 @@ export class WorktreeService {
     // the agent first (inside runtime.stop): it may be mid-turn in the directory about to be
     // deleted, and its session-info callback would re-add the session entry removed below
     await this.d.runtime.stop(worktreeId);
+    await this.teardown(wt, repo);
     const kept = await withRepoLock(repo.path, async () => {
       // before the directory goes: its uncommitted work exists nowhere else. Nothing kept means
       // nothing goes: the branch is deleted on the strength of the ref holding its commits, and a
@@ -852,6 +853,25 @@ export class WorktreeService {
     }
     this.d.hub.emit("worktreesChanged");
     return archived;
+  }
+
+  /** The repo's teardown commands, in the directory while it is still there, with the same
+   * variables setup had, so what setup made for this worktree alone (a database named for its
+   * id) can be dropped. Outside the repo lock: a `dropdb` can take seconds and touches no
+   * checkout. A failure is logged and the removal goes on, since a database left behind is the
+   * lesser surprise than a directory that will not go. */
+  private async teardown(wt: WorktreeInfo, repo: RepoInfo): Promise<void> {
+    const cmds = repo.config.teardown ?? [];
+    if (cmds.length === 0 || !existsSync(wt.path)) return;
+    for (const cmd of cmds) {
+      const code = await runSetup(
+        cmd,
+        wt.path,
+        (line) => this.d.hub.emit("log", wt.id, "setup", line),
+        worktreeEnv(wt, repo),
+      );
+      if (code !== 0) log.warn(wt.id, `teardown failed (exit ${code}): ${cmd}`);
+    }
   }
 
   /** a worktree's commits and uncommitted work, under its archive ref, before its directory goes */

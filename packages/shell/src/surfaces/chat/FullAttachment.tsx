@@ -25,7 +25,7 @@ export function FullAttachment({
   const cm = useContextMenu("chat");
   return (
     <Float
-      className="attach-full"
+      className="attach-full scrim"
       onDismiss={onClose}
       onKey={(e) => {
         if (e.key !== "Escape") return;

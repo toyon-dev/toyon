@@ -18,6 +18,12 @@
     width: auto;
     height: auto;
   }
+  /* A float that covers the window: a palette's frame, a picture at full size. The scrim is the
+     float's own box, because a top-layer box has nothing above it to dim it with. */
+  .scrim {
+    inset: 0;
+    background: var(--scrim);
+  }
   /* The title bar is the window's drag region. A float over it is not in the bar's layout, so the
      bar's own exemptions cannot reach it and it says so itself: without this, a press on a row that
      overlaps the bar drags the window instead. */
@@ -25,6 +31,12 @@
     .float {
       -webkit-app-region: no-drag;
       app-region: no-drag;
+    }
+    /* the installed app's title bar is the top bar, and the OS paints its own controls over that
+       strip whatever is under it: a scrim under them dims a strip the controls stay lit on, and
+       makes it undraggable. A sheet covers the content and leaves the title bar standing. */
+    .scrim {
+      top: env(titlebar-area-height, 0px);
     }
   }
 }

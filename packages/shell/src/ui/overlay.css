@@ -1,18 +1,14 @@
 /* Overlay: the scrim and the box a palette or prompt sits in. */
 @layer tokens, base, surfaces;
 @layer base {
-  /* ---- overlay: scrim over the centre + a box anchored near the top (a palette's height
-   changes as you type, and a centered box would bob with it — editor/launcher convention) ---- */
+  /* ---- overlay: a scrim over the window (see .scrim in float.css) + a box anchored near the top
+   (a palette's height changes as you type, and a centered box would bob with it — editor/launcher
+   convention) ---- */
   .overlay {
-    position: absolute;
-    inset: 0;
-    background: var(--scrim);
     display: grid;
     justify-items: center;
     align-content: start;
     padding-top: clamp(72px, 18vh, 220px);
-    /* over the panes of the column it dims, and no further: .center-root isolates */
-    z-index: 1;
   }
   .overlay-box {
     width: min(560px, 90%);

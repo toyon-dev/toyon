@@ -1115,13 +1115,8 @@
       background: var(--surface2);
     }
   }
-  /* what a chip holds, over the whole window (FullAttachment.tsx). The scrim is the float's own box
-     rather than a layer under it: a top-layer box has nothing above it to dim it with. */
+  /* what a chip holds, over the whole window (FullAttachment.tsx): a .scrim, see float.css */
   .attach-full {
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    background: var(--scrim);
     /* flex and not grid: a grid track sized by its content gives the picture's max-height nothing
        to be a percentage of, and a tall image runs off the bottom of the window */
     display: flex;
@@ -1140,12 +1135,6 @@
       position: absolute;
       top: 12px;
       right: 12px;
-    }
-    /* the window's own controls are drawn over this corner on the platforms that put them right */
-    @media (display-mode: window-controls-overlay) {
-      & .btn-icon {
-        top: calc(env(titlebar-area-height, 0px) + 12px);
-      }
     }
     /* a paste is read rather than looked at, so it keeps a page's measure and a card under it */
     & .paste-full {

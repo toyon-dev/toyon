@@ -1,6 +1,6 @@
-import { type ReactNode, useRef } from "react";
+import type { ReactNode } from "react";
 import { cx } from "./cx.ts";
-import { Float, useFloatEntry } from "./Float.tsx";
+import { Float } from "./Float.tsx";
 import "./overlay.css";
 import type { Flip } from "./place.ts";
 
@@ -19,7 +19,7 @@ type Props = {
   boxClass?: string;
   /** no box chrome: the children bring their own cards (shortcuts + settings) */
   bare?: boolean;
-  /** a dropdown on the control that opened it, rather than a centred overlay over the preview */
+  /** a dropdown on the control that opened it, rather than a centred overlay over the window */
   anchored?: boolean | Anchored;
   /** the part of the box that lands on the control: the panel's own field, so the value it holds
    * does not move when the panel opens over it */
@@ -30,7 +30,7 @@ type Props = {
 };
 
 /**
- * The palette frame: a scrim over the centre and a box, or a dropdown on the control that
+ * The palette frame: a scrim over the window and a box, or a dropdown on the control that
  * opened it. Every overlay dismisses the same way, through the one stack in floats.ts: a press
  * outside it and everything it opened, or a press in the preview, which never reaches this page.
  */
@@ -63,18 +63,28 @@ function Dropdown({
   );
 }
 
+/**
+ * The box is about the app, not the preview: a palette, the settings, a project's page. So it is
+ * measured against the window, the same box in every layout, and not against whatever the docks
+ * leave of the centre, where a narrow column wrapped every shortcut's label. The scrim is the
+ * float's own box, as a top-layer box has nothing above it to dim it with; a press on it is inside
+ * the float for the stack, which keeps the palette and closes what it opened, and the box then
+ * closes itself. The id sits on the float for the same reason: the stack reads `aria-controls`
+ * against the box it holds.
+ */
 function Centred({ onClose, onEscape, boxClass = "", bare = false, id, children }: Omit<Props, "anchored">) {
-  const ref = useRef<HTMLDivElement | null>(null);
-  useFloatEntry(ref, {
-    onDismiss: onClose ? () => onClose() : undefined,
-    onKey: onEscape ? escapeOnly(onEscape) : undefined,
-  });
   return (
-    <div className="overlay">
-      <div className={cx(bare ? "" : "overlay-box", boxClass)} id={id} ref={ref}>
-        {children}
-      </div>
-    </div>
+    <Float
+      className="overlay scrim"
+      id={id}
+      onDismiss={onClose ? () => onClose() : undefined}
+      onKey={onEscape ? escapeOnly(onEscape) : undefined}
+      onClick={(e) => {
+        if (onClose && e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className={cx(bare ? "" : "overlay-box", boxClass)}>{children}</div>
+    </Float>
   );
 }
 

@@ -85,7 +85,7 @@ export function makeNamer(runtime: RuntimeRegistry) {
  * one is not worth waking the agent for. A fixed id is checked against the models the agent last
  * listed. An agent that picks from its list (a function) decides on the session, where the current
  * model is known. */
-function lacksQuickModel(
+export function lacksQuickModel(
   spec: NonNullable<ReturnType<AgentRegistry["get"]>>,
   state: Pick<StateStore, "cachedOptions">,
 ): boolean {

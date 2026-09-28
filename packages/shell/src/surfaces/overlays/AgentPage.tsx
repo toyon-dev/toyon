@@ -54,6 +54,16 @@ export function AgentPage({ agentId }: { agentId: string }) {
             {authLabel(agent)}
           </Button>
         </div>
+        {/* said once here rather than under every turn's box: an agent with no quick model gives
+            no verdict, no recap and no commit message, and agents.json is where one is named */}
+        <div className="keys-setting">
+          <span className="keys-d">commit messages</span>
+          <span className="keys-d">
+            {agent.quick
+              ? "its quick model writes one after each turn"
+              : "none: it has no quick model, so you write them in the changes panel; quickModel in agents.json names one"}
+          </span>
+        </div>
 
         <div className="section-title keys-h">MCP servers it will load</div>
         {config === null ? (

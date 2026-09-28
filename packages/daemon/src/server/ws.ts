@@ -15,6 +15,7 @@ import {
   WS_CLOSE_UNAUTHORIZED,
 } from "@toyon/shared";
 import type { Server, ServerWebSocket } from "bun";
+import { lacksQuickModel } from "../agent/tasks.ts";
 import { cloud } from "../core/cloud.ts";
 import { UserError } from "../core/errors.ts";
 import { fireAndForget, log } from "../core/log.ts";
@@ -270,7 +271,15 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
     s.accounts.describe(s.agents.infos()).map((a) => {
       const models = s.state.cachedOptions(a.id, "model");
       const efforts = s.state.cachedOptions(a.id, "thought_level");
-      return { ...a, ...(models.length > 0 ? { models } : {}), ...(efforts.length > 0 ? { efforts } : {}) };
+      // whether the side questions can be put to it, so the shell says once, on its page, that
+      // the commit message is the person's to write, instead of every turn under the box
+      const spec = s.agents.get(a.id);
+      return {
+        ...a,
+        ...(models.length > 0 ? { models } : {}),
+        ...(efforts.length > 0 ? { efforts } : {}),
+        ...(spec && !lacksQuickModel(spec, s.state) ? { quick: true as const } : {}),
+      };
     });
   const agentsMsg = () =>
     ({

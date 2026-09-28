@@ -522,6 +522,9 @@ export interface AgentInfo {
   onDemand?: boolean;
   /** runs shell commands under an OS sandbox confined to the worktree */
   sandboxed: boolean;
+  /** it has a quick model for the side questions (a name, a recap, the commit message); without
+   * one those go unasked, and the commit message is the person's to write */
+  quick?: true;
   /** the identity it last reported, from any connection; absent until one has run */
   auth?: AuthStatus;
   /** it advertised ACP's logout method, so settings can offer to sign it out */

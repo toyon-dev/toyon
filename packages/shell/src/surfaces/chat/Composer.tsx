@@ -215,6 +215,9 @@ export function Composer({
   const spawnAgent = draft?.agent ?? defaultAgent;
   // the chips list what the agent in question advertised: the one being chosen, or this one's
   const agentInfo = useStore((s) => s.agents.find((a) => a.id === (choosing ? spawnAgent : active?.worktree.agent)));
+  // whether the side questions can be put to it: with no quick model the commit message is the
+  // person's to write, and the line says which agent that is
+  const quick = !!agentInfo?.quick;
   const agentModels = agentInfo?.models ?? NO_CHOICES;
   const agentEfforts = agentInfo?.efforts ?? NO_CHOICES;
   const [newModel, setNewModel] = useNewWorktreeModel(spawnAgent);
@@ -459,6 +462,8 @@ export function Composer({
     if (id) sock?.send({ t: "judge", worktreeId: id, ...(note ? { note } : {}) });
   };
   const hasCheck = !!repo?.config.check?.trim();
+  // what the land would be missing for the commit it makes first, if anything
+  const gap = messageGap(verdict, dirty, quick);
   // work with no verdict, one the tree moved under, or one whose question went unanswered with a
   // commit to write: the check is the next step, and the word for it sits where `land` will once
   // it passes. A check running or failed keeps its own line.
@@ -469,7 +474,7 @@ export function Composer({
     !hasLanded &&
     !prClosed &&
     landCount > 0 &&
-    (!verdict || !!verdict.stale || messageGap(verdict, dirty) === "unanswered");
+    (!verdict || !!verdict.stale || gap === "unanswered");
   const archiveTip =
     "Archive this worktree when you are done here; the rail's archived section brings it back with its chat.";
   // the ship word and where it sends the work: onto main by the repo's route, or up to the open
@@ -529,10 +534,10 @@ export function Composer({
             ? {
                 word: "check",
                 line: verdict?.subject ?? verbLine(said ?? filesLine(landCount)),
-                tip: checkTip(verdict, hasCheck),
+                tip: checkTip(verdict, hasCheck, gap),
                 run: judge,
               }
-            : landing?.ready && !landingLine(landing, dirty)
+            : landing?.ready && !landingLine(landing, dirty, quick, agentInfo?.name)
               ? {
                   word: shipWord,
                   line: landing.subject ?? verbLine(said ?? (landFacts(landing, landCount) || "ready")),
@@ -555,7 +560,7 @@ export function Composer({
   // rebase with work in it, the network) is the one worth naming
   const landingNow = !!verb?.ships && op === "land";
   const heldStep = useHeld(step, STEP_HOLD_MS);
-  const blocked = landing ? landingLine(landing, dirty) : null;
+  const blocked = landing ? landingLine(landing, dirty, quick, agentInfo?.name) : null;
   // the empty box's line, first match wins: what the box is for when it is not a worktree's, then
   // the next step on the work, then what the work is waiting on, then where the last turn left it,
   // then how to start
@@ -592,7 +597,7 @@ export function Composer({
       ? null
       : verb
         ? (verb.word === "land" || verb.word === "update" || verb.word === "check") && landing && !restated
-          ? verdictLine(landing, landCount, dirty)
+          ? verdictLine(landing, landCount, gap)
           : null
         : pr || blocked
           ? (said ?? landing?.subject ?? null)
@@ -660,7 +665,7 @@ export function Composer({
       else judge(args || undefined);
       return;
     }
-    const stuck = verdict ? landingLine(verdict, dirty) : null;
+    const stuck = verdict ? landingLine(verdict, dirty, quick, agentInfo?.name) : null;
     if (spawning || !canLand(active.worktree)) refuse("nothing to land from here");
     else if (hasLanded) refuse(`already landed on ${repo?.defaultBranch ?? "main"}`);
     else if (midTurn) refuse("wait for the turn to end");

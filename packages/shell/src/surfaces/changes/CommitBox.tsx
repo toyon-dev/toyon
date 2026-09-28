@@ -85,9 +85,15 @@ export function CommitBox({
   // a land or an update commits first when the tree is dirty, so with no message typed and none
   // suggested the press that writes one takes the land word's place: the same check the composer
   // offers, which runs the repo's check and asks the model for the message. Nothing offers it
-  // when nothing could answer (`unasked`): the message is the person's to write, and the field
-  // says so.
-  const gap = typed ? null : messageGap(owned?.landing, dirty ? 1 : 0);
+  // when nothing could answer (`unasked`, an agent with no quick model): the message is the
+  // person's to write, and the field says so.
+  const quick = useStore((s) => !!s.agents.find((a) => a.id === (owned?.agent ?? s.defaultAgent))?.quick);
+  const verdict = owned?.landing;
+  const gap = typed ? null : messageGap(verdict, dirty ? 1 : 0, quick);
+  // the check running, or a verdict the tree moved under: the word waits on the check the way it
+  // does in the composer, whatever the field holds
+  const checking = verdict?.check === "pending";
+  const stale = !!verdict?.stale;
   const judge = () => {
     if (!op) sock?.send({ t: "judge", worktreeId: id });
   };
@@ -108,13 +114,15 @@ export function CommitBox({
   // work since the PR opened: the same press sends it up to the PR, and merge waits until the
   // branch on origin has all of it, since merging now would leave it behind
   const prMissing = prOpen && (dirty || unpushed > 0);
-  const canLand = !!owned && landable(owned) && (dirty || ahead > 0) && !checkFailed && !prOpen && !gap;
-  const canUpdate = !!owned && prMissing && !checkFailed && !gap;
+  const held = checking || stale || !!gap;
+  const canLand = !!owned && landable(owned) && (dirty || ahead > 0) && !checkFailed && !prOpen && !held;
+  const canUpdate = !!owned && prMissing && !checkFailed && !held;
   // the check in the land word's place, while the agent is not mid-turn (the daemon refuses it then)
   const canCheck =
     !!owned &&
     landable(owned) &&
-    (gap === "unwritten" || gap === "unanswered") &&
+    !checking &&
+    (stale || gap === "unwritten" || gap === "unanswered") &&
     active.agent !== "working" &&
     active.agent !== "waiting";
   const repo = useStore((s) => s.repos.find((r) => r.id === active.repoId) ?? null);
@@ -171,7 +179,7 @@ export function CommitBox({
             placeholder={
               suggested ??
               (gap === "unanswered"
-                ? "no message yet: the model could not be reached. Check again, or write one here"
+                ? "no message yet: the model did not answer. Check again, or write one here"
                 : gap === "unasked"
                   ? "no message yet: write one here to commit or land"
                   : "commit message…")
@@ -219,14 +227,14 @@ export function CommitBox({
                 <Button
                   tone="primary"
                   disabled={!!op}
-                  data-tip={checkTip(owned?.landing, !!repo?.config.check?.trim())}
+                  data-tip={checkTip(verdict, !!repo?.config.check?.trim(), gap)}
                   onClick={judge}
                 >
                   check
                 </Button>
               )}
               {/* the check's own press is out: the word as prose, the way the op line reads */}
-              {gap === "pending" && <span className="live-text">check</span>}
+              {checking && <span className="live-text">check</span>}
               {canUpdate && pr && (
                 <Button
                   tone="primary"

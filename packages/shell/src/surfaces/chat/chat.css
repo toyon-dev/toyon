@@ -139,54 +139,52 @@
     }
   }
 
-  /* the rest of the way in the direction the reader is scrolling, the way a phone's address bar
-     follows the motion: a caret alone at the end they are heading for, gone once they settle to
-     read, so nothing sits over the text they scrolled to. Something arriving while they are up
-     names itself and stays, since now it is news and not a shortcut. One box for both, lifted
-     off the text the same way, so the pill reads as the disc with something to say. */
-  .jump-down,
-  .jump-up {
-    --jump-fade: 0.15s;
+  /* one pill at the foot of the log, the way a phone's address bar follows the motion: while the
+     reader scrolls it offers the rest of the way in the direction they are going, a caret up for
+     the start or down for the end, and it is gone once they settle to read, so nothing sits over
+     the text they scrolled to. Something arriving while they are up names itself on the down
+     segment and stays, since now it is news and not a shortcut; scrolling up past it puts the
+     up caret beside the words. Rendered only while it has something to offer, so the fade is the
+     mount's (starting-style) and the unmount is instant: a pill is a shortcut, not a thing to
+     watch leave. */
+  .jump {
     position: absolute;
+    bottom: 10px;
     left: 50%;
     transform: translateX(-50%);
+    display: flex;
     background: var(--element0);
     border: 1px solid var(--border1);
     border-radius: var(--radius-pill);
-    /* the caret alone sits in a disc: side padding trimmed until the box is as wide as it is tall */
-    padding: 3px 6px;
-    /* the tier an icon button rests at: a control, one step under the news pill, which is read */
-    color: var(--ink1);
     box-shadow: 0 2px 10px var(--shadow);
-    transition: opacity var(--jump-fade) ease;
+    transition: opacity 0.15s ease;
     @starting-style {
       opacity: 0;
     }
+  }
+  /* a segment: the brightest tier, the same as the words, since a caret a tier under them in the
+     same pill reads as disabled rather than quiet. A lone caret's side padding is trimmed until
+     the pill is a disc. */
+  .jump-up,
+  .jump-down {
+    padding: 3px 6px;
+    color: var(--text0);
+    border-radius: inherit;
     :where([data-hover]) &:hover {
-      border-color: var(--accent);
       color: var(--accent);
     }
   }
-  .jump-down {
-    bottom: 10px;
+  .jump-up + .jump-down {
+    border-left: 1px solid var(--border1);
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
   }
-  .jump-up {
-    top: 10px;
+  .jump:has(.jump-up + .jump-down) .jump-up {
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
   }
-  /* resting: faded, and out of the way of a press on the text under it once the fade is done.
-     No hold for a pointer over it: a hand that reaches it after the rest sees it go, and one more
-     turn of the wheel brings it back; a hold made the fade depend on where the pointer happened
-     to be parked. */
-  .jump-rest {
-    opacity: 0;
-    visibility: hidden;
-    transition:
-      opacity var(--jump-fade) ease,
-      visibility 0s var(--jump-fade);
-  }
-  .jump-down-news {
-    padding: 3px 12px;
-    color: var(--text0);
+  .jump-news .jump-down {
+    padding-right: 12px;
   }
 
   .msg-user {

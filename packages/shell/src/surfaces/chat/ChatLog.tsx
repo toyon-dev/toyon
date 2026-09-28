@@ -76,11 +76,28 @@ export function ChatLog({
   };
 
   // the log tails the conversation: the newest line stays in view until the reader scrolls up.
-  // While they scroll, a caret offers the rest of the way in the direction they are going, the
-  // start or the end, and fades when they settle to read. Something arriving while they are up
-  // names itself and stays. Another chat opens at its end.
+  // While they scroll, one pill at the foot of the log offers the rest of the way in the direction
+  // they are going, the start or the end, and fades when they settle to read. Something arriving
+  // while they are up names itself on the pill and stays. Another chat opens at its end.
   const follow = useTail(logRef, items);
   useOnChange([id], () => follow.jump());
+  const upSeg = follow.offStart && follow.moving === "up";
+  const downSeg = follow.offEnd && (follow.moving === "down" || follow.away);
+  const jump = (upSeg || downSeg) && (
+    <div className={cx("jump", follow.away && "jump-news")}>
+      {upSeg && (
+        <button className="jump-up" onClick={follow.start} data-tip="Jump to start">
+          <Icon name="caret-up" className="icon-inline" />
+        </button>
+      )}
+      {downSeg && (
+        <button className="jump-down" onClick={() => follow.jump(true)} data-tip="Jump to latest">
+          <Icon name="caret" className="icon-inline" />
+          {follow.away && " new messages"}
+        </button>
+      )}
+    </div>
+  );
 
   // The composer's walk back through what was sent marks the row it is on and brings that row to
   // the top of the log, so what came after it is what fills the pane. A walk that ends in a blank box
@@ -371,29 +388,7 @@ export function ChatLog({
         )}
       </div>
       {find && <DocumentFind root={logRef} body={logRef} seed={find.seed} seq={find.seq} onClose={closeFind} />}
-      {follow.offStart && (
-        <button
-          className={cx("jump-up", follow.moving !== "up" && "jump-rest")}
-          onClick={follow.start}
-          data-tip="Jump to start"
-        >
-          <Icon name="caret-up" className="icon-inline" />
-        </button>
-      )}
-      {follow.offEnd && (
-        <button
-          className={cx(
-            "jump-down",
-            follow.away && "jump-down-news",
-            !follow.away && follow.moving !== "down" && "jump-rest",
-          )}
-          onClick={() => follow.jump(true)}
-          data-tip="Jump to latest"
-        >
-          <Icon name="caret" className="icon-inline" />
-          {follow.away && " new messages"}
-        </button>
-      )}
+      {jump}
     </div>
   );
 }

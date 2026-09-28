@@ -47,7 +47,8 @@ const PRIMITIVES = new Set([
 
 /**
  * Controls that are deliberately not one of the sizes, each for a reason:
- * - .jump-down and .jump-up are floating discs over the transcript, sized to clear the composer
+ * - .jump-up and .jump-down are the segments of the pill floating over the transcript, sized to
+ *   clear the composer
  * - .rail-disc-head is a full-width rail row that happens to be a button
  * - .bar-path is the address strip: chrome, so quieter at rest than a form field, with the bar's
  *   own inset

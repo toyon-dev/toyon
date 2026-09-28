@@ -415,21 +415,20 @@
     display: flex;
   }
   /* the socket is down: every row is stale and nothing you click will answer. The dots say so, in
-   the fault colour: what they were reporting is exactly what we have stopped hearing, and the dot
-   column is where every other state of a worktree is read. The names keep their own colour. Fading
-   them read as "still loading", and painting them in the fault colour put a status on the text,
-   which read as something wrong with each worktree rather than with the wire. The tip on every
-   row says what happened. */
+   the fault colour, and only the dots that were saying something: a live fill (a server up, an
+   agent at work, a crash) is exactly what we have stopped hearing, so it empties to a ring in the
+   fault colour, the fill gone and the row still here. A gray dot was reporting nothing, and losing
+   the wire loses nothing there, so idle, asleep, starting and the hollow found dot stay as they
+   are; a whole column turning one colour said every worktree had broken at once. A ring rather
+   than a fill because the fault colour is red under the default accent, and a red fill is the
+   crashed mark. The names keep their own colour: painting them read as something wrong with each
+   worktree rather than with the wire. The tip on every row says what happened. */
   .rail {
-    &.offline .rail-item .dot {
-      background: var(--fault);
-      animation: none;
-      box-shadow: none;
-    }
-    /* the hollow dot keeps its shape offline; it is a ring, so blanking box-shadow would erase it */
-    &.offline .rail-disc-item .dot.discovered {
+    &.offline .rail-item .dot:is(.running, .working, .waiting, .crashed, .failed, .landed) {
       background: none;
-      box-shadow: inset 0 0 0 1px var(--fault);
+      animation: none;
+      /* the found dot's ring width: at eight pixels a hairline reads as a smudge */
+      box-shadow: inset 0 0 0 1.5px var(--fault);
     }
     /* identical row heights in both modes, and the dot keeps its x too: 20px from the near edge, the
    centre of the collapsed strip. The peek then unfurls toward the centre from under the pointer

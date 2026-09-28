@@ -108,7 +108,7 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
     if (sock && connected && activeRepoId) sock.send({ t: "list-archived", repoId: activeRepoId });
   }, [sock, connected, activeRepoId]);
   const activeId = useActiveId();
-  // offline the dots take the fault colour and every tip names it; the bar says what the socket is doing
+  // offline the live dots empty to a ring in the fault colour and every tip names it; the bar says what the socket is doing
   const offline = useOffline();
   const layout = useStore((s) => s.layout);
   const railOpen = useStore((s) => s.railOpen);

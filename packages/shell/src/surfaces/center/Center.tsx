@@ -23,6 +23,7 @@ import {
 } from "../../state/selectors.ts";
 import { worktreeById } from "../../state/store.ts";
 import { bridgeThemeMsg } from "../../theme.ts";
+import { cx } from "../../ui/cx.ts";
 import { useDragResize, usePersisted } from "../../ui/hooks.ts";
 import { hasToken } from "../../ws.ts";
 
@@ -46,7 +47,7 @@ const CARRY_MS = 8_000;
 
 import { View } from "../../ui/View.tsx";
 import { ChatPanel } from "../chat/ChatPanel.tsx";
-import { missedFileDrop, noteFileDrag } from "../chat/useIntake.ts";
+import { fileDrop, noteFileDrag, plainDrop } from "../chat/useIntake.ts";
 import { DesignPane } from "../design/DesignPane.tsx";
 import { EditorPane } from "../editor/EditorPane.tsx";
 import { Overlays } from "../overlays/Overlays.tsx";
@@ -133,6 +134,8 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
   const themeRef = useRef(theme);
   themeRef.current = theme;
   const zen = useStore((s) => s.zen);
+  // a file held over the centre: it opens here, and the area says so
+  const dropOver = useStore((s) => s.dragFiles?.at === "centre");
   const zenRef = useRef(zen);
   zenRef.current = zen;
   const log = useLocalField(activeId, "log");
@@ -276,14 +279,15 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
             dispatch({ a: "set-picking", v: false });
             break;
           case "drag-files":
-            // the pointer is inside a preview, so it is not over the chat panel; the shell's own
-            // window sees no dragover in here to tell it that
-            noteFileDrag(store, false);
+            // the pointer is inside a preview, which is the centre; the shell's own window sees
+            // no dragover in here to tell it that
+            noteFileDrag(store, store.getState().activeId ? { at: "centre" } : null);
             break;
           case "drop-files":
             // a file drop the page didn't take: the bridge swallowed it so the frame wouldn't
-            // navigate to the file, and it attaches nowhere from out there
-            missedFileDrop(store);
+            // navigate to the file, and hands the files over as a drop on the centre. No handle
+            // crosses the frame's origin, so they open as bytes
+            fileDrop(store, sock, store.getState().activeId ? { at: "centre" } : null, plainDrop(d.files));
             break;
           case "focus":
             // a hand clicked or typed in the page: the keyboard is the page's and the seat is
@@ -493,7 +497,7 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
       {/* a full-height pane takes the preview's place; in zen the panes are hidden (app.css), so
           the preview comes back for the window rather than leaving the column blank */}
       <div
-        className="center-area"
+        className={cx("center-area", dropOver && "drop-over")}
         style={{
           display:
             !(zen && !chatCentred) && ((editor && editorFull) || (designOpen && designFull)) ? "none" : undefined,

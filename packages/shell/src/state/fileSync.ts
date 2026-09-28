@@ -13,7 +13,7 @@ import type { Store } from "./context.tsx";
 import { type FileRef, localOf, type State } from "./store.ts";
 
 /** how long typing rests before the text is saved */
-const SAVE_DELAY = 800;
+export const SAVE_DELAY = 800;
 
 /** the editor's text, as fileSync reads and replaces it */
 export interface SyncBuffer {
@@ -109,7 +109,7 @@ export class FileSync {
     // edits made in another editor while this window was behind it
     const onFocus = () => {
       const e = this.d.store.getState().editor;
-      if (e) this.refresh(keyOf(e));
+      if (e && !e.loose) this.refresh(keyOf(e));
     };
     this.d.win?.addEventListener("focus", onFocus);
     // the page is going (a reload, a close): an edit still inside the pause is saved now rather
@@ -178,8 +178,9 @@ export class FileSync {
 
   private follow(was: State, now: State) {
     if (was.connected && !now.connected) this.dropped();
-    const e = now.editor;
-    const pe = was.editor;
+    // a loose file is no file of the daemon's: to this it is the pane being closed
+    const e = now.editor?.loose ? null : now.editor;
+    const pe = was.editor?.loose ? null : was.editor;
     if (pe && (!e || keyOf(pe) !== keyOf(e))) this.closed(keyOf(pe));
     if (e && (!pe || pe.seq !== e.seq)) this.opened(e);
     if (!was.connected && now.connected) {

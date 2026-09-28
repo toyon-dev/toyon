@@ -7,6 +7,9 @@
     overflow-y: auto;
     /* the tree holds focus for the panel, and the cursor row is what says so, as in the changes list */
     outline: none;
+    /* a file dropped on the tree's own space lands at the root: the drop marker (base, .drop-over)
+       lights the tree, and a drop on a folder lights that row */
+    position: relative;
   }
   /* depth is indent, one step a level, so a child's name starts under its folder's. The rails are
    drawn into the gutter that opens: one 1px line per ancestor, each in the column that ancestor's
@@ -15,6 +18,7 @@
    straight rail needs nothing that the depth does not already say; 18px is the first caret's
    centre (--row-inset plus half the caret's box), and the step is the indent. */
   .tree-row {
+    position: relative;
     gap: 2px;
     padding-left: calc(var(--row-inset) + var(--tree-depth, 0) * 14px);
     cursor: default;

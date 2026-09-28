@@ -675,6 +675,21 @@
     }
   }
 
+  /* ---- the drop target ----
+     A file dragged over a place that takes it: the whole place lights up, since the whole place is
+     the target (the chat panel, the centre, a folder row in the files tab). A hairline rather than
+     a dashed box: the drop is the obvious reading of a file held over the place, and the marker
+     only has to confirm the target, not shout at it. The line is the accent at full strength: a
+     tint of it appears in no swatch and reads as a fourth hue. Drawn over the place rather than on
+     it, so a child that paints its own ground (an iframe) cannot cover it; the owner is positioned. */
+  .drop-over::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    box-shadow: inset 0 0 0 1px var(--accent);
+  }
+
   /* ---- badges ----
      A badge is a coloured word or count beside a name, and is never pressed: ahead on a worktree
      row and under the commit box, the profile and variant marks on the rail. One colour per

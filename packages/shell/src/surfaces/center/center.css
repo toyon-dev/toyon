@@ -25,6 +25,8 @@
     min-height: 80px;
     display: flex;
     flex-direction: column;
+    /* the drop marker (base, .drop-over) is drawn over this area, not over the panes below it */
+    position: relative;
   }
   .frames-wrap {
     flex: 1;

@@ -76,6 +76,10 @@ export function FileTree({
   // edit to a file that exists changes nothing here.
   useOnChange([worktreeId, git, sock], () => listFiles(worktreeId, store.getState(), { sock, dispatch }));
 
+  // the folder a file from outside is held over, to light its row (the root lights the tree)
+  const dropDir = useStore((s) =>
+    s.dragFiles?.at === "tree" && s.dragFiles.worktreeId === worktreeId ? s.dragFiles.dir : null,
+  );
   const openList = useStore((s) => s.treeOpen[worktreeId] ?? NO_PATHS);
   const open = useMemo(() => new Set(openList), [openList]);
   const [revealed, setRevealed] = useState<ReadonlySet<string>>(NO_FOLDERS);
@@ -294,9 +298,12 @@ export function FileTree({
 
   return (
     <div
-      className="tree"
+      className={cx("tree", dropDir === "" && "drop-over")}
       role="tree"
       aria-label="files"
+      // the window's file drop hit-tests the tree and its rows (useFileDrop): which worktree a
+      // dropped file is written into is read off here
+      data-worktree={worktreeId}
       // the tree holds the keyboard and no row can take focus, so a reader is told where the cursor
       // is by the tree pointing at that row rather than by focus moving to it
       aria-activedescendant={focused && sel >= 0 ? treeRowId(sel) : undefined}
@@ -342,6 +349,7 @@ export function FileTree({
               changedInside={row.kind !== "file" && marked.folders.has(row.path)}
               current={focused ? i === sel : !openRef && row.path === openPath}
               cursor={focused && i === sel}
+              dropOver={dropDir === row.path}
               onPress={press}
               menu={menuFor}
               onHover={hover}
@@ -443,6 +451,7 @@ const TreeItem = memo(function TreeItem({
   changedInside,
   current,
   cursor,
+  dropOver,
   onPress,
   menu,
   onHover,
@@ -456,6 +465,8 @@ const TreeItem = memo(function TreeItem({
   /** the row the tree marks: the cursor while the tree has the keyboard, the open file otherwise */
   current: boolean;
   cursor: boolean;
+  /** a file from outside is held over this folder, and would be written into it */
+  dropOver: boolean;
   onPress: (row: TreeRow) => void;
   menu: (row: TreeRow) => MenuEntry[];
   onHover: (row: TreeRow, entering: boolean) => void;
@@ -480,7 +491,7 @@ const TreeItem = memo(function TreeItem({
       aria-expanded={row.kind === "folder" ? row.open : undefined}
       aria-selected={cursor}
       // a div, not a button: Firefox never starts a drag on a button
-      className="row row-sm tree-row row-edge"
+      className={cx("row row-sm tree-row row-edge", dropOver && "drop-over")}
       data-state={rowState({ current, cursor })}
       data-kind={row.kind}
       data-path={row.path}

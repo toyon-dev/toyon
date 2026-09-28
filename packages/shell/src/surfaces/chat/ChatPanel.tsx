@@ -41,7 +41,7 @@ export function ChatPanel({
   const assumed = placement === "centre" && !archived && repo?.assumed ? repo : null;
   // dropped files attach here, but the drop is taken on the window (see useFileDrop): this only
   // lends it the panel's bounds and shows the highlight while the pointer is inside them
-  const over = useStore((s) => s.dragFiles);
+  const over = useStore((s) => s.dragFiles?.at === "chat");
   // a row dragged from the files tab is this window's own drag, so the panel takes it itself
   const store = useStoreInstance();
   const pathDrop = useMemo(() => pathDropHandlers(store), [store]);

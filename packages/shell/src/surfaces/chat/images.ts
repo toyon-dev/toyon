@@ -61,10 +61,10 @@ export function otherFiles(dt: DataTransfer | null): File[] {
   return out;
 }
 
-/** a file's text, or null when it is not text at all. Decoded strictly, so a binary comes back
- * null rather than as a screen of replacement characters. */
-export async function readText(file: File): Promise<string | null> {
-  if (file.size > MAX_TEXT_FILE_BYTES) return null;
+/** a file's text, or null when it is not text at all, or is more than `max` bytes. Decoded
+ * strictly, so a binary comes back null rather than as a screen of replacement characters. */
+export async function readText(file: File, max = MAX_TEXT_FILE_BYTES): Promise<string | null> {
+  if (file.size > max) return null;
   try {
     return new TextDecoder("utf-8", { fatal: true }).decode(await file.arrayBuffer());
   } catch {

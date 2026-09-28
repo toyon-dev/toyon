@@ -5,7 +5,8 @@ import { previewBus } from "../../app/previewBus.ts";
 import { fileItems, viewsOf } from "../../state/actions/file.ts";
 import { addToChat } from "../../state/attach.ts";
 import { useDispatch, useFileSync, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
-import type { EditorSync, FileSync } from "../../state/fileSync.ts";
+import type { FileSync } from "../../state/fileSync.ts";
+import { looseSync, NO_SYNC } from "../../state/looseSync.ts";
 import { useTheme } from "../../state/selectors.ts";
 import {
   archivedPageOf,
@@ -45,9 +46,6 @@ function Loading({ what }: { what: string }) {
   );
 }
 
-/** an editor with nothing behind it (no daemon in a test): it holds the text and saves nowhere */
-const NO_SYNC: EditorSync = { attach: () => {}, edited: () => {}, saveNow: () => {} };
-
 /** a drag nobody starts: a pane on a phone's screen is not resized */
 const NO_DRAG = () => {};
 
@@ -85,6 +83,10 @@ export function EditorPane({
   const files = useFileSync();
   const theme = useTheme();
   const { worktreeId, path, ref } = editor;
+  // a file from outside every worktree, dropped on the centre: `path` is its name, the text came
+  // with it, and the browser saves it through the handle it carried, if one did. None of the
+  // working-tree wiring below applies, and the worktree id is only lent to the pane's plumbing.
+  const loose = editor.loose;
   // a file on an archived worktree's page is only in git: its directory is gone
   const kept = useStore((s) => archivedPageOf(s)?.id === worktreeId);
   const wtPath = useStore((s) => {
@@ -95,26 +97,31 @@ export function EditorPane({
   // a commit's copy: read-only, and none of the working-tree wiring below applies to it
   const history = ref !== undefined;
   const sync = useMemo(
-    () => files?.bind({ worktreeId, path, ...(ref ? { ref } : {}) }) ?? NO_SYNC,
-    [files, worktreeId, path, ref],
+    () =>
+      loose
+        ? looseSync(loose.source, path, (message) =>
+            dispatch({ a: "editor-refused", file: { worktreeId, path }, message }),
+          )
+        : (files?.bind({ worktreeId, path, ...(ref ? { ref } : {}) }) ?? NO_SYNC),
+    [files, worktreeId, path, ref, loose, dispatch],
   );
   const cached = useStore((s) => localOf(s, worktreeId).changedRanges[path]);
   // warm the line-offset/ranges cache so line-hover highlights align; a git-status wipes the
   // cache, so `cached` is a dependency and the request re-fires. Ranges are measured against the
   // working tree, so for a commit they would light up lines the page never rendered.
   useEffect(() => {
-    if (!cached && !history && !kept) sock?.send({ t: "changed-ranges", worktreeId, path });
-  }, [worktreeId, path, cached, history, kept, sock]);
+    if (!cached && !history && !kept && !loose) sock?.send({ t: "changed-ranges", worktreeId, path });
+  }, [worktreeId, path, cached, history, kept, loose, sock]);
   const lineOff = cached?.offset ?? 0;
   const disk = editor.disk;
   // until the first read decides, the toggles offer what they would from a diff
   const view = editor.view ?? "diff";
-  // a file with nothing on the other side has no diff to switch to
+  // a file with nothing on the other side has no diff to switch to; a loose file has no other side
   const added = disk?.before === "";
-  const others = viewsOf(path, added).filter((v) => v !== view);
+  const others = viewsOf(path, added).filter((v) => v !== view && !(loose && v === "diff"));
   // a file the browser draws is drawn from the working tree; one only in git (a commit's copy, an
-  // archived page) has no bytes to serve
-  const viewer = history || kept ? null : viewerOf(path);
+  // archived page) or from outside it has no bytes to serve
+  const viewer = history || kept || loose ? null : viewerOf(path);
   // a line the page reported is only placed once its offset is known
   const line = editor.line && !editor.line.fiber ? editor.line.n : undefined;
   return (
@@ -127,9 +134,10 @@ export function EditorPane({
       onDragStart={onDragStart ?? NO_DRAG}
       title={history ? `${path} at ${ref?.slice(0, 7)}` : path}
       // the header names the file, so it answers with the file's actions, the same list its row in
-      // the changes panel has; a commit's copy is read-only, so no discard
+      // the changes panel has; a commit's copy is read-only, so no discard. A loose file has no
+      // row and no place in the worktree, so nothing to offer
       menu={() =>
-        wtPath
+        wtPath && !loose
           ? fileItems(
               { id: worktreeId, dir: wtPath },
               path,
@@ -159,7 +167,10 @@ export function EditorPane({
                 <Icon name={VIEW_ICONS[v]} className="icon-inline" /> {v}
               </Button>
             ))}
-          {!kept && <OpenInMenu absPath={absPath} onReveal={() => sock?.send({ t: "reveal", worktreeId, path })} />}
+          {/* a loose file's place on disk is the browser's secret, so there is nowhere to open it */}
+          {!kept && !loose && (
+            <OpenInMenu absPath={absPath} onReveal={() => sock?.send({ t: "reveal", worktreeId, path })} />
+          )}
         </>
       }
     >
@@ -184,8 +195,8 @@ export function EditorPane({
             text={disk.after}
             path={path}
             worktreeId={worktreeId}
-            // a copy only git holds has no bytes on disk for its assets to be served from
-            version={history || kept ? undefined : disk.version}
+            // a copy only git holds, or a file from outside, has no bytes on disk for its assets to be served from
+            version={history || kept || loose ? undefined : disk.version}
             openSeq={editor.seq}
             focus={editor.focus}
           />
@@ -194,8 +205,8 @@ export function EditorPane({
             text={disk.after}
             path={path}
             worktreeId={worktreeId}
-            // a copy only git holds has no bytes on disk for its images to be served from
-            version={history || kept ? undefined : disk.version}
+            // a copy only git holds, or a file from outside, has no bytes on disk for its images to be served from
+            version={history || kept || loose ? undefined : disk.version}
             openSeq={editor.seq}
             focus={editor.focus}
             onChat={(selected) => addToChat(store, { worktreeId, text: selected, name: path })}
@@ -204,8 +215,9 @@ export function EditorPane({
           <ErrorBoundary pane>
             <Suspense fallback={<Loading what={view} />}>
               <Editor
-                // one mount per file: the models it holds are that file's
-                key={`${worktreeId}\n${ref ?? ""}\n${path}`}
+                // one mount per file: the models it holds are that file's, and a loose file named
+                // like a worktree file is another file
+                key={`${worktreeId}\n${loose ? "loose" : (ref ?? "")}\n${path}`}
                 file={{ worktreeId, path, ...(ref ? { ref } : {}) }}
                 disk={disk}
                 blame={editor.blame}
@@ -216,33 +228,41 @@ export function EditorPane({
                 readOnly={history || !disk.writable || onScreen}
                 theme={theme}
                 sync={sync}
-                // the editor knows the lines; whose file they are, and at which commit, is the pane's
-                onCopy={(copied, lines, clipboard) =>
-                  writeCopiedSource(clipboard, {
-                    worktreeId,
-                    path: copied,
-                    ...lines,
-                    ...(ref ? { ref } : {}),
-                  })
+                // the editor knows the lines; whose file they are, and at which commit, is the
+                // pane's. A loose file's lines name no file the agent could read, so a copy is
+                // plain text and a selection joins the chat under the name alone
+                onCopy={
+                  loose
+                    ? undefined
+                    : (copied, lines, clipboard) =>
+                        writeCopiedSource(clipboard, {
+                          worktreeId,
+                          path: copied,
+                          ...lines,
+                          ...(ref ? { ref } : {}),
+                        })
                 }
                 onChat={(taken, selection) =>
                   addToChat(
                     store,
-                    selection && {
-                      worktreeId,
-                      text: selection.text,
-                      source: {
-                        path: taken,
-                        startLine: selection.startLine,
-                        endLine: selection.endLine,
-                        ...(ref ? { ref } : {}),
-                      },
-                    },
+                    selection &&
+                      (loose
+                        ? { worktreeId, text: selection.text, name: taken }
+                        : {
+                            worktreeId,
+                            text: selection.text,
+                            source: {
+                              path: taken,
+                              startLine: selection.startLine,
+                              endLine: selection.endLine,
+                              ...(ref ? { ref } : {}),
+                            },
+                          }),
                   )
                 }
                 onNew={() => store.dispatch({ a: "open-draft" })}
                 onLineHover={
-                  history
+                  history || loose
                     ? undefined
                     : (hovered) => {
                         if (hovered == null) previewBus.post(worktreeId, { type: "highlight-clear" });
@@ -302,6 +322,14 @@ function EditorNote({ editor, disk, files }: { editor: EditorFile; disk: EditorD
     return (
       <div className="editor-note">
         <span className="hint">{editor.refused}</span>
+      </div>
+    );
+  }
+  // a file from outside with no handle to save through: the browser gave its bytes and kept its place
+  if (editor.loose && !disk.writable && !disk.tooLarge) {
+    return (
+      <div className="editor-note">
+        <span className="hint">read-only: {path} is not in a project; drop it on a folder in files to add it</span>
       </div>
     );
   }

@@ -486,6 +486,34 @@ export interface OpenFile {
 /** a file the editor can have open: a working-tree path, or a commit's copy of one */
 export type FileRef = Pick<OpenFile, "worktreeId" | "path" | "ref">;
 
+/** Where a loose file's save goes. A handle is what a drop carries in Chromium: the browser writes
+ * the file where it lives, after its one permission prompt. Bytes alone are read-only. */
+export type LooseSource = { kind: "handle"; handle: FileSystemFileHandle } | { kind: "bytes" };
+
+/** what a caller opens from outside every worktree: a dropped file, by name, with its text read */
+export interface OpenLoose {
+  /** the pane's plumbing keys on a worktree, so the one on screen lends its id */
+  worktreeId: string;
+  name: string;
+  /** empty when `tooLarge` */
+  text: string;
+  /** more than the pane shows: opened read-only with nothing in it, as a worktree file that size is */
+  tooLarge: boolean;
+  source: LooseSource;
+  seq: number;
+}
+
+/** where a file drag is, while it is over a place that takes a drop: the chat panel attaches, the
+ * centre opens, a folder in the files tab (`dir`; the tree's own space is the root) takes the file */
+export type DropZone = { at: "chat" } | { at: "centre" } | { at: "tree"; worktreeId: string; dir: string };
+
+const sameZone = (a: DropZone | null, b: DropZone | null) =>
+  a === b ||
+  (!!a &&
+    !!b &&
+    a.at === b.at &&
+    (a.at !== "tree" || b.at !== "tree" || (a.worktreeId === b.worktreeId && a.dir === b.dir)));
+
 export const sameFile = (a: FileRef, b: FileRef) =>
   a.worktreeId === b.worktreeId && a.path === b.path && a.ref === b.ref;
 
@@ -504,6 +532,10 @@ export interface EditorFile extends Omit<OpenFile, "view"> {
   /** who last touched each line, for the version of the file it was asked for; null until the
    * first answer. The editor shows it only while `disk` is still that version. */
   blame: EditorBlame | null;
+  /** a file from outside every worktree, dropped on the centre: `path` is its name, `disk` holds
+   * its text from the start, and none of the working-tree wiring applies. It lives while the pane
+   * is open on the worktree it was dropped on; a handle cannot be kept across a reload */
+  loose?: { source: LooseSource };
 }
 
 /** a file's blame, named for the read it followed */
@@ -599,8 +631,8 @@ export interface State {
   openUrl: string | null;
   /** bumped to request a preview reload for a worktree (the edit/HMR decision lives in this reducer) */
   reloadReq: { id: string; n: number } | null;
-  /** a file is being dragged over the chat panel, which is the one place a drop attaches */
-  dragFiles: boolean;
+  /** a file is being dragged over a place that takes a drop, and which; null over anywhere else */
+  dragFiles: DropZone | null;
   /** the armed element picker's verb: ⌘E's chat, ⌘I's code */
   picking: PickVerb | false;
   overlay: Overlay | null;
@@ -792,7 +824,7 @@ export function initialState(opts: InitialOpts): State {
     editor: null,
     openUrl: null,
     reloadReq: null,
-    dragFiles: false,
+    dragFiles: null,
     picking: false,
     overlay: null,
     paletteReturn: null,
@@ -1156,6 +1188,8 @@ export type Action =
   | { a: "close-editor" }
   /** the editor pane opens this file now; fileSync reads it */
   | { a: "open-file"; v: OpenFile }
+  /** the editor pane opens a file from outside every worktree, text in hand; fileSync leaves it alone */
+  | { a: "open-loose"; v: OpenLoose }
   /** fileSync: what a read of the open file found, or why it could not read it */
   | { a: "editor-read"; file: FileRef; disk: EditorDisk | null; error?: string }
   /** fileSync: the file changed on disk under unsaved edits (what is there now), or that was settled */
@@ -1190,7 +1224,7 @@ export type Action =
   | { a: "page"; id: string; url?: string; title?: string; error?: string; fresh?: boolean }
   /** links a preview's page showed, for an app with no route table */
   | { a: "links"; id: string; links: PageLink[] }
-  | { a: "drag-files"; v: boolean }
+  | { a: "drag-files"; v: DropZone | null }
   | { a: "set-picking"; v: PickVerb | false }
   /** open an overlay (closes any other); palettes forget a pending return, sub-pickers keep it */
   | { a: "open"; overlay: Overlay }
@@ -1518,9 +1552,38 @@ function reduce(s: State, action: Action): State {
         },
       };
     }
+    case "open-loose": {
+      const v = action.v;
+      // the text is the disk: both sides the same, so there is no diff to show, and no version,
+      // since nothing here compares a save against what it read
+      const disk: EditorDisk = {
+        before: v.text,
+        after: v.text,
+        version: null,
+        writable: v.source.kind === "handle" && !v.tooLarge,
+        binary: false,
+        tooLarge: v.tooLarge,
+      };
+      return {
+        ...s,
+        editor: {
+          worktreeId: v.worktreeId,
+          path: v.name,
+          view: readingView(v.name),
+          seq: v.seq,
+          disk,
+          focus: true,
+          conflict: null,
+          // no read follows, so no blame follows either
+          blame: null,
+          loose: { source: v.source },
+        },
+      };
+    }
     case "editor-read": {
       const e = s.editor;
-      if (!e || !sameFile(e, action.file)) return s;
+      // a loose file named like a worktree file is another file, and no read is ever out for it
+      if (!e || e.loose || !sameFile(e, action.file)) return s;
       const disk = action.disk;
       if (!disk) {
         // a pane with nothing in it yet has nothing to show, so it closes; one with text keeps it.
@@ -1543,7 +1606,7 @@ function reduce(s: State, action: Action): State {
     }
     case "editor-conflict": {
       const e = s.editor;
-      return e && sameFile(e, action.file) ? { ...s, editor: { ...e, conflict: action.theirs } } : s;
+      return e && !e.loose && sameFile(e, action.file) ? { ...s, editor: { ...e, conflict: action.theirs } } : s;
     }
     case "editor-view":
       // the line was a one-time jump; past a switch the editor carries its own place, and a line
@@ -1551,11 +1614,14 @@ function reduce(s: State, action: Action): State {
       return s.editor ? { ...s, editor: { ...s.editor, view: action.v, line: undefined } } : s;
     case "editor-refused": {
       const e = s.editor;
-      return e && sameFile(e, action.file) ? { ...s, editor: { ...e, refused: action.message } } : s;
+      if (!e || !sameFile(e, action.file)) return s;
+      // a loose file has no fresh read to come back writable from, so the text locks with the note
+      const disk = e.loose && e.disk ? { ...e.disk, writable: false } : e.disk;
+      return { ...s, editor: { ...e, refused: action.message, disk } };
     }
     case "editor-blame": {
       const e = s.editor;
-      return e && sameFile(e, action.file) ? { ...s, editor: { ...e, blame: action.blame } } : s;
+      return e && !e.loose && sameFile(e, action.file) ? { ...s, editor: { ...e, blame: action.blame } } : s;
     }
     case "notice":
       // the answer is under the box, so the box has to be on screen
@@ -1625,7 +1691,7 @@ function reduce(s: State, action: Action): State {
         return links === l.links ? l : { ...l, links };
       });
     case "drag-files":
-      return s.dragFiles === action.v ? s : { ...s, dragFiles: action.v };
+      return sameZone(s.dragFiles, action.v) ? s : { ...s, dragFiles: action.v };
     case "set-picking":
       return { ...s, picking: action.v };
     case "open":

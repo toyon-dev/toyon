@@ -1177,20 +1177,6 @@
       margin: 0;
     }
   }
-  /* an image dragged over the chat: the whole panel takes it, so the whole panel lights up. A
-   hairline rather than a dashed box: the drop is the obvious reading of a file over the chat, and
-   the marker only has to confirm the target, not shout at it. The line is the accent at full
-   strength: a tint of it appears in no swatch and reads as a fourth hue. */
-  .chat-dock {
-    &.drop-over::after {
-      content: "";
-      position: absolute;
-      inset: 0;
-      pointer-events: none;
-      box-shadow: inset 0 0 0 1px var(--accent);
-    }
-  }
-
   /* ---- the ask ----
    The agent asked something and its turn is stopped until it is answered, so the question takes
    the message box: the keyboard is already there, the box never scrolls away, and the strip is

@@ -109,8 +109,9 @@ export const bridgeToShellSchema = z.discriminatedUnion("type", [
    * inside a frame, and would otherwise still believe the drag is wherever it saw it last */
   z.object({ type: z.literal("drag-files") }),
   /** a file dropped on the preview that the page itself did not take. The bridge swallowed it:
-   * left alone the frame navigates to the file and the running app is gone */
-  z.object({ type: z.literal("drop-files") }),
+   * left alone the frame navigates to the file and the running app is gone. The files ride along
+   * by structured clone, so the shell opens them as a drop on the centre */
+  z.object({ type: z.literal("drop-files"), files: z.array(z.instanceof(File)) }),
   /** the page took the keyboard: a hand clicked or typed in it (`gesture`), or it focused something
    * on its own, the way a field focused on load or an app reloading under someone typing in the
    * terminal does. The shell's window gets no event when focus enters a frame */

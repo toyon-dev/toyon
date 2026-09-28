@@ -1,15 +1,18 @@
-import { isLongPaste, limitMessage } from "@toyon/shared";
+import { FILE_MAX_CHARS, isLongPaste, limitMessage } from "@toyon/shared";
 import { useEffect, useRef } from "react";
 import { readCopiedSource } from "../../app/copiedSource.ts";
+import { createFile, nextSeq } from "../../state/actions/file.ts";
 import { attachText, mentionInChat, noticeIn, roomIn, treeBox } from "../../state/attach.ts";
 import type { Store } from "../../state/context.tsx";
-import { useStoreInstance } from "../../state/context.tsx";
-import { composerBoxOf, worktreeById } from "../../state/store.ts";
+import { useSock, useStoreInstance } from "../../state/context.tsx";
+import { composerBoxOf, type DropZone, worktreeById } from "../../state/store.ts";
+import type { DaemonSocket } from "../../ws.ts";
+import { parentOf } from "../changes/fileTree.ts";
 import { imageFiles, otherFiles, prepareImage, readText } from "./images.ts";
 
 /** the chat panel, registered by ChatPanel wherever it is placed. The drop is handled on the window (a file dropped on
  * anything that doesn't take it navigates the tab to that file and the session is gone), so the
- * window hit-tests against this to tell a drop that attaches from one it only swallows. */
+ * window hit-tests against this to tell a drop that attaches from one that opens or is swallowed. */
 export const chatPanel = { el: null as HTMLElement | null };
 
 /** how long the highlight outlives the last sign of the drag. A dragleave the pointer is still
@@ -20,7 +23,7 @@ const DRAG_GONE_MS = 80;
  * quiet rather than firing anything. Long enough that a drag held still never blinks out. */
 const DRAG_IDLE_MS = 2000;
 
-/** the drag in flight, if any. Not in the store: only `dragFiles` (the panel's highlight) is
+/** the drag in flight, if any. Not in the store: only `dragFiles` (which place is lit) is
  * rendered, and a beat that arrives every 350ms shouldn't go through the reducer. */
 let drag: { refused: boolean } | null = null;
 let idle: ReturnType<typeof setTimeout> | undefined;
@@ -30,10 +33,10 @@ const wait = (store: Store, ms: number) => {
   idle = setTimeout(() => endFileDrag(store), ms);
 };
 
-/** a file drag was just seen, by this window's dragover or by a preview's bridge */
-export function noteFileDrag(store: Store, onPanel: boolean) {
+/** a file drag was just seen over `zone`, by this window's dragover or by a preview's bridge */
+export function noteFileDrag(store: Store, zone: DropZone | null) {
   drag ??= { refused: false };
-  store.dispatch({ a: "drag-files", v: onPanel && !drag.refused });
+  store.dispatch({ a: "drag-files", v: drag.refused ? null : zone });
   wait(store, DRAG_IDLE_MS);
 }
 
@@ -46,7 +49,7 @@ function fadeFileDrag(store: Store) {
 function endFileDrag(store: Store) {
   clearTimeout(idle);
   drag = null;
-  store.dispatch({ a: "drag-files", v: false });
+  store.dispatch({ a: "drag-files", v: null });
 }
 
 /** escape mid-drag. An OS drag can't be called off from script, so the rest of this one goes
@@ -56,7 +59,7 @@ function endFileDrag(store: Store) {
 function refuseFileDrag(store: Store) {
   if (!drag) return;
   drag.refused = true;
-  store.dispatch({ a: "drag-files", v: false });
+  store.dispatch({ a: "drag-files", v: null });
 }
 
 /** the type a files-tab row drags under, beside text/plain for anywhere outside toyon */
@@ -87,7 +90,7 @@ export function pathDropHandlers(store: Store) {
       e.preventDefault();
       const takes = treeBox(store.getState(), pathDrag.worktreeId) !== null;
       e.dataTransfer.dropEffect = takes ? "copy" : "none";
-      if (takes) noteFileDrag(store, true);
+      if (takes) noteFileDrag(store, { at: "chat" });
     },
     onDrop: (e: React.DragEvent) => {
       if (!carriesPath(e) || !pathDrag) return;
@@ -134,10 +137,7 @@ function dropBox(store: Store): string | null {
 }
 
 /** a drop on the chat panel */
-function dropFiles(store: Store, files: File[]) {
-  const refused = drag?.refused ?? false;
-  endFileDrag(store);
-  if (refused || files.length === 0) return;
+function dropOnChat(store: Store, files: File[]) {
   const boxId = dropBox(store);
   const images = files.filter((f) => f.type.startsWith("image/"));
   if (images.length) return void attachImages(store, boxId, images);
@@ -146,37 +146,174 @@ function dropFiles(store: Store, files: File[]) {
   void attachTextFiles(store, boxId, files);
 }
 
-/** a file drop the shell swallowed away from the chat panel, including one the bridge caught
- * inside a preview: it went nowhere, so say where it should have gone */
-export function missedFileDrop(store: Store) {
+/** A dropped file and the handle it came with, in Chromium. The handle is asked for inside the
+ * drop event, since the item list is emptied when the event returns; the answer arrives later. */
+export interface Dropped {
+  file: File;
+  handle: Promise<FileSystemFileHandle | null>;
+}
+
+const NO_HANDLE: Promise<FileSystemFileHandle | null> = Promise.resolve(null);
+
+/** what Chromium adds to a dropped item; lib.dom leaves it out */
+type HandleItem = DataTransferItem & { getAsFileSystemHandle?: () => Promise<FileSystemHandle | null> };
+
+function takeDrop(dt: DataTransfer | null): Dropped[] {
+  if (!dt) return [];
+  const out: Dropped[] = [];
+  for (const item of Array.from(dt.items) as HandleItem[]) {
+    if (item.kind !== "file") continue;
+    const file = item.getAsFile();
+    if (!file) continue;
+    const handle =
+      item.getAsFileSystemHandle?.().then(
+        (h) => (h?.kind === "file" ? (h as FileSystemFileHandle) : null),
+        () => null,
+      ) ?? NO_HANDLE;
+    out.push({ file, handle });
+  }
+  // a browser that fills `files` alone
+  if (out.length === 0) for (const file of Array.from(dt.files)) out.push({ file, handle: NO_HANDLE });
+  return out;
+}
+
+/** files with no handle to them: a drop the bridge caught inside a preview frame */
+export const plainDrop = (files: File[]): Dropped[] => files.map((file) => ({ file, handle: NO_HANDLE }));
+
+/** the text a loose file holds, or null when it is not text. Empty and `tooLarge` past what the
+ * pane shows, the same cap the daemon puts on a worktree file. */
+async function readLoose(file: File): Promise<{ text: string; tooLarge: boolean } | null> {
+  // UTF-8 spends at most four bytes a character, so past this many bytes the text is over the cap
+  // whatever it decodes to, and is not read
+  const cap = FILE_MAX_CHARS * 4;
+  if (file.size > cap) return { text: "", tooLarge: true };
+  const text = await readText(file, cap);
+  if (text === null) return null;
+  return text.length > FILE_MAX_CHARS ? { text: "", tooLarge: true } : { text, tooLarge: false };
+}
+
+/** A drop on the centre: a picture goes to the chat, as any picture does. The first text file
+ * opens in the editor pane, editable when a handle came with it; anything else is said by name. */
+async function dropOnCentre(store: Store, dropped: Dropped[]) {
+  const boxId = dropBox(store);
+  const worktreeId = store.getState().activeId;
+  const say = (text: string) => boxId && noticeIn(store, boxId, text);
+  const images = dropped.filter((d) => d.file.type.startsWith("image/")).map((d) => d.file);
+  if (images.length) void attachImages(store, boxId, images);
+  const rest = dropped.filter((d) => !d.file.type.startsWith("image/"));
+  const first = rest[0];
+  if (!first || !worktreeId) return;
+  const read = await readLoose(first.file);
+  if (!read) return void say(`${first.file.name}: not a text file`);
+  const handle = await first.handle;
+  store.dispatch({
+    a: "open-loose",
+    v: {
+      worktreeId,
+      name: first.file.name,
+      ...read,
+      source: handle ? { kind: "handle", handle } : { kind: "bytes" },
+      seq: nextSeq(),
+    },
+  });
+  if (rest.length > 1) say(`opened ${first.file.name}; one file opens at a time`);
+}
+
+/** A drop on a folder in the files tab: each text file is written there under its own name and
+ * opened. A picture, a binary, or more than the pane shows is refused by name, and so is a name
+ * already taken, in the daemon's words. */
+async function dropOnTree(
+  store: Store,
+  sock: DaemonSocket | null,
+  zone: Extract<DropZone, { at: "tree" }>,
+  dropped: Dropped[],
+) {
+  const boxId = treeBox(store.getState(), zone.worktreeId) ?? dropBox(store);
+  const say = (text: string) => boxId && noticeIn(store, boxId, text);
+  const deps = { sock, dispatch: (a: Parameters<Store["dispatch"]>[0]) => store.dispatch(a) };
+  for (const { file } of dropped) {
+    const read = await readLoose(file);
+    if (!read) {
+      say(`${file.name}: not a text file`);
+      continue;
+    }
+    if (read.tooLarge) {
+      say(`${file.name}: too large to add here`);
+      continue;
+    }
+    const path = zone.dir ? `${zone.dir}/${file.name}` : file.name;
+    const why = await createFile(deps, { worktreeId: zone.worktreeId, path }, read.text);
+    if (why) say(`${file.name}: ${why}`);
+  }
+}
+
+/** a file drop the shell swallowed away from every place that takes one: it went nowhere, so say
+ * where it should have gone */
+function missedFileDrop(store: Store) {
+  const boxId = dropBox(store);
+  if (boxId)
+    noticeIn(store, boxId, "drop a file on the chat to attach it, on the preview to open it, or on a folder to add it");
+}
+
+/** A file drop, from this window or from a preview's bridge, on `zone`. The drag ends here; one
+ * escaped mid-flight is swallowed and taken nowhere. */
+export function fileDrop(store: Store, sock: DaemonSocket | null, zone: DropZone | null, dropped: Dropped[]) {
   const refused = drag?.refused ?? false;
   endFileDrag(store);
-  const boxId = dropBox(store);
-  if (!refused && boxId) noticeIn(store, boxId, "drop images on the chat to attach them");
+  if (refused || dropped.length === 0) return;
+  if (!zone) missedFileDrop(store);
+  else if (zone.at === "chat")
+    dropOnChat(
+      store,
+      dropped.map((d) => d.file),
+    );
+  else if (zone.at === "centre") void dropOnCentre(store, dropped);
+  else void dropOnTree(store, sock, zone, dropped);
 }
 
 const hasFiles = (dt: DataTransfer | null) => !!dt && Array.from(dt.types).includes("Files");
-const onPanel = (e: DragEvent) => e.target instanceof Node && !!chatPanel.el?.contains(e.target);
 
-/** the app-wide file drag, mounted once. Only the chat panel takes a drop; everywhere else the
- * drag is still intercepted, because the browser's own answer to a stray file drop is to navigate
- * the tab to that file. The panel lights up only while the pointer is actually over it. */
+/** The place under the pointer that takes a file, if any. The chat panel is asked first: centred,
+ * it sits inside the centre. In the files tab, a folder row, a file row for the folder it is in,
+ * or the tree's own space for the root; a submodule's files are not this worktree's. The centre
+ * takes the rest, but not the terminal or design pane stacked in it, and only with a worktree on
+ * screen to lend the pane its id. */
+function zoneAt(store: Store, target: EventTarget | null): DropZone | null {
+  const el = target instanceof Element ? target : target instanceof Node ? target.parentElement : null;
+  if (!el) return null;
+  if (chatPanel.el?.contains(el)) return dropBox(store) ? { at: "chat" } : null;
+  const tree = el.closest<HTMLElement>(".tree");
+  const worktreeId = tree?.dataset.worktree;
+  if (tree && worktreeId) {
+    const row = el.closest<HTMLElement>("[data-path]");
+    const kind = row?.dataset.kind;
+    if (kind === "submodule") return null;
+    const path = row?.dataset.path ?? "";
+    return { at: "tree", worktreeId, dir: kind === "file" ? parentOf(path) : path };
+  }
+  if (!el.closest(".center-root") || el.closest('[data-pane="terminal"], [data-pane="design"]')) return null;
+  return store.getState().activeId ? { at: "centre" } : null;
+}
+
+/** the app-wide file drag, mounted once. Every drag is intercepted, because the browser's own
+ * answer to a stray file drop is to navigate the tab to that file; the place under the pointer
+ * decides what a drop does, and lights up only while the pointer is actually over it. */
 export function useFileDrop() {
   const store = useStoreInstance();
+  const sock = useSock();
   useEffect(() => {
     const onDragOver = (e: DragEvent) => {
       // a surface that took the drag itself (a text drop into a field) keeps it
       if (e.defaultPrevented || !hasFiles(e.dataTransfer)) return;
       e.preventDefault();
-      noteFileDrag(store, onPanel(e) && !!dropBox(store));
+      noteFileDrag(store, zoneAt(store, e.target));
       // the cursor carries the same answer as the highlight: nowhere else will take this
       if (e.dataTransfer) e.dataTransfer.dropEffect = store.getState().dragFiles ? "copy" : "none";
     };
     const onDrop = (e: DragEvent) => {
       if (e.defaultPrevented || !hasFiles(e.dataTransfer)) return;
       e.preventDefault();
-      if (onPanel(e)) dropFiles(store, Array.from(e.dataTransfer?.files ?? []));
-      else missedFileDrop(store);
+      fileDrop(store, sock, zoneAt(store, e.target), takeDrop(e.dataTransfer));
     };
     const onDragLeave = () => fadeFileDrag(store);
     const onKey = (e: KeyboardEvent) => {
@@ -194,7 +331,7 @@ export function useFileDrop() {
       window.removeEventListener("dragleave", onDragLeave);
       window.removeEventListener("keydown", onKey, true);
     };
-  }, [store]);
+  }, [store, sock]);
 }
 
 /**

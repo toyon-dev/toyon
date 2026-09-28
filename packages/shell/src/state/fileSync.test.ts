@@ -396,6 +396,18 @@ describe("the open file and the disk", () => {
     const again = h.attach("x.ts", "agent");
     expect(again.value).toBe("mine");
   });
+
+  test("a loose file is no file of the daemon's: nothing is read for it, on open or on focus", () => {
+    const h = harness();
+    h.open("x.ts");
+    expect(h.count("read-file")).toBe(1);
+    h.store.dispatch({
+      a: "open-loose",
+      v: { worktreeId: "a", name: "x.ts", text: "x", tooLarge: false, source: { kind: "bytes" }, seq: 99 },
+    });
+    h.win.fire("focus");
+    expect(h.count("read-file")).toBe(1);
+  });
 });
 
 describe("who last touched each line", () => {

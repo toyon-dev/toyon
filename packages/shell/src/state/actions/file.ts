@@ -56,10 +56,14 @@ type Written = Extract<FileServerMsg, { t: "file-written" }>;
 /** the files being made, each waiting on the answer to its write */
 const creates = new Map<number, (msg: Written) => void>();
 
-/** Make an empty file and open it in the editor pane, where its text is typed. The write names no
+/** Make a file, empty unless `content` is given, and open it in the editor pane. The write names no
  * base, so a file already there is left alone and comes back as `changed`; the folders on the way
  * are made with it. Resolves null once the file is open, or with why it was not made. */
-export function createFile(deps: Deps, target: { worktreeId: string; path: string }): Promise<string | null> {
+export function createFile(
+  deps: Deps,
+  target: { worktreeId: string; path: string },
+  content = "",
+): Promise<string | null> {
   const { sock } = deps;
   if (!sock) return Promise.resolve("not connected to the daemon");
   const seq = nextSeq();
@@ -72,7 +76,7 @@ export function createFile(deps: Deps, target: { worktreeId: string; path: strin
         resolve(msg.reason === "changed" ? "a file is already there" : (msg.message ?? "the file was not made"));
       }
     });
-    sock.send({ t: "write-file", ...target, content: "", base: null, seq });
+    sock.send({ t: "write-file", ...target, content, base: null, seq });
   });
 }
 

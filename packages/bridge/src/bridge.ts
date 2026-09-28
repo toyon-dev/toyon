@@ -146,23 +146,23 @@ window.addEventListener("focus", tookKeyboard);
 if (document.hasFocus() && document.activeElement && document.activeElement !== document.body) tookKeyboard();
 
 // A file dropped on a page that doesn't take it navigates that frame to the file: drop a
-// screenshot on the preview and the running app is gone. Swallow those and tell the shell, which
-// says where the drop should have gone. A page keeps its own drop zones: a handler that called
-// preventDefault has claimed the drag, and this backs off.
+// screenshot on the preview and the running app is gone. Swallow those and hand the files to the
+// shell, which opens them as a drop on the centre. A page keeps its own drop zones: a handler that
+// called preventDefault has claimed the drag, and this backs off.
 const fileDrag = (e: DragEvent) => !e.defaultPrevented && !!e.dataTransfer?.types.includes("Files");
 window.addEventListener("dragover", (e) => {
   if (!fileDrag(e)) return;
   e.preventDefault();
-  // nothing in here takes a file, and the cursor should say so before the drop
-  if (e.dataTransfer) e.dataTransfer.dropEffect = "none";
-  // the shell's window sees nothing while the pointer is in here, so each dragover is also what
-  // tells it the drag has left the chat panel (it coalesces them; nothing re-renders)
+  // the shell takes the drop, and the cursor should say so before it: the shell's window sees no
+  // dragover while the pointer is in here, so this is the only place that can
+  if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
+  // each dragover is also what tells the shell where the drag is (it coalesces them; nothing re-renders)
   post({ type: "drag-files" });
 });
 window.addEventListener("drop", (e) => {
   if (!fileDrag(e)) return;
   e.preventDefault();
-  post({ type: "drop-files" });
+  post({ type: "drop-files", files: Array.from(e.dataTransfer?.files ?? []) });
 });
 
 // ---- React fiber source mapping (the rules are in fiber.ts) ----

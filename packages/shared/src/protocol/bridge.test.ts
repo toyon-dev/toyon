@@ -13,6 +13,16 @@ describe("bridge messages", () => {
     expect(links([{ path: `/${"x".repeat(2048)}`, text: "" }])).toBeNull();
   });
 
+  test("a drop carries its files, and one without them is refused", () => {
+    const f = new File(["hi"], "notes.md", { type: "text/markdown" });
+    expect(parseBridgeMsg({ __toyon: true, type: "drop-files", files: [f] })).toEqual({
+      type: "drop-files",
+      files: [f],
+    });
+    expect(parseBridgeMsg({ __toyon: true, type: "drop-files" })).toBeNull();
+    expect(parseBridgeMsg({ __toyon: true, type: "drop-files", files: ["notes.md"] })).toBeNull();
+  });
+
   test("a navigation may come without a title from an older bridge, and a title can arrive on its own", () => {
     expect(parseBridgeMsg({ __toyon: true, type: "navigated", url: "http://x/a" })).toEqual({
       type: "navigated",

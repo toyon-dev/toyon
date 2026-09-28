@@ -17,6 +17,7 @@ import {
   changesTabShown,
   changesTabStep,
   type Draft,
+  type DropZone,
   type EditorDisk,
   type EditorView,
   EMPTY_LOCAL,
@@ -30,6 +31,7 @@ import {
   type NewProjectState,
   newProjectState,
   type OpenFile,
+  type OpenLoose,
   previewIdOf,
   reducer,
   routeTarget,
@@ -1457,6 +1459,24 @@ describe("streams and notices", () => {
   });
 });
 
+// A dragover arrives every few hundred milliseconds; the store only moves when the place under the
+// pointer does, so nothing re-renders on the beat.
+describe("where a file drag is", () => {
+  test("the same place again is the same state; another folder, or nowhere, is not", () => {
+    const over = (v: DropZone | null): Action => ({ a: "drag-files", v });
+    const s = reducer(initial, over({ at: "tree", worktreeId: "a", dir: "src" }));
+    expect(reducer(s, over({ at: "tree", worktreeId: "a", dir: "src" }))).toBe(s);
+    expect(reducer(s, over({ at: "tree", worktreeId: "a", dir: "" })).dragFiles).toEqual({
+      at: "tree",
+      worktreeId: "a",
+      dir: "",
+    });
+    const c = reducer(s, over({ at: "centre" }));
+    expect(reducer(c, over({ at: "centre" }))).toBe(c);
+    expect(reducer(c, over(null)).dragFiles).toBeNull();
+  });
+});
+
 // The pane opens a file before the daemon has read it; fileSync reads it and hands the store what
 // it found, for the file the pane has open and no other.
 describe("the editor's open file", () => {
@@ -1467,6 +1487,40 @@ describe("the editor's open file", () => {
     expect(read.editor).toMatchObject({
       view: "diff",
       disk: { before: "a", after: "b", version: "v1", writable: true },
+    });
+  });
+
+  test("a loose file opens with its text as the disk, and no read of the daemon's touches it", () => {
+    const loose = (v: Partial<OpenLoose> = {}): Action => ({
+      a: "open-loose",
+      v: { worktreeId: "a", name: "notes.md", text: "# hi", tooLarge: false, source: { kind: "bytes" }, seq: 3, ...v },
+    });
+    const s = run([hello(wt("a")), loose()]);
+    expect(s.editor).toMatchObject({
+      path: "notes.md",
+      seq: 3,
+      view: "preview",
+      focus: true,
+      loose: { source: { kind: "bytes" } },
+      disk: { before: "# hi", after: "# hi", version: null, writable: false, binary: false, tooLarge: false },
+    });
+    // a worktree file of the same name is another file
+    expect(reducer(s, readInto("notes.md", { after: "x" }))).toBe(s);
+    expect(reducer(s, { a: "editor-conflict", file: { worktreeId: "a", path: "notes.md" }, theirs: null })).toBe(s);
+    // a handle writes; more than the pane shows opens empty and locked whatever came with it
+    const handle = { kind: "file" } as unknown as FileSystemFileHandle;
+    expect(run([hello(wt("a")), loose({ source: { kind: "handle", handle } })]).editor?.disk?.writable).toBe(true);
+    const big = run([hello(wt("a")), loose({ text: "", tooLarge: true, source: { kind: "handle", handle } })]);
+    expect(big.editor?.disk).toMatchObject({ writable: false, tooLarge: true });
+    // a save the browser refused locks the text, since no fresh read will come to unlock it
+    const refused = reducer(run([hello(wt("a")), loose({ source: { kind: "handle", handle } })]), {
+      a: "editor-refused",
+      file: { worktreeId: "a", path: "notes.md" },
+      message: "read-only: the browser would not save notes.md",
+    });
+    expect(refused.editor).toMatchObject({
+      refused: "read-only: the browser would not save notes.md",
+      disk: { writable: false },
     });
   });
 

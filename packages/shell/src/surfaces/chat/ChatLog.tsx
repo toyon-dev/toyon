@@ -91,7 +91,7 @@ export function ChatLog({
         </button>
       )}
       {downSeg && (
-        <button className="jump-down" onClick={() => follow.jump(true)} data-tip="Jump to latest">
+        <button className="jump-down" onClick={follow.jump} data-tip="Jump to latest">
           <Icon name="caret" className="icon-inline" />
           {follow.away && " new messages"}
         </button>

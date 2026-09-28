@@ -214,7 +214,7 @@ export function useTail(
   away: boolean;
   moving: "up" | "down" | null;
   pinned: () => boolean;
-  jump: (smooth?: boolean) => void;
+  jump: () => void;
   start: () => void;
   read: () => void;
 } {
@@ -247,21 +247,20 @@ export function useTail(
     if (rest.current) clearTimeout(rest.current);
     rest.current = setTimeout(() => setMoving(null), SCROLL_REST);
   }, []);
-  const jump = useCallback(
-    (smooth = false) => {
-      const el = ref.current;
-      if (!el) return;
-      if (smooth) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-      else el.scrollTop = el.scrollHeight;
-      pinned.current = true;
-      setOffEnd(false);
-      setAway(false);
-    },
-    [ref],
-  );
-  // the scroll events on the way up keep the rest current, so this only moves
+  // Both ends are reached in one step, the way End and Home reach them: across a long log a smooth
+  // scroll takes a second of unreadable text going by, and the pin, which sets the end on every
+  // resize, fights an animation still on its way there while a reply streams.
+  const jump = useCallback(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+    pinned.current = true;
+    setOffEnd(false);
+    setAway(false);
+  }, [ref]);
+  // the scroll event keeps the rest current, so this only moves
   const start = useCallback(() => {
-    ref.current?.scrollTo({ top: 0, behavior: "smooth" });
+    if (ref.current) ref.current.scrollTop = 0;
   }, [ref]);
   useEffect(() => {
     const el = ref.current;

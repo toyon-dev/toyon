@@ -39,8 +39,8 @@ import { Spinner } from "../../ui/Spinner.tsx";
 import { type TipPlacement, tip } from "../../ui/Tooltip.tsx";
 import { dollars, tokens } from "../chat/usage.ts";
 import { hhmm } from "../chips/baseNote.ts";
-import { recapLine } from "../recap.ts";
-import { ago, chord, dotClass, procTrouble, rowLabel, shipLabel, shipShown, stateLabel } from "../util.ts";
+import { lastStopLine, recapLine } from "../recap.ts";
+import { ago, chord, dotClass, isBusy, procTrouble, rowLabel, shipLabel, shipShown, stateLabel } from "../util.ts";
 import "./rail.css";
 import { cx } from "../../ui/cx.ts";
 import { useOnChange } from "../../ui/hooks.ts";
@@ -347,8 +347,12 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
               placement: tipSide,
               name: nameOf(w),
               aside: figuresOf(w),
-              // an unseen stop says what happened under the state, so a hover is enough to triage it
-              detail: w.unseen && owned.worktree.lastTurn ? recapLine(owned.worktree.lastTurn) : undefined,
+              // where the work stands under the state, so a hover is enough to decide whether to
+              // switch. On a busy row the record's recap is the previous stop's, so it is marked
+              // and dated there, or under "Agent working" it would read as the turn in flight.
+              detail: owned.worktree.lastTurn
+                ? (isBusy(w) ? lastStopLine : recapLine)(owned.worktree.lastTurn)
+                : undefined,
               dot: offline ? undefined : op ? "spinner" : dotClass(w),
             })
           : tip(

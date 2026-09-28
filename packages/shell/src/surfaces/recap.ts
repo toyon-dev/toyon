@@ -149,20 +149,22 @@ export function verbLine(text: string): string {
 /** How it stopped, for a stop with no sentence to say it: recaps set to facts, a sentence still
  * being written, or none that came back. The counts of turns and edits are not among them; they
  * are on the transcript right above, and in the line they read as noise in front of the reason. */
+/** an age as a clause: "just now", "12m ago" */
+const when = (age: string) => (age === "now" ? "just now" : `${age} ago`);
+
 function facts(end: LastTurn["end"], f: TurnFacts, age: string): string {
-  const when = age === "now" ? "just now" : `${age} ago`;
   switch (end) {
     case "asking":
       return `Waiting on you${age === "now" ? "" : ` for ${age}`}${f.ask ? `: ${ended(f.ask)}` : "."}`;
     case "failed":
-      if (f.auth) return `Stopped ${when}: not logged in.`;
-      return f.error ? `Failed ${when}: ${ended(f.error)}` : `Failed ${when}.`;
+      if (f.auth) return `Stopped ${when(age)}: not logged in.`;
+      return f.error ? `Failed ${when(age)}: ${ended(f.error)}` : `Failed ${when(age)}.`;
     case "stopped":
       // the agent ends its turn on a plan sent back and waits for the notes; this line is the
       // composer's placeholder, so it says what to type
-      return f.planBack ? `Sent the plan back ${when}. Say what to change.` : `Stopped ${when}.`;
+      return f.planBack ? `Sent the plan back ${when(age)}. Say what to change.` : `Stopped ${when(age)}.`;
     case "done":
-      return f.cut ? `Ended early ${when} (${f.cut}).` : `Finished ${when}.`;
+      return f.cut ? `Ended early ${when(age)} (${f.cut}).` : `Finished ${when(age)}.`;
   }
 }
 
@@ -172,4 +174,13 @@ function facts(end: LastTurn["end"], f: TurnFacts, age: string): string {
 export function recapLine(turn: LastTurn): string {
   const text = turn.recap?.text;
   return text ? ended(text) : facts(turn.end, turn.facts, ago(turn.at));
+}
+
+/** The last stop's sentence under a busy row's state. The agent has been sent on since, so the
+ * line is marked as that stop's and dated, or "ready to land" under "Agent working" reads as the
+ * turn in flight. Nothing when the stop left no sentence: an unfinished stop (an ask, a failure)
+ * has only its facts, and those are what the row moved on from. */
+export function lastStopLine(turn: LastTurn): string | undefined {
+  const text = turn.recap?.text;
+  return text ? `Last stop, ${when(ago(turn.at))}: ${ended(clause(text))}` : undefined;
 }

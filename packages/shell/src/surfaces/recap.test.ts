@@ -6,6 +6,7 @@ import {
   filesLine,
   landFacts,
   landingLine,
+  lastStopLine,
   messageGap,
   prCanMerge,
   prLine,
@@ -47,6 +48,28 @@ describe("recapLine", () => {
 
   test("no line carries a dash or an arrow", () => {
     for (const [t] of lines) expect(recapLine(t)).not.toMatch(/[\u2013\u2014\u2192]/);
+  });
+});
+
+describe("lastStopLine", () => {
+  test("a busy row's sentence is marked as the last stop's and dated", () => {
+    expect(lastStopLine(turn("done", { edits: 4 }, 12, "Added a sticky header; check the page next."))).toBe(
+      "Last stop, 12m ago: added a sticky header; check the page next.",
+    );
+    expect(lastStopLine(turn("done", {}, 0, "Sticky header half done"))).toBe(
+      "Last stop, just now: sticky header half done.",
+    );
+  });
+
+  test("a name keeps its case after the label", () => {
+    expect(lastStopLine(turn("done", {}, 5, "ChatLog.tsx reads the tail."))).toBe(
+      "Last stop, 5m ago: ChatLog.tsx reads the tail.",
+    );
+  });
+
+  test("a stop with no sentence leaves the busy row's tip to its state word", () => {
+    expect(lastStopLine(turn("asking", { ask: "Which port?" }, 20))).toBeUndefined();
+    expect(lastStopLine(turn("failed", { error: "rate limited" }, 5))).toBeUndefined();
   });
 });
 

@@ -21,6 +21,7 @@ export type IconName =
   | "full"
   | "more"
   | "caret"
+  | "caret-up"
   | "stop"
   | "external"
   | "plus"
@@ -78,6 +79,8 @@ const ICON_PATHS: Record<IconName, string> = {
   // every tier; at 2.5px they outweighed the plus beside them
   more: "M3.55 8a.45 .45 0 1 0 .9 0a.45 .45 0 1 0-.9 0z M7.55 8a.45 .45 0 1 0 .9 0a.45 .45 0 1 0-.9 0z M11.55 8a.45 .45 0 1 0 .9 0a.45 .45 0 1 0-.9 0z",
   caret: "M4.5 6.5 8 10l3.5-3.5",
+  // the same chevron pointing up: the way back to the start of a log, opposite the way to its end
+  "caret-up": "M4.5 9.5 8 6l3.5 3.5",
   stop: "M4.5 4.5h7v7h-7z",
   // arrow leaving a pane, for a link that opens outside the app
   external: "M9 3h4v4 M13 3 8 8 M11.5 9.5V13H3V4.5h3.5",

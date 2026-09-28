@@ -183,28 +183,47 @@ export function useReveal(scroller: string) {
 /** how close to the end still counts as reading the end, so a pixel of rounding does not let go */
 const TAIL_SLACK = 40;
 
+/** how long after the last scroll event the scroller still counts as moving: long enough that a
+ * pause between two turns of the wheel does not blink a control that follows the motion, short
+ * enough that it is gone before the reader has settled into reading */
+const SCROLL_REST = 1200;
+
 /** A scroller that tails what it holds, the way a terminal does: the end stays in view while the
  * reader is at the end, and the moment they scroll up it stops following. Growth is watched in
  * the layout (the box, every child, and children as they come and go), not in state: a pin keyed
  * on data has to name every source of growth and misses the next. "At the end" is read from the
  * element when it scrolls, never from where a jump meant to land: a programmatic scroll dispatches
  * its event in the frame's scroll steps, before the observers deliver, so a reader taken elsewhere
- * is known to have left before anything could pull them back. `away` says `news` changed while
- * the reader was up the scroller; it is a value and not the layout because a row the reader opened
- * themselves grows the same way a message arriving does. `read` is for a caller that moved the
+ * is known to have left before anything could pull them back. `up` says the reader is up the
+ * scroller now, for a control that offers the way back; `away` says `news` changed while they
+ * were, and it is a value and not the layout because a row the reader opened themselves grows the
+ * same way a message arriving does. `deep` says the start is more than a screen above them, for
+ * a control that offers the way there: nearer than that a flick of the wheel is faster than a
+ * press. `moving` is the way the scroller is travelling, and null once it has rested: a control
+ * that follows the motion, the way a phone's address bar does, shows for the direction the reader
+ * is already going and hides when they settle to read. `read` is for a caller that moved the
  * scroller itself and wants the answer now. The element is read when the effect mounts, so it
  * must be rendered from the first paint. */
 export function useTail(
   ref: RefObject<HTMLElement | null>,
   news?: unknown,
 ): {
+  up: boolean;
+  deep: boolean;
   away: boolean;
+  moving: "up" | "down" | null;
   pinned: () => boolean;
   jump: (smooth?: boolean) => void;
+  start: () => void;
   read: () => void;
 } {
   const pinned = useRef(true);
+  const [up, setUp] = useState(false);
+  const [deep, setDeep] = useState(false);
   const [away, setAway] = useState(false);
+  const [moving, setMoving] = useState<"up" | "down" | null>(null);
+  const lastTop = useRef(0);
+  const rest = useRef<ReturnType<typeof setTimeout> | null>(null);
   useOnChange([news], () => {
     if (!pinned.current) setAway(true);
   });
@@ -212,7 +231,14 @@ export function useTail(
     const el = ref.current;
     if (!el) return;
     pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < TAIL_SLACK;
+    setUp(!pinned.current);
+    setDeep(el.scrollTop > el.clientHeight);
     if (pinned.current) setAway(false);
+    // a layout change fires a scroll event without moving; the direction holds until it does
+    if (el.scrollTop !== lastTop.current) setMoving(el.scrollTop < lastTop.current ? "up" : "down");
+    lastTop.current = el.scrollTop;
+    if (rest.current) clearTimeout(rest.current);
+    rest.current = setTimeout(() => setMoving(null), SCROLL_REST);
   }, [ref]);
   const jump = useCallback(
     (smooth = false) => {
@@ -221,13 +247,20 @@ export function useTail(
       if (smooth) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
       else el.scrollTop = el.scrollHeight;
       pinned.current = true;
+      setUp(false);
+      setDeep(false);
       setAway(false);
     },
     [ref],
   );
+  // the scroll events on the way up keep the rest current, so this only moves
+  const start = useCallback(() => {
+    ref.current?.scrollTo({ top: 0, behavior: "smooth" });
+  }, [ref]);
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
+    lastTop.current = el.scrollTop;
     el.addEventListener("scroll", read, { passive: true });
     const ro = new ResizeObserver(() => {
       if (pinned.current) el.scrollTop = el.scrollHeight;
@@ -245,9 +278,10 @@ export function useTail(
       el.removeEventListener("scroll", read);
       mo.disconnect();
       ro.disconnect();
+      if (rest.current) clearTimeout(rest.current);
     };
   }, [ref, read]);
-  return { away, pinned: () => pinned.current, jump, read };
+  return { up, deep, away, moving, pinned: () => pinned.current, jump, start, read };
 }
 
 /** where a selection end sits inside `el`, as a count of the text before it */

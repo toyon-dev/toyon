@@ -47,12 +47,12 @@ const PRIMITIVES = new Set([
 
 /**
  * Controls that are deliberately not one of the sizes, each for a reason:
- * - .jump-down is a floating pill over the transcript, sized to clear the composer
+ * - .jump-down and .jump-up are floating discs over the transcript, sized to clear the composer
  * - .rail-disc-head is a full-width rail row that happens to be a button
  * - .bar-path is the address strip: chrome, so quieter at rest than a form field, with the bar's
  *   own inset
  */
-const ONE_OFFS = new Set([".jump-down", ".rail-disc-head", ".bar-path"]);
+const ONE_OFFS = new Set([".jump-down", ".jump-up", ".rail-disc-head", ".bar-path"]);
 
 /**
  * A raw <button> is a row, or one of three inline controls that are text rather than a chip:
@@ -68,6 +68,7 @@ const RAW_BUTTON_OK = new Set([
   "design-row",
   "rail-disc-head",
   "jump-down",
+  "jump-up",
   "pick-open",
   "image-link",
   "tool-image",

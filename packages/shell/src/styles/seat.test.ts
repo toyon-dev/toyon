@@ -24,6 +24,7 @@ const NOT_A_SEAT = [
   "[data-touch] :is(.btn, .btn-icon):not(.btn-inline):active:not(:disabled)",
   ".tone-chrome.on",
   ".jump-down",
+  ".jump-up",
   ".dock-resize:hover::after",
   ".dock-resize.active::after",
   ".pane-resize:hover",

@@ -5,6 +5,7 @@ import { useDispatch, useSock, useStoreInstance } from "../../state/context.tsx"
 import { useLocalField } from "../../state/selectors.ts";
 import { localOf } from "../../state/store.ts";
 import { IconButton } from "../../ui/Button.tsx";
+import { cx } from "../../ui/cx.ts";
 import { DocumentFind } from "../../ui/DocumentFind.tsx";
 import { isFind } from "../../ui/find.ts";
 import { useOnChange, useSecondsSince, useTail } from "../../ui/hooks.ts";
@@ -74,8 +75,10 @@ export function ChatLog({
     }
   };
 
-  // the log tails the conversation: the newest line stays in view until the reader scrolls up,
-  // and a pill offers the way back once something new is said. Another chat opens at its end.
+  // the log tails the conversation: the newest line stays in view until the reader scrolls up.
+  // While they scroll, a caret offers the rest of the way in the direction they are going: the
+  // end, or the start once it is a screen or more above; both fade when they settle to read.
+  // Something arriving while they are up names itself and stays. Another chat opens at its end.
   const follow = useTail(logRef, items);
   useOnChange([id], () => follow.jump());
 
@@ -368,9 +371,27 @@ export function ChatLog({
         )}
       </div>
       {find && <DocumentFind root={logRef} body={logRef} seed={find.seed} seq={find.seq} onClose={closeFind} />}
-      {follow.away && (
-        <button className="jump-down" onClick={() => follow.jump(true)} data-tip="Jump to latest">
-          <Icon name="caret" className="icon-inline" /> new messages
+      {follow.deep && (
+        <button
+          className={cx("jump-up", follow.moving !== "up" && "jump-rest")}
+          onClick={follow.start}
+          data-tip="Jump to start"
+        >
+          <Icon name="caret-up" className="icon-inline" />
+        </button>
+      )}
+      {follow.up && (
+        <button
+          className={cx(
+            "jump-down",
+            follow.away && "jump-down-news",
+            !follow.away && follow.moving !== "down" && "jump-rest",
+          )}
+          onClick={() => follow.jump(true)}
+          data-tip="Jump to latest"
+        >
+          <Icon name="caret" className="icon-inline" />
+          {follow.away && " new messages"}
         </button>
       )}
     </div>

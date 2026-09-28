@@ -69,6 +69,7 @@ export function ListPicker<T>({
   rowMenu,
   groupOf,
   groupHead,
+  headAlone = false,
 }: {
   items: T[];
   /** narrow the list for a query (empty query → everything) */
@@ -134,6 +135,9 @@ export function ListPicker<T>({
   groupOf?: (t: T) => string;
   /** the head for a group, given its key and how many rows it holds */
   groupHead?: (group: string, n: number) => ReactNode;
+  /** draw the head over a lone group too: for rows that say nothing of where they belong (a chat's
+   * hits carry no chat name), the head is the only thing that does */
+  headAlone?: boolean;
 }) {
   const cm = useContextMenu("picker");
   const [q, setQ] = useState(initialQuery);
@@ -233,7 +237,9 @@ export function ListPicker<T>({
       {results.map((t, i) => {
         const group = groupOf?.(t);
         const head =
-          group !== undefined && counts.size > 1 && (i === 0 || groupOf?.(results[i - 1] as T) !== group) ? (
+          group !== undefined &&
+          (headAlone || counts.size > 1) &&
+          (i === 0 || groupOf?.(results[i - 1] as T) !== group) ? (
             <div className="picker-group">{groupHead?.(group, counts.get(group) ?? 0) ?? group}</div>
           ) : null;
         return (

@@ -60,7 +60,7 @@ export function ChatsPicker({ repoId }: { repoId: string }) {
     () => [...live.filter((w) => !isLead(w.worktree)).map(liveRow), ...archived.map(archivedRow)],
     [live, archived],
   );
-  const names = useMemo(() => new Map(worktrees.map((w) => [w.id, w.name])), [worktrees]);
+  const byId = useMemo(() => new Map(worktrees.map((w) => [w.id, w])), [worktrees]);
   const items = useMemo(
     (): ChatsRow[] => [...worktrees, ...(results?.hits ?? []).map((hit) => ({ kind: "hit" as const, hit }))],
     [worktrees, results],
@@ -88,6 +88,29 @@ export function ChatsPicker({ repoId }: { repoId: string }) {
       keyOf={(r) => (r.kind === "hit" ? `h:${r.hit.worktreeId}:${r.hit.seq}` : `w:${r.id}`)}
       rowClass={(r) => (r.kind === "hit" ? "chats-hit" : "picker-row")}
       rowTitle={(r) => (r.kind === "hit" ? r.hit.text : undefined)}
+      // the daemon answers chat by chat, so a chat's hits already sit together; the head says
+      // the chat's name once and the rows under it say only who and when. Drawn over a lone chat
+      // too, or sixteen hits from one chat would name it nowhere.
+      groupOf={(r) => (r.kind === "hit" ? r.hit.worktreeId : "named")}
+      groupHead={(group, n) => {
+        if (group === "named") return `by name · ${n}`;
+        const w = byId.get(group);
+        // one span: the head is a flex box, and bare text beside the archived mark would lose the
+        // space between them
+        return (
+          <span>
+            {w?.name ?? "a worktree"}
+            {w?.archived && (
+              <>
+                {" "}
+                <span className="row-dim">archived</span>
+              </>
+            )}
+            {` · ${n}`}
+          </span>
+        );
+      }}
+      headAlone
       onPick={(r) => {
         const id = r.kind === "hit" ? r.hit.worktreeId : r.id;
         const gone = r.kind === "hit" ? r.hit.archived : r.archived;
@@ -127,15 +150,11 @@ export function ChatsPicker({ repoId }: { repoId: string }) {
           />
         ) : (
           <>
-            <span className="chats-where">
-              <span className="chats-name">{names.get(r.hit.worktreeId) ?? "a worktree"}</span>
-              {r.hit.archived && <span className="row-dim">archived</span>}
-              <span className="chats-said row-dim">
-                {r.hit.role === "user" ? "you" : "the agent"}
-                {r.hit.ts > 0 ? ` · ${ago(r.hit.ts)}` : ""}
-              </span>
-            </span>
             <span className="chats-text">{markHits(r.hit.text, charsOf(r.hit.match), 0)}</span>
+            <span className="chats-said row-dim">
+              {r.hit.role === "user" ? "you" : "the agent"}
+              {r.hit.ts > 0 ? ` · ${ago(r.hit.ts)}` : ""}
+            </span>
           </>
         )
       }

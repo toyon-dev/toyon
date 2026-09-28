@@ -1,38 +1,27 @@
-/* The chats palette's hits: where it was said, over what was said with the match lit. */
+/* The chats palette's hits: one line each, what was said with the match lit, then who and when.
+   The chat's name is the group head over them, said once. */
 @layer tokens, base, surfaces;
 @layer surfaces {
   .chats-hit {
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
     white-space: normal;
     padding: 5px var(--picker-inset, 10px);
   }
-  .chats-where {
-    display: flex;
-    gap: 6px;
-    align-items: baseline;
+  .chats-text {
+    flex: 1;
     min-width: 0;
     color: var(--text1);
-  }
-  .chats-name {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
   .chats-said {
     flex: none;
-    margin-inline-start: auto;
   }
-  .chats-text {
-    display: block;
-    color: var(--text1);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  /* the row you are on lifts both lines to the reading tier, as a files hit does */
-  .chats-hit[data-state~="cursor"] {
-    & .chats-name,
-    & .chats-text {
-      color: var(--text0);
-    }
+  /* the row you are on lifts the line to the reading tier, as a files hit does */
+  .chats-hit[data-state~="cursor"] .chats-text {
+    color: var(--text0);
   }
 }

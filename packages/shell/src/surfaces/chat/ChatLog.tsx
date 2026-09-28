@@ -76,9 +76,9 @@ export function ChatLog({
   };
 
   // the log tails the conversation: the newest line stays in view until the reader scrolls up.
-  // While they scroll, a caret offers the rest of the way in the direction they are going: the
-  // end, or the start once it is a screen or more above; both fade when they settle to read.
-  // Something arriving while they are up names itself and stays. Another chat opens at its end.
+  // While they scroll, a caret offers the rest of the way in the direction they are going, the
+  // start or the end, and fades when they settle to read. Something arriving while they are up
+  // names itself and stays. Another chat opens at its end.
   const follow = useTail(logRef, items);
   useOnChange([id], () => follow.jump());
 
@@ -371,7 +371,7 @@ export function ChatLog({
         )}
       </div>
       {find && <DocumentFind root={logRef} body={logRef} seed={find.seed} seq={find.seq} onClose={closeFind} />}
-      {follow.deep && (
+      {follow.offStart && (
         <button
           className={cx("jump-up", follow.moving !== "up" && "jump-rest")}
           onClick={follow.start}
@@ -380,7 +380,7 @@ export function ChatLog({
           <Icon name="caret-up" className="icon-inline" />
         </button>
       )}
-      {follow.up && (
+      {follow.offEnd && (
         <button
           className={cx(
             "jump-down",

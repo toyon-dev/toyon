@@ -140,10 +140,10 @@
   }
 
   /* the rest of the way in the direction the reader is scrolling, the way a phone's address bar
-     follows the motion: a caret alone and quiet at the end they are heading for, the start once
-     it is more than a screen above, and gone once they settle to read, so nothing sits over the
-     text they scrolled to. Something arriving while they are up names itself, lifts the bottom
-     pill and stays, since now it is news and not a shortcut. */
+     follows the motion: a caret alone at the end they are heading for, gone once they settle to
+     read, so nothing sits over the text they scrolled to. Something arriving while they are up
+     names itself and stays, since now it is news and not a shortcut. One box for both, lifted
+     off the text the same way, so the pill reads as the disc with something to say. */
   .jump-down,
   .jump-up {
     --jump-fade: 0.15s;
@@ -157,6 +157,7 @@
     padding: 3px 6px;
     /* the tier an icon button rests at: a control, one step under the news pill, which is read */
     color: var(--ink1);
+    box-shadow: 0 2px 10px var(--shadow);
     transition: opacity var(--jump-fade) ease;
     @starting-style {
       opacity: 0;
@@ -172,8 +173,10 @@
   .jump-up {
     top: 10px;
   }
-  /* resting: faded, and out of the way of a press on the text under it once the fade is done. A
-     hand already on it keeps it, so it does not vanish under the pointer mid-press. */
+  /* resting: faded, and out of the way of a press on the text under it once the fade is done.
+     No hold for a pointer over it: a hand that reaches it after the rest sees it go, and one more
+     turn of the wheel brings it back; a hold made the fade depend on where the pointer happened
+     to be parked. */
   .jump-rest {
     opacity: 0;
     visibility: hidden;
@@ -181,15 +184,9 @@
       opacity var(--jump-fade) ease,
       visibility 0s var(--jump-fade);
   }
-  :where([data-hover]) .jump-rest:hover {
-    opacity: 1;
-    visibility: visible;
-    transition: opacity var(--jump-fade) ease;
-  }
   .jump-down-news {
     padding: 3px 12px;
     color: var(--text0);
-    box-shadow: 0 2px 10px var(--shadow);
   }
 
   .msg-user {

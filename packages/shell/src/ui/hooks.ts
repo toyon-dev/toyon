@@ -194,22 +194,23 @@ const SCROLL_REST = 1200;
  * on data has to name every source of growth and misses the next. "At the end" is read from the
  * element when it scrolls, never from where a jump meant to land: a programmatic scroll dispatches
  * its event in the frame's scroll steps, before the observers deliver, so a reader taken elsewhere
- * is known to have left before anything could pull them back. `up` says the reader is up the
- * scroller now, for a control that offers the way back; `away` says `news` changed while they
- * were, and it is a value and not the layout because a row the reader opened themselves grows the
- * same way a message arriving does. `deep` says the start is more than a screen above them, for
- * a control that offers the way there: nearer than that a flick of the wheel is faster than a
- * press. `moving` is the way the scroller is travelling, and null once it has rested: a control
- * that follows the motion, the way a phone's address bar does, shows for the direction the reader
- * is already going and hides when they settle to read. `read` is for a caller that moved the
- * scroller itself and wants the answer now. The element is read when the effect mounts, so it
- * must be rendered from the first paint. */
+ * is known to have left before anything could pull them back. `offEnd` and `offStart` say the
+ * reader is away from either end now, by the same slack, for a control at each end that offers
+ * the rest of the way; `away` says `news` changed while they were off the end, and it is a value
+ * and not the layout because a row the reader opened themselves grows the same way a message
+ * arriving does. `moving` is the way the reader is pushing the scroller, by wheel or finger, and
+ * null once they have rested: a control that follows the motion, the way a phone's address bar
+ * does, shows for the direction they are already going and hides when they settle to read. A
+ * scroll the layout or a jump caused is not motion; a scrollbar drag is missed, and a person
+ * dragging the bar has the whole log under their hand already. `read` is for a caller that
+ * moved the scroller itself and wants the answer now. The element is read when the effect mounts,
+ * so it must be rendered from the first paint. */
 export function useTail(
   ref: RefObject<HTMLElement | null>,
   news?: unknown,
 ): {
-  up: boolean;
-  deep: boolean;
+  offEnd: boolean;
+  offStart: boolean;
   away: boolean;
   moving: "up" | "down" | null;
   pinned: () => boolean;
@@ -218,11 +219,11 @@ export function useTail(
   read: () => void;
 } {
   const pinned = useRef(true);
-  const [up, setUp] = useState(false);
-  const [deep, setDeep] = useState(false);
+  const [offEnd, setOffEnd] = useState(false);
+  const [offStart, setOffStart] = useState(false);
   const [away, setAway] = useState(false);
   const [moving, setMoving] = useState<"up" | "down" | null>(null);
-  const lastTop = useRef(0);
+  const lastTouch = useRef<number | null>(null);
   const rest = useRef<ReturnType<typeof setTimeout> | null>(null);
   useOnChange([news], () => {
     if (!pinned.current) setAway(true);
@@ -231,15 +232,21 @@ export function useTail(
     const el = ref.current;
     if (!el) return;
     pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < TAIL_SLACK;
-    setUp(!pinned.current);
-    setDeep(el.scrollTop > el.clientHeight);
+    setOffEnd(!pinned.current);
+    setOffStart(el.scrollTop >= TAIL_SLACK);
     if (pinned.current) setAway(false);
-    // a layout change fires a scroll event without moving; the direction holds until it does
-    if (el.scrollTop !== lastTop.current) setMoving(el.scrollTop < lastTop.current ? "up" : "down");
-    lastTop.current = el.scrollTop;
+  }, [ref]);
+  // Direction is read from the hand, not the scroll position: a row opening or closing moves the
+  // log too (the browser anchors the position above it, a reveal scrolls its output into view,
+  // the pin keeps the end in view as a reply streams), and none of that is the reader going
+  // anywhere. A wheel's sign is the direction, and so is a finger's, inverted; a trackpad's
+  // momentum keeps sending wheel events, so the caret rides the glide out.
+  const push = useCallback((dy: number) => {
+    if (dy === 0) return;
+    setMoving(dy < 0 ? "up" : "down");
     if (rest.current) clearTimeout(rest.current);
     rest.current = setTimeout(() => setMoving(null), SCROLL_REST);
-  }, [ref]);
+  }, []);
   const jump = useCallback(
     (smooth = false) => {
       const el = ref.current;
@@ -247,8 +254,7 @@ export function useTail(
       if (smooth) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
       else el.scrollTop = el.scrollHeight;
       pinned.current = true;
-      setUp(false);
-      setDeep(false);
+      setOffEnd(false);
       setAway(false);
     },
     [ref],
@@ -260,8 +266,20 @@ export function useTail(
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    lastTop.current = el.scrollTop;
     el.addEventListener("scroll", read, { passive: true });
+    const onWheel = (e: WheelEvent) => push(e.deltaY);
+    const onTouchStart = (e: TouchEvent) => {
+      lastTouch.current = e.touches[0]?.clientY ?? null;
+    };
+    const onTouchMove = (e: TouchEvent) => {
+      const y = e.touches[0]?.clientY;
+      if (y === undefined || lastTouch.current === null) return;
+      push(lastTouch.current - y);
+      lastTouch.current = y;
+    };
+    el.addEventListener("wheel", onWheel, { passive: true });
+    el.addEventListener("touchstart", onTouchStart, { passive: true });
+    el.addEventListener("touchmove", onTouchMove, { passive: true });
     const ro = new ResizeObserver(() => {
       if (pinned.current) el.scrollTop = el.scrollHeight;
     });
@@ -276,12 +294,15 @@ export function useTail(
     mo.observe(el, { childList: true });
     return () => {
       el.removeEventListener("scroll", read);
+      el.removeEventListener("wheel", onWheel);
+      el.removeEventListener("touchstart", onTouchStart);
+      el.removeEventListener("touchmove", onTouchMove);
       mo.disconnect();
       ro.disconnect();
       if (rest.current) clearTimeout(rest.current);
     };
-  }, [ref, read]);
-  return { up, deep, away, moving, pinned: () => pinned.current, jump, start, read };
+  }, [ref, read, push]);
+  return { offEnd, offStart, away, moving, pinned: () => pinned.current, jump, start, read };
 }
 
 /** where a selection end sits inside `el`, as a count of the text before it */

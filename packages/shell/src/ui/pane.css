@@ -35,8 +35,14 @@
         flex: 1;
       }
     }
+    /* the title gives before the actions do: on one line and cut, so a long path in a narrow
+       centre never wraps the head to two rows and pushes the actions past the pane's edge */
     & .pane-title {
       flex: 1;
+      min-width: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
       font: var(--type-mono);
       color: var(--text1);
     }

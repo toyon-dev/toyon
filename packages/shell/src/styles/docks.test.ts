@@ -34,6 +34,18 @@ describe("the docks row fits the window", () => {
     expect(decls.get("flex")).toMatch(/^1 0 \d+px$/);
     expect(decls.get("min-width")).toBe("0");
   });
+  // the centre is positioned and the docks are not, so it paints over them: a pane head that ran
+  // past a narrow centre's edge once drew its buttons over the changes panel's history tab
+  test("the centre clips what runs past its edge, without becoming a scroll container", async () => {
+    const decls = declsOf(cssRules(await shellCss()), ".center-root");
+    expect(decls.get("overflow")).toBe("clip");
+  });
+  test("a pane's title gives before its actions, on one line", async () => {
+    const decls = declsOf(cssRules(await shellCss()), ".pane .pane-title");
+    expect(decls.get("min-width")).toBe("0");
+    expect(decls.get("white-space")).toBe("nowrap");
+    expect(decls.get("text-overflow")).toBe("ellipsis");
+  });
   test("the rail and the handles keep their width, so only the docks give", async () => {
     const rules = cssRules(await shellCss());
     for (const fixed of [".rail", ".dock-resize"]) expect(declsOf(rules, fixed).get("flex-shrink")).toBe("0");

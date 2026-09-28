@@ -17,6 +17,11 @@
     /* the column layers its own children: the palette's scrim over the panes under it, and nothing
        outside this column counts in that order */
     isolation: isolate;
+    /* this column is positioned and the docks beside it are not, so anything that runs past its
+       edge (a pane head wider than a narrow centre) would paint over the dock next to it. Clipped
+       rather than hidden: a hidden box is a scroll container, and a focus inside it could scroll
+       the column. Nothing here needs to reach out: what covers is a Float, in the top layer. */
+    overflow: clip;
   }
   .center-area {
     flex: 1;

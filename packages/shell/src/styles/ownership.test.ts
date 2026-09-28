@@ -22,7 +22,7 @@ import { cssRules } from "./cssRules.ts";
 const SRC = new URL("..", import.meta.url).pathname;
 
 /** third-party DOM the shell reaches into; a selector naming one of these is theirs, not ours */
-const FOREIGN = [".monaco-editor", ".xterm"];
+const FOREIGN = [".monaco-editor", ".monaco-diff-editor", ".xterm"];
 
 /** classes built at runtime from a prefix, so no literal names them: the syntax scopes a theme
  * paints, `sy-${scope}` in the markdown renderer, and the slot a subagent's rows take, `rail-${rail}`

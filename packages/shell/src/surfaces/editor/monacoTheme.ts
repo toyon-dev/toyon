@@ -117,6 +117,11 @@ export function toMonacoTheme(t: Theme): monaco.editor.IStandaloneThemeData {
       "diffEditor.unchangedRegionBackground": c.surface1,
       "diffEditor.unchangedRegionForeground": c.text2,
       "diffEditor.unchangedCodeBackground": hex8(c.surface0, 0),
+      // the strip beside the scrollbar, where the hunks sit in the whole file: removed on its left
+      // half, added on its right. The line tints again, at a weight that carries on a band 15px
+      // wide; the tint's own alpha is set for a line of code and vanishes there.
+      "diffEditorOverview.insertedForeground": hex8(c.diffAdd, 0.7),
+      "diffEditorOverview.removedForeground": hex8(c.diffDel, 0.7),
 
       "editorWidget.background": c.surface1,
       "editorWidget.foreground": c.text0,

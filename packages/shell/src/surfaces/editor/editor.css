@@ -20,6 +20,12 @@
     & .monaco-editor .diff-hidden-lines .center {
       font: var(--type-ui-sm);
     }
+    /* the strip beside the scrollbar maps the hunks; monaco also draws the viewport on it as a box
+     in the scrollbar thumb's colour, which on a diff that fits its pane is a lighter column the
+     whole height of the strip. The thumb beside it already says where you are, so the box goes. */
+    & .monaco-diff-editor .diffViewport {
+      display: none;
+    }
     /* removed text drawn in place inside a changed line: monaco gives it the editor's foreground and
      only the word tint, which vanishes over the added line's green, so it read as live code and a
      struck space as a hyphen. Dimmed, it reads as gone. The tint is a background-image because

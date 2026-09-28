@@ -20,6 +20,7 @@ import { Float } from "../../ui/Float.tsx";
 import { useOnChange } from "../../ui/hooks.ts";
 import type { Placement, Rect } from "../../ui/place.ts";
 import { blameCommit, blameLine } from "./blameLine.ts";
+import { diffFit, type Hunk } from "./diffFit.ts";
 import { registerGrammars } from "./grammar.ts";
 import { minimalEdit } from "./minimalEdit.ts";
 import { toMonacoTheme } from "./monacoTheme.ts";
@@ -127,6 +128,21 @@ function editorOptions(readOnly: boolean) {
  * the cap a jump deep into a long file would tokenize everything above it on the main thread, so
  * there Monaco's own pass colours the lines, a frame or two late. */
 const TOKENIZE_NOW = 3000;
+
+/** a short gap between hunks shows as code: a fold band saves a couple of lines and costs a click
+ * and a jump, so only a real stretch is worth folding */
+const FOLD_MIN = 10;
+
+/** the diff's hunks as the line count on each side; Monaco marks a side with nothing by an end of 0 */
+const hunksOf = (d: monaco.editor.IDiffEditor): Hunk[] =>
+  (d.getLineChanges() ?? []).map((c) => ({
+    original: c.originalEndLineNumber ? c.originalEndLineNumber - c.originalStartLineNumber + 1 : 0,
+    modified: c.modifiedEndLineNumber ? c.modifiedEndLineNumber - c.modifiedStartLineNumber + 1 : 0,
+  }));
+
+/** the lines the pane has room for */
+const rowsOf = (el: HTMLElement, code: monaco.editor.ICodeEditor) =>
+  Math.floor(el.clientHeight / code.getOption(monaco.editor.EditorOption.lineHeight));
 function tokenizeThrough(model: monaco.editor.ITextModel, line: number) {
   const through = Math.min(line, model.getLineCount());
   if (through < 1 || through > TOKENIZE_NOW) return;
@@ -391,16 +407,13 @@ export default function Editor({
         // a change within one line reads on that line: added text highlighted, removed text struck
         // through in place, instead of the whole old line drawn again above the new one
         experimental: { useTrueInlineView: true },
-        renderOverviewRuler: false,
         renderGutterMenu: false,
         renderMarginRevertIcon: false,
         // a place carried over from the other view, or a line to reveal, may sit in an unchanged
-        // region that collapsing would hide; and an unchanged file collapses to nothing at all
+        // region that folding would hide; and an unchanged file folds to nothing at all
         hideUnchangedRegions: {
           enabled: !unchanged && !restored && lineRef.current === undefined,
-          // a short gap between hunks shows as code: a fold row saves a couple of lines and costs
-          // a click and a jump, so only a real stretch is worth collapsing
-          minimumLineCount: 10,
+          minimumLineCount: FOLD_MIN,
         },
       });
       diffEditor.setModel({ original: m.original, modified: m.modified });
@@ -453,6 +466,9 @@ export default function Editor({
     if (restored) settle(() => code.restoreViewState(restored));
     else if (d && !unchanged && lineRef.current === undefined) {
       settle(() => {
+        // the hunks are known now, so the pane's own height can say what is worth folding
+        const fold = diffFit(rowsOf(el, code), m.modified.getLineCount(), hunksOf(d));
+        d.updateOptions({ hideUnchangedRegions: { ...fold, minimumLineCount: FOLD_MIN } });
         const first = d.getLineChanges()?.[0];
         code.revealLineInCenter(first?.modifiedStartLineNumber || first?.modifiedEndLineNumber || 1);
       });

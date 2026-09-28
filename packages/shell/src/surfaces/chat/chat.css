@@ -94,11 +94,10 @@
        window's is not once the chat is a dock beside the preview or a screen under the phone's bar.
        Its size is the column's to give, so containing it costs nothing. */
     container-type: size;
-    /* the one height a body in the log may have of its own, for the bodies that grow while they are
-       watched: a thought, a process's output, a picture. Most of the transcript, but not all of it:
-       what is left is the row's own line above the body and the composer under it, so the thing
-       the body answers and the place to answer it stay on screen for the whole run. Set here and
-       not per body, so the three stop at one line. */
+    /* the one height a band in the log may have of its own (.tool-body, and the picture inside
+       one). Most of the transcript, but not all of it: what is left is the row's own line above
+       the band and the composer under it, so the thing the band answers and the place to answer
+       it stay on screen for the whole run. */
     --body-cap: 60cqh;
   }
 
@@ -543,12 +542,19 @@
     & .tool-part + .tool-part {
       border-top: 1px solid var(--border0);
     }
+    /* the band under the line (Fold), and the one box in the log that scrolls on its own. Whatever
+       grows under a line while it is watched sits in it: a thought, a process's output, a
+       subagent's calls. The cap is the fold's and not each body's, so every kind of body stops at
+       one line, and a body still growing is tailed inside (Fold, useTail) with the line above it
+       and the composer under it on screen for the whole run. */
+    & > .tool-body {
+      max-height: var(--body-cap);
+      overflow-y: auto;
+    }
     /* the card's body: prose and code alike, edge to edge inside it, under a rule that separates it from
-   the chip. It takes whatever height its output needs and the chat log scrolls it: a box of its own
-   inside a scrolling column means the wheel does one of two things depending on where the pointer
-   happens to be, and a long output you wanted to read is 320px of it with the rest behind a second
-   scrollbar. The one axis kept is the block's own, since a line too long to wrap is not a reason to
-   widen the chat pane. */
+   the chip. It takes whatever height its output needs; the band it sits in is what stops and scrolls.
+   The one axis kept here is the block's own, since a line too long to wrap is not a reason to widen
+   the chat pane. */
     & .tool-out {
       display: flex;
       flex-direction: column;
@@ -557,8 +563,8 @@
       background: var(--surface1);
     }
     /* the picture a call returned (ChatItemView.tsx, ToolPicture): as wide as the band and no
-       wider, and no taller than most of the transcript, since a screenshot taken at 2x would
-       otherwise run past the pane. The whole picture is the control, pressed for the full size. */
+       wider, and no taller than the band's cap, so a screenshot taken at 2x is seen whole rather
+       than scrolled inside the band. The whole picture is the control, pressed for the full size. */
     & .tool-image {
       display: block;
       align-self: flex-start;
@@ -594,19 +600,6 @@
       font: var(--type-ui);
       line-height: 1.6;
       color: var(--text1);
-      /* a thought is bounded by nothing, and a long one filled the pane and kept filling it, with
-         the message it was working toward pushed out of sight under a wall of reasoning. It stops
-         at the body cap and scrolls inside, tailed by ThoughtRow while the agent is still writing. */
-      max-height: var(--body-cap);
-      overflow-y: auto;
-    }
-    /* what a process printed to the person (a `!` command, a landing's git step, the check) is
-       bounded only by how long it ran, and a hook's test run is minutes of lines: the same cap and
-       the same tail (ToolOut), with the command line above the box and the composer under it. An
-       agent's own call keeps its full height: that row opens only when read. */
-    & .tool-out.tool-cap {
-      max-height: var(--body-cap);
-      overflow-y: auto;
     }
     & .tool-block {
       font: var(--type-mono-sm);

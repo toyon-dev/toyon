@@ -1,4 +1,4 @@
-import { CHECK_TOOL, LOGIN_STREAM, type PickMeta, SHELL_TOOL, type ShipOp, type ToolImage } from "@toyon/shared";
+import { LOGIN_STREAM, type PickMeta, SHELL_TOOL, type ShipOp, type ToolImage } from "@toyon/shared";
 import { Fragment, memo, type ReactNode, useMemo, useRef, useState } from "react";
 import { copyText } from "../../state/actions/deps.ts";
 import { openFile, openFolder } from "../../state/actions/file.ts";
@@ -138,28 +138,11 @@ function paintBlocks(blocks: OutputBlock[], path: string) {
 
 /** the panel under a row: the agent's prose as prose, its fenced blocks as blocks, and a diff
  * coloured by line rather than printed as backticks. */
-function ToolOut({
-  blocks,
-  path,
-  worktreeId,
-  tail,
-}: {
-  blocks: PaintedBlock[];
-  path: string;
-  worktreeId?: string | null;
-  /** the output of a process printing to the person (a `!` command, a landing's git step, the
-   * repo's check): capped at the log's body share and tailed inside, the way a thought is, so
-   * the command line above it and the composer under it stay on screen for the whole run. An
-   * agent's own call keeps its full height: its row opens only when read, and it was opened to
-   * be read whole. */
-  tail?: boolean;
-}) {
+function ToolOut({ blocks, path, worktreeId }: { blocks: PaintedBlock[]; path: string; worktreeId?: string | null }) {
   const sock = useSock();
   const dispatch = useDispatch();
-  const body = useRef<HTMLDivElement>(null);
-  useTail(body);
   return (
-    <div className={cx("tool-out", tail && "tool-cap")} ref={body}>
+    <div className="tool-out">
       {blocks.map((b, i) =>
         b.diff ? (
           // biome-ignore lint/suspicious/noArrayIndexKey: blocks are positional and never reordered
@@ -251,12 +234,10 @@ const ToolPart = memo(function ToolPart({
   item,
   roots,
   worktreeId,
-  tail,
 }: {
   item: ToolItem;
   roots?: string[];
   worktreeId?: string | null;
-  tail?: boolean;
 }) {
   const blocks = useMemo(() => paintBlocks(toolBlocks(item, item.output ?? ""), callPath(item)), [item]);
   const command = toolLabel(item, roots).command;
@@ -265,9 +246,7 @@ const ToolPart = memo(function ToolPart({
   return (
     <div className="tool-part">
       {command && <pre className="tool-block cmd">{command}</pre>}
-      {blocks.length > 0 && (
-        <ToolOut blocks={blocks} path={openable(item, roots)} worktreeId={worktreeId} tail={tail} />
-      )}
+      {blocks.length > 0 && <ToolOut blocks={blocks} path={openable(item, roots)} worktreeId={worktreeId} />}
       {images.length > 0 && worktreeId && (
         <div className="tool-out">
           {images.map((img) => (
@@ -327,21 +306,27 @@ function Painted({ pieces }: { pieces: Piece[] }) {
   );
 }
 
-/** the band a line of the transcript folds out into: a call, a run of calls, or a thought. `auto`
- * is whether the row opens itself, which only the row the agent is on does, so scrolling back over
- * a long turn is a list of one-line rows; a click pins the row either way from then on. A `leaf`
- * has nothing under its line: a call that printed nothing and ran no command. It stays a row, in
- * the same column with the same glyph, but it is not a control: a click opened an empty band with
- * the accent edge down it, and a fill under the pointer promised the same. */
+/** the band a line of the transcript folds out into: a call, a run of calls, a subagent's rows, or
+ * a thought. `auto` is whether the row opens itself, which only the row the agent is on does, so
+ * scrolling back over a long turn is a list of one-line rows; a click pins the row either way from
+ * then on. A `leaf` has nothing under its line: a call that printed nothing and ran no command. It
+ * stays a row, in the same column with the same glyph, but it is not a control: a click opened an
+ * empty band with the accent edge down it, and a fill under the pointer promised the same.
+ *
+ * The band is the one box in the log with a height of its own: it stops at a share of the
+ * transcript (chat.css, .tool-body) and scrolls inside, so whatever grows under a line while it is
+ * watched (a thought, a process's output, a subagent's calls) leaves the line above it and the
+ * composer under it on screen. The fold holds the cap rather than each body, so a new kind of body
+ * is bounded without knowing it. */
 function Fold({
   className,
   state,
   auto,
   leaf,
+  growing,
   label,
   summary,
   menu,
-  onToggle,
   children,
 }: {
   className: string;
@@ -349,17 +334,24 @@ function Fold({
   state?: string;
   auto: boolean;
   leaf?: boolean;
+  /** the body is still being written to. It tails inside its cap, the newest line in view until
+   * the reader scrolls up, as the log does. A body at rest is read from the start instead: the
+   * browser keeps a folded body's scroll, so without this a finished thought opened later would
+   * open where the tail left it, on its last line. */
+  growing?: boolean;
   label: string;
   summary: ReactNode;
   /** what a right-click on the row offers; told whether the row is open, and how to fold it, or
    * that there is nothing to fold */
   menu: (fold: { open: boolean; leaf: boolean; toggle: () => void }) => MenuEntry[];
-  /** the row opened or closed, by a click or by `auto`, once the browser has applied it */
-  onToggle?: (open: boolean) => void;
   children: ReactNode;
 }) {
   const [pinned, setPinned] = useState<boolean | null>(null);
   const card = useRef<HTMLDetailsElement>(null);
+  // a body that is not open has no height and the pin is a no-op, so it costs nothing on the
+  // closed rows of an old turn
+  const body = useRef<HTMLDivElement>(null);
+  const tail = useTail(body);
   // output that lands below the pane is scrolled into view once the row has opened. The hook is
   // handed the card, not the summary: the summary is the one part of the row that is already on
   // the page, and measuring it alone found nothing to reveal.
@@ -379,7 +371,15 @@ function Fold({
       className={cx(className, leaf && "leaf")}
       data-state={state}
       open={open}
-      onToggle={(e) => onToggle?.(e.currentTarget.open)}
+      onToggle={(e) => {
+        if (!e.currentTarget.open || growing) return;
+        const el = body.current;
+        if (!el) return;
+        el.scrollTop = 0;
+        // the pin reads the box: at the top of a body taller than its cap it lets go, so the
+        // resize the open itself causes does not pull the body back to its end
+        tail.read();
+      }}
       {...cm.contextMenu(() => menu({ open, leaf: !!leaf, toggle }))}
       // clicking the output selects text and leaves focus on the body, so the card takes it: that is
       // what makes Escape close the row you are reading, not only the one whose chip you clicked
@@ -406,7 +406,9 @@ function Fold({
       >
         {summary}
       </summary>
-      {children}
+      <div className="tool-body" ref={body}>
+        {children}
+      </div>
     </details>
   );
 }
@@ -450,23 +452,10 @@ export const ThoughtRow = memo(function ThoughtRow({
   const sock = useSock();
   const dispatch = useDispatch();
   const word = streaming ? "Thinking" : "Thought";
-  // The body stops growing at a share of the transcript (chat.css, .thought-out) and scrolls
-  // inside, so it tails the way the log does: the newest line in view while the agent writes,
-  // until the reader scrolls up. A body that is not open has no height and the pin is a no-op,
-  // so it costs nothing on the closed rows of an old turn.
-  const body = useRef<HTMLDivElement>(null);
-  useTail(body);
   // the DOMPurify-sanitized markup goes in through the hook, which keeps a selection through the
   // re-renders of a thought still streaming
+  const body = useRef<HTMLDivElement>(null);
   useLiveHtml(body, html);
-  // A folded row keeps its body's scroll (the browser hides the contents rather than dropping
-  // them), so a finished thought opened later to be read would open where the tail left it, on
-  // its last line. A thought at rest is read from the start; one still streaming opens tailed.
-  const onToggle = (isOpen: boolean) => {
-    const el = body.current;
-    if (!el || !isOpen || streaming) return;
-    el.scrollTop = 0;
-  };
   const out = (
     <div className="tool-part">
       {/* biome-ignore lint/a11y/useKeyWithClickEvents: the links inside are the controls; the root only routes their clicks */}
@@ -487,8 +476,8 @@ export const ThoughtRow = memo(function ThoughtRow({
         className="tool-row"
         auto={false}
         leaf={leaf}
+        growing={streaming}
         label={line}
-        onToggle={onToggle}
         menu={(fold) =>
           grouped([
             [{ id: "copy", label: "copy thought", onClick: () => copyText(item.text) }],
@@ -510,8 +499,8 @@ export const ThoughtRow = memo(function ThoughtRow({
     <Fold
       className="tool-row"
       auto={!!open}
+      growing={streaming}
       label={word}
-      onToggle={onToggle}
       menu={(fold) =>
         grouped([
           [{ id: "copy", label: "copy thought", onClick: () => copyText(item.text) }],
@@ -656,6 +645,7 @@ export const ToolRow = memo(
         state={rowState({ cursor: marked })}
         auto={auto}
         leaf={leaf}
+        growing={running}
         label={run && count ? `${what}, ${count}` : tools.length > 1 ? `${what}, ${tools.length} calls` : what}
         menu={(fold) => {
           const w = worktreeById(store.getState(), worktreeId);
@@ -715,15 +705,7 @@ export const ToolRow = memo(
         {net ? (
           <NetPart text={net} item={head} roots={roots} worktreeId={worktreeId} />
         ) : (
-          tools.map((t) => (
-            <ToolPart
-              key={t.id}
-              item={t}
-              roots={roots}
-              worktreeId={worktreeId}
-              tail={head.name === SHELL_TOOL || head.name === CHECK_TOOL}
-            />
-          ))
+          tools.map((t) => <ToolPart key={t.id} item={t} roots={roots} worktreeId={worktreeId} />)
         )}
       </Fold>
     );

@@ -1032,7 +1032,10 @@ export const ChatItemView = memo(function ChatItemView({
       return (
         <div className="blocked-row" {...cm.contextMenu(() => pathItems(item.path, dirOf()))}>
           <div className="blocked-head">
-            <span className="blocked-tag">blocked</span>
+            <span className="blocked-tag">
+              <Icon name="lock" className="icon-inline" />
+              blocked
+            </span>
             <span className="tool-name">{item.tool}</span>
             {item.path && <span className="tool-hint">{item.path}</span>}
           </div>
@@ -1046,7 +1049,12 @@ export const ChatItemView = memo(function ChatItemView({
           data-tip={`what follows was said in ${item.title} before it was merged in here`}
           data-tip-placement="follow"
         >
-          <span className="graft-tag">grafted</span>
+          {/* layers is the rail's glyph for a worktree merged from several: this divider is where
+              one of those merges shows in the transcript */}
+          <span className="graft-tag">
+            <Icon name="layers" className="icon-inline" />
+            grafted
+          </span>
           <span className="tool-name">{item.title}</span>
           <span className="tool-hint">{item.branch}</span>
         </div>
@@ -1065,7 +1073,10 @@ function LandedRow({ item }: { item: Extract<ChatItem, { kind: "landed" }> }) {
   const left = useStore((s) => item.archiveIds.filter((id) => worktreeById(s, id) !== null).length);
   return (
     <div className="landed-row">
-      <span className="landed-tag">landed</span>
+      <span className="landed-tag">
+        <Icon name="check" className="icon-inline" />
+        landed
+      </span>
       <span className="landed-text">{item.text}</span>
       {left > 0 && (
         <Button variant="inline" tone="strong" onClick={() => archiveWorktrees(sock, dispatch, item.archiveIds)}>

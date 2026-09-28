@@ -358,7 +358,10 @@ export function ChatLog({
               key={`q-${i}`}
               className="msg-user queued-msg"
             >
-              <span className="queued-tag">queued</span>
+              <span className="queued-tag">
+                <Icon name="clock" className="icon-inline" />
+                queued
+              </span>
               <span className="queued-text">{text}</span>
               <span className="queued-actions">
                 <IconButton
@@ -382,7 +385,10 @@ export function ChatLog({
             that note, and it stays until the restored agent has the message */}
         {restoring !== undefined && (
           <div className="msg-user queued-msg">
-            <span className="queued-tag">restoring</span>
+            <span className="queued-tag">
+              <Icon name="clock" className="icon-inline" />
+              restoring
+            </span>
             <span className="queued-text">{restoring}</span>
           </div>
         )}

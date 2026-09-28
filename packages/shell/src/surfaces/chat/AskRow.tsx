@@ -7,6 +7,7 @@
 
 import { useDispatch } from "../../state/context.tsx";
 import { useLocalField } from "../../state/selectors.ts";
+import { Icon } from "../../ui/Icon.tsx";
 import { CLOSED } from "./AskBox.tsx";
 import { type AskItem, askLine } from "./ask.ts";
 
@@ -24,7 +25,10 @@ export function AskRow({ item, worktreeId }: { item: AskItem; worktreeId?: strin
           dispatch({ a: "focus-chat" });
         }}
       >
-        <span className="ask-tag">asking</span>
+        <span className="ask-tag">
+          <Icon name="chat" className="icon-inline" />
+          asking
+        </span>
         <span className="ask-row-text">{askLine(item)}</span>
       </button>
     );

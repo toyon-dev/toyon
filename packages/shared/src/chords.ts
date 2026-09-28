@@ -92,9 +92,11 @@ export const CHORDS: readonly Chord[] = [
     bareAlias: "F1",
   },
   { id: "search", key: "f", shift: true },
-  // ⌘G searches every chat in the project, Slack's pair: ⌘F finds in the conversation on screen,
-  // and stays the browser's for that, and ⌘G looks through all of them. A focused Monaco keeps ⌘G
-  // as find-next (app/keys.ts), and a browser's open find bar keeps it while it has the keyboard.
+  // ⌘G searches every chat in the project, Slack's pair: ⌘F finds in what is on screen, and ⌘G
+  // looks through all of them. ⌘F is not a chord: a surface that is a document of its own answers
+  // it in place (Monaco for a file, the markdown preview for a rendered one), and elsewhere it
+  // stays the browser's. A focused Monaco keeps ⌘G as find-next (app/keys.ts), and so does an open
+  // find box while it has the keyboard.
   { id: "chats", key: "g" },
   // ⌘B is the panel with your files in VS Code, Cursor and Zed, whichever side it stands on here.
   // ⌃⇧G is the git panel in VS Code and Zed and stays a hidden alias for the hand that knows it.

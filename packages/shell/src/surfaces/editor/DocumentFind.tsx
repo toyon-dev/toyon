@@ -1,0 +1,214 @@
+import { type RefObject, useLayoutEffect, useRef, useState } from "react";
+import { IconButton } from "../../ui/Button.tsx";
+import { Field } from "../../ui/Field.tsx";
+import { useOnChange } from "../../ui/hooks.ts";
+import { isFind, type Match, matchOffsets, nearestIndex, segmentsOf, spanOf, stepped } from "./find.ts";
+
+/** the two highlight names the stylesheet paints: every match, and the one the reader is on */
+const ALL = "editor-find";
+const CURRENT = "editor-find-current";
+
+/** the CSS highlight API paints a range with no change to the DOM under it; an engine without it
+ * still gets the count, the stepping and the scroll, with only the wash missing */
+const CAN_PAINT = typeof CSS !== "undefined" && "highlights" in CSS;
+
+function textNodesOf(root: Node): Text[] {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  const nodes: Text[] = [];
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) if ((n as Text).data.length > 0) nodes.push(n as Text);
+  return nodes;
+}
+
+type Found = { matches: Match[]; ranges: Range[] };
+const NOTHING: Found = { matches: [], ranges: [] };
+
+function search(body: HTMLElement, query: string): Found {
+  if (!query) return NOTHING;
+  const nodes = textNodesOf(body);
+  const matches = matchOffsets(nodes.map((n) => n.data).join(""), query);
+  const segments = segmentsOf(nodes.map((n) => n.data.length));
+  const ranges = matches.map((m) => {
+    const { from, to } = spanOf(segments, m);
+    const range = document.createRange();
+    range.setStart(nodes[from.i]!, from.at);
+    range.setEnd(nodes[to.i]!, to.at);
+    return range;
+  });
+  return { matches, ranges };
+}
+
+function paint(ranges: Range[], at: number) {
+  if (!CAN_PAINT) return;
+  CSS.highlights.set(ALL, new Highlight(...ranges.filter((_, i) => i !== at)));
+  CSS.highlights.set(CURRENT, new Highlight(...(ranges[at] ? [ranges[at]] : [])));
+}
+
+function unpaint() {
+  if (!CAN_PAINT) return;
+  CSS.highlights.delete(ALL);
+  CSS.highlights.delete(CURRENT);
+}
+
+/** the first match at or below the top of the scroll box, wrapping to the first of all when every
+ * match is above it; -1 with none */
+function firstFrom(ranges: Range[], root: HTMLElement): number {
+  if (ranges.length === 0) return -1;
+  const top = root.getBoundingClientRect().top;
+  const i = ranges.findIndex((r) => r.getBoundingClientRect().bottom >= top);
+  return i === -1 ? 0 : i;
+}
+
+/** air kept between the match and the box's edge before the scroll box is left alone */
+const MARGIN = 48;
+
+/** the match brought a third of the way down the box, where a heading jumped to sits as well; one
+ * already comfortably in view leaves the scroll where the reader put it */
+function reveal(root: HTMLElement, range: Range) {
+  const r = range.getBoundingClientRect();
+  const box = root.getBoundingClientRect();
+  if (r.top >= box.top + MARGIN && r.bottom <= box.bottom - MARGIN) return;
+  root.scrollTop += r.top - box.top - box.height / 3;
+}
+
+/**
+ * Find in the document on screen, as the editor has for a file: a box over the top corner of the
+ * text, the count, and the next and previous steps. Every match is washed and the current one
+ * darker, the way Monaco marks them. The document is live under it (an agent may still be writing
+ * the file), so the matches are read again from the rendered text whenever `html` changes, with
+ * the reader kept on the match they were on and the scroll left alone.
+ *
+ * `seq` ticks when ⌘F is pressed again with the box already open, which puts the caret back in it
+ * with its text selected; a `seed` beside it is what the document had selected at that press.
+ */
+export function DocumentFind({
+  root,
+  body,
+  html,
+  seed,
+  seq,
+  onClose,
+}: {
+  root: RefObject<HTMLElement | null>;
+  body: RefObject<HTMLElement | null>;
+  html: string;
+  seed: string;
+  seq: number;
+  /** the match the reader was on when the box closed, for the document to keep as its selection */
+  onClose: (current: Range | null) => void;
+}) {
+  const field = useRef<HTMLInputElement>(null);
+  const [query, setQuery] = useState(seed);
+  const [found, setFound] = useState<Found>(NOTHING);
+  const [at, setAt] = useState(-1);
+  // the same two as refs, for the read that decides the next index before the render that shows it
+  const live = useRef({ found: NOTHING, at: -1 });
+  // what the last read was for: a re-read of a changed document keeps the index, a new query moves
+  // to the match nearest where the reader was
+  const searched = useRef("");
+  // whether the next paint also scrolls: a new query and a step do, a document changing under the
+  // reader does not
+  const show = useRef(false);
+
+  useOnChange([seq], () => {
+    if (seed) setQuery(seed);
+    field.current?.focus();
+    field.current?.select();
+  });
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `html` is the document changing under the search, which is what re-reads it
+  useLayoutEffect(() => {
+    const el = body.current;
+    if (!el) return;
+    const next = search(el, query);
+    const fresh = query !== searched.current;
+    searched.current = query;
+    if (fresh) show.current = true;
+    const { found: was, at: prev } = live.current;
+    let index: number;
+    if (!fresh) index = Math.min(prev, next.matches.length - 1);
+    else if (was.matches[prev]) index = nearestIndex(next.matches, was.matches[prev].start);
+    // the first query, or one typed over after every match went: start from what is on screen,
+    // as the browser's find does, rather than from the top of a document read halfway down
+    else index = root.current ? firstFrom(next.ranges, root.current) : nearestIndex(next.matches, 0);
+    live.current = { found: next, at: index };
+    setFound(next);
+    setAt(index);
+  }, [query, html]);
+
+  useLayoutEffect(() => {
+    paint(found.ranges, at);
+    const range = found.ranges[at];
+    // a scroll asked for waits for a match to scroll to: the first render after a query has none yet
+    if (!range) return;
+    if (show.current && root.current) reveal(root.current, range);
+    show.current = false;
+  }, [found, at, root]);
+
+  useLayoutEffect(() => unpaint, []);
+
+  const count = found.matches.length;
+  const step = (dir: 1 | -1) => {
+    if (count === 0) return;
+    show.current = true;
+    const index = stepped(live.current.at, count, dir);
+    live.current = { ...live.current, at: index };
+    setAt(index);
+  };
+  const close = () => onClose(found.ranges[at] ?? null);
+
+  return (
+    <div className="editor-find">
+      <Field
+        ref={field}
+        autoFocus
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="find…"
+        aria-label="find in this document"
+        className="editor-find-field"
+        spellCheck={false}
+        onKeyDown={(e) => {
+          // the pane's Escape would close the pane; here the box goes first, and the document keeps
+          // the match as its selection
+          if (e.key === "Escape") {
+            e.preventDefault();
+            e.stopPropagation();
+            close();
+            return;
+          }
+          if (e.key === "Enter") {
+            e.preventDefault();
+            step(e.shiftKey ? -1 : 1);
+            return;
+          }
+          // ⌘F again selects what is typed, as the editor's own box does. ⌘G and ⌘⇧G step, as they
+          // do in the editor, and are kept from the window, where ⌘G is the search across chats.
+          if (isFind(e)) {
+            e.preventDefault();
+            e.stopPropagation();
+            e.currentTarget.select();
+            return;
+          }
+          if (e.key.toLowerCase() === "g" && (e.metaKey || e.ctrlKey) && !e.altKey) {
+            e.preventDefault();
+            e.stopPropagation();
+            step(e.shiftKey ? -1 : 1);
+          }
+        }}
+      />
+      <span className="editor-find-count" aria-live="polite">
+        {query ? (count === 0 ? "no matches" : `${at + 1}/${count}`) : ""}
+      </span>
+      <IconButton
+        icon="caret"
+        label="Previous match"
+        hint="⇧↩"
+        className="editor-find-prev"
+        disabled={count === 0}
+        onClick={() => step(-1)}
+      />
+      <IconButton icon="caret" label="Next match" hint="↩" disabled={count === 0} onClick={() => step(1)} />
+      <IconButton icon="close" label="Close" hint="esc" onClick={close} />
+    </div>
+  );
+}

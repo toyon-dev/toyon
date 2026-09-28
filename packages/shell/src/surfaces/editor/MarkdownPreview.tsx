@@ -9,6 +9,8 @@ import { rowState } from "../../ui/rowState.ts";
 import { isSelectAll, selectContents, selectedText } from "../../ui/selectAll.ts";
 import { useMarkdown } from "../chat/markdown.ts";
 import { assetPath, dirOf } from "../chat/markdownPaths.ts";
+import { DocumentFind } from "./DocumentFind.tsx";
+import { isFind } from "./find.ts";
 import { outlineDepths } from "./outline.ts";
 
 /** a heading the render produced, and the element it is, for the outline to read and scroll to.
@@ -63,6 +65,18 @@ export function MarkdownPreview({
   const body = useRef<HTMLDivElement>(null);
   const [heads, setHeads] = useState<Heading[]>([]);
   const [at, setAt] = useState(-1);
+  // the find box: open with what was selected at the press, and `seq` ticking on each press since
+  const [find, setFind] = useState<{ seed: string; seq: number } | null>(null);
+  const closeFind = (current: Range | null) => {
+    setFind(null);
+    // the box goes, the match stays: as the reader's selection, where ⌘L can take it to the chat
+    if (current) {
+      const sel = window.getSelection();
+      sel?.removeAllRanges();
+      sel?.addRange(current);
+    }
+    ref.current?.focus();
+  };
   // nothing rendered takes focus on its own, so the body does, as a picture's does: Escape then
   // finds the pane
   useOnChange([openSeq], () => {
@@ -115,6 +129,22 @@ export function MarkdownPreview({
     if (target) openFile({ sock, dispatch }, { worktreeId, path: target, view: readingView(target) });
   };
   const onKeyDown = (e: React.KeyboardEvent) => {
+    // the browser's find reads the whole shell, the rail and the chat with it, and counts what is
+    // not on screen; here it means the document, as the editor's own find means the file. A
+    // selection at the press is what is looked for, as the editor's is.
+    if (isFind(e)) {
+      e.preventDefault();
+      e.stopPropagation();
+      const seed = (body.current && selectedText(body.current)) ?? "";
+      setFind((f) => ({ seed: seed || f?.seed || "", seq: (f?.seq ?? 0) + 1 }));
+      return;
+    }
+    // with the box open and the hand back in the document, Escape closes the box before the pane
+    if (e.key === "Escape" && find) {
+      e.stopPropagation();
+      closeFind(null);
+      return;
+    }
     // the document is not editable, so the browser's select-all would take the whole shell with
     // it; here it means the document
     if (isSelectAll(e) && body.current) {
@@ -144,6 +174,7 @@ export function MarkdownPreview({
           dangerouslySetInnerHTML={{ __html: html }}
         />
       </div>
+      {find && <DocumentFind root={ref} body={body} html={html} seed={find.seed} seq={find.seq} onClose={closeFind} />}
       <Outline heads={heads} at={at} onJump={jump} />
     </>
   );

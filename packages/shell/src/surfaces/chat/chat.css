@@ -1274,25 +1274,10 @@
     grid-column: 2;
     color: var(--text0);
   }
-  /* a row's own description, drawn only where there is no cursor for the block below to follow */
+  /* a row's own description, under its label: drawn on the row the cursor is on, and on every
+     row where there is no cursor */
   .ask-desc {
     grid-column: 2;
-  }
-  /* the description of the row the cursor is on, under the list in the label's column: every
-     row's is here, stacked in one cell and unseen but the current one, so the block is as tall as
-     the longest and walking the rows moves nothing under it */
-  .ask-about {
-    display: grid;
-    margin: 4px 0 0;
-    padding-left: 22px;
-    color: var(--text2);
-    overflow-wrap: anywhere;
-  }
-  .ask-about-line {
-    grid-area: 1 / 1;
-  }
-  .ask-about-off {
-    visibility: hidden;
   }
   .ask-preview {
     margin: 6px 0 0;
@@ -1308,6 +1293,14 @@
   .ask-own {
     margin-top: 8px;
     flex: none;
+  }
+  /* the field as the "other" row's description, when the answer is its own: no gap above it, and
+     it starts in the label's column (the digit's 14px gutter and the 8px after it) so it reads as
+     the line under that row rather than a field of its own. Two classes, since the bare field's
+     own rule zeroes the padding and is read after this file. */
+  .ask-own.ask-own-desc {
+    margin-top: 0;
+    padding-left: 22px;
   }
   /* the actions under a page, at the page's floor: every page stands at the tallest one's height,
    and the slack goes above this row, so the send sits in one place whichever page is open. The

@@ -304,6 +304,11 @@ function QuestionBody({
     const a = draft[i];
     const owning = ownChosen(a, !!qq.multi);
     const under = open ? qq.options[cursor] : undefined;
+    /* a row reads its description under its label while it holds the cursor, so the words sit
+       against the label they explain rather than under the whole list, where they read as the
+       last row's. The box steps as the cursor walks; the row grows downward, so a pointer resting
+       on it stays on it. A finger has no cursor, so on touch every row keeps its description. */
+    const describes = (oi: number) => touch || (open && oi === cursor);
     return (
       <div key={qq.id} className={cx("ask-page", !open && "ask-page-off")}>
         <div className="ask-head">
@@ -331,7 +336,7 @@ function QuestionBody({
                   {stripRecommended(o.label)}
                   {recommended(o.label) && <span className="badge-recommended">recommended</span>}
                 </span>
-                {touch && o.description && <span className="ask-desc row-dim">{o.description}</span>}
+                {describes(oi) && o.description && <span className="ask-desc row-dim">{o.description}</span>}
               </button>
             );
           })}
@@ -347,30 +352,15 @@ function QuestionBody({
             >
               <Kbd k={String(qq.options.length + 1)} className="ask-num row-dim" />
               <span className="ask-label">{qq.note.label}</span>
-              {touch && <span className="ask-desc row-dim">your own answer</span>}
+              {/* once the field is open and the answer is its own, the field is this row's
+                  description: it stands right under the row, in the label's column, and the
+                  words move into its placeholder rather than being read twice */}
+              {describes(qq.options.length) && a?.note === undefined && (
+                <span className="ask-desc row-dim">your own answer</span>
+              )}
             </button>
           )}
         </div>
-        {/* the descriptions under the list rather than one per row: the row you are on has its
-            description read here, the way a picker's hint follows the cursor, so the list is its
-            labels and the agent's restatements do not stack the box tall. Every description is in
-            the block, unseen, stacked in one cell, so the block stands at the tallest one's height
-            and the box does not step as the cursor moves. A finger has no cursor to follow, so on
-            touch each row keeps its own description (above) and there is no block. */}
-        {!touch && (
-          <div className="ask-about">
-            {[...qq.options.map((o) => o.description ?? ""), ...(qq.note ? ["your own answer"] : [])].map((d, oi) => (
-              <div
-                // biome-ignore lint/suspicious/noArrayIndexKey: the rows are positional, as the digits that reach them are
-                key={oi}
-                className={cx("ask-about-line", !(open && oi === cursor) && "ask-about-off")}
-                aria-hidden={!(open && oi === cursor)}
-              >
-                {d}
-              </div>
-            ))}
-          </div>
-        )}
         {under?.preview && <pre className="ask-preview">{under.preview}</pre>}
         {qq.note && a?.note !== undefined && (
           <TextArea
@@ -378,8 +368,8 @@ function QuestionBody({
             bare
             font="ui"
             rows={2}
-            className="ask-own"
-            placeholder={owning ? `${qq.note.label}: your own answer` : "a note for the agent, sent with your pick"}
+            className={cx("ask-own", owning && "ask-own-desc")}
+            placeholder={owning ? "your own answer" : "a note for the agent, sent with your pick"}
             value={a.note}
             onChange={(e) => write(setNote(draft, i, e.target.value), i)}
           />

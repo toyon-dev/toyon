@@ -526,8 +526,9 @@
     & a {
       color: var(--blue);
     }
-    /* A file is a place inside Toyon, not a trip out to the web, so it never takes the link blue. It
-       is set in the mono face, which is what a path wears everywhere else in the shell, and sits on
+    /* A file is a place inside Toyon, not a trip out to the web, so it never takes the link blue,
+       whether it sits in this worktree or anywhere else the daemon can open it. It is set in the
+       mono face, which is what a path wears everywhere else in the shell, and sits on
        the scan tier: a filename is what a reader scans a sentence for, and at the prose tier the
        mono and the underline alone did not lift it out of the words around it. Never the skip tier:
        the one thing in the line you can click must not be its dimmest word. The underline says it
@@ -548,12 +549,6 @@
     :where([data-hover]) & a.file-link:hover {
       color: var(--text0);
       text-decoration-color: currentColor;
-    }
-    /* a path outside the checkout has nowhere to open in Toyon, so it is a word and not a link: the
-       anchor has no href and takes no link colour, and its code child paints the path */
-    & a.path-text {
-      color: inherit;
-      text-decoration: none;
     }
     /* a link whose url is still arriving: the label holds the link's place and shines like any
        other thing the agent is mid-way through, and takes the blue and the underline only once

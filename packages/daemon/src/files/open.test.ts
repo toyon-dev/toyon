@@ -118,6 +118,24 @@ describe("what a path opens as", () => {
     });
   });
 
+  test("a file asked for by a shell is answered to it alone: nothing emitted, nothing waiting", async () => {
+    const { t, opens, outside, emitted, refusals, root } = setup();
+    expect(await opens.file(join(t.repo, "README.md"))).toEqual({
+      kind: "file",
+      worktreeId: "wmain",
+      path: "README.md",
+    });
+    const p = outside("shot/notes.md", "hi\n");
+    expect(await opens.file(p)).toMatchObject({ kind: "loose", name: "notes.md", text: "hi\n" });
+    expect(emitted).toEqual([]);
+    expect(opens.takePending()).toEqual([]);
+    // a folder is refused even when it is a repo: the shell asked for a file, and the refusal is
+    // the reply, not a broadcast
+    await expect(opens.file(t.repo)).rejects.toThrow("is a folder");
+    await expect(opens.file(join(root, "gone.md"))).rejects.toThrow("does not exist");
+    expect(refusals).toEqual([]);
+  });
+
   test("a text file outside every project is granted, with its text and version", async () => {
     const { opens, outside, emitted } = setup();
     const p = outside("notes/todo.md", "# todo\n");

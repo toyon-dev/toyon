@@ -605,6 +605,10 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
     base: z.string().max(64).nullable(),
     seq,
   }),
+  /** a link in the chat to a file outside this worktree, by its absolute path: opened as the Dock
+   * icon opens one, in the worktree it sits in or loose under a grant. Answered by one `open-path`
+   * or `open-loose` to this socket, or by an `error` naming the refusal. */
+  z.object({ t: z.literal("open-outside"), path: relPath }),
   /** save a granted file's text only over `base`, the version open-loose or the last save named.
    * Answered by exactly one `loose-written`. */
   z.object({

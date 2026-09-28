@@ -21,9 +21,8 @@ import { UserError } from "../core/errors.ts";
 import { fireAndForget, log } from "../core/log.ts";
 import { lag, type SocketStats } from "../core/metrics.ts";
 import { PairCodes } from "../core/pair.ts";
-import type { OpenedFile } from "../files/open.ts";
 import { setWaitingColors } from "../runtime/proxy.ts";
-import { dispatch, type Services } from "./handlers.ts";
+import { dispatch, openedFrame, type Services } from "./handlers.ts";
 import { createFetch, type WsData } from "./http.ts";
 
 /** how far behind a socket may fall before its terminal output is dropped instead of queued */
@@ -50,12 +49,6 @@ export interface ServerOpts {
    * and the branded listener binds only where it allows */
   managed: ManagedResolved;
 }
-
-/** the frame a shell shows an outside open as */
-const openedFrame = (o: OpenedFile): ServerMsg =>
-  o.kind === "file"
-    ? { t: "open-path", worktreeId: o.worktreeId, path: o.path }
-    : { t: "open-loose", id: o.id, name: o.name, path: o.path, text: o.text, tooLarge: o.tooLarge, version: o.version };
 
 export function startServer(opts: ServerOpts): { server: Server<WsData>; branded: boolean; stop: () => void } {
   const { services: s, token, version } = opts;

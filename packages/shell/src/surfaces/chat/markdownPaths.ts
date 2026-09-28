@@ -57,25 +57,37 @@ export function worktreeLink(root: string, ref: string): WorktreeLink | null {
   return line && line > 0 ? { path, line } : { path };
 }
 
-/** A root-absolute link that is not a worktree file: a path on the daemon's disk, as the agent
- * wrote it. The browser would resolve it against the page and ask the daemon for a page it does not
- * serve, so it is never followed; the path is shown as text and offered to the editors instead.
- * Null for a URL, a page anchor and a relative reference. */
-export function outsidePath(ref: string): string | null {
+export interface OutsideLink {
+  /** the path on the daemon's disk, with any line suffix taken off */
+  path: string;
+  line?: number;
+}
+
+/** A root-absolute link that is not a worktree file: a path on the daemon's disk, which the daemon
+ * opens in the worktree it sits in or loose under a grant. The browser would resolve it against the
+ * page and ask the daemon for a page it does not serve, so it is never followed. Null for a URL, a
+ * page anchor and a relative reference. */
+export function outsidePath(ref: string): OutsideLink | null {
   if (!ref.startsWith("/") || ref.startsWith("//")) return null;
+  let decoded: string;
   try {
-    return decodeURIComponent(ref);
+    decoded = decodeURIComponent(ref);
   } catch {
     return null;
   }
+  const suffix = decoded.match(/:(\d+)(?::\d+)?$/);
+  if (!suffix) return { path: decoded };
+  const line = Number.parseInt(suffix[1] ?? "", 10);
+  const path = decoded.slice(0, suffix.index);
+  return line > 0 ? { path, line } : { path };
 }
 
 /** A code span that names an absolute path, as the agent wrote it: a root-absolute word with no
- * space in it. The agent is told to write a path it cannot link in backticks, so this is how a
- * file outside the worktree usually reaches the transcript, and the span earns the path menu a
- * demoted link gets. A route like `/api/users` reads the same and passes too; the menu it gains
- * is a copy and an editor, neither of which acts until picked. Null for a lone slash, a
- * protocol-relative address and anything with whitespace, which is a command and not a path. */
+ * space in it. Older transcripts name a file outside the worktree in backticks, and an agent
+ * still may, so the span earns the path menu a link gets, though never a link's click. A route
+ * like `/api/users` reads the same and passes too; the menu it gains is a copy and an editor,
+ * neither of which acts until picked. Null for a lone slash, a protocol-relative address and
+ * anything with whitespace, which is a command and not a path. */
 export function codePath(text: string): string | null {
   if (text.length < 2 || !text.startsWith("/") || text.startsWith("//") || /\s/.test(text)) return null;
   return text;

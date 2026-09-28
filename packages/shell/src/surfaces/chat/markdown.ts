@@ -66,28 +66,20 @@ purify.addHook("afterSanitizeAttributes", (node) => {
     node.setAttribute("rel", "noreferrer");
   }
   const file = rendering?.fileRoot ? worktreeLink(rendering.fileRoot, href) : null;
+  const outside = file ? null : outsidePath(href);
+  // a file anywhere on the daemon's disk is a place in Toyon: in this worktree it opens as the
+  // file, elsewhere the daemon grants it, and both wear the same link
   if (file) {
     node.classList.add("file-link");
     node.setAttribute("data-tip", file.folder ? `${file.path}/` : `${file.path}${file.line ? `:${file.line}` : ""}`);
     node.setAttribute("data-tip-placement", "follow");
-  } else if (href) {
-    const path = outsidePath(href);
-    if (path) {
-      // a path the daemon cannot serve is not a link: without its href the anchor is text, and the
-      // path stands in the mono like any other path the agent names in prose
-      node.removeAttribute("href");
-      node.classList.add("path-text");
-      node.setAttribute("data-path", path);
-      if (!(node.childNodes.length === 1 && node.firstElementChild?.tagName === "CODE")) {
-        const code = node.ownerDocument.createElement("code");
-        code.append(...Array.from(node.childNodes));
-        node.append(code);
-      }
-    }
+  } else if (outside) {
+    node.classList.add("file-link");
+    node.setAttribute("data-tip", `${outside.path}${outside.line ? `:${outside.line}` : ""}`);
+    node.setAttribute("data-tip-placement", "follow");
   }
-  // a backticked absolute path is the same word as a demoted link's, and takes the same menu. A
-  // fenced block is code and not a path, and the code a demoted link was just wrapped in already
-  // sits inside the anchor that carries its path.
+  // a backticked absolute path takes the path menu a link gets, though never its click. A fenced
+  // block is code and not a path, and a code span inside a link is the link's label.
   if (node.tagName === "CODE" && !node.closest("pre, a")) {
     const path = codePath(node.textContent ?? "");
     if (path) node.setAttribute("data-path", path);

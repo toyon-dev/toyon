@@ -4,6 +4,7 @@
 // written by exactly its canonical path, for as long as the daemon runs, and by the person alone.
 // No agent reaches a granted file; it is in no worktree.
 
+import type { Stats } from "node:fs";
 import { stat } from "node:fs/promises";
 import { basename, resolve } from "node:path";
 import { FILE_MAX_CHARS } from "@toyon/shared";
@@ -64,21 +65,39 @@ export class OpenService {
   }
 
   private async decide(raw: string): Promise<Opened> {
+    const { path, st } = await this.locate(raw);
+    if (st.isDirectory()) {
+      if (!(await isGitRepo(path))) throw new UserError(`${raw} is not a git repository: open one, or a file`);
+      return { kind: "repo", repoId: (await this.d.register(path)).id };
+    }
+    const opened = await this.openFile(raw, path, st);
+    this.pending.push({ opened, at: this.now() });
+    this.d.hub.emit("opened", opened);
+    return opened;
+  }
+
+  /** A file a shell asked for by path, from a link in its chat: answered to that shell alone, so
+   * nothing is broadcast and nothing waits for a window. A folder is refused; the files tab shows
+   * a worktree's folders, and nothing in Toyon shows any other. */
+  async file(raw: string): Promise<OpenedFile> {
+    const { path, st } = await this.locate(raw);
+    if (st.isDirectory()) throw new UserError(`${raw} is a folder: Toyon opens files`);
+    return this.openFile(raw, path, st);
+  }
+
+  private async locate(raw: string): Promise<{ path: string; st: Stats }> {
     const path = canonical(resolve(expandTilde(raw)));
     const st = await stat(path).catch((e: NodeJS.ErrnoException) => {
       if (e.code === "ENOENT") return null;
       throw e;
     });
     if (!st) throw new UserError(`${raw} does not exist`);
-    if (st.isDirectory()) {
-      if (!(await isGitRepo(path))) throw new UserError(`${raw} is not a git repository: open one, or a file`);
-      return { kind: "repo", repoId: (await this.d.register(path)).id };
-    }
+    return { path, st };
+  }
+
+  private async openFile(raw: string, path: string, st: Stats): Promise<OpenedFile> {
     if (!st.isFile()) throw new UserError(`${raw} is not a file`);
-    const opened = (await this.inWorktree(path)) ?? (await this.grant(path, st.size, st.mtimeMs));
-    this.pending.push({ opened, at: this.now() });
-    this.d.hub.emit("opened", opened);
-    return opened;
+    return (await this.inWorktree(path)) ?? (await this.grant(path, st.size, st.mtimeMs));
   }
 
   /** the worktree the file sits in, deepest root first: a found worktree nested in a checkout is

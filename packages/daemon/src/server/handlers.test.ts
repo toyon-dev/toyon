@@ -1063,6 +1063,19 @@ describe("handlers", () => {
     });
   });
 
+  test("open-outside answers the asking shell with the file in its worktree, or granted", async () => {
+    const { services, ctx, replies, repo } = make();
+    const main = await mainOf(services, repo);
+    await dispatch({ t: "open-outside", path: join(repo, "README.md") }, ctx, services);
+    expect(replies.at(-1)).toEqual({ t: "open-path", worktreeId: main.id, path: "README.md" });
+    const outside = join(dirname(repo), "stray.md");
+    writeFileSync(outside, "stray\n");
+    await dispatch({ t: "open-outside", path: outside }, ctx, services);
+    expect(replies.at(-1)).toMatchObject({ t: "open-loose", name: "stray.md", text: "stray\n", tooLarge: false });
+    // a folder is a refusal the socket turns into its error frame
+    await expect(dispatch({ t: "open-outside", path: dirname(repo) }, ctx, services)).rejects.toThrow("is a folder");
+  });
+
   test("write-loose saves a granted file over its version, and answers a lost grant in words", async () => {
     const { services, ctx, replies, repo } = make();
     const outside = join(dirname(repo), "notes.md");

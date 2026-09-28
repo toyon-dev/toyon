@@ -31,7 +31,7 @@ import {
 } from "./group.ts";
 import { SentImageChip } from "./ImageChip.tsx";
 import { useMarkdown } from "./markdown.ts";
-import { worktreeLink } from "./markdownPaths.ts";
+import { outsidePath, worktreeLink } from "./markdownPaths.ts";
 import { netOfCalls } from "./mergeDiffs.ts";
 import { PasteChip } from "./PasteChip.tsx";
 import { PickChip } from "./PickChip.tsx";
@@ -50,9 +50,9 @@ import {
 } from "./toolCall.ts";
 import { toolRowItems } from "./toolRowItems.ts";
 
-/** the link at or around an element of a rendered message, and the worktree file it names when
- * the checkout root is known; a backticked absolute path counts, as the path it names; null when
- * the element is in neither */
+/** the link at or around an element of a rendered message: the worktree file it names when the
+ * checkout root is known, a file elsewhere on the daemon's disk, or a page out; a backticked
+ * absolute path counts, as the path it names; null when the element is in none of these */
 function chatLink(target: Element, root: string | undefined): ChatLink | null {
   const a = target.closest("a, code[data-path]");
   if (!a) return null;
@@ -61,7 +61,9 @@ function chatLink(target: Element, root: string | undefined): ChatLink | null {
   const href = a.getAttribute("href");
   if (!href) return null;
   const file = root ? worktreeLink(root, href) : null;
-  return file ? { kind: "file", file } : { kind: "out", href };
+  if (file) return { kind: "file", file };
+  const outside = outsidePath(href);
+  return outside ? { kind: "outside", ...outside } : { kind: "out", href };
 }
 
 function openChatLink(
@@ -71,6 +73,13 @@ function openChatLink(
   deps: { dispatch: ReturnType<typeof useDispatch>; sock: ReturnType<typeof useSock> },
 ) {
   const link = chatLink(e.target as Element, root);
+  if (link?.kind === "outside") {
+    // the daemon answers with the open, in whichever worktree the file sits in or loose under a
+    // grant, and the same code the Dock icon's opens go through puts it in the pane
+    e.preventDefault();
+    deps.sock?.send({ t: "open-outside", path: link.path });
+    return;
+  }
   if (link?.kind !== "file" || !worktreeId) return;
   const target = link.file;
   e.preventDefault();

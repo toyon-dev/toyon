@@ -46,6 +46,9 @@ describe("SYSTEM_APPEND", () => {
     expect(SYSTEM_APPEND).toContain("Markdown link");
     expect(SYSTEM_APPEND).toContain("absolute path");
     expect(SYSTEM_APPEND).toContain("built-in editor");
+    // a file outside the worktree opens too, so it is linked and not backticked; a route is not a file
+    expect(SYSTEM_APPEND).toContain("anywhere else on this machine");
+    expect(SYSTEM_APPEND).toContain("never as a link");
   });
   test("sends an offer that waits on a yes through the question tool, and a suggestion through prose", () => {
     // a turn that ends "I can do that if you want" makes the person type the yes; the card answers

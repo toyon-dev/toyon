@@ -53,9 +53,10 @@ describe("a file link in chat", () => {
 });
 
 describe("a path outside the worktree", () => {
-  test("is the path the agent wrote, decoded", () => {
-    expect(outsidePath("/Users/me/.cache/driver.mjs")).toBe("/Users/me/.cache/driver.mjs");
-    expect(outsidePath("/Users/me/my%20notes/plan.md:12")).toBe("/Users/me/my notes/plan.md:12");
+  test("is the path the agent wrote, decoded, with the line when it names one", () => {
+    expect(outsidePath("/Users/me/.cache/driver.mjs")).toEqual({ path: "/Users/me/.cache/driver.mjs" });
+    expect(outsidePath("/Users/me/my%20notes/plan.md:12")).toEqual({ path: "/Users/me/my notes/plan.md", line: 12 });
+    expect(outsidePath("/tmp/a.ts:3:7")).toEqual({ path: "/tmp/a.ts", line: 3 });
   });
 
   test("is not a URL, an anchor, a relative reference or a protocol-relative address", () => {

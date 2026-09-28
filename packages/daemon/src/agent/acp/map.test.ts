@@ -505,6 +505,56 @@ describe("network asks", () => {
   });
 });
 
+describe("tool searches", () => {
+  // the shape the Claude adapter sends for a ToolSearch: no `name`, the loader's name as the title
+  // and in the meta, kind `other`, and the query only in the input update that follows
+  const start: SessionUpdate = {
+    _meta: { claudeCode: { toolName: "ToolSearch" } },
+    sessionUpdate: "tool_call",
+    toolCallId: "t1",
+    title: "ToolSearch",
+    kind: "other",
+    status: "pending",
+    rawInput: {},
+  };
+  const input = (query: string): SessionUpdate => ({
+    _meta: { claudeCode: { toolName: "ToolSearch" } },
+    sessionUpdate: "tool_call_update",
+    toolCallId: "t1",
+    title: "ToolSearch",
+    rawInput: { query, max_results: 2 },
+    content: [],
+  });
+
+  test("the row is a search named for the loader, saying the tools it asked for once they arrive", () => {
+    const memos: ToolMemos = new Map();
+    expect(run([start, input("select:WebSearch,WebFetch")], memos)).toEqual([
+      { type: "tool-start", toolId: "t1", name: "ToolSearch", input: {}, kind: "search", title: "ToolSearch" },
+      {
+        type: "tool-update",
+        toolId: "t1",
+        title: "WebSearch, WebFetch",
+        input: { query: "select:WebSearch,WebFetch", max_results: 2 },
+      },
+    ]);
+    expect(memos.get("t1")?.writing).toBe(false);
+  });
+
+  test("a keyword query reads as typed", () => {
+    expect(run([start, input("  notebook jupyter ")]).at(-1)).toMatchObject({ title: "notebook jupyter" });
+  });
+
+  test("until the query is in, the call is being written, so a cut-off one is ended", () => {
+    const memos: ToolMemos = new Map();
+    run([start], memos);
+    expect(memos.get("t1")?.writing).toBe(true);
+    expect(run([{ sessionUpdate: "agent_message_chunk", content: { type: "text", text: "so" } }], memos)).toEqual([
+      { type: "tool-end", toolId: "t1" },
+      { type: "text-delta", text: "so" },
+    ]);
+  });
+});
+
 describe("mapCommands", () => {
   test("lifts the hint out of the input, defaults a missing description", () => {
     expect(mapCommands([{ name: "review", description: "look at a PR", input: { hint: "<pr>" } }])).toEqual([

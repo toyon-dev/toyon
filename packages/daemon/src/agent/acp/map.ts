@@ -73,6 +73,30 @@ function isNetworkAsk(update: { name?: string | null; _meta?: Record<string, unk
   return update.name === NETWORK_ASK || asRecord(asRecord(update._meta).claudeCode).toolName === NETWORK_ASK;
 }
 
+/** Claude loading the schemas of tools it had deferred. The adapter knows no kind for it, so the
+ * call arrived as a dot, the loader's name and nothing else, over a list of the tools it found;
+ * what it asked for is in the input, which lands after the call opens. It is a search, and reads as
+ * one: the search glyph, the loader's name, and the names or words it searched for. */
+const TOOL_SEARCH = "ToolSearch";
+
+function isToolSearch(update: { name?: string | null; _meta?: Record<string, unknown> | null }): boolean {
+  return update.name === TOOL_SEARCH || asRecord(asRecord(update._meta).claudeCode).toolName === TOOL_SEARCH;
+}
+
+/** what a ToolSearch asked for: the names behind `select:`, spaced, else its keywords as typed.
+ * "" until the input is in, where the row says it is being written. */
+function toolSearchQuery(rawInput: unknown): string {
+  const query = asRecord(rawInput).query;
+  if (typeof query !== "string") return "";
+  const names = /^select:(.*)$/.exec(query.trim());
+  if (!names) return query.trim();
+  return (names[1] ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .join(", ");
+}
+
 /** the words a call's row starts with: the agent's own, except a network ask's, which reads as the
  * host it named under the fetch glyph rather than as the check's internal name. No word beside it:
  * the answer under the row says allowed or refused, which is all that tells it from a fetch */
@@ -90,6 +114,9 @@ function heading(update: {
   const name = typeof update.name === "string" ? update.name : "";
   const host = asRecord(update.rawInput).host;
   if (isNetworkAsk(update) && typeof host === "string") return { name: "", title: host, kind: "fetch" };
+  if (isToolSearch(update)) {
+    return { name: TOOL_SEARCH, title: toolSearchQuery(update.rawInput) || TOOL_SEARCH, kind: "search" };
+  }
   return { name, title: update.title, ...(update.kind ? { kind: update.kind } : {}) };
 }
 
@@ -164,12 +191,13 @@ export function mapUpdate(update: SessionUpdate, memos: ToolMemos, tag: string, 
       const spawn = spawnOf(update._meta);
       const out = abandoned(memos, spawn.parentToolId);
       const input = update.rawInput ?? { locations: update.locations ?? [] };
+      const head = heading(update);
       const memo: ToolMemo = {
-        ...heading(update),
+        ...head,
         content: update.content ?? [],
         rawOutput: update.rawOutput,
         ended: false,
-        writing: isWrittenKind(update.kind ?? undefined) && emptyInput(input),
+        writing: isWrittenKind(head.kind) && emptyInput(input),
         ...(spawn.parentToolId ? { parent: spawn.parentToolId } : {}),
       };
       memos.set(update.toolCallId, memo);
@@ -222,9 +250,12 @@ export function mapUpdate(update: SessionUpdate, memos: ToolMemos, tag: string, 
       // whole call is in.
       if (update.rawInput !== undefined && update.content === undefined && update.status === undefined) return out;
       const refined: Extract<AgentEvent, { type: "tool-update" }> = { type: "tool-update", toolId: update.toolCallId };
-      if (update.title && update.title !== memo.title) {
-        memo.title = update.title;
-        refined.title = update.title;
+      // a ToolSearch's title is its query, which the update carries in the input and never in its
+      // title: that only ever repeats the loader's name
+      const title = memo.name === TOOL_SEARCH ? toolSearchQuery(update.rawInput) : update.title;
+      if (title && title !== memo.title) {
+        memo.title = title;
+        refined.title = title;
       }
       if (update.name && update.name !== memo.name) {
         refined.name = memo.name = update.name;

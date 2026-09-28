@@ -200,12 +200,24 @@ describe("LandingService", () => {
     expect(w.checks).toEqual([]);
   });
 
+  test("a check that passes says so on the hub, for what the tree built to be kept", async () => {
+    w = world({ check: "true", verdict: null });
+    const passed: string[] = [];
+    w.hub.on("checkPassed", (id) => passed.push(id));
+    w.dirty();
+    await w.settle();
+    expect(passed).toEqual(["w1"]);
+  });
+
   test("a failed check is the verdict: not ready, the tail kept, and no question asked", async () => {
     w = world({ check: "bun run check", exit: 1, output: "src/App.tsx(3,1): error TS2322\n2 errors\n" });
+    const passed: string[] = [];
+    w.hub.on("checkPassed", (id) => passed.push(id));
     w.dirty();
     await w.settle();
     expect(w.checks).toEqual(["bun run check"]);
     expect(w.judged).toEqual([]);
+    expect(passed).toEqual([]);
     expect(w.wt()?.landing).toMatchObject({
       check: "fail",
       ready: false,

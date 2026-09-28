@@ -2,6 +2,7 @@ import { closeSync, type Dirent, existsSync, openSync, readdirSync, readFileSync
 import { join } from "node:path";
 import {
   CONFIG_FILES,
+  cacheConfigSchema,
   issueReason,
   landConfigSchema,
   type SharedServices,
@@ -94,7 +95,12 @@ function unknownKeys(raw: Record<string, unknown>): string[] {
         .filter((k) => !(k in timeoutsSchema.shape))
         .map((k) => `timeouts.${k}`)
     : [];
-  return [...top, ...land, ...timeouts];
+  const cache = isObject(raw.cache)
+    ? Object.keys(raw.cache)
+        .filter((k) => !(k in cacheConfigSchema.shape))
+        .map((k) => `cache.${k}`)
+    : [];
+  return [...top, ...land, ...timeouts, ...cache];
 }
 
 /** RFC 7396, the local file over the shared one: objects merge key by key all the way down, null

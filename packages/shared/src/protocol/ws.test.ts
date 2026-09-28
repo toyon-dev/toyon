@@ -31,6 +31,30 @@ describe("toyonConfigSchema", () => {
     expect(toyonConfigSchema.safeParse({ run: {}, timeouts: { setup: "25h" } }).success).toBe(false);
     expect(toyonConfigSchema.safeParse({ run: {}, timeouts: { check: 30 } }).success).toBe(false);
   });
+
+  test("cache is a list of paths or the long form, each path inside the root", () => {
+    expect(toyonConfigSchema.safeParse({ run: {}, cache: ["node_modules", ".mypy_cache"] }).success).toBe(true);
+    expect(
+      toyonConfigSchema.safeParse({
+        run: {},
+        cache: { paths: [".testmondata"], key: ["pyproject.toml"], tools: ["python3 --version"] },
+      }).success,
+    ).toBe(true);
+    expect(toyonConfigSchema.safeParse({ run: {}, cache: [] }).success).toBe(false);
+    for (const [bad, why] of [
+      ["../shared", "must stay inside the root"],
+      ["/abs", "must be relative to the root"],
+      [".git", "cannot name .git"],
+      ["a//b", "must stay inside the root"],
+    ]) {
+      const r = toyonConfigSchema.safeParse({ run: {}, cache: [bad] });
+      expect(r.success).toBe(false);
+      expect(r.error && issueReason(r.error, "invalid")).toBe(`cache.0: ${why}`);
+    }
+    const r = toyonConfigSchema.safeParse({ run: {}, cache: { paths: ["ok"], key: ["../x"] } });
+    expect(r.success).toBe(false);
+    expect(r.error && issueReason(r.error, "invalid")).toBe("cache.key.0: must stay inside the root");
+  });
 });
 
 describe("parseClientMsg", () => {

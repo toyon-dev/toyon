@@ -87,6 +87,20 @@ export interface RunState {
   why?: string;
 }
 
+/** What a copy builds that the next copy can start from: the folders and files named here are
+ * kept after the repo's check passes and cloned into every new copy, keyed by the lockfiles, the
+ * tool versions, the platform and the commit the copy was cut from (see cache.ts). */
+export interface CacheConfig {
+  /** paths under the root: `node_modules`, `.mypy_cache`, `.testmondata`. A SQLite file brings
+   * its `-wal` and `-journal` along. */
+  paths: string[];
+  /** files under the root whose contents key the entries, beside the lockfiles toyon knows */
+  key?: string[];
+  /** commands whose output keys the entries: the versions the artifacts were built by. Absent,
+   * they follow from the lockfiles present (`bun --version` for a bun.lock); `[]` asks none. */
+  tools?: string[];
+}
+
 /** a repo's settings file (see config.ts for where it lives), shared and local merged */
 export interface ToyonConfig {
   /** the JSON schema an editor validates the file against; toyon itself ignores it */
@@ -111,6 +125,9 @@ export interface ToyonConfig {
   land?: LandConfig;
   /** how long each kind of run may take before it is killed; DEFAULT_TIMEOUT_MS each when unset */
   timeouts?: Timeouts;
+  /** what a copy builds that the next one starts from, kept once the check passes; the list of
+   * paths alone is the short form */
+  cache?: string[] | CacheConfig;
   /** proc that the preview iframe should show (defaults to "web", else first proc) */
   preview?: string;
   /** named subsets of procs a worktree can run (full stack vs frontend-against-staging) */

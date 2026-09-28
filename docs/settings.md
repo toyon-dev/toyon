@@ -35,6 +35,7 @@ The first open guesses a file from `package.json` and asks you to confirm it. Ot
   - `automerge`: `pr` only. GitHub merges the pull request itself once its rules allow.
 - **`afterLand`**: commands run in the main checkout, in order, once work has landed: the build, the migration, the install you would otherwise remember to run. Nothing waits on them, and a failure stops the rest: the line that stopped it reads on the chat. Work that lands while they are running gets one more run once they finish.
 - **`timeouts`**: how long each kind of run may take before Toyon kills it, as `setup`, `check` and `commit`, each a duration like `"30m"`, `"90s"` or `"1h"`. Ten minutes each when unset. `setup` is per command; `commit` covers a commit with the hooks it runs, which is where a pre-commit suite lives. A suite that takes twenty minutes needs `"check": "30m"` and, if a hook runs it again, `"commit": "30m"`. While one runs, the word that waits on it says what it is on, how long it has been against the ceiling, and whether the daemon is still watching it; a run killed at the ceiling says what it gave up after.
+- **`cache`**: paths a copy builds that the next copy starts from, such as `node_modules`, `.mypy_cache` or `.testmondata`. Kept once `check` passes and cloned into every new copy before `setup` runs; see "Keeping what a copy built".
 - **`profiles`** and **`defaultProfile`**: named ways to run the project, such as the full stack or the page against staging. Each profile lists which `run` commands it starts, an `env` merged into each of them, and its own `preview`. `defaultProfile` is required once there are profiles, and each chat picks one from its profile menu.
 
 ## The contract
@@ -120,6 +121,37 @@ A SQLite file copied from the main checkout:
 ```
 
 `node_modules` and the `.env` files come along on their own. Without a `teardown`, nothing drops a database when a copy goes; that is yours to clean up.
+
+## Keeping what a copy built
+
+A new copy starts with the main checkout's `node_modules`, cloned rather than copied where the disk allows it (APFS, btrfs, XFS), so an install that has nothing to do takes no time. What a copy builds while it works, an incremental type check or a test selection database, is gone with the copy unless the settings say to keep it. Nothing is kept until `cache` names at least one path:
+
+```json
+{
+  "check": "uv run mypy . && uv run pytest",
+  "cache": ["node_modules", ".mypy_cache", ".testmondata"]
+}
+```
+
+When `check` passes in a copy, those paths are kept, once per base commit, and the next copy gets them before its `setup` runs, as the "restoring cache" stage of its setup: mypy and testmon start from the last run's answers, and `bun install` or `uv sync` finds its work done. A path that is not there when the check passes is simply not kept, and a path the copy already has is never replaced. A SQLite file brings its `-wal` and `-journal` along, so nothing committed is left behind.
+
+What is kept is keyed by what built it: the platform, every lockfile in the tree, and the versions of the tools involved. A copy with a different lockfile, or a machine with a different Python, gets nothing rather than something wrong. Among what matches, the copy takes what was kept at its own base commit, else the newest; an incremental cache from a neighbouring commit is mostly right, and its tool checks every answer in it.
+
+The long form names more of the key:
+
+```json
+{
+  "cache": {
+    "paths": [".mypy_cache", ".testmondata"],
+    "key": ["pyproject.toml", "mypy.ini"],
+    "tools": ["python3 --version", "uv run mypy --version"]
+  }
+}
+```
+
+`key` lists files whose contents matter beside the lockfiles. `tools` lists commands whose output is part of the key; left out, they follow from the lockfiles present (`bun --version` for a `bun.lock`, `node --version` for npm, pnpm and yarn, `python3 --version` for uv, poetry and pip, `rustc --version` for cargo), and `[]` asks none. Entries live under `~/.toyon/cache.noindex`, the newest three per key are kept, and a key nothing has used in a month goes at the next start.
+
+What this costs in disk depends on the filesystem. On APFS, btrfs and XFS an entry shares its blocks with the copy it was kept from, so three entries of a gigabyte `node_modules` cost little beyond the files that differ. On ext4, and on any disk without copy-on-write, each entry is a full copy: three entries per key and a key per lockfile and tool version, so a `node_modules` there is worth caching only when the install it saves is slower than the copy. The daemon log names which kind of copy each entry took.
 
 ## Sleep
 

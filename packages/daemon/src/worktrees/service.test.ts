@@ -1,5 +1,14 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { chmodSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { SHELL_TOOL } from "@toyon/shared";
 import { type FakeAgent, fakeAgents, fakeFactories } from "../../test/helpers/fakes.ts";
@@ -17,6 +26,7 @@ import { treeFingerprint } from "../git/status.ts";
 import { AfterLand } from "../repos/afterLand.ts";
 import { RepoRegistry } from "../repos/registry.ts";
 import { RuntimeRegistry } from "../runtime/registry.ts";
+import { ArtifactCache } from "./cache.ts";
 import { WorktreeService } from "./service.ts";
 import { TurnService } from "./turns.ts";
 
@@ -50,12 +60,15 @@ function world() {
   // the namer's answer and how many times it was asked; `gate` holds an answer back, for a birth
   // ask still out when a turn ends
   const naming = { reply: null as string | null, calls: 0, gate: Promise.resolve() };
+  // the version commands answered without a shell, so the key is the lockfiles and the platform
+  const cache = new ArtifactCache({ paths: t.paths, state, hub, tool: async () => "1.0" });
   const worktrees = new WorktreeService({
     state,
     hub,
     runtime,
     paths: t.paths,
     agents,
+    cache,
     namer: async () => {
       naming.calls++;
       await naming.gate;
@@ -65,7 +78,7 @@ function world() {
   });
   const turns = new TurnService({ state, hub, transcript: (id) => runtime.agentFor(id)?.transcript() ?? [] });
   const repos = new RepoRegistry({ state, hub, runtime, worktrees, ...noSelf(state, hub) });
-  return { ...t, state, hub, runtime, worktrees, turns, repos, registry: agents, naming, ...f };
+  return { ...t, state, hub, runtime, worktrees, turns, repos, registry: agents, naming, cache, ...f };
 }
 
 let w: World;
@@ -183,6 +196,48 @@ describe("create / remove", () => {
     expect(existsSync(join(wt.path, ".gitignore"))).toBe(false);
     expect(existsSync(join(wt.path, "node_modules", "dep.js"))).toBe(true);
     expect((await w.worktrees.gitStatus(wt.id))?.files).toEqual([]);
+  });
+
+  // what one worktree built to pass the check reaches the next before its setup runs, ahead of
+  // main's own copy, so an install with nothing to do meets the tree already made
+  test("a kept cache is restored into a new worktree before its setup commands run", async () => {
+    const repoId = await registered();
+    const repo = w.state.requireRepo(repoId);
+    repo.config = {
+      run: { web: "true" },
+      check: "true",
+      setup: ["test -e .mypy_cache/x && touch restored"],
+      cache: [".mypy_cache"],
+    };
+    writeFileSync(join(w.repo, ".gitignore"), ".mypy_cache/\nrestored\n");
+    sh(w.repo, GIT, "add", ".gitignore");
+    sh(w.repo, GIT, "commit", "-qm", "ignore the cache");
+    const first = await w.worktrees.create(repoId, "first");
+    await settle();
+    mkdirSync(join(first.path, ".mypy_cache"), { recursive: true });
+    writeFileSync(join(first.path, ".mypy_cache", "x"), "checked\n");
+    const lines: string[] = [];
+    w.hub.on("log", (_id, proc, line) => {
+      if (proc === "setup") lines.push(line);
+    });
+    // the stages the setup run passes through on the row, so the wait can say what it is on
+    const stages: string[] = [];
+    w.hub.on("worktreesChanged", () => {
+      for (const wt of w.state.worktrees) {
+        const stage = wt.runs?.find((r) => r.kind === "setup")?.stage;
+        if (stage && stages.at(-1) !== stage) stages.push(stage);
+      }
+    });
+    w.hub.emit("checkPassed", first.id);
+    await until(() => existsSync(join(w.paths.cacheDir, repoId)));
+    await until(() => readdirSync(join(w.paths.cacheDir, repoId)).length > 0);
+    const second = await w.worktrees.create(repoId, "second");
+    await until(() => existsSync(join(second.path, "restored")));
+    expect(readFileSync(join(second.path, ".mypy_cache", "x"), "utf8")).toBe("checked\n");
+    expect(lines.find((l) => l.startsWith("cache:"))).toMatch(/^cache: restored \.mypy_cache from [0-9a-f]{7}/);
+    expect(stages).toEqual(["restoring cache", "test -e .mypy_cache/x && touch restored"]);
+    expect(w.state.worktree(second.id)?.runs).toBeUndefined();
+    expect((await w.worktrees.gitStatus(second.id))?.files).toEqual([]);
   });
 
   test("a second setup rewrites the mirrored block rather than stacking another", async () => {

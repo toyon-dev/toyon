@@ -9,7 +9,8 @@ import { fireAndForget } from "../core/log.ts";
 import { lastGit } from "../core/metrics.ts";
 import { killGroup } from "../runtime/kill.ts";
 
-const LOCKFILES = [
+/** the files that pin what an install produces, in every ecosystem toyon has met */
+export const LOCKFILES = [
   "bun.lock",
   "bun.lockb",
   "package-lock.json",

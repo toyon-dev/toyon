@@ -12,6 +12,7 @@ import {
   baseIsRemote,
   baseOf,
   type CommitEntry,
+  cachePolicy,
   canArchive,
   canGraft,
   canLand,
@@ -50,6 +51,7 @@ import { firstAskOf } from "../agent/recap.ts";
 import type { AgentRegistry } from "../agent/registry.ts";
 import { makeNamer, taskText } from "../agent/tasks.ts";
 import { coalesce, Transcript, type TranscriptEntry, transcriptPathFor } from "../agent/transcript.ts";
+import { cloneTree } from "../core/clone.ts";
 import { UserError } from "../core/errors.ts";
 import type { Hub } from "../core/hub.ts";
 import { fireAndForget, log } from "../core/log.ts";
@@ -108,6 +110,7 @@ import { DEFAULT_AGENT_ID, type RuntimeRegistry, worktreeEnv } from "../runtime/
 import { runSetup } from "../runtime/setup.ts";
 import { type ArchiveRecord, type ChatFiles, firstPrompt, lastUsage, summarize, WorktreeArchive } from "./archive.ts";
 import { ArchivedGit } from "./archivedGit.ts";
+import type { ArtifactCache } from "./cache.ts";
 import { discoverIn, type FoundWorktree } from "./discover.ts";
 import { branchSlug, cleanTitle, freeSlot, shortId, titleFrom, variantLens } from "./naming.ts";
 import { SparePool } from "./spare.ts";
@@ -244,6 +247,8 @@ export interface WorktreeServiceDeps {
   drafts?: Pick<DraftStore, "drop" | "text" | "set">;
   /** task → short kebab-case name (the worktree's own agent by default; tests inject a stub) */
   namer?: (prompt: string, wt: WorktreeInfo) => Promise<string | null>;
+  /** what earlier worktrees built to pass the check, cloned in ahead of the install */
+  cache?: Pick<ArtifactCache, "restore">;
   /** a git step a landing runs, watched onto the worktree's transcript as the rows a `!` command
    * leaves (ExecService.watch): live while it runs long, whole when it fails */
   watch?: <T extends { exit: number | string | null; text: string }>(
@@ -1365,25 +1370,24 @@ export class WorktreeService {
     { setupCommands = true }: { setupCommands?: boolean },
   ): Promise<void> {
     await this.mirrorBaseIgnore(repo);
-    // Copy-on-write where the fs allows it: `cp -c` (APFS clonefile), then GNU `--reflink=auto`
-    // (btrfs/XFS), then a plain recursive copy (ext4). The log line records which
-    // path ran and how long the fallback copy takes per worktree.
+    const ceiling = timeoutFor(repo.config, "setup");
+    // what an earlier worktree built to pass the check comes first: keyed by this tree's own
+    // lockfiles, it matches when main's copy would not, and a hit makes the copy below and the
+    // install after it no-ops. It stands on the row as a setup stage of its own, since a clone of
+    // a large tree is seconds a person waits through with nothing on the transcript yet.
+    if (this.d.cache && cachePolicy(repo.config)) {
+      const run = this.runs.begin(wt.id, "setup", { timeoutMs: ceiling, stage: "restoring cache" });
+      await this.d.cache.restore(wt, repo, (line) => this.d.hub.emit("log", wt.id, "setup", line));
+      run.finish(0);
+    }
+    // the base checkout's deps, copy-on-write where the fs allows it; the log line records which
+    // path ran and how long the fallback copy takes per worktree
     const srcNm = join(depsSource, "node_modules");
     const dstNm = join(wt.path, "node_modules");
     if (existsSync(srcNm) && !existsSync(dstNm)) {
-      const started = Date.now();
-      const attempts: [string, string[]][] = [
-        ["clonefile", ["-Rc", srcNm, dstNm]],
-        ["reflink", ["-R", "--reflink=auto", srcNm, dstNm]],
-        ["copy", ["-R", srcNm, dstNm]],
-      ];
-      for (const [how, args] of attempts) {
-        if ((await run("cp", args, wt.path)).ok) {
-          this.d.hub.emit("log", wt.id, "setup", `deps via ${how} in ${Date.now() - started}ms`);
-          break;
-        }
-        await run("rm", ["-rf", dstNm], wt.path);
-      }
+      const r = await cloneTree(srcNm, dstNm);
+      if (r.ok) this.d.hub.emit("log", wt.id, "setup", `deps via ${r.how} in ${r.ms}ms`);
+      else log.warn(wt.id, "could not copy node_modules from the base checkout", r.error);
     }
     for (const f of LOCAL_CONFIG_FILES) {
       const src = join(depsSource, f);
@@ -1396,7 +1400,6 @@ export class WorktreeService {
     // flowing while a new worktree warms up. Each command runs under the settings' setup ceiling
     // and stands on the row while it does, so the wait for it says how long and on what.
     const cmds = setupCommands ? (repo.config.setup ?? []) : [];
-    const ceiling = timeoutFor(repo.config, "setup");
     for (const [i, cmd] of cmds.entries()) {
       const stage = cmds.length > 1 ? `${cmd} (${i + 1} of ${cmds.length})` : cmd;
       const run = this.runs.begin(wt.id, "setup", { timeoutMs: ceiling, stage });

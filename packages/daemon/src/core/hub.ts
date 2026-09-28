@@ -13,6 +13,8 @@ export interface HubEvents {
   agentStatus: (worktreeId: string, status: AgentStatus) => void;
   /** the agent stopped (finished, was stopped, failed, or is blocked asking) and the record says how */
   turnSettled: (worktreeId: string, turn: LastTurn) => void;
+  /** the repo's check exited 0 in the worktree: what the tree built to pass it is worth keeping */
+  checkPassed: (worktreeId: string) => void;
   queue: (worktreeId: string, items: string[]) => void;
   /** the worktree's agent advertised a new slash-command list */
   agentCommands: (worktreeId: string, commands: AgentCommand[]) => void;

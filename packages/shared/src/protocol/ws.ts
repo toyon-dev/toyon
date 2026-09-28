@@ -6,6 +6,7 @@
 
 import { z } from "zod";
 import { ATTACHMENTS_PER_MESSAGE, limitMessage, overLimit } from "../attachment.ts";
+import { cachePathReason } from "../cache.ts";
 import { runShared } from "../config.ts";
 import type { RemoteView } from "../daemon.ts";
 import { MAX_DURATION_MS, MIN_DURATION_MS, parseDuration } from "../duration.ts";
@@ -364,6 +365,21 @@ export const timeoutsSchema = z.object({
   commit: duration.optional(),
 });
 
+/** a path under the root a copy keeps or is keyed by */
+const cachePath = z
+  .string()
+  .max(500)
+  .superRefine((p, ctx) => {
+    const why = cachePathReason(p);
+    if (why) ctx.addIssue({ code: "custom", message: why });
+  });
+const cachePaths = z.array(cachePath).min(1).max(50);
+export const cacheConfigSchema = z.object({
+  paths: cachePaths,
+  key: z.array(cachePath).max(50).optional(),
+  tools: z.array(shellCommand).max(20).optional(),
+});
+
 export const toyonConfigSchema = z
   .object({
     $schema: z.string().max(2_000).optional(),
@@ -374,6 +390,7 @@ export const toyonConfigSchema = z
     afterLand: z.array(shellCommand).max(50).optional(),
     land: landConfigSchema.optional(),
     timeouts: timeoutsSchema.optional(),
+    cache: z.union([cachePaths, cacheConfigSchema]).optional(),
     preview: procName.optional(),
     profiles: z.record(procName, runProfileSchema).optional(),
     defaultProfile: procName.optional(),
@@ -735,6 +752,16 @@ export function issueReason(error: z.ZodError, fallback: string): string {
   while (issue && (issue.code === "invalid_key" || issue.code === "invalid_element") && issue.issues[0]) {
     issue = issue.issues[0];
     path = [...path, ...issue.path];
+  }
+  // a union names every branch's complaint; the one whose shape the input had (a list given a
+  // list) is the branch that got past the type check, and its first issue is the reason
+  if (issue?.code === "invalid_union") {
+    const branch = issue.errors.find((errs) => errs[0]?.code !== "invalid_type") ?? issue.errors[0];
+    const inner = branch?.[0];
+    if (inner) {
+      path = [...path, ...inner.path];
+      return `${path.length ? `${path.map(String).join(".")}: ` : ""}${inner.message}`;
+    }
   }
   const where = path.length ? `${path.map(String).join(".")}: ` : "";
   return `${where}${issue?.message ?? fallback}`;

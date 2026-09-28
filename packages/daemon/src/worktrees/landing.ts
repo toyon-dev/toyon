@@ -248,6 +248,8 @@ export class LandingService {
         // the first line of the tail is what the placeholder says, so the ceiling goes first
         checkTail = [`gave up after ${describeDuration(ceiling)}`, tail(r.text)].filter(Boolean).join("\n");
       } else if (check === "fail") checkTail = tail(r.text) || `exit ${r.exit}`;
+      // still live, so no turn has started since: the tree that passed is the tree as it stands
+      else this.d.hub.emit("checkPassed", worktreeId);
     }
 
     let verdict: LandVerdict | null = null;

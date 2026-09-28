@@ -4,6 +4,7 @@
 export * from "./agent-tools.ts";
 export * from "./archiveRule.ts";
 export * from "./attachment.ts";
+export * from "./cache.ts";
 export * from "./chord-labels.ts";
 export * from "./chords.ts";
 export * from "./config.ts";

@@ -25,6 +25,8 @@ export interface Paths {
   /** removed worktrees: each one's record, transcript and attachments (worktrees/archive.ts) */
   archiveDir: string;
   worktreesDir: string;
+  /** what copies built that the next ones start from, by repo and key (worktrees/cache.ts) */
+  cacheDir: string;
   /** user-dropped theme files: Toyon Theme JSON or raw VS Code theme JSON/JSONC */
   themesDir: string;
   /** one npm install per agent adapter (<id>/node_modules/...), fetched on demand */
@@ -56,6 +58,8 @@ export function makePaths(home = process.env.TOYON_HOME ?? join(homedir(), ".toy
     // The suffix is the only mechanism that works: `.metadata_never_index` is ignored on a
     // subdirectory, and a symlinked node_modules gets replaced by `npm install`.
     worktreesDir: join(home, "worktrees.noindex"),
+    // the same clones of node_modules, so the same suffix
+    cacheDir: join(home, "cache.noindex"),
     themesDir: join(home, "themes"),
     agentsDir: process.env.TOYON_AGENTS_DIR ?? join(home, "agents"),
     agentsFile: join(home, "agents.json"),
@@ -70,6 +74,7 @@ export function ensureDirs(p: Paths) {
   mkdirSync(p.attachmentsDir, { recursive: true });
   mkdirSync(p.archiveDir, { recursive: true });
   mkdirSync(p.worktreesDir, { recursive: true });
+  mkdirSync(p.cacheDir, { recursive: true });
   mkdirSync(p.themesDir, { recursive: true });
   mkdirSync(p.agentsDir, { recursive: true });
   mkdirSync(p.scratchDir, { recursive: true });

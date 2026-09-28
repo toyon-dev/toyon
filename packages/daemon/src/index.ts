@@ -57,6 +57,7 @@ import { latestVersion, runInstall } from "./update/infra.ts";
 import { readVersion } from "./update/installed.ts";
 import { UpdateService } from "./update/service.ts";
 import { BackendShare } from "./worktrees/backend.ts";
+import { ArtifactCache } from "./worktrees/cache.ts";
 import { ChatSearch } from "./worktrees/chats.ts";
 import { LandingService } from "./worktrees/landing.ts";
 import { PrService } from "./worktrees/prs.ts";
@@ -163,6 +164,9 @@ const drafts = new DraftStore({ file: paths.draftsFile, hub });
 const runs = new RunService({ state, hub });
 // typed, since the two services name each other
 const exec = new ExecService({ state, runtime, shipping: (id): Shipping | undefined => worktrees.shippingOf(id) });
+// what a worktree built to pass the check, kept for the next one; it publishes on the hub's
+// checkPassed and restores from inside the service's setup
+const cache = new ArtifactCache({ paths, state, hub });
 const worktrees = new WorktreeService({
   state,
   hub,
@@ -170,6 +174,7 @@ const worktrees = new WorktreeService({
   paths,
   agents,
   drafts,
+  cache,
   watch: (id, command, run) => exec.watch(id, command, run),
   runs,
 });
@@ -340,6 +345,8 @@ idle.boot();
 runs.boot();
 // a verdict the last daemon went down in the middle of runs again
 landing.boot();
+// after the repos are known, so the cache of one that was removed goes with it
+fireAndForget("cache", cache.sweep(), "cache sweep");
 // the adapters are fetched on first boot (and after a version bump), not shipped: the default
 // agent first, so the first prompt waits on one download at most. One already on disk installs
 // without a change event, so the probe is asked here as well.

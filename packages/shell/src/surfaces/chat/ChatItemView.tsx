@@ -566,10 +566,11 @@ export const ToolRow = memo(
      * again (group.ts), so this row shines for it instead of a row of its own appearing below */
     next?: ToolItem;
     live?: boolean;
-    /** the subagent this call started is still at work (subagentsAtWork in group.ts). Its rows sit
-     * under a closed fold, so this line's shine is what says so, and it holds across the gaps
-     * between the subagent's calls: a shine that came and went with each call would restart its
-     * sweep every time and strobe rather than travel. */
+    /** the subagent this call started is still at work (spawnsAtWork in group.ts), and the row
+     * floats at the foot of the log for it (placeSpawns). Its rows sit under a closed fold, so this
+     * line's shine is what says so, and it holds across the gaps between the subagent's calls: a
+     * shine that came and went with each call would restart its sweep every time and strobe
+     * rather than travel. */
     working?: boolean;
     /** this row's call is the one executing (runningRow in group.ts), so its wait is counted
      * here, from this stamp: when the call reached the head of the batch, by the store's clock */

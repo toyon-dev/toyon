@@ -190,6 +190,14 @@ export function toolLabel(call: ToolCall, roots: string[] = []): ToolRowText {
   };
 }
 
+/** a spawn the agent sent to the background: its own call returns at once and the subagent goes
+ * on without it. Claude says so in the brief; an agent that does not is read as waiting on its
+ * spawn, which its open call says anyway. */
+export function isBackgroundSpawn(call: ToolCall): boolean {
+  const input = call.input as Record<string, unknown> | null;
+  return !!call.subagent && !!input && input.run_in_background === true;
+}
+
 /** what the row says while a kind's input streams in, in place of the path or command it has not
  * got yet, so the line reads as a status and not as a file called "writing". "writing" where the
  * agent is composing something (a command, a change, a search), "choosing" where the only thing

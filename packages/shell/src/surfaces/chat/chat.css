@@ -308,7 +308,6 @@
     margin-left: 6px;
     font-variant-numeric: tabular-nums;
   }
-
   /* a collapsed row is a line of the transcript, not a card: no fill and no border, so twenty calls in
    a turn read as text to skip over. It spans the log's full width and its box meets its neighbours'
    (-5px against the log's 10px gap), so the whole band under the pointer is the row: there is no

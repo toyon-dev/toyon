@@ -6,9 +6,10 @@ import {
   groupTools,
   openRow,
   ownCallRunning,
+  placeSpawns,
   runCalls,
   runningRow,
-  subagentsAtWork,
+  spawnsAtWork,
   type ToolItem,
 } from "./group.ts";
 
@@ -375,56 +376,136 @@ describe("groupTools", () => {
   });
 });
 
-describe("subagentsAtWork", () => {
+/** a spawn the agent sent to the background: its own call returned at once */
+const bg = (id: string, description: string, extra: Partial<ChatItem> = {}): ChatItem =>
+  spawn(id, description, { input: { description, run_in_background: true }, ...extra });
+
+describe("spawnsAtWork", () => {
   const sub = (id: string, extra: Partial<ChatItem> = {}) => tool("read", "/wt/a.ts", { parentToolId: id, ...extra });
-  const none = { ids: new Set<string>(), calls: 0 };
+  const none = new Set<string>();
 
   test("nothing is at work in a log with no subagent calls, or with only the main agent's", () => {
-    expect(subagentsAtWork([])).toEqual(none);
-    expect(subagentsAtWork([text("Hi"), tool("read", "/wt/a.ts", { done: false })])).toEqual(none);
+    expect(spawnsAtWork([])).toEqual(none);
+    expect(spawnsAtWork([text("Hi"), tool("read", "/wt/a.ts", { done: false })])).toEqual(none);
+  });
+
+  test("a foreground spawn is at work exactly while its own call is open", () => {
+    expect(spawnsAtWork([spawn("task1", "Check the ports", { done: false })])).toEqual(new Set(["task1"]));
+    expect(spawnsAtWork([spawn("task1", "Check the ports", { done: false }), sub("task1")])).toEqual(
+      new Set(["task1"]),
+    );
+    // returned, the report came back with the call: its subagent's calls being the newest thing in
+    // the log says nothing more
+    expect(spawnsAtWork([spawn("task1", "Check the ports"), sub("task1")])).toEqual(none);
+    expect(spawnsAtWork([spawn("task1", "Check the ports"), text("Ports are pinned.")])).toEqual(none);
+  });
+
+  test("a background spawn is at work from its start, before its subagent has made a call", () => {
+    expect(spawnsAtWork([bg("task1", "Map the runtime"), text("Waiting on it.")])).toEqual(new Set(["task1"]));
+    // a spawn not sent to the background, returned with no call: an agent that marks a spawn but
+    // never tags a child, whose row has nothing to wait on
+    expect(spawnsAtWork([spawn("task1", "Map the runtime"), text("Waiting on it.")])).toEqual(none);
+    // a spawn that failed started nothing
+    expect(spawnsAtWork([bg("task1", "Map the runtime", { isError: true }), text("It failed.")])).toEqual(none);
   });
 
   test("a background subagent counts from its calls landing after the main agent's last own item", () => {
-    const items = [spawn("task1", "Map the runtime"), text("Waiting on it."), sub("task1"), sub("task1")];
-    expect(subagentsAtWork(items)).toEqual({ ids: new Set(["task1"]), calls: 2 });
+    const items = [bg("task1", "Map the runtime"), text("Waiting on it."), sub("task1"), sub("task1")];
+    expect(spawnsAtWork(items)).toEqual(new Set(["task1"]));
+    // a spawn whose row was never kept, known only as the parent its calls name, has the same rule
+    expect(spawnsAtWork([text("Waiting on it."), sub("task1"), sub("task1")])).toEqual(new Set(["task1"]));
   });
 
   test("a subagent stays at work between its calls, not only while one is in flight", () => {
-    const items = [spawn("task1", "Map the runtime"), text("Waiting on it."), sub("task1"), sub("task1")];
-    expect(subagentsAtWork(items).ids.has("task1")).toBe(true);
-    expect(subagentsAtWork([...items, sub("task1", { done: false })]).ids.has("task1")).toBe(true);
+    const items = [bg("task1", "Map the runtime"), text("Waiting on it."), sub("task1"), sub("task1")];
+    expect(spawnsAtWork(items).has("task1")).toBe(true);
+    expect(spawnsAtWork([...items, sub("task1", { done: false })]).has("task1")).toBe(true);
   });
 
-  test("each subagent heard from since counts once, with every call it has made", () => {
+  test("each subagent heard from since counts once", () => {
     const items = [
-      spawn("task1", "Map the runtime"),
-      spawn("task2", "Map the shell"),
+      bg("task1", "Map the runtime"),
+      bg("task2", "Map the shell"),
       sub("task1"),
       text("Waiting on them."),
       sub("task2"),
       sub("task1"),
       sub("task2"),
     ];
-    expect(subagentsAtWork(items)).toEqual({ ids: new Set(["task1", "task2"]), calls: 4 });
+    expect(spawnsAtWork(items)).toEqual(new Set(["task1", "task2"]));
   });
 
   test("the main agent's next own item ends the count, unless a subagent's call is still in flight", () => {
-    const heard = [spawn("task1", "Map the runtime"), sub("task1"), sub("task1")];
-    expect(subagentsAtWork([...heard, text("Here is what it found.")])).toEqual(none);
-    const inFlight = [spawn("task1", "Map the runtime"), sub("task1"), sub("task1", { done: false })];
-    expect(subagentsAtWork([...inFlight, text("Meanwhile:")])).toEqual({ ids: new Set(["task1"]), calls: 2 });
+    const heard = [bg("task1", "Map the runtime"), sub("task1"), sub("task1")];
+    expect(spawnsAtWork([...heard, text("Here is what it found.")])).toEqual(none);
+    const inFlight = [bg("task1", "Map the runtime"), sub("task1"), sub("task1", { done: false })];
+    expect(spawnsAtWork([...inFlight, text("Meanwhile:")])).toEqual(new Set(["task1"]));
   });
 
   test("a subagent from an earlier turn, long since reported on, is not at work", () => {
     const items = [
-      spawn("task1", "Map the runtime"),
+      bg("task1", "Map the runtime"),
       sub("task1"),
       text("Here is what it found."),
+      bg("task0", "Never heard from"),
       { kind: "user", text: "and the shell?" } as ChatItem,
-      spawn("task2", "Map the shell"),
+      bg("task2", "Map the shell"),
       sub("task2"),
     ];
-    expect(subagentsAtWork(items)).toEqual({ ids: new Set(["task2"]), calls: 1 });
+    expect(spawnsAtWork(items)).toEqual(new Set(["task2"]));
+  });
+});
+
+describe("placeSpawns", () => {
+  const sub = (id: string, extra: Partial<ChatItem> = {}) => tool("read", "/wt/a.ts", { parentToolId: id, ...extra });
+  /** the log as rendered: the flow's rows by their first item, then the rows floating at the foot */
+  const placed = (items: ChatItem[]) => {
+    const { flow, floating } = placeSpawns(groupTools(items, ["/wt"]), spawnsAtWork(items));
+    return { flow: flow.map((e) => e.at), floating: floating.map((e) => e.spawn.id) };
+  };
+
+  test("a spawn at work floats at the foot, under everything the main agent did since", () => {
+    const items = [bg("task1", "Map the runtime"), text("Meanwhile, the notes."), sub("task1"), sub("task1")];
+    expect(placed(items)).toEqual({ flow: [1], floating: ["task1"] });
+    // the agent's own wait on it is in the flow, and the row floats under that
+    const waiting = [bg("task1", "Map the runtime"), tool("execute", "", { done: false }), sub("task1")];
+    expect(placed(waiting)).toEqual({ flow: [1], floating: ["task1"] });
+  });
+
+  test("a fan-out floats as a stack in the order it was started, whichever was heard from last", () => {
+    const items = [
+      bg("task1", "Map the runtime"),
+      bg("task2", "Map the shell"),
+      text("Waiting on them."),
+      sub("task2"),
+      sub("task1"),
+    ];
+    expect(placed(items)).toEqual({ flow: [2], floating: ["task1", "task2"] });
+  });
+
+  test("done, the row joins the flow where its work ended, not where it was spawned", () => {
+    const items = [
+      bg("task1", "Map the runtime"),
+      tool("execute", ""),
+      sub("task1"),
+      tool("execute", ""),
+      sub("task1"),
+      text("Here is what it found."),
+    ];
+    // the two commands, then the spawn at its last call, then the words: the order it floated in
+    expect(placed(items)).toEqual({ flow: [1, 3, 0, 5], floating: [] });
+  });
+
+  test("a spawn that made no call sits where it was spawned", () => {
+    const items = [spawn("task1", "Map the runtime"), text("Nothing came of it.")];
+    expect(placed(items)).toEqual({ flow: [0, 1], floating: [] });
+  });
+
+  test("a foreground spawn at the tail floats there and settles there: nothing moves", () => {
+    const open = [text("Checking."), spawn("task1", "Check the ports", { done: false }), sub("task1", { done: false })];
+    expect(placed(open)).toEqual({ flow: [0], floating: ["task1"] });
+    const done = [text("Checking."), spawn("task1", "Check the ports"), sub("task1"), text("Ports are pinned.")];
+    expect(placed(done)).toEqual({ flow: [0, 1, 3], floating: [] });
   });
 });
 

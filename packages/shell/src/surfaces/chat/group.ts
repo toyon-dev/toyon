@@ -1,7 +1,7 @@
 import { emptyInput, isWrittenKind } from "@toyon/shared";
 import type { ChatItem } from "../../state/store.ts";
 import { thoughtLine } from "./thought.ts";
-import { isGuardian, toolLabel } from "./toolCall.ts";
+import { isBackgroundSpawn, isGuardian, toolLabel } from "./toolCall.ts";
 
 /** An agent working through one file writes it in several calls, one hunk each, and the transcript
  * printed a line per call: four rows reading "edit menu.ts" with nothing to tell them apart. A run
@@ -26,11 +26,15 @@ export type ToolEntry = {
 /** a row of the transcript, and where it starts in the item list: React's key, and what says which
  * row the agent is on. A spawn is the call that started a subagent, with that subagent's own calls
  * folded under it: they arrive in the parent's stream tagged with the spawning call's id, and the
- * row they belong to is the one that folds them away once the subagent is done. */
+ * row they belong to is the one that folds them away once the subagent is done. `end` is where the
+ * subagent last spoke, the index of its newest call (its own `at` until it has made one), which is
+ * where the row sits in the transcript once the subagent is done (placeSpawns). */
 export type ChatEntry =
   | { at: number; item: Exclude<ChatItem, { kind: "tool" }> }
   | ToolEntry
-  | { at: number; spawn: ToolItem; run: ToolEntry[] };
+  | { at: number; spawn: ToolItem; run: ToolEntry[]; end: number };
+
+export type SpawnEntry = Extract<ChatEntry, { spawn: ToolItem }>;
 
 /** kinds whose hint names the thing the call was about, where a repeat is the same call again:
  * several reads or edits of one file is the ordinary way to work, and a fetch row is a host or a
@@ -98,7 +102,7 @@ export function groupTools(items: ChatItem[], roots: string[]): ChatEntry[] {
   const out: ChatEntry[] = [];
   // the run each spawn is filling, and the key its newest row groups on: a subagent's calls
   // interleave with the main agent's and with another subagent's, and each run groups on its own
-  const runs = new Map<string, { run: ToolEntry[]; key: string }>();
+  const runs = new Map<string, { entry: SpawnEntry; key: string }>();
   let key = "";
   for (const [at, item] of items.entries()) {
     if (item.kind !== "tool") {
@@ -109,9 +113,9 @@ export function groupTools(items: ChatItem[], roots: string[]): ChatEntry[] {
     if (cutOff(item)) continue;
     if (spawns.has(item.id)) {
       key = "";
-      const run: ToolEntry[] = [];
-      runs.set(item.id, { run, key: "" });
-      out.push({ at, spawn: item, run });
+      const entry: SpawnEntry = { at, spawn: item, run: [], end: at };
+      runs.set(item.id, { entry, key: "" });
+      out.push(entry);
       continue;
     }
     const next = groupKey(item, roots);
@@ -119,11 +123,13 @@ export function groupTools(items: ChatItem[], roots: string[]): ChatEntry[] {
     // keeps its place in the flow, indented: there is no row for it to fold under.
     const home = item.parentToolId ? runs.get(item.parentToolId) : undefined;
     if (home) {
-      const last = home.run.at(-1);
+      const run = home.entry.run;
+      const last = run.at(-1);
       if (next && next === home.key && last) last.tools.push(item);
       else if (!next && follows(item, last, roots)) last.next = item;
-      else home.run.push({ at, tools: [item] });
+      else run.push({ at, tools: [item] });
       home.key = next;
+      home.entry.end = at;
       continue;
     }
     const last = out.at(-1);
@@ -147,14 +153,19 @@ export function runCalls(run: ToolEntry[]): number {
   return run.reduce((n, e) => n + e.tools.length, 0);
 }
 
-/** The subagents at work while the main agent waits on them, and their calls so far. A background
- * spawn returns at once, so nothing but its calls landing says the subagent is still going, and
- * nothing marks its end but the main agent's next move. So a subagent counts from its first call
- * after the main agent's newest own item until the main agent's next, and while it has a call in
- * flight wherever that sits. Only meaningful while the turn is on: a turn that ended on a
- * subagent's call leaves the window open. */
-export function subagentsAtWork(items: ChatItem[]): { ids: Set<string>; calls: number } {
+/** The subagents still at work, by the id of the call that started each. A foreground spawn is at
+ * work exactly while its own call is: the agent is waiting on it, and the report comes back with
+ * the call. A background spawn returns at once, so nothing but its calls landing says the subagent
+ * is still going, and nothing marks its end but the main agent's next move: it counts from its
+ * first call until the main agent's next own item after its newest call, and while it has a call in
+ * flight wherever that sits. Before that first call there is only the flag the agent started it
+ * with: a spawn sent to the background this turn that has made no call yet is on its way, not one
+ * that never ran, so it counts until it is heard from. A spawn whose row was never kept (a
+ * transcript from before the flag was) has only the inference. Only meaningful while the turn is
+ * on: a turn that ended on a subagent's call leaves the window open. */
+export function spawnsAtWork(items: ChatItem[]): Set<string> {
   const ids = new Set<string>();
+  const called = new Set<string>();
   let heard = true;
   for (let i = items.length - 1; i >= 0; i--) {
     const item = items[i]!;
@@ -162,12 +173,43 @@ export function subagentsAtWork(items: ChatItem[]): { ids: Set<string>; calls: n
       heard = false;
       continue;
     }
+    called.add(item.parentToolId);
     if (heard || !item.done) ids.add(item.parentToolId);
   }
-  if (ids.size === 0) return { ids, calls: 0 };
-  let calls = 0;
-  for (const item of items) if (item.kind === "tool" && item.parentToolId && ids.has(item.parentToolId)) calls++;
-  return { ids, calls };
+  let thisTurn = true;
+  for (let i = items.length - 1; i >= 0; i--) {
+    const item = items[i]!;
+    if (item.kind === "user") thisTurn = false;
+    if (item.kind !== "tool" || !item.subagent) continue;
+    if (item.isError) ids.delete(item.id);
+    else if (!item.done) ids.add(item.id);
+    else if (!isBackgroundSpawn(item)) ids.delete(item.id);
+    else if (thisTurn && !called.has(item.id)) ids.add(item.id);
+  }
+  return ids;
+}
+
+/** Where a spawn row sits. While its subagent works the row is not in the transcript: it floats
+ * under everything the main agent has said and done since, shining, with its count ticking, so the
+ * one line that says a subagent is at work is the last line of the log, where the reader looks. A
+ * fan-out floats as a stack, in the order it was started. Once the subagent is done its row joins
+ * the transcript where its work ended, at its newest call, which is where it was floating: a row
+ * settling back to where it was spawned would jump up over everything that landed meanwhile. */
+export function placeSpawns(
+  entries: ChatEntry[],
+  atWork: ReadonlySet<string>,
+): { flow: ChatEntry[]; floating: SpawnEntry[] } {
+  const floating: SpawnEntry[] = [];
+  const keyed: { key: number; entry: ChatEntry }[] = [];
+  for (const entry of entries) {
+    if ("spawn" in entry) {
+      if (atWork.has(entry.spawn.id)) floating.push(entry);
+      else keyed.push({ key: entry.end, entry });
+    } else keyed.push({ key: entry.at, entry });
+  }
+  // every key is an item's own index, so no two entries share one
+  keyed.sort((a, b) => a.key - b.key);
+  return { flow: keyed.map((k) => k.entry), floating };
 }
 
 /** Whether a call of the main agent's own is in flight: one it is running itself, whose row

@@ -12,8 +12,11 @@ import { useSelectAllWithin } from "../../ui/selectAll.ts";
 import { elapsed, isBusy, pickLabel } from "../util.ts";
 import { openAsk } from "./ask.ts";
 import { ChatItemView, QUIET_AFTER, ThoughtRow, ToolRow } from "./ChatItemView.tsx";
-import { groupTools, indexOfSeq, openRow, ownCallRunning, runningRow, subagentsAtWork } from "./group.ts";
+import { groupTools, indexOfSeq, openRow, ownCallRunning, placeSpawns, runningRow, spawnsAtWork } from "./group.ts";
 import { isBlank } from "./recall.ts";
+
+/** no spawn at work: one frozen set, so a turn that is over keys the same placement every render */
+const NONE: ReadonlySet<string> = new Set();
 
 /** the transcript for the active worktree: items, working indicator, waiting messages, jump-down pill.
  * `lead` is a line the conversation starts from: the first child of the log, so it sits on the
@@ -124,7 +127,14 @@ export function ChatLog({
   const roots = useMemo(() => (root ? [root] : []), [root]);
   // calls that did the same thing to the same file, back to back, are one row carrying a count,
   // and a subagent's calls are the run under the row that started it
-  const entries = useMemo(() => groupTools(items, roots), [items, roots]);
+  const grouped = useMemo(() => groupTools(items, roots), [items, roots]);
+  // A subagent at work is not in the transcript yet: its row floats at the foot of the log, under
+  // everything the main agent has done since, shining with its count ticking, and joins the flow
+  // where its work ended once it is done (placeSpawns in group.ts). Each floating row carries its
+  // own count, so a fan-out of three says which one is slow. Nothing floats once the turn is over:
+  // a turn that ended on a subagent's call would otherwise hold its row at the foot for good.
+  const atWork = useMemo(() => (busy ? spawnsAtWork(items) : NONE), [busy, items]);
+  const { flow: entries, floating } = useMemo(() => placeSpawns(grouped, atWork), [grouped, atWork]);
   // the one row that opens itself while the agent runs; everything else in the turn is a line.
   // A turn stopped on a question is still the turn: the thought before the ask stays open while
   // the box waits, since it is the case the question is made from.
@@ -163,23 +173,20 @@ export function ChatLog({
   const heardAt = usage?.heard !== undefined && chatAt !== undefined && usage.heard > chatAt ? usage.heard : undefined;
   const heard = useSecondsSince(busy ? heardAt : undefined);
   // What in the log already says busy where the reader is looking: the shimmer on a running call
-  // of the main agent's own (ownCallRunning in group.ts says which calls count), or a thought or
-  // reply still arriving. The word under the log shows only when nothing does, in the gap between
-  // two calls. A running call's row carries its own count (ToolRow), so under it there is no line
-  // at all: one count below could not say which of two calls running at once is the slow one. A
-  // stalled thought has no row to count on, so its silence is still said here.
+  // of the main agent's own (ownCallRunning in group.ts says which calls count), a thought or
+  // reply still arriving, or a spawn row floating at the foot. The word under the log shows only
+  // when nothing does, in the gap between two calls. A running call's row carries its own count
+  // (ToolRow), so under it there is no line at all: one count below could not say which of two
+  // calls running at once is the slow one. A stalled thought has no row to count on, so its
+  // silence is still said here, and so is a fan-out's: the floating rows say who is working, and
+  // the seconds under them say that nobody has been heard from.
   const calling = ownCallRunning(items);
-  const moving = streaming >= 0 || calling;
+  const moving = streaming >= 0 || calling || floating.length > 0;
   // the one row whose call is executing, which is the row that counts its wait (runningRow in group.ts)
   const countingRow = useMemo(() => runningRow(entries), [entries]);
   // when that call reached the head of the batch, stamped by the store (the row is rebuilt on
   // every switch of worktree, so a clock of its own would start over)
   const running = useLocalField(id, "running");
-  // the subagents the main agent is waiting on: named in the word, with their calls ticking beside
-  // it, since their rows are out of sight and this line is the one place that can say so. The
-  // spawn rows that started them shine for the same window.
-  const fanout = useMemo(() => subagentsAtWork(items), [items]);
-  const agents = fanout.ids.size;
 
   return (
     <div className="chat-wrap">
@@ -187,14 +194,7 @@ export function ChatLog({
         {lead}
         {entries.map((entry, i) =>
           "spawn" in entry ? (
-            <ToolRow
-              key={entry.at}
-              tools={[entry.spawn]}
-              run={entry.run}
-              working={busy && fanout.ids.has(entry.spawn.id)}
-              roots={roots}
-              worktreeId={id}
-            />
+            <ToolRow key={entry.at} tools={[entry.spawn]} run={entry.run} roots={roots} worktreeId={id} />
           ) : "tools" in entry ? (
             <ToolRow
               key={entry.at}
@@ -227,6 +227,11 @@ export function ChatLog({
             />
           ),
         )}
+        {/* the subagents at work, under everything that landed since they started: the same row,
+            with the same key, so it keeps its fold and moves rather than remounts when it settles */}
+        {floating.map((entry) => (
+          <ToolRow key={entry.at} tools={[entry.spawn]} run={entry.run} working roots={roots} worktreeId={id} />
+        ))}
         {/* the row is status alone: the stop is the composer's, in the field's corner, which stays
             put where this row scrolls off as soon as the log is read back. So while a call runs
             above, or a thought shimmers and the silence is short, there is no row: the shimmer
@@ -254,41 +259,30 @@ export function ChatLog({
                     read a hundred times a session. A word stays only where it adds a fact the
                     mark cannot: who is working, or where the wait is. */}
                   <Spinner variant="squares" />
-                  {agents ? (
-                    <>
-                      <span className="working-word">
-                        {agents} {agents === 1 ? "agent" : "agents"}
-                      </span>
-                      <span className="working-num">
-                        {fanout.calls} {fanout.calls === 1 ? "call" : "calls"}
-                      </span>
-                    </>
-                  ) : heardAt !== undefined ? (
-                    // gated on its own count, not the whole silence: a short think after a long
-                    // queue would otherwise flash a word for a wait that has just begun
-                    heard >= QUIET_AFTER && (
-                      <>
-                        {/* with no call open and nothing streaming, a silence this long after the
+                  {heardAt !== undefined
+                    ? // gated on its own count, not the whole silence: a short think after a long
+                      // queue would otherwise flash a word for a wait that has just begun
+                      heard >= QUIET_AFTER && (
+                        <>
+                          {/* with no call open and nothing streaming, a silence this long after the
                             model took the request is the model holding the turn: its thinking is
                             summarized, and the summary lands only once the thought is done, so a
                             long think is a hole in the log. Naming it says where the wait is. Under
                             the threshold a healthy turn would flick the number on and off with
                             every result; past it, the silence is the news */}
-                        <span className="working-word">thinking</span>
-                        <span className="working-num">{elapsed(heard)}</span>
-                      </>
-                    )
-                  ) : (
-                    quiet >= QUIET_AFTER && (
-                      <>
-                        {/* the model has not taken the request yet: the wait is the provider's
+                          <span className="working-word">thinking</span>
+                          <span className="working-num">{elapsed(heard)}</span>
+                        </>
+                      )
+                    : quiet >= QUIET_AFTER && (
+                        <>
+                          {/* the model has not taken the request yet: the wait is the provider's
                             queue, not the agent's, and the word says so before it can read as the
                             model working hard */}
-                        <span className="working-word">waiting for the model</span>
-                        <span className="working-num">{elapsed(quiet)}</span>
-                      </>
-                    )
-                  )}
+                          <span className="working-word">waiting for the model</span>
+                          <span className="working-num">{elapsed(quiet)}</span>
+                        </>
+                      )}
                 </span>
               )}
             </div>

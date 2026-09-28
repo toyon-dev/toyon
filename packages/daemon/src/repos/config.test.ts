@@ -8,6 +8,7 @@ import {
   configTarget,
   configText,
   detectConfig,
+  detectServices,
   inferPaths,
   mergePatch,
   previewPaths,
@@ -35,6 +36,24 @@ function repo(files: Record<string, string>): string {
 }
 const pkg = (scripts: Record<string, string>, extra: Record<string, unknown> = {}) =>
   JSON.stringify({ name: "x", scripts, ...extra });
+
+describe("detectServices", () => {
+  test("a compose file at the root, a database URL in an env file, or nothing", () => {
+    expect(detectServices(repo({ "package.json": "{}" }))).toBeUndefined();
+    expect(detectServices(repo({ "docker-compose.yml": "services: {}" }))).toEqual({ compose: "docker-compose.yml" });
+    expect(detectServices(repo({ ".env": "PORT=3000\nDATABASE_URL=postgres://localhost/app\n" }))).toEqual({
+      envUrl: { name: "DATABASE_URL", file: ".env" },
+    });
+    // the first env file with one wins; a mention in a comment or a longer name is not one
+    expect(
+      detectServices(repo({ ".env": "# DATABASE_URL=x\nMY_DATABASE_URL=y\n", ".env.local": "export DB_URL=z\n" })),
+    ).toEqual({ envUrl: { name: "DB_URL", file: ".env.local" } });
+    expect(detectServices(repo({ "compose.yaml": "", ".env": "MONGODB_URI=m\n" }))).toEqual({
+      compose: "compose.yaml",
+      envUrl: { name: "MONGODB_URI", file: ".env" },
+    });
+  });
+});
 
 describe("inferPaths", () => {
   test("reads folders and files off the command, a cd, a Python module, and a script one level down", () => {

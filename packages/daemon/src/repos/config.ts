@@ -1,6 +1,13 @@
 import { closeSync, type Dirent, existsSync, openSync, readdirSync, readFileSync, readSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { CONFIG_FILES, issueReason, landConfigSchema, type ToyonConfig, toyonConfigSchema } from "@toyon/shared";
+import {
+  CONFIG_FILES,
+  issueReason,
+  landConfigSchema,
+  type SharedServices,
+  type ToyonConfig,
+  toyonConfigSchema,
+} from "@toyon/shared";
 import { applyEdits, type JSONPath, modify, type ParseError, parse, printParseErrorCode } from "jsonc-parser";
 import { log } from "../core/log.ts";
 
@@ -330,6 +337,40 @@ function head(path: string): string {
     // a directory by the file's name, or one this user cannot read: it says nothing either way
     return "";
   }
+}
+
+/** the compose files a stack is brought up from, at the root */
+const COMPOSE_FILES = ["docker-compose.yml", "docker-compose.yaml", "compose.yml", "compose.yaml"];
+/** env files a database URL is kept in, in the order the first hit is reported */
+const ENV_FILES = [".env", ".env.local", ".env.development", ".env.development.local"];
+/** the variables a database URL is kept under */
+const DB_URL_NAMES = [
+  "DATABASE_URL",
+  "DB_URL",
+  "POSTGRES_URL",
+  "POSTGRESQL_URL",
+  "MYSQL_URL",
+  "MONGODB_URI",
+  "MONGO_URL",
+];
+
+/** What the worktrees would share: a compose stack at the root, a database an env file points
+ * at. Read off the tree, never the settings, so it holds whether or not the settings keep the
+ * copies apart; the pane compares the two. */
+export function detectServices(repoPath: string): SharedServices | undefined {
+  const out: SharedServices = {};
+  const compose = COMPOSE_FILES.find((f) => existsSync(join(repoPath, f)));
+  if (compose) out.compose = compose;
+  for (const file of ENV_FILES) {
+    const text = head(join(repoPath, file));
+    if (!text) continue;
+    const name = DB_URL_NAMES.find((n) => new RegExp(`^\\s*(?:export\\s+)?${n}\\s*=`, "m").test(text));
+    if (name) {
+      out.envUrl = { name, file };
+      break;
+    }
+  }
+  return out.compose || out.envUrl ? out : undefined;
 }
 
 /** what the page proc draws from, beside whatever its command names: a change here is the page's */

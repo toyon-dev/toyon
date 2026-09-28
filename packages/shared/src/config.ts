@@ -3,7 +3,7 @@
 // Each place holds a shared file (committed if the team wants it) and a local one beside it that
 // overrides it for one person and is kept out of git by name.
 
-import type { RunEntry } from "./model.ts";
+import type { RunEntry, ToyonConfig } from "./model.ts";
 
 export const CONFIG_FILES = {
   folder: { shared: ".toyon/settings.json", local: ".toyon/settings.local.json" },
@@ -26,6 +26,18 @@ export function runShared(entry: RunEntry): boolean {
 /** the paths a shared proc flips on, as written; undefined means infer them from the command */
 export function runPaths(entry: RunEntry): string[] | undefined {
   return typeof entry === "string" ? undefined : entry.paths;
+}
+
+/** whether the settings name the worktree anywhere a command runs: the sign that a database or a
+ * compose project is made per worktree rather than shared by all of them */
+export function keepsCopiesApart(config: ToyonConfig): boolean {
+  const commands = [
+    ...(config.setup ?? []),
+    ...(config.teardown ?? []),
+    ...Object.values(config.run).map(runCmd),
+    ...Object.values(config.profiles ?? {}).flatMap((p) => Object.values(p.env ?? {})),
+  ];
+  return commands.some((c) => c.includes("TOYON_WORKTREE"));
 }
 
 /** a local file: one person's, never committed */

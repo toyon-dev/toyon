@@ -64,7 +64,7 @@ Main's shared tier is awake while any copy using it is, and sleeps with them. Th
 
 ## Keeping copies apart
 
-Toyon does not know what a database is. Each copy runs your setup and your commands on its own, so a database, a compose stack or a cache they all point at is shared, migrations included. Nothing warns before three copies run migrations against one Postgres.
+Toyon does not know what a database is. Each copy runs your setup and your commands on its own, so a database, a compose stack or a cache they all point at is shared, migrations included. When the tree names one (a `DATABASE_URL` in an env file, a compose file at the root) and the settings name no copy, the setup pane says so and can ask the agent to write the recipe below; a land whose work changes migrations says so beside the word.
 
 Every command, setup step, teardown step and terminal gets two variables to keep them apart:
 

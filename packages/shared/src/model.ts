@@ -35,6 +35,14 @@ export interface RunProc {
 }
 export type RunEntry = string | RunProc;
 
+/** what the worktrees of a repo would share unless the settings keep them apart */
+export interface SharedServices {
+  /** a compose file at the root, by name */
+  compose?: string;
+  /** a database URL in an env file: the variable, and the file it was read from */
+  envUrl?: { name: string; file: string };
+}
+
 /** a repo's settings file (see config.ts for where it lives), shared and local merged */
 export interface ToyonConfig {
   /** the JSON schema an editor validates the file against; toyon itself ignores it */
@@ -83,6 +91,10 @@ export interface RepoInfo {
    * nothing that serves a page: the project opens on the chat rather than the setup pane. Only with
    * `needsSetup`, never written anywhere, and gone once setup is saved. */
   assumed?: string;
+  /** a database or a compose stack the worktrees would share, seen in the tree at register and
+   * on each detection: a compose file at the root, or a database URL in an env file. What the
+   * setup pane warns about while the settings keep no copy apart. Never written anywhere. */
+  services?: SharedServices;
   /** toyon made this project from nothing: the whole folder, or only the `.git` in an empty folder
    * the person already had. What going back from the first-run screen may take away again, and
    * only while the project is still exactly as it was made. Absent on a repo that was opened. */

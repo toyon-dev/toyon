@@ -31,7 +31,7 @@ import { shortId } from "../worktrees/naming.ts";
 import type { WorktreeService } from "../worktrees/service.ts";
 import type { AfterLand } from "./afterLand.ts";
 import { expandTilde } from "./browse.ts";
-import { configTarget, configText, detectConfig, readConfigFile } from "./config.ts";
+import { configTarget, configText, detectConfig, detectServices, readConfigFile } from "./config.ts";
 import {
   type CreateOpts,
   cloneInto,
@@ -284,6 +284,7 @@ export class RepoRegistry {
       needsSetup: detected.needsSetup,
       guess: detected.from,
       assumed: detected.assumed,
+      services: detectServices(root),
       ...(made ? { made } : {}),
       remote: await hasOrigin(root),
     };
@@ -473,15 +474,18 @@ export class RepoRegistry {
     }
     if (wt.path !== repo.path && this.adoptConfig(repo, wt)) return;
     const detected = detectConfig(wt.path);
+    const services = detectServices(wt.path);
     const same =
       JSON.stringify(detected.config) === JSON.stringify(repo.config) &&
       detected.from === repo.guess &&
-      detected.assumed === repo.assumed;
+      detected.assumed === repo.assumed &&
+      JSON.stringify(services) === JSON.stringify(repo.services);
     if (same) return;
     // a front end scaffolded beside the build file ends the assumption, and the setup pane comes back
     repo.config = detected.config;
     repo.guess = detected.from;
     repo.assumed = detected.assumed;
+    repo.services = services;
     this.d.state.save();
     this.d.hub.emit("reposChanged");
   }

@@ -102,6 +102,10 @@
   .setup-shared {
     flex-basis: 100%;
   }
+  /* what the worktrees would share, under the title: a sentence with its one action inline */
+  .setup-shared-note {
+    margin-bottom: 12px;
+  }
   .setup-name {
     width: 90px;
     flex-shrink: 0;

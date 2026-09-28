@@ -7,7 +7,16 @@
 // narrows the work without changing what the sentence and the message say about it. The sentence
 // is the turn's recap and stays with the turn.
 
-import { type AgentStatus, baseOf, canLand, type Landing, type LastTurn, type WorktreeInfo } from "@toyon/shared";
+import {
+  type AgentStatus,
+  baseOf,
+  canLand,
+  keepsCopiesApart,
+  type Landing,
+  type LastTurn,
+  type RepoInfo,
+  type WorktreeInfo,
+} from "@toyon/shared";
 import { answerPrompt, type LandVerdict, landPrompt } from "../agent/landing.ts";
 import { firstAskOf, turnsSince } from "../agent/recap.ts";
 import type { TranscriptEntry } from "../agent/transcript.ts";
@@ -17,7 +26,8 @@ import { fireAndForget, log } from "../core/log.ts";
 import type { StateStore } from "../core/state.ts";
 import type { ExecResult } from "../exec/service.ts";
 import { git } from "../git/exec.ts";
-import { aheadBehind, statusFiles, treeFingerprint } from "../git/status.ts";
+import { aheadBehind, committedFiles, statusFiles, treeFingerprint } from "../git/status.ts";
+import { migrationMatch } from "./backend.ts";
 import type { WorktreeService } from "./service.ts";
 
 export interface LandingServiceDeps {
@@ -229,6 +239,10 @@ export class LandingService {
       ...(verdict?.body ? { body: verdict.body } : {}),
       fingerprint: await treeFingerprint(wt.path),
     };
+    // a migration on a branch whose settings keep no worktree apart lands on the database every
+    // other worktree is using: said beside the word, where the doubt is read, never as a toast
+    const caveat = await this.sharedMigration(wt, repo);
+    if (caveat) landing.why = landing.why ? `${landing.why}. ${caveat}` : caveat;
     if (!live()) return;
     this.judging.delete(worktreeId);
     // the sentence goes on the turn it describes; setLanding saves and broadcasts the record with it
@@ -240,6 +254,15 @@ export class LandingService {
       `landing: check ${check}${landing.why ? ", doubted" : ""}${opts.ask ? "" : ", check only"}, ${Date.now() - started}ms`,
     );
     this.d.worktrees.setLanding(worktreeId, landing);
+  }
+
+  /** whether the work touches a migration while the tree names a shared database or stack and
+   * the settings give no worktree its own */
+  private async sharedMigration(wt: WorktreeInfo, repo: RepoInfo): Promise<string | undefined> {
+    if (!repo.services || keepsCopiesApart(repo.config)) return undefined;
+    const files = [...(await statusFiles(wt.path)), ...(await committedFiles(wt.path, repo.defaultBranch))];
+    if (!files.some((f) => migrationMatch(f.path))) return undefined;
+    return "this changes migrations, and the worktrees share the database";
   }
 }
 

@@ -5,6 +5,7 @@ import {
   DEFAULT_LAND_ROUTE,
   DEFAULT_MERGE_METHOD,
   isOwned,
+  keepsCopiesApart,
   LAND_ROUTES,
   type LandRoute,
   landPolicy,
@@ -27,7 +28,7 @@ import { FormRow } from "../../ui/FormRow.tsx";
 import { Icon } from "../../ui/Icon.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
 import { View } from "../../ui/View.tsx";
-import { setupFixPrompt } from "./fixPrompt.ts";
+import { keepApartPrompt, setupFixPrompt } from "./fixPrompt.ts";
 
 /** `shared`: main runs it once for every worktree (`from: "trunk"` in the file); on by default
  * for every guessed proc but the page, so the cheap thing is what a first confirm writes */
@@ -154,6 +155,24 @@ export function Setup({ repo, onClose }: { repo: RepoInfo; onClose?: () => void 
   // unconfirmed, and a fix to the code itself (a server that ignores PORT) lands with its branch
   const askAgent = () =>
     sock?.send({ t: "create-worktree", clientId, repoId: repo.id, prompt: setupFixPrompt(repo, file) });
+  // the tree names a database or a compose stack, and nothing in the form names the worktree: the
+  // copies will share it, migrations included. Toyon cannot write the recipe (it does not know
+  // what a database is), so the line says what will happen and hands the writing to the agent.
+  const services = repo.services;
+  const apart =
+    [install, teardown, ...procs.map((p) => p.cmd)].some((c) => c.includes("TOYON_WORKTREE")) ||
+    keepsCopiesApart(repo.config);
+  const sharedWhat = services
+    ? [
+        services.envUrl ? `the database at ${services.envUrl.name} in ${services.envUrl.file}` : null,
+        services.compose ? `the stack in ${services.compose}` : null,
+      ]
+        .filter(Boolean)
+        .join(" and ")
+    : "";
+  const askApart = () =>
+    services &&
+    sock?.send({ t: "create-worktree", clientId, repoId: repo.id, prompt: keepApartPrompt(repo, file, services) });
 
   const procRow = (p: Proc, i: number) => (
     <div className="setup-proc" key={p.id}>
@@ -193,6 +212,14 @@ export function Setup({ repo, onClose }: { repo: RepoInfo; onClose?: () => void 
   return (
     <View>
       <p className="form-title">how does {repo.name} start?</p>
+      {services && !apart && (
+        <p className="hint setup-shared-note">
+          Worktrees will share {sharedWhat}, migrations included.{" "}
+          <Button tone="quiet" disabled={!main} onClick={askApart}>
+            ask the agent to keep them apart
+          </Button>
+        </p>
+      )}
       <FormRow label="install" hint="once per new worktree; one command per line">
         <TextArea
           size="md"

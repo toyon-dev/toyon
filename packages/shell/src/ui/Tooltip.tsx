@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTouch } from "../state/selectors.ts";
+import { cx } from "./cx.ts";
 import { Float, type FloatHandle } from "./Float.tsx";
 import { Kbd } from "./Kbd.tsx";
 import { type Placement, type Point, pointRect, type Rect } from "./place.ts";
@@ -36,15 +37,15 @@ export type TipOptions = {
    * itself is at the other end of the row. `spinner` draws the Spinner's dot instead, for a tip
    * whose row has swapped its dot for one while an op runs. */
   dot?: string;
-  /** a line under the text in the quiet tier, naming the thing the text is about: a worktree row's
-   * branch under its state, so every row's tip has the same shape whatever the row itself shows.
-   * The text is the answer and leads; the name says whose, and takes the aside on its line. */
+  /** the thing the text is about, in the quiet tier at the far end of the text's line: a worktree
+   * row's branch beside its state, so every row's tip has the same shape whatever the row itself
+   * shows. The text is the answer and leads; the name says whose. */
   name?: string;
-  /** the figures, on a line of their own at the foot of the box under a rule: what this has cost,
-   * apart from what it is and what it is doing. A worktree row puts its agent's spend and context
-   * here. On the name's line they ran into the branch, and with a sentence of detail under them
-   * the three read as one paragraph. Drawn only with a name. */
-  aside?: string;
+  /** the figures, on a line of their own at the foot of the box under a rule, one at each edge:
+   * what this has cost, apart from what it is and what it is doing. A worktree row puts its
+   * agent's spend and context here. On the name's line they ran into the branch, and with a
+   * sentence of detail under them the three read as one paragraph. Drawn only with a name. */
+  aside?: string[];
   /** the other verb of the same gesture, on a key of its own, as a row under the text in the quiet
    * tier: the inspector's button says ⌘E adds the element to chat under its own ⌘I. The two keys
    * stand in one column so the chords line up and read as a pair. A lead has no place in the grid
@@ -56,7 +57,7 @@ export type TipAlso = { text: string; key: string };
 
 export function tip(text: string, key?: string, { placement, detail, dot, name, aside, also }: TipOptions = {}) {
   const named = name ? `${text}: ${name}` : text;
-  const label = [named, detail, name ? aside : undefined].filter(Boolean).join(", ");
+  const label = [named, detail, ...(name && aside ? aside : [])].filter(Boolean).join(", ");
   return {
     "data-tip": text,
     "data-tip-key": key,
@@ -64,7 +65,8 @@ export function tip(text: string, key?: string, { placement, detail, dot, name, 
     "data-tip-detail": detail,
     "data-tip-dot": dot,
     "data-tip-name": name,
-    "data-tip-aside": aside,
+    // the figures ride one attribute, a line each: none of them is ever more than one line
+    "data-tip-aside": aside?.length ? aside.join("\n") : undefined,
     "data-tip-also": also?.text,
     "data-tip-also-key": also?.key,
     // the name stays this control's own: the other verb is a hint for the eye, not what it does
@@ -96,7 +98,7 @@ export type Anchor = {
   detail?: string;
   dot?: string;
   name?: string;
-  aside?: string;
+  aside?: string[];
   also?: TipAlso;
   placement: TipPlacement;
 };
@@ -179,7 +181,7 @@ export function Tooltips() {
         detail: el.dataset.tipDetail,
         dot: el.dataset.tipDot,
         name: el.dataset.tipName,
-        aside: el.dataset.tipAside,
+        aside: el.dataset.tipAside?.split("\n"),
         also:
           el.dataset.tipAlso && el.dataset.tipAlsoKey
             ? { text: el.dataset.tipAlso, key: el.dataset.tipAlsoKey }
@@ -288,7 +290,8 @@ export function Tooltips() {
     // shown again whenever it moves to another control, which puts it back above whatever opened
     // while it stood: a tip about a menu row is over that menu
     <Float
-      className="tooltip"
+      // a tip with figures at its foot is a card about a row, and every row's card is one width
+      className={cx("tooltip", anchor.name && anchor.aside && "tooltip-card")}
       role="tooltip"
       boxRef={box}
       handle={handle}
@@ -304,12 +307,24 @@ export function Tooltips() {
           <span className="tooltip-also">{anchor.also.text}</span>
           <Kbd k={anchor.also.key} className="tooltip-key" />
         </div>
+      ) : anchor.name ? (
+        // the name shares the state's line, at the far edge from the row: a line of its own under
+        // the state pushed the sentence a rung down for a branch that is one word
+        <div className="tooltip-head">
+          <span>{head}</span>
+          <span className="tooltip-name">{anchor.name}</span>
+        </div>
       ) : (
         head
       )}
-      {anchor.name && <div className="tooltip-name">{anchor.name}</div>}
       {anchor.detail && <div className="tooltip-detail">{anchor.detail}</div>}
-      {anchor.name && anchor.aside && <div className="tooltip-foot">{anchor.aside}</div>}
+      {anchor.name && anchor.aside && (
+        <div className="tooltip-foot">
+          {anchor.aside.map((f) => (
+            <span key={f}>{f}</span>
+          ))}
+        </div>
+      )}
     </Float>
   );
 }

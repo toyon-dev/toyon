@@ -42,23 +42,64 @@
     margin-left: 12px;
     color: var(--text1);
   }
-  /* the line under the text, a tier under it like the detail: what the tip is about, under what
-   it says. In the text's own tier a branch was the longest and loudest line, and the state read
-   as the aside. */
+  /* the text and the name on one line, the state at the row's edge and the branch at the far one,
+   so the sentence starts a line down from the state whatever the branch measures. The state is
+   the piece that never wraps; the branch gives way, and the box's wrap rule breaks it anywhere.
+   The gap is the key's, the least the two ever get when this is the widest line. */
+  .tooltip-head {
+    display: flex;
+    justify-content: space-between;
+    /* the two share a face and a line height, so their first lines' baselines meet from the top;
+     baseline alignment would have hung the name off the dot's bottom edge, since the state is a
+     flex box below, and it is the state's box that has no text baseline of its own */
+    align-items: flex-start;
+    gap: 12px;
+    /* the dot centred on the state's line, as the row centres its own: `middle` sat it on the
+     x-height, a pixel under the row's dot in this face, and the tip's dot restates the row's */
+    & > :first-child {
+      display: inline-flex;
+      align-items: center;
+      flex: none;
+    }
+    & > .tooltip-name {
+      min-width: 0;
+    }
+  }
+  /* a tier under the text like the detail: in the text's own tier a branch was the longest and
+   loudest thing in the box, and the state read as the aside */
   .tooltip-name {
     color: var(--text1);
+  }
+  /* beside the row's left the line is mirrored, so the state stays at the row's edge */
+  .tooltip[data-side="left"] .tooltip-head {
+    flex-direction: row-reverse;
+  }
+  /* a card about a row holds one width: the foot spreads its figures to the edges, which a box
+   sized to a short branch left cramped, and a hover down the rail would otherwise swap the box's
+   shape at every row */
+  .tooltip-card {
+    min-width: 240px;
   }
   /* the figures, on a line of their own at the foot under a rule: read apart from the name and
    the sentence, which they ran together with as one paragraph when they shared the name's line.
    The rule is the menu's between groups, and spans the box's own width the way that one does its
-   rows. Numbers that tick keep their columns. */
+   rows. One figure at each edge, the way a row keeps its counts at its far end: a middot between
+   them read as one phrase. Numbers that tick keep their columns. */
   .tooltip-foot {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
     margin: 4px -8px 0;
     padding: 4px 8px 0;
     border-top: 1px solid var(--border0);
     color: var(--text1);
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
+  }
+  /* beside the row's left, the box is mirrored: a lone figure sits at the row's edge like the
+   lines above it, and the pair keep their edges */
+  .tooltip[data-side="left"] .tooltip-foot {
+    flex-direction: row-reverse;
   }
   /* two verbs of one gesture: the keys take a column of their own, started at its left edge, so
    the two ⌘ glyphs stand one over the other whatever the letters after them measure, and each

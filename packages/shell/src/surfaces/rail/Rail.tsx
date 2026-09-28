@@ -179,7 +179,7 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
   const figuresOf = (d: WorktreeStatus) => {
     const u = d.usage;
     const parts = [u?.cost !== undefined ? dollars(u.cost) : null, u ? `${tokens(u.used)} of ${tokens(u.size)}` : null];
-    return parts.some(Boolean) ? parts.filter(Boolean).join(" · ") : undefined;
+    return parts.some(Boolean) ? parts.filter((p) => p !== null) : undefined;
   };
 
   const [graftMode, setGraftMode] = useState(false);
@@ -234,7 +234,7 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
       {...tip(archivedState(a), undefined, {
         placement: tipSide,
         name: a.branch,
-        aside: a.cost !== undefined ? dollars(a.cost) : undefined,
+        aside: a.cost !== undefined ? [dollars(a.cost)] : undefined,
       })}
       onClick={() => dispatch({ a: "open-archived", id: a.id })}
       {...cm.contextMenu(() => archivedItems(a, clientId, deps), a.id)}

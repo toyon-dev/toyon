@@ -2278,11 +2278,10 @@ function onServer(s: State, msg: StoreServerMsg): State {
         openUrl: msg.ok && msg.url ? msg.url : settled.openUrl,
       };
       // What happened is read where the work is: a failure as a line on the worktree's chat, or
-      // under the composer for an op with no worktree (a batch); a land that merged as a row for
-      // the record. A success with nothing to offer says nothing: the panel and the row show it.
+      // under the composer for an op with no worktree (a batch). A land that merged is on the
+      // transcript as the daemon's own event, so it reads back after a reload; a success with
+      // nothing to offer says nothing here, since the panel and the row show it.
       if (!msg.ok) return id ? answerFor(next, id, msg.message) : noticeOnScreen(next, msg.message);
-      if (msg.merged)
-        return noteChat(next, id, { kind: "landed", text: msg.message, archiveIds: msg.archiveIds ?? [] });
       return next;
     }
     case "files":
@@ -2517,6 +2516,8 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
       return [...items, { kind: "blocked", tool: event.tool, path: event.path, reason: event.reason }];
     case "grafted":
       return [...items, { kind: "grafted", title: event.title, branch: event.branch }];
+    case "landed":
+      return [...items, { kind: "landed", text: event.message, archiveIds: event.archiveIds }];
     case "agent-auth-required":
       return [
         ...items,

@@ -376,7 +376,7 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
   },
 
   async land(msg, ctx, s) {
-    const { result, archiveIds } = await s.worktrees.land(msg.worktreeId, msg.message);
+    const { result } = await s.worktrees.land(msg.worktreeId, msg.message);
     // the same prefilled prompt sync offers on a conflict: the one failure an agent can be asked to fix
     const suggestion =
       !result.ok && result.conflict
@@ -386,16 +386,14 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     if (result.ok && (result.pr || s.state.worktree(msg.worktreeId)?.pr)) {
       fireAndForget(msg.worktreeId, s.prs.refresh(msg.worktreeId), "pr refresh");
     }
+    // a land that merged is on the transcript already, as the service's own event; this frame
+    // ends the op and carries the failure, or the page to open
     await notify(
       s,
       ctx,
       msg.worktreeId,
       shipped(msg.worktreeId, result.ok, result.message, {
-        merged: result.ok,
         url: result.url,
-        // the worktree stays, with close offered in its box; what the chat's row offers up is its
-        // variant siblings, if any
-        archiveIds: archiveIds ?? [],
         ...(suggestion ? { suggestion } : {}),
       }),
     );

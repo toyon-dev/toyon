@@ -238,6 +238,10 @@ export type AgentEvent =
   /** a graft appended another worktree's transcript here: what follows, up to the next marker or
    * the next message someone types, was said in that worktree before it was merged in and removed */
   | { type: "grafted"; title: string; branch: string; ts: number }
+  /** a land put this worktree's work on main: the daemon's word on it, kept on the transcript so
+   * the row reads back after a reload. `archiveIds` are the variant siblings the land leaves
+   * behind, offered on the row for as long as they are still rows */
+  | { type: "landed"; message: string; archiveIds: string[]; ts: number }
   /** the agent asked something and its turn is blocked until the answer goes back. `toolId` ties
    * the card to the tool row the agent emitted just before it, which the card then replaces.
    * Always followed by an agent-ask-end. */

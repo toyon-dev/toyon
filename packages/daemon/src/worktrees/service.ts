@@ -1606,10 +1606,24 @@ export class WorktreeService {
   async land(worktreeId: string, message?: string): Promise<{ result: ShipResult; archiveIds?: string[] }> {
     const { wt, repo } = this.landable(worktreeId, "land");
     // inside the op, so the press is the one out on the row from its first tick
-    return this.ship(wt.id, "land", async () => {
+    const out = await this.ship(wt.id, "land", async () => {
       await this.followBranch(wt);
       return this.landOp(wt, repo, message);
     });
+    if (out.result.ok && out.archiveIds) this.noteLanded(wt, out.result.message, out.archiveIds);
+    return out;
+  }
+
+  /** the word on a land that put the work on main, on the transcript the way a graft's marker is:
+   * the row reads it back after a reload, where a frame to the sockets open at the time would not.
+   * The siblings ride along for the row to offer, for as long as they are still rows. */
+  private noteLanded(wt: WorktreeInfo, message: string, archiveIds: string[]) {
+    this.d.runtime.ensureAgent(wt).agent.note({ type: "landed", message, archiveIds, ts: Date.now() });
+  }
+
+  /** the variant siblings a land leaves behind: what the landed row offers to archive */
+  private siblingIds(wt: WorktreeInfo): string[] {
+    return siblingsOf(wt, this.d.state.worktrees).map((s) => s.id);
   }
 
   /** The record's branch is whatever the checkout is on. A hand switches branches in a worktree
@@ -1679,7 +1693,10 @@ export class WorktreeService {
     if (policy.land === "pr") {
       // GitHub merged the PR while an op was out on the row, so the poll left the landing to this
       // press: it lands the merge, never a second PR of the same commit
-      if (wt.pr?.state === "merged" && !prTaken(wt)) return { result: await this.prMergedOp(wt.id, undefined, w) };
+      if (wt.pr?.state === "merged" && !prTaken(wt)) {
+        const result = await this.prMergedOp(wt.id, undefined, w);
+        return result.ok ? { result, archiveIds: this.siblingIds(wt) } : { result };
+      }
       // the branch is measured against origin's main, fetched now: main here is not pulled on
       // this route and can trail origin by days
       const fetched = await this.fetchBase(wt, repo, w);
@@ -1715,7 +1732,8 @@ export class WorktreeService {
       if ((await aheadBehind(wt.path, base)).ahead === 0) {
         const r = await this.prMergedOp(wt.id, mark, w);
         const on = `origin's ${repo.defaultBranch} has this work already`;
-        return { result: { ...r, message: r.ok ? `${on}; ${r.message}` : `${on}, but ${r.message}` } };
+        const result = { ...r, message: r.ok ? `${on}; ${r.message}` : `${on}, but ${r.message}` };
+        return r.ok ? { result, archiveIds: this.siblingIds(wt) } : { result };
       }
       const result = await openPr(
         {
@@ -1767,11 +1785,10 @@ export class WorktreeService {
       await this.settleLanded(wt);
     }
     if (!result.ok) return { result };
-    const archiveIds = siblingsOf(wt, this.d.state.worktrees).map((w) => w.id);
     // the row says what the press did, not where the work sits: "is on main" read as the press
     // having found it there and done nothing
     const did = committedHere ? "committed and merged" : "merged";
-    return { result: { ...result, message: `${did} into ${repo.defaultBranch}` }, archiveIds };
+    return { result: { ...result, message: `${did} into ${repo.defaultBranch}` }, archiveIds: this.siblingIds(wt) };
   }
 
   /** The push route: the landing built in the worktree and pushed straight to main on origin, so
@@ -1844,8 +1861,7 @@ export class WorktreeService {
     const did = already
       ? `origin's ${repo.defaultBranch} has this work already`
       : `${committed ? `committed and ${how}` : how} ${repo.defaultBranch} and pushed`;
-    const archiveIds = siblingsOf(wt, this.d.state.worktrees).map((s) => s.id);
-    return { result: { ok: true, message: `${did}; ${here}` }, archiveIds };
+    return { result: { ok: true, message: `${did}; ${here}` }, archiveIds: this.siblingIds(wt) };
   }
 
   /** A landing onto the record, oldest first, with its tip kept under a ref: the branch restarts from
@@ -1909,7 +1925,9 @@ export class WorktreeService {
     // landed once: a second poll, or one that raced the first, records nothing more
     const wt = this.d.state.worktree(worktreeId);
     if (wt && prTaken(wt)) return { ok: true, message: `PR #${wt.pr?.number} merged; landed already` };
-    return this.ship(worktreeId, "land", () => this.prMergedOp(worktreeId));
+    const result = await this.ship(worktreeId, "land", () => this.prMergedOp(worktreeId));
+    if (result.ok && wt) this.noteLanded(wt, result.message, this.siblingIds(wt));
+    return result;
   }
 
   private async prMergedOp(

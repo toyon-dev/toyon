@@ -1335,6 +1335,12 @@ describe("landing", () => {
     const { result, archiveIds } = await w.worktrees.land(wt.id);
     expect(result.ok).toBe(true);
     expect(archiveIds).toEqual([]);
+    // the word on it goes on the transcript, where a reload reads it back
+    expect(w.agents.get(wt.id)!.recorded.at(-1)).toMatchObject({
+      type: "landed",
+      message: "merged into main",
+      archiveIds: [],
+    });
     expect(existsSync(join(w.repo, "feature.txt"))).toBe(true);
     expect(await parents()).toBe(2);
     expect((await git(w.repo, "log", "-1", "--format=%s", "main^2")).out).toBe("add feature");
@@ -1554,8 +1560,8 @@ describe("landing", () => {
     expect(w.worktrees.shippingOf(wt.id)).toBeUndefined();
     expect(agent.held).toBe(false);
     expect((await w.worktrees.rows()).find((r) => r.id === wt.id)?.shipping).toBeUndefined();
-    // steps that passed at once left no rows behind
-    expect(recorded(wt.id)).toEqual([]);
+    // steps that passed at once left no rows behind: the transcript holds the word on the land alone
+    expect(recorded(wt.id).map((e) => e.type)).toEqual(["landed"]);
   });
 
   test("the verdict goes and the landed mark comes in one frame, so no frame reads as work unchecked", async () => {

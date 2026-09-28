@@ -212,8 +212,6 @@ export type ServerMsg =
       ok: boolean;
       url?: string;
       message: string;
-      merged?: boolean;
-      archiveIds?: string[];
       suggestion?: string;
     }
   /** the files on disk now; the submodules, which are entries but not files; and what git ignores,

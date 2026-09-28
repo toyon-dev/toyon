@@ -1387,9 +1387,12 @@ describe("streams and notices", () => {
   });
   test("a merged land is a row on the chat with the siblings to clean up; a PR only opens its page", () => {
     const base = [hello(wt("a"), wt("b"))];
+    // the row is the daemon's transcript event, so it reads back after a reload; the frame that
+    // ends the op adds nothing to the chat
     const merged = run([
       ...base,
-      server({ t: "shipped", worktreeId: "a", ok: true, message: "a is on main", merged: true, archiveIds: ["b"] }),
+      agent("a", { type: "landed", message: "a is on main", archiveIds: ["b"], ts: 0 }),
+      server({ t: "shipped", worktreeId: "a", ok: true, message: "a is on main" }),
     ]);
     expect(localOf(merged, "a").chat).toEqual([{ kind: "landed", text: "a is on main", archiveIds: ["b"] }]);
     expect(merged.openUrl).toBeNull();
@@ -2472,14 +2475,8 @@ describe("a landing op in flight", () => {
     const s = run([
       three(),
       { a: "shipping", id: "a", op: "land" },
-      server({
-        t: "shipped",
-        worktreeId: "a",
-        ok: true,
-        message: "a is on main",
-        merged: true,
-        archiveIds: [],
-      }),
+      agent("a", { type: "landed", message: "a is on main", archiveIds: [], ts: 0 }),
+      server({ t: "shipped", worktreeId: "a", ok: true, message: "a is on main" }),
     ]);
     expect(s.shipping).toEqual({});
     expect(localOf(s, "a").chat).toEqual([{ kind: "landed", text: "a is on main", archiveIds: [] }]);

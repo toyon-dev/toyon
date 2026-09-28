@@ -19,7 +19,15 @@ import { attachmentUrl } from "../../ws.ts";
 import { elapsed } from "../util.ts";
 import { AskRow } from "./AskRow.tsx";
 import { FullAttachment } from "./FullAttachment.tsx";
-import { runCalls, sameRun, sameTools, type ThinkingItem, type ToolEntry, type ToolItem } from "./group.ts";
+import {
+  runCalls,
+  runningInRun,
+  sameRun,
+  sameTools,
+  type ThinkingItem,
+  type ToolEntry,
+  type ToolItem,
+} from "./group.ts";
 import { SentImageChip } from "./ImageChip.tsx";
 import { useMarkdown } from "./markdown.ts";
 import { worktreeLink } from "./markdownPaths.ts";
@@ -563,8 +571,10 @@ export const ToolRow = memo(
     working?: boolean;
     /** this row's call is the one executing (runningRow in group.ts), so its wait is counted
      * here, from this stamp: when the call reached the head of the batch, by the store's clock.
-     * A floating spawn row counts from the log's last event instead (ChatLog): a subagent's calls
-     * land in the log, so the seconds say how long nobody has been heard from. */
+     * A floating spawn row is handed the log's last event instead (ChatLog): a subagent's calls
+     * land in the log, so the seconds say how long nobody has been heard from. The row passes the
+     * stamp down to the subagent's call that is executing (runningInRun), where the wait is, and
+     * keeps it on its own line only while the fold is closed or no call under it is open. */
     since?: number;
     roots?: string[];
     worktreeId?: string | null;
@@ -594,6 +604,12 @@ export const ToolRow = memo(
     // it). The store keeps the stamp, since this row is rebuilt on every switch of worktree. A
     // background spawn's own call returned at once, so its row counts while it is at work instead.
     const age = useSecondsSince(streaming || working ? since : undefined);
+    // A spawn row's seconds are the subagent's silence, and beside "42 calls" a bare number read
+    // as the run's length. The wait belongs to the subagent's call that is executing, so that row
+    // counts it, as the main agent's own running call does, and the spawn row's line keeps the
+    // number only for a closed fold (chat.css hides it on an open one) or between calls, when
+    // nothing under it is waiting and the silence is the subagent's own.
+    const inner = run ? runningInRun(run) : -1;
     // The log decides which row opens itself, and it hands the row two answers: the turn's one
     // self-opening row (openRow in group.ts, reasoning only) and the newest `!` command, which is
     // open from the start because what it printed is the reason the person ran it. A subagent's
@@ -675,7 +691,9 @@ export const ToolRow = memo(
               hint && <span className={cx("tool-hint", running && "live-text")}>{hint}</span>
             )}
             {background && <span className="tool-status">in the background</span>}
-            {age >= QUIET_AFTER && <span className="tool-age">{elapsed(age)}</span>}
+            {age >= QUIET_AFTER && (
+              <span className={cx("tool-age", inner >= 0 && "tool-age-folded")}>{elapsed(age)}</span>
+            )}
             {count && <span className="tool-count">{count}</span>}
             {stoppable && (
               <IconButton
@@ -702,8 +720,15 @@ export const ToolRow = memo(
       >
         {run && run.length > 0 && (
           <div className="spawn-run">
-            {run.map((e) => (
-              <ToolRow key={e.at} tools={e.tools} next={e.next} roots={roots} worktreeId={worktreeId} />
+            {run.map((e, i) => (
+              <ToolRow
+                key={e.at}
+                tools={e.tools}
+                next={e.next}
+                since={i === inner ? since : undefined}
+                roots={roots}
+                worktreeId={worktreeId}
+              />
             ))}
           </div>
         )}

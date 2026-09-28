@@ -521,6 +521,12 @@
       flex: 0 0 auto;
       color: var(--text1);
     }
+    /* a spawn row's seconds while one of the subagent's calls is executing: that call's row counts
+   the same wait, so the spawn's line says it only while the fold is closed and the call's row is
+   out of sight. Open, beside the run's call count, the number read as the run's length. */
+    &.spawn[open] > summary .tool-age-folded {
+      display: none;
+    }
     /* the word for a command whose shell has exited while what it started runs on: after the
    command it qualifies, at the count's tier so it parts from the command's prose, and it never
    shrinks, being the one thing that says why a row whose exit is in is still live */

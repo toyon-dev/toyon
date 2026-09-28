@@ -8,6 +8,7 @@ import {
   ownCallRunning,
   placeSpawns,
   runCalls,
+  runningInRun,
   runningRow,
   spawnsAtWork,
   type ToolItem,
@@ -570,5 +571,41 @@ describe("runningRow", () => {
     expect(running([unflagged, sub("task2", { done: false })])).toBe(-1);
     // an orphan subagent call keeps its place in the flow but is still not the main agent's
     expect(running([sub("gone", { done: false })])).toBe(-1);
+  });
+});
+
+describe("runningInRun", () => {
+  const sub = (id: string, path: string, extra: Partial<ChatItem> = {}) =>
+    tool("read", path, { name: "Read", parentToolId: id, ...extra });
+  const runOf = (items: ChatItem[]) => {
+    const entry = groupTools(items, ["/wt"]).find((e) => "spawn" in e);
+    if (!entry || !("spawn" in entry)) throw new Error("no spawn row");
+    return runningInRun(entry.run);
+  };
+
+  test("between calls nothing under the spawn row counts: the wait is the subagent's", () => {
+    expect(runOf([spawn("task1", "Map the runtime", { done: false })])).toBe(-1);
+    expect(runOf([spawn("task1", "Map the runtime", { done: false }), sub("task1", "/wt/a.ts")])).toBe(-1);
+  });
+
+  test("a batch counts on its oldest open call, as the main agent's does", () => {
+    const batch = [
+      spawn("task1", "Map the runtime", { done: false }),
+      sub("task1", "/wt/a.ts"),
+      sub("task1", "/wt/b.ts", { done: false }),
+      sub("task1", "/wt/c.ts", { done: false }),
+    ];
+    expect(runOf(batch)).toBe(1);
+    const landed = batch.map((i, at) => (at === 2 ? { ...i, done: true } : i)) as ChatItem[];
+    expect(runOf(landed)).toBe(2);
+  });
+
+  test("a run of calls on one file counts while its newest call is open", () => {
+    const items = [
+      spawn("task1", "Map the runtime", { done: false }),
+      sub("task1", "/wt/a.ts"),
+      sub("task1", "/wt/a.ts", { done: false }),
+    ];
+    expect(runOf(items)).toBe(0);
   });
 });

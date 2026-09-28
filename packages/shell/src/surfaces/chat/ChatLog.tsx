@@ -131,7 +131,8 @@ export function ChatLog({
   // A subagent at work is not in the transcript yet: its row floats at the foot of the log, under
   // everything the main agent has done since, shining with its count ticking, and joins the flow
   // where its work ended once it is done (placeSpawns in group.ts). Each floating row carries its
-  // own count, so a fan-out of three says which one is slow. Nothing floats once the turn is over:
+  // own count, on the subagent's call that is executing when the fold is open and on its own line
+  // when closed, so a fan-out of three says which one is slow. Nothing floats once the turn is over:
   // a turn that ended on a subagent's call would otherwise hold its row at the foot for good.
   const atWork = useMemo(() => (busy ? spawnsAtWork(items) : NONE), [busy, items]);
   const { flow: entries, floating } = useMemo(() => placeSpawns(grouped, atWork), [grouped, atWork]);
@@ -179,8 +180,9 @@ export function ChatLog({
   // (ToolRow), so under it there is no line at all: one count below could not say which of two
   // calls running at once is the slow one. A floating spawn row counts the same way, from the
   // log's stamp: a subagent's calls land in the log, so its silence is the log's, and the row that
-  // says who is working is where the reader looks for how long. A stalled thought has no row to
-  // count on, so its silence alone is still said here.
+  // says who is working is where the reader looks for how long (ToolRow hands the stamp on to the
+  // subagent's executing call once the fold is open). A stalled thought has no row to count on,
+  // so its silence alone is still said here.
   const calling = ownCallRunning(items);
   const fanned = floating.length > 0;
   const moving = streaming >= 0 || calling || fanned;

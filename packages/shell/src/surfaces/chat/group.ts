@@ -235,6 +235,15 @@ export function runningRow(entries: ChatEntry[]): number {
   return entries.findIndex((e) => "tools" in e && !e.tools[0]!.parentToolId && !e.tools.at(-1)!.done);
 }
 
+/** The same for a subagent's run: the row of the oldest call still open, or -1. While one is open
+ * the wait is that call's, and its row counts it the way the main agent's own does; between calls
+ * nothing under the spawn row is waiting, and the silence is the subagent's, so the spawn row says
+ * it. A subagent writes batches the same way its parent does, so the head of the queue is the one
+ * running. */
+export function runningInRun(run: ToolEntry[]): number {
+  return run.findIndex((e) => !e.tools.at(-1)!.done);
+}
+
 /** the entries hold fresh arrays on every render, so the rows compare their calls one by one:
  * without this a streamed token into the message above re-renders every call in the turn */
 export function sameTools(a: ToolItem[], b: ToolItem[]): boolean {

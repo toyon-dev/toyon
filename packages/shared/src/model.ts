@@ -400,6 +400,10 @@ export interface Landing {
   /** the suggested commit message: a subject, and a body when there was more to say */
   subject?: string;
   body?: string;
+  /** the question was put and never answered (the agent died, the model was unreachable), so no
+   * message was written and asking again is worth a press; without it, a missing subject means
+   * nothing could answer (an agent with no quick model) and the message is the person's to write */
+  unanswered?: true;
   /** HEAD plus the diff's shape when this was written: a tree that no longer matches marks it stale */
   fingerprint: string;
   /** the tree moved since this was written, by a hand or another tool: the message and the

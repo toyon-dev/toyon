@@ -41,9 +41,40 @@ export function prCanMerge(pr: PrState): boolean {
 
 const capital = (text: string) => `${text.charAt(0).toUpperCase()}${text.slice(1)}`;
 
+/** Why the verdict has no commit message, when it has none and the work needs one to land:
+ * `unwritten` when no verdict has been written, or the tree moved under the one there is, so the
+ * check writes it; `pending` while that runs; `unanswered` when the question failed and is worth
+ * asking again; `unasked` when nothing could answer it (an agent with no quick model), so the
+ * message is the person's to write. Null with a message in hand, or with nothing uncommitted,
+ * since a land only commits first when there is something to commit. A failed check is null
+ * too: its own line stands in front, and the message is not what is missing. */
+export type MessageGap = "unwritten" | "pending" | "unanswered" | "unasked";
+export function messageGap(l: Landing | undefined, dirty: number): MessageGap | null {
+  if (dirty === 0 || l?.subject) return null;
+  if (!l || l.stale) return "unwritten";
+  if (l.check === "pending") return "pending";
+  if (l.check === "fail") return null;
+  return l.unanswered ? "unanswered" : "unasked";
+}
+
+/** The check word's tooltip, the same on the composer and the commit box: what the press runs and
+ * what it writes, and why it is offered again when it is. */
+export function checkTip(l: Landing | undefined, hasCheck: boolean): string {
+  if (l?.stale)
+    return `The work changed since this was written. ${hasCheck ? "Run the check again and refresh" : "Refresh"} the message.`;
+  if (l?.unanswered)
+    return `The model could not be reached for the message. ${hasCheck ? "Run the check again and ask" : "Ask"} for it again.`;
+  return `${hasCheck ? "Run the repo's check here, then write" : "Write"} the recap and the commit message.`;
+}
+
+/** The line for a message nobody can write here: the field it is written in is named */
+export const NO_MESSAGE_LINE = "No commit message yet: write one in the changes panel.";
+
 /** What stands between the work and landing, as the placeholder's first line: the check running,
- * or the check failed. Null once the work can land, when the line is the verb and the recap. */
-export function landingLine(l: Landing): string | null {
+ * the check failed, or a message that has to be written by hand. Null once the work can land,
+ * when the line is the verb and the recap. `dirty` is the uncommitted count, since a land with
+ * nothing to commit needs no message. */
+export function landingLine(l: Landing, dirty = 0): string | null {
   if (l.check === "pending") return "Checking the work…";
   if (l.check === "fail") {
     const first = l.checkTail
@@ -52,6 +83,7 @@ export function landingLine(l: Landing): string | null {
       ?.trim();
     return `Check failed${first ? `: ${ended(first)}` : "."}`;
   }
+  if (messageGap(l, dirty) === "unasked") return NO_MESSAGE_LINE;
   return null;
 }
 
@@ -93,8 +125,10 @@ export function filesLine(count: number): string {
  * is left when the model did not read the work as done; else ready, with the facts. A tree that
  * moved since the verdict was written says so instead, which is why the word above is `check` and
  * not `land`. Never a refusal: the word stays. */
-export function verdictLine(l: Landing, count: number): string | null {
+export function verdictLine(l: Landing, count: number, dirty = count): string | null {
   if (l.stale) return "Changed since this was written.";
+  // a message is owed only for a commit the land would make: `dirty` is the uncommitted count
+  if (l.unanswered && dirty > 0) return "No message yet: the model could not be reached.";
   if (l.why) return `Not ready: ${ended(clause(l.why))}`;
   const facts = factsOf(l, count);
   return facts ? `Ready: ${facts}.` : "Ready.";

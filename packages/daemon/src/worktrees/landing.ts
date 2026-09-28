@@ -190,6 +190,7 @@ export class LandingService {
       ...(held?.why ? { why: held.why } : {}),
       ...(held?.subject ? { subject: held.subject } : {}),
       ...(held?.body ? { body: held.body } : {}),
+      ...(held?.unanswered ? { unanswered: true as const } : {}),
     };
 
     this.judging.set(worktreeId, opts.at);
@@ -213,6 +214,7 @@ export class LandingService {
     }
 
     let verdict: LandVerdict | null = null;
+    let unanswered = false;
     if (opts.ask && check !== "fail" && this.d.judge) {
       const entries = this.d.transcript(worktreeId);
       const prompt = landPrompt({
@@ -228,10 +230,10 @@ export class LandingService {
       } catch (e) {
         if (!live()) return;
         // the question was never put (the agent died, or would not open a session), which is not
-        // the model declining: no verdict is written, so the box offers the check and its press
-        // asks again, rather than a land word with no message behind it
-        log.warn(worktreeId, "landing verdict unanswered; no verdict written", e);
-        return this.clear(worktreeId);
+        // the model declining: no message is made up, and the verdict says one is still owed, so
+        // the box offers to ask again rather than a land word with no message behind it
+        log.warn(worktreeId, "landing verdict unanswered", e);
+        unanswered = true;
       }
       if (!live()) return;
     }
@@ -246,6 +248,7 @@ export class LandingService {
       ...(verdict && !verdict.ready && verdict.why ? { why: verdict.why } : {}),
       ...(verdict?.subject ? { subject: verdict.subject } : {}),
       ...(verdict?.body ? { body: verdict.body } : {}),
+      ...(unanswered ? { unanswered: true as const } : {}),
       fingerprint: await treeFingerprint(wt.path),
     };
     // a migration on a branch whose settings keep no worktree apart lands on the database every

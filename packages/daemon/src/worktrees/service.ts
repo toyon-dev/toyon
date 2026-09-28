@@ -1521,8 +1521,11 @@ export class WorktreeService {
   private async verdictSurvives(wt: WorktreeInfo, opts: { dropMessage: boolean }) {
     const l = wt.landing;
     if (!l || l.check === "pending") return;
-    const { subject, body, ...kept } = l;
-    const message = opts.dropMessage ? {} : { ...(subject ? { subject } : {}), ...(body ? { body } : {}) };
+    const { subject, body, unanswered, ...kept } = l;
+    // the mark that a message was owed goes with the message: the commit by hand supplied one
+    const message = opts.dropMessage
+      ? {}
+      : { ...(subject ? { subject } : {}), ...(body ? { body } : {}), ...(unanswered ? { unanswered } : {}) };
     this.setLanding(wt.id, { ...kept, ...message, fingerprint: await treeFingerprint(wt.path) });
   }
 

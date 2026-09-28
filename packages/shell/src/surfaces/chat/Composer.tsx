@@ -48,9 +48,11 @@ import { fileRow } from "../overlays/QuickOpen.tsx";
 import { rankMentions } from "../overlays/quickOpen.ts";
 import {
   behindFact,
+  checkTip,
   filesLine,
   landFacts,
   landingLine,
+  messageGap,
   prCanMerge,
   prLine,
   recapLine,
@@ -457,8 +459,9 @@ export function Composer({
     if (id) sock?.send({ t: "judge", worktreeId: id, ...(note ? { note } : {}) });
   };
   const hasCheck = !!repo?.config.check?.trim();
-  // work with no verdict, or one the tree moved under: the check is the next step, and the word
-  // for it sits where `land` will once it passes. A check running or failed keeps its own line.
+  // work with no verdict, one the tree moved under, or one whose question went unanswered with a
+  // commit to write: the check is the next step, and the word for it sits where `land` will once
+  // it passes. A check running or failed keeps its own line.
   const checkable =
     atRest &&
     !spawning &&
@@ -466,7 +469,7 @@ export function Composer({
     !hasLanded &&
     !prClosed &&
     landCount > 0 &&
-    (!verdict || !!verdict.stale);
+    (!verdict || !!verdict.stale || messageGap(verdict, dirty) === "unanswered");
   const archiveTip =
     "Archive this worktree when you are done here; the rail's archived section brings it back with its chat.";
   // the ship word and where it sends the work: onto main by the repo's route, or up to the open
@@ -526,12 +529,10 @@ export function Composer({
             ? {
                 word: "check",
                 line: verdict?.subject ?? verbLine(said ?? filesLine(landCount)),
-                tip: verdict?.stale
-                  ? `The work changed since this was written. ${hasCheck ? "Run the check again and refresh" : "Refresh"} the message.`
-                  : `${hasCheck ? "Run the repo's check here, then write" : "Write"} the recap and the commit message.`,
+                tip: checkTip(verdict, hasCheck),
                 run: judge,
               }
-            : landing?.ready && !landingLine(landing)
+            : landing?.ready && !landingLine(landing, dirty)
               ? {
                   word: shipWord,
                   line: landing.subject ?? verbLine(said ?? (landFacts(landing, landCount) || "ready")),
@@ -554,7 +555,7 @@ export function Composer({
   // rebase with work in it, the network) is the one worth naming
   const landingNow = !!verb?.ships && op === "land";
   const heldStep = useHeld(step, STEP_HOLD_MS);
-  const blocked = landing ? landingLine(landing) : null;
+  const blocked = landing ? landingLine(landing, dirty) : null;
   // the empty box's line, first match wins: what the box is for when it is not a worktree's, then
   // the next step on the work, then what the work is waiting on, then where the last turn left it,
   // then how to start
@@ -591,7 +592,7 @@ export function Composer({
       ? null
       : verb
         ? (verb.word === "land" || verb.word === "update" || verb.word === "check") && landing && !restated
-          ? verdictLine(landing, landCount)
+          ? verdictLine(landing, landCount, dirty)
           : null
         : pr || blocked
           ? (said ?? landing?.subject ?? null)
@@ -659,7 +660,7 @@ export function Composer({
       else judge(args || undefined);
       return;
     }
-    const stuck = verdict ? landingLine(verdict) : null;
+    const stuck = verdict ? landingLine(verdict, dirty) : null;
     if (spawning || !canLand(active.worktree)) refuse("nothing to land from here");
     else if (hasLanded) refuse(`already landed on ${repo?.defaultBranch ?? "main"}`);
     else if (midTurn) refuse("wait for the turn to end");

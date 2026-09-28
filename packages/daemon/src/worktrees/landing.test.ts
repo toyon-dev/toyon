@@ -381,20 +381,32 @@ describe("LandingService", () => {
     });
   });
 
-  test("a question that was never answered leaves no verdict, so the box offers the check again", async () => {
+  test("a question that was never answered is a verdict with no message, marked so the box asks again", async () => {
+    let answers = 0;
     w = world({
       check: "bun run check",
-      judge: async () => {
-        throw new Error("ACP connection closed");
-      },
+      judge: async () =>
+        answers++ === 0
+          ? Promise.reject(new Error("ACP connection closed"))
+          : { ready: true, subject: "add the feature" },
     });
     w.dirty();
     await w.settle();
     expect(w.checks).toEqual(["bun run check"]);
     expect(w.judged.length).toBe(1);
-    // pending while it ran, then nothing: never a ready word with no message behind it
-    expect(w.set.map((l) => l?.check)).toEqual(["pending", undefined]);
-    expect(w.wt()?.landing).toBeUndefined();
+    // the check's word stands (it passed), the message does not, and the mark says one is owed
+    expect(w.set.map((l) => l?.check)).toEqual(["pending", "pass"]);
+    expect(w.wt()?.landing).toMatchObject({ check: "pass", ready: true, unanswered: true });
+    expect(w.wt()?.landing?.subject).toBeUndefined();
+    // the mark holds through a recheck, since only the check ran again
+    w.service.recheck("w1");
+    await w.settled();
+    expect(w.wt()?.landing).toMatchObject({ check: "pass", unanswered: true });
+    // asked again by hand, the answer clears it
+    await w.service.judge("w1");
+    await w.settled();
+    expect(w.wt()?.landing).toMatchObject({ check: "pass", subject: "add the feature" });
+    expect(w.wt()?.landing?.unanswered).toBeUndefined();
   });
 
   test("stop() mid-question leaves the verdict pending, and boot() finishes it", async () => {

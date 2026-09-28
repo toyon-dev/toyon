@@ -18,7 +18,7 @@ import { Icon } from "../../ui/Icon.tsx";
 import { useContextMenu } from "../../ui/menu.ts";
 import { tip } from "../../ui/Tooltip.tsx";
 import { behindNote } from "../chips/baseNote.ts";
-import { prCanMerge } from "../recap.ts";
+import { checkTip, messageGap, prCanMerge } from "../recap.ts";
 
 /** The foot of the changes panel, built like the chat composer: a message box over a row that says
  * where you are on the left and what you can do on the right. The message box shows the suggested
@@ -82,6 +82,15 @@ export function CommitBox({
   // what the box has is what any verb commits with; the daemon falls back to the suggestion on its
   // own when nothing was typed, so the message is sent only when it is the person's
   const typed = msg.trim() || undefined;
+  // a land or an update commits first when the tree is dirty, so with no message typed and none
+  // suggested the press that writes one takes the land word's place: the same check the composer
+  // offers, which runs the repo's check and asks the model for the message. Nothing offers it
+  // when nothing could answer (`unasked`): the message is the person's to write, and the field
+  // says so.
+  const gap = typed ? null : messageGap(owned?.landing, dirty ? 1 : 0);
+  const judge = () => {
+    if (!op) sock?.send({ t: "judge", worktreeId: id });
+  };
   const commit = () => {
     if (op || (!typed && !suggested)) return;
     shipOp(sock, dispatch, { t: "commit", worktreeId: id, message: typed ?? suggested ?? "" });
@@ -99,8 +108,15 @@ export function CommitBox({
   // work since the PR opened: the same press sends it up to the PR, and merge waits until the
   // branch on origin has all of it, since merging now would leave it behind
   const prMissing = prOpen && (dirty || unpushed > 0);
-  const canLand = !!owned && landable(owned) && (dirty || ahead > 0) && !checkFailed && !prOpen;
-  const canUpdate = !!owned && prMissing && !checkFailed;
+  const canLand = !!owned && landable(owned) && (dirty || ahead > 0) && !checkFailed && !prOpen && !gap;
+  const canUpdate = !!owned && prMissing && !checkFailed && !gap;
+  // the check in the land word's place, while the agent is not mid-turn (the daemon refuses it then)
+  const canCheck =
+    !!owned &&
+    landable(owned) &&
+    (gap === "unwritten" || gap === "unanswered") &&
+    active.agent !== "working" &&
+    active.agent !== "waiting";
   const repo = useStore((s) => s.repos.find((r) => r.id === active.repoId) ?? null);
   const landTip = describeLand(landPolicy(repo?.config ?? {}), repo?.defaultBranch);
   // what the counts here are against: main here, or origin's main where the route lands there
@@ -152,7 +168,14 @@ export function CommitBox({
                 takeSuggestion();
               }
             }}
-            placeholder={suggested ?? "commit message…"}
+            placeholder={
+              suggested ??
+              (gap === "unanswered"
+                ? "no message yet: the model could not be reached. Check again, or write one here"
+                : gap === "unasked"
+                  ? "no message yet: write one here to commit or land"
+                  : "commit message…")
+            }
           />
         </div>
       )}
@@ -192,6 +215,18 @@ export function CommitBox({
                   land
                 </Button>
               )}
+              {canCheck && (
+                <Button
+                  tone="primary"
+                  disabled={!!op}
+                  data-tip={checkTip(owned?.landing, !!repo?.config.check?.trim())}
+                  onClick={judge}
+                >
+                  check
+                </Button>
+              )}
+              {/* the check's own press is out: the word as prose, the way the op line reads */}
+              {gap === "pending" && <span className="live-text">check</span>}
               {canUpdate && pr && (
                 <Button
                   tone="primary"

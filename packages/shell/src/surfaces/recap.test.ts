@@ -2,9 +2,11 @@ import { describe, expect, test } from "bun:test";
 import type { Landing, LastTurn, PrState, TurnFacts } from "@toyon/shared";
 import {
   behindFact,
+  checkTip,
   filesLine,
   landFacts,
   landingLine,
+  messageGap,
   prCanMerge,
   prLine,
   recapLine,
@@ -98,6 +100,53 @@ describe("landingLine", () => {
   test("a tree that moved under the verdict says so ahead of any verdict", () => {
     expect(verdictLine(landing({ why: "a question is open", stale: true }), 3)).toBe("Changed since this was written.");
     expect(verdictLine(landing({ check: "pass", stale: true }), 3)).toBe("Changed since this was written.");
+  });
+
+  test("a question that went unanswered says the message is owed, under the check word", () => {
+    expect(verdictLine(landing({ check: "pass", unanswered: true }), 3)).toBe(
+      "No message yet: the model could not be reached.",
+    );
+    // nothing uncommitted: the land makes no commit, so no message is owed and the word is land
+    expect(verdictLine(landing({ check: "pass", unanswered: true }), 1, 0)).toBe(
+      "Ready: 1 file changed, check passed.",
+    );
+  });
+
+  test("what is missing for the land to commit, and nothing when nothing is uncommitted or a message is in hand", () => {
+    expect(messageGap(undefined, 2)).toBe("unwritten");
+    expect(messageGap(landing({ check: "pass", stale: true }), 2)).toBe("unwritten");
+    expect(messageGap(landing({ check: "pending", ready: false }), 2)).toBe("pending");
+    expect(messageGap(landing({ check: "pass", unanswered: true }), 2)).toBe("unanswered");
+    expect(messageGap(landing({ check: "pass" }), 2)).toBe("unasked");
+    expect(messageGap(landing({}), 2)).toBe("unasked");
+    // a message in hand, nothing to commit, or a failed check whose own line stands in front
+    expect(messageGap(landing({ check: "pass", subject: "add the feature" }), 2)).toBeNull();
+    expect(messageGap(landing({ check: "pass", unanswered: true }), 0)).toBeNull();
+    expect(messageGap(undefined, 0)).toBeNull();
+    expect(messageGap(landing({ check: "fail", ready: false }), 2)).toBeNull();
+  });
+
+  test("a message nobody here can write stops the land with the field named; not with nothing to commit", () => {
+    expect(landingLine(landing({ check: "pass" }), 2)).toBe("No commit message yet: write one in the changes panel.");
+    expect(landingLine(landing({ check: "pass" }), 0)).toBeNull();
+    expect(landingLine(landing({ check: "pass", subject: "add the feature" }), 2)).toBeNull();
+    // the check word covers the rest: no line stands in front of it
+    expect(landingLine(landing({ check: "pass", unanswered: true }), 2)).toBeNull();
+    expect(landingLine(landing({ check: "pass", stale: true }), 2)).toBeNull();
+  });
+
+  test("the check word's tip says why it is offered again", () => {
+    expect(checkTip(undefined, true)).toBe("Run the repo's check here, then write the recap and the commit message.");
+    expect(checkTip(undefined, false)).toBe("Write the recap and the commit message.");
+    expect(checkTip(landing({ stale: true }), true)).toBe(
+      "The work changed since this was written. Run the check again and refresh the message.",
+    );
+    expect(checkTip(landing({ unanswered: true }), true)).toBe(
+      "The model could not be reached for the message. Run the check again and ask for it again.",
+    );
+    expect(checkTip(landing({ unanswered: true }), false)).toBe(
+      "The model could not be reached for the message. Ask for it again.",
+    );
   });
 
   test("the count alone, for a line with nothing else to say", () => {

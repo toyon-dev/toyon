@@ -5,7 +5,7 @@
 // The matching is pure so its rules have tests without a transcript on disk; the class around it
 // owns what costs something, reading and parsing the files.
 
-import type { ChatHit } from "@toyon/shared";
+import { type ChatHit, queryTerms } from "@toyon/shared";
 import { coalesce, parseTranscript, type TranscriptEntry } from "../agent/transcript.ts";
 import type { StateStore } from "../core/state.ts";
 
@@ -83,12 +83,12 @@ export function saidRows(entries: TranscriptEntry[]): SaidRow[] {
   return out;
 }
 
-/** The words a query is matched by: lower-cased, each once. A message matches when it has every one,
- * in any order, so "footer link" finds "the link in the footer". Empty when the query is too short. */
-export function needleWords(query: string): string[] {
-  const needle = flat(query).toLowerCase();
-  if (needle.length < MIN_QUERY) return [];
-  return [...new Set(needle.split(" "))];
+/** What a query is matched by: its words, and a quoted run as one phrase. A message matches when it
+ * has every term, in any order, so `footer link` finds "the link in the footer" and `"footer link"`
+ * only a message that says those two words together. Empty when the query is too short. */
+export function needleTerms(query: string): string[] {
+  const terms = queryTerms(query);
+  return terms.join(" ").length < MIN_QUERY ? [] : terms;
 }
 
 /** the part of `text` around the first of `ranges` (start and length, in `text`), and where each
@@ -107,18 +107,18 @@ export function snippet(text: string, ranges: Array<[number, number]>): Pick<Cha
   return { text: `${head}${text.slice(start, end)}${tail}`, match };
 }
 
-/** one chat's hits for the query's words, newest first; `more` when the limit left some out */
+/** one chat's hits for the query's terms, newest first; `more` when the limit left some out */
 export function searchRows(
   rows: SaidRow[],
-  words: string[],
+  terms: string[],
   chat: Pick<ChatHit, "worktreeId" | "archived">,
   limit = CHAT_HITS_PER_WORKTREE,
 ): { hits: ChatHit[]; more: boolean } {
   const hits: ChatHit[] = [];
-  if (words.length === 0) return { hits, more: false };
+  if (terms.length === 0) return { hits, more: false };
   for (let i = rows.length - 1; i >= 0; i--) {
     const row = rows[i]!;
-    const ranges = wordRanges(row.lower, words);
+    const ranges = termRanges(row.lower, terms);
     if (!ranges) continue;
     if (hits.length === limit) return { hits, more: true };
     hits.push({ ...chat, seq: row.seq, role: row.role, ts: row.ts, ...snippet(row.text, ranges) });
@@ -126,13 +126,14 @@ export function searchRows(
   return { hits, more: false };
 }
 
-/** each word where it first appears in `lower`, or null when one is absent */
-function wordRanges(lower: string, words: string[]): Array<[number, number]> | null {
+/** each term where it first appears in `lower`, or null when one is absent. A phrase is a plain
+ * substring too: the row's whitespace is already one space each, as the term's is. */
+function termRanges(lower: string, terms: string[]): Array<[number, number]> | null {
   const ranges: Array<[number, number]> = [];
-  for (const word of words) {
-    const at = lower.indexOf(word);
+  for (const term of terms) {
+    const at = lower.indexOf(term);
     if (at < 0) return null;
-    ranges.push([at, word.length]);
+    ranges.push([at, term.length]);
   }
   return ranges;
 }
@@ -146,8 +147,8 @@ export class ChatSearch {
 
   async search(repoId: string, query: string): Promise<{ hits: ChatHit[]; truncated: boolean }> {
     this.d.state.requireRepo(repoId);
-    const words = needleWords(query);
-    if (words.length === 0) return { hits: [], truncated: false };
+    const terms = needleTerms(query);
+    if (terms.length === 0) return { hits: [], truncated: false };
     // main has no chat of its own and a spare has not started one, so the chats are the worktrees
     const chats = [
       ...this.d.state.worktrees
@@ -159,7 +160,7 @@ export class ChatSearch {
     const found = await Promise.all(
       chats.map(async (c) => {
         const rows = await this.rowsOf(c.id, c.archived, c.path, read);
-        return searchRows(rows, words, { worktreeId: c.id, archived: c.archived });
+        return searchRows(rows, terms, { worktreeId: c.id, archived: c.archived });
       }),
     );
     // a chat no longer listed (restored, deleted, its worktree gone) is not read again

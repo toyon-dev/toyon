@@ -24,6 +24,7 @@ export * from "./protocol/events.ts";
 export * from "./protocol/limits.ts";
 export * from "./protocol/pick.ts";
 export * from "./protocol/ws.ts";
+export * from "./query.ts";
 export * from "./railOrder.ts";
 export * from "./restart.ts";
 export * from "./routes.ts";

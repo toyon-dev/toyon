@@ -1,4 +1,4 @@
-import { type ArchivedWorktree, type ChatHit, isLead, type OwnedWorktree } from "@toyon/shared";
+import { type ArchivedWorktree, type ChatHit, isLead, type OwnedWorktree, queryTerms } from "@toyon/shared";
 import { useCallback, useEffect, useMemo } from "react";
 import { archivedHint } from "../../state/actions/archive.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
@@ -11,6 +11,8 @@ import "./chats.css";
 
 /** a query this short matches nearly every message, and the daemon answers nothing under it */
 const MIN = 2;
+/** measured as the daemon measures it: what is searched for, not the quotes around it */
+const tooShort = (q: string) => queryTerms(q).join(" ").length < MIN;
 
 /** a worktree whose name or branch has the query in it, listed above the hits: typing a branch's name
  * finds its chat though nothing in the chat says it. Not its first message, which is a hit already:
@@ -65,16 +67,18 @@ export function ChatsPicker({ repoId }: { repoId: string }) {
     (): ChatsRow[] => [...worktrees, ...(results?.hits ?? []).map((hit) => ({ kind: "hit" as const, hit }))],
     [worktrees, results],
   );
-  // the hits are the daemon's answer, shown as they came; the worktrees are matched here
+  // the hits are the daemon's answer, shown as they came; the worktrees are matched here, by the
+  // daemon's rule: every term somewhere in the name or the branch, a quoted phrase whole
   const filter = useCallback((rows: ChatsRow[], q: string) => {
-    const needle = q.trim().toLowerCase();
-    if (needle.length < MIN) return NONE;
-    return rows.filter((r) => r.kind === "hit" || r.fields.some((f) => f.toLowerCase().includes(needle)));
+    if (tooShort(q)) return NONE;
+    const terms = queryTerms(q);
+    return rows.filter(
+      (r) => r.kind === "hit" || terms.every((t) => r.fields.some((f) => f.toLowerCase().includes(t))),
+    );
   }, []);
   const onQuery = useCallback(
     (q: string) => {
-      const t = q.trim();
-      if (t.length >= MIN) sock?.send({ t: "search-chats", repoId, query: t });
+      if (!tooShort(q)) sock?.send({ t: "search-chats", repoId, query: q.trim() });
     },
     [sock, repoId],
   );
@@ -125,9 +129,7 @@ export function ChatsPicker({ repoId }: { repoId: string }) {
         pick: active ? (active.kind === "hit" ? "opens the chat there" : "opens its chat") : undefined,
         back: "closes",
       })}
-      empty={(q) =>
-        q.trim().length < MIN ? "type at least two characters" : isStale(q) ? "searching…" : "no chat says that"
-      }
+      empty={(q) => (tooShort(q) ? "type at least two characters" : isStale(q) ? "searching…" : "no chat says that")}
       footer={(q, rows) => {
         const hits = rows.filter((r) => r.kind === "hit").length;
         return results?.truncated && !isStale(q) && hits > 0 ? (

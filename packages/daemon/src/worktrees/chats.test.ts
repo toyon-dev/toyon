@@ -6,7 +6,7 @@ import {
   CHAT_HITS_PER_WORKTREE,
   type ChatFs,
   ChatSearch,
-  needleWords,
+  needleTerms,
   saidRows,
   searchRows,
   snippet,
@@ -35,10 +35,14 @@ describe("saidRows", () => {
   });
 });
 
-describe("needleWords", () => {
+describe("needleTerms", () => {
   test("lower-cased words, each once, and nothing under two characters", () => {
-    expect(needleWords("  Footer\nlink footer ")).toEqual(["footer", "link"]);
-    expect(needleWords("f")).toEqual([]);
+    expect(needleTerms("  Footer\nlink footer ")).toEqual(["footer", "link"]);
+    expect(needleTerms("f")).toEqual([]);
+  });
+  test("a quoted phrase is one term, and its quotes do not count toward the two characters", () => {
+    expect(needleTerms('"footer link" tidy')).toEqual(["footer link", "tidy"]);
+    expect(needleTerms('"f"')).toEqual([]);
   });
 });
 
@@ -83,6 +87,12 @@ describe("searchRows", () => {
       [16, 6],
       [4, 4],
     ]);
+  });
+  test("a phrase must be there whole, across a line break too, and is marked as one run", () => {
+    const rows = saidRows([said(0, "the link in the footer", 1), said(1, "the footer\nlink alone", 2)]);
+    const { hits } = searchRows(rows, ["footer link"], { worktreeId: "a", archived: false });
+    expect(hits).toHaveLength(1);
+    expect(hits[0]).toMatchObject({ seq: 1, text: "the footer link alone", match: [[4, 11]] });
   });
 });
 

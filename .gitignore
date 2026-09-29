@@ -4,6 +4,7 @@ node_modules
 dist/
 *.tgz
 *.log
+*.swp
 .DS_Store
 .env
 inspo/

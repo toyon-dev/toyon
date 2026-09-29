@@ -122,7 +122,7 @@ export function QuickOpen({ worktreeId }: { worktreeId: string }) {
         ) : r.kind === "page" ? (
           <RouteRow row={r.page} />
         ) : (
-          fileRow(r.path, r.status, q)
+          fileRow(r.path, r.status, q, { gutter: status.length > 0 })
         )
       }
     />
@@ -131,13 +131,20 @@ export function QuickOpen({ worktreeId }: { worktreeId: string }) {
 
 /** one file row: status letter, highlighted basename, dimmed directory, line counts. Exported so
  * the composer's `@` menu draws the same row as ⌘P rather than a lookalike; a folder there takes
- * the same row with its trailing slash, the way it is inserted. */
-export function fileRow(path: string, status: GitFileStatus | undefined, q: string, folder = false) {
+ * the same row with its trailing slash, the way it is inserted. The letter column is the list's,
+ * not the row's: it is kept on every row while any file in the worktree has a letter, so names
+ * line up, and dropped altogether when none does, so a clean tree is not indented past nothing. */
+export function fileRow(
+  path: string,
+  status: GitFileStatus | undefined,
+  q: string,
+  { folder = false, gutter = true }: { folder?: boolean; gutter?: boolean } = {},
+) {
   const [name, dir] = splitPath(path);
   const hits = q.trim() ? matchPositions(path, q.trim()) : null;
   return (
     <>
-      <span className={`xy ${status ? xyClass(status.xy) : ""}`}>{status ? xyLetter(status.xy) : ""}</span>
+      {gutter && <span className={`xy ${status ? xyClass(status.xy) : ""}`}>{status ? xyLetter(status.xy) : ""}</span>}
       <span className="name">
         {markHits(name, hits, dir.length)}
         {folder && "/"}

@@ -957,8 +957,10 @@ export function Composer({
           listRef={listRef}
           empty={emptyMenu(trigger.kind, files, commands.length, source !== null)}
           row={(r) => {
-            if (r.kind === "file") return fileRow(r.path, r.status, trigger.query);
-            if (r.kind === "folder") return fileRow(r.path, undefined, trigger.query, true);
+            // the letter column only while the live status has a letter to put in it
+            const gutter = (git?.files.length ?? 0) > 0;
+            if (r.kind === "file") return fileRow(r.path, r.status, trigger.query, { gutter });
+            if (r.kind === "folder") return fileRow(r.path, undefined, trigger.query, { folder: true, gutter });
             if (r.kind === "changes")
               return <PaletteRow label="@changes" hint={`${r.n} uncommitted ${r.n === 1 ? "file" : "files"}`} />;
             return <CommandRow c={r.c} query={trigger.query} />;

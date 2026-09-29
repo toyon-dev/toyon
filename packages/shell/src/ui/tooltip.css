@@ -79,7 +79,21 @@
    shape at every row. A fixed width, not a floor under max-content, so a long branch wraps
    inside the same box instead of stretching it. */
   .tooltip-card {
-    width: 240px;
+    width: 280px;
+    /* a card's inset, not a tip's: five lines with a rule and a foot hugged the box at 4px 8px,
+     and a 240px measure held about 32 characters, short for a sentence. 280 puts a recap on
+     three or four even lines and stays under the box's max. */
+    padding: 6px 10px;
+    /* the sentence a step under the head: with none, the branch (the head's second tier) sat
+     straight over the sentence in the same tier and the two read as one paragraph. The same
+     4px the foot keeps above its rule. */
+    & .tooltip-detail {
+      margin-top: 4px;
+    }
+    & .tooltip-foot {
+      margin: 4px -10px 0;
+      padding: 4px 10px 0;
+    }
   }
   /* the figures, on a line of their own at the foot under a rule: read apart from the name and
    the sentence, which they ran together with as one paragraph when they shared the name's line.

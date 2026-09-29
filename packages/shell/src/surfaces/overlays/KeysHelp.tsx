@@ -128,23 +128,25 @@ export function KeysHelp() {
 }
 
 /** The running version as a chip, one word after it when something is under way. A press does
- * the one thing the state is waiting on: restart onto an install, rebuild a checkout, install what
- * is out, or ask the registry. The daemon answers a check that finds nothing in words, since the
- * chip would otherwise not move. */
+ * the one thing the state is waiting on: restart onto an install, rebuild a checkout, reload this
+ * page onto a build it watched finish, install what is out, or ask the registry. The daemon answers
+ * a check that finds nothing in words, since the chip would otherwise not move. */
 function VersionRow() {
   const sock = useSock();
   const version = useStore((s) => s.version);
   const install = useStore((s) => s.install);
   const update = useStore((s) => s.update);
   const self = useStore((s) => s.self);
+  const rebuilt = useStore((s) => s.rebuilt);
   const repos = useStore((s) => s.repos);
   const updates = useStore((s) => s.managed.updates);
-  const row = versionRow(version, install, update, self, repos);
+  const row = versionRow(version, install, update, self, repos, rebuilt);
   // a restart onto what is already installed, or a checkout's rebuild, is not an update: only the
   // presses that would ask the registry or install are the policy's to take away
   const managed = !updates && (row.act === "update" || row.act === "check");
   const act = () => {
     if (row.act === "restart") sock?.send({ t: "restart-daemon" });
+    else if (row.act === "reload") window.location.reload();
     else if (row.act === "rebuild" && self) sock?.send({ t: "run-after-land", repoId: self.repoId });
     else if (row.act === "update") sock?.send({ t: "update-now" });
     else if (row.act === "check") sock?.send({ t: "check-update" });

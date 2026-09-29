@@ -730,6 +730,10 @@ export interface State {
    * running daemon, or the bundle it is serving this page from, does not have. Null the rest of
    * the time, which is every install that is not someone working on toyon itself. */
   self: SelfState | null;
+  /** this page watched the checkout's build finish cleanly, so the bundles on disk are newer than
+   * the code it runs. The daemon cannot say so: it does not know which build each page came from.
+   * Only a reload clears it, since that is what brings the page level. */
+  rebuilt: boolean;
   /** the Toyon installed on this machine is not the one running, or a restart someone asked for is
    * waiting on a chat to finish. Null the rest of the time. */
   update: UpdateState | null;
@@ -875,6 +879,7 @@ export function initialState(opts: InitialOpts): State {
     // the page never shows before hello, which is what says otherwise
     gitIdentity: true,
     self: null,
+    rebuilt: false,
     update: null,
     version: "",
     install: "none",
@@ -2012,7 +2017,14 @@ function onServer(s: State, msg: StoreServerMsg): State {
       };
     }
     case "self":
-      return { ...s, self: msg.self };
+      // a build this page saw start and now sees end without a failure is one it is now behind.
+      // Read off the daemon's frames alone: a hello after a reconnect says nothing about whether
+      // the build the page last saw ran to the end or died with the daemon.
+      return {
+        ...s,
+        self: msg.self,
+        rebuilt: s.rebuilt || (s.self?.building === true && !msg.self?.building && msg.self?.buildFailed === undefined),
+      };
     case "paired":
       return { ...s, paired: true, pairings: s.pairings + 1 };
     case "update":

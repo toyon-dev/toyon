@@ -341,21 +341,29 @@ function Offer({
  * that runs for minutes has no business holding the composer, or a corner of the window, while it
  * does. The word is the verb; what the state means is the chip's tip, with the last
  * line a failed build printed under it. There is no dismiss: the checkout does not move back, so
- * the chip stays until it is acted on. */
+ * the chip stays until it is acted on. A build the page watched finish leaves the chip offering
+ * the reload, since the bar going quiet would otherwise be the only sign that this page is now the
+ * stale half; the reload itself is what clears it. */
 function SelfOffer() {
   const self = useStore((s) => s.self);
+  const rebuilt = useStore((s) => s.rebuilt);
   const repos = useStore((s) => s.repos);
   const sock = useSock();
   // once a restart is asked for, the update chip says how it is going; two chips would both offer it
   const asked = useStore((s) => s.update?.restarting != null);
-  const notice = selfNotice(self, repos);
-  if (!notice || !self || asked) return null;
+  const notice = selfNotice(self, repos, rebuilt);
+  if (!notice || asked) return null;
   const word = notice.busy
     ? "rebuilding"
-    : notice.build === "rebuild"
-      ? "rebuild Toyon"
-      : (notice.build ?? "restart Toyon");
-  const act = () => sock?.send(notice.build ? { t: "run-after-land", repoId: self.repoId } : { t: "restart-daemon" });
+    : notice.reload
+      ? "reload Toyon"
+      : notice.build === "rebuild"
+        ? "rebuild Toyon"
+        : (notice.build ?? "restart Toyon");
+  const act = () => {
+    if (notice.reload) window.location.reload();
+    else if (self) sock?.send(notice.build ? { t: "run-after-land", repoId: self.repoId } : { t: "restart-daemon" });
+  };
   return (
     <Offer icon="reload" busy={notice.busy} onClick={act} {...tip(notice.text, undefined, { detail: notice.detail })}>
       {word}

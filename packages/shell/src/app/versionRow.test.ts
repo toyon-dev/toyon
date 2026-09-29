@@ -102,6 +102,14 @@ describe("versionRow", () => {
     expect(stopped).toMatchObject({ value: "0.2.0, rebuild stopped", act: "rebuild", detail: "tsc: 3 errors" });
   });
 
+  test("a build this page watched finish reads rebuilt, and the press reloads the page", () => {
+    expect(versionRow("0.2.0", "none", null, null, repos, true)).toMatchObject({
+      value: "0.2.0, rebuilt",
+      act: "reload",
+      busy: false,
+    });
+  });
+
   test("an update on its way outranks the checkout notice: one thing is next, not two", () => {
     const row = versionRow("0.2.0", "npm", update({ installed: "0.3.0" }), self({ restart: true }), repos);
     expect(row.value).toBe("0.3.0 ready");

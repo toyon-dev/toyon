@@ -8,6 +8,8 @@ export interface SelfNotice {
   /** stop the daemon and start it again; absent until the bundles are level, since a restart that
    * left the old shell on disk would only put the notice straight back */
   restart?: boolean;
+  /** load this page again: the bundles on disk are newer than the code it is running */
+  reload?: boolean;
   busy: boolean;
   /** what the last run printed before it stopped */
   detail?: string;
@@ -18,16 +20,21 @@ export interface SelfNotice {
  * whichever of the two catch-ups is next. Never both at once: a rebuild has to land before a
  * restart is worth offering, or the fresh process would come up serving the same stale bundle.
  *
+ * `rebuilt` is this page's own knowledge: it watched a build finish, so what is on disk is newer
+ * than what it runs, and the daemon's state has nothing to say about that. The reload comes ahead
+ * of the daemon's asks because it is the cheap one, and the page it loads reads them fresh.
+ *
  * `branch` is the project's own default branch name, so the text says what the person actually
  * typed into the land box rather than assuming it is called main.
  */
-export function selfNotice(self: SelfState | null, repos: RepoInfo[]): SelfNotice | null {
-  if (!self) return null;
-  const branch = repos.find((r) => r.id === self.repoId)?.defaultBranch ?? "the default branch";
-  if (self.building) return { text: `Rebuilding Toyon from ${branch}`, busy: true };
-  if (self.buildFailed) {
+export function selfNotice(self: SelfState | null, repos: RepoInfo[], rebuilt = false): SelfNotice | null {
+  const branch = repos.find((r) => r.id === self?.repoId)?.defaultBranch ?? "the default branch";
+  if (self?.building) return { text: `Rebuilding Toyon from ${branch}`, busy: true };
+  if (self?.buildFailed) {
     return { text: "Rebuilding Toyon stopped", detail: self.buildFailed, build: "try again", busy: false };
   }
+  if (rebuilt) return { text: "Toyon's shell was rebuilt while this page was open", reload: true, busy: false };
+  if (!self) return null;
   if (self.rebuild) return { text: `Toyon's shell is behind ${branch}`, build: "rebuild", busy: false };
   if (self.restart) return { text: `Toyon itself is behind ${branch}`, restart: true, busy: false };
   return null;

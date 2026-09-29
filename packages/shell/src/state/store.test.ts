@@ -2654,3 +2654,30 @@ describe("routes", () => {
     expect(localOf(again, "a")).toBe(localOf(first, "a"));
   });
 });
+
+describe("the checkout's build", () => {
+  const building = server({ t: "self", self: { repoId: "r1", rebuild: true, restart: false, building: true } });
+
+  test("a build this page saw start and finish marks the page as the stale half, until a reload", () => {
+    const s = run([hello(wt("a")), building, server({ t: "self", self: null })]);
+    expect(s.rebuilt).toBe(true);
+    // the daemon's later frames do not take it back: only a fresh page is level with disk
+    const later = run(
+      [server({ t: "self", self: { repoId: "r1", rebuild: true, restart: false, building: false } })],
+      s,
+    );
+    expect(later.rebuilt).toBe(true);
+    expect(run([hello(wt("a"))], s).rebuilt).toBe(true);
+    expect(initial.rebuilt).toBe(false);
+  });
+
+  test("a build that stopped leaves it alone, and so does the daemon going quiet about anything else", () => {
+    const failed = server({
+      t: "self",
+      self: { repoId: "r1", rebuild: true, restart: false, building: false, buildFailed: "tsc: 3 errors" },
+    });
+    expect(run([hello(wt("a")), building, failed]).rebuilt).toBe(false);
+    // a null with no build before it is a restart no longer owed, not a build ending
+    expect(run([hello(wt("a")), server({ t: "self", self: null })]).rebuilt).toBe(false);
+  });
+});

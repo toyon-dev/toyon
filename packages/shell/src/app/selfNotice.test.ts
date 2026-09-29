@@ -42,6 +42,19 @@ describe("selfNotice", () => {
     expect(n).toMatchObject({ build: "try again", detail: "error TS2322", busy: false });
   });
 
+  test("a build this page watched finish offers the reload, ahead of what the daemon still wants", () => {
+    // the daemon has nothing left to say, and the page is still the one from before the build
+    expect(selfNotice(null, repos, true)).toMatchObject({ reload: true, busy: false });
+    // a restart is still owed, but the reload is the cheap one and the fresh page reads it too
+    const n = selfNotice(state({ restart: true }), repos, true);
+    expect(n).toMatchObject({ reload: true });
+    expect(n?.restart).toBeUndefined();
+    // a build going again, or one that stopped, is what the person needs to read first
+    expect(selfNotice(state({ building: true }), repos, true)).toMatchObject({ busy: true });
+    expect(selfNotice(state({ buildFailed: "error TS2322" }), repos, true)).toMatchObject({ build: "try again" });
+    expect(selfNotice(null, repos, false)).toBeNull();
+  });
+
   test("the project's own branch name is what the text uses", () => {
     expect(selfNotice(state({ rebuild: true }), repos)?.text).toBe("Toyon's shell is behind trunk");
     // a project the shell has not been told about yet still reads as a sentence

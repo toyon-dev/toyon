@@ -10,10 +10,10 @@ export interface VersionRow {
   text: string;
   /** what the last build printed before it stopped */
   detail?: string;
-  /** what a press does: restart onto what is installed, run the project's `afterLand`, install what
-   * is out, or ask the registry. Null where a press could do nothing: a checkout updates by
-   * landing on its own branch. */
-  act: "restart" | "rebuild" | "update" | "check" | null;
+  /** what a press does: restart onto what is installed, run the project's `afterLand`, load this
+   * page again onto a finished build, install what is out, or ask the registry. Null where a press
+   * could do nothing: a checkout updates by landing on its own branch. */
+  act: "restart" | "rebuild" | "reload" | "update" | "check" | null;
   /** something is under way, so the chip shows it and takes no press */
   busy: boolean;
 }
@@ -36,6 +36,7 @@ export function versionRow(
   update: UpdateState | null,
   self: SelfState | null,
   repos: RepoInfo[],
+  rebuilt = false,
 ): VersionRow {
   if (update) {
     if (update.restarting) {
@@ -79,9 +80,10 @@ export function versionRow(
       };
     }
   }
-  const notice = selfNotice(self, repos);
+  const notice = selfNotice(self, repos, rebuilt);
   if (notice) {
     if (notice.busy) return { value: `${version}, rebuilding`, text: notice.text, act: "rebuild", busy: true };
+    if (notice.reload) return { value: `${version}, rebuilt`, text: notice.text, act: "reload", busy: false };
     if (notice.build === "try again") {
       return {
         value: `${version}, rebuild stopped`,

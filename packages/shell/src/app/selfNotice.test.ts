@@ -42,13 +42,15 @@ describe("selfNotice", () => {
     expect(n).toMatchObject({ build: "try again", detail: "error TS2322", busy: false });
   });
 
-  test("a build this page watched finish offers the reload, ahead of what the daemon still wants", () => {
+  test("a build this page watched finish offers the reload, between the daemon's two asks", () => {
     // the daemon has nothing left to say, and the page is still the one from before the build
     expect(selfNotice(null, repos, true)).toMatchObject({ reload: true, busy: false });
     // a restart is still owed, but the reload is the cheap one and the fresh page reads it too
     const n = selfNotice(state({ restart: true }), repos, true);
     expect(n).toMatchObject({ reload: true });
     expect(n?.restart).toBeUndefined();
+    // the branch moved again since: the page a reload would load is behind it too
+    expect(selfNotice(state({ rebuild: true }), repos, true)).toMatchObject({ build: "rebuild" });
     // a build going again, or one that stopped, is what the person needs to read first
     expect(selfNotice(state({ building: true }), repos, true)).toMatchObject({ busy: true });
     expect(selfNotice(state({ buildFailed: "error TS2322" }), repos, true)).toMatchObject({ build: "try again" });

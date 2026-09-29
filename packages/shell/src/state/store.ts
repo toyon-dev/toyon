@@ -2016,15 +2016,15 @@ function onServer(s: State, msg: StoreServerMsg): State {
         activeImportId: msg.pending.some((x) => x.id === s.activeImportId) ? s.activeImportId : null,
       };
     }
-    case "self":
-      // a build this page saw start and now sees end without a failure is one it is now behind.
-      // Read off the daemon's frames alone: a hello after a reconnect says nothing about whether
-      // the build the page last saw ran to the end or died with the daemon.
-      return {
-        ...s,
-        self: msg.self,
-        rebuilt: s.rebuilt || (s.self?.building === true && !msg.self?.building && msg.self?.buildFailed === undefined),
-      };
+    case "self": {
+      // a build this page saw start and now sees end without a failure is one it is now behind,
+      // when there were bundles to build: a land that touched only the daemon runs the same
+      // commands and builds nothing. Read off the daemon's frames alone: a hello after a reconnect
+      // says nothing about whether the build the page last saw ran to the end or died with the
+      // daemon.
+      const ended = s.self?.building === true && s.self.rebuild && !msg.self?.building;
+      return { ...s, self: msg.self, rebuilt: s.rebuilt || (ended && msg.self?.buildFailed === undefined) };
+    }
     case "paired":
       return { ...s, paired: true, pairings: s.pairings + 1 };
     case "update":

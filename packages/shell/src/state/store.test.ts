@@ -2679,5 +2679,10 @@ describe("the checkout's build", () => {
     expect(run([hello(wt("a")), building, failed]).rebuilt).toBe(false);
     // a null with no build before it is a restart no longer owed, not a build ending
     expect(run([hello(wt("a")), server({ t: "self", self: null })]).rebuilt).toBe(false);
+    // a land that touched only the daemon runs the commands with nothing to build: the page is
+    // not behind the disk, the process is
+    const daemonOnly = server({ t: "self", self: { repoId: "r1", rebuild: false, restart: true, building: true } });
+    const done = server({ t: "self", self: { repoId: "r1", rebuild: false, restart: true, building: false } });
+    expect(run([hello(wt("a")), daemonOnly, done]).rebuilt).toBe(false);
   });
 });

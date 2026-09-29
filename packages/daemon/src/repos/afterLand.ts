@@ -55,16 +55,34 @@ export class AfterLand {
       return;
     }
     this.running.add(repoId);
-    const done = this.exec(repo, commands).finally(() => {
-      this.running.delete(repoId);
-      if (this.again.delete(repoId)) this.run(repoId);
-    });
+    // under way from here, not from the first command: the wait for the wake queue can run a
+    // minute, and a notice offering the rebuild through it would only queue this same run again,
+    // while a page that reloaded on it would come up on the build from before this land
+    if (this.d.self.building(true)) this.d.hub.emit("selfChanged");
+    const done = this.runs(repo, commands).finally(() => this.running.delete(repoId));
     fireAndForget(repo.id, done, "afterLand");
   }
 
-  private async exec(repo: RepoInfo, commands: string[]): Promise<void> {
-    await this.d.settled?.();
-    if (this.d.self.building(true)) this.d.hub.emit("selfChanged");
+  /** every run owed, one after another, and one settling of the self state at the end: a page
+   * takes a build ending as its cue to reload, so the end of a run with another queued behind it
+   * is not one */
+  private async runs(repo: RepoInfo, commands: string[]): Promise<void> {
+    let failure: string | undefined;
+    let notice: string | undefined;
+    do {
+      await this.d.settled?.();
+      ({ failure, notice } = await this.exec(repo, commands));
+    } while (this.again.delete(repo.id));
+    // read before the self state settles: a clean finish clears it, and nothing more is owed
+    const onNotice = this.d.self.reports(repo);
+    if (this.d.self.building(false, failure)) this.d.hub.emit("selfChanged");
+    if (notice !== undefined && !onNotice) {
+      const main = this.mainOf(repo);
+      if (main) this.d.hub.emit("failed", main.id, notice);
+    }
+  }
+
+  private async exec(repo: RepoInfo, commands: string[]): Promise<{ failure?: string; notice?: string }> {
     let failure: string | undefined;
     let notice: string | undefined;
     for (const command of commands) {
@@ -84,13 +102,7 @@ export class AfterLand {
       log.warn(repo.id, `afterLand stopped: ${command} exited ${code}`);
       break;
     }
-    // read before the self state settles: a clean finish clears it, and nothing more is owed
-    const onNotice = this.d.self.reports(repo);
-    if (this.d.self.building(false, failure)) this.d.hub.emit("selfChanged");
-    if (notice !== undefined && !onNotice) {
-      const main = this.mainOf(repo);
-      if (main) this.d.hub.emit("failed", main.id, notice);
-    }
+    return { failure, notice };
   }
 
   /** a line in the main worktree's log pane, the one surface that belongs to the checkout itself */

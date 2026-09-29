@@ -61,6 +61,14 @@ async function until(cond: () => boolean): Promise<void> {
 }
 const settled = (repoId: string) => until(() => !w.afterLand.busy(repoId));
 
+/** main moved under the daemon by a shell change, so there is a notice to report into */
+async function moveMain() {
+  mkdirSync(join(w.repo, "packages/shell"), { recursive: true });
+  writeFileSync(join(w.repo, "packages/shell/x.ts"), "");
+  sh(w.repo, GIT, "add", "-A");
+  sh(w.repo, GIT, "commit", "-q", "-m", "shell");
+}
+
 describe("afterLand", () => {
   test("a land during a run means one more run when it ends, however many arrive", async () => {
     w = world();
@@ -73,20 +81,44 @@ describe("afterLand", () => {
     expect(readFileSync(join(w.repo, "ran.txt"), "utf8")).toBe("ran\nran\n");
   });
 
-  test("a run waits for the wake queue to drain before it starts", async () => {
+  test("a run waits for the wake queue to drain before it starts, and is under way while it waits", async () => {
     let release = () => {};
     const gate = new Promise<void>((r) => {
       release = r;
     });
-    w = world(false, () => gate);
+    w = world(true, () => gate);
+    await w.self.start();
     const { repo } = await registered(["echo ran >> ran.txt"]);
+    await moveMain();
+    expect(await w.self.check(repo)).toBe(true);
     w.afterLand.run(repo.id);
     expect(w.afterLand.busy(repo.id)).toBe(true);
+    // the notice says so from the start: a rebuild offered through the wait would queue the same
+    // run again, and a page reloading on it would come up on the build from before this land
+    expect(w.self.get()?.building).toBe(true);
     await new Promise((r) => setTimeout(r, 100));
     expect(existsSync(join(w.repo, "ran.txt"))).toBe(false);
     release();
     await settled(repo.id);
     expect(readFileSync(join(w.repo, "ran.txt"), "utf8")).toBe("ran\n");
+    expect(w.self.get()).toBeNull();
+  });
+
+  test("a run with another queued behind it does not read as finished in between", async () => {
+    w = world(true);
+    await w.self.start();
+    const { repo } = await registered(["echo ran >> ran.txt; sleep 0.3"]);
+    await moveMain();
+    expect(await w.self.check(repo)).toBe(true);
+    const frames: Array<boolean | undefined> = [];
+    w.hub.on("selfChanged", () => frames.push(w.self.get()?.building));
+    w.afterLand.run(repo.id);
+    w.afterLand.run(repo.id);
+    await settled(repo.id);
+    expect(readFileSync(join(w.repo, "ran.txt"), "utf8")).toBe("ran\nran\n");
+    // one start and one end: a page takes the end as its cue to reload, and the first run's end
+    // would have it reload onto bundles the second run is about to replace
+    expect(frames).toEqual([true, undefined]);
   });
 
   test("a clean run says nothing", async () => {
@@ -118,11 +150,7 @@ describe("afterLand", () => {
     w = world(true);
     await w.self.start();
     const { repo } = await registered(["false"]);
-    // main moved under the daemon by a shell change, so there is a notice to report into
-    mkdirSync(join(w.repo, "packages/shell"), { recursive: true });
-    writeFileSync(join(w.repo, "packages/shell/x.ts"), "");
-    sh(w.repo, GIT, "add", "-A");
-    sh(w.repo, GIT, "commit", "-q", "-m", "shell");
+    await moveMain();
     expect(await w.self.check(repo)).toBe(true);
     w.afterLand.run(repo.id);
     await settled(repo.id);

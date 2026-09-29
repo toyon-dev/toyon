@@ -6,6 +6,7 @@ import { cx } from "../../ui/cx.ts";
 import { FullAttachment } from "../../ui/FullAttachment.tsx";
 import { Icon } from "../../ui/Icon.tsx";
 import { useContextMenu } from "../../ui/menu.ts";
+import { rowState } from "../../ui/rowState.ts";
 
 /** A block of pasted text, collapsed. Same chip family as the picked element and the image: a
  * close button only when it can be removed, so the transcript's copy is inert. */
@@ -19,6 +20,7 @@ export function PasteChip({
   text,
   href,
   onRemove,
+  cursor,
   className = "",
 }: {
   n: number;
@@ -33,6 +35,8 @@ export function PasteChip({
   /** where the full text lives, once the daemon has stored it */
   href?: string;
   onRemove?: () => void;
+  /** the chip Backspace would take next */
+  cursor?: boolean;
   className?: string;
 }) {
   // a piece of a file is named the way an editor names a selection; its directory, and the commit
@@ -52,7 +56,7 @@ export function PasteChip({
         <b>
           {name ? name.slice(name.lastIndexOf("/") + 1) : source ? sourceLabel(source) : attachmentLabel("paste", n)}
         </b>
-        {detail && <span className="pick-file"> · {detail}</span>}
+        {detail && <span className="pick-file row-dim"> · {detail}</span>}
       </span>
     </>
   );
@@ -61,7 +65,8 @@ export function PasteChip({
   const paste = { text, href };
   return (
     <div
-      className={cx("pick-chip paste-chip", className)}
+      className={cx("pick-chip paste-chip row row-sm row-edge", className)}
+      data-state={rowState({ cursor })}
       data-tip={preview || undefined}
       {...cm.contextMenu(() => pasteItems(paste, { open: href ? () => setFull(true) : undefined, remove: onRemove }))}
     >

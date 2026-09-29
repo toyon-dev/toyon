@@ -325,6 +325,9 @@ export function Composer({
     },
   ];
   const [caret, setCaret] = useState(0);
+  // whether the field has the keyboard: with it there and the box empty, the last chip is what
+  // Backspace takes next, and it wears the edge to say so
+  const [focused, setFocused] = useState(false);
   /** the mention the user dismissed with esc, so it does not reopen on the next keystroke */
   const [dismissed, setDismissed] = useState<number | null>(null);
   /** the command just inserted, so the draft can show what it still expects */
@@ -888,8 +891,9 @@ export function Composer({
         </div>
       )}
       {boxId &&
-        numbered(attachments, nextNumbers(sentBefore)).map(([item, n]) => {
+        numbered(attachments, nextNumbers(sentBefore)).map(([item, n], i) => {
           const detach = () => dispatch({ a: "detach", id: boxId, key: item.key });
+          const cursor = focused && text === "" && i === attachments.length - 1;
           if (item.kind === "image")
             return (
               <ImageChip
@@ -901,6 +905,7 @@ export function Composer({
                 height={item.height}
                 bytes={item.bytes}
                 onRemove={detach}
+                cursor={cursor}
               />
             );
           if (item.kind === "paste")
@@ -915,6 +920,7 @@ export function Composer({
                 preview={item.preview}
                 text={item.text}
                 onRemove={detach}
+                cursor={cursor}
               />
             );
           return (
@@ -923,6 +929,7 @@ export function Composer({
               pick={item}
               dir={dir}
               tipText={item.html}
+              cursor={cursor}
               onHover={(entering) =>
                 frameId &&
                 previewBus.post(
@@ -997,6 +1004,8 @@ export function Composer({
             font={shellCmd !== null ? "mono" : "ui"}
             ref={composerRef}
             value={text}
+            onFocus={() => setFocused(true)}
+            onBlur={() => setFocused(false)}
             onChange={(e) => {
               const value = e.target.value;
               const at = e.target.selectionStart ?? value.length;

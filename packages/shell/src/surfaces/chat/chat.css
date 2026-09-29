@@ -44,9 +44,6 @@
     & .chat-input {
       --composer-min: 120px;
       background: var(--sunken-floor);
-      & .pick-chip {
-        background: var(--surface0);
-      }
     }
   }
 
@@ -948,12 +945,6 @@
   .composer-subline {
     color: var(--text1);
   }
-  /* chips ride on that same tone, so they take the panel's to stay raised */
-  .chat-input {
-    & .pick-chip {
-      background: var(--surface1);
-    }
-  }
   /* same 20px box as the top bar's icons, flush with the textarea's right edge
    (the chat toggle in the bar is 4px further right — the nearby edge wins) */
   /* a crashed proc in this worktree, badged on the terminal button: the only status this row shows,
@@ -997,8 +988,9 @@
     & > .composer-plan {
       padding-right: 24px;
     }
+    /* the row bleeds 10px past the padding the stop is measured from */
     & > .pick-chip:first-child {
-      margin-right: 24px;
+      margin-right: 14px;
     }
     &:not(:has(> .composer-plan, > .pick-chip)) .composer-field :is(textarea, .composer-ghost) {
       padding-right: 24px;
@@ -1114,26 +1106,28 @@
     margin-left: auto;
   }
 
+  /* ---- attachment chips ----
+   An attachment is a row, the band the rail and the files tab use: a leading slot (an icon, a
+   thumbnail), a name, its meta a tier down, and the remove at the end. It draws no card and no
+   ground of its own; the box it stands in is its ground, the way the ask's options stand in the
+   composer. The edge is the row idiom's, reserved and transparent, and lit only as a state: in
+   the composer, for the chip Backspace would take. A stripe every chip wore was the app's one
+   "you are here" mark spent as decoration, and being a border it bent round the card's corners.
+
+   Bled out of the box's padding and inset back by the same distance, so the words start where
+   the text in the box does: the composer pads 10px, and so does the bubble a sent one sits in. */
   .pick-chip {
-    padding: 4px 8px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 6px;
-    background: var(--sunken);
-    border: 1px solid var(--border1);
-    border-left: 3px solid var(--accent);
-    border-radius: var(--radius);
-    font: var(--type-mono);
-    color: var(--text0);
+    width: auto;
+    margin-inline: -10px;
+    --row-inset: 10px;
     & .pick-target {
       flex: 1;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
-    & .pick-file {
-      color: var(--text2);
+    &[data-state~="cursor"] {
+      --row-edge-color: var(--accent);
     }
     /* the file half of a pick opens it: a link, so the underline only arrives on hover and the row
    keeps reading as one line of text until you aim at it */
@@ -1145,15 +1139,6 @@
     }
     :where([data-hover]) & .pick-open:hover {
       text-decoration-color: currentColor;
-    }
-    &.in-chat {
-      margin: 6px 0 0;
-      padding: 2px 6px;
-      cursor: default;
-      display: inline-flex;
-    }
-    :where([data-hover]) &.in-chat:hover {
-      border-color: var(--accent);
     }
     /* a sent attachment opens what it holds (the image here, a paste's text through the daemon):
      the whole row is the control, laid out and coloured as the row, never as link text or a chip */
@@ -1173,6 +1158,8 @@
   /* image attachments: the pick-chip row with a thumbnail in the leading slot */
 
   .image-chip {
+    /* the thumbnail outgrows the row's height, so the row gives it a little air from its neighbours */
+    padding-block: 2px;
     & .image-thumb {
       width: 40px;
       height: 40px;
@@ -1180,10 +1167,6 @@
       border-radius: var(--radius);
       background: var(--surface2);
       flex: none;
-    }
-    &.in-chat {
-      display: flex;
-      padding: 3px 6px;
     }
   }
   /* the hovered chip's image at a readable size, floated off the transcript's edge onto the preview
@@ -1234,17 +1217,20 @@
   .msg-attachments {
     display: flex;
     flex-direction: column;
-    gap: 4px;
-    /* the bubble's padding is even, but text under it carries its own leading and a bordered chip
-       carries none, so the chips sat visibly closer to the top than the text does to the bottom */
-    padding-top: 2px;
-    margin-bottom: 6px;
+    margin-bottom: 4px;
     /* a message that is attachments alone: nothing follows, so nothing to keep a gap from */
     &:last-child {
       margin-bottom: 0;
     }
-    & .pick-chip.in-chat {
-      margin: 0;
+  }
+  /* the bubble's ground is already the row idiom's hover rung, so a sent chip's hover lifts one
+     more; the seat moves the ladder with it, as every seat does */
+  .pick-chip.in-chat {
+    :where([data-hover]) &:hover,
+    &.menu-open {
+      background: var(--element1);
+      --text1: var(--ink0);
+      --text2: var(--ink1);
     }
   }
   /* ---- the ask ----

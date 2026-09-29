@@ -7,6 +7,7 @@ import { Float } from "../../ui/Float.tsx";
 import { FullAttachment } from "../../ui/FullAttachment.tsx";
 import { useContextMenu } from "../../ui/menu.ts";
 import type { Placement, Rect } from "../../ui/place.ts";
+import { rowState } from "../../ui/rowState.ts";
 import { fmtBytes } from "./images.ts";
 
 /** an attached image as a chip: thumbnail, its session number, name and size. In the composer it
@@ -20,6 +21,7 @@ export function ImageChip({
   height,
   bytes,
   onRemove,
+  cursor,
   className = "",
 }: {
   src: string;
@@ -29,6 +31,8 @@ export function ImageChip({
   height: number;
   bytes: number;
   onRemove?: () => void;
+  /** the chip Backspace would take next */
+  cursor?: boolean;
   className?: string;
 }) {
   const body = (
@@ -36,7 +40,7 @@ export function ImageChip({
       <img className="image-thumb" src={src} alt={name} width={40} height={40} />
       <span className="pick-target">
         <b>{attachmentLabel("image", n)}</b>
-        <span className="pick-file">
+        <span className="pick-file row-dim">
           {" "}
           · {name} · {width}×{height} · {fmtBytes(bytes)}
         </span>
@@ -50,7 +54,8 @@ export function ImageChip({
     // the tip trails the pointer: centred under a row this wide it lands on the row below
     <div
       ref={chip}
-      className={cx("pick-chip image-chip", className)}
+      className={cx("pick-chip image-chip row row-sm row-edge", className)}
+      data-state={rowState({ cursor })}
       data-tip="Open full size"
       data-tip-placement="follow"
       {...cm.contextMenu(() => imageItems(src, { open: () => setFull(true), remove: onRemove }))}

@@ -191,6 +191,10 @@
     align-self: flex-end;
     max-width: 92%;
     white-space: pre-wrap;
+    /* pre-wrap breaks only at spaces, and a pasted terminal transcript is full of runs with none:
+       a path, a URL, a hash. The max-width caps the bubble but not its lines, so one such run
+       poured past the bubble's edge and scrolled the whole log sideways. */
+    overflow-wrap: anywhere;
     /* the message the composer has walked back to, marked the one way this app marks where you
      are: the edge and a lifted seat together. The edge is a straight bar, so the bubble squares
      the corners on its side while it carries one; on a rounded corner the bar bends into a smear. */

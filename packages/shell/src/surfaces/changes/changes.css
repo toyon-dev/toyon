@@ -75,6 +75,30 @@
     &[data-state~="cursor"] {
       --row-edge-color: var(--accent);
     }
+    /* after current on purpose: while files are being picked, a row that is both shows the pick,
+       in the rail's colour for a checked row */
+    &[data-state~="checked"] {
+      --row-edge-color: var(--aqua);
+      background: var(--element1);
+    }
+  }
+  /* the box before a row's letter while files are being picked; the row is the control, and the
+     box only shows what the row's state already says */
+  .changes-check {
+    accent-color: var(--accent);
+    pointer-events: none;
+    margin: 0;
+    flex-shrink: 0;
+  }
+  /* the pick's verbs, at the foot of the list and over the commit box, kept in view however long
+     the list is, the way the rail's graft row sits under its rows */
+  .changes-pick {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    border-top: 1px solid var(--border0);
+    padding: 4px 6px;
+    gap: 2px;
   }
 
   /* one commit: the subject takes the row, the age ends it where a file row ends with its counts */

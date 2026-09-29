@@ -99,7 +99,8 @@ export function openFolder({ dispatch }: Deps, target: { worktreeId: string; pat
  * somewhere else, copy where it is, and for an uncommitted one, throw it away. `showing` is the view the pane already
  * has this file in, which the menu swaps rather than reads again; `ref` is the commit a history row
  * stands for; `added` says the file has nothing on the other side, so no diff to offer; `kept` says
- * only git holds it, so there is nothing on disk to open elsewhere or reveal. */
+ * only git holds it, so there is nothing on disk to open elsewhere or reveal; `select` starts the
+ * changes list's pick from this row, for a touch or the keyboard, which have no shift-click. */
 export function fileItems(
   wt: { id: string; dir: string },
   path: string,
@@ -109,7 +110,15 @@ export function fileItems(
     showing,
     added = false,
     kept = false,
-  }: { discard?: boolean; ref?: string; showing?: EditorView; added?: boolean; kept?: boolean },
+    select,
+  }: {
+    discard?: boolean;
+    ref?: string;
+    showing?: EditorView;
+    added?: boolean;
+    kept?: boolean;
+    select?: (path: string) => void;
+  },
   deps: Deps,
 ): MenuEntry[] {
   const { sock, dispatch } = deps;
@@ -124,6 +133,7 @@ export function fileItems(
   const abs = `${wt.dir}/${path}`;
   const open = kept ? [] : editorItems(abs, () => sock?.send({ t: "reveal", worktreeId: wt.id, path }));
   const copy: MenuItem[] = [{ id: "copy-path", label: "copy path", onClick: () => copyText(abs) }];
+  const selectItems: MenuItem[] = select ? [{ id: "select", label: "select…", onClick: () => select(path) }] : [];
   const discardItems = discard
     ? [
         {
@@ -131,12 +141,22 @@ export function fileItems(
           label: "discard changes…",
           danger: true,
           onClick: () => {
-            if (window.confirm(`Discard uncommitted changes to ${path}?`)) {
-              sock?.send({ t: "discard-file", worktreeId: wt.id, path });
+            if (window.confirm(discardQuestion([path]))) {
+              sock?.send({ t: "discard-files", worktreeId: wt.id, paths: [path] });
             }
           },
         },
       ]
     : [];
-  return grouped([views, copy, open, discardItems]);
+  return grouped([views, copy, open, selectItems, discardItems]);
+}
+
+/** the confirm before a discard: the one file by name, or how many and which. Past a screenful the
+ * rest is a count, since the list under the question is what the person just checked. */
+export function discardQuestion(paths: readonly string[]): string {
+  if (paths.length === 1) return `Discard uncommitted changes to ${paths[0]}?`;
+  const shown = paths.slice(0, 12);
+  const more = paths.length - shown.length;
+  const names = [...shown, ...(more > 0 ? [`and ${more} more`] : [])].join("\n");
+  return `Discard uncommitted changes to ${paths.length} files?\n\n${names}`;
 }

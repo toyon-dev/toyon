@@ -2,8 +2,9 @@ import { baseOf, type CommitEntry, type GitFileStatus } from "@toyon/shared";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { previewBus } from "../../app/previewBus.ts";
 import { commitItems } from "../../state/actions/commit.ts";
-import { fileItems, openFile } from "../../state/actions/file.ts";
-import { useDispatch, useSock, useStore } from "../../state/context.tsx";
+import { discardQuestion, fileItems, openFile } from "../../state/actions/file.ts";
+import { mentionFilesInChat } from "../../state/attach.ts";
+import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
 import {
   useActive,
   useActiveId,
@@ -13,6 +14,7 @@ import {
   useLocalField,
 } from "../../state/selectors.ts";
 import { type ChangesTab, changesTabShown, repoById } from "../../state/store.ts";
+import { Button, IconButton } from "../../ui/Button.tsx";
 import { Icon } from "../../ui/Icon.tsx";
 import { step } from "../../ui/listNav.ts";
 import { type MenuEntry, useContextMenu } from "../../ui/menu.ts";
@@ -47,6 +49,7 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
   const onScreen = placement === "screen";
   const sock = useSock();
   const dispatch = useDispatch();
+  const store = useStoreInstance();
   const liveId = useActiveId();
   // an archived worktree's page shows that worktree's work, read from what git kept of it
   const archived = useArchivedPage();
@@ -182,7 +185,44 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
   // cursor is by the list pointing at that row rather than by focus moving to it. One scheme for
   // both lists: only one of them is rendered at a time.
   const rowId = (i: number) => `changes-row-${i}`;
-  useOnChange([shownId, tab], () => setSel(0));
+
+  // The pick: uncommitted files checked to be discarded or named in the chat together, the way
+  // the rail checks worktrees for a graft. A shift-click on a row opens it, and while it is open
+  // every uncommitted row shows a box and a click checks rather than opens. Only the working
+  // tree's own rows: a committed or historical file has nothing to discard, and an archived page
+  // has no chat to name one in.
+  const [picking, setPicking] = useState(false);
+  const [checked, setChecked] = useState<string[]>([]);
+  const cancelPick = useCallback(() => {
+    setPicking(false);
+    setChecked([]);
+  }, []);
+  const check = useCallback((path: string) => {
+    setPicking(true);
+    setChecked((c) => (c.includes(path) ? c.filter((p) => p !== path) : [...c, path]));
+  }, []);
+  // in the list's order, not the order they were checked in: it is how the confirm lists them and
+  // how the chat names them
+  const picked = useMemo(() => files.filter((f) => checked.includes(f.path)).map((f) => f.path), [files, checked]);
+  // a file that left the list (discarded, or committed by the agent) leaves the pick with it
+  useOnChange([files], () =>
+    setChecked((c) => {
+      const kept = c.filter((p) => files.some((f) => f.path === p));
+      return kept.length === c.length ? c : kept;
+    }),
+  );
+  // Esc from anywhere ends the pick, as the rail's does; the list has its own Esc below, and stops
+  // the key there, so a pick ended from the list is ended once
+  useOnChange([picking], () => {
+    if (!picking) return;
+    const onEsc = (e: KeyboardEvent) => e.key === "Escape" && cancelPick();
+    window.addEventListener("keydown", onEsc);
+    return () => window.removeEventListener("keydown", onEsc);
+  });
+  useOnChange([shownId, tab], () => {
+    setSel(0);
+    cancelPick();
+  });
 
   // the log is pulled, not pushed: reading it costs a git process, so a worktree nobody is
   // reviewing never pays for one. HEAD moving under an open tab (the agent committed) re-reads it.
@@ -273,7 +313,17 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
   // archived page the ones under its uncommitted files
   const inHist = (i: number) => showHist && i >= above;
   const onKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    if (picking && e.key === "Escape") {
+      // the pick ends before anything it was opened over closes
+      e.preventDefault();
+      e.stopPropagation();
+      cancelPick();
+    } else if (picking && e.key === " ") {
+      // the keyboard's check: the row the cursor is on, when it is one of the working tree's
+      e.preventDefault();
+      const f = showChanges && sel < files.length ? files[sel] : undefined;
+      if (f) check(f.path);
+    } else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
       const i = step(sel, e.key === "ArrowDown" ? 1 : -1, total);
       if (inHist(i)) moveHist(i);
@@ -319,9 +369,14 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
   const menuUncommitted = useCallback(
     (path: string): MenuEntry[] =>
       wtId
-        ? fileItems({ id: wtId, dir }, path, { discard: !kept, kept, ref: snapRef ?? undefined }, { sock, dispatch })
+        ? fileItems(
+            { id: wtId, dir },
+            path,
+            { discard: !kept, kept, ref: snapRef ?? undefined, select: kept ? undefined : check },
+            { sock, dispatch },
+          )
         : [],
-    [wtId, dir, kept, snapRef, sock, dispatch],
+    [wtId, dir, kept, snapRef, check, sock, dispatch],
   );
   const menuCommitted = useCallback(
     (path: string): MenuEntry[] => (wtId ? fileItems({ id: wtId, dir }, path, { kept }, { sock, dispatch }) : []),
@@ -457,7 +512,10 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
                   id={rowId(i)}
                   active={marked(i, openRef === snapRef && f.path === openPath)}
                   selected={focused && sel === i}
+                  checking={picking}
+                  checked={checked.includes(f.path)}
                   onOpen={clickRow}
+                  onCheck={kept ? undefined : check}
                   menu={menuUncommitted}
                   onHover={hoverFile}
                 />
@@ -518,6 +576,37 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
             ))}
           {showHist && commits === undefined && <div className="empty">reading history…</div>}
           {showHist && commits?.length === 0 && files.length === 0 && <div className="empty">no commits yet</div>}
+        </div>
+      )}
+      {picking && (
+        <div className="changes-pick">
+          <Button
+            size="md"
+            tone="danger"
+            disabled={picked.length === 0}
+            data-tip="Throw away the uncommitted changes to every checked file"
+            onClick={() => {
+              if (!wtId || picked.length === 0) return;
+              if (window.confirm(discardQuestion(picked))) {
+                sock?.send({ t: "discard-files", worktreeId: wtId, paths: picked });
+                cancelPick();
+              }
+            }}
+          >
+            discard {picked.length}…
+          </Button>
+          <Button
+            size="md"
+            disabled={picked.length === 0}
+            data-tip="Name every checked file in the chat"
+            onClick={() => {
+              if (wtId) mentionFilesInChat(store, wtId, picked);
+              cancelPick();
+            }}
+          >
+            add to chat
+          </Button>
+          <IconButton icon="close" label="Cancel" hint="esc" onClick={cancelPick} />
         </div>
       )}
       {activeRow && !archived && (

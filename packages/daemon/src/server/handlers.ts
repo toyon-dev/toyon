@@ -510,13 +510,18 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     s.files.reveal(msg.worktreeId, msg.path);
   },
 
-  async "discard-file"(msg, _ctx, s) {
-    await s.files.discard(msg.worktreeId, msg.path);
-    // every tab's changes list re-reads from the git-status this pushes, and an editor open on the
-    // file re-reads the file from that; the file leaving the list is the word on it
-    s.hub.emit("filesChanged", msg.worktreeId);
-    // the work is narrower, not different: the verdict's words stand, the check runs again
-    s.landing.recheck(msg.worktreeId);
+  async "discard-files"(msg, _ctx, s) {
+    // one at a time: each takes its file's lock, and a refusal on one (its changes are already
+    // gone) stops the run there, with the files before it discarded and the status saying so
+    try {
+      for (const path of msg.paths) await s.files.discard(msg.worktreeId, path);
+    } finally {
+      // every tab's changes list re-reads from the git-status this pushes, and an editor open on
+      // a file re-reads the file from that; the files leaving the list are the word on it
+      s.hub.emit("filesChanged", msg.worktreeId);
+      // the work is narrower, not different: the verdict's words stand, the check runs again
+      s.landing.recheck(msg.worktreeId);
+    }
   },
 
   async judge(msg, _ctx, s) {

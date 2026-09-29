@@ -127,6 +127,12 @@ export function mentionInChat(store: Store, worktreeId: string, path: string, fo
   appendToBox(store, worktreeId, `${mentionOf(path, folder)} `);
 }
 
+/** "add to chat" over the files checked in the changes list: every path, as one run of mentions */
+export function mentionFilesInChat(store: Store, worktreeId: string, paths: readonly string[]) {
+  if (paths.length === 0) return;
+  appendToBox(store, worktreeId, `${paths.map((p) => mentionOf(p, false)).join(" ")} `);
+}
+
 /** a sentence asking the agent to change the project's shape, left in the box and never sent */
 export function askAgent(store: Store, worktreeId: string, sentence: string) {
   appendToBox(store, worktreeId, sentence);

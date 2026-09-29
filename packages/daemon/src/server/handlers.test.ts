@@ -1606,13 +1606,48 @@ describe("handlers", () => {
     await Bun.write(join(repo, "new.txt"), "abc");
 
     replies.length = 0;
-    await dispatch({ t: "discard-file", worktreeId: main.id, path: "README.md" }, ctx, services);
+    await dispatch({ t: "discard-files", worktreeId: main.id, paths: ["README.md"] }, ctx, services);
     expect(await Bun.file(join(repo, "README.md")).text()).toBe("hello\n");
     expect(replies).toEqual([]);
 
-    await dispatch({ t: "discard-file", worktreeId: main.id, path: "new.txt" }, ctx, services);
+    await dispatch({ t: "discard-files", worktreeId: main.id, paths: ["new.txt"] }, ctx, services);
     expect(existsSync(join(repo, "new.txt"))).toBe(false);
     expect(changed).toEqual([main.id, main.id]);
+  });
+
+  test("a discard of several files tells the tabs once, after the last of them", async () => {
+    const { services, ctx, repo } = make();
+    const main = await mainOf(services, repo);
+    const changed: string[] = [];
+    services.hub.on("filesChanged", (id) => changed.push(id));
+    await Bun.write(join(repo, "README.md"), "edited\n");
+    await Bun.write(join(repo, "new.txt"), "abc");
+    await Bun.write(join(repo, "other.txt"), "def");
+
+    await dispatch(
+      { t: "discard-files", worktreeId: main.id, paths: ["README.md", "new.txt", "other.txt"] },
+      ctx,
+      services,
+    );
+    expect(await Bun.file(join(repo, "README.md")).text()).toBe("hello\n");
+    expect(existsSync(join(repo, "new.txt"))).toBe(false);
+    expect(existsSync(join(repo, "other.txt"))).toBe(false);
+    expect(changed).toEqual([main.id]);
+  });
+
+  test("a discard that stops on one file still says the ones before it changed", async () => {
+    const { services, ctx, repo } = make();
+    const main = await mainOf(services, repo);
+    const changed: string[] = [];
+    services.hub.on("filesChanged", (id) => changed.push(id));
+    await Bun.write(join(repo, "new.txt"), "abc");
+
+    // the second path has no uncommitted changes, so the run is refused there
+    await expect(
+      dispatch({ t: "discard-files", worktreeId: main.id, paths: ["new.txt", "README.md"] }, ctx, services),
+    ).rejects.toThrow(/no uncommitted changes/);
+    expect(existsSync(join(repo, "new.txt"))).toBe(false);
+    expect(changed).toEqual([main.id]);
   });
 
   test("run-after-land on a project with no afterLand says where to put one", async () => {
@@ -1652,13 +1687,13 @@ describe("handlers", () => {
 });
 
 describe("the verdict by hand", () => {
-  test("discard-file hands the worktree to the check again, after the file is gone", async () => {
+  test("discard-files hands the worktree to the check again, after the files are gone", async () => {
     const { services, ctx, repo, landingCalls } = make();
     const r = await services.repos.register(repo);
     r.needsSetup = false;
     const wt = await services.worktrees.create(r.id, "tidy the footer");
     writeFileSync(join(wt.path, "b.txt"), "b\n");
-    await dispatch({ t: "discard-file", worktreeId: wt.id, path: "b.txt" }, ctx, services);
+    await dispatch({ t: "discard-files", worktreeId: wt.id, paths: ["b.txt"] }, ctx, services);
     expect(existsSync(join(wt.path, "b.txt"))).toBe(false);
     expect(landingCalls).toEqual([`recheck ${wt.id}`]);
   });

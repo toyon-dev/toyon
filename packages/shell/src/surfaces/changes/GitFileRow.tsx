@@ -20,7 +20,10 @@ export const GitFileRow = memo(function GitFileRow({
   id,
   active,
   selected,
+  checking = false,
+  checked = false,
   onOpen,
+  onCheck,
   menu,
   onHover,
 }: {
@@ -32,7 +35,14 @@ export const GitFileRow = memo(function GitFileRow({
   active: boolean;
   /** the keyboard selection, drawn only while the list has focus */
   selected: boolean;
+  /** the list is picking files to act on together, and this row is one it can pick: a box shows
+   * before the letter, and a click checks rather than opens */
+  checking?: boolean;
+  /** a member of that pick */
+  checked?: boolean;
   onOpen: (path: string) => void;
+  /** check or uncheck this row; a shift-click starts the pick from a row that has none showing */
+  onCheck?: (path: string) => void;
   /** what a right-click on this file offers */
   menu: (path: string) => MenuEntry[];
   onHover: (path: string, entering: boolean) => void;
@@ -43,16 +53,17 @@ export const GitFileRow = memo(function GitFileRow({
     <button
       className="row row-sm git-file row-edge"
       id={id}
-      data-state={rowState({ current: active, cursor: selected })}
+      data-state={rowState({ current: active, cursor: selected, checked })}
       role="option"
       aria-selected={selected}
       // the list owns the keyboard: tab reaches the panel, not each of fifty files in it
       tabIndex={-1}
-      onClick={() => onOpen(f.path)}
+      onClick={(e) => (onCheck && (checking || e.shiftKey) ? onCheck(f.path) : onOpen(f.path))}
       {...cm.contextMenu(() => menu(f.path))}
       onMouseEnter={() => onHover(f.path, true)}
       onMouseLeave={() => onHover(f.path, false)}
     >
+      {checking && <input type="checkbox" className="changes-check" checked={checked} readOnly tabIndex={-1} />}
       <span className={`xy ${xyClass(f.xy)}`}>{xyLetter(f.xy)}</span>
       <span className="path" data-tip={dir ? f.path : undefined}>
         <span className="name">{name}</span>

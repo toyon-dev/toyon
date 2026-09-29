@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { GitFileStatus } from "@toyon/shared";
 import type { DaemonSocket } from "../../ws.ts";
 import { type Action, EMPTY_LOCAL, type WorktreeLocal } from "../store.ts";
-import { createFile, listFiles, listingKey, settleCreate } from "./file.ts";
+import { createFile, discardQuestion, listFiles, listingKey, settleCreate } from "./file.ts";
 
 describe("listingKey", () => {
   const head = "abc123";
@@ -107,5 +107,23 @@ describe("createFile", () => {
 
   test("an answer to a write nobody made here is left for the open file's sync", () => {
     expect(settleCreate(answer(999_999, { ok: true, version: "v1" }))).toBe(false);
+  });
+});
+
+describe("discardQuestion", () => {
+  test("one file is named", () => {
+    expect(discardQuestion(["src/a.ts"])).toBe("Discard uncommitted changes to src/a.ts?");
+  });
+
+  test("several are counted and listed", () => {
+    expect(discardQuestion(["a.ts", "b.ts"])).toBe("Discard uncommitted changes to 2 files?\n\na.ts\nb.ts");
+  });
+
+  test("past a screenful the rest is a count", () => {
+    const paths = Array.from({ length: 15 }, (_, i) => `f${i}.ts`);
+    const q = discardQuestion(paths);
+    expect(q.startsWith("Discard uncommitted changes to 15 files?\n\nf0.ts\n")).toBe(true);
+    expect(q.endsWith("f11.ts\nand 3 more")).toBe(true);
+    expect(q).not.toContain("f12.ts");
   });
 });

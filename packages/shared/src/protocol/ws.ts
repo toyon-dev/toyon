@@ -629,7 +629,10 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
    * Answered by one `element-sources`. */
   z.object({ t: z.literal("find-element"), worktreeId: id, seq, element: elementTraitsSchema }),
   z.object({ t: z.literal("design-scan"), worktreeId: id }),
-  z.object({ t: z.literal("discard-file"), worktreeId: id, path: relPath }),
+  /** throw away the uncommitted changes to these files: one row's, or every row checked in the
+   * changes list. One message for the set, so the status push and the check run once after all of
+   * them rather than once per file. */
+  z.object({ t: z.literal("discard-files"), worktreeId: id, paths: z.array(relPath).min(1).max(500) }),
   /** run the repo's check here and write the recap and the commit message, by hand: for a verdict
    * the tree moved under, a turn that stopped short of one, or none at all. Answered by the
    * worktree's landing on the rows frame; refused while its agent is mid-turn. A `note` is what

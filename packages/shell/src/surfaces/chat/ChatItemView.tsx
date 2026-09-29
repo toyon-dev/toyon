@@ -1,11 +1,10 @@
 import { LOGIN_STREAM, type PickMeta, SHELL_TOOL, type ShipOp, type ToolImage } from "@toyon/shared";
 import { Fragment, memo, type ReactNode, useMemo, useRef, useState } from "react";
 import { copyText } from "../../state/actions/deps.ts";
-import { openFile, openFolder } from "../../state/actions/file.ts";
+import { openFile } from "../../state/actions/file.ts";
 import { type ChatLink, codeItems, imageItems, messageItems, pathItems } from "../../state/actions/message.ts";
 import { archiveWorktrees } from "../../state/actions/worktree.ts";
 import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
-import { openByPath } from "../../state/openOutside.ts";
 import { openSource } from "../../state/openSource.ts";
 import { type ChatItem, worktreeById } from "../../state/store.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
@@ -21,6 +20,7 @@ import { attachmentUrl } from "../../ws.ts";
 import { elapsed } from "../util.ts";
 import { AskRow } from "./AskRow.tsx";
 import { answeredQuestion, answerLines } from "./ask.ts";
+import { chatLink, openChatLink } from "./chatLink.ts";
 import {
   runCalls,
   runningInRun,
@@ -31,8 +31,8 @@ import {
   type ToolItem,
 } from "./group.ts";
 import { SentImageChip } from "./ImageChip.tsx";
+import { MentionText, openMention } from "./Mentions.tsx";
 import { useMarkdown } from "./markdown.ts";
-import { outsidePath, worktreeLink } from "./markdownPaths.ts";
 import { netOfCalls } from "./mergeDiffs.ts";
 import { PasteChip } from "./PasteChip.tsx";
 import { PickChip } from "./PickChip.tsx";
@@ -51,53 +51,6 @@ import {
 } from "./toolCall.ts";
 import { toolRowItems } from "./toolRowItems.ts";
 import { codeAt, useCodeCopy } from "./useCodeCopy.tsx";
-
-/** the link at or around an element of a rendered message: the worktree file it names when the
- * checkout root is known, a file elsewhere on the daemon's disk, or a page out; a backticked
- * absolute path counts, as the path it names; null when the element is in none of these */
-function chatLink(target: Element, root: string | undefined): ChatLink | null {
-  const a = target.closest("a, code[data-path]");
-  if (!a) return null;
-  const path = a.getAttribute("data-path");
-  if (path) return { kind: "path", path };
-  const href = a.getAttribute("href");
-  if (!href) return null;
-  const file = root ? worktreeLink(root, href) : null;
-  if (file) return { kind: "file", file };
-  const outside = outsidePath(href);
-  return outside ? { kind: "outside", href, ...outside } : { kind: "out", href };
-}
-
-function openChatLink(
-  e: React.MouseEvent,
-  root: string | undefined,
-  worktreeId: string | null | undefined,
-  deps: { dispatch: ReturnType<typeof useDispatch>; sock: ReturnType<typeof useSock> },
-) {
-  const link = chatLink(e.target as Element, root);
-  if (link?.kind === "outside" && worktreeId) {
-    // the daemon answers with the open, in whichever worktree the file sits in or loose under a
-    // grant, and the same code the Dock icon's opens go through puts it in the pane
-    e.preventDefault();
-    openByPath(deps, worktreeId, link);
-    return;
-  }
-  if (link?.kind !== "file" || !worktreeId) return;
-  const target = link.file;
-  e.preventDefault();
-  if (target.folder) {
-    openFolder(deps, { worktreeId, path: target.path });
-    return;
-  }
-  // a message names a file because the agent touched it, so the view is left unsaid and the read
-  // opens the diff when there is one, the file otherwise. A line is an address into whichever it
-  // opens: the diff never folds around a line it is asked to show, so the line is in view either way.
-  openFile(deps, {
-    worktreeId,
-    path: target.path,
-    ...(target.line ? { line: { n: target.line } } : {}),
-  });
-}
 
 function Markdown({
   text,
@@ -952,12 +905,19 @@ export const ChatItemView = memo(function ChatItemView({
   // the agent runs at the worktree's real path even when the UI gives it a title-shaped symlink
   const fileRoot = () => worktreeById(store.getState(), worktreeId)?.worktree.path;
   switch (item.kind) {
-    case "user":
+    case "user": {
+      // the person's `@` references are links, as the agent's paths are: the row routes a press
+      // on one, and the menu on one is the file's
+      const root = fileRoot();
       return (
+        // biome-ignore lint/a11y/useKeyWithClickEvents: the links inside are the controls; the root only routes their clicks
         <div
           className="msg-user row-edge"
           data-state={rowState({ cursor: marked })}
-          {...cm.contextMenu(() => messageItems(item, worktreeId ?? null, deps))}
+          {...cm.contextMenu((_from, target) =>
+            messageItems(item, worktreeId ?? null, deps, { link: chatLink(target, root), dir: dirOf() }),
+          )}
+          onClick={(e) => openMention(e, root, worktreeId, deps)}
         >
           {item.attachments && worktreeId && (
             <div className="msg-attachments">
@@ -990,9 +950,10 @@ export const ChatItemView = memo(function ChatItemView({
               )}
             </div>
           )}
-          {item.text}
+          <MentionText text={item.text} worktreeId={worktreeId} root={root} />
         </div>
       );
+    }
     case "assistant":
       return (
         <Markdown

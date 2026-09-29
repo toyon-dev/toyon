@@ -4,6 +4,7 @@
 
 import type { AgentCommand } from "@toyon/shared";
 import { commandScore } from "../overlays/commands.ts";
+import { folderList } from "../util.ts";
 
 export interface Trigger {
   kind: "file" | "command";
@@ -39,6 +40,80 @@ export function triggerAt(text: string, caret: number): Trigger | null {
   let to = caret;
   while (to < text.length && !/\s/.test(text[to] ?? "")) to++;
   return { kind: "file", query, from: at, to };
+}
+
+/** what a message's `@` references resolve against: the worktree's files, and the folders they
+ * imply, which is the same list the `@` menu offers, so a reference is a link exactly when the
+ * menu would have offered it */
+export interface MentionIndex {
+  files: ReadonlySet<string>;
+  folders: ReadonlySet<string>;
+}
+
+const NO_INDEX: MentionIndex = { files: new Set(), folders: new Set() };
+
+// one index per file list: every bubble of a transcript reads the same list, and the folder walk
+// over a large checkout is not a thing to redo per row
+const indexes = new WeakMap<readonly string[], MentionIndex>();
+
+/** the index for a file list; without one, only `@changes` resolves */
+export function mentionIndex(files: readonly string[] | undefined): MentionIndex {
+  if (!files) return NO_INDEX;
+  let index = indexes.get(files);
+  if (!index) {
+    index = { files: new Set(files), folders: new Set(folderList(files)) };
+    indexes.set(files, index);
+  }
+  return index;
+}
+
+export type MentionSpan =
+  | { kind: "text"; text: string }
+  | { kind: "file"; text: string; path: string }
+  | { kind: "folder"; text: string; path: string }
+  | { kind: "changes"; text: string };
+
+/** the sigil opens a word, as it must for the menu (`triggerAt`), and the word runs to the next space */
+const MENTION = /(^|\s)(@\S+)/g;
+/** what a sentence hangs on the end of a reference: `see @src/App.tsx.` names the file, not `App.tsx.` */
+const TRAILING = /[.,;:!?)\]}'"]$/;
+
+function resolve(word: string, index: MentionIndex): MentionSpan | null {
+  if (word === "changes") return { kind: "changes", text: "@changes" };
+  if (index.files.has(word)) return { kind: "file", text: `@${word}`, path: word };
+  const folder = word.replace(/\/+$/, "");
+  if (folder && index.folders.has(folder)) return { kind: "folder", text: `@${word}`, path: folder };
+  return null;
+}
+
+/** a message split at every `@` reference that names something in the worktree: a file or folder
+ * the index holds, or the uncommitted set. Anything else stays prose, an address included, so the
+ * mark says the agent has somewhere to look rather than that a sigil was typed. */
+export function mentionSpans(text: string, index: MentionIndex): MentionSpan[] {
+  const out: MentionSpan[] = [];
+  let last = 0;
+  const push = (s: string) => {
+    if (!s) return;
+    const prev = out.at(-1);
+    if (prev?.kind === "text") prev.text += s;
+    else out.push({ kind: "text", text: s });
+  };
+  for (const m of text.matchAll(MENTION)) {
+    const start = m.index + (m[1] ?? "").length;
+    let word = (m[2] ?? "").slice(1);
+    let hit = resolve(word, index);
+    // punctuation is peeled from the end until the reference is one the index knows
+    while (!hit && TRAILING.test(word)) {
+      word = word.slice(0, -1);
+      hit = word ? resolve(word, index) : null;
+    }
+    if (!hit) continue;
+    push(text.slice(last, start));
+    out.push(hit);
+    last = start + hit.text.length;
+  }
+  push(text.slice(last));
+  return out;
 }
 
 /** the draft with the trigger's span replaced, and where the caret lands after it */

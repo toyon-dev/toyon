@@ -903,6 +903,43 @@
       color: var(--text1);
     }
   }
+  /* A `@` reference in the person's own words wears what a file link in the agent's prose wears:
+     the mono face a path has everywhere else in the shell, the scan tier, and an underline saying
+     it opens, which goes solid as the word comes up a tier under the pointer. Both sides of the
+     transcript then say one thing about a path, which is what makes the tag a link and not a word
+     with a sigil on it. The set of uncommitted files takes the same mark. */
+  .chat-mention {
+    font: var(--type-mono);
+    color: var(--text1);
+    text-decoration: underline;
+    text-decoration-color: color-mix(in srgb, currentColor 55%, transparent);
+    text-underline-offset: 2px;
+    overflow-wrap: anywhere;
+    cursor: pointer;
+  }
+  :where([data-hover]) .chat-mention:hover {
+    color: var(--text0);
+    text-decoration-color: currentColor;
+  }
+  /* The draft's references, over the field: the text again in the field's own metrics with the
+     words transparent, so only the underlines show through under the words the textarea draws,
+     and a path reads as a link before it is sent. The face and the wrapping are the field's, or
+     the marks drift off the words under them, which is also why the mono is not worn here. The
+     overlay lets presses through to the field; the marks alone take them, as the verb does. */
+  .composer-marks {
+    color: transparent;
+    overflow-wrap: break-word;
+    & .chat-mention {
+      font: inherit;
+      color: transparent;
+      overflow-wrap: inherit;
+      pointer-events: auto;
+      text-decoration-color: color-mix(in srgb, var(--text1) 55%, transparent);
+    }
+    :where([data-hover]) & .chat-mention:hover {
+      text-decoration-color: var(--text0);
+    }
+  }
   /* an empty box with something to say under its placeholder draws both itself, on one tier and
    with no gap: a tight pair reads as one card, what the work is over where it stands, and the
    label opening the second line does the separating. A quieter second line read as a hint under

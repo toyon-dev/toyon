@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { filterCommands, insertAt, triggerAt } from "./mentions.ts";
+import { filterCommands, insertAt, mentionIndex, mentionSpans, triggerAt } from "./mentions.ts";
 
 // caret is written as | in the case names; the tests pass the index directly
 const at = (text: string, caret = text.length) => triggerAt(text, caret);
@@ -107,5 +107,51 @@ describe("filterCommands", () => {
   test("the description is a fallback when no name matches, for an unguessable name", () => {
     expect(filterCommands(cmds, "delivery").map((c) => c.name)).toEqual(["receive"]);
     expect(filterCommands(cmds, "zzz")).toEqual([]);
+  });
+});
+
+describe("mentionSpans: the references in a sent message", () => {
+  const index = mentionIndex(["README.md", "src/App.tsx", "src/pages/About.tsx"]);
+  const spans = (text: string) => mentionSpans(text, index);
+
+  test("a file the index holds is a link; the words around it stay prose", () => {
+    expect(spans("fix @src/App.tsx please")).toEqual([
+      { kind: "text", text: "fix " },
+      { kind: "file", text: "@src/App.tsx", path: "src/App.tsx" },
+      { kind: "text", text: " please" },
+    ]);
+  });
+
+  test("a folder resolves with or without its slash, and @changes always does", () => {
+    expect(spans("@src/ and @src/pages")).toEqual([
+      { kind: "folder", text: "@src/", path: "src" },
+      { kind: "text", text: " and " },
+      { kind: "folder", text: "@src/pages", path: "src/pages" },
+    ]);
+    expect(mentionSpans("review @changes", mentionIndex(undefined))).toEqual([
+      { kind: "text", text: "review " },
+      { kind: "changes", text: "@changes" },
+    ]);
+  });
+
+  test("punctuation after a reference belongs to the sentence", () => {
+    expect(spans("see @README.md.")).toEqual([
+      { kind: "text", text: "see " },
+      { kind: "file", text: "@README.md", path: "README.md" },
+      { kind: "text", text: "." },
+    ]);
+    expect(spans("(@src/App.tsx)")).toEqual([{ kind: "text", text: "(@src/App.tsx)" }]);
+  });
+
+  test("what the index does not know, an address, or a sigil mid-word is prose", () => {
+    expect(spans("ask @kyle or me@example.com about @gone.ts")).toEqual([
+      { kind: "text", text: "ask @kyle or me@example.com about @gone.ts" },
+    ]);
+    expect(spans("")).toEqual([]);
+  });
+
+  test("one index per list, so every row shares the folder walk", () => {
+    const files = ["a/b.ts"];
+    expect(mentionIndex(files)).toBe(mentionIndex(files));
   });
 });

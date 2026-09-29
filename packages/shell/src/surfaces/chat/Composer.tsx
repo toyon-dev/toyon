@@ -65,6 +65,7 @@ import { AskBox } from "./AskBox.tsx";
 import { openAsk } from "./ask.ts";
 import { ImageChip } from "./ImageChip.tsx";
 import { dataUrl } from "./images.ts";
+import { MentionText, openMention } from "./Mentions.tsx";
 import { filterCommands, insertAt, triggerAt } from "./mentions.ts";
 import { isMode, mergeCommands, ownCommandOf, ownCommands } from "./ownCommands.ts";
 import { PasteChip } from "./PasteChip.tsx";
@@ -352,6 +353,8 @@ export function Composer({
   }, [triggerKind, triggerQuery, files, folders, git, commands, ownRows]);
 
   const composerRef = useRef<HTMLTextAreaElement>(null);
+  // the marks over the field scroll with it, or a long draft's underlines sit under the wrong words
+  const marksRef = useRef<HTMLDivElement>(null);
   // the keyboard's place in the box: the ask while one is up, else the textarea
   const focusBox = () => (askRef.current ?? composerRef.current)?.focus();
   const refocus = focusBox;
@@ -1017,6 +1020,9 @@ export function Composer({
               keepRecalled();
             }}
             onPaste={onPaste}
+            onScroll={(e) => {
+              if (marksRef.current) marksRef.current.scrollTop = e.currentTarget.scrollTop;
+            }}
             onKeyDown={(e) => {
               onPasteKey(e);
               // an IME builds a word out of several keystrokes; a menu opening mid-composition would
@@ -1095,6 +1101,20 @@ export function Composer({
             <div className="composer-ghost" aria-hidden="true">
               <span className="picker-typed">{text}</span>
               {ghost}
+            </div>
+          )}
+          {/* the draft's `@` references, marked where they stand and opening what they name: the
+              file list decides which words are references, so a sigil that names nothing shows
+              nothing. Not in `!` mode, where a `@` is the shell's. Hidden from readers: the field
+              already reads the text, and the links are the pointer's. */}
+          {id && shellCmd === null && text.includes("@") && (
+            <div
+              ref={marksRef}
+              className="composer-ghost composer-marks"
+              aria-hidden="true"
+              onClick={(e) => openMention(e, active?.worktree.path, id, { sock, dispatch })}
+            >
+              <MentionText text={text} worktreeId={id} root={active?.worktree.path} inField />
             </div>
           )}
           {/* present only while the box is empty, so typing and landing are never offered at once;

@@ -174,11 +174,11 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
     isOwned(d) && isLead(d.worktree)
       ? [repoOf(d)?.name, rowLabel(d, repoOf(d))].filter(Boolean).join(" · ")
       : (d.branch ?? d.name);
-  // the aside: what the agent has cost and filled so far, at the foot of the tip and nowhere else,
-  // so the figures are found in one place
+  // the aside: what the agent has filled and cost so far, at the foot of the tip and nowhere else,
+  // so the figures are found in one place. Context first: it is the one that runs out.
   const figuresOf = (d: WorktreeStatus) => {
     const u = d.usage;
-    const parts = [u?.cost !== undefined ? dollars(u.cost) : null, u ? `${tokens(u.used)} of ${tokens(u.size)}` : null];
+    const parts = [u ? `${tokens(u.used)} of ${tokens(u.size)}` : null, u?.cost !== undefined ? dollars(u.cost) : null];
     return parts.some(Boolean) ? parts.filter((p) => p !== null) : undefined;
   };
 

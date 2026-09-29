@@ -70,9 +70,11 @@
     pointer-events: none;
     margin: 0;
   }
-  /* The counts: one fixed column per kind, dirty nearest the name then behind then ahead, tabular
-   digits aligned toward the dot, so the numbers form straight edges down the list and the column
-   says which is which.
+  /* The counts: one fixed column per kind, ahead nearest the name then dirty then behind (rarest
+   first, see Rail.tsx), tabular digits aligned toward the dot, so the numbers form straight edges
+   down the list and the column says which is which. Behind sits beside the time in the gutter,
+   both from the quiet tier: the time is a rung smaller (mono-sm) and always wears a unit, which
+   is what keeps "3" and "9m" from reading as one figure.
    They are read, not pressed (see .badge-* in base.css): the verbs live in the row menu. */
   .rail-counts {
     display: flex;

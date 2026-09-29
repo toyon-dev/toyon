@@ -293,7 +293,7 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
   /* The count columns are reserved list-wide, so every number sits under the one above it. A column
    * nobody uses is not drawn, and the name takes its width. */
   const all = [...worktrees, ...discovered].map(countsOf);
-  const kinds = (["dirty", "ahead", "behind"] as const).filter((k) => all.some((w) => (w[k] ?? 0) > 0));
+  const kinds = (["ahead", "dirty", "behind"] as const).filter((k) => all.some((w) => (w[k] ?? 0) > 0));
   /** The columns a row draws. The name is the one item that stretches, so what follows it is
    * anchored to the far edge: a trailing empty column is what keeps a row's number under the one
    * above, and an empty column between the name and the row's first number holds nothing in place.
@@ -494,26 +494,27 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
             <span className="act">pick</span>
           </span>
         )}
-        {/* dirty and ahead in colour, side by side: they are the two you act on, and they read
-            outward from the name as uncommitted, then committed but not landed. Behind is nearly
-            always there and nearly always in the hundreds, so as a number it only says "stale",
-            and it says that from the quiet tier, at the edge beside the equally quiet time. Same
-            order git prints them in. The columns say which count is which, so no glyph does. */}
+        {/* Ordered by how often a column is filled, rarest nearest the name: a leading empty column
+            is not drawn and the name runs into its space, so the count few rows have is the one that
+            costs the least. Ahead and dirty in colour, side by side: they are the two you act on.
+            Behind is nearly always there and nearly always in the hundreds, so as a number it only
+            says "stale", and it says that from the quiet tier, at the edge beside the equally quiet
+            time. The columns say which count is which, so no glyph does. */}
         <span className="rail-counts">
-          {cols.has("dirty") && (
-            <span
-              className="rail-count badge-dirty"
-              data-tip={counts.dirty ? `${counts.dirty} uncommitted${onLead ? " on main" : ""}` : undefined}
-            >
-              {counts.dirty ? `~${count(counts.dirty)}` : ""}
-            </span>
-          )}
           {cols.has("ahead") && (
             <span
               className="rail-count badge-ahead"
               data-tip={counts.ahead ? `${counts.ahead} ahead of ${base}` : undefined}
             >
               {counts.ahead ? `+${count(counts.ahead)}` : ""}
+            </span>
+          )}
+          {cols.has("dirty") && (
+            <span
+              className="rail-count badge-dirty"
+              data-tip={counts.dirty ? `${counts.dirty} uncommitted${onLead ? " on main" : ""}` : undefined}
+            >
+              {counts.dirty ? `~${count(counts.dirty)}` : ""}
             </span>
           )}
           {cols.has("behind") && (

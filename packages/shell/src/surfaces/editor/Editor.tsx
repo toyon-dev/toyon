@@ -138,10 +138,21 @@ const hunksOf = (d: monaco.editor.IDiffEditor): Hunk[] =>
     modified: c.modifiedEndLineNumber ? c.modifiedEndLineNumber - c.modifiedStartLineNumber + 1 : 0,
   }));
 
-const paneOf = (el: HTMLElement, code: monaco.editor.ICodeEditor): Pane => ({
-  height: el.clientHeight,
-  lineHeight: code.getOption(monaco.editor.EditorOption.lineHeight),
-});
+/** the room the fit has: the height Monaco laid the editor out at, less the horizontal scrollbar.
+ * Monaco's height and not the box's: the box reports a fractional height rounded, Monaco floors
+ * it, and a fold sized to the rounded one scrolled by that pixel. Monaco adds the bar's height to
+ * the content whenever a line runs wider than the box, so the last line can be read above it, and
+ * a fold sized without it scrolled by exactly that much. Reserved always rather than measured: the
+ * width Monaco knows is that of the lines it has drawn, so a wide line further down would add the
+ * bar after the fit was made. The reserve costs one context line at most. */
+const paneOf = (code: monaco.editor.ICodeEditor): Pane => {
+  const scrollbar = code.getOption(monaco.editor.EditorOption.scrollbar);
+  const bar = scrollbar.horizontal === monaco.editor.ScrollbarVisibility.Hidden ? 0 : scrollbar.horizontalScrollbarSize;
+  return {
+    height: code.getLayoutInfo().height - bar,
+    lineHeight: code.getOption(monaco.editor.EditorOption.lineHeight),
+  };
+};
 function tokenizeThrough(model: monaco.editor.ITextModel, line: number) {
   const through = Math.min(line, model.getLineCount());
   if (through < 1 || through > TOKENIZE_NOW) return;
@@ -470,7 +481,7 @@ export default function Editor({
         // the hunks are known now, so the pane's own height can say what is worth folding. The
         // strip beside the scrollbar maps hunks that are off the screen; with every hunk on it,
         // it is the gutter's marks drawn a second time, smaller
-        const { scrolls, ...fold } = diffFit(paneOf(el, code), m.modified.getLineCount(), hunksOf(d));
+        const { scrolls, ...fold } = diffFit(paneOf(code), m.modified.getLineCount(), hunksOf(d));
         d.updateOptions({
           hideUnchangedRegions: { ...fold, minimumLineCount: FOLD_MIN },
           renderOverviewRuler: scrolls,

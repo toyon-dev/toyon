@@ -30,8 +30,30 @@ export function withStatus(paths: string[], status: GitFileStatus[]): QuickOpenR
 }
 
 /**
+ * A flat list read as a tree: at each level a folder's own files come before its subfolders, in
+ * byte order (dotfiles, capitals, lowercase) like `git ls-files` and the files tab. Sorting the
+ * whole path instead put nested files between root ones, and the picker's row cap then hid the
+ * root files a person reaches for without typing (package.json, README, the settings file).
+ * Folders come after files, the reverse of a tree view, because here a folder is not one row
+ * but every file under it.
+ */
+export function treeOrder(a: string, b: string): number {
+  const as = a.split("/"),
+    bs = b.split("/");
+  for (let i = 0; ; i++) {
+    const x = as[i],
+      y = bs[i];
+    if (x === undefined || y === undefined) return as.length - bs.length;
+    const xFile = i === as.length - 1,
+      yFile = i === bs.length - 1;
+    if (xFile !== yFile) return xFile ? -1 : 1;
+    if (x !== y) return x < y ? -1 : 1;
+  }
+}
+
+/**
  * Empty query: changed files first in status order (same as the changes panel), then the
- * rest alphabetically. With a query: fuzzy score, basename hits preferred, a small nudge
+ * rest in tree order. With a query: fuzzy score, basename hits preferred, a small nudge
  * for changed files so ties break toward what the agent just touched.
  */
 export function rankFiles(paths: string[], status: GitFileStatus[], query: string, limit = 50): QuickOpenList {
@@ -40,8 +62,8 @@ export function rankFiles(paths: string[], status: GitFileStatus[], query: strin
   if (!needle) {
     const order = new Map(status.map((s, i) => [s.path, i]));
     const rank = (r: QuickOpenRow) => order.get(r.status?.path ?? "") ?? order.get(r.path) ?? Number.MAX_SAFE_INTEGER;
-    const changed = rows.filter((r) => r.status).sort((a, b) => rank(a) - rank(b) || a.path.localeCompare(b.path));
-    const rest = rows.filter((r) => !r.status).sort((a, b) => a.path.localeCompare(b.path));
+    const changed = rows.filter((r) => r.status).sort((a, b) => rank(a) - rank(b) || treeOrder(a.path, b.path));
+    const rest = rows.filter((r) => !r.status).sort((a, b) => treeOrder(a.path, b.path));
     return { rows: [...changed, ...rest].slice(0, limit), changed: Math.min(changed.length, limit) };
   }
   const scored = scoreFiles(rows, needle);

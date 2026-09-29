@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { matchPositions, rankFiles, splitPath, withStatus } from "./quickOpen.ts";
+import { matchPositions, rankFiles, splitPath, treeOrder, withStatus } from "./quickOpen.ts";
 
 const paths = [
   "src/pages/About.tsx",
@@ -29,7 +29,7 @@ describe("withStatus", () => {
 });
 
 describe("rankFiles", () => {
-  test("empty query: changed files first in panel order, then the rest alphabetically", () => {
+  test("empty query: changed files first in panel order, then the rest in tree order", () => {
     const { rows, changed } = rankFiles(paths, status, "");
     expect(rows.map((r) => r.path)).toEqual([
       "src/App.tsx",
@@ -38,10 +38,36 @@ describe("rankFiles", () => {
       "src/pages/Home.tsx",
       ".gitignore",
       "index.html",
-      "src/main.tsx",
       "vite.config.ts",
+      "src/main.tsx",
     ]);
     expect(changed).toBe(4);
+  });
+  test("tree order: a folder's files before its subfolders at every level, byte order within", () => {
+    const unsorted = [
+      "packages/shell/src/app.ts",
+      "packages/shell/package.json",
+      "biome.jsonc",
+      ".github/workflows/check.yml",
+      "packages/bridge/package.json",
+      "README.md",
+      ".gitignore",
+      "docs/images/toyon.gif",
+      "docs/agents.md",
+      "package.json",
+    ];
+    expect([...unsorted].sort(treeOrder)).toEqual([
+      ".gitignore",
+      "README.md",
+      "biome.jsonc",
+      "package.json",
+      ".github/workflows/check.yml",
+      "docs/agents.md",
+      "docs/images/toyon.gif",
+      "packages/bridge/package.json",
+      "packages/shell/package.json",
+      "packages/shell/src/app.ts",
+    ]);
   });
   test("query: no divider, basename hits beat directory hits, changed files nudge ahead on ties", () => {
     const { rows, changed } = rankFiles(paths, status, "app");

@@ -17,6 +17,8 @@ function make(
     method?: InstallMethod;
     managedBy?: "policy" | "env" | null;
     installFails?: boolean;
+    /** what the restarter answers a request with: a refusal, or null having restarted */
+    refuse?: string | null;
   } = {},
 ) {
   const hub = new Hub();
@@ -47,6 +49,7 @@ function make(
       registryAsks++;
       return { version: latest, registry: REGISTRY };
     },
+    registry: async () => REGISTRY,
     command: (v) => (method === "npm" ? ["npm", "install", "-g", `toyon@${v}`] : null),
     install: async (command) => {
       installs.push(command);
@@ -57,9 +60,10 @@ function make(
     restarter: {
       working: () => working,
       waitingOn: () => (asked ? working : null),
-      request: () => {
-        asked = true;
+      request: async () => {
         requests++;
+        if (start.refuse) return start.refuse;
+        asked = true;
         return null;
       },
     },
@@ -104,18 +108,41 @@ describe("UpdateService: what is installed", () => {
     expect(changes).toBe(0);
   });
 
-  test("an install under the running daemon is announced once", async () => {
-    const { update, hub } = make({ installed: "0.3.0" });
+  test("an install under the running daemon counts once it has read the same for a minute, and is announced once", async () => {
+    const { update, hub, advance } = make({ installed: "0.3.0" });
     let changes = 0;
     hub.on("updateChanged", () => changes++);
+    // npm writes package.json before the rest of the install: a version just read is not yet whole
+    await update.refresh();
+    expect(update.get()).toBeNull();
+    advance(30_000);
+    await update.refresh();
+    expect(update.get()).toBeNull();
+    advance(30_000);
     await update.refresh();
     await update.refresh();
     expect(update.get()).toMatchObject({ running: "0.2.0", installed: "0.3.0", latest: null, restarting: null });
     expect(changes).toBe(1);
   });
 
+  test("a version that changes under the read starts the minute again", async () => {
+    const { update, advance, install } = make({ installed: "0.3.0" });
+    await update.refresh();
+    advance(45_000);
+    install("0.3.1");
+    await update.refresh();
+    advance(45_000);
+    await update.refresh();
+    expect(update.get()).toBeNull();
+    advance(15_000);
+    await update.refresh();
+    expect(update.get()?.installed).toBe("0.3.1");
+  });
+
   test("a package.json caught half-written is not the update going away", async () => {
-    const { update, install } = make({ installed: "0.3.0" });
+    const { update, advance, install } = make({ installed: "0.3.0" });
+    await update.refresh();
+    advance(MIN);
     await update.refresh();
     install(null);
     await update.refresh();
@@ -129,12 +156,33 @@ describe("UpdateService: what is installed", () => {
     expect(update.get()).toMatchObject({ installed: null, restarting: ["fix login"] });
   });
 
-  test("a hand install restarts onto itself once the machine settles, with nothing to install", async () => {
+  test("a hand install restarts onto itself once it and the machine have settled, with nothing to install", async () => {
     const { update, advance, installs, requests } = make({ installed: "0.3.0" });
     advance(3 * MIN);
     await update.tick();
+    expect(requests()).toBe(0);
+    advance(MIN);
+    await update.tick();
     expect(installs).toEqual([]);
     expect(requests()).toBe(1);
+  });
+
+  test("a restart the daemon cannot make is said on the chip, with the command, and asked again next minute", async () => {
+    const reason =
+      "the bun Toyon runs on did not start (/x/bun.exe: exec format error); an install may still be writing it";
+    const { update, advance, state, requests } = make({ installed: "0.3.0", refuse: reason });
+    advance(3 * MIN);
+    await update.tick();
+    advance(MIN);
+    await update.tick();
+    expect(requests()).toBe(1);
+    expect(update.get()).toMatchObject({ failed: { version: "0.3.0", line: reason, command: "toyon restart" } });
+    // not an install that failed: nothing holds the version for a day, since the next read may
+    // find the install whole
+    expect(state.updateFailed).toBeUndefined();
+    advance(MIN);
+    await update.tick();
+    expect(requests()).toBe(2);
   });
 });
 
@@ -156,12 +204,22 @@ describe("UpdateService: what is out", () => {
 
   test("a registry without toyon is named for doctor, and an answer later clears it", async () => {
     const { update, publish } = make();
+    expect(update.status()).toEqual({ managedBy: null, registry: null, unreachable: null, latest: null });
     await update.check();
     expect(update.get()).toBeNull();
-    expect(update.status()).toEqual({ managedBy: null, unreachable: REGISTRY, latest: null });
+    expect(update.status()).toEqual({ managedBy: null, registry: REGISTRY, unreachable: REGISTRY, latest: null });
     publish("0.3.0");
     await update.check();
-    expect(update.status()).toEqual({ managedBy: null, unreachable: null, latest: "0.3.0" });
+    expect(update.status()).toEqual({ managedBy: null, registry: REGISTRY, unreachable: null, latest: "0.3.0" });
+  });
+
+  test("the registry updates come from is read for hello without asking it anything, and is nothing where nothing updates", async () => {
+    const { update, registryAsks } = make();
+    expect(await update.registry()).toBe(REGISTRY);
+    expect(registryAsks()).toBe(0);
+    expect(await make({ method: "none" }).update.registry()).toBeNull();
+    expect(await make({ managedBy: "policy" }).update.registry()).toBeNull();
+    expect(make({ managedBy: "env" }).update.status().registry).toBeNull();
   });
 });
 
@@ -277,9 +335,9 @@ describe("UpdateService: a press on the version chip", () => {
     expect(update.get()).toMatchObject({ latest: "0.3.0" });
   });
 
-  test("a check that finds nothing says so in words, since nothing else would move", async () => {
+  test("a check that finds nothing says so in words and names the registry, since a mirror can lag", async () => {
     const { update } = make({ latest: "0.2.0" });
-    await expect(update.checkNow()).rejects.toThrow("Toyon 0.2.0 is the newest version");
+    await expect(update.checkNow()).rejects.toThrow("Toyon 0.2.0 is the newest version artifacts.example lists");
     const { update: off } = make();
     await expect(off.checkNow()).rejects.toThrow(`Could not reach ${REGISTRY}`);
   });

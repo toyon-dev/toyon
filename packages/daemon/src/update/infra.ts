@@ -9,8 +9,7 @@ import { run, runLive } from "../git/exec.ts";
  * around. `version` is null when that registry has no toyon, npm is missing, or nothing answers;
  * `registry` names the one asked, for saying so. */
 export async function latestVersion(): Promise<{ version: string | null; registry: string }> {
-  const config = await run("npm", ["config", "get", "registry"], homedir());
-  const registry = config.ok && config.out !== "" ? config.out : "the npm registry";
+  const registry = await npmRegistry();
   const r = await run("npm", ["view", "toyon", "version", "--json"], homedir());
   if (!r.ok) return { version: null, registry };
   try {
@@ -20,6 +19,13 @@ export async function latestVersion(): Promise<{ version: string | null; registr
     // npm printed something other than the JSON asked for; the next check asks again
     return { version: null, registry };
   }
+}
+
+/** the registry npm is set up for on this machine, read from its config and not asked anything;
+ * a phrase when npm is missing or says nothing */
+export async function npmRegistry(): Promise<string> {
+  const config = await run("npm", ["config", "get", "registry"], homedir());
+  return config.ok && config.out !== "" ? config.out : "the npm registry";
 }
 
 /** npm ends every failure by pointing at its log, which says nothing about what went wrong */

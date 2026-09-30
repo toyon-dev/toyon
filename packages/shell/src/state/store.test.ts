@@ -118,6 +118,7 @@ const helloIn = (repos: RepoInfo[], ...w: WorktreeStatus[]): Action =>
     t: "hello",
     version: "0",
     install: "npm",
+    registry: null,
     protocol: PROTOCOL_VERSION,
     repos,
     rows: w,

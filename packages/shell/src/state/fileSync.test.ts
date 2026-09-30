@@ -91,6 +91,7 @@ function harness() {
     t: "hello",
     version: "0",
     install: "npm",
+    registry: null,
     protocol: PROTOCOL_VERSION,
     repos: [],
     rows: [],

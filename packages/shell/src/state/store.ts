@@ -741,6 +741,8 @@ export interface State {
    * hello, which is before the page shows. */
   version: string;
   install: InstallMethod;
+  /** hello's `registry`: where updates come from, named on the version row; null where nothing updates */
+  registry: string | null;
   /** the Finder dialog is up, and which of the new-project view's controls asked for it: where the
    * project goes, or a folder to open. Escape is the dialog's while it is up. */
   choosingFolder: false | "location" | "open";
@@ -883,6 +885,7 @@ export function initialState(opts: InitialOpts): State {
     update: null,
     version: "",
     install: "none",
+    registry: null,
     choosingFolder: false,
     newProject: null,
     autoSend: null,
@@ -2012,6 +2015,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
         update: msg.update,
         version: msg.version,
         install: msg.install,
+        registry: msg.registry,
         // an import this tab was watching may have finished while it was away
         activeImportId: msg.pending.some((x) => x.id === s.activeImportId) ? s.activeImportId : null,
       };

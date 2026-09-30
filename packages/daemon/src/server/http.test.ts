@@ -64,7 +64,7 @@ const opts: HttpOpts = {
       version: "v1",
     };
   },
-  restart: (now) => {
+  restart: async (now) => {
     restartsAsked++;
     restartNow = now;
     return restartRefusal;
@@ -564,7 +564,7 @@ describe("static shell", () => {
     preview: () => null,
     metrics: () => ({ lag: 0 }),
     bootstrap: async () => ({}),
-    restart: () => null,
+    restart: async () => null,
     restartWait: () => ({ waiting: null, asking: [] }),
     pair: new PairCodes(),
     onPaired: () => {},

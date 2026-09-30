@@ -35,7 +35,7 @@ import { fireAndForget, log } from "./core/log.ts";
 import { startLagSampler } from "./core/metrics.ts";
 import { ensureDirs, makePaths } from "./core/paths.ts";
 import { loadRemote, previewGrant } from "./core/remote.ts";
-import { respawn, restartable } from "./core/restart.ts";
+import { replacementRuns, respawn, restartable } from "./core/restart.ts";
 import { Restarter } from "./core/restarter.ts";
 import { SelfWatch } from "./core/self.ts";
 import { loadOrCreateToken, StateStore } from "./core/state.ts";
@@ -55,7 +55,7 @@ import { pinProxyPorts } from "./runtime/ports.ts";
 import { RuntimeRegistry } from "./runtime/registry.ts";
 import { startServer } from "./server/ws.ts";
 import { ThemeStore } from "./themes/store.ts";
-import { latestVersion, runInstall } from "./update/infra.ts";
+import { latestVersion, npmRegistry, runInstall } from "./update/infra.ts";
 import { readVersion } from "./update/installed.ts";
 import { UpdateService } from "./update/service.ts";
 import { BackendShare } from "./worktrees/backend.ts";
@@ -250,9 +250,11 @@ const restarter = new Restarter({
   hub,
   state,
   runtime,
-  refusal: () => {
+  refusal: async () => {
     const can = restartable();
-    return can.ok ? null : can.reason;
+    if (!can.ok) return can.reason;
+    const runs = await replacementRuns();
+    return runs.ok ? null : runs.reason;
   },
   // a beat later: shutdown closes the server before its first await, and the answer to whoever
   // asked (the 202 to a page, the broadcast that a restart is under way) has to leave first
@@ -272,6 +274,7 @@ const update = new UpdateService({
   restarter,
   installed: async () => (installedPackage ? readVersion(installedPackage) : null),
   latest: latestVersion,
+  registry: npmRegistry,
   command: (version) => installCommand(method, version),
   install: runInstall,
   busy: () => runtime.anyBusy(),
@@ -461,7 +464,14 @@ async function shutdown(signal: string, opts: { respawn?: boolean } = {}) {
     // be racing a listener that is still on its way down
     await Bun.sleep(250);
     log.info("daemon", "starting the replacement");
-    respawn(paths.logFile);
+    try {
+      respawn(paths.logFile);
+    } catch (e) {
+      // the listener is closed and the pid file gone, so a process that stayed here would be a
+      // daemon nobody can reach and `toyon` would not know to start another
+      log.error("daemon", "the replacement did not start; run `toyon` to start it again", e);
+      process.exit(1);
+    }
   }
   process.exit(0);
 }

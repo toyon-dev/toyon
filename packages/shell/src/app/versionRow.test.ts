@@ -24,11 +24,14 @@ const self = (over: Partial<SelfState> = {}): SelfState => ({
 const repos = [{ id: "r1", name: "toyon", defaultBranch: "main" } as RepoInfo];
 
 describe("versionRow", () => {
-  test("level: the version, how it was installed, and a press asks the registry", () => {
-    const row = versionRow("0.2.0", "npm", null, null, repos);
+  test("level: the version, how it was installed, where updates come from, and a press asks there", () => {
+    const row = versionRow("0.2.0", "npm", null, null, repos, false, "https://artifacts.example/api/npm/npm-packages/");
     expect(row.value).toBe("0.2.0");
     expect(row.text).toContain("installed with npm");
+    expect(row.text).toContain("from artifacts.example");
     expect(row).toMatchObject({ act: "check", busy: false });
+    // before the daemon has asked npm, the registry is the one npm is set up for, unnamed
+    expect(versionRow("0.2.0", "npm", null, null, repos).text).toContain("from the npm registry");
   });
 
   test("a checkout has nothing to press for: it updates by landing on its own branch", () => {

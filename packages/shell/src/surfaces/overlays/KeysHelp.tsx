@@ -135,12 +135,13 @@ function VersionRow() {
   const sock = useSock();
   const version = useStore((s) => s.version);
   const install = useStore((s) => s.install);
+  const registry = useStore((s) => s.registry);
   const update = useStore((s) => s.update);
   const self = useStore((s) => s.self);
   const rebuilt = useStore((s) => s.rebuilt);
   const repos = useStore((s) => s.repos);
   const updates = useStore((s) => s.managed.updates);
-  const row = versionRow(version, install, update, self, repos, rebuilt);
+  const row = versionRow(version, install, update, self, repos, rebuilt, registry);
   // a restart onto what is already installed, or a checkout's rebuild, is not an update: only the
   // presses that would ask the registry or install are the policy's to take away
   const managed = !updates && (row.act === "update" || row.act === "check");

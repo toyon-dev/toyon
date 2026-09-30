@@ -25,8 +25,14 @@ export interface Health {
   remote?: RemoteView | null;
   lag?: { last: number; max: number; maxCause: string | null; over: number };
   worktrees?: { total: number; running: number };
-  /** updates turned off for the machine and by whom, or a registry the daemon could not get toyon from */
-  updates?: { managedBy: "policy" | "env" | null; unreachable: string | null; latest: string | null };
+  /** updates turned off for the machine and by whom, the registry they come from, or one the
+   * daemon could not get toyon from */
+  updates?: {
+    managedBy: "policy" | "env" | null;
+    registry: string | null;
+    unreachable: string | null;
+    latest: string | null;
+  };
   /** the managed policy the daemon booted under: where it came from, and a hash of it */
   managed?: { source: string | null; hash: string | null };
 }

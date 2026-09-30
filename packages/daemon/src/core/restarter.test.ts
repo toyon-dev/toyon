@@ -14,6 +14,7 @@ function make(refusal: string | null = null) {
   ];
   let restarts = 0;
   let changes = 0;
+  let refusals = 0;
   hub.on("updateChanged", () => changes++);
   const restarter = new Restarter({
     hub,
@@ -24,7 +25,10 @@ function make(refusal: string | null = null) {
         return s ? { status: s } : undefined;
       },
     } as unknown as Pick<RuntimeRegistry, "agentFor">,
-    refusal: () => refusal,
+    refusal: async () => {
+      refusals++;
+      return refusal;
+    },
     go: () => {
       restarts++;
     },
@@ -33,21 +37,21 @@ function make(refusal: string | null = null) {
     status.set(id, s);
     hub.emit("agentStatus", id, s);
   };
-  return { restarter, set, restarts: () => restarts, changes: () => changes };
+  return { restarter, set, restarts: () => restarts, changes: () => changes, refusals: () => refusals };
 }
 
 describe("Restarter", () => {
-  test("with no chat mid-reply the restart happens at once", () => {
+  test("with no chat mid-reply the restart happens at once", async () => {
     const { restarter, restarts } = make();
-    expect(restarter.request()).toBeNull();
+    expect(await restarter.request()).toBeNull();
     expect(restarts()).toBe(1);
     expect(restarter.waitingOn()).toEqual([]);
   });
 
-  test("a chat mid-reply is waited out, and the restart follows the last one settling", () => {
+  test("a chat mid-reply is waited out, and the restart follows the last one settling", async () => {
     const { restarter, set, restarts } = make();
     set("a", "working");
-    restarter.request();
+    await restarter.request();
     expect(restarts()).toBe(0);
     expect(restarter.waitingOn()).toEqual(["fix login"]);
     set("b", "working");
@@ -58,10 +62,10 @@ describe("Restarter", () => {
     expect(restarts()).toBe(1);
   });
 
-  test("a chat stopped on a question does not hold the restart", () => {
+  test("a chat stopped on a question does not hold the restart", async () => {
     const { restarter, set, restarts } = make();
     set("a", "waiting");
-    restarter.request();
+    await restarter.request();
     expect(restarts()).toBe(1);
   });
 
@@ -73,42 +77,44 @@ describe("Restarter", () => {
     expect(restarter.working()).toEqual(["docs"]);
   });
 
-  test("asking twice is one restart", () => {
+  test("asking twice is one restart", async () => {
     const { restarter, set, restarts } = make();
     set("a", "working");
-    restarter.request();
-    restarter.request();
+    await restarter.request();
+    await restarter.request();
     set("a", "idle");
     set("a", "working");
     set("a", "idle");
     expect(restarts()).toBe(1);
   });
 
-  test("`now` does not wait, and the chat settling later is not a second restart", () => {
+  test("`now` does not wait, and the chat settling later is not a second restart", async () => {
     const { restarter, set, restarts } = make();
     set("a", "working");
-    restarter.request();
+    await restarter.request();
     expect(restarts()).toBe(0);
-    expect(restarter.request({ now: true })).toBeNull();
+    expect(await restarter.request({ now: true })).toBeNull();
     expect(restarts()).toBe(1);
     expect(restarter.waitingOn()).toEqual([]);
     set("a", "idle");
     expect(restarts()).toBe(1);
   });
 
-  test("a refusal is the answer, and nothing waits behind it", () => {
-    const { restarter, set, restarts } = make("restart it from its terminal tab");
+  test("a refusal is the answer, and nothing waits behind it", async () => {
+    const { restarter, set, restarts, refusals } = make("restart it from its terminal tab");
     set("a", "working");
-    expect(restarter.request()).toBe("restart it from its terminal tab");
+    expect(await restarter.request()).toBe("restart it from its terminal tab");
+    // asked before anything is given up: a daemon that cannot come back keeps serving
+    expect(refusals()).toBe(1);
     set("a", "idle");
     expect(restarts()).toBe(0);
     expect(restarter.waitingOn()).toBeNull();
   });
 
-  test("a status tick that leaves the wait as it was announces nothing", () => {
+  test("a status tick that leaves the wait as it was announces nothing", async () => {
     const { restarter, set, changes } = make();
     set("a", "working");
-    restarter.request();
+    await restarter.request();
     expect(changes()).toBe(1);
     set("a", "working");
     expect(changes()).toBe(1);

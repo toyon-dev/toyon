@@ -53,6 +53,10 @@ export type ServerMsg =
       /** how this Toyon was installed: what the settings card says under the version, and whether
        * a press there can ask for a newer one */
       install: InstallMethod;
+      /** the registry updates come from, as npm's config names it: what the settings card says
+       * updates come from, so a company mirror that lags the public registry is visible. Null
+       * where nothing updates: a checkout, or a machine with updates off. */
+      registry: string | null;
       protocol: number;
       repos: RepoInfo[];
       /** every row: toyon's own worktrees first, in its order, then the ones git knows about that

@@ -150,6 +150,11 @@ export async function doctor(): Promise<number> {
           `npm could not get toyon from ${h.updates.unreachable}, so Toyon cannot update itself; if you may use the public registry, run npm install -g toyon --registry=https://registry.npmjs.org/`,
         ),
       );
+    } else if (h.updates?.registry) {
+      // a company mirror can lag the public registry by releases, so where "newest" was read from
+      // is said beside it
+      const newest = h.updates.latest ? `${h.updates.latest} is out` : `${version} is the newest it lists`;
+      lines.push(line(true, "updates", `from ${h.updates.registry}; ${newest}`));
     }
   }
 

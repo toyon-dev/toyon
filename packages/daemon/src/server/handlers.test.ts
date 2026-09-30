@@ -164,7 +164,7 @@ function make() {
     hub,
     state,
     runtime,
-    refusal: () => null,
+    refusal: async () => null,
     go: () => {
       restarts.push(Date.now());
     },
@@ -177,6 +177,7 @@ function make() {
     method: "none",
     installed: async () => null,
     latest: async () => ({ version: null, registry: "" }),
+    registry: async () => "",
     managedBy: null,
     command: () => null,
     install: async () => ({ ok: true, line: "" }),

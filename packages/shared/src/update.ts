@@ -23,6 +23,18 @@ export function installCommand(method: InstallMethod, version: string): string[]
   return null;
 }
 
+/** What stands in for a registry in a sentence: its host, since the path npm's config carries
+ * (`/artifactory/api/npm/npm-packages/`) says nothing a person needs; the words as given when it
+ * is not a URL; "the npm registry" when nothing has asked yet. */
+export function registryHost(registry: string | null): string {
+  if (registry === null || registry === "") return "the npm registry";
+  try {
+    return new URL(registry).host;
+  } catch {
+    return registry;
+  }
+}
+
 /** Whether version `a` is newer than `b`, for the `major.minor.patch` and `-pre` versions npm
  * publishes. A prerelease is older than its release; two prereleases of one release compare by
  * their tag's text. Anything that is not a version is never newer. */

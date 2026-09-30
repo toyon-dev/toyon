@@ -12,8 +12,8 @@ export interface RestarterDeps {
   hub: Hub;
   state: Pick<StateStore, "worktrees">;
   runtime: Pick<RuntimeRegistry, "agentFor">;
-  /** why this daemon may not replace itself, or null when it may */
-  refusal: () => string | null;
+  /** why this daemon may not replace itself right now, or null when it may */
+  refusal: () => Promise<string | null>;
   /** stop and start again; called at most once */
   go: () => void;
 }
@@ -35,8 +35,8 @@ export class Restarter {
 
   /** Ask for a restart. Answers a refusal, or null having restarted or queued behind a reply.
    * `now` goes without the wait: whoever asked has read which chats it cuts off. */
-  request(opts: { now?: boolean } = {}): string | null {
-    const refused = this.d.refusal();
+  async request(opts: { now?: boolean } = {}): Promise<string | null> {
+    const refused = await this.d.refusal();
     if (refused) return refused;
     this.asked = true;
     this.attempt(opts.now);

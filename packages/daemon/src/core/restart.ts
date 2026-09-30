@@ -8,6 +8,8 @@
 
 import { spawn } from "node:child_process";
 import { openSync } from "node:fs";
+import { homedir } from "node:os";
+import { run } from "../git/exec.ts";
 import { log } from "./log.ts";
 
 /** Whether this daemon is allowed to replace itself, and what to say when it is not.
@@ -21,6 +23,22 @@ export function restartable(env: NodeJS.ProcessEnv = process.env): { ok: true } 
     return { ok: false, reason: "this daemon runs as a toyon process; restart it from its terminal tab" };
   }
   return { ok: true };
+}
+
+/** Whether the bun this daemon runs on can be started again right now, and what to say when it
+ * cannot. The replacement is spawned from `process.execPath`, and an install replaces that file
+ * under a running daemon: npm writes the package's own files first and lays the bun binary down
+ * last, in bun's postinstall, so a daemon that reads the new version off package.json and restarts
+ * at once execs a binary that is not there yet or not all there. Asked before the listener is
+ * closed, since a daemon that has closed it and cannot come back is simply gone. */
+export async function replacementRuns(): Promise<{ ok: true } | { ok: false; reason: string }> {
+  const r = await run(process.execPath, ["--version"], homedir());
+  if (r.ok && /^\d+\.\d+\.\d+/.test(r.out)) return { ok: true };
+  const why = r.err !== "" ? r.err : `exit ${r.exit}`;
+  return {
+    ok: false,
+    reason: `the bun Toyon runs on did not start (${process.execPath}: ${why}); an install may still be writing it`,
+  };
 }
 
 /** Start the replacement, writing to `logFile` as the CLI's own start does. Call this last, after

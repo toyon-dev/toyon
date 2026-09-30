@@ -433,8 +433,8 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     ctx.reply({ t: "self", self: s.self.get() });
   },
 
-  "restart-daemon"(_msg, _ctx, s) {
-    const refused = s.restarter.request();
+  async "restart-daemon"(_msg, _ctx, s) {
+    const refused = await s.restarter.request();
     if (refused) throw new UserError(refused);
   },
 

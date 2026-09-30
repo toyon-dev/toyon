@@ -1,4 +1,4 @@
-import type { InstallMethod, RepoInfo, SelfState, UpdateState } from "@toyon/shared";
+import { type InstallMethod, type RepoInfo, registryHost, type SelfState, type UpdateState } from "@toyon/shared";
 import { selfNotice } from "./selfNotice.ts";
 import { restartWaitLine } from "./updateNotice.ts";
 
@@ -18,11 +18,19 @@ export interface VersionRow {
   busy: boolean;
 }
 
-const INSTALL_TEXT: Record<InstallMethod, string> = {
-  npm: "installed with npm. A newer version installs itself when nothing is busy; press to check for one now",
-  bun: "installed with bun. A newer version installs itself when nothing is busy; press to check for one now",
-  npx: "run with npx, which fetches the newest version itself. Press to check for one now",
-  none: "run from a checkout, which does not update itself",
+/** how this copy came to be and where a newer one comes from. The registry is named because a
+ * company mirror can sit releases behind the public one, and "newest" then means newest it lists. */
+const installText = (install: InstallMethod, registry: string | null): string => {
+  const from = registryHost(registry);
+  switch (install) {
+    case "npm":
+    case "bun":
+      return `installed with ${install}. A newer version from ${from} installs itself when nothing is busy; press to check for one now`;
+    case "npx":
+      return `run with npx, which fetches the newest version from ${from} itself. Press to check for one now`;
+    case "none":
+      return "run from a checkout, which does not update itself";
+  }
 };
 
 /**
@@ -37,6 +45,7 @@ export function versionRow(
   self: SelfState | null,
   repos: RepoInfo[],
   rebuilt = false,
+  registry: string | null = null,
 ): VersionRow {
   if (update) {
     if (update.restarting) {
@@ -97,7 +106,7 @@ export function versionRow(
   }
   return {
     value: version,
-    text: `Toyon ${version}, ${INSTALL_TEXT[install]}`,
+    text: `Toyon ${version}, ${installText(install, registry)}`,
     act: install === "none" ? null : "check",
     busy: false,
   };

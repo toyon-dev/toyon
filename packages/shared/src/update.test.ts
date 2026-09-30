@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { installCommand, installMethod, newer } from "./update.ts";
+import { installCommand, installMethod, newer, registryHost } from "./update.ts";
 
 describe("installMethod", () => {
   test("reads the install from where the package sits", () => {
@@ -22,6 +22,18 @@ describe("installCommand", () => {
     expect(installCommand("bun", "0.3.0")).toEqual(["bun", "add", "-g", "toyon@0.3.0"]);
     expect(installCommand("npx", "0.3.0")).toBeNull();
     expect(installCommand("none", "0.3.0")).toBeNull();
+  });
+});
+
+describe("registryHost", () => {
+  test("a registry is named by its host, and nothing known is the npm registry", () => {
+    expect(registryHost("https://artifacts.dropbox.dev/artifactory/api/npm/npm-packages/")).toBe(
+      "artifacts.dropbox.dev",
+    );
+    expect(registryHost("https://registry.npmjs.org/")).toBe("registry.npmjs.org");
+    expect(registryHost("the npm registry")).toBe("the npm registry");
+    expect(registryHost(null)).toBe("the npm registry");
+    expect(registryHost("")).toBe("the npm registry");
   });
 });
 

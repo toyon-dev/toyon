@@ -1,0 +1,491 @@
+import { describe, expect, test } from "bun:test";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { SHELL_TOOL } from "@toyon/shared";
+import type { FakeAgent } from "../../test/helpers/fakes.ts";
+import { sh } from "../../test/helpers/tmp-repo.ts";
+import { registered, setRoute, until, useWorld, w } from "../../test/helpers/world.ts";
+import { UserError } from "../core/errors.ts";
+import { GIT, git } from "../git/exec.ts";
+import { treeFingerprint } from "../git/status.ts";
+
+// Landing on the merge route: the commit, the sync, the verdict on the tree it saw, and the hooks in the way.
+
+useWorld();
+
+describe("landing", () => {
+  /** the subjects on main, newest first */
+  const subjects = async () => (await git(w.repo, "log", "--format=%s", "-n", "6")).out.split("\n");
+  /** how many parents main's tip has: two for a merge commit, one otherwise */
+  const parents = async () => (await git(w.repo, "log", "-1", "--format=%P")).out.split(" ").filter(Boolean).length;
+
+  test("a committed branch lands under a merge commit, marks landed, and restarts from main; an edit unmarks it until discarded", async () => {
+    const repoId = await registered();
+    const wt = await w.worktrees.create(repoId, "feature");
+    writeFileSync(join(wt.path, "feature.txt"), "x\n");
+    expect((await w.worktrees.commit(wt.id, "add feature")).ok).toBe(true);
+    const { result, archiveIds } = await w.worktrees.land(wt.id);
+    expect(result.ok).toBe(true);
+    expect(archiveIds).toEqual([]);
+    // the word on it goes on the transcript, where a reload reads it back
+    expect(w.agents.get(wt.id)!.recorded.at(-1)).toMatchObject({
+      type: "landed",
+      message: "merged into main",
+      archiveIds: [],
+    });
+    expect(existsSync(join(w.repo, "feature.txt"))).toBe(true);
+    expect(await parents()).toBe(2);
+    expect((await git(w.repo, "log", "-1", "--format=%s", "main^2")).out).toBe("add feature");
+    expect(w.state.worktree(wt.id)?.landed).toBe(true);
+    // the branch now equals main: nothing ahead, nothing behind, a clean base for what comes next
+    expect((await git(wt.path, "rev-parse", "HEAD")).out).toBe((await git(w.repo, "rev-parse", "main")).out);
+    // an edit clears the mark through gitStatus, and discarding it brings the mark back: the
+    // base has the work either way, and only what is here says whether there is more
+    writeFileSync(join(wt.path, "more.txt"), "y\n");
+    await w.worktrees.gitStatus(wt.id);
+    expect(w.state.worktree(wt.id)?.landed).toBeUndefined();
+    rmSync(join(wt.path, "more.txt"));
+    await w.worktrees.gitStatus(wt.id);
+    expect(w.state.worktree(wt.id)?.landed).toBe(true);
+    // a commit past the landing is new work, and the mark is gone for good
+    writeFileSync(join(wt.path, "more.txt"), "y\n");
+    expect((await w.worktrees.commit(wt.id, "more")).ok).toBe(true);
+    await w.worktrees.gitStatus(wt.id);
+    expect(w.state.worktree(wt.id)?.landed).toBeUndefined();
+  });
+
+  test("a commit by hand keeps the verdict on the tree it saw, without the message that is in git now", async () => {
+    const repoId = await registered();
+    const wt = await w.worktrees.create(repoId, "feature");
+    writeFileSync(join(wt.path, "feature.txt"), "x\n");
+    const row = w.state.worktree(wt.id)!;
+    row.landing = {
+      at: 1,
+      check: "pass",
+      ready: true,
+      why: "a question is open",
+      subject: "add feature",
+      body: "One file.",
+      fingerprint: await treeFingerprint(wt.path),
+    };
+    expect((await w.worktrees.commit(wt.id, "add feature")).ok).toBe(true);
+    await w.worktrees.gitStatus(wt.id);
+    expect(row.landing).toEqual({
+      at: 1,
+      check: "pass",
+      ready: true,
+      why: "a question is open",
+      fingerprint: await treeFingerprint(wt.path),
+    });
+    // an edit after the commit is a tree the verdict never saw
+    writeFileSync(join(wt.path, "more.txt"), "y\n");
+    await w.worktrees.gitStatus(wt.id);
+    expect(row.landing?.stale).toBe(true);
+  });
+
+  test("a sync keeps the verdict, message and all: the same work over a newer base", async () => {
+    const repoId = await registered();
+    const wt = await w.worktrees.create(repoId, "feature");
+    writeFileSync(join(wt.path, "feature.txt"), "x\n");
+    expect((await w.worktrees.commit(wt.id, "add feature")).ok).toBe(true);
+    const row = w.state.worktree(wt.id)!;
+    row.landing = {
+      at: 1,
+      check: "pass",
+      ready: true,
+      subject: "add feature",
+      body: "One file.",
+      fingerprint: await treeFingerprint(wt.path),
+    };
+    writeFileSync(join(w.repo, "other.txt"), "o\n");
+    sh(w.repo, GIT, "add", "-A");
+    sh(w.repo, GIT, "commit", "-qm", "other");
+    expect((await w.worktrees.sync(wt.id)).result.ok).toBe(true);
+    await w.worktrees.gitStatus(wt.id);
+    expect(row.landing).toEqual({
+      at: 1,
+      check: "pass",
+      ready: true,
+      subject: "add feature",
+      body: "One file.",
+      fingerprint: await treeFingerprint(wt.path),
+    });
+  });
+
+  test("a landing git did without toyon marks the row landed, keeps the range, and restarts the branch", async () => {
+    const repoId = await registered();
+    const wt = await w.worktrees.create(repoId, "feature");
+    const before = (await git(w.repo, "rev-parse", "main")).out;
+    // a row that only answered has no commits of its own: not a landing
+    await w.worktrees.gitStatus(wt.id);
+    expect(w.state.worktree(wt.id)?.landed).toBeUndefined();
+    writeFileSync(join(wt.path, "feature.txt"), "x\n");
+    expect((await w.worktrees.commit(wt.id, "add feature")).ok).toBe(true);
+    const tip = (await git(wt.path, "rev-parse", "HEAD")).out;
+    await w.worktrees.gitStatus(wt.id);
+    expect(w.state.worktree(wt.id)?.landed).toBeUndefined();
+    // the agent fast-forwards main from the main checkout
+    expect((await git(w.repo, "merge", "--ff-only", wt.branch)).ok).toBe(true);
+    expect(await w.worktrees.gitStatus(wt.id)).toMatchObject({ files: [], ahead: 0, behind: 0 });
+    const row = w.state.worktree(wt.id)!;
+    expect(row.landed).toBe(true);
+    expect(row.lands).toEqual([{ base: before, tip, at: expect.any(Number) }]);
+    expect((await git(w.repo, "rev-parse", `refs/toyon/lands/${wt.id}/0`)).out).toBe(tip);
+    // a second landing, under a merge commit this time, counts only the commits after the first
+    writeFileSync(join(wt.path, "more.txt"), "y\n");
+    expect((await w.worktrees.commit(wt.id, "more")).ok).toBe(true);
+    await w.worktrees.gitStatus(wt.id);
+    expect(row.landed).toBeUndefined();
+    const second = (await git(wt.path, "rev-parse", "HEAD")).out;
+    expect((await git(w.repo, "merge", "--no-ff", "-m", "land more", wt.branch)).ok).toBe(true);
+    await w.worktrees.gitStatus(wt.id);
+    expect(row.landed).toBe(true);
+    expect(row.lands?.[1]).toMatchObject({ base: tip, tip: second });
+    // restarted from main: level with the merge commit, as after the press
+    expect((await git(wt.path, "rev-parse", "HEAD")).out).toBe((await git(w.repo, "rev-parse", "main")).out);
+  });
+
+  test("commits reset away by hand are not a landing", async () => {
+    const repoId = await registered();
+    const wt = await w.worktrees.create(repoId, "feature");
+    writeFileSync(join(wt.path, "feature.txt"), "x\n");
+    expect((await w.worktrees.commit(wt.id, "add feature")).ok).toBe(true);
+    expect((await git(wt.path, "reset", "--hard", "main")).ok).toBe(true);
+    await w.worktrees.gitStatus(wt.id);
+    expect(w.state.worktree(wt.id)?.landed).toBeUndefined();
+  });
+
+  /** a pre-commit hook for the repo that prints its complaint and refuses; repo-local hooksPath so
+   * a global one on this machine does not stand in for it */
+  const refusingHook = (lines: string[], hook = "pre-commit") => {
+    // beside the checkout, not in it: an untracked hooks folder would dirty main and stop a landing
+    const hooks = join(w.repo, "..", "hooks");
+    mkdirSync(hooks, { recursive: true });
+    const body = lines.map((l) => `echo ${JSON.stringify(l)}`).join("\n");
+    writeFileSync(join(hooks, hook), `#!/bin/sh\n${body}\necho "and on stderr" 1>&2\nexit 1\n`, {
+      mode: 0o755,
+    });
+    sh(w.repo, "git", "config", "core.hooksPath", hooks);
+  };
+  const recorded = (id: string) => (w.runtime.agentFor(id) as unknown as FakeAgent).recorded;
+
+  test("a commit a hook refuses goes on the transcript whole, as the rows a ! command leaves", async () => {
+    const repoId = await registered();
+    const wt = await w.worktrees.create(repoId, "feature");
+    refusingHook(["a dash in copy: src/x.ts:3", "one file rejected"]);
+    writeFileSync(join(wt.path, "feature.txt"), "x\n");
+    const result = await w.worktrees.commit(wt.id, "add feature\n\nwith a body");
+    expect(result.ok).toBe(false);
+    expect(result.message).toBe("commit refused: what git and its hooks printed is on the chat");
+    const rows = recorded(wt.id);
+    expect(rows.map((e) => e.type)).toEqual(["tool-start", "tool-end"]);
+    const start = rows[0];
+    expect(start?.type === "tool-start" && start.name === SHELL_TOOL && start.input).toEqual({
+      command: 'git commit -m "add feature"',
+    });
+    const end = rows[1];
+    expect(end?.type === "tool-end" && end.isError).toBe(true);
+    expect(end?.type === "tool-end" && end.output).toBe(
+      "```\na dash in copy: src/x.ts:3\none file rejected\nand on stderr\n```\nexit 1",
+    );
+    // land's commit step is the same commit: refused the same way, and nothing lands
+    const landed = await w.worktrees.land(wt.id, "add feature");
+    expect(landed.result.ok).toBe(false);
+    expect(recorded(wt.id).map((e) => e.type)).toEqual(["tool-start", "tool-end", "tool-start", "tool-end"]);
+    expect(existsSync(join(w.repo, "feature.txt"))).toBe(false);
+  });
+
+  test("a push a pre-push hook refuses goes on the transcript whole, named for the checkout it ran in", async () => {
+    const repoId = await registered();
+    const origin = join(w.repo, "..", "origin.git");
+    sh(w.repo, "git", "init", "-q", "--bare", "-b", "main", origin);
+    sh(w.repo, "git", "remote", "add", "origin", origin);
+    sh(w.repo, "git", "push", "-q", "-u", "origin", "main");
+    await setRoute(repoId, "push");
+    refusingHook(["tests: 1 failed"], "pre-push");
+    const wt = await w.worktrees.create(repoId, "feature");
+    writeFileSync(join(wt.path, "feature.txt"), "x\n");
+    const { result } = await w.worktrees.land(wt.id, "add feature");
+    expect(result.ok).toBe(false);
+    expect(result.message).toBe("push failed: what git and its hooks printed is on the chat");
+    const rows = recorded(wt.id);
+    expect(rows.map((e) => e.type)).toEqual(["tool-start", "tool-end"]);
+    // the push runs in the worktree, so its row is the plain command
+    const start = rows[0];
+    expect(start?.type === "tool-start" && start.input).toEqual({
+      command: expect.stringMatching(/^git push origin [0-9a-f]{40}:refs\/heads\/main$/),
+    });
+    const end = rows[1];
+    expect(end?.type === "tool-end" && end.isError).toBe(true);
+    expect(end?.type === "tool-end" && end.output).toContain("tests: 1 failed\nand on stderr\n");
+    expect(end?.type === "tool-end" && end.output).toContain("exit 1");
+    // nothing landed: origin has nothing of it, and the work stands committed on the branch
+    expect(w.state.worktree(wt.id)?.landed).toBeUndefined();
+    expect((await git(origin, "log", "-1", "--format=%s", "main")).out).toBe("init");
+    expect(await w.worktrees.gitStatus(wt.id)).toMatchObject({ files: [], ahead: 1 });
+  });
+
+  test("the press is the op out on the row, named step by step, with the agent's queue held", async () => {
+    const repoId = await registered();
+    const wt = await w.worktrees.create(repoId, "feature");
+    const agent = w.runtime.agentFor(wt.id) as unknown as FakeAgent;
+    // what each frame would carry, and whether the queue was held when it went out
+    const seen: Array<{ step?: string; held: boolean }> = [];
+    w.hub.on("worktreesChanged", () => {
+      const out = w.worktrees.shippingOf(wt.id);
+      const last = seen.at(-1);
+      if (out && (!last || last.step !== out.step)) seen.push({ step: out.step, held: agent.held });
+    });
+    writeFileSync(join(wt.path, "feature.txt"), "x\n");
+    sh(w.repo, "git", "commit", "-q", "--allow-empty", "-m", "main moved");
+    const landing = w.worktrees.land(wt.id, "add feature");
+    // one op per row: a second press meanwhile is refused, whichever tab it came from
+    await expect(w.worktrees.commit(wt.id, "again")).rejects.toThrow("a land is already running here");
+    expect((await landing).result.ok).toBe(true);
+    expect(seen).toEqual([
+      { step: undefined, held: true },
+      { step: "committing", held: true },
+      { step: "rebasing onto main", held: true },
+      { step: "merging into main", held: true },
+    ]);
+    // over: off the frame, and the queue goes again
+    expect(w.worktrees.shippingOf(wt.id)).toBeUndefined();
+    expect(agent.held).toBe(false);
+    expect((await w.worktrees.rows()).find((r) => r.id === wt.id)?.shipping).toBeUndefined();
+    // steps that passed at once left no rows behind: the transcript holds the word on the land alone
+    expect(recorded(wt.id).map((e) => e.type)).toEqual(["landed"]);
+  });
+
+  test("the verdict goes and the landed mark comes in one frame, so no frame reads as work unchecked", async () => {
+    const repoId = await registered();
+    const wt = await w.worktrees.create(repoId, "feature");
+    writeFileSync(join(wt.path, "feature.txt"), "x\n");
+    w.worktrees.setLanding(wt.id, { at: 1, check: "none", ready: true, subject: "add feature", fingerprint: "f" });
+    // what each frame would carry of the record
+    const seen: Array<{ verdict: boolean; landed: boolean }> = [];
+    w.hub.on("worktreesChanged", () => {
+      const r = w.state.worktree(wt.id);
+      seen.push({ verdict: !!r?.landing, landed: !!r?.landed });
+    });
+    expect((await w.worktrees.land(wt.id)).result.ok).toBe(true);
+    expect(seen.filter((f) => !f.verdict && !f.landed)).toEqual([]);
+    expect(seen.at(-1)).toEqual({ verdict: false, landed: true });
+  });
+
+  test("a branch behind main is rebased first, so the landing carries no merge of main", async () => {
+    const repoId = await registered();
+    const wt = await w.worktrees.create(repoId, "feature");
+    writeFileSync(join(wt.path, "feature.txt"), "x\n");
+    sh(wt.path, "git", "add", "-A");
+    sh(wt.path, "git", "commit", "-qm", "add feature");
+    sh(w.repo, "git", "commit", "--allow-empty", "-qm", "main moves on");
+    w.state.requireRepo(repoId).config.land = { method: "rebase" };
+    const { result } = await w.worktrees.land(wt.id);
+    expect(result.ok).toBe(true);
+    // a fast-forward: the feature commit sits on top of main's own, and nothing merged anything
+    expect(await parents()).toBe(1);
+    expect(await subjects()).toEqual(["add feature", "main moves on", "init"]);
+  });
+
+  test("squash lands the branch as one commit carrying the suggested message", async () => {
+    const repoId = await registered();
+    const wt = await w.worktrees.create(repoId, "feature");
+    for (const n of [1, 2]) {
+      writeFileSync(join(wt.path, `f${n}.txt`), "x\n");
+      sh(wt.path, "git", "add", "-A");
+      sh(wt.path, "git", "commit", "-qm", `step ${n}`);
+    }
+    w.state.requireRepo(repoId).config.land = { method: "squash" };
+    w.worktrees.setLanding(wt.id, {
+      at: 1,
+      check: "none",
+      ready: true,
+      subject: "add the feature",
+      body: "Two steps.",
+      fingerprint: "f",
+    });
+    const { result } = await w.worktrees.land(wt.id);
+    expect(result.ok).toBe(true);
+    expect(await parents()).toBe(1);
+    expect(await subjects()).toEqual(["add the feature", "init"]);
+    expect((await git(w.repo, "log", "-1", "--format=%b")).out).toBe("Two steps.");
+    expect((await git(wt.path, "rev-parse", "HEAD")).out).toBe((await git(w.repo, "rev-parse", "main")).out);
+  });
+
+  test("a rebase that conflicts is aborted and the branch is left as it was", async () => {
+    const repoId = await registered();
+    const wt = await w.worktrees.create(repoId, "feature");
+    writeFileSync(join(wt.path, "README.md"), "theirs\n");
+    sh(wt.path, "git", "commit", "-qam", "theirs");
+    writeFileSync(join(w.repo, "README.md"), "ours\n");
+    sh(w.repo, "git", "commit", "-qam", "ours");
+    const { result } = await w.worktrees.land(wt.id);
+    expect(result.ok).toBe(false);
+    expect(result.conflict).toBe(true);
+    expect((await git(wt.path, "status", "--porcelain")).out).toBe("");
+    expect(readFileSync(join(wt.path, "README.md"), "utf8")).toBe("theirs\n");
+    expect((await git(wt.path, "log", "-1", "--format=%s")).out).toBe("theirs");
+  });
+
+  test("land commits with the message it is given and merges; the worktree stays, marked landed", async () => {
+    const repoId = await registered();
+    const wt = await w.worktrees.create(repoId, "feature");
+    writeFileSync(join(wt.path, "feature.txt"), "x\n");
+    w.worktrees.setLanding(wt.id, { at: 1, check: "pass", ready: true, subject: "old words", fingerprint: "f" });
+    const { result, archiveIds } = await w.worktrees.land(wt.id, "add feature\n\nOne file.");
+    expect(result.ok).toBe(true);
+    expect(result.message).toBe("committed and merged into main");
+    expect(archiveIds).toEqual([]);
+    expect(existsSync(join(w.repo, "feature.txt"))).toBe(true);
+    // main had not moved, so the merge fast-forwards onto the commit itself
+    expect((await git(w.repo, "log", "-1", "--format=%s", "main^2")).out).toBe("add feature");
+    expect(w.state.worktree(wt.id)).toMatchObject({ landed: true });
+    expect(w.state.worktree(wt.id)?.landing).toBeUndefined();
+    expect(existsSync(wt.path)).toBe(true);
+  });
+
+  test("land takes the suggested message when none is typed, and refuses with neither", async () => {
+    const repoId = await registered();
+    const wt = await w.worktrees.create(repoId, "feature");
+    writeFileSync(join(wt.path, "feature.txt"), "x\n");
+    await expect(w.worktrees.land(wt.id)).rejects.toBeInstanceOf(UserError);
+    w.worktrees.setLanding(wt.id, { at: 1, check: "none", ready: true, subject: "add the feature", fingerprint: "f" });
+    expect((await w.worktrees.land(wt.id)).result.ok).toBe(true);
+    expect((await git(w.repo, "log", "-1", "--format=%s", "main^2")).out).toBe("add the feature");
+  });
+
+  test("a branch switched by hand in the worktree is the row's branch: a status reads it and a land lands it", async () => {
+    const repoId = await registered();
+    const wt = await w.worktrees.create(repoId, "feature");
+    const born = wt.branch;
+    sh(wt.path, "git", "switch", "-q", "-c", "mine");
+    writeFileSync(join(wt.path, "mine.txt"), "x\n");
+    sh(wt.path, "git", "add", "-A");
+    sh(wt.path, "git", "commit", "-qm", "on mine");
+    const tip = (await git(wt.path, "rev-parse", "HEAD")).out;
+    await w.worktrees.gitStatus(wt.id);
+    expect(w.state.worktree(wt.id)?.branch).toBe("mine");
+    // a land takes the checkout's branch, not the one the row was born with, which is still on
+    // main with nothing to land; the checkout is not reset under the switch
+    const { result } = await w.worktrees.land(wt.id);
+    expect(result.ok).toBe(true);
+    expect((await git(w.repo, "log", "-1", "--format=%s", "main^2")).out).toBe("on mine");
+    expect((await git(w.repo, "merge-base", "--is-ancestor", tip, "main")).ok).toBe(true);
+    // a branch not toyon's keeps its history rather than restarting from main
+    expect((await git(wt.path, "rev-parse", "HEAD")).out).toBe(tip);
+    expect((await git(wt.path, "branch", "--show-current")).out).toBe("mine");
+    expect(w.state.worktree(wt.id)).toMatchObject({ branch: "mine", landed: true });
+    expect((await git(w.repo, "branch", "--list", born)).out).toContain(born);
+    // detached: the record keeps its branch, and the land says so
+    sh(wt.path, "git", "switch", "-q", "--detach");
+    await w.worktrees.gitStatus(wt.id);
+    expect(w.state.worktree(wt.id)?.branch).toBe("mine");
+  });
+
+  test("land syncs main in first when the branch is behind, and a file on main in the way refuses", async () => {
+    const repoId = await registered();
+    const wt = await w.worktrees.create(repoId, "feature");
+    writeFileSync(join(wt.path, "feature.txt"), "x\n");
+    sh(w.repo, "git", "commit", "--allow-empty", "-qm", "main moves on");
+    // an edit on main the branch never touches rides along; the file the branch adds, started on
+    // main too and never committed, is the one thing in the landing's way
+    writeFileSync(join(w.repo, "README.md"), "edited on main\n");
+    writeFileSync(join(w.repo, "feature.txt"), "started on main\n");
+    const refused = await w.worktrees.land(wt.id, "add feature");
+    expect(refused.result.ok).toBe(false);
+    expect(refused.result.message).toContain("would overwrite (feature.txt)");
+    // the commit stood: the work is safer committed, and the worktree is still there to try again
+    expect(w.state.worktree(wt.id)).toBeDefined();
+    expect((await git(wt.path, "status", "--porcelain")).out).toBe("");
+    rmSync(join(w.repo, "feature.txt"));
+    const { result } = await w.worktrees.land(wt.id);
+    expect(result.ok).toBe(true);
+    expect((await git(w.repo, "log", "--format=%s", "-n", "4")).out.split("\n")).toContain("main moves on");
+    expect(readFileSync(join(w.repo, "README.md"), "utf8")).toBe("edited on main\n");
+  });
+
+  test("a status read marks a verdict stale once the tree no longer matches it, and clears the mark when it does again", async () => {
+    const repoId = await registered();
+    const wt = await w.worktrees.create(repoId, "feature");
+    writeFileSync(join(wt.path, "feature.txt"), "x\n");
+    w.worktrees.setLanding(wt.id, {
+      at: 1,
+      check: "none",
+      ready: true,
+      subject: "add the feature",
+      fingerprint: await treeFingerprint(wt.path),
+    });
+    await w.worktrees.gitStatus(wt.id);
+    expect(w.state.worktree(wt.id)?.landing?.ready).toBe(true);
+    expect(w.state.worktree(wt.id)?.landing?.stale).toBeUndefined();
+    writeFileSync(join(wt.path, "feature.txt"), "x\ny\n");
+    await w.worktrees.gitStatus(wt.id);
+    // the words stay for the box; the word waits on the check
+    expect(w.state.worktree(wt.id)?.landing).toMatchObject({ ready: true, subject: "add the feature", stale: true });
+    writeFileSync(join(wt.path, "feature.txt"), "x\n");
+    await w.worktrees.gitStatus(wt.id);
+    expect(w.state.worktree(wt.id)?.landing?.stale).toBeUndefined();
+  });
+
+  test("land is refused from main, and with nothing to land", async () => {
+    const repoId = await registered();
+    const wt = await w.worktrees.create(repoId, "feature");
+    expect((await w.worktrees.land(wt.id)).result.ok).toBe(false);
+    const main = w.state.worktrees.find((x) => x.kind === "main")!;
+    await expect(w.worktrees.land(main.id)).rejects.toBeInstanceOf(UserError);
+  });
+
+  test("a conflicted sync says so and leaves the tree as it was", async () => {
+    const repoId = await registered();
+    const wt = await w.worktrees.create(repoId, "feature");
+    writeFileSync(join(wt.path, "README.md"), "theirs\n");
+    sh(wt.path, "git", "commit", "-qam", "theirs");
+    writeFileSync(join(w.repo, "README.md"), "ours\n");
+    sh(w.repo, "git", "commit", "-qam", "ours");
+    const { result } = await w.worktrees.sync(wt.id);
+    expect(result.ok).toBe(false);
+    expect(result.conflict).toBe(true);
+    expect((await git(wt.path, "status", "--porcelain")).out).toBe("");
+    expect(readFileSync(join(wt.path, "README.md"), "utf8")).toBe("theirs\n");
+  });
+
+  test("commit with an empty message is a UserError", async () => {
+    const repoId = await registered();
+    const wt = await w.worktrees.create(repoId, "feature");
+    await expect(w.worktrees.commit(wt.id, "  ")).rejects.toBeInstanceOf(UserError);
+  });
+
+  // the rail's badges come from rows(), which caches counts for 10s; a landing op that moves
+  // the worktree's own HEAD has to drop that entry and push a frame, or the rail keeps showing the
+  // count the person just acted on
+  test("sync and commit refresh the badge counts at once and push a worktrees frame", async () => {
+    const repoId = await registered();
+    const wt = await w.worktrees.create(repoId, "feature");
+    // create's setup and procs run behind it, and runtime.start emits once the proxy is up; a frame
+    // from that landing inside a sync or commit below would be counted as theirs
+    await until(() => w.runtime.get(wt.id)?.proxy != null);
+    // the frames an op pushes while it runs list it (its start, each step); the one that carries
+    // the fresh counts is the one with the op gone, and there is one of those
+    let frames = 0;
+    w.hub.on("worktreesChanged", () => {
+      if (!w.worktrees.shippingOf(wt.id)) frames++;
+    });
+    const row = async () => (await w.worktrees.rows()).find((s) => s.id === wt.id)!;
+
+    sh(w.repo, "git", "commit", "--allow-empty", "-m", "main moves on");
+    w.worktrees.invalidateCounts();
+    expect((await row()).behind).toBe(1);
+
+    frames = 0;
+    expect((await w.worktrees.sync(wt.id)).result.ok).toBe(true);
+    expect(frames).toBe(1);
+    expect((await row()).behind).toBe(0);
+    expect((await row()).ahead).toBe(0);
+
+    writeFileSync(join(wt.path, "feature.txt"), "x\n");
+    frames = 0;
+    expect((await w.worktrees.commit(wt.id, "add feature")).ok).toBe(true);
+    expect(frames).toBe(1);
+    expect((await row()).ahead).toBe(1);
+  });
+});

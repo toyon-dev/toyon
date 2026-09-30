@@ -16,20 +16,33 @@ afterAll(() => t.cleanup());
 
 const settle = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
+/** a fire that is owed is waited for, not slept past; one that never comes leaves the expect
+ * after this to say so */
+async function until(done: () => boolean, ms = 5000): Promise<void> {
+  const stop = Date.now() + ms;
+  while (!done() && Date.now() < stop) await Bun.sleep(20);
+}
+
+// Silence has to be waited out: the ref watcher's debounce and the rev-parse behind it, or the
+// worktree watcher's debounce alone, plus a margin for a loaded machine.
+const REF_QUIET = 1500;
+const DIR_QUIET = 800;
+
 test("a commit on main fires once; index churn without a ref move does not", async () => {
   let moves = 0;
   const stop = watchDefaultBranch(t.repo, "main", () => moves++);
   await settle(300); // baseline rev-parse
   writeFileSync(join(t.repo, "a.txt"), "a\n");
   sh(t.repo, GIT, "add", "-A"); // touches .git/index only
-  await settle(1500);
+  await settle(REF_QUIET);
   expect(moves).toBe(0);
   sh(t.repo, GIT, "commit", "-q", "-m", "a");
-  await settle(2500);
+  await until(() => moves >= 1);
   expect(moves).toBe(1);
   stop();
+  // the quiet after this catches a second fire for the commit above as well as one after stop
   sh(t.repo, GIT, "commit", "-q", "--allow-empty", "-m", "after stop");
-  await settle(1500);
+  await settle(REF_QUIET);
   expect(moves).toBe(1);
 }, 15000);
 
@@ -43,7 +56,7 @@ test("worktrees added and removed outside toyon each fire; commits do not", asyn
     // the first one also creates .git/worktrees itself
     const first = join(dirname(w.repo), "wt-one");
     sh(w.repo, GIT, "worktree", "add", "-q", "-b", "one", first, "main");
-    await settle(800);
+    await until(() => changes > 0);
     expect(changes).toBeGreaterThan(0);
 
     // the case a watch on .git alone would miss: .git/worktrees already exists, so adding a
@@ -51,24 +64,24 @@ test("worktrees added and removed outside toyon each fire; commits do not", asyn
     const before = changes;
     const second = join(dirname(w.repo), "wt-two");
     sh(w.repo, GIT, "worktree", "add", "-q", "-b", "two", second, "main");
-    await settle(800);
+    await until(() => changes > before);
     expect(changes).toBeGreaterThan(before);
 
     const beforeRemove = changes;
     sh(w.repo, GIT, "worktree", "remove", "--force", second);
-    await settle(800);
+    await until(() => changes > beforeRemove);
     expect(changes).toBeGreaterThan(beforeRemove);
 
     // an ordinary commit is not a worktree change
     const beforeCommit = changes;
     sh(w.repo, GIT, "commit", "-q", "--allow-empty", "-m", "unrelated");
-    await settle(800);
+    await settle(DIR_QUIET);
     expect(changes).toBe(beforeCommit);
 
     stop();
     const third = join(dirname(w.repo), "wt-three");
     sh(w.repo, GIT, "worktree", "add", "-q", "-b", "three", third, "main");
-    await settle(800);
+    await settle(DIR_QUIET);
     expect(changes).toBe(beforeCommit);
   } finally {
     w.cleanup();
@@ -91,10 +104,11 @@ test("origin's main moving is an upstream move, a commit here a local one", asyn
     sh(clone, GIT, "-c", "user.name=o", "-c", "user.email=o@o", "commit", "-q", "--allow-empty", "-m", "theirs");
     sh(clone, GIT, "push", "-q", "origin", "main");
     sh(u.repo, GIT, "fetch", "-q");
-    await settle(2500);
+    await until(() => moves.length >= 1);
     expect(moves).toEqual(["upstream"]);
     sh(u.repo, GIT, "commit", "-q", "--allow-empty", "-m", "mine");
-    await settle(2500);
+    await until(() => moves.length >= 2);
+    await settle(REF_QUIET); // and nothing more for either
     expect(moves).toEqual(["upstream", "local"]);
     stop();
   } finally {
@@ -116,14 +130,15 @@ test("a remote never fetched is watched from its first fetch, which is itself an
     const stop = watchDefaultBranch(u.repo, "main", (which) => moves.push(which));
     await settle(400);
     sh(u.repo, GIT, "fetch", "-q");
-    await settle(2500);
+    await until(() => moves.length >= 1);
     expect(moves).toEqual(["upstream"]);
     const clone = join(dirname(u.repo), "clone");
     sh(dirname(u.repo), GIT, "clone", "-q", bare, clone);
     sh(clone, GIT, "-c", "user.name=o", "-c", "user.email=o@o", "commit", "-q", "--allow-empty", "-m", "theirs");
     sh(clone, GIT, "push", "-q", "origin", "main");
     sh(u.repo, GIT, "fetch", "-q");
-    await settle(2500);
+    await until(() => moves.length >= 2);
+    await settle(REF_QUIET); // and nothing more
     expect(moves).toEqual(["upstream", "upstream"]);
     stop();
   } finally {

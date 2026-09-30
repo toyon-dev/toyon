@@ -259,7 +259,9 @@ describe("ExecService.exec", () => {
     await until(agent, () => agent.recorded.some((e) => e.type === "tool-delta"));
     stop?.();
     expect((await done).exit).toBe("SIGTERM");
-    expect(ledger.size).toBe(0);
+    // the shell reports its signal before the sleep under it is gone, and the group stays in the
+    // ledger until nothing of it is left
+    await until(agent, () => ledger.size === 0);
   }, 10_000);
 
   test("a command still running at its own ceiling is killed, and the row says what it gave up after", async () => {

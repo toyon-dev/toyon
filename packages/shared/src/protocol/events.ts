@@ -11,6 +11,12 @@ export const SHELL_TOOL = "shell";
  * way), but toyon's to run rather than the person's, so the shell does not open it as theirs */
 export const CHECK_TOOL = "check";
 
+/** Claude loading the schemas of tools it had deferred. The adapter knows no kind for it, so the
+ * daemon files it as a search and the row reads as one: the search glyph, the loader's name, and
+ * the names or words it searched for. The shell keys on the name to keep it on the row, since the
+ * words alone under that glyph read as a search of the code. */
+export const TOOL_SEARCH = "ToolSearch";
+
 /** ACP's tool categories; what the shell keys "did this turn edit anything" on */
 export type ToolKind =
   | "read"

@@ -433,9 +433,9 @@
       }
     }
     /* a summary is one line: a command long enough to wrap would push the row into a paragraph of
-   monospace, and a transcript of those is unreadable. The name is only there when the agent sent
-   its own word for the tool, and it never shrinks; flex would otherwise clip "Bash" down to "B…"
-   beside a long command. The cap is for an agent that sends a sentence as a tool name. */
+   monospace, and a transcript of those is unreadable. The name is only there when the glyph does
+   not already say the tool, and it never shrinks; flex would otherwise clip "ToolSearch" down to
+   "T…" beside a long query. The cap is for an agent that sends a sentence as a tool name. */
     & .tool-name {
       color: var(--text2);
       flex: 0 0 auto;

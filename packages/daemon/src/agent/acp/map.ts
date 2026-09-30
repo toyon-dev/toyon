@@ -11,7 +11,14 @@ import type {
   ToolCallContent,
   ToolKind,
 } from "@agentclientprotocol/sdk";
-import { type AgentCommand, type AgentEvent, emptyInput, isWrittenKind, type ToolImage } from "@toyon/shared";
+import {
+  type AgentCommand,
+  type AgentEvent,
+  emptyInput,
+  isWrittenKind,
+  TOOL_SEARCH,
+  type ToolImage,
+} from "@toyon/shared";
 import { log } from "../../core/log.ts";
 import { toolImage } from "../attachments.ts";
 import { type BackgroundStart, backgroundStart } from "./background.ts";
@@ -72,20 +79,15 @@ function asRecord(v: unknown): Record<string, unknown> {
  * call named for the check, with the host only in its input, and no tool ever runs behind it. */
 const NETWORK_ASK = "SandboxNetworkAccess";
 
-/** whether a call is the network ask. Claude's adapter sends no `name` on a tool_call: the tool's
- * name is in its `_meta`, and the title repeats it. Only this check reads the meta; the row's name
- * stays what the adapter sent, since a Bash call whose name became "Bash" would print that word
- * beside every command in the transcript. */
+/** whether a call is the network ask. Claude's adapter names the tool in `name` or, where it sends
+ * none, only in its `_meta`, with the title repeating it. Only this check reads the meta; the
+ * row's name stays what the adapter sent. */
 function isNetworkAsk(update: { name?: string | null; _meta?: Record<string, unknown> | null }): boolean {
   return update.name === NETWORK_ASK || asRecord(asRecord(update._meta).claudeCode).toolName === NETWORK_ASK;
 }
 
-/** Claude loading the schemas of tools it had deferred. The adapter knows no kind for it, so the
- * call arrived as a dot, the loader's name and nothing else, over a list of the tools it found;
- * what it asked for is in the input, which lands after the call opens. It is a search, and reads as
- * one: the search glyph, the loader's name, and the names or words it searched for. */
-const TOOL_SEARCH = "ToolSearch";
-
+/** A ToolSearch arrives with no kind of its own: a dot, the loader's name and nothing else, over a
+ * list of the tools it found; what it asked for is in the input, which lands after the call opens. */
 function isToolSearch(update: { name?: string | null; _meta?: Record<string, unknown> | null }): boolean {
   return update.name === TOOL_SEARCH || asRecord(asRecord(update._meta).claudeCode).toolName === TOOL_SEARCH;
 }

@@ -233,9 +233,22 @@ describe("toolLabel", () => {
     });
   });
 
-  test("an agent that names its tools keeps the name, and the command is not repeated inside", () => {
+  test("a tool's name is not printed beside a glyph that says its kind, and the command is not repeated inside", () => {
     const call = { name: "Bash", title: "ls -la", toolKind: "execute" as const, input: { command: "ls -la" } };
-    expect(toolLabel(call)).toEqual({ label: "run", name: "Bash", icon: "folder", hint: "ls -la", command: "" });
+    expect(toolLabel(call)).toEqual({ label: "run", name: "", icon: "folder", hint: "ls -la", command: "" });
+    // a title the adapter wrote to stand alone stands alone
+    const fetch = { name: "WebFetch", title: "Fetch https://toyon.dev", toolKind: "fetch" as const, input: {} };
+    expect(toolLabel(fetch)).toMatchObject({ name: "", icon: "globe", hint: "Fetch https://toyon.dev" });
+    // with nothing else on the row, the name is the row
+    expect(toolLabel({ ...call, title: "Bash", input: {} })).toMatchObject({ name: "Bash", hint: "" });
+  });
+
+  test("the name stays where the glyph does not say the tool", () => {
+    // a call with no kind is a dot, and a ToolSearch's words alone would read as a search of the code
+    const old = { name: "Bash", input: { command: "ls -la" } };
+    expect(toolLabel(old)).toMatchObject({ name: "Bash", icon: "folder", hint: "ls -la" });
+    const search = { name: "ToolSearch", title: "WebSearch, WebFetch", toolKind: "search" as const, input: {} };
+    expect(toolLabel(search)).toMatchObject({ name: "ToolSearch", icon: "search", hint: "WebSearch, WebFetch" });
   });
 
   test("falls back to the title when there is no usable input", () => {

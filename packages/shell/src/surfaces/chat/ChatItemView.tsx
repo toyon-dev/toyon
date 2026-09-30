@@ -685,7 +685,10 @@ export const ToolRow = memo(
             {/* the kind says "think", which is the nearest word ACP has for a call that starts
                 another agent, and the bulb is a thought's glyph: this row is a fork, not a thought */}
             <Icon name={run ? "spawn" : icon} className="tool-icon" />
-            {name && <span className={cx("tool-name", running && "live-text")}>{name}</span>}
+            {/* one shine to a line: each span sweeps on its own width, so a name and a hint both lit
+                are two bands out of step. The hint is what the call is doing, so the name shines
+                only where it is the whole line. */}
+            {name && <span className={cx("tool-name", running && !hint && "live-text")}>{name}</span>}
             {/* while the input streams the hint slot holds the mark, and the phrase is its tip: on
                 the line it was replaced by the command a beat later, two lines of text for one
                 event, but an edit sits here for the whole replacement, and a mark alone for ten

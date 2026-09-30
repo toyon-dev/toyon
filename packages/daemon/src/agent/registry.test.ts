@@ -107,7 +107,7 @@ describe("agent registry", () => {
       sandboxed: true,
     });
     await reg.install("opencode");
-    expect(calls.at(-1)).toBe("opencode-linux-x64-baseline-musl@1.18.30");
+    expect(calls.at(-1)).toBe("opencode-linux-x64-baseline-musl@1.18.33");
     const spec = reg.require("opencode");
     expect(reg.command(spec)).toEqual({
       command: expect.stringMatching(/opencode-linux-x64-baseline-musl\/bin\/opencode$/),

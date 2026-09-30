@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { hostTraits, nativePackage } from "./native.ts";
 
-// The names OpenCode's own wrapper lists as its optional dependencies, 1.18.30: a machine that picks a
+// The names OpenCode's own wrapper lists as its optional dependencies, 1.18.33: a machine that picks a
 // name not on that list installs nothing.
 
 const host = (platform: NodeJS.Platform, arch: string, musl = false, avx2 = true) => ({ platform, arch, musl, avx2 });

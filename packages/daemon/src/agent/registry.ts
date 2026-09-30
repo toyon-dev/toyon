@@ -138,7 +138,7 @@ export const BUILTIN_AGENTS: AgentSpec[] = [
     id: "opencode",
     name: "OpenCode",
     builtin: true,
-    run: { kind: "npm-native", pkg: "opencode", version: "1.18.30", bin: "bin/opencode", args: ["acp"] },
+    run: { kind: "npm-native", pkg: "opencode", version: "1.18.33", bin: "bin/opencode", args: ["acp"] },
     onDemand: true,
     // OpenCode brings no OS sandbox, so it runs inside toyon's, writing only the worktree and its own state
     confinement: "toyon-sandbox",

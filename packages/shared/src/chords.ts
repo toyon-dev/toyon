@@ -265,6 +265,15 @@ export function matchChord(
   return null;
 }
 
+/** ⌘S, ⌘⇧S, and their ⌃ forms on Linux: the browser's Save Page As, a Finder sheet over the whole
+ * app. Not a chord: it has no verb of its own outside the editor, where Monaco binds save-now and
+ * stops the key before the window sees it. Elsewhere only the browser's default is cancelled
+ * (app/keys.ts, the bridge's forwarder), so a previewed app that binds ⌘S itself still hears it. */
+export function isBrowserSave(e: { key: string; metaKey: boolean; ctrlKey?: boolean; altKey?: boolean }): boolean {
+  if (e.altKey || e.key.toLowerCase() !== "s") return false;
+  return !!e.ctrlKey !== e.metaKey;
+}
+
 export function chordOf(id: ChordId): Chord {
   const c = CHORDS.find((x) => x.id === id);
   if (!c) throw new Error(`unknown chord ${id}`);

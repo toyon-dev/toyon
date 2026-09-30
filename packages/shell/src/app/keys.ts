@@ -1,6 +1,7 @@
 import {
   type ChordId,
   chordOf,
+  isBrowserSave,
   isTyping,
   LOGIN_STREAM,
   matchChord,
@@ -73,6 +74,11 @@ export function useChords() {
     };
     const onKey = (e: KeyboardEvent) => {
       onMods(e);
+      // ⌘S from the composer, a list, a palette: the browser's Save Page As, a Finder sheet over the
+      // app, for a hand that was saving a file autosave already wrote. The editor's save-now and the
+      // terminal (⌃S is a shell's flow control, and xterm stops the key it sent) both claim theirs
+      // before the window hears it, so what arrives unclaimed was for nobody.
+      if (isBrowserSave(e) && !e.defaultPrevented) e.preventDefault();
       const s = store.getState();
       const { dispatch } = store;
       // a walk or a digit that lands on a row is there to read and reply, so the composer is offered

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { CHORD_LABELS, CHORD_SECTIONS, chordLabel, chordsInSection } from "./chord-labels.ts";
-import { CHORDS, chordOf, matchChord, worktreeChord, worktreeIndex, ZEN_CHORDS } from "./chords.ts";
+import { CHORDS, chordOf, isBrowserSave, matchChord, worktreeChord, worktreeIndex, ZEN_CHORDS } from "./chords.ts";
 
 const ev = (
   key: string,
@@ -189,6 +189,17 @@ describe("matchChord", () => {
     expect(matchChord(ev("W", { shift: true }))).toBeNull();
     expect(matchChord(ev("w", { meta: false, ctrl: true }))).toBeNull(); // ⌃W is delete-word in a shell
     expect(ZEN_CHORDS.has("close")).toBe(true);
+  });
+  test("⌘S is not a chord; the browser's save keys are known so an unclaimed press can be swallowed", () => {
+    expect(matchChord(ev("s"))).toBeNull();
+    expect(isBrowserSave(ev("s"))).toBe(true);
+    expect(isBrowserSave(ev("S", { shift: true }))).toBe(true);
+    expect(isBrowserSave(ev("s", { meta: false, ctrl: true }))).toBe(true);
+    // ⌥S types a symbol, ⌃⌘S is nothing a browser saves on, and a bare s is typing
+    expect(isBrowserSave(ev("s", { alt: true }))).toBe(false);
+    expect(isBrowserSave(ev("s", { ctrl: true }))).toBe(false);
+    expect(isBrowserSave(ev("s", { meta: false }))).toBe(false);
+    expect(isBrowserSave(ev("a"))).toBe(false);
   });
   test("an advertised key is always one of the chord's aliases", () => {
     for (const [id, shown] of Object.entries(CHORD_LABELS)) {

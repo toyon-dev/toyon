@@ -6,7 +6,7 @@
 // (postMessage drops a frame whose origin doesn't match, so posting once per candidate is safe);
 // inbound commands are accepted only from the parent frame at one of them. Without the list
 // (cloud with no known public host) both sides fall back to open.
-import { chordOf, isTyping, matchChord, ZEN_CHORDS } from "@toyon/shared/chords";
+import { chordOf, isBrowserSave, isTyping, matchChord, ZEN_CHORDS } from "@toyon/shared/chords";
 import type { BridgeToShellMsg, ShellToBridgeMsg } from "@toyon/shared/protocol/bridge";
 import { type Fiber, pickedAt, pickTarget, type Source, sourceOf } from "./fiber.ts";
 
@@ -103,6 +103,9 @@ window.addEventListener(
     // a shell framed as a preview keeps its own keyboard: forwarding from here would leave the
     // inner shell dead to every chord and act on keys meant for it
     if (window.__toyonShell) return;
+    // ⌘S is the browser's Save Page As for the shell around this frame. Only the default is
+    // cancelled, so the key still reaches a page that binds it (an editor under test), in zen or out
+    if (isBrowserSave(e)) e.preventDefault();
     // the page is a guest keyboard: an alias it may use itself (⌃R in a web terminal) stays its own
     const chord = matchChord(e, { guest: true });
     // a word jump in one of the page's own fields stays the page's

@@ -767,6 +767,14 @@
   .daemon-row {
     margin: 0 -12px;
     padding: 4px var(--row-inset);
+    /* the tool row's floor, with the head centred on it: a band drawn across the same column as
+     the open call's is measured against it, and the small face's line under this padding stops a
+     fraction of a pixel short of that height. A row with a line under its head, or a sentence that
+     wraps, is taller than the floor and keeps its padding. */
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-height: var(--row-height-sm);
     font: var(--type-ui-sm);
     color: var(--text1);
     background: var(--surface0);

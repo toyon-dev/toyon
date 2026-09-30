@@ -657,15 +657,17 @@
       color: var(--text1);
     }
     /* the command that produced the output, where the summary line carries the sentence that named
-   it instead. It is the one strip in the band on the log's own ground: what ran belongs with the
-   line above it, and what it printed sits in the recess under it with everything else the agent
-   brought back. */
+   it instead. It sits in the band's recess with what it printed: a command can run to a screen (a
+   heredoc), and a strip with a ground of its own then fills the band with that ground. The reading
+   tier says which lines were typed, and the rule says where what they printed starts. */
     & .tool-block.cmd {
       padding: 6px 12px;
-      background: var(--surface1);
       color: var(--text0);
       white-space: pre-wrap;
       word-break: break-word;
+      &:not(:last-child) {
+        border-bottom: 1px solid var(--border0);
+      }
     }
     /* a diff fills the band: its tints run to all four of the panel's edges rather than sitting inside
    its padding, which read as a dark bar above the first changed line */

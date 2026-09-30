@@ -113,6 +113,9 @@ export type ChatItem =
   /** the daemon's word on a land that merged, kept for the record; `archiveIds` are the variant
    * siblings the landed one leaves behind, offered here where the land is read */
   | { kind: "landed"; text: string; archiveIds: string[] }
+  /** the daemon's word on a restore from the archive: when it went, what branch it came back on,
+   * and whether its uncommitted changes came with it */
+  | { kind: "restored"; archivedAt: number; branch: string; uncommitted: boolean; ts: number }
   /** the agent wants credentials; `done` once a login went through. `rejected`: it had a
    * credential and the provider refused it, so the error above this card says what went wrong */
   | {
@@ -2534,6 +2537,17 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
       return [...items, { kind: "grafted", title: event.title, branch: event.branch }];
     case "landed":
       return [...items, { kind: "landed", text: event.message, archiveIds: event.archiveIds }];
+    case "restored":
+      return [
+        ...items,
+        {
+          kind: "restored",
+          archivedAt: event.archivedAt,
+          branch: event.branch,
+          uncommitted: event.uncommitted,
+          ts: event.ts,
+        },
+      ];
     case "agent-auth-required":
       return [
         ...items,

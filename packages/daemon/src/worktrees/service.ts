@@ -1195,6 +1195,15 @@ export class WorktreeService {
     if (!dropped.ok) log.warn(old.id, `could not drop its archive ref: ${dropped.err}`);
     this.countsCache.delete(wt.id);
     this.launch(wt, repo, repo.path);
+    // the word on the restore goes on the transcript first, the way a land's does: the chat picks
+    // up from where the archive cut it, and the row is what says how long the gap was
+    this.d.runtime.ensureAgent(wt).agent.note({
+      type: "restored",
+      archivedAt: rec.archivedAt,
+      branch,
+      uncommitted: !!kept.snapshot,
+      ts: Date.now(),
+    });
     // setup and procs warm in the background; the agent takes the message now, as on create
     if (message) this.d.runtime.ensureAgent(wt).agent.send(message.text, { attachments: message.attachments });
     this.d.hub.emit("archiveChanged", repo.id);

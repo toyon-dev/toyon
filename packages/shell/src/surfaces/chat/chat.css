@@ -319,17 +319,6 @@
     min-height: var(--row-height-sm);
     margin-block: -5px;
   }
-  /* the removal, said last in a chat that ended: a note in the log's column, in the log's voice for
-     a line that is not a message, with the way back under it */
-  .chat-archived {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 8px;
-    & p {
-      margin: 0;
-    }
-  }
   /* the mark and the count sit on one line, the mark on the text's own midline */
   .working-mark {
     display: inline-flex;
@@ -524,7 +513,7 @@
     }
   }
   .tool-row .tool-hint,
-  .blocked-row .tool-hint {
+  .daemon-row .tool-hint {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -765,62 +754,75 @@
    `.live-text` (base.css) and is the only mark. The answer is not marked: its words appearing is
    the signal, and a band over the whole block would sweep back over sentences already read. */
 
-  /* the graft divider and the landed row are the blocked row's box with another edge: all three
-   are the daemon writing into the transcript itself. The landed row takes the aqua that says
-   "landed" everywhere else, not the accent: on the blocked row's red edge, a land read as a
-   failure */
-  .blocked-row,
-  .graft-row,
-  .landed-row {
-    padding: 4px 8px;
-    font: var(--type-mono);
+  /* the daemon writing into the transcript itself (DaemonRow): the call it refused, the divider
+   where a merged worktree's chat begins, the word on a land. One box for all of them, and it spans
+   the log the way a tool row does, -12px being the log's padding put back inside as the row inset,
+   so the edge stands where the open band's edge stands and the glyph on the tool rows' glyph
+   column. The edge is the selected-row bar rather than a border, since a border would push the
+   glyph 2px off that column. The row is prose in the UI face; the tool name and path it quotes are
+   the only mono. The tone names the edge's colour, which is the tag's, and the row carries no
+   other: the landed row takes the aqua that says "landed" everywhere else, not the accent, since on
+   the blocked row's red a land read as a failure. */
+  .daemon-row {
+    margin: 0 -12px;
+    padding: 4px var(--row-inset);
+    font: var(--type-ui-sm);
     color: var(--text1);
     background: var(--surface0);
-    border-left: 2px solid var(--red);
-    & .blocked-tag,
-    & .graft-tag,
-    & .landed-tag {
-      color: var(--red);
-      font: var(--type-ui-sm);
+    --row-edge-color: var(--red);
+    &[data-tone="accent"] {
+      --row-edge-color: var(--accent);
+    }
+    &[data-tone="aqua"] {
+      --row-edge-color: var(--aqua);
+    }
+    &[data-tone="quiet"] {
+      --row-edge-color: var(--ink1);
+    }
+    & .daemon-tag {
+      color: var(--row-edge-color);
+    }
+    & .daemon-head {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    & .tool-name,
+    & .tool-hint {
+      font: var(--type-mono);
     }
     & .tool-name {
       color: var(--text1);
+    }
+    /* the hint gives way but never grows, as on a tool row: a long path or branch is what truncates */
+    & .tool-hint {
+      flex: 0 1 auto;
+      min-width: 0;
+    }
+    /* the daemon's sentence wraps rather than pushing the offer beside it off the row */
+    & .daemon-text {
+      flex: 1;
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+    /* the line under the head wraps rather than truncating, since it is the whole reason the row
+       is here: toyon's rule, under the call it refused. The agent is told only that its request was
+       refused, so it reports one as the person declining; this line is where the person reads
+       otherwise */
+    & .daemon-below {
+      margin-top: 2px;
     }
   }
   /* every row toyon writes into the transcript leads with a glyph the way a tool row does, so a
    scrolled-back turn stays one column of glyphs and the word beside it is not the odd row out. The
    glyph sits inside the tag and takes its colour, which is the edge's: the row carries no other */
-  .blocked-tag,
-  .graft-tag,
-  .landed-tag,
+  .daemon-tag,
   .ask-tag,
   .queued-tag {
     display: inline-flex;
     align-items: center;
     gap: 4px;
     flex: none;
-  }
-  .graft-row,
-  .landed-row,
-  .blocked-row .blocked-head {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  /* the daemon's sentence wraps rather than pushing the offer off the row */
-  .landed-row .landed-text {
-    flex: 1;
-    min-width: 0;
-    overflow-wrap: anywhere;
-  }
-  /* the row is prose, not a command: the blocked row's mono is for the tool name it quotes, and
-   this one quotes nothing. The face sits on the row so the inline offer keeps the sentence's */
-  .landed-row {
-    font: var(--type-ui-sm);
-    border-left-color: var(--aqua);
-    & .landed-tag {
-      color: var(--aqua);
-    }
   }
   /* the composer's answer under the field: the knobs row's tier, and it wraps, since it is the
    whole reason the line is there */
@@ -845,19 +847,6 @@
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
-    }
-  }
-  /* Toyon's rule, under the call it refused. The agent is told only that its request was refused,
-   so it reports one as the person declining; this line is where the person reads otherwise, and it
-   wraps rather than truncating, since it is the whole reason the block is here */
-  .blocked-row .blocked-why {
-    margin-top: 2px;
-    font: var(--type-ui-sm);
-  }
-  .graft-row {
-    border-left-color: var(--accent);
-    & .graft-tag {
-      color: var(--accent);
     }
   }
   /* the frame is base's (.composer); the tall floor is the dock's own. Scoped to the dock rather

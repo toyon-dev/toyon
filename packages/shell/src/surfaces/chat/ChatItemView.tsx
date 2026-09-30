@@ -17,10 +17,11 @@ import { grouped, type MenuEntry, useContextMenu } from "../../ui/menu.ts";
 import { rowState } from "../../ui/rowState.ts";
 import { Spinner } from "../../ui/Spinner.tsx";
 import { attachmentUrl } from "../../ws.ts";
-import { elapsed } from "../util.ts";
+import { elapsed, spanWords } from "../util.ts";
 import { AskRow } from "./AskRow.tsx";
 import { answeredQuestion, answerLines } from "./ask.ts";
 import { chatLink, openChatLink } from "./chatLink.ts";
+import { DaemonRow } from "./DaemonRow.tsx";
 import {
   runCalls,
   runningInRun,
@@ -1012,37 +1013,45 @@ export const ChatItemView = memo(function ChatItemView({
       // was refused, so it reports a refusal as the person declining, and the row is the only place
       // the person can read whose rule this was
       return (
-        <div className="blocked-row" {...cm.contextMenu(() => pathItems(item.path, dirOf()))}>
-          <div className="blocked-head">
-            <span className="blocked-tag">
-              <Icon name="lock" className="icon-inline" />
-              blocked
-            </span>
-            <span className="tool-name">{item.tool}</span>
-            {item.path && <span className="tool-hint">{item.path}</span>}
-          </div>
-          <div className="blocked-why row-dim">{item.reason}</div>
-        </div>
+        <DaemonRow
+          icon="lock"
+          word="blocked"
+          tone="red"
+          below={<div className="daemon-below row-dim">{item.reason}</div>}
+          {...cm.contextMenu(() => pathItems(item.path, dirOf()))}
+        >
+          <span className="tool-name">{item.tool}</span>
+          {item.path && <span className="tool-hint">{item.path}</span>}
+        </DaemonRow>
       );
     case "grafted":
+      // layers is the rail's glyph for a worktree merged from several: this divider is where one of
+      // those merges shows in the transcript
       return (
-        <div
-          className="graft-row"
+        <DaemonRow
+          icon="layers"
+          word="grafted"
+          tone="accent"
           data-tip={`what follows was said in ${item.title} before it was merged in here`}
           data-tip-placement="follow"
         >
-          {/* layers is the rail's glyph for a worktree merged from several: this divider is where
-              one of those merges shows in the transcript */}
-          <span className="graft-tag">
-            <Icon name="layers" className="icon-inline" />
-            grafted
-          </span>
           <span className="tool-name">{item.title}</span>
           <span className="tool-hint">{item.branch}</span>
-        </div>
+        </DaemonRow>
       );
     case "landed":
       return <LandedRow item={item} />;
+    case "restored":
+      // the gap in the chat, said in the daemon's own row: how long it sat in the archive and what
+      // came back, so what reads before and after it is one conversation with a pause
+      return (
+        <DaemonRow icon="reload" word="restored" tone="quiet">
+          <span className="daemon-text">
+            after {spanWords(item.ts - item.archivedAt)} in the archive, back on {item.branch}
+            {item.uncommitted ? " with its uncommitted changes" : ""}
+          </span>
+        </DaemonRow>
+      );
   }
 });
 
@@ -1054,17 +1063,13 @@ function LandedRow({ item }: { item: Extract<ChatItem, { kind: "landed" }> }) {
   const dispatch = useDispatch();
   const left = useStore((s) => item.archiveIds.filter((id) => worktreeById(s, id) !== null).length);
   return (
-    <div className="landed-row">
-      <span className="landed-tag">
-        <Icon name="check" className="icon-inline" />
-        landed
-      </span>
-      <span className="landed-text">{item.text}</span>
+    <DaemonRow icon="check" word="landed" tone="aqua">
+      <span className="daemon-text">{item.text}</span>
       {left > 0 && (
         <Button variant="inline" tone="strong" onClick={() => archiveWorktrees(sock, dispatch, item.archiveIds)}>
           {left > 1 ? `archive ${left} worktrees` : "archive the other worktree"}
         </Button>
       )}
-    </div>
+    </DaemonRow>
   );
 }

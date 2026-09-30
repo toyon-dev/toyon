@@ -445,6 +445,12 @@ describe("archive", () => {
     expect(w.state.worktree(wt.id)).toBeDefined();
     expect(await refExists(wt.id)).toBe(false);
     expect(w.worktrees.archived(repoId)).toEqual([]);
+    // the word on it goes on the transcript, where the chat reads why it stops and picks up again
+    expect(w.agents.get(wt.id)!.recorded.at(-1)).toMatchObject({
+      type: "restored",
+      branch: wt.branch,
+      uncommitted: true,
+    });
   });
 
   test("the archived chat is readable in place, and a message on restore goes to the agent", async () => {

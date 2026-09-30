@@ -504,6 +504,19 @@ describe("chat folding", () => {
       { kind: "user", text: "in beta", seq: 0 },
     ]);
   });
+  test("a restore marker is a row of its own; what follows is the chat going on", () => {
+    const s = run([
+      hello(wt("a")),
+      agent("a", { type: "user-message", text: "before", ts: 0 }),
+      agent("a", { type: "restored", archivedAt: 5, branch: "toyon/beta", uncommitted: true, ts: 9 }),
+      agent("a", { type: "user-message", text: "after", ts: 9 }),
+    ]);
+    expect(s.local.a?.chat).toEqual([
+      { kind: "user", text: "before", seq: 0 },
+      { kind: "restored", archivedAt: 5, branch: "toyon/beta", uncommitted: true, ts: 9 },
+      { kind: "user", text: "after", seq: 0 },
+    ]);
+  });
   test("tool-end completes the matching tool-start", () => {
     const s = run([
       hello(wt("a")),

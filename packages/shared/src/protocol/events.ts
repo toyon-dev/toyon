@@ -242,6 +242,11 @@ export type AgentEvent =
    * the row reads back after a reload. `archiveIds` are the variant siblings the land leaves
    * behind, offered on the row for as long as they are still rows */
   | { type: "landed"; message: string; archiveIds: string[]; ts: number }
+  /** a restore brought this worktree back from the archive: the daemon's word on it, kept on the
+   * transcript so the chat reads why it stops and picks up again. `archivedAt` is when it went,
+   * `branch` what the commits came back on (a new name when the old one was taken meanwhile), and
+   * `uncommitted` whether kept changes were put back over them */
+  | { type: "restored"; archivedAt: number; branch: string; uncommitted: boolean; ts: number }
   /** the agent asked something and its turn is blocked until the answer goes back. `toolId` ties
    * the card to the tool row the agent emitted just before it, which the card then replaces.
    * Always followed by an agent-ask-end. */

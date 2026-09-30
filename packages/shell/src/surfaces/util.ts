@@ -248,6 +248,22 @@ export function rowLabel(w: WorktreeStatus, repo: RepoInfo | null): string {
 
 /** Coarse on purpose: the question an age in a row answers is "how long ago", and a narrow row has
  * no space for a date the reader would have to parse anyway. */
+/** a span in a sentence, where the gutter's "3m" and "2d" would read as units: "3 minutes",
+ * "2 days", and under a minute "a moment" */
+export function spanWords(ms: number): string {
+  const secs = Math.max(0, ms / 1000);
+  const unit = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+  if (secs < 60) return "a moment";
+  const mins = secs / 60;
+  if (mins < 60) return unit(Math.floor(mins), "minute");
+  const hours = mins / 60;
+  if (hours < 24) return unit(Math.floor(hours), "hour");
+  const days = hours / 24;
+  if (days < 7) return unit(Math.floor(days), "day");
+  if (days < 365) return unit(Math.floor(days / 7), "week");
+  return unit(Math.floor(days / 365), "year");
+}
+
 export function ago(at: number): string {
   const secs = Math.max(0, (Date.now() - at) / 1000);
   if (secs < 60) return "now";

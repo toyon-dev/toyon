@@ -27,11 +27,14 @@ export type TipPlacement = "follow" | "top" | "bottom" | "left" | "right";
 
 export type TipOptions = {
   placement?: TipPlacement;
-  /** a second line under the text in the quiet tier, for the where or the which under the what:
+  /** a line or more under the text in the quiet tier, for the where or the which under the what:
    * a worktree's state, then its path. The text is what you asked, so it comes first; a middot
    * between the two on one line read as a phrase, and the path ahead of the state put the answer
-   * last. */
-  detail?: string;
+   * last. Several are each a line of their own: a row's recap, then where its PR stands. */
+  detail?: string | string[];
+  /** a card about a row: one fixed width whatever the row has to say, so a hover down a list does
+   * not swap the box's shape at every row. Implied by a name or figures. */
+  card?: boolean;
   /** a status dot class (`running`, `waiting`, see base.css) drawn just before the text: for a
    * tip that names a dot's state, so the colour and the word sit together even when the dot
    * itself is at the other end of the row. `spinner` draws the Spinner's dot instead, for a tip
@@ -43,8 +46,8 @@ export type TipOptions = {
   name?: string;
   /** the figures, on a line of their own at the foot of the box under a rule, one at each edge:
    * what this has cost, apart from what it is and what it is doing. A worktree row puts its
-   * agent's spend and context here. On the name's line they ran into the branch, and with a
-   * sentence of detail under them the three read as one paragraph. Drawn only with a name. */
+   * agent's spend here. On the text's line they ran into it, and with a sentence of detail under
+   * them the three read as one paragraph. A tip with figures is a card. */
   aside?: string[];
   /** the other verb of the same gesture, on a key of its own, as a row under the text in the quiet
    * tier: the inspector's button says ⌘E adds the element to chat under its own ⌘I. The two keys
@@ -55,17 +58,20 @@ export type TipOptions = {
 
 export type TipAlso = { text: string; key: string };
 
-export function tip(text: string, key?: string, { placement, detail, dot, name, aside, also }: TipOptions = {}) {
+export function tip(text: string, key?: string, { placement, detail, card, dot, name, aside, also }: TipOptions = {}) {
   const named = name ? `${text}: ${name}` : text;
-  const label = [named, detail, ...(name && aside ? aside : [])].filter(Boolean).join(", ");
+  const details = (Array.isArray(detail) ? detail : [detail]).filter((d): d is string => !!d);
+  const label = [named, ...details, ...(aside ?? [])].join(", ");
   return {
     "data-tip": text,
     "data-tip-key": key,
     "data-tip-placement": placement,
-    "data-tip-detail": detail,
+    // the detail lines and the figures each ride one attribute, a line each: none of them is ever
+    // more than one line
+    "data-tip-detail": details.length ? details.join("\n") : undefined,
+    "data-tip-card": card || name || aside?.length ? "" : undefined,
     "data-tip-dot": dot,
     "data-tip-name": name,
-    // the figures ride one attribute, a line each: none of them is ever more than one line
     "data-tip-aside": aside?.length ? aside.join("\n") : undefined,
     "data-tip-also": also?.text,
     "data-tip-also-key": also?.key,
@@ -95,7 +101,8 @@ export type Anchor = {
   el: HTMLElement;
   text: string;
   key?: string;
-  detail?: string;
+  detail?: string[];
+  card: boolean;
   dot?: string;
   name?: string;
   aside?: string[];
@@ -178,7 +185,8 @@ export function Tooltips() {
         el,
         text,
         key: el.dataset.tipKey,
-        detail: el.dataset.tipDetail,
+        detail: el.dataset.tipDetail?.split("\n"),
+        card: el.dataset.tipCard !== undefined,
         dot: el.dataset.tipDot,
         name: el.dataset.tipName,
         aside: el.dataset.tipAside?.split("\n"),
@@ -296,9 +304,9 @@ export function Tooltips() {
     // shown again whenever it moves to another control, which puts it back above whatever opened
     // while it stood: a tip about a menu row is over that menu
     <Float
-      // a tip with a name is a card about a row, and every row's card is one width, with or
-      // without figures at its foot: main's has none and stood narrow among the rest
-      className={cx("tooltip", anchor.name && "tooltip-card")}
+      // every row's card is one width, with or without figures at its foot: main's has none and
+      // stood narrow among the rest
+      className={cx("tooltip", anchor.card && "tooltip-card")}
       role="tooltip"
       boxRef={box}
       handle={handle}
@@ -324,8 +332,12 @@ export function Tooltips() {
       ) : (
         head
       )}
-      {anchor.detail && <div className="tooltip-detail">{anchor.detail}</div>}
-      {anchor.name && anchor.aside && (
+      {anchor.detail?.map((line) => (
+        <div key={line} className="tooltip-detail">
+          {line}
+        </div>
+      ))}
+      {anchor.aside && (
         <div className="tooltip-foot">
           {anchor.aside.map((f) => (
             <span key={f}>{f}</span>

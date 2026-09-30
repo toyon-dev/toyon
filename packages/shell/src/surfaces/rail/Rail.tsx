@@ -37,15 +37,14 @@ import { Icon } from "../../ui/Icon.tsx";
 import { useContextMenu, useMenu } from "../../ui/menu.ts";
 import { Spinner } from "../../ui/Spinner.tsx";
 import { type TipPlacement, tip } from "../../ui/Tooltip.tsx";
-import { dollars, tokens } from "../chat/usage.ts";
+import { dollars } from "../chat/usage.ts";
 import { hhmm } from "../chips/baseNote.ts";
-import { lastStopLine, recapLine } from "../recap.ts";
-import { ago, chord, dotClass, isBusy, procTrouble, rowLabel, shipLabel, shipShown, stateLabel } from "../util.ts";
+import { ago, chord, dotClass, procTrouble, rowLabel, shipLabel, shipShown, stateLabel } from "../util.ts";
 import "./rail.css";
 import { cx } from "../../ui/cx.ts";
 import { useOnChange } from "../../ui/hooks.ts";
 import { rowState } from "../../ui/rowState.ts";
-import { FOUND_LINE, OFFLINE_LINE, rowLine } from "./rowLine.ts";
+import { cardFigures, cardLines, FOUND_LINE, OFFLINE_LINE, rowLine } from "./rowLine.ts";
 
 /** a count in its 3ch column; past three digits the exact number stops meaning anything here */
 const count = (n: number) => (n > 999 ? "1k+" : String(n));
@@ -166,21 +165,10 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
     const p = d.worktree ? d.worktree.path : d.path;
     return home && p.startsWith(`${home}/`) ? `~${p.slice(home.length)}` : p;
   };
-  // Every row's tip is one shape: the state in words with its dot, then the branch with the figures
-  // at the far edge, then a line of detail when there is one. The branch is what the row never
-  // shows, and a toyon worktree's directory is an id that says nothing; the path itself is the
-  // menu's. The lead's row goes by its branch, so its name puts the project ahead of it.
-  const nameOf = (d: WorktreeStatus) =>
-    isOwned(d) && isLead(d.worktree)
-      ? [repoOf(d)?.name, rowLabel(d, repoOf(d))].filter(Boolean).join(" · ")
-      : (d.branch ?? d.name);
-  // the aside: what the agent has filled and cost so far, at the foot of the tip and nowhere else,
-  // so the figures are found in one place. Context first: it is the one that runs out.
-  const figuresOf = (d: WorktreeStatus) => {
-    const u = d.usage;
-    const parts = [u ? `${tokens(u.used)} of ${tokens(u.size)}` : null, u?.cost !== undefined ? dollars(u.cost) : null];
-    return parts.some(Boolean) ? parts.filter((p) => p !== null) : undefined;
-  };
+  // Every row's tip is one card: the state in words with its dot, then the lines under it
+  // (cardLines), then the figures at the foot (cardFigures). No branch: it is the title's slug on
+  // nearly every row, and a toyon worktree's directory is an id that says nothing; the path
+  // itself is the menu's, where it can be copied.
 
   const [graftMode, setGraftMode] = useState(false);
   const [sel, setSel] = useState<string[]>([]);
@@ -233,7 +221,7 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
       data-state={rowState({ current: archivedPage?.id === a.id })}
       {...tip(archivedState(a), undefined, {
         placement: tipSide,
-        name: a.branch,
+        card: true,
         aside: a.cost !== undefined ? [dollars(a.cost)] : undefined,
       })}
       onClick={() => dispatch({ a: "open-archived", id: a.id })}
@@ -333,26 +321,21 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
         className={cx("row row-edge", owned ? "rail-item" : "row-quiet rail-disc-item", menuOpen && "menu-open")}
         // an archived worktree's page marks its own row, and the row underneath does not read as picked
         data-state={rowState({ current: id === activeId && !archivedPage, checked: sel.includes(id) })}
-        // one tip per row, on the row: the dot's state in words over the branch, with the dot
-        // restated beside the word, since the real one is at the far end of the row from where
-        // the tip sits. A tip per element would swap fifty times as the mouse crosses the panel.
-        // Badges and the crashed dot keep their own, since those are what a hover over them is
-        // asking about. A found row's state is that nothing of ours runs there, or who holds it,
-        // and its path is its detail; an owned row's path is in its menu, where it can be copied.
-        // Offline, the state is whatever the daemon last said, and a tip restating it as live sat
-        // over a row painted in the fault colour, a green "Running" over an orange dot: the tip
-        // names the fault instead, with no dot, since there is no live state for one to restate.
+        // one tip per row, on the row: the dot's state in words with the dot restated beside it,
+        // since the real one is at the far end of the row from where the tip sits. A tip per
+        // element would swap fifty times as the mouse crosses the panel. Badges and the crashed
+        // dot keep their own, since those are what a hover over them is asking about. A found
+        // row's state is that nothing of ours runs there, or who holds it, and its path is its
+        // detail; an owned row's lines are where the work stands (cardLines). Offline, the state
+        // is whatever the daemon last said, and a tip restating it as live sat over a row painted
+        // in the fault colour, a green "Running" over an orange dot: the tip names the fault
+        // instead, with no dot, since there is no live state for one to restate.
         {...(owned
           ? tip(offline ? OFFLINE_LINE : op ? shipLabel(op) : stateLabel(w, asksSetup(repoOf(owned))), undefined, {
               placement: tipSide,
-              name: nameOf(w),
-              aside: figuresOf(w),
-              // where the work stands under the state, so a hover is enough to decide whether to
-              // switch. On a busy row the record's recap is the previous stop's, so it is marked
-              // and dated there, or under "Agent working" it would read as the turn in flight.
-              detail: owned.worktree.lastTurn
-                ? (isBusy(w) ? lastStopLine : recapLine)(owned.worktree.lastTurn)
-                : undefined,
+              card: true,
+              aside: cardFigures(w),
+              detail: cardLines(owned),
               dot: offline ? undefined : op ? "spinner" : dotClass(w),
             })
           : tip(
@@ -360,7 +343,7 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
               undefined,
               {
                 placement: tipSide,
-                name: nameOf(w),
+                card: true,
                 detail: wtDirLabel(w),
                 // the lock takes the dot's seat in the row, so the tip has no dot to restate
                 dot: offline || w.locked ? undefined : "discovered",

@@ -1,6 +1,7 @@
 import { isLead, isOwned, type ShipOp, type WorktreeStatus } from "@toyon/shared";
-import { recapLine } from "../recap.ts";
-import { type DotState, dotClass, shipLabel, stateLabel } from "../util.ts";
+import { dollars } from "../chat/usage.ts";
+import { lastStopLine, prLine, recapLine } from "../recap.ts";
+import { type DotState, dotClass, isBusy, shipLabel, stateLabel } from "../util.ts";
 
 /**
  * The line under a row's name on a screen.
@@ -57,4 +58,43 @@ export function rowLine(w: WorktreeStatus, ctx: RowContext): string {
   // would trail after a clamp; the state is a word, and the time is what makes it a line
   if (!IN_FLIGHT.has(dotClass(w)) && turn) return recapLine(turn);
   return ctx.at ? `${state} · ${ctx.at}` : state;
+}
+
+/**
+ * The lines under the state in an owned row's card on a desk: where the work stands, so a hover
+ * is enough to decide whether to switch. The recap first, since it says what the work is; on a
+ * busy row the record's recap is the previous stop's, so it is marked and dated there, or under
+ * "Agent working" it would read as the turn in flight. Then where the PR stands, when one is out
+ * and the branch has not landed since: the composer's own line for it, which is the fact the rail
+ * cannot show and the one that decides whether the row needs a hand. The branch is not among
+ * them: it is the title's slug on nearly every row, and the menu has it for copying.
+ */
+export function cardLines(w: WorktreeStatus & { worktree: NonNullable<WorktreeStatus["worktree"]> }): string[] {
+  const turn = w.worktree.lastTurn;
+  const recap = turn ? (isBusy(w) ? lastStopLine : recapLine)(turn) : undefined;
+  const pr = w.worktree.pr && !w.worktree.landed ? prLine(w.worktree.pr) : undefined;
+  return [recap, pr].filter((l): l is string => !!l);
+}
+
+/** context in use past this share of the window is a figure worth a hover: below it the number
+ * changes nothing you would do here */
+export const CONTEXT_HIGH = 0.5;
+
+/**
+ * The figures at the card's foot, the cost last at the far edge: what the agent has spent here,
+ * which the row never shows, so the figures are found in one place. Context only once it runs
+ * high, as the composer's ring says it, since "95k of 1000k" is noise and "72% of context" is
+ * the cue to start fresh rather than send another turn. Messages waiting behind a turn, when
+ * any are: nothing on the rail says a busy row has more queued. Nothing at all when none apply,
+ * so the card has no rule over an empty line.
+ */
+export function cardFigures(w: WorktreeStatus): string[] | undefined {
+  const u = w.usage;
+  const share = u && u.size > 0 ? u.used / u.size : 0;
+  const figures = [
+    share >= CONTEXT_HIGH ? `${Math.round(100 * share)}% of context` : undefined,
+    w.queued ? `${w.queued} queued` : undefined,
+    u?.cost !== undefined ? dollars(u.cost) : undefined,
+  ].filter((f): f is string => !!f);
+  return figures.length ? figures : undefined;
 }

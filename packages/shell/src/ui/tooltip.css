@@ -75,8 +75,8 @@
     flex-direction: row-reverse;
   }
   /* a card about a row holds one width: the foot spreads its figures to the edges, which a box
-   sized to a short branch left cramped, and a hover down the rail would otherwise swap the box's
-   shape at every row. A fixed width, not a floor under max-content, so a long branch wraps
+   sized to a short state word left cramped, and a hover down the rail would otherwise swap the
+   box's shape at every row. A fixed width, not a floor under max-content, so a long name wraps
    inside the same box instead of stretching it. */
   .tooltip-card {
     width: 280px;

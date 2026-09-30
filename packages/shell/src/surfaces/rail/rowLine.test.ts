@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import type { WorktreeStatus } from "@toyon/shared";
-import { cardFigures, cardLines, OFFLINE_LINE, type RowContext, rowLine } from "./rowLine.ts";
+import type { ArchivedWorktree, WorktreeStatus } from "@toyon/shared";
+import { archivedLines, cardFigures, cardLines, leadLines, OFFLINE_LINE, type RowContext, rowLine } from "./rowLine.ts";
 
 // The order of the line's answers is the whole logic, and each step below was chosen against the
 // one after it: a row that said "Idle" under main, or recapped a finished turn beside a dot that
@@ -155,5 +155,58 @@ describe("the figures at a card's foot", () => {
       "$1.00",
     ]);
     expect(cardFigures(owned({ queued: 0 }))).toBeUndefined();
+  });
+});
+
+const arch = (over: Partial<ArchivedWorktree> = {}): ArchivedWorktree => ({
+  id: "z",
+  repoId: "r",
+  title: "Update fix",
+  branch: "toyon/update-fix",
+  path: "/w/z",
+  createdAt: 0,
+  archivedAt: 5,
+  restorable: true,
+  transcript: "/t",
+  ...over,
+});
+const NOW = Date.now();
+
+describe("the lines under main's state", () => {
+  test("what landed last, across the rows and the archive, newest wins", () => {
+    const rows = [
+      owned({}, { title: "Chip bar", lands: [{ base: "a", tip: "b", at: NOW - 3 * 3600_000 }] }),
+      owned({ id: "b" }, { title: "Tag links", lands: [{ base: "a", tip: "b", at: NOW - 9e5 }] }),
+    ];
+    expect(leadLines(rows, [arch({ landed: true, landedAt: NOW - 6e5 })], null, "main")).toEqual([
+      "Landed Update fix 10m ago.",
+    ]);
+    expect(leadLines(rows, [arch({ landed: true })], null, "main")).toEqual(["Landed Tag links 15m ago."]);
+    expect(leadLines([owned()], [arch()], null, "main")).toEqual([]);
+  });
+
+  test("where main stands against origin: the composer's note, or level with the fetch time", () => {
+    const trunk = { id: "t", dirty: 0, empty: false, fetchedAt: NOW - 4 * 60_000 };
+    expect(leadLines([], [], trunk, "main")).toEqual(["Level with origin, fetched 4m ago."]);
+    expect(leadLines([], [], { ...trunk, behind: 3 }, "main")).toEqual(["3 behind origin."]);
+    expect(leadLines([], [], { ...trunk, behind: 3, stale: "diverged" }, "main")).toEqual([
+      "Main has diverged from origin.",
+    ]);
+    expect(leadLines([], [], { ...trunk, fetchFailed: "no route to host" }, "main")[0]).toMatch(
+      /^Could not reach origin since \d\d:\d\d: no route to host\.$/,
+    );
+    // never fetched: nothing to say about origin
+    expect(leadLines([], [], { id: "t", dirty: 0, empty: false }, "main")).toEqual([]);
+  });
+});
+
+describe("the line under an archived row's state", () => {
+  test("the first message, on one line, cut at a word past the measure", () => {
+    expect(archivedLines(arch({ prompt: "  fix the\n  update race " }))).toEqual(["fix the update race"]);
+    expect(archivedLines(arch())).toEqual([]);
+    const long = Array.from({ length: 40 }, (_, i) => `word${i}`).join(" ");
+    const [line] = archivedLines(arch({ prompt: long }));
+    expect(line?.length).toBeLessThanOrEqual(161);
+    expect(line).toMatch(/^word0 .*word\d+…$/);
   });
 });

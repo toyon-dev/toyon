@@ -150,6 +150,7 @@ export function summarize(r: ArchiveRecord, repoId: string, transcript: string):
     ...(r.sessionId ? { sessionId: r.sessionId } : {}),
     ...(r.kept?.snapshot ? { uncommitted: true, ...(r.kept.dirty ? { dirty: r.kept.dirty } : {}) } : {}),
     ...(r.worktree.landed ? { landed: true } : {}),
+    ...(r.worktree.lands?.length ? { landedAt: r.worktree.lands[r.worktree.lands.length - 1]?.at } : {}),
     ...(r.cost !== undefined ? { cost: r.cost } : {}),
     ...(r.auto ? { auto: r.auto } : {}),
   };

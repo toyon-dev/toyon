@@ -44,7 +44,7 @@ import "./rail.css";
 import { cx } from "../../ui/cx.ts";
 import { useOnChange } from "../../ui/hooks.ts";
 import { rowState } from "../../ui/rowState.ts";
-import { cardFigures, cardLines, FOUND_LINE, OFFLINE_LINE, rowLine } from "./rowLine.ts";
+import { archivedLines, cardFigures, cardLines, FOUND_LINE, leadLines, OFFLINE_LINE, rowLine } from "./rowLine.ts";
 
 /** a count in its 3ch column; past three digits the exact number stops meaning anything here */
 const count = (n: number) => (n > 999 ? "1k+" : String(n));
@@ -222,6 +222,7 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
       {...tip(archivedState(a), undefined, {
         placement: tipSide,
         card: true,
+        detail: archivedLines(a),
         aside: a.cost !== undefined ? [dollars(a.cost)] : undefined,
       })}
       onClick={() => dispatch({ a: "open-archived", id: a.id })}
@@ -335,7 +336,8 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
               placement: tipSide,
               card: true,
               aside: cardFigures(w),
-              detail: cardLines(owned),
+              // main has no turn to recap: its lines say whether it is fresh
+              detail: isLead(owned.worktree) ? leadLines(worktrees, archived, trunk, base) : cardLines(owned),
               dot: offline ? undefined : op ? "spinner" : dotClass(w),
             })
           : tip(

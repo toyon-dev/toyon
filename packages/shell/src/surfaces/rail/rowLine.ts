@@ -1,7 +1,15 @@
-import { isLead, isOwned, type ShipOp, type WorktreeStatus } from "@toyon/shared";
+import {
+  type ArchivedWorktree,
+  isLead,
+  isOwned,
+  type ShipOp,
+  type TrunkStatus,
+  type WorktreeStatus,
+} from "@toyon/shared";
 import { dollars } from "../chat/usage.ts";
-import { lastStopLine, prLine, recapLine } from "../recap.ts";
-import { type DotState, dotClass, isBusy, shipLabel, stateLabel } from "../util.ts";
+import { originNote } from "../chips/baseNote.ts";
+import { ended, lastStopLine, prLine, recapLine, when } from "../recap.ts";
+import { ago, type DotState, dotClass, isBusy, shipLabel, stateLabel } from "../util.ts";
 
 /**
  * The line under a row's name on a screen.
@@ -74,6 +82,55 @@ export function cardLines(w: WorktreeStatus & { worktree: NonNullable<WorktreeSt
   const recap = turn ? (isBusy(w) ? lastStopLine : recapLine)(turn) : undefined;
   const pr = w.worktree.pr && !w.worktree.landed ? prLine(w.worktree.pr) : undefined;
   return [recap, pr].filter((l): l is string => !!l);
+}
+
+/**
+ * The lines under main's state. Main has no turn and no PR; what a hover on it asks is whether it
+ * is fresh, and two facts answer that: what landed on it last, from the newest land mark across
+ * the rows and the archive, and where it stands against origin. The origin line is the composer's
+ * own note when there is something to say (behind, held back, unreachable), and says level when
+ * there is not, since "fetched just now" with no count is the answer being looked for. Nothing
+ * about origin when the repo has never fetched one.
+ */
+export function leadLines(
+  worktrees: readonly WorktreeStatus[],
+  archived: readonly ArchivedWorktree[],
+  trunk: TrunkStatus | null,
+  defaultBranch: string,
+): string[] {
+  let last: { title: string; at: number } | undefined;
+  const mark = (title: string, at: number | undefined) => {
+    if (at && (!last || at > last.at)) last = { title, at };
+  };
+  for (const w of worktrees) {
+    const lands = w.worktree?.lands;
+    if (w.worktree && lands?.length) mark(w.worktree.title, lands[lands.length - 1]?.at);
+  }
+  for (const a of archived) mark(a.title, a.landedAt);
+  const landed = last ? `Landed ${last.title} ${when(ago(last.at))}.` : undefined;
+  const note = trunk ? originNote(defaultBranch, trunk) : null;
+  const origin = note
+    ? ended(`${note.charAt(0).toUpperCase()}${note.slice(1)}`)
+    : trunk?.fetchedAt
+      ? `Level with origin, fetched ${when(ago(trunk.fetchedAt))}.`
+      : undefined;
+  return [landed, origin].filter((l): l is string => !!l);
+}
+
+/** the longest line an archived row's first message makes: past it the line is cut at a word */
+const PROMPT_MAX = 160;
+
+/**
+ * The line under an archived row's state: the first message sent there, which the record keeps so
+ * a row can say what the work was. The last recap would say where the last turn left it, which is
+ * not the same thing over a long session; what was asked is true of the whole of it.
+ */
+export function archivedLines(a: ArchivedWorktree): string[] {
+  const p = a.prompt?.replace(/\s+/g, " ").trim();
+  if (!p) return [];
+  if (p.length <= PROMPT_MAX) return [p];
+  const cut = p.slice(0, PROMPT_MAX);
+  return [`${cut.slice(0, Math.max(cut.lastIndexOf(" "), 1)).trimEnd()}…`];
 }
 
 /** context in use past this share of the window is a figure worth a hover: below it the number

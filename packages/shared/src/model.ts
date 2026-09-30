@@ -712,6 +712,8 @@ export interface ArchivedWorktree {
   dirty?: number;
   /** it had been merged into main */
   landed?: boolean;
+  /** when it last landed on main, whether or not work followed: main's row says what landed last */
+  landedAt?: number;
   /** what its agent's session cost, as the agent last reported it; only an agent that prices
    * itself reports one, so a chat run by one that does not has no figure */
   cost?: number;

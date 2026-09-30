@@ -5,7 +5,7 @@ import type { Landing, LastTurn, PrState, TurnFacts } from "@toyon/shared";
 import { ago } from "./util.ts";
 
 /** a clause that ends the line gets its full stop, unless it brought its own */
-const ended = (text: string) => (/[.!?]$/.test(text) ? text : `${text}.`);
+export const ended = (text: string) => (/[.!?]$/.test(text) ? text : `${text}.`);
 
 /** The worktree's PR as the placeholder's first line: what GitHub is waiting on, or that it is
  * done. Read while the PR stands between the work and main. */
@@ -150,7 +150,7 @@ export function verbLine(text: string): string {
  * being written, or none that came back. The counts of turns and edits are not among them; they
  * are on the transcript right above, and in the line they read as noise in front of the reason. */
 /** an age as a clause: "just now", "12m ago" */
-const when = (age: string) => (age === "now" ? "just now" : `${age} ago`);
+export const when = (age: string) => (age === "now" ? "just now" : `${age} ago`);
 
 function facts(end: LastTurn["end"], f: TurnFacts, age: string): string {
   switch (end) {

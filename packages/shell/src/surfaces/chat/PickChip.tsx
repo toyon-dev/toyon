@@ -4,7 +4,6 @@ import { IconButton } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { useContextMenu } from "../../ui/menu.ts";
-import { rowState } from "../../ui/rowState.ts";
 import { pickLabel } from "../util.ts";
 
 /** a picked element as a chip: crosshair, <Component />, then file:line. Named, not numbered: a
@@ -19,7 +18,6 @@ export function PickChip({
   onHover,
   onOpen,
   onRemove,
-  cursor,
   className = "",
 }: {
   pick: PickMeta;
@@ -30,8 +28,6 @@ export function PickChip({
   /** open the source this element was rendered from, at the line the chip names */
   onOpen?: (path: string, line: number) => void;
   onRemove?: () => void;
-  /** the chip Backspace would take next */
-  cursor?: boolean;
   className?: string;
 }) {
   // the call site leads, because it is the file the pick is usually about: picking a control finds
@@ -55,8 +51,7 @@ export function PickChip({
   const cm = useContextMenu("chat");
   return (
     <div
-      className={cx("pick-chip row row-sm row-edge", className)}
-      data-state={rowState({ cursor })}
+      className={cx("pick-chip row row-sm", className)}
       data-tip={tipText}
       onMouseEnter={() => onHover?.(true)}
       onMouseLeave={() => onHover?.(false)}

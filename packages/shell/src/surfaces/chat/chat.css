@@ -973,8 +973,8 @@
       box-shadow: 0 0 0 1.5px var(--border0);
     }
   }
-  /* the agent's stop, in the box's top-right corner while it has the turn: anchored to the box and
-   not the field, so it holds one place whether a plan line or an attachment stands above the
+  /* the agent's stop, at the box's right edge while it has the turn: anchored to the box and not
+   the field, so it stays in the corner whether a plan line or an attachment stands above the
    field. Absolute, at the box's own padding, so it comes and goes with the turn without moving
    the knobs row's buttons. Whatever is first in the box keeps the corner clear: the plan path
    truncates short of it, a chip stops short of it, and the field and its ghost pad together,
@@ -992,9 +992,20 @@
     & > .composer-plan {
       padding-right: 24px;
     }
-    /* the row bleeds 10px past the padding the stop is measured from */
+    /* A chip first in the box is a row with its own close at the end, and the stop stands level
+     with that close, the top bar's 20px between their boxes: pinned to the corner it sat above
+     and beside the close on a diagonal, and the row's hover ground ran under it. The chip bleeds
+     10px past the padding the stop is measured from, and its close sits 10px inside its own end,
+     so 30px of margin leaves the 20px. The image row is 44px (a 40px thumbnail with 2px of air),
+     the others the small row's 24px. */
     & > .pick-chip:first-child {
-      margin-right: 14px;
+      margin-right: 30px;
+    }
+    &:has(> .pick-chip:first-child) .composer-stop {
+      top: 12px;
+    }
+    &:has(> .image-chip:first-child) .composer-stop {
+      top: 22px;
     }
     &:not(:has(> .composer-plan, > .pick-chip)) .composer-field :is(textarea, .composer-ghost) {
       padding-right: 24px;
@@ -1114,9 +1125,9 @@
    An attachment is a row, the band the rail and the files tab use: a leading slot (an icon, a
    thumbnail), a name, its meta a tier down, and the remove at the end. It draws no card and no
    ground of its own; the box it stands in is its ground, the way the ask's options stand in the
-   composer. The edge is the row idiom's, reserved and transparent, and lit only as a state: in
-   the composer, for the chip Backspace would take. A stripe every chip wore was the app's one
-   "you are here" mark spent as decoration, and being a border it bent round the card's corners.
+   composer. No edge: the accent bar means "this is the one you are on" everywhere else, and bled
+   to the box's edge it stood exactly where the rail draws that mark. Backspace on an empty field
+   still takes the last chip; the mark that said so was read as a selection.
 
    Bled out of the box's padding and inset back by the same distance, so the words start where
    the text in the box does: the composer pads 10px, and so does the bubble a sent one sits in. */
@@ -1129,9 +1140,6 @@
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
-    }
-    &[data-state~="cursor"] {
-      --row-edge-color: var(--accent);
     }
     /* the file half of a pick opens it: a link, so the underline only arrives on hover and the row
    keeps reading as one line of text until you aim at it */

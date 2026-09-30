@@ -63,14 +63,18 @@ export function PasteChip({
   const [full, setFull] = useState(false);
   const cm = useContextMenu("chat");
   const paste = { text, href };
+  // the composer still holds the text; the transcript has only where the daemon put it
+  const canOpen = text !== undefined || href !== undefined;
   return (
     <div
       className={cx("pick-chip paste-chip row row-sm row-edge", className)}
       data-state={rowState({ cursor })}
       data-tip={preview || undefined}
-      {...cm.contextMenu(() => pasteItems(paste, { open: href ? () => setFull(true) : undefined, remove: onRemove }))}
+      {...cm.contextMenu(() =>
+        pasteItems(paste, { open: canOpen ? () => setFull(true) : undefined, remove: onRemove }),
+      )}
     >
-      {href ? (
+      {canOpen ? (
         <button type="button" className="image-link" onClick={() => setFull(true)}>
           {label}
         </button>
@@ -78,9 +82,9 @@ export function PasteChip({
         label
       )}
       {onRemove && <IconButton icon="close" label="Remove attachment" tone="quiet" onClick={onRemove} />}
-      {full && href && (
+      {full && canOpen && (
         <FullAttachment owner="chat" onClose={() => setFull(false)} menu={() => pasteItems(paste)}>
-          <FullPaste href={href} />
+          {text !== undefined ? <pre className="paste-full paste-text">{text}</pre> : href && <FullPaste href={href} />}
         </FullAttachment>
       )}
     </div>

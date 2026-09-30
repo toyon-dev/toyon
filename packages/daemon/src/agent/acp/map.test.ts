@@ -216,6 +216,58 @@ describe("mapUpdate", () => {
     ]);
   });
 
+  test("a command sent to the background keeps its row open once the session takes it on, and closes as usual otherwise", () => {
+    const started =
+      "Command running in background with ID: b1. Output is being written to: /t/claude-501/-wt/s1/tasks/b1.output. You will be notified when it completes.";
+    const updates: SessionUpdate[] = [
+      {
+        sessionUpdate: "tool_call",
+        toolCallId: "c1",
+        title: "Terminal",
+        kind: "execute",
+        status: "pending",
+        rawInput: { command: "bun run check", run_in_background: true, timeout: 600000 },
+      },
+      {
+        sessionUpdate: "tool_call_update",
+        toolCallId: "c1",
+        status: "completed",
+        content: [{ type: "content", content: { type: "text", text: started } }],
+      },
+    ];
+    const taken: unknown[] = [];
+    const memos: ToolMemos = new Map();
+    const events = updates.flatMap((u) =>
+      mapUpdate(u, memos, "t", undefined, (toolId, start, input) => {
+        taken.push([toolId, start, input]);
+        return true;
+      }),
+    );
+    expect(events.map((e) => e.type)).toEqual(["tool-start", "tool-update"]);
+    expect(events[1]).toEqual({ type: "tool-update", toolId: "c1", background: true });
+    expect(taken).toEqual([
+      [
+        "c1",
+        { taskId: "b1", file: "/t/claude-501/-wt/s1/tasks/b1.output" },
+        { command: "bun run check", run_in_background: true, timeout: 600000 },
+      ],
+    ]);
+    // nothing more comes for it on the wire, and the memo says so
+    expect(memos.get("c1")?.ended).toBe(true);
+    // the session declines (the log is not where it looks for it): the row ends the way any call does
+    const declining: ToolMemos = new Map();
+    const declined = updates.flatMap((u) => mapUpdate(u, declining, "t", undefined, () => false));
+    expect(declined.map((e) => e.type)).toEqual(["tool-start", "tool-end"]);
+    expect(declined[1]).toMatchObject({ output: started, isError: false });
+    // a command that ran in the foreground is never offered
+    const plain: ToolMemos = new Map();
+    const foreground = [
+      { ...updates[0]!, rawInput: { command: "bun run check" } } as SessionUpdate,
+      updates[1]!,
+    ].flatMap((u) => mapUpdate(u, plain, "t", undefined, () => true));
+    expect(foreground.map((e) => e.type)).toEqual(["tool-start", "tool-end"]);
+  });
+
   test("a command reported completed that exited non-zero is an error (OpenCode marks every call completed)", () => {
     expect(
       run([

@@ -27,6 +27,7 @@ import type { AuthObservation } from "../accounts.ts";
 import type { AgentAdapter, AskOpts, AskReply, AuthOutcome, SendOpts } from "../adapter.ts";
 import type { AttachmentStore, Stored } from "../attachments.ts";
 import { agentModeFor, modeAfterPlan } from "../modes.ts";
+import { formatOutput } from "../output.ts";
 import { decide, decideUnattended, pickOption } from "../policy.ts";
 import { ambientBlock, buildPrompt, SYSTEM_APPEND } from "../prompt.ts";
 import type { AgentSpec } from "../registry.ts";
@@ -34,6 +35,7 @@ import { type Bounds, type Prepared, prepareLaunch } from "../sandbox.ts";
 import { Transcript, type TranscriptEntry, transcriptPathFor } from "../transcript.ts";
 import { askOnce } from "./ask.ts";
 import { AUTH_STATUS_UPDATE_METHOD, parseAuthStatus, supportsLogout } from "./authstatus.ts";
+import { BackgroundTasks } from "./background.ts";
 import { parseForm, toContent } from "./elicit.ts";
 import { endOfAsk, mapCommands, mapStopReason, mapUpdate, type ToolMemos } from "./map.ts";
 import { currentValues, type LiveOptions, type OptionCategory, readModeOption, readOptions } from "./options.ts";
@@ -72,6 +74,11 @@ export interface AcpSessionDeps {
   idleMs?: number;
   /** how long a turn the agent started on its own may go quiet before it is over */
   ownSettleMs?: number;
+  /** where Claude Code keeps its session logs, for the end of a command sent to the background
+   * (background.ts); its own default when absent */
+  claudeConfigDir?: string;
+  /** how often such a command's files are looked at */
+  taskPollMs?: number;
   /** the worktree's bounds, after the agent's own setup has run (agent/sandbox.ts `prepareLaunch`) */
   prepare?: (cwd: string, spec: AgentSpec) => Promise<Prepared>;
   /** what the agent may do here without asking; read before every turn and every permission */
@@ -207,6 +214,9 @@ export class AcpSession implements AgentAdapter {
    * past the end of the turn that started it and prompts itself when the command exits, so its
    * work then arrives as updates alone; without this the worktree reads idle while it edits. */
   private own: OwnTurn | null = null;
+  /** the commands the agent sent to the background and has not heard the end of: their rows are
+   * open, and the process they run under stays up for them */
+  private tasks: BackgroundTasks;
   /** questions in flight on side sessions; the reaper waits for them */
   private asking = 0;
   /** ask cards waiting on a person, by ask id. The agent's request stays open on the wire until
@@ -227,6 +237,12 @@ export class AcpSession implements AgentAdapter {
     // Until then the last one this agent gave for this repo is a far better answer than nothing.
     this.commandList = d.seedCommands?.() ?? [];
     this.log = new Transcript(transcriptPathFor(d.transcriptsDir, d.worktreeId), d.worktreeId);
+    this.tasks = new BackgroundTasks({
+      note: (e) => this.emit(e),
+      onEnd: () => this.maybeArmReaper(),
+      ...(d.taskPollMs !== undefined ? { pollMs: d.taskPollMs } : {}),
+      ...(d.claudeConfigDir !== undefined ? { configDir: d.claudeConfigDir } : {}),
+    });
     this.seq = nextNumbers(
       this.log.entries.map(({ event }) => (event.type === "user-message" ? event.attachments : undefined)),
     );
@@ -239,6 +255,20 @@ export class AcpSession implements AgentAdapter {
       else if (event.type === "agent-ask-end") open.delete(event.id);
     }
     for (const id of open) this.emit({ type: "agent-ask-end", id, outcome: "expired", ts: Date.now() });
+    // a command's row held open for something running on (a `!` command's server, a command the
+    // agent sent to the background): the process went with the daemon, and nothing is watching
+    // the files any more. What it printed is on the row already; the end says why it stopped.
+    const held = new Map<string, string>();
+    for (const { event } of this.log.entries) {
+      if (event.type === "tool-update" && event.background) held.set(event.toolId, "");
+      else if (event.type === "tool-delta" && held.has(event.toolId))
+        held.set(event.toolId, held.get(event.toolId) + event.text);
+      else if (event.type === "tool-end") held.delete(event.toolId);
+    }
+    for (const [toolId, text] of held) {
+      const output = [formatOutput(text, 0, false), "ended with the daemon that was watching it"].filter(Boolean);
+      this.emit({ type: "tool-end", toolId, output: output.join("\n"), isError: true });
+    }
   }
 
   get commands(): AgentCommand[] {
@@ -750,6 +780,7 @@ export class AcpSession implements AgentAdapter {
         this.conn = null;
         this.live = null;
         this.cancelAsks();
+        this.tasks.endAll("the agent stopped, and the command with it");
         this.endOwn("interrupted");
       }
     });
@@ -954,8 +985,13 @@ export class AcpSession implements AgentAdapter {
     if (params.update.sessionUpdate === "config_option_update") this.absorb(live, params.update.configOptions);
     // a picture a call returned is written as the tool-end that names it goes out; the http side
     // waits on the write, so the row's fetch never beats the bytes to the disk
-    const events = mapUpdate(params.update, live.tools, this.d.worktreeId, (file, bytes) =>
-      fireAndForget(this.d.worktreeId, this.d.attachments.putToolImage(this.d.worktreeId, file, bytes), "tool image"),
+    const events = mapUpdate(
+      params.update,
+      live.tools,
+      this.d.worktreeId,
+      (file, bytes) =>
+        fireAndForget(this.d.worktreeId, this.d.attachments.putToolImage(this.d.worktreeId, file, bytes), "tool image"),
+      (toolId, start, input) => this.tasks.start(toolId, start, input),
     );
     if (!this.running) this.trackOwn(events);
     for (const ev of events) {
@@ -1152,7 +1188,8 @@ export class AcpSession implements AgentAdapter {
     }
     for (const e of events) {
       if (e.type === "tool-start") this.own.open.add(e.toolId);
-      else if (e.type === "tool-end") this.own.open.delete(e.toolId);
+      // a command sent to the background has returned to the agent, and the turn goes on without it
+      else if (e.type === "tool-end" || (e.type === "tool-update" && e.background)) this.own.open.delete(e.toolId);
     }
     if (this.own.settle) clearTimeout(this.own.settle);
     this.own.settle = null;
@@ -1171,9 +1208,14 @@ export class AcpSession implements AgentAdapter {
     this.maybeArmReaper();
   }
 
+  /** nothing to hold the process for: no turn, no question out, no card open, and no command the
+   * agent sent to the background still running under it (its process would go with the reap) */
+  private quiet(): boolean {
+    return !this.running && !this.own && !this.asking && this.asks.size === 0 && this.tasks.size === 0;
+  }
+
   private maybeArmReaper() {
-    if (!this.running && !this.own && !this.asking && this.asks.size === 0 && this.conn && !this.stopped)
-      this.armReaper();
+    if (this.quiet() && this.conn && !this.stopped) this.armReaper();
   }
 
   private armReaper() {
@@ -1181,7 +1223,7 @@ export class AcpSession implements AgentAdapter {
     const idleMs = this.d.idleMs ?? DEFAULT_IDLE_MS;
     const t = setTimeout(() => {
       this.reaper = null;
-      if (this.running || this.own || this.asking || this.asks.size > 0 || !this.conn) return;
+      if (!this.quiet() || !this.conn) return;
       fireAndForget(this.d.worktreeId, this.dropConn(`idle for ${Math.round(idleMs / 60_000)} min`), "reap agent");
     }, idleMs);
     // a sleeping timer must not keep a test (or a shutdown) waiting
@@ -1198,6 +1240,7 @@ export class AcpSession implements AgentAdapter {
     // closing the connection aborts outbound requests only, so a card the agent is blocked on
     // would otherwise sit here forever with no process left to answer
     this.cancelAsks();
+    this.tasks.endAll("the agent stopped, and the command with it");
     const conn = this.conn;
     this.conn = null;
     this.live = null;

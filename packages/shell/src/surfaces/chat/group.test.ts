@@ -468,8 +468,40 @@ describe("placeSpawns", () => {
   /** the log as rendered: the flow's rows by their first item, then the rows floating at the foot */
   const placed = (items: ChatItem[]) => {
     const { flow, floating } = placeSpawns(groupTools(items, ["/wt"]), spawnsAtWork(items));
-    return { flow: flow.map((e) => e.at), floating: floating.map((e) => e.spawn.id) };
+    return { flow: flow.map((e) => e.at), floating: floating.map((e) => ("spawn" in e ? e.spawn.id : e.tools[0]!.id)) };
   };
+
+  /** a command the agent sent to the background, as the daemon holds its row: open and marked */
+  const bgCmd = (id: string, extra: Partial<ChatItem> = {}) =>
+    tool("execute", "", {
+      id,
+      name: "",
+      input: { command: "bun run check", run_in_background: true },
+      done: false,
+      background: true,
+      ...extra,
+    });
+
+  test("a command running in the background floats at the foot, turn or no turn, and settles where it was called", () => {
+    const items = [text("Running the check."), bgCmd("cmd1"), text("Meanwhile, the notes."), tool("read", "/wt/a.ts")];
+    expect(placed(items)).toEqual({ flow: [0, 2, 3], floating: ["cmd1"] });
+    // ended by the daemon: back in the flow at its call, under the words that announced it
+    const done = [...items.slice(0, 1), bgCmd("cmd1", { done: true, output: "12 pass" }), ...items.slice(2)];
+    expect(placed(done)).toEqual({ flow: [0, 1, 2, 3], floating: [] });
+  });
+
+  test("a `!` command whose shell left a server running is marked the same way but stays put", () => {
+    const items = [bgCmd("sh1", { name: "shell", input: { command: "bun dev &" } }), text("Started it.")];
+    expect(placed(items)).toEqual({ flow: [0, 1], floating: [] });
+  });
+
+  test("a command running in the background is not the call the agent waits on", () => {
+    const items = [bgCmd("cmd1"), text("Meanwhile:"), tool("read", "/wt/a.ts", { done: false })];
+    expect(ownCallRunning([bgCmd("cmd1"), text("Meanwhile:")])).toBe(false);
+    expect(ownCallRunning(items)).toBe(true);
+    // the wait counted is the read's, at its row, not the command's
+    expect(runningRow(placeSpawns(groupTools(items, ["/wt"]), spawnsAtWork(items)).flow)).toBe(1);
+  });
 
   test("a spawn at work floats at the foot, under everything the main agent did since", () => {
     const items = [bg("task1", "Map the runtime"), text("Meanwhile, the notes."), sub("task1"), sub("task1")];

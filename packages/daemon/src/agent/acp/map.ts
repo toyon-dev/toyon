@@ -14,6 +14,7 @@ import type {
 import { type AgentCommand, type AgentEvent, emptyInput, isWrittenKind, type ToolImage } from "@toyon/shared";
 import { log } from "../../core/log.ts";
 import { toolImage } from "../attachments.ts";
+import { type BackgroundStart, backgroundStart } from "./background.ts";
 import { unifiedDiff } from "./diff.ts";
 import { currentValues, readOptions } from "./options.ts";
 
@@ -21,6 +22,8 @@ export interface ToolMemo {
   name: string;
   title: string;
   kind?: ToolKind;
+  /** the call's input as last sent, read once it ends: a command sent to the background says so here */
+  input: unknown;
   content: ToolCallContent[];
   rawOutput?: unknown;
   ended: boolean;
@@ -36,6 +39,10 @@ export type ToolMemos = Map<string, ToolMemo>;
 /** where the bytes of a picture a call returned go: the mapper names the file and hands the bytes
  * over, and the tool-end it emits refers to the file by name */
 export type ImageSink = (file: string, bytes: Buffer) => void;
+
+/** a command Claude Code sent to the background has returned (background.ts): whether the session
+ * has taken it on, in which case the row stays open and the session ends it when the command ends */
+export type BackgroundSink = (toolId: string, start: BackgroundStart, input: unknown) => boolean;
 
 /** Which call spawned this one, out of the `_meta` each adapter stamps on its own updates.
  *
@@ -160,7 +167,13 @@ function abandoned(memos: ToolMemos, parent: string | undefined): AgentEvent[] {
   return out;
 }
 
-export function mapUpdate(update: SessionUpdate, memos: ToolMemos, tag: string, sink?: ImageSink): AgentEvent[] {
+export function mapUpdate(
+  update: SessionUpdate,
+  memos: ToolMemos,
+  tag: string,
+  sink?: ImageSink,
+  background?: BackgroundSink,
+): AgentEvent[] {
   switch (update.sessionUpdate) {
     case "agent_message_chunk": {
       // the adapter forwards a subagent's prose like any other chunk and only declines to count it
@@ -194,6 +207,7 @@ export function mapUpdate(update: SessionUpdate, memos: ToolMemos, tag: string, 
       const head = heading(update);
       const memo: ToolMemo = {
         ...head,
+        input,
         content: update.content ?? [],
         rawOutput: update.rawOutput,
         ended: false,
@@ -212,7 +226,7 @@ export function mapUpdate(update: SessionUpdate, memos: ToolMemos, tag: string, 
       });
       // some agents report a one-shot tool already finished
       if (update.status === "completed" || update.status === "failed")
-        out.push(endOf(update.toolCallId, memo, update.status, sink));
+        out.push(endOf(update.toolCallId, memo, update.status, sink, background));
       return out;
     }
     case "tool_call_update": {
@@ -226,6 +240,7 @@ export function mapUpdate(update: SessionUpdate, memos: ToolMemos, tag: string, 
           name: update.name ?? "",
           title: update.title ?? update.name ?? "tool",
           ...(update.kind ? { kind: update.kind } : {}),
+          input,
           content: [],
           ended: false,
           writing: isWrittenKind(update.kind ?? undefined) && emptyInput(input),
@@ -262,14 +277,14 @@ export function mapUpdate(update: SessionUpdate, memos: ToolMemos, tag: string, 
       }
       if (update.kind && update.kind !== memo.kind) refined.kind = memo.kind = update.kind;
       if (update.rawInput !== undefined) {
-        refined.input = update.rawInput;
+        refined.input = memo.input = update.rawInput;
         if (!emptyInput(update.rawInput)) memo.writing = false;
       }
       if (Object.keys(refined).length > 2 && !memo.ended && out.length === 0) out.push(refined);
       if (update.content) memo.content = [...memo.content, ...update.content];
       if (update.rawOutput !== undefined) memo.rawOutput = update.rawOutput;
       if ((update.status === "completed" || update.status === "failed") && !memo.ended) {
-        out.push(endOf(update.toolCallId, memo, update.status, sink));
+        out.push(endOf(update.toolCallId, memo, update.status, sink, background));
       }
       return out;
     }
@@ -305,13 +320,26 @@ function textOf(content: { type: string; text?: string }, tag: string, what: str
   return null;
 }
 
-function endOf(toolId: string, memo: ToolMemo, status: "completed" | "failed", sink?: ImageSink): AgentEvent {
+function endOf(
+  toolId: string,
+  memo: ToolMemo,
+  status: "completed" | "failed",
+  sink?: ImageSink,
+  background?: BackgroundSink,
+): AgentEvent {
   memo.ended = true;
+  const output = summarizeToolOutput(memo.content, memo.rawOutput);
+  // a command sent to the background has only started: its row stays open, marked, and the
+  // session ends it once the command has (background.ts). The wire says nothing more about it.
+  if (status === "completed" && memo.kind === "execute" && background) {
+    const start = backgroundStart(memo.input, output);
+    if (start && background(toolId, start, memo.input)) return { type: "tool-update", toolId, background: true };
+  }
   const images = sink ? toolImages(memo.content, sink) : [];
   return {
     type: "tool-end",
     toolId,
-    output: summarizeToolOutput(memo.content, memo.rawOutput),
+    output,
     isError: status === "failed" || exitCodeOf(memo.rawOutput) > 0,
     ...(images.length ? { images } : {}),
   };

@@ -280,19 +280,24 @@ export function ChatLog({
             />
           ),
         )}
-        {/* the subagents at work, under everything that landed since they started: the same row,
-            with the same key, so it keeps its fold and moves rather than remounts when it settles */}
-        {floating.map((entry) => (
-          <ToolRow
-            key={entry.at}
-            tools={[entry.spawn]}
-            run={entry.run}
-            working
-            since={chatAt}
-            roots={roots}
-            worktreeId={id}
-          />
-        ))}
+        {/* the subagents at work and the commands running in the background, under everything
+            that landed since they started: the same row, with the same key, so it keeps its fold
+            and moves rather than remounts when it settles */}
+        {floating.map((entry) =>
+          "spawn" in entry ? (
+            <ToolRow
+              key={entry.at}
+              tools={[entry.spawn]}
+              run={entry.run}
+              working
+              since={chatAt}
+              roots={roots}
+              worktreeId={id}
+            />
+          ) : (
+            <ToolRow key={entry.at} tools={entry.tools} since={chatAt} roots={roots} worktreeId={id} />
+          ),
+        )}
         {/* the row is status alone: the stop is the composer's, in the field's corner, which stays
             put where this row scrolls off as soon as the log is read back. So while a call runs
             above, a spawn row floats, or a thought shimmers and the silence is short, there is no

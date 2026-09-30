@@ -750,6 +750,34 @@ describe("chat folding", () => {
     expect(s.local.a?.chat.length).toBe(2);
   });
 
+  test("a turn-end leaves a row held open for a command running in the background: its own end closes it", () => {
+    const s = run([
+      hello(wt("a")),
+      agent("a", { type: "turn-start", ts: 0 }),
+      agent("a", {
+        type: "tool-start",
+        toolId: "t1",
+        name: "",
+        input: { command: "bun run check", run_in_background: true },
+      }),
+      agent("a", { type: "tool-update", toolId: "t1", background: true }),
+      agent("a", { type: "tool-start", toolId: "t2", name: "Bash", input: {} }),
+      agent("a", { type: "turn-end", stopReason: "end_turn", ts: 0 }),
+    ]);
+    const tools = s.local.a!.chat.filter((i) => i.kind === "tool");
+    expect(tools.map((t) => t.done)).toEqual([false, true]);
+    // the command is not the call the agent waits on: no stamp counts it
+    expect(s.local.a?.running).toBeUndefined();
+    const ended = run(
+      [
+        agent("a", { type: "tool-delta", toolId: "t1", text: "12 pass\n" }),
+        agent("a", { type: "tool-end", toolId: "t1", output: "```\n12 pass\n```", isError: false }),
+      ],
+      s,
+    );
+    expect(ended.local.a!.chat[0]).toMatchObject({ id: "t1", done: true, output: "```\n12 pass\n```" });
+  });
+
   test("a turn-end closes the calls it left open: a turn cut off by a restart is not still running", () => {
     const s = run([
       hello(wt("a")),

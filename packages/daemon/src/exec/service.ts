@@ -6,18 +6,16 @@
 // command that stops to ask a question should fail on a closed stdin rather than sit forever
 // waiting for keystrokes nobody can type. Anything interactive belongs in the terminal pane.
 
-import { type AgentEvent, describeDuration, SHELL_TOOL, type Shipping, shipNoun } from "@toyon/shared";
+import { type AgentEvent, SHELL_TOOL, type Shipping, shipNoun } from "@toyon/shared";
 import type { Subprocess } from "bun";
 import type { AgentAdapter } from "../agent/adapter.ts";
+import { formatOutput, OUTPUT_CAP } from "../agent/output.ts";
 import { UserError } from "../core/errors.ts";
 import { fireAndForget, log } from "../core/log.ts";
 import type { StateStore } from "../core/state.ts";
 import { groupAlive, groupGone, killGroup } from "../runtime/kill.ts";
 import type { RuntimeRegistry } from "../runtime/registry.ts";
 
-/** what one command may leave on the transcript. Every subscriber replays the whole file, so a
- * `cat` of something large would cost every later open of the worktree, not just this one. */
-const OUTPUT_CAP = 200_000;
 /** nothing typed at a prompt should still be running an hour later with no one watching it */
 const TIMEOUT_MS = 10 * 60_000;
 /** how long after the shell exits to keep reading for its children's last words */
@@ -345,20 +343,4 @@ export class ExecService {
 export interface ExecResult {
   exit: number | string | null;
   text: string;
-}
-
-/** the output as the transcript renders it: the text fenced, so it draws as a block rather than
- * as prose, and a line under it for anything the text alone would not say. A command killed at
- * its ceiling gave up, and the line says after how long when the ceiling is known. */
-export function formatOutput(text: string, exit: number | string | null, truncated: boolean, ceiling?: number): string {
-  const body = text.replace(/\n+$/, "");
-  const notes: string[] = [];
-  if (truncated) notes.push(`output cut at ${Math.round(OUTPUT_CAP / 1000)} KB`);
-  if (exit === "timeout") notes.push(ceiling ? `gave up after ${describeDuration(ceiling)}` : "gave up at the ceiling");
-  else if (typeof exit === "string") notes.push(`killed (${exit})`);
-  else if (exit !== 0) notes.push(`exit ${exit}`);
-  const parts: string[] = [];
-  if (body.trim()) parts.push(`\`\`\`\n${body}\n\`\`\``);
-  parts.push(...notes);
-  return parts.join("\n");
 }

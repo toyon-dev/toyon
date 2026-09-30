@@ -1,4 +1,4 @@
-import { emptyInput, isWrittenKind } from "@toyon/shared";
+import { emptyInput, isWrittenKind, SHELL_TOOL } from "@toyon/shared";
 import type { ChatItem } from "../../state/store.ts";
 import { thoughtLine } from "./thought.ts";
 import { isBackgroundSpawn, isGuardian, toolLabel } from "./toolCall.ts";
@@ -35,6 +35,19 @@ export type ChatEntry =
   | { at: number; spawn: ToolItem; run: ToolEntry[]; end: number };
 
 export type SpawnEntry = Extract<ChatEntry, { spawn: ToolItem }>;
+
+/** a row at the foot of the log rather than in the flow: a spawn whose subagent is at work, or a
+ * command the agent sent to the background and is still running */
+export type FloatingEntry = SpawnEntry | ToolEntry;
+
+/** A command the agent sent to the background, still running: its call returned at once and the
+ * row is held open by the daemon, which tails the output in and ends the row when the command
+ * ends. A `!` command whose shell left a server running carries the same mark but stays put: it
+ * is the person's own row, open where they ran it. */
+export function inBackground(entry: ToolEntry): boolean {
+  const last = entry.tools.at(-1)!;
+  return !!last.background && !last.done && !last.parentToolId && last.name !== SHELL_TOOL;
+}
 
 /** kinds whose hint names the thing the call was about, where a repeat is the same call again:
  * several reads or edits of one file is the ordinary way to work, and a fetch row is a host or a
@@ -194,18 +207,24 @@ export function spawnsAtWork(items: ChatItem[]): Set<string> {
  * one line that says a subagent is at work is the last line of the log, where the reader looks. A
  * fan-out floats as a stack, in the order it was started. Once the subagent is done its row joins
  * the transcript where its work ended, at its newest call, which is where it was floating: a row
- * settling back to where it was spawned would jump up over everything that landed meanwhile. */
+ * settling back to where it was spawned would jump up over everything that landed meanwhile.
+ *
+ * A command running in the background floats the same way, for the same reason: its call is a
+ * line the agent wrote minutes ago, and the shine on it is above everything said since, which is
+ * where nobody is looking. It runs past the turn, so it floats past the turn too, and ends where
+ * it was called: the agent's next words about it land under it either way. */
 export function placeSpawns(
   entries: ChatEntry[],
   atWork: ReadonlySet<string>,
-): { flow: ChatEntry[]; floating: SpawnEntry[] } {
-  const floating: SpawnEntry[] = [];
+): { flow: ChatEntry[]; floating: FloatingEntry[] } {
+  const floating: FloatingEntry[] = [];
   const keyed: { key: number; entry: ChatEntry }[] = [];
   for (const entry of entries) {
     if ("spawn" in entry) {
       if (atWork.has(entry.spawn.id)) floating.push(entry);
       else keyed.push({ key: entry.end, entry });
-    } else keyed.push({ key: entry.at, entry });
+    } else if ("tools" in entry && inBackground(entry)) floating.push(entry);
+    else keyed.push({ key: entry.at, entry });
   }
   // every key is an item's own index, so no two entries share one
   keyed.sort((a, b) => a.key - b.key);
@@ -220,8 +239,10 @@ export function placeSpawns(
  * writing it, which is its own work. */
 export function ownCallRunning(items: ChatItem[]): boolean {
   const spawns = spawnIds(items);
+  // a command running in the background is not waited on either: its row floats and shines for it
   return items.some(
-    (i) => i.kind === "tool" && !i.done && !i.parentToolId && (!spawns.has(i.id) || emptyInput(i.input)),
+    (i) =>
+      i.kind === "tool" && !i.done && !i.parentToolId && !i.background && (!spawns.has(i.id) || emptyInput(i.input)),
   );
 }
 
@@ -230,9 +251,12 @@ export function ownCallRunning(items: ChatItem[]): boolean {
  * the batch in order, so a read written behind a slow command is open for the whole wait and a
  * count on its row would say the read was slow. Nothing on the wire says when a call starts (no
  * in_progress at start; acp/map.ts), so the head of the queue is the one running. A subagent's
- * call and the spawn that waits on one are not candidates (subagentsAtWork). */
+ * call and the spawn that waits on one are not candidates (subagentsAtWork), nor is a command
+ * running in the background: the agent has moved on from it, and its row counts its own wait. */
 export function runningRow(entries: ChatEntry[]): number {
-  return entries.findIndex((e) => "tools" in e && !e.tools[0]!.parentToolId && !e.tools.at(-1)!.done);
+  return entries.findIndex(
+    (e) => "tools" in e && !e.tools[0]!.parentToolId && !e.tools.at(-1)!.done && !e.tools.at(-1)!.background,
+  );
 }
 
 /** The same for a subagent's run: the row of the oldest call still open, or -1. While one is open

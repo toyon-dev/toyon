@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as acp from "@agentclientprotocol/sdk";
@@ -411,6 +411,107 @@ describe("AcpSession", () => {
     expect(w.types().slice(n)).toEqual(["turn-start", "tool-start", "tool-end", "text-delta", "turn-end"]);
     expect(w.events.at(-1)).toMatchObject({ type: "turn-end", stopReason: "end_turn" });
     expect(w.statuses.slice(-2)).toEqual(["working", "idle"]);
+    await w.session.close();
+  });
+
+  test("a command sent to the background: the turn goes on without it, its row stays open and streams, and Claude Code's log ends it", async () => {
+    let ctx: acp.AgentContext | undefined;
+    let sid = "";
+    const fake = fakeAgent(async (p, client) => {
+      ctx = client;
+      sid = p.sessionId;
+      return { stopReason: "end_turn" };
+    });
+    // Claude Code's layout: the task's output under <tmp>/claude-<uid>/<slug>/<session>/tasks,
+    // the session's log under <config>/projects/<slug>/<session>.jsonl
+    const configDir = join(home, "claude-config");
+    const tasks = join(home, "claude-501", "-wt", "csid", "tasks");
+    mkdirSync(tasks, { recursive: true });
+    mkdirSync(join(configDir, "projects", "-wt"), { recursive: true });
+    const logFile = join(configDir, "projects", "-wt", "csid.jsonl");
+    writeFileSync(logFile, '{"type":"user"}\n');
+    const out = join(tasks, "b1.output");
+    const w = world(fake, claudeSpec, 60_000, undefined, {
+      ownSettleMs: 30,
+      claudeConfigDir: configDir,
+      taskPollMs: 5,
+    });
+    w.session.send("go");
+    await w.idle();
+    const update = (u: acp.SessionUpdate) =>
+      ctx!.notify(acp.methods.client.session.update, { sessionId: sid, update: u });
+    const n = w.events.length;
+    await update({
+      sessionUpdate: "tool_call",
+      toolCallId: "bg1",
+      title: "Terminal",
+      kind: "execute",
+      status: "pending",
+      rawInput: { command: "bun run check", run_in_background: true },
+    });
+    await update({
+      sessionUpdate: "tool_call_update",
+      toolCallId: "bg1",
+      status: "completed",
+      content: [
+        {
+          type: "content",
+          content: {
+            type: "text",
+            text: `Command running in background with ID: b1. Output is being written to: ${out}. You will be notified when it completes.`,
+          },
+        },
+      ],
+    });
+    // the call has returned to the agent: its own turn settles without waiting on the command
+    for (let i = 0; i < 100 && w.events.at(-1)?.type !== "turn-end"; i++) await Bun.sleep(5);
+    expect(w.types().slice(n)).toEqual(["turn-start", "tool-start", "tool-update", "turn-end"]);
+    expect(w.events[n + 2]).toEqual({ type: "tool-update", toolId: "bg1", background: true });
+    expect(w.session.status).toBe("idle");
+    // what the command prints reaches the row while it runs
+    writeFileSync(out, "12 pass\n");
+    for (let i = 0; i < 100 && w.events.at(-1)?.type !== "tool-delta"; i++) await Bun.sleep(5);
+    expect(w.events.at(-1)).toEqual({ type: "tool-delta", toolId: "bg1", text: "12 pass\n" });
+    // Claude Code notes the finish in its log, naming the call
+    appendFileSync(
+      logFile,
+      `${JSON.stringify({
+        type: "user",
+        message:
+          '<task-notification>\n<task-id>b1</task-id>\n<tool-use-id>bg1</tool-use-id>\n<status>completed</status>\n<summary>Background command "check" completed (exit code 0)</summary>\n</task-notification>',
+      })}\n`,
+    );
+    for (let i = 0; i < 100 && w.events.at(-1)?.type !== "tool-end"; i++) await Bun.sleep(5);
+    expect(w.events.at(-1)).toEqual({ type: "tool-end", toolId: "bg1", output: "```\n12 pass\n```", isError: false });
+    await w.session.close();
+  });
+
+  test("a row a restart left held open for a background command is ended on the next boot", async () => {
+    const id = `w${Math.random().toString(36).slice(2, 8)}`;
+    const entries = [
+      {
+        seq: 0,
+        event: { type: "tool-start", toolId: "bg1", name: "", input: { command: "bun run check" }, kind: "execute" },
+      },
+      { seq: 1, event: { type: "tool-update", toolId: "bg1", background: true } },
+      { seq: 2, event: { type: "tool-delta", toolId: "bg1", text: "12 pass\n" } },
+      {
+        seq: 3,
+        event: { type: "tool-start", toolId: "bg2", name: "", input: { command: "bun test" }, kind: "execute" },
+      },
+      { seq: 4, event: { type: "tool-update", toolId: "bg2", background: true } },
+      { seq: 5, event: { type: "tool-end", toolId: "bg2", output: "done", isError: false } },
+    ];
+    writeFileSync(join(home, `${id}.jsonl`), `${entries.map((e) => JSON.stringify(e)).join("\n")}\n`);
+    const w = world(fakeAgent(say("hi")), claudeSpec, 60_000, id);
+    expect(w.events).toEqual([
+      {
+        type: "tool-end",
+        toolId: "bg1",
+        output: "```\n12 pass\n```\nended with the daemon that was watching it",
+        isError: true,
+      },
+    ]);
     await w.session.close();
   });
 

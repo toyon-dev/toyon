@@ -1324,8 +1324,9 @@ function withLocal(s: State, id: string, fn: (l: WorktreeLocal) => WorktreeLocal
  * and no open call clears it. The head moves only when a call opens or closes, so this is read on
  * those events and on a transcript arriving whole, never on a streamed token. */
 function runningOf(chat: ChatItem[], was: WorktreeLocal["running"]): WorktreeLocal["running"] {
+  // a call held open for a command running in the background is not one the agent waits on
   const head = chat.find(
-    (i): i is Extract<ChatItem, { kind: "tool" }> => i.kind === "tool" && !i.done && !i.parentToolId,
+    (i): i is Extract<ChatItem, { kind: "tool" }> => i.kind === "tool" && !i.done && !i.parentToolId && !i.background,
   );
   if (!head) return undefined;
   return was?.id === head.id ? was : { id: head.id, at: Date.now() };
@@ -2185,7 +2186,14 @@ function onServer(s: State, msg: StoreServerMsg): State {
       const id = msg.worktreeId;
       let next = withLocal(s, id, (l) => {
         const chat = applyEvent(l.chat, ev, msg.seq);
-        const running = ev.type === "tool-start" || ev.type === "tool-end" ? runningOf(chat, l.running) : l.running;
+        // a call marked as running on in the background has returned to the agent, and a turn's end
+        // closes what it left open: the head moves on those too
+        const moved =
+          ev.type === "tool-start" ||
+          ev.type === "tool-end" ||
+          ev.type === "turn-end" ||
+          (ev.type === "tool-update" && ev.background);
+        const running = moved ? runningOf(chat, l.running) : l.running;
         let turn = l.turn;
         if (ev.type === "turn-start") turn = { edits: false, hmr: false };
         else if (ev.type === "tool-start" && isEditTool(ev)) turn = { ...turn, edits: true };
@@ -2596,12 +2604,14 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
       };
       return next;
     }
-    case "turn-end":
+    case "turn-end": {
       // a row reads as running by whether its call ended, and a turn cut off (a stop, a daemon
-      // restart) leaves calls with no end: what the turn left open closes with it
-      return items.some((i) => i.kind === "tool" && !i.done)
-        ? items.map((i) => (i.kind === "tool" && !i.done ? { ...i, done: true } : i))
-        : items;
+      // restart) leaves calls with no end: what the turn left open closes with it. A row held open
+      // for a command running in the background outlives the turn by design, and its own end
+      // closes it (the daemon writes one, at the latest when it restarts).
+      const cut = (i: ChatItem) => i.kind === "tool" && !i.done && !i.background;
+      return items.some(cut) ? items.map((i) => (cut(i) ? { ...i, done: true } : i)) : items;
+    }
     default:
       return items;
   }

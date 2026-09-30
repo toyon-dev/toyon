@@ -1,12 +1,15 @@
 // Lazy-loaded xterm.js terminal for one of a worktree's streams (React.lazy, like the editor: the
 // bundle only downloads when a pane is first opened). Frames come straight off the socket via terminalBus.
 
-import { chordOf, hex8, matchChord, streamKey, type Theme } from "@toyon/shared";
+import { accentOf, chordOf, composite, hex8, matchChord, streamKey, type Theme } from "@toyon/shared";
 import { FitAddon } from "@xterm/addon-fit";
+import { type ISearchOptions, SearchAddon } from "@xterm/addon-search";
 import { type ITheme, Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import { useEffect, useRef, useState } from "react";
 import { terminalBus } from "../../app/terminalBus.ts";
+import { FindBox } from "../../ui/FindBox.tsx";
+import { isFind } from "../../ui/find.ts";
 import { useOnChange } from "../../ui/hooks.ts";
 import type { DaemonSocket } from "../../ws.ts";
 
@@ -41,6 +44,31 @@ export function toXtermTheme(t: Theme): ITheme {
     brightWhite: c.text0,
   };
 }
+
+/** the wash on a match, as the document find and the editor's own paint theirs: every match, and
+ * the one the reader is on darker. xterm takes an opaque colour only, so the accent is laid over
+ * the terminal's ground here rather than by the browser. */
+const washOf = (t: Theme, alpha: number) => composite(hex8(accentOf(t), alpha), t.colors.surface0);
+
+function findColors(t: Theme): ISearchOptions {
+  const accent = accentOf(t);
+  return {
+    decorations: {
+      matchBackground: washOf(t, 0.18),
+      activeMatchBackground: washOf(t, 0.38),
+      // the ruler is off; the type asks for its colours all the same
+      matchOverviewRuler: accent,
+      activeMatchColorOverviewRuler: accent,
+    },
+  };
+}
+
+/** Find in the terminal is ⌘F alone. The terminal is a guest keyboard, and ⌃F is the program's:
+ * a page down in less and vim, a character forward at the prompt. */
+const isTermFind = (e: KeyboardEvent) => isFind(e) && e.metaKey && !e.ctrlKey;
+
+/** xterm marks no more than this many matches, and past it cannot say which one the reader is on */
+const FIND_LIMIT = 1000;
 
 function monoFont(): string {
   const v = getComputedStyle(document.documentElement).getPropertyValue("--face-mono").trim();
@@ -91,6 +119,12 @@ export default function XTerm({
 }) {
   const box = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
+  const searchRef = useRef<SearchAddon | null>(null);
+  // ⌘F in the pane: the browser's find reads only the rows on screen, and the rail and the chat
+  // with them; this one reads the scrollback. A selection at the press is what is looked for.
+  const [find, setFind] = useState<{ seed: string; seq: number } | null>(null);
+  const [query, setQuery] = useState("");
+  const [found, setFound] = useState({ at: -1, count: 0 });
   const themeRef = useRef(theme);
   themeRef.current = theme;
   const onAliveRef = useRef(onAlive);
@@ -116,15 +150,35 @@ export default function XTerm({
       cursorBlink: true,
       scrollback: 5000,
       macOptionIsMeta: true,
+      // the wash on a found match is a decoration, which xterm still files under its proposed API
+      allowProposedApi: true,
     });
     const fit = new FitAddon();
     term.loadAddon(fit);
+    const search = new SearchAddon({ highlightLimit: FIND_LIMIT });
+    term.loadAddon(search);
     term.open(el);
     fit.fit();
     termRef.current = term;
+    searchRef.current = search;
+    const counted = search.onDidChangeResults((r) => setFound({ at: r.resultIndex, count: r.resultCount }));
+    // The key is taken on the pane, so a hand on the tab strip means the terminal too. The box
+    // answers its own ⌘F; a native listener here runs before React's, so that one is left to it.
+    const pane = el.closest<HTMLElement>("[data-pane]") ?? el;
+    const onFind = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || !isTermFind(e) || (e.target as Element).closest(".find")) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const picked = term.getSelection();
+      const seed = picked.trim() && !picked.includes("\n") ? picked : "";
+      setFind((f) => ({ seed: seed || f?.seed || "", seq: (f?.seq ?? 0) + 1 }));
+    };
+    pane.addEventListener("keydown", onFind);
 
     term.attachCustomKeyEventHandler((e) => {
       if (e.type !== "keydown") return true;
+      // xterm skips it and the pane's listener above answers
+      if (isTermFind(e)) return false;
       // ⌘K clears, as in Terminal.app; while the terminal has focus, new-worktree is ⌘N or the palette
       if (e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "k") {
         e.preventDefault();
@@ -196,9 +250,15 @@ export default function XTerm({
       off();
       input.dispose();
       resized.dispose();
+      counted.dispose();
+      pane.removeEventListener("keydown", onFind);
+      // the matches were this terminal's
+      setFind(null);
+      setQuery("");
       sock.send({ t: "term-close", worktreeId, stream });
       term.dispose();
       termRef.current = null;
+      searchRef.current = null;
     };
   }, [worktreeId, stream, sock]);
 
@@ -210,9 +270,18 @@ export default function XTerm({
     sock.send({ t: "term-open", worktreeId, stream, cols: term.cols, rows: term.rows });
   }, [connected, sock, worktreeId, stream]);
 
+  // xterm holds the match the reader is on as its selection, and its DOM renderer paints a
+  // selection over any decoration: while the box is open the selection is the darker wash, focused
+  // or not, so the current match reads as it does in a document
+  const finding = find !== null;
   useEffect(() => {
-    if (termRef.current) termRef.current.options.theme = toXtermTheme(theme);
-  }, [theme]);
+    const term = termRef.current;
+    if (!term) return;
+    const current = washOf(theme, 0.38);
+    term.options.theme = finding
+      ? { ...toXtermTheme(theme), selectionBackground: current, selectionInactiveBackground: current }
+      : toXtermTheme(theme);
+  }, [theme, finding]);
 
   // typed as if at the keyboard, return included, so it lands in the shell's own history
   useEffect(() => {
@@ -231,5 +300,57 @@ export default function XTerm({
     termRef.current?.focus();
   });
 
-  return <div className="term-host" ref={box} />;
+  // A query typed is looked for from the newest line up, since the foot of the output is where the
+  // reader is; typing more of it stays on the match it has while that still fits. An empty query
+  // clears the wash.
+  const look = (next: string) => {
+    setQuery(next);
+    const search = searchRef.current;
+    if (!search) return;
+    if (next) search.findPrevious(next, findColors(themeRef.current));
+    else {
+      search.clearDecorations();
+      termRef.current?.clearSelection();
+      setFound({ at: -1, count: 0 });
+    }
+  };
+  const step = (dir: 1 | -1) => {
+    if (!query) return;
+    if (dir === 1) searchRef.current?.findNext(query, findColors(themeRef.current));
+    else searchRef.current?.findPrevious(query, findColors(themeRef.current));
+  };
+  // the box goes, the match stays as the terminal's selection, and the keyboard is the prompt's again
+  const closeFind = () => {
+    setFind(null);
+    setQuery("");
+    setFound({ at: -1, count: 0 });
+    searchRef.current?.clearDecorations();
+    termRef.current?.focus();
+  };
+  const status = !query
+    ? ""
+    : found.count === 0
+      ? "no matches"
+      : found.at < 0
+        ? `${found.count}+`
+        : `${found.at + 1}/${found.count}`;
+
+  return (
+    <>
+      <div className="term-host" ref={box} />
+      {find && (
+        <FindBox
+          label="find in the terminal"
+          query={query}
+          onQuery={look}
+          seed={find.seed}
+          seq={find.seq}
+          status={status}
+          none={found.count === 0}
+          onStep={step}
+          onClose={closeFind}
+        />
+      )}
+    </>
+  );
 }

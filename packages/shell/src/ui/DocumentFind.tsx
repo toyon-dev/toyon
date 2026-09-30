@@ -1,9 +1,6 @@
 import { type RefObject, useLayoutEffect, useRef, useState } from "react";
-import { IconButton } from "./Button.tsx";
-import { Field } from "./Field.tsx";
-import { isFind, type Match, matchOffsets, nearestIndex, segmentsOf, spanOf, stepped } from "./find.ts";
-import { useOnChange } from "./hooks.ts";
-import "./find.css";
+import { FindBox } from "./FindBox.tsx";
+import { type Match, matchOffsets, nearestIndex, segmentsOf, spanOf, stepped } from "./find.ts";
 
 /** the two highlight names the stylesheet paints: every match, and the one the reader is on */
 const ALL = "find";
@@ -90,8 +87,7 @@ function reveal(root: HTMLElement, range: Range) {
  * reader kept on the match they were on and the scroll left alone.
  *
  * `root` is the box that scrolls and `body` the element the text is read from; they may be one.
- * `seq` ticks when ⌘F is pressed again with the box already open, which puts the caret back in it
- * with its text selected; a `seed` beside it is what the document had selected at that press.
+ * `seed` and `seq` are the box's own (FindBox): what the document had selected at the press.
  */
 export function DocumentFind({
   root,
@@ -107,7 +103,6 @@ export function DocumentFind({
   /** the match the reader was on when the box closed, for the document to keep as its selection */
   onClose: (current: Range | null) => void;
 }) {
-  const field = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState(seed);
   const [found, setFound] = useState<Found>(NOTHING);
   const [at, setAt] = useState(-1);
@@ -121,12 +116,6 @@ export function DocumentFind({
   const show = useRef(false);
   // the document changing under the box: one re-read per frame however many nodes moved
   const [tick, setTick] = useState(0);
-
-  useOnChange([seq], () => {
-    if (seed) setQuery(seed);
-    field.current?.focus();
-    field.current?.select();
-  });
 
   useLayoutEffect(() => {
     const el = body.current;
@@ -189,58 +178,16 @@ export function DocumentFind({
   const close = () => onClose(found.ranges[at] ?? null);
 
   return (
-    <div className="find">
-      <Field
-        ref={field}
-        autoFocus
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        placeholder="find…"
-        aria-label="find in this document"
-        className="find-field"
-        spellCheck={false}
-        onKeyDown={(e) => {
-          // the surface's Escape would close a pane or leave a page; here the box goes first, and
-          // the document keeps the match as its selection
-          if (e.key === "Escape") {
-            e.preventDefault();
-            e.stopPropagation();
-            close();
-            return;
-          }
-          if (e.key === "Enter") {
-            e.preventDefault();
-            step(e.shiftKey ? -1 : 1);
-            return;
-          }
-          // ⌘F again selects what is typed, as the editor's own box does. ⌘G and ⌘⇧G step, as they
-          // do in the editor, and are kept from the window, where ⌘G is the search across chats.
-          if (isFind(e)) {
-            e.preventDefault();
-            e.stopPropagation();
-            e.currentTarget.select();
-            return;
-          }
-          if (e.key.toLowerCase() === "g" && (e.metaKey || e.ctrlKey) && !e.altKey) {
-            e.preventDefault();
-            e.stopPropagation();
-            step(e.shiftKey ? -1 : 1);
-          }
-        }}
-      />
-      <span className="find-count" aria-live="polite">
-        {query ? (count === 0 ? "no matches" : `${at + 1}/${count}`) : ""}
-      </span>
-      <IconButton
-        icon="caret"
-        label="Previous match"
-        hint="⇧↩"
-        className="find-prev"
-        disabled={count === 0}
-        onClick={() => step(-1)}
-      />
-      <IconButton icon="caret" label="Next match" hint="↩" disabled={count === 0} onClick={() => step(1)} />
-      <IconButton icon="close" label="Close" hint="esc" onClick={close} />
-    </div>
+    <FindBox
+      label="find in this document"
+      query={query}
+      onQuery={setQuery}
+      seed={seed}
+      seq={seq}
+      status={query ? (count === 0 ? "no matches" : `${at + 1}/${count}`) : ""}
+      none={count === 0}
+      onStep={step}
+      onClose={close}
+    />
   );
 }

@@ -1,4 +1,4 @@
-/* DocumentFind: the find box over a document, and the wash on its matches. */
+/* FindBox: the find box over what is being read, and the wash DocumentFind puts on its matches. */
 @layer tokens, base, surfaces;
 @layer base {
   /* a strip over the top corner of the text, where the editor's own sits, in whatever box the

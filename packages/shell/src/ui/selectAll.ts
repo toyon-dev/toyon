@@ -18,11 +18,15 @@ export function isSelectAll(e: {
  * outright. A surface with no focus seat of its own is the other case: a click on its text drops
  * focus on the body, and the key arrives at the window with nothing saying where the hand is. The
  * last press says: while it landed inside `ref` and nothing has taken the keyboard since, the key
- * means this surface. `act` is handed the element, and the event has been claimed. */
+ * means this surface. `act` is handed the element, and the event has been claimed.
+ *
+ * `elsewhere` lets the surface answer for a hand that is on none: it is asked about a key that
+ * reached the window unclaimed from outside `ref`, and is handed what holds the keyboard. */
 export function useKeyWithin(
   ref: RefObject<HTMLElement | null>,
   match: (e: KeyboardEvent) => boolean,
   act: (el: HTMLElement, e: KeyboardEvent) => void,
+  elsewhere?: (held: Element | null) => boolean,
 ) {
   useEffect(() => {
     let pointed = false;
@@ -34,7 +38,7 @@ export function useKeyWithin(
       if (!el || e.defaultPrevented || !match(e)) return;
       const held = document.activeElement;
       const inside = held && held !== document.body ? el.contains(held) : pointed;
-      if (!inside) return;
+      if (!inside && !elsewhere?.(held)) return;
       e.preventDefault();
       act(el, e);
     };
@@ -44,7 +48,7 @@ export function useKeyWithin(
       window.removeEventListener("pointerdown", onDown, true);
       window.removeEventListener("keydown", onKey);
     };
-  }, [ref, match, act]);
+  }, [ref, match, act, elsewhere]);
 }
 
 /** select-all on a surface that is read and not edited: the surface, not the shell around it */

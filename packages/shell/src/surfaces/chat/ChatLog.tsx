@@ -58,13 +58,20 @@ export function ChatLog({
   useSelectAllWithin(logRef);
   // and so is find: the browser's would read the rail and the panes with it, and count what is
   // not on screen. A selection in the log at the press is what is looked for. The box, once open,
-  // answers ⌘F itself, so a press with the caret in it never reaches here.
+  // answers ⌘F itself, so a press with the caret in it never reaches here. A hand on the chrome
+  // (the rail, a dock, the bar) means the conversation as well: it is what is on screen to read.
   const [find, setFind] = useState<{ seed: string; seq: number } | null>(null);
   const openFind = useCallback(() => {
     const seed = (logRef.current && selectedText(logRef.current)) ?? "";
     setFind((f) => ({ seed: seed || f?.seed || "", seq: (f?.seq ?? 0) + 1 }));
   }, []);
-  useKeyWithin(panelRef, isFind, openFind);
+  const fromChrome = useCallback(
+    // a pane is a surface of its own: one that answers ⌘F took the key before it got here, and
+    // the rest keep the browser's. So does an overlay, which holds the keyboard over the chat.
+    (held: Element | null) => !held?.closest("[data-pane]") && !store.getState().overlay,
+    [store],
+  );
+  useKeyWithin(panelRef, isFind, openFind, fromChrome);
   const closeFind = (current: Range | null) => {
     setFind(null);
     // the box goes, the match stays, as the reader's selection

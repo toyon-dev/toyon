@@ -81,7 +81,7 @@ describe("agent registry", () => {
     ]);
     expect(() => reg.require("claude")).toThrow(/not ready/);
     await reg.installMissing();
-    expect(calls).toEqual(["@agentclientprotocol/claude-agent-acp@0.84.0", "@agentclientprotocol/codex-acp@1.10.0"]);
+    expect(calls).toEqual(["@agentclientprotocol/claude-agent-acp@0.84.0", "@agentclientprotocol/codex-acp@2.0.1"]);
     expect(changes[0]).toEqual(["claude:installing", "codex:not installed yet", "opencode:not installed"]);
     expect(changes.at(-1)).toEqual(["claude:ok", "codex:ok", "opencode:not installed"]);
     const l = reg.launch(reg.require("claude"), prepared);

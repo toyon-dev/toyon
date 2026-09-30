@@ -3,8 +3,8 @@ import type { CreateElicitationRequest, ElicitationPropertySchema } from "@agent
 import { parseForm, toContent } from "./elicit.ts";
 
 // The fixtures below are shaped exactly like `askUserQuestionsToCreateRequest` in
-// @agentclientprotocol/claude-agent-acp: `question_<n>` selects, a `question_<n>_custom`
-// companion carrying the un-namespaced marker, option previews under the Claude `_meta` key.
+// @agentclientprotocol/claude-agent-acp: `question_<n>` selects, an unmarked `question_<n>_custom`
+// companion, option previews under the Claude `_meta` key.
 
 const form = (properties: Record<string, ElicitationPropertySchema>, message = "Which one?", required?: string[]) =>
   ({
@@ -35,12 +35,11 @@ const multi = (title: string, labels: string[]) =>
     items: { anyOf: labels.map((l) => ({ const: l, title: l })) },
   }) as ElicitationPropertySchema;
 
-const custom = (questionId: string) =>
+const custom = () =>
   ({
     type: "string",
     title: "Other",
-    description: "Type your own answer instead of choosing an option above (optional).",
-    _meta: { _askUserQuestionCustomAnswer: { questionId, isCustomAnswer: true } },
+    description: "Type your own answer, or add a note to the option you chose above (optional).",
   }) as ElicitationPropertySchema;
 
 describe("parseForm", () => {
@@ -51,7 +50,7 @@ describe("parseForm", () => {
           ["Session cookies", "simplest", "GET /login\n302"],
           ["JWT in header", "stateless"],
         ]),
-        question_0_custom: custom("question_0"),
+        question_0_custom: custom(),
       }),
     );
     expect(parsed?.questions).toEqual([
@@ -86,7 +85,7 @@ describe("parseForm", () => {
     // the companion deliberately sits before the question it answers
     const parsed = parseForm({
       ...form({
-        question_0_custom: custom("question_0"),
+        question_0_custom: custom(),
         question_0: select("Auth", [["Cookies"], ["JWT"]]),
       }),
     });
@@ -94,31 +93,37 @@ describe("parseForm", () => {
     expect(parsed?.questions[0]?.note).toEqual({ label: "Other" });
   });
 
-  test("Codex's request_user_input form is a card, its Other field the note", () => {
-    // the wire as @agentclientprotocol/codex-acp builds it: the question keyed by its own id, the
-    // recommended option marked in its label, the free-text companion under a `codex` meta key
+  test("Codex's request_user_input form is a card, its note field the note", () => {
+    // the wire as @agentclientprotocol/codex-acp builds it: the question keyed by its own id and
+    // titled with its text, the header in the description, the recommended option marked in its
+    // label, an added "None of the above" pick, the note companion marked `user_note` under a
+    // `codex` meta key
     const parsed = parseForm(
       form(
         {
           new_name: {
-            title: "New name",
-            description: "Which new name do you prefer for note.txt?",
+            title: "Which new name do you prefer for note.txt?",
+            description: "New name",
             type: "string",
             _meta: { codex: { isOther: true, isSecret: false } },
             oneOf: [
               { const: "apple.txt (Recommended)", title: "apple.txt (Recommended)", description: "Fruit-themed." },
               { const: "berry.txt", title: "berry.txt", description: "Also fruit-themed." },
+              {
+                const: "None of the above",
+                title: "None of the above",
+                description: "Provide a different answer in the note field.",
+              },
             ],
           } as ElicitationPropertySchema,
-          new_name__other: {
+          new_name_note: {
             type: "string",
-            title: "Other",
-            description: "Type your own answer instead of choosing an option above.",
-            _meta: { codex: { questionId: "new_name", isOtherAnswer: true, isSecret: false } },
+            title: "Additional answer or note",
+            _meta: { codex: { questionId: "new_name", role: "user_note", isSecret: false } },
           } as ElicitationPropertySchema,
         },
-        "Which new name do you prefer for note.txt?",
-        [],
+        "Codex needs your input to continue.",
+        ["new_name"],
       ),
     );
     expect(parsed?.questions).toEqual([
@@ -129,15 +134,25 @@ describe("parseForm", () => {
         options: [
           { value: "apple.txt (Recommended)", label: "apple.txt (Recommended)", description: "Fruit-themed." },
           { value: "berry.txt", label: "berry.txt", description: "Also fruit-themed." },
+          {
+            value: "None of the above",
+            label: "None of the above",
+            description: "Provide a different answer in the note field.",
+          },
         ],
-        note: { label: "Other" },
+        note: { label: "Additional answer or note" },
+        required: true,
       },
     ]);
-    // the bridge lets the Other field win over the pick, so the label rides in it
+    // the bridge keeps the pick and appends the note as its own answer
     expect(toContent(parsed!, [{ selected: ["berry.txt"], note: "lowercase please" }])).toEqual({
       new_name: "berry.txt",
-      new_name__other: "berry.txt: lowercase please",
+      new_name_note: "lowercase please",
     });
+  });
+
+  test("a free-text field named like a companion is one only when its question is in the form", () => {
+    expect(parseForm(form({ question_3_custom: custom(), question_0: select("Auth", [["Cookies"]]) }))).toBeNull();
   });
 
   test("a multi-select question is read from items.anyOf", () => {
@@ -184,7 +199,7 @@ describe("toContent", () => {
     parseForm(
       form({
         question_0: select("Auth", [["Session cookies"], ["JWT in header"]]),
-        question_0_custom: custom("question_0"),
+        question_0_custom: custom(),
       }),
     )!;
 
@@ -192,12 +207,12 @@ describe("toContent", () => {
     expect(toContent(parsed(), [{ selected: ["JWT in header"] }])).toEqual({ question_0: "JWT in header" });
   });
 
-  test("a pick with a note writes both, with the label leading the note", () => {
+  test("a pick with a note writes both, the note trimmed", () => {
     expect(
       toContent(parsed(), [{ selected: ["Session cookies"], note: "  only if refresh stays server-side  " }]),
     ).toEqual({
       question_0: "Session cookies",
-      question_0_custom: "Session cookies: only if refresh stays server-side",
+      question_0_custom: "only if refresh stays server-side",
     });
   });
 

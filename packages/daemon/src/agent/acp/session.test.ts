@@ -1499,7 +1499,6 @@ const askForm = (opts: { note?: boolean; multi?: boolean } = {}) => ({
             question_0_custom: {
               type: "string" as const,
               title: "Other",
-              _meta: { _askUserQuestionCustomAnswer: { questionId: "question_0", isCustomAnswer: true } },
             },
           }
         : {}),
@@ -1577,7 +1576,7 @@ describe("AcpSession ask cards", () => {
     // the note rides with the pick, so the agent reads the choice and the caveat together
     expect(saidBack(w.events)).toEqual({
       action: "accept",
-      content: { question_0: "a", question_0_custom: "A: only if it stays server-side" },
+      content: { question_0: "a", question_0_custom: "only if it stays server-side" },
     });
     expect(w.statuses).toEqual(["working", "waiting", "working", "idle"]);
     await w.session.close();

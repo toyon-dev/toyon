@@ -862,10 +862,10 @@ export function Composer({
   const sentBefore = spawning ? [] : chat.map((c) => (c.kind === "user" ? c.attachments : undefined));
   const dir = active ? active.worktree.path : null;
   const plan = active?.worktree.plan;
-  // the stop stands in for the field's esc, so it goes when an ask card takes the field's place
-  // the ask too: it replaces the field, not the corner, and a stop beside the ask's send read as
-  // the send's opposite on one line
-  const stopShown = stoppable;
+  // the stop stands in for the field's esc, so it goes with the field when an ask card takes its
+  // place: there esc parks the question, and a stop beside the ask's send read as the send's
+  // opposite on one line
+  const stopShown = stoppable && !askUp;
 
   return (
     <div className={cx("composer chat-input", stopShown && "stopping")}>
@@ -968,23 +968,6 @@ export function Composer({
               return <PaletteRow label="@changes" hint={`${r.n} uncommitted ${r.n === 1 ? "file" : "files"}`} />;
             return <CommandRow c={r.c} query={trigger.query} />;
           }}
-        />
-      )}
-      {/* the agent's stop, in the box's top-right corner for as long as it has the turn: one place
-          whatever the box holds, where a corner of the field dropped a row under the plan line or an
-          attachment. The box stays put where a row under the log scrolls off as soon as the log is
-          read back, and it sits with the esc in the field that does the same. The glyph alone: the
-          corner says what it is, and a word made it the loudest thing in the box while a steer was
-          being typed. */}
-      {stopShown && (
-        <IconButton
-          icon="stop"
-          tone="danger"
-          className="composer-stop"
-          label={`Stop the agent (context up to here is kept${queue.length ? "; queued messages go next" : ""})`}
-          // under an ask, esc parks the question rather than stopping the turn
-          hint={askUp ? undefined : "esc"}
-          onClick={() => id && sock?.send({ t: "stop-agent", worktreeId: id })}
         />
       )}
       {askUp && id ? (
@@ -1159,6 +1142,24 @@ export function Composer({
                 </>
               )}
             </div>
+          )}
+          {/* the agent's stop, in the field's top-right corner for as long as it has the turn: it
+              is the field's esc as a button, so it stands with the caret, under whatever chips and
+              plan line are stacked above, and each of those keeps its whole row. The field stays
+              put where a row under the log scrolls off as soon as the log is read back. The glyph
+              alone: the corner says what it is, and a word made it the loudest thing in the box
+              while a steer was being typed. Last in the field, so it paints over the ghosts with
+              no rung of its own. Not under an ask: the card takes the field's place, and there
+              esc parks the question rather than stopping the turn. */}
+          {stopShown && (
+            <IconButton
+              icon="stop"
+              tone="danger"
+              className="composer-stop"
+              label={`Stop the agent (context up to here is kept${queue.length ? "; queued messages go next" : ""})`}
+              hint="esc"
+              onClick={() => id && sock?.send({ t: "stop-agent", worktreeId: id })}
+            />
           )}
         </div>
       )}

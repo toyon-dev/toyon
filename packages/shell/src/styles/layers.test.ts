@@ -20,7 +20,6 @@ const LOCAL_LAYERS: Record<string, { root: string; why: string }> = {
   ".dock-resize": { root: ".docks", why: "the grab strip over the seam between two docks" },
   ".rail:not(.pinned) .rail-panel": { root: ".docks", why: "the peek covers the chat dock and its grab strip" },
   ".pane-resize": { root: ".pane", why: "the drag strip over the pane's own head" },
-  ".composer-stop": { root: ".composer", why: "the agent's stop over the corner of the field it stands in" },
 };
 
 const cssFiles = () => [...new Glob("**/*.css").scanSync({ cwd: SRC })].sort();

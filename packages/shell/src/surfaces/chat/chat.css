@@ -962,43 +962,19 @@
       box-shadow: 0 0 0 1.5px var(--border0);
     }
   }
-  /* the agent's stop, at the box's right edge while it has the turn: anchored to the box and not
-   the field, so it stays in the corner whether a plan line or an attachment stands above the
-   field. Absolute, at the box's own padding, so it comes and goes with the turn without moving
-   the knobs row's buttons. Whatever is first in the box keeps the corner clear: the plan path
-   truncates short of it, a chip stops short of it, and the field and its ghost pad together,
-   since the ghost's wrap has to match the field's or it drifts off the caret. The field after it
-   is positioned too, and a later positioned sibling paints over an earlier one, so with nothing
-   above the field the textarea's padding sat over the button: no hover reached it and a press
-   focused the field. One rung up, counted inside the box, which isolates for it (base .composer). */
+  /* the agent's stop, in the field's top-right corner while it has the turn: the field's esc as a
+   button, so it stands with the caret and not in the box's corner, where a chip's own close sat
+   beside it and the row's ground ran under it. Absolute in the field, so it comes and goes with
+   the turn without moving the knobs row's buttons, and the chips and plan line above keep their
+   whole rows. The field and its ghost pad together, since the ghost's wrap has to match the
+   field's or it drifts off the caret. */
   .composer-stop {
     position: absolute;
-    top: 10px;
-    right: 10px;
-    z-index: 1;
+    top: 0;
+    right: 0;
   }
-  .composer.stopping {
-    & > .composer-plan {
-      padding-right: 24px;
-    }
-    /* A chip first in the box is a row with its own close at the end, and the stop stands level
-     with that close, the top bar's 20px between their boxes: pinned to the corner it sat above
-     and beside the close on a diagonal, and the row's hover ground ran under it. The chip bleeds
-     10px past the padding the stop is measured from, and its close sits 10px inside its own end,
-     so 30px of margin leaves the 20px. The image row is 44px (a 40px thumbnail with 2px of air),
-     the others the small row's 24px. */
-    & > .pick-chip:first-child {
-      margin-right: 30px;
-    }
-    &:has(> .pick-chip:first-child) .composer-stop {
-      top: 12px;
-    }
-    &:has(> .image-chip:first-child) .composer-stop {
-      top: 22px;
-    }
-    &:not(:has(> .composer-plan, > .pick-chip)) .composer-field :is(textarea, .composer-ghost) {
-      padding-right: 24px;
-    }
+  .composer.stopping .composer-field :is(textarea, .composer-ghost) {
+    padding-right: 24px;
   }
   /* the verb leading the placeholder's line: the ghost lets presses through to the textarea under
    it, and the word is the one part of the ghost that takes them */

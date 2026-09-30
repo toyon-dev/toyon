@@ -48,7 +48,7 @@ describe("claude's terminal login", () => {
     const claude = BUILTIN_AGENTS.find((a) => a.id === "claude")!;
     // claude-agent-acp names its no-browser login `claude-login` and takes `--cli auth login`: a new
     // adapter version is checked for both before this pin moves
-    expect(claude.run).toMatchObject({ pkg: "@agentclientprotocol/claude-agent-acp", version: "0.75.1" });
+    expect(claude.run).toMatchObject({ pkg: "@agentclientprotocol/claude-agent-acp", version: "0.84.0" });
     // `plan` marks it as the consumer sign-in a managed policy can withhold
     expect(claude.terminalLogins).toEqual({
       "claude-login": { args: ["--cli", "auth", "login", "--claudeai"], env: { NO_BROWSER: "1" }, plan: true },
@@ -81,14 +81,14 @@ describe("agent registry", () => {
     ]);
     expect(() => reg.require("claude")).toThrow(/not ready/);
     await reg.installMissing();
-    expect(calls).toEqual(["@agentclientprotocol/claude-agent-acp@0.75.1", "@agentclientprotocol/codex-acp@1.10.0"]);
+    expect(calls).toEqual(["@agentclientprotocol/claude-agent-acp@0.84.0", "@agentclientprotocol/codex-acp@1.10.0"]);
     expect(changes[0]).toEqual(["claude:installing", "codex:not installed yet", "opencode:not installed"]);
     expect(changes.at(-1)).toEqual(["claude:ok", "codex:ok", "opencode:not installed"]);
     const l = reg.launch(reg.require("claude"), prepared);
     expect(l.command).toBe(process.execPath);
     expect(l.env).toEqual({ FROM_SETUP: "1" });
     expect(l.args[0]).toMatch(/claude-agent-acp\/dist\/index\.js$/);
-    expect(JSON.parse(readFileSync(join(l.args[0]!, "../../package.json"), "utf8")).version).toBe("0.75.1");
+    expect(JSON.parse(readFileSync(join(l.args[0]!, "../../package.json"), "utf8")).version).toBe("0.84.0");
     // already at the pinned version: nothing to do
     await reg.installMissing();
     expect(calls).toHaveLength(2);

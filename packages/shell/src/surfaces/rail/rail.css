@@ -127,6 +127,14 @@
       /* the time ticks; `font` resets the variant */
       font-variant-numeric: tabular-nums;
     }
+    /* the column centres its glyphs, and the time would float with them: it is a figure like the
+       counts, so it takes their box, three characters aligned to the far side. Everything ago()
+       makes fits, "now" and "52w" included, so the widest value stays put and the shorter ones
+       move out to meet its edge */
+    & .rail-gut .rail-at {
+      width: 3ch;
+      text-align: right;
+    }
     :where([data-hover]) &:hover .rail-at,
     &.menu-open .rail-at {
       display: none;

@@ -1901,14 +1901,15 @@ describe("landing", () => {
     const before = (await git(w.repo, "rev-parse", "main")).out;
     w.worktrees.setPr(wt.id, { number: 7, url: "https://x/pull/7", state: "open", at: 1 });
     squashedOnOrigin(other, origin, wt.branch);
-    // GitHub's answer comes while an edit on main stands in the fast-forward's way
-    writeFileSync(join(w.repo, "README.md"), "edited on main\n");
+    // GitHub's answer comes while a file on main stands in the fast-forward's way: the one the
+    // squash on origin adds, started here too and never committed
+    writeFileSync(join(w.repo, "feature.txt"), "started here too\n");
     w.worktrees.setPr(wt.id, { number: 7, url: "https://x/pull/7", state: "merged", at: 2 });
     const r = await w.worktrees.prMerged(wt.id);
     // the merge on GitHub is the landing: the record has it and the branch restarted from main
     // here, which stayed where it was and says why; the branch on origin is untouched
     expect(r.ok).toBe(true);
-    expect(r.message).toMatch(/^PR #7 merged; main here was left where it is: .*uncommitted changes/);
+    expect(r.message).toMatch(/^PR #7 merged; main here was left where it is: .*would overwrite \(feature\.txt\)/);
     expect(w.state.worktree(wt.id)).toMatchObject({ landed: true, pr: { number: 7, state: "merged" } });
     expect(w.state.worktree(wt.id)?.lands).toEqual([{ base: before, tip, at: expect.any(Number), pr: 7 }]);
     expect((await git(w.repo, "rev-parse", "main")).out).toBe(before);
@@ -1923,8 +1924,8 @@ describe("landing", () => {
     expect(again.result.ok).toBe(true);
     expect(again.result.message).toContain("main here was left where it is");
     expect(w.state.worktree(wt.id)?.lands).toHaveLength(1);
-    // main cleared: its own pull takes the merge, and the row stays landed
-    sh(w.repo, "git", "checkout", "-q", "--", "README.md");
+    // the file out of the way: main's own pull takes the merge, and the row stays landed
+    rmSync(join(w.repo, "feature.txt"));
     const main = w.state.worktrees.find((x) => x.repoId === repoId && x.kind === "main")!;
     expect((await w.worktrees.pull(main.id)).ok).toBe(true);
     expect((await git(w.repo, "rev-parse", "main")).out).toBe((await git(origin, "rev-parse", "main")).out);
@@ -2095,22 +2096,26 @@ describe("landing", () => {
     expect(w.state.worktree(wt.id)?.branch).toBe("mine");
   });
 
-  test("land syncs main in first when the branch is behind, and a dirty main checkout refuses", async () => {
+  test("land syncs main in first when the branch is behind, and a file on main in the way refuses", async () => {
     const repoId = await registered();
     const wt = await w.worktrees.create(repoId, "feature");
     writeFileSync(join(wt.path, "feature.txt"), "x\n");
     sh(w.repo, "git", "commit", "--allow-empty", "-qm", "main moves on");
+    // an edit on main the branch never touches rides along; the file the branch adds, started on
+    // main too and never committed, is the one thing in the landing's way
     writeFileSync(join(w.repo, "README.md"), "edited on main\n");
+    writeFileSync(join(w.repo, "feature.txt"), "started on main\n");
     const refused = await w.worktrees.land(wt.id, "add feature");
     expect(refused.result.ok).toBe(false);
-    expect(refused.result.message).toContain("uncommitted changes");
+    expect(refused.result.message).toContain("would overwrite (feature.txt)");
     // the commit stood: the work is safer committed, and the worktree is still there to try again
     expect(w.state.worktree(wt.id)).toBeDefined();
     expect((await git(wt.path, "status", "--porcelain")).out).toBe("");
-    sh(w.repo, "git", "checkout", "-q", "--", "README.md");
+    rmSync(join(w.repo, "feature.txt"));
     const { result } = await w.worktrees.land(wt.id);
     expect(result.ok).toBe(true);
     expect((await git(w.repo, "log", "--format=%s", "-n", "4")).out.split("\n")).toContain("main moves on");
+    expect(readFileSync(join(w.repo, "README.md"), "utf8")).toBe("edited on main\n");
   });
 
   test("a status read marks a verdict stale once the tree no longer matches it, and clears the mark when it does again", async () => {
@@ -2893,6 +2898,19 @@ describe("main against origin", () => {
     sh(clone, "git", "push", "-q", "origin", "main");
     return sh(clone, "git", "rev-parse", "HEAD").trim();
   }
+
+  /** origin's main takes a commit that writes `name`: what a fast-forward here has to rewrite */
+  function pushUpstreamFile(name: string, text: string): string {
+    const bare = join(dirname(w.repo), "origin.git");
+    const clone = join(dirname(w.repo), "clone");
+    if (!existsSync(clone)) sh(dirname(w.repo), "git", "clone", "-q", bare, clone);
+    sh(clone, "git", "pull", "-q", "--rebase");
+    writeFileSync(join(clone, name), text);
+    sh(clone, "git", "add", "-A");
+    sh(clone, "git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", `write ${name}`);
+    sh(clone, "git", "push", "-q", "origin", "main");
+    return sh(clone, "git", "rev-parse", "HEAD").trim();
+  }
   /** a service with no fetch on record, the way a minute's wait leaves the trunk */
   const fresh = () =>
     new WorktreeService({
@@ -2977,16 +2995,30 @@ describe("main against origin", () => {
     expect(headOf(w.repo)).toBe(b);
   });
 
-  test("a dirty or diverged main is left where it is, and the trunk says which", async () => {
+  test("a main with a file in the pull's way, or diverged, is left where it is, and the trunk says which", async () => {
     const repoId = await withUpstream();
     const before = headOf(w.repo);
+    // origin's commit writes wip.txt, and an uncommitted wip.txt sits here: the one file the
+    // fast-forward would overwrite, so it stands and says so
+    const theirs = pushUpstreamFile("wip.txt", "theirs\n");
     writeFileSync(join(w.repo, "wip.txt"), "x\n");
     const dirty = fresh();
     await dirty.syncTrunk(repoId);
     expect(headOf(w.repo)).toBe(before);
-    expect((await dirty.trunks())[repoId]).toMatchObject({ behind: 1, dirty: 1, stale: "dirty" });
-    // committed here instead: main has its own commit and origin has one too
+    expect((await dirty.trunks())[repoId]).toMatchObject({ behind: 2, dirty: 1, stale: "dirty" });
+    // the same edit under a name the pull does not touch is no reason to stand: main follows
+    // and the file rides along, still uncommitted
     rmSync(join(w.repo, "wip.txt"));
+    writeFileSync(join(w.repo, "aside.txt"), "x\n");
+    const aside = fresh();
+    await aside.syncTrunk(repoId);
+    expect(headOf(w.repo)).toBe(theirs);
+    expect((await aside.trunks())[repoId]).toMatchObject({ behind: 0, dirty: 1 });
+    expect((await aside.trunks())[repoId]?.stale).toBeUndefined();
+    expect(sh(w.repo, "git", "status", "--porcelain")).toBe("?? aside.txt");
+    // committed here instead: main has its own commit and origin has one too
+    rmSync(join(w.repo, "aside.txt"));
+    pushUpstream("theirs again");
     sh(w.repo, "git", "commit", "--allow-empty", "-qm", "mine");
     const diverged = fresh();
     await diverged.syncTrunk(repoId);
@@ -3014,12 +3046,19 @@ describe("main against origin", () => {
     expect(headOf(w.repo)).not.toBe(upstream);
   });
 
-  test("pull refuses a dirty main and a worktree, and says why", async () => {
+  test("pull refuses a main with a file in its way, naming it, and a worktree", async () => {
     const repoId = await withUpstream();
     const wt = await w.worktrees.create(repoId, "feature");
     const main = w.state.worktrees.find((x) => x.repoId === repoId && x.kind === "main")!;
+    // an uncommitted file the pull does not touch is no reason to refuse
+    writeFileSync(join(w.repo, "aside.txt"), "x\n");
+    expect((await w.worktrees.pull(main.id)).ok).toBe(true);
+    // one it would overwrite is
+    pushUpstreamFile("wip.txt", "theirs\n");
     writeFileSync(join(w.repo, "wip.txt"), "x\n");
-    expect((await w.worktrees.pull(main.id)).ok).toBe(false);
+    const r = await w.worktrees.pull(main.id);
+    expect(r.ok).toBe(false);
+    expect(r.message).toContain("would overwrite (wip.txt)");
     await expect(w.worktrees.pull(wt.id)).rejects.toBeInstanceOf(UserError);
   });
 });

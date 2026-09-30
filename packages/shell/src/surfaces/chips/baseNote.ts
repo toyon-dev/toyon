@@ -18,10 +18,11 @@ export function hhmm(at: number): string {
 }
 
 /** How far main trails origin as of the last fetch: what a new worktree would start without. The
- * trunk follows origin on its own when it is clean, so a count that stands says why it stood:
- * uncommitted files on main hold it where it is (the come-along check is the way to clear them
- * from here), or its history diverged, which is a terminal's job. A fetch that failed comes
- * ahead of any count, since "0 behind" means nothing while origin cannot be reached. */
+ * trunk follows origin on its own, so a count that stands says why it stood: an uncommitted file
+ * on main that the pull would overwrite holds it where it is (the pull's own refusal names it,
+ * and the come-along check is the way to clear main from here), or its history diverged, which
+ * is a terminal's job. A fetch that failed comes ahead of any count, since "0 behind" means
+ * nothing while origin cannot be reached. */
 export function originNote(
   defaultBranch: string,
   trunk: {
@@ -40,8 +41,7 @@ export function originNote(
   if (n === 0) return null;
   if (trunk.stale === "diverged") return `${defaultBranch} has diverged from origin`;
   if (trunk.stale === "dirty" && trunk.dirty > 0) {
-    const files = `~${trunk.dirty} uncommitted`;
-    return `${n} behind origin; ${files} on ${defaultBranch} ${trunk.dirty === 1 ? "keeps" : "keep"} it where it is`;
+    return `${n} behind origin; an uncommitted file on ${defaultBranch} is in the pull's way`;
   }
   return `${n} behind origin`;
 }

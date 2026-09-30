@@ -20,10 +20,7 @@ describe("originNote", () => {
   });
   test("says what held main where it is, and whether a pull could move it", () => {
     expect(originNote("main", { behind: 3, dirty: 2, stale: "dirty" })).toBe(
-      "3 behind origin; ~2 uncommitted on main keep it where it is",
-    );
-    expect(originNote("main", { behind: 3, dirty: 1, stale: "dirty" })).toBe(
-      "3 behind origin; ~1 uncommitted on main keeps it where it is",
+      "3 behind origin; an uncommitted file on main is in the pull's way",
     );
     // the files went since the daemon last looked: the plain count until it looks again
     expect(originNote("main", { behind: 3, dirty: 0, stale: "dirty" })).toBe("3 behind origin");

@@ -1310,17 +1310,15 @@ export function Composer({
           {origin && trunk && (
             <div className="hint composer-note">
               <span>{origin}</span>
-              {/* a diverged main is a terminal's job: no button promises what a fast-forward cannot do */}
+              {/* a diverged main is a terminal's job: no button promises what a fast-forward cannot do.
+                  A dirty main keeps the button: the pull goes through past files it does not touch,
+                  and names the one in its way when it refuses */}
               {canPull(trunk) && (
                 <Button
                   variant="outline"
                   busy={trunkOp === "pull-main"}
-                  disabled={!!trunkOp || trunk.dirty > 0}
-                  data-tip={
-                    trunk.dirty > 0
-                      ? `commit or discard the changes on ${repo?.defaultBranch} first`
-                      : "Fast-forward main to origin"
-                  }
+                  disabled={!!trunkOp}
+                  data-tip="Fast-forward main to origin"
                   onClick={() => shipOp(sock, dispatch, { t: "pull-main", worktreeId: trunk.id })}
                 >
                   pull

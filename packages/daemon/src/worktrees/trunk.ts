@@ -51,7 +51,8 @@ export class Trunk {
   /** main's `behind` is against its upstream, refreshed by a fetch every few minutes while someone
    * is looking: the count is only as good as the last fetch, and nobody runs one by hand for a tool
    * to read. No upstream, no count and no fetch. A fetch that finds main behind takes origin in
-   * when main is clean, so the spare is the latest main whenever the plus is next used. */
+   * when nothing uncommitted on main is in the way, so the spare is the latest main whenever the
+   * plus is next used. */
   async behind(mainId: string, path: string): Promise<{ behind?: number }> {
     const behind = await behindUpstream(path);
     if (behind === null) return {};
@@ -77,11 +78,12 @@ export class Trunk {
   }
 
   /** The trunk follows origin when the plus is opened: one fetch, unless one ran within the last
-   * minute, then a fast-forward of main when it is clean and behind. The watcher resets the spare
-   * onto the moved main, so the row on screen is the latest main. A dirty or diverged main is left
-   * alone and the trunk says why, for the line under the composer's knobs. The fetch holds the
-   * network for seconds, so it runs with no lock held; only the fast-forward takes the repo lock,
-   * and git's own index lock only for the checkout, on a clean main. */
+   * minute, then a fast-forward of main when it is behind. The watcher resets the spare onto the
+   * moved main, so the row on screen is the latest main. A main with an uncommitted file in the
+   * fast-forward's way, or one that diverged, is left alone and the trunk says why, for the line
+   * under the composer's knobs; uncommitted files elsewhere on it ride along untouched. The fetch
+   * holds the network for seconds, so it runs with no lock held; only the fast-forward takes the
+   * repo lock, and git's own index lock only for the checkout. */
   async sync(repoId: string): Promise<void> {
     const repo = this.d.state.repo(repoId);
     const main = mainOf(this.d.state, repoId);
@@ -113,9 +115,9 @@ export class Trunk {
   }
 
   /** Main onto origin now, for work that landed there (a PR GitHub merged): one fetch, then the
-   * fast-forward when main is clean and behind, with why it stood recorded for the trunk's note the
-   * way the periodic follow records it. The fetch holds the network for seconds and runs with no
-   * lock held; `w` names the steps on the row that asked. */
+   * fast-forward when main is behind and nothing on it is in the way, with why it stood recorded
+   * for the trunk's note the way the periodic follow records it. The fetch holds the network for
+   * seconds and runs with no lock held; `w` names the steps on the row that asked. */
   async pull(repoId: string, w: LandWatch = UNWATCHED): Promise<TrunkFf> {
     const repo = this.d.state.repo(repoId);
     const main = mainOf(this.d.state, repoId);
@@ -131,15 +133,15 @@ export class Trunk {
 
   /** Main onto what is fetched already, for a landing pushed straight to origin from a worktree:
    * the route's own fetch brought origin's main, so no second fetch, only the fast-forward under
-   * the lock when main is clean and behind, with why it stood recorded otherwise. Housekeeping
-   * the landing does not wait on to be a landing. */
+   * the lock when main is behind, with why it stood recorded otherwise. Housekeeping the landing
+   * does not wait on to be a landing. */
   async catchUp(repoId: string): Promise<TrunkFf> {
     const main = mainOf(this.d.state, repoId);
     if (!main) return { ok: false, message: "no main checkout to pull" };
     return this.follow(main.id);
   }
 
-  /** main onto what the last fetch brought, when it is clean and behind; else why not, on the trunk */
+  /** main onto what the last fetch brought, when it is behind and can move; else why not, on the trunk */
   private async follow(mainId: string): Promise<TrunkFf> {
     const main = this.d.state.worktree(mainId);
     const repo = main && this.d.state.repo(main.repoId);

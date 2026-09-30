@@ -663,8 +663,8 @@ export interface TrunkStatus {
   dirty: number;
   /** nothing tracked and nothing untracked: a project made from the picker before anything landed */
   empty: boolean;
-  /** why the checkout was not fast-forwarded when origin moved: uncommitted files sit on it, its
-   * history diverged from origin's, or it has no upstream to follow */
+  /** why the checkout was not fast-forwarded when origin moved: an uncommitted file the pull would
+   * overwrite sits on it, its history diverged from origin's, or it has no upstream to follow */
   stale?: "dirty" | "diverged" | "no-upstream";
   /** when origin last answered a fetch; absent until one has. A count against origin is as true
    * as this fetch, so the rail says so beside the count. */

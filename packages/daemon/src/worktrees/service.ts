@@ -2001,7 +2001,8 @@ export class WorktreeService {
   /** Fast-forward main to its upstream, the trunk's own way (a fetch, then the fast-forward under
    * the lock, the fetch on the record); under a local base every worktree's `behind` moves with
    * it. Never a merge: a main that has diverged from origin is a decision for a terminal, not a
-   * button, and a dirty main is refused before the fetch rather than after it. */
+   * button. Uncommitted files on main are git's to judge, at the fast-forward: only one it would
+   * overwrite refuses it, named. */
   async pull(worktreeId: string): Promise<ShipResult> {
     const wt = this.d.state.requireWorktree(worktreeId);
     if (!isMain(wt)) throw new UserError("pull on main; a worktree syncs from main instead");
@@ -2009,12 +2010,6 @@ export class WorktreeService {
     // main has no chat for git's rows, so the pull's steps are named and nothing more
     const w: LandWatch = { step: (name) => this.step(worktreeId, name), git: UNWATCHED.git };
     return this.ship(worktreeId, "pull-main", async () => {
-      if ((await statusFiles(repo.path)).length > 0) {
-        return {
-          ok: false,
-          message: `${repo.defaultBranch} has uncommitted changes: commit or stash them there first`,
-        };
-      }
       const result = await this.trunk.pull(repo.id, w);
       if (result.ok) {
         this.invalidateCounts();

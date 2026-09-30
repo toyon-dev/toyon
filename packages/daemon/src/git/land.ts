@@ -99,14 +99,45 @@ async function requireClean(worktreePath: string): Promise<ShipResult | null> {
   return null;
 }
 
-/** the main checkout can take a merge: on its branch, and nothing uncommitted that a merge
- * would carry through or stop on */
-async function requireMainReady(repoPath: string, defaultBr: string): Promise<ShipResult | null> {
+/** The files git named when it refused to move a checkout over them. A merge or fast-forward
+ * checks every file it would rewrite against the working tree before touching any, and aborts
+ * listing the ones in the way under one of two headers (tracked edits, untracked files); what is
+ * uncommitted elsewhere in the tree is no concern of its and stays as it was. Empty when the
+ * refusal was about something else. */
+export function overwritten(text: string): string[] {
+  const files: string[] = [];
+  let listing = false;
+  for (const line of text.split("\n")) {
+    if (/would be overwritten by (merge|checkout):\s*$/.test(line)) {
+      listing = true;
+    } else if (listing && line.startsWith("\t")) {
+      files.push(line.trim());
+    } else {
+      listing = false;
+    }
+  }
+  return files;
+}
+
+/** why a landing or pull stood: the files on main in its way, named so the person knows which of
+ * main's uncommitted files to commit or stash, rather than told to clear all of them */
+function inTheWay(defaultBr: string, what: string, files: string[]): string {
+  const shown = files.length > 3 ? `${files.slice(0, 3).join(", ")} and ${files.length - 3} more` : files.join(", ");
+  return `${defaultBr} has uncommitted files the ${what} would overwrite (${shown}): commit or stash them there first`;
+}
+
+/** The main checkout can take the landing: on its branch, and clean when the method needs it.
+ * A fast-forward or merge refuses on its own the one thing that matters, an uncommitted file it
+ * would rewrite, and leaves the rest alone, so an edit that has nothing to do with the branch
+ * (a version bump waiting on a release, a local config tweak) blocks nothing. A squash cannot be
+ * given that: its recovery from a refused commit is a hard reset, which would take every
+ * uncommitted file with it, so it wants the tree clean before it starts. */
+async function requireMainReady(repoPath: string, defaultBr: string, clean: boolean): Promise<ShipResult | null> {
   const current = await git(repoPath, "branch", "--show-current");
   if (current.out !== defaultBr) {
     return { ok: false, message: `main checkout is on '${current.out}', not ${defaultBr}; switch it first` };
   }
-  if ((await statusFiles(repoPath)).length > 0) {
+  if (clean && (await statusFiles(repoPath)).length > 0) {
     return { ok: false, message: `${defaultBr} has uncommitted changes: commit or stash them there first` };
   }
   return null;
@@ -166,13 +197,16 @@ export async function landLocally(
   if (cErr) return cErr;
   const { ahead } = await aheadBehind(worktreePath, defaultBr);
   if (ahead === 0) return { ok: false, message: `nothing to merge: no commits ahead of ${defaultBr}` };
-  const mErr = await requireMainReady(repoPath, defaultBr);
+  const mErr = await requireMainReady(repoPath, defaultBr, method === "squash");
   if (mErr) return mErr;
   if (method === "rebase") {
     w.step(`moving ${defaultBr} onto the branch`);
     const ff = await w.git(repoPath, ["merge", "--ff-only", branch]);
-    if (!ff.ok)
+    if (!ff.ok) {
+      const files = overwritten(ff.text);
+      if (files.length) return { ok: false, message: inTheWay(defaultBr, "landing", files) };
       return { ok: false, message: `${branch} is not a fast-forward of ${defaultBr}: take ${defaultBr} in first` };
+    }
     return { ok: true, message: `${defaultBr} moved onto ${branch}` };
   }
   if (method === "squash") {
@@ -191,7 +225,11 @@ export async function landLocally(
   }
   w.step(`merging into ${defaultBr}`);
   const m = await w.git(repoPath, ["merge", "--no-ff", "--no-edit", branch]);
-  if (!m.ok) return mergeFailure(repoPath, m, `merge conflicts with ${defaultBr}: take ${defaultBr} in first`);
+  if (!m.ok) {
+    const files = overwritten(m.text);
+    if (files.length) return { ok: false, message: inTheWay(defaultBr, "landing", files) };
+    return mergeFailure(repoPath, m, `merge conflicts with ${defaultBr}: take ${defaultBr} in first`);
+  }
   return { ok: true, message: `merged ${branch} into ${defaultBr}` };
 }
 
@@ -214,8 +252,9 @@ export type TrunkFf = ShipResult & { moved?: boolean; stale?: TrunkStatus["stale
 
 /** The fast-forward alone, onto what the last fetch brought. The fetch is the slow half and holds
  * the network for seconds, so the trunk's own sync runs it outside the repo lock and takes only
- * this step inside. Git's own refusal of an edit the merge would overwrite stands; a main that is
- * dirty is `stale: "dirty"` rather than merged around. */
+ * this step inside. Git's own refusal of an uncommitted file the pull would overwrite is the
+ * guard: main is `stale: "dirty"` with the files named, and every other uncommitted file on it
+ * rides along untouched, as it would under a pull typed in a terminal. */
 export async function fastForwardFetched(repoPath: string, defaultBr: string): Promise<TrunkFf> {
   const current = await git(repoPath, "branch", "--show-current");
   if (current.out !== defaultBr) {
@@ -226,22 +265,11 @@ export async function fastForwardFetched(repoPath: string, defaultBr: string): P
     return { ok: false, stale: "no-upstream", message: `${defaultBr} has no upstream to pull from` };
   }
   if (behind === 0) return { ok: true, moved: false, message: "already up to date with origin" };
-  if ((await statusFiles(repoPath)).length > 0) {
-    return {
-      ok: false,
-      stale: "dirty",
-      message: `${defaultBr} has uncommitted changes: commit or stash them there first`,
-    };
-  }
   const m = await git(repoPath, "merge", "--ff-only", "@{upstream}");
   if (!m.ok) {
-    const clobber = /overwritten by merge|would be overwritten/.test(`${m.out}\n${m.err}`);
-    return clobber
-      ? {
-          ok: false,
-          stale: "dirty",
-          message: `${defaultBr} here has edits the pull would overwrite; commit or stash them first`,
-        }
+    const files = overwritten(`${m.out}\n${m.err}`);
+    return files.length
+      ? { ok: false, stale: "dirty", message: inTheWay(defaultBr, "pull", files) }
       : { ok: false, stale: "diverged", message: `${defaultBr} has diverged from origin; reconcile it in a terminal` };
   }
   return { ok: true, moved: true, message: `pulled ${behind} commit(s) from origin` };

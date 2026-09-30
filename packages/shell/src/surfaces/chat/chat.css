@@ -597,13 +597,14 @@
     /* the card's body: prose and code alike, edge to edge inside it, under a rule that separates it from
    the chip. It takes whatever height its output needs; the band it sits in is what stops and scrolls.
    The one axis kept here is the block's own, since a line too long to wrap is not a reason to widen
-   the chat pane. */
+   the chat pane. It draws no ground of its own: what the agent read, ran into or thought sits in the
+   band's recess, and a panel painted back to the log's ground left the open row as a lifted header
+   over text on the same ground as the messages around it. */
     & .tool-out {
       display: flex;
       flex-direction: column;
       gap: 6px;
       padding: 6px 12px;
-      background: var(--surface1);
     }
     /* the picture a call returned (ChatItemView.tsx, ToolPicture): as wide as the band and no
        wider, and short enough to be seen whole inside the band's cap rather than scrolled in it,
@@ -655,13 +656,13 @@
       overflow-x: auto;
       color: var(--text1);
     }
-    /* the command that produced the output: the card's own tone across its full width, with the answer
-   in the lighter panel under it. The summary line above carries the sentence that named it. */
-    /* what ran is the darkest strip in the band, the way the box you type in is the darkest thing in
-   the chat; the answer sits on the lighter surface under it */
+    /* the command that produced the output, where the summary line carries the sentence that named
+   it instead. It is the one strip in the band on the log's own ground: what ran belongs with the
+   line above it, and what it printed sits in the recess under it with everything else the agent
+   brought back. */
     & .tool-block.cmd {
       padding: 6px 12px;
-      background: var(--sunken);
+      background: var(--surface1);
       color: var(--text0);
       white-space: pre-wrap;
       word-break: break-word;

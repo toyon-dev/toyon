@@ -17,7 +17,7 @@
     "typecheck": "tsc --noEmit -p .",
     "lint": "biome check .",
     "format": "biome format --write .",
-    "test": "bun test --parallel",
+    "test": "bun scripts/test.ts",
     "check": "bun run typecheck && bun run lint && bun run test && bun run --cwd packages/bridge build"
   },
   "devDependencies": {

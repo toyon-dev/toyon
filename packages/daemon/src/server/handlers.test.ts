@@ -788,17 +788,20 @@ describe("handlers", () => {
     expect(procs.get(main.id)?.started ?? []).toEqual([]);
   });
 
-  test("sync-main on a dirty tree toasts the refusal with no prompt to prefill", async () => {
+  test("sync-main over uncommitted work that no longer fits toasts the refusal with no prompt to prefill", async () => {
     const { services, ctx, replies, repo } = make();
     const r = await services.repos.register(repo);
     r.needsSetup = false;
     const wt = await services.worktrees.create(r.id, "feature");
-    await Bun.write(join(wt.path, "wip.txt"), "x\n");
+    await Bun.write(join(wt.path, "README.md"), "mine, uncommitted\n");
+    writeFileSync(join(repo, "README.md"), "main's\n");
+    sh(repo, "git", "commit", "-qam", "main moves");
     await dispatch({ t: "sync-main", worktreeId: wt.id }, ctx, services);
     const t = replies.find((m) => m.t === "shipped");
     expect(t).toMatchObject({ t: "shipped", ok: false });
     expect(t && "suggestion" in t ? t.suggestion : undefined).toBeUndefined();
     expect(lastShipped(replies) ?? (t?.t === "shipped" ? t.message : "")).toContain("uncommitted");
+    expect(readFileSync(join(wt.path, "README.md"), "utf8")).toBe("mine, uncommitted\n");
   });
 
   test("chat hands the text, context and attachments to the agent", async () => {

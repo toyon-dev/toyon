@@ -401,8 +401,9 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
 
   async "sync-main"(msg, ctx, s) {
     const { result, base } = await s.worktrees.sync(msg.worktreeId);
-    // a prefilled prompt is for a conflict, and only where there is an agent to prompt: a dirty
-    // tree is a plain refusal, and a found worktree has no composer for the suggestion to land in
+    // a prefilled prompt is for a conflict, and only where there is an agent to prompt: uncommitted
+    // work that no longer fits over the base is a plain refusal (the person commits it first), and
+    // a found worktree has no composer for the suggestion to land in
     const prompt = !result.ok && result.conflict && s.state.worktree(msg.worktreeId);
     await notify(
       s,

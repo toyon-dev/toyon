@@ -128,6 +128,8 @@ describe("create / remove", () => {
     await until(() => readdirSync(join(w.paths.cacheDir, repoId)).length > 0);
     const second = await w.worktrees.create(repoId, "second");
     await until(() => existsSync(join(second.path, "restored")));
+    // the file is there before the command's shell has exited, and the run goes only once it has
+    await until(() => !w.state.worktree(second.id)?.runs);
     expect(readFileSync(join(second.path, ".mypy_cache", "x"), "utf8")).toBe("checked\n");
     expect(lines.find((l) => l.startsWith("cache:"))).toMatch(/^cache: restored \.mypy_cache from [0-9a-f]{7}/);
     expect(stages).toEqual(["restoring cache", "test -e .mypy_cache/x && touch restored"]);

@@ -138,6 +138,16 @@ export function CommitBox({
   // what the counts here are against: main here, or origin's main where the route lands there
   const base = repo ? baseOf(repo) : "main";
   const behindLine = canSync(active) ? behindNote(base, behind) : null;
+  // a dirty tree syncs where toyon runs the worktree: the daemon carries the uncommitted work
+  // across, except under a turn, whose writes would land in the moment the tree is empty
+  const midTurn = active.agent === "working" || active.agent === "waiting";
+  const syncHeld = !dirty
+    ? undefined
+    : !owned
+      ? "commit or discard the changes here first"
+      : midTurn
+        ? "the agent is mid-turn: sync when it is done"
+        : undefined;
   const canMerge = prOpen && !prMissing && prCanMerge(pr);
   // the word a land runs under here: the one the row offered, since what the row can do does not
   // change while the op runs. Pull is the composer's word for the same op on a merged PR.
@@ -324,8 +334,8 @@ export function CommitBox({
               ) : (
                 <Button
                   variant="outline"
-                  disabled={!!op || dirty}
-                  data-tip={dirty ? "commit or discard the changes here first" : `Merge ${base} into this worktree`}
+                  disabled={!!op || !!syncHeld}
+                  data-tip={syncHeld ?? `Merge ${base} into this worktree${dirty ? ", uncommitted changes kept" : ""}`}
                   onClick={() => shipOp(sock, dispatch, { t: "sync-main", worktreeId: id })}
                 >
                   sync

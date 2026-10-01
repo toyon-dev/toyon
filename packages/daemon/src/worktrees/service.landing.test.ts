@@ -7,6 +7,7 @@ import { sh } from "../../test/helpers/tmp-repo.ts";
 import { registered, setRoute, until, useWorld, w } from "../../test/helpers/world.ts";
 import { UserError } from "../core/errors.ts";
 import { GIT, git } from "../git/exec.ts";
+import { CARRIED } from "../git/land.ts";
 import { treeFingerprint } from "../git/status.ts";
 
 // Landing on the merge route: the commit, the sync, the verdict on the tree it saw, and the hooks in the way.
@@ -447,6 +448,98 @@ describe("landing", () => {
     expect(result.conflict).toBe(true);
     expect((await git(wt.path, "status", "--porcelain")).out).toBe("");
     expect(readFileSync(join(wt.path, "README.md"), "utf8")).toBe("theirs\n");
+  });
+
+  describe("a sync over uncommitted work", () => {
+    /** a worktree one commit ahead, with an edit, a staged new file and an untracked one */
+    const dirtyWorktree = async () => {
+      const repoId = await registered();
+      const wt = await w.worktrees.create(repoId, "feature");
+      writeFileSync(join(wt.path, "mine.txt"), "committed\n");
+      sh(wt.path, "git", "add", "mine.txt");
+      sh(wt.path, "git", "commit", "-qm", "mine");
+      writeFileSync(join(wt.path, "mine.txt"), "edited\n");
+      writeFileSync(join(wt.path, "staged.txt"), "staged\n");
+      sh(wt.path, "git", "add", "staged.txt");
+      writeFileSync(join(wt.path, "loose.txt"), "loose\n");
+      return wt;
+    };
+    const mainMoves = (file: string, text: string) => {
+      writeFileSync(join(w.repo, file), text);
+      sh(w.repo, "git", "add", file);
+      sh(w.repo, "git", "commit", "-qm", `main: ${file}`);
+    };
+    const porcelain = async (path: string) => (await git(path, "status", "--porcelain")).out;
+    const head = async (path: string) => (await git(path, "rev-parse", "HEAD")).out;
+    /** nothing of the carry is left behind: not its ref, and nothing on the shared stash stack */
+    const noTrace = async (path: string) => {
+      expect((await git(path, "rev-parse", "-q", "--verify", CARRIED)).ok).toBe(false);
+      expect((await git(path, "stash", "list")).out).toBe("");
+    };
+
+    test("the work rides across: main comes in under it and every file reads as it did", async () => {
+      const wt = await dirtyWorktree();
+      mainMoves("newer.txt", "x\n");
+      const { result } = await w.worktrees.sync(wt.id);
+      expect(result).toMatchObject({ ok: true });
+      expect(existsSync(join(wt.path, "newer.txt"))).toBe(true);
+      expect((await w.worktrees.gitStatus(wt.id))?.behind).toBe(0);
+      expect(readFileSync(join(wt.path, "mine.txt"), "utf8")).toBe("edited\n");
+      expect(readFileSync(join(wt.path, "staged.txt"), "utf8")).toBe("staged\n");
+      expect(readFileSync(join(wt.path, "loose.txt"), "utf8")).toBe("loose\n");
+      await noTrace(wt.path);
+    });
+
+    test("work that no longer fits over main refuses, named, and the branch is back where it was", async () => {
+      const wt = await dirtyWorktree();
+      writeFileSync(join(wt.path, "README.md"), "mine, uncommitted\n");
+      const [before, was] = [await porcelain(wt.path), await head(wt.path)];
+      mainMoves("README.md", "main's\n");
+      const { result } = await w.worktrees.sync(wt.id);
+      expect(result.ok).toBe(false);
+      expect(result.conflict).toBeUndefined();
+      expect(result.message).toContain("(README.md)");
+      expect(await head(wt.path)).toBe(was);
+      expect(await porcelain(wt.path)).toBe(before);
+      expect(readFileSync(join(wt.path, "README.md"), "utf8")).toBe("mine, uncommitted\n");
+      await noTrace(wt.path);
+    });
+
+    test("a rebase that conflicts is aborted with the work put back as it was", async () => {
+      const wt = await dirtyWorktree();
+      const [before, was] = [await porcelain(wt.path), await head(wt.path)];
+      mainMoves("mine.txt", "main's\n");
+      const { result } = await w.worktrees.sync(wt.id);
+      expect(result).toMatchObject({ ok: false, conflict: true });
+      expect(await head(wt.path)).toBe(was);
+      expect(await porcelain(wt.path)).toBe(before);
+      expect(readFileSync(join(wt.path, "mine.txt"), "utf8")).toBe("edited\n");
+      await noTrace(wt.path);
+    });
+
+    test("an untracked file main now has refuses by name, nothing moved", async () => {
+      const wt = await dirtyWorktree();
+      const before = await porcelain(wt.path);
+      mainMoves("loose.txt", "main's\n");
+      const { result } = await w.worktrees.sync(wt.id);
+      expect(result.ok).toBe(false);
+      expect(result.conflict).toBeUndefined();
+      expect(result.message).toContain("loose.txt");
+      expect(await porcelain(wt.path)).toBe(before);
+      expect(readFileSync(join(wt.path, "loose.txt"), "utf8")).toBe("loose\n");
+      await noTrace(wt.path);
+    });
+
+    test("a turn in flight refuses it; the same tree syncs once the agent is idle", async () => {
+      const wt = await dirtyWorktree();
+      mainMoves("newer.txt", "x\n");
+      const agent = w.runtime.agentFor(wt.id) as unknown as FakeAgent;
+      agent.status = "working";
+      await expect(w.worktrees.sync(wt.id)).rejects.toBeInstanceOf(UserError);
+      expect(existsSync(join(wt.path, "newer.txt"))).toBe(false);
+      agent.status = "idle";
+      expect((await w.worktrees.sync(wt.id)).result.ok).toBe(true);
+    });
   });
 
   test("commit with an empty message is a UserError", async () => {

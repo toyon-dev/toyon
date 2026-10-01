@@ -1975,8 +1975,9 @@ export class WorktreeService {
 
   /** take main into any row with a branch, a found worktree included: a rebase for toyon's own
    * branch, a merge for one it found or adopted. The one git write allowed without take-over,
-   * because both refuse a dirty tree before touching it and abort on a conflict, so the directory
-   * is left as it was found in every case but success. */
+   * because there both refuse a dirty tree before touching it and abort on a conflict, so the
+   * directory is left as it was found in every case but success. A worktree toyon runs is dirty as
+   * a rule (its agent never commits), so there the uncommitted work is carried across the sync. */
   async sync(worktreeId: string): Promise<{ result: ShipResult; base: string }> {
     const r = this.readable(worktreeId);
     if (!r) throw new UserError("that worktree is gone");
@@ -1987,6 +1988,12 @@ export class WorktreeService {
     if (r.locked) throw new UserError(`${r.name} is held by another tool`);
     const repo = this.d.state.requireRepo(r.repoId);
     const own = r.wt ? hasOwnBranch(r.wt) : false;
+    const carry = !!r.wt;
+    // carrying empties the tree for a moment, and a file tool writing into that gap is lost under
+    // the work put back; a clean tree has no such gap
+    const status = this.d.runtime.agentFor(worktreeId)?.status;
+    if (carry && (status === "working" || status === "waiting") && (await statusFiles(r.path)).length > 0)
+      throw new UserError(`${r.name}'s agent is mid-turn with uncommitted changes: sync when it is done`);
     // a found worktree has no chat for the rows to go on
     const w = r.wt ? this.landWatch(r.wt) : UNWATCHED;
     const result = await this.ship(worktreeId, "sync-main", async () => {
@@ -1996,7 +2003,7 @@ export class WorktreeService {
         const fetched = await this.fetchBase(r.wt, repo, w);
         if (!fetched.ok) return fetched;
       }
-      const taken = await withRepoLock(repo.path, () => takeMainIn(r.path, r.base, own, w));
+      const taken = await withRepoLock(repo.path, () => takeMainIn(r.path, r.base, own, w, carry));
       if (taken.ok) {
         this.headMoved(worktreeId);
         // the same work over a newer base: the sentence and the message still describe it

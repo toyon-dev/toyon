@@ -119,11 +119,18 @@ export function overwritten(text: string): string[] {
   return files;
 }
 
+const listed = (files: string[]) =>
+  files.length > 3 ? `${files.slice(0, 3).join(", ")} and ${files.length - 3} more` : files.join(", ");
+
 /** why a landing or pull stood: the files on main in its way, named so the person knows which of
  * main's uncommitted files to commit or stash, rather than told to clear all of them */
 function inTheWay(defaultBr: string, what: string, files: string[]): string {
-  const shown = files.length > 3 ? `${files.slice(0, 3).join(", ")} and ${files.length - 3} more` : files.join(", ");
-  return `${defaultBr} has uncommitted files the ${what} would overwrite (${shown}): commit or stash them there first`;
+  return `${defaultBr} has uncommitted files the ${what} would overwrite (${listed(files)}): commit or stash them there first`;
+}
+
+/** why a sync over a dirty tree stood: a file git does not track here that main now has */
+function untrackedInTheWay(defaultBr: string, files: string[]): string {
+  return `${defaultBr} has files that are untracked here (${listed(files)}): move or delete them, then sync`;
 }
 
 /** The main checkout can take the landing: on its branch, and clean when the method needs it.
@@ -143,23 +150,103 @@ async function requireMainReady(repoPath: string, defaultBr: string, clean: bool
   return null;
 }
 
+/** Where a sync keeps the uncommitted work it set aside until it is back in the tree. Under
+ * refs/worktree/, which git keeps per worktree, so two syncs never share it and none of them
+ * touches the stash stack every worktree shares. */
+export const CARRIED = "refs/worktree/toyon/carried";
+
+interface Aside {
+  sha: string;
+  /** the branch before main came in, to return to when the work no longer fits over it */
+  head: string;
+}
+
+/** The tracked changes as a stash commit, and the tree reset under them: what `--autostash` does,
+ * with the commit held under a ref this side knows, so the way back never guesses which stash is
+ * its own. Null when nothing tracked is uncommitted: an untracked file is not moved by a rebase or
+ * a merge, and git refuses by name the one that is in the way. */
+async function setAside(worktreePath: string): Promise<Aside | ShipResult | null> {
+  const head = await git(worktreePath, "rev-parse", "HEAD");
+  const made = await git(worktreePath, "stash", "create");
+  if (!head.ok || !made.ok) {
+    return { ok: false, message: `could not set the uncommitted changes aside: ${made.err.slice(0, 200)}` };
+  }
+  if (!made.out) return null;
+  const kept = await git(worktreePath, "update-ref", CARRIED, made.out);
+  const cleared = kept.ok ? await git(worktreePath, "reset", "--hard", "-q") : kept;
+  if (!cleared.ok) {
+    return { ok: false, message: `could not set the uncommitted changes aside: ${cleared.err.slice(0, 200)}` };
+  }
+  return { sha: made.out, head: head.out };
+}
+
+/** The work set aside, back over whatever the sync left. Over the new base it may no longer fit;
+ * then the branch returns to where it was and the work goes back exactly, index included, so a
+ * sync that did not succeed leaves no trace. The ref goes only once the work is in the tree. */
+async function putBack(worktreePath: string, defaultBr: string, aside: Aside, taken: ShipResult): Promise<ShipResult> {
+  let clash: string[] | null = null;
+  if (taken.ok) {
+    const applied = await git(worktreePath, "stash", "apply", aside.sha);
+    if (applied.ok) {
+      await git(worktreePath, "update-ref", "-d", CARRIED);
+      return taken;
+    }
+    const unmerged = await git(worktreePath, "diff", "--name-only", "--diff-filter=U");
+    clash = unmerged.out.split("\n").filter(Boolean);
+    await git(worktreePath, "reset", "--hard", "-q", aside.head);
+  }
+  const back = await git(worktreePath, "stash", "apply", "--index", aside.sha);
+  if (!back.ok) {
+    return {
+      ok: false,
+      message: `sync stopped with the uncommitted changes set aside: git stash apply ${CARRIED} in the worktree brings them back`,
+    };
+  }
+  await git(worktreePath, "update-ref", "-d", CARRIED);
+  if (!clash) return taken;
+  const named = clash.length ? ` (${listed(clash)})` : "";
+  return {
+    ok: false,
+    message: `the uncommitted changes here conflict with ${defaultBr}${named}: commit them first, then sync`,
+  };
+}
+
 /** Take main into the branch: a rebase for a branch toyon owns, a merge for one it adopted. Both
- * leave the tree as it was on a conflict. */
+ * leave the tree as it was on a conflict. A dirty tree is refused, unless the caller asks for the
+ * uncommitted work to be carried across: set aside, and put back over the new base. */
 export async function takeMainIn(
   worktreePath: string,
   defaultBr: string,
   own: boolean,
   w: LandWatch = UNWATCHED,
+  carry = false,
 ): Promise<ShipResult> {
-  const cErr = await requireClean(worktreePath);
-  if (cErr) return cErr;
+  if (!carry) {
+    const cErr = await requireClean(worktreePath);
+    if (cErr) return cErr;
+  }
   const { behind } = await aheadBehind(worktreePath, defaultBr);
   if (behind === 0) return { ok: true, message: `already up to date with ${defaultBr}` };
+  const aside = carry ? await setAside(worktreePath) : null;
+  if (aside && "message" in aside) return aside;
+  const taken = await bringIn(worktreePath, defaultBr, own, behind, w);
+  return aside ? putBack(worktreePath, defaultBr, aside, taken) : taken;
+}
+
+async function bringIn(
+  worktreePath: string,
+  defaultBr: string,
+  own: boolean,
+  behind: number,
+  w: LandWatch,
+): Promise<ShipResult> {
   if (own) {
     w.step(`rebasing onto ${defaultBr}`);
     const r = await w.git(worktreePath, ["rebase", defaultBr]);
     if (!r.ok) {
       await git(worktreePath, "rebase", "--abort");
+      const files = overwritten(r.text);
+      if (files.length) return { ok: false, message: untrackedInTheWay(defaultBr, files) };
       const ask = `rebase onto ${defaultBr} conflicts: ask the agent to bring ${defaultBr} in and resolve them`;
       return {
         ok: false,
@@ -172,6 +259,8 @@ export async function takeMainIn(
   w.step(`merging ${defaultBr} in`);
   const m = await w.git(worktreePath, ["merge", "--no-edit", defaultBr]);
   if (!m.ok) {
+    const files = overwritten(m.text);
+    if (files.length) return { ok: false, message: untrackedInTheWay(defaultBr, files) };
     return mergeFailure(
       worktreePath,
       m,

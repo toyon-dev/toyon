@@ -17,6 +17,11 @@ export const CHECK_TOOL = "check";
  * words alone under that glyph read as a search of the code. */
 export const TOOL_SEARCH = "ToolSearch";
 
+/** Claude asking the person a question. The call has no kind of its own, and the card takes the
+ * row's place once the question is in, so the row is only ever seen while the agent writes it: the
+ * shell keys on the name to say so, under the glyph the ask itself wears. */
+export const ASK_TOOL = "AskUserQuestion";
+
 /** ACP's tool categories; what the shell keys "did this turn edit anything" on */
 export type ToolKind =
   | "read"

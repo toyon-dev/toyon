@@ -337,6 +337,16 @@ describe("toolLabel", () => {
     ).toBe("");
   });
 
+  test("an ask is a row only while its question is written, and says so under the ask's glyph", () => {
+    const ask = { name: "AskUserQuestion", title: "Asking for your input", toolKind: "other" as const, input: {} };
+    expect(composing(ask)).toBe("writing the question");
+    expect(toolLabel(ask)).toMatchObject({ label: "ask", name: "", icon: "chat" });
+    // the question lands a beat before the card takes the row's place: no tool name beside it
+    const asked = { ...ask, title: "Which one?", input: { questions: [{ question: "Which one?" }] } };
+    expect(composing(asked)).toBe("");
+    expect(toolLabel(asked)).toMatchObject({ name: "", icon: "chat", hint: "Which one?" });
+  });
+
   test("the glyph follows the command's verb where the kind only says `run`", () => {
     const call = {
       name: "Bash",

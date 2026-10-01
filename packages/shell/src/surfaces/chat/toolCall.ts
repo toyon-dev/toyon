@@ -1,4 +1,5 @@
 import {
+  ASK_TOOL,
   CHECK_TOOL,
   emptyInput,
   isWrittenKind,
@@ -178,7 +179,9 @@ export function toolLabel(call: ToolCall, roots: string[] = []): ToolRowText {
   // kind of its own) and for a ToolSearch, whose words alone would read as a search of the code.
   // Toyon's own rows (a `!` command, the check after a turn) carry a name for the log to find
   // them by, not a word to print: the glyph and the command already say what ran
-  const glyphSays = kind !== "other" && call.name !== TOOL_SEARCH;
+  // An ask has no kind either, but it has a glyph of its own, the one its parked row wears.
+  const ask = call.name === ASK_TOOL;
+  const glyphSays = (kind !== "other" || ask) && call.name !== TOOL_SEARCH;
   const own =
     detail && (glyphSays || call.name === call.title || call.name === SHELL_TOOL || call.name === CHECK_TOOL)
       ? ""
@@ -189,9 +192,9 @@ export function toolLabel(call: ToolCall, roots: string[] = []): ToolRowText {
   // the verb only ever refines a row the kind left generic; an agent that says "read" is read
   const byVerb = (kind === "execute" || kind === "other") && command ? verbIcon(command) : undefined;
   return {
-    label,
+    label: ask ? "ask" : label,
     name,
-    icon: byVerb ?? KIND_ICON[kind],
+    icon: ask ? "chat" : (byVerb ?? KIND_ICON[kind]),
     hint: detail === name ? "" : detail,
     command: command && command !== detail ? command : "",
   };
@@ -236,6 +239,10 @@ export function composing(call: ToolCall): string {
   // brief is what the agent writes here, and until it lands the row would say "Task" with a
   // count of no calls, which reads as a subagent that never started
   if (call.subagent) return "writing the brief";
+  // an ask has no kind, and its question is the longest input an agent types that nobody sees
+  // arrive: the adapter's placeholder ("Asking for your input") says the person is being waited
+  // on while there is nothing yet to answer
+  if (call.name === ASK_TOOL) return "writing the question";
   return isWrittenKind(kind) ? WRITING[kind] : "";
 }
 

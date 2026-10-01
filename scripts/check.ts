@@ -21,11 +21,20 @@ const runs = Object.entries(STEPS).map(async ([name, args]) => {
     proc.exited,
   ]);
   // a step's output whole, when it ends, so two steps never interleave
-  process.stdout.write(out);
-  process.stderr.write(err);
+  await drain(process.stdout, out);
+  await drain(process.stderr, err);
   return code === 0 ? null : name;
 });
 
 const failed = (await Promise.all(runs)).filter((name) => name !== null);
 if (failed.length) console.error(`check failed: ${failed.join(", ")}`);
-process.exit(failed.length ? 1 : 0);
+// an exit code, not process.exit: a write to a pipe is still draining when the step's output is
+// large, and exit would cut it off right where a failure is printed
+process.exitCode = failed.length ? 1 : 0;
+
+function drain(stream: NodeJS.WriteStream, text: string): Promise<void> {
+  return new Promise((done) => {
+    if (text.length === 0) return done();
+    stream.write(text, () => done());
+  });
+}

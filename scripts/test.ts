@@ -23,11 +23,20 @@ const runs = Array.from({ length: SHARDS }, async (_, i) => {
     proc.exited,
   ]);
   // a shard's output whole, when it ends, so two shards never interleave
-  process.stdout.write(out);
-  process.stderr.write(err);
+  await drain(process.stdout, out);
+  await drain(process.stderr, err);
   return code;
 });
 
 const failed = (await Promise.all(runs)).filter((code) => code !== 0).length;
 if (failed) console.error(`${failed} of ${SHARDS} test shards failed`);
-process.exit(failed ? 1 : 0);
+// an exit code, not process.exit: a write to a pipe is still draining when a shard's output is
+// large, and exit would cut it off right where a failure is printed
+process.exitCode = failed ? 1 : 0;
+
+function drain(stream: NodeJS.WriteStream, text: string): Promise<void> {
+  return new Promise((done) => {
+    if (text.length === 0) return done();
+    stream.write(text, () => done());
+  });
+}

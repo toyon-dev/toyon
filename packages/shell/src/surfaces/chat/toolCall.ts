@@ -283,6 +283,12 @@ export function callPath(call: ToolCall): string {
   return filePathOf(call) || field(call, "path");
 }
 
+/** the sentence the agent wrote about the call, where it wrote one. The row prints it on one line
+ * and cuts it there, and the blocks under the row leave it out, so this is the only whole copy. */
+export function callDescription(call: ToolCall): string {
+  return field(call, "description");
+}
+
 /** the file an edit or a read names: Claude says file_path, OpenCode filepath, and an adapter that
  * titles the call in prose ("Read file '/x'") still names it in ACP's own `locations`. The file is
  * the row, not the sentence around it: relative, it is the same line Claude's read prints. */

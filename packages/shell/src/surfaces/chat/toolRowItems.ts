@@ -3,10 +3,10 @@ import { editorItems } from "../../state/actions/editor.ts";
 import { openFile } from "../../state/actions/file.ts";
 import { grouped, type MenuEntry, type MenuItem } from "../../ui/menu.ts";
 import type { ToolItem } from "./group.ts";
-import { callPath, relPath, toolLabel } from "./toolCall.ts";
+import { callDescription, callPath, relPath, toolLabel } from "./toolCall.ts";
 
 /** what a tool row in the transcript offers: the file it named, in the diff pane and elsewhere;
- * what it ran and what came back, as text; and the fold. The pane and the fold are different
+ * what it said it was doing, what it ran and what came back, as text; and the fold. The pane and the fold are different
  * verbs: the fold shows the row's own receipt inline, the pane shows the whole file below the
  * preview. A call on a file outside the worktree (a screenshot under /tmp) has nothing for the
  * pane, which reads inside the checkout alone, so it offers the editors on this machine and the
@@ -37,6 +37,12 @@ export function toolRowItems(
   }
   const copies: MenuItem[] = [];
   const command = toolLabel(head, roots).command;
+  // the row's line is cut at the edge and has no other copy; a description that is the command
+  // itself is the command's item
+  const description = callDescription(head);
+  if (description && description !== command) {
+    copies.push({ id: "copy-description", label: "copy description", onClick: () => copyText(description) });
+  }
   if (command) copies.push({ id: "copy-command", label: "copy command", onClick: () => copyText(command) });
   const output = tools
     .map((t) => t.output ?? "")

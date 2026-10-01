@@ -355,6 +355,31 @@ describe("landing", () => {
     expect((await git(w.repo, "log", "-1", "--format=%s", "main^2")).out).toBe("add the feature");
   });
 
+  test("a land mid-turn goes through on the tree the check saw, and is refused once the agent has written since", async () => {
+    const repoId = await registered();
+    const wt = await w.worktrees.create(repoId, "feature");
+    writeFileSync(join(wt.path, "feature.txt"), "x\n");
+    w.worktrees.setLanding(wt.id, {
+      at: 1,
+      check: "pass",
+      ready: true,
+      subject: "add the feature",
+      fingerprint: await treeFingerprint(wt.path),
+    });
+    (w.runtime.agentFor(wt.id) as unknown as FakeAgent).status = "working";
+    writeFileSync(join(wt.path, "half.txt"), "y\n");
+    const refused = await w.worktrees.land(wt.id);
+    expect(refused.result.ok).toBe(false);
+    expect(refused.result.message).toContain("changed files since the check");
+    // nothing was committed and the op is off the row
+    expect((await git(wt.path, "status", "--porcelain")).out).toContain("feature.txt");
+    expect(w.worktrees.shippingOf(wt.id)).toBeUndefined();
+    rmSync(join(wt.path, "half.txt"));
+    expect((await w.worktrees.land(wt.id)).result.ok).toBe(true);
+    expect(existsSync(join(w.repo, "feature.txt"))).toBe(true);
+    expect(existsSync(join(w.repo, "half.txt"))).toBe(false);
+  });
+
   test("a branch switched by hand in the worktree is the row's branch: a status reads it and a land lands it", async () => {
     const repoId = await registered();
     const wt = await w.worktrees.create(repoId, "feature");

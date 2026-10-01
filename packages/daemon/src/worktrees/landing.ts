@@ -1,9 +1,11 @@
 // Whether a worktree is ready to land, decided after every finished turn: the repo's check runs
 // in the worktree with its output on the transcript, and when it passes the agent's quick model is
 // asked for a commit message, whether the work reads as done, and one sentence on where it stands.
-// The check decides; the model's doubt is kept as a sentence. The verdict sits on the worktree
-// record until a new turn starts; a tree that changes under it goes stale (service.gitStatus), and
-// the same question can be asked again by hand, or the check alone re-run after a discard, which
+// The check decides; the model's doubt is kept as a sentence. The verdict is about the tree, not
+// the turn: one that says the work can land stands through a new turn for as long as the tree is
+// the one it saw, so a message that only asks, or sends the agent to work somewhere else, leaves
+// the word where it was. A tree that changes under it goes stale (service.gitStatus), and the
+// same question can be asked again by hand, or the check alone re-run after a discard, which
 // narrows the work without changing what the sentence and the message say about it. The sentence
 // is the turn's recap and stays with the turn.
 
@@ -83,11 +85,20 @@ export class LandingService {
 
   constructor(private d: LandingServiceDeps) {
     d.hub.on("turnSettled", (id, turn) => fireAndForget(id, this.settle(id, turn), "landing verdict"));
-    // a new turn is new work: whatever the last verdict said is about a tree that is changing
     d.hub.on("agentStatus", (id, status) => {
       this.note(id, status);
-      if (status === "working") this.clear(id);
+      if (status === "working") this.turnStarts(id);
     });
+  }
+
+  /** A new turn may be new work or none. A verdict that says the work can land stays: the
+   * fingerprint retires it the moment a file moves, and the turn's end reads the tree again.
+   * Anything else goes: a run in flight is about a tree that may be changing under it, and a
+   * failed check is what the turn is most likely here to fix. */
+  private turnStarts(worktreeId: string) {
+    if (!this.d.state.worktree(worktreeId)?.landing?.ready) return this.clear(worktreeId);
+    // the words being refreshed behind a standing verdict were about the turn before this one
+    this.judging.delete(worktreeId);
   }
 
   private note(worktreeId: string, status: AgentStatus) {
@@ -121,13 +132,77 @@ export class LandingService {
   private async settle(worktreeId: string, turn: LastTurn) {
     const wt = this.d.state.worktree(worktreeId);
     if (!wt || !canLand(wt)) return;
-    if (turn.end !== "done") return this.clear(worktreeId);
+    const held = await this.standing(wt);
+    if (turn.end !== "done") {
+      if (!held) this.clear(worktreeId);
+      return;
+    }
     if (!(await this.hasWork(wt))) {
       // nothing to judge and no message to write, but the turn still said something worth a line
       this.clear(worktreeId);
       return this.recapAnswer(wt, turn);
     }
+    if (held) return this.reword(wt, turn, held);
     await this.run(wt, { at: turn.at, ask: true, quiet: false });
+  }
+
+  /** the verdict that says the work can land, when the tree is still the one it was written about */
+  private async standing(wt: WorktreeInfo): Promise<Landing | undefined> {
+    const l = wt.landing;
+    if (!l?.ready) return undefined;
+    return l.fingerprint === (await treeFingerprint(wt.path)) ? l : undefined;
+  }
+
+  /** A finished turn that left the tree as the verdict saw it. The check's answer was about these
+   * same bytes, so it does not run again and the word never leaves the box. What the turn said can
+   * still settle or raise a doubt, and the turn is owed its sentence, so the question is asked
+   * again behind the standing verdict. The message stays the one already offered: the change it
+   * names has not moved, and a subject that rewrote itself after every reply would not read as
+   * the name of anything. */
+  private async reword(wt: WorktreeInfo, turn: LastTurn, held: Landing) {
+    if (!this.d.judge) return;
+    const worktreeId = wt.id;
+    const repo = this.d.state.requireRepo(wt.repoId);
+    this.judging.set(worktreeId, turn.at);
+    const started = Date.now();
+    const entries = this.d.transcript(worktreeId);
+    const prompt = landPrompt({
+      title: wt.title,
+      firstAsk: firstAskOf(entries),
+      turns: turnsSince(entries, 0),
+      diffStat: await diffSummary(wt.path, baseOf(repo)),
+      recentSubjects: await recentSubjects(wt.path, baseOf(repo)),
+    });
+    let verdict: LandVerdict | null = null;
+    try {
+      verdict = await this.d.judge(wt, prompt);
+    } catch (e) {
+      // the verdict as it stood is still true of the tree; only its words go unrefreshed
+      log.warn(worktreeId, "landing verdict kept its words: the question went unanswered", e);
+    }
+    if (this.stopping || this.judging.get(worktreeId) !== turn.at) return;
+    this.judging.delete(worktreeId);
+    const row = this.d.state.worktree(worktreeId);
+    // landed, discarded or checked again by hand while the question was out: not this verdict any more
+    const now = row?.landing;
+    if (!verdict || !row || !now?.ready || now.fingerprint !== held.fingerprint) return;
+    // the doubt is rewritten from this answer, and the tree was just read as the one it saw
+    const { why: _was, stale: _moved, ...rest } = now;
+    const caveat = await this.sharedMigration(wt, repo);
+    const doubt = [!verdict.ready && verdict.why ? verdict.why : "", caveat ?? ""].filter(Boolean).join(". ");
+    const landing: Landing = { ...rest, at: turn.at, ...(doubt ? { why: doubt } : {}) };
+    // a message is taken only where none was written, and with it goes the mark that one was owed
+    if (!landing.subject && verdict.subject) {
+      landing.subject = verdict.subject;
+      if (verdict.body) landing.body = verdict.body;
+      delete landing.unanswered;
+    }
+    if (row.lastTurn?.at === turn.at && verdict.recap) row.lastTurn.recap = { at: Date.now(), text: verdict.recap };
+    log.info(
+      worktreeId,
+      `landing: tree unchanged, check not run again${doubt ? ", doubted" : ""}, ${Date.now() - started}ms`,
+    );
+    this.d.worktrees.setLanding(worktreeId, landing);
   }
 
   /** The sentence for a turn that answered rather than changed anything. It is stamped only while

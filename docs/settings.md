@@ -28,7 +28,7 @@ The first open guesses a file from `package.json` and asks you to confirm it. Ot
 - **`teardown`**: commands run once, in order, when a copy is removed or archived, before its directory goes. A restored copy runs `setup` again.
 - **`run`**: the commands that keep running, by name. Each one is a process with its own terminal tab. A value is the command, or `{ "cmd": ..., "from": "trunk", "paths": [...] }` for one the main checkout runs for every copy; see "Sharing the backend".
 - **`preview`**: which of them the preview shows. `web` when there is one, otherwise the first.
-- **`check`**: a command that must exit 0 before a copy is offered to land. It runs in the copy after every finished turn, and its output shows in the chat.
+- **`check`**: a command that must exit 0 before a copy is offered to land. It runs in the copy after every finished turn, and its output shows in the chat. A pass stands through a turn that leaves the files as they were checked, so it does not run again for a message that changed nothing.
 - **`land`**: how work lands.
   - `route`: `merge` merges into main on your machine and pushes nothing (the default), `push` merges and then pushes main, and `pr` pushes the branch and opens a pull request on GitHub.
   - `method`: `merge` for a merge commit, `squash` for one commit, `rebase` for the commits as they are. Locally it defaults to a merge commit; on the `pr` route it follows what the repository allows, squash first.

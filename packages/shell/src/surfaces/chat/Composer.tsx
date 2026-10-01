@@ -286,11 +286,16 @@ export function Composer({
   const lastTurn = active?.worktree.lastTurn;
   const blank = !text.trim() && attachments.length === 0;
   const standing = !drafting && !greenfield && blank && !midTurn ? lastTurn : undefined;
-  // the landing verdict, read while the box is empty and the agent is not on it: once the work is
-  // done the empty box is where the next step is offered, and it goes with the first letter typed
-  // the way the recap does. A PR under review has no landing here, so it never shows one.
+  // the landing verdict, read while the box is empty: once the work is done the empty box is where
+  // the next step is offered, and it goes with the first letter typed the way the recap does. A PR
+  // under review has no landing here, so it never shows one.
   const verdict = !drafting && !greenfield && active && canLand(active.worktree) ? active.worktree.landing : undefined;
-  const landing = blank && !midTurn ? verdict : undefined;
+  // A turn under way does not take the word with it. A verdict that says the work can land is
+  // about the tree, and a message that only asks, or sends the agent to work somewhere else,
+  // leaves the tree as it was checked. The daemon marks the verdict stale the moment a file moves
+  // here, and then the word waits for the turn to end and the check to run on what it left.
+  const holds = !!verdict?.ready && !verdict.stale && !landingLine(verdict, dirty, quick, agentInfo?.name);
+  const landing = blank && (!midTurn || holds) ? verdict : undefined;
   // what would land: the uncommitted files, or the committed ones when the tree is clean
   const landCount = dirty || (git?.committed?.length ?? 0);
   // the verb's states, in order: landed and nothing since (the box offers the one thing left,
@@ -305,7 +310,10 @@ export function Composer({
   // work since the PR opened, uncommitted or committed here only: what the PR is missing, and
   // what a merge now would leave behind. It goes through the check and then up to the PR, so the
   // PR's own rungs (merge, view) wait until the branch on origin has all of it.
-  const prMissing = pr?.state === "open" && (dirty > 0 || unpushed > 0);
+  // Read off the row and not the rung above, which is only there at rest: the word for it is
+  // offered mid-turn too, while the verdict holds.
+  const prOpen = !hasLanded && active?.worktree.pr?.state === "open" ? active.worktree.pr : undefined;
+  const prMissing = !!prOpen && (dirty > 0 || unpushed > 0);
   // a PR closed without merging is the end of the branch too: its work is not on main, and the
   // one thing left is to close the row
   const prClosed = active?.worktree.pr?.state === "closed";
@@ -491,8 +499,8 @@ export function Composer({
   // route lands there
   const base = repo ? baseOf(repo) : "main";
   const shipHow =
-    prMissing && pr
-      ? `Commit, take ${base} in and push the branch; PR #${pr.number} takes the new commits.`
+    prMissing && prOpen
+      ? `Commit, take ${base} in and push the branch; PR #${prOpen.number} takes the new commits.`
       : `${describeLand(policy, repo?.defaultBranch)}.`;
   // The next step, when the work has one, is the first word of the empty box's line: a word in the
   // sentence, bright and never the accent, which reads as an error. What it rests on (the facts,
@@ -689,8 +697,8 @@ export function Composer({
     const stuck = verdict ? landingLine(verdict, dirty, quick, agentInfo?.name) : null;
     if (spawning || !canLand(active.worktree)) refuse("nothing to land from here");
     else if (hasLanded) refuse(`already landed on ${repo?.defaultBranch ?? "main"}`);
-    else if (midTurn) refuse("wait for the turn to end");
     else if (stuck) refuse(stuck);
+    else if (midTurn && (!verdict || verdict.stale)) refuse("wait for the turn to end");
     else if (verdict?.stale) refuse("the work changed since this was checked; check again first");
     else land();
   };

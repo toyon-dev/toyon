@@ -1490,8 +1490,8 @@ export class WorktreeService {
     this.d.hub.emit("worktreesChanged");
   }
 
-  /** the landing verdict for a worktree, or none: written after a turn, retired by a new turn or
-   * a tree that no longer matches it */
+  /** the landing verdict for a worktree, or none: written after a turn, marked stale by a tree
+   * that no longer matches it, and dropped by a new turn unless it says the work can land */
   setLanding(worktreeId: string, landing: Landing | undefined) {
     const wt = this.d.state.worktree(worktreeId);
     if (!wt || (wt.landing === undefined && landing === undefined)) return;
@@ -1615,12 +1615,26 @@ export class WorktreeService {
   async land(worktreeId: string, message?: string): Promise<{ result: ShipResult; archiveIds?: string[] }> {
     const { wt, repo } = this.landable(worktreeId, "land");
     // inside the op, so the press is the one out on the row from its first tick
-    const out = await this.ship(wt.id, "land", async () => {
+    const out = await this.ship(wt.id, "land", async (): Promise<{ result: ShipResult; archiveIds?: string[] }> => {
       await this.followBranch(wt);
+      const moved = await this.movedMidTurn(wt);
+      if (moved) return { result: moved };
       return this.landOp(wt, repo, message);
     });
     if (out.result.ok && out.archiveIds) this.noteLanded(wt, out.result.message, out.archiveIds);
     return out;
+  }
+
+  /** A land pressed mid-turn was offered on the verdict's tree, and the agent can write a file
+   * between the frame that offered the word and the press: the commit would take bytes no check
+   * saw. Refused here, where the tree is read under the op. At rest the tree moves only by the
+   * person's own hand, and what they land is theirs to say. */
+  private async movedMidTurn(wt: WorktreeInfo): Promise<ShipResult | null> {
+    const status = this.d.runtime.agentFor(wt.id)?.status;
+    if (status !== "working" && status !== "waiting") return null;
+    const l = wt.landing;
+    if (!l || l.fingerprint === (await treeFingerprint(wt.path))) return null;
+    return { ok: false, message: "the agent has changed files since the check: land once its turn ends" };
   }
 
   /** the word on a land that put the work on main, on the transcript the way a graft's marker is:

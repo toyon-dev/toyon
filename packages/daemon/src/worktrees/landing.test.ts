@@ -303,14 +303,100 @@ describe("LandingService", () => {
     expect(w.wt()?.landing?.subject).toBeUndefined();
   });
 
-  test("a turn that ended asking or stopped clears the verdict", async () => {
+  test("a turn that ended asking or stopped keeps the verdict on the tree it saw, and clears it once the tree moved", async () => {
     w = world({ verdict: { ready: true, subject: "add the feature" } });
     w.dirty();
     await w.settle();
-    expect(w.wt()?.landing?.ready).toBe(true);
+    const first = w.wt()?.landing;
+    expect(first?.ready).toBe(true);
     w.set.length = 0;
-    await w.settle("asking", 200);
+    w.hub.emit("agentStatus", "w1", "working");
+    await w.settle("asking", 200, false);
+    await Bun.sleep(60);
+    expect(w.set).toEqual([]);
+    expect(w.wt()?.landing).toEqual(first);
+    writeFileSync(join(w.wtPath, "more.txt"), "y\n");
+    await w.settle("stopped", 300);
     expect(w.wt()?.landing).toBeUndefined();
+  });
+
+  test("a new turn keeps a verdict that says the work can land, and one that leaves the tree alone runs no check", async () => {
+    const answers: LandVerdict[] = [
+      {
+        ready: false,
+        why: "a question is open",
+        recap: "Added the feature.",
+        subject: "add the feature",
+        body: "One file.",
+      },
+      { ready: true, recap: "Answered the question; nothing changed.", subject: "another subject" },
+    ];
+    w = world({ check: "bun run check", judge: async () => answers.shift() ?? null });
+    w.dirty();
+    await w.settle();
+    const first = w.wt()?.landing;
+    expect(first).toMatchObject({ check: "pass", ready: true, why: "a question is open", subject: "add the feature" });
+    w.set.length = 0;
+    w.hub.emit("agentStatus", "w1", "working");
+    expect(w.wt()?.landing).toEqual(first);
+    w.hub.emit("agentStatus", "w1", "idle");
+    await w.settle("done", 200);
+    // the check's answer was about these bytes, and the box never went back to pending
+    expect(w.checks).toEqual(["bun run check"]);
+    expect(w.set.every((l) => l?.check === "pass")).toBe(true);
+    // asked again for the doubt and the sentence; the message is the one already offered
+    expect(w.judged.length).toBe(2);
+    expect(w.wt()?.landing).toEqual({
+      at: 200,
+      check: "pass",
+      ready: true,
+      subject: "add the feature",
+      body: "One file.",
+      fingerprint: first?.fingerprint ?? "",
+    });
+    expect(w.wt()?.lastTurn?.recap?.text).toBe("Answered the question; nothing changed.");
+  });
+
+  test("a turn that moved the tree under a standing verdict gets the check and the message again", async () => {
+    const answers: LandVerdict[] = [
+      { ready: true, subject: "add the feature" },
+      { ready: true, subject: "add the feature and more" },
+    ];
+    w = world({ check: "bun run check", judge: async () => answers.shift() ?? null });
+    w.dirty();
+    await w.settle();
+    w.set.length = 0;
+    w.hub.emit("agentStatus", "w1", "working");
+    writeFileSync(join(w.wtPath, "more.txt"), "y\n");
+    w.hub.emit("agentStatus", "w1", "idle");
+    await w.settle("done", 200);
+    expect(w.checks).toEqual(["bun run check", "bun run check"]);
+    expect(w.set[0]).toMatchObject({ at: 200, check: "pending" });
+    expect(w.wt()?.landing).toMatchObject({ at: 200, check: "pass", subject: "add the feature and more" });
+    expect(w.wt()?.landing?.fingerprint).toBe(await treeFingerprint(w.wtPath));
+  });
+
+  test("words asked for behind a standing verdict are dropped once the work has landed or a new turn started", async () => {
+    let release: (v: LandVerdict) => void = () => {};
+    const slow = new Promise<LandVerdict>((r) => {
+      release = r;
+    });
+    const answers: Array<Promise<LandVerdict> | LandVerdict> = [{ ready: true, subject: "add the feature" }, slow];
+    w = world({ judge: async () => (await answers.shift()) ?? null });
+    w.dirty();
+    await w.settle();
+    w.set.length = 0;
+    await w.settle("done", 200, false);
+    for (let i = 0; i < 200 && w.judged.length < 2; i++) await Bun.sleep(10);
+    expect(w.judged.length).toBe(2);
+    // the land took the verdict with it while the question was out
+    delete w.wt()!.landing;
+    release({ ready: false, why: "a question is open", recap: "late" });
+    await slow;
+    await Bun.sleep(30);
+    expect(w.set).toEqual([]);
+    expect(w.wt()?.landing).toBeUndefined();
+    expect(w.wt()?.lastTurn?.recap).toBeUndefined();
   });
 
   test("a new turn starting clears it, and an answer to the old turn is dropped", async () => {

@@ -359,7 +359,8 @@ export interface WorktreeInfo {
    * turn has run. The rail's ring and the recap both read it. */
   lastTurn?: LastTurn;
   /** whether the work here is ready to land, and the message it would land with. Written after a
-   * finished turn once the check has run; gone when the tree changes or a new turn starts. */
+   * finished turn once the check has run. One that says the work can land stands through a new
+   * turn while the tree is the one it saw; any other goes when a turn starts. */
   landing?: Landing;
   /** the setup, check or commit out here, while one is, and a terminated one until the next of its
    * kind. Written at each change of status and stage, and kept across a restart so the next

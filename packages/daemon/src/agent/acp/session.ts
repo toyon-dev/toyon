@@ -834,11 +834,15 @@ export class AcpSession implements AgentAdapter {
     let resumed = false;
     if (sessionId && conn.resumeSession) {
       try {
+        // the same meta as session/new: the adapter builds a resumed session's query from this
+        // request alone, so a resume without it runs the agent on its bare preset with none of
+        // Toyon's rules
         const r = await conn.ctx.request(acp.methods.agent.session.resume, {
           sessionId,
           cwd: this.d.cwd,
           mcpServers: [],
           additionalDirectories,
+          ...(conn.spec.systemPrompt === "meta-append" ? { _meta: { systemPrompt: { append: SYSTEM_APPEND } } } : {}),
         });
         modes = r.modes;
         configOptions = r.configOptions;

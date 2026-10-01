@@ -1079,6 +1079,8 @@ describe("AcpSession", () => {
     expect(w.links).toHaveLength(2);
     expect(fake.resumes).toHaveLength(1);
     expect(fake.resumes[0]!.sessionId).toBe("s1");
+    // the resumed query is built from this request, so the rules ride on it as they did on new
+    expect(fake.resumes[0]!._meta).toEqual({ systemPrompt: { append: SYSTEM_APPEND } });
     expect(fake.loads).toHaveLength(0);
     expect(fake.newSessions).toHaveLength(1);
     expect(w.events.filter((e) => e.type === "text-delta").map((e) => (e as { text: string }).text)).toEqual([

@@ -19,6 +19,10 @@ const SRC = new URL("..", import.meta.url).pathname;
 const LOCAL_LAYERS: Record<string, { root: string; why: string }> = {
   ".dock-resize": { root: ".docks", why: "the grab strip over the seam between two docks" },
   ".rail:not(.pinned) .rail-panel": { root: ".docks", why: "the peek covers the chat dock and its grab strip" },
+  ".tool-row.spawn[open]::before": {
+    root: ".tool-row.spawn[open]",
+    why: "the spawn row's edge over its children's hover fills",
+  },
   ".pane-resize": { root: ".pane", why: "the drag strip over the pane's own head" },
 };
 

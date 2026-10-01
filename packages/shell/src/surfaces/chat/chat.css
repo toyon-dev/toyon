@@ -500,6 +500,15 @@
     /* the subagent's rows, inside the row that started them. They are ordinary rows and keep the
      negative margins above, so the run gives them back the log's own padding and gap: a child then
      sits in the same column as a top-level row, and its indent is its own summary's. */
+    /* the spawn row's edge runs the whole band, its children's rows included: each child's summary
+     is positioned for its rail and comes later in the page, so its hover fill (and an open child's
+     ground) would paint over the edge and cut a notch out of it at the row under the pointer. */
+    &.spawn[open] {
+      isolation: isolate;
+    }
+    &.spawn[open]::before {
+      z-index: 1;
+    }
     & .spawn-run {
       display: flex;
       flex-direction: column;

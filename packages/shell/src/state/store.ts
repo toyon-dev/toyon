@@ -988,6 +988,13 @@ export function isChatCentred(s: Pick<State, "repos" | "activeRepoId">): boolean
   return !!repo && runsNothing(repo);
 }
 
+/** what ⌘L does: an open chat dock shuts, a shut one opens with the caret in the box. A chat in the
+ * centre, a project's or an archived worktree's, is not a panel: there is nothing to close, only
+ * the box to reach. */
+export function chatChordAction(s: State): Action {
+  return s.layout.chat && !isChatCentred(s) && !s.archivedPage ? { a: "toggle-chat" } : { a: "focus-chat" };
+}
+
 /** the chat is about to be written in, so its dock opens; a chat in the centre has no dock to open,
  * and writing one into the layout would leave the project's remembered panels holding it */
 function revealChat(s: State): State {

@@ -15,7 +15,7 @@ import {
   stripAnsi,
 } from "@toyon/shared";
 import type { Store } from "./context.tsx";
-import { composerBoxOf, type PendingAttachment, type State, worktreeById } from "./store.ts";
+import { chatChordAction, composerBoxOf, type PendingAttachment, type State, worktreeById } from "./store.ts";
 
 /** what could not be attached, said under the box it was for */
 export const noticeIn = (store: Store, boxId: string, text: string) => store.dispatch({ a: "notice", id: boxId, text });
@@ -73,9 +73,9 @@ export function attachText(
 export type Taken = { worktreeId: string; text: string } & ({ source: PasteSource } | { name: string });
 
 /** ⌘L from the editor or a rendered document. A selection joins the box the chat is writing in, as
- * a chip named for its file, and the keyboard goes to the box either way. What is already waiting
- * there is not added twice, since pressing ⌘L again is how someone gets back to the box: the same
- * lines, or the same text out of the same document. */
+ * a chip named for its file, and the keyboard goes to the box with it. What is already waiting
+ * there is not added twice: the same lines, or the same text out of the same document. With
+ * nothing selected it is the chat's toggle, as ⌘L is everywhere else. */
 export function addToChat(store: Store, taken: Taken | null) {
   const s = store.getState();
   const active = worktreeById(s, s.activeId);
@@ -96,7 +96,7 @@ export function addToChat(store: Store, taken: Taken | null) {
     });
     if (!waiting) attachText(store, boxId, taken.text, from);
   }
-  store.dispatch({ a: "focus-chat" });
+  store.dispatch(taken ? { a: "focus-chat" } : chatChordAction(s));
 }
 
 /** The box the files tab's words go into: the composer on screen, for the worktree the tab shows.

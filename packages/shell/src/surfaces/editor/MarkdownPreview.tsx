@@ -153,9 +153,8 @@ export function MarkdownPreview({
       return;
     }
     // ⌘L with a selection is add-to-chat, as in the editor; with none it goes on to the window,
-    // where the chord reaches the box. Handled here it is also kept from the window: the box takes
-    // the caret before the window's listener runs, and the chord read from inside the box is a
-    // toggle that would close the chat just opened
+    // where the chord toggles the chat. Handled here it is also kept from the window, whose toggle
+    // would close the chat the selection just went to
     if (matchChord(e)?.id === "composer" && body.current) {
       const selected = selectedText(body.current);
       if (!selected) return;

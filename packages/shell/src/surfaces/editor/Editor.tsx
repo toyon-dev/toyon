@@ -552,7 +552,7 @@ export default function Editor({
     el.addEventListener("cut", tagCopy, true);
 
     // ⌘L gives the chat what is selected, named for the lines it covers, and with nothing selected
-    // only moves the keyboard to the box, as ⌘L does everywhere else. Monaco binds the key to
+    // toggles the chat, as ⌘L does everywhere else. Monaco binds the key to
     // expanding the line selection and keeps it from the window, so the editor answers it itself:
     // two actions split on whether there is a selection, and the one that takes it sits in the
     // context menu, which shows the key beside it to anyone who has not read the shortcuts.
@@ -573,8 +573,8 @@ export default function Editor({
       },
     });
     const focusAction = code.addAction({
-      id: "toyon.focus-chat",
-      label: "Focus Chat",
+      id: "toyon.toggle-chat",
+      label: "Toggle Chat",
       keybindings: chatKey,
       precondition: "!editorHasSelection",
       run: () => chatRef.current?.(file.path, null),

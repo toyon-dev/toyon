@@ -112,10 +112,10 @@ export const CHORDS: readonly Chord[] = [
   { id: "panel-tab-prev", key: "ArrowLeft", alt: true, textKeeps: true },
   { id: "panel-tab-next", key: "ArrowRight", alt: true, textKeeps: true },
   // ⌘L is Cursor's key for the chat, so it is the one a hand already reaches for, and the chat's only
-  // chord: from elsewhere it puts the caret in the box, opening the panel if it must, and from the
-  // box it closes the panel (app/keys.ts). From the editor it brings the selection along as Cursor's
-  // does (the editor answers it there, since Monaco keeps the key). A tab may lose it to the address
-  // bar, an installed app always sees it.
+  // chord: it opens the panel with the caret in the box, and shuts a panel that is open
+  // (app/keys.ts). From the editor it brings the selection along as Cursor's does (the editor
+  // answers it there, since Monaco keeps the key). A tab may lose it to the address bar, an
+  // installed app always sees it.
   { id: "composer", key: "l" },
   // ⌘⇧K next to ⌘K: one makes a worktree, the other shows the panel of them. No alias: ⌘⇧L was
   // one, and it is add-to-chat in Cursor and select-all-matches in VS Code and Zed, so it caught

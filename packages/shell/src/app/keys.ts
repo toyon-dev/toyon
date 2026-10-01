@@ -16,6 +16,7 @@ import {
   archivedPageOf,
   changesTabShown,
   changesTabStep,
+  chatChordAction,
   isChatCentred,
   isFirstRun,
   isSubPicker,
@@ -29,9 +30,6 @@ import { previewBus, togglePick } from "./previewBus.ts";
 import { createWalkPeek } from "./railPeek.ts";
 import { railWalk } from "./railWalk.ts";
 import { unseenJump } from "./unseenJump.ts";
-
-/** the keyboard is somewhere inside `selector` */
-const inside = (selector: string) => !!document.activeElement?.closest(selector);
 
 /** the chords a focused Monaco keeps for itself (see useChords) */
 const MONACO_OWNS = new Set<ChordId>(["design", "chats"]);
@@ -209,25 +207,22 @@ export function useChords() {
             // looked at, so there the window staying is the whole chord.
             if (!(s.zen && !isChatCentred(s)) && !s.overlay) closePane();
             break;
-          // the panel chords answer where the keyboard is. From anywhere else they open the panel if
-          // it is shut and hand it the keyboard (the changes list, the chat box, the terminal, the
-          // current worktree row); from inside that spot they close it. A press that shut a panel
-          // already on screen took it from a hand that had come to type in it.
-          // the two panel keys each name a tab, so a press from the other tab, or from the panel shut
-          // on it, lands on the one the key names rather than on wherever the panel was left. An
-          // archived page's one list is its changes list.
+          // the panel chords toggle, wherever the keyboard is: a panel on screen shuts, and a shut
+          // one opens with the keyboard in it (the changes list, the chat box, the terminal, the
+          // current worktree row).
+          // the two panel keys each name a tab, so a press from the other tab lands on the one the
+          // key names rather than shutting a panel that was not showing it. An archived page's one
+          // list is its changes list.
           case "changes":
             dispatch(
-              s.layout.changes &&
-                (changesTabShown(s) === "changes" || archivedPageOf(s) !== null) &&
-                inside(".changes-list")
+              s.layout.changes && (changesTabShown(s) === "changes" || archivedPageOf(s) !== null)
                 ? { a: "toggle-changes" }
                 : { a: "focus-changes", tab: "changes" },
             );
             break;
           case "files":
             dispatch(
-              s.layout.changes && changesTabShown(s) === "files" && inside(".tree")
+              s.layout.changes && changesTabShown(s) === "files"
                 ? { a: "toggle-changes" }
                 : { a: "focus-changes", tab: "files" },
             );
@@ -245,22 +240,16 @@ export function useChords() {
             );
             break;
           case "composer":
-            // a chat in the centre, a project's or an archived worktree's, is not a panel: there is
-            // nothing to close, only the box to reach
-            dispatch(
-              s.layout.chat && !isChatCentred(s) && !s.archivedPage && inside(".chat-input")
-                ? { a: "toggle-chat" }
-                : { a: "focus-chat" },
-            );
+            dispatch(chatChordAction(s));
             break;
           case "rail":
-            dispatch(s.railOpen && inside(".rail-list") ? { a: "toggle-rail" } : { a: "focus-rail" });
+            dispatch(s.railOpen ? { a: "toggle-rail" } : { a: "focus-rail" });
             break;
           case "keys":
             dispatch({ a: "toggle", overlay: { kind: "keys" } });
             break;
           case "terminal":
-            dispatch(s.layout.term && inside(".xterm") ? { a: "toggle-terminal" } : { a: "focus-terminal" });
+            dispatch(s.layout.term ? { a: "toggle-terminal" } : { a: "focus-terminal" });
             break;
           case "design":
             dispatch({ a: "toggle-design" });

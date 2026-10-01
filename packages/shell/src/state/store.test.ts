@@ -2583,14 +2583,22 @@ describe("add to chat", () => {
     ]);
     expect(store.getState().focusChat).toBe(asked + 1);
   });
-  test("the same lines again, or nothing selected, only move the keyboard", () => {
+  test("the same lines again only move the keyboard", () => {
     const store = storeOn();
     const asked = store.getState().focusChat;
     addToChat(store, { worktreeId: "a", source, text: "x" });
     addToChat(store, { worktreeId: "a", source, text: "x" });
-    addToChat(store, null);
     expect(store.getState().local.a?.attachments).toHaveLength(1);
-    expect(store.getState().focusChat).toBe(asked + 3);
+    expect(store.getState().focusChat).toBe(asked + 2);
+  });
+  test("nothing selected toggles the chat: an open dock shuts, a shut one opens with the keyboard", () => {
+    const store = storeOn();
+    const asked = store.getState().focusChat;
+    expect(store.getState().layout.chat).toBe(true);
+    addToChat(store, null);
+    expect(store.getState()).toMatchObject({ layout: { chat: false }, focusChat: asked });
+    addToChat(store, null);
+    expect(store.getState()).toMatchObject({ layout: { chat: true }, focusChat: asked + 1 });
   });
   test("lines from a worktree that is not on screen attach nothing", () => {
     const store = storeOn();

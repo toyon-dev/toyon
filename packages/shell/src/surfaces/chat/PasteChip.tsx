@@ -1,9 +1,12 @@
 import { attachmentLabel, type PasteSource, sourceLabel } from "@toyon/shared";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { pasteItems } from "../../state/actions/message.ts";
+import { Button } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { AttachmentChip } from "./AttachmentChip.tsx";
+import { renderMarkdown } from "./markdown.ts";
+import { pasteReading } from "./pasteReading.ts";
 
 /** A block of pasted text, collapsed. Same chip family as the picked element and the image: a
  * close button only when it can be removed, so the transcript's copy is inert. */
@@ -62,7 +65,7 @@ export function PasteChip({
       label={label}
       tip={preview || undefined}
       peek={canOpen ? <PastePeek text={text} href={href} /> : undefined}
-      full={canOpen ? <FullPaste text={text} href={href} /> : undefined}
+      full={canOpen ? <FullPaste text={text} href={href} path={at || undefined} /> : undefined}
       menu={(ui) => pasteItems({ text, href }, ui)}
       removeLabel="Remove attachment"
       onRemove={onRemove}
@@ -96,10 +99,52 @@ function usePasteText(held: string | undefined, href: string | undefined) {
   return { text: held ?? text, failed };
 }
 
-function FullPaste({ text: held, href }: { text?: string; href?: string }) {
+/** The paste at the window's size. Text that is markdown is read rendered, with the text as it
+ * went out one press away: the rendering is a guess about a clipboard, and what the agent was
+ * sent is the text. */
+function FullPaste({ text: held, href, path }: { text?: string; href?: string; path?: string }) {
   const { text, failed } = usePasteText(held, href);
+  const reading = useMemo(() => (text ? pasteReading(text, path) : "plain"), [text, path]);
+  const [picked, setPicked] = useState<boolean | null>(null);
   if (failed) return <p className="paste-full hint">Toyon could not read that paste back.</p>;
-  return <pre className="paste-full paste-text">{text}</pre>;
+  if (!text || reading === "plain") return <pre className="paste-full paste-text">{text}</pre>;
+  const rendered = picked ?? reading === "rendered";
+  return (
+    <div className="paste-full paste-doc">
+      <div className="paste-doc-head">
+        {/* names the reading it switches to, as the editor's view buttons do */}
+        <Button
+          variant="outline"
+          tone="quiet"
+          mono
+          className="deep-link"
+          onClick={() => setPicked(!rendered)}
+          data-tip={rendered ? "Text: read it as it was sent" : "Preview: read it rendered"}
+        >
+          <Icon name={rendered ? "text" : "book"} className="icon-inline" /> {rendered ? "text" : "preview"}
+        </Button>
+      </div>
+      {rendered ? <PasteMarkdown text={text} /> : <pre className="paste-doc-body paste-text">{text}</pre>}
+    </div>
+  );
+}
+
+function PasteMarkdown({ text }: { text: string }) {
+  const html = useMemo(() => renderMarkdown(text), [text]);
+  return (
+    // biome-ignore lint/a11y/useKeyWithClickEvents: the links inside are the controls; the root only routes their clicks
+    <div
+      className="paste-doc-body md md-preview"
+      // a link out opens beside the shell; any other would navigate the shell itself, and a paste
+      // names no folder for a relative one to be read from
+      onClick={(e) => {
+        const link = (e.target as Element).closest("a");
+        if (link && link.target !== "_blank") e.preventDefault();
+      }}
+      // biome-ignore lint/security/noDangerouslySetInnerHtml: html is DOMPurify-sanitized markdown output
+      dangerouslySetInnerHTML={{ __html: html }}
+    />
+  );
 }
 
 /** the peek clips what does not fit, so a paste of any length costs it only its opening */

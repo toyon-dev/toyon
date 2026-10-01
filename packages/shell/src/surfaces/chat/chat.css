@@ -1234,6 +1234,33 @@
     border-radius: var(--radius-lg);
     box-shadow: var(--elevation-overlay);
   }
+  /* a paste that reads as markdown: the card holds still and its body scrolls under the switch
+     between the two readings, so the switch is in reach at any depth. One width for both, so the
+     card does not jump when the reading changes. */
+  .paste-doc {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    max-width: var(--chat-measure);
+    padding: 0;
+    overflow: hidden;
+  }
+  .paste-doc-head {
+    flex: none;
+    display: flex;
+    justify-content: flex-end;
+    padding: 8px 8px 0;
+  }
+  .paste-doc-body {
+    min-height: 0;
+    overflow: auto;
+    margin: 0;
+    padding: 6px 16px 14px;
+    /* the head is the air above the title here, where the editor's pane has none */
+    &.md-preview {
+      padding: 0 32px 40px;
+    }
+  }
   /* the text itself as it arrived, breaks and all: the same face and wrap a process's output
      takes, because this is someone else's text and not toyon's own words */
   .paste-text {

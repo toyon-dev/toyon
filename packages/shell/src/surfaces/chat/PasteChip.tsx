@@ -62,9 +62,11 @@ export function PasteChip({
   // the composer still holds the text; the transcript has only where the daemon put it
   const canOpen = text !== undefined || href !== undefined;
   return (
+    // the tip trails the pointer: centred under a row this wide it lands on the row below
     <div
       className={cx("pick-chip paste-chip row row-sm", className)}
-      data-tip={preview || undefined}
+      data-tip={canOpen ? "Open full size" : preview || undefined}
+      data-tip-placement="follow"
       {...cm.contextMenu(() =>
         pasteItems(paste, { open: canOpen ? () => setFull(true) : undefined, remove: onRemove }),
       )}

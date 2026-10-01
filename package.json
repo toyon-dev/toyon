@@ -18,7 +18,7 @@
     "lint": "biome check .",
     "format": "biome format --write .",
     "test": "bun scripts/test.ts",
-    "check": "bun run typecheck && bun run lint && bun run test && bun run --cwd packages/bridge build"
+    "check": "bun scripts/check.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.12",

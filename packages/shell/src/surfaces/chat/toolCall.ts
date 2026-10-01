@@ -215,12 +215,18 @@ export function toolLabel(call: ToolCall, roots: string[] = []): ToolRowText {
   };
 }
 
+/** the sentence a spawn's call returns with when Claude Code started the subagent and did not wait */
+const ASYNC_SPAWN = /^Async agent launched/m;
+
 /** a spawn the agent sent to the background: its own call returns at once and the subagent goes
- * on without it. Claude says so in the brief; an agent that does not is read as waiting on its
- * spawn, which its open call says anyway. */
-export function isBackgroundSpawn(call: ToolCall): boolean {
+ * on without it. Claude says so in the brief, or only in what the call returns with: a harness
+ * that backgrounds every spawn takes no flag, and the brief of one reads like a foreground
+ * spawn's. An agent that says neither is read as waiting on its spawn, which its open call says
+ * anyway. */
+export function isBackgroundSpawn(call: ToolCall & { output?: string }): boolean {
+  if (!call.subagent) return false;
   const input = call.input as Record<string, unknown> | null;
-  return !!call.subagent && !!input && input.run_in_background === true;
+  return input?.run_in_background === true || (!!call.output && ASYNC_SPAWN.test(call.output));
 }
 
 /** what the row says while a kind's input streams in, in place of the path or command it has not

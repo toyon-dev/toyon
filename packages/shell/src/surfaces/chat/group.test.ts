@@ -535,6 +535,30 @@ describe("placeSpawns", () => {
     expect(placed(items)).toEqual({ flow: [1, 3, 0, 5], floating: [] });
   });
 
+  test("a spawn backgrounded with no flag in its brief is known by what its call returned", () => {
+    const launched = (id: string, description: string) =>
+      spawn(id, description, { output: `${description}\nAsync agent launched successfully.\nagentId: a1` });
+    const items = [
+      launched("task1", "Map the shell"),
+      launched("task2", "Map the daemon"),
+      text("Waiting on them."),
+      sub("task2"),
+      sub("task1"),
+    ];
+    expect(placed(items)).toEqual({ flow: [2], floating: ["task1", "task2"] });
+    expect(placed([...items, sub("task2")])).toEqual({ flow: [2], floating: ["task1", "task2"] });
+  });
+
+  test("settled spawns keep the order they were started in, whichever called last", () => {
+    const items = [bg("task1", "Map the shell"), bg("task2", "Map the daemon"), text("Waiting on them.")];
+    const settled = (tail: ChatItem[]) => placeSpawns(groupTools([...items, ...tail], ["/wt"]), new Set()).flow;
+    const order = (tail: ChatItem[]) => settled(tail).map((e) => e.at);
+    expect(order([sub("task1"), sub("task2")])).toEqual([2, 0, 1]);
+    expect(order([sub("task1"), sub("task2"), sub("task1")])).toEqual([2, 0, 1]);
+    // the later one is held under the earlier one's end, not lifted over what landed before it
+    expect(order([sub("task2"), text("One is back."), sub("task1")])).toEqual([2, 4, 0, 1]);
+  });
+
   test("a spawn that made no call sits where it was spawned", () => {
     const items = [spawn("task1", "Map the runtime"), text("Nothing came of it.")];
     expect(placed(items)).toEqual({ flow: [0, 1], floating: [] });

@@ -208,6 +208,7 @@ export function spawnsAtWork(items: ChatItem[]): Set<string> {
  * fan-out floats as a stack, in the order it was started. Once the subagent is done its row joins
  * the transcript where its work ended, at its newest call, which is where it was floating: a row
  * settling back to where it was spawned would jump up over everything that landed meanwhile.
+ * Settled rows keep the order they were started in too.
  *
  * A command running in the background floats the same way, for the same reason: its call is a
  * line the agent wrote minutes ago, and the shine on it is above everything said since, which is
@@ -219,14 +220,22 @@ export function placeSpawns(
 ): { flow: ChatEntry[]; floating: FloatingEntry[] } {
   const floating: FloatingEntry[] = [];
   const keyed: { key: number; entry: ChatEntry }[] = [];
+  // A spawn never settles above one started before it. Two subagents still calling once the turn
+  // is over (sent to the background, the agent done talking) are both in the flow with their ends
+  // leapfrogging, and keyed on its end alone each row would swap with the other on every call.
+  let floor = -1;
   for (const entry of entries) {
     if ("spawn" in entry) {
       if (atWork.has(entry.spawn.id)) floating.push(entry);
-      else keyed.push({ key: entry.end, entry });
+      else {
+        floor = Math.max(floor, entry.end);
+        keyed.push({ key: floor, entry });
+      }
     } else if ("tools" in entry && inBackground(entry)) floating.push(entry);
     else keyed.push({ key: entry.at, entry });
   }
-  // every key is an item's own index, so no two entries share one
+  // a spawn held to the floor shares its key with the one that set it; the sort is stable and the
+  // entries arrive in the order they started, so that order holds
   keyed.sort((a, b) => a.key - b.key);
   return { flow: keyed.map((k) => k.entry), floating };
 }

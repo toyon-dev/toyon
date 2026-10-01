@@ -68,24 +68,21 @@ export function policyLines(m: ManagedResolved, daemon: Health["managed"] | unde
 }
 
 /** The agent adapters the daemon runs. One ok line while each is the version this Toyon pins; an
- * adapter left on another version fails on its own line, because the daemon keeps launching the
- * old one and the only other trace is a line in the log. */
+ * adapter whose install failed gets its own failing line, because the daemon keeps launching the
+ * old one and the only other trace is a line in the log. One off the pin with no failure recorded
+ * is still installing: a fresh daemon reads that way for its first minute, so it stays ok. */
 export function agentLines(agents: NonNullable<Health["agents"]>): Line[] {
   const level = agents.filter((a) => a.installed === a.pinned);
   const lines: Line[] = [];
   if (level.length > 0) lines.push(line(true, "agents", level.map((a) => `${a.id} ${a.installed}`).join(", ")));
   for (const a of agents) {
     if (a.installed === a.pinned) continue;
-    const why = a.error ? `: ${a.error}` : "; it may still be installing";
-    lines.push(
-      line(
-        false,
-        "agents",
-        a.installed === null
-          ? `${a.id} ${a.pinned} is not installed${why}`
-          : `${a.id} runs ${a.installed}, not the pinned ${a.pinned}${why}. \`toyon restart\` tries again`,
-      ),
-    );
+    const state =
+      a.installed === null
+        ? `${a.id} ${a.pinned} is not installed`
+        : `${a.id} runs ${a.installed}, not the pinned ${a.pinned}`;
+    if (a.error) lines.push(line(false, "agents", `${state}: ${a.error}. \`toyon restart\` tries again`));
+    else lines.push(line(true, "agents", `${state}; it may still be installing`));
   }
   return lines;
 }

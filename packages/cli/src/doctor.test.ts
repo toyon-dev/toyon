@@ -75,9 +75,12 @@ describe("agentLines", () => {
       },
     ]);
   });
-  test("an adapter that never installed fails too, and one with no reason yet may still be installing", () => {
+  test("an adapter off the pin with no failure recorded is still installing, which is not a fault", () => {
     expect(agentLines([{ id: "claude", installed: null, pinned: "0.84.0" }])).toEqual([
-      { ok: false, label: "agents", detail: "claude 0.84.0 is not installed; it may still be installing" },
+      { ok: true, label: "agents", detail: "claude 0.84.0 is not installed; it may still be installing" },
+    ]);
+    expect(agentLines([{ id: "claude", installed: "0.75.1", pinned: "0.84.0" }])).toEqual([
+      { ok: true, label: "agents", detail: "claude runs 0.75.1, not the pinned 0.84.0; it may still be installing" },
     ]);
   });
 });

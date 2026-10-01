@@ -328,24 +328,45 @@ describe("UpdateService: a press on the failed chip", () => {
 });
 
 describe("UpdateService: a press on the version chip", () => {
-  test("asks the registry now, and what it finds is announced the usual way", async () => {
-    const { update, registryAsks } = make({ latest: "0.3.0" });
-    await update.checkNow();
+  test("asks the registry now, and a newer version installs at once, without waiting to settle", async () => {
+    const { update, registryAsks, installs, requests } = make({ latest: "0.3.0" });
+    expect(await update.checkNow()).toEqual({ registry: REGISTRY, latest: "0.3.0" });
     expect(registryAsks()).toBe(1);
-    expect(update.get()).toMatchObject({ latest: "0.3.0" });
+    await Bun.sleep(5);
+    expect(installs).toEqual([["npm", "install", "-g", "toyon@0.3.0"]]);
+    expect(requests()).toBe(1);
   });
 
-  test("a check that finds nothing says so in words and names the registry, since a mirror can lag", async () => {
+  test("a newer version found while a chat is replying waits for it, and an npx copy only says so", async () => {
+    const { update, working, installs } = make({ latest: "0.3.0" });
+    working.push("fix login");
+    await update.checkNow();
+    await Bun.sleep(5);
+    expect(installs).toEqual([]);
+    expect(update.get()?.restarting).toEqual(["fix login"]);
+    const npx = make({ latest: "0.3.0", method: "npx" });
+    await npx.update.checkNow();
+    await Bun.sleep(5);
+    expect(npx.requests()).toBe(0);
+    expect(npx.update.get()).toMatchObject({ latest: "0.3.0", restarting: null });
+  });
+
+  test("a check that finds nothing still answers and names the registry, since a mirror can lag", async () => {
     const { update } = make({ latest: "0.2.0" });
-    await expect(update.checkNow()).rejects.toThrow("Toyon 0.2.0 is the newest version artifacts.example lists");
+    expect(await update.checkNow()).toEqual({ registry: REGISTRY, latest: "0.2.0" });
+    expect(update.get()).toBeNull();
     const { update: off } = make();
-    await expect(off.checkNow()).rejects.toThrow(`Could not reach ${REGISTRY}`);
+    expect(await off.checkNow()).toEqual({ registry: REGISTRY, latest: null });
   });
 
-  test("a checkout is told it does not update itself, without asking the registry", async () => {
+  test("a checkout is answered on a press, and what is out never becomes an update for it", async () => {
     const { update, registryAsks } = make({ latest: "0.3.0", method: "none" });
-    await expect(update.checkNow()).rejects.toThrow("runs from a checkout");
+    await update.check();
     expect(registryAsks()).toBe(0);
+    expect(await update.checkNow()).toEqual({ registry: REGISTRY, latest: "0.3.0" });
+    expect(registryAsks()).toBe(1);
+    expect(update.get()).toBeNull();
+    expect(update.status().unreachable).toBeNull();
     expect(update.install()).toBe("none");
   });
 });

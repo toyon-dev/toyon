@@ -50,6 +50,7 @@ import type {
   ToolImage,
   ToolKind,
   TrunkStatus,
+  UpdateCheck,
   UpdateState,
   WorktreePages,
   WorktreeStatus,
@@ -740,6 +741,9 @@ export interface State {
   /** the Toyon installed on this machine is not the one running, or a restart someone asked for is
    * waiting on a chat to finish. Null the rest of the time. */
   update: UpdateState | null;
+  /** a check asked from the version chip: on its way, or what the registry said. The chip reads
+   * it, since the answer belongs where the press was. */
+  updateCheck: UpdateCheck | "asking" | null;
   /** the Toyon running, and how it was installed: the settings card's version row. Empty until
    * hello, which is before the page shows. */
   version: string;
@@ -886,6 +890,7 @@ export function initialState(opts: InitialOpts): State {
     self: null,
     rebuilt: false,
     update: null,
+    updateCheck: null,
     version: "",
     install: "none",
     registry: null,
@@ -1277,6 +1282,8 @@ export type Action =
   | { a: "toggle-rail" }
   /** the chat dock, and the rail with it, to the other side of the window */
   | { a: "toggle-chat-side" }
+  /** the version chip asked the registry, and waits on its answer */
+  | { a: "update-check" }
   /** pin the worktree panel if it is not, and ask its current row for the keyboard either way */
   | { a: "focus-rail" }
   /** the phone frame goes to a screen it is not on. The only action that moves `screen` on its
@@ -1775,6 +1782,8 @@ function reduce(s: State, action: Action): State {
       return { ...s, railOpen: !s.railOpen };
     case "toggle-chat-side":
       return { ...s, chatSide: s.chatSide === "left" ? "right" : "left" };
+    case "update-check":
+      return { ...s, updateCheck: "asking" };
     case "focus-rail":
       // asking for the list is asking for it on either frame. railOpen is the rail's pin, which is
       // per browser and not one of the panels a project remembers, so the phone may write it.
@@ -2017,6 +2026,8 @@ function onServer(s: State, msg: StoreServerMsg): State {
         visits: msg.visits,
         self: msg.self,
         update: msg.update,
+        // a check asked of the daemon that went away is never answered
+        updateCheck: s.updateCheck === "asking" ? null : s.updateCheck,
         version: msg.version,
         install: msg.install,
         registry: msg.registry,
@@ -2037,6 +2048,8 @@ function onServer(s: State, msg: StoreServerMsg): State {
       return { ...s, paired: true, pairings: s.pairings + 1 };
     case "update":
       return { ...s, update: msg.update };
+    case "update-checked":
+      return { ...s, updateCheck: msg.check };
     case "visits":
       return { ...s, visits: { ...s.visits, [msg.repoId]: msg.pages } };
     case "themes":
@@ -2396,6 +2409,8 @@ function onServer(s: State, msg: StoreServerMsg): State {
             ? null
             : page,
         pendingOpen: refused ? false : s.pendingOpen,
+        // a check that was refused has its answer in this frame, and the chip stops waiting
+        updateCheck: !id && s.updateCheck === "asking" ? null : s.updateCheck,
       };
       // the reason is read where the press was: a refused create on its view, a worktree's on its
       // chat, and anything else under the composer on screen

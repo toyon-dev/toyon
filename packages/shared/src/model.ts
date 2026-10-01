@@ -216,6 +216,15 @@ export interface UpdateState {
   restarting: string[] | null;
 }
 
+/** What the registry said to a check a person asked for. It answers the one who asked, whatever
+ * it found, since a check that finds nothing changes no state and the press would land in silence. */
+export interface UpdateCheck {
+  /** the registry asked, as npm's config names it: a company mirror can lag the public one */
+  registry: string;
+  /** the newest version it lists; null when it has no toyon or did not answer */
+  latest: string | null;
+}
+
 /** one directory offered by the project picker's path completion */
 export interface PathEntry {
   /** absolute path, tilde-collapsed for display and for typing back in */

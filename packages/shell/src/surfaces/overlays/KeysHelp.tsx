@@ -10,6 +10,7 @@ import { versionRow } from "../../app/versionRow.ts";
 import { agentItems } from "../../state/actions/agent.ts";
 import { projectItems } from "../../state/actions/project.ts";
 import { appearanceLabel } from "../../state/actions/settings.ts";
+import { versionItems } from "../../state/actions/version.ts";
 import { useDarkNow, useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { useActiveRepo } from "../../state/selectors.ts";
 import type { Action } from "../../state/store.ts";
@@ -129,10 +130,13 @@ export function KeysHelp() {
 
 /** The running version as a chip, one word after it when something is under way. A press does
  * the one thing the state is waiting on: restart onto an install, rebuild a checkout, reload this
- * page onto a build it watched finish, install what is out, or ask the registry. The daemon answers
- * a check that finds nothing in words, since the chip would otherwise not move. */
+ * page onto a build it watched finish, install what is out, or ask the registry. A check is
+ * answered on the chip itself, whatever it found, since the chip would otherwise not move. A
+ * right-click on the row has the pages about this version, which a press cannot reach. */
 function VersionRow() {
   const sock = useSock();
+  const dispatch = useDispatch();
+  const cm = useContextMenu("keys");
   const version = useStore((s) => s.version);
   const install = useStore((s) => s.install);
   const registry = useStore((s) => s.registry);
@@ -141,7 +145,8 @@ function VersionRow() {
   const rebuilt = useStore((s) => s.rebuilt);
   const repos = useStore((s) => s.repos);
   const updates = useStore((s) => s.managed.updates);
-  const row = versionRow(version, install, update, self, repos, rebuilt, registry);
+  const check = useStore((s) => s.updateCheck);
+  const row = versionRow(version, install, update, self, repos, rebuilt, registry, check);
   // a restart onto what is already installed, or a checkout's rebuild, is not an update: only the
   // presses that would ask the registry or install are the policy's to take away
   const managed = !updates && (row.act === "update" || row.act === "check");
@@ -150,16 +155,27 @@ function VersionRow() {
     else if (row.act === "reload") window.location.reload();
     else if (row.act === "rebuild" && self) sock?.send({ t: "run-after-land", repoId: self.repoId });
     else if (row.act === "update") sock?.send({ t: "update-now" });
-    else if (row.act === "check") sock?.send({ t: "check-update" });
+    else if (row.act === "check" && sock) {
+      dispatch({ a: "update-check" });
+      sock.send({ t: "check-update" });
+    }
   };
+  const menu = () =>
+    versionItems(
+      version,
+      row.act === "check" && !row.busy
+        ? { run: act, ...(managed ? { off: "managed by your organization" } : {}) }
+        : null,
+    );
   return (
-    <div className="keys-setting">
+    // on the row, not the chip: a disabled button answers no pointer event, a right-click included
+    <div className="keys-setting" {...cm.contextMenu(menu)}>
       <span className="keys-d">version</span>
       <Button
         variant="field"
         mono
         busy={row.busy}
-        disabled={row.act === null || managed}
+        disabled={managed}
         onClick={act}
         {...tip(managed ? "updates are managed by your organization" : row.text, undefined, { detail: row.detail })}
       >

@@ -11,7 +11,7 @@
 // Only the registry npm is set up for is ever asked or installed from. TOYON_UPDATES=off, or the
 // managed policy, turns all of it off for the machine.
 
-import { type InstallMethod, newer, registryHost, type UpdateState } from "@toyon/shared";
+import { type InstallMethod, newer, type UpdateCheck, type UpdateState } from "@toyon/shared";
 import { UserError } from "../core/errors.ts";
 import type { Hub } from "../core/hub.ts";
 import { fireAndForget, log } from "../core/log.ts";
@@ -154,16 +154,21 @@ export class UpdateService {
    * cannot update. */
   async check(): Promise<void> {
     if (this.d.method === "none" || this.d.managedBy) return;
+    await this.ask();
+  }
+
+  private async ask(): Promise<UpdateCheck> {
     const answer = await this.d.latest();
     this.registryName = answer.registry;
     if (answer.version === null) {
       this.unreachable = answer.registry;
-      return;
+      return { registry: answer.registry, latest: null };
     }
     this.unreachable = null;
     this.latest = newer(answer.version, this.d.running) ? answer.version : null;
     this.announce();
     await this.auto();
+    return { registry: answer.registry, latest: answer.version };
   }
 
   /** A press on the failed chip: try again now, without waiting for the machine to settle. */
@@ -180,20 +185,28 @@ export class UpdateService {
   }
 
   /** A press on the version chip while nothing is out: ask the registry now. A newer version
-   * announces itself and installs when the machine settles; every other answer is thrown, since a
-   * check that finds nothing announces nothing and the press would otherwise land in silence. The
-   * answer names the registry, because a company mirror can lag the public one by releases and
-   * "newest" then means newest it lists. */
-  async checkNow(): Promise<void> {
+   * starts installing without waiting for the machine to settle, since the person asking is at the
+   * machine and one press should not need a second; a chat mid-reply is still waited out. The
+   * answer goes back to whoever asked either way, since a check that finds nothing announces
+   * nothing and the press would otherwise land in silence. It names the registry, because a
+   * company mirror can lag the public one by releases and "newest" then means newest it lists. A
+   * checkout is answered too, without the answer becoming an update: it has nothing to install,
+   * and what is out is still worth knowing. */
+  async checkNow(): Promise<UpdateCheck> {
     this.refuseManaged();
     if (this.d.method === "none") {
-      throw new UserError(`Toyon ${this.d.running} runs from a checkout, which does not update itself`);
+      const answer = await this.d.latest();
+      return { registry: answer.registry, latest: answer.version };
     }
-    await this.check();
-    if (this.unreachable) throw new UserError(`Could not reach ${this.unreachable}`);
-    if (this.target() === null) {
-      throw new UserError(`Toyon ${this.d.running} is the newest version ${registryHost(this.registryName)} lists`);
+    const answer = await this.ask();
+    const target = this.target();
+    if (target !== null && !this.wanted && !(this.needsInstall() && this.d.command(target) === null)) {
+      this.failed = null;
+      this.wanted = true;
+      // not awaited: the answer leaves before the install, which the chip then follows in `update`
+      fireAndForget("update", this.proceed(), "update");
     }
+    return answer;
   }
 
   /** how this Toyon was installed, for hello: the settings card reads it under the version */

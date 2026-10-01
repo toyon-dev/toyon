@@ -33,6 +33,7 @@ import type {
   ThemePrefs,
   ToyonConfig,
   TrunkStatus,
+  UpdateCheck,
   UpdateState,
   WorktreeInfo,
   WorktreeStatus,
@@ -109,6 +110,8 @@ export type ServerMsg =
   | { t: "paired" }
   /** an install landed under the running daemon, or a requested restart moved on */
   | { t: "update"; update: UpdateState | null }
+  /** the answer to a `check-update`, to the tab that asked */
+  | { t: "update-checked"; check: UpdateCheck }
   /** the answer to a `zone`: whether the sun is down where that browser is, and when that changes.
    * Only the appearance mode that follows daylight reads it, and the shell asks again at `until`. */
   | { t: "daylight"; dark: boolean; until: number }
@@ -596,8 +599,8 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
    * mid-reply */
   z.object({ t: z.literal("update-now") }),
   /** a press on the version chip: ask the registry now. A newer version announces itself in
-   * `update`; anything else the check learns comes back as an error, since a check that finds
-   * nothing would otherwise say nothing. */
+   * `update`, and whatever the check found comes back as `update-checked`, since a check that
+   * finds nothing would otherwise say nothing. */
   z.object({ t: z.literal("check-update") }),
   /** fast-forward the main checkout (`worktreeId` is main's row) to its upstream */
   z.object({ t: z.literal("pull-main"), worktreeId: id }),

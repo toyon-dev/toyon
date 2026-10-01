@@ -940,6 +940,7 @@ export function Composer({
                     : { type: "highlight-clear" },
                 )
               }
+              worktreeId={id}
               onOpen={(path, line) => id && openSource(store, sock, id, path, line)}
               onRemove={detach}
             />

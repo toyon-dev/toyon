@@ -58,7 +58,7 @@ const ONE_OFFS = new Set([".jump-down", ".jump-up", ".rail-disc-head", ".bar-pat
 /**
  * A raw <button> is a row, or one of three inline controls that are text rather than a chip:
  * .pick-open is a link inside a chip's sentence, .dl.more the last line of a diff block, and the
- * rail's full-width row is above. .image-link is a row too: the whole attachment chip, pressed to
+ * rail's full-width row is above. .chip-link is a row too: the whole attachment chip, pressed to
  * open what it holds, and .tool-image is the picture a call returned, pressed the same way, as is
  * .editor-image, the pane's body when the file is a picture. A tab (.tab-btn) is a band in a
  * strip, and its box is the strip's the way a picker row's is the list's. Anything else pressable
@@ -72,7 +72,7 @@ const RAW_BUTTON_OK = new Set([
   "jump-down",
   "jump-up",
   "pick-open",
-  "image-link",
+  "chip-link",
   "tool-image",
   "editor-image",
   "dl",

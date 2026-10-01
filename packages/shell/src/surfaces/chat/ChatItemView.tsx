@@ -35,9 +35,10 @@ import { SentImageChip } from "./ImageChip.tsx";
 import { MentionText, openMention } from "./Mentions.tsx";
 import { useMarkdown } from "./markdown.ts";
 import { netOfCalls } from "./mergeDiffs.ts";
+import { Painted } from "./Painted.tsx";
 import { PasteChip } from "./PasteChip.tsx";
 import { PickChip } from "./PickChip.tsx";
-import { languageOf, type Piece, paintCode, paintDiff, pathInDiff } from "./syntax.ts";
+import { languageOf, paintCode, paintDiff, pathInDiff } from "./syntax.ts";
 import { normalizeThoughtMarkdown, thoughtLine, thoughtSteps } from "./thought.ts";
 import {
   callPath,
@@ -292,26 +293,6 @@ const NetPart = memo(function NetPart({
     </div>
   );
 });
-
-/** one line's worth of code: a span per run that carries a colour or a change, the rest as text.
- * A piece with neither is left bare rather than wrapped, which is most of a file. */
-function Painted({ pieces }: { pieces: Piece[] }) {
-  return (
-    <>
-      {pieces.map((p, i) => {
-        const cls = `${p.changed ? "ch " : ""}${p.scope ? `sy-${p.scope}` : ""}`.trim();
-        // biome-ignore lint/suspicious/noArrayIndexKey: pieces are positional and never reordered
-        if (!cls) return <Fragment key={i}>{p.text}</Fragment>;
-        return (
-          // biome-ignore lint/suspicious/noArrayIndexKey: same
-          <span key={i} className={cls}>
-            {p.text}
-          </span>
-        );
-      })}
-    </>
-  );
-}
 
 /** the band a line of the transcript folds out into: a call, a run of calls, a subagent's rows, or
  * a thought. `auto` is whether the row opens itself, which only the row the agent is on does, so
@@ -948,6 +929,7 @@ export const ChatItemView = memo(function ChatItemView({
                     className="in-chat"
                     tipText="Hover to highlight on the page"
                     onHover={(entering) => onPickHover?.(a, entering)}
+                    worktreeId={worktreeId}
                     onOpen={(path, line) => openSource(store, sock, worktreeId, path, line)}
                   />
                 ),

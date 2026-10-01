@@ -1,12 +1,7 @@
 import { attachmentLabel, type ImageRef } from "@toyon/shared";
-import { type RefObject, useEffect, useRef, useState } from "react";
 import { imageItems } from "../../state/actions/message.ts";
-import { IconButton } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
-import { Float } from "../../ui/Float.tsx";
-import { FullAttachment } from "../../ui/FullAttachment.tsx";
-import { useContextMenu } from "../../ui/menu.ts";
-import type { Placement, Rect } from "../../ui/place.ts";
+import { AttachmentChip } from "./AttachmentChip.tsx";
 import { fmtBytes } from "./images.ts";
 
 /** an attached image as a chip: thumbnail, its session number, name and size. In the composer it
@@ -31,116 +26,32 @@ export function ImageChip({
   onRemove?: () => void;
   className?: string;
 }) {
-  const body = (
-    <>
-      <img className="image-thumb" src={src} alt={name} width={40} height={40} />
-      <span className="pick-target">
-        <b>{attachmentLabel("image", n)}</b>
-        <span className="pick-file row-dim">
-          {" "}
-          · {name} · {width}×{height} · {fmtBytes(bytes)}
-        </span>
-      </span>
-    </>
-  );
-  const chip = useRef<HTMLDivElement | null>(null);
-  const [full, setFull] = useState(false);
-  const cm = useContextMenu("chat");
   return (
-    // the tip trails the pointer: centred under a row this wide it lands on the row below
-    <div
-      ref={chip}
-      className={cx("pick-chip image-chip row row-sm", className)}
-      data-tip="Open full size"
-      data-tip-placement="follow"
-      {...cm.contextMenu(() => imageItems(src, { open: () => setFull(true), remove: onRemove }))}
-    >
-      <button type="button" className="image-link" onClick={() => setFull(true)}>
-        {body}
-      </button>
-      {onRemove && <IconButton icon="close" label="Remove image" tone="quiet" onClick={onRemove} />}
-      <ImagePeek chip={chip} src={src} alt={name} width={width} height={height} />
-      {full && (
-        <FullAttachment owner="chat" onClose={() => setFull(false)} menu={() => imageItems(src)}>
-          <img src={src} alt={name} />
-        </FullAttachment>
-      )}
-    </div>
+    <AttachmentChip
+      className={cx("image-chip", className)}
+      label={
+        <>
+          <img className="image-thumb" src={src} alt={name} width={40} height={40} />
+          <span className="pick-target">
+            <b>{attachmentLabel("image", n)}</b>
+            <span className="pick-file row-dim">
+              {" "}
+              · {name} · {width}×{height} · {fmtBytes(bytes)}
+            </span>
+          </span>
+        </>
+      }
+      // the ratio holds the peek's shape until the image is in
+      peek={<img src={src} alt={name} style={{ aspectRatio: `${width} / ${height}` }} />}
+      full={<img src={src} alt={name} />}
+      menu={(ui) => imageItems(src, ui)}
+      removeLabel="Remove image"
+      onRemove={onRemove}
+    />
   );
 }
 
 /** the chip for an image that has been sent: the daemon serves it back by worktree + file */
 export function SentImageChip({ img, src }: { img: ImageRef; src: string }) {
   return <ImageChip className="in-chat" src={src} {...img} />;
-}
-
-/** a sweep across the chips should not flash each image up; the same wait a tooltip takes */
-const PEEK_DELAY = 150;
-
-/** where the peek stands: beside the transcript rather than beside the chip. Level with the chip, and
- * off the transcript's edge onto the preview, so it covers nothing in the chat it was opened from. */
-const PEEK_PLACEMENT: Placement = { side: "left", align: "center", offset: 12, flip: "side", margin: 8 };
-
-/**
- * The image at a size you can read, up while the chip is under the pointer. A float rather than the
- * thumb scaled in place: the transcript is a scroll box, so anything grown inside it is clipped at
- * its edge and covers the rows around it, and this one is a chat's width wide.
- */
-function ImagePeek({
-  chip: chipRef,
-  src,
-  alt,
-  width,
-  height,
-}: {
-  chip: RefObject<HTMLDivElement | null>;
-  src: string;
-  alt: string;
-  width: number;
-  height: number;
-}) {
-  const [open, setOpen] = useState(false);
-
-  useEffect(() => {
-    const chip = chipRef.current;
-    if (!chip) return;
-    let timer = 0;
-    const hide = () => {
-      window.clearTimeout(timer);
-      setOpen(false);
-    };
-    const enter = () => {
-      window.clearTimeout(timer);
-      timer = window.setTimeout(() => setOpen(true), PEEK_DELAY);
-    };
-    chip.addEventListener("mouseenter", enter);
-    chip.addEventListener("mouseleave", hide);
-    // a press opens the full image in a tab; the look at it has served
-    chip.addEventListener("mousedown", hide);
-    return () => {
-      window.clearTimeout(timer);
-      chip.removeEventListener("mouseenter", enter);
-      chip.removeEventListener("mouseleave", hide);
-      chip.removeEventListener("mousedown", hide);
-    };
-  }, [chipRef]);
-
-  // level with the chip, and as wide as the transcript around it, so "beside" means beside the
-  // transcript. A chip outside one stands for itself.
-  const anchor = (): Rect | null => {
-    const chip = chipRef.current;
-    if (!chip) return null;
-    const row = chip.getBoundingClientRect();
-    const log = chip.closest(".chat-log")?.getBoundingClientRect() ?? row;
-    return { left: log.left, right: log.right, top: row.top, bottom: row.bottom };
-  };
-
-  if (!open) return null;
-  return (
-    // tracked: the transcript scrolls under the pointer, and the box has its size only once the
-    // image is in; the ratio holds its shape until then
-    <Float className="image-peek" anchor={anchor} placement={PEEK_PLACEMENT} track>
-      <img src={src} alt={alt} style={{ aspectRatio: `${width} / ${height}` }} />
-    </Float>
-  );
 }

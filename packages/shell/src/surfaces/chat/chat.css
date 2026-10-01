@@ -1130,7 +1130,7 @@
     }
     /* a sent attachment opens what it holds (the image here, a paste's text through the daemon):
      the whole row is the control, laid out and coloured as the row, never as link text or a chip */
-    & .image-link {
+    & .chip-link {
       display: flex;
       align-items: center;
       gap: 8px;
@@ -1157,11 +1157,11 @@
       flex: none;
     }
   }
-  /* the hovered chip's image at a readable size, floated off the transcript's edge onto the preview
-     (ImageChip.tsx places it). The menu's box, as every float is; the image fills it to the frame. It
-     takes no pointer: clamped over the chat when there is no room beside it, it must not sit between
-     the pointer and the chip that opened it. */
-  .image-peek {
+  /* what the hovered chip stands for at a readable size, floated off the transcript's edge onto the
+     preview (ChipPeek.tsx places it). The menu's box, as every float is; an image fills it to the
+     frame. It takes no pointer: clamped over the chat when there is no room beside it, it must not
+     sit between the pointer and the chip that opened it. */
+  .chip-peek {
     pointer-events: none;
     background: var(--surface1);
     border: 1px solid var(--border1);
@@ -1172,6 +1172,10 @@
     &[data-side="right"] {
       animation-name: tooltip-in-right;
     }
+    /* still fetching, or unreadable: no box around nothing */
+    &:empty {
+      display: none;
+    }
     & img {
       display: block;
       width: auto;
@@ -1180,6 +1184,42 @@
       max-height: 70vh;
       background: var(--surface2);
     }
+  }
+  /* a paste's opening in the peek: a page's measure, and cut at the box where it runs long, since
+     nothing that takes no pointer can scroll */
+  .paste-peek {
+    max-width: min(76ch, 45vw);
+    max-height: 70vh;
+    overflow: hidden;
+    margin: 0;
+    padding: 10px 12px;
+  }
+  /* the source around a picked element's line in the peek. Long lines are cut at the box rather
+     than wrapped, so the indentation that says where the element sits keeps its shape; the line
+     the chip names takes the row's own mark for where you are. */
+  .pick-peek {
+    max-width: min(88ch, 45vw);
+    overflow: hidden;
+    margin: 0;
+    padding: 8px 0;
+    font: var(--type-mono-sm);
+    color: var(--text1);
+  }
+  .pick-peek-line {
+    display: block;
+    padding-inline: 12px;
+    white-space: pre;
+    &[data-state="current"] {
+      background: var(--element1);
+      --text1: var(--ink0);
+      --text2: var(--ink1);
+      color: var(--text1);
+    }
+  }
+  .pick-peek-n {
+    margin-right: 12px;
+    color: var(--text2);
+    user-select: none;
   }
   /* a paste at the window's size (in a FullAttachment, see full-attachment.css) is read rather
      than looked at, so it keeps a page's measure and a card under it */

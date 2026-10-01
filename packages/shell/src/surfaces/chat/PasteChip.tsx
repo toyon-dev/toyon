@@ -1,11 +1,9 @@
 import { attachmentLabel, type PasteSource, sourceLabel } from "@toyon/shared";
 import { useEffect, useState } from "react";
 import { pasteItems } from "../../state/actions/message.ts";
-import { IconButton } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
-import { FullAttachment } from "../../ui/FullAttachment.tsx";
 import { Icon } from "../../ui/Icon.tsx";
-import { useContextMenu } from "../../ui/menu.ts";
+import { AttachmentChip } from "./AttachmentChip.tsx";
 
 /** A block of pasted text, collapsed. Same chip family as the picked element and the image: a
  * close button only when it can be removed, so the transcript's copy is inert. */
@@ -56,45 +54,31 @@ export function PasteChip({
       </span>
     </>
   );
-  const [full, setFull] = useState(false);
-  const cm = useContextMenu("chat");
-  const paste = { text, href };
   // the composer still holds the text; the transcript has only where the daemon put it
   const canOpen = text !== undefined || href !== undefined;
   return (
-    // the tip trails the pointer: centred under a row this wide it lands on the row below
-    <div
-      className={cx("pick-chip paste-chip row row-sm", className)}
-      data-tip={canOpen ? "Open full size" : preview || undefined}
-      data-tip-placement="follow"
-      {...cm.contextMenu(() =>
-        pasteItems(paste, { open: canOpen ? () => setFull(true) : undefined, remove: onRemove }),
-      )}
-    >
-      {canOpen ? (
-        <button type="button" className="image-link" onClick={() => setFull(true)}>
-          {label}
-        </button>
-      ) : (
-        label
-      )}
-      {onRemove && <IconButton icon="close" label="Remove attachment" tone="quiet" onClick={onRemove} />}
-      {full && canOpen && (
-        <FullAttachment owner="chat" onClose={() => setFull(false)} menu={() => pasteItems(paste)}>
-          {text !== undefined ? <pre className="paste-full paste-text">{text}</pre> : href && <FullPaste href={href} />}
-        </FullAttachment>
-      )}
-    </div>
+    <AttachmentChip
+      className={cx("paste-chip", className)}
+      label={label}
+      tip={preview || undefined}
+      peek={canOpen ? <PastePeek text={text} href={href} /> : undefined}
+      full={canOpen ? <FullPaste text={text} href={href} /> : undefined}
+      menu={(ui) => pasteItems({ text, href }, ui)}
+      removeLabel="Remove attachment"
+      onRemove={onRemove}
+    />
   );
 }
 
-/** The text the daemon kept, read back the way it went out. Fetched when the box opens rather than
- * held with the row: a transcript can carry a hundred of these and none of them is being read. */
-function FullPaste({ href }: { href: string }) {
-  const [text, setText] = useState<string | null>(null);
+/** The text the daemon kept, read back the way it went out. Fetched when it is first shown rather
+ * than held with the row: a transcript can carry a hundred of these and none of them is being read.
+ * The composer still holds its own, and that is used as it stands. */
+function usePasteText(held: string | undefined, href: string | undefined) {
+  const [text, setText] = useState<string | null>(held ?? null);
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
+    if (held !== undefined || !href) return;
     let live = true;
     fetch(href)
       .then((r) => (r.ok ? r.text() : Promise.reject(new Error(String(r.status)))))
@@ -107,8 +91,24 @@ function FullPaste({ href }: { href: string }) {
     return () => {
       live = false;
     };
-  }, [href]);
+  }, [held, href]);
 
+  return { text: held ?? text, failed };
+}
+
+function FullPaste({ text: held, href }: { text?: string; href?: string }) {
+  const { text, failed } = usePasteText(held, href);
   if (failed) return <p className="paste-full hint">Toyon could not read that paste back.</p>;
   return <pre className="paste-full paste-text">{text}</pre>;
+}
+
+/** the peek clips what does not fit, so a paste of any length costs it only its opening */
+const PEEK_CHARS = 20_000;
+
+/** the opening of the paste beside the transcript; nothing until the text is in, and nothing when
+ * it cannot be read: the press that opens it in full is where that is said */
+function PastePeek({ text: held, href }: { text?: string; href?: string }) {
+  const { text } = usePasteText(held, href);
+  if (!text) return null;
+  return <pre className="paste-peek paste-text">{text.slice(0, PEEK_CHARS)}</pre>;
 }

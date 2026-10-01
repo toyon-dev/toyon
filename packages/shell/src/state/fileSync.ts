@@ -87,6 +87,8 @@ const keyOf = (f: { worktreeId: string; path: string; ref?: string }) => `${f.wo
 
 export class FileSync {
   private files = new Map<string, Tracked>();
+  /** reads asked for a look at a file nobody has open, by the seq each went out with */
+  private looks = new Map<number, (text: string | null) => void>();
 
   constructor(
     private d: {
@@ -128,6 +130,12 @@ export class FileSync {
 
   /** a file frame the socket routed here rather than to the store */
   receive(msg: FileServerMsg) {
+    const look = msg.t === "file-read" ? this.looks.get(msg.seq) : undefined;
+    if (look && msg.t === "file-read") {
+      this.looks.delete(msg.seq);
+      look(msg.error || msg.binary || msg.tooLarge || msg.version === null ? null : msg.after);
+      return;
+    }
     const t = this.files.get(keyOf(msg));
     if (!t) return;
     if (msg.t === "file-blame") {
@@ -140,6 +148,18 @@ export class FileSync {
     if (msg.t === "file-read") this.read(t, msg);
     else if (out.write !== undefined) this.written(t, out.write, msg);
     this.next(t);
+  }
+
+  /** A file's text as the disk has it, for something that shows it without opening it (a chip's
+   * look at the source it names). One read, outside the open files and their one-request rule;
+   * null when there is no text to show. A socket that drops under it answers null. */
+  look(worktreeId: string, path: string): Promise<string | null> {
+    if (!this.d.store.getState().connected) return Promise.resolve(null);
+    const seq = nextSeq();
+    return new Promise((resolve) => {
+      this.looks.set(seq, resolve);
+      this.d.send({ t: "read-file", worktreeId, path, seq });
+    });
   }
 
   bind(file: FileRef): EditorSync {
@@ -237,6 +257,8 @@ export class FileSync {
 
   /** the socket went down: whatever was out will not be answered, and a write it carried is still owed */
   private dropped() {
+    for (const done of this.looks.values()) done(null);
+    this.looks.clear();
     for (const t of this.files.values()) {
       if (!t.out) continue;
       if (t.out.write !== undefined) t.pending ??= t.out.write;

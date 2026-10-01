@@ -449,3 +449,29 @@ describe("who last touched each line", () => {
     expect(h.count("blame-file")).toBe(2);
   });
 });
+
+describe("a look at a file nobody has open", () => {
+  test("answers with the disk's text and leaves the editor alone", async () => {
+    const h = harness();
+    const text = h.sync.look("a", "src/App.tsx");
+    h.read({ after: "one\ntwo" });
+    expect(await text).toBe("one\ntwo");
+    expect(h.store.getState().editor).toBeNull();
+  });
+  test("has nothing to show for a file that is missing, binary or unreadable", async () => {
+    const h = harness();
+    const gone = h.sync.look("a", "gone.ts");
+    h.read({ version: null });
+    const binary = h.sync.look("a", "logo.png");
+    h.read({ binary: true });
+    const failed = h.sync.look("a", "x.ts");
+    h.read({ error: "unknown worktree" });
+    expect([await gone, await binary, await failed]).toEqual([null, null, null]);
+  });
+  test("is answered with nothing when the socket drops under it", async () => {
+    const h = harness();
+    const text = h.sync.look("a", "src/App.tsx");
+    h.store.dispatch({ a: "connected", v: false });
+    expect(await text).toBeNull();
+  });
+});

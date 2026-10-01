@@ -461,6 +461,34 @@ describe("mapUpdate", () => {
     ]);
   });
 
+  test("Claude's spawn is known by the tool's name, with no flag beside it", () => {
+    const flags = run([
+      {
+        sessionUpdate: "tool_call",
+        toolCallId: "a",
+        name: "Agent",
+        title: "Task",
+        kind: "think",
+        status: "pending",
+        rawInput: {},
+        _meta: { claudeCode: { toolName: "Agent" } },
+      },
+      {
+        sessionUpdate: "tool_call",
+        toolCallId: "b",
+        name: "Read",
+        title: "Read /a",
+        kind: "read",
+        status: "pending",
+        _meta: { claudeCode: { toolName: "Read" } },
+      },
+    ]);
+    expect(flags.map((e) => (e.type === "tool-start" ? [e.toolId, e.subagent] : null))).toEqual([
+      ["a", true],
+      ["b", undefined],
+    ]);
+  });
+
   test("an agent that stamps no subagent meta gets neither field", () => {
     expect(
       run([{ sessionUpdate: "tool_call", toolCallId: "p", title: "Read", kind: "read", status: "pending" }]),

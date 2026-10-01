@@ -67,7 +67,10 @@ function spawnOf(meta: Record<string, unknown> | null | undefined): { parentTool
   // codex's marker is the thread it describes, not a flag. Reading it as one would put the mark on
   // anything that ever lands under that key, so the shape has to be there as well as the key.
   const codex = asRecord(asRecord(meta).codex).subagent;
-  const subagent = claude.subagent === true || Object.keys(asRecord(codex)).length > 0;
+  // Claude's adapter sets its own spawn flag for one client only, so the tool's name is what every
+  // client gets: the two names Claude Code has given the tool that starts a subagent
+  const spawns = claude.toolName === "Agent" || claude.toolName === "Task";
+  const subagent = spawns || claude.subagent === true || Object.keys(asRecord(codex)).length > 0;
   return { ...(parentToolId ? { parentToolId } : {}), ...(subagent ? { subagent: true } : {}) };
 }
 

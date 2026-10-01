@@ -6,7 +6,8 @@ import {
   describeManaged,
   resolveTheme,
 } from "@toyon/shared";
-import { versionRow } from "../../app/versionRow.ts";
+import { useEffect } from "react";
+import { CHECK_SETTLE_MS, versionRow } from "../../app/versionRow.ts";
 import { agentItems } from "../../state/actions/agent.ts";
 import { projectItems } from "../../state/actions/project.ts";
 import { appearanceLabel } from "../../state/actions/settings.ts";
@@ -131,8 +132,9 @@ export function KeysHelp() {
 /** The running version as a chip, one word after it when something is under way. A press does
  * the one thing the state is waiting on: restart onto an install, rebuild a checkout, reload this
  * page onto a build it watched finish, install what is out, or ask the registry. A check is
- * answered on the chip itself, whatever it found, since the chip would otherwise not move. A
- * right-click on the row has the pages about this version, which a press cannot reach. */
+ * answered on the chip itself, whatever it found, since the chip would otherwise not move, and
+ * an answer with nothing to do goes back to the version once it has been read. A right-click on
+ * the row has the pages about this version, which a press cannot reach. */
 function VersionRow() {
   const sock = useSock();
   const dispatch = useDispatch();
@@ -150,6 +152,17 @@ function VersionRow() {
   // a restart onto what is already installed, or a checkout's rebuild, is not an update: only the
   // presses that would ask the registry or install are the policy's to take away
   const managed = !updates && (row.act === "update" || row.act === "check");
+  const settling = row.settles && check && check !== "asking" ? check : null;
+  useEffect(() => {
+    if (!settling) return;
+    const settle = () => dispatch({ a: "update-check-settle", check: settling });
+    const timer = setTimeout(settle, CHECK_SETTLE_MS);
+    // closing the card settles it too, so an old answer is not what the chip opens on
+    return () => {
+      clearTimeout(timer);
+      settle();
+    };
+  }, [settling, dispatch]);
   const act = () => {
     if (row.act === "restart") sock?.send({ t: "restart-daemon" });
     else if (row.act === "reload") window.location.reload();

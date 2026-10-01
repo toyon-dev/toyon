@@ -47,13 +47,14 @@ describe("versionRow", () => {
     expect(checked("npm", "asking")).toMatchObject({ value: "0.2.0 checking", busy: true });
     const registry = "https://artifacts.example/api/npm/npm-packages/";
     const newest = checked("npm", { registry, latest: "0.2.0" });
-    expect(newest).toMatchObject({ value: "0.2.0 newest", act: "check", busy: false });
+    expect(newest).toMatchObject({ value: "0.2.0 up to date", act: "check", busy: false, settles: true });
     expect(newest.text).toContain("newest version artifacts.example lists");
     const silent = checked("npm", { registry, latest: null });
-    expect(silent.value).toBe("0.2.0 no answer");
+    expect(silent).toMatchObject({ value: "0.2.0 no answer", settles: true });
     expect(silent.text).toContain("Could not reach artifacts.example");
     const out = checked("none", { registry, latest: "0.3.0" });
     expect(out.value).toBe("0.3.0 out");
+    expect(out.settles).toBeUndefined();
     expect(out.text).toContain("pull to get it");
   });
 

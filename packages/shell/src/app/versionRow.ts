@@ -23,6 +23,9 @@ export interface VersionRow {
   act: "restart" | "rebuild" | "reload" | "update" | "check";
   /** something is under way, so the chip shows it and takes no press */
   busy: boolean;
+  /** the registry's answer leaves nothing to do, so the chip goes back to the bare version once
+   * it has been read */
+  settles?: true;
 }
 
 /** how this copy came to be and where a newer one comes from. The registry is named because a
@@ -46,8 +49,12 @@ export const REPO_URL = "https://github.com/toyon-dev/toyon";
 export const releaseUrl = (version: string): string => `${REPO_URL}/releases/tag/v${version}`;
 export const LATEST_RELEASE_URL = `${REPO_URL}/releases/latest`;
 
-/** The chip between a check and the next thing to happen: the registry's answer stays on it, in
- * the place the press was, until an update or another check replaces it. */
+/** how long an answer that leaves nothing to do stays on the chip */
+export const CHECK_SETTLE_MS = 4_000;
+
+/** The chip between a check and the next thing to happen: the registry's answer is read on it, in
+ * the place the press was. A newer version stays until an update or another check replaces it;
+ * the other answers settle back to the version. */
 function checkedRow(version: string, install: InstallMethod, registry: string | null, check: UpdateCheck | "asking") {
   if (check === "asking") {
     return {
@@ -60,7 +67,12 @@ function checkedRow(version: string, install: InstallMethod, registry: string | 
   const from = registryHost(check.registry);
   const row = { act: "check" as const, busy: false };
   if (check.latest === null) {
-    return { ...row, value: `${version} no answer`, text: `Could not reach ${from}. Press to ask again` };
+    return {
+      ...row,
+      value: `${version} no answer`,
+      text: `Could not reach ${from}. Press to ask again`,
+      settles: true as const,
+    };
   }
   if (newer(check.latest, version)) {
     const how =
@@ -73,8 +85,9 @@ function checkedRow(version: string, install: InstallMethod, registry: string | 
   }
   return {
     ...row,
-    value: `${version} newest`,
+    value: `${version} up to date`,
     text: `Toyon ${version} is the newest version ${from} lists. Press to ask again`,
+    settles: true as const,
   };
 }
 

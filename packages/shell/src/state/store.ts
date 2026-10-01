@@ -1284,6 +1284,7 @@ export type Action =
   | { a: "toggle-chat-side" }
   /** the version chip asked the registry, and waits on its answer */
   | { a: "update-check" }
+  | { a: "update-check-settle"; check: UpdateCheck }
   /** pin the worktree panel if it is not, and ask its current row for the keyboard either way */
   | { a: "focus-rail" }
   /** the phone frame goes to a screen it is not on. The only action that moves `screen` on its
@@ -1784,6 +1785,9 @@ function reduce(s: State, action: Action): State {
       return { ...s, chatSide: s.chatSide === "left" ? "right" : "left" };
     case "update-check":
       return { ...s, updateCheck: "asking" };
+    case "update-check-settle":
+      // only the answer that was on the chip: a check asked since then is not this one's to clear
+      return s.updateCheck === action.check ? { ...s, updateCheck: null } : s;
     case "focus-rail":
       // asking for the list is asking for it on either frame. railOpen is the rail's pin, which is
       // per browser and not one of the panels a project remembers, so the phone may write it.

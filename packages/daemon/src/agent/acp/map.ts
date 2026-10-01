@@ -21,7 +21,7 @@ import {
 } from "@toyon/shared";
 import { log } from "../../core/log.ts";
 import { toolImage } from "../attachments.ts";
-import { type BackgroundStart, backgroundStart } from "./background.ts";
+import { type BackgroundStart, backgroundStart, spawnDetached } from "./background.ts";
 import { unifiedDiff } from "./diff.ts";
 import { currentValues, readOptions } from "./options.ts";
 
@@ -38,6 +38,8 @@ export interface ToolMemo {
   writing: boolean;
   /** the call that spawned this one, so a subagent's stream is read apart from the main agent's */
   parent?: string;
+  /** the call starts a subagent, so its return may be only the launch (endOf) */
+  spawns?: boolean;
 }
 
 /** per-session memory of tool calls; cleared when the session's process goes away */
@@ -218,6 +220,7 @@ export function mapUpdate(
         ended: false,
         writing: isWrittenKind(head.kind) && emptyInput(input),
         ...(spawn.parentToolId ? { parent: spawn.parentToolId } : {}),
+        ...(spawn.subagent ? { spawns: true } : {}),
       };
       memos.set(update.toolCallId, memo);
       out.push({
@@ -250,6 +253,7 @@ export function mapUpdate(
           ended: false,
           writing: isWrittenKind(update.kind ?? undefined) && emptyInput(input),
           ...(spawn.parentToolId ? { parent: spawn.parentToolId } : {}),
+          ...(spawn.subagent ? { spawns: true } : {}),
         };
         memos.set(update.toolCallId, memo);
         out.push({
@@ -341,13 +345,24 @@ function endOf(
     if (start && background(toolId, start, memo.input)) return { type: "tool-update", toolId, background: true };
   }
   const images = sink ? toolImages(memo.content, sink) : [];
+  // read off the whole of what the call returned: the output above is cut to length, and a spawn's
+  // opens with its brief, which is often longer than the cut
+  const detached = status === "completed" && !!memo.spawns && spawnDetached(wholeText(memo.content, memo.rawOutput));
   return {
     type: "tool-end",
     toolId,
     output,
     isError: status === "failed" || exitCodeOf(memo.rawOutput) > 0,
+    ...(detached ? { detached: true } : {}),
     ...(images.length ? { images } : {}),
   };
+}
+
+/** every word the call returned, uncut */
+function wholeText(content: ToolCallContent[], rawOutput: unknown): string {
+  const parts = content.flatMap((c) => (c.type === "content" && c.content.type === "text" ? [c.content.text] : []));
+  if (typeof rawOutput === "string") parts.push(rawOutput);
+  return parts.join("\n");
 }
 
 /** the pictures among a call's content blocks (a read of a screenshot is one image block and no

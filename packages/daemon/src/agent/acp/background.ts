@@ -32,6 +32,13 @@ export function backgroundStart(input: unknown, output: string): BackgroundStart
   return m ? { taskId: m[1]!, file: m[2]! } : null;
 }
 
+/** A spawn's call returned with the subagent launched rather than finished: Claude Code runs a
+ * subagent in the background unless the call asks it to wait, so the brief carries no flag for
+ * the common case, and the sentence the call returns with is the only thing that says so. */
+export function spawnDetached(output: string): boolean {
+  return output.includes("Async agent launched successfully");
+}
+
 export function claudeConfigDir(): string {
   return process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
 }

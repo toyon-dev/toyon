@@ -103,6 +103,8 @@ export type ChatItem =
       parentToolId?: string;
       /** this call is the spawn itself (a Task), so its children have somewhere to sit */
       subagent?: boolean;
+      /** the spawn's call returned with its subagent launched, not finished */
+      detached?: boolean;
       /** the call's own process has exited and what it started is still running: the row is not
        * done, and says why not */
       background?: boolean;
@@ -2555,6 +2557,7 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
         output: event.output,
         isError: event.isError,
         ...(event.images?.length ? { images: event.images } : {}),
+        ...(event.detached ? { detached: true } : {}),
         done: true,
       };
       return next;

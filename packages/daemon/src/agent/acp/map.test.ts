@@ -364,6 +364,37 @@ describe("mapUpdate", () => {
     ]);
   });
 
+  test("a spawn that returns with its subagent only launched ends detached", () => {
+    // the call returns its brief and then the sentence, and a brief outruns the cut on the output
+    const brief = "Map the daemon. ".repeat(400);
+    const ends = (toolName: string, text: string) =>
+      run([
+        {
+          sessionUpdate: "tool_call",
+          toolCallId: "task1",
+          title: "Task",
+          kind: "think",
+          status: "pending",
+          rawInput: { description: "Map the daemon", prompt: brief },
+          _meta: { claudeCode: { toolName } },
+        },
+        {
+          sessionUpdate: "tool_call_update",
+          toolCallId: "task1",
+          status: "completed",
+          content: [{ type: "content", content: { type: "text", text } }],
+        },
+      ]).at(-1);
+    expect(ends("Agent", `${brief}\nAsync agent launched successfully.\nagentId: a1`)).toMatchObject({
+      type: "tool-end",
+      detached: true,
+    });
+    // waited on: the call came back with the report
+    expect(ends("Agent", "The daemon has three layers.")).not.toHaveProperty("detached");
+    // the sentence in what some other call printed says nothing about that call
+    expect(ends("Read", "Async agent launched successfully.")).not.toHaveProperty("detached");
+  });
+
   test("codex marks its subagent markers but names no parent, so its rows stay flat", () => {
     expect(
       run([

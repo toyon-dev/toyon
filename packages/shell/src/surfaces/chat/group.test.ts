@@ -416,6 +416,13 @@ describe("spawnsAtWork", () => {
     expect(spawnsAtWork([bg("task1", "Map the runtime", { isError: true }), text("It failed.")])).toEqual(none);
   });
 
+  test("a spawn that returned with its subagent only launched is a background one, flag or no flag", () => {
+    const launched = spawn("task1", "Map the runtime", { detached: true });
+    expect(spawnsAtWork([launched, text("Waiting on it.")])).toEqual(new Set(["task1"]));
+    expect(spawnsAtWork([launched, text("Waiting on it."), sub("task1"), sub("task1")])).toEqual(new Set(["task1"]));
+    expect(spawnsAtWork([launched, sub("task1"), text("Here is what it found.")])).toEqual(none);
+  });
+
   test("a background subagent counts from its calls landing after the main agent's last own item", () => {
     const items = [bg("task1", "Map the runtime"), text("Waiting on it."), sub("task1"), sub("task1")];
     expect(spawnsAtWork(items)).toEqual(new Set(["task1"]));

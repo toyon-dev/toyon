@@ -221,8 +221,9 @@ export type AgentEvent =
    * work already is. Superseded by the `tool-end` output, which is the report it finished with. */
   | { type: "tool-delta"; toolId: string; text: string }
   /** `images` are the pictures the call returned, which the row shows in place of output it has
-   * none of: a read of a png says nothing in words */
-  | { type: "tool-end"; toolId: string; output?: string; isError?: boolean; images?: ToolImage[] }
+   * none of: a read of a png says nothing in words. `detached` is a spawn whose call returned with
+   * its subagent launched and still to do its work. */
+  | { type: "tool-end"; toolId: string; output?: string; isError?: boolean; images?: ToolImage[]; detached?: boolean }
   | { type: "turn-end"; stopReason: string; ts: number }
   /** the agent's running figures after a reply: context tokens in use of the window's size, and
    * the session's spend so far when the agent prices itself (Claude does; a rate-limit notice

@@ -64,6 +64,20 @@ const KIND_ICON: Record<ToolKind, IconName> = {
   other: "dot",
 };
 
+/** Claude's tools that arrive with no kind, which would otherwise all wear the dot: the glyph is
+ * picked by the tool's name instead. A Map, since a name is the agent's string and an object would
+ * answer "constructor". A tool not listed here and not kinded (an MCP server's) keeps the dot. */
+const NAME_ICON = new Map<string, IconName>([
+  // the glyph the ask's parked row wears
+  [ASK_TOOL, "chat"],
+  // a watch on something running in the background, which reports as time passes
+  ["Monitor", "clock"],
+  // what a background command or subagent printed
+  ["TaskOutput", "terminal"],
+  // a packaged set of instructions loaded over the agent's own
+  ["Skill", "layers"],
+]);
+
 /** a run row's verb says more than "execute" does: `grep -rn x .` is a search and `git commit` is a
  * commit, and the column reads better following the command than the kind. Conservative on purpose:
  * a verb belongs here only when one glyph is right for every use of it, which is why `sed` (a read
@@ -194,7 +208,8 @@ export function toolLabel(call: ToolCall, roots: string[] = []): ToolRowText {
   return {
     label: ask ? "ask" : label,
     name,
-    icon: ask ? "chat" : (byVerb ?? KIND_ICON[kind]),
+    // a call sent with no name carries the tool's name as its title
+    icon: NAME_ICON.get(call.name) ?? NAME_ICON.get(call.title ?? "") ?? byVerb ?? KIND_ICON[kind],
     hint: detail === name ? "" : detail,
     command: command && command !== detail ? command : "",
   };

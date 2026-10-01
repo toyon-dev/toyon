@@ -347,6 +347,18 @@ describe("toolLabel", () => {
     expect(toolLabel(asked)).toMatchObject({ name: "", icon: "chat", hint: "Which one?" });
   });
 
+  test("a tool with no kind takes its glyph from its name, and keeps the name on the row", () => {
+    const skill = { name: "Skill", input: { skill: "dataviz" } };
+    expect(toolLabel(skill)).toMatchObject({ name: "Skill", icon: "layers" });
+    const output = { name: "TaskOutput", title: "TaskOutput", toolKind: "other" as const, input: {} };
+    expect(toolLabel(output)).toMatchObject({ name: "TaskOutput", icon: "terminal" });
+    // named only by its title
+    expect(toolLabel({ name: "", title: "Monitor", toolKind: "other" as const, input: {} }).icon).toBe("clock");
+    // a name nobody listed, and one an object would have answered for, keep the dot
+    expect(toolLabel({ name: "mcp__x__y", input: {} }).icon).toBe("dot");
+    expect(toolLabel({ name: "constructor", input: {} }).icon).toBe("dot");
+  });
+
   test("the glyph follows the command's verb where the kind only says `run`", () => {
     const call = {
       name: "Bash",

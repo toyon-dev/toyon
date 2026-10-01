@@ -144,6 +144,24 @@ describe("agent registry", () => {
     expect(reg.infos()[1]).toMatchObject({ id: "codex", available: true });
   });
 
+  test("a failed upgrade keeps the older adapter launchable, and adapters() says which version runs and why", async () => {
+    const dir = tmp();
+    const old = BUILTIN_AGENTS.map((a) => (a.id === "claude" ? { ...a, run: { ...a.run, version: "0.75.1" } } : a));
+    await new AgentRegistry(old as AgentSpec[], dir, fakeInstaller().installer).installMissing();
+    const reg = new AgentRegistry(
+      BUILTIN_AGENTS,
+      dir,
+      fakeInstaller(new Set(["@agentclientprotocol/claude-agent-acp"])).installer,
+    );
+    await reg.installMissing();
+    expect(reg.infos()[0]).toMatchObject({ id: "claude", available: true });
+    // OpenCode is fetched on demand and nobody asked, so it is not listed
+    expect(reg.adapters()).toEqual([
+      { id: "claude", installed: "0.75.1", pinned: "0.84.0", error: "install failed: registry unreachable" },
+      { id: "codex", installed: "2.0.1", pinned: "2.0.1" },
+    ]);
+  });
+
   test("unknown ids and uninstalled custom commands are UserErrors with a reason", () => {
     const reg = new AgentRegistry(
       [

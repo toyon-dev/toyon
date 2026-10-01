@@ -155,6 +155,8 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
     costs: s.idle.costs(),
     /** whether updates are off for the machine, or the registry has no toyon: doctor says so */
     updates: s.update.status(),
+    /** the adapter versions on disk beside the pinned ones: doctor names an upgrade that failed */
+    agents: s.agents.adapters(),
     sockets: [...sockets].map(
       (ws): SocketStats => ({ subs: [...ws.data.subs], sent: ws.data.sent, bytes: ws.data.bytes }),
     ),

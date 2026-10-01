@@ -158,7 +158,16 @@ export interface Launch {
   env: Record<string, string>;
 }
 
-/** installs `pkg@version` into `dir` (a package.json is already there); tests fake it */
+export interface AdapterVersion {
+  id: string;
+  /** null while nothing is installed */
+  installed: string | null;
+  pinned: string;
+  /** why the last install did not land */
+  error?: string;
+}
+
+/** installs `pkg@version` into `dir`(a package.json is already there); tests fake it */
 export type Installer = (dir: string, pkg: string, version: string) => Promise<{ ok: boolean; err: string }>;
 
 const bunInstall: Installer = async (dir) => {
@@ -351,6 +360,21 @@ export class AgentRegistry {
       if (!spec || spec.run.kind === "command" || spec.onDemand) continue;
       await this.install(id);
     }
+  }
+
+  /** each npm adapter's version on disk beside the one this toyon pins, for `toyon doctor`. An
+   * upgrade that fails leaves the older adapter launchable, so nothing in `infos()` shows it. An
+   * agent fetched on demand is listed once someone has asked for it. */
+  adapters(): AdapterVersion[] {
+    const out: AdapterVersion[] = [];
+    for (const spec of this.list()) {
+      if (spec.run.kind === "command" || !this.packageName(spec)) continue;
+      const installed = this.installed(spec) ? this.installedVersion(spec) : null;
+      const error = this.installErrors.get(spec.id);
+      if (spec.onDemand && installed === null && !error) continue;
+      out.push({ id: spec.id, installed, pinned: spec.run.version, ...(error ? { error } : {}) });
+    }
+    return out;
   }
 
   infos(): AgentInfo[] {

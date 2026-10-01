@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { MANAGED_DEFAULTS, MANAGED_STRICTEST, type ManagedResolved } from "@toyon/shared";
-import { policyLines } from "./doctor.ts";
+import { agentLines, policyLines } from "./doctor.ts";
 
 // The policy line is what a reviewer reads to check the file took, so each state has to read as
 // itself: nothing, applied, broken, and a daemon that has not caught up.
@@ -46,5 +46,38 @@ describe("policyLines", () => {
     expect(lines[1]?.detail).toContain("toyon restart");
     // a daemon that predates the field cannot be compared, and is not blamed
     expect(policyLines(applied, undefined)).toHaveLength(1);
+  });
+});
+
+// A failed adapter upgrade leaves the old adapter running, so this line is the one place a person
+// sees it short of reading the log.
+describe("agentLines", () => {
+  test("adapters on the pinned version share one ok line", () => {
+    expect(
+      agentLines([
+        { id: "claude", installed: "0.84.0", pinned: "0.84.0" },
+        { id: "codex", installed: "2.0.1", pinned: "2.0.1" },
+      ]),
+    ).toEqual([{ ok: true, label: "agents", detail: "claude 0.84.0, codex 2.0.1" }]);
+  });
+  test("an adapter left on an older version fails with both versions and the installer's reason", () => {
+    const lines = agentLines([
+      { id: "claude", installed: "0.75.1", pinned: "0.84.0", error: "install failed: blocked by minimum-release-age" },
+      { id: "codex", installed: "2.0.1", pinned: "2.0.1" },
+    ]);
+    expect(lines).toEqual([
+      { ok: true, label: "agents", detail: "codex 2.0.1" },
+      {
+        ok: false,
+        label: "agents",
+        detail:
+          "claude runs 0.75.1, not the pinned 0.84.0: install failed: blocked by minimum-release-age. `toyon restart` tries again",
+      },
+    ]);
+  });
+  test("an adapter that never installed fails too, and one with no reason yet may still be installing", () => {
+    expect(agentLines([{ id: "claude", installed: null, pinned: "0.84.0" }])).toEqual([
+      { ok: false, label: "agents", detail: "claude 0.84.0 is not installed; it may still be installing" },
+    ]);
   });
 });

@@ -309,6 +309,10 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
     const base = rowRepo ? baseOf(rowRepo) : "main";
     const asOf = rowRepo && baseIsRemote(rowRepo) && trunk?.fetchedAt ? ` as of ${hhmm(trunk.fetchedAt)}` : "";
     const cols = drawn(counts);
+    // Ahead with nothing uncommitted takes the dirty column: the two are told apart by colour and
+    // sign, not by place, so the number sits under the other coloured ones instead of a blank
+    // column short of them. The empty dirty column is the one not drawn, so the name gains its width.
+    const slid = !!counts.ahead && !counts.dirty;
     const id = w.id;
     const menuOpen = menu?.owner === "rail" && menu.key === id;
     const showCheck = owned && graftMode && canGraft(owned.worktree) && id !== activeId;
@@ -494,7 +498,7 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
               {counts.ahead ? `+${count(counts.ahead)}` : ""}
             </span>
           )}
-          {cols.has("dirty") && (
+          {cols.has("dirty") && !slid && (
             <span
               className="rail-count badge-dirty"
               data-tip={counts.dirty ? `${counts.dirty} uncommitted${onLead ? " on main" : ""}` : undefined}

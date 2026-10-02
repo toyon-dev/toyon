@@ -1,8 +1,7 @@
 import {
   type ChordId,
-  chordOf,
+  fieldKeeps,
   isBrowserSave,
-  isTyping,
   LOGIN_STREAM,
   matchChord,
   SHELL_STREAM,
@@ -108,11 +107,12 @@ export function useChords() {
       const monaco = !!document.activeElement?.closest(".monaco-editor");
       if (monaco && chord && MONACO_OWNS.has(chord.id)) return;
       // the terminal and the editor type into a textarea of their own, so this covers them as well
-      if (chord && chordOf(chord.id).textKeeps && isTyping(document.activeElement)) return;
+      if (chord && fieldKeeps(chord.id, document.activeElement)) return;
       // with no page up (setup, a stopped app, an update waiting on a reload, a chat) ⌘R and ⌘←/→
       // are the browser's again: the shell is the only thing on screen they could mean
       if (chord && PAGE_CHORDS.has(chord.id) && !(previewIdOf(s) && routeTarget(s))) return;
       if (chord) {
+        const claimed = e.defaultPrevented;
         e.preventDefault();
         if (s.newProject && !VIEW_CHORDS.has(chord.id)) return;
         switch (chord.id) {
@@ -147,7 +147,10 @@ export function useChords() {
             break;
           case "wt-archive": {
             // the worktree on screen, through the same confirm its menu line gives it. Not under
-            // an archived page, which sits over the row the key would otherwise take.
+            // an archived page, which sits over the row the key would otherwise take. A repeat is
+            // a held word delete that ran the field dry, and a key the field already answered
+            // (the composer dropping an attachment) is spent.
+            if (e.repeat || claimed) break;
             const w = s.draft || s.archivedPage ? undefined : s.visible.find((w) => w.id === s.activeId);
             if (w) worktreeActions(sock, dispatch).archive(w);
             break;

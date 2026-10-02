@@ -1,6 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import { CHORD_LABELS, CHORD_SECTIONS, chordLabel, chordsInSection } from "./chord-labels.ts";
-import { CHORDS, chordOf, isBrowserSave, matchChord, worktreeChord, worktreeIndex, ZEN_CHORDS } from "./chords.ts";
+import {
+  CHORDS,
+  chordOf,
+  fieldKeeps,
+  isBrowserSave,
+  matchChord,
+  worktreeChord,
+  worktreeIndex,
+  ZEN_CHORDS,
+} from "./chords.ts";
 
 const ev = (
   key: string,
@@ -161,6 +170,13 @@ describe("matchChord", () => {
     expect(matchChord(ev("Backspace", { meta: false, alt: true }))).toEqual({ id: "wt-archive" });
     expect(matchChord(ev("Backspace", { meta: false, alt: true }), { guest: true })).toEqual({ id: "wt-archive" });
     expect(chordOf("wt-archive").textKeeps).toBe(true);
+    const field = (value: string, inside = false) => ({ tagName: "TEXTAREA", value, closest: () => inside });
+    expect(fieldKeeps("wt-archive", field("a draft"))).toBe(true);
+    expect(fieldKeeps("wt-archive", field(""))).toBe(false); // no word to delete, so the key archives
+    expect(fieldKeeps("wt-archive", field("", true))).toBe(true); // Monaco's and xterm's textarea is always empty
+    expect(fieldKeeps("wt-archive", { tagName: "DIV", isContentEditable: true })).toBe(true);
+    expect(fieldKeeps("wt-archive", { tagName: "BODY" })).toBe(false);
+    expect(fieldKeeps("mark-unread", field(""))).toBe(true); // an empty field still starts the umlaut
     expect(matchChord(ev("Backspace", { meta: false, alt: true, shift: true }))).toBeNull();
     expect(matchChord(ev("Backspace"))).toBeNull(); // ⌘⌫ deletes to the line's start
     expect(matchChord(ev("Backspace", { alt: true }))).toBeNull(); // ⌘⌥⌫ is nobody's

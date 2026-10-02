@@ -81,6 +81,8 @@ export interface Chord {
   bareAlias?: string;
   /** a focused text field keeps the chord: ⌥←/→ is a word jump in every field, editor and shell */
   textKeeps?: true;
+  /** a field with nothing in it gives the chord up after all: the key has no text to act on there */
+  emptyGives?: true;
 }
 
 export const CHORDS: readonly Chord[] = [
@@ -163,10 +165,12 @@ export const CHORDS: readonly Chord[] = [
   { id: "wt-unseen-next", key: "ArrowDown", alt: true, shift: true },
   // ⌥⌫ archives the worktree on screen, the one ⌥↑/↓ just walked to: the same modifier, and the
   // key that takes a thing away. It asks first when the row has work, as the menu's line does.
-  // Anywhere text is typed it stays the word delete it is there, the way ⌥←/→ stay the word jump.
+  // Where there is a word to delete it stays the word delete, the way ⌥←/→ stay the word jump. An
+  // empty field has none, and the composer holds the caret whenever a worktree is on screen, so
+  // there the key is the archive: kept for every field, it would only ever fire from a menu.
   // ⌘⌫ is not bound: it deletes to the line's start in a field and moves to the trash in Finder,
   // and a reflex for either landing on a worktree is the wrong surprise.
-  { id: "wt-archive", key: "Backspace", alt: true, textKeeps: true },
+  { id: "wt-archive", key: "Backspace", alt: true, textKeeps: true, emptyGives: true },
   // ⌥U puts the unseen ring back on the worktree on screen, to come back to: the rail's modifier
   // again, beside ⌥↑/↓ and ⌥⌫, rather than Mail's ⌘⇧U. Under ⌥ the letter is a dead key on macOS,
   // so it is matched on the physical key, and a field keeps it as the umlaut it starts there.
@@ -301,4 +305,18 @@ export function isTyping(el: unknown): boolean {
   if (!e?.tagName) return false;
   if (e.isContentEditable || e.tagName === "TEXTAREA") return true;
   return e.tagName === "INPUT" && !["button", "checkbox", "radio", "range", "submit", "reset"].includes(e.type ?? "");
+}
+
+/** a plain field holding no text. The editor and the terminal type through a textarea that is
+ * always empty while the text lives elsewhere, so theirs never counts. */
+export function isEmptyField(el: unknown): boolean {
+  const e = el as { tagName?: string; value?: unknown; closest?: (sel: string) => unknown } | null;
+  if (e?.tagName !== "TEXTAREA" && e?.tagName !== "INPUT") return false;
+  return e.value === "" && !e.closest?.(".monaco-editor, .xterm");
+}
+
+/** the focused element keeps this chord for its own text */
+export function fieldKeeps(id: ChordId, el: unknown): boolean {
+  const c = chordOf(id);
+  return !!c.textKeeps && isTyping(el) && !(c.emptyGives && isEmptyField(el));
 }

@@ -1,5 +1,5 @@
 import { baseOf, type CommitEntry, type GitFileStatus } from "@toyon/shared";
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { previewBus } from "../../app/previewBus.ts";
 import { commitItems } from "../../state/actions/commit.ts";
 import { discardQuestion, fileItems, openFile } from "../../state/actions/file.ts";
@@ -25,7 +25,9 @@ import { CommitBox } from "./CommitBox.tsx";
 import { CommitRow } from "./CommitRow.tsx";
 import { FileTree } from "./FileTree.tsx";
 import { GitFileRow } from "./GitFileRow.tsx";
-import { testsLast } from "./testFiles.ts";
+import { TestNames } from "./TestNames.tsx";
+import { isTestPath, testsLast } from "./testFiles.ts";
+import { type ChangedTest, changedTests } from "./testNames.ts";
 import "./changes.css";
 import { cx } from "../../ui/cx.ts";
 import { useOnChange } from "../../ui/hooks.ts";
@@ -39,6 +41,17 @@ function landedWhen(at: number): string {
   const when = ago(at);
   return when === "now" ? "landed just now" : `landed ${when} ago`;
 }
+
+interface Cursor {
+  row: number;
+  at: number;
+}
+
+/** a row the list numbers: a file or a commit, and not a test name under a file */
+const ROW = '[role="option"]:not([data-sub])';
+
+/** no test file is open, or its change names no test */
+const NO_TESTS: ChangedTest[] = [];
 
 /** a history row is a commit, or one file inside the commit expanded under it */
 type HistRow = { commit: CommitEntry; file?: GitFileStatus };
@@ -72,6 +85,16 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
   const { files, source: fileSource } = useMemo(() => testsLast(statusFiles), [statusFiles]);
   const { files: committed, source: committedSource } = useMemo(() => testsLast(statusCommitted), [statusCommitted]);
   // a title splits a list only when it holds both kinds: a list of tests alone is just the list
+  // A test file is one row until it is opened: then the tests its change touched are listed under
+  // it, read from the two sides the editor holds. One file's names at a time, as one commit's files.
+  const openDisk = useStore((s) => (s.editor && s.editor.worktreeId === shownId ? s.editor.disk : null));
+  const openTests = useMemo(
+    () =>
+      openPath !== null && openDisk && isTestPath(openPath)
+        ? changedTests(openPath, openDisk.before, openDisk.after)
+        : NO_TESTS,
+    [openPath, openDisk],
+  );
   const fileTests = fileSource > 0 ? files.length - fileSource : 0;
   const committedTests = committedSource > 0 ? committed.length - committedSource : 0;
   const clean = files.length === 0;
@@ -183,12 +206,18 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
     return titles;
   }, [archived, histRows]);
   const listRef = useRef<HTMLDivElement>(null);
-  const [sel, setSel] = useState(0);
+  // The cursor: a row, and under an open test file the name it is on (`at`, -1 on the row itself).
+  // The rows keep their numbers whichever file is open, so a name is a step inside a row and not a
+  // row of its own; moving to a row by its number lands on the row, never on a name left under it.
+  const [{ row: sel, at: selName }, setSel] = useReducer(
+    (_: Cursor, to: number | Cursor): Cursor => (typeof to === "number" ? { row: to, at: -1 } : to),
+    { row: 0, at: -1 },
+  );
   const [focused, setFocused] = useState(false);
   // the list marks one row, and it is where you are: the cursor while the list has the keyboard,
   // the file open in the editor while it does not. The cursor drawing an edge and the open file a
   // band split one mark across two rows the moment the arrows left the open file, onto a commit.
-  const marked = (i: number, open: boolean) => (focused ? sel === i : open);
+  const marked = (i: number, open: boolean) => (focused ? cursorOn(i) : open);
   // The list holds the keyboard and none of its rows can take focus, so a reader is told where the
   // cursor is by the list pointing at that row rather than by focus moving to it. One scheme for
   // both lists: only one of them is rendered at a time.
@@ -252,7 +281,7 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
     [shownId, filesBySha, sock],
   );
   // a moved selection has to come into view, and it is the row that scrolls, not the list
-  useOnChange([sel, focused], () => {
+  useOnChange([sel, selName, focused], () => {
     // a file row or a commit row: both carry the cursor state, and only one of them ever has it
     if (focused)
       listRef.current?.querySelector<HTMLElement>('[data-state~="cursor"]')?.scrollIntoView({ block: "nearest" });
@@ -320,6 +349,40 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
   // a row past the uncommitted ones is the history's: every row on the history tab, and on an
   // archived page the ones under its uncommitted files
   const inHist = (i: number) => showHist && i >= above;
+  /** the row is the file the editor has open, as that row opens it */
+  const rowIsOpen = (i: number): boolean => {
+    if (openPath === null) return false;
+    if (showChanges && i < rows.length)
+      return rows[i]?.path === openPath && (i < files.length ? openRef === snapRef : !openRef);
+    const r = inHist(i) ? histRows[i - above] : undefined;
+    return !!r?.file && openRef === r.commit.sha && r.file.path === openPath;
+  };
+  /** the names under a row: the open file's, under the row that opened it */
+  const namesAt = (i: number) => (rowIsOpen(i) ? openTests : NO_TESTS);
+  // the name the cursor is on, or -1 while it is on a row
+  const onName = selName < namesAt(sel).length ? selName : -1;
+  const cursorOn = (i: number) => focused && sel === i && onName < 0;
+  /** show the open file at one of its tests; the keyboard stays here unless Enter sent it */
+  const showTest = (at: number, focus = false) => {
+    const t = openTests[at];
+    if (!t || !shownId || openPath === null) return;
+    openFile(
+      { sock, dispatch },
+      { worktreeId: shownId, path: openPath, ref: openRef ?? undefined, line: { n: t.line }, focus },
+    );
+  };
+  const names = (i: number) =>
+    namesAt(i).length > 0 && (
+      <TestNames
+        tests={openTests}
+        id={rowId(i)}
+        cursor={focused && sel === i ? onName : -1}
+        onPick={(at) => {
+          setSel({ row: i, at });
+          showTest(at);
+        }}
+      />
+    );
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (picking && e.key === "Escape") {
       // the pick ends before anything it was opened over closes
@@ -331,6 +394,22 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
       e.preventDefault();
       const f = showChanges && sel < files.length ? files[sel] : undefined;
       if (f) check(f.path);
+    } else if (e.key === "ArrowDown" && onName + 1 < namesAt(sel).length) {
+      // ↓ on an open test file walks its names before it reaches the next file
+      e.preventDefault();
+      setSel({ row: sel, at: onName + 1 });
+      showTest(onName + 1);
+    } else if ((e.key === "ArrowUp" || e.key === "ArrowLeft") && onName >= 0) {
+      // ↑ walks back up them and off the first onto the file's own row, where ← goes from any
+      e.preventDefault();
+      if (e.key === "ArrowLeft" || onName === 0) setSel(sel);
+      else {
+        setSel({ row: sel, at: onName - 1 });
+        showTest(onName - 1);
+      }
+    } else if (e.key === "Enter" && onName >= 0) {
+      e.preventDefault();
+      showTest(onName, true);
     } else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
       const i = step(sel, e.key === "ArrowDown" ? 1 : -1, total);
@@ -484,7 +563,9 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
           className={cx("changes-list", showHist && "history")}
           role="listbox"
           aria-label={archived ? "kept work" : showHist ? "commits" : "changed files"}
-          aria-activedescendant={focused && sel >= 0 && sel < total ? rowId(sel) : undefined}
+          aria-activedescendant={
+            focused && sel >= 0 && sel < total ? (onName < 0 ? rowId(sel) : `${rowId(sel)}-t${onName}`) : undefined
+          }
           tabIndex={0}
           ref={listRef}
           onKeyDown={onKeyDown}
@@ -498,8 +579,8 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
           onMouseDown={(e) => {
             if (e.button !== 0) return;
             e.preventDefault();
-            const hit = (e.target as HTMLElement).closest('[role="option"]');
-            const i = hit ? Array.from(e.currentTarget.querySelectorAll('[role="option"]')).indexOf(hit) : -1;
+            const hit = (e.target as HTMLElement).closest(ROW);
+            const i = hit ? Array.from(e.currentTarget.querySelectorAll(ROW)).indexOf(hit) : -1;
             if (i >= 0) setSel(i);
             listRef.current?.focus();
           }}
@@ -525,8 +606,8 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
                   <GitFileRow
                     f={f}
                     id={rowId(i)}
-                    active={marked(i, openRef === snapRef && f.path === openPath)}
-                    selected={focused && sel === i}
+                    active={marked(i, rowIsOpen(i))}
+                    selected={cursorOn(i)}
                     checking={picking}
                     checked={checked.includes(f.path)}
                     onOpen={clickRow}
@@ -534,6 +615,7 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
                     menu={menuUncommitted}
                     onHover={hoverFile}
                   />
+                  {names(i)}
                 </Fragment>
               ))}
             </>
@@ -555,12 +637,13 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
                   <GitFileRow
                     f={f}
                     id={rowId(files.length + i)}
-                    active={marked(files.length + i, !openRef && f.path === openPath)}
-                    selected={focused && sel === files.length + i}
+                    active={marked(files.length + i, rowIsOpen(files.length + i))}
+                    selected={cursorOn(files.length + i)}
                     onOpen={clickRow}
                     menu={menuCommitted}
                     onHover={hoverFile}
                   />
+                  {names(files.length + i)}
                 </Fragment>
               ))}
             </>
@@ -575,22 +658,20 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
                 )}
                 {!archived && aheadCount > 0 && i === firstLanded && <div className="section-title">{base}</div>}
                 {r.file ? (
-                  <GitFileRow
-                    f={r.file}
-                    id={rowId(above + i)}
-                    active={marked(above + i, openRef === r.commit.sha && r.file.path === openPath)}
-                    selected={focused && sel === above + i}
-                    onOpen={clickHistFile}
-                    menu={menuAtCommit}
-                    onHover={noHover}
-                  />
+                  <>
+                    <GitFileRow
+                      f={r.file}
+                      id={rowId(above + i)}
+                      active={marked(above + i, rowIsOpen(above + i))}
+                      selected={cursorOn(above + i)}
+                      onOpen={clickHistFile}
+                      menu={menuAtCommit}
+                      onHover={noHover}
+                    />
+                    {names(above + i)}
+                  </>
                 ) : (
-                  <CommitRow
-                    c={r.commit}
-                    id={rowId(above + i)}
-                    selected={focused && sel === above + i}
-                    onToggle={clickCommit}
-                  />
+                  <CommitRow c={r.commit} id={rowId(above + i)} selected={cursorOn(above + i)} onToggle={clickCommit} />
                 )}
               </Fragment>
             ))}

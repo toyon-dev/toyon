@@ -126,6 +126,31 @@
     }
   }
 
+  /* a test's name under its file: the step in that a commit's files take under their commit, and
+   cut at the column's edge, since the dock is narrow and the whole name is in the tip */
+  .changes-test {
+    padding-left: 28px;
+    /* one rail, in the column its file's status letter stands in */
+    --rail-depth: 1;
+    --rail-at: 16px;
+    .changes-list.history .log-row ~ & {
+      padding-left: 44px;
+      --rail-at: 32px;
+    }
+    & .xy {
+      width: 18px;
+    }
+    /* a name is a sentence, and the UI face fits half as much again of one as the row's mono */
+    & .name {
+      font: var(--type-ui);
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  }
+
   .changes-list .section-title {
     padding: 10px 12px 4px;
   }

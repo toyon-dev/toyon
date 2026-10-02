@@ -157,6 +157,18 @@
   .row-dim {
     color: var(--text2);
   }
+  /* Rows that sit under another row say so with a rail: a 1px line in the column of what holds
+   them, one per level, so a run of children reads as one bracket rather than as rows that happen
+   to start further right. The rails are the row's own background rather than an element per
+   level, since a straight rail needs nothing the depth does not already say. A row names how many
+   (--rail-depth) and where the first stands (--rail-at); the step is the tree's indent. A marked
+   row's band replaces them, being lighter than they are. */
+  .row-rails {
+    background-image: repeating-linear-gradient(to right, var(--border0) 0 1px, transparent 1px 14px);
+    background-position: var(--rail-at, 18px) 0;
+    background-repeat: no-repeat;
+    background-size: calc(var(--rail-depth, 0) * 14px) 100%;
+  }
 
   /* ---- the lifted seat ----
    A seat that lifts moves the ladder up a rung for everything standing on it: text1 becomes the

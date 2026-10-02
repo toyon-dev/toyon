@@ -409,7 +409,7 @@ function NewFileRow({
   return (
     <>
       {/* no treeitem role: the field is what the keyboard is in, and the row only seats it */}
-      <div className="row row-sm tree-row" data-kind="file" data-root={root} style={indent}>
+      <div className="row row-sm tree-row row-rails" data-kind="file" data-root={root} style={indent}>
         <span className="tree-caret row-dim" />
         <Field
           bare
@@ -435,7 +435,7 @@ function NewFileRow({
         />
       </div>
       {error && (
-        <div className="tree-row tree-new-error" data-root={root} style={indent}>
+        <div className="tree-row tree-new-error row-rails" data-root={root} style={indent}>
           <span className="tree-caret" />
           <span className="hint">{error}</span>
         </div>
@@ -491,7 +491,7 @@ const TreeItem = memo(function TreeItem({
       aria-expanded={row.kind === "folder" ? row.open : undefined}
       aria-selected={cursor}
       // a div, not a button: Firefox never starts a drag on a button
-      className={cx("row row-sm tree-row row-edge", dropOver && "drop-over")}
+      className={cx("row row-sm tree-row row-rails row-edge", dropOver && "drop-over")}
       data-state={rowState({ current, cursor })}
       data-kind={row.kind}
       data-path={row.path}

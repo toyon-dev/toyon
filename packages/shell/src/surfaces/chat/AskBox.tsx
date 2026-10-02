@@ -9,7 +9,7 @@
 // ask and gives the plain box back; the ask stays open, since it is still what the agent waits on.
 
 import type { AskAnswer } from "@toyon/shared";
-import { type RefObject, useMemo, useRef, useState } from "react";
+import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { openFile } from "../../state/actions/file.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { useLocalField, useTouch } from "../../state/selectors.ts";
@@ -63,7 +63,9 @@ function holdsKeyboard(el: Element | null): boolean {
  * that plainly wants it. And it takes it back when a click dropped it nowhere: a click on the
  * transcript's text, to read or to scroll, lands focus on the body, and from there every digit
  * went dead with nothing on screen saying so. A click that lands somewhere (a row, a field, the
- * preview) keeps what it landed on. */
+ * preview) keeps what it landed on. It waits for the press to be let go: focus moving under a
+ * held button ends the drag, so a selection begun in the transcript never got past its first
+ * character. */
 function useAskFocus(root: Root, id: string) {
   useOnChange([id], () => {
     // rAF because the root is painted in the same commit that mounts it
@@ -72,13 +74,35 @@ function useAskFocus(root: Root, id: string) {
     });
     return () => cancelAnimationFrame(f);
   });
-  return (e: React.FocusEvent) => {
-    if (e.relatedTarget) return;
-    // the body is only known after the event: a click into the preview reports no target either,
-    // and the iframe is what holds focus by the next frame
+  const pressed = useRef(false);
+  // the body is only known after the event: a click into the preview reports no target either,
+  // and the iframe is what holds focus by the next frame
+  const retake = useCallback(() => {
     requestAnimationFrame(() => {
       if (document.activeElement === document.body) root.current?.focus();
     });
+  }, [root]);
+  useEffect(() => {
+    const onDown = () => {
+      pressed.current = true;
+    };
+    const onUp = () => {
+      pressed.current = false;
+      retake();
+    };
+    window.addEventListener("pointerdown", onDown, true);
+    window.addEventListener("pointerup", onUp, true);
+    // a drag the browser took over (selected text picked up and carried) ends without a release
+    window.addEventListener("pointercancel", onUp, true);
+    return () => {
+      window.removeEventListener("pointerdown", onDown, true);
+      window.removeEventListener("pointerup", onUp, true);
+      window.removeEventListener("pointercancel", onUp, true);
+    };
+  }, [retake]);
+  return (e: React.FocusEvent) => {
+    // the release answers for a press; this is for focus dropped nowhere by anything else
+    if (!e.relatedTarget && !pressed.current) retake();
   };
 }
 

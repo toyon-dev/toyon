@@ -125,6 +125,14 @@ function editorOptions(readOnly: boolean) {
   };
 }
 
+/** the diff's strip of hunks down the right edge. It carries a viewport of its own that drags and
+ * wheels like a scrollbar, so with the strip up the editor's bar beside it would be a second
+ * slider for the same scroll, 14px further into the code; the bar takes no width then. */
+const overviewStrip = (on: boolean) => ({
+  renderOverviewRuler: on,
+  scrollbar: { verticalScrollbarSize: on ? 0 : 14 },
+});
+
 /** Monaco colours the lines an editor shows on a 50ms timer after it shows them, so a model made
  * for this open would paint its first frames in plain text and then flash into colour. Tokenizing
  * those lines before the frame skips the plain paint. `tokenization` is not in monaco's types. Past
@@ -422,8 +430,8 @@ export default function Editor({
         experimental: { useTrueInlineView: true },
         renderGutterMenu: false,
         renderMarginRevertIcon: false,
-        // the strip beside the scrollbar has nothing to map on a file with no hunks
-        renderOverviewRuler: !unchanged,
+        // the strip has nothing to map on a file with no hunks
+        ...overviewStrip(!unchanged),
         // a place carried over from the other view, or a line to reveal, may sit in an unchanged
         // region that folding would hide; and an unchanged file folds to nothing at all
         hideUnchangedRegions: {
@@ -487,7 +495,7 @@ export default function Editor({
         const { scrolls, ...fold } = diffFit(paneOf(code), m.modified.getLineCount(), hunksOf(d));
         d.updateOptions({
           hideUnchangedRegions: { ...fold, minimumLineCount: FOLD_MIN },
-          renderOverviewRuler: scrolls,
+          ...overviewStrip(scrolls),
         });
         const first = d.getLineChanges()?.[0];
         code.revealLineInCenter(first?.modifiedStartLineNumber || first?.modifiedEndLineNumber || 1);

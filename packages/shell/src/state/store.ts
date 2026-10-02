@@ -72,6 +72,8 @@ import {
   SHELL_STREAM,
   toyonDark,
 } from "@toyon/shared";
+import { owedJump } from "../app/unseenJump.ts";
+import { dotClass } from "../surfaces/util.ts";
 import { mergeLinks } from "./links.ts";
 
 /** `heard` is the shell's own clock when a live figure landed: the agent reports usage as soon as
@@ -1528,8 +1530,19 @@ function reduce(s: State, action: Action): State {
       const ids = action.ids.filter((id) => !s.archiving.includes(id) && worktreeById(s, id));
       if (ids.length === 0) return s;
       const hidden = { ...s, archiving: [...s.archiving, ...ids] };
-      // the selection leaves with the row, the way the daemon's own snapshot would move it
-      return s.activeId && ids.includes(s.activeId) ? activate(hidden, landingIn(hidden, s.activeRepoId)) : hidden;
+      if (!s.activeId || !ids.includes(s.activeId)) return hidden;
+      // the selection leaves with the row, for the next thing the rail owes the person: the nearest
+      // row waiting, unseen or working, looked for from where the archived row sat. With none, the
+      // closest row whose app is up, the one below on a tie: a task that is open and can be carried
+      // on. With none of those either, the lead, whose box starts the next worktree.
+      const from = s.visible.filter((w) => w.id === s.activeId || !hidden.archiving.includes(w.id));
+      const owed = owedJump(from, s.activeId, 1)?.activate;
+      const at = from.findIndex((w) => w.id === s.activeId);
+      const up = from
+        .map((w, i) => ({ id: w.id, i, far: Math.abs(i - at), up: !isLead(w.worktree) && dotClass(w) === "running" }))
+        .filter((w) => w.up && w.far > 0)
+        .sort((a, b) => a.far - b.far || b.i - a.i)[0]?.id;
+      return activate(hidden, owed ?? up ?? landingIn(hidden, s.activeRepoId));
     }
     case "shipping": {
       // one op per worktree at a time: the daemon serializes them under the repo lock anyway,

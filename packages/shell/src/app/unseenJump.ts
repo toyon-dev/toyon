@@ -21,7 +21,9 @@ export function needsYou(rows: readonly JumpRow[], activeId: string | null): Nee
   return { n, tier: others.some((w) => w.agent === "waiting") ? "waiting" : "unseen" };
 }
 
-export function unseenJump(rows: readonly JumpRow[], activeId: string | null, dir: 1 | -1): UnseenJump {
+/** The nearest row of the best occupied tier in the direction pressed, wrapping round, or null with
+ * every tier empty. `activeId` is where the looking starts and is never the answer. */
+export function owedJump(rows: readonly JumpRow[], activeId: string | null, dir: 1 | -1): UnseenJump {
   // the row on screen is looked at by definition, so it is never the answer
   const marked = (hit: (w: JumpRow) => boolean) =>
     rows.map((w, i) => (hit(w) && w.id !== activeId ? i : -1)).filter((i) => i >= 0);
@@ -31,10 +33,6 @@ export function unseenJump(rows: readonly JumpRow[], activeId: string | null, di
     () => marked((w) => w.agent === "working"),
   ];
   const targets = tiers.reduce<number[]>((found, tier) => (found.length > 0 ? found : tier()), []);
-  if (targets.length === 0) {
-    const first = rows[0];
-    return first && first.id !== activeId ? { activate: first.id } : null;
-  }
   const at = rows.findIndex((w) => w.id === activeId);
   const i =
     dir > 0
@@ -42,4 +40,11 @@ export function unseenJump(rows: readonly JumpRow[], activeId: string | null, di
       : (targets.findLast((k) => k < at) ?? targets[targets.length - 1]);
   const wt = i === undefined ? undefined : rows[i];
   return wt ? { activate: wt.id } : null;
+}
+
+export function unseenJump(rows: readonly JumpRow[], activeId: string | null, dir: 1 | -1): UnseenJump {
+  const owed = owedJump(rows, activeId, dir);
+  if (owed) return owed;
+  const first = rows[0];
+  return first && first.id !== activeId ? { activate: first.id } : null;
 }

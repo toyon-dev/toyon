@@ -2392,10 +2392,55 @@ describe("archiving a worktree", () => {
     expect(s.rows.map((w) => w.id)).toEqual(["main", "a", "b"]);
   });
 
-  test("archiving the active worktree lands the selection somewhere still shown", () => {
+  test("archiving the active worktree with nothing else going lands on the lead, with its box open", () => {
     const s = run([three(), { a: "activate", id: "a" }, { a: "archive-worktrees", ids: ["a"] }]);
     expect(s.activeId).toBe("main");
     expect(s.lastActive.r).toBe("main");
+    expect(s.draft).not.toBeNull();
+  });
+
+  test("archiving the active worktree lands on the next row the rail owes the person", () => {
+    const five = (over: Record<string, Partial<WorktreeStatus>>) =>
+      hello(...[wt("main", "main"), wt("a"), wt("b"), wt("c"), wt("d")].map((w) => ({ ...w, ...over[w.id] })));
+    const after = (over: Record<string, Partial<WorktreeStatus>>, ids = ["b"]) =>
+      run([five(over), { a: "activate", id: "b" }, { a: "archive-worktrees", ids }]).activeId;
+    // a row waiting on an answer beats a nearer one that only finished or is still working
+    expect(after({ a: { agent: "waiting" }, c: { unseen: true }, d: { agent: "working" } })).toBe("a");
+    expect(after({ a: { agent: "working" }, d: { unseen: true } })).toBe("d");
+    // within a tier, the nearest below where the row sat, then round from the top
+    expect(after({ a: { agent: "working" }, c: { agent: "working" }, d: { agent: "working" } })).toBe("c");
+    expect(after({ a: { agent: "working" } })).toBe("a");
+    // a row going in the same press is not somewhere to land
+    expect(after({ c: { agent: "waiting" }, d: { agent: "working" } }, ["b", "c"])).toBe("d");
+  });
+
+  test("with nothing owed, archiving the active worktree lands on the closest row whose app is up", () => {
+    const up: Partial<WorktreeStatus> = { procs: [{ name: "web", status: "running" }] as WorktreeStatus["procs"] };
+    const after = (over: Record<string, Partial<WorktreeStatus>>) =>
+      run([
+        hello(
+          ...[wt("main", "main"), wt("a"), wt("b"), wt("c"), wt("d"), wt("e")].map((w) => ({ ...w, ...over[w.id] })),
+        ),
+        { a: "activate", id: "c" },
+        { a: "archive-worktrees", ids: ["c"] },
+      ]).activeId;
+    expect(after({ a: up, d: up })).toBe("d");
+    expect(after({ b: up, e: up })).toBe("b");
+    // the one below on a tie
+    expect(after({ b: up, d: up })).toBe("d");
+    // main's app being up is not a task to carry on: the lead is where the next one starts
+    expect(after({ main: up })).toBe("main");
+    // anything owed still comes first, however far
+    expect(after({ b: up, e: { agent: "working" } })).toBe("e");
+  });
+
+  test("archiving a row other than the one on screen moves nothing", () => {
+    const s = run([
+      hello(wt("main", "main"), wt("a"), { ...wt("b"), agent: "waiting" }, wt("c")),
+      { a: "activate", id: "c" },
+      { a: "archive-worktrees", ids: ["a"] },
+    ]);
+    expect(s.activeId).toBe("c");
   });
 
   test("a snapshot that still lists the row keeps it hidden; one without it retires the pending remove", () => {

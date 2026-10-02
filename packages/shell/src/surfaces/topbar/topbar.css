@@ -73,6 +73,15 @@
      the pill, and the installed app's bar is already this tall (the OS title bar sets it) */
     min-height: 38px;
   }
+  /* A pinch zooms the whole page, and the window's own controls do not zoom with it: a bar that
+   grew would slide under them, and off the view as it pans. So while the window is zoomed the bar
+   is drawn back at its own size on the top edge of what is in view (usePinToView sets the three
+   values), over the docks it no longer lines up with. */
+  .top-bar[data-pinned] {
+    transform-origin: 0 0;
+    transform: translate(var(--pin-x), var(--pin-y)) scale(var(--pin-scale));
+    z-index: 1;
+  }
   /* zen drops the bar, and the grid row with it, or .docks re-slots into the auto track. Said here,
    in the file that holds the installed app's exception below, because the two rules are equally
    specific and only their order in one file decides between them. A media query that negates

@@ -17,7 +17,7 @@ import { selectedLines } from "../../app/copiedSource.ts";
 import type { EditorSync, SyncBuffer } from "../../state/fileSync.ts";
 import type { EditorBlame, EditorDisk, EditorView, FileRef } from "../../state/store.ts";
 import { Float } from "../../ui/Float.tsx";
-import { useOnChange } from "../../ui/hooks.ts";
+import { passPinch, useOnChange } from "../../ui/hooks.ts";
 import type { Placement, Rect } from "../../ui/place.ts";
 import { blameCommit, blameLine } from "./blameLine.ts";
 import { diffFit, FOLD_MIN, type Hunk, type Pane } from "./diffFit.ts";
@@ -106,6 +106,9 @@ function editorOptions(readOnly: boolean) {
     theme: THEME,
     scrollBeyondLastLine: false,
     minimap: { enabled: false },
+    // a scroll the editor has no room left for goes on to the window, which pans when it is
+    // pinch-zoomed; by default Monaco cancels every wheel event over it
+    scrollbar: { alwaysConsumeMouseWheel: false },
     ...shellType(),
     lineHeight: 1.5,
     // monaco stacks a glyph margin (a full line-height wide), a folding column and the diff
@@ -672,7 +675,7 @@ export default function Editor({
 
   return (
     <>
-      <div ref={ref} className="editor-monaco" />
+      <div ref={ref} className="editor-monaco" onWheelCapture={passPinch} />
       {card && (
         // the tooltip's own card, in its parts: who at the head with their address as the name,
         // what the commit said as the detail, and the sha and the date as the figures at the foot

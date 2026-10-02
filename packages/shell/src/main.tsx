@@ -21,6 +21,8 @@ import { DaemonSocket } from "./ws.ts";
 // tell an injected preview bridge that this document is a shell, so it leaves the chords to us
 // (toyon inside toyon: without this the outer shell takes every keystroke meant for this one)
 window.__toyonShell = true;
+// a shell shown in another shell's preview: base.css lets its scrolls chain out to the window
+if (window.top !== window) document.documentElement.dataset.framed = "";
 
 migrateStorage();
 

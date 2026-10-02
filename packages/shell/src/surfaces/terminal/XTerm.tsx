@@ -10,7 +10,7 @@ import { useEffect, useRef, useState } from "react";
 import { terminalBus } from "../../app/terminalBus.ts";
 import { FindBox } from "../../ui/FindBox.tsx";
 import { isFind } from "../../ui/find.ts";
-import { useOnChange } from "../../ui/hooks.ts";
+import { passPinch, useOnChange } from "../../ui/hooks.ts";
 import type { DaemonSocket } from "../../ws.ts";
 
 /** a paste arrives as one onData; the protocol caps a term-input frame at 64K */
@@ -337,7 +337,7 @@ export default function XTerm({
 
   return (
     <>
-      <div className="term-host" ref={box} />
+      <div className="term-host" ref={box} onWheelCapture={passPinch} />
       {find && (
         <FindBox
           label="find in the terminal"

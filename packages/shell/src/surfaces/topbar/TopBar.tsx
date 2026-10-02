@@ -1,4 +1,4 @@
-import { type ComponentProps, type ReactNode, useEffect, useState } from "react";
+import { type ComponentProps, type ReactNode, useEffect, useRef, useState } from "react";
 import { previewBus, togglePick } from "../../app/previewBus.ts";
 import { selfNotice } from "../../app/selfNotice.ts";
 import { updateNotice } from "../../app/updateNotice.ts";
@@ -17,7 +17,7 @@ import {
 import { previewUp } from "../../state/store.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
-import { useEdges, useEdgesOf, useOnChange, useWindowWidth } from "../../ui/hooks.ts";
+import { useEdges, useEdgesOf, useOnChange, usePinToView, useWindowWidth } from "../../ui/hooks.ts";
 import { Icon, type IconName } from "../../ui/Icon.tsx";
 import { grouped, useContextMenu } from "../../ui/menu.ts";
 import { tip } from "../../ui/Tooltip.tsx";
@@ -37,6 +37,8 @@ export function TopBar({ center }: { center: HTMLDivElement | null }) {
   // only this surface re-renders when any of the three moves
   const winW = useWindowWidth();
   const centre = useEdgesOf(center);
+  const barRef = useRef<HTMLDivElement>(null);
+  usePinToView(barRef);
   const [leadRef, lead] = useEdges<HTMLSpanElement>();
   const [toolsRef, tools] = useEdges<HTMLSpanElement>();
   const nav = navCluster({ winW, centre, leadRight: lead.right, toolsLeft: tools.left });
@@ -89,7 +91,7 @@ export function TopBar({ center }: { center: HTMLDivElement | null }) {
     />
   );
   return (
-    <div className="top-bar">
+    <div className="top-bar" ref={barRef}>
       {zen && <span className="bar-zen-title">{active?.worktree.title ?? "Toyon"}</span>}
       {/* the lead: what stands at the bar's start in flow, measured so the cluster clears it */}
       <span className="bar-lead" ref={leadRef}>

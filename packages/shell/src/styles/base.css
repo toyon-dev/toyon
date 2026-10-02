@@ -25,8 +25,9 @@
   }
   /* html alone: its value is the viewport's, which is what stops the window rubber-banding. On
      body too, body is a scroller of its own that ends the scroll chain, and a pinch-zoomed
-     window can no longer be panned */
-  html {
+     window can no longer be panned. Not in a frame, for the same reason one level up: the
+     viewport of a framed page ends the chain into the window that holds it. */
+  html:not([data-framed]) {
     overscroll-behavior: none;
   }
   /* selected text sits on the picked seat, the tier the editor pane already selects in, so a

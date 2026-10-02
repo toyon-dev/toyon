@@ -379,7 +379,16 @@ export function useEdgesOf(el: HTMLElement | null): { left: number; right: numbe
     if (!el) return;
     const read = () => {
       const b = el.getBoundingClientRect();
-      const next = { left: Math.round(b.left), right: Math.round(b.right) };
+      let { left, right } = b;
+      // inside a box usePinToView has drawn smaller and moved: the edges as laid out, not as drawn
+      const pin = el.closest<HTMLElement>("[data-pinned]");
+      if (pin) {
+        const p = pin.getBoundingClientRect();
+        const k = pin.offsetWidth / p.width;
+        left = pin.offsetLeft + (left - p.left) * k;
+        right = pin.offsetLeft + (right - p.left) * k;
+      }
+      const next = { left: Math.round(left), right: Math.round(right) };
       setEdges((prev) => (prev.left === next.left && prev.right === next.right ? prev : next));
     };
     read();
@@ -398,4 +407,44 @@ export function useEdgesOf(el: HTMLElement | null): { left: number; right: numbe
 export function useEdges<T extends HTMLElement>(): [RefCallback<T>, { left: number; right: number }] {
   const [el, setEl] = useState<T | null>(null);
   return [setEl, useEdgesOf(el)];
+}
+
+/** A trackpad pinch reaches the page as a wheel event with ctrl held, and the window only zooms
+ * when nothing cancels it. A widget that scrolls itself in script (the editor, the terminal) takes
+ * every wheel event and cancels it, pinch included, so the pinch is stopped on its way down to the
+ * widget. For `onWheelCapture` on the box the widget mounts in. */
+export function passPinch(e: { ctrlKey: boolean; stopPropagation: () => void }): void {
+  if (e.ctrlKey) e.stopPropagation();
+}
+
+/** Holds a full-width strip at its own size on the top edge of a pinch-zoomed window. The pinch
+ * magnifies the page under a view that pans over it, and nothing in CSS follows that view, so the
+ * element is told where the view is and how far it is zoomed (`--pin-x`, `--pin-y`,
+ * `--pin-scale`, with `data-pinned` while zoomed) and its stylesheet draws it there. The values go
+ * on the element and not through state: they change on every frame of the gesture. */
+export function usePinToView(ref: RefObject<HTMLElement | null>): void {
+  useEffect(() => {
+    const view = window.visualViewport;
+    if (!view) return;
+    const place = () => {
+      const el = ref.current;
+      if (!el) return;
+      // a hair over 1 is rounding at the end of a pinch back out, not a zoom
+      if (view.scale < 1.01) {
+        delete el.dataset.pinned;
+        return;
+      }
+      el.dataset.pinned = "";
+      el.style.setProperty("--pin-x", `${view.offsetLeft}px`);
+      el.style.setProperty("--pin-y", `${view.offsetTop}px`);
+      el.style.setProperty("--pin-scale", String(1 / view.scale));
+    };
+    place();
+    view.addEventListener("resize", place);
+    view.addEventListener("scroll", place);
+    return () => {
+      view.removeEventListener("resize", place);
+      view.removeEventListener("scroll", place);
+    };
+  }, [ref]);
 }

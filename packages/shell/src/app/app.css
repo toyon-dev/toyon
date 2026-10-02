@@ -7,6 +7,8 @@
     display: grid;
     grid-template-rows: auto 1fr;
     height: 100%;
+    /* the bar pinned to a pinch-zoomed view counts its rung here, over the docks */
+    isolation: isolate;
 
     /* zen: full-bleed preview, all chrome hidden (⌘. exits; esc belongs to the page). The panes
        stacked under the preview (editor, design, terminal) are chrome too: hidden, not closed, so

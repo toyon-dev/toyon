@@ -3,10 +3,11 @@ import { CONTEXT_FLOOR, diffFit, type Hunk } from "./diffFit.ts";
 
 // 17px rows; a fold band is 24px
 const pane = (rows: number) => ({ height: rows * 17, lineHeight: 17 });
-const hunk = (modifiedStart: number, original: number, modified: number): Hunk => ({
+const hunk = (modifiedStart: number, original: number, modified: number, inPlace = false): Hunk => ({
   modifiedStart,
   original,
   modified,
+  inPlace,
 });
 
 describe("what a diff folds, given the pane it is read in", () => {
@@ -24,6 +25,14 @@ describe("what a diff folds, given the pane it is read in", () => {
     // ahead never fold (too short to hold a context and the minimum); the 16 after fold down to
     // a context of 6 at most, and 4 + 50 + 6 rows and one band is what the pane holds
     expect(diffFit(pane(62), 20, [hunk(5, 50, 0)])).toEqual({ enabled: true, contextLineCount: 6, scrolls: false });
+  });
+
+  test("a rewritten line is two rows unless it is drawn in place", () => {
+    // line 10 of 30 replaced by five: the old line sits above the new ones, 29 + 1 + 5 rows
+    expect(diffFit(pane(35), 34, [hunk(10, 1, 5)]).enabled).toBe(false);
+    expect(diffFit(pane(34), 34, [hunk(10, 1, 5)]).enabled).toBe(true);
+    // struck through on the line itself, it takes no row of its own
+    expect(diffFit(pane(34), 34, [hunk(10, 1, 5, true)]).enabled).toBe(false);
   });
 
   test("one small hunk in a long file takes the context that fills the pane", () => {

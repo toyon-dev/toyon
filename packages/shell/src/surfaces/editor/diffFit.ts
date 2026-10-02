@@ -13,6 +13,9 @@ export interface Hunk {
   modifiedStart: number;
   original: number;
   modified: number;
+  /** the old text is struck through on the new lines instead of drawn above them, which Monaco
+   * does only when every edit inside the hunk stays within one line */
+  inPlace: boolean;
 }
 
 export interface Fold {
@@ -42,7 +45,8 @@ const BAND_PX = 24;
 /** the height of the diff of `hunks` over a file `modifiedLines` long, folded with `context` lines
  * around each hunk, or unfolded for a context of Infinity. Monaco's own rule: a stretch at either
  * end of the file folds once it holds a context and the minimum; one between hunks needs a context
- * on each side. Inline, a deleted line is a row of its own under the file's lines. */
+ * on each side. Inline, a hunk's old lines are rows of their own above its new ones, unless the
+ * hunk is drawn in place: then the two sides share rows and the longer one sets the count. */
 function heightOf(pane: Pane, modifiedLines: number, hunks: Hunk[], context: number): number {
   let rows = 0;
   let bands = 0;
@@ -56,7 +60,7 @@ function heightOf(pane: Pane, modifiedLines: number, hunks: Hunk[], context: num
   };
   hunks.forEach((h, i) => {
     gap(h.modifiedStart - at, i === 0);
-    rows += Math.max(h.original, h.modified);
+    rows += h.inPlace ? Math.max(h.original, h.modified) : h.original + h.modified;
     at = h.modifiedStart + h.modified;
   });
   gap(modifiedLines + 1 - at, true);

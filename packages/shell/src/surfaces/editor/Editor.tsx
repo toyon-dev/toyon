@@ -141,12 +141,24 @@ const overviewStrip = (on: boolean) => ({
 const TOKENIZE_NOW = 3000;
 
 /** the diff's hunks with the line count on each side. Monaco marks a side with nothing by an end
- * of 0, and then its start names the line the change sits after rather than the first of a range */
+ * of 0, and then its start names the line the change sits after rather than the first of a range.
+ * `inPlace` is Monaco's own test for the true inline view, which it does not export: every edit
+ * inside the hunk starts and ends on one line of each side, an insert at the top of the file aside. */
 const hunksOf = (d: monaco.editor.IDiffEditor): Hunk[] =>
   (d.getLineChanges() ?? []).map((c) => ({
     modifiedStart: c.modifiedEndLineNumber ? c.modifiedStartLineNumber : c.modifiedStartLineNumber + 1,
     original: c.originalEndLineNumber ? c.originalEndLineNumber - c.originalStartLineNumber + 1 : 0,
     modified: c.modifiedEndLineNumber ? c.modifiedEndLineNumber - c.modifiedStartLineNumber + 1 : 0,
+    inPlace:
+      c.charChanges?.every(
+        (i) =>
+          (i.originalStartLineNumber === i.originalEndLineNumber &&
+            i.modifiedStartLineNumber === i.modifiedEndLineNumber) ||
+          (i.originalStartLineNumber === 1 &&
+            i.originalStartColumn === 1 &&
+            i.originalEndLineNumber === 1 &&
+            i.originalEndColumn === 1),
+      ) ?? false,
   }));
 
 /** the room the fit has: the height Monaco laid the editor out at, less the horizontal scrollbar.

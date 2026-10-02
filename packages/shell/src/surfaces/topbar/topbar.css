@@ -82,6 +82,17 @@
     transform: translate(var(--pin-x), var(--pin-y)) scale(var(--pin-scale));
     z-index: 1;
   }
+  /* mid-pinch the bar would be drawn a frame behind every step of the zoom. It leaves at once and
+   comes back when the zoom has settled; the fade is on the way in only, so none of the shudder
+   shows on the way out. */
+  .top-bar {
+    transition: opacity 0.12s ease-out;
+  }
+  .top-bar[data-zooming] {
+    opacity: 0;
+    pointer-events: none;
+    transition: none;
+  }
   /* zen drops the bar, and the grid row with it, or .docks re-slots into the auto track. Said here,
    in the file that holds the installed app's exception below, because the two rules are equally
    specific and only their order in one file decides between them. A media query that negates

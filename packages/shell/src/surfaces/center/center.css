@@ -38,7 +38,17 @@
       width: 100%;
       height: 100%;
       border: none;
-      background: #fff;
+      /* A frame is on screen before its page is: blank until the app answers, and for a moment
+         each time a hidden one is shown again. What it shows meanwhile is the centre's own
+         ground. A page that sets no background still reads on white in a dark theme: its colour
+         scheme differs from the shell's, and the browser gives such a document an opaque canvas
+         of its own. */
+      background: var(--surface0);
+      /* in a light theme the schemes match and the frame's ground shows through that page, so
+         there it is the white a browser tab would give it */
+      :root[data-theme="light"] & {
+        background: var(--page-paper);
+      }
     }
   }
   .new-project-field {

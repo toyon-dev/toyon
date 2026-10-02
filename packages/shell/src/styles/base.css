@@ -19,10 +19,15 @@
   html,
   body {
     overflow: hidden;
-    overscroll-behavior: none;
     /* the platform's tap flash, off: a row already answers a press by lifting its seat, and a
        second, bluer answer over it reads as foreign */
     -webkit-tap-highlight-color: transparent;
+  }
+  /* html alone: its value is the viewport's, which is what stops the window rubber-banding. On
+     body too, body is a scroller of its own that ends the scroll chain, and a pinch-zoomed
+     window can no longer be panned */
+  html {
+    overscroll-behavior: none;
   }
   /* selected text sits on the picked seat, the tier the editor pane already selects in, so a
      drag across the chat and one across a file read as the same act. The text is named too: the

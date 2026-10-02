@@ -6,6 +6,7 @@ import {
   mapCommands,
   mapStopReason,
   mapUpdate,
+  release,
   summarizeToolOutput,
   type ToolMemos,
   truncate,
@@ -186,6 +187,81 @@ describe("mapUpdate", () => {
         { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "on it" } },
       ]).filter((e) => e.type === "tool-end"),
     ).toEqual([]);
+  });
+
+  test("an input with no content is held until its call moves on, then sent before what follows", () => {
+    const open = (toolCallId: string, title: string, kind: "read" | "execute"): SessionUpdate => ({
+      sessionUpdate: "tool_call",
+      toolCallId,
+      title,
+      kind,
+      status: "pending",
+      rawInput: {},
+    });
+    const text = (t: string) => [{ type: "content" as const, content: { type: "text" as const, text: t } }];
+    // a read: the adapter leaves out the content its first report already carried, so the whole
+    // input looks like a field closing. The result is what says it was whole.
+    expect(
+      run([
+        open("r1", "Read File", "read"),
+        { sessionUpdate: "tool_call_update", toolCallId: "r1", title: "Read /a", rawInput: { file_path: "/a" } },
+        { sessionUpdate: "tool_call_update", toolCallId: "r1", status: "completed", content: text("x") },
+      ]).slice(1),
+    ).toEqual([
+      { type: "tool-update", toolId: "r1", title: "Read /a", input: { file_path: "/a" } },
+      { type: "tool-end", toolId: "r1", output: "x", isError: false },
+    ]);
+    // two commands in one message: the first is whole when the second opens, and still to run
+    const memos: ToolMemos = new Map();
+    expect(
+      run(
+        [
+          open("p1", "Terminal", "execute"),
+          { sessionUpdate: "tool_call_update", toolCallId: "p1", title: "ls", rawInput: { command: "ls" } },
+          open("p2", "Terminal", "execute"),
+          { sessionUpdate: "tool_call_update", toolCallId: "p1", status: "completed", content: text("a") },
+        ],
+        memos,
+      ).filter((e) => e.type !== "tool-start"),
+    ).toEqual([
+      { type: "tool-update", toolId: "p1", title: "ls", input: { command: "ls" } },
+      { type: "tool-end", toolId: "p1", output: "a", isError: false },
+    ]);
+    // a field closing and then the rest: one update, the later input with the earlier title
+    expect(
+      run([
+        open("w1", "Terminal", "execute"),
+        { sessionUpdate: "tool_call_update", toolCallId: "w1", title: "ls", rawInput: { command: "ls" } },
+        { sessionUpdate: "tool_call_update", toolCallId: "w1", rawInput: { command: "ls", timeout: 5 } },
+        { sessionUpdate: "tool_call_update", toolCallId: "w1", status: "in_progress" },
+      ]).slice(1),
+    ).toEqual([{ type: "tool-update", toolId: "w1", title: "ls", input: { command: "ls", timeout: 5 } }]);
+  });
+
+  test("release sends a held input once, and nothing for a call that ended first", () => {
+    const memos: ToolMemos = new Map();
+    run(
+      [
+        { sessionUpdate: "tool_call", toolCallId: "h1", title: "Terminal", kind: "execute", rawInput: {} },
+        { sessionUpdate: "tool_call_update", toolCallId: "h1", title: "ls", rawInput: { command: "ls" } },
+      ],
+      memos,
+    );
+    const memo = memos.get("h1")!;
+    expect(memo.writing).toBe(true);
+    expect(release("h1", memo)).toEqual({ type: "tool-update", toolId: "h1", title: "ls", input: { command: "ls" } });
+    expect(memo.writing).toBe(false);
+    expect(release("h1", memo)).toBeNull();
+    // cut off by prose after a field closed: the row is gone, and the input with it
+    run(
+      [
+        { sessionUpdate: "tool_call", toolCallId: "h2", title: "Terminal", kind: "execute", rawInput: {} },
+        { sessionUpdate: "tool_call_update", toolCallId: "h2", rawInput: { command: "ls" } },
+        { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "Instead" } },
+      ],
+      memos,
+    );
+    expect(release("h2", memos.get("h2")!)).toBeNull();
   });
 
   test("a subagent writing a call is read apart from the main agent, and the other way round", () => {

@@ -37,7 +37,7 @@ import { askOnce } from "./ask.ts";
 import { AUTH_STATUS_UPDATE_METHOD, parseAuthStatus, supportsLogout } from "./authstatus.ts";
 import { BackgroundTasks } from "./background.ts";
 import { parseForm, toContent } from "./elicit.ts";
-import { endOfAsk, mapCommands, mapStopReason, mapUpdate, type ToolMemos } from "./map.ts";
+import { endOfAsk, mapCommands, mapStopReason, mapUpdate, release, type ToolMemos } from "./map.ts";
 import { currentValues, type LiveOptions, type OptionCategory, readModeOption, readOptions } from "./options.ts";
 import { STEER_METHOD, type SteerOutcome, steerOutcome, supportsSteering } from "./steering.ts";
 import type { AcpLink } from "./transport.ts";
@@ -74,6 +74,8 @@ export interface AcpSessionDeps {
   idleMs?: number;
   /** how long a turn the agent started on its own may go quiet before it is over */
   ownSettleMs?: number;
+  /** how long a call's input is held for the rest of it before it is read as whole */
+  inputHoldMs?: number;
   /** where Claude Code keeps its session logs, for the end of a command sent to the background
    * (background.ts); its own default when absent */
   claudeConfigDir?: string;
@@ -110,6 +112,10 @@ const DEFAULT_IDLE_MS = Number(process.env.TOYON_AGENT_IDLE_MS) || 5 * 60_000;
  * call the wire carries nothing while the model reads the result, seconds on a long context; a
  * turn cut at that gap would come back as a second one, so the wait errs long. */
 const OWN_SETTLE_MS = 10_000;
+/** Long enough for the field after the one that closed to stream in, a command's description above
+ * all, so a half-written input rarely reaches the row; short enough that a command already running
+ * does not read as one still being written. */
+const INPUT_HOLD_MS = 1000;
 
 /** A turn the agent is running with no prompt out: the calls it has open, and the timer that ends
  * the turn once they are all answered and it has gone quiet */
@@ -997,6 +1003,11 @@ export class AcpSession implements AgentAdapter {
         fireAndForget(this.d.worktreeId, this.d.attachments.putToolImage(this.d.worktreeId, file, bytes), "tool image"),
       (toolId, start, input) => this.tasks.start(toolId, start, input),
     );
+    this.forward(live, events);
+    this.holdInput(live, params.update);
+  }
+
+  private forward(live: Live, events: AgentEvent[]) {
     if (!this.running) this.trackOwn(events);
     for (const ev of events) {
       // words or a call after a steer are the agent answering it. Output the pre-emption cut off can
@@ -1005,6 +1016,24 @@ export class AcpSession implements AgentAdapter {
       // the mapper does not know the session id; the transcript wants the real one
       this.emit(ev.type === "session-info" ? { ...ev, sessionId: live.sessionId } : ev);
     }
+  }
+
+  /** An input the mapper held back goes out once its call has been quiet for a while. Nothing on
+   * the wire says an input is whole, and a call that then runs for a minute sends nothing more
+   * until it is done; the row would say the command was still being written the whole time. */
+  private holdInput(live: Live, update: acp.SessionUpdate) {
+    if (update.sessionUpdate !== "tool_call_update") return;
+    const toolId = update.toolCallId;
+    const memo = live.tools.get(toolId);
+    const held = memo?.held;
+    if (!memo || !held) return;
+    const t = setTimeout(() => {
+      // a later update replaced what was held or sent it on, and a turn that ended took the row
+      if (this.live !== live || memo.held !== held || !(this.running || this.own)) return;
+      const sent = release(toolId, memo);
+      if (sent) this.forward(live, [sent]);
+    }, this.d.inputHoldMs ?? INPUT_HOLD_MS);
+    t.unref?.();
   }
 
   private onPermission(

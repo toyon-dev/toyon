@@ -36,11 +36,17 @@ export interface ToolMemo {
   ended: boolean;
   /** the agent is still writing the call: its kind takes an input and none has been forwarded */
   writing: boolean;
+  /** what the adapter has refined that the shell has not been sent: an input that may be half
+   * written waits here until something says the call is whole (`tool_call_update`, `release`) */
+  held?: ToolRefine;
   /** the call that spawned this one, so a subagent's stream is read apart from the main agent's */
   parent?: string;
   /** the call starts a subagent, so its return may be only the launch (endOf) */
   spawns?: boolean;
 }
+
+/** the fields of a call that an update can change */
+type ToolRefine = Omit<Extract<AgentEvent, { type: "tool-update" }>, "type" | "toolId">;
 
 /** per-session memory of tool calls; cleared when the session's process goes away */
 export type ToolMemos = Map<string, ToolMemo>;
@@ -156,6 +162,16 @@ export function endOfAsk(
   };
 }
 
+/** A held input goes out: the call is whole, or has been quiet long enough to be read as whole.
+ * Null where nothing is held, or the call ended first. */
+export function release(toolId: string, memo: ToolMemo): AgentEvent | null {
+  const held = memo.held;
+  if (!held) return null;
+  delete memo.held;
+  if (!emptyInput(memo.input)) memo.writing = false;
+  return memo.ended ? null : { type: "tool-update", toolId, ...held };
+}
+
 /** The calls still waiting for their input when this stream moved on, ended: nothing more is coming
  * for them. The Claude adapter finishes one call's input before it opens the next, two calls in one
  * message included, and its prose never follows a call it is still writing; so a call with no
@@ -163,11 +179,21 @@ export function endOfAsk(
  * (steering.ts: the agent pre-empts its own generation), and the adapter then sends nothing for it,
  * no status and no update. Left alone the row would shimmer until the turn ends and then print
  * the adapter's placeholder title as if a tool by that name had run. Read per spawning call: two
- * subagents' streams interleave, and one of them writing a call says nothing about the other's. */
-function abandoned(memos: ToolMemos, parent: string | undefined): AgentEvent[] {
+ * subagents' streams interleave, and one of them writing a call says nothing about the other's.
+ *
+ * A call with an input held is the exception when what arrives is another call (`opening`): the
+ * earlier call of two in one message looks exactly like that, whole and about to run, so its input
+ * goes out and the row stays open. A call cut off after a field closed and answered with a call
+ * reads the same on the wire, and keeps its row until the turn ends. */
+function abandoned(memos: ToolMemos, parent: string | undefined, opening = false): AgentEvent[] {
   const out: AgentEvent[] = [];
   for (const [toolId, memo] of memos) {
     if (memo.ended || !memo.writing || memo.parent !== parent) continue;
+    if (opening && memo.held) {
+      const sent = release(toolId, memo);
+      if (sent) out.push(sent);
+      continue;
+    }
     memo.ended = true;
     out.push({ type: "tool-end", toolId });
   }
@@ -209,7 +235,7 @@ export function mapUpdate(
     }
     case "tool_call": {
       const spawn = spawnOf(update._meta);
-      const out = abandoned(memos, spawn.parentToolId);
+      const out = abandoned(memos, spawn.parentToolId, true);
       const input = update.rawInput ?? { locations: update.locations ?? [] };
       const head = heading(update);
       const memo: ToolMemo = {
@@ -266,30 +292,31 @@ export function mapUpdate(
           ...spawn,
         });
       }
-      // an update with input but neither content nor status is the Claude adapter's partial-input
-      // refine, sent each time a top-level field of the streaming input closes; the consolidated
-      // call that follows carries the same fields plus a content list (every tool, empty or not).
-      // Forwarding the partial repaints the row once per field, the command and then the sentence
-      // that replaces it, so it is held back and the row reads as still being written until the
-      // whole call is in.
-      if (update.rawInput !== undefined && update.content === undefined && update.status === undefined) return out;
-      const refined: Extract<AgentEvent, { type: "tool-update" }> = { type: "tool-update", toolId: update.toolCallId };
+      const refined: ToolRefine = { ...memo.held };
       // a ToolSearch's title is its query, which the update carries in the input and never in its
       // title: that only ever repeats the loader's name
       const title = memo.name === TOOL_SEARCH ? toolSearchQuery(update.rawInput) : update.title;
-      if (title && title !== memo.title) {
-        memo.title = title;
-        refined.title = title;
-      }
-      if (update.name && update.name !== memo.name) {
-        refined.name = memo.name = update.name;
-      }
+      if (title && title !== memo.title) refined.title = memo.title = title;
+      if (update.name && update.name !== memo.name) refined.name = memo.name = update.name;
       if (update.kind && update.kind !== memo.kind) refined.kind = memo.kind = update.kind;
-      if (update.rawInput !== undefined) {
-        refined.input = memo.input = update.rawInput;
-        if (!emptyInput(update.rawInput)) memo.writing = false;
+      if (update.rawInput !== undefined) refined.input = memo.input = update.rawInput;
+      // An update with input but neither content nor status may be the Claude adapter's
+      // partial-input refine, sent each time a top-level field of the streaming input closes.
+      // Forwarding those repaints the row once per field, the command and then the sentence that
+      // replaces it, so the row reads as still being written until the whole call is in. Nothing
+      // on the update says which it is: the adapter leaves out every field that repeats what it
+      // last sent, so the whole input of a read or a plain command arrives with no content
+      // either. It is held, and goes out with whatever shows the call has moved on: its content,
+      // its status, the next call (abandoned), or a quiet second (session.ts).
+      if (update.rawInput !== undefined && update.content === undefined && update.status === undefined) {
+        if (out.length === 0) memo.held = refined;
+        return out;
       }
-      if (Object.keys(refined).length > 2 && !memo.ended && out.length === 0) out.push(refined);
+      delete memo.held;
+      if (!emptyInput(memo.input)) memo.writing = false;
+      if (Object.keys(refined).length > 0 && !memo.ended && out.length === 0) {
+        out.push({ type: "tool-update", toolId: update.toolCallId, ...refined });
+      }
       if (update.content) memo.content = [...memo.content, ...update.content];
       if (update.rawOutput !== undefined) memo.rawOutput = update.rawOutput;
       if ((update.status === "completed" || update.status === "failed") && !memo.ended) {

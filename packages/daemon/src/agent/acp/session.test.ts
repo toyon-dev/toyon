@@ -358,7 +358,7 @@ function world(
 describe("AcpSession", () => {
   /** an agent whose prompt returns at once and hands back its context, for updates pushed after
    * the turn: Claude Code prompting itself when a background command exits */
-  function selfDriven() {
+  function selfDriven(extra: Partial<AcpSessionDeps> = {}) {
     let ctx: acp.AgentContext | undefined;
     let sid = "";
     const fake = fakeAgent(async (p, client) => {
@@ -366,7 +366,7 @@ describe("AcpSession", () => {
       sid = p.sessionId;
       return { stopReason: "end_turn" };
     });
-    const w = world(fake, claudeSpec, 60_000, undefined, { ownSettleMs: 30 });
+    const w = world(fake, claudeSpec, 60_000, undefined, { ownSettleMs: 30, ...extra });
     const update = (u: acp.SessionUpdate) =>
       ctx!.notify(acp.methods.client.session.update, { sessionId: sid, update: u });
     const call = () =>
@@ -411,6 +411,40 @@ describe("AcpSession", () => {
     expect(w.types().slice(n)).toEqual(["turn-start", "tool-start", "tool-end", "text-delta", "turn-end"]);
     expect(w.events.at(-1)).toMatchObject({ type: "turn-end", stopReason: "end_turn" });
     expect(w.statuses.slice(-2)).toEqual(["working", "idle"]);
+    await w.session.close();
+  });
+
+  test("an input that arrives with nothing else is held, then sent once its call has been quiet", async () => {
+    const { w, update, working } = selfDriven({ ownSettleMs: 500, inputHoldMs: 40 });
+    w.session.send("go");
+    await w.idle();
+    const n = w.events.length;
+    await update({
+      sessionUpdate: "tool_call",
+      toolCallId: "s1",
+      title: "Terminal",
+      kind: "execute",
+      status: "pending",
+      rawInput: {},
+    });
+    await working();
+    // the whole input of a command with no description: the adapter sends no content with it,
+    // and nothing more until the command is done
+    await update({
+      sessionUpdate: "tool_call_update",
+      toolCallId: "s1",
+      title: "sleep 60",
+      rawInput: { command: "sleep 60" },
+    });
+    await Bun.sleep(10);
+    expect(w.types().slice(n)).toEqual(["turn-start", "tool-start"]);
+    await Bun.sleep(80);
+    expect(w.events.slice(n + 2)).toEqual([
+      { type: "tool-update", toolId: "s1", title: "sleep 60", input: { command: "sleep 60" } },
+    ]);
+    await update({ sessionUpdate: "tool_call_update", toolCallId: "s1", status: "completed" });
+    await w.idle();
+    expect(w.types().slice(n)).toEqual(["turn-start", "tool-start", "tool-update", "tool-end", "turn-end"]);
     await w.session.close();
   });
 

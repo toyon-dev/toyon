@@ -25,6 +25,7 @@ import { CommitBox } from "./CommitBox.tsx";
 import { CommitRow } from "./CommitRow.tsx";
 import { FileTree } from "./FileTree.tsx";
 import { GitFileRow } from "./GitFileRow.tsx";
+import { testsLast } from "./testFiles.ts";
 import "./changes.css";
 import { cx } from "../../ui/cx.ts";
 import { useOnChange } from "../../ui/hooks.ts";
@@ -64,8 +65,15 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
   // the row whose file is open in the editor; plain strings so the selectors stay identity-stable
   const openPath = useStore((s) => (s.editor && s.editor.worktreeId === shownId ? s.editor.path : null));
   const openRef = useStore((s) => (s.editor && s.editor.worktreeId === shownId ? (s.editor.ref ?? null) : null));
-  const files = gitInfo?.files ?? NO_FILES;
-  const committed = gitInfo?.committed ?? NO_FILES;
+  // each list reads the change first and its tests after: the order every index below is in, so
+  // the arrows, the pick and the titles agree with what is drawn
+  const statusFiles = gitInfo?.files ?? NO_FILES;
+  const statusCommitted = gitInfo?.committed ?? NO_FILES;
+  const { files, source: fileSource } = useMemo(() => testsLast(statusFiles), [statusFiles]);
+  const { files: committed, source: committedSource } = useMemo(() => testsLast(statusCommitted), [statusCommitted]);
+  // a title splits a list only when it holds both kinds: a list of tests alone is just the list
+  const fileTests = fileSource > 0 ? files.length - fileSource : 0;
+  const committedTests = committedSource > 0 ? committed.length - committedSource : 0;
   const clean = files.length === 0;
 
   const tab = useStore(changesTabShown);
@@ -142,7 +150,7 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
     const out: HistRow[] = [];
     for (const c of commits ?? []) {
       out.push({ commit: c });
-      if (c.sha === openSha) for (const f of filesBySha[c.sha] ?? []) out.push({ commit: c, file: f });
+      if (c.sha === openSha) for (const f of testsLast(filesBySha[c.sha] ?? []).files) out.push({ commit: c, file: f });
     }
     return out;
   }, [commits, openSha, filesBySha]);
@@ -504,21 +512,29 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
             <>
               {/* the tab already says changes and how many; the title is only needed to tell this
                 section from the committed one under it, or on an archived page from the history */}
-              {(committed.length > 0 || archived) && <div className="section-title">uncommitted · {files.length}</div>}
+              {(committed.length > 0 || archived) && (
+                <div className="section-title">uncommitted · {files.length - fileTests}</div>
+              )}
               {files.map((f, i) => (
-                <GitFileRow
-                  key={f.path}
-                  f={f}
-                  id={rowId(i)}
-                  active={marked(i, openRef === snapRef && f.path === openPath)}
-                  selected={focused && sel === i}
-                  checking={picking}
-                  checked={checked.includes(f.path)}
-                  onOpen={clickRow}
-                  onCheck={kept ? undefined : check}
-                  menu={menuUncommitted}
-                  onHover={hoverFile}
-                />
+                <Fragment key={f.path}>
+                  {fileTests > 0 && i === fileSource && (
+                    <div className="section-title">
+                      {committed.length > 0 || archived ? "uncommitted tests" : "tests"} · {fileTests}
+                    </div>
+                  )}
+                  <GitFileRow
+                    f={f}
+                    id={rowId(i)}
+                    active={marked(i, openRef === snapRef && f.path === openPath)}
+                    selected={focused && sel === i}
+                    checking={picking}
+                    checked={checked.includes(f.path)}
+                    onOpen={clickRow}
+                    onCheck={kept ? undefined : check}
+                    menu={menuUncommitted}
+                    onHover={hoverFile}
+                  />
+                </Fragment>
               ))}
             </>
           )}
@@ -529,19 +545,23 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
                 data-tip={`Committed on this branch, not yet on ${base}`}
                 data-tip-placement="follow"
               >
-                committed · {committed.length}
+                committed · {committed.length - committedTests}
               </div>
               {committed.map((f, i) => (
-                <GitFileRow
-                  key={`c-${f.path}`}
-                  f={f}
-                  id={rowId(files.length + i)}
-                  active={marked(files.length + i, !openRef && f.path === openPath)}
-                  selected={focused && sel === files.length + i}
-                  onOpen={clickRow}
-                  menu={menuCommitted}
-                  onHover={hoverFile}
-                />
+                <Fragment key={`c-${f.path}`}>
+                  {committedTests > 0 && i === committedSource && (
+                    <div className="section-title">committed tests · {committedTests}</div>
+                  )}
+                  <GitFileRow
+                    f={f}
+                    id={rowId(files.length + i)}
+                    active={marked(files.length + i, !openRef && f.path === openPath)}
+                    selected={focused && sel === files.length + i}
+                    onOpen={clickRow}
+                    menu={menuCommitted}
+                    onHover={hoverFile}
+                  />
+                </Fragment>
               ))}
             </>
           )}

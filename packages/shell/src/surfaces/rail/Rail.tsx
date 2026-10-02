@@ -44,6 +44,7 @@ import "./rail.css";
 import { cx } from "../../ui/cx.ts";
 import { useOnChange } from "../../ui/hooks.ts";
 import { rowState } from "../../ui/rowState.ts";
+import { treeKey } from "../../ui/treeNav.ts";
 import { archivedLines, cardFigures, cardLines, FOUND_LINE, leadLines, OFFLINE_LINE, rowLine } from "./rowLine.ts";
 
 /** a count in its 3ch column; past three digits the exact number stops meaning anything here */
@@ -96,6 +97,12 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
   const discOpen = useDiscoveredOpen();
   const archived = useVisibleArchived();
   const archOpen = useArchivedOpen();
+  // ← closes a section's heading and → opens it, as they do a folder in the files tree
+  const headKey = (e: React.KeyboardEvent, open: boolean, a: "toggle-discovered" | "toggle-archived") => {
+    if ((e.key !== "ArrowLeft" && e.key !== "ArrowRight") || e.shiftKey || e.altKey || e.metaKey || e.ctrlKey) return;
+    e.preventDefault();
+    if (treeKey([{ depth: 0, open }], 0, e.key)) dispatch({ a });
+  };
   // an archived worktree's page is up: its row is the marked one, over the active row underneath
   const archivedPage = useArchivedPage();
   const clientId = useStore((s) => s.clientId);
@@ -713,6 +720,7 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
                   { placement: tipSide },
                 )}
                 onClick={() => dispatch({ a: "toggle-discovered" })}
+                onKeyDown={(e) => headKey(e, discOpen, "toggle-discovered")}
               >
                 <span className="rail-gut">
                   <Icon name="caret" className={cx("icon-inline disc-caret", !discOpen && "shut")} />
@@ -735,6 +743,7 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
                   { placement: tipSide },
                 )}
                 onClick={() => dispatch({ a: "toggle-archived" })}
+                onKeyDown={(e) => headKey(e, archOpen, "toggle-archived")}
               >
                 <span className="rail-gut">
                   <Icon name="caret" className={cx("icon-inline disc-caret", !archOpen && "shut")} />

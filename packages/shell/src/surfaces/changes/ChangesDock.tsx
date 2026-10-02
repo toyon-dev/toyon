@@ -20,6 +20,7 @@ import { step } from "../../ui/listNav.ts";
 import { type MenuEntry, useContextMenu } from "../../ui/menu.ts";
 import { Tabs } from "../../ui/Tabs.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
+import { type TreeNavRow, treeKey } from "../../ui/treeNav.ts";
 import { ago, chord, shiftRanges } from "../util.ts";
 import { CommitBox } from "./CommitBox.tsx";
 import { CommitRow } from "./CommitRow.tsx";
@@ -95,6 +96,11 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
         : NO_TESTS,
     [openPath, openDisk],
   );
+  // The open test file is a folder of its names, as the files tree has folders: ← on it or a click
+  // closes it, → or a click opens it again. Opening another file starts open, since that is what
+  // the click was for.
+  const [folded, setFolded] = useState(false);
+  useOnChange([openPath, openRef], () => setFolded(false));
   const fileTests = fileSource > 0 ? files.length - fileSource : 0;
   const committedTests = committedSource > 0 ? committed.length - committedSource : 0;
   const clean = files.length === 0;
@@ -358,10 +364,27 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
     return !!r?.file && openRef === r.commit.sha && r.file.path === openPath;
   };
   /** the names under a row: the open file's, under the row that opened it */
-  const namesAt = (i: number) => (rowIsOpen(i) ? openTests : NO_TESTS);
+  const namesAt = (i: number) => (rowIsOpen(i) && !folded ? openTests : NO_TESTS);
   // the name the cursor is on, or -1 while it is on a row
   const onName = selName < namesAt(sel).length ? selName : -1;
   const cursorOn = (i: number) => focused && sel === i && onName < 0;
+  /** The list as ← and → read it: every row with the names under the open test file, each at its
+   * depth. A commit holds its files; a test file holds its names, and is shut until it is the open
+   * file with its names showing. */
+  const navRows = () => {
+    const out: Array<TreeNavRow & { row: number; at: number }> = [];
+    for (let i = 0; i < total; i++) {
+      const r = inHist(i) ? histRows[i - above] : undefined;
+      const path = r ? r.file?.path : rows[i]?.path;
+      const depth = r?.file ? 1 : 0;
+      const shown = namesAt(i);
+      if (r && !r.file) out.push({ row: i, at: -1, depth, open: r.commit.sha === openSha });
+      else if (path !== undefined && isTestPath(path)) out.push({ row: i, at: -1, depth, open: shown.length > 0 });
+      else out.push({ row: i, at: -1, depth });
+      for (let at = 0; at < shown.length; at++) out.push({ row: i, at, depth: depth + 1 });
+    }
+    return out;
+  };
   /** show the open file at one of its tests; the keyboard stays here unless Enter sent it */
   const showTest = (at: number, focus = false) => {
     const t = openTests[at];
@@ -399,10 +422,10 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
       e.preventDefault();
       setSel({ row: sel, at: onName + 1 });
       showTest(onName + 1);
-    } else if ((e.key === "ArrowUp" || e.key === "ArrowLeft") && onName >= 0) {
-      // ↑ walks back up them and off the first onto the file's own row, where ← goes from any
+    } else if (e.key === "ArrowUp" && onName >= 0) {
+      // ↑ walks back up them and off the first onto the file's own row
       e.preventDefault();
-      if (e.key === "ArrowLeft" || onName === 0) setSel(sel);
+      if (onName === 0) setSel(sel);
       else {
         setSel({ row: sel, at: onName - 1 });
         showTest(onName - 1);
@@ -423,21 +446,31 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
     } else if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
       // ←/→ belong to the tree under them and never to the strip: a deep file in the files tree has
       // no way to tell a step out from a walk away, so the tabs are ⌥←/⌥→ (app/keys.ts) on every
-      // tab alike. The history is only ever a tree one commit deep, so ← anywhere inside a commit
-      // closes it and lands on it: a stop on the parent first is a step nobody asked for in a tree
-      // this shallow.
+      // tab alike. The list is a tree too, read by the files tree's own rule: a commit holds its
+      // files and the open test file its names.
       e.preventDefault();
-      const r = inHist(sel) ? histRows[sel - above] : undefined;
-      if (!r) return;
-      if (e.key === "ArrowRight") {
-        if (r.file) return;
-        if (r.commit.sha !== openSha) toggleCommit(r.commit.sha);
-        else if (histRows[sel - above + 1]?.file) moveHist(sel + 1);
-      } else if (r.commit.sha === openSha) {
-        // the commit's own row sits above its files, so its index survives the collapse
-        if (r.file) setSel(above + histRows.findIndex((x) => !x.file && x.commit.sha === r.commit.sha));
-        toggleCommit(r.commit.sha);
-      }
+      const nav = navRows();
+      const move = treeKey(
+        nav,
+        nav.findIndex((n) => n.row === sel && n.at === onName),
+        e.key,
+      );
+      const to = move && nav[move.at];
+      if (!move || !to) return;
+      const r = inHist(to.row) ? histRows[to.row - above] : undefined;
+      if (move.do === "to") {
+        // onto a name, onto a commit's first file (which opens, as any file the arrows reach), or
+        // back up onto the row that holds this one
+        if (to.at >= 0) {
+          setSel({ row: to.row, at: to.at });
+          showTest(to.at);
+        } else if (r?.file && to.row > sel) moveHist(to.row);
+        else setSel(to.row);
+      } else if (r && !r.file) toggleCommit(r.commit.sha);
+      else if (move.do === "close") setFolded(true);
+      else if (rowIsOpen(to.row)) setFolded(false);
+      else if (r?.file) moveHist(to.row);
+      else select(to.row);
     } else if (e.key === "Escape") {
       // Escape closes what the list opened and leaves the keyboard here, so the arrows can open the
       // next file straight away. Only a list with nothing open hands the keyboard back. It never
@@ -491,9 +524,11 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
   const clickRow = useCallback(
     (path: string) => {
       setSel(rows.findIndex((f) => f.path === path));
-      open(path);
+      // a press on the open test file folds its names and opens them again, as a commit's row does
+      if (path === openPath && openRef === snapRef && openTests.length > 0) setFolded((f) => !f);
+      else open(path);
     },
-    [rows, open],
+    [rows, open, openPath, openRef, snapRef, openTests],
   );
   const clickCommit = useCallback(
     (sha: string) => {
@@ -505,9 +540,10 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
   const clickHistFile = useCallback(
     (path: string) => {
       setSel(above + histRows.findIndex((r) => r.file?.path === path));
-      openAt(path);
+      if (path === openPath && openRef === openShaRef.current && openTests.length > 0) setFolded((f) => !f);
+      else openAt(path);
     },
-    [histRows, above, openAt],
+    [histRows, above, openAt, openPath, openRef, openTests],
   );
   // the preview shows the working tree, so a line in a commit has nowhere on the page to light up
   const noHover = useCallback(() => {}, []);

@@ -16,6 +16,7 @@ import { Icon } from "../../ui/Icon.tsx";
 import { grouped, type MenuEntry, useContextMenu } from "../../ui/menu.ts";
 import { rowState } from "../../ui/rowState.ts";
 import { Spinner } from "../../ui/Spinner.tsx";
+import { treeKey } from "../../ui/treeNav.ts";
 import { attachmentUrl } from "../../ws.ts";
 import { elapsed, spanWords } from "../util.ts";
 import { AskRow } from "./AskRow.tsx";
@@ -375,6 +376,13 @@ function Fold({
       tabIndex={-1}
       onPointerDown={() => card.current?.focus({ preventScroll: true })}
       onKeyDown={(e) => {
+        // ← closes the row that has focus and → opens it, as they do a folder in the files tree.
+        // Unmodified only: with shift they extend a selection in the output.
+        if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && !leaf) {
+          if (e.shiftKey || e.altKey || e.metaKey || e.ctrlKey) return;
+          if (treeKey([{ depth: 0, open }], 0, e.key)) toggle();
+          return;
+        }
         // Escape belongs to the row that has focus. Anything less local (the overlay, picker,
         // terminal and diff ladder in app/keys.ts) keeps the key otherwise, and a second press
         // falls through to it.

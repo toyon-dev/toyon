@@ -25,6 +25,7 @@ import { jumpTo, step } from "../../ui/listNav.ts";
 import { type MenuEntry, useContextMenu } from "../../ui/menu.ts";
 import { rowState } from "../../ui/rowState.ts";
 import { tip } from "../../ui/Tooltip.tsx";
+import { treeKey } from "../../ui/treeNav.ts";
 import { endPathDrag, PATH_MIME, startPathDrag } from "../chat/useIntake.ts";
 import { ancestors, xyClass, xyLetter } from "../util.ts";
 import { buildTree, marks, newFilePath, parentOf, type TreeRow, visibleRows } from "./fileTree.ts";
@@ -181,21 +182,13 @@ export function FileTree({
         else if (r?.kind === "folder") toggle(r.path);
         return;
       case "ArrowRight":
-        e.preventDefault();
-        if (r?.kind !== "folder") return;
-        if (!r.open) toggle(r.path);
-        else if ((rows[sel + 1]?.depth ?? -1) > r.depth) go(sel + 1);
-        return;
       case "ArrowLeft": {
         e.preventDefault();
-        if (!r) return;
-        if (r.kind === "folder" && r.open) {
-          toggle(r.path);
-          return;
-        }
-        // a top-level row has nowhere to climb to, so a held ← stays put rather than leaving the tab
-        const parent = ancestors(r.path).at(-1);
-        if (parent !== undefined) setCursor(parent);
+        // only a folder holds rows: a submodule and a folder git ignores whole open nothing
+        const nav = rows.map((x) => (x.kind === "folder" ? { depth: x.depth, open: x.open } : { depth: x.depth }));
+        const move = treeKey(nav, sel, e.key);
+        if (move?.do === "to") go(move.at);
+        else if (move && r) toggle(r.path);
         return;
       }
       case "Escape":

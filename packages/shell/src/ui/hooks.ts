@@ -417,34 +417,18 @@ export function passPinch(e: { ctrlKey: boolean; stopPropagation: () => void }):
   if (e.ctrlKey) e.stopPropagation();
 }
 
-/** how long after the zoom level last changed a pinch counts as over: past the gap between two
- * steps of one gesture, short enough that the strip is back as the fingers lift */
-const ZOOM_REST = 200;
-
 /** Holds a full-width strip at its own size on the top edge of a pinch-zoomed window. The pinch
  * magnifies the page under a view that pans over it, and nothing in CSS follows that view, so the
  * element is told where the view is and how far it is zoomed (`--pin-x`, `--pin-y`,
  * `--pin-scale`, with `data-pinned` while zoomed) and its stylesheet draws it there. The values go
- * on the element and not through state: they change on every frame of the gesture. The browser
- * zooms first and says so afterwards, so an element re-drawn on each step of a pinch is always a
- * frame behind it and shudders: `data-zooming` is on while the zoom level is still changing, for
- * the stylesheet to hide the element until it can be drawn once, in place. A pan at a held zoom
- * moves the element without resizing it, and is followed live. */
+ * on the element and not through state: they change on every frame of the gesture. */
 export function usePinToView(ref: RefObject<HTMLElement | null>): void {
   useEffect(() => {
     const view = window.visualViewport;
     if (!view) return;
-    let scale = view.scale;
-    let settle: ReturnType<typeof setTimeout> | null = null;
     const place = () => {
       const el = ref.current;
       if (!el) return;
-      if (Math.abs(view.scale - scale) > 0.001) {
-        scale = view.scale;
-        el.dataset.zooming = "";
-        if (settle) clearTimeout(settle);
-        settle = setTimeout(() => delete el.dataset.zooming, ZOOM_REST);
-      }
       // a hair over 1 is rounding at the end of a pinch back out, not a zoom
       if (view.scale < 1.01) {
         delete el.dataset.pinned;
@@ -461,7 +445,6 @@ export function usePinToView(ref: RefObject<HTMLElement | null>): void {
     return () => {
       view.removeEventListener("resize", place);
       view.removeEventListener("scroll", place);
-      if (settle) clearTimeout(settle);
     };
   }, [ref]);
 }

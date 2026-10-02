@@ -124,8 +124,16 @@ describe("create / remove", () => {
       }
     });
     w.hub.emit("checkPassed", first.id);
-    await until(() => existsSync(join(w.paths.cacheDir, repoId)));
-    await until(() => readdirSync(join(w.paths.cacheDir, repoId)).length > 0);
+    // an entry is built beside its family and renamed in whole, so the family folder exists while
+    // there is still nothing to restore; the manifest is what says the entry is kept
+    const kept = () => {
+      const repoDir = join(w.paths.cacheDir, repoId);
+      if (!existsSync(repoDir)) return false;
+      return readdirSync(repoDir).some((family) =>
+        readdirSync(join(repoDir, family)).some((entry) => existsSync(join(repoDir, family, entry, "manifest.json"))),
+      );
+    };
+    await until(kept);
     const second = await w.worktrees.create(repoId, "second");
     await until(() => existsSync(join(second.path, "restored")));
     // the file is there before the command's shell has exited, and the run goes only once it has

@@ -169,11 +169,19 @@ export function registerGrammars(m: typeof monaco) {
 
 export const initialState = (): monaco.languages.IState => new LineState(null);
 
+/** the grammars that have tokenized a line: the first line a grammar sees also compiles its
+ * regexes, which on a slow machine alone outruns the line budget and leaves that line half
+ * painted, so the first line runs uncapped and the budget guards the lines after it */
+const warmed = new Set<string>();
+
 /** one line of a file in `language` coloured, carrying on from where the line above it ended */
 export function tokenizeLine(language: string, line: string, state: monaco.languages.IState) {
   const start = state as LineState;
   if (!highlighter || line.length > LONG_LINE) return { tokens: [{ startIndex: 0, scopes: "" }], endState: start };
-  const r = highlighter.getLanguage(GRAMMAR[language] as string).tokenizeLine(line, start.stack, LINE_BUDGET_MS);
+  const grammar = GRAMMAR[language] as string;
+  const budget = warmed.has(grammar) ? LINE_BUDGET_MS : 0;
+  warmed.add(grammar);
+  const r = highlighter.getLanguage(grammar).tokenizeLine(line, start.stack, budget);
   return {
     tokens: r.tokens.map((t) => ({ startIndex: t.startIndex, scopes: tokenOf(t.scopes) })),
     endState: new LineState(r.ruleStack),

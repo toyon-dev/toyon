@@ -10,6 +10,9 @@ import { resolve } from "node:path";
 const SHARDS = 8;
 const root = resolve(import.meta.dir, "..");
 const args = process.argv.slice(2);
+// bunfig's [test] timeout does not reach Bun 1.4.2, which then stops a test at five seconds; the
+// git fixtures need the room it asks for whenever the machine is busy with a second run
+if (!args.some((arg) => arg.startsWith("--timeout"))) args.unshift("--timeout", "20000");
 
 const runs = Array.from({ length: SHARDS }, async (_, i) => {
   const proc = Bun.spawn([process.execPath, "test", `--shard=${i + 1}/${SHARDS}`, ...args], {

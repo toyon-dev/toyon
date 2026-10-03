@@ -192,6 +192,16 @@ function QuestionBody({
     write(openNote(draft, current, asOwn, multi), current);
     requestAnimationFrame(() => own.current?.focus());
   };
+  /** `n`: a note on the row the cursor is on. The row becomes the pick without moving on, since
+   * the note is still to be written; with nothing picked the field read as the "other" row's
+   * answer, which is not what the key says. On the "other" row the field is the answer itself. */
+  const note = () => {
+    if (!q?.note) return;
+    const option = q.options[cursor];
+    if (!option || multi) return type(!option);
+    write(openNote(choose(draft, current, option.value, false), current, false, false), current);
+    requestAnimationFrame(() => own.current?.focus());
+  };
   const pick = (oi: number) => {
     if (isOwnRow(q, oi)) {
       setCursor(oi);
@@ -278,7 +288,7 @@ function QuestionBody({
     }
     if (e.key === "n" && q?.note) {
       e.preventDefault();
-      return type(false);
+      return note();
     }
     if (e.key === "s" && !onAnswer) {
       e.preventDefault();

@@ -88,7 +88,8 @@ describe("create / remove", () => {
     mkdirSync(join(w.repo, "node_modules"), { recursive: true });
     writeFileSync(join(w.repo, "node_modules", "dep.js"), "x\n");
     const wt = await w.worktrees.create(repoId, "task");
-    await settle();
+    // the deps copy runs after create returns, and a fixed settle loses to it on a busy machine
+    await until(() => existsSync(join(wt.path, "node_modules", "dep.js")));
     expect(existsSync(join(wt.path, ".gitignore"))).toBe(false);
     expect(existsSync(join(wt.path, "node_modules", "dep.js"))).toBe(true);
     expect((await w.worktrees.gitStatus(wt.id))?.files).toEqual([]);
@@ -125,13 +126,17 @@ describe("create / remove", () => {
       }
     });
     w.hub.emit("checkPassed", first.id);
-    // an entry is built beside its family and renamed in whole, so the family folder exists while
-    // there is still nothing to restore; the manifest is what says the entry is kept
+    // an entry is built in a .tmp- folder beside its family, manifest last, and renamed in whole:
+    // the family folder and even the manifest exist while there is still nothing to restore, so
+    // the wait is for an entry under its own name, the only kind a restore reads
     const kept = () => {
       const repoDir = join(w.paths.cacheDir, repoId);
       if (!existsSync(repoDir)) return false;
       return readdirSync(repoDir).some((family) =>
-        readdirSync(join(repoDir, family)).some((entry) => existsSync(join(repoDir, family, entry, "manifest.json"))),
+        readdirSync(join(repoDir, family)).some(
+          (entry) =>
+            /^[0-9a-f]{12}-[0-9a-z]+$/.test(entry) && existsSync(join(repoDir, family, entry, "manifest.json")),
+        ),
       );
     };
     await until(kept);

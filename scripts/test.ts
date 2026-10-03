@@ -5,9 +5,14 @@
 // (the git fixtures make thousands of them), and no test timeout can fire on a thread that never
 // yields. A plain `bun test` process does not, so the parallelism is across processes instead.
 
+import { availableParallelism } from "node:os";
 import { resolve } from "node:path";
 
-const SHARDS = 8;
+// One shard for every two cores, eight at most. The git fixtures are all spawns, and more test
+// processes than the machine can serve make every fixed wait in the suite miss: a three-core CI
+// runner gets one shard, which is the serial run. TOYON_TEST_SHARDS names a count outright.
+const SHARDS =
+  Number(process.env.TOYON_TEST_SHARDS) || Math.max(1, Math.min(8, Math.floor(availableParallelism() / 2)));
 const root = resolve(import.meta.dir, "..");
 const args = process.argv.slice(2);
 // bunfig's [test] timeout does not reach Bun 1.4.2, which then stops a test at five seconds; the

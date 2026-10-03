@@ -407,8 +407,16 @@ export class AcpSession implements AgentAdapter {
     this.d.onStatus(s);
   }
 
+  /** A message from the person. One sent past an open card is their answer to it: the agent is
+   * blocked on the card and would read nothing until it closed, so the card closes as passed and
+   * the message is what the turn carries on with. */
   send(text: string, opts: SendOpts = {}) {
     if (this.stopped) return log.warn(this.d.worktreeId, "send after close dropped");
+    for (const ask of [...this.asks.values()]) ask.settle("skipped");
+    this.post(text, opts);
+  }
+
+  private post(text: string, opts: SendOpts = {}) {
     const { context, attachments } = opts;
     const item: QueueItem = { text, context, ...(attachments?.length ? { attachments } : {}) };
     // held from here until the message is recorded, which for a queued one is turns away
@@ -1151,7 +1159,7 @@ export class AcpSession implements AgentAdapter {
    * a message instead, which steers into the turn the approval just released. */
   private async sayPlanEdited(proposed: string, path: string) {
     if (!(await this.d.planEdited?.(path, proposed))) return;
-    this.send(`I edited the plan before approving it. Build what is in ${path}, not the plan you proposed.`);
+    this.post(`I edited the plan before approving it. Build what is in ${path}, not the plan you proposed.`);
   }
 
   private onElicit(

@@ -1867,6 +1867,48 @@ describe("AcpSession ask cards", () => {
     await w.session.close();
   });
 
+  test("a message sent past an open question closes it as passed, and joins the turn it released", async () => {
+    const fake = fakeAgent(asks(), { steering: true });
+    const w = world(fake);
+    w.session.send("go");
+    await waitFor(() => !!openAsk(w.events));
+    const id = openAsk(w.events)!;
+    w.session.send("never mind, do it the other way");
+    await w.idle();
+    expect(w.events.find((e) => e.type === "agent-ask-end")).toMatchObject({ id, outcome: "skipped" });
+    expect(saidBack(w.events)).toEqual({ action: "decline" });
+    // the card closed before the message was shown, and the message went into the same turn
+    const types = w.types();
+    expect(types.indexOf("agent-ask-end")).toBeLessThan(types.lastIndexOf("user-message"));
+    expect(fake.steers).toHaveLength(1);
+    expect(types.filter((t) => t === "turn-start")).toHaveLength(1);
+    await w.session.close();
+  });
+
+  test("a message sent past an open permission denies it", async () => {
+    let outcome: unknown;
+    const fake = fakeAgent(async (p, client) => {
+      const r = await client.request(acp.methods.client.session.requestPermission, {
+        sessionId: p.sessionId,
+        toolCall: { toolCallId: "t9", title: "Approve Plan", kind: "switch_mode" },
+        options: [
+          { optionId: "exit_plan_default", name: "Yes, manually approve edits", kind: "allow_once" },
+          { optionId: "cancel", name: "No, keep planning", kind: "reject_once" },
+        ],
+      });
+      outcome = r.outcome;
+      return { stopReason: "end_turn" };
+    });
+    const w = world(fake);
+    w.session.send("go");
+    await waitFor(() => !!openAsk(w.events));
+    w.session.send("plan the other half first");
+    await w.idle();
+    expect(w.events.find((e) => e.type === "agent-ask-end")).toMatchObject({ outcome: "skipped" });
+    expect(outcome).toEqual({ outcome: "cancelled" });
+    await w.session.close();
+  });
+
   test("stopping the turn cancels the card instead of leaving the agent blocked on it", async () => {
     const fake = fakeAgent(asks());
     const w = world(fake);

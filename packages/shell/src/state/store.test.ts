@@ -2183,6 +2183,16 @@ describe("discovered worktrees", () => {
     expect(run([helloR(wt("m1", "main"))], from).archivedOpen).toEqual({ r: true });
   });
 
+  test("the committed section folds per project, open until someone shuts it, and a forgotten project drops it", () => {
+    const open = run([helloR(wt("main", "main"))]);
+    expect(open.committedShut.r).toBeUndefined();
+    const shut = run([{ a: "toggle-committed" }], open);
+    expect(shut.committedShut.r).toBe(true);
+    expect(run([{ a: "toggle-committed" }], shut).committedShut.r).toBe(false);
+    const from = initialState({ clientId: ME, storedCommittedShut: { r: true, gone: true } });
+    expect(run([helloR(wt("m1", "main"))], from).committedShut).toEqual({ r: true });
+  });
+
   test("a folder opened by hand in the files tab is remembered per worktree; closing the last forgets the entry", () => {
     const one = run([{ a: "tree-folder", worktreeId: "w1", path: "src", open: true }]);
     expect(one.treeOpen).toEqual({ w1: ["src"] });

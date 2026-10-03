@@ -363,11 +363,26 @@
       height: 1px;
       background: var(--border0);
     }
-    &:first-child {
+    /* nor has one that follows another title directly, a shut section over the next: the rule
+       parts rows from a section, and two of them a row apart read as a table */
+    &:first-child,
+    .section-row + & {
       margin-top: 0;
       &::before {
         display: none;
       }
+    }
+  }
+  /* a section row that folds what it heads: the whole width is the press, the caret at its far end
+     included, so the whole width answers the pointer the way the rows under it do, and the seat
+     lifts its text with it */
+  .section-fold {
+    width: 100%;
+    text-align: left;
+    :where([data-hover]) &:hover {
+      background: var(--element0);
+      --text1: var(--ink0);
+      --text2: var(--ink1);
     }
   }
   /* an empty list, on the rows' own text column */

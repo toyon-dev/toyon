@@ -154,6 +154,16 @@
   .changes-list .section-row {
     padding: 0 var(--row-inset);
   }
+  /* the tests' title under a section: a label inside the section and not one more of them, so it
+     steps in to the file names' column (past the status letter and the row's gap), stands shorter
+     than a section's row and draws nothing. At the sections' own edge it read as one that folds. */
+  .changes-sub {
+    padding: 4px var(--row-inset) 2px calc(var(--row-inset) + 18px + 8px);
+  }
+  /* the caret ends the row, where the rail's sections keep theirs */
+  .changes-list .section-fold .disc-caret {
+    margin-left: auto;
+  }
 
   .git-file {
     & .xy {

@@ -60,6 +60,9 @@ export const useVisibleArchived = (): ArchivedWorktree[] =>
 export const useArchivedOpen = (): boolean =>
   useStore((s) => (s.activeRepoId ? (s.archivedOpen[s.activeRepoId] ?? false) : false));
 
+/** is the changes list's committed section open in this project (open by default) */
+export const useCommittedOpen = (): boolean => useStore((s) => !(s.activeRepoId && s.committedShut[s.activeRepoId]));
+
 /** the archived worktree whose page the centre shows (an element of the list, so its identity holds) */
 export const useArchivedPage = (): ArchivedWorktree | null => useStore(archivedPageOf);
 

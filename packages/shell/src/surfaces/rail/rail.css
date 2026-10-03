@@ -373,13 +373,8 @@
   /* a section's row with a press on it: the shape, the rule above and the text are the shared
      ones, and what is the rail's is its columns */
   .rail-disc-head {
-    width: 100%;
     gap: 8px;
     padding: 0 var(--rail-pad-r) 0 var(--rail-pad-l);
-    text-align: left;
-    :where([data-hover]) &:hover {
-      color: var(--text1);
-    }
   }
   /* the same padding as .rail-item: these rows sit in the same column and their dots have to land
    on the same centre line. A rung down in height as well as colour, because these are not main's

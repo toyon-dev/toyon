@@ -49,16 +49,17 @@ const PRIMITIVES = new Set([
  * Controls that are deliberately not one of the sizes, each for a reason:
  * - .jump-up and .jump-down are the segments of the pill floating over the transcript, sized to
  *   clear the composer
- * - .rail-disc-head is a full-width rail row that happens to be a button
+ * - .section-fold is a section heading that folds its rows: a full-width row that happens to be
+ *   a button
  * - .bar-path is the address strip: chrome, so quieter at rest than a form field, with the bar's
  *   own inset
  */
-const ONE_OFFS = new Set([".jump-down", ".jump-up", ".rail-disc-head", ".bar-path"]);
+const ONE_OFFS = new Set([".jump-down", ".jump-up", ".section-fold", ".bar-path"]);
 
 /**
  * A raw <button> is a row, or one of three inline controls that are text rather than a chip:
  * .pick-open is a link inside a chip's sentence, .dl.more the last line of a diff block, and the
- * rail's full-width row is above. .chip-link is a row too: the whole attachment chip, pressed to
+ * folding section heading is above. .chip-link is a row too: the whole attachment chip, pressed to
  * open what it holds, and .tool-image is the picture a call returned, pressed the same way, as is
  * .editor-image, the pane's body when the file is a picture. A tab (.tab-btn) is a band in a
  * strip, and its box is the strip's the way a picker row's is the list's. Anything else pressable
@@ -68,7 +69,7 @@ const RAW_BUTTON_OK = new Set([
   "row",
   "picker-item",
   "design-row",
-  "rail-disc-head",
+  "section-fold",
   "jump-down",
   "jump-up",
   "pick-open",

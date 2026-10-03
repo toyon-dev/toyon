@@ -11,6 +11,7 @@ import {
   useActiveRow,
   useArchivedPage,
   useBare,
+  useCommittedOpen,
   useLocalField,
 } from "../../state/selectors.ts";
 import { type ChangesTab, changesTabShown, repoById } from "../../state/store.ts";
@@ -84,7 +85,14 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
   const statusFiles = gitInfo?.files ?? NO_FILES;
   const statusCommitted = gitInfo?.committed ?? NO_FILES;
   const { files, source: fileSource } = useMemo(() => testsLast(statusFiles), [statusFiles]);
-  const { files: committed, source: committedSource } = useMemo(() => testsLast(statusCommitted), [statusCommitted]);
+  // a folded committed section leaves the list altogether, so the cursor, the row ids and the
+  // menus count only what is drawn; the heading stays for as long as the branch holds anything
+  const hasCommitted = statusCommitted.length > 0;
+  const committedOpen = useCommittedOpen();
+  const { files: committed, source: committedSource } = useMemo(
+    () => testsLast(committedOpen ? statusCommitted : NO_FILES),
+    [statusCommitted, committedOpen],
+  );
   // a title splits a list only when it holds both kinds: a list of tests alone is just the list
   // A test file is one row until it is opened: then the tests its change touched are listed under
   // it, read from the two sides the editor holds. One file's names at a time, as one commit's files.
@@ -629,14 +637,12 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
             <>
               {/* the tab already says changes and how many; the title is only needed to tell this
                 section from the committed one under it, or on an archived page from the history */}
-              {(committed.length > 0 || archived) && <div className="section-title section-row">uncommitted</div>}
+              {(hasCommitted || archived) && <div className="section-title section-row">uncommitted</div>}
               {files.map((f, i) => (
                 <Fragment key={f.path}>
-                  {fileTests > 0 && i === fileSource && (
-                    <div className="section-title section-row">
-                      {committed.length > 0 || archived ? "uncommitted tests" : "tests"}
-                    </div>
-                  )}
+                  {/* a title inside its section, not a section of its own: it says where the change
+                      ends and its tests begin, so it takes no rule and repeats no section's name */}
+                  {fileTests > 0 && i === fileSource && <div className="section-title changes-sub">tests</div>}
                   <GitFileRow
                     f={f}
                     id={rowId(i)}
@@ -654,19 +660,27 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
               ))}
             </>
           )}
-          {showChanges && !archived && committed.length > 0 && (
+          {showChanges && !archived && hasCommitted && (
             <>
-              <div
-                className="section-title section-row"
+              {/* the one section here that folds: it is what the branch already holds, and a long
+                  run of it under the work in hand is the part worth putting away */}
+              <button
+                type="button"
+                className="section-title section-row section-fold"
+                aria-expanded={committedOpen}
                 data-tip={`Committed on this branch, not yet on ${base}`}
                 data-tip-placement="follow"
+                onClick={() => dispatch({ a: "toggle-committed" })}
+                // the press is the heading's own: the list under it reads Enter as opening its row
+                onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && e.stopPropagation()}
               >
                 committed
-              </div>
+                <Icon name="caret" className={cx("icon-inline disc-caret", !committedOpen && "shut")} />
+              </button>
               {committed.map((f, i) => (
                 <Fragment key={`c-${f.path}`}>
                   {committedTests > 0 && i === committedSource && (
-                    <div className="section-title section-row">committed tests</div>
+                    <div className="section-title changes-sub">tests</div>
                   )}
                   <GitFileRow
                     f={f}
@@ -682,7 +696,7 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
               ))}
             </>
           )}
-          {showChanges && !archived && clean && committed.length === 0 && <div className="empty">clean</div>}
+          {showChanges && !archived && clean && !hasCommitted && <div className="empty">clean</div>}
           {showHist &&
             histRows.map((r, i) => (
               <Fragment key={r.file ? `${r.commit.sha}:${r.file.path}` : r.commit.sha}>

@@ -610,6 +610,9 @@ export interface State {
   discoveredOpen: Record<string, boolean>;
   /** per repo: has the rail's archived section been opened; collapsed by default, like discovered */
   archivedOpen: Record<string, boolean>;
+  /** per repo: has the changes list's committed section been folded. Open is the default: what a
+   * branch already holds is part of what is being read until someone says it is in the way. */
+  committedShut: Record<string, boolean>;
   /** per worktree: the folders opened by hand in the files tab. Remembered, unlike the folders the
    * open file reveals, which the tree keeps to itself: a few jumps with ⌘P must not leave the
    * whole tree open. Dropped with the worktree. */
@@ -814,6 +817,8 @@ export interface InitialOpts {
   storedDiscoveredOpen?: Record<string, boolean>;
   /** which projects had the archived section open, for the same reason */
   storedArchivedOpen?: Record<string, boolean>;
+  /** which projects had the committed section folded, so it does not reopen on every reload */
+  storedCommittedShut?: Record<string, boolean>;
   /** the folders each worktree's files tab had open by hand */
   storedTreeOpen?: Record<string, string[]>;
   /** the frame this window opens in, so the first paint is the right one (app/phone.ts) */
@@ -836,6 +841,7 @@ export function initialState(opts: InitialOpts): State {
     visibleDiscovered: [],
     discoveredOpen: opts.storedDiscoveredOpen ?? {},
     archivedOpen: opts.storedArchivedOpen ?? {},
+    committedShut: opts.storedCommittedShut ?? {},
     treeOpen: opts.storedTreeOpen ?? {},
     treeReveal: null,
     refs: {},
@@ -1313,6 +1319,7 @@ export type Action =
   | { a: "rail-peek"; on: boolean }
   /** open or close the active project's discovered section */
   | { a: "toggle-discovered" }
+  | { a: "toggle-committed" }
   /** a folder in the files tab opened or closed by hand */
   | { a: "tree-folder"; worktreeId: string; path: string; open: boolean }
   /** a folder named in the chat: shown in the files tab, opened along with what holds it */
@@ -1843,6 +1850,11 @@ function reduce(s: State, action: Action): State {
       if (!repoId) return s;
       return { ...s, archivedOpen: { ...s.archivedOpen, [repoId]: !s.archivedOpen[repoId] } };
     }
+    case "toggle-committed": {
+      const repoId = s.activeRepoId;
+      if (!repoId) return s;
+      return { ...s, committedShut: { ...s.committedShut, [repoId]: !s.committedShut[repoId] } };
+    }
     case "tree-folder": {
       const was = s.treeOpen[action.worktreeId] ?? [];
       if (was.includes(action.path) === action.open) return s;
@@ -2033,6 +2045,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
         treeOpen: pruneByRow(s.treeOpen, msg.rows),
         discoveredOpen: pruneByRepo(s.discoveredOpen, msg.repos),
         archivedOpen: pruneByRepo(s.archivedOpen, msg.repos),
+        committedShut: pruneByRepo(s.committedShut, msg.repos),
         refs: pruneByRepo(s.refs, msg.repos),
         chats: pruneByRepo(s.chats, msg.repos),
         archived: pruneByRepo(s.archived, msg.repos),

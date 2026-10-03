@@ -42,6 +42,7 @@ export function App() {
   const lastActive = useStore((s) => s.lastActive);
   const discoveredOpen = useStore((s) => s.discoveredOpen);
   const archivedOpen = useStore((s) => s.archivedOpen);
+  const committedShut = useStore((s) => s.committedShut);
   const treeOpen = useStore((s) => s.treeOpen);
   const theme = useTheme();
   const previewing = useStore((s) => s.previewTheme !== null);
@@ -260,6 +261,12 @@ export function App() {
       localStorage.setItem(STORAGE.archivedOpen, JSON.stringify(archivedOpen));
     } catch {}
   }, [archivedOpen]);
+  // and a folded committed section, which would otherwise unfold over the work on every reload
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE.committedShut, JSON.stringify(committedShut));
+    } catch {}
+  }, [committedShut]);
   // the folders opened by hand in each files tab: a reload comes back to the tree as it was left
   useEffect(() => {
     try {

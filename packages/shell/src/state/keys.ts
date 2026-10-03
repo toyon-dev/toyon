@@ -10,6 +10,8 @@ export const STORAGE = {
   discoveredOpen: "toyon-disc",
   /** which projects had the rail's archived section open, keyed by repo id */
   archivedOpen: "toyon-arch",
+  /** which projects had the changes list's committed section folded, keyed by repo id */
+  committedShut: "toyon-committed-shut",
   /** the folders opened by hand in the files tab, keyed by worktree id: {"<worktree>":["src",...]} */
   treeOpen: "toyon-tree",
   /** daemon token; an installed PWA launches without the #token fragment */

@@ -712,7 +712,7 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
           {!graftMode && discovered.length > 0 && (
             <>
               <button
-                className="section-title section-row rail-disc-head"
+                className="section-title section-row section-fold rail-disc-head"
                 aria-expanded={discOpen}
                 {...tip(
                   `${discovered.length} worktree${discovered.length === 1 ? "" : "s"} here that Toyon did not make`,
@@ -735,7 +735,7 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
             <>
               <button
                 type="button"
-                className="section-title section-row rail-disc-head"
+                className="section-title section-row section-fold rail-disc-head"
                 aria-expanded={archOpen}
                 {...tip(
                   `${archived.length} archived worktree${archived.length === 1 ? "" : "s"}, kept with ${archived.length === 1 ? "its chat" : "their chats"}`,

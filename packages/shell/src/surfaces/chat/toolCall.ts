@@ -111,8 +111,12 @@ const VERB_ICON: Record<string, IconName> = {
  * a script that happens to hold ` -i`, stays a run row: a miss costs the book, never a wrong glyph. */
 const SED_IN_PLACE = /(^|\s)(-[A-Za-z]*i|--in-place)/;
 
+/** `cd dir &&` or `cd dir;` at the head of a command: it only says where, and the work is whatever
+ * comes next, so the verb is read from there. */
+const LEADING_CD = /^\s*cd\s+(?:"[^"]*"|'[^']*'|[^\s;&|]+)\s*(?:&&|;)\s*/;
+
 function verbIcon(command: string): IconName | undefined {
-  const first = command.trim().split(/\s+/)[0] ?? "";
+  const first = command.replace(LEADING_CD, "").trim().split(/\s+/)[0] ?? "";
   // an absolute path still names the verb: /usr/bin/grep is a grep
   const verb = first.slice(first.lastIndexOf("/") + 1);
   // without -i sed only prints, whatever its script does to the lines on the way

@@ -375,6 +375,11 @@ describe("toolLabel", () => {
     for (const flag of ["-i ''", "-i.bak", "-ni", "--in-place"])
       expect(toolLabel({ ...call, input: { command: `sed ${flag} 's/a/b/' a.ts` } }).icon).toBe("run");
     expect(toolLabel({ ...call, input: { command: "sed -n 1,9p a.ts; sed -i 's/a/b/' b.ts" } }).icon).toBe("run");
+    // a leading cd only says where: the verb is the command after it
+    expect(toolLabel({ ...call, input: { command: "cd packages/shell && grep -rn dark ." } }).icon).toBe("search");
+    expect(toolLabel({ ...call, input: { command: 'cd "my dir"; sed -n 1,9p a.ts' } }).icon).toBe("book");
+    expect(toolLabel({ ...call, input: { command: "cd packages/shell && bun test" } }).icon).toBe("run");
+    expect(toolLabel({ ...call, input: { command: "cd packages/shell" } }).icon).toBe("run");
     // a verb with no entry, and a kind the agent named itself, both keep the kind's own glyph
     expect(toolLabel({ ...call, input: { command: "bun run check" } }).icon).toBe("run");
     expect(toolLabel({ ...call, toolKind: "read", input: { command: "cat x" } }).icon).toBe("book");

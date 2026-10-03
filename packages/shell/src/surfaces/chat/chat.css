@@ -1150,6 +1150,16 @@
       text-align: left;
       color: inherit;
       text-decoration: none;
+      /* the row's hover and tip cover its padding, so the press does too: the control takes the
+         row's inset as its own and stands the row's full height */
+      align-self: stretch;
+      margin-inline: calc(-1 * var(--row-inset));
+      padding-inline: var(--row-inset);
+      /* a chip still in the composer ends in its remove button, which keeps the trailing inset */
+      &:has(+ button) {
+        margin-inline-end: 0;
+        padding-inline-end: 0;
+      }
     }
   }
 
@@ -1158,6 +1168,10 @@
   .image-chip {
     /* the thumbnail outgrows the row's height, so the row gives it a little air from its neighbours */
     padding-block: 2px;
+    & .chip-link {
+      margin-block: -2px;
+      padding-block: 2px;
+    }
     & .image-thumb {
       width: 40px;
       height: 40px;

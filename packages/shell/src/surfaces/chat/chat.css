@@ -874,10 +874,10 @@
       white-space: nowrap;
     }
   }
-  /* the question set aside, at the top of the box where it stood: the glyph in the accent, which
-     is what says the turn is waiting on you, then the word that brings it back and what is asked,
-     a tier under the word as the line after the box's other verb is. One line: the question in
-     full is a press away. */
+  /* the question set aside, at the top of the box where it stood, in the plan row's shape so the
+     two stack as one column of glyphs: the glyph in the row's own tier, then the word that brings
+     the question back and what is asked, a tier under the word as the line after the box's other
+     verb is. One line: the question in full is a press away. */
   .composer-ask {
     display: flex;
     align-items: center;
@@ -887,7 +887,6 @@
     color: var(--text1);
     & > .icon-inline {
       flex: none;
-      color: var(--accent);
     }
     & .composer-ask-line {
       min-width: 0;

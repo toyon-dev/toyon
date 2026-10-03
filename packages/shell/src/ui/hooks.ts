@@ -194,7 +194,10 @@ const SCROLL_REST = 1200;
  * on data has to name every source of growth and misses the next. "At the end" is read from the
  * element when it scrolls, never from where a jump meant to land: a programmatic scroll dispatches
  * its event in the frame's scroll steps, before the observers deliver, so a reader taken elsewhere
- * is known to have left before anything could pull them back. `offEnd` and `offStart` say the
+ * is known to have left before anything could pull them back. The one event not read that way is
+ * the pin's own: it too arrives a frame late, and whatever landed in between (the message a send
+ * jumped for) would measure as the reader having left, so an event that finds the scroller still
+ * pinned and still where the pin put it changes nothing. `offEnd` and `offStart` say the
  * reader is away from either end now, by the same slack, for a control at each end that offers
  * the rest of the way; `away` says `news` changed while they were off the end, and it is a value
  * and not the layout because a row the reader opened themselves grows the same way a message
@@ -219,6 +222,8 @@ export function useTail(
   read: () => void;
 } {
   const pinned = useRef(true);
+  // where the pin last put the scroller, as the element reported it back
+  const held = useRef<number | null>(null);
   const [offEnd, setOffEnd] = useState(false);
   const [offStart, setOffStart] = useState(false);
   const [away, setAway] = useState(false);
@@ -254,6 +259,7 @@ export function useTail(
     const el = ref.current;
     if (!el) return;
     el.scrollTop = el.scrollHeight;
+    held.current = el.scrollTop;
     pinned.current = true;
     setOffEnd(false);
     setAway(false);
@@ -265,7 +271,11 @@ export function useTail(
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    el.addEventListener("scroll", read, { passive: true });
+    const onScroll = () => {
+      if (pinned.current && el.scrollTop === held.current) setOffStart(el.scrollTop >= TAIL_SLACK);
+      else read();
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
     const onWheel = (e: WheelEvent) => push(e.deltaY);
     const onTouchStart = (e: TouchEvent) => {
       lastTouch.current = e.touches[0]?.clientY ?? null;
@@ -280,7 +290,9 @@ export function useTail(
     el.addEventListener("touchstart", onTouchStart, { passive: true });
     el.addEventListener("touchmove", onTouchMove, { passive: true });
     const ro = new ResizeObserver(() => {
-      if (pinned.current) el.scrollTop = el.scrollHeight;
+      if (!pinned.current) return;
+      el.scrollTop = el.scrollHeight;
+      held.current = el.scrollTop;
     });
     ro.observe(el);
     for (const child of el.children) ro.observe(child);
@@ -292,7 +304,7 @@ export function useTail(
     });
     mo.observe(el, { childList: true });
     return () => {
-      el.removeEventListener("scroll", read);
+      el.removeEventListener("scroll", onScroll);
       el.removeEventListener("wheel", onWheel);
       el.removeEventListener("touchstart", onTouchStart);
       el.removeEventListener("touchmove", onTouchMove);

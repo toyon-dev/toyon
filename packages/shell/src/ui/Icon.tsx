@@ -47,6 +47,7 @@ export type IconName =
   | "lock"
   | "pr"
   | "clock"
+  | "archive"
   | "phone"
   | "dot";
 
@@ -148,6 +149,9 @@ const ICON_PATHS: Record<IconName, string> = {
   // a clock face with two hands: something toyon did on its own after a while, the rail's mark on a
   // worktree that archived itself
   clock: "M8 2.2a5.8 5.8 0 1 0 0 11.6 5.8 5.8 0 1 0 0-11.6z M8 4.8V8l2.2 1.4",
+  // a storage box: a wide lid over a narrower body, with the short handle slot that keeps it from
+  // reading as a plain card. Put away and kept, where `trash` is gone and `close` is a press
+  archive: "M2.4 3.2h11.2v2.8H2.4z M3.4 6v6.1a.9.9 0 0 0 .9.9h7.4a.9.9 0 0 0 .9-.9V6 M6.6 8.6h2.8",
   // a step that happened under a name we cannot read: a marker, deliberately without a meaning
   dot: "M8 4.6a3.4 3.4 0 1 0 0 6.8 3.4 3.4 0 1 0 0-6.8z",
 };

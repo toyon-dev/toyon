@@ -25,7 +25,7 @@ export function ArchivedNote({ item }: { item: ArchivedWorktree }) {
     ? `Toyon kept ${kept}${cost}. A message sent below restores it first.`
     : `Its commits were not kept, so there is nothing to restore${cost}; its row's menu on the rail can delete it for good.`;
   return (
-    <DaemonRow icon="close" word="archived" tone="quiet" below={<div className="daemon-below row-dim">{note}</div>}>
+    <DaemonRow icon="archive" word="archived" tone="quiet" below={<div className="daemon-below row-dim">{note}</div>}>
       <span className="daemon-text">
         {spanWords(Date.now() - item.archivedAt)} ago{item.landed ? ", after it was merged into main" : ""}
       </span>

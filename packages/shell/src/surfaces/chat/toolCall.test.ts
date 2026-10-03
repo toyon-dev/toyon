@@ -375,6 +375,9 @@ describe("toolLabel", () => {
     for (const flag of ["-i ''", "-i.bak", "-ni", "-I ''", "--in-place"])
       expect(toolLabel({ ...call, input: { command: `sed ${flag} 's/a/b/' a.ts` } }).icon).toBe("run");
     expect(toolLabel({ ...call, input: { command: "sed -n 1,9p a.ts; sed -i 's/a/b/' b.ts" } }).icon).toBe("run");
+    // another command's -i is not sed's
+    const mixed = 'sed -n 30,60p a.md; echo ----; grep -n -i "cookie" b.md | head -80';
+    expect(toolLabel({ ...call, input: { command: mixed } }).icon).toBe("book");
     // a leading cd only says where: the verb is the command after it
     expect(toolLabel({ ...call, input: { command: "cd packages/shell && grep -rn dark ." } }).icon).toBe("search");
     expect(toolLabel({ ...call, input: { command: 'cd "my dir"; sed -n 1,9p a.ts' } }).icon).toBe("book");

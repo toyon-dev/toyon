@@ -106,9 +106,10 @@ const VERB_ICON: Record<string, IconName> = {
   git: "branch",
 };
 
-/** `-i` (BSD also takes `-I`), alone or in a cluster (`-ni`, `-i.bak`), or spelled out: the one flag that makes sed write
- * the file it was given. Matched anywhere in the command, so a chain with one in-place sed in it, or
- * a script that happens to hold ` -i`, stays a run row: a miss costs the book, never a wrong glyph. */
+/** `-i` (BSD also takes `-I`), alone or in a cluster (`-ni`, `-i.bak`), or spelled out: the one
+ * flag that makes sed write the file it was given. Asked of each sed in the chain and of no other
+ * command, since a read is very often `sed -n ...; grep -i ...` and that `-i` is grep's. A script
+ * that happens to hold ` -i` trips it: a miss costs the book, never a wrong glyph. */
 const SED_IN_PLACE = /(^|\s)(-[A-Za-z]*[iI]|--in-place)/;
 
 /** what stands at the head of a command and only sets the scene: `cd dir &&`, a variable set for
@@ -138,15 +139,21 @@ function afterScene(command: string): string {
  * A `>` inside a quoted pattern trips it too, which costs that row its glyph and nothing more. */
 const TO_FILE = /(?<![0-9&])>{1,2}\s*(?!\/dev\/null|&)[^\s&>]/;
 
+const SEPARATOR = /&&|;|\n|\|/;
+
+function sedWrites(command: string): boolean {
+  return command.split(SEPARATOR).some((part) => /^\s*(?:\S*\/)?sed\s/.test(part) && SED_IN_PLACE.test(part));
+}
+
 function verbIcon(command: string): IconName | undefined {
   const rest = afterScene(command).trim();
   const first = rest.split(/\s+/)[0] ?? "";
   // an absolute path still names the verb: /usr/bin/grep is a grep
   const verb = first.slice(first.lastIndexOf("/") + 1);
   // without -i sed only prints, whatever its script does to the lines on the way
-  const icon = verb === "sed" ? (SED_IN_PLACE.test(command) ? undefined : "book") : VERB_ICON[verb];
+  const icon = verb === "sed" ? (sedWrites(command) ? undefined : "book") : VERB_ICON[verb];
   if (icon === "book" || icon === "search") {
-    const head = rest.split(/&&|;|\n|\|/)[0] ?? "";
+    const head = rest.split(SEPARATOR)[0] ?? "";
     if (TO_FILE.test(head)) return verb === "cat" && head.includes("<<") ? "edit" : undefined;
   }
   if (icon) return icon;

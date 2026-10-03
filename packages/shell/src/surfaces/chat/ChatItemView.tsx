@@ -1000,7 +1000,7 @@ export const ChatItemView = memo(function ChatItemView({
       // bubble. Dimming it as a tool exchange put the sentence that decided the turn in the quiet
       // tier under the prose it caused.
       const said = answeredQuestion(item);
-      if (!said) return <AskRow item={item} worktreeId={worktreeId} />;
+      if (!said) return <AskRow item={item} />;
       const answer = answerLines(said.questions, said.answers).join("\n");
       // the bubble offers copy alone: a pick re-sent as prose is not the choice, so it takes no
       // "edit in composer" and no place in the walk

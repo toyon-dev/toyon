@@ -65,7 +65,7 @@ import {
 import { runLine, runOf, runTicking } from "../runs.ts";
 import { chord, commandSource, folderList, pickLabel, procTrouble } from "../util.ts";
 import { AskBox } from "./AskBox.tsx";
-import { openAsk } from "./ask.ts";
+import { askLine, openAsk } from "./ask.ts";
 import { FileChip } from "./FileChip.tsx";
 import { ImageChip } from "./ImageChip.tsx";
 import { MentionText, openMention } from "./Mentions.tsx";
@@ -942,6 +942,29 @@ export function Composer({
           </Button>
         </div>
       )}
+      {/* the question set aside with escape, and the way back to it: at the top of the box, where
+          the question itself stood, and in the shape of the box's other verb, the word to press
+          and then what it is about. One line for it, since the log's own line already says the
+          turn is waiting. */}
+      {parked && id && (
+        <div className="composer-ask">
+          <Icon name="chat" className="icon-inline" />
+          <span className="composer-ask-line">
+            <Button
+              variant="inline"
+              tone="strong"
+              data-tip="Bring the question back into the box"
+              onClick={() => {
+                dispatch({ a: "ask-unpark", id });
+                dispatch({ a: "focus-chat" });
+              }}
+            >
+              answer
+            </Button>{" "}
+            {askLine(parked)}
+          </span>
+        </div>
+      )}
       {boxId &&
         numbered(attachments, numbersAfter(nextNumbers(sentBefore), queued)).map(([item, n]) => {
           const detach = () => dispatch({ a: "detach", id: boxId, key: item.key });
@@ -1361,46 +1384,30 @@ export function Composer({
           do about it now, each on its own line so the row above keeps its shape. Main against
           origin while drafting, with the pull, since a new worktree starts from main as it is and
           a main nobody has pulled today hands the agent stale code. What the message will be
-          (batch, variants, main's files coming along) is the intro's, above the box. And the
-          question set aside, with the way back to it. How far a worktree trails main is not a row
-          here: land takes main in first, so the count is a fact on the verb's tooltip, and a row
-          that left as the land ran moved the verb from under the cursor before archive took its
-          place. The sync itself stays in the changes tab's foot and the rail menu. */}
-      {((origin && trunk) || (parked && id)) && (
+          (batch, variants, main's files coming along) is the intro's, above the box. How far a
+          worktree trails main is not a row here: land takes main in first, so the count is a fact
+          on the verb's tooltip, and a row that left as the land ran moved the verb from under the
+          cursor before archive took its place. The sync itself stays in the changes tab's foot and
+          the rail menu. */}
+      {origin && trunk && (
         <div className="composer-notes">
-          {parked && id && (
-            <div className="hint composer-note">
-              <span>the agent is waiting on a question</span>
+          <div className="hint composer-note">
+            <span>{origin}</span>
+            {/* a diverged main is a terminal's job: no button promises what a fast-forward cannot do.
+                A dirty main keeps the button: the pull goes through past files it does not touch,
+                and names the one in its way when it refuses */}
+            {canPull(trunk) && (
               <Button
                 variant="outline"
-                onClick={() => {
-                  dispatch({ a: "ask-unpark", id });
-                  dispatch({ a: "focus-chat" });
-                }}
+                busy={trunkOp === "pull-main"}
+                disabled={!!trunkOp}
+                data-tip="Fast-forward main to origin"
+                onClick={() => shipOp(sock, dispatch, { t: "pull-main", worktreeId: trunk.id })}
               >
-                answer
+                pull
               </Button>
-            </div>
-          )}
-          {origin && trunk && (
-            <div className="hint composer-note">
-              <span>{origin}</span>
-              {/* a diverged main is a terminal's job: no button promises what a fast-forward cannot do.
-                  A dirty main keeps the button: the pull goes through past files it does not touch,
-                  and names the one in its way when it refuses */}
-              {canPull(trunk) && (
-                <Button
-                  variant="outline"
-                  busy={trunkOp === "pull-main"}
-                  disabled={!!trunkOp}
-                  data-tip="Fast-forward main to origin"
-                  onClick={() => shipOp(sock, dispatch, { t: "pull-main", worktreeId: trunk.id })}
-                >
-                  pull
-                </Button>
-              )}
-            </div>
-          )}
+            )}
+          </div>
         </div>
       )}
     </div>

@@ -843,7 +843,6 @@
    scrolled-back turn stays one column of glyphs and the word beside it is not the odd row out. The
    glyph sits inside the tag and takes its colour, which is the edge's: the row carries no other */
   .daemon-tag,
-  .ask-tag,
   .queued-tag {
     display: inline-flex;
     align-items: center;
@@ -869,6 +868,28 @@
     color: var(--text1);
     font: var(--type-mono-sm);
     & .composer-plan-path {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  }
+  /* the question set aside, at the top of the box where it stood: the glyph in the accent, which
+     is what says the turn is waiting on you, then the word that brings it back and what is asked,
+     a tier under the word as the line after the box's other verb is. One line: the question in
+     full is a press away. */
+  .composer-ask {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    margin-bottom: 6px;
+    color: var(--text1);
+    & > .icon-inline {
+      flex: none;
+      color: var(--accent);
+    }
+    & .composer-ask-line {
       min-width: 0;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -1495,32 +1516,9 @@
     position: relative;
   }
   /* ---- the ask in the transcript ----
-   While the question is open its row is one line, "asking" and what is asked, with the accent's
-   edge: in a long log it is what says the turn is waiting on you, and pressing it brings a parked
-   question back into the box. A permission's verdict, or a question
-     closed with no answer, reads back in the quiet tier; a question the person answered is a
-     message pair, the agent's prose and the person's bubble, and takes no row of its own. */
-  .ask-row {
-    min-height: 0;
-    padding: 4px 8px;
-    align-items: baseline;
-    background: var(--surface0);
-    border-left: 2px solid var(--accent);
-    :where([data-hover]) &:hover {
-      background: var(--element0);
-      --text1: var(--ink0);
-      --text2: var(--ink1);
-    }
-    & .ask-tag {
-      color: var(--accent);
-      font: var(--type-ui-sm);
-    }
-    & .ask-row-text {
-      flex: 1;
-      min-width: 0;
-      overflow-wrap: anywhere;
-    }
-  }
+     A permission's verdict, or a question closed with no answer, reads back in the quiet tier; a
+     question the person answered is a message pair, the agent's prose and the person's bubble,
+     and takes no row of its own. */
   .ask-closed {
     color: var(--text2);
     & .ask-lead {

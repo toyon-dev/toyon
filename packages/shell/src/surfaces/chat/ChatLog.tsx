@@ -270,7 +270,7 @@ export function ChatLog({
   const busy = !!active && isBusy(active);
   // the ask in the box under the log, with the stop on its own floor: a row here saying the agent
   // waits, with a second stop, said what the box already says. Parked, the box is the plain one
-  // again and the row is what says the turn is waiting on you.
+  // again and this row is the log's word that the turn is waiting on you.
   const askParked = useLocalField(id, "askParked");
   const askInBox = useMemo(() => {
     const ask = openAsk(items);

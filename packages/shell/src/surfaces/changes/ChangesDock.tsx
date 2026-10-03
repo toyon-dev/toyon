@@ -51,7 +51,7 @@ function emptyNote(base: string, branch: boolean, behind: number, top: CommitEnt
   const stands = !branch ? "no changes" : behind > 0 ? "no changes of its own" : `same as ${base}`;
   if (!top) return stands;
   const when = ago(top.at);
-  return `${stands} · last commit ${when === "now" ? "just now" : `${when} ago`}`;
+  return `${stands}, last commit ${when === "now" ? "just now" : `${when} ago`}`;
 }
 
 interface Cursor {

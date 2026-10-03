@@ -1445,13 +1445,12 @@ describe("handlers", () => {
     await opened(task.id, ctx, services);
     const agent = agents.get(task.id)!;
     await dispatch({ t: "exec", worktreeId: task.id, command: "echo started; sleep 30" }, ctx, services);
-    // let the shell get as far as the sleep, so the kill lands on a running command
-    await Bun.sleep(300);
+    // "started" streams in as a delta before the kill, so the kill lands on a running command
+    await until(() => agent.recorded.some((e) => e.type === "tool-delta" && e.text === "started\n"));
     const toolId = (agent.recorded[0] as { toolId: string }).toolId;
     await dispatch({ t: "exec-stop", worktreeId: task.id, toolId }, ctx, services);
     await until(() => agent.recorded.at(-1)?.type === "tool-end");
-    // "started" streamed in as a delta before the kill; the end carries it fenced
-    expect(agent.recorded.some((e) => e.type === "tool-delta" && e.text === "started\n")).toBe(true);
+    // the end carries what streamed in, fenced
     const end = agent.recorded.at(-1)!;
     if (end.type !== "tool-end") throw new Error("expected a tool-end");
     expect(end.isError).toBe(true);

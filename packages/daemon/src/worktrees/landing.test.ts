@@ -3,6 +3,7 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AgentEvent, Landing, LastTurn, RepoInfo, Timeouts, WorktreeInfo } from "@toyon/shared";
 import { sh, tmpRepo } from "../../test/helpers/tmp-repo.ts";
+import { until } from "../../test/helpers/world.ts";
 import type { LandVerdict } from "../agent/landing.ts";
 import type { TranscriptEntry } from "../agent/transcript.ts";
 import { Hub } from "../core/hub.ts";
@@ -161,9 +162,20 @@ function world(opts: Opts = {}) {
   const recapSettled = async () => {
     for (let i = 0; i < 50 && !state.worktree("w1")?.lastTurn?.recap; i++) await Bun.sleep(10);
   };
+  /** A verdict asked for on each tree, in this order in the repo's line. A run reads its tree
+   * before it takes its place, so three asked for at once line up in whatever order git answers:
+   * each is in line before the next is asked for. */
+  const lineUp = async (ids: string[]) => {
+    for (const id of ids) dirty(id);
+    for (const id of ids) {
+      await service.judge(id);
+      await until(() => !!state.worktree(id)?.runs?.some((r) => r.kind === "check"));
+    }
+  };
   return {
     ...t,
     wtPath,
+    lineUp,
     state,
     hub,
     runs,
@@ -502,16 +514,14 @@ describe("LandingService", () => {
     w = world({ check: "bun run check", verdict: "none", extra: 2, slow: true });
     const ids = ["w1", "w2", "w3"];
     const status = (id: string) => w?.wt(id)?.runs?.find((r) => r.kind === "check")?.status;
-    for (const id of ids) w.dirty(id);
-    for (const id of ids) await w.service.judge(id);
-    await Bun.sleep(30);
+    await w.lineUp(ids);
+    await until(() => w?.started.length === 2);
     expect(w.started).toEqual(["w1", "w2"]);
     expect(ids.map(status)).toEqual(["running", "running", "queued"]);
     expect(ids.map((id) => w?.wt(id)?.landing?.check)).toEqual(["pending", "pending", "pending"]);
     w.end("w1");
-    await Bun.sleep(30);
+    await until(() => w?.started.length === 3 && w.wt("w1")?.landing?.check === "pass");
     expect(w.started).toEqual(["w1", "w2", "w3"]);
-    expect(w.wt("w1")?.landing?.check).toBe("pass");
     expect(status("w3")).toBe("running");
     w.end("w2");
     w.end("w3");
@@ -523,9 +533,8 @@ describe("LandingService", () => {
   test("a run that goes stale while it stands queued never spawns its check", async () => {
     w = world({ check: "bun run check", verdict: "none", extra: 2, slow: true });
     const ids = ["w1", "w2", "w3"];
-    for (const id of ids) w.dirty(id);
-    for (const id of ids) await w.service.judge(id);
-    await Bun.sleep(30);
+    await w.lineUp(ids);
+    await until(() => w?.started.length === 2);
     expect(w.started).toEqual(["w1", "w2"]);
     // a new turn on w3 while it stands in line: its verdict and its run are cleared, and the
     // check it was waiting to run is about a tree that is changing

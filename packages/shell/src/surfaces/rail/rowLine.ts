@@ -121,19 +121,28 @@ export function leadLines(
 const PROMPT_MAX = 160;
 
 /**
- * The lines under an archived row's state. First the first message sent there, which the record
- * keeps so a row can say what the work was. The last recap would say where the last turn left it,
- * which is not the same thing over a long session; what was asked is true of the whole of it. Then
- * why it archived itself, when it did: the clock in the dot's seat is on the row the card belongs
- * to, and a tip of its own there swapped with the card as the pointer crossed the row.
+ * The line under an archived row's state: the first message sent there, which the record keeps so
+ * a row can say what the work was. The last recap would say where the last turn left it, which is
+ * not the same thing over a long session; what was asked is true of the whole of it.
  */
 export function archivedLines(a: ArchivedWorktree): string[] {
-  const auto = a.auto ? [`Archived automatically: ${a.auto}`] : [];
   const p = a.prompt?.replace(/\s+/g, " ").trim();
-  if (!p) return auto;
-  if (p.length <= PROMPT_MAX) return [p, ...auto];
+  if (!p) return [];
+  if (p.length <= PROMPT_MAX) return [p];
   const cut = p.slice(0, PROMPT_MAX);
-  return [`${cut.slice(0, Math.max(cut.lastIndexOf(" "), 1)).trimEnd()}…`, ...auto];
+  return [`${cut.slice(0, Math.max(cut.lastIndexOf(" "), 1)).trimEnd()}…`];
+}
+
+/**
+ * Why an archived row archived itself, for the far end of its card's state line, where the two
+ * read as one phrase: "Merged, archived automatically: landed, not opened in 2h". The clock in the
+ * dot's seat is on the row the card belongs to, and a tip of its own there swapped with the card
+ * as the pointer crossed the row; as a line under the first message it read as more of the
+ * message. A row whose state is the bare "Archived" does not say the word twice.
+ */
+export function archivedAuto(a: ArchivedWorktree, state: string): string | undefined {
+  if (!a.auto) return undefined;
+  return state === "Archived" ? `automatically: ${a.auto}` : `archived automatically: ${a.auto}`;
 }
 
 /** how many archived rows the rail draws: the ones recent enough to be found by where they sit.

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { ArchivedWorktree, WorktreeStatus } from "@toyon/shared";
 import {
   ARCHIVED_SHOWN,
+  archivedAuto,
   archivedLines,
   archivedWindow,
   cardFigures,
@@ -219,14 +220,14 @@ describe("the line under an archived row's state", () => {
     expect(line?.length).toBeLessThanOrEqual(161);
     expect(line).toMatch(/^word0 .*word\d+…$/);
   });
+});
 
-  test("why it archived itself, after what the work was", () => {
+describe("why an archived row archived itself", () => {
+  test("a phrase after the state, which does not say archived twice", () => {
     const auto = "landed, not opened in 2h";
-    expect(archivedLines(arch({ auto }))).toEqual([`Archived automatically: ${auto}`]);
-    expect(archivedLines(arch({ prompt: "fix the update race", auto }))).toEqual([
-      "fix the update race",
-      `Archived automatically: ${auto}`,
-    ]);
+    expect(archivedAuto(arch(), "Archived")).toBeUndefined();
+    expect(archivedAuto(arch({ auto }), "Merged")).toBe(`archived automatically: ${auto}`);
+    expect(archivedAuto(arch({ auto }), "Archived")).toBe(`automatically: ${auto}`);
   });
 });
 

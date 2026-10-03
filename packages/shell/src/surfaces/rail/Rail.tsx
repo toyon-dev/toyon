@@ -46,6 +46,7 @@ import { useOnChange } from "../../ui/hooks.ts";
 import { rowState } from "../../ui/rowState.ts";
 import { treeKey } from "../../ui/treeNav.ts";
 import {
+  archivedAuto,
   archivedLines,
   archivedWindow,
   cardFigures,
@@ -239,6 +240,7 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
       {...tip(archivedState(a), undefined, {
         placement: tipSide,
         card: true,
+        name: archivedAuto(a, archivedState(a)),
         detail: archivedLines(a),
         aside: a.cost !== undefined ? [dollars(a.cost)] : undefined,
       })}

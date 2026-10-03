@@ -185,9 +185,11 @@ export function ListPicker<T>({
     <div
       className="picker-input"
       // the strip is drawn as the field, so a press on its padding belongs in the field; otherwise it
-      // lands on a div and focus leaves for the body, where the next keystroke goes nowhere
+      // lands on a div and focus leaves for the body, where the next keystroke goes nowhere. A
+      // button in the strip changes what the field searches, so its press keeps the caret too: the
+      // click still fires, and the arrows and the next letter go on working.
       onMouseDown={(e) => {
-        if ((e.target as HTMLElement).closest("input, button")) return;
+        if ((e.target as HTMLElement).closest("input")) return;
         e.preventDefault();
         inputRef.current?.focus();
       }}

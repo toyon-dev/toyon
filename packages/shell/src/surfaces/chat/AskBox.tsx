@@ -307,25 +307,18 @@ function QuestionBody({
    * to walk to, so enter on a row answers the ask outright */
   const pickSends = (qq: (typeof questions)[number]) => questions.length === 1 && !qq.multi;
 
-  /** the actions under a page: the send where a pick alone is not one (several questions, a
-   * multi-select, or a field open, whose enter a mouse does not have), the note on the pick where
-   * the agent takes one and a pick is made, and the skip. Nothing lists the keys: the arrows,
-   * enter and escape are what they are everywhere, and the one key that is not says so on its row.
-   * A send arriving must not add a row, so where nothing else would hold the row (a stopped
-   * question has no skip) the send stands there unseen until a field opens. Each page carries its
-   * own foot; it sits at the page's floor so the send is in one place whichever page is open. The
-   * agent's stop is not here: it keeps the box's corner, as it does over the plain field. */
-  const sendShown = (qq?: (typeof questions)[number], a?: AskAnswer) => !qq || !pickSends(qq) || a?.note !== undefined;
+  /** the actions under a page: the send where a pick alone is not one (several questions, or a
+   * multi-select), the note on the pick where the agent takes one and a pick is made, and the
+   * skip. A field open on a lone question has no send where there is a keyboard: enter in it is
+   * the send, as enter on a row is, and a button arriving under the list moved the box; on touch
+   * it has one. Nothing lists the keys: the arrows, enter and escape are what they are
+   * everywhere, and the one key that is not says so on its row. Each page carries its own foot;
+   * it sits at the page's floor so the send is in one place whichever page is open. The agent's
+   * stop is not here: it keeps the box's corner, as it does over the plain field. */
   const foot = (qq?: (typeof questions)[number], a?: AskAnswer) => (
     <div className="ask-foot">
-      {(sendShown(qq, a) || (onAnswer && qq?.note)) && (
-        <Button
-          variant="outline"
-          size="md"
-          className={cx(!sendShown(qq, a) && "ask-hold")}
-          disabled={!sendShown(qq, a) || !canSubmit(questions, draft)}
-          onClick={submit}
-        >
+      {(!qq || !pickSends(qq) || (touch && a?.note !== undefined)) && (
+        <Button variant="outline" size="md" disabled={!canSubmit(questions, draft)} onClick={submit}>
           send
         </Button>
       )}

@@ -1477,10 +1477,6 @@
     margin-top: auto;
     padding-top: 10px;
   }
-  /* the send keeping the foot's row before it has anything to send */
-  .ask-hold {
-    visibility: hidden;
-  }
   /* whatever is first in the box keeps the corner clear for the stop (Composer): the question
      when it heads the box, the tab strip's list when the strip does, so the far tab does not
      sit under the glyph */

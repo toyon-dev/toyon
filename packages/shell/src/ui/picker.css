@@ -196,23 +196,21 @@
     /* the matched characters take the accent, the same colour as the bar marking the row you are
    on: why this row is here and which one is current, said in one colour. A highlight inside a
    word is emphasis rather than status, so it never reads as a fault the way a red border does.
-   Its contrast is read on element1, the highlighted row, not on surface0: 2.6:1 there, and a red
-   light enough to fix that has lost its chroma and is a salmon everywhere else it appears. */
+   Its contrast is read on the highlighted row, not on surface0: the seat under the cursor is the
+   lightest ground the characters meet. */
     & .hit {
       font-weight: inherit;
       color: var(--accent);
     }
-    :where([data-hover]) &:hover {
-      background: var(--element0);
-      --text1: var(--ink0);
-      --text2: var(--ink1);
-    }
     /* Where the keyboard is, and nothing more. The orange edge means "this is the one you are on"
    (the active worktree, the open tool call); on a picker row it read as a choice already made,
-   when the row under the cursor is only the row the pointer or ↑↓ happens to be over. Hover sets
-   the same index, so this is the one highlight either way. */
+   when the row under the cursor is only the row the pointer or ↑↓ happens to be over. A pointer
+   that moves sets the same index, so this is the one highlight either way, and the row takes no
+   :hover of its own: a pointer left resting on a row kept that row lit while the arrows walked
+   the cursor off it, two highlights in two greys. The seat is the pointer's tier, as a menu
+   row's is: the cursor is passing through, and the picked tier is for a row that is held. */
     &[data-state~="cursor"] {
-      background: var(--element1);
+      background: var(--element0);
       color: var(--text0);
       --text1: var(--ink0);
       --text2: var(--ink1);

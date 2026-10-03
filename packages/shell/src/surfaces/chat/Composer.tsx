@@ -846,7 +846,7 @@ export function Composer({
         sock?.send({ t: "create-worktree", ...from, ...here, ...variants, prompt, boxId });
         // the worktree takes a moment to make and its agent a moment more to take the turn: the
         // log shows the message and the working mark from here, so nothing waits on the daemon
-        if (boxId) dispatch({ a: "starting", id: boxId, text: prompt });
+        if (boxId) dispatch({ a: "sending", id: boxId, message: { text: prompt, attachments: sent } });
       }
     } else {
       // the session reads these when it opens, and the daemon handles frames in order, so they are
@@ -856,6 +856,10 @@ export function Composer({
         sock?.send({ t: "set-worktree-effort", worktreeId: id, effort: newEffort });
       }
       sock?.send({ t: "chat", worktreeId: id, clientId, text: prompt, context, attachments: sent, boxId });
+      // the message and the status come back in two frames a beat apart, the status behind a read
+      // of every row: shown from here, the bubble and the mark arrive together and at the press.
+      // Mid-turn the log is already busy, and the message joins the turn or the queue.
+      if (!midTurn) dispatch({ a: "sending", id, message: { text: prompt, attachments: sent } });
     }
     dispatch({ a: "sent-box", id: boxId });
     // the reply lands in the dock, so the dock comes back with the message that started it

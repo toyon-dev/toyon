@@ -213,11 +213,12 @@ export interface WorktreeLocal {
   /** a message sent from an archived page, shown as sent while the worktree comes back: gone when
    * its own message reaches the chat, or when the daemon hands it back unsent */
   restoring?: string;
-  /** a message sent from the lead row's box, while its worktree is made: the log shows the words
-   * and the working mark from the press, and the draft's choices step aside, so the wait reads as
-   * the turn it becomes. The words go when the agent's own copy reaches the chat and the mark
-   * holds until the row says busy itself; a message handed back unsent takes both. */
-  starting?: { text?: string };
+  /** a message sent to an agent that is not mid-turn, until the daemon's word catches up: the log
+   * shows the bubble and the working mark from the press, so the wait reads as the turn it becomes
+   * (and on the lead row, whose worktree is still being made, the draft's choices step aside).
+   * The message goes when the agent's own copy reaches the chat and the mark holds until the row
+   * says busy itself, in whichever order those land; a message handed back unsent takes both. */
+  sending?: { message?: QueuedMessage };
   /** how many messages this tab has sent from here: the log goes to its end on each, wherever
    * the reader had scrolled to, since the reply is what they are waiting for now */
   sent?: number;
@@ -1218,7 +1219,7 @@ export type Action =
   | { a: "archive-worktrees"; ids: string[] }
   /** a message went from an archived page with the restore it asks for: show it as sent meanwhile */
   | { a: "restoring"; id: string; text: string }
-  | { a: "starting"; id: string; text: string }
+  | { a: "sending"; id: string; message: QueuedMessage }
   /** this tab sent a message from the box, which the daemon has taken: the box is empty here too,
    * and the log jumps to its end */
   | { a: "sent-box"; id: string }
@@ -1349,36 +1350,38 @@ export type Action =
   | { a: "incompatible" };
 
 /** the send's placeholder is spent: the row speaks for itself, or the message came back */
-function started(l: WorktreeLocal): WorktreeLocal {
-  if (!l.starting) return l;
-  const { starting: _spent, ...rest } = l;
+function settled(l: WorktreeLocal): WorktreeLocal {
+  if (!l.sending) return l;
+  const { sending: _spent, ...rest } = l;
   return rest;
 }
 
 /** A refusal ends the wait it answers: the row it names, or every row when it names none. */
-function notStarting(s: State, id?: string): State {
-  const ids = Object.keys(s.local).filter((k) => s.local[k]?.starting && (!id || k === id));
+function notSending(s: State, id?: string): State {
+  const ids = Object.keys(s.local).filter((k) => s.local[k]?.sending && (!id || k === id));
   if (ids.length === 0) return s;
   const local = { ...s.local };
-  for (const k of ids) local[k] = started(local[k]!);
+  for (const k of ids) local[k] = settled(local[k]!);
   return { ...s, local };
 }
 
 /** A send's placeholder follows its message: onto the row made for it when that is a new one
  * (main as the lead has no row to become the task), and gone from any row whose agent has the
- * turn, since the log says busy on its own from there. */
-function withStarting(local: State["local"], rows: WorktreeStatus[], from: string | null, to: string | null) {
+ * turn, since the log says busy on its own from there. Words the chat does not have yet stay
+ * until it does: the status can outrun the message, and the bubble must not blink out between. */
+function withSending(local: State["local"], rows: WorktreeStatus[], from: string | null, made: string | undefined) {
   let out = local;
-  const held = from ? out[from]?.starting : undefined;
-  if (held && from && to && to !== from) {
-    const there = out[to] ?? EMPTY_LOCAL;
+  const held = from ? out[from]?.sending : undefined;
+  if (held && from && made && made !== from) {
+    const there = out[made] ?? EMPTY_LOCAL;
     // the agent's copy may already be in the new row's chat, and then only the mark is owed
-    const starting = there.chat.some((i) => i.kind === "user") ? {} : held;
-    out = { ...out, [from]: started(out[from]!), [to]: { ...there, starting } };
+    const sending = there.chat.some((i) => i.kind === "user") ? {} : held;
+    out = { ...out, [from]: settled(out[from]!), [made]: { ...there, sending } };
   }
   for (const w of rows) {
     const l = out[w.id];
-    if (l?.starting && (w.agent === "working" || w.agent === "waiting")) out = { ...out, [w.id]: started(l) };
+    if (l?.sending && !l.sending.message && (w.agent === "working" || w.agent === "waiting"))
+      out = { ...out, [w.id]: settled(l) };
   }
   return out;
 }
@@ -1572,8 +1575,8 @@ function reduce(s: State, action: Action): State {
       return s.archivedPage ? closeArchivedPage(s) : s;
     case "restoring":
       return withLocal(s, action.id, (l) => ({ ...l, restoring: action.text }));
-    case "starting":
-      return withLocal(s, action.id, (l) => ({ ...l, starting: { text: action.text } }));
+    case "sending":
+      return withLocal(s, action.id, (l) => ({ ...l, sending: { message: action.message } }));
     case "sent-box":
       // a walk that ended in a send is over, and the message answers whatever was said under the box
       return withLocal(s, action.id, ({ notice: _notice, ...l }) => ({
@@ -2292,11 +2295,11 @@ function onServer(s: State, msg: StoreServerMsg): State {
             trunks: msg.trunks,
             archiving: archiving.length === s.archiving.length ? s.archiving : archiving,
             shipping: shippingFrom(s.shipping, msg.rows, msg.trunks),
-            local: withStarting(
+            local: withSending(
               landedClean(pruneLocal(s.local, msg.rows, s.archivedPage), s.rows, msg.rows),
               msg.rows,
               s.activeId,
-              activeId,
+              activeId === fresh?.id ? fresh.id : undefined,
             ),
             treeOpen: pruneByRow(s.treeOpen, msg.rows),
           },
@@ -2342,11 +2345,13 @@ function onServer(s: State, msg: StoreServerMsg): State {
         const usage = ev.type === "usage" ? { ...figuresOf(ev), heard: Date.now() } : l.usage;
         // a message an archived page sent is in the chat now, as the agent has it
         const { restoring: _sent, ...heard } = l;
-        // and so are the words of one sent from the lead row; its mark holds until the row is busy,
-        // or until the turn is over before a status frame ever said so
-        const said = heard.starting ? { ...heard, starting: {} } : heard;
+        // and so are the words of one shown ahead of the daemon; its mark holds until the row is
+        // busy, or until the turn is over before a status frame ever said so
+        const row = s.rows.find((w) => w.id === id);
+        const busy = row?.agent === "working" || row?.agent === "waiting";
+        const said = !heard.sending ? heard : busy ? settled(heard) : { ...heard, sending: {} };
         const over = ev.type === "turn-end" || ev.type === "agent-error";
-        const base = askSettled(ev.type === "user-message" ? said : over ? started(l) : l, ev);
+        const base = askSettled(ev.type === "user-message" ? said : over ? settled(l) : l, ev);
         return {
           // a message sent moves the conversation on from the hit a search landed on
           ...(ev.type === "user-message" ? withoutMark(base, "reveal") : base),
@@ -2382,9 +2387,9 @@ function onServer(s: State, msg: StoreServerMsg): State {
       // mid-restore hears it here rather than live
       const heard = (text: string) =>
         msg.events.some(({ event }) => event.type === "user-message" && event.text === text);
-      return withLocal(s, msg.worktreeId, ({ restoring, starting, ...l }) => ({
+      return withLocal(s, msg.worktreeId, ({ restoring, sending, ...l }) => ({
         ...l,
-        ...(starting && !(starting.text !== undefined && heard(starting.text)) ? { starting } : {}),
+        ...(sending && !(sending.message && heard(sending.message.text)) ? { sending } : {}),
         chat,
         chatAt: Date.now(),
         running: runningOf(chat, l.running),
@@ -2525,7 +2530,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
       const page = s.newProject;
       const refused = page?.phase === "creating" && !page.repoId;
       const next = {
-        ...notStarting(s, id),
+        ...notSending(s, id),
         archiving: id
           ? s.archiving.includes(id)
             ? s.archiving.filter((w) => w !== id)
@@ -2552,7 +2557,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
       // A message no agent took, back in the box it was sent from with the reason under it. The
       // words only into an empty box, since anything typed there since is newer; the chips ahead
       // of anything attached since. A page that was showing it as sent stops.
-      return withLocal(revealChat(s), msg.boxId, ({ restoring: _held, starting: _waited, ...l }) => ({
+      return withLocal(revealChat(s), msg.boxId, ({ restoring: _held, sending: _waited, ...l }) => ({
         ...l,
         draft: l.draft || msg.text,
         attachments: [...fromInputs(msg.items, []), ...l.attachments],

@@ -126,7 +126,7 @@ export function ChatLog({
   const items = useLocalField(id, "chat");
   const queue = useLocalField(id, "queue");
   const restoring = useLocalField(id, "restoring");
-  const starting = useLocalField(id, "starting");
+  const sending = useLocalField(id, "sending");
   // each queued message's chips count on from the sent ones and from the messages queued ahead of it
   const sentNumbers = useMemo(
     () => nextNumbers(items.map((c) => (c.kind === "user" ? c.attachments : undefined))),
@@ -396,12 +396,27 @@ export function ChatLog({
             put where this row scrolls off as soon as the log is read back. So while a call runs
             above, a spawn row floats, or a thought shimmers and the silence is short, there is no
             row: the shimmer says it, and the call's or the spawn's row counts its own wait. */}
-        {/* a message sent from the lead row, ahead of the agent's own copy of it: the bubble it will
-            be, and under it the row below, which is one element from the press to the first reply
-            so the mark never restarts */}
-        {starting?.text && <div className="msg-user">{starting.text}</div>}
+        {/* a message just sent, ahead of the agent's own copy of it: the bubble it will be, chips
+            included, and under it the row below, which is one
+            element from the press to the first reply so the mark never restarts */}
+        {id && sending?.message && (
+          <div className="msg-user">
+            {sending.message.attachments && (
+              <QueuedChips
+                items={sending.message.attachments}
+                next={sentNumbers}
+                worktreeId={id}
+                dir={active?.worktree.path ?? null}
+                onOpen={(path, line) => openSource(store, sock, id, path, line)}
+              />
+            )}
+            {/* plain words: a reference becomes a link when the sent row draws it, with the handlers
+                that open it */}
+            {sending.message.text}
+          </div>
+        )}
         {active &&
-          (starting ||
+          (sending ||
             (busy &&
               !(active.agent === "waiting" && askInBox) &&
               !calling &&

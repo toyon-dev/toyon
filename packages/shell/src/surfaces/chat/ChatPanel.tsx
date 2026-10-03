@@ -37,7 +37,7 @@ export function ChatPanel({
   const draft = useDraft();
   // sent, and the row has not become the task yet: the choices are spent at the press, so their
   // row leaves then and the log grows into its place in one step, with the message at its foot
-  const starting = useLocalField(active?.worktree.id, "starting");
+  const sending = useLocalField(active?.worktree.id, "sending");
   const repo = useActiveRepo();
   // a project toyon opened on the chat without asking says what it went by, where the conversation
   // starts, with the way to say otherwise; a confirmed one was answered by the person and needs no line
@@ -83,7 +83,7 @@ export function ChatPanel({
           }
         />
       )}
-      {!archived && draft && !starting && <DraftIntro draft={draft} lead={active} />}
+      {!archived && draft && !sending && <DraftIntro draft={draft} lead={active} />}
       {archived ? (
         <Composer active={null} archived={archived} placement={placement} />
       ) : (

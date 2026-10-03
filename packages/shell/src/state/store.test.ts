@@ -1271,29 +1271,44 @@ describe("drafts", () => {
     expect(s.local.a?.restoring).toBeUndefined();
   });
   test("a send from the lead row shows as sent and working until the row says so itself", () => {
-    let s = run([hello(wt("main", "main"), wt("sp", "spare")), { a: "starting", id: "sp", text: "fix it" }]);
-    expect(s.local.sp?.starting).toEqual({ text: "fix it" });
+    let s = run([
+      hello(wt("main", "main"), wt("sp", "spare")),
+      { a: "sending", id: "sp", message: { text: "fix it" } },
+    ]);
+    expect(s.local.sp?.sending).toEqual({ message: { text: "fix it" } });
     // the agent's copy takes the words; the mark holds until a status frame says busy
     s = run([agent("sp", { type: "user-message", text: "fix it", ts: 0 })], s);
-    expect(s.local.sp?.starting).toEqual({});
+    expect(s.local.sp?.sending).toEqual({});
     s = run([worktrees(wt("main", "main"), { ...wt("sp", "worktree", ME), agent: "working" })], s);
-    expect(s.local.sp?.starting).toBeUndefined();
-    // a turn over before any status frame ends it too, and so does a message handed back
+    expect(s.local.sp?.sending).toBeUndefined();
+    // the status outrunning the message leaves the words up, and the message then takes it all
     s = run(
-      [{ a: "starting", id: "sp", text: "again" }, agent("sp", { type: "turn-end", stopReason: "end_turn", ts: 1 })],
+      [worktrees(wt("main", "main"), wt("sp", "worktree", ME)), { a: "sending", id: "sp", message: { text: "more" } }],
       s,
     );
-    expect(s.local.sp?.starting).toBeUndefined();
-    s = run([{ a: "starting", id: "sp", text: "again" }], s);
+    s = run([worktrees(wt("main", "main"), { ...wt("sp", "worktree", ME), agent: "working" })], s);
+    expect(s.local.sp?.sending).toEqual({ message: { text: "more" } });
+    s = run([agent("sp", { type: "user-message", text: "more", ts: 2 })], s);
+    expect(s.local.sp?.sending).toBeUndefined();
+    // a turn over before any status frame ends it too, and so does a message handed back
+    s = run(
+      [
+        { a: "sending", id: "sp", message: { text: "again" } },
+        agent("sp", { type: "turn-end", stopReason: "end_turn", ts: 1 }),
+      ],
+      s,
+    );
+    expect(s.local.sp?.sending).toBeUndefined();
+    s = run([{ a: "sending", id: "sp", message: { text: "again" } }], s);
     s = run([server({ t: "unsent", boxId: "sp", text: "again", items: [], message: "refused" })], s);
-    expect(s.local.sp?.starting).toBeUndefined();
+    expect(s.local.sp?.sending).toBeUndefined();
   });
   test("sent from main as the lead, the placeholder moves to the row made for the message", () => {
-    let s = run([hello(wt("main", "main")), { a: "starting", id: "main", text: "fix it" }]);
+    let s = run([hello(wt("main", "main")), { a: "sending", id: "main", message: { text: "fix it" } }]);
     s = run([worktrees(wt("main", "main"), wt("new", "worktree", ME))], s);
     expect(s.activeId).toBe("new");
-    expect(s.local.main?.starting).toBeUndefined();
-    expect(s.local.new?.starting).toEqual({ text: "fix it" });
+    expect(s.local.main?.sending).toBeUndefined();
+    expect(s.local.new?.sending).toEqual({ message: { text: "fix it" } });
   });
   test("a send empties the box here, ends a walk, and counts, so the log goes to its end on every one", () => {
     const chip = { kind: "file" as const, key: "f1", upload: "u1", name: "run.jsonl", bytes: 9, text: true };

@@ -21,7 +21,6 @@ import { cx } from "../../ui/cx.ts";
 import { TextArea } from "../../ui/Field.tsx";
 import { useOnChange } from "../../ui/hooks.ts";
 import { Kbd } from "../../ui/Kbd.tsx";
-import { KeyHints } from "../../ui/KeyHints.tsx";
 import { step } from "../../ui/listNav.ts";
 import { rowState } from "../../ui/rowState.ts";
 import { Tabs } from "../../ui/Tabs.tsx";
@@ -304,41 +303,29 @@ function QuestionBody({
     }
   };
 
-  /** the key strip of a page, the send page's when no question is given. Each page carries its
-   * own rather than the open page's, since a hidden page's strip still sets its height, and a
-   * strip that wrapped on one page and not another moved the box with the tab. */
   /** on a lone single-select question the pick is the send (advance): there is no page after it
    * to walk to, so enter on a row answers the ask outright */
   const pickSends = (qq: (typeof questions)[number]) => questions.length === 1 && !qq.multi;
 
-  const hintsFor = (qq?: (typeof questions)[number]): Array<[string, string]> =>
-    qq
-      ? [
-          ...(questions.length > 1 ? [["←→", "question"] as [string, string]] : []),
-          ["↑↓", "move"],
-          ["⏎", pickSends(qq) ? "send" : "choose"],
-          ...(qq.note ? [["n", "add a note"] as [string, string]] : []),
-          ...(pickSends(qq) ? [] : [["⌘⏎", "send"] as [string, string]]),
-          ["esc", "reply instead"],
-        ]
-      : [
-          ["←→", "question"],
-          ["⏎", "send"],
-          ["esc", "reply instead"],
-        ];
-
   /** the actions under a page: the send where a pick alone is not one (several questions, a
-   * multi-select, or a note open on the pick, whose enter a mouse does not have; the typed
-   * answer has no button where there is a keyboard, since enter in its field is the send and
-   * the key strip says so, and keeps one on touch, where there is no strip), the note
-   * on the pick where the agent takes one and a pick is made, and the skip. Each page carries its
-   * own, and the key strip after it, so the page's height is the whole of what shows for it; the
-   * foot sits at the page's floor so the send is in one place whichever page is open. The agent's
-   * stop is not here: it keeps the box's corner, as it does over the plain field. */
+   * multi-select, or a field open, whose enter a mouse does not have), the note on the pick where
+   * the agent takes one and a pick is made, and the skip. Nothing lists the keys: the arrows,
+   * enter and escape are what they are everywhere, and the one key that is not says so on its row.
+   * A send arriving must not add a row, so where nothing else would hold the row (a stopped
+   * question has no skip) the send stands there unseen until a field opens. Each page carries its
+   * own foot; it sits at the page's floor so the send is in one place whichever page is open. The
+   * agent's stop is not here: it keeps the box's corner, as it does over the plain field. */
+  const sendShown = (qq?: (typeof questions)[number], a?: AskAnswer) => !qq || !pickSends(qq) || a?.note !== undefined;
   const foot = (qq?: (typeof questions)[number], a?: AskAnswer) => (
     <div className="ask-foot">
-      {(!qq || !pickSends(qq) || (a?.note !== undefined && (touch || !ownChosen(a, !!qq?.multi)))) && (
-        <Button variant="outline" size="md" disabled={!canSubmit(questions, draft)} onClick={submit}>
+      {(sendShown(qq, a) || (onAnswer && qq?.note)) && (
+        <Button
+          variant="outline"
+          size="md"
+          className={cx(!sendShown(qq, a) && "ask-hold")}
+          disabled={!sendShown(qq, a) || !canSubmit(questions, draft)}
+          onClick={submit}
+        >
           send
         </Button>
       )}
@@ -358,7 +345,7 @@ function QuestionBody({
   );
 
   /** one question's page: its text, its options, the "other" row, the typed answer's field once
-   * opened, and its own foot and key strip. Every page is in the DOM so the box stands at the
+   * opened, and its own foot. Every page is in the DOM so the box stands at the
    * tallest one's height; only the open page has the cursor, the preview and the field's ref.
    * Every row keeps its description under its label whether or not the cursor is on it: a line
    * that came and went with the cursor moved every row below it as the pointer crossed the list. */
@@ -369,6 +356,26 @@ function QuestionBody({
     const under = open ? qq.options[cursor] : undefined;
     const ownState = rowState({ cursor: open && !touch && cursor === qq.options.length, checked: owning });
     const toOwn = () => cursor !== qq.options.length && setCursor(qq.options.length);
+    /* the field a row holds once something is typed against it: the "other" row's answer, or a
+       note on the pick, under the row it is about. One line that grows with what is typed. */
+    const field = (placeholder: string) => (
+      <TextArea
+        ref={open ? own : undefined}
+        bare
+        font="ui"
+        rows={1}
+        className="ask-own-field"
+        placeholder={placeholder}
+        value={a?.note ?? ""}
+        onChange={(e) => write(setNote(draft, i, e.target.value), i)}
+      />
+    );
+    /** a press on a row holding a field, beside the field: the caret goes in rather than being dropped */
+    const toField = (e: React.MouseEvent<HTMLDivElement>) => {
+      if (e.target instanceof HTMLTextAreaElement) return;
+      e.preventDefault();
+      e.currentTarget.querySelector("textarea")?.focus();
+    };
     return (
       <div key={qq.id} className={cx("ask-page", !open && "ask-page-off")}>
         <div className="ask-head">
@@ -377,26 +384,56 @@ function QuestionBody({
         <div className="ask-options">
           {qq.options.map((o, oi) => {
             const on = a?.selected.includes(o.value);
-            return (
-              <button
-                key={o.value}
-                type="button"
-                className="picker-item ask-opt row-edge"
-                data-state={rowState({ cursor: open && !touch && oi === cursor, checked: on })}
-                // mousemove, not mouseenter, for the same reason the picker gives: a row arriving
-                // under a stationary pointer must not steal the highlight the keyboard is on
-                onMouseMove={() => oi !== cursor && setCursor(oi)}
-                onClick={() => {
-                  pick(oi);
-                  root.current?.focus();
-                }}
-              >
+            const state = rowState({ cursor: open && !touch && oi === cursor, checked: on });
+            const toRow = () => oi !== cursor && setCursor(oi);
+            const body = (
+              <>
                 <Kbd k={String(oi + 1)} className="ask-num row-dim" />
                 <span className="ask-label">
                   {stripRecommended(o.label)}
                   {recommended(o.label) && <span className="badge-recommended">recommended</span>}
                 </span>
+                {/* the one key that acts on a row rather than the ask, said on the row it would act
+                    on: at the end of the label's line. Every row keeps the room for it and only
+                    the cursor's shows it, so a label wraps the same wherever the cursor is and no
+                    row changes height. A multi-select's `n` is the typed answer, not a note. */}
+                {!touch && qq.note && !qq.multi && (
+                  <span className={cx("ask-hint row-dim", open && oi === cursor && a?.note === undefined && "on")}>
+                    <Kbd k="n" /> add a note
+                  </span>
+                )}
                 {o.description && <span className="ask-desc row-dim">{o.description}</span>}
+              </>
+            );
+            // the pick with a note open on it holds the note's field, so it is no longer a button
+            if (on && !owning && a?.note !== undefined)
+              return (
+                <div
+                  key={o.value}
+                  className="picker-item ask-opt row-edge"
+                  data-state={state}
+                  onMouseMove={toRow}
+                  onMouseDown={toField}
+                >
+                  {body}
+                  {field("a note for the agent, sent with your pick")}
+                </div>
+              );
+            return (
+              <button
+                key={o.value}
+                type="button"
+                className="picker-item ask-opt row-edge"
+                data-state={state}
+                // mousemove, not mouseenter, for the same reason the picker gives: a row arriving
+                // under a stationary pointer must not steal the highlight the keyboard is on
+                onMouseMove={toRow}
+                onClick={() => {
+                  pick(oi);
+                  root.current?.focus();
+                }}
+              >
+                {body}
               </button>
             );
           })}
@@ -419,48 +456,20 @@ function QuestionBody({
               its placeholder the same words, so opening it moves nothing. The row is no longer a
               button, since it holds the field. */}
           {qq.note && owning && a?.note !== undefined && (
-            // biome-ignore lint/a11y/noStaticElementInteractions: the press lands on the field the row holds, which is the control
             <div
               className="picker-item ask-opt row-edge"
               data-state={ownState}
               onMouseMove={toOwn}
-              onMouseDown={(e) => {
-                if (e.target instanceof HTMLTextAreaElement) return;
-                // the field keeps the caret a press beside it would have dropped
-                e.preventDefault();
-                e.currentTarget.querySelector("textarea")?.focus();
-              }}
+              onMouseDown={toField}
             >
               <Kbd k={String(qq.options.length + 1)} className="ask-num row-dim" />
               <span className="ask-label">{qq.note.label}</span>
-              <TextArea
-                ref={open ? own : undefined}
-                bare
-                font="ui"
-                rows={1}
-                className="ask-own-field"
-                placeholder="your own answer"
-                value={a.note}
-                onChange={(e) => write(setNote(draft, i, e.target.value), i)}
-              />
+              {field("your own answer")}
             </div>
           )}
         </div>
         {under?.preview && <pre className="ask-preview">{under.preview}</pre>}
-        {qq.note && !owning && a?.note !== undefined && (
-          <TextArea
-            ref={open ? own : undefined}
-            bare
-            font="ui"
-            rows={2}
-            className="ask-own"
-            placeholder="a note for the agent, sent with your pick"
-            value={a.note}
-            onChange={(e) => write(setNote(draft, i, e.target.value), i)}
-          />
-        )}
         {foot(qq, a)}
-        <KeyHints hints={hintsFor(qq)} className="ask-keys" />
       </div>
     );
   };
@@ -522,19 +531,12 @@ function QuestionBody({
               })}
             </div>
             {foot()}
-            <KeyHints hints={hintsFor()} className="ask-keys" />
           </div>
         )}
       </div>
     </div>
   );
 }
-
-const PERMISSION_KEYS: Array<[string, string]> = [
-  ["↑↓", "move"],
-  ["⏎", "choose"],
-  ["esc", "reply instead"],
-];
 
 function PermissionBody({
   item,
@@ -620,7 +622,6 @@ function PermissionBody({
           </button>
         ))}
       </div>
-      <KeyHints hints={PERMISSION_KEYS} className="ask-keys" />
     </div>
   );
 }

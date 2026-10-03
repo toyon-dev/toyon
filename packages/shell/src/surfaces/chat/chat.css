@@ -70,10 +70,9 @@
         background: var(--surface0);
       }
     }
-    /* the ask's number keys and its key strip are a hardware keyboard's idioms; on a screen the
-       options are tapped and the buttons are what closes the ask, and the digit's gutter goes with it */
-    & .ask-num,
-    & .ask-keys {
+    /* the ask's number keys are a hardware keyboard's idiom; on a screen the options are tapped,
+       and the digit's gutter goes with the digit */
+    & .ask-num {
       display: none;
     }
     & .ask-opt {
@@ -1350,12 +1349,12 @@
     min-height: 0;
     outline: none;
     /* the options are a picker's rows, so the strip is the box they bleed out of: --picker-bleed
-     undoes its padding for the row bands and the key strip, --picker-inset puts it back inside the
+     undoes its padding for the row bands, --picker-inset puts it back inside the
      row, so the labels stay in the column the question above them starts in */
     --picker-bleed: -10px;
     --picker-inset: 10px;
   }
-  /* the questions as a tab strip heading the box, full bleed like the key strip that closes it:
+  /* the questions as a tab strip heading the box, full bleed:
    the recess is the strip's floor, and the open tab is the strip's own ground showing through, so
    it joins the question under it. First in the strip it takes the strip's top padding back. */
   .ask-tabs {
@@ -1401,7 +1400,7 @@
    two options apart, so it wraps rather than ellipsising the way the slash menu's do. */
   .ask-opt {
     display: grid;
-    grid-template-columns: 14px 1fr;
+    grid-template-columns: 14px 1fr auto;
     column-gap: 8px;
     align-items: baseline;
     padding-block: 5px;
@@ -1436,7 +1435,18 @@
   }
   /* a row's own description, under its label, on every row */
   .ask-desc {
-    grid-column: 2;
+    grid-column: 2 / -1;
+  }
+  /* the cursor row's own key, at the far end of the label's line */
+  .ask-hint {
+    grid-column: 3;
+    grid-row: 1;
+    font: var(--type-ui-sm);
+    white-space: nowrap;
+    visibility: hidden;
+    &.on {
+      visibility: visible;
+    }
   }
   .ask-preview {
     margin: 6px 0 0;
@@ -1447,16 +1457,11 @@
     overflow-x: auto;
     white-space: pre;
   }
-  /* a note riding with a pick, under the options once `n` opened it: the composer's textarea in
-   this mode. Two rows, since it is prose beside an answer rather than the answer. */
-  .ask-own {
-    margin-top: 8px;
-    flex: none;
-  }
-  /* the typed answer, in the "other" row where its description stood: one line that grows with
-     what is typed, so the row is the height it was before the field opened. */
+  /* what is typed against a row, in the row: the "other" row's answer where its description
+     stood, or a note on the pick under its description. One line that grows with what is typed,
+     so the "other" row is the height it was before the field opened. */
   .ask-own-field {
-    grid-column: 2;
+    grid-column: 2 / -1;
     min-width: 0;
     resize: none;
     field-sizing: content;
@@ -1471,6 +1476,10 @@
     gap: 8px;
     margin-top: auto;
     padding-top: 10px;
+  }
+  /* the send keeping the foot's row before it has anything to send */
+  .ask-hold {
+    visibility: hidden;
   }
   /* whatever is first in the box keeps the corner clear for the stop (Composer): the question
      when it heads the box, the tab strip's list when the strip does, so the far tab does not
@@ -1492,14 +1501,6 @@
     &.answered {
       background: var(--ink1);
     }
-  }
-  /* the key strip closes the box the way it closes a picker: its own band under the actions, ruled
-   off and reaching both edges. The last thing in the strip, it takes the strip's padding back. */
-  .ask-keys {
-    margin-top: 10px;
-  }
-  .ask-box:last-child .ask-keys {
-    margin-bottom: -10px;
   }
   /* what the agent proposes when no file was written for it: prose a person reads, and it can be
      long, so it scrolls in the box rather than the page */

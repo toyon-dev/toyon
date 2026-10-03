@@ -1,6 +1,16 @@
 import { describe, expect, test } from "bun:test";
 import type { ArchivedWorktree, WorktreeStatus } from "@toyon/shared";
-import { archivedLines, cardFigures, cardLines, leadLines, OFFLINE_LINE, type RowContext, rowLine } from "./rowLine.ts";
+import {
+  ARCHIVED_SHOWN,
+  archivedLines,
+  archivedWindow,
+  cardFigures,
+  cardLines,
+  leadLines,
+  OFFLINE_LINE,
+  type RowContext,
+  rowLine,
+} from "./rowLine.ts";
 
 // The order of the line's answers is the whole logic, and each step below was chosen against the
 // one after it: a row that said "Idle" under main, or recapped a finished turn beside a dot that
@@ -208,5 +218,28 @@ describe("the line under an archived row's state", () => {
     const [line] = archivedLines(arch({ prompt: long }));
     expect(line?.length).toBeLessThanOrEqual(161);
     expect(line).toMatch(/^word0 .*word\d+…$/);
+  });
+});
+
+describe("the archived rows the rail draws", () => {
+  const many = (n: number) => Array.from({ length: n }, (_, i) => arch({ id: `a${i}` }));
+
+  test("every row up to the measure, and one over it rather than a row saying 1 more", () => {
+    expect(archivedWindow(many(3), null)).toEqual({ shown: many(3), rest: 0 });
+    expect(archivedWindow(many(ARCHIVED_SHOWN + 1), null).rest).toBe(0);
+  });
+
+  test("the newest past the measure, the rest counted", () => {
+    const { shown, rest } = archivedWindow(many(ARCHIVED_SHOWN + 10), null);
+    expect(shown.map((a) => a.id)).toEqual(many(ARCHIVED_SHOWN).map((a) => a.id));
+    expect(rest).toBe(10);
+  });
+
+  test("the row whose page is up is drawn even when it is older than the window", () => {
+    const { shown, rest } = archivedWindow(many(ARCHIVED_SHOWN + 10), `a${ARCHIVED_SHOWN + 4}`);
+    expect(shown.at(-1)?.id).toBe(`a${ARCHIVED_SHOWN + 4}`);
+    expect(rest).toBe(9);
+    // one inside the window is not drawn twice
+    expect(archivedWindow(many(ARCHIVED_SHOWN + 10), "a2").shown).toHaveLength(ARCHIVED_SHOWN);
   });
 });

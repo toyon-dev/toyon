@@ -133,6 +133,28 @@ export function archivedLines(a: ArchivedWorktree): string[] {
   return [`${cut.slice(0, Math.max(cut.lastIndexOf(" "), 1)).trimEnd()}…`];
 }
 
+/** how many archived rows the rail draws: the ones recent enough to be found by where they sit.
+ * Past that a row is found by its name, which is the archive palette's job. */
+export const ARCHIVED_SHOWN = 25;
+
+/**
+ * The archived rows the rail draws, newest first, and how many it leaves to the palette. The
+ * archive only grows, so the rail keeps a fixed window of it. A single row over the measure is
+ * drawn, since the row saying "1 more" would take the line it saves. The row whose page is up is
+ * always drawn, after the rest when it is older than the window: its page marks a row, and the
+ * mark needs one to sit on.
+ */
+export function archivedWindow(
+  archived: readonly ArchivedWorktree[],
+  pageId: string | null,
+): { shown: readonly ArchivedWorktree[]; rest: number } {
+  if (archived.length <= ARCHIVED_SHOWN + 1) return { shown: archived, rest: 0 };
+  const shown = archived.slice(0, ARCHIVED_SHOWN);
+  const page = pageId ? archived.find((a) => a.id === pageId) : undefined;
+  if (page && !shown.includes(page)) shown.push(page);
+  return { shown, rest: archived.length - shown.length };
+}
+
 /** context in use past this share of the window is a figure worth a hover: below it the number
  * changes nothing you would do here */
 export const CONTEXT_HIGH = 0.5;

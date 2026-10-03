@@ -45,7 +45,16 @@ import { cx } from "../../ui/cx.ts";
 import { useOnChange } from "../../ui/hooks.ts";
 import { rowState } from "../../ui/rowState.ts";
 import { treeKey } from "../../ui/treeNav.ts";
-import { archivedLines, cardFigures, cardLines, FOUND_LINE, leadLines, OFFLINE_LINE, rowLine } from "./rowLine.ts";
+import {
+  archivedLines,
+  archivedWindow,
+  cardFigures,
+  cardLines,
+  FOUND_LINE,
+  leadLines,
+  OFFLINE_LINE,
+  rowLine,
+} from "./rowLine.ts";
 
 /** a count in its 3ch column; past three digits the exact number stops meaning anything here */
 const count = (n: number) => (n > 999 ? "1k+" : String(n));
@@ -210,7 +219,8 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
 
   /* the archive keeps its own count column, reserved list-wide the way the worktrees' are, and not
      drawn at all when no archived row has a number to put in it */
-  const archCounts = archived.some((a) => (a.dirty ?? 0) > 0);
+  const arch = archivedWindow(archived, archivedPage?.id ?? null);
+  const archCounts = arch.shown.some((a) => (a.dirty ?? 0) > 0);
 
   /** An archived worktree, kept with its chat. It runs nothing, so it reads a rung down like a found
    * row, and its dot's seat is blank rather than absent so its name starts where every other name
@@ -750,7 +760,23 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
                 </span>
                 <span className="rail-label">archived</span>
               </button>
-              {archOpen && archived.map(archivedRow)}
+              {archOpen && arch.shown.map(archivedRow)}
+              {/* the rest of the archive, in the palette that finds one by name: an archived row's
+                  box with its seats blank, so the count starts where the names above it do */}
+              {archOpen && arch.rest > 0 && activeRepoId && (
+                <button
+                  type="button"
+                  className="row row-quiet rail-disc-item rail-arch-item"
+                  {...tip("Find an older one by its name, branch or first message", undefined, {
+                    placement: tipSide,
+                  })}
+                  onClick={() => dispatch({ a: "open", overlay: { kind: "archived", repoId: activeRepoId } })}
+                >
+                  <span className="rail-gut" />
+                  <span className="branch row-dim">{arch.rest} more</span>
+                  <span className="dot" />
+                </button>
+              )}
             </>
           )}
         </div>

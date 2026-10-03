@@ -2538,6 +2538,24 @@ describe("archiving a worktree", () => {
     expect(after({ c: { agent: "waiting" }, d: { agent: "working" } }, ["b", "c"])).toBe("d");
   });
 
+  test("archiving the active worktree lands on the next row that is done too, after one that is waiting", () => {
+    const landed = (id: string, over: Partial<WorktreeStatus> = {}): WorktreeStatus => {
+      const w = wt(id);
+      return { ...w, ...over, worktree: { ...w.worktree!, landed: true } };
+    };
+    const after = (...rows: WorktreeStatus[]) =>
+      run([hello(wt("main", "main"), ...rows), { a: "activate", id: "b" }, { a: "archive-worktrees", ids: ["b"] }])
+        .activeId;
+    // a row waiting on an answer still wins; one unseen or working does not
+    expect(after({ ...wt("a"), agent: "waiting" }, wt("b"), wt("c"), landed("d"))).toBe("a");
+    expect(after({ ...wt("a"), unseen: true }, wt("b"), { ...wt("c"), agent: "working" }, landed("d"))).toBe("d");
+    // the nearest below where the row sat, then round from the top
+    expect(after(landed("a"), wt("b"), landed("c"))).toBe("c");
+    expect(after(landed("a"), wt("b"), wt("c"))).toBe("a");
+    // a landed row whose agent is at work again is not done
+    expect(after(wt("a"), wt("b"), landed("c", { agent: "working" }), landed("d"))).toBe("d");
+  });
+
   test("with nothing owed, archiving the active worktree lands on the closest row whose app is up", () => {
     const up: Partial<WorktreeStatus> = { procs: [{ name: "web", status: "running" }] as WorktreeStatus["procs"] };
     const after = (over: Record<string, Partial<WorktreeStatus>>) =>

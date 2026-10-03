@@ -57,6 +57,7 @@ import type {
 import {
   applyLog,
   builtinThemes,
+  canArchive,
   defaultThemePrefs,
   isEditTool,
   isLead,
@@ -1543,18 +1544,27 @@ function reduce(s: State, action: Action): State {
       if (ids.length === 0) return s;
       const hidden = { ...s, archiving: [...s.archiving, ...ids] };
       if (!s.activeId || !ids.includes(s.activeId)) return hidden;
-      // the selection leaves with the row, for the next thing the rail owes the person: the nearest
-      // row waiting, unseen or working, looked for from where the archived row sat. With none, the
-      // closest row whose app is up, the one below on a tie: a task that is open and can be carried
-      // on. With none of those either, the lead, whose box starts the next worktree.
+      // the selection leaves with the row. A row waiting on an answer comes first, since its agent
+      // is stuck until someone replies. Then, archiving being tidying up, the next row that is done
+      // too: landed, its agent at rest, the nearest below where the archived row sat and then round
+      // from the top. Then the rest of what the rail owes the person: the nearest row unseen or
+      // working, looked for the same way. With none, the closest row whose app is up, the one below
+      // on a tie: a task that is open and can be carried on. With none of those either, the lead,
+      // whose box starts the next worktree.
       const from = s.visible.filter((w) => w.id === s.activeId || !hidden.archiving.includes(w.id));
-      const owed = owedJump(from, s.activeId, 1)?.activate;
       const at = from.findIndex((w) => w.id === s.activeId);
+      const isDone = (w: OwnedWorktree) =>
+        w.id !== s.activeId && canArchive(w.worktree) && !!w.worktree.landed && w.agent === "idle";
+      const below = (hit: (w: OwnedWorktree) => boolean) =>
+        (from.find((w, i) => i > at && hit(w)) ?? from.find(hit))?.id;
+      const waiting = below((w) => w.id !== s.activeId && w.agent === "waiting");
+      const done = below(isDone);
+      const owed = owedJump(from, s.activeId, 1)?.activate;
       const up = from
         .map((w, i) => ({ id: w.id, i, far: Math.abs(i - at), up: !isLead(w.worktree) && dotClass(w) === "running" }))
         .filter((w) => w.up && w.far > 0)
         .sort((a, b) => a.far - b.far || b.i - a.i)[0]?.id;
-      return activate(hidden, owed ?? up ?? landingIn(hidden, s.activeRepoId));
+      return activate(hidden, waiting ?? done ?? owed ?? up ?? landingIn(hidden, s.activeRepoId));
     }
     case "shipping": {
       // one op per worktree at a time: the daemon serializes them under the repo lock anyway,

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { ArchivedWorktree, WorktreeStatus } from "@toyon/shared";
 import {
   ARCHIVED_SHOWN,
-  archivedAuto,
+  archivedFigures,
   archivedLines,
   archivedWindow,
   cardFigures,
@@ -222,12 +222,13 @@ describe("the line under an archived row's state", () => {
   });
 });
 
-describe("why an archived row archived itself", () => {
-  test("a phrase after the state, which does not say archived twice", () => {
+describe("the foot of an archived row's card", () => {
+  test("why it archived itself, then the cost, and no foot with neither", () => {
     const auto = "landed, not opened in 2h";
-    expect(archivedAuto(arch(), "Archived")).toBeUndefined();
-    expect(archivedAuto(arch({ auto }), "Merged")).toBe(`archived automatically: ${auto}`);
-    expect(archivedAuto(arch({ auto }), "Archived")).toBe(`automatically: ${auto}`);
+    expect(archivedFigures(arch())).toBeUndefined();
+    expect(archivedFigures(arch({ auto }))).toEqual([`auto: ${auto}`]);
+    expect(archivedFigures(arch({ cost: 2.35 }))).toEqual(["$2.35"]);
+    expect(archivedFigures(arch({ auto, cost: 2.35 }))).toEqual([`auto: ${auto}`, "$2.35"]);
   });
 });
 

@@ -93,6 +93,12 @@
     & .tooltip-foot {
       margin: 4px -10px 0;
       padding: 4px 10px 0;
+      /* a phrase sharing the foot with a figure gives way to it: the figure keeps the far edge
+       and its one line, and the phrase wraps in what is left rather than run out of the box */
+      & > :first-child:not(:only-child) {
+        min-width: 0;
+        white-space: normal;
+      }
     }
   }
   /* the figures, on a line of their own at the foot under a rule: read apart from the name and

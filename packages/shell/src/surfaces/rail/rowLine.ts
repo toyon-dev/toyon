@@ -134,15 +134,18 @@ export function archivedLines(a: ArchivedWorktree): string[] {
 }
 
 /**
- * Why an archived row archived itself, for the far end of its card's state line, where the two
- * read as one phrase: "Merged, archived automatically: landed, not opened in 2h". The clock in the
- * dot's seat is on the row the card belongs to, and a tip of its own there swapped with the card
- * as the pointer crossed the row; as a line under the first message it read as more of the
- * message. A row whose state is the bare "Archived" does not say the word twice.
+ * The foot of an archived row's card: why it archived itself, when it did, then what its agent
+ * cost, last at the far edge as on a live row. Both are about the record and neither is about the
+ * work, so the rule sets them apart from the first message. The clock in the dot's seat is on the
+ * row the card belongs to, and a tip of its own there swapped with the card as the pointer
+ * crossed the row; under the first message the reason read as more of the message, and beside the
+ * state it wrapped under itself.
  */
-export function archivedAuto(a: ArchivedWorktree, state: string): string | undefined {
-  if (!a.auto) return undefined;
-  return state === "Archived" ? `automatically: ${a.auto}` : `archived automatically: ${a.auto}`;
+export function archivedFigures(a: ArchivedWorktree): string[] | undefined {
+  const figures = [a.auto ? `auto: ${a.auto}` : undefined, a.cost !== undefined ? dollars(a.cost) : undefined].filter(
+    (f): f is string => !!f,
+  );
+  return figures.length ? figures : undefined;
 }
 
 /** how many archived rows the rail draws: the ones recent enough to be found by where they sit.

@@ -37,7 +37,6 @@ import { Icon } from "../../ui/Icon.tsx";
 import { useContextMenu, useMenu } from "../../ui/menu.ts";
 import { Spinner } from "../../ui/Spinner.tsx";
 import { type TipPlacement, tip } from "../../ui/Tooltip.tsx";
-import { dollars } from "../chat/usage.ts";
 import { hhmm } from "../chips/baseNote.ts";
 import { ago, chord, dotClass, procTrouble, rowLabel, shipLabel, shipShown, stateLabel } from "../util.ts";
 import "./rail.css";
@@ -46,7 +45,7 @@ import { useOnChange } from "../../ui/hooks.ts";
 import { rowState } from "../../ui/rowState.ts";
 import { treeKey } from "../../ui/treeNav.ts";
 import {
-  archivedAuto,
+  archivedFigures,
   archivedLines,
   archivedWindow,
   cardFigures,
@@ -240,9 +239,8 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
       {...tip(archivedState(a), undefined, {
         placement: tipSide,
         card: true,
-        name: archivedAuto(a, archivedState(a)),
         detail: archivedLines(a),
-        aside: a.cost !== undefined ? [dollars(a.cost)] : undefined,
+        aside: archivedFigures(a),
       })}
       onClick={() => dispatch({ a: "open-archived", id: a.id })}
       {...cm.contextMenu(() => archivedItems(a, clientId, deps), a.id)}

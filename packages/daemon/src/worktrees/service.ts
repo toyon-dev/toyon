@@ -23,6 +23,7 @@ import {
   hasOwnBranch,
   isMain,
   isProvisional,
+  isWriteTool,
   type LandedFacts,
   type Landing,
   type LandPolicy,
@@ -341,6 +342,15 @@ export class WorktreeService {
       },
     });
     d.hub.on("agent", (worktreeId, _seq, event) => {
+      // the first file a parked worktree's agent writes is when its preview has something new to
+      // show, and when the agent may want to look at it. A shell command does not count: a
+      // question answered with `git log` is still a question.
+      if (
+        (event.type === "tool-start" || (event.type === "tool-update" && event.kind)) &&
+        isWriteTool({ name: event.name ?? "", kind: event.kind })
+      ) {
+        this.startPreview(worktreeId);
+      }
       if (event.type !== "usage") return;
       const { used, size, cost } = event;
       this.usage.set(worktreeId, { used, size, ...(cost !== undefined ? { cost } : {}) });
@@ -1178,6 +1188,8 @@ export class WorktreeService {
       proxyPort: await allocateProxyPort(),
       // bringing it back is going back to work in it, so it sits with what you last sent to
       promptedAt: Date.now(),
+      // deps and setup come back, the procs wait: see startPreview
+      parked: true,
       ...(createdBy ? { createdBy } : {}),
     };
     try {
@@ -1317,6 +1329,18 @@ export class WorktreeService {
     this.countsCache.delete(target.id);
     this.d.hub.emit("worktreesChanged");
     return { target, grafted: sources.map((w) => w.title) };
+  }
+
+  /** A parked worktree's procs start: someone pressed for the preview, or its agent wrote a file.
+   * While its setup is still running the wake does nothing and the start at the end of setup,
+   * which now finds the record unparked, is what brings them up. */
+  startPreview(worktreeId: string): void {
+    const wt = this.d.state.worktree(worktreeId);
+    if (!wt?.parked) return;
+    delete wt.parked;
+    this.d.state.save();
+    this.d.hub.emit("worktreesChanged");
+    fireAndForget(worktreeId, this.d.runtime.wake(worktreeId), "start a parked preview");
   }
 
   // ---- setup ----

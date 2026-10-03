@@ -814,6 +814,11 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     if (!s.runs.stop(msg.worktreeId, msg.kind)) throw new UserError(`no ${msg.kind} is running here`);
   },
 
+  "preview-start"(msg, _ctx, s) {
+    requireRun(s, msg.worktreeId);
+    s.worktrees.startPreview(msg.worktreeId);
+  },
+
   async "search-refs"(msg, ctx, s) {
     const refs = await s.refs.search(msg.repoId, msg.query);
     ctx.reply({ t: "refs", repoId: msg.repoId, query: msg.query, refs });

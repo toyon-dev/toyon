@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { sh } from "../../test/helpers/tmp-repo.ts";
-import { registered, settle, useWorld, w } from "../../test/helpers/world.ts";
+import { registered, settle, until, useWorld, w } from "../../test/helpers/world.ts";
 import { PLANS_DIR, writePlanDoc } from "../agent/planDoc.ts";
 import { transcriptPathFor } from "../agent/transcript.ts";
 import { UserError } from "../core/errors.ts";
@@ -82,6 +82,44 @@ describe("archive", () => {
       branch: wt.branch,
       uncommitted: true,
     });
+  });
+
+  test("a restored worktree comes back parked: nothing that wakes one starts its procs", async () => {
+    const repoId = await registered();
+    const { wt } = await workedOn(repoId);
+    await until(() => !!w.runtime.get(wt.id)?.procs);
+    await w.worktrees.archiveWorktree(wt.id);
+    const back = await w.worktrees.restore(wt.id, undefined, { text: "what did we decide" });
+    await settle();
+    expect(back.parked).toBe(true);
+    expect(w.runtime.get(wt.id)?.procs).toBeNull();
+    // a tab landing on it, a restarted daemon, a finished turn: all of them come through wake
+    await w.runtime.wake(wt.id);
+    expect(w.runtime.get(wt.id)?.procs).toBeNull();
+    expect(w.runtime.previewStanding(wt.id)).toEqual({ status: "parked" });
+    // a shell command is still a question
+    w.hub.emit("agent", wt.id, 1, { type: "tool-start", toolId: "t1", name: "Bash", input: {}, kind: "execute" });
+    await settle();
+    expect(w.state.worktree(wt.id)?.parked).toBe(true);
+  });
+
+  test("a parked worktree's procs start when someone asks, or when its agent writes a file", async () => {
+    const repoId = await registered();
+    const { wt } = await workedOn(repoId);
+    await w.worktrees.archiveWorktree(wt.id);
+    await w.worktrees.restore(wt.id);
+    await settle();
+    w.worktrees.startPreview(wt.id);
+    await until(() => !!w.runtime.get(wt.id)?.procs);
+    expect(w.state.worktree(wt.id)?.parked).toBeUndefined();
+
+    await w.worktrees.archiveWorktree(wt.id);
+    await w.worktrees.restore(wt.id);
+    await settle();
+    expect(w.runtime.get(wt.id)?.procs).toBeNull();
+    w.hub.emit("agent", wt.id, 1, { type: "tool-start", toolId: "t2", name: "Edit", input: {}, kind: "edit" });
+    await until(() => !!w.runtime.get(wt.id)?.procs);
+    expect(w.state.worktree(wt.id)?.parked).toBeUndefined();
   });
 
   test("the archived chat is readable in place, and a message on restore goes to the agent", async () => {

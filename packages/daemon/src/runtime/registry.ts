@@ -603,8 +603,12 @@ export class RuntimeRegistry {
    * setup pane and the first-run preview working. A main that ran the shared tier alone and leads
    * now gets its page. A worktree runs everything but what it borrows. */
   async start(wt: WorktreeInfo, repo: RepoInfo): Promise<void> {
-    if (!this.deps.state.worktree(wt.id)) return; // removed while setup was running
+    const record = this.deps.state.worktree(wt.id);
+    if (!record) return; // removed while setup was running
     const rt = this.ensureAgent(wt);
+    // parked: every edge that wakes a worktree ends here, and none of them is someone asking for
+    // this one's preview
+    if (record.parked) return;
     // unconfirmed detection: no procs until the user confirms the setup pane
     const run = repo.needsSetup ? EMPTY_RUN : resolveRun(repo, wt);
     const leads = wt.kind !== "main" || !this.deps.mainLeads || this.deps.mainLeads(wt.repoId);
@@ -1108,6 +1112,11 @@ export class RuntimeRegistry {
    * the address it answers (or will answer) at, "setup" while the tree is still being made, null
    * when there is nothing to run here or nothing confirmed yet */
   previewStanding(id: string): PreviewStanding | null {
+    const wt = this.deps.state.worktree(id);
+    if (wt?.parked) {
+      const repo = this.deps.state.repos.find((r) => r.id === wt.repoId);
+      return repo && !repo.needsSetup && resolveRun(repo, wt).preview ? { status: "parked" } : null;
+    }
     if (this.settingUp.has(id)) return { status: "setup" };
     const rt = this.runtimes.get(id);
     if (!rt?.procs) return null;

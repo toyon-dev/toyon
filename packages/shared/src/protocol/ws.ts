@@ -833,6 +833,8 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   /** kill the run of that kind out on the worktree (its setup command, its check, its commit with
    * the hooks in it); the run's own end reports it as terminated */
   z.object({ t: z.literal("run-stop"), worktreeId: id, kind: z.enum(["setup", "check", "commit"]) }),
+  /** start the procs of a worktree that came back from the archive parked */
+  z.object({ t: z.literal("preview-start"), worktreeId: id }),
   /** the ref palette: local branches, remote branches and open PRs matching the query; replies
    * `refs`. An empty query lists the work that is open. */
   z.object({ t: z.literal("search-refs"), repoId: id, query: z.string().max(200) }),

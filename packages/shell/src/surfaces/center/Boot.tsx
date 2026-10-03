@@ -22,6 +22,9 @@ function startingText(phase: SparePhase | undefined): string {
   return "starting dev servers…";
 }
 
+/** the line on a worktree back from the archive, whose procs wait to be asked for */
+const PARKED_TEXT = "preview off since the restore; it starts when the agent writes a file";
+
 /** how much of the tail the pane shows: enough to read a stack trace, not a scrollback */
 const TAIL = 30;
 
@@ -42,6 +45,10 @@ export function Boot({ worktree, log }: { worktree: OwnedWorktree; log: LogLine[
   const setup = runOf(worktree, "setup");
   const setupRun = setup && setup.status !== "terminated" ? setup : null;
   const setupSecs = useSecondsSince(runTicking(setupRun ?? undefined) ? setupRun?.since : undefined);
+  // back from the archive and nothing asked for its preview yet: the pane says so and offers it,
+  // where every other row with no procs is on its way to having some
+  const parked = !!worktree.worktree.parked && procs.length === 0;
+  const startPreview = () => sock?.send({ t: "preview-start", worktreeId: worktree.id });
   const setupStoppable = setupRun && (setupRun.status === "running" || setupRun.status === "detached");
   // the diagnosis is specific enough to hand over: the agent gets it, the command, the tail and
   // the rule, and the daemon restarts the proc when its turn ends. The lead has no task yet, so its
@@ -62,6 +69,8 @@ export function Boot({ worktree, log }: { worktree: OwnedWorktree; log: LogLine[
             <span className="live-text" data-tip={RUN_STATUS_TIP[setupRun.status]}>
               {runLine("setup", setupRun, setupSecs)}
             </span>
+          ) : parked ? (
+            PARKED_TEXT
           ) : (
             startingText(worktree.worktree.phase)
           )}
@@ -84,6 +93,13 @@ export function Boot({ worktree, log }: { worktree: OwnedWorktree; log: LogLine[
             </li>
           ))}
         </ul>
+      )}
+      {parked && (
+        <div className="status-actions">
+          <Button variant="outline" size="lg" onClick={startPreview}>
+            start preview
+          </Button>
+        </div>
       )}
       {setupStoppable && (
         <div className="status-actions">

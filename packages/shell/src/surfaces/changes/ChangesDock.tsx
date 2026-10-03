@@ -39,12 +39,6 @@ import { useOnChange } from "../../ui/hooks.ts";
  * identity on every render and re-render every row with it */
 const NO_FILES: GitFileStatus[] = [];
 
-/** a landing's age, as a section title reads it */
-function landedWhen(at: number): string {
-  const when = ago(at);
-  return when === "now" ? "landed just now" : `landed ${when} ago`;
-}
-
 /** What a worktree with nothing changed says in place of a list: where it stands against its base,
  * and how old the commit it stands on is, so "nothing here" still says how fresh the code is. Main
  * has no base to be the same as, and a count behind is the foot's to say beside the sync. */
@@ -153,7 +147,7 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
 
   const tab = useStore(changesTabShown);
   // an archived page has no strip: the worktree's whole life is one list, what it left uncommitted
-  // over its history, each run of commits headed by the landing that carried it
+  // over its history, the commits that landed told from the ones that never did
   const showChanges = archived !== null || tab === "changes";
   const showHist = archived !== null || tab === "history";
   const setTab = useCallback((v: ChangesTab) => dispatch({ a: "changes-tab", v }), [dispatch]);
@@ -241,27 +235,23 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
   // cursor walks from the last uncommitted file into the first commit
   const above = archived ? rows.length : 0;
   const total = (showChanges ? rows.length : 0) + (showHist ? histRows.length : 0);
-  // an archived worktree's history is only its own commits, so the titles say instead which landing
-  // carried each run of them, and which never landed. One landing that carried all of them has
-  // nothing to tell apart: the chat's landed row says when, and each commit row its own age.
+  // an archived worktree's history is only its own commits, so the titles say instead which of
+  // them landed and which never did. When is not a title's to say: each commit row has its own
+  // age, and the chat's landed rows the landings'. A history that all landed, with nothing
+  // uncommitted over it, has nothing to tell apart and takes no title.
   const keptTitles = useMemo(() => {
     const titles = new Map<number, string>();
     if (!archived) return titles;
-    const counts = new Map<number, number>();
-    for (const r of histRows) {
-      const at = r.commit.landedAt ?? 0;
-      if (!r.file) counts.set(at, (counts.get(at) ?? 0) + 1);
-    }
-    if (counts.size === 1 && !counts.has(0)) return titles;
-    let last: number | undefined;
+    if (files.length === 0 && histRows.every((r) => r.commit.landedAt)) return titles;
+    let last: boolean | undefined;
     histRows.forEach((r, i) => {
-      const at = r.commit.landedAt ?? 0;
-      if (at === last) return;
-      last = at;
-      titles.set(i, `${at ? landedWhen(at) : "not landed"} · ${counts.get(at) ?? 0}`);
+      const landed = !!r.commit.landedAt;
+      if (landed === last) return;
+      last = landed;
+      titles.set(i, landed ? "landed" : "not landed");
     });
     return titles;
-  }, [archived, histRows]);
+  }, [archived, files, histRows]);
   const listRef = useRef<HTMLDivElement>(null);
   // The cursor: a row, and under an open test file the name it is on (`at`, -1 on the row itself).
   // The rows keep their numbers whichever file is open, so a name is a step inside a row and not a

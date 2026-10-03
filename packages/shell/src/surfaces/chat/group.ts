@@ -1,4 +1,4 @@
-import { emptyInput, isWrittenKind, SHELL_TOOL } from "@toyon/shared";
+import { emptyInput, isEditTool, isWrittenKind, SHELL_TOOL } from "@toyon/shared";
 import type { ChatItem } from "../../state/store.ts";
 import { thoughtLine } from "./thought.ts";
 import { isBackgroundSpawn, isGuardian, toolLabel } from "./toolCall.ts";
@@ -266,6 +266,33 @@ export function runningRow(entries: ChatEntry[]): number {
   return entries.findIndex(
     (e) => "tools" in e && !e.tools[0]!.parentToolId && !e.tools.at(-1)!.done && !e.tools.at(-1)!.background,
   );
+}
+
+/** The open rows whose calls have not started: written into the batch behind a call that runs
+ * alone. An agent runs a batch in order, the calls that only look (a read, a search, a fetch) side
+ * by side and each call that can change something by itself, so a read written after a command is
+ * open for the command's whole run without having begun, and a shine on its row would say three
+ * things are happening where one is. Nothing on the wire says when a call starts (runningRow), so
+ * this is read off the kinds: a row waits when a call that runs alone is open ahead of it, and one
+ * that runs alone waits for every open call ahead of it. An unknown kind counts as looking: a row
+ * that shines a moment early is a smaller lie than a running one that sits still. `nested` reads a
+ * subagent's run, where every call is the subagent's own. */
+export function queuedRows(entries: ChatEntry[], nested = false): ReadonlySet<number> {
+  const queued = new Set<number>();
+  let open = false;
+  let alone = false;
+  entries.forEach((e, i) => {
+    if (!("tools" in e) || (!nested && e.tools[0]!.parentToolId)) return;
+    const last = e.tools.at(-1)!;
+    // a `!` command or a landing's step is the person's, not a call in the agent's batch: one left
+    // running would hold every call the agent makes after it at "queued"
+    if (last.done || last.background || last.name === SHELL_TOOL) return;
+    const solo = isEditTool({ name: last.name, kind: last.toolKind });
+    if (alone || (open && solo)) queued.add(i);
+    open = true;
+    alone ||= solo;
+  });
+  return queued;
 }
 
 /** The same for a subagent's run: the row of the oldest call still open, or -1. While one is open

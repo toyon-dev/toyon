@@ -25,6 +25,7 @@ import { chatLink, openChatLink } from "./chatLink.ts";
 import { DaemonRow, useAgo } from "./DaemonRow.tsx";
 import { FileChip } from "./FileChip.tsx";
 import {
+  queuedRows,
   runCalls,
   runningInRun,
   sameRun,
@@ -549,6 +550,7 @@ export const ToolRow = memo(
     live,
     working,
     since,
+    queued,
     roots,
     worktreeId,
     marked,
@@ -574,6 +576,9 @@ export const ToolRow = memo(
      * stamp down to the subagent's call that is executing (runningInRun), where the wait is, and
      * keeps it on its own line only while the fold is closed or no call under it is open. */
     since?: number;
+    /** the call is written but has not started: it waits behind one that runs alone (queuedRows
+     * in group.ts), so the row holds still until its turn */
+    queued?: boolean;
     roots?: string[];
     worktreeId?: string | null;
     /** the composer has walked back to the command this row ran */
@@ -595,9 +600,12 @@ export const ToolRow = memo(
     const alive = streaming || !!next;
     // A spawn row shines while its subagent works. A spawn run in the background returns at once,
     // so its own call says nothing about the subagent; the log says when it is at work.
-    const running = alive || !!working;
+    // A call queued behind another is open and not running, and its row says so by not moving: the
+    // shine is the claim that something is happening on this line now.
+    const running = (alive && !queued) || !!working;
+    const waits = streaming && !!queued;
     // How long the call has been executing. The shine says busy the same way whether the call is
-    // running, queued or wedged; the count climbing beside it is what tells them apart, so only the
+    // running or wedged; the count climbing beside it is what tells them apart, and only the
     // row at the head of the batch counts, from when it got there (runningRow in group.ts picks
     // it). The store keeps the stamp, since this row is rebuilt on every switch of worktree. A
     // background spawn's own call returned at once, so its row counts while it is at work instead.
@@ -608,6 +616,7 @@ export const ToolRow = memo(
     // number only for a closed fold (chat.css hides it on an open one) or between calls, when
     // nothing under it is waiting and the silence is the subagent's own.
     const inner = run ? runningInRun(run) : -1;
+    const waiting = useMemo(() => (run ? queuedRows(run, true) : undefined), [run]);
     // The log decides which row opens itself, and it hands the row two answers: the turn's one
     // self-opening row (openRow in group.ts, reasoning only) and the newest `!` command, which is
     // open from the start because what it printed is the reason the person ran it. A subagent's
@@ -635,7 +644,8 @@ export const ToolRow = memo(
         (t) => !toolLabel(t, roots).command && toolBlocks(t, t.output ?? "").length === 0 && !t.images?.length,
       );
     const calls = run ? runCalls(run) : 0;
-    const what = [label, hint].filter(Boolean).join(" ") + (background ? ", in the background" : "");
+    const what =
+      [label, hint].filter(Boolean).join(" ") + (background ? ", in the background" : "") + (waits ? ", queued" : "");
     // no count while the call is still being written: a spawn's "0 calls" beside the mark read as
     // a subagent that had started and done nothing
     const count = writing
@@ -659,6 +669,7 @@ export const ToolRow = memo(
           tools.some((t) => t.isError) && "error",
           head.parentToolId && "nested",
           run && "spawn",
+          waits && "queued",
         )}
         state={rowState({ cursor: marked })}
         auto={auto}
@@ -692,6 +703,8 @@ export const ToolRow = memo(
               hint && <span className={cx("tool-hint", running && "live-text")}>{hint}</span>
             )}
             {background && <span className="tool-status">in the background</span>}
+            {/* the row is faint and still (chat.css), and the word says what the faintness means */}
+            {waits && <span className="tool-status">queued</span>}
             {age >= QUIET_AFTER && (
               <span className={cx("tool-age", inner >= 0 && "tool-age-folded")}>{elapsed(age)}</span>
             )}
@@ -727,6 +740,7 @@ export const ToolRow = memo(
                 tools={e.tools}
                 next={e.next}
                 since={i === inner ? since : undefined}
+                queued={waiting?.has(i)}
                 roots={roots}
                 worktreeId={worktreeId}
               />
@@ -747,6 +761,7 @@ export const ToolRow = memo(
     a.live === b.live &&
     a.working === b.working &&
     a.since === b.since &&
+    a.queued === b.queued &&
     a.next === b.next &&
     a.roots === b.roots &&
     a.worktreeId === b.worktreeId &&

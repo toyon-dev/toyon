@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { ToolKind } from "@toyon/shared";
+import { SHELL_TOOL, type ToolKind } from "@toyon/shared";
 import type { ChatItem } from "../../state/store.ts";
 import {
   type ChatEntry,
@@ -7,6 +7,7 @@ import {
   openRow,
   ownCallRunning,
   placeSpawns,
+  queuedRows,
   runCalls,
   runningInRun,
   runningRow,
@@ -640,6 +641,47 @@ describe("runningRow", () => {
     expect(running([unflagged, sub("task2", { done: false })])).toBe(-1);
     // an orphan subagent call keeps its place in the flow but is still not the main agent's
     expect(running([sub("gone", { done: false })])).toBe(-1);
+  });
+});
+
+describe("queuedRows", () => {
+  const bash = (extra: Partial<ChatItem> = {}) =>
+    tool("execute", "", { name: "Bash", input: { command: "bun run check" }, done: false, ...extra });
+  const read = (path: string, extra: Partial<ChatItem> = {}) =>
+    tool("read", path, { name: "Read", done: false, ...extra });
+  const queued = (items: ChatItem[]) => [...queuedRows(groupTools(items, ["/wt"]))];
+
+  test("the reads written behind a command wait for it, and start when it lands", () => {
+    expect(queued([text("Hi"), bash(), read("/wt/a.png"), read("/wt/b.png")])).toEqual([2, 3]);
+    expect(queued([text("Hi"), bash({ done: true }), read("/wt/a.png"), read("/wt/b.png")])).toEqual([]);
+  });
+
+  test("calls that only look run side by side, and a command behind them waits for all of them", () => {
+    expect(queued([read("/wt/a.png"), tool("search", "", { name: "Grep", done: false })])).toEqual([]);
+    expect(queued([read("/wt/a.png"), bash(), read("/wt/b.png")])).toEqual([1, 2]);
+  });
+
+  test("a command in the background holds nothing up", () => {
+    expect(queued([bash({ background: true }), read("/wt/a.png")])).toEqual([]);
+  });
+
+  test("a command the person ran with ! holds nothing up: it is not in the agent's batch", () => {
+    expect(queued([bash({ name: SHELL_TOOL }), read("/wt/a.png")])).toEqual([]);
+  });
+
+  test("a subagent's batch is read on its own, and never against the main agent's", () => {
+    const sub = (extra: Partial<ChatItem>) => read("/wt/a.ts", { parentToolId: "task1", ...extra });
+    const items = [
+      spawn("task1", "Map the runtime", { done: false }),
+      bash({ parentToolId: "task1" }),
+      sub({}),
+      read("/wt/b.png"),
+    ];
+    const entries = groupTools(items, ["/wt"]);
+    expect([...queuedRows(entries)]).toEqual([]);
+    const entry = entries.find((e) => "spawn" in e);
+    if (!entry || !("spawn" in entry)) throw new Error("no spawn row");
+    expect([...queuedRows(entry.run, true)]).toEqual([1]);
   });
 });
 

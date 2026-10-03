@@ -573,6 +573,11 @@
       flex: 0 0 auto;
       color: var(--text1);
     }
+    /* a call written into the batch but not started: not running, so it holds still, and not done,
+   so it sits fainter than a finished row, the way a message queued behind the turn does */
+    &.queued > summary {
+      opacity: 0.65;
+    }
     /* how many calls the row stands for, one gap after the path it counts: most rows have no count,
    so there is no column to line them up in, and a number at the far end of a wide row floats free
    of its path. It is the only thing that tells this row from one that ran once, so it never shrinks

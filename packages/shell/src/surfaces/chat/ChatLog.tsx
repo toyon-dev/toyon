@@ -30,7 +30,16 @@ import { elapsed, isBusy, pickLabel } from "../util.ts";
 import { openAsk } from "./ask.ts";
 import { ChatItemView, QUIET_AFTER, ThoughtRow, ToolRow } from "./ChatItemView.tsx";
 import { FileChip } from "./FileChip.tsx";
-import { groupTools, indexOfSeq, openRow, ownCallRunning, placeSpawns, runningRow, spawnsAtWork } from "./group.ts";
+import {
+  groupTools,
+  indexOfSeq,
+  openRow,
+  ownCallRunning,
+  placeSpawns,
+  queuedRows,
+  runningRow,
+  spawnsAtWork,
+} from "./group.ts";
 import { ImageChip } from "./ImageChip.tsx";
 import { PasteChip } from "./PasteChip.tsx";
 import { PickChip } from "./PickChip.tsx";
@@ -331,6 +340,8 @@ export function ChatLog({
   const moving = streaming >= 0 || calling || fanned;
   // the one row whose call is executing, which is the row that counts its wait (runningRow in group.ts)
   const countingRow = useMemo(() => runningRow(entries), [entries]);
+  // the rows written behind it that have not started, which hold still until they do
+  const queued = useMemo(() => queuedRows(entries), [entries]);
   // when that call reached the head of the batch, stamped by the store (the row is rebuilt on
   // every switch of worktree, so a clock of its own would start over)
   const running = useLocalField(id, "running");
@@ -349,6 +360,7 @@ export function ChatLog({
               next={entry.next}
               live={i === liveRow || i === newestShell}
               since={i === countingRow ? running?.at : undefined}
+              queued={queued.has(i)}
               roots={roots}
               worktreeId={id}
               // a `!` command is never grouped, so the walk's index is the row's own

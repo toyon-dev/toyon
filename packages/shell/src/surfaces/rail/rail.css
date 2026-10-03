@@ -370,17 +370,12 @@
       display var(--rail-slide) allow-discrete var(--rail-wait),
       opacity var(--rail-slide) ease var(--rail-wait);
   }
+  /* a section's row with a press on it: the shape, the rule above and the text are the shared
+     ones, and what is the rail's is its columns */
   .rail-disc-head {
-    height: var(--row-height-sm);
     width: 100%;
-    align-items: center;
-    position: relative;
     gap: 8px;
     padding: 0 var(--rail-pad-r) 0 var(--rail-pad-l);
-    /* a section's worth of air above it, not a row's: at 6px it read as one more worktree row */
-    margin-top: 14px;
-    font: var(--type-ui-sm);
-    color: var(--text2);
     text-align: left;
     :where([data-hover]) &:hover {
       color: var(--text1);

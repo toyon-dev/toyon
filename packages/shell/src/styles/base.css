@@ -344,6 +344,32 @@
     font: var(--type-ui-sm);
     color: var(--text2);
   }
+  /* A section title heading rows of a list: a short row of its own, and in the air above it a rule,
+     so two panels side by side part their sections the same way. The rule keeps off both edges by
+     the composer's padding: a line that meets the edges is a seam between regions, and this one
+     lines up with the rule inside the commit box and the chat box. It is the same line in every
+     list whatever columns the list keeps, so it runs over a control column too. The title that
+     opens a list has nothing above it to part from. A list adds only its own inset. */
+  .section-row {
+    position: relative;
+    display: flex;
+    align-items: center;
+    min-height: var(--row-height-sm);
+    margin-top: 12px;
+    &::before {
+      content: "";
+      position: absolute;
+      inset: -6px 10px auto;
+      height: 1px;
+      background: var(--border0);
+    }
+    &:first-child {
+      margin-top: 0;
+      &::before {
+        display: none;
+      }
+    }
+  }
   /* an empty list, on the rows' own text column */
   .empty {
     padding: 4px 12px;

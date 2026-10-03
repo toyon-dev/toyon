@@ -629,14 +629,12 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
             <>
               {/* the tab already says changes and how many; the title is only needed to tell this
                 section from the committed one under it, or on an archived page from the history */}
-              {(committed.length > 0 || archived) && (
-                <div className="section-title">uncommitted · {files.length - fileTests}</div>
-              )}
+              {(committed.length > 0 || archived) && <div className="section-title section-row">uncommitted</div>}
               {files.map((f, i) => (
                 <Fragment key={f.path}>
                   {fileTests > 0 && i === fileSource && (
-                    <div className="section-title">
-                      {committed.length > 0 || archived ? "uncommitted tests" : "tests"} · {fileTests}
+                    <div className="section-title section-row">
+                      {committed.length > 0 || archived ? "uncommitted tests" : "tests"}
                     </div>
                   )}
                   <GitFileRow
@@ -659,16 +657,16 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
           {showChanges && !archived && committed.length > 0 && (
             <>
               <div
-                className="section-title"
+                className="section-title section-row"
                 data-tip={`Committed on this branch, not yet on ${base}`}
                 data-tip-placement="follow"
               >
-                committed · {committed.length - committedTests}
+                committed
               </div>
               {committed.map((f, i) => (
                 <Fragment key={`c-${f.path}`}>
                   {committedTests > 0 && i === committedSource && (
-                    <div className="section-title">committed tests · {committedTests}</div>
+                    <div className="section-title section-row">committed tests</div>
                   )}
                   <GitFileRow
                     f={f}
@@ -688,11 +686,13 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
           {showHist &&
             histRows.map((r, i) => (
               <Fragment key={r.file ? `${r.commit.sha}:${r.file.path}` : r.commit.sha}>
-                {archived && keptTitles.has(i) && <div className="section-title">{keptTitles.get(i)}</div>}
+                {archived && keptTitles.has(i) && <div className="section-title section-row">{keptTitles.get(i)}</div>}
                 {!archived && aheadCount > 0 && i === 0 && (
-                  <div className="section-title">on this branch · {aheadCount}</div>
+                  <div className="section-title section-row">on this branch</div>
                 )}
-                {!archived && aheadCount > 0 && i === firstLanded && <div className="section-title">{base}</div>}
+                {!archived && aheadCount > 0 && i === firstLanded && (
+                  <div className="section-title section-row">{base}</div>
+                )}
                 {r.file ? (
                   <>
                     <GitFileRow

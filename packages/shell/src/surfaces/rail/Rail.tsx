@@ -712,7 +712,7 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
           {!graftMode && discovered.length > 0 && (
             <>
               <button
-                className="rail-disc-head"
+                className="section-title section-row rail-disc-head"
                 aria-expanded={discOpen}
                 {...tip(
                   `${discovered.length} worktree${discovered.length === 1 ? "" : "s"} here that Toyon did not make`,
@@ -725,7 +725,7 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
                 <span className="rail-gut">
                   <Icon name="caret" className={cx("icon-inline disc-caret", !discOpen && "shut")} />
                 </span>
-                <span className="rail-label">discovered · {discovered.length}</span>
+                <span className="rail-label">discovered</span>
               </button>
               {discOpen && discovered.map(railRow)}
             </>
@@ -735,7 +735,7 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
             <>
               <button
                 type="button"
-                className="rail-disc-head"
+                className="section-title section-row rail-disc-head"
                 aria-expanded={archOpen}
                 {...tip(
                   `${archived.length} archived worktree${archived.length === 1 ? "" : "s"}, kept with ${archived.length === 1 ? "its chat" : "their chats"}`,
@@ -748,7 +748,7 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
                 <span className="rail-gut">
                   <Icon name="caret" className={cx("icon-inline disc-caret", !archOpen && "shut")} />
                 </span>
-                <span className="rail-label">archived · {archived.length}</span>
+                <span className="rail-label">archived</span>
               </button>
               {archOpen && archived.map(archivedRow)}
             </>

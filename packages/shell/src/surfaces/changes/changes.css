@@ -151,8 +151,8 @@
     }
   }
 
-  .changes-list .section-title {
-    padding: 10px 12px 4px;
+  .changes-list .section-row {
+    padding: 0 var(--row-inset);
   }
 
   .git-file {

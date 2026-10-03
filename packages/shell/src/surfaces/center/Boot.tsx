@@ -22,8 +22,8 @@ function startingText(phase: SparePhase | undefined): string {
   return "starting dev servers…";
 }
 
-/** the line on a worktree back from the archive, whose procs wait to be asked for */
-const PARKED_TEXT = "preview off since the restore; it starts when the agent writes a file";
+/** the line on a worktree back from the archive or taken over, whose procs wait to be asked for */
+const PARKED_TEXT = "preview off; it starts when the agent writes a file";
 
 /** how much of the tail the pane shows: enough to read a stack trace, not a scrollback */
 const TAIL = 30;
@@ -45,7 +45,7 @@ export function Boot({ worktree, log }: { worktree: OwnedWorktree; log: LogLine[
   const setup = runOf(worktree, "setup");
   const setupRun = setup && setup.status !== "terminated" ? setup : null;
   const setupSecs = useSecondsSince(runTicking(setupRun ?? undefined) ? setupRun?.since : undefined);
-  // back from the archive and nothing asked for its preview yet: the pane says so and offers it,
+  // back from the archive or taken over, and nothing asked for its preview yet: the pane says so and offers it,
   // where every other row with no procs is on its way to having some
   const parked = !!worktree.worktree.parked && procs.length === 0;
   const startPreview = () => sock?.send({ t: "preview-start", worktreeId: worktree.id });

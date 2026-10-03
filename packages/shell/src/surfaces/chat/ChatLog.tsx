@@ -9,6 +9,7 @@ import {
   type PickMeta,
   pasteSummary,
   SHELL_TOOL,
+  type WorktreeStatus,
 } from "@toyon/shared";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { previewBus } from "../../app/previewBus.ts";
@@ -117,21 +118,24 @@ const NONE: ReadonlySet<string> = new Set();
  * `lead` is a line the conversation starts from: the first child of the log, so it sits on the
  * composer in an empty chat and scrolls up as the conversation grows, the way a message would.
  * `tail` is the last thing said, after every message. A removed worktree's chat is `archived`
- * instead of `active`: the same log under the same id, with nothing running in it. */
+ * instead of `active`: the same log under the same id, with nothing running in it. One toyon does
+ * not run is `found`: an empty log under the row's id, holding what its box sends on the way. */
 export function ChatLog({
   active,
   archived,
+  found,
   lead,
   tail,
 }: {
   active: OwnedWorktree | null;
   archived?: ArchivedWorktree | null;
+  found?: WorktreeStatus | null;
   lead?: React.ReactNode;
   tail?: React.ReactNode;
 }) {
   const sock = useSock();
   const store = useStoreInstance();
-  const id = active?.worktree.id ?? archived?.id ?? null;
+  const id = active?.worktree.id ?? archived?.id ?? found?.id ?? null;
   const items = useLocalField(id, "chat");
   const queue = useLocalField(id, "queue");
   const restoring = useLocalField(id, "restoring");
@@ -279,7 +283,7 @@ export function ChatLog({
   const wt = active?.worktree;
   // one array per worktree: a fresh one on every render would defeat the rows' memo. An archived
   // chat's paths are under the directory it had, which is gone but is still what they are relative to
-  const root = wt?.path ?? archived?.path;
+  const root = wt?.path ?? archived?.path ?? found?.path;
   const roots = useMemo(() => (root ? [root] : []), [root]);
   // calls that did the same thing to the same file, back to back, are one row carrying a count,
   // and a subagent's calls are the run under the row that started it
@@ -526,13 +530,13 @@ export function ChatLog({
             ),
           )}
         {tail}
-        {/* sent from an archived page: newer than the archive it asks back from, so it reads under
-            that note, and it stays until the restored agent has the message */}
+        {/* sent from an archived page or a found worktree's: newer than the note it answers, so it
+            reads under it, and it stays until the worktree's agent has the message */}
         {restoring !== undefined && (
           <div className="msg-user queued-msg">
             <span className="queued-tag">
               <Icon name="clock" className="icon-inline" />
-              restoring
+              {found ? "taking over" : "restoring"}
             </span>
             <span className="queued-text">{restoring}</span>
           </div>

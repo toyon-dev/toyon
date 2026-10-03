@@ -2,7 +2,7 @@ import { useState } from "react";
 import { appItems } from "../state/actions/app.ts";
 import { useDispatch, useSock, useStore, useStoreInstance } from "../state/context.tsx";
 import { STORAGE } from "../state/keys.ts";
-import { useArchivedPage, useBare, useChatCentred, useTouch } from "../state/selectors.ts";
+import { useArchivedPage, useBare, useChatCentred, useFoundPage, useTouch } from "../state/selectors.ts";
 import { Center } from "../surfaces/center/Center.tsx";
 import { ChangesDock } from "../surfaces/changes/ChangesDock.tsx";
 import { ChatDock } from "../surfaces/chat/ChatDock.tsx";
@@ -46,10 +46,12 @@ export function DeskFrame() {
   // All three go as well on a page its daemon cannot talk to, where they have nothing to show and
   // the card in the centre lists the chats itself.
   // The chat dock is hidden on an archived worktree's page too, whose chat is the page itself; the
-  // changes dock stays, showing that worktree's work rather than the row's underneath.
+  // changes dock stays, showing that worktree's work rather than the row's underneath. A found
+  // worktree's page is the same: its chat is the centre.
   const archivedPage = useArchivedPage();
+  const paged = !!useFoundPage() || !!archivedPage;
   const changesOpen = useStore((s) => s.layout.changes) && !bare;
-  const chatOpen = useStore((s) => s.layout.chat) && !bare && !chatCentred && !archivedPage;
+  const chatOpen = useStore((s) => s.layout.chat) && !bare && !chatCentred && !paged;
   const chatSide = useStore((s) => s.chatSide);
   const railOpen = useStore((s) => s.railOpen);
 
@@ -88,7 +90,7 @@ export function DeskFrame() {
   // the centre shows the chat instead, and one composer at a time is the only kind there is; an
   // archived chat in the centre is the one chat panel too: a second composer, hidden, would answer
   // the focus chord and take a dropped file's bounds
-  const chat = !chatCentred && !archivedPage && <ChatDock width={chatW} />;
+  const chat = !chatCentred && !paged && <ChatDock width={chatW} />;
   const rail = !bare && <Rail width={railW} />;
   // its handle only while it is a column: the strip peeks over the dock beside it, and a peek is
   // not resized

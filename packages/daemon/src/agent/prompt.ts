@@ -26,7 +26,7 @@ export const SYSTEM_APPEND = [
 /** where the project's preview stands as a message goes out, for the block that tells the agent */
 export interface PreviewStanding {
   /** the preview proc's status, "setup" while the worktree is still being made and has no procs,
-   * or "parked" on one back from the archive whose procs nobody has asked for yet */
+   * or "parked" on one back from the archive or taken over, whose procs nobody has asked for yet */
   status: ProcStatus | "setup" | "parked";
   /** where the preview proc answers, or will; absent until it has a port */
   url?: string;
@@ -61,7 +61,7 @@ export function previewContext(p: PreviewStanding | null): string | undefined {
       break;
     case "parked":
       line =
-        "The preview is off: this worktree came back from the archive, and Toyon starts its dev servers when you first write a file or when the user asks for them. Nothing answers until then.";
+        "The preview is off: Toyon has not started this worktree's dev servers, and starts them when you first write a file or when the user asks for them. Nothing answers until then.";
       break;
     case "starting":
       line = `Toyon is starting the preview; it answers${at} once it is up.`;

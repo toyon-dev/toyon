@@ -123,6 +123,8 @@ export type ChatItem =
   /** the daemon's word on a restore from the archive: when it went, what branch it came back on,
    * and whether its uncommitted changes came with it */
   | { kind: "restored"; archivedAt: number; branch: string; uncommitted: boolean; ts: number }
+  /** the daemon's word on a take-over: the branch the worktree was found on, which stays its own */
+  | { kind: "adopted"; branch: string; ts: number }
   /** the agent wants credentials; `done` once a login went through. `rejected`: it had a
    * credential and the provider refused it, so the error above this card says what went wrong */
   | {
@@ -214,8 +216,9 @@ export interface WorktreeLocal {
   /** the listing key (actions/file.ts) the files were last asked for; the same key asks nothing */
   filesFor?: string;
   queue: QueuedMessage[];
-  /** a message sent from an archived page, shown as sent while the worktree comes back: gone when
-   * its own message reaches the chat, or when the daemon hands it back unsent */
+  /** a message sent from an archived page or a found worktree's, shown as sent while the worktree
+   * becomes toyon's to run: gone when its own message reaches the chat, when the daemon hands it
+   * back unsent, or, for a found one, with the row it was sent from */
   restoring?: string;
   /** a message sent to an agent that is not mid-turn, until the daemon's word catches up: the log
    * shows the bubble and the working mark from the press, so the wait reads as the turn it becomes
@@ -1018,10 +1021,12 @@ export function isChatCentred(s: Pick<State, "repos" | "activeRepoId">): boolean
 }
 
 /** what ⌘L does: an open chat dock shuts, a shut one opens with the caret in the box. A chat in the
- * centre, a project's or an archived worktree's, is not a panel: there is nothing to close, only
- * the box to reach. */
+ * centre, a project's or that of a worktree toyon is not running, is not a panel: there is nothing
+ * to close, only the box to reach. */
 export function chatChordAction(s: State): Action {
-  return s.layout.chat && !isChatCentred(s) && !s.archivedPage ? { a: "toggle-chat" } : { a: "focus-chat" };
+  return s.layout.chat && !isChatCentred(s) && !s.archivedPage && !foundPageOf(s)
+    ? { a: "toggle-chat" }
+    : { a: "focus-chat" };
 }
 
 /** the chat is about to be written in, so its dock opens; a chat in the centre has no dock to open,
@@ -1183,6 +1188,14 @@ export function changesTabStep(
   if (archivedPageOf(s)) return shown;
   const n = CHANGES_TABS.length;
   return CHANGES_TABS[(CHANGES_TABS.indexOf(shown) + delta + n) % n] ?? "changes";
+}
+
+/** The found worktree whose page the centre shows: the active row, when toyon does not run it. Its
+ * chat is the page, as an archived worktree's is, so the chat dock goes while it is up. */
+export function foundPageOf(s: Pick<State, "rows" | "activeId" | "archivedPage">): WorktreeStatus | null {
+  if (s.archivedPage) return null;
+  const row = rowById(s, s.activeId);
+  return row && !isOwned(row) ? row : null;
 }
 
 export function archivedPageOf(s: Pick<State, "archivedPage" | "activeRepoId" | "archived">): ArchivedWorktree | null {
@@ -2742,6 +2755,8 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
           ts: event.ts,
         },
       ];
+    case "adopted":
+      return [...items, { kind: "adopted", branch: event.branch, ts: event.ts }];
     case "agent-auth-required":
       return [
         ...items,

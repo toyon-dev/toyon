@@ -1,5 +1,5 @@
 import { useDispatch, useStore } from "../../state/context.tsx";
-import { useActive, useArchivedPage, useChatCentred, useTouch } from "../../state/selectors.ts";
+import { useActive, useArchivedPage, useChatCentred, useFoundPage, useTouch } from "../../state/selectors.ts";
 import type { Screen } from "../../state/store.ts";
 import { IconButton } from "../../ui/Button.tsx";
 import { Menus } from "../../ui/Menu.tsx";
@@ -36,6 +36,7 @@ export function PhoneFrame() {
   const screen = useStore((s) => s.screen);
   const active = useActive();
   const archivedPage = useArchivedPage();
+  const foundPage = useFoundPage();
   const editor = useStore((s) => s.editor);
   const remote = useStore((s) => s.remote);
   const chatCentred = useChatCentred();
@@ -60,7 +61,7 @@ export function PhoneFrame() {
 
   // a row that went while its screen was open (archived from the desk, or removed) leaves the
   // screen pointing at nothing; the list is where that lands
-  const onWorktree = screen !== "home" && (active !== null || archivedPage !== null);
+  const onWorktree = screen !== "home" && (active !== null || archivedPage !== null || foundPage !== null);
   // the app is the worktree's own, running: a project with nothing to run has no app, and an
   // archived worktree's page is about work that no longer runs
   const previewed = onWorktree && !chatCentred && !archivedPage ? active : null;
@@ -134,7 +135,7 @@ export function PhoneFrame() {
             // whichever tab is open; its close returns there, and a tab or the way back shuts it
             <EditorPane editor={editor} placement="screen" />
           ) : tab === "chat" ? (
-            <ChatPanel placement="screen" archived={archivedPage} />
+            <ChatPanel placement="screen" archived={archivedPage} found={foundPage} />
           ) : tab === "changes" ? (
             <ChangesDock placement="screen" />
           ) : null}

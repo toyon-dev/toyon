@@ -613,6 +613,10 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
     /** as on create-worktree: only the tab that asked focuses the promoted row */
     clientId: z.string().max(64).optional(),
     worktreeId: id,
+    /** typed into the found worktree's box: the message goes to the agent once the row is toyon's */
+    message: z.object({ text: prose, attachments }).optional(),
+    /** the box `message` was written in */
+    boxId,
   }),
   z.object({ t: z.literal("git-status"), worktreeId: id }),
   /** the file as the working tree has it, beside what it was at the merge-base with main; `ref`
@@ -846,7 +850,7 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   /** kill the run of that kind out on the worktree (its setup command, its check, its commit with
    * the hooks in it); the run's own end reports it as terminated */
   z.object({ t: z.literal("run-stop"), worktreeId: id, kind: z.enum(["setup", "check", "commit"]) }),
-  /** start the procs of a worktree that came back from the archive parked */
+  /** start the procs of a parked worktree: one back from the archive, or one taken over */
   z.object({ t: z.literal("preview-start"), worktreeId: id }),
   /** the ref palette: local branches, remote branches and open PRs matching the query; replies
    * `refs`. An empty query lists the work that is open. */

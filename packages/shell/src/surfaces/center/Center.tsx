@@ -54,7 +54,6 @@ import { Overlays } from "../overlays/Overlays.tsx";
 import { TerminalPane } from "../terminal/TerminalPane.tsx";
 import { chord, isBusy, previewUrl, relFile } from "../util.ts";
 import { Boot } from "./Boot.tsx";
-import { Discovered } from "./Discovered.tsx";
 import { carriedFrame, shownFrame } from "./frames.ts";
 import { Greenfield } from "./Greenfield.tsx";
 import { Import } from "./Import.tsx";
@@ -341,7 +340,7 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
     );
   });
 
-  // a worktree toyon did not make: its own pane, and a shell in the terminal below it
+  // a worktree toyon did not make: its chat in the centre, and a shell in the terminal below it
   const activeRow = useActiveRow();
   const activeDiscovered = activeRow && !isOwned(activeRow) ? activeRow : null;
   // a removed worktree's page: over the row underneath, with the panes that are that row's hidden
@@ -544,7 +543,11 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
                   onClose={forcedSetup ? undefined : () => dispatch({ a: "close" })}
                 />
               )}
-              {activeDiscovered && !setupRepo && !watching && !archivedPage && <Discovered row={activeDiscovered} />}
+              {/* a worktree toyon does not run: the chat panel with nothing said yet, over a box that
+                  takes it over */}
+              {activeDiscovered && !setupRepo && !watching && !archivedPage && (
+                <ChatPanel key={activeDiscovered.id} placement="centre" found={activeDiscovered} />
+              )}
               {/* a removed worktree's chat, as it was: the chat panel, not a view of toyon's own */}
               {archivedPage && !setupRepo && !watching && (
                 <ChatPanel key={archivedPage.id} placement="centre" archived={archivedPage} />

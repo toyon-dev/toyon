@@ -272,6 +272,9 @@ export type AgentEvent =
    * `branch` what the commits came back on (a new name when the old one was taken meanwhile), and
    * `uncommitted` whether kept changes were put back over them */
   | { type: "restored"; archivedAt: number; branch: string; uncommitted: boolean; ts: number }
+  /** toyon took over a worktree it did not make: the daemon's word on it, the first thing on the
+   * transcript, so the chat says how the row came to be here and on whose `branch` */
+  | { type: "adopted"; branch: string; ts: number }
   /** the agent asked something and its turn is blocked until the answer goes back. `toolId` ties
    * the card to the tool row the agent emitted just before it, which the card then replaces.
    * Always followed by an agent-ask-end. */

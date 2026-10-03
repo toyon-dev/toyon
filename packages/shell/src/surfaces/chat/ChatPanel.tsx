@@ -1,4 +1,4 @@
-import type { ArchivedWorktree } from "@toyon/shared";
+import type { ArchivedWorktree, WorktreeStatus } from "@toyon/shared";
 import { useMemo } from "react";
 import { useDispatch, useStore, useStoreInstance } from "../../state/context.tsx";
 import { useActive, useActiveRepo, useDraft, useLocalField } from "../../state/selectors.ts";
@@ -8,6 +8,7 @@ import { ArchivedNote } from "./ArchivedNote.tsx";
 import { ChatLog } from "./ChatLog.tsx";
 import { Composer } from "./Composer.tsx";
 import { DraftIntro } from "./DraftIntro.tsx";
+import { FoundNote } from "./FoundNote.tsx";
 import { chatPanel, pathDropHandlers } from "./useIntake.ts";
 import "./chat.css";
 
@@ -16,6 +17,8 @@ import "./chat.css";
  * that goes lands in the log above it with nothing swapping. It sits in the dock beside the
  * preview, or is what the centre shows for a project with nothing to run, or for a removed
  * worktree (`archived`): its chat as it was, ending in the removal, over a box that brings it back.
+ * A worktree git knows and Toyon does not run (`found`) is the same page with nothing said yet:
+ * the note that offers to take it over, over a box that does.
  * On a phone it is a screen of its own, which is the same panel again: the transcript and the box
  * are what the phone is for, and what differs is only the box it sits in.
  * Only one placement is ever mounted, so there is one composer to focus and one panel a dropped
@@ -25,11 +28,13 @@ export function ChatPanel({
   className,
   width,
   archived,
+  found,
 }: {
   placement: "dock" | "centre" | "screen";
   className?: string;
   width?: number;
   archived?: ArchivedWorktree | null;
+  found?: WorktreeStatus | null;
 }) {
   const dispatch = useDispatch();
   // the row underneath an archived page is not what the page shows
@@ -65,6 +70,8 @@ export function ChatPanel({
     >
       {archived ? (
         <ChatLog active={null} archived={archived} tail={<ArchivedNote item={archived} />} />
+      ) : found ? (
+        <ChatLog active={null} found={found} tail={<FoundNote row={found} />} />
       ) : (
         <ChatLog
           active={active}
@@ -83,9 +90,11 @@ export function ChatPanel({
           }
         />
       )}
-      {!archived && draft && !sending && <DraftIntro draft={draft} lead={active} />}
+      {!archived && !found && draft && !sending && <DraftIntro draft={draft} lead={active} />}
       {archived ? (
         <Composer active={null} archived={archived} placement={placement} />
+      ) : found ? (
+        <Composer active={null} found={found} placement={placement} />
       ) : (
         <Composer active={active} draft={draft} placement={placement} />
       )}

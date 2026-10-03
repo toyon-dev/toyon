@@ -8,6 +8,7 @@ import {
   archivedPageOf,
   asksSetup,
   currentTheme,
+  foundPageOf,
   isBare,
   isChatCentred,
   isGreenfield,
@@ -68,6 +69,9 @@ export const useTurnOpen = (): boolean => useStore((s) => !!(s.activeRepoId && s
 
 /** the archived worktree whose page the centre shows (an element of the list, so its identity holds) */
 export const useArchivedPage = (): ArchivedWorktree | null => useStore(archivedPageOf);
+
+/** the found worktree whose page the centre shows (an element of the rows, so its identity holds) */
+export const useFoundPage = (): WorktreeStatus | null => useStore(foundPageOf);
 
 /** the project the shell is scoped to (an element of the repos array, so its identity is stable) */
 export const useActiveRepo = (): RepoInfo | null => useStore((s) => repoById(s, s.activeRepoId));

@@ -6,6 +6,7 @@ import type {
   ModelChoice,
   OwnedWorktree,
   PermissionMode,
+  WorktreeStatus,
 } from "@toyon/shared";
 import {
   baseOf,
@@ -143,11 +144,13 @@ const STILL_UPLOADING = "still uploading what is attached; send again in a momen
  * uncommitted files move with it when the intro's note says so, and the draft gives way as the row
  * becomes the task. And a message into an `archived` worktree's chat, which restores it and then
  * goes to its agent: the box is that worktree's under the id it comes back with, and nothing here
- * that needs a running worktree is offered. */
+ * that needs a running worktree is offered. A `found` worktree's chat is the same send with
+ * take-over for the restore. */
 export function Composer({
   active,
   draft,
   archived,
+  found,
   greenfield,
   placement = "dock",
 }: {
@@ -156,6 +159,8 @@ export function Composer({
   draft?: Draft | null;
   /** a removed worktree whose chat is on screen; `active` is null with it */
   archived?: ArchivedWorktree | null;
+  /** a worktree toyon does not run, whose page is on screen; `active` is null with it */
+  found?: WorktreeStatus | null;
   /** rendered in the centre of an empty project: the scaffolding brief rides with the first
    * message, and the knobs that assume a preview or a second worktree stay out of the way */
   greenfield?: boolean;
@@ -170,7 +175,11 @@ export function Composer({
   const drafting = !!draft;
   const id = active?.worktree.id ?? null;
   const repoId = active?.worktree.repoId;
-  const boxId = archived ? archived.id : composerBoxOf(active);
+  const boxId = archived ? archived.id : found ? found.id : composerBoxOf(active);
+  // a worktree toyon is not running: nothing that needs a session or a proc is offered
+  const outside = !!archived || !!found;
+  // the send has somewhere to go: an archive that kept its commits, a found worktree nobody holds
+  const takes = archived ? archived.restorable : !!found && !found.locked;
   const text = useLocalField(boxId, "draft");
   const attachments = useLocalField(boxId, "attachments");
   const notice = useLocalField(boxId, "notice");
@@ -353,8 +362,9 @@ export function Composer({
   const [inserted, setInserted] = useState<{ name: string; hint: string } | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
-  // an archived chat has no files to name and no session to take a command: no menu there
-  const trigger = boxId && !archived ? triggerAt(text, caret) : null;
+  // a chat toyon is not running has no session to take a command and no listing to name a file
+  // from: no menu there
+  const trigger = boxId && !outside ? triggerAt(text, caret) : null;
   // opens even with nothing to show: an empty menu that says why beats a `/` that does nothing. Not
   // over a walked-back message: a recalled `/compact` was sent, not typed, and the menu would take
   // the arrows the walk is using.
@@ -464,7 +474,7 @@ export function Composer({
 
   // `!` mode: the draft is a command for the worktree's shell, not a message. The box wears the
   // mono face while it is one, so the change of contract shows before anything runs.
-  const shellCmd = id || archived ? shellCommandOf(text) : null;
+  const shellCmd = id || outside ? shellCommandOf(text) : null;
 
   // what the inserted command still expects, drawn after the caret. Only while nothing has been
   // typed after it: once the arguments are being written, the hint is in the way rather than help.
@@ -637,6 +647,11 @@ export function Composer({
         ? `message agent on ${archived.title}; sending restores it first`
         : "its commits were not kept, so it cannot come back";
     }
+    if (found) {
+      return found.locked
+        ? `held by ${found.lockReason ?? "another tool"}; Toyon takes it over once the lock goes`
+        : `message agent on ${found.name}; sending takes it over first`;
+    }
     if (!active) return "no worktree selected";
     if (verb) return "";
     // a verdict only exists for work the PR is missing, so the check's word comes before the PR's
@@ -770,6 +785,30 @@ export function Composer({
       sock?.send({
         t: "restore-worktree",
         archiveId: archived.id,
+        clientId,
+        message: { text: text.trim(), attachments: sent },
+        boxId,
+      });
+      dispatch({ a: "restoring", id: boxId, text: text.trim() });
+      dispatch({ a: "sent-box", id: boxId });
+      return;
+    }
+    // into a found worktree's chat: the same one frame, taking it over and handing on the message
+    if (found) {
+      if (found.locked) return;
+      if (shellCmd !== null) {
+        refuse("nothing runs here until Toyon takes it over; its menu on the rail opens a shell");
+        return;
+      }
+      if (uploading) {
+        refuse(STILL_UPLOADING);
+        return;
+      }
+      const sent = attachments.length ? attachments.map(toInput) : undefined;
+      leaveBox();
+      sock?.send({
+        t: "adopt-worktree",
+        worktreeId: found.id,
         clientId,
         message: { text: text.trim(), attachments: sent },
         boxId,
@@ -1202,7 +1241,7 @@ export function Composer({
             }}
             // the ghost draws the placeholder itself when it has a line to put under it
             placeholder={subline || verb ? "" : placeholderText}
-            disabled={!active && !archived?.restorable}
+            disabled={!active && !takes}
           />
           {ghost && (
             <div className="composer-ghost" aria-hidden="true">
@@ -1367,10 +1406,10 @@ export function Composer({
           </span>
           <span className="spawn-tools">
             {/* the terminal is one shell per worktree, so it belongs with the other per-worktree
-              actions rather than in the app's top bar. Not on an empty project, an archived chat or
-              a phone's screen: the pane is hidden there, and a button that flips a hidden pane is a
-              dead button. */}
-            {!greenfield && !archived && !onScreen && (
+              actions rather than in the app's top bar. Not on an empty project, a chat Toyon is not
+              running or a phone's screen: the pane is hidden there or has no procs to show, and a
+              button that flips a hidden pane is a dead button. */}
+            {!greenfield && !outside && !onScreen && (
               <IconButton
                 icon="terminal"
                 tone="chrome"
@@ -1392,7 +1431,7 @@ export function Composer({
                 )}
               />
             )}
-            {!greenfield && !chatCentred && !archived && !onScreen && (
+            {!greenfield && !chatCentred && !outside && !onScreen && (
               <IconButton
                 icon="pick"
                 label="Pick an element on the page to attach"

@@ -386,9 +386,10 @@ export interface WorktreeInfo {
    * ring and waits for focus: this one is what decides which dev servers a restarted daemon
    * brings back, and whether a finished turn is worth booting one for. */
   viewedAt?: number;
-  /** back from the archive with its procs not started: a restore is as often one more question as
-   * more work, and a question needs no dev server. Nothing that wakes a worktree starts one that
-   * is parked; it goes when someone asks for the preview or its agent writes a file. */
+  /** back from the archive, or taken over, with its procs not started: a restore is as often one
+   * more question as more work, and a question needs no dev server; a directory the person made is
+   * theirs, and a dev server in it is something they ask for. Nothing that wakes a worktree starts
+   * one that is parked; it goes when someone asks for the preview or its agent writes a file. */
   parked?: boolean;
   /** the person marked it unread to come back to; rings the row until it is next seen */
   unread?: boolean;

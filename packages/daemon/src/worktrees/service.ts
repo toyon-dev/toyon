@@ -188,7 +188,8 @@ export interface GitInfo {
   head?: string;
 }
 
-/** what was typed into an archived chat, sent once the worktree is back */
+/** what was typed into the chat of a worktree toyon is not running (an archived one, a found
+ * one), sent once the worktree is toyon's to run */
 export interface RestoreMessage {
   text: string;
   attachments?: AttachmentInput[];
@@ -656,11 +657,12 @@ export class WorktreeService {
 
   /** Promote a worktree git knows about into one toyon runs.
    *
-   * The directory already exists and someone else made it, so this allocates a port, records it and
-   * starts the procs. It deliberately does not run the settings' setup commands (see
-   * `setupAndStart`) and does not start an agent: take-over is not a task, and the agent comes up
-   * on the first message like it does anywhere else. */
-  async adopt(worktreeId: string, createdBy?: string): Promise<WorktreeInfo> {
+   * The directory already exists and someone else made it, so this allocates a port and records
+   * it, parked: a dev server in a directory the person made is theirs to ask for (see
+   * `startPreview`). It deliberately does not run the settings' setup commands (see
+   * `setupAndStart`). Take-over is not a task, so the agent comes up on the first message like it
+   * does anywhere else; a `message` typed into the found row's chat is that message. */
+  async adopt(worktreeId: string, createdBy?: string, message?: RestoreMessage): Promise<WorktreeInfo> {
     const r = this.readable(worktreeId);
     if (!r) throw new UserError("that worktree is gone");
     if (r.wt) throw new UserError(`Toyon already runs ${r.name}`);
@@ -692,6 +694,8 @@ export class WorktreeService {
         title: found.name,
         createdAt: Date.now(),
         agent: this.d.agents.require(this.d.state.defaultAgent ?? DEFAULT_AGENT_ID).id,
+        parked: true,
+        ...(message ? { promptedAt: Date.now() } : {}),
         ...(createdBy ? { createdBy } : {}),
       };
       return rec;
@@ -699,6 +703,10 @@ export class WorktreeService {
     this.invalidateDiscovered();
     // slow, and nothing above depends on it: outside the lock, like create()'s own setup
     this.launch(wt, repo, repo.path, { setupCommands: false });
+    // the word on the take-over opens the transcript, the way a restore's picks one up
+    const { agent } = this.d.runtime.ensureAgent(wt);
+    agent.note({ type: "adopted", branch: wt.branch, ts: Date.now() });
+    if (message) agent.send(message.text, { attachments: message.attachments });
     return wt;
   }
 

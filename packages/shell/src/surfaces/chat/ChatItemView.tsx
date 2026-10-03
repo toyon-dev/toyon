@@ -1060,6 +1060,13 @@ export const ChatItemView = memo(function ChatItemView({
       return <LandedRow item={item} />;
     case "restored":
       return <RestoredRow item={item} />;
+    case "adopted":
+      // where the found note stood: the chat opens on how the row came to be Toyon's
+      return (
+        <DaemonRow icon="branch" word="taken over" tone="quiet" at={item.ts}>
+          <span className="daemon-text">on {item.branch}, its own branch; the preview is off until you start it</span>
+        </DaemonRow>
+      );
   }
 });
 

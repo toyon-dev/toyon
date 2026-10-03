@@ -75,7 +75,7 @@ describe("discovery", () => {
 });
 
 describe("adopt", () => {
-  test("take-over records it, starts its procs, and drops it from discovered", async () => {
+  test("take-over records it, parked, and drops it from discovered", async () => {
     await registered();
     await settle();
     const dir = foreignWorktree("takeover", "take-me");
@@ -91,9 +91,26 @@ describe("adopt", () => {
     expect(rows.find((s) => s.id === wt.id)?.worktree).toBe(wt);
     expect(rows.every((s) => s.worktree)).toBe(true);
     expect(await w.worktrees.discovered()).toEqual([]);
-    expect(w.procs.get(wt.id)?.started.map((p) => p.name)).toEqual(["web"]);
+    // the directory is the person's: no dev server in it until one is asked for
+    expect(wt.parked).toBe(true);
+    expect(w.runtime.get(wt.id)?.procs).toBeNull();
+    expect(w.agents.get(wt.id)!.recorded.at(-1)).toMatchObject({ type: "adopted", branch: "take-me" });
     // take-over is not a task: no prompt goes anywhere
     expect(w.agents.get(wt.id)?.sent ?? []).toEqual([]);
+    w.worktrees.startPreview(wt.id);
+    await until(() => !!w.runtime.get(wt.id)?.procs);
+    expect(w.procs.get(wt.id)?.started.map((p) => p.name)).toEqual(["web"]);
+  });
+
+  test("a message typed into a found worktree's chat goes to its agent with the take-over", async () => {
+    await registered();
+    await settle();
+    const id = await foundId(foreignWorktree("asked", "ask-me"));
+    const wt = await w.worktrees.adopt(id, "tab-1", { text: "what is on this branch" });
+    await settle();
+    expect(wt).toMatchObject({ createdBy: "tab-1", parked: true });
+    expect(w.agents.get(wt.id)?.sent.at(-1)).toMatchObject({ text: "what is on this branch" });
+    expect(w.runtime.get(wt.id)?.procs).toBeNull();
   });
 
   test("an adopted worktree keeps its branch name: rename refuses rather than moving it under toyon/", async () => {

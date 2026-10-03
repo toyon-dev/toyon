@@ -366,8 +366,10 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     await s.worktrees.deleteArchived(msg.archiveId);
   },
 
-  async "adopt-worktree"(msg, _ctx, s) {
-    await s.worktrees.adopt(msg.worktreeId, msg.clientId);
+  async "adopt-worktree"(msg, ctx, s) {
+    await sending(s, ctx, msg, msg.message?.attachments, async () => {
+      await s.worktrees.adopt(msg.worktreeId, msg.clientId, msg.message);
+    });
   },
 
   async "git-status"(msg, ctx, s) {

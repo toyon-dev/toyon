@@ -8,6 +8,7 @@ import {
   useActiveId,
   useActiveRepo,
   useArchivedPage,
+  useFoundPage,
   useOffline,
   useVisibleWorktrees,
 } from "../../state/selectors.ts";
@@ -37,12 +38,15 @@ export function PhoneBar({ screen, tabs }: { screen: "home" | "chat"; tabs?: Rea
   const active = useActive();
   const activeId = useActiveId();
   const archivedPage = useArchivedPage();
+  const foundPage = useFoundPage();
   const visible = useVisibleWorktrees();
   const offline = useOffline();
   const owed = needsYou(visible, activeId);
   const lead = visible.find((w) => isLead(w.worktree));
   const home = screen === "home";
-  const title = home ? (repo?.name ?? null) : (archivedPage?.title ?? active?.worktree.title ?? null);
+  const title = home
+    ? (repo?.name ?? null)
+    : (archivedPage?.title ?? active?.worktree.title ?? foundPage?.name ?? null);
   const tasks = visible.filter((w) => !isLead(w.worktree)).length;
   const line = home
     ? tasks === 0
@@ -57,7 +61,9 @@ export function PhoneBar({ screen, tabs }: { screen: "home" | "chat"; tabs?: Rea
             path: active.worktree.path,
             at: isLead(active.worktree) ? undefined : ago(sentAt(active.worktree)),
           })
-        : null;
+        : foundPage
+          ? rowLine(foundPage, { offline, needsSetup: false, path: foundPage.path })
+          : null;
   const asks = !home && !archivedPage && !!active && dotClass(active) === "waiting";
   const switching = useStore((s) => s.overlay?.kind === "projects" && s.overlay.form === "pill");
   const commands = useStore((s) => s.overlay?.kind === "commands");

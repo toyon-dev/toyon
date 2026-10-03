@@ -127,18 +127,17 @@ export function filesLine(count: number): string {
   return count > 0 ? ended(capital(`${count} ${count === 1 ? "file" : "files"} changed`)) : "";
 }
 
-/** Under the verb's line, the verdict behind a fixed label, so the eye gets the answer before the
- * sentence: rewritten after every turn, the line is scanned far more often than it is read. What
- * is left when the model did not read the work as done; else ready, with the facts. A tree that
- * moved since the verdict was written says so instead, which is why the word above is `check` and
- * not `land`. Never a refusal: the word stays. */
-export function verdictLine(l: Landing, count: number, gap: MessageGap | null = null): string | null {
+/** Under the verb's line, what is in the way, so a second line is itself the signal: rewritten
+ * after every turn, the box is scanned far more often than it is read. What is left when the
+ * model did not read the work as done, behind a fixed label. A tree that moved since the verdict
+ * was written says so instead, which is why the word above is `check` and not `land`. Never a
+ * refusal: the word stays. Null when the work is ready: the word alone says so, and its tooltip
+ * carries the facts. */
+export function verdictLine(l: Landing, gap: MessageGap | null = null): string | null {
   if (l.stale) return "Changed since this was written.";
   // a message is owed only for a commit the land would make, which is what the gap says
   if (gap === "unanswered") return "No message yet: the model did not answer.";
-  if (l.why) return `Not ready: ${ended(clause(l.why))}`;
-  const facts = factsOf(l, count);
-  return facts ? `Ready: ${facts}.` : "Ready.";
+  return l.why ? `Not ready: ${ended(clause(l.why))}` : null;
 }
 
 /** what the verb's line says after the word, as a whole sentence */

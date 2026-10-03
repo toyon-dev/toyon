@@ -109,30 +109,27 @@ describe("landingLine", () => {
     expect(behindFact("main", undefined)).toBe("");
   });
 
-  test("the verdict leads with its label: what is left, or ready with the facts", () => {
-    expect(verdictLine(landing({ why: "verify the fix live" }), 3)).toBe("Not ready: verify the fix live.");
-    expect(verdictLine(landing({ why: "Live hover unverified" }), 3)).toBe("Not ready: live hover unverified.");
-    expect(verdictLine(landing({ why: "ChatLog.tsx fix is unverified" }), 3)).toBe(
+  test("the verdict says what is left behind its label, and nothing when the work is ready", () => {
+    expect(verdictLine(landing({ why: "verify the fix live" }))).toBe("Not ready: verify the fix live.");
+    expect(verdictLine(landing({ why: "Live hover unverified" }))).toBe("Not ready: live hover unverified.");
+    expect(verdictLine(landing({ why: "ChatLog.tsx fix is unverified" }))).toBe(
       "Not ready: ChatLog.tsx fix is unverified.",
     );
-    expect(verdictLine(landing({ check: "pass" }), 3)).toBe("Ready: 3 files changed, check passed.");
-    expect(verdictLine(landing({}), 1)).toBe("Ready: 1 file changed.");
-    expect(verdictLine(landing({}), 0)).toBe("Ready.");
+    expect(verdictLine(landing({ check: "pass" }))).toBeNull();
+    expect(verdictLine(landing({}))).toBeNull();
   });
 
   test("a tree that moved under the verdict says so ahead of any verdict", () => {
-    expect(verdictLine(landing({ why: "a question is open", stale: true }), 3)).toBe("Changed since this was written.");
-    expect(verdictLine(landing({ check: "pass", stale: true }), 3)).toBe("Changed since this was written.");
+    expect(verdictLine(landing({ why: "a question is open", stale: true }))).toBe("Changed since this was written.");
+    expect(verdictLine(landing({ check: "pass", stale: true }))).toBe("Changed since this was written.");
   });
 
   test("a question that went unanswered says the message is owed, under the check word", () => {
-    expect(verdictLine(landing({ check: "pass", unanswered: true }), 3, "unanswered")).toBe(
+    expect(verdictLine(landing({ check: "pass", unanswered: true }), "unanswered")).toBe(
       "No message yet: the model did not answer.",
     );
     // nothing uncommitted: the land makes no commit, so no message is owed and the word is land
-    expect(verdictLine(landing({ check: "pass", unanswered: true }), 1, null)).toBe(
-      "Ready: 1 file changed, check passed.",
-    );
+    expect(verdictLine(landing({ check: "pass", unanswered: true }), null)).toBeNull();
   });
 
   test("what is missing for the land to commit, and nothing when nothing is uncommitted or a message is in hand", () => {

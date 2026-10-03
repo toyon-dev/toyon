@@ -578,13 +578,10 @@ export function Composer({
   // each as it starts flashes three sentences through the line before one can be read; the
   // sentence already there lighting up is the press taken, and a step that holds (a hook, a
   // rebase with work in it, the network) is the one worth naming
-  // the verdict behind the word's label: ready with the facts, or what is left. Not when the
-  // word's line is already the facts (no subject and no sentence to stand in front of them) and
-  // the verdict would only say them again: the word alone says ready.
-  const restated = !!landing && !landing.subject && !said && !landing.why && !landing.stale;
+  // what is in the way, under the word: nothing when the work is ready, since the word says that
   const offeredUnder =
-    (offered?.word === "land" || offered?.word === "update" || offered?.word === "check") && landing && !restated
-      ? verdictLine(landing, landCount, gap)
+    (offered?.word === "land" || offered?.word === "update" || offered?.word === "check") && landing
+      ? verdictLine(landing, gap)
       : null;
   // The line as it stood at the press, held for as long as the press is out. The land moves
   // everything the line is derived from (the commit empties the tree, the verdict goes, the count
@@ -638,11 +635,11 @@ export function Composer({
     return `message agent on ${title}; / for a command, ! for a shell command`;
   };
   const placeholderText = placeholderFor();
-  // under the verb, the verdict behind its label. Under a line with no word (a check running or
+  // under the verb, what is in the way of it. Under a line with no word (a check running or
   // failed, a PR merged or closed): the recap's sentence when one has been written, else the
   // message the work would land with, the next most useful thing to read. While the land is out
-  // the verdict stays where it was until a step is named: "Ready" under "land: committing" is a
-  // verdict on a press already taken, and the line above says where it stands now.
+  // the verdict stays where it was until a step is named: "Not ready" under "land: committing" is
+  // a verdict on a press already taken, and the line above says where it stands now.
   const subline =
     text !== "" || ghost || !active
       ? null

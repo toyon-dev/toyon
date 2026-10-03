@@ -395,7 +395,7 @@ function QuestionBody({
                     <Kbd k="n" /> add a note
                   </span>
                 )}
-                {o.description && <span className="ask-desc row-dim">{o.description}</span>}
+                {o.description && <span className="ask-desc">{o.description}</span>}
               </>
             );
             // the pick with a note open on it holds the note's field, so it is no longer a button

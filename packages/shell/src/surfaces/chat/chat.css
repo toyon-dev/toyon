@@ -1433,7 +1433,8 @@
     grid-column: 2;
     color: var(--text0);
   }
-  /* a row's own description, under its label, on every row */
+  /* a row's own description, under its label, on every row. The scan tier, the row's own: it is
+     often the only thing telling two options apart, so it is read rather than skipped. */
   .ask-desc {
     grid-column: 2 / -1;
   }
@@ -1465,6 +1466,11 @@
     min-width: 0;
     resize: none;
     field-sizing: content;
+    /* the prompt is the last thing on the row to read: a rung under the description above it,
+       and the same tier as the words it replaces on the "other" row */
+    &::placeholder {
+      color: var(--text2);
+    }
   }
   /* the actions under a page, at the page's floor: every page stands at the tallest one's height,
    and the slack goes above this row, so the send sits in one place whichever page is open. The
@@ -1497,9 +1503,14 @@
       --text2: var(--ink1);
     }
   }
-  /* the dot on each tab: filled once that question has an answer */
+  /* the dot on each tab: filled once that question has an answer. An empty one is the raised
+     surface, which is the colour of the seat a hovered closed tab lifts to, so there it takes the
+     skip tier held still or it is gone. */
   .ask-step {
     background: var(--surface2);
+    :where([data-hover]) :where(.tab:not([data-state~="current"]):hover) & {
+      background: var(--ink2);
+    }
     &.answered {
       background: var(--ink1);
     }

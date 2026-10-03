@@ -1,4 +1,4 @@
-import { baseOf, type CommitEntry, type GitFileStatus } from "@toyon/shared";
+import { baseOf, type CommitEntry, canSync, type GitFileStatus } from "@toyon/shared";
 import { Fragment, useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { previewBus } from "../../app/previewBus.ts";
 import { commitItems } from "../../state/actions/commit.ts";
@@ -42,6 +42,16 @@ const NO_FILES: GitFileStatus[] = [];
 function landedWhen(at: number): string {
   const when = ago(at);
   return when === "now" ? "landed just now" : `landed ${when} ago`;
+}
+
+/** What a worktree with nothing changed says in place of a list: where it stands against its base,
+ * and how old the commit it stands on is, so "nothing here" still says how fresh the code is. Main
+ * has no base to be the same as, and a count behind is the foot's to say beside the sync. */
+function emptyNote(base: string, branch: boolean, behind: number, top: CommitEntry | undefined): string {
+  const stands = !branch ? "no changes" : behind > 0 ? "no changes of its own" : `same as ${base}`;
+  if (!top) return stands;
+  const when = ago(top.at);
+  return `${stands} · last commit ${when === "now" ? "just now" : `${when} ago`}`;
 }
 
 interface Cursor {
@@ -112,6 +122,8 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
   const fileTests = fileSource > 0 ? files.length - fileSource : 0;
   const committedTests = committedSource > 0 ? committed.length - committedSource : 0;
   const clean = files.length === 0;
+  // nothing uncommitted and nothing committed on top of the base, once git has said so
+  const unchanged = !!gitInfo && clean && !hasCommitted;
 
   const tab = useStore(changesTabShown);
   // an archived page has no strip: the worktree's whole life is one list, what it left uncommitted
@@ -277,15 +289,16 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
 
   // the log is pulled, not pushed: reading it costs a git process, so a worktree nobody is
   // reviewing never pays for one. HEAD moving under an open tab (the agent committed) re-reads it.
+  // The empty changes list reads it too, for the age of the commit it stands on.
   const head = gitInfo?.head;
   const lastLog = useRef("");
   useEffect(() => {
-    if (!showHist || !shownId) return;
+    if (!(showHist || unchanged) || !shownId) return;
     const key = `${shownId}:${head ?? ""}`;
     if (lastLog.current === key) return;
     lastLog.current = key;
     sock?.send({ t: "git-log", worktreeId: shownId });
-  }, [showHist, shownId, head, sock]);
+  }, [showHist, unchanged, shownId, head, sock]);
   // a commit's files are fetched once and kept: the same shas are still there after a re-read
   const toggleCommit = useCallback(
     (sha: string) => {
@@ -696,7 +709,11 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
               ))}
             </>
           )}
-          {showChanges && !archived && clean && !hasCommitted && <div className="empty">clean</div>}
+          {showChanges && !archived && unchanged && (
+            <div className="empty">
+              {emptyNote(base, !!activeRow && canSync(activeRow), gitInfo?.behind ?? 0, commits?.[0])}
+            </div>
+          )}
           {showHist &&
             histRows.map((r, i) => (
               <Fragment key={r.file ? `${r.commit.sha}:${r.file.path}` : r.commit.sha}>

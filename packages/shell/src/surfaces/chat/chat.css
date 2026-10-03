@@ -777,16 +777,18 @@
    the blocked row's red a land read as a failure. */
   .daemon-row {
     margin: 0 -12px;
-    padding: 4px var(--row-inset);
+    padding: 2px var(--row-inset);
     /* the tool row's floor, with the head centred on it: a band drawn across the same column as
-     the open call's is measured against it, and the small face's line under this padding stops a
+     the open call's is measured against it, and the body face's line under this padding stops a
      fraction of a pixel short of that height. A row with a line under its head, or a sentence that
-     wraps, is taller than the floor and keeps its padding. */
+     wraps, is taller than the floor and keeps its padding. The face is the body tier and not the
+     small one: beside the tool rows' mono the small face made toyon's own word the faintest line
+     in the turn. */
     display: flex;
     flex-direction: column;
     justify-content: center;
     min-height: var(--row-height-sm);
-    font: var(--type-ui-sm);
+    font: var(--type-ui);
     color: var(--text1);
     background: var(--surface0);
     --row-edge-color: var(--red);

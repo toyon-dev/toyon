@@ -13,6 +13,7 @@ import {
   useBare,
   useCommittedOpen,
   useLocalField,
+  useTurnOpen,
 } from "../../state/selectors.ts";
 import { type ChangesTab, changesTabShown, repoById } from "../../state/store.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
@@ -90,6 +91,7 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
   // the row whose file is open in the editor; plain strings so the selectors stay identity-stable
   const openPath = useStore((s) => (s.editor && s.editor.worktreeId === shownId ? s.editor.path : null));
   const openRef = useStore((s) => (s.editor && s.editor.worktreeId === shownId ? (s.editor.ref ?? null) : null));
+  const openSince = useStore((s) => (s.editor && s.editor.worktreeId === shownId ? (s.editor.since ?? null) : null));
   // each list reads the change first and its tests after: the order every index below is in, so
   // the arrows, the pick and the titles agree with what is drawn
   const statusFiles = gitInfo?.files ?? NO_FILES;
@@ -103,6 +105,20 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
     () => testsLast(committedOpen ? statusCommitted : NO_FILES),
     [statusCommitted, committedOpen],
   );
+  // What the last turn changed, when that is less than everything uncommitted: a section of its
+  // own, shut until asked for, since the list above already holds these files. Its rows carry the
+  // turn's own counts and open the file against the tree the turn started from. Shut, it leaves
+  // the list as a folded committed section does.
+  const turn = gitInfo?.turn;
+  const turnBase = turn?.base;
+  const turnOpen = useTurnOpen();
+  const { files: turned, source: turnedSource } = useMemo(
+    () => testsLast(turn && turnOpen ? turn.files : NO_FILES),
+    [turn, turnOpen],
+  );
+  // where each section's rows start in the one flat order the cursor walks
+  const turnAt = files.length;
+  const committedAt = files.length + turned.length;
   // a title splits a list only when it holds both kinds: a list of tests alone is just the list
   // A test file is one row until it is opened: then the tests its change touched are listed under
   // it, read from the two sides the editor holds. One file's names at a time, as one commit's files.
@@ -118,9 +134,10 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
   // closes it, → or a click opens it again. Opening another file starts open, since that is what
   // the click was for.
   const [folded, setFolded] = useState(false);
-  useOnChange([openPath, openRef], () => setFolded(false));
+  useOnChange([openPath, openRef, openSince], () => setFolded(false));
   const fileTests = fileSource > 0 ? files.length - fileSource : 0;
   const committedTests = committedSource > 0 ? committed.length - committedSource : 0;
+  const turnedTests = turnedSource > 0 ? turned.length - turnedSource : 0;
   const clean = files.length === 0;
   // nothing uncommitted and nothing committed on top of the base, once git has said so
   const unchanged = !!gitInfo && clean && !hasCommitted;
@@ -184,15 +201,18 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
   // walking the list opens each file as it arrives, and the keyboard stays here for the next arrow;
   // Enter is the one that takes it into the file
   const open = useCallback(
-    (path: string, focus = false) =>
-      shownId && openFile({ sock, dispatch }, { worktreeId: shownId, path, focus, ref: snapRef ?? undefined }),
+    (path: string, focus = false, since?: string) =>
+      shownId && openFile({ sock, dispatch }, { worktreeId: shownId, path, focus, ref: snapRef ?? undefined, since }),
     [shownId, snapRef, sock, dispatch],
   );
 
   // one flat order across both sections, so ↑↓ crosses the section titles the way the eye does. An
   // archived page's unlanded commits are the "not landed" run of the history under it, files and
   // all, so their flat file list is not repeated above them.
-  const rows = useMemo(() => (archived ? files : [...files, ...committed]), [archived, files, committed]);
+  const rows = useMemo(
+    () => (archived ? files : [...files, ...turned, ...committed]),
+    [archived, files, turned, committed],
+  );
   // the expanded commit's files sit in the same flat order, so the arrows walk into a commit and
   // out the other side without the list needing a notion of depth
   const histRows = useMemo(() => {
@@ -324,7 +344,15 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
   // the open file's index means a row only among the uncommitted ones, and only when it is open
   // as they open it: a history commit's copy of the same path is another row
   const atOpen = useRef(-1);
-  atOpen.current = showChanges && openRef === snapRef ? rows.findIndex((f) => f.path === openPath) : -1;
+  /** the commit a row reads its file against: a last turn row the tree its turn started from, the
+   * rest the branch's base */
+  const sinceAt = (i: number) => (i >= turnAt && i < committedAt ? turnBase : undefined);
+  /** row `i` of the changes list holds the open file, opened the way that row opens it */
+  const opensAt = (i: number) =>
+    rows[i]?.path === openPath &&
+    (openSince ?? undefined) === sinceAt(i) &&
+    (i < turnAt ? openRef === snapRef : !openRef);
+  atOpen.current = showChanges ? rows.findIndex((_, i) => opensAt(i)) : -1;
   useEffect(() => {
     if (!focusReq) return;
     // on the files tab the tree takes it, and picks up at the open file itself
@@ -340,10 +368,10 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
       const f = rows[i];
       if (!f) return;
       setSel(i);
-      open(f.path, focus);
+      open(f.path, focus, i >= turnAt && i < committedAt ? turnBase : undefined);
       hoverFile(f.path, true);
     },
-    [rows, open, hoverFile],
+    [rows, open, hoverFile, turnAt, committedAt, turnBase],
   );
   /** open a file as one commit left it. The sha is the expanded commit's: only one is ever open. */
   const openAt = useCallback(
@@ -381,8 +409,7 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
   /** the row is the file the editor has open, as that row opens it */
   const rowIsOpen = (i: number): boolean => {
     if (openPath === null) return false;
-    if (showChanges && i < rows.length)
-      return rows[i]?.path === openPath && (i < files.length ? openRef === snapRef : !openRef);
+    if (showChanges && i < rows.length) return opensAt(i);
     const r = inHist(i) ? histRows[i - above] : undefined;
     return !!r?.file && openRef === r.commit.sha && r.file.path === openPath;
   };
@@ -414,7 +441,14 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
     if (!t || !shownId || openPath === null) return;
     openFile(
       { sock, dispatch },
-      { worktreeId: shownId, path: openPath, ref: openRef ?? undefined, line: { n: t.line }, focus },
+      {
+        worktreeId: shownId,
+        path: openPath,
+        ref: openRef ?? undefined,
+        since: openSince ?? undefined,
+        line: { n: t.line },
+        focus,
+      },
     );
   };
   const names = (i: number) =>
@@ -525,6 +559,12 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
     (path: string): MenuEntry[] => (wtId ? fileItems({ id: wtId, dir }, path, { kept }, { sock, dispatch }) : []),
     [wtId, dir, kept, sock, dispatch],
   );
+  // a last turn row's file views read it against the tree the turn started from, as its click does
+  const menuTurn = useCallback(
+    (path: string): MenuEntry[] =>
+      wtId ? fileItems({ id: wtId, dir }, path, { kept, since: turnBase }, { sock, dispatch }) : [],
+    [wtId, dir, kept, turnBase, sock, dispatch],
+  );
   // a history row's file views open it as that commit left it, the way clicking the row does
   const menuAtCommit = useCallback(
     (path: string): MenuEntry[] =>
@@ -539,20 +579,26 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
   const selectedMenu = (): MenuEntry[] => {
     if (showChanges && sel < rows.length) {
       const f = rows[sel];
-      return f ? (sel < files.length ? menuUncommitted : menuCommitted)(f.path) : [];
+      return f ? (sel < turnAt ? menuUncommitted : sel < committedAt ? menuTurn : menuCommitted)(f.path) : [];
     }
     const r = inHist(sel) ? histRows[sel - above] : undefined;
     return r ? (r.file ? menuAtCommit(r.file.path) : commitItems(r.commit)) : [];
   };
-  const clickRow = useCallback(
-    (path: string) => {
-      setSel(rows.findIndex((f) => f.path === path));
-      // a press on the open test file folds its names and opens them again, as a commit's row does
-      if (path === openPath && openRef === snapRef && openTests.length > 0) setFolded((f) => !f);
-      else open(path);
-    },
-    [rows, open, openPath, openRef, snapRef, openTests],
-  );
+  // One press for every section of the changes list. `at` is where the section's rows start: a
+  // path can sit in more than one section, and the cursor lands on the row that was pressed. The
+  // rows are memoized on their props, so each section's handler reads the latest press through a ref.
+  const press = (at: number, path: string) => {
+    const i = rows.findIndex((f, n) => n >= at && f.path === path);
+    setSel(i);
+    // a press on the open test file folds its names and opens them again, as a commit's row does
+    if (opensAt(i) && openTests.length > 0) setFolded((f) => !f);
+    else open(path, false, sinceAt(i));
+  };
+  const pressRef = useRef(press);
+  pressRef.current = press;
+  const clickRow = useCallback((path: string) => pressRef.current(0, path), []);
+  const clickTurn = useCallback((path: string) => pressRef.current(turnAt, path), [turnAt]);
+  const clickCommitted = useCallback((path: string) => pressRef.current(committedAt, path), [committedAt]);
   const clickCommit = useCallback(
     (sha: string) => {
       setSel(above + histRows.findIndex((r) => !r.file && r.commit.sha === sha));
@@ -669,6 +715,38 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
               ))}
             </>
           )}
+          {showChanges && !archived && turn && (
+            <>
+              <button
+                type="button"
+                className="section-title section-row section-fold"
+                aria-expanded={turnOpen}
+                data-tip="What changed since your last message"
+                data-tip-placement="follow"
+                onClick={() => dispatch({ a: "toggle-turn" })}
+                // the press is the heading's own: the list under it reads Enter as opening its row
+                onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && e.stopPropagation()}
+              >
+                last turn
+                <Icon name="caret" className={cx("icon-inline disc-caret", !turnOpen && "shut")} />
+              </button>
+              {turned.map((f, i) => (
+                <Fragment key={`t-${f.path}`}>
+                  {turnedTests > 0 && i === turnedSource && <div className="section-title changes-sub">tests</div>}
+                  <GitFileRow
+                    f={f}
+                    id={rowId(turnAt + i)}
+                    active={marked(turnAt + i, rowIsOpen(turnAt + i))}
+                    selected={cursorOn(turnAt + i)}
+                    onOpen={clickTurn}
+                    menu={menuTurn}
+                    onHover={hoverFile}
+                  />
+                  {names(turnAt + i)}
+                </Fragment>
+              ))}
+            </>
+          )}
           {showChanges && !archived && hasCommitted && (
             <>
               {/* the one section here that folds: it is what the branch already holds, and a long
@@ -693,14 +771,14 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
                   )}
                   <GitFileRow
                     f={f}
-                    id={rowId(files.length + i)}
-                    active={marked(files.length + i, rowIsOpen(files.length + i))}
-                    selected={cursorOn(files.length + i)}
-                    onOpen={clickRow}
+                    id={rowId(committedAt + i)}
+                    active={marked(committedAt + i, rowIsOpen(committedAt + i))}
+                    selected={cursorOn(committedAt + i)}
+                    onOpen={clickCommitted}
                     menu={menuCommitted}
                     onHover={hoverFile}
                   />
-                  {names(files.length + i)}
+                  {names(committedAt + i)}
                 </Fragment>
               ))}
             </>

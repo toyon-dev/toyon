@@ -2319,6 +2319,16 @@ describe("discovered worktrees", () => {
     expect(run([helloR(wt("m1", "main"))], from).committedShut).toEqual({ r: true });
   });
 
+  test("the last turn section is shut until opened, per project, and a project that left takes its entry", () => {
+    const shut = run([helloR(wt("main", "main"))]);
+    expect(shut.turnOpen.r).toBeUndefined();
+    const open = run([{ a: "toggle-turn" }], shut);
+    expect(open.turnOpen.r).toBe(true);
+    expect(run([{ a: "toggle-turn" }], open).turnOpen.r).toBe(false);
+    const from = initialState({ clientId: ME, storedTurnOpen: { r: true, gone: true } });
+    expect(run([helloR(wt("m1", "main"))], from).turnOpen).toEqual({ r: true });
+  });
+
   test("a folder opened by hand in the files tab is remembered per worktree; closing the last forgets the entry", () => {
     const one = run([{ a: "tree-folder", worktreeId: "w1", path: "src", open: true }]);
     expect(one.treeOpen).toEqual({ w1: ["src"] });

@@ -55,6 +55,8 @@ export interface RuntimeDeps {
   state: StateStore;
   paths: Paths;
   agents: AgentRegistry;
+  /** a worktree's agent is about to be sent a turn; awaited before the prompt goes. Absent in tests */
+  turnStarting?: (worktreeId: string) => Promise<void>;
   /** what the managed policy lets an agent session offer; everything when absent (tests) */
   managed?: Pick<ManagedPolicy, "planSignIn">;
   /** told what each agent session learns about its agent's credentials; absent in tests */
@@ -207,6 +209,7 @@ function defaultAgent(
     setSessionId: (id) => d.state.setSession(wt.id, id),
     onEvent: (event, seq) => d.hub.emit("agent", wt.id, seq, event),
     onStatus: (status) => d.hub.emit("agentStatus", wt.id, status),
+    beforeTurn: async () => d.turnStarting?.(wt.id),
     onAuth: (agentId, o) => d.accounts?.observe(agentId, o),
     // read at call time, for the same reason as `spec`
     seedCommands: () => d.state.cachedCommands(d.state.requireWorktree(wt.id).agent ?? "", wt.repoId),

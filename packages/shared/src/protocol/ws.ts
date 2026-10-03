@@ -158,6 +158,10 @@ export type ServerMsg =
       worktreeId: string;
       files: GitFileStatus[];
       committed?: GitFileStatus[];
+      /** what the last turn that wrote anything changed: its files with their own counts, and the
+       * commit holding the tree it started from, which a `read-file` names as its `since`. Absent
+       * when that is the whole of `files`, or cannot be told apart from work taken in from main. */
+      turn?: { base: string; files: GitFileStatus[] };
       ahead?: number;
       behind?: number;
       /** commits origin's copy of the branch lacks, counted only while a PR is open */
@@ -178,6 +182,7 @@ export type ServerMsg =
       worktreeId: string;
       path: string;
       ref?: string;
+      since?: string;
       seq: number;
       before: string;
       after: string;
@@ -611,8 +616,16 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   }),
   z.object({ t: z.literal("git-status"), worktreeId: id }),
   /** the file as the working tree has it, beside what it was at the merge-base with main; `ref`
-   * reads it as that commit left it instead. Answered by exactly one `file-read`. */
-  z.object({ t: z.literal("read-file"), worktreeId: id, path: relPath, ref: sha.optional(), seq }),
+   * reads it as that commit left it instead, and `since` keeps the working tree's copy and puts
+   * that commit's beside it. Answered by exactly one `file-read`. */
+  z.object({
+    t: z.literal("read-file"),
+    worktreeId: id,
+    path: relPath,
+    ref: sha.optional(),
+    since: sha.optional(),
+    seq,
+  }),
   /** who last touched each line of the file, for the ghost after the caret's line; `ref` blames the
    * file as that commit left it. Answered by exactly one `file-blame`. */
   z.object({ t: z.literal("blame-file"), worktreeId: id, path: relPath, ref: sha.optional(), seq }),

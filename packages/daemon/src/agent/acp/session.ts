@@ -85,6 +85,9 @@ export interface AcpSessionDeps {
   taskPollMs?: number;
   /** the worktree's bounds, after the agent's own setup has run (agent/sandbox.ts `prepareLaunch`) */
   prepare?: (cwd: string, spec: AgentSpec) => Promise<Prepared>;
+  /** A message is about to go to the agent as a turn of its own. Awaited, so whatever is read here
+   * is read before the agent can write: the tree the turn starts from. */
+  beforeTurn?: () => Promise<void>;
   /** what the agent may do here without asking; read before every turn and every permission */
   mode?: () => PermissionMode;
   /** a plan approval decided the mode for the work that follows */
@@ -743,6 +746,12 @@ export class AcpSession implements AgentAdapter {
 
   private async runTurn(item: QueueItem) {
     item.recorded ??= await this.record(item);
+    try {
+      await this.d.beforeTurn?.();
+    } catch (e) {
+      // bookkeeping for the changes panel: the turn goes whether or not it was kept
+      log.warn(this.d.worktreeId, "before-turn hook failed", e);
+    }
     this.emit({ type: "turn-start", ts: Date.now() });
     const live = await this.ensureLive("a turn");
     await this.applyMode(live);

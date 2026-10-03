@@ -63,6 +63,9 @@ export const useArchivedOpen = (): boolean =>
 /** is the changes list's committed section open in this project (open by default) */
 export const useCommittedOpen = (): boolean => useStore((s) => !(s.activeRepoId && s.committedShut[s.activeRepoId]));
 
+/** is the changes list's last turn section open in this project (shut by default) */
+export const useTurnOpen = (): boolean => useStore((s) => !!(s.activeRepoId && s.turnOpen[s.activeRepoId]));
+
 /** the archived worktree whose page the centre shows (an element of the list, so its identity holds) */
 export const useArchivedPage = (): ArchivedWorktree | null => useStore(archivedPageOf);
 

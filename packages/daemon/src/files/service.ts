@@ -19,7 +19,7 @@ import { blameFile } from "../git/blame.ts";
 import { GIT, git, run } from "../git/exec.ts";
 import { fileLockKey, withLock } from "../git/lock.ts";
 import { fileAtCommit } from "../git/log.ts";
-import { changedRanges, fileBefore, statusFiles } from "../git/status.ts";
+import { changedRanges, fileAt, fileBefore, statusFiles } from "../git/status.ts";
 import type { RuntimeRegistry } from "../runtime/registry.ts";
 import { resolveInside } from "../worktrees/paths.ts";
 import type { ReadableWorktree } from "../worktrees/service.ts";
@@ -137,7 +137,7 @@ export class FileService {
 
   /** With `ref`, the file on either side of that commit (history, read-only in the editor);
    * without it, the working tree against the merge-base with main. */
-  async read(worktreeId: string, path: string, ref?: string): Promise<FileRead> {
+  async read(worktreeId: string, path: string, ref?: string, since?: string): Promise<FileRead> {
     const r = this.require(worktreeId);
     // the ref side never opens the file, but the path is still the client's: bound it the same
     // way, then hand git the relative form it wants
@@ -146,7 +146,8 @@ export class FileService {
       const { before, after } = await fileAtCommit(r.path, ref, path);
       return { ...sides(before, after), version: null, writable: false };
     }
-    const before = await fileBefore(r.path, r.base, path);
+    // `since` puts another commit's copy on the before side: the tree a turn started from
+    const before = since ? await fileAt(r.path, since, path) : await fileBefore(r.path, r.base, path);
     const st = await statFile(target);
     if (st && st.size > FILE_MAX_CHARS) {
       // never read whole: a version off the stat is enough for a file nothing will write

@@ -317,11 +317,11 @@ export default function Editor({
   // The session, for as long as this file is open: the pane keys this component by file, so another
   // file is another mount. `sync` is taken once here, so an edit still owed to disk on the way out
   // goes to this file whatever the props say by then.
-  useOnChange([file.worktreeId, file.path, file.ref], () => {
+  useOnChange([file.worktreeId, file.path, file.ref, file.since], () => {
     const el = ref.current;
     if (!el) return;
     const s = sync;
-    const scope = `/${file.worktreeId}/${file.ref ?? "work"}`;
+    const scope = `/${file.worktreeId}/${file.ref ?? file.since ?? "work"}`;
     const modified = monaco.editor.createModel(
       disk.after,
       languageFor(file.path),

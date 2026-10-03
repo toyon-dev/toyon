@@ -152,6 +152,9 @@ export type ChatItem =
 export interface GitInfo {
   files: GitFileStatus[];
   committed?: GitFileStatus[];
+  /** what the last turn changed and the commit holding the tree it started from; absent when
+   * that is the whole of `files` */
+  turn?: { base: string; files: GitFileStatus[] };
   ahead?: number;
   behind?: number;
   /** commits origin's copy of the branch lacks, counted only while a PR is open */
@@ -489,6 +492,9 @@ export interface OpenFile {
   path: string;
   /** a commit's copy: history, so the editor opens it read-only */
   ref?: string;
+  /** the working tree's copy, read against this commit's instead of the branch's base: what a
+   * turn changed, beside the tree it started from */
+  since?: string;
   view?: EditorView;
   line?: EditorLine;
   /** the keyboard follows the file into the editor */
@@ -498,7 +504,7 @@ export interface OpenFile {
 }
 
 /** a file the editor can have open: a working-tree path, or a commit's copy of one */
-export type FileRef = Pick<OpenFile, "worktreeId" | "path" | "ref">;
+export type FileRef = Pick<OpenFile, "worktreeId" | "path" | "ref" | "since">;
 
 /** Where a loose file's save goes. A handle is what a drop carries in Chromium: the browser writes
  * the file where it lives, after its one permission prompt. A grant is the daemon's, for a file
@@ -536,7 +542,7 @@ const sameZone = (a: DropZone | null, b: DropZone | null) =>
     (a.at !== "tree" || b.at !== "tree" || (a.worktreeId === b.worktreeId && a.dir === b.dir)));
 
 export const sameFile = (a: FileRef, b: FileRef) =>
-  a.worktreeId === b.worktreeId && a.path === b.path && a.ref === b.ref;
+  a.worktreeId === b.worktreeId && a.path === b.path && a.ref === b.ref && a.since === b.since;
 
 /** The file the editor pane has open. The pane shows it before the daemon has read it; fileSync
  * reads it and keeps what the pane shows in step with the disk. */
@@ -614,6 +620,9 @@ export interface State {
   /** per repo: has the changes list's committed section been folded. Open is the default: what a
    * branch already holds is part of what is being read until someone says it is in the way. */
   committedShut: Record<string, boolean>;
+  /** per repo: has the changes list's last turn section been opened. Shut is the default: the
+   * list above it already holds these files, and the section is for when only the turn is wanted. */
+  turnOpen: Record<string, boolean>;
   /** per worktree: the folders opened by hand in the files tab. Remembered, unlike the folders the
    * open file reveals, which the tree keeps to itself: a few jumps with ⌘P must not leave the
    * whole tree open. Dropped with the worktree. */
@@ -820,6 +829,8 @@ export interface InitialOpts {
   storedArchivedOpen?: Record<string, boolean>;
   /** which projects had the committed section folded, so it does not reopen on every reload */
   storedCommittedShut?: Record<string, boolean>;
+  /** which projects had the last turn section open */
+  storedTurnOpen?: Record<string, boolean>;
   /** the folders each worktree's files tab had open by hand */
   storedTreeOpen?: Record<string, string[]>;
   /** the frame this window opens in, so the first paint is the right one (app/phone.ts) */
@@ -843,6 +854,7 @@ export function initialState(opts: InitialOpts): State {
     discoveredOpen: opts.storedDiscoveredOpen ?? {},
     archivedOpen: opts.storedArchivedOpen ?? {},
     committedShut: opts.storedCommittedShut ?? {},
+    turnOpen: opts.storedTurnOpen ?? {},
     treeOpen: opts.storedTreeOpen ?? {},
     treeReveal: null,
     refs: {},
@@ -1325,6 +1337,7 @@ export type Action =
   /** open or close the active project's discovered section */
   | { a: "toggle-discovered" }
   | { a: "toggle-committed" }
+  | { a: "toggle-turn" }
   /** a folder in the files tab opened or closed by hand */
   | { a: "tree-folder"; worktreeId: string; path: string; open: boolean }
   /** a folder named in the chat: shown in the files tab, opened along with what holds it */
@@ -1661,7 +1674,7 @@ function reduce(s: State, action: Action): State {
       const v = action.v;
       const e = s.editor;
       // the file already open keeps its text and view on screen while its fresh read is out
-      const same = e && e.worktreeId === v.worktreeId && e.path === v.path && e.ref === v.ref ? e : null;
+      const same = e && sameFile(e, v) ? e : null;
       const line = v.line && placeLine(s, v.worktreeId, v.path, v.line);
       return {
         ...s,
@@ -1669,6 +1682,7 @@ function reduce(s: State, action: Action): State {
           worktreeId: v.worktreeId,
           path: v.path,
           ...(v.ref ? { ref: v.ref } : {}),
+          ...(v.since ? { since: v.since } : {}),
           view: v.view ?? same?.view ?? null,
           seq: v.seq,
           disk: same?.disk ?? null,
@@ -1921,6 +1935,11 @@ function reduce(s: State, action: Action): State {
       if (!repoId) return s;
       return { ...s, committedShut: { ...s.committedShut, [repoId]: !s.committedShut[repoId] } };
     }
+    case "toggle-turn": {
+      const repoId = s.activeRepoId;
+      if (!repoId) return s;
+      return { ...s, turnOpen: { ...s.turnOpen, [repoId]: !s.turnOpen[repoId] } };
+    }
     case "tree-folder": {
       const was = s.treeOpen[action.worktreeId] ?? [];
       if (was.includes(action.path) === action.open) return s;
@@ -2125,6 +2144,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
         discoveredOpen: pruneByRepo(s.discoveredOpen, msg.repos),
         archivedOpen: pruneByRepo(s.archivedOpen, msg.repos),
         committedShut: pruneByRepo(s.committedShut, msg.repos),
+        turnOpen: pruneByRepo(s.turnOpen, msg.repos),
         refs: pruneByRepo(s.refs, msg.repos),
         chats: pruneByRepo(s.chats, msg.repos),
         archived: pruneByRepo(s.archived, msg.repos),
@@ -2420,6 +2440,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
         git: {
           files: msg.files,
           committed: msg.committed,
+          turn: msg.turn,
           ahead: msg.ahead,
           behind: msg.behind,
           unpushed: msg.unpushed,

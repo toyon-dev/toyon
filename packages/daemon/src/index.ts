@@ -154,6 +154,8 @@ const runtime = new RuntimeRegistry({
   accounts,
   attachments,
   bridgeScript: () => bridge.get(),
+  // asked only when a turn is sent, after the service below exists
+  turnStarting: (id): Promise<void> => worktrees.turnStarted(id),
   remote,
   grant: previewGrant(token),
   // asked only once the policy exists: the first view comes from a socket, after boot

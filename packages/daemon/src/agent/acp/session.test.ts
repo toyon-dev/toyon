@@ -652,6 +652,27 @@ describe("AcpSession", () => {
     await w.session.close();
   });
 
+  test("each prompt waits on the before-turn hook, a queued one included, and a hook that throws stops nothing", async () => {
+    const fake = fakeAgent(say("ok"));
+    const order: string[] = [];
+    let n = 0;
+    const w = world(fake, claudeSpec, 60_000, undefined, {
+      beforeTurn: async () => {
+        await Bun.sleep(10);
+        order.push(`before ${fake.prompts.length}`);
+        if (++n === 2) throw new Error("no snapshot");
+      },
+    });
+    w.session.send("one");
+    w.session.send("two");
+    await w.idle();
+    // read before the agent has the prompt: nothing it writes can be ahead of the hook
+    expect(order).toEqual(["before 0", "before 1"]);
+    expect(fake.prompts).toHaveLength(2);
+    expect(w.types().filter((t) => t === "turn-end")).toHaveLength(2);
+    await w.session.close();
+  });
+
   test("a queued message is listed whole: its words and what it carries", async () => {
     let release: () => void = () => {};
     const gate = new Promise<void>((r) => {

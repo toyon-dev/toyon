@@ -82,7 +82,7 @@ export function EditorPane({
   const sock = useSock();
   const files = useFileSync();
   const theme = useTheme();
-  const { worktreeId, path, ref } = editor;
+  const { worktreeId, path, ref, since } = editor;
   // a file from outside every worktree, dropped on the centre: `path` is its name, the text came
   // with it, and the browser saves it through the handle it carried, if one did. None of the
   // working-tree wiring below applies, and the worktree id is only lent to the pane's plumbing.
@@ -112,8 +112,8 @@ export function EditorPane({
             (message) => dispatch({ a: "editor-refused", file: { worktreeId, path }, message }),
             browserEnv(sock ? (m) => sock.send(m) : null),
           )
-        : (files?.bind({ worktreeId, path, ...(ref ? { ref } : {}) }) ?? NO_SYNC),
-    [files, worktreeId, path, ref, loose, dispatch, sock],
+        : (files?.bind({ worktreeId, path, ...(ref ? { ref } : {}), ...(since ? { since } : {}) }) ?? NO_SYNC),
+    [files, worktreeId, path, ref, since, loose, dispatch, sock],
   );
   const cached = useStore((s) => localOf(s, worktreeId).changedRanges[path]);
   // warm the line-offset/ranges cache so line-hover highlights align; a git-status wipes the
@@ -147,7 +147,7 @@ export function EditorPane({
       height={full || onScreen ? undefined : height}
       resizable={!full && !onScreen}
       onDragStart={onDragStart ?? NO_DRAG}
-      title={history ? `${path} at ${ref?.slice(0, 7)}` : path}
+      title={history ? `${path} at ${ref?.slice(0, 7)}` : since ? `${path}, last turn` : path}
       // the header names the file, so it answers with the file's actions, the same list its row in
       // the changes panel has; a commit's copy is read-only, so no discard. A loose file has no
       // row and no place in the worktree, so nothing to offer
@@ -252,8 +252,8 @@ export function EditorPane({
               <Editor
                 // one mount per file: the models it holds are that file's, and a loose file named
                 // like a worktree file is another file
-                key={`${worktreeId}\n${loose ? "loose" : (ref ?? "")}\n${path}`}
-                file={{ worktreeId, path, ...(ref ? { ref } : {}) }}
+                key={`${worktreeId}\n${loose ? "loose" : (ref ?? since ?? "")}\n${path}`}
+                file={{ worktreeId, path, ...(ref ? { ref } : {}), ...(since ? { since } : {}) }}
                 disk={disk}
                 blame={editor.blame}
                 view={view}
@@ -321,8 +321,8 @@ export function EditorPane({
 /** A row above the text when the text alone would mislead: the file changed on disk under unsaved
  * edits, or nothing typed here can be saved. It takes its own row rather than covering the code. */
 function EditorNote({ editor, disk, files }: { editor: EditorFile; disk: EditorDisk; files: FileSync | null }) {
-  const { worktreeId, path, ref, conflict } = editor;
-  const file = { worktreeId, path, ...(ref ? { ref } : {}) };
+  const { worktreeId, path, ref, since, conflict } = editor;
+  const file = { worktreeId, path, ...(ref ? { ref } : {}), ...(since ? { since } : {}) };
   if (conflict) {
     const gone = conflict.version === null;
     return (

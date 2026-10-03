@@ -238,6 +238,7 @@ const store = createStore(
     storedDiscoveredOpen: storedSectionOpen(STORAGE.discoveredOpen),
     storedArchivedOpen: storedSectionOpen(STORAGE.archivedOpen),
     storedCommittedShut: storedSectionOpen(STORAGE.committedShut),
+    storedTurnOpen: storedSectionOpen(STORAGE.turnOpen),
     storedTreeOpen: storedTreeOpen(),
     clientId: clientId(),
     // seeded rather than dispatched after mount, so the first paint is the right frame and the

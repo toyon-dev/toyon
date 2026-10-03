@@ -102,6 +102,7 @@ import {
   treeEmpty,
   treeFingerprint,
 } from "../git/status.ts";
+import { dropTurnRefs, markTurn, type TurnChanges, turnChanges } from "../git/turn.ts";
 import { listWorktrees } from "../git/worktrees.ts";
 import { isInside } from "../repos/create.ts";
 import { RunService } from "../runs/service.ts";
@@ -177,6 +178,8 @@ export interface ReadableWorktree {
 export interface GitInfo {
   files: GitFileStatus[];
   committed?: GitFileStatus[];
+  /** what the last turn changed, when that is narrower than `files` */
+  turn?: TurnChanges;
   ahead?: number;
   behind?: number;
   /** commits origin's copy of the branch lacks, counted only while a PR is open */
@@ -892,6 +895,8 @@ export class WorktreeService {
     this.d.state.removeWorktree(worktreeId);
     releasePort(wt.proxyPort);
     let archived: ArchivedWorktree | null = null;
+    // the directory they were read against is gone, and a restore starts its own
+    await dropTurnRefs(repo.path, worktreeId);
     if (archive) archived = this.archiveChat(wt, repo, kept, sessionId, reason);
     else {
       this.deleteChat(worktreeId);
@@ -2269,6 +2274,13 @@ export class WorktreeService {
     };
   }
 
+  /** A turn is starting on this worktree: keep the tree it starts from, so the changes panel can
+   * say what the turn itself wrote. */
+  async turnStarted(worktreeId: string): Promise<void> {
+    const wt = this.d.state.worktree(worktreeId);
+    if (wt && !this.going.has(worktreeId)) await markTurn(wt.path, wt.id);
+  }
+
   /** the working-tree state the changes panel shows (subscribe, edits, ref ticks). Also the one
    * place the `landed` badge is cleared: new work after a merge means it is no longer landed. */
   async gitStatus(worktreeId: string): Promise<GitInfo | null> {
@@ -2291,6 +2303,8 @@ export class WorktreeService {
       const counts = { ...ab, ...(unpushed === undefined ? {} : { unpushed }) };
       const ahead = (counts as { ahead?: number }).ahead ?? 0;
       const committed = !isMain && ahead > 0 ? await committedFiles(r.path, r.base) : undefined;
+      // only a worktree toyon runs has turns, and a clean tree has nothing for one to have changed
+      const turn = r.wt && files.length > 0 ? await turnChanges(r.path, r.wt.id, r.base, !isMain, files) : null;
       // a landing git did without toyon: the branch is clean and level with the base and has
       // commits of its own since its last landing. Asked once per HEAD, and before the landed
       // mark is read, since a second hand landing over a first leaves the row landed by the rule
@@ -2334,7 +2348,7 @@ export class WorktreeService {
       // the removal started while the reads were in flight
       if (this.going.has(worktreeId)) return null;
       this.noteCounts(worktreeId, isMain, files.length, counts);
-      return { files, committed, head: head.ok ? head.out : undefined, ...counts };
+      return { files, committed, ...(turn ? { turn } : {}), head: head.ok ? head.out : undefined, ...counts };
     } catch (e) {
       log.warn(worktreeId, "git status failed", e);
       return null;

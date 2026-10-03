@@ -98,7 +98,7 @@ export function openFolder({ dispatch }: Deps, target: { worktreeId: string; pat
 /** a file in the changes panel: show it in the editor pane as its diff or as the file, open it
  * somewhere else, copy where it is, and for an uncommitted one, throw it away. `showing` is the view the pane already
  * has this file in, which the menu swaps rather than reads again; `ref` is the commit a history row
- * stands for; `added` says the file has nothing on the other side, so no diff to offer; `kept` says
+ * stands for; `since` is the commit a last turn row reads the working file against; `added` says the file has nothing on the other side, so no diff to offer; `kept` says
  * only git holds it, so there is nothing on disk to open elsewhere or reveal; `select` starts the
  * changes list's pick from this row, for a touch or the keyboard, which have no shift-click. */
 export function fileItems(
@@ -107,6 +107,7 @@ export function fileItems(
   {
     discard = false,
     ref,
+    since,
     showing,
     added = false,
     kept = false,
@@ -114,6 +115,7 @@ export function fileItems(
   }: {
     discard?: boolean;
     ref?: string;
+    since?: string;
     showing?: EditorView;
     added?: boolean;
     kept?: boolean;
@@ -128,7 +130,7 @@ export function fileItems(
       id: `view:${v}`,
       label: `view ${v}`,
       onClick: () =>
-        showing ? dispatch({ a: "editor-view", v }) : openFile(deps, { worktreeId: wt.id, path, view: v, ref }),
+        showing ? dispatch({ a: "editor-view", v }) : openFile(deps, { worktreeId: wt.id, path, view: v, ref, since }),
     }));
   const abs = `${wt.dir}/${path}`;
   const open = kept ? [] : editorItems(abs, () => sock?.send({ t: "reveal", worktreeId: wt.id, path }));

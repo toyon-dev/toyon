@@ -43,6 +43,7 @@ export function App() {
   const discoveredOpen = useStore((s) => s.discoveredOpen);
   const archivedOpen = useStore((s) => s.archivedOpen);
   const committedShut = useStore((s) => s.committedShut);
+  const turnOpen = useStore((s) => s.turnOpen);
   const treeOpen = useStore((s) => s.treeOpen);
   const theme = useTheme();
   const previewing = useStore((s) => s.previewTheme !== null);
@@ -267,6 +268,12 @@ export function App() {
       localStorage.setItem(STORAGE.committedShut, JSON.stringify(committedShut));
     } catch {}
   }, [committedShut]);
+  // and an opened last turn section, for whoever reads the turn and not the pile
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE.turnOpen, JSON.stringify(turnOpen));
+    } catch {}
+  }, [turnOpen]);
   // the folders opened by hand in each files tab: a reload comes back to the tree as it was left
   useEffect(() => {
     try {

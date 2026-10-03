@@ -73,6 +73,13 @@ export async function fileBefore(worktreePath: string, defaultBr: string, file: 
   return r.ok ? r.out : "";
 }
 
+/** File content as one commit holds it (empty string where it holds none). */
+export async function fileAt(worktreePath: string, commit: string, file: string): Promise<string> {
+  // untrimmed, as fileBefore is and for its reason
+  const r = await gitRaw(worktreePath, "show", `${commit}:${file}`);
+  return r.ok ? r.out : "";
+}
+
 export type LineCounts = Pick<GitFileStatus, "add" | "del">;
 
 /** `--numstat` output → counts by path, whichever command produced it. Binary files map to {}. */

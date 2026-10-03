@@ -375,13 +375,22 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
   },
 
   async "read-file"(msg, ctx, s) {
-    const head = { t: "file-read", worktreeId: msg.worktreeId, path: msg.path, ref: msg.ref, seq: msg.seq } as const;
+    const head = {
+      t: "file-read",
+      worktreeId: msg.worktreeId,
+      path: msg.path,
+      ref: msg.ref,
+      since: msg.since,
+      seq: msg.seq,
+    } as const;
     try {
       // an archived worktree's files are only in git, and its page reads them from there
       const kept = s.worktrees.readable(msg.worktreeId)
         ? null
         : await s.worktrees.archivedFile(msg.worktreeId, msg.path, msg.ref);
-      const read = kept ? keptRead(kept.before, kept.after) : await s.files.read(msg.worktreeId, msg.path, msg.ref);
+      const read = kept
+        ? keptRead(kept.before, kept.after)
+        : await s.files.read(msg.worktreeId, msg.path, msg.ref, msg.since);
       ctx.reply({ ...head, ...read });
     } catch (e) {
       // answered either way: the shell holds one request per open file until this comes back

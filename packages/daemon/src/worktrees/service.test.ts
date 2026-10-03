@@ -5,6 +5,7 @@ import { sh } from "../../test/helpers/tmp-repo.ts";
 import { adoptDir, foreignWorktree, noSelf, registered, settle, until, useWorld, w } from "../../test/helpers/world.ts";
 import { transcriptPathFor } from "../agent/transcript.ts";
 import { UserError } from "../core/errors.ts";
+import { FileService } from "../files/service.ts";
 import { GIT, git } from "../git/exec.ts";
 import { RepoRegistry } from "../repos/registry.ts";
 import { WorktreeService } from "./service.ts";
@@ -274,6 +275,33 @@ describe("create / remove", () => {
     expect(await w.worktrees.gitStatus(wt.id)).toBeNull();
     expect(await w.worktrees.freshCounts(wt.id)).toEqual({});
     await going;
+  });
+
+  test("the status says what the last turn changed, once that is less than everything uncommitted", async () => {
+    const repoId = await registered();
+    const wt = await w.worktrees.create(repoId, "task");
+    await settle();
+    await w.worktrees.turnStarted(wt.id);
+    writeFileSync(join(wt.path, "a.txt"), "one\n");
+    // one turn in: the uncommitted list is the turn
+    expect((await w.worktrees.gitStatus(wt.id))?.turn).toBeUndefined();
+    await w.worktrees.turnStarted(wt.id);
+    writeFileSync(join(wt.path, "b.txt"), "two\n");
+    const info = await w.worktrees.gitStatus(wt.id);
+    expect(info?.files.map((f) => f.path)).toEqual(["a.txt", "b.txt"]);
+    expect(info?.turn?.files).toEqual([{ xy: "A ", path: "b.txt", add: 1, del: 0 }]);
+    // the read a last turn row asks for: the working file beside the tree the turn started from
+    writeFileSync(join(wt.path, "a.txt"), "one\nmore\n");
+    const base = (await w.worktrees.gitStatus(wt.id))!.turn!.base;
+    const files = new FileService(w.state, w.runtime, (id) => w.worktrees.readable(id));
+    expect(await files.read(wt.id, "a.txt", undefined, base)).toMatchObject({
+      before: "one\n",
+      after: "one\nmore\n",
+      writable: true,
+    });
+    // the worktree going takes the kept trees with it
+    await w.worktrees.discardWorktree(wt.id);
+    expect(sh(w.repo, GIT, "for-each-ref", "refs/toyon/turns/")).toBe("");
   });
 
   test("a discard is on its way out too, and no archive covers it", async () => {

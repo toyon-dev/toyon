@@ -83,7 +83,8 @@ interface Tracked {
   blame: { seq: number; version: string | null } | null;
 }
 
-const keyOf = (f: { worktreeId: string; path: string; ref?: string }) => `${f.worktreeId}\n${f.ref ?? ""}\n${f.path}`;
+const keyOf = (f: { worktreeId: string; path: string; ref?: string; since?: string }) =>
+  `${f.worktreeId}\n${f.ref ?? ""}\n${f.since ?? ""}\n${f.path}`;
 
 export class FileSync {
   private files = new Map<string, Tracked>();
@@ -219,7 +220,12 @@ export class FileSync {
     let t = this.files.get(key);
     if (!t) {
       t = {
-        file: { worktreeId: file.worktreeId, path: file.path, ...(file.ref ? { ref: file.ref } : {}) },
+        file: {
+          worktreeId: file.worktreeId,
+          path: file.path,
+          ...(file.ref ? { ref: file.ref } : {}),
+          ...(file.since ? { since: file.since } : {}),
+        },
         open: true,
         base: null,
         out: null,
@@ -270,12 +276,12 @@ export class FileSync {
   /** send what is owed, if nothing is out: a read first, since a save decides nothing without one */
   private next(t: Tracked) {
     if (t.out || !this.d.store.getState().connected) return;
-    const { worktreeId, path, ref } = t.file;
+    const { worktreeId, path, ref, since } = t.file;
     if (t.reread) {
       t.reread = false;
       const seq = nextSeq();
       t.out = { seq };
-      this.d.send({ t: "read-file", worktreeId, path, ref, seq });
+      this.d.send({ t: "read-file", worktreeId, path, ref, since, seq });
       return;
     }
     if (t.pending !== null && t.base && t.pending === t.base.text) t.pending = null;

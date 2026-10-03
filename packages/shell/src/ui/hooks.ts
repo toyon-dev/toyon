@@ -200,6 +200,10 @@ const SCROLL_REST = 1200;
  * pinned and still where the pin put it changes nothing. A row taken out moves the scroller with
  * no resize to observe (the end came up to meet it), so the pin is taken again as the row leaves:
  * left for the event, a message landing in the same gap would be measured as the reader's.
+ * While pinned the scroller takes no scroll anchoring: the end is the pin's to keep, and the
+ * browser's own adjustment is a move the pin did not make. A composer that shrinks clamps the
+ * scroller up, the message landing under it gives the room back, and anchoring returns the
+ * scroller to where it was, short of the message; the event for that reads as the reader leaving.
  * `offEnd` and `offStart` say the reader is away from either end now, by the same slack, for a
  * control at each end that offers the rest of the way; `away` says `news` changed while they were
  * off the end, and it is a value and not the layout because a row the reader opened themselves
@@ -230,6 +234,13 @@ export function useTail(
   const [offStart, setOffStart] = useState(false);
   const [away, setAway] = useState(false);
   const [moving, setMoving] = useState<"up" | "down" | null>(null);
+  const hold = useCallback(
+    (at: boolean) => {
+      pinned.current = at;
+      if (ref.current) ref.current.style.overflowAnchor = at ? "none" : "";
+    },
+    [ref],
+  );
   const lastTouch = useRef<number | null>(null);
   const rest = useRef<ReturnType<typeof setTimeout> | null>(null);
   useOnChange([news], () => {
@@ -238,11 +249,11 @@ export function useTail(
   const read = useCallback(() => {
     const el = ref.current;
     if (!el) return;
-    pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < TAIL_SLACK;
+    hold(el.scrollHeight - el.scrollTop - el.clientHeight < TAIL_SLACK);
     setOffEnd(!pinned.current);
     setOffStart(el.scrollTop >= TAIL_SLACK);
     if (pinned.current) setAway(false);
-  }, [ref]);
+  }, [ref, hold]);
   // Direction is read from the hand, not the scroll position: a row opening or closing moves the
   // log too (the browser anchors the position above it, a reveal scrolls its output into view,
   // the pin keeps the end in view as a reply streams), and none of that is the reader going
@@ -262,10 +273,10 @@ export function useTail(
     if (!el) return;
     el.scrollTop = el.scrollHeight;
     held.current = el.scrollTop;
-    pinned.current = true;
+    hold(true);
     setOffEnd(false);
     setAway(false);
-  }, [ref]);
+  }, [ref, hold]);
   // the scroll event keeps the rest current, so this only moves
   const start = useCallback(() => {
     if (ref.current) ref.current.scrollTop = 0;
@@ -273,6 +284,7 @@ export function useTail(
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
+    hold(pinned.current);
     const onScroll = () => {
       if (pinned.current && el.scrollTop === held.current) setOffStart(el.scrollTop >= TAIL_SLACK);
       else read();
@@ -318,7 +330,7 @@ export function useTail(
       ro.disconnect();
       if (rest.current) clearTimeout(rest.current);
     };
-  }, [ref, read, push]);
+  }, [ref, read, push, hold]);
   return { offEnd, offStart, away, moving, pinned: () => pinned.current, jump, start, read };
 }
 

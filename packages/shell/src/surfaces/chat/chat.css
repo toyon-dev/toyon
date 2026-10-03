@@ -1434,8 +1434,7 @@
     grid-column: 2;
     color: var(--text0);
   }
-  /* a row's own description, under its label: drawn on the row the cursor is on, and on every
-     row where there is no cursor */
+  /* a row's own description, under its label, on every row */
   .ask-desc {
     grid-column: 2;
   }
@@ -1448,19 +1447,19 @@
     overflow-x: auto;
     white-space: pre;
   }
-  /* the typed answer, under the options once its row or `n` opened it: the composer's textarea in
-   this mode. Two rows, since it can ride with a pick rather than replace it. */
+  /* a note riding with a pick, under the options once `n` opened it: the composer's textarea in
+   this mode. Two rows, since it is prose beside an answer rather than the answer. */
   .ask-own {
     margin-top: 8px;
     flex: none;
   }
-  /* the field as the "other" row's description, when the answer is its own: no gap above it, and
-     it starts in the label's column (the digit's 14px gutter and the 8px after it) so it reads as
-     the line under that row rather than a field of its own. Two classes, since the bare field's
-     own rule zeroes the padding and is read after this file. */
-  .ask-own.ask-own-desc {
-    margin-top: 0;
-    padding-left: 22px;
+  /* the typed answer, in the "other" row where its description stood: one line that grows with
+     what is typed, so the row is the height it was before the field opened. */
+  .ask-own-field {
+    grid-column: 2;
+    min-width: 0;
+    resize: none;
+    field-sizing: content;
   }
   /* the actions under a page, at the page's floor: every page stands at the tallest one's height,
    and the slack goes above this row, so the send sits in one place whichever page is open. The

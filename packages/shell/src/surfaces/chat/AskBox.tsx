@@ -318,14 +318,16 @@ function QuestionBody({
         ];
 
   /** the actions under a page: the send where a pick alone is not one (several questions, a
-   * multi-select, or the typed answer's field open, whose enter a mouse does not have), the note
+   * multi-select, or a note open on the pick, whose enter a mouse does not have; the typed
+   * answer has no button where there is a keyboard, since enter in its field is the send and
+   * the key strip says so, and keeps one on touch, where there is no strip), the note
    * on the pick where the agent takes one and a pick is made, and the skip. Each page carries its
    * own, and the key strip after it, so the page's height is the whole of what shows for it; the
    * foot sits at the page's floor so the send is in one place whichever page is open. The agent's
    * stop is not here: it keeps the box's corner, as it does over the plain field. */
   const foot = (qq?: (typeof questions)[number], a?: AskAnswer) => (
     <div className="ask-foot">
-      {(!qq || !pickSends(qq) || a?.note !== undefined) && (
+      {(!qq || !pickSends(qq) || (a?.note !== undefined && (touch || !ownChosen(a, !!qq?.multi)))) && (
         <Button variant="outline" size="md" disabled={!canSubmit(questions, draft)} onClick={submit}>
           send
         </Button>
@@ -347,17 +349,16 @@ function QuestionBody({
 
   /** one question's page: its text, its options, the "other" row, the typed answer's field once
    * opened, and its own foot and key strip. Every page is in the DOM so the box stands at the
-   * tallest one's height; only the open page has the cursor, the preview and the field's ref. */
+   * tallest one's height; only the open page has the cursor, the preview and the field's ref.
+   * Every row keeps its description under its label whether or not the cursor is on it: a line
+   * that came and went with the cursor moved every row below it as the pointer crossed the list. */
   const page = (qq: (typeof questions)[number], i: number) => {
     const open = i === current;
     const a = draft[i];
     const owning = ownChosen(a, !!qq.multi);
     const under = open ? qq.options[cursor] : undefined;
-    /* a row reads its description under its label while it holds the cursor, so the words sit
-       against the label they explain rather than under the whole list, where they read as the
-       last row's. The box steps as the cursor walks; the row grows downward, so a pointer resting
-       on it stays on it. A finger has no cursor, so on touch every row keeps its description. */
-    const describes = (oi: number) => touch || (open && oi === cursor);
+    const ownState = rowState({ cursor: open && !touch && cursor === qq.options.length, checked: owning });
+    const toOwn = () => cursor !== qq.options.length && setCursor(qq.options.length);
     return (
       <div key={qq.id} className={cx("ask-page", !open && "ask-page-off")}>
         <div className="ask-head">
@@ -385,40 +386,65 @@ function QuestionBody({
                   {stripRecommended(o.label)}
                   {recommended(o.label) && <span className="badge-recommended">recommended</span>}
                 </span>
-                {describes(oi) && o.description && <span className="ask-desc row-dim">{o.description}</span>}
+                {o.description && <span className="ask-desc row-dim">{o.description}</span>}
               </button>
             );
           })}
           {/* the typed answer as one more row, numbered after the options so it lines up with them
               and is reached the same way; it opens the field rather than moving on */}
-          {qq.note && (
+          {qq.note && !owning && (
             <button
               type="button"
               className="picker-item ask-opt row-edge"
-              data-state={rowState({ cursor: open && !touch && cursor === qq.options.length, checked: owning })}
-              onMouseMove={() => cursor !== qq.options.length && setCursor(qq.options.length)}
+              data-state={ownState}
+              onMouseMove={toOwn}
               onClick={() => pick(qq.options.length)}
             >
               <Kbd k={String(qq.options.length + 1)} className="ask-num row-dim" />
               <span className="ask-label">{qq.note.label}</span>
-              {/* once the field is open and the answer is its own, the field is this row's
-                  description: it stands right under the row, in the label's column, and the
-                  words move into its placeholder rather than being read twice */}
-              {describes(qq.options.length) && a?.note === undefined && (
-                <span className="ask-desc row-dim">your own answer</span>
-              )}
+              <span className="ask-desc row-dim">your own answer</span>
             </button>
+          )}
+          {/* once the answer is its own, the field is the row's description: it takes that line,
+              its placeholder the same words, so opening it moves nothing. The row is no longer a
+              button, since it holds the field. */}
+          {qq.note && owning && a?.note !== undefined && (
+            // biome-ignore lint/a11y/noStaticElementInteractions: the press lands on the field the row holds, which is the control
+            <div
+              className="picker-item ask-opt row-edge"
+              data-state={ownState}
+              onMouseMove={toOwn}
+              onMouseDown={(e) => {
+                if (e.target instanceof HTMLTextAreaElement) return;
+                // the field keeps the caret a press beside it would have dropped
+                e.preventDefault();
+                e.currentTarget.querySelector("textarea")?.focus();
+              }}
+            >
+              <Kbd k={String(qq.options.length + 1)} className="ask-num row-dim" />
+              <span className="ask-label">{qq.note.label}</span>
+              <TextArea
+                ref={open ? own : undefined}
+                bare
+                font="ui"
+                rows={1}
+                className="ask-own-field"
+                placeholder="your own answer"
+                value={a.note}
+                onChange={(e) => write(setNote(draft, i, e.target.value), i)}
+              />
+            </div>
           )}
         </div>
         {under?.preview && <pre className="ask-preview">{under.preview}</pre>}
-        {qq.note && a?.note !== undefined && (
+        {qq.note && !owning && a?.note !== undefined && (
           <TextArea
             ref={open ? own : undefined}
             bare
             font="ui"
             rows={2}
-            className={cx("ask-own", owning && "ask-own-desc")}
-            placeholder={owning ? "your own answer" : "a note for the agent, sent with your pick"}
+            className="ask-own"
+            placeholder="a note for the agent, sent with your pick"
             value={a.note}
             onChange={(e) => write(setNote(draft, i, e.target.value), i)}
           />

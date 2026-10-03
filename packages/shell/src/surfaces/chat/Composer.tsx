@@ -847,6 +847,9 @@ export function Composer({
         // one frame however many attempts: the daemon makes the group, this row first
         const variants = draft && draft.variants > 1 ? { variants: draft.variants } : {};
         sock?.send({ t: "create-worktree", ...from, ...here, ...variants, prompt, boxId });
+        // the worktree takes a moment to make and its agent a moment more to take the turn: the
+        // log shows the message and the working mark from here, so nothing waits on the daemon
+        if (boxId) dispatch({ a: "starting", id: boxId, text: prompt });
       }
     } else {
       // the session reads these when it opens, and the daemon handles frames in order, so they are

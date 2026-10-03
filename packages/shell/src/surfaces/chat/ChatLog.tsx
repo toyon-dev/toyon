@@ -126,6 +126,7 @@ export function ChatLog({
   const items = useLocalField(id, "chat");
   const queue = useLocalField(id, "queue");
   const restoring = useLocalField(id, "restoring");
+  const starting = useLocalField(id, "starting");
   // each queued message's chips count on from the sent ones and from the messages queued ahead of it
   const sentNumbers = useMemo(
     () => nextNumbers(items.map((c) => (c.kind === "user" ? c.attachments : undefined))),
@@ -395,12 +396,17 @@ export function ChatLog({
             put where this row scrolls off as soon as the log is read back. So while a call runs
             above, a spawn row floats, or a thought shimmers and the silence is short, there is no
             row: the shimmer says it, and the call's or the spawn's row counts its own wait. */}
-        {busy &&
-          active &&
-          !(active.agent === "waiting" && askInBox) &&
-          !calling &&
-          !fanned &&
-          !(moving && quiet < QUIET_AFTER) && (
+        {/* a message sent from the lead row, ahead of the agent's own copy of it: the bubble it will
+            be, and under it the row below, which is one element from the press to the first reply
+            so the mark never restarts */}
+        {starting?.text && <div className="msg-user">{starting.text}</div>}
+        {active &&
+          (starting ||
+            (busy &&
+              !(active.agent === "waiting" && askInBox) &&
+              !calling &&
+              !fanned &&
+              !(moving && quiet < QUIET_AFTER))) && (
             <div className="working-row">
               {/* waiting is not activity: it is blocked on you, and the rail keeps that dot steady
                 for the same reason */}

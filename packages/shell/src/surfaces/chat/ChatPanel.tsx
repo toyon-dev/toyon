@@ -1,7 +1,7 @@
 import type { ArchivedWorktree } from "@toyon/shared";
 import { useMemo } from "react";
 import { useDispatch, useStore, useStoreInstance } from "../../state/context.tsx";
-import { useActive, useActiveRepo, useDraft } from "../../state/selectors.ts";
+import { useActive, useActiveRepo, useDraft, useLocalField } from "../../state/selectors.ts";
 import { Button } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { ArchivedNote } from "./ArchivedNote.tsx";
@@ -35,6 +35,9 @@ export function ChatPanel({
   // the row underneath an archived page is not what the page shows
   const active = useActive();
   const draft = useDraft();
+  // sent, and the row has not become the task yet: the choices are spent at the press, so their
+  // row leaves then and the log grows into its place in one step, with the message at its foot
+  const starting = useLocalField(active?.worktree.id, "starting");
   const repo = useActiveRepo();
   // a project toyon opened on the chat without asking says what it went by, where the conversation
   // starts, with the way to say otherwise; a confirmed one was answered by the person and needs no line
@@ -80,7 +83,7 @@ export function ChatPanel({
           }
         />
       )}
-      {!archived && draft && <DraftIntro draft={draft} lead={active} />}
+      {!archived && draft && !starting && <DraftIntro draft={draft} lead={active} />}
       {archived ? (
         <Composer active={null} archived={archived} placement={placement} />
       ) : (

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { type ArchiveFacts, archiveReason, archiveWait } from "./archiveRule.ts";
+import { type ArchiveFacts, archiveParts, archiveReason } from "./archiveRule.ts";
 import type { WorktreeInfo } from "./model.ts";
 
 const HOUR = 60 * 60_000;
@@ -100,7 +100,7 @@ describe("archiveReason", () => {
     const ahead = (id: string) => (id === "v1" ? { dirty: 0, ahead: 0 } : { dirty: 0, ahead: 3 });
     // the winner was opened a moment ago and stays; the two it beat do not wait for it
     expect(archiveReason(won, facts(rows, { counts: ahead }))).toBeNull();
-    expect(archiveReason(rows[0]!, facts(rows, { counts: ahead }))).toBe("a sibling landed, not opened in 2h");
+    expect(archiveReason(rows[0]!, facts(rows, { counts: ahead }))).toBe("sibling landed, not opened in 2h");
     // work left uncommitted in one since, or counts git could not give, still hold it
     const dirty = (id: string) => (id === "v2" ? { dirty: 1, ahead: 3 } : ahead(id));
     expect(archiveReason(rows[0]!, facts(rows, { counts: dirty }))).toBeNull();
@@ -108,9 +108,9 @@ describe("archiveReason", () => {
   });
 });
 
-describe("the wait a reason ends on", () => {
-  test("the reason without how the work went", () => {
-    expect(archiveWait("a sibling landed, not opened in 2h")).toBe("not opened in 2h");
-    expect(archiveWait("something else")).toBe("something else");
+describe("a reason split at its wait", () => {
+  test("how the work went, and how long nobody opened it", () => {
+    expect(archiveParts("sibling landed, not opened in 2h")).toEqual({ what: "sibling landed", idle: "2h" });
+    expect(archiveParts("something else")).toEqual({ what: "something else" });
   });
 });

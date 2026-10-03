@@ -10,10 +10,13 @@ import { copyText, type Deps } from "./deps.ts";
  * figure: the context it filled is gone with the session, the money is not. */
 /** The archived row's state, the way a live row's dot is one in words: how it went, then what the
  * archive holds of it. Merged outranks uncommitted, since the changes were kept beside a branch
- * that already landed; the count column says how many. The time is the row's gutter, and the
- * cost is a figure, so neither is in the phrase. */
+ * that already landed; the count column says how many. A row that archived itself says so here,
+ * and the card's foot is left with the reason alone. The time is the row's gutter, and the cost
+ * is a figure, so neither is in the phrase. */
 export function archivedState(a: ArchivedWorktree): string {
-  const what = a.landed ? "Merged" : a.uncommitted ? "Archived with uncommitted changes" : "Archived";
+  const archived = a.auto ? "Auto archived" : "Archived";
+  const merged = a.auto ? "Merged, auto archived" : "Merged";
+  const what = a.landed ? merged : a.uncommitted ? `${archived} with uncommitted changes` : archived;
   return a.restorable ? what : `${what}, commits not kept`;
 }
 

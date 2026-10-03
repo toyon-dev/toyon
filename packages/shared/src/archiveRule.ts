@@ -36,17 +36,19 @@ export function archiveReason(wt: WorktreeInfo, f: ArchiveFacts): string | null 
     // a group still being compared is compared as one, so it goes as one
   } else if (!group.every((w) => nothingToKeep(w, f, false))) return null;
   if (unitsAhead(wt, f.rows) < ARCHIVE_KEEP_RECENT) return null;
-  const what = lost ? "a sibling landed" : wt.landed ? "landed" : "no changes";
+  const what = lost ? "sibling landed" : wt.landed ? "landed" : "no changes";
   return `${what}, ${UNOPENED}${duration(f.afterMs)}`;
 }
 
 const UNOPENED = "not opened in ";
 
-/** the wait a reason ends on ("not opened in 2h"), for a line whose row already says how the
- * work went; the whole reason when it does not end on one */
-export function archiveWait(reason: string): string {
+/** a reason split at the wait it ends on: how the work went ("no changes") and how long nobody
+ * opened it ("2h"), so a line can lead with the wait and drop what its row already says. All `what`
+ * when it does not end on one */
+export function archiveParts(reason: string): { what: string; idle?: string } {
   const at = reason.lastIndexOf(UNOPENED);
-  return at < 0 ? reason : reason.slice(at);
+  if (at < 0) return { what: reason };
+  return { what: reason.slice(0, at).replace(/,\s*$/, ""), idle: reason.slice(at + UNOPENED.length) };
 }
 
 /** `lost`: the commits are an attempt a sibling beat, which the archive keeps for a later cherry-pick,

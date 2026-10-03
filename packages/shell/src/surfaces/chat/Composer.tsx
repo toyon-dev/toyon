@@ -514,7 +514,7 @@ export function Composer({
   // After the word, what the work is: the commit subject when the verdict wrote one, since it is
   // the one line that names the change and it settles once the change stops moving, where the
   // recap is a new sentence every turn. The recap stands in until a subject exists.
-  const verb: Verb | null = !id
+  const offered: Verb | null = !id
     ? null
     : landed
       ? {
@@ -578,6 +578,24 @@ export function Composer({
   // each as it starts flashes three sentences through the line before one can be read; the
   // sentence already there lighting up is the press taken, and a step that holds (a hook, a
   // rebase with work in it, the network) is the one worth naming
+  // the verdict behind the word's label: ready with the facts, or what is left. Not when the
+  // word's line is already the facts (no subject and no sentence to stand in front of them) and
+  // the verdict would only say them again: the word alone says ready.
+  const restated = !!landing && !landing.subject && !said && !landing.why && !landing.stale;
+  const offeredUnder =
+    (offered?.word === "land" || offered?.word === "update" || offered?.word === "check") && landing && !restated
+      ? verdictLine(landing, landCount, gap)
+      : null;
+  // The line as it stood at the press, held for as long as the press is out. The land moves
+  // everything the line is derived from (the commit empties the tree, the verdict goes, the count
+  // becomes the committed files), and a line that followed each of those re-wrote itself two or
+  // three times inside a second, under a cursor that had just pressed it. So the box keeps the
+  // words it had and only lights them, until the op is over and the next word takes the place.
+  // A press from another tab has no line to hold here and reads the live one.
+  const pressed = useRef<{ id: string; verb: Verb; under: string | null } | null>(null);
+  if (op !== "land") pressed.current = id && offered?.ships ? { id, verb: offered, under: offeredUnder } : null;
+  const kept = op === "land" && blank && pressed.current?.id === id ? pressed.current : null;
+  const verb = kept ? kept.verb : offered;
   const landingNow = !!verb?.ships && op === "land";
   const heldStep = useHeld(step, STEP_HOLD_MS);
   // the run behind the line, when one is going: the land's commit while the press is out, else
@@ -592,7 +610,9 @@ export function Composer({
     : landing.check === "pending" && checkRun && checkRun.status !== "terminated"
       ? runLine("Checking the work", checkRun, runSecs)
       : landingLine(landing, dirty, quick, agentInfo?.name);
-  const landLine = verb && landingNow ? `${verb.word}: ${heldStep ?? verb.line}` : null;
+  // the same words in the same places as before the press, so nothing shifts under the shine; the
+  // colon comes only with a step's name, which replaces the line anyway
+  const landLine = verb && landingNow ? (heldStep ? `${verb.word}: ${heldStep}` : `${verb.word} ${verb.line}`) : null;
   const landingText =
     landLine && commitRun && commitRun.status !== "terminated" ? runLine(landLine, commitRun, runSecs) : landLine;
   // the empty box's line, first match wins: what the box is for when it is not a worktree's, then
@@ -618,24 +638,25 @@ export function Composer({
     return `message agent on ${title}; / for a command, ! for a shell command`;
   };
   const placeholderText = placeholderFor();
-  // under the verb, the verdict behind its label: ready with the facts, or what is left. Not when
-  // the verb's line is already the facts (no subject and no sentence to stand in front of them)
-  // and the verdict would only say them again: the word alone says ready. Under a line with no
-  // word (a check running or failed, a PR merged or closed): the recap's sentence when one has
-  // been written, else the message the work would land with, the next most useful thing to read.
-  // Not while the land is out: "Ready" under "land: committing" is a verdict on a press already
-  // taken, and the line above says where it stands now.
-  const restated = !!landing && !landing.subject && !said && !landing.why && !landing.stale;
+  // under the verb, the verdict behind its label. Under a line with no word (a check running or
+  // failed, a PR merged or closed): the recap's sentence when one has been written, else the
+  // message the work would land with, the next most useful thing to read. While the land is out
+  // the verdict stays where it was until a step is named: "Ready" under "land: committing" is a
+  // verdict on a press already taken, and the line above says where it stands now.
   const subline =
-    text !== "" || ghost || !active || landingNow
+    text !== "" || ghost || !active
       ? null
-      : verb
-        ? (verb.word === "land" || verb.word === "update" || verb.word === "check") && landing && !restated
-          ? verdictLine(landing, landCount, gap)
-          : null
-        : pr || blocked
-          ? (said ?? landing?.subject ?? null)
-          : null;
+      : landingNow
+        ? heldStep
+          ? null
+          : kept
+            ? kept.under
+            : offeredUnder
+        : verb
+          ? offeredUnder
+          : pr || blocked
+            ? (said ?? landing?.subject ?? null)
+            : null;
 
   // On open: the file listing is refreshed if the files can have moved since it was asked for
   // (the agent may have written one this turn); cached rows render meanwhile so the menu never

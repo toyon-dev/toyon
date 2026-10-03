@@ -1,4 +1,5 @@
 import { type ReactNode, type RefObject, useEffect, useState } from "react";
+import { useStore } from "../../state/context.tsx";
 import { cx } from "../../ui/cx.ts";
 import { Float } from "../../ui/Float.tsx";
 import type { Placement, Rect } from "../../ui/place.ts";
@@ -7,8 +8,17 @@ import type { Placement, Rect } from "../../ui/place.ts";
 const PEEK_DELAY = 150;
 
 /** where the peek stands: beside the transcript rather than beside the chip. Level with the chip, and
- * off the transcript's edge onto the preview, so it covers nothing in the chat it was opened from. */
-const PEEK_PLACEMENT: Placement = { side: "left", align: "center", offset: 12, flip: "side", margin: 8 };
+ * off the transcript's edge onto the preview, so it covers nothing in the chat it was opened from.
+ * The preview is on the far side from the dock the chat is in. Asking for one fixed side and leaving
+ * the rest to the flip put a peek small enough to fit there over the rail, and a larger one over
+ * the preview, so the same chip opened either way by what it held. */
+const peekPlacement = (side: "left" | "right"): Placement => ({
+  side,
+  align: "center",
+  offset: 12,
+  flip: "side",
+  margin: 8,
+});
 
 /**
  * What a chip stands for at a size you can read, up while the chip is under the pointer. A float
@@ -25,6 +35,7 @@ export function ChipPeek({
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
+  const chatSide = useStore((s) => s.chatSide);
 
   useEffect(() => {
     const chip = chipRef.current;
@@ -64,7 +75,12 @@ export function ChipPeek({
   return (
     // tracked: the transcript scrolls under the pointer, and the box has its size only once what
     // it shows is in
-    <Float className={cx("chip-peek", className)} anchor={anchor} placement={PEEK_PLACEMENT} track>
+    <Float
+      className={cx("chip-peek", className)}
+      anchor={anchor}
+      placement={peekPlacement(chatSide === "left" ? "right" : "left")}
+      track
+    >
       {children}
     </Float>
   );

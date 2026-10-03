@@ -372,7 +372,7 @@ describe("toolLabel", () => {
     // sed prints unless it is told to write the file in place
     expect(toolLabel({ ...call, input: { command: "sed -n 250,275p a.ts; sed -n 1,9p b.ts" } }).icon).toBe("book");
     expect(toolLabel({ ...call, input: { command: "sed -E 's/a/b/' a.ts" } }).icon).toBe("book");
-    for (const flag of ["-i ''", "-i.bak", "-ni", "--in-place"])
+    for (const flag of ["-i ''", "-i.bak", "-ni", "-I ''", "--in-place"])
       expect(toolLabel({ ...call, input: { command: `sed ${flag} 's/a/b/' a.ts` } }).icon).toBe("run");
     expect(toolLabel({ ...call, input: { command: "sed -n 1,9p a.ts; sed -i 's/a/b/' b.ts" } }).icon).toBe("run");
     // a leading cd only says where: the verb is the command after it
@@ -386,6 +386,26 @@ describe("toolLabel", () => {
     expect(toolLabel({ ...call, input: { command: "export CI=1; FOO='a b' grep -rn dark ." } }).icon).toBe("search");
     expect(toolLabel({ ...call, input: { command: "f=$(grep -l x .) && cat $f" } }).icon).toBe("run");
     expect(toolLabel({ ...call, input: { command: "N=1" } }).icon).toBe("run");
+    // and an echo that only labels what the next command prints, unless it is the one writing
+    expect(toolLabel({ ...call, input: { command: 'echo "== status" && git status' } }).icon).toBe("branch");
+    expect(toolLabel({ ...call, input: { command: 'echo "x" > a.txt && cat a.txt' } }).icon).toBe("run");
+    expect(toolLabel({ ...call, input: { command: "echo done" } }).icon).toBe("run");
+    // a script fed to python that writes a file is an edit; one that only prints is a run
+    const rewrite = "python3 - <<'EOF'\np='a.ts'; s=open(p).read()\nopen(p,'w').write(s.replace('a','b'))\nEOF";
+    expect(toolLabel({ ...call, input: { command: rewrite } }).icon).toBe("edit");
+    expect(toolLabel({ ...call, input: { command: `cd pkg && ${rewrite}` } }).icon).toBe("edit");
+    expect(toolLabel({ ...call, input: { command: "python3 - <<'EOF'\nprint(open('a.ts').read())\nEOF" } }).icon).toBe(
+      "run",
+    );
+    expect(toolLabel({ ...call, input: { command: "python3 scripts/gen.py" } }).icon).toBe("run");
+    const prints = "python3 - <<'EOF'\nimport sys\nsys.stdout.write(open('a.ts').read())\nEOF";
+    expect(toolLabel({ ...call, input: { command: prints } }).icon).toBe("run");
+    // a reading verb sent to a file is writing: cat over a heredoc is an edit, the rest a plain run
+    expect(toolLabel({ ...call, input: { command: "cat > a.ts <<'EOF'\nconst a = 1;\nEOF" } }).icon).toBe("edit");
+    expect(toolLabel({ ...call, input: { command: "tail -n +3 a.md > b.md" } }).icon).toBe("run");
+    expect(toolLabel({ ...call, input: { command: "sed 's/a/b/' a.ts >> b.ts" } }).icon).toBe("run");
+    expect(toolLabel({ ...call, input: { command: "grep -rn dark . 2>/dev/null" } }).icon).toBe("search");
+    expect(toolLabel({ ...call, input: { command: "cat a.ts 2>&1 | head; echo x > y" } }).icon).toBe("book");
     // a verb with no entry, and a kind the agent named itself, both keep the kind's own glyph
     expect(toolLabel({ ...call, input: { command: "bun run check" } }).icon).toBe("run");
     expect(toolLabel({ ...call, toolKind: "read", input: { command: "cat x" } }).icon).toBe("book");

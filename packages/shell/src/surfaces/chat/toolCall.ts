@@ -106,17 +106,26 @@ const VERB_ICON: Record<string, IconName> = {
   git: "branch",
 };
 
-/** `-i`, alone or in a cluster (`-ni`, `-i.bak`), or spelled out: the one flag that makes sed write
+/** `-i` (BSD also takes `-I`), alone or in a cluster (`-ni`, `-i.bak`), or spelled out: the one flag that makes sed write
  * the file it was given. Matched anywhere in the command, so a chain with one in-place sed in it, or
  * a script that happens to hold ` -i`, stays a run row: a miss costs the book, never a wrong glyph. */
-const SED_IN_PLACE = /(^|\s)(-[A-Za-z]*i|--in-place)/;
+const SED_IN_PLACE = /(^|\s)(-[A-Za-z]*[iI]|--in-place)/;
 
-/** what stands at the head of a command and only sets the scene: `cd dir &&`, and a variable set for
- * the rest of it (`N=notes.md &&`, `export CI=1;`, `FOO=1 cmd`). The work is whatever comes next, so
- * the verb is read from there. A value that runs something (`f=$(grep x)`) is not skipped whole,
- * and such a row keeps the kind's glyph. */
-const SCENE =
-  /^\s*(?:cd\s+(?:"[^"]*"|'[^']*'|[^\s;&|]+)\s*(?:&&|;)|(?:export\s+)?[A-Za-z_]\w*=(?:"[^"]*"|'[^']*'|[^\s;&|()`]*)\s*(?:&&|;|(?=\s)))\s*/;
+/** what stands at the head of a command and only sets the scene: `cd dir &&`, a variable set for
+ * the rest of it (`N=notes.md &&`, `export CI=1;`, `FOO=1 cmd`), and an `echo "heading" &&` that
+ * labels what the next command prints. The work is whatever comes next, so the verb is read from
+ * there. A value that runs something (`f=$(grep x)`) is not skipped whole, nor is an echo sent to a
+ * file, and such a row keeps the kind's glyph. */
+const SCENE_WORD = String.raw`(?:"[^"]*"|'[^']*'|[^\s;&|]+)`;
+const SCENE = new RegExp(
+  String.raw`^\s*(?:(?:cd|echo)\s+${SCENE_WORD}\s*(?:&&|;)|(?:export\s+)?[A-Za-z_]\w*=(?:"[^"]*"|'[^']*'|[^\s;&|()\`]*)\s*(?:&&|;|(?=\s)))\s*`,
+);
+
+/** a script fed to python on stdin that writes a file: how an agent makes an edit its own edit tool
+ * is awkward for, and an edit is what the row should say. One that only prints, `sys.stdout.write`
+ * included, is still a run. */
+const PYTHON = /^python[\d.]*$/;
+const WRITES_FILE = /open\([^)]*,\s*["'][wax]|(?<!std(?:out|err))\.write\(|\.write_text\(/;
 
 function afterScene(command: string): string {
   let rest = command;
@@ -124,12 +133,24 @@ function afterScene(command: string): string {
   return rest;
 }
 
+/** the first command sends what it prints to a file (`>`, `>>`), `/dev/null` and a stream (`2>&1`)
+ * aside. A reading verb doing that is writing: `cat > a.ts <<EOF` is how an agent writes a file whole.
+ * A `>` inside a quoted pattern trips it too, which costs that row its glyph and nothing more. */
+const TO_FILE = /(?<![0-9&])>{1,2}\s*(?!\/dev\/null|&)[^\s&>]/;
+
 function verbIcon(command: string): IconName | undefined {
-  const first = afterScene(command).trim().split(/\s+/)[0] ?? "";
+  const rest = afterScene(command).trim();
+  const first = rest.split(/\s+/)[0] ?? "";
   // an absolute path still names the verb: /usr/bin/grep is a grep
   const verb = first.slice(first.lastIndexOf("/") + 1);
   // without -i sed only prints, whatever its script does to the lines on the way
-  if (verb === "sed") return SED_IN_PLACE.test(command) ? undefined : "book";
+  const icon = verb === "sed" ? (SED_IN_PLACE.test(command) ? undefined : "book") : VERB_ICON[verb];
+  if (icon === "book" || icon === "search") {
+    const head = rest.split(/&&|;|\n|\|/)[0] ?? "";
+    if (TO_FILE.test(head)) return verb === "cat" && head.includes("<<") ? "edit" : undefined;
+  }
+  if (icon) return icon;
+  if (PYTHON.test(verb)) return rest.includes("<<") && WRITES_FILE.test(rest) ? "edit" : undefined;
   return VERB_ICON[verb];
 }
 

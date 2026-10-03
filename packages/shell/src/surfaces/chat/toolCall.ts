@@ -80,8 +80,8 @@ const NAME_ICON = new Map<string, IconName>([
 
 /** a run row's verb says more than "execute" does: `grep -rn x .` is a search and `git commit` is a
  * commit, and the column reads better following the command than the kind. Conservative on purpose:
- * a verb belongs here only when one glyph is right for every use of it, which is why `sed` (a read
- * with -n, an edit with -i) and `cp` are not in it. */
+ * a verb belongs here only when one glyph is right for every use of it, which is why `cp` is not in
+ * it, and why `sed` is read by its flags in `verbIcon` instead. */
 const VERB_ICON: Record<string, IconName> = {
   grep: "search",
   rg: "search",
@@ -106,10 +106,18 @@ const VERB_ICON: Record<string, IconName> = {
   git: "branch",
 };
 
+/** `-i`, alone or in a cluster (`-ni`, `-i.bak`), or spelled out: the one flag that makes sed write
+ * the file it was given. Matched anywhere in the command, so a chain with one in-place sed in it, or
+ * a script that happens to hold ` -i`, stays a run row: a miss costs the book, never a wrong glyph. */
+const SED_IN_PLACE = /(^|\s)(-[A-Za-z]*i|--in-place)/;
+
 function verbIcon(command: string): IconName | undefined {
   const first = command.trim().split(/\s+/)[0] ?? "";
   // an absolute path still names the verb: /usr/bin/grep is a grep
-  return VERB_ICON[first.slice(first.lastIndexOf("/") + 1)];
+  const verb = first.slice(first.lastIndexOf("/") + 1);
+  // without -i sed only prints, whatever its script does to the lines on the way
+  if (verb === "sed") return SED_IN_PLACE.test(command) ? undefined : "book";
+  return VERB_ICON[verb];
 }
 
 export interface ToolCall {

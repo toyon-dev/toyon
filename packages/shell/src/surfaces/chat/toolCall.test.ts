@@ -369,6 +369,12 @@ describe("toolLabel", () => {
     expect(toolLabel(call).icon).toBe("search");
     expect(toolLabel({ ...call, input: { command: "/usr/bin/git commit -m x" } }).icon).toBe("branch");
     expect(toolLabel({ ...call, input: { command: "rm -rf dist" } }).icon).toBe("trash");
+    // sed prints unless it is told to write the file in place
+    expect(toolLabel({ ...call, input: { command: "sed -n 250,275p a.ts; sed -n 1,9p b.ts" } }).icon).toBe("book");
+    expect(toolLabel({ ...call, input: { command: "sed -E 's/a/b/' a.ts" } }).icon).toBe("book");
+    for (const flag of ["-i ''", "-i.bak", "-ni", "--in-place"])
+      expect(toolLabel({ ...call, input: { command: `sed ${flag} 's/a/b/' a.ts` } }).icon).toBe("run");
+    expect(toolLabel({ ...call, input: { command: "sed -n 1,9p a.ts; sed -i 's/a/b/' b.ts" } }).icon).toBe("run");
     // a verb with no entry, and a kind the agent named itself, both keep the kind's own glyph
     expect(toolLabel({ ...call, input: { command: "bun run check" } }).icon).toBe("run");
     expect(toolLabel({ ...call, toolKind: "read", input: { command: "cat x" } }).icon).toBe("book");

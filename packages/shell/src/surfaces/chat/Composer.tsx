@@ -26,7 +26,7 @@ import { takeBackQueued, toInput } from "../../state/attach.ts";
 import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
 import { openSource } from "../../state/openSource.ts";
 import { isUploading } from "../../state/pending.ts";
-import { useChatCentred, useGreenfield, useLocalField, usePreviewId } from "../../state/selectors.ts";
+import { useChatCentred, useGreenfield, useLocalField, usePreviewId, useTouch } from "../../state/selectors.ts";
 import { canCarry, composerBoxOf, type Draft, trunkOf } from "../../state/store.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
@@ -196,6 +196,7 @@ export function Composer({
   const askUp = ask && askParked !== ask.id ? ask : null;
   const parked = ask && askParked === ask.id ? ask : null;
   const askRef = useRef<HTMLDivElement>(null);
+  const touch = useTouch();
   // the frame on screen: while drafting the lead's own preview, which is what the picker picks
   // from and the page context describes
   const frameId = usePreviewId();
@@ -396,11 +397,18 @@ export function Composer({
     const f = requestAnimationFrame(focusBox);
     return () => cancelAnimationFrame(f);
   });
-  // Escape parked the ask to write a reply instead, so the caret goes where the reply is written.
-  // Only when the keyboard is nowhere: the ask's root went with the ask, and a hand elsewhere stays.
-  const parkedId = parked?.id;
-  useOnChange([parkedId], () => {
-    if (!parkedId || centred !== !!greenfield) return;
+  // The ask left the box and the textarea is back in its place, so the caret goes where the next
+  // message is written: escape parked the ask to write a reply instead, or it was answered and its
+  // root, which held the keyboard, went with it. Only when the keyboard is nowhere: a hand elsewhere
+  // stays. Not for a switch to another worktree, whose box never held the ask, and an answer on a
+  // touch window leaves the caret out, since it would raise the keyboard over the reply being read.
+  const askUpId = askUp?.id;
+  const askWas = useRef({ id, askUpId });
+  useOnChange([id, askUpId], () => {
+    const was = askWas.current;
+    askWas.current = { id, askUpId };
+    if (askUpId || !was.askUpId || was.id !== id) return;
+    if (centred !== !!greenfield || (touch && !parked)) return;
     const f = requestAnimationFrame(() => {
       const held = document.activeElement;
       if (!held || held === document.body) composerRef.current?.focus();

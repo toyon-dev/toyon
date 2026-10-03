@@ -111,12 +111,21 @@ const VERB_ICON: Record<string, IconName> = {
  * a script that happens to hold ` -i`, stays a run row: a miss costs the book, never a wrong glyph. */
 const SED_IN_PLACE = /(^|\s)(-[A-Za-z]*i|--in-place)/;
 
-/** `cd dir &&` or `cd dir;` at the head of a command: it only says where, and the work is whatever
- * comes next, so the verb is read from there. */
-const LEADING_CD = /^\s*cd\s+(?:"[^"]*"|'[^']*'|[^\s;&|]+)\s*(?:&&|;)\s*/;
+/** what stands at the head of a command and only sets the scene: `cd dir &&`, and a variable set for
+ * the rest of it (`N=notes.md &&`, `export CI=1;`, `FOO=1 cmd`). The work is whatever comes next, so
+ * the verb is read from there. A value that runs something (`f=$(grep x)`) is not skipped whole,
+ * and such a row keeps the kind's glyph. */
+const SCENE =
+  /^\s*(?:cd\s+(?:"[^"]*"|'[^']*'|[^\s;&|]+)\s*(?:&&|;)|(?:export\s+)?[A-Za-z_]\w*=(?:"[^"]*"|'[^']*'|[^\s;&|()`]*)\s*(?:&&|;|(?=\s)))\s*/;
+
+function afterScene(command: string): string {
+  let rest = command;
+  for (let next = rest.replace(SCENE, ""); next !== rest; next = rest.replace(SCENE, "")) rest = next;
+  return rest;
+}
 
 function verbIcon(command: string): IconName | undefined {
-  const first = command.replace(LEADING_CD, "").trim().split(/\s+/)[0] ?? "";
+  const first = afterScene(command).trim().split(/\s+/)[0] ?? "";
   // an absolute path still names the verb: /usr/bin/grep is a grep
   const verb = first.slice(first.lastIndexOf("/") + 1);
   // without -i sed only prints, whatever its script does to the lines on the way

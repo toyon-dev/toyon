@@ -380,6 +380,12 @@ describe("toolLabel", () => {
     expect(toolLabel({ ...call, input: { command: 'cd "my dir"; sed -n 1,9p a.ts' } }).icon).toBe("book");
     expect(toolLabel({ ...call, input: { command: "cd packages/shell && bun test" } }).icon).toBe("run");
     expect(toolLabel({ ...call, input: { command: "cd packages/shell" } }).icon).toBe("run");
+    // so does a variable set for the rest of the command, however many stand in front
+    const chain = "cd /w/wt-f7a4 && N=/w/notes/A.md && sed -n 120,135p $N && sed -n 1,9p b.ts";
+    expect(toolLabel({ ...call, input: { command: chain } }).icon).toBe("book");
+    expect(toolLabel({ ...call, input: { command: "export CI=1; FOO='a b' grep -rn dark ." } }).icon).toBe("search");
+    expect(toolLabel({ ...call, input: { command: "f=$(grep -l x .) && cat $f" } }).icon).toBe("run");
+    expect(toolLabel({ ...call, input: { command: "N=1" } }).icon).toBe("run");
     // a verb with no entry, and a kind the agent named itself, both keep the kind's own glyph
     expect(toolLabel({ ...call, input: { command: "bun run check" } }).icon).toBe("run");
     expect(toolLabel({ ...call, toolKind: "read", input: { command: "cat x" } }).icon).toBe("book");

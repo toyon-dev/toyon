@@ -121,16 +121,19 @@ export function leadLines(
 const PROMPT_MAX = 160;
 
 /**
- * The line under an archived row's state: the first message sent there, which the record keeps so
- * a row can say what the work was. The last recap would say where the last turn left it, which is
- * not the same thing over a long session; what was asked is true of the whole of it.
+ * The lines under an archived row's state. First the first message sent there, which the record
+ * keeps so a row can say what the work was. The last recap would say where the last turn left it,
+ * which is not the same thing over a long session; what was asked is true of the whole of it. Then
+ * why it archived itself, when it did: the clock in the dot's seat is on the row the card belongs
+ * to, and a tip of its own there swapped with the card as the pointer crossed the row.
  */
 export function archivedLines(a: ArchivedWorktree): string[] {
+  const auto = a.auto ? [`Archived automatically: ${a.auto}`] : [];
   const p = a.prompt?.replace(/\s+/g, " ").trim();
-  if (!p) return [];
-  if (p.length <= PROMPT_MAX) return [p];
+  if (!p) return auto;
+  if (p.length <= PROMPT_MAX) return [p, ...auto];
   const cut = p.slice(0, PROMPT_MAX);
-  return [`${cut.slice(0, Math.max(cut.lastIndexOf(" "), 1)).trimEnd()}…`];
+  return [`${cut.slice(0, Math.max(cut.lastIndexOf(" "), 1)).trimEnd()}…`, ...auto];
 }
 
 /** how many archived rows the rail draws: the ones recent enough to be found by where they sit.

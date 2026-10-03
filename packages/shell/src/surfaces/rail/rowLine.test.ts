@@ -219,6 +219,15 @@ describe("the line under an archived row's state", () => {
     expect(line?.length).toBeLessThanOrEqual(161);
     expect(line).toMatch(/^word0 .*word\d+…$/);
   });
+
+  test("why it archived itself, after what the work was", () => {
+    const auto = "landed, not opened in 2h";
+    expect(archivedLines(arch({ auto }))).toEqual([`Archived automatically: ${auto}`]);
+    expect(archivedLines(arch({ prompt: "fix the update race", auto }))).toEqual([
+      "fix the update race",
+      `Archived automatically: ${auto}`,
+    ]);
+  });
 });
 
 describe("the archived rows the rail draws", () => {

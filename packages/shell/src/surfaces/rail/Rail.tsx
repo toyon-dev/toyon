@@ -282,10 +282,8 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
         </span>
       )}
       {a.auto ? (
-        <span
-          className="rail-glyph rail-auto row-dim"
-          {...tip(`Archived automatically: ${a.auto}`, undefined, { placement: tipSide })}
-        >
+        // no tip of its own: the row's card says why it archived itself
+        <span className="rail-glyph rail-auto row-dim">
           <Icon name="clock" className="icon-inline" />
         </span>
       ) : (

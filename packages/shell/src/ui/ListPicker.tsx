@@ -13,7 +13,7 @@ import { rowState } from "./rowState.ts";
 export { step } from "./listNav.ts";
 
 /** the verb for each key the picker binds, as the person at the shell would say it */
-type KeyVerbs = { nav?: string; side?: string; complete?: string; pick?: string; back?: string };
+type KeyVerbs = { nav?: string; side?: string; complete?: string; tab?: string; pick?: string; back?: string };
 
 /** the ghost's text with its placeholder ranges drawn as placeholders */
 function ghostText({ text, params }: Ghost): ReactNode {
@@ -50,6 +50,7 @@ export function ListPicker<T>({
   onBack,
   onActive,
   onSide,
+  onTab,
   onQuery,
   completionOf,
   narrowTo,
@@ -84,6 +85,8 @@ export function ListPicker<T>({
   onActive?: (t: T | null) => void;
   /** ←→ on the highlighted row */
   onSide?: (t: T, dir: -1 | 1) => void;
+  /** tab, in a picker with nothing to complete: the one switch it has (what a search looks through) */
+  onTab?: () => void;
   /** debounced (150ms): the query changed and the source should fetch (async pickers) */
   onQuery?: (q: string) => void;
   /** what the highlighted row would complete the query to; the remainder is drawn as ghost text
@@ -112,7 +115,8 @@ export function ListPicker<T>({
   /** what this picker's keys do, as the verb for each one. The picker owns the keyboard, so it
    * draws the row and each palette says only what its keys mean. Arrow and modifier characters
    * belong here rather than in `placeholder`, which can only hold a string. `side` is ignored
-   * unless `onSide` is wired up, and `complete` unless tab would actually complete something. A
+   * unless `onSide` is wired up, `complete` unless tab would actually complete something, and `tab`
+   * unless `onTab` is wired up. A
    * function sees the highlighted row, for a picker whose enter means different things per row. */
   keys?: KeyVerbs | ((active: T | null, q: string) => KeyVerbs);
   /** draw as a dropdown on the control that opened it (the caller renders it inside that control's
@@ -174,6 +178,7 @@ export function ListPicker<T>({
   // tab is only offered while there is a completion under it: a standing hint for a key that does
   // nothing is worse than no hint
   if (verbs?.complete && ghost?.accept) hints.push(["tab", verbs.complete]);
+  if (verbs?.tab && onTab) hints.push(["tab", verbs.tab]);
   if (verbs?.pick) hints.push(["enter", verbs.pick]);
   if (verbs?.back) hints.push(["esc", verbs.back]);
   const inputEl = (
@@ -216,7 +221,9 @@ export function ListPicker<T>({
                 return;
               }
             }
-            nav.onKeyDown(e);
+            if (nav.onKeyDown(e) || !onTab || e.key !== "Tab" || e.shiftKey) return;
+            e.preventDefault();
+            onTab();
           }}
           placeholder={placeholder}
         />

@@ -770,7 +770,7 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
                   {...tip("Find an older one by its name, branch or first message", undefined, {
                     placement: tipSide,
                   })}
-                  onClick={() => dispatch({ a: "open", overlay: { kind: "archived", repoId: activeRepoId } })}
+                  onClick={() => dispatch({ a: "open", overlay: { kind: "chats", names: true } })}
                 >
                   <span className="rail-gut" />
                   <span className="branch row-dim">{arch.rest} more</span>

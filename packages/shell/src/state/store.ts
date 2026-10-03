@@ -323,10 +323,9 @@ export type Overlay =
   | { kind: "search" }
   /** the ref palette: a branch or PR to open as a worktree */
   | { kind: "refs" }
-  /** the chats palette: what the project's chats say, live worktrees and archived ones */
-  | { kind: "chats" }
-  /** a project's removed worktrees: restore one, or delete it for good */
-  | { kind: "archived"; repoId: string }
+  /** the chats palette: the project's chats, live worktrees and archived ones, and what they say.
+   * `names` opens it looking through their names alone: where a removed worktree is found again. */
+  | { kind: "chats"; names?: true }
   | { kind: "keys" }
   /** a one-time code for a phone, as a QR */
   | { kind: "pair" }
@@ -620,7 +619,7 @@ export interface State {
   refs: Record<string, { query: string; refs: RefHit[] }>;
   /** the chats palette's last answer for each project; `query` tells a stale one from a fresh one */
   chats: Record<string, { query: string; hits: ChatHit[]; truncated: boolean }>;
-  /** per repo: its archived worktrees, newest first; absent until the rail or the archive picker asks */
+  /** per repo: its archived worktrees, newest first; absent until the rail or the chats palette asks */
   archived: Record<string, ArchivedWorktree[]>;
   /** the archived worktree whose page the centre shows, by archive id. Like the draft it is a tab
    * over the active row rather than a selection: an archived worktree has no row to select, and

@@ -3,7 +3,6 @@ import { useActiveId, useOverlay } from "../../state/selectors.ts";
 import { AgentPage } from "./AgentPage.tsx";
 import { AgentPicker } from "./AgentPicker.tsx";
 import { AppearancePicker } from "./AppearancePicker.tsx";
-import { ArchivePicker } from "./ArchivePicker.tsx";
 import { ChatsPicker } from "./ChatsPicker.tsx";
 import { CommandPalette } from "./CommandPalette.tsx";
 import { ElementSources } from "./ElementSources.tsx";
@@ -32,8 +31,9 @@ export function Overlays() {
       {overlay?.kind === "search" && activeId && <SearchPalette worktreeId={activeId} />}
       {overlay?.kind === "element-sources" && <ElementSources worktreeId={overlay.worktreeId} hits={overlay.hits} />}
       {overlay?.kind === "refs" && activeRepoId && <RefPicker repoId={activeRepoId} />}
-      {overlay?.kind === "chats" && activeRepoId && <ChatsPicker repoId={activeRepoId} />}
-      {overlay?.kind === "archived" && <ArchivePicker repoId={overlay.repoId} />}
+      {overlay?.kind === "chats" && activeRepoId && (
+        <ChatsPicker repoId={activeRepoId} scope={overlay.names ? "names" : "all"} />
+      )}
       {overlay?.kind === "keys" && <KeysHelp />}
       {overlay?.kind === "pair" && <PairCard />}
       {overlay?.kind === "theme" && <ThemePicker slot={overlay.slot} />}

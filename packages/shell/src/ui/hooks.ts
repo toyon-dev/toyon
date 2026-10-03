@@ -197,11 +197,13 @@ const SCROLL_REST = 1200;
  * is known to have left before anything could pull them back. The one event not read that way is
  * the pin's own: it too arrives a frame late, and whatever landed in between (the message a send
  * jumped for) would measure as the reader having left, so an event that finds the scroller still
- * pinned and still where the pin put it changes nothing. `offEnd` and `offStart` say the
- * reader is away from either end now, by the same slack, for a control at each end that offers
- * the rest of the way; `away` says `news` changed while they were off the end, and it is a value
- * and not the layout because a row the reader opened themselves grows the same way a message
- * arriving does. `moving` is the way the reader is pushing the scroller, by wheel or finger, and
+ * pinned and still where the pin put it changes nothing. A row taken out moves the scroller with
+ * no resize to observe (the end came up to meet it), so the pin is taken again as the row leaves:
+ * left for the event, a message landing in the same gap would be measured as the reader's.
+ * `offEnd` and `offStart` say the reader is away from either end now, by the same slack, for a
+ * control at each end that offers the rest of the way; `away` says `news` changed while they were
+ * off the end, and it is a value and not the layout because a row the reader opened themselves
+ * grows the same way a message arriving does. `moving` is the way the reader is pushing the scroller, by wheel or finger, and
  * null once they have rested: a control that follows the motion, the way a phone's address bar
  * does, shows for the direction they are already going and hides when they settle to read. A
  * scroll the layout or a jump caused is not motion; a scrollbar drag is missed, and a person
@@ -289,10 +291,12 @@ export function useTail(
     el.addEventListener("wheel", onWheel, { passive: true });
     el.addEventListener("touchstart", onTouchStart, { passive: true });
     el.addEventListener("touchmove", onTouchMove, { passive: true });
-    const ro = new ResizeObserver(() => {
-      if (!pinned.current) return;
+    const pin = () => {
       el.scrollTop = el.scrollHeight;
       held.current = el.scrollTop;
+    };
+    const ro = new ResizeObserver(() => {
+      if (pinned.current) pin();
     });
     ro.observe(el);
     for (const child of el.children) ro.observe(child);
@@ -301,6 +305,8 @@ export function useTail(
         for (const n of r.addedNodes) if (n instanceof Element) ro.observe(n);
         for (const n of r.removedNodes) if (n instanceof Element) ro.unobserve(n);
       }
+      // only from the end: a scroller that a jump elsewhere has moved is the scroll event's to read
+      if (pinned.current && el.scrollHeight - el.scrollTop - el.clientHeight < TAIL_SLACK) pin();
     });
     mo.observe(el, { childList: true });
     return () => {

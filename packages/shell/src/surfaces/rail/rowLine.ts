@@ -1,5 +1,6 @@
 import {
   type ArchivedWorktree,
+  archiveWait,
   isLead,
   isOwned,
   type ShipOp,
@@ -139,12 +140,13 @@ export function archivedLines(a: ArchivedWorktree): string[] {
  * work, so the rule sets them apart from the first message. The clock in the dot's seat is on the
  * row the card belongs to, and a tip of its own there swapped with the card as the pointer
  * crossed the row; under the first message the reason read as more of the message, and beside the
- * state it wrapped under itself.
+ * state it wrapped under itself. Only the wait on a merged row, whose state already says how the
+ * work went; any other keeps the whole reason, since its state does not say there was nothing to
+ * keep or that a sibling landed.
  */
 export function archivedFigures(a: ArchivedWorktree): string[] | undefined {
-  const figures = [a.auto ? `auto: ${a.auto}` : undefined, a.cost !== undefined ? dollars(a.cost) : undefined].filter(
-    (f): f is string => !!f,
-  );
+  const auto = a.auto && `auto archived: ${a.landed ? archiveWait(a.auto) : a.auto}`;
+  const figures = [auto, a.cost !== undefined ? dollars(a.cost) : undefined].filter((f): f is string => !!f);
   return figures.length ? figures : undefined;
 }
 

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { type ArchiveFacts, archiveReason } from "./archiveRule.ts";
+import { type ArchiveFacts, archiveReason, archiveWait } from "./archiveRule.ts";
 import type { WorktreeInfo } from "./model.ts";
 
 const HOUR = 60 * 60_000;
@@ -105,5 +105,12 @@ describe("archiveReason", () => {
     const dirty = (id: string) => (id === "v2" ? { dirty: 1, ahead: 3 } : ahead(id));
     expect(archiveReason(rows[0]!, facts(rows, { counts: dirty }))).toBeNull();
     expect(archiveReason(rows[0]!, facts(rows, { counts: () => ({ dirty: 0 }) }))).toBeNull();
+  });
+});
+
+describe("the wait a reason ends on", () => {
+  test("the reason without how the work went", () => {
+    expect(archiveWait("a sibling landed, not opened in 2h")).toBe("not opened in 2h");
+    expect(archiveWait("something else")).toBe("something else");
   });
 });

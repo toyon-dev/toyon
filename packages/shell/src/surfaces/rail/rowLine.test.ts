@@ -226,9 +226,16 @@ describe("the foot of an archived row's card", () => {
   test("why it archived itself, then the cost, and no foot with neither", () => {
     const auto = "landed, not opened in 2h";
     expect(archivedFigures(arch())).toBeUndefined();
-    expect(archivedFigures(arch({ auto }))).toEqual([`auto: ${auto}`]);
+    expect(archivedFigures(arch({ auto, landed: true }))).toEqual(["auto archived: not opened in 2h"]);
+    // not merged: the state above does not say why there was nothing to keep, so the foot does
+    expect(archivedFigures(arch({ auto: "no changes, not opened in 2h" }))).toEqual([
+      "auto archived: no changes, not opened in 2h",
+    ]);
     expect(archivedFigures(arch({ cost: 2.35 }))).toEqual(["$2.35"]);
-    expect(archivedFigures(arch({ auto, cost: 2.35 }))).toEqual([`auto: ${auto}`, "$2.35"]);
+    expect(archivedFigures(arch({ auto, landed: true, cost: 2.35 }))).toEqual([
+      "auto archived: not opened in 2h",
+      "$2.35",
+    ]);
   });
 });
 

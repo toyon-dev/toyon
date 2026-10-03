@@ -37,7 +37,16 @@ export function archiveReason(wt: WorktreeInfo, f: ArchiveFacts): string | null 
   } else if (!group.every((w) => nothingToKeep(w, f, false))) return null;
   if (unitsAhead(wt, f.rows) < ARCHIVE_KEEP_RECENT) return null;
   const what = lost ? "a sibling landed" : wt.landed ? "landed" : "no changes";
-  return `${what}, not opened in ${duration(f.afterMs)}`;
+  return `${what}, ${UNOPENED}${duration(f.afterMs)}`;
+}
+
+const UNOPENED = "not opened in ";
+
+/** the wait a reason ends on ("not opened in 2h"), for a line whose row already says how the
+ * work went; the whole reason when it does not end on one */
+export function archiveWait(reason: string): string {
+  const at = reason.lastIndexOf(UNOPENED);
+  return at < 0 ? reason : reason.slice(at);
 }
 
 /** `lost`: the commits are an attempt a sibling beat, which the archive keeps for a later cherry-pick,

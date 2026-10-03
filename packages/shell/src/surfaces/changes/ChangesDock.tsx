@@ -594,14 +594,8 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
             },
             {
               id: "changes",
-              label:
-                files.length > 0 ? (
-                  <>
-                    changes <span className="tab-count">{files.length}</span>
-                  </>
-                ) : (
-                  "changes"
-                ),
+              label: "changes",
+              ...(files.length > 0 ? { count: files.length } : {}),
             },
             { id: "history", label: "history" },
           ]}

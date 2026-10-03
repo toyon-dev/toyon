@@ -90,23 +90,6 @@
   .tabs-fill .tab-btn {
     justify-content: center;
   }
-  /* a count beside the label, in the skip tier: the label is the tab, the number is an aside */
-  .tab-label {
-    position: relative;
-    display: inline-flex;
-    gap: 6px;
-  }
-  .tab-count {
-    color: var(--text2);
-    font-variant-numeric: tabular-nums;
-  }
-  /* centred, the label is centred alone and the count hangs off its end: a number that appears,
-   or gains a digit, would otherwise push the word sideways */
-  .tabs-fill .tab-count {
-    position: absolute;
-    left: 100%;
-    margin-left: 6px;
-  }
   /* the trail is the open tab's alone, so the tab grows by the slot when it opens. It floats over
    the button's end rather than sitting beside it, so the button is the whole tab and the slot is
    the button's own padding. */

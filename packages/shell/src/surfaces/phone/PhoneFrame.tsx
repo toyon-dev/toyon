@@ -88,8 +88,7 @@ export function PhoneFrame() {
           },
         ]
       : []),
-    // the explorer, the diff and the history together, which is the code; the count stays on the
-    // changes tab inside it, where it names what it counts
+    // the explorer, the diff and the history together, which is the code
     { id: "changes", label: "code" },
   ];
 

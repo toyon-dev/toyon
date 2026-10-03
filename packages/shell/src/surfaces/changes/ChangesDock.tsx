@@ -139,6 +139,15 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
   const committedTests = committedSource > 0 ? committed.length - committedSource : 0;
   const turnedTests = turnedSource > 0 ? turned.length - turnedSource : 0;
   const clean = files.length === 0;
+  // the working tree's own figures, for the tab's hover: the committed section keeps its own title
+  const changedFact = useMemo(() => {
+    if (files.length === 0) return undefined;
+    const add = files.reduce((n, f) => n + (f.add ?? 0), 0);
+    const del = files.reduce((n, f) => n + (f.del ?? 0), 0);
+    const lines = [add > 0 && `+${add}`, del > 0 && `−${del}`].filter(Boolean).join(" ");
+    const count = `${files.length} uncommitted ${files.length === 1 ? "file" : "files"}`;
+    return lines ? `${count}, ${lines}` : count;
+  }, [files]);
   // nothing uncommitted and nothing committed on top of the base, once git has said so
   const unchanged = !!gitInfo && clean && !hasCommitted;
 
@@ -622,7 +631,8 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
       className={cx("changes-dock", onScreen && "changes-screen", !onScreen && (!changesOpen || bare) && "collapsed")}
       style={onScreen ? undefined : { width }}
     >
-      {/* the count is the working tree's: the committed section under it keeps its own title */}
+      {/* the strip holds words alone, so a tab never shifts as the work moves; what the working
+          tree holds is said on the changes tab's hover, beside its key */}
       {!archived && (
         <Tabs<ChangesTab>
           fill
@@ -638,11 +648,7 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
               ariaLabel: "files",
               tip: tip("files", chord("files")),
             },
-            {
-              id: "changes",
-              label: "changes",
-              ...(files.length > 0 ? { count: files.length } : {}),
-            },
+            { id: "changes", label: "changes", tip: tip("changes", chord("changes"), { detail: changedFact }) },
             { id: "history", label: "history" },
           ]}
           current={tab}
@@ -690,8 +696,8 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
         >
           {showChanges && files.length > 0 && (
             <>
-              {/* the tab already says changes and how many; the title is only needed to tell this
-                section from the committed one under it, or on an archived page from the history */}
+              {/* the tab already says changes; the title is only needed to tell this section from
+                the committed one under it, or on an archived page from the history */}
               {(hasCommitted || archived) && <div className="section-title section-row">uncommitted</div>}
               {files.map((f, i) => (
                 <Fragment key={f.path}>

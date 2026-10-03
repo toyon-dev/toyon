@@ -10,9 +10,6 @@ import "./tabs.css";
 export type TabItem<Id extends string> = {
   id: Id;
   label: ReactNode;
-  /** a number beside the label, in the skip tier. In a `fill` strip it hangs off the label's end
-   * rather than centring with it, so the word holds still while the number ticks. */
-  count?: number;
   /** before the label: the proc's status dot */
   lead?: ReactNode;
   /** after the label, on the open tab only: the stream's restart. The tab grows to hold it when
@@ -112,14 +109,7 @@ export function Tabs<Id extends string>({
                 {...(it.ariaLabel ? { "aria-label": it.ariaLabel } : {})}
               >
                 {it.lead}
-                {it.count === undefined ? (
-                  it.label
-                ) : (
-                  <span className="tab-label">
-                    {it.label}
-                    <span className="tab-count">{it.count}</span>
-                  </span>
-                )}
+                {it.label}
               </button>
               {open && it.trail && <span className="tab-trail">{it.trail}</span>}
             </div>

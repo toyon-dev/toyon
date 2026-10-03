@@ -51,9 +51,11 @@ export function codeItems(code: string | null | undefined): MenuItem[] {
 
 /** a message in the transcript: what was under the pointer first, when that was a fenced block
  * or a link, then its text as text, and for one the person wrote, back into the composer to be
- * said again with a change. `dir` is the worktree's directory, which a file link's editors need. */
+ * said again with a change: the daemon rebuilds the box from the transcript, so what the message
+ * carried comes back with its words. `dir` is the worktree's directory, which a file link's
+ * editors need. */
 export function messageItems(
-  item: { kind: "user" | "assistant" | "error"; text: string },
+  item: { kind: "user" | "assistant" | "error"; text: string; seq?: number },
   worktreeId: string | null,
   { dispatch, sock }: Deps,
   at: { link?: ChatLink | null; code?: string | null; dir?: string | null } = {},
@@ -78,7 +80,14 @@ export function messageItems(
     again.push({
       id: "draft",
       label: "edit in composer",
-      onClick: () => dispatch({ a: "set-draft", id: worktreeId, text: item.text }),
+      onClick: () => {
+        const seq = item.seq;
+        // a message with no place in the transcript yet has only its words to give
+        if (seq === undefined || !sock) return dispatch({ a: "set-draft", id: worktreeId, text: item.text });
+        // the words in the box give way first: the daemon fills only an empty one
+        dispatch({ a: "set-draft", id: worktreeId, text: "" });
+        sock.send({ t: "redraft", worktreeId, seq });
+      },
     });
   }
   return grouped([codeItems(at.code), ...lead, copy, again]);

@@ -1,4 +1,12 @@
-import type { AgentCommand, AgentEvent, AgentStatus, LogLine, ProcState, WorktreeInfo } from "@toyon/shared";
+import type {
+  AgentCommand,
+  AgentEvent,
+  AgentStatus,
+  LogLine,
+  ProcState,
+  QueuedMessage,
+  WorktreeInfo,
+} from "@toyon/shared";
 import { AgentAccounts, type AgentAccountsDeps } from "../../src/agent/accounts.ts";
 import type { AgentAdapter, AskOpts, AskReply, SendOpts } from "../../src/agent/adapter.ts";
 import { AgentRegistry, type AgentSpec } from "../../src/agent/registry.ts";
@@ -42,8 +50,10 @@ export class FakeAgent implements AgentAdapter {
   get queueLength() {
     return 0;
   }
-  get queueItems(): string[] {
-    return [];
+  /** messages a test leaves waiting, for `unqueue` to take */
+  queued: QueuedMessage[] = [];
+  get queueItems(): QueuedMessage[] {
+    return this.queued;
   }
   unsettled = false;
   send(text: string, opts: SendOpts = {}) {
@@ -91,7 +101,10 @@ export class FakeAgent implements AgentAdapter {
   loggedIn() {
     this.logins++;
   }
-  unqueue() {}
+  unqueue(index: number, taken?: (message: QueuedMessage) => void) {
+    const [message] = this.queued.splice(index, 1);
+    if (message) taken?.(message);
+  }
   /** what the daemon put on the transcript itself (exec results); an agent's own events never
    * reach a fake */
   recorded: AgentEvent[] = [];

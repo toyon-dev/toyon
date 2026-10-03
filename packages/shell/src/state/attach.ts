@@ -4,18 +4,25 @@
 // the wire.
 
 import {
-  type AttachmentInput,
   type AttachmentKind,
+  type ClientMsg,
+  fmtBytes,
   limitMessage,
   PASTE_MAX_CHARS,
+  PASTED_FILE_NAME,
   type PasteSource,
   type PickedElement,
   pasteSummary,
   roomFor,
   stripAnsi,
+  UPLOAD_MAX_BYTES,
 } from "@toyon/shared";
+import { uploadAttachment } from "../ws.ts";
 import type { Store } from "./context.tsx";
-import { chatChordAction, composerBoxOf, type PendingAttachment, type State, worktreeById } from "./store.ts";
+import type { PendingAttachment } from "./pending.ts";
+import { chatChordAction, composerBoxOf, type State, worktreeById } from "./store.ts";
+
+export { toInput } from "./pending.ts";
 
 /** what could not be attached, said under the box it was for */
 export const noticeIn = (store: Store, boxId: string, text: string) => store.dispatch({ a: "notice", id: boxId, text });
@@ -27,27 +34,68 @@ export function roomIn(store: Store, boxId: string, kind: AttachmentKind): numbe
   return room;
 }
 
-/** what the wire takes of a waiting attachment: the key and the chip's figures stay behind, since
- * the daemon derives its own */
-export function toInput(a: PendingAttachment): AttachmentInput {
-  switch (a.kind) {
-    case "image": {
-      const { key: _key, bytes: _bytes, ...input } = a;
-      return input;
-    }
-    case "paste": {
-      const { key: _key, chars: _chars, lines: _lines, preview: _preview, ...input } = a;
-      return input;
-    }
-    case "pick": {
-      const { key: _key, ...input } = a;
-      return input;
-    }
+/** how long an upload the daemon did not answer waits before it is tried again, doubling to a ceiling */
+const RETRY_FIRST_MS = 1_000;
+const RETRY_MAX_MS = 10_000;
+
+/** an image or a file whose chip goes up now and whose bytes follow */
+type Uploadable = Extract<PendingAttachment, { kind: "image" | "file" }>;
+
+/** Put a chip up for bytes on their way to the daemon, and settle it when they land: the daemon's
+ * id and count on the chip, or the chip gone and the reason under the box. `chip.local`, when set,
+ * is an object URL this lets go of either way. */
+export async function attachUpload(store: Store, boxId: string, chip: Uploadable, blob: Blob) {
+  const { local, ...settled } = chip;
+  store.dispatch({ a: "attach", id: boxId, items: [{ ...chip, upload: "", uploading: true }] });
+  const waiting = () => !!store.getState().local[boxId]?.attachments.some((a) => a.key === chip.key);
+  let up = await uploadAttachment(chip.kind, blob);
+  // The daemon is not answering: the chip waits and the upload is tried again until it lands or
+  // the chip is taken off. Said once, under the box, since the chip itself reads as uploading.
+  const waited = up === null;
+  if (waited) noticeIn(store, boxId, `${chip.name}: Toyon is not answering; it attaches once it is back`);
+  for (let wait = RETRY_FIRST_MS; up === null && waiting(); wait = Math.min(wait * 2, RETRY_MAX_MS)) {
+    await new Promise((done) => setTimeout(done, wait));
+    if (waiting()) up = await uploadAttachment(chip.kind, blob);
   }
+  if (up === null) {
+    // taken off while it waited
+  } else if (typeof up === "string") {
+    store.dispatch({ a: "detach", id: boxId, key: chip.key });
+    noticeIn(store, boxId, `${chip.name}: ${up}`);
+  } else {
+    const item: Uploadable =
+      settled.kind === "file" ? { ...settled, ...up } : { ...settled, upload: up.upload, bytes: up.bytes };
+    store.dispatch({ a: "attached", id: boxId, key: chip.key, item });
+    // the wait is over, and so is what was said about it, unless something else has been said since
+    const said = store.getState().local[boxId]?.notice;
+    if (waited && said?.startsWith(`${chip.name}: Toyon is not answering`)) noticeIn(store, boxId, "");
+  }
+  if (local) URL.revokeObjectURL(local);
+}
+
+/** Files that are not images, of any type: each is a chip at once and uploads as it stands. The
+ * agent is told where the daemon stored it and reads it there, so nothing about its size or its
+ * format is this side's to judge beyond what an upload takes. */
+export function attachFiles(store: Store, boxId: string | null, files: File[]) {
+  if (!boxId || files.length === 0) return;
+  const room = roomIn(store, boxId, "file");
+  if (room === 0) return;
+  for (const f of files.slice(0, room)) {
+    const name = f.name || "file";
+    if (f.size > UPLOAD_MAX_BYTES) {
+      noticeIn(store, boxId, `${name}: larger than ${fmtBytes(UPLOAD_MAX_BYTES)}`);
+      continue;
+    }
+    const chip: Uploadable = { kind: "file", key: crypto.randomUUID(), upload: "", name, bytes: f.size, text: false };
+    void attachUpload(store, boxId, chip, f);
+  }
+  if (files.length > room) noticeIn(store, boxId, `kept ${room} of ${files.length}: ${limitMessage("file")}`);
 }
 
 /** Attach text to composer box `boxId` as a chip. The text travels with the message: an `@path`
- * would name the file as it is by the time the agent reads it, not the lines that were taken. */
+ * would name the file as it is by the time the agent reads it, not the lines that were taken. Text
+ * past what a prompt should hold goes as a file instead, for the agent to read where it is stored;
+ * a selection that long out of the editor is already a file in the worktree, and is named as one. */
 export function attachText(
   store: Store,
   boxId: string | null,
@@ -57,15 +105,31 @@ export function attachText(
   if (!boxId) return;
   // a whole-line copy ends in the line break, which is not one of the lines it names
   const text = stripAnsi(from.source ? raw.replace(/\r?\n$/, "") : raw);
+  if (text.length > PASTE_MAX_CHARS) {
+    if (from.source)
+      // neither truncated nor dropped in silence: say what to do with something this big
+      return noticeIn(store, boxId, "that paste is too large; save it in the worktree and reference it with @path");
+    return attachFiles(store, boxId, [new File([text], PASTED_FILE_NAME, { type: "text/plain" })]);
+  }
   if (roomIn(store, boxId, "paste") === 0) return;
-  if (text.length > PASTE_MAX_CHARS)
-    // neither truncated nor dropped in silence: say what to do with something this big
-    return noticeIn(store, boxId, "that paste is too large; save it in the worktree and reference it with @path");
   store.dispatch({
     a: "attach",
     id: boxId,
     items: [{ kind: "paste", key: crypto.randomUUID(), text, ...from, ...pasteSummary(text) }],
   });
+}
+
+/** A queued message taken back to be changed. The daemon moves it from the queue into the box,
+ * words and chips, for every tab. The words in the box give way to it, and go first: the daemon
+ * puts words back only into an empty box, since anything typed there is newer than what it holds. */
+export function takeBackQueued(
+  store: Store,
+  sock: { send(msg: ClientMsg): void } | null,
+  worktreeId: string,
+  index: number,
+) {
+  store.dispatch({ a: "set-draft", id: worktreeId, text: "" });
+  sock?.send({ t: "unqueue", worktreeId, index, edit: true });
 }
 
 /** what ⌘L hands over: the text it selected and whose file that is. The editor names the lines;

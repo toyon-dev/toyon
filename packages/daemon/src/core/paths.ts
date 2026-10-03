@@ -11,6 +11,8 @@ export interface Paths {
   stateFile: string;
   /** the unsent text in every composer box (drafts/store.ts) */
   draftsFile: string;
+  /** what is attached and unsent in every composer box (drafts/store.ts) */
+  draftAttachmentsFile: string;
   tokenFile: string;
   /** the running daemon's pid, for `toyon stop`; absent or stale when it is not running */
   pidFile: string;
@@ -22,6 +24,8 @@ export interface Paths {
   transcriptsDir: string;
   /** images attached to chat messages, by worktree id (agent/attachments.ts) */
   attachmentsDir: string;
+  /** images and files attached and not yet recorded by a message (agent/uploads.ts) */
+  uploadsDir: string;
   /** removed worktrees: each one's record, transcript and attachments (worktrees/archive.ts) */
   archiveDir: string;
   worktreesDir: string;
@@ -46,12 +50,14 @@ export function makePaths(home = process.env.TOYON_HOME ?? join(homedir(), ".toy
     home,
     stateFile: join(home, DAEMON_FILES.state),
     draftsFile: join(home, DAEMON_FILES.drafts),
+    draftAttachmentsFile: join(home, "draft-attachments.json"),
     tokenFile: join(home, DAEMON_FILES.token),
     pidFile: join(home, DAEMON_FILES.pid),
     logFile: join(home, DAEMON_FILES.log),
     remoteFile: join(home, DAEMON_FILES.remote),
     transcriptsDir: join(home, "transcripts"),
     attachmentsDir: join(home, "attachments"),
+    uploadsDir: join(home, "uploads"),
     archiveDir: join(home, "archive"),
     // `.noindex` keeps Spotlight out of the worktrees: each one carries a CoW clone of
     // node_modules, which the indexer walks as fresh paths every time, so it never converges.
@@ -72,6 +78,7 @@ export function ensureDirs(p: Paths) {
   mkdirSync(p.home, { recursive: true, mode: 0o700 });
   mkdirSync(p.transcriptsDir, { recursive: true });
   mkdirSync(p.attachmentsDir, { recursive: true });
+  mkdirSync(p.uploadsDir, { recursive: true });
   mkdirSync(p.archiveDir, { recursive: true });
   mkdirSync(p.worktreesDir, { recursive: true });
   mkdirSync(p.cacheDir, { recursive: true });

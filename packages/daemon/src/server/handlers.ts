@@ -2,13 +2,15 @@
 // compile error. Handlers marshal (pick fields, shape replies) and call a service; they do not
 // run git or decide policy.
 
-import type { ClientMsg, FileBlame, ServerMsg, WorktreeInfo } from "@toyon/shared";
+import { randomBytes } from "node:crypto";
+import type { AttachmentInput, ClientMsg, FileBlame, ServerMsg, WorktreeInfo } from "@toyon/shared";
 import { isLead, pickTheme, SHELL_STREAM } from "@toyon/shared";
 import type { AgentAccounts } from "../agent/accounts.ts";
 import type { AttachmentStore } from "../agent/attachments.ts";
 import { agentConfigFiles, describeAgentConfig } from "../agent/config.ts";
 import type { AgentRegistry } from "../agent/registry.ts";
 import { coalesce } from "../agent/transcript.ts";
+import { GONE, uploadIds } from "../agent/uploads.ts";
 import type { FolderDialog } from "../core/dialog.ts";
 import { UserError } from "../core/errors.ts";
 import type { Hub } from "../core/hub.ts";
@@ -217,6 +219,10 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     s.worktrees.spare.typed(msg.boxId, msg.text);
   },
 
+  "set-attachments"(msg, _ctx, s) {
+    s.drafts.setAttachments(msg.boxId, msg.items, msg.clientId);
+  },
+
   "refresh-git"(msg, _ctx, s) {
     // the recount's repoTick also asks GitHub about the repo's open PRs (PrService)
     s.worktrees.recount(msg.repoId);
@@ -234,20 +240,20 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     s.routes.forget(msg.repoId, msg.path);
   },
 
-  async chat(msg, _ctx, s) {
-    await s.worktrees.send(msg.worktreeId, {
-      text: msg.text,
-      clientId: msg.clientId,
-      context: msg.context,
-      attachments: msg.attachments,
-    });
+  async chat(msg, ctx, s) {
+    await sending(s, ctx, msg, msg.attachments, () =>
+      s.worktrees.send(msg.worktreeId, {
+        text: msg.text,
+        clientId: msg.clientId,
+        context: msg.context,
+        attachments: msg.attachments,
+      }),
+    );
   },
 
-  async "create-worktree"(msg, _ctx, s) {
-    await s.worktrees.create(msg.repoId, msg.prompt, {
+  async "create-worktree"(msg, ctx, s) {
+    const opts = {
       createdBy: msg.clientId,
-      worktreeId: msg.worktreeId,
-      variant: msg.variant,
       context: msg.context,
       attachments: msg.attachments,
       agent: msg.agent,
@@ -256,6 +262,35 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
       model: msg.model,
       effort: msg.effort,
       carry: msg.carry,
+    };
+    const of = msg.variants ?? 1;
+    await sending(s, ctx, msg, msg.attachments, async () => {
+      if (of === 1) {
+        await s.worktrees.create(msg.repoId, msg.prompt, { ...opts, worktreeId: msg.worktreeId });
+        return;
+      }
+      // the attempts are made side by side as one group; the first is the row the message was
+      // typed in, and its siblings are made beside it
+      const group = randomBytes(4).toString("hex");
+      const made = await Promise.allSettled(
+        Array.from({ length: of }, (_, i) =>
+          s.worktrees.create(msg.repoId, msg.prompt, {
+            ...opts,
+            ...(i === 0 ? { worktreeId: msg.worktreeId } : {}),
+            variant: { group, index: i + 1, of },
+          }),
+        ),
+      );
+      const failed = made.flatMap((m) => (m.status === "rejected" ? [m.reason as unknown] : []));
+      if (failed.length === 0) return;
+      // one message, so one answer: it went if any attempt's agent has it
+      const went = failed.find((e) => e instanceof UserError && e.delivered);
+      if (went) throw went;
+      if (failed.length < of) {
+        const why = failed[0] instanceof Error ? failed[0].message : String(failed[0]);
+        throw new UserError(`${failed.length} of ${of} attempts did not start: ${why}`, { delivered: true });
+      }
+      throw failed[0];
     });
   },
 
@@ -285,6 +320,8 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
 
   "batch-worktrees"(msg, ctx, s) {
     const repo = s.state.requireRepo(msg.repoId);
+    // a batch is many messages of its own making, and none of them is the box's to have back
+    if (msg.boxId) s.drafts.take(msg.boxId);
     // plan + spawn in the background so the socket stays responsive: the rows appearing are the
     // word on it, and a task that could not start is the one thing worth a line. That reply may
     // land on a socket that has since closed; reply() tolerates that.
@@ -319,8 +356,10 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     ctx.reply({ t: "archived", repoId: msg.repoId, items: s.worktrees.archived(msg.repoId) });
   },
 
-  async "restore-worktree"(msg, _ctx, s) {
-    await s.worktrees.restore(msg.archiveId, msg.clientId, msg.message);
+  async "restore-worktree"(msg, ctx, s) {
+    await sending(s, ctx, msg, msg.message?.attachments, async () => {
+      await s.worktrees.restore(msg.archiveId, msg.clientId, msg.message);
+    });
   },
 
   async "delete-archived"(msg, _ctx, s) {
@@ -499,7 +538,28 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
 
   unqueue(msg, _ctx, s) {
     requireRun(s, msg.worktreeId);
-    s.runtime.agentFor(msg.worktreeId)?.unqueue(msg.index);
+    s.runtime.agentFor(msg.worktreeId)?.unqueue(
+      msg.index,
+      // taken back to be changed: into the worktree's box, for every tab
+      msg.edit ? (m) => s.drafts.putBack(msg.worktreeId, { text: m.text, items: m.attachments ?? [] }) : undefined,
+    );
+  },
+
+  async redraft(msg, _ctx, s) {
+    const r = s.worktrees.readable(msg.worktreeId);
+    const events = r?.wt
+      ? s.runtime.ensureAgent(r.wt).agent.transcript()
+      : (s.worktrees.archivedTranscript(msg.worktreeId) ?? []);
+    const event = events.find((e) => e.seq === msg.seq)?.event;
+    if (event?.type !== "user-message") throw new UserError("that message is no longer in this chat");
+    const items: AttachmentInput[] = [];
+    for (const ref of event.attachments ?? []) {
+      const item = await s.attachments.reattach(msg.worktreeId, ref, (file) =>
+        s.worktrees.archivedAttachment(msg.worktreeId, file),
+      );
+      if (item) items.push(item);
+    }
+    s.drafts.putBack(msg.worktreeId, { text: event.text, items });
   },
 
   async "changed-ranges"(msg, ctx, s) {
@@ -768,6 +828,42 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     await s.worktrees.openRef(msg.repoId, msg.kind, msg.ref, { createdBy: msg.clientId, pr: msg.pr });
   },
 };
+
+/** Deliver a message sent from a composer box. A send takes the box: it is emptied here, before
+ * anything is awaited, with its uploads held first so none goes in the moment no list names it. A
+ * worktree can take seconds to make, and the agent takes its own hold when the message reaches it,
+ * which is before `deliver` settles. A message no agent took goes back: the box is filled again,
+ * less the chips whose uploads are gone, and the sender is told why with `unsent`. One that did
+ * arrive and then failed (main's changes did not move) leaves the box empty and is a plain error. */
+async function sending(
+  s: Services,
+  ctx: HandlerCtx,
+  from: { boxId?: string; clientId?: string },
+  attachments: AttachmentInput[] | undefined,
+  deliver: () => Promise<void>,
+): Promise<void> {
+  const uploads = s.attachments.uploads;
+  const { boxId, clientId } = from;
+  const named = uploadIds(attachments);
+  const boxed = boxId ? uploadIds(s.drafts.attachments(boxId)) : [];
+  const ids = [...new Set([...named, ...boxed])].filter((id) => uploads.has(id));
+  uploads.hold(ids);
+  const was = boxId ? s.drafts.take(boxId, clientId) : null;
+  try {
+    // refused whole, in words the person reads
+    if (named.some((id) => !uploads.has(id))) throw new UserError(GONE);
+    await deliver();
+  } catch (e) {
+    if (!boxId || !was || (e instanceof UserError && e.delivered)) throw e;
+    if (!(e instanceof UserError)) log.error("ws", "a message reached no agent", e);
+    const items = was.items.filter((a) => !("upload" in a) || uploads.has(a.upload));
+    s.drafts.putBack(boxId, { text: was.text, items }, clientId);
+    ctx.reply({ t: "unsent", boxId, text: was.text, items, message: e instanceof Error ? e.message : String(e) });
+  } finally {
+    // after the put-back, so the box names them again before this lets go
+    uploads.release(ids);
+  }
+}
 
 /** The directory a loose shell should open in, or null when this id is an ordinary worktree.
  * A discovered worktree runs nothing, so its only stream is a shell: asking for a proc's stream on

@@ -12,6 +12,7 @@ import { askFreshAgent } from "../oneshot.ts";
 import { AgentRegistry, BUILTIN_AGENTS } from "../registry.ts";
 import { SETTINGS_REL } from "../sandbox.ts";
 import { NAME_SYSTEM, namePrompt, PLAN_SYSTEM, parseName, parsePlan, planPrompt } from "../tasks.ts";
+import { UploadStore } from "../uploads.ts";
 import { AcpSession } from "./session.ts";
 import { spawnAcp } from "./transport.ts";
 
@@ -37,6 +38,7 @@ function world() {
   const registry = new AgentRegistry(BUILTIN_AGENTS, makePaths().agentsDir);
   const events: AgentEvent[] = [];
   let sessionId: string | undefined;
+  const uploads = new UploadStore(t.paths.uploadsDir);
   const session = new AcpSession({
     worktreeId: "it",
     cwd: wt,
@@ -44,7 +46,7 @@ function world() {
     connect: (app, spec, prepared) => spawnAcp(app, registry.launch(spec, prepared), wt, "it"),
     launch: (spec) => registry.command(spec),
     transcriptsDir: t.paths.transcriptsDir,
-    attachments: new AttachmentStore(t.paths.attachmentsDir),
+    attachments: new AttachmentStore(t.paths.attachmentsDir, uploads),
     getSessionId: () => sessionId,
     setSessionId: (id) => {
       sessionId = id;
@@ -61,7 +63,7 @@ function world() {
       .filter((e) => e.type === "text-delta")
       .map((e) => (e as { text: string }).text)
       .join("");
-  return { t, wt, events, session, settle, said };
+  return { t, wt, events, session, settle, said, uploads };
 }
 
 describe.skipIf(!enabled)("claude via ACP (integration)", () => {
@@ -89,13 +91,16 @@ describe.skipIf(!enabled)("claude via ACP (integration)", () => {
   }, 180_000);
 
   test("an attached image reaches the model as an image block it can see", async () => {
-    const { t, events, session, settle, said } = world();
+    const { t, events, session, settle, said, uploads } = world();
     // a 64×64 solid red PNG
     const red =
       "iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAS0lEQVR42u3PQQkAAAgAsetfWiP4FgYrsKZeS0BAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEDgsqnc8OJg6Ln3AAAAAElFTkSuQmCC";
+    const { upload, bytes } = await uploads.put("image", "image/png", [Buffer.from(red, "base64")]);
     try {
       session.send("Reply with exactly one word, the dominant color of image 1. Do not use any tools.", {
-        attachments: [{ kind: "image", name: "swatch.png", mimeType: "image/png", data: red, width: 64, height: 64 }],
+        attachments: [
+          { kind: "image", name: "swatch.png", mimeType: "image/png", upload, bytes, width: 64, height: 64 },
+        ],
       });
       await settle();
       expect(session.status).toBe("idle");

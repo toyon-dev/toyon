@@ -111,6 +111,7 @@ function harness() {
     self: null,
     update: null,
     drafts: {},
+    attachments: {},
     managed: MANAGED_NONE,
   });
   store.dispatch({ a: "connected", v: true });

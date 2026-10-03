@@ -10,6 +10,7 @@ import { PLANS_DIR, planEdited, writePlanDoc } from "../planDoc.ts";
 import { SYSTEM_APPEND } from "../prompt.ts";
 import type { AgentSpec } from "../registry.ts";
 import type { Bounds } from "../sandbox.ts";
+import { UploadStore } from "../uploads.ts";
 import { AUTH_STATUS_UPDATE_METHOD } from "./authstatus.ts";
 import { AcpSession, type AcpSessionDeps } from "./session.ts";
 import { STEER_METHOD } from "./steering.ts";
@@ -19,6 +20,10 @@ import type { AcpLink } from "./transport.ts";
 // every ACP exchange is real and nothing is spawned. `script` decides what the fake does per prompt.
 
 const home = realpathSync(mkdtempSync(join(tmpdir(), "toyon-acp-session-")));
+const uploads = new UploadStore(join(home, "uploads"));
+/** an upload as a chip leaves it: on the daemon, named by nothing yet */
+const upload = async (kind: "image" | "file", mime: string, body: string) =>
+  (await uploads.put(kind, mime, [Buffer.from(body)])).upload;
 const wt = join(home, "wt");
 const bounds: Bounds = {
   root: wt,
@@ -335,7 +340,7 @@ function world(
     connect,
     launch: () => ({ command: "/bin/agent", args: ["run.js"] }),
     transcriptsDir: home,
-    attachments: new AttachmentStore(join(home, "attachments")),
+    attachments: new AttachmentStore(join(home, "attachments"), uploads),
     getSessionId: () => sessionId,
     setSessionId: (s) => {
       sessionId = s;
@@ -632,12 +637,12 @@ describe("AcpSession", () => {
       return say(`re:${(p.prompt[0] as { text: string }).text}`)(p, client);
     });
     const w = world(fake);
-    const queues: string[][] = [];
+    const queues: { text: string }[][] = [];
     w.session.onQueueChange = () => queues.push(w.session.queueItems);
     w.session.send("one");
     await Bun.sleep(20);
     w.session.send("two");
-    expect(w.session.queueItems).toEqual(["two"]);
+    expect(w.session.queueItems).toEqual([{ text: "two" }]);
     release();
     await w.idle();
     expect(fake.prompts.map((p) => (p.prompt[0] as { text: string }).text)).toEqual(["one", "two"]);
@@ -647,13 +652,34 @@ describe("AcpSession", () => {
     await w.session.close();
   });
 
+  test("a queued message is listed whole: its words and what it carries", async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    const fake = fakeAgent(async (p, client) => {
+      await gate;
+      return say("ok")(p, client);
+    });
+    const w = world(fake);
+    const paste = { kind: "paste" as const, text: "TypeError: x is undefined" };
+    w.session.send("one");
+    await Bun.sleep(20);
+    w.session.send("and this", { attachments: [paste] });
+    expect(w.session.queueItems).toEqual([{ text: "and this", attachments: [paste] }]);
+    release();
+    await w.idle();
+    expect(w.session.queueItems).toEqual([]);
+    await w.session.close();
+  });
+
   test("a hold keeps what is sent in the queue, and the release runs it", async () => {
     const fake = fakeAgent(say("ok"));
     const w = world(fake);
     const release = w.session.hold();
     w.session.send("one");
     await Bun.sleep(20);
-    expect(w.session.queueItems).toEqual(["one"]);
+    expect(w.session.queueItems).toEqual([{ text: "one" }]);
     expect(w.session.status).toBe("idle");
     expect(fake.prompts).toHaveLength(0);
     release();
@@ -682,11 +708,11 @@ describe("AcpSession", () => {
     w.session.send("two");
     await Bun.sleep(20);
     expect(fake.steers).toHaveLength(0);
-    expect(w.session.queueItems).toEqual(["two"]);
+    expect(w.session.queueItems).toEqual([{ text: "two" }]);
     release();
     for (let i = 0; i < 100 && w.session.status === "working"; i++) await Bun.sleep(5);
     expect(w.session.status).toBe("idle");
-    expect(w.session.queueItems).toEqual(["two"]);
+    expect(w.session.queueItems).toEqual([{ text: "two" }]);
     expect(fake.prompts).toHaveLength(1);
     unhold();
     await w.idle();
@@ -908,7 +934,7 @@ describe("AcpSession", () => {
     await Bun.sleep(30);
     w.session.stop();
     w.session.send("next");
-    expect(w.session.queueItems).toEqual(["next"]);
+    expect(w.session.queueItems).toEqual([{ text: "next" }]);
     w.session.unqueue(0);
     await w.idle();
     expect(promptTexts(stopping)).toEqual(["go", "also"]);
@@ -1191,7 +1217,8 @@ describe("AcpSession", () => {
     expect(auths).toEqual([{ methodId: "api-key", _meta: { "api-key": { apiKey: "sk-test" } } }]);
     await w.idle();
     expect(w.session.status).toBe("idle");
-    expect(w.types().filter((t) => t === "user-message")).toHaveLength(2);
+    // the message it was refused on, not a second copy of it
+    expect(w.types().filter((t) => t === "user-message")).toHaveLength(1);
     expect(w.types()).toContain("agent-auth-ok");
     expect(w.events.at(-1)).toMatchObject({ type: "turn-end", stopReason: "end_turn" });
     expect(w.links).toHaveLength(1);
@@ -1298,7 +1325,7 @@ describe("AcpSession", () => {
     expect(await w.session.authenticate("api-key", "sk-good")).toEqual({ kind: "done" });
     await w.idle();
     expect(w.session.status).toBe("idle");
-    expect(w.types().filter((ty) => ty === "user-message")).toHaveLength(2);
+    expect(w.types().filter((ty) => ty === "user-message")).toHaveLength(1);
     await w.session.close();
   });
 
@@ -1395,14 +1422,16 @@ describe("AcpSession", () => {
     });
   });
 
-  const png = {
+  /** a fresh upload each time: recording a message lets go of the one it was copied from */
+  const shot = async (name = "shot.png") => ({
     kind: "image" as const,
-    name: "shot.png",
+    name,
     mimeType: "image/png" as const,
-    data: Buffer.from("PNG").toString("base64"),
+    upload: await upload("image", "image/png", "PNG"),
+    bytes: 3,
     width: 8,
     height: 4,
-  };
+  });
   const paste = (text: string, name?: string) => ({ kind: "paste" as const, text, ...(name ? { name } : {}) });
   const pick = {
     kind: "pick" as const,
@@ -1420,7 +1449,7 @@ describe("AcpSession", () => {
   test("images: stored, numbered per session, captioned ahead of the text; numbering survives a restart", async () => {
     const fake = fakeAgent(say("ok"), { images: true });
     const w = world(fake);
-    w.session.send("what is this", { context: ["ctx"], attachments: [png, { ...png, name: "two.png" }] });
+    w.session.send("what is this", { context: ["ctx"], attachments: [await shot(), await shot("two.png")] });
     await w.idle();
     expect(w.events[0]).toMatchObject({
       type: "user-message",
@@ -1431,9 +1460,9 @@ describe("AcpSession", () => {
       ],
     });
     expect(fake.prompts[0]!.prompt).toEqual([
-      { type: "text", text: "Image 1: shot.png (8×4)" },
+      { type: "text", text: `Image 1: shot.png (8×4), saved at ${join(home, "attachments", w.id, "1.png")}` },
       { type: "image", mimeType: "image/png", data: "UE5H" },
-      { type: "text", text: "Image 2: two.png (8×4)" },
+      { type: "text", text: `Image 2: two.png (8×4), saved at ${join(home, "attachments", w.id, "2.png")}` },
       { type: "image", mimeType: "image/png", data: "UE5H" },
       { type: "text", text: "what is this" },
       { type: "text", text: "[Attached by Toyon:\nctx]" },
@@ -1442,7 +1471,7 @@ describe("AcpSession", () => {
     await w.session.close();
     // a new AcpSession over the same transcript continues the count: "image 3" is unambiguous
     const w2 = world(fake, claudeSpec, 60_000, w.id);
-    w2.session.send("and this", { attachments: [png] });
+    w2.session.send("and this", { attachments: [await shot()] });
     await w2.idle();
     expect(w2.events[0]).toMatchObject({ type: "user-message", attachments: [{ kind: "image", n: 3, file: "3.png" }] });
     await w2.session.close();
@@ -1451,7 +1480,7 @@ describe("AcpSession", () => {
   test("kinds are numbered apart and keep the order they were attached in, in the bubble and the prompt", async () => {
     const fake = fakeAgent(say("ok"), { images: true });
     const w = world(fake);
-    w.session.send("this one", { attachments: [pick, paste("a"), { ...pick, selector: "nav" }, png] });
+    w.session.send("this one", { attachments: [pick, paste("a"), { ...pick, selector: "nav" }, await shot()] });
     await w.idle();
     expect(w.events[0]).toMatchObject({
       type: "user-message",
@@ -1501,10 +1530,96 @@ describe("AcpSession", () => {
     await w2.session.close();
   });
 
+  test("files: copied under their own name, numbered apart, and named to the agent by path", async () => {
+    const fake = fakeAgent(say("ok"));
+    const w = world(fake);
+    const id = await upload("file", "application/x-ndjson", '{"a":1}\n');
+    const file = { kind: "file" as const, upload: id, name: "run log.jsonl", bytes: 8, text: true };
+    w.session.send("what failed", { attachments: [file, paste("x")] });
+    await w.idle();
+    expect(w.events[0]).toMatchObject({
+      type: "user-message",
+      attachments: [
+        { kind: "file", n: 1, name: "run log.jsonl", bytes: 8, text: true, file: "1-run_log.jsonl" },
+        { kind: "paste", n: 1, file: "1.txt" },
+      ],
+    });
+    const stored = join(home, "attachments", w.id, "1-run_log.jsonl");
+    expect(readFileSync(stored, "utf8")).toBe('{"a":1}\n');
+    expect((fake.prompts[0]!.prompt as Array<{ text: string }>)[0]!.text).toBe(
+      // short enough that its text goes with it
+      `A file the user attached: run log.jsonl (1 KB), saved at ${stored}.\n<attached-file 1>\n{"a":1}\n\n</attached-file>`,
+    );
+    // recorded, so the upload it was copied from is gone
+    expect(uploads.path(id)).toBeNull();
+    await w.session.close();
+  });
+
+  test("an upload is held while its message waits, and let go when the message is taken back", async () => {
+    // a turn on "go" that runs until it is stopped
+    const fake = fakeAgent(async (p, client) => {
+      if ((p.prompt[0] as { text: string }).text !== "go") return say("done")(p, client);
+      while (fake.cancels === 0) await Bun.sleep(5);
+      return { stopReason: "cancelled" };
+    });
+    const w = world(fake);
+    w.session.send("go");
+    await Bun.sleep(30);
+    const id = await upload("file", "text/plain", "notes");
+    const notes = { kind: "file" as const, upload: id, name: "notes.txt", bytes: 5, text: true };
+    w.session.send("next", { attachments: [notes] });
+    // the box it was sent from empties at once: nothing names the upload but the queued message
+    uploads.keep([id]);
+    uploads.keep([]);
+    expect(uploads.path(id)).not.toBeNull();
+    w.session.unqueue(0);
+    expect(uploads.path(id)).toBeNull();
+    // taken back to be changed: handed over while still held, so a box can name its upload first
+    const again = await upload("file", "text/plain", "notes");
+    const kept = { ...notes, upload: again };
+    w.session.send("later", { attachments: [kept] });
+    let taken: unknown;
+    w.session.unqueue(0, (message) => {
+      taken = message;
+      expect(uploads.path(again)).not.toBeNull();
+      uploads.keep([again]);
+    });
+    expect(taken).toEqual({ text: "later", attachments: [kept] });
+    expect(uploads.path(again)).not.toBeNull();
+    expect(w.session.queueItems).toEqual([]);
+    // a message naming an upload that is gone is refused where it is sent
+    expect(() => w.session.send("again", { attachments: [notes] })).toThrow("attach it again");
+    w.session.stop();
+    await w.idle();
+    await w.session.close();
+  });
+
+  test("a message refused for want of a login goes again as it was recorded, image and all", async () => {
+    let failures = 1;
+    const fake = fakeAgent(
+      async (p, client) => {
+        if (failures-- > 0) throw acp.RequestError.authRequired();
+        return say("ok")(p, client);
+      },
+      { images: true },
+    );
+    fake.app.onRequest(acp.methods.agent.authenticate, () => ({}));
+    const w = world(fake);
+    w.session.send("see", { attachments: [await shot()] });
+    await w.idle();
+    expect(await w.session.authenticate("api-key", "sk-test")).toEqual({ kind: "done" });
+    await w.idle();
+    expect(w.session.status).toBe("idle");
+    expect(w.events.filter((e) => e.type === "user-message")).toHaveLength(1);
+    const sent = fake.prompts.at(-1)!.prompt as Array<{ type: string; text?: string }>;
+    expect(sent.map((b) => b.text?.split(":")[0] ?? b.type)).toEqual(["Image 1", "image", "see"]);
+    await w.session.close();
+  });
+
   test("an agent without image support gets the text only, and the person is told", async () => {
     const fake = fakeAgent(say("ok"));
     const w = world(fake);
-    w.session.send("look", { attachments: [png] });
+    w.session.send("look", { attachments: [await shot()] });
     await w.idle();
     expect(w.types()).toEqual(["user-message", "turn-start", "session-info", "agent-error", "text-delta", "turn-end"]);
     expect(w.events[3]).toMatchObject({ message: "Claude does not accept images; the message went without it" });

@@ -5,6 +5,7 @@ import {
   RESTART_NOW,
   type RestartWait,
   type ServerMsg,
+  type Uploaded,
   WS_CLOSE_UNAUTHORIZED,
 } from "@toyon/shared";
 import { STORAGE } from "./state/keys.ts";
@@ -33,6 +34,36 @@ export function hasToken(): boolean {
  * because an <img> cannot send a header */
 export function attachmentUrl(worktreeId: string, file: string): string {
   return `/attachments/${worktreeId}/${file}?token=${getToken()}`;
+}
+
+/** where the daemon serves an image or a file that is attached and not sent yet, by its upload id */
+export function uploadUrl(id: string): string {
+  return `/uploads/${id}?token=${getToken()}`;
+}
+
+/** Hand an image's or a file's bytes to the daemon as it is attached. Answers what a message names
+ * them by, or the words to show instead (the daemon's own refusal, or that the bytes cannot be
+ * read), or null when the daemon did not answer at all and the same bytes are worth sending again. */
+export async function uploadAttachment(kind: "image" | "file", blob: Blob): Promise<Uploaded | string | null> {
+  try {
+    // a folder, or a file gone since it was picked, fails here and not as a request that never arrives
+    await blob.slice(0, 1).arrayBuffer();
+  } catch {
+    return "could not be read";
+  }
+  try {
+    const r = await fetch(`/uploads?kind=${kind}`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${getToken()}`, "content-type": blob.type || "application/octet-stream" },
+      body: blob,
+    });
+    // a front that could not reach the daemon (a proxy, the dev server) answers for it
+    if (r.status >= 502 && r.status <= 504) return null;
+    if (!r.ok) return (await r.text()) || "could not be attached";
+    return (await r.json()) as Uploaded;
+  } catch {
+    return null;
+  }
 }
 
 /** where the daemon serves a file in a worktree for the editor pane's viewer. `version` names the
@@ -115,6 +146,12 @@ const SETTLE = 1500;
 /** messages kept while disconnected; subscribe-shaped ones are deduped by worktree */
 const QUEUE_MAX = 50;
 
+/** the frames that are a message leaving its box, which the daemon empties as each arrives */
+const takesBox = (
+  msg: ClientMsg,
+): msg is Extract<ClientMsg, { t: "chat" | "create-worktree" | "restore-worktree" | "batch-worktrees" }> =>
+  msg.t === "chat" || msg.t === "create-worktree" || msg.t === "restore-worktree" || msg.t === "batch-worktrees";
+
 export class DaemonSocket {
   private ws: WebSocket | null = null;
   private queue: Array<{ key: string | null; raw: string }> = [];
@@ -125,6 +162,8 @@ export class DaemonSocket {
   private downAt: number | null = null;
   /** the pending "say why" (see SETTLE); cancelled by a socket that comes back first */
   private sayTimer: ReturnType<typeof setTimeout> | null = null;
+  /** the boxes a message was sent from while the socket was down, until the next hello asks */
+  private sentDown = new Set<string>();
 
   constructor(
     private onMsg: (msg: ServerMsg) => void,
@@ -232,8 +271,19 @@ export class DaemonSocket {
     const key =
       msg.t === "subscribe" || msg.t === "unsubscribe" ? `sub:${msg.worktreeId}` : msg.t === "view" ? "view" : null;
     if (key) this.queue = this.queue.filter((q) => q.key !== key);
+    if (takesBox(msg) && msg.boxId) this.sentDown.add(msg.boxId);
     this.queue.push({ key, raw });
     if (this.queue.length > QUEUE_MAX) this.queue.splice(0, this.queue.length - QUEUE_MAX);
+  }
+
+  /** The boxes a message left while the socket was down, asked once per hello. The queue goes out
+   * ahead of the hello being read, and the daemon wrote that hello before it read the queue: it
+   * still lists those boxes as full, and laid into the page they would show a sent message as a
+   * draft to send again. */
+  sentWhileDown(): string[] {
+    const ids = [...this.sentDown];
+    this.sentDown.clear();
+    return ids;
   }
 
   dispose() {

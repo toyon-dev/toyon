@@ -12,6 +12,7 @@ import type {
   AskChoice,
   AskOutcome,
   AskQuestion,
+  AttachmentInput,
   AttachmentRef,
   AuthMethodInfo,
   ChatHit,
@@ -23,19 +24,17 @@ import type {
   FileBlame,
   FileServerMsg,
   GitFileStatus,
-  ImageInput,
   InstallMethod,
   LogLine,
   ManagedView,
   OwnedWorktree,
   PageEntry,
   PageLink,
-  PasteInput,
   PathEntry,
   PathTarget,
   PendingRepo,
-  PickInput,
   PickVerb,
+  QueuedMessage,
   RefHit,
   RemoteView,
   RepoInfo,
@@ -75,6 +74,7 @@ import {
 import { owedJump } from "../app/unseenJump.ts";
 import { dotClass } from "../surfaces/util.ts";
 import { mergeLinks } from "./links.ts";
+import { fromInputs, type PendingAttachment } from "./pending.ts";
 
 /** `heard` is the shell's own clock when a live figure landed: the agent reports usage as soon as
  * the model accepts a request, before any of the reply, so a figure newer than the last thing in
@@ -208,9 +208,9 @@ export interface WorktreeLocal {
   ignored?: string[];
   /** the listing key (actions/file.ts) the files were last asked for; the same key asks nothing */
   filesFor?: string;
-  queue: string[];
+  queue: QueuedMessage[];
   /** a message sent from an archived page, shown as sent while the worktree comes back: gone when
-   * its own message reaches the chat, and back in the box if the restore is refused */
+   * its own message reaches the chat, or when the daemon hands it back unsent */
   restoring?: string;
   /** how many messages this tab has sent from here: the log goes to its end on each, wherever
    * the reader had scrolled to, since the reply is what they are waiting for now */
@@ -298,12 +298,7 @@ export const canCarry = (d: Draft | null | undefined): boolean => !!d?.carry && 
  * send makes that row the worktree and the words typed on it go with it */
 export const composerBoxOf = (active: OwnedWorktree | null): string | null => active?.worktree.id ?? null;
 
-/** an attachment waiting in a composer box: what the wire takes, a local key, and what its chip
- * shows before the daemon has stored it */
-export type PendingAttachment =
-  | (ImageInput & { key: string; bytes: number })
-  | (PasteInput & { key: string; chars: number; lines: number; preview: string })
-  | (PickInput & { key: string });
+export type { PendingAttachment } from "./pending.ts";
 
 export const EMPTY_LOCAL: WorktreeLocal = Object.freeze({
   chat: [],
@@ -1218,8 +1213,9 @@ export type Action =
   | { a: "archive-worktrees"; ids: string[] }
   /** a message went from an archived page with the restore it asks for: show it as sent meanwhile */
   | { a: "restoring"; id: string; text: string }
-  /** this tab sent a message from the box: the log jumps to its end */
-  | { a: "sent"; id: string }
+  /** this tab sent a message from the box, which the daemon has taken: the box is empty here too,
+   * and the log jumps to its end */
+  | { a: "sent-box"; id: string }
   /** a landing op went out for this worktree: show it working until the shipped frame */
   | { a: "shipping"; id: string; op: ShipOp }
   /** an "open project" request went to the daemon: adopt the repo it adds */
@@ -1270,6 +1266,8 @@ export type Action =
   | { a: "reveal"; id: string; seq: number }
   /** attachments joining a composer box, after whatever is already waiting there */
   | { a: "attach"; id: string; items: PendingAttachment[] }
+  /** an upload landed: the placeholder with this key becomes the attachment the daemon now holds */
+  | { a: "attached"; id: string; key: string; item: PendingAttachment }
   | { a: "detach"; id: string; key: string }
   | { a: "clear-attachments"; id: string }
   | { a: "hmr"; id: string }
@@ -1533,8 +1531,14 @@ function reduce(s: State, action: Action): State {
       return s.archivedPage ? closeArchivedPage(s) : s;
     case "restoring":
       return withLocal(s, action.id, (l) => ({ ...l, restoring: action.text }));
-    case "sent":
-      return withLocal(s, action.id, (l) => ({ ...l, sent: (l.sent ?? 0) + 1 }));
+    case "sent-box":
+      // a walk that ended in a send is over, and the message answers whatever was said under the box
+      return withLocal(s, action.id, ({ notice: _notice, ...l }) => ({
+        ...withoutMark(l, "walk"),
+        draft: "",
+        attachments: [],
+        sent: (l.sent ?? 0) + 1,
+      }));
     case "archive-worktrees": {
       const ids = action.ids.filter((id) => !s.archiving.includes(id) && worktreeById(s, id));
       if (ids.length === 0) return s;
@@ -1733,6 +1737,13 @@ function reduce(s: State, action: Action): State {
         // attaching is writing the message, which answers the notice the way typing does
         ...l,
         attachments: [...l.attachments, ...action.items],
+      }));
+    case "attached":
+      // a chip taken off while its bytes were on their way stays off
+      if (!s.local[action.id]?.attachments.some((a) => a.key === action.key)) return s;
+      return withLocal(s, action.id, (l) => ({
+        ...l,
+        attachments: l.attachments.map((a) => (a.key === action.key ? action.item : a)),
       }));
     case "detach":
       // taking one off answers a notice about what was attached
@@ -1935,7 +1946,7 @@ function pruneByRow<T>(byId: Record<string, T>, rows: WorktreeStatus[]): Record<
 /** drop per-worktree records for rows the daemon no longer lists, found rows included: theirs
  * hold git status and history too, and a push arrives on every proc event. Any box with words or
  * an attachment in it stays, since an archived worktree keeps its draft under the same id and the
- * daemon says when one is gone for good; the attachment lives only here until it is sent. */
+ * daemon says when one is gone for good. */
 function pruneLocal(local: State["local"], rows: WorktreeStatus[], archivedPage: string | null): State["local"] {
   const keep = new Set(rows.map((w) => w.id));
   // the archived page's chat is under an id no row has, for as long as the page is up
@@ -1971,6 +1982,19 @@ function withDrafts(local: State["local"], drafts: Record<string, string>): Stat
     if (l?.draft) continue;
     if (out === local) out = { ...local };
     out[id] = { ...(l ?? EMPTY_LOCAL), draft };
+  }
+  return out;
+}
+
+/** the same for what the daemon holds attached in each box: a box with chips of this tab's own
+ * keeps them, and they go to the daemon next */
+function withAttachments(local: State["local"], lists: Record<string, AttachmentInput[]>): State["local"] {
+  let out = local;
+  for (const [id, items] of Object.entries(lists)) {
+    const l = out[id];
+    if (l?.attachments.length) continue;
+    if (out === local) out = { ...local };
+    out[id] = { ...(l ?? EMPTY_LOCAL), attachments: fromInputs(items, []) };
   }
   return out;
 }
@@ -2040,7 +2064,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
         trunks: msg.trunks,
         archiving: s.archiving.length ? [] : s.archiving,
         shipping: shippingFrom({}, msg.rows, msg.trunks),
-        local: pruneLocal(withDrafts(s.local, msg.drafts), msg.rows, s.archivedPage),
+        local: pruneLocal(withAttachments(withDrafts(s.local, msg.drafts), msg.attachments), msg.rows, s.archivedPage),
         lastActive: pruneLastActive(s.lastActive, msg.rows),
         treeOpen: pruneByRow(s.treeOpen, msg.rows),
         discoveredOpen: pruneByRepo(s.discoveredOpen, msg.repos),
@@ -2144,6 +2168,10 @@ function onServer(s: State, msg: StoreServerMsg): State {
       return withLocal(s, msg.boxId, (l) =>
         l.draft === msg.text || l.mark?.by === "walk" ? l : { ...l, draft: msg.text },
       );
+    case "attachments":
+      // as on a draft: this tab wrote it and already has it
+      if (msg.clientId === s.clientId) return s;
+      return withLocal(s, msg.boxId, (l) => ({ ...l, attachments: fromInputs(msg.items, l.attachments) }));
     case "repos": {
       const known = new Set(s.repos.map((r) => r.id));
       const added = msg.repos.find((r) => !known.has(r.id));
@@ -2456,18 +2484,18 @@ function onServer(s: State, msg: StoreServerMsg): State {
       // the reason is read where the press was: a refused create on its view, a worktree's on its
       // chat, and anything else under the composer on screen
       if (refused) return next;
-      // a restore asked from an archived page: the message goes back in that page's box with the
-      // reason under it, rather than onto a row it never became
-      const held = id ? next.local[id]?.restoring : undefined;
-      if (id && held !== undefined) {
-        return withLocal(next, id, ({ restoring: _held, ...l }) => ({
-          ...l,
-          draft: l.draft || held,
-          notice: msg.message,
-        }));
-      }
       return id ? answerFor(next, id, msg.message) : noticeOnScreen(next, msg.message);
     }
+    case "unsent":
+      // A message no agent took, back in the box it was sent from with the reason under it. The
+      // words only into an empty box, since anything typed there since is newer; the chips ahead
+      // of anything attached since. A page that was showing it as sent stops.
+      return withLocal(revealChat(s), msg.boxId, ({ restoring: _held, ...l }) => ({
+        ...l,
+        draft: l.draft || msg.text,
+        attachments: [...fromInputs(msg.items, []), ...l.attachments],
+        notice: msg.message,
+      }));
     default: {
       // exhaustive at compile time, but a daemon one version ahead can still send a `t` this
       // build has never heard of, and returning undefined here blanks the tab on the next read

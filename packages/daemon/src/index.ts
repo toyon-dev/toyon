@@ -26,6 +26,7 @@ import { loadAgentRegistry } from "./agent/registry.ts";
 import { prepareLaunch } from "./agent/sandbox.ts";
 import { makeAnswerRecapper, makeLander, makePlanner } from "./agent/tasks.ts";
 import { transcriptPathFor } from "./agent/transcript.ts";
+import { UploadStore } from "./agent/uploads.ts";
 import { locateAssets, pruneAssets } from "./core/assets.ts";
 import { cloud } from "./core/cloud.ts";
 import { folderDialog } from "./core/dialog.ts";
@@ -142,7 +143,8 @@ const accounts = new AgentAccounts({
     ),
 });
 accounts.onChange = () => hub.emit("agentsChanged");
-const attachments = new AttachmentStore(paths.attachmentsDir);
+const uploads = new UploadStore(paths.uploadsDir);
+const attachments = new AttachmentStore(paths.attachmentsDir, uploads);
 const runtime = new RuntimeRegistry({
   hub,
   state,
@@ -160,7 +162,12 @@ const runtime = new RuntimeRegistry({
   // asked only when a start is, after the service below exists
   mainLeads: (repoId): boolean => worktrees.spare.current(repoId) === null,
 });
-const drafts = new DraftStore({ file: paths.draftsFile, hub });
+const drafts = new DraftStore({
+  file: paths.draftsFile,
+  attachmentsFile: paths.draftAttachmentsFile,
+  hub,
+  uploads,
+});
 // the setup, check and commit runs as every row carries them: one book for the three services
 // that write it
 const runs = new RunService({ state, hub });
@@ -368,6 +375,8 @@ await repos.boot();
 // after boot, which archives what went while the daemon was down: a box is kept while its worktree
 // or its archive is
 drafts.prune((id) => !!state.worktree(id) || worktrees.hasArchived(id));
+// and an upload is kept while a box that survived names it: no message is waiting on one this early
+uploads.sweep(drafts.uploadIds());
 // what was being looked at before the restart comes back on its own
 idle.boot();
 // what the last daemon left running is still on the rows, detached, until it ends; before the

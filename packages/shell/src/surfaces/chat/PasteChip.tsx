@@ -102,11 +102,11 @@ function usePasteText(held: string | undefined, href: string | undefined) {
 /** The paste at the window's size. Text that is markdown is read rendered, with the text as it
  * went out one press away: the rendering is a guess about a clipboard, and what the agent was
  * sent is the text. */
-function FullPaste({ text: held, href, path }: { text?: string; href?: string; path?: string }) {
+export function FullPaste({ text: held, href, path }: { text?: string; href?: string; path?: string }) {
   const { text, failed } = usePasteText(held, href);
   const reading = useMemo(() => (text ? pasteReading(text, path) : "plain"), [text, path]);
   const [picked, setPicked] = useState<boolean | null>(null);
-  if (failed) return <p className="paste-full hint">Toyon could not read that paste back.</p>;
+  if (failed) return <p className="paste-full hint">Toyon could not read that back.</p>;
   if (!text || reading === "plain") return <pre className="paste-full paste-text">{text}</pre>;
   const rendered = picked ?? reading === "rendered";
   return (
@@ -152,7 +152,7 @@ const PEEK_CHARS = 20_000;
 
 /** the opening of the paste beside the transcript; nothing until the text is in, and nothing when
  * it cannot be read: the press that opens it in full is where that is said */
-function PastePeek({ text: held, href }: { text?: string; href?: string }) {
+export function PastePeek({ text: held, href }: { text?: string; href?: string }) {
   const { text } = usePasteText(held, href);
   if (!text) return null;
   return <pre className="paste-peek paste-text">{text.slice(0, PEEK_CHARS)}</pre>;

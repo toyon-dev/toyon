@@ -244,7 +244,7 @@ export interface WorktreeServiceDeps {
   agents: AgentRegistry;
   /** the unsent text in composer boxes: a worktree discarded or deleted from the archive takes its
    * own, and a spare whose warm-up failed hands its words to the row that stands in for it */
-  drafts?: Pick<DraftStore, "drop" | "text" | "set">;
+  drafts?: Pick<DraftStore, "drop" | "move">;
   /** task → short kebab-case name (the worktree's own agent by default; tests inject a stub) */
   namer?: (prompt: string, wt: WorktreeInfo) => Promise<string | null>;
   /** what earlier worktrees built to pass the check, cloned in ahead of the install */
@@ -322,9 +322,8 @@ export class WorktreeService {
         await this.discardWorktree(id);
       },
       carryDraft: (fromId, repoId) => {
-        const text = this.d.drafts?.text(fromId);
         const main = this.mainOf(repoId);
-        if (text && main) this.d.drafts?.set(main.id, text);
+        if (main) this.d.drafts?.move(fromId, main.id, true);
       },
       // main ran its page while it was the lead (the setup pane's preview, an empty project's);
       // the spare is the trunk's running page from here, so main's page stops rather than run
@@ -335,14 +334,10 @@ export class WorktreeService {
         if (this.d.runtime.get(main.id)?.procs) {
           fireAndForget(main.id, this.d.runtime.stopPage(main.id), "main's page stops for the spare");
         }
-        // words typed into main's box while it stood in (the spare warming, or one that failed
-        // under someone's fingers) go with the row: main's box is out of sight from here
-        const text = this.d.drafts?.text(main.id);
+        // what was typed or attached in main's box while it stood in (the spare warming, or one
+        // that failed under someone's fingers) goes with the row: main's box is out of sight from here
         const spare = this.leadSpareOf(repoId);
-        if (text && spare && !this.d.drafts?.text(spare)) {
-          this.d.drafts?.set(spare, text);
-          this.d.drafts?.drop(main.id);
-        }
+        if (spare) this.d.drafts?.move(main.id, spare);
       },
     });
     d.hub.on("agent", (worktreeId, _seq, event) => {
@@ -430,7 +425,7 @@ export class WorktreeService {
       if (rt.agent.runningAgent !== null && rt.agent.runningAgent !== agent) await rt.agent.restart();
       rt.agent.send(agentPrompt, { context: withCarry(context, carried), attachments });
       this.scheduleNaming(claimed, task, variant);
-      if (carried.unmoved) throw new UserError(carried.unmoved);
+      if (carried.unmoved) throw new UserError(carried.unmoved, { delivered: true });
       return claimed;
     }
 
@@ -478,7 +473,7 @@ export class WorktreeService {
     this.launch(wt, repo, repo.path);
     this.d.runtime.ensureAgent(wt).agent.send(agentPrompt, { context: withCarry(context, carried), attachments });
     this.scheduleNaming(wt, task, variant);
-    if (carried.unmoved) throw new UserError(carried.unmoved);
+    if (carried.unmoved) throw new UserError(carried.unmoved, { delivered: true });
     return wt;
   }
 

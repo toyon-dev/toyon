@@ -2,16 +2,22 @@
 // message holds, and how each is numbered and named. Zod-free like limits.ts, so the shell can
 // bound and label chips without pulling the schemas in; ws.ts bounds the wire with these numbers.
 
-export const ATTACHMENT_KINDS = ["image", "paste", "pick"] as const;
+export const ATTACHMENT_KINDS = ["image", "paste", "file", "pick"] as const;
 export type AttachmentKind = (typeof ATTACHMENT_KINDS)[number];
 
-/** how many of each kind one message holds. Images are what size the frame: six at the byte cap is
- * the payload the daemon's socket is configured to take. */
-export const ATTACHMENT_LIMITS: Readonly<Record<AttachmentKind, number>> = { image: 6, paste: 4, pick: 8 };
+/** how many of each kind one message holds. The kind decides how a thing travels, never its size:
+ * an image and a file are uploaded when they are attached and the message names them by id, while
+ * a paste and a picked element ride in the frame. */
+export const ATTACHMENT_LIMITS: Readonly<Record<AttachmentKind, number>> = { image: 6, paste: 4, file: 8, pick: 8 };
 export const ATTACHMENTS_PER_MESSAGE = ATTACHMENT_KINDS.reduce((sum, k) => sum + ATTACHMENT_LIMITS[k], 0);
 
 /** what a person calls one of a kind, in a sentence */
-const KIND_NOUN: Readonly<Record<AttachmentKind, string>> = { image: "image", paste: "paste", pick: "element" };
+const KIND_NOUN: Readonly<Record<AttachmentKind, string>> = {
+  image: "image",
+  paste: "paste",
+  file: "file",
+  pick: "element",
+};
 
 const KIND_LABEL = { image: "Image", paste: "Pasted text" } as const;
 
@@ -43,7 +49,7 @@ export const overLimit = (list: readonly Kinded[]): AttachmentKind | null =>
 export function nextNumbers(
   sent: Iterable<readonly (Kinded & { readonly n: number })[] | undefined>,
 ): Record<AttachmentKind, number> {
-  const next: Record<AttachmentKind, number> = { image: 1, paste: 1, pick: 1 };
+  const next: Record<AttachmentKind, number> = { image: 1, paste: 1, file: 1, pick: 1 };
   for (const list of sent) for (const a of list ?? []) next[a.kind] = Math.max(next[a.kind], a.n + 1);
   return next;
 }
@@ -56,4 +62,28 @@ export function numbered<T extends Kinded>(
 ): Array<[T, number]> {
   const at = { ...next };
   return items.map((item) => [item, at[item.kind]++]);
+}
+
+/** `next` once `items` have taken their numbers: where the count stands after a message that has
+ * not been recorded yet, a queued one, so what follows it is numbered as it will be sent */
+export function numbersAfter(
+  next: Readonly<Record<AttachmentKind, number>>,
+  items: readonly Kinded[],
+): Record<AttachmentKind, number> {
+  const at = { ...next };
+  for (const item of items) at[item.kind]++;
+  return at;
+}
+
+/** a size the way a chip and a caption both say it */
+export function fmtBytes(n: number): string {
+  return n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`;
+}
+
+/** what an upload answers with: the id a message names the bytes by, how many there were, and
+ * whether they read as text */
+export interface Uploaded {
+  upload: string;
+  bytes: number;
+  text: boolean;
 }

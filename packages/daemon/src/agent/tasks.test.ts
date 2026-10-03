@@ -10,7 +10,8 @@ describe("taskText", () => {
     expect(
       taskText("  ", [
         { kind: "paste", text: "TypeError: x is undefined" },
-        { kind: "image", name: "shot.png", mimeType: "image/png", data: "", width: 1, height: 1 },
+        { kind: "image", name: "shot.png", mimeType: "image/png", upload: "u1", bytes: 1, width: 1, height: 1 },
+        { kind: "file", name: "run.jsonl", upload: "u2", bytes: 1, text: true },
         {
           kind: "pick",
           component: "Button",
@@ -24,7 +25,7 @@ describe("taskText", () => {
           html: "<button>Save</button>",
         },
       ]),
-    ).toBe('TypeError: x is undefined\n\nimage shot.png\n\nelement <Button> "Save"');
+    ).toBe('TypeError: x is undefined\n\nimage shot.png\n\nfile run.jsonl\n\nelement <Button> "Save"');
     expect(taskText("")).toBe("");
   });
 });

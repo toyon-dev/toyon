@@ -2,7 +2,15 @@
 // push to which client. Synchronous on purpose: an AcpSession emit runs the hub and then git
 // status inline today, and changing that backpressure is a later job, not this file's.
 
-import type { AgentCommand, AgentEvent, AgentStatus, LastTurn, ProcState } from "@toyon/shared";
+import type {
+  AgentCommand,
+  AgentEvent,
+  AgentStatus,
+  AttachmentInput,
+  LastTurn,
+  ProcState,
+  QueuedMessage,
+} from "@toyon/shared";
 import type { OpenedFile } from "../files/open.ts";
 import { log } from "./log.ts";
 
@@ -16,7 +24,7 @@ export interface HubEvents {
   turnSettled: (worktreeId: string, turn: LastTurn) => void;
   /** the repo's check exited 0 in the worktree: what the tree built to pass it is worth keeping */
   checkPassed: (worktreeId: string) => void;
-  queue: (worktreeId: string, items: string[]) => void;
+  queue: (worktreeId: string, items: QueuedMessage[]) => void;
   /** the worktree's agent advertised a new slash-command list */
   agentCommands: (worktreeId: string, commands: AgentCommand[]) => void;
   /** raw output from one of the worktree's streams (its shell or a proc), escapes included */
@@ -52,6 +60,8 @@ export interface HubEvents {
   archiveChanged: (repoId: string) => void;
   /** a composer box's unsent text changed; `clientId` is the tab that wrote it, when one did */
   draftChanged: (boxId: string, text: string, clientId?: string) => void;
+  /** what is attached and unsent in a composer box changed; `clientId` as on draftChanged */
+  attachmentsChanged: (boxId: string, items: AttachmentInput[], clientId?: string) => void;
   /** the editor saved or discarded a file: every tab's changes list, and any editor open on it, re-reads */
   filesChanged: (worktreeId: string) => void;
   /** a file was opened from outside the shell (the Dock icon, `toyon <file>`): a shell should show it */

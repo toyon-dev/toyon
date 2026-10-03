@@ -23,6 +23,7 @@ import { AskRow } from "./AskRow.tsx";
 import { answeredQuestion, answerLines } from "./ask.ts";
 import { chatLink, openChatLink } from "./chatLink.ts";
 import { DaemonRow } from "./DaemonRow.tsx";
+import { FileChip } from "./FileChip.tsx";
 import {
   runCalls,
   runningInRun,
@@ -917,6 +918,14 @@ export const ChatItemView = memo(function ChatItemView({
               {item.attachments.map((a) =>
                 a.kind === "image" ? (
                   <SentImageChip key={`${a.kind}-${a.n}`} img={a} src={attachmentUrl(worktreeId, a.file)} />
+                ) : a.kind === "file" ? (
+                  <FileChip
+                    key={`${a.kind}-${a.n}`}
+                    className="in-chat"
+                    name={a.name}
+                    bytes={a.bytes}
+                    href={a.text ? attachmentUrl(worktreeId, a.file) : undefined}
+                  />
                 ) : a.kind === "paste" ? (
                   <PasteChip
                     key={`${a.kind}-${a.n}`}

@@ -2,13 +2,13 @@ import { FILE_MAX_CHARS, isLongPaste, limitMessage } from "@toyon/shared";
 import { useEffect, useRef } from "react";
 import { readCopiedSource } from "../../app/copiedSource.ts";
 import { createFile, nextSeq } from "../../state/actions/file.ts";
-import { attachText, mentionInChat, noticeIn, roomIn, treeBox } from "../../state/attach.ts";
+import { attachFiles, attachText, attachUpload, mentionInChat, noticeIn, roomIn, treeBox } from "../../state/attach.ts";
 import type { Store } from "../../state/context.tsx";
 import { useSock, useStoreInstance } from "../../state/context.tsx";
 import { composerBoxOf, type DropZone, worktreeById } from "../../state/store.ts";
 import type { DaemonSocket } from "../../ws.ts";
 import { parentOf } from "../changes/fileTree.ts";
-import { imageFiles, otherFiles, prepareImage, readText } from "./images.ts";
+import { imageFiles, otherFiles, type PreparedImage, prepareImage, readText } from "./images.ts";
 
 /** the chat panel, registered by ChatPanel wherever it is placed. The drop is handled on the window (a file dropped on
  * anything that doesn't take it navigates the tab to that file and the session is gone), so the
@@ -102,31 +102,34 @@ export function pathDropHandlers(store: Store) {
   };
 }
 
-/** files on their way to the composer, from a paste or a drop on the chat panel. Reads the pending
- * count from the store at call time so neither call site has to subscribe to it. */
+let imageSeq = 0;
+
+/** an image as its chip first shows it: drawn from the bytes this tab holds while they upload */
+function imageChip(img: PreparedImage) {
+  const { blob, ...shown } = img;
+  return {
+    kind: "image" as const,
+    key: `img${++imageSeq}`,
+    ...shown,
+    upload: "",
+    bytes: blob.size,
+    local: URL.createObjectURL(blob),
+  };
+}
+
+/** images on their way to the composer, from a paste or a drop. Reads the pending count from the
+ * store at call time so neither call site has to subscribe to it. Each is a chip as soon as it is
+ * sized, and uploads from there. */
 async function attachImages(store: Store, boxId: string | null, files: File[]) {
   if (!boxId || files.length === 0) return;
   const room = roomIn(store, boxId, "image");
   if (room === 0) return;
   const results = await Promise.allSettled(files.slice(0, room).map(prepareImage));
-  const images = results.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
+  for (const r of results)
+    if (r.status === "fulfilled") void attachUpload(store, boxId, imageChip(r.value), r.value.blob);
   const failed = results.find((r) => r.status === "rejected");
-  if (images.length) store.dispatch({ a: "attach", id: boxId, items: images });
   if (failed) noticeIn(store, boxId, String((failed as PromiseRejectedResult).reason?.message ?? failed.reason));
   else if (files.length > room) noticeIn(store, boxId, `kept ${room} of ${files.length}: ${limitMessage("image")}`);
-}
-
-/** a file that is not an image: attached as text under its own name, or refused by name */
-async function attachTextFiles(store: Store, boxId: string | null, files: File[]) {
-  if (!boxId || files.length === 0) return;
-  const room = roomIn(store, boxId, "paste");
-  if (room === 0) return;
-  for (const f of files.slice(0, room)) {
-    const text = await readText(f);
-    if (text === null) noticeIn(store, boxId, `${f.name}: not a text file`);
-    else attachText(store, boxId, text, { name: f.name });
-  }
-  if (files.length > room) noticeIn(store, boxId, `kept ${room} of ${files.length}: ${limitMessage("paste")}`);
 }
 
 /** the box a drop lands in: the one the composer on screen writes in. Read at drop time, like the
@@ -136,14 +139,21 @@ function dropBox(store: Store): string | null {
   return composerBoxOf(worktreeById(s, s.activeId));
 }
 
-/** a drop on the chat panel */
-function dropOnChat(store: Store, files: File[]) {
+/** a drop on the chat panel: pictures as images, everything else as files, and a folder refused
+ * by name, since the browser hands over no bytes for one */
+function dropOnChat(store: Store, dropped: Dropped[]) {
   const boxId = dropBox(store);
-  const images = files.filter((f) => f.type.startsWith("image/"));
-  if (images.length) return void attachImages(store, boxId, images);
-  // not an image, but a log or a source file is still worth attaching: it lands as a paste chip,
-  // and attachTextFiles names anything that will not decode
-  void attachTextFiles(store, boxId, files);
+  const files = dropped.filter((d) => !d.folder).map((d) => d.file);
+  const isImage = (f: File) => f.type.startsWith("image/");
+  void attachImages(store, boxId, files.filter(isImage));
+  attachFiles(
+    store,
+    boxId,
+    files.filter((f) => !isImage(f)),
+  );
+  // after the attaching, which answers an earlier notice
+  const folder = dropped.find((d) => d.folder);
+  if (boxId && folder) noticeIn(store, boxId, `${folder.file.name}: a folder cannot be attached; drop its files`);
 }
 
 /** A dropped file and the handle it came with, in Chromium. The handle is asked for inside the
@@ -151,6 +161,8 @@ function dropOnChat(store: Store, files: File[]) {
 export interface Dropped {
   file: File;
   handle: Promise<FileSystemFileHandle | null>;
+  /** the item is a folder, which arrives looking like an empty file */
+  folder?: boolean;
 }
 
 const NO_HANDLE: Promise<FileSystemFileHandle | null> = Promise.resolve(null);
@@ -170,7 +182,7 @@ function takeDrop(dt: DataTransfer | null): Dropped[] {
         (h) => (h?.kind === "file" ? (h as FileSystemFileHandle) : null),
         () => null,
       ) ?? NO_HANDLE;
-    out.push({ file, handle });
+    out.push({ file, handle, folder: item.webkitGetAsEntry?.()?.isDirectory === true });
   }
   // a browser that fills `files` alone
   if (out.length === 0) for (const file of Array.from(dt.files)) out.push({ file, handle: NO_HANDLE });
@@ -265,11 +277,7 @@ export function fileDrop(store: Store, sock: DaemonSocket | null, zone: DropZone
   endFileDrag(store);
   if (refused || dropped.length === 0) return;
   if (!zone) missedFileDrop(store);
-  else if (zone.at === "chat")
-    dropOnChat(
-      store,
-      dropped.map((d) => d.file),
-    );
+  else if (zone.at === "chat") dropOnChat(store, dropped);
   else if (zone.at === "centre") void dropOnCentre(store, dropped);
   else void dropOnTree(store, sock, zone, dropped);
 }
@@ -340,7 +348,7 @@ export function useFileDrop() {
 /**
  * The composer's paste, in precedence order: an image wins, because copying a spreadsheet cell or
  * a figure offers an image and a text flavour and the picture is what was meant; then a non-image
- * file (a Finder copy carries no text to fall through to); then a selection copied in the editor
+ * file, attached as a file (a Finder copy carries no text to fall through to); then a selection copied in the editor
  * that takes in a line break, which is a piece of the file rather than words for the sentence, on a
  * chip named for its file and lines; then text long enough to bury the textarea. Anything shorter
  * is typed in as usual. ⌘⇧V types any text in, however long or wherever it was copied from.
@@ -367,7 +375,7 @@ export function useComposerPaste(boxId: string | null, worktreeId: string | null
     const files = otherFiles(e.clipboardData);
     if (files.length > 0) {
       e.preventDefault();
-      return void attachTextFiles(store, boxId, files);
+      return attachFiles(store, boxId, files);
     }
     if (plain.current) return;
     // text/plain, never text/html: an editor or a web page offers both, and the markup is style

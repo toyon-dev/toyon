@@ -1,12 +1,9 @@
 // Images on their way into a message: pulled out of a paste or drop, downscaled to the models'
 // long-edge ceiling, and re-encoded when the original is a format or size the daemon refuses.
 
-import { IMAGE_MAX_BYTES, IMAGE_MAX_EDGE, IMAGE_MIME_TYPES, type ImageInput, type ImageMimeType } from "@toyon/shared";
-import type { PendingAttachment } from "../../state/store.ts";
+import { IMAGE_MAX_BYTES, IMAGE_MAX_EDGE, IMAGE_MIME_TYPES, type ImageMimeType } from "@toyon/shared";
 
 const ACCEPTED = new Set<string>(IMAGE_MIME_TYPES);
-/** past this a "text" file is not something anyone means to paste into a message */
-const MAX_TEXT_FILE_BYTES = 2 * 1024 * 1024;
 
 /** the name a browser gives the pasteboard's picture when nothing copied had one: a screenshot, an
  * image copied off a page. Chromium and Gecko write image.png; WebKit writes one per encoding the
@@ -46,9 +43,9 @@ export function imageFiles(dt: DataTransfer | null): File[] {
   return one ? [one] : [];
 }
 
-/** everything else the OS handed over: a file copied in Finder or dragged in arrives here, and a
- * text one becomes a paste chip. The browser never exposes its path, so a file that happens to
- * live in the worktree still cannot become an @ reference; its contents travel instead. */
+/** everything else the OS handed over: a file copied in Finder or dragged in arrives here, and is
+ * attached as a file whatever it holds. The browser never exposes its path, so a file that happens
+ * to live in the worktree still cannot become an @ reference; a copy of it travels instead. */
 export function otherFiles(dt: DataTransfer | null): File[] {
   if (!dt) return [];
   const out: File[] = [];
@@ -63,7 +60,7 @@ export function otherFiles(dt: DataTransfer | null): File[] {
 
 /** a file's text, or null when it is not text at all, or is more than `max` bytes. Decoded
  * strictly, so a binary comes back null rather than as a screen of replacement characters. */
-export async function readText(file: File, max = MAX_TEXT_FILE_BYTES): Promise<string | null> {
+export async function readText(file: File, max: number): Promise<string | null> {
   if (file.size > max) return null;
   try {
     return new TextDecoder("utf-8", { fatal: true }).decode(await file.arrayBuffer());
@@ -80,14 +77,6 @@ async function decode(file: File): Promise<ImageBitmap> {
   }
 }
 
-function toBase64(bytes: ArrayBuffer): string {
-  let s = "";
-  const u = new Uint8Array(bytes);
-  // String.fromCharCode over the whole buffer overflows the argument list on large images
-  for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode(...u.subarray(i, i + 0x8000));
-  return btoa(s);
-}
-
 function encode(bitmap: ImageBitmap, scale: number, mime: ImageMimeType): Promise<Blob> {
   const canvas = document.createElement("canvas");
   canvas.width = Math.max(1, Math.round(bitmap.width * scale));
@@ -98,13 +87,20 @@ function encode(bitmap: ImageBitmap, scale: number, mime: ImageMimeType): Promis
   );
 }
 
-let keySeq = 0;
+/** an image ready to upload: the bytes the daemon takes, and what its chip and its ref say */
+export interface PreparedImage {
+  blob: Blob;
+  name: string;
+  mimeType: ImageMimeType;
+  width: number;
+  height: number;
+}
 
 /** a file as the daemon wants it: within IMAGE_MAX_EDGE and IMAGE_MAX_BYTES, in a format the
  * models accept. Originals that already qualify go through untouched (a re-encode of a
  * screenshot only loses quality); the rest are drawn down and saved as PNG, or JPEG when the
  * source was one, since a photo re-encoded as PNG balloons. */
-export async function prepareImage(file: File): Promise<Extract<PendingAttachment, { kind: "image" }>> {
+export async function prepareImage(file: File): Promise<PreparedImage> {
   const bitmap = await decode(file);
   try {
     const edge = Math.max(bitmap.width, bitmap.height);
@@ -127,24 +123,13 @@ export async function prepareImage(file: File): Promise<Extract<PendingAttachmen
       height = Math.max(1, Math.round(bitmap.height * scale));
     }
     return {
-      kind: "image",
-      key: `img${++keySeq}`,
+      blob,
       name: file.name || `pasted.${mimeType === "image/jpeg" ? "jpg" : "png"}`,
       mimeType: mimeType as ImageMimeType,
-      data: toBase64(await blob.arrayBuffer()),
       width,
       height,
-      bytes: blob.size,
     };
   } finally {
     bitmap.close();
   }
-}
-
-export function dataUrl(img: Pick<ImageInput, "mimeType" | "data">): string {
-  return `data:${img.mimeType};base64,${img.data}`;
-}
-
-export function fmtBytes(n: number): string {
-  return n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`;
 }

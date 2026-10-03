@@ -3,8 +3,8 @@
 // it; the others get it prepended to the first prompt of a session.
 
 import type { ContentBlock } from "@agentclientprotocol/sdk";
-import type { ImageRef, PasteRef, PickRef, ProcStatus } from "@toyon/shared";
-import { attachmentLabel, lineSpan } from "@toyon/shared";
+import type { FileRef, ImageRef, PasteRef, PickRef, ProcStatus } from "@toyon/shared";
+import { attachmentLabel, fmtBytes, lineSpan } from "@toyon/shared";
 import type { Stored } from "./attachments.ts";
 
 export const SYSTEM_APPEND = [
@@ -74,9 +74,17 @@ export function previewContext(p: PreviewStanding | null): string | undefined {
 }
 
 /** what the model reads as an image's label: its session number (how the user will refer to it
- * later) and where it came from */
-export function imageCaption(ref: ImageRef): string {
-  return `${attachmentLabel("image", ref.n)}: ${ref.name} (${ref.width}×${ref.height})`;
+ * later), where it came from, and where the stored copy is, for a tool that wants the file */
+export function imageCaption(ref: ImageRef, path: string): string {
+  return `${attachmentLabel("image", ref.n)}: ${ref.name} (${ref.width}×${ref.height}), saved at ${path}`;
+}
+
+/** A file is named by where its copy is stored, for the agent's own tools. No resource link
+ * beside it, since an adapter flattens one to these same words. `inline` is a file short enough
+ * that its text follows the caption, so the path is where it is and not where to go and read it. */
+export function fileCaption(ref: FileRef, path: string, inline = false): string {
+  const at = `A file the user attached: ${ref.name} (${fmtBytes(ref.bytes)}), saved at ${path}.`;
+  return inline ? at : `${at} Read or search it there.`;
 }
 
 /** the same for a paste: its number, then where it was copied from or, for text with no file
@@ -118,7 +126,9 @@ const LEADING_COMMAND = /^\/[A-Za-z0-9]/;
 
 /** attachments go first, each behind its caption and in the order they were attached, then the
  * text; context (live-page state) rides after it, except on a message that leads with a slash
- * command, which goes alone. A message that is attachments alone has no text block: the paste or
+ * command, which goes alone. A file goes as its caption, which says where its stored copy is, with
+ * a short one's text after it. A
+ * message that is attachments alone has no text block: the paste or
  * the picked element is the whole message. The visible transcript only ever shows the text itself. */
 export function buildPrompt(
   text: string,
@@ -145,11 +155,19 @@ function attachmentBlocks(a: Stored): ContentBlock[] {
   switch (a.kind) {
     case "image":
       return [
-        textBlock(imageCaption(a.ref)),
+        textBlock(imageCaption(a.ref, a.path)),
         { type: "image", mimeType: a.ref.mimeType, data: a.bytes.toString("base64") },
       ];
     case "paste":
       return [textBlock(`${pasteCaption(a.ref)}\n<pasted-text ${a.ref.n}>\n${a.text}\n</pasted-text>`)];
+    case "file":
+      return [
+        textBlock(
+          a.text === undefined
+            ? fileCaption(a.ref, a.path)
+            : `${fileCaption(a.ref, a.path, true)}\n<attached-file ${a.ref.n}>\n${a.text}\n</attached-file>`,
+        ),
+      ];
     case "pick":
       return [textBlock(pickCaption(a.ref))];
   }

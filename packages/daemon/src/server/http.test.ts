@@ -2,8 +2,10 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { IMAGE_MAX_BYTES } from "@toyon/shared";
 import type { Server } from "bun";
 import { AttachmentStore } from "../agent/attachments.ts";
+import { UploadStore } from "../agent/uploads.ts";
 import { UserError } from "../core/errors.ts";
 import { PairCodes } from "../core/pair.ts";
 import { previewGrant } from "../core/remote.ts";
@@ -25,6 +27,19 @@ const repos = {
   },
 } as unknown as RepoRegistry;
 const attachmentsDir = mkdtempSync(join(tmpdir(), "toyon-http-"));
+const uploads = new UploadStore(join(attachmentsDir, "uploads"));
+const attachments = new AttachmentStore(attachmentsDir, uploads);
+/** a png's first bytes, uploaded: what an image chip names */
+const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
+const shot = async (name = "shot.png") => ({
+  kind: "image" as const,
+  name,
+  mimeType: "image/png" as const,
+  upload: (await uploads.put("image", "image/png", [PNG])).upload,
+  bytes: 4,
+  width: 2,
+  height: 2,
+});
 afterAll(() => rmSync(attachmentsDir, { recursive: true, force: true }));
 const learnedOrigins: (string | null)[] = [];
 /** what the daemon answers a restart with: a refusal, or null having taken it */
@@ -38,7 +53,7 @@ const opts: HttpOpts = {
   shellDist: "/nonexistent",
   version: "0",
   repos,
-  attachments: new AttachmentStore(attachmentsDir),
+  attachments,
   archivedAttachment: () => null,
   worktreeFile: async (id, path) =>
     id === "wt1" && path === "public/a b.png" ? join(attachmentsDir, "wt1", "1.png") : null,
@@ -417,21 +432,27 @@ describe("/register", () => {
 });
 
 describe("/attachments", () => {
-  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47]).toString("base64");
-  const img = {
-    kind: "image" as const,
-    name: "shot.png",
-    mimeType: "image/png" as const,
-    data: png,
-    width: 2,
-    height: 2,
-  };
-  test("serves a stored image with the token, immutable", async () => {
-    await new AttachmentStore(attachmentsDir).put("wt1", 1, img);
+  const png = PNG.toString("base64");
+  test("serves a stored image with the token, immutable, as the image it is and nothing else", async () => {
+    await attachments.put("wt1", 1, await shot());
     const r = await fetch(req("/attachments/wt1/1.png?token=secret"), srv());
     expect(r?.status).toBe(200);
     expect(r?.headers.get("cache-control")).toContain("immutable");
+    expect(r?.headers.get("content-type")).toBe("image/png");
+    expect(r?.headers.get("x-content-type-options")).toBe("nosniff");
     expect(Buffer.from(await r!.arrayBuffer()).toString("base64")).toBe(png);
+  });
+  test("a stored file goes out as plain text in a sandbox, whatever it is named", async () => {
+    const page = await uploads.put("file", "text/html", [Buffer.from("<script>alert(1)</script>")]);
+    await attachments.put("wt1", 1, { kind: "file", name: "page.html", ...page });
+    await attachments.put("wt1", 2, { kind: "file", name: "x.png", ...(await uploads.put("file", "", [PNG])) });
+    for (const file of ["1-page.html", "2-x.png"]) {
+      const r = await fetch(req(`/attachments/wt1/${file}?token=secret`), srv());
+      expect(r?.status).toBe(200);
+      expect(r?.headers.get("content-type")).toBe("text/plain; charset=utf-8");
+      expect(r?.headers.get("x-content-type-options")).toBe("nosniff");
+      expect(r?.headers.get("content-security-policy")).toBe("sandbox");
+    }
   });
   test("an image the archive holds is served once the store no longer has it", async () => {
     const archiveDir = mkdtempSync(join(tmpdir(), "toyon-archive-"));
@@ -451,30 +472,65 @@ describe("/attachments", () => {
   });
 });
 
+describe("/uploads", () => {
+  const post = (
+    kind: string,
+    type: string,
+    body: BodyInit,
+    auth = "Bearer secret",
+    more: Record<string, string> = {},
+  ) =>
+    req(`/uploads?kind=${kind}`, {
+      method: "POST",
+      body,
+      headers: { authorization: auth, "content-type": type, ...more },
+    });
+  test("takes the bytes with the bearer token and answers the id a message names them by", async () => {
+    const r = await fetch(post("file", "application/x-ndjson", '{"a":1}\n'), srv());
+    expect(r?.status).toBe(200);
+    const up = (await r!.json()) as { upload: string; bytes: number; text: boolean };
+    expect(up).toMatchObject({ bytes: 8, text: true });
+    expect(await Bun.file(uploads.path(up.upload)!).text()).toBe('{"a":1}\n');
+    expect((await fetch(post("file", "text/plain", "x", "Bearer nope"), srv()))?.status).toBe(401);
+    expect((await fetch(post("video", "text/plain", "x"), srv()))?.status).toBe(400);
+  });
+  test("refuses an image of a type the models do not take, and one over the image cap, in words", async () => {
+    const svg = await fetch(post("image", "image/svg+xml", "<svg/>"), srv());
+    expect(svg?.status).toBe(400);
+    expect(await svg?.text()).toContain("not an image format");
+    const big = await fetch(post("image", "image/png; charset=binary", new Uint8Array(IMAGE_MAX_BYTES + 1)), srv());
+    expect(big?.status).toBe(400);
+    expect(await big?.text()).toContain("larger than");
+    expect((await fetch(post("file", "text/plain", ""), srv()))?.status).toBe(400);
+  });
+  test("serves an upload back by id with the token: an image as its type, a page as plain text", async () => {
+    const img = await shot();
+    const r = await fetch(req(`/uploads/${img.upload}?token=secret`), srv());
+    expect(r?.status).toBe(200);
+    expect(r?.headers.get("content-type")).toBe("image/png");
+    expect(r?.headers.get("x-content-type-options")).toBe("nosniff");
+    const page = await uploads.put("file", "text/html", [Buffer.from("<script>alert(1)</script>")]);
+    const p = await fetch(req(`/uploads/${page.upload}?token=secret`), srv());
+    expect(p?.headers.get("content-type")).toBe("text/plain; charset=utf-8");
+    expect(p?.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(p?.headers.get("content-security-policy")).toBe("sandbox");
+    expect(await p?.text()).toBe("<script>alert(1)</script>");
+    expect((await fetch(req(`/uploads/${img.upload}`), srv()))?.status).toBe(401);
+    expect((await fetch(req("/uploads/nope?token=secret"), srv()))?.status).toBe(404);
+    expect((await fetch(req("/uploads/..%2Fx?token=secret"), srv()))?.status).toBe(404);
+  });
+});
+
 describe("/files", () => {
   test("serves a worktree's file by its decoded path, never cached", async () => {
-    await new AttachmentStore(attachmentsDir).put("wt1", 1, {
-      kind: "image",
-      name: "a.png",
-      mimeType: "image/png",
-      data: Buffer.from([0x89, 0x50, 0x4e, 0x47]).toString("base64"),
-      width: 2,
-      height: 2,
-    });
+    await attachments.put("wt1", 1, await shot("a.png"));
     const r = await fetch(req("/files/wt1/public/a%20b.png?token=secret"), srv());
     expect(r?.status).toBe(200);
     expect(r?.headers.get("cache-control")).toBe("no-store");
     expect(r?.headers.get("x-content-type-options")).toBe("nosniff");
   });
   test("serves a granted picture by its grant id, never cached; no token is 401, an unknown id is 404", async () => {
-    await new AttachmentStore(attachmentsDir).put("wt1", 1, {
-      kind: "image",
-      name: "a.png",
-      mimeType: "image/png",
-      data: Buffer.from([0x89, 0x50, 0x4e, 0x47]).toString("base64"),
-      width: 2,
-      height: 2,
-    });
+    await attachments.put("wt1", 1, await shot("a.png"));
     const r = await fetch(req("/loose/g1?token=secret"), srv());
     expect(r?.status).toBe(200);
     expect(r?.headers.get("cache-control")).toBe("no-store");
@@ -552,7 +608,7 @@ describe("static shell", () => {
     shellDist: dist,
     version: "0",
     repos,
-    attachments: new AttachmentStore(attachmentsDir),
+    attachments,
     archivedAttachment: () => null,
     worktreeFile: async () => null,
     looseFile: () => null,

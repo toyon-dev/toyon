@@ -19,6 +19,7 @@ import type {
   AuthMethodInfo,
   ModelChoice,
   PermissionMode,
+  QueuedMessage,
 } from "@toyon/shared";
 import { DEFAULT_PERMISSION_MODE, nextNumbers } from "@toyon/shared";
 import { UserError } from "../../core/errors.ts";
@@ -33,6 +34,7 @@ import { ambientBlock, buildPrompt, SYSTEM_APPEND } from "../prompt.ts";
 import type { AgentSpec } from "../registry.ts";
 import { type Bounds, type Prepared, prepareLaunch } from "../sandbox.ts";
 import { Transcript, type TranscriptEntry, transcriptPathFor } from "../transcript.ts";
+import { uploadIds } from "../uploads.ts";
 import { askOnce } from "./ask.ts";
 import { AUTH_STATUS_UPDATE_METHOD, parseAuthStatus, supportsLogout } from "./authstatus.ts";
 import { BackgroundTasks } from "./background.ts";
@@ -184,6 +186,12 @@ interface QueueItem {
   attachments?: AttachmentInput[];
   recorded?: Recorded;
 }
+
+/** a waiting message as the shell draws it and as a box takes it back */
+const queued = (q: QueueItem): QueuedMessage => ({
+  text: q.text,
+  ...(q.attachments ? { attachments: q.attachments } : {}),
+});
 
 /** what the end event keeps of the answer, so a reload can read the card back */
 function recorded(reply?: AskReply): { answers?: AskAnswer[]; choiceId?: string } {
@@ -346,8 +354,8 @@ export class AcpSession implements AgentAdapter {
     return this.queue.length > 0 || this.steered.length > 0 || this.refused !== null || this.asks.size > 0;
   }
 
-  get queueItems(): string[] {
-    return this.waiting().map((q) => q.text);
+  get queueItems(): QueuedMessage[] {
+    return this.waiting().map(queued);
   }
 
   /** what waits with no bubble of its own yet. A message already in the transcript (steered, then
@@ -363,11 +371,19 @@ export class AcpSession implements AgentAdapter {
     this.onQueueChange?.();
   }
 
-  unqueue(index: number) {
+  unqueue(index: number, taken?: (message: QueuedMessage) => void) {
     const item = this.waiting()[index];
     if (!item) return;
     this.queue.splice(this.queue.indexOf(item), 1);
+    // whoever takes the message names its uploads before this lets go of them
+    taken?.(queued(item));
+    this.letGo(item);
     this.queueChanged();
+  }
+
+  /** a message that will never be recorded gives up the uploads it was holding */
+  private letGo(item: QueueItem) {
+    if (!item.recorded) this.d.attachments.uploads.release(uploadIds(item.attachments));
   }
 
   transcript(): TranscriptEntry[] {
@@ -392,6 +408,8 @@ export class AcpSession implements AgentAdapter {
     if (this.stopped) return log.warn(this.d.worktreeId, "send after close dropped");
     const { context, attachments } = opts;
     const item: QueueItem = { text, context, ...(attachments?.length ? { attachments } : {}) };
+    // held from here until the message is recorded, which for a queued one is turns away
+    this.d.attachments.uploads.hold(uploadIds(attachments));
     // sending during a turn means "while you are doing that": an agent that takes steering reads the
     // message as part of the work it is already on, which is the whole reason a person types then.
     // A stop already on its way is the exception — that turn is going away, so the message waits.
@@ -515,6 +533,7 @@ export class AcpSession implements AgentAdapter {
     this.stopped = true;
     this.clearReaper();
     // nothing may start a turn after this, so what was queued goes with the process
+    for (const item of this.queue) this.letGo(item);
     this.queue = [];
     this.steered = [];
     this.queueChanged();
@@ -656,9 +675,9 @@ export class AcpSession implements AgentAdapter {
   retry() {
     const item = this.refused;
     this.refused = null;
-    // back through send(), which records it again: the message is shown a second time, above the
-    // turn the login finally lets it start
-    if (item) this.send(item.text, item);
+    // the item itself, as it was recorded: its bubble is already on the chat and its attachments
+    // are written, and the uploads they were copied from went when that happened
+    if (item && !this.stopped) this.enqueue(item);
   }
 
   /** a plan sign-in the managed policy withholds: the spec marks the method, the policy says no */
@@ -692,8 +711,13 @@ export class AcpSession implements AgentAdapter {
    * attached before anything is shown, so the bubble and the prompt agree on "Image N". */
   private async record({ text, attachments }: QueueItem): Promise<Recorded> {
     const stored: Stored[] = [];
-    for (const a of attachments ?? [])
-      stored.push(await this.d.attachments.put(this.d.worktreeId, this.seq[a.kind]++, a));
+    try {
+      for (const a of attachments ?? [])
+        stored.push(await this.d.attachments.put(this.d.worktreeId, this.seq[a.kind]++, a));
+    } finally {
+      // copied, or never going to be: a message that fails here is not tried again
+      this.d.attachments.uploads.release(uploadIds(attachments));
+    }
     this.emit({
       type: "user-message",
       text,

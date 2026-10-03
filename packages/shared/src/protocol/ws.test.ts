@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { ATTACHMENT_LIMITS } from "../attachment.ts";
-import { PASTE_MAX_CHARS } from "./limits.ts";
+import { IMAGE_MAX_BYTES, PASTE_MAX_CHARS, UPLOAD_MAX_BYTES } from "./limits.ts";
 import { issueReason, parseClientMsg, toyonConfigSchema } from "./ws.ts";
 
 describe("toyonConfigSchema", () => {
@@ -73,7 +73,9 @@ describe("parseClientMsg", () => {
           { kind: "pick", component: null, file: null, line: null, tag: "div", selector: "div", text: "", html: "" },
         ],
       },
-      { t: "create-worktree", repoId: "r", prompt: "x", variant: { group: "g", index: 1, of: 2 } },
+      { t: "create-worktree", repoId: "r", prompt: "x", variants: 3, boxId: "a" },
+      { t: "unqueue", worktreeId: "a", index: 0, edit: true },
+      { t: "redraft", worktreeId: "a", seq: 12 },
       { t: "create-worktree", repoId: "r", prompt: "x", agent: "codex" },
       { t: "batch-worktrees", repoId: "r", prompt: "x", agent: "claude" },
       { t: "set-default-agent", agent: "codex" },
@@ -196,6 +198,14 @@ describe("parseClientMsg", () => {
       html: "",
     };
     expect(chat([paste("")]).ok).toBe(false);
+    // a message names the box it was written in, which the daemon takes
+    expect(parseClientMsg({ t: "chat", worktreeId: "a", text: "hi", boxId: "a" }).ok).toBe(true);
+    expect(parseClientMsg({ t: "chat", worktreeId: "a", text: "hi", boxId: "" }).ok).toBe(false);
+    // one frame however many attempts, up to the most the intro offers
+    const attempts = (variants: number) => parseClientMsg({ t: "create-worktree", repoId: "r", prompt: "x", variants });
+    expect(attempts(0).ok).toBe(false);
+    expect(attempts(4).ok).toBe(false);
+    expect(parseClientMsg({ t: "redraft", worktreeId: "a", seq: -1 }).ok).toBe(false);
     expect(chat([paste("x".repeat(PASTE_MAX_CHARS + 1))]).ok).toBe(false);
     expect(chat(Array(ATTACHMENT_LIMITS.paste + 1).fill(paste("x"))).ok).toBe(false);
     // a full count of one kind leaves every other kind its own room
@@ -206,6 +216,40 @@ describe("parseClientMsg", () => {
     const over = chat(Array(ATTACHMENT_LIMITS.pick + 1).fill(pick));
     expect(over.ok).toBe(false);
     if (!over.ok) expect(over.reason).toContain(`at most ${ATTACHMENT_LIMITS.pick} elements per message`);
+  });
+  test("an image and a file name an upload by id; neither carries bytes in the frame", () => {
+    const chat = (attachments: unknown) => parseClientMsg({ t: "chat", worktreeId: "a", text: "hi", attachments });
+    const image = {
+      kind: "image",
+      name: "a.png",
+      mimeType: "image/png",
+      upload: "u_1-A",
+      bytes: 3,
+      width: 2,
+      height: 1,
+    };
+    const file = { kind: "file", name: "run.jsonl", upload: "u2", bytes: 108_544, text: true };
+    expect(chat([image, file]).ok).toBe(true);
+    // the shape from before uploads, and an id that could be a path
+    expect(chat([{ ...image, upload: undefined, data: "UE5H" }]).ok).toBe(false);
+    expect(chat([{ ...image, upload: "../x" }]).ok).toBe(false);
+    expect(chat([{ ...image, mimeType: "image/svg+xml" }]).ok).toBe(false);
+    expect(chat([{ ...image, bytes: IMAGE_MAX_BYTES + 1 }]).ok).toBe(false);
+    expect(chat([{ ...file, bytes: UPLOAD_MAX_BYTES + 1 }]).ok).toBe(false);
+    expect(chat([{ ...file, name: "" }]).ok).toBe(false);
+    expect(chat([{ ...file, text: undefined }]).ok).toBe(false);
+    expect(chat(Array(ATTACHMENT_LIMITS.file).fill(file)).ok).toBe(true);
+    const over = chat(Array(ATTACHMENT_LIMITS.file + 1).fill(file));
+    if (!over.ok) expect(over.reason).toContain(`at most ${ATTACHMENT_LIMITS.file} files per message`);
+    expect(over.ok).toBe(false);
+  });
+  test("set-attachments carries a box's list, bounded like a message's, and may be empty", () => {
+    const set = (items: unknown) => parseClientMsg({ t: "set-attachments", boxId: "wt-a", items, clientId: "tab1" });
+    const file = { kind: "file", name: "run.jsonl", upload: "u2", bytes: 1, text: false };
+    expect(set([file, { kind: "paste", text: "x" }]).ok).toBe(true);
+    expect(set([]).ok).toBe(true);
+    expect(set(undefined).ok).toBe(false);
+    expect(set(Array(ATTACHMENT_LIMITS.file + 1).fill(file)).ok).toBe(false);
   });
   test("an attachment of no known kind is refused", () => {
     expect(parseClientMsg({ t: "chat", worktreeId: "a", text: "hi", attachments: [{ kind: "video" }] }).ok).toBe(false);

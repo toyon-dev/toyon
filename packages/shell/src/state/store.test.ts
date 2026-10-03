@@ -1,6 +1,7 @@
 import { describe, expect, setSystemTime, test } from "bun:test";
 import {
   type AgentEvent,
+  type AttachmentInput,
   MANAGED_NONE,
   PROTOCOL_VERSION,
   type RepoInfo,
@@ -10,6 +11,7 @@ import {
 } from "@toyon/shared";
 import { addToChat, attachPick } from "./attach.ts";
 import { createStore } from "./context.tsx";
+import { isUploading, settledInputs, toInput } from "./pending.ts";
 import {
   type Action,
   asksSetup,
@@ -138,6 +140,7 @@ const helloIn = (repos: RepoInfo[], ...w: WorktreeStatus[]): Action =>
     self: null,
     update: null,
     drafts: {},
+    attachments: {},
     managed: MANAGED_NONE,
   });
 const hello = (...w: WorktreeStatus[]): Action => helloIn([], ...w);
@@ -1116,7 +1119,7 @@ describe("attachments", () => {
     key: "k1",
     name: "a.png",
     mimeType: "image/png" as const,
-    data: "UE5H",
+    upload: "u1",
     width: 2,
     height: 1,
     bytes: 3,
@@ -1131,6 +1134,54 @@ describe("attachments", () => {
     expect(s.local.a?.attachments.map((x) => x.key)).toEqual(["k1", "k2"]);
     s = run([{ a: "clear-attachments", id: "a" }], s);
     expect(s.local.a?.attachments).toEqual([]);
+  });
+  const file = { kind: "file" as const, upload: "u2", name: "run.jsonl", bytes: 9, text: true };
+  test("an upload's chip is up while its bytes travel, settles when they land, and stays off if taken off", () => {
+    const flying = { ...file, key: "f1", upload: "", text: false, uploading: true };
+    let s = run([hello(wt("a")), { a: "attach", id: "a", items: [flying] }]);
+    expect(s.local.a?.attachments.map(isUploading)).toEqual([true]);
+    // nothing the daemon can be told, or a message can carry, until it lands
+    expect(settledInputs(s.local.a?.attachments ?? [])).toEqual([]);
+    s = run([{ a: "attached", id: "a", key: "f1", item: { ...file, key: "f1" } }], s);
+    expect(settledInputs(s.local.a?.attachments ?? [])).toEqual([file]);
+    const gone = run([{ a: "detach", id: "a", key: "f1" }], s);
+    expect(reducer(gone, { a: "attached", id: "a", key: "f1", item: { ...file, key: "f1" } })).toBe(gone);
+  });
+  test("what goes to the wire leaves the key, the local thumbnail and the chip's figures behind", () => {
+    expect(toInput({ ...img, local: "blob:x", uploading: false })).toEqual({
+      kind: "image",
+      name: "a.png",
+      mimeType: "image/png",
+      upload: "u1",
+      width: 2,
+      height: 1,
+      bytes: 3,
+    });
+    expect(toInput(paste)).toEqual({ kind: "paste", text: "a\nb" });
+  });
+  test("hello lays the daemon's chips into the boxes, but not over what this tab attached meanwhile", () => {
+    const h = hello(wt("a"), wt("b"));
+    if (h.a !== "server" || h.msg.t !== "hello") throw new Error("hello is a server frame");
+    const lists = { a: [file, { kind: "paste" as const, text: "a\nb" }], b: [file] };
+    const s = run([{ a: "attach", id: "b", items: [paste] }, server({ ...h.msg, attachments: lists })]);
+    // a paste back from the daemon gets the figures its chip shows
+    expect(s.local.a?.attachments).toMatchObject([file, { kind: "paste", text: "a\nb", lines: 2, preview: "a" }]);
+    expect(new Set(s.local.a?.attachments.map((x) => x.key)).size).toBe(2);
+    expect(s.local.b?.attachments).toEqual([paste]);
+  });
+  test("another tab's list replaces the box's, keeps the chips it shares and this tab's uploads in flight", () => {
+    const flying = { ...file, key: "f9", upload: "", uploading: true };
+    let s = run([hello(wt("a")), { a: "attach", id: "a", items: [paste, { ...file, key: "f1" }, flying] }]);
+    const frame = (items: AttachmentInput[], clientId = "other") =>
+      server({ t: "attachments", boxId: "a", items, clientId });
+    s = run([frame([file, { kind: "file", upload: "u3", name: "b.pdf", bytes: 2, text: false }])], s);
+    expect(s.local.a?.attachments.map((x) => (x.kind === "file" ? x.upload : x.kind))).toEqual(["u2", "u3", ""]);
+    // the chip both lists hold is the same chip, so nothing on screen is rebuilt
+    expect(s.local.a?.attachments[0]?.key).toBe("f1");
+    // this tab's own frame is one it already has
+    expect(reducer(s, frame([], ME))).toBe(s);
+    s = run([frame([])], s);
+    expect(s.local.a?.attachments).toEqual([flying]);
   });
   test("an attachment opens a collapsed chat, since its chip is the only sign it landed", () => {
     const s = run([hello(wt("a")), { a: "toggle-chat" }, { a: "attach", id: "a", items: [paste] }]);
@@ -1219,19 +1270,54 @@ describe("drafts", () => {
     s = run([server({ t: "backfill", worktreeId: "a", events: [{ seq: 0, event: said }] })], s);
     expect(s.local.a?.restoring).toBeUndefined();
   });
-  test("each send from a box counts, so the log can go to its end on every one", () => {
+  test("a send empties the box here, ends a walk, and counts, so the log goes to its end on every one", () => {
+    const chip = { kind: "file" as const, key: "f1", upload: "u1", name: "run.jsonl", bytes: 9, text: true };
     let s = run([hello(wt("a"))]);
     expect(s.local.a?.sent).toBeUndefined();
-    s = run([{ a: "sent", id: "a" }], s);
-    s = run([{ a: "sent", id: "a" }], s);
+    s = run(
+      [
+        { a: "walk", id: "a", walk: { at: 3, from: "" }, text: "said before" },
+        { a: "attach", id: "a", items: [chip] },
+        { a: "notice", id: "a", text: "still uploading" },
+        { a: "sent-box", id: "a" },
+      ],
+      s,
+    );
+    expect(s.local.a?.draft).toBe("");
+    expect(s.local.a?.attachments).toEqual([]);
+    expect(s.local.a?.mark).toBeUndefined();
+    expect(s.local.a?.notice).toBeUndefined();
+    s = run([{ a: "sent-box", id: "a" }], s);
     expect(s.local.a?.sent).toBe(2);
   });
-  test("a refused restore puts the message back in the box, with the reason under it", () => {
-    let s = run([hello(wt("b")), { a: "restoring", id: "a", text: "one more thing" }]);
-    s = run([server({ t: "error", message: "that archived worktree is gone", worktreeId: "a" })], s);
+  test("a message no agent took comes back to its box, words and chips, with the reason under it", () => {
+    const item = { kind: "file" as const, upload: "u1", name: "run.jsonl", bytes: 9, text: true };
+    let s = run([hello(wt("a"), wt("b")), { a: "sent-box", id: "a" }]);
+    // an error is said and gives nothing back
+    s = run([server({ t: "error", message: "the check is still running", worktreeId: "a" })], s);
+    expect(s.local.a?.draft ?? "").toBe("");
+    // something attached since stays, after what comes back
+    const since = { ...item, key: "f3", upload: "u3", name: "new.txt" };
+    s = run([{ a: "attach", id: "a", items: [since] }], s);
+    const message = "worktree still starting; try again in a moment";
+    s = run([server({ t: "unsent", boxId: "a", text: "what failed here", items: [item], message })], s);
+    expect(s.local.a?.draft).toBe("what failed here");
+    expect(s.local.a?.attachments.map((a) => ("upload" in a ? a.upload : ""))).toEqual(["u1", "u3"]);
+    expect(s.local.a?.notice).toBe(message);
+  });
+  test("words typed since a message was sent stay when it comes back unsent", () => {
+    let s = run([hello(wt("a")), { a: "sent-box", id: "a" }, { a: "set-draft", id: "a", text: "second thought" }]);
+    s = run([server({ t: "unsent", boxId: "a", text: "first", items: [], message: "refused" })], s);
+    expect(s.local.a?.draft).toBe("second thought");
+    expect(s.local.a?.notice).toBe("refused");
+  });
+  test("a restore handed back unsent stops showing as sent and is back in the page's box", () => {
+    let s = run([hello(wt("b")), { a: "restoring", id: "a", text: "one more thing" }, { a: "sent-box", id: "a" }]);
+    const message = "that archived worktree is gone";
+    s = run([server({ t: "unsent", boxId: "a", text: "one more thing", items: [], message })], s);
     expect(s.local.a?.restoring).toBeUndefined();
     expect(s.local.a?.draft).toBe("one more thing");
-    expect(s.local.a?.notice).toBe("that archived worktree is gone");
+    expect(s.local.a?.notice).toBe(message);
   });
   test("a walk writes the draft and its place together, and any other write to the draft ends it", () => {
     let s = run([hello(wt("a")), { a: "walk", id: "a", walk: { at: 3, from: "" }, text: "fix the header" }]);
@@ -2360,7 +2446,7 @@ describe("an archived worktree's page", () => {
       key: "img1",
       name: "shot.png",
       mimeType: "image/png" as const,
-      data: "AAAA",
+      upload: "u1",
       width: 1,
       height: 1,
       bytes: 4,
@@ -2373,7 +2459,7 @@ describe("an archived worktree's page", () => {
       listed(),
     );
     expect(s.local.x?.attachments).toHaveLength(1);
-    // the attachment is only in this tab until it is sent, so leaving the page must not drop it
+    // the box is still written in, so leaving the page must not drop it
     const left = run([{ a: "close-archived" }, worktrees(wt("main", "main"), wt("a"))], s);
     expect(left.local.x?.attachments).toHaveLength(1);
     // taken off again, the box is empty and the next frame lets it go

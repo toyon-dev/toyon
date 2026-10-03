@@ -18,7 +18,7 @@ export const namePrompt = (task: string) =>
   `Name this coding task the way a teammate would say it out loud: 1 or 2 plain lowercase words, 16 characters at most (like "sticky header", "dark mode", "price badge"). Leave out words every task in the project would share, like the product or the app. Reply with ONLY the name, nothing else.\n\nTask: ${task.slice(0, 500)}`;
 
 /** What a task is named from: its message's text, or, when the message was attachments alone,
- * what they carry: a paste's text, an image's name, a picked element's component or tag and its
+ * what they carry: a paste's text, an image's or a file's name, a picked element's component or tag and its
  * text. Empty when there is nothing to name from, and then no name is asked for. */
 export function taskText(text: string, attachments: readonly AttachmentInput[] = []): string {
   if (text.trim()) return text;
@@ -28,6 +28,7 @@ export function taskText(text: string, attachments: readonly AttachmentInput[] =
 function attachmentText(a: AttachmentInput): string {
   if (a.kind === "paste") return a.text;
   if (a.kind === "image") return a.name ? `image ${a.name}` : "an image";
+  if (a.kind === "file") return `file ${a.name}`;
   return `element <${a.component ?? a.tag}>${a.text ? ` "${a.text}"` : ""}`;
 }
 

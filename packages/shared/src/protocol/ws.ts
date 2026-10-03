@@ -35,13 +35,20 @@ import type {
   TrunkStatus,
   UpdateCheck,
   UpdateState,
-  WorktreeInfo,
   WorktreeStatus,
 } from "../model.ts";
 import { LOGIN_STREAM, SHELL_STREAM } from "../model.ts";
 import type { PageEntry, WorktreePages } from "../routes.ts";
 import type { AgentCommand, AgentEvent, AskAnswer, PasteSource, PickMeta, PickRef } from "./events.ts";
-import { FILE_MAX_CHARS, IMAGE_MAX_BYTES, IMAGE_MAX_EDGE, IMAGE_MIME_TYPES, PASTE_MAX_CHARS } from "./limits.ts";
+import {
+  FILE_MAX_CHARS,
+  IMAGE_MAX_BYTES,
+  IMAGE_MAX_EDGE,
+  IMAGE_MIME_TYPES,
+  PASTE_MAX_CHARS,
+  UPLOAD_MAX_BYTES,
+  VARIANTS_MAX,
+} from "./limits.ts";
 import { elementTraitsSchema, pickMetaSchema } from "./pick.ts";
 
 /** one content-search match: path + 1-based line + the (trimmed) line text */
@@ -99,6 +106,8 @@ export type ServerMsg =
       update: UpdateState | null;
       /** the unsent text in every composer box that has some, by box id */
       drafts: Record<string, string>;
+      /** what is attached and unsent in every composer box that has some, by box id */
+      attachments: Record<string, AttachmentInput[]>;
       /** what whoever runs the machine has turned off, and from which file: the shell removes or
        * greys the controls and says why, while the daemon and the CLI do the refusing */
       managed: ManagedView;
@@ -238,8 +247,10 @@ export type ServerMsg =
   | { t: "archived"; repoId: string; items: ArchivedWorktree[] }
   /** a composer box's unsent text as a tab wrote it; `clientId` names that tab, which already has it */
   | { t: "draft"; boxId: string; text: string; clientId?: string }
+  /** a composer box's unsent attachments as a tab left them; `clientId` as on `draft` */
+  | { t: "attachments"; boxId: string; items: AttachmentInput[]; clientId?: string }
   | { t: "design-index"; worktreeId: string; index: DesignIndex }
-  | { t: "queue"; worktreeId: string; items: string[] }
+  | { t: "queue"; worktreeId: string; items: QueuedMessage[] }
   /** the slash commands this worktree's agent session advertises. Ephemeral, never a transcript
    * event (it is the live session's state, not history), so it is replayed on subscribe like
    * `queue`. */
@@ -252,7 +263,16 @@ export type ServerMsg =
   | { t: "term-exit"; worktreeId: string; stream: string; exitCode: number }
   /** a client message refused, in words for the person; `worktreeId` is the one the message
    * named, so the reason lands on that worktree's chat rather than somewhere it must be looked for */
-  | { t: "error"; message: string; worktreeId?: string };
+  | { t: "error"; message: string; worktreeId?: string }
+  /** a message no agent took, back in the box it was sent from: the words and the chips the daemon
+   * returned to it (less any whose upload is gone), and the reason, to the tab that sent it */
+  | { t: "unsent"; boxId: string; text: string; items: AttachmentInput[]; message: string };
+
+/** a message waiting its turn, as its queued row shows it and as "edit" puts it back */
+export interface QueuedMessage {
+  text: string;
+  attachments?: AttachmentInput[];
+}
 
 /** the terminal stream: bytes for xterm, which the shell routes around its store */
 export type TermServerMsg = Extract<ServerMsg, { t: "term-data" | "term-snapshot" | "term-exit" }>;
@@ -288,13 +308,16 @@ const routePath = z.string().min(1).max(2_000);
 /** a page's title as the document has it; the daemon collapses and caps it to what it keeps */
 const pageTitle = z.string().max(1_000);
 
-/** an image as the shell sends it: already downscaled, base64 so it rides in the JSON frame */
+/** what an upload answered with: the name its bytes are held under until a message records them */
+const uploadId = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/);
+
+/** an image as the shell sends it: already downscaled and uploaded, so the frame names it by id */
 const imageInputSchema = z.object({
   kind: z.literal("image"),
   name: z.string().max(200),
   mimeType: z.enum(IMAGE_MIME_TYPES),
-  /** base64 (no data: prefix); 4/3 of the byte cap, rounded up to the next multiple of 4 */
-  data: z.string().max(Math.ceil((IMAGE_MAX_BYTES * 4) / 3 / 4) * 4),
+  upload: uploadId,
+  bytes: z.number().int().min(1).max(IMAGE_MAX_BYTES),
   width: z.number().int().min(1).max(IMAGE_MAX_EDGE),
   height: z.number().int().min(1).max(IMAGE_MAX_EDGE),
 });
@@ -316,6 +339,16 @@ const pasteInputSchema = z.object({
   source: pasteSourceSchema.optional(),
 });
 
+/** a file as the shell sends it: uploaded when it was attached, whatever its type */
+const fileInputSchema = z.object({
+  kind: z.literal("file"),
+  upload: uploadId,
+  name: z.string().min(1).max(200),
+  bytes: z.number().int().min(1).max(UPLOAD_MAX_BYTES),
+  /** the bytes read as text, as the upload found them: whether a chip can show its contents */
+  text: z.boolean(),
+});
+
 /** a picked element as the shell sends it: paths already relative to the checkout it was picked in,
  * and the text and markup the bridge captured, bounded at the bridge's own caps */
 const pickInputSchema = pickMetaSchema.extend({
@@ -327,23 +360,28 @@ const pickInputSchema = pickMetaSchema.extend({
 export const attachmentInputSchema = z.discriminatedUnion("kind", [
   imageInputSchema,
   pasteInputSchema,
+  fileInputSchema,
   pickInputSchema,
 ]);
 export type AttachmentInput = z.infer<typeof attachmentInputSchema>;
 export type ImageInput = Extract<AttachmentInput, { kind: "image" }>;
 export type PasteInput = Extract<AttachmentInput, { kind: "paste" }>;
+export type FileInput = Extract<AttachmentInput, { kind: "file" }>;
 export type PickInput = Extract<AttachmentInput, { kind: "pick" }>;
 
 /** in the order they were attached. The length is bounded before any element is parsed; the
  * per-kind bounds are checked once every element has. */
-const attachments = z
+const attachmentList = z
   .array(attachmentInputSchema)
   .max(ATTACHMENTS_PER_MESSAGE)
   .superRefine((list, ctx) => {
     const over = overLimit(list);
     if (over) ctx.addIssue({ code: "custom", message: limitMessage(over) });
-  })
-  .optional();
+  });
+const attachments = attachmentList.optional();
+/** the composer box a message was written in. The daemon empties it as the message arrives, and
+ * fills it again when no agent took the message. */
+const boxId = id.optional();
 
 /** one question's answer on an ask card: the option values chosen, and the note typed beside them */
 const askAnswerSchema = z.object({
@@ -477,8 +515,6 @@ export const themePrefsSchema = z.object({
   dark: z.string(),
 });
 
-const variantSchema = z.object({ group: z.string(), index: z.number().int().min(1), of: z.number().int().min(1) });
-
 export const clientMsgSchema = z.discriminatedUnion("t", [
   /** receive this worktree's stream (agent events, logs, queue, git status); replies with a backfill */
   z.object({ t: z.literal("subscribe"), worktreeId: id }),
@@ -494,6 +530,7 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
     text: prose,
     context: ambient.optional(),
     attachments,
+    boxId,
   }),
   z.object({
     t: z.literal("create-worktree"),
@@ -505,7 +542,8 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
      * made and `clientId` says which tab focuses it. */
     worktreeId: id.optional(),
     prompt,
-    variant: variantSchema.optional(),
+    /** how many attempts at the one prompt, made as a group; one when absent */
+    variants: z.number().int().min(1).max(VARIANTS_MAX).optional(),
     context: ambient.optional(),
     attachments,
     /** registry id; the daemon's default when absent */
@@ -520,6 +558,7 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
     effort: z.string().max(100).optional(),
     /** move main's uncommitted changes into the new worktree; only for a single worktree from main */
     carry: z.boolean().optional(),
+    boxId,
   }),
   z.object({
     t: z.literal("batch-worktrees"),
@@ -529,6 +568,7 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
     /** as on create-worktree; every planned worktree asks for the same model and effort */
     model: z.string().max(200).optional(),
     effort: z.string().max(100).optional(),
+    boxId,
   }),
   /** change what the agent may do here without asking; takes effect on its next turn */
   z.object({ t: z.literal("set-worktree-mode"), worktreeId: id, mode: permissionModeSchema }),
@@ -556,6 +596,8 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
     clientId: z.string().max(64).optional(),
     /** typed into the archived chat: the message goes to the agent once the worktree is back */
     message: z.object({ text: prose, attachments }).optional(),
+    /** the box `message` was written in */
+    boxId,
   }),
   /** delete an archived worktree for good: its chat, attachments and the commits kept for it */
   z.object({ t: z.literal("delete-archived"), archiveId: id }),
@@ -654,6 +696,13 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   /** a composer box's unsent text as it stands, so another tab or device, and an archive, keep it;
    * `boxId` is a worktree's id or a repo's new-worktree draft */
   z.object({ t: z.literal("set-draft"), boxId: id, text: prose, clientId: z.string().max(64).optional() }),
+  /** what is attached in a composer box and not yet sent, kept beside its text for the same reasons */
+  z.object({
+    t: z.literal("set-attachments"),
+    boxId: id,
+    items: attachmentList,
+    clientId: z.string().max(64).optional(),
+  }),
   /** the window came back from another app, where files may have changed: recount the project's
    * rows and re-read its open changes lists */
   z.object({ t: z.literal("refresh-git"), repoId: id }),
@@ -666,7 +715,16 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   /** take a page off the repo's list */
   z.object({ t: z.literal("forget-visit"), repoId: id, path: routePath }),
   z.object({ t: z.literal("pick-variant"), worktreeId: id }),
-  z.object({ t: z.literal("unqueue"), worktreeId: id, index: z.number().int().min(0) }),
+  /** take a waiting message out of the queue; with `edit`, back into the worktree's box, words and chips */
+  z.object({
+    t: z.literal("unqueue"),
+    worktreeId: id,
+    index: z.number().int().min(0),
+    edit: z.boolean().optional(),
+  }),
+  /** a message already sent, back into the worktree's box to be said again with a change: its
+   * words, and what it carried. `seq` is its place in the transcript. */
+  z.object({ t: z.literal("redraft"), worktreeId: id, seq: z.number().int().min(0) }),
   z.object({ t: z.literal("changed-ranges"), worktreeId: id, path: relPath }),
   z.object({ t: z.literal("rename-worktree"), worktreeId: id, title: z.string().min(1).max(200) }),
   /** `kind` is the setup pane's answer to committed or kept local: which of the pair the save
@@ -833,7 +891,6 @@ type Same<A, B> = A extends B ? (B extends A ? true : never) : never;
 const _pickMeta: Same<z.infer<typeof pickMetaSchema>, PickMeta> = true;
 const _config: Same<z.infer<typeof toyonConfigSchema>, ToyonConfig> = true;
 const _prefs: Same<z.infer<typeof themePrefsSchema>, ThemePrefs> = true;
-const _variant: Same<z.infer<typeof variantSchema>, NonNullable<WorktreeInfo["variant"]>> = true;
 const _askAnswer: Same<z.infer<typeof askAnswerSchema>, AskAnswer> = true;
 const _pasteSource: Same<z.infer<typeof pasteSourceSchema>, PasteSource> = true;
 const _pickRef: Same<z.infer<typeof pickInputSchema>, Omit<PickRef, "n">> = true;
@@ -842,4 +899,3 @@ void _pasteSource;
 void _pickRef;
 void _config;
 void _prefs;
-void _variant;

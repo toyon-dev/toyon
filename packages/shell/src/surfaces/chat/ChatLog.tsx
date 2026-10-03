@@ -1,7 +1,20 @@
-import { type ArchivedWorktree, type OwnedWorktree, type PickMeta, SHELL_TOOL } from "@toyon/shared";
+import {
+  type ArchivedWorktree,
+  type AttachmentInput,
+  type AttachmentKind,
+  nextNumbers,
+  numbered,
+  numbersAfter,
+  type OwnedWorktree,
+  type PickMeta,
+  pasteSummary,
+  SHELL_TOOL,
+} from "@toyon/shared";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { previewBus } from "../../app/previewBus.ts";
-import { useDispatch, useSock, useStoreInstance } from "../../state/context.tsx";
+import { takeBackQueued } from "../../state/attach.ts";
+import { useSock, useStoreInstance } from "../../state/context.tsx";
+import { openSource } from "../../state/openSource.ts";
 import { useLocalField } from "../../state/selectors.ts";
 import { localOf } from "../../state/store.ts";
 import { IconButton } from "../../ui/Button.tsx";
@@ -12,10 +25,15 @@ import { useOnChange, useSecondsSince, useTail } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { Spinner } from "../../ui/Spinner.tsx";
 import { selectedText, useKeyWithin, useSelectAllWithin } from "../../ui/selectAll.ts";
+import { uploadUrl } from "../../ws.ts";
 import { elapsed, isBusy, pickLabel } from "../util.ts";
 import { openAsk } from "./ask.ts";
 import { ChatItemView, QUIET_AFTER, ThoughtRow, ToolRow } from "./ChatItemView.tsx";
+import { FileChip } from "./FileChip.tsx";
 import { groupTools, indexOfSeq, openRow, ownCallRunning, placeSpawns, runningRow, spawnsAtWork } from "./group.ts";
+import { ImageChip } from "./ImageChip.tsx";
+import { PasteChip } from "./PasteChip.tsx";
+import { PickChip } from "./PickChip.tsx";
 import { isBlank } from "./recall.ts";
 import { chatPanel } from "./useIntake.ts";
 
@@ -26,6 +44,62 @@ const panelRef = {
     return chatPanel.el;
   },
 };
+
+/** What a queued message carries, on its row: the chips it was sent with, numbered as they will be
+ * when it goes, and nothing to take off, since the message is taken back whole. An image and a
+ * file are read from where they were uploaded, which the message holds until it is recorded. */
+function QueuedChips({
+  items,
+  next,
+  worktreeId,
+  dir,
+  onOpen,
+}: {
+  items: readonly AttachmentInput[];
+  next: Readonly<Record<AttachmentKind, number>>;
+  worktreeId: string;
+  dir: string | null;
+  onOpen: (path: string, line: number) => void;
+}) {
+  return (
+    <div className="msg-attachments">
+      {numbered(items, next).map(([a, n]) =>
+        a.kind === "image" ? (
+          <ImageChip
+            key={`image-${n}`}
+            className="in-chat"
+            src={uploadUrl(a.upload)}
+            n={n}
+            name={a.name}
+            width={a.width}
+            height={a.height}
+            bytes={a.bytes}
+          />
+        ) : a.kind === "file" ? (
+          <FileChip
+            key={`file-${n}`}
+            className="in-chat"
+            name={a.name}
+            bytes={a.bytes}
+            href={a.text ? uploadUrl(a.upload) : undefined}
+          />
+        ) : a.kind === "paste" ? (
+          <PasteChip
+            key={`paste-${n}`}
+            className="in-chat"
+            n={n}
+            name={a.name}
+            source={a.source}
+            {...pasteSummary(a.text)}
+            text={a.text}
+          />
+        ) : (
+          <PickChip key={`pick-${n}`} className="in-chat" pick={a} dir={dir} worktreeId={worktreeId} onOpen={onOpen} />
+        ),
+      )}
+    </div>
+  );
+}
 
 /** no spawn at work: one frozen set, so a turn that is over keys the same placement every render */
 const NONE: ReadonlySet<string> = new Set();
@@ -46,13 +120,25 @@ export function ChatLog({
   lead?: React.ReactNode;
   tail?: React.ReactNode;
 }) {
-  const dispatch = useDispatch();
   const sock = useSock();
   const store = useStoreInstance();
   const id = active?.worktree.id ?? archived?.id ?? null;
   const items = useLocalField(id, "chat");
   const queue = useLocalField(id, "queue");
   const restoring = useLocalField(id, "restoring");
+  // each queued message's chips count on from the sent ones and from the messages queued ahead of it
+  const sentNumbers = useMemo(
+    () => nextNumbers(items.map((c) => (c.kind === "user" ? c.attachments : undefined))),
+    [items],
+  );
+  const queuedNumbers = useMemo(() => {
+    let at = sentNumbers;
+    return queue.map((q) => {
+      const mine = at;
+      at = numbersAfter(at, q.attachments ?? []);
+      return mine;
+    });
+  }, [queue, sentNumbers]);
   const logRef = useRef<HTMLDivElement>(null);
   // a hand resting on the transcript: select-all is the conversation, not the shell around it
   useSelectAllWithin(logRef);
@@ -364,9 +450,9 @@ export function ChatLog({
         {/* only an agent that cannot take a message mid-turn leaves one waiting here. The rest go
             into the turn as they are sent, and read as an ordinary message in the place they landed. */}
         {id &&
-          queue.map((text, i) => (
+          queue.map((message, i) => (
             <div
-              // biome-ignore lint/suspicious/noArrayIndexKey: the queue is strings in send order; position is the identity, and a removed entry closes the gap
+              // biome-ignore lint/suspicious/noArrayIndexKey: the queue is messages in send order; position is the identity, and a removed entry closes the gap
               key={`q-${i}`}
               className="msg-user queued-msg"
             >
@@ -374,15 +460,23 @@ export function ChatLog({
                 <Icon name="clock" className="icon-inline" />
                 queued
               </span>
-              <span className="queued-text">{text}</span>
+              <div className="queued-text">
+                {message.attachments && (
+                  <QueuedChips
+                    items={message.attachments}
+                    next={queuedNumbers[i] ?? sentNumbers}
+                    worktreeId={id}
+                    dir={active?.worktree.path ?? null}
+                    onOpen={(path, line) => openSource(store, sock, id, path, line)}
+                  />
+                )}
+                {message.text}
+              </div>
               <span className="queued-actions">
                 <IconButton
                   icon="edit"
                   label="Edit: removes from queue, puts it back in the input"
-                  onClick={() => {
-                    sock?.send({ t: "unqueue", worktreeId: id, index: i });
-                    dispatch({ a: "set-draft", id, text });
-                  }}
+                  onClick={() => takeBackQueued(store, sock, id, i)}
                 />
                 <IconButton
                   icon="close"

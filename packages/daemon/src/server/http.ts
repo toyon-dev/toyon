@@ -1,11 +1,12 @@
 // HTTP side of the daemon: loopback/host guards, /ws auth + upgrade, /health, /register (CLI),
-// /attachments (images the shell attached to chat messages), and the static shell. Business logic stays in the services it calls.
+// /uploads and /attachments (what the shell attached to chat messages), and the static shell. Business logic stays in the services it calls.
 
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { type PairMint, type PairRedeem, pairLink, RESTART_NOW, type Remote, type RestartWait } from "@toyon/shared";
 import type { Server } from "bun";
-import type { AttachmentStore } from "../agent/attachments.ts";
+import { type AttachmentStore, drawnType } from "../agent/attachments.ts";
+import { isUploadKind } from "../agent/uploads.ts";
 import { UserError } from "../core/errors.ts";
 import { log } from "../core/log.ts";
 import type { PairCodes } from "../core/pair.ts";
@@ -82,6 +83,18 @@ const IMMUTABLE = "private, max-age=31536000, immutable";
  * whose reload button reads the same cached index again, with no way out. manifest.json, icon.svg
  * and sw.js are unhashed for the same reason, and a cached worker script is slow to replace. */
 const NO_STORE = "no-store";
+
+/** How something a person attached goes back out. One of the image types is drawn as that type and
+ * nothing else; everything else is plain text, whatever it is. An uploaded page or SVG must never
+ * run on the origin that holds the token, so the type is fixed, sniffing is off, and a browser
+ * that navigates there anyway gets a sandboxed document. */
+function attachedHeaders(imageType: string | null): Record<string, string> {
+  return {
+    "content-type": imageType ?? "text/plain; charset=utf-8",
+    "x-content-type-options": "nosniff",
+    ...(imageType ? {} : { "content-security-policy": "sandbox" }),
+  };
+}
 
 export function createFetch(opts: HttpOpts) {
   const grant = previewGrant(opts.token);
@@ -248,10 +261,44 @@ export function createFetch(opts: HttpOpts) {
       }
     }
 
-    // what the shell attached to chat messages (image thumbnails, the text behind a paste chip),
-    // back for the transcript. Bun.file types the response from the extension. The token
-    // rides in the query like /ws does: an <img src> cannot carry a header. Files never change
-    // once written, so the browser may keep them.
+    // An image or a file, uploaded as its chip appears: the body is the bytes, the type is the
+    // header's, and the answer is the id a message names it by. Refused before the body is read
+    // when the length already says too much; the store counts what actually arrives.
+    if (url.pathname === "/uploads" && req.method === "POST") {
+      if (!sameSecret(req.headers.get("authorization"), `Bearer ${opts.token}`)) {
+        return new Response("unauthorized", { status: 401 });
+      }
+      const kind = url.searchParams.get("kind");
+      if (!isUploadKind(kind)) return new Response("missing kind", { status: 400 });
+      const mime = (req.headers.get("content-type") ?? "").split(";")[0]?.trim().toLowerCase() ?? "";
+      try {
+        // a body is read chunk by chunk under Bun, which the DOM's type for it does not say
+        const body = req.body as AsyncIterable<Uint8Array> | null;
+        return Response.json(await opts.attachments.uploads.put(kind, mime, body), {
+          headers: { "cache-control": NO_STORE },
+        });
+      } catch (e) {
+        if (e instanceof UserError) return new Response(e.message, { status: 400 });
+        log.error("http", "upload failed", e);
+        return new Response("upload failed; see daemon log", { status: 500 });
+      }
+    }
+
+    // an upload back, for a chip that outlived the page that attached it. An id never means other
+    // bytes later, so the browser may keep it.
+    if (url.pathname.startsWith("/uploads/")) {
+      if (!sameSecret(url.searchParams.get("token"), opts.token)) return new Response("unauthorized", { status: 401 });
+      const id = url.pathname.slice("/uploads/".length);
+      const path = opts.attachments.uploads.path(id);
+      if (!path || !existsSync(path)) return new Response("not found", { status: 404 });
+      return new Response(Bun.file(path), {
+        headers: { "cache-control": IMMUTABLE, ...attachedHeaders(opts.attachments.uploads.imageType(id)) },
+      });
+    }
+
+    // what the shell attached to chat messages (image thumbnails, the text behind a paste or a
+    // file chip), back for the transcript. The token rides in the query like /ws does: an
+    // <img src> cannot carry a header. Files never change once written, so the browser may keep them.
     if (url.pathname.startsWith("/attachments/")) {
       if (!sameSecret(url.searchParams.get("token"), opts.token)) return new Response("unauthorized", { status: 401 });
       const [worktreeId, file, extra] = url.pathname.slice("/attachments/".length).split("/");
@@ -264,7 +311,9 @@ export function createFetch(opts: HttpOpts) {
       if (worktreeId && file) await opts.attachments.whenWritten(worktreeId, file);
       const path = places.find((p): p is string => !!p && existsSync(p));
       if (!path) return new Response("not found", { status: 404 });
-      return new Response(Bun.file(path), { headers: { "cache-control": IMMUTABLE } });
+      return new Response(Bun.file(path), {
+        headers: { "cache-control": IMMUTABLE, ...attachedHeaders(drawnType(file ?? "")) },
+      });
     }
 
     // a file in a worktree the browser draws (an image), for the editor pane's viewer. Token in the

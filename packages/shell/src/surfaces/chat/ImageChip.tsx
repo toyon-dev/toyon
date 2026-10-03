@@ -1,8 +1,7 @@
-import { attachmentLabel, type ImageRef } from "@toyon/shared";
+import { attachmentLabel, fmtBytes, type ImageRef } from "@toyon/shared";
 import { imageItems } from "../../state/actions/message.ts";
 import { cx } from "../../ui/cx.ts";
 import { AttachmentChip } from "./AttachmentChip.tsx";
-import { fmtBytes } from "./images.ts";
 
 /** an attached image as a chip: thumbnail, its session number, name and size. In the composer it
  * can be removed; in the chat it links to the full image and shows a larger look while hovered.
@@ -14,6 +13,7 @@ export function ImageChip({
   width,
   height,
   bytes,
+  uploading,
   onRemove,
   className = "",
 }: {
@@ -23,6 +23,8 @@ export function ImageChip({
   width: number;
   height: number;
   bytes: number;
+  /** its bytes are still on their way to the daemon */
+  uploading?: boolean;
   onRemove?: () => void;
   className?: string;
 }) {
@@ -37,6 +39,7 @@ export function ImageChip({
             <span className="pick-file row-dim">
               {" "}
               · {name} · {width}×{height} · {fmtBytes(bytes)}
+              {uploading && " · uploading"}
             </span>
           </span>
         </>

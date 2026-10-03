@@ -1,7 +1,7 @@
 // What the rest of the daemon needs from an agent session. AcpSession (agent/acp/session.ts) is
 // the implementation; tests use a fake.
 
-import type { AgentCommand, AgentEvent, AgentStatus, AskAnswer, AttachmentInput } from "@toyon/shared";
+import type { AgentCommand, AgentEvent, AgentStatus, AskAnswer, AttachmentInput, QueuedMessage } from "@toyon/shared";
 
 /** a login the agent's own CLI runs in a terminal */
 export interface LoginRun {
@@ -43,7 +43,7 @@ export interface AgentAdapter {
   readonly status: AgentStatus;
   readonly queueLength: number;
   /** the waiting messages the shell draws as queued: those not yet shown in the transcript */
-  readonly queueItems: string[];
+  readonly queueItems: QueuedMessage[];
   /** something is still owed a person: a message queued, steered or refused, or a card open */
   readonly unsettled: boolean;
   /** notified whenever the pending queue changes (send/consume/unqueue/stop) */
@@ -72,8 +72,9 @@ export interface AgentAdapter {
   hold(): () => void;
   /** interrupt the running turn; anything queued goes next */
   stop(): void;
-  /** `index` is a position in `queueItems` */
-  unqueue(index: number): void;
+  /** `index` is a position in `queueItems`. `taken` is handed the message as it leaves the queue,
+   * while its uploads are still held: a message taken back to be changed goes to its box there. */
+  unqueue(index: number, taken?: (message: QueuedMessage) => void): void;
   transcript(): Array<{ seq: number; event: AgentEvent }>;
   /** put an event the daemon produced itself (a command the person ran from the composer) on the
    * worktree's transcript and stream, in sequence with what the agent is saying */

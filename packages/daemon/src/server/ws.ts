@@ -12,6 +12,7 @@ import {
   SHELL_STREAM,
   streamKey,
   ThemeImportError,
+  UPLOAD_MAX_BYTES,
   WS_CLOSE_UNAUTHORIZED,
 } from "@toyon/shared";
 import type { Server, ServerWebSocket } from "bun";
@@ -21,6 +22,7 @@ import { UserError } from "../core/errors.ts";
 import { fireAndForget, log } from "../core/log.ts";
 import { lag, type SocketStats } from "../core/metrics.ts";
 import { PairCodes } from "../core/pair.ts";
+import type { DraftStore } from "../drafts/store.ts";
 import { setWaitingColors } from "../runtime/proxy.ts";
 import { dispatch, openedFrame, type Services } from "./handlers.ts";
 import { createFetch, type WsData } from "./http.ts";
@@ -28,6 +30,32 @@ import { createFetch, type WsData } from "./http.ts";
 /** how far behind a socket may fall before its terminal output is dropped instead of queued */
 const DROP_ABOVE_BYTES = 4 * 1024 * 1024;
 const DROPPED_NOTICE = "\r\n[toyon] output dropped: this pane was too far behind\r\n";
+
+/** the frames that are a message sent from a composer box */
+const SENDS = new Set(["chat", "create-worktree", "restore-worktree", "batch-worktrees"]);
+
+/** the box a frame that did not parse was sent from, read off the raw JSON; null when it is not a
+ * send, or names no box */
+function sentFrom(json: unknown): string | null {
+  if (!json || typeof json !== "object") return null;
+  const { t, boxId } = json as { t?: unknown; boxId?: unknown };
+  if (typeof t !== "string" || !SENDS.has(t)) return null;
+  return typeof boxId === "string" && boxId.length > 0 && boxId.length <= 200 ? boxId : null;
+}
+
+/** The answer to a frame that did not parse. A send that did not parse reached nobody and took
+ * nothing: its box is as the daemon holds it, and the tab that emptied its own is handed that
+ * back with the reason. Anything else is told the reason alone. */
+export function unparsedReply(
+  json: unknown,
+  reason: string,
+  drafts: Pick<DraftStore, "text" | "attachments">,
+): ServerMsg {
+  const message = `invalid message: ${reason}`;
+  const boxId = sentFrom(json);
+  if (boxId === null) return { t: "error", message };
+  return { t: "unsent", boxId, text: drafts.text(boxId), items: drafts.attachments(boxId), message };
+}
 
 interface TermChunk {
   worktreeId: string;
@@ -321,6 +349,9 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
   s.hub.on("draftChanged", (boxId, text, clientId) =>
     broadcast({ t: "draft", boxId, text, ...(clientId ? { clientId } : {}) }),
   );
+  s.hub.on("attachmentsChanged", (boxId, items, clientId) =>
+    broadcast({ t: "attachments", boxId, items, ...(clientId ? { clientId } : {}) }),
+  );
 
   // What a page learns first, over the socket or over the bootstrap fetch that precedes it. Quick
   // rows: the frame goes out from what is known and the counts follow, rather than every page
@@ -352,12 +383,15 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
       self: s.self.get(),
       update: s.update.get(),
       drafts: s.drafts.all(),
+      attachments: s.drafts.allAttachments(),
       managed: managedView(opts.managed),
     } satisfies ServerMsg;
   };
 
   let branded = false;
   const serverConfig = {
+    // an upload is the largest body anything sends; the store counts the bytes that arrive too
+    maxRequestBodySize: UPLOAD_MAX_BYTES,
     hostname: cloud.bindHost,
     fetch: createFetch({
       token,
@@ -385,9 +419,6 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
       },
     }),
     websocket: {
-      // a chat frame can carry ATTACHMENT_LIMITS.image images of IMAGE_MAX_BYTES each, base64; Bun's
-      // default (16 MB) would drop the socket mid-paste
-      maxPayloadLength: 64 * 1024 * 1024,
       // idleTimeout and sendPings stay at Bun's defaults (120 s, on): they are what close a tab that
       // died without a word, which is what lets go of the worktree it was showing
       async open(ws: ServerWebSocket<WsData>) {
@@ -432,7 +463,7 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
         }
         const parsed = parseClientMsg(json);
         if (!parsed.ok) {
-          send(ws, { t: "error", message: `invalid message: ${parsed.reason}` });
+          send(ws, unparsedReply(json, parsed.reason, s.drafts));
           return;
         }
         const ctx = {

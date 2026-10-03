@@ -12,6 +12,7 @@ import { AttachmentStore } from "../agent/attachments.ts";
 import { planEdited, writePlanDoc } from "../agent/planDoc.ts";
 import { type PreviewStanding, previewContext } from "../agent/prompt.ts";
 import type { AgentRegistry } from "../agent/registry.ts";
+import { UploadStore } from "../agent/uploads.ts";
 import { cloud } from "../core/cloud.ts";
 import { UserError } from "../core/errors.ts";
 import type { Hub } from "../core/hub.ts";
@@ -201,7 +202,7 @@ function defaultAgent(
     launch: (spec) => d.agents.command(spec),
     planSignIn: () => d.managed?.planSignIn ?? true,
     transcriptsDir: d.paths.transcriptsDir,
-    attachments: d.attachments ?? new AttachmentStore(d.paths.attachmentsDir),
+    attachments: d.attachments ?? new AttachmentStore(d.paths.attachmentsDir, new UploadStore(d.paths.uploadsDir)),
     getSessionId: () => d.state.session(wt.id),
     setSessionId: (id) => d.state.setSession(wt.id, id),
     onEvent: (event, seq) => d.hub.emit("agent", wt.id, seq, event),

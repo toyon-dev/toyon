@@ -15,6 +15,7 @@ import { fakeAccounts, fakeAgents, fakeFactories } from "../../test/helpers/fake
 import { sh, tmpRepo } from "../../test/helpers/tmp-repo.ts";
 import { AttachmentStore } from "../agent/attachments.ts";
 import { transcriptPathFor } from "../agent/transcript.ts";
+import { UploadStore } from "../agent/uploads.ts";
 import { UserError } from "../core/errors.ts";
 import { Hub } from "../core/hub.ts";
 import { Restarter } from "../core/restarter.ts";
@@ -92,7 +93,8 @@ function make() {
   const f = fakeFactories();
   const agents = fakeAgents(t.paths.agentsDir);
   const accounts = fakeAccounts(agents);
-  const attachments = new AttachmentStore(t.paths.attachmentsDir);
+  const uploads = new UploadStore(t.paths.uploadsDir);
+  const attachments = new AttachmentStore(t.paths.attachmentsDir, uploads);
   const runtime = new RuntimeRegistry({
     hub,
     state,
@@ -103,7 +105,13 @@ function make() {
     bridgeScript: () => "",
     ...f.factories,
   });
-  const drafts = new DraftStore({ file: t.paths.draftsFile, hub, saveDelayMs: 0 });
+  const drafts = new DraftStore({
+    file: t.paths.draftsFile,
+    attachmentsFile: t.paths.draftAttachmentsFile,
+    hub,
+    uploads,
+    saveDelayMs: 0,
+  });
   const worktrees = new WorktreeService({
     state,
     hub,
@@ -658,6 +666,251 @@ describe("handlers", () => {
     expect(services.drafts.text(main.id)).toBe("");
   });
 
+  test("what is attached in a box moves with it, and the upload behind a chip is kept through the move", async () => {
+    const { services, ctx, repo } = make();
+    const uploads = services.attachments.uploads;
+    const r = await services.repos.register(repo);
+    r.needsSetup = false;
+    r.config = { run: { web: "true" } };
+    const main = services.state.worktrees.find((x) => x.repoId === r.id && x.kind === "main")!;
+    const up = await uploads.put("file", "text/plain", [Buffer.from("notes")]);
+    const items = [{ kind: "file" as const, name: "notes.txt", ...up }];
+    const told: Array<[string, number, string | undefined]> = [];
+    services.hub.on("attachmentsChanged", (boxId, list, clientId) => told.push([boxId, list.length, clientId]));
+    await dispatch({ t: "set-attachments", boxId: main.id, items, clientId: "tab1" }, ctx, services);
+    expect(told).toEqual([[main.id, 1, "tab1"]]);
+    // chips alone are a box written in: its worktree is not archived out from under them
+    expect(services.drafts.has(main.id)).toBe(true);
+    // main's box to the spare that takes the row
+    await services.worktrees.spare.ensure(r.id);
+    const spare = services.state.worktrees.find((x) => x.repoId === r.id && x.kind === "spare")!;
+    expect(services.drafts.attachments(spare.id)).toEqual(items);
+    expect(services.drafts.attachments(main.id)).toEqual([]);
+    expect(uploads.path(up.upload)).not.toBeNull();
+    // and back: a spare that goes hands its box to main
+    services.drafts.set(spare.id, "with words");
+    services.drafts.move(spare.id, main.id, true);
+    expect(services.drafts.attachments(main.id)).toEqual(items);
+    expect(services.drafts.text(main.id)).toBe("with words");
+    expect(uploads.path(up.upload)).not.toBeNull();
+    // the chip is taken off: no box names the upload any more and no message holds it, so it goes
+    await dispatch({ t: "set-attachments", boxId: main.id, items: [], clientId: "tab1" }, ctx, services);
+    expect(services.drafts.uploadIds()).toEqual([]);
+    expect(uploads.path(up.upload)).toBeNull();
+  });
+
+  test("a message holds its uploads from arrival, and one naming an upload that is gone is refused", async () => {
+    const { services, ctx, repo, agents } = make();
+    const uploads = services.attachments.uploads;
+    const r = await services.repos.register(repo);
+    r.needsSetup = false;
+    const task = await services.worktrees.create(r.id, "a task");
+    await opened(task.id, ctx, services);
+    const up = await uploads.put("file", "text/plain", [Buffer.from("notes")]);
+    const items = [{ kind: "file" as const, name: "notes.txt", ...up }];
+    await dispatch({ t: "set-attachments", boxId: task.id, items }, ctx, services);
+    let heldAtSend = false;
+    const agent = agents.get(task.id)!;
+    const send = agent.send.bind(agent);
+    agent.send = (text, opts) => {
+      // the box has emptied by the time the agent is reached, as it does when a worktree is made first
+      services.drafts.setAttachments(task.id, []);
+      heldAtSend = uploads.path(up.upload) !== null;
+      send(text, opts);
+    };
+    await dispatch({ t: "chat", worktreeId: task.id, text: "see", attachments: items }, ctx, services);
+    expect(heldAtSend).toBe(true);
+    expect(agent.sent.at(-1)?.attachments).toEqual(items);
+    // the fake agent records nothing and holds nothing, so the handler's release is the last
+    expect(uploads.path(up.upload)).toBeNull();
+    await expect(
+      dispatch({ t: "chat", worktreeId: task.id, text: "again", attachments: items }, ctx, services),
+    ).rejects.toThrow("attach it again");
+    expect(agent.sent.at(-1)?.text).toBe("see");
+  });
+
+  test("a send takes the box, and a refusal puts it back and says why with unsent", async () => {
+    const { services, ctx, replies, repo } = make();
+    const uploads = services.attachments.uploads;
+    const r = await services.repos.register(repo);
+    r.needsSetup = false;
+    const main = await mainOf(services, repo);
+    const up = await uploads.put("file", "text/plain", [Buffer.from("notes")]);
+    const items = [{ kind: "file" as const, name: "notes.txt", ...up }];
+    await dispatch({ t: "set-draft", boxId: main.id, text: " see this ", clientId: "tab1" }, ctx, services);
+    await dispatch({ t: "set-attachments", boxId: main.id, items, clientId: "tab1" }, ctx, services);
+    const told: Array<[string, string | undefined]> = [];
+    services.hub.on("draftChanged", (_box, text, clientId) => told.push([text, clientId]));
+    const sent = dispatch(
+      { t: "chat", worktreeId: main.id, clientId: "tab1", text: "see this", attachments: items, boxId: main.id },
+      ctx,
+      services,
+    );
+    // taken as the frame arrives, before anything is awaited, with the upload held across the gap
+    expect(services.drafts.has(main.id)).toBe(false);
+    expect(uploads.path(up.upload)).not.toBeNull();
+    // nothing runs on main: no agent took it, and the handler answers rather than throws
+    await sent;
+    expect(services.drafts.text(main.id)).toBe(" see this ");
+    expect(services.drafts.attachments(main.id)).toEqual(items);
+    // both under the sender's name: it emptied its own box, and acts on `unsent` alone
+    expect(told).toEqual([
+      ["", "tab1"],
+      [" see this ", "tab1"],
+    ]);
+    expect(lastOf(replies, "unsent")).toEqual({
+      t: "unsent",
+      boxId: main.id,
+      text: " see this ",
+      items,
+      message: "nothing runs on main: the plus starts a worktree for it",
+    });
+    expect(lastOf(replies, "error")).toBeUndefined();
+    // named again by the box before the handler let go
+    expect(uploads.path(up.upload)).not.toBeNull();
+  });
+
+  test("words typed since a refused send stay, and a chip whose upload is gone is not put back", async () => {
+    const { services, ctx, replies, repo } = make();
+    const uploads = services.attachments.uploads;
+    const r = await services.repos.register(repo);
+    r.needsSetup = false;
+    const main = await mainOf(services, repo);
+    const up = await uploads.put("file", "text/plain", [Buffer.from("notes")]);
+    const here = { kind: "file" as const, name: "notes.txt", ...up };
+    const lost = { kind: "file" as const, name: "old.log", upload: "nope", bytes: 3, text: true };
+    services.drafts.set(main.id, "first");
+    services.drafts.setAttachments(main.id, [here, lost]);
+    // refused only once the service has been asked, which is a moment the person can type in
+    const sent = dispatch(
+      { t: "chat", worktreeId: main.id, text: "first", attachments: [here], boxId: main.id },
+      ctx,
+      services,
+    );
+    services.drafts.set(main.id, "second thought");
+    await sent;
+    expect(services.drafts.text(main.id)).toBe("second thought");
+    expect(services.drafts.attachments(main.id)).toEqual([here]);
+    expect(lastOf(replies, "unsent")).toMatchObject({ text: "first", items: [here] });
+    // a message that names a missing upload is refused whole, before any service hears of it
+    services.drafts.set(main.id, "");
+    await dispatch(
+      { t: "chat", worktreeId: main.id, text: "again", attachments: [here, lost], boxId: main.id },
+      ctx,
+      services,
+    );
+    expect(lastOf(replies, "unsent")?.message).toContain("attach it again");
+    expect(services.drafts.attachments(main.id)).toEqual([here]);
+  });
+
+  test("a message an agent took leaves the box empty, and one that failed after is a plain error", async () => {
+    const { services, ctx, replies, repo, agents } = make();
+    const r = await services.repos.register(repo);
+    r.needsSetup = false;
+    const task = await services.worktrees.create(r.id, "a task");
+    await opened(task.id, ctx, services);
+    services.drafts.set(task.id, "and this");
+    await dispatch({ t: "chat", worktreeId: task.id, text: "and this", boxId: task.id }, ctx, services);
+    expect(agents.get(task.id)!.sent.at(-1)?.text).toBe("and this");
+    expect(services.drafts.has(task.id)).toBe(false);
+    expect(lastOf(replies, "unsent")).toBeUndefined();
+    // delivered and then failed: the agent has the message, so the box does not get it back
+    services.drafts.set(task.id, "once more");
+    const send = services.worktrees.send.bind(services.worktrees);
+    services.worktrees.send = async (id, msg) => {
+      await send(id, msg);
+      throw new UserError("moved nothing", { delivered: true });
+    };
+    await expect(
+      dispatch({ t: "chat", worktreeId: task.id, text: "once more", boxId: task.id }, ctx, services),
+    ).rejects.toThrow("moved nothing");
+    expect(services.drafts.has(task.id)).toBe(false);
+    expect(lastOf(replies, "unsent")).toBeUndefined();
+  });
+
+  test("variants are one frame: the daemon makes the group, and the box is taken once", async () => {
+    const { services, ctx, replies, repo, agents } = make();
+    const r = await services.repos.register(repo);
+    r.needsSetup = false;
+    const main = await mainOf(services, repo);
+    services.drafts.set(main.id, "try it three ways");
+    await dispatch(
+      { t: "create-worktree", repoId: r.id, prompt: "try it three ways", variants: 3, boxId: main.id },
+      ctx,
+      services,
+    );
+    const made = services.state.worktrees.filter((w) => w.variant);
+    expect(made.map((w) => w.variant!.index).sort()).toEqual([1, 2, 3]);
+    expect(new Set(made.map((w) => w.variant!.group)).size).toBe(1);
+    expect(made.every((w) => w.variant!.of === 3)).toBe(true);
+    expect(made.every((w) => agents.get(w.id)!.sent.length === 1)).toBe(true);
+    expect(services.drafts.has(main.id)).toBe(false);
+    expect(lastOf(replies, "unsent")).toBeUndefined();
+    // refused whole, the one message comes back once
+    services.drafts.set(main.id, "and again");
+    await dispatch(
+      { t: "create-worktree", repoId: r.id, prompt: "and again", variants: 2, agent: "no-such-agent", boxId: main.id },
+      ctx,
+      services,
+    );
+    expect(replies.filter((m) => m.t === "unsent")).toHaveLength(1);
+    expect(services.drafts.text(main.id)).toBe("and again");
+  });
+
+  test("a queued message taken back to edit fills the worktree's box, its upload kept", async () => {
+    const { services, ctx, repo, agents } = make();
+    const uploads = services.attachments.uploads;
+    const r = await services.repos.register(repo);
+    r.needsSetup = false;
+    const task = await services.worktrees.create(r.id, "a task");
+    await opened(task.id, ctx, services);
+    const up = await uploads.put("file", "text/plain", [Buffer.from("notes")]);
+    const items = [{ kind: "file" as const, name: "notes.txt", ...up }];
+    const agent = agents.get(task.id)!;
+    // the queue holds it, as a session does from the send
+    uploads.hold([up.upload]);
+    agent.queued = [{ text: "first" }, { text: "then this", attachments: items }];
+    await dispatch({ t: "unqueue", worktreeId: task.id, index: 1, edit: true }, ctx, services);
+    uploads.release([up.upload]);
+    expect(agent.queued).toEqual([{ text: "first" }]);
+    expect(services.drafts.text(task.id)).toBe("then this");
+    expect(services.drafts.attachments(task.id)).toEqual(items);
+    expect(uploads.path(up.upload)).not.toBeNull();
+    // without `edit` the message just goes
+    await dispatch({ t: "unqueue", worktreeId: task.id, index: 0 }, ctx, services);
+    expect(agent.queued).toEqual([]);
+    expect(services.drafts.text(task.id)).toBe("then this");
+  });
+
+  test("redraft rebuilds the box from a sent message: its words, and a fresh upload for what it carried", async () => {
+    const { services, ctx, repo, agents } = make();
+    const store = services.attachments;
+    const r = await services.repos.register(repo);
+    r.needsSetup = false;
+    const task = await services.worktrees.create(r.id, "a task");
+    await opened(task.id, ctx, services);
+    const img = await store.uploads.put("image", "image/png", [Buffer.from("png bytes")]);
+    const input = { kind: "image" as const, name: "shot.png", mimeType: "image/png" as const, width: 2, height: 1 };
+    const image = await store.put(task.id, 1, { ...input, upload: img.upload, bytes: img.bytes });
+    const paste = await store.put(task.id, 1, { kind: "paste", text: "a long paste", name: "log.txt" });
+    const agent = agents.get(task.id)!;
+    agent.note({ type: "turn-start", ts: 1 });
+    agent.note({ type: "user-message", text: "look at this", ts: 2, attachments: [image.ref, paste.ref] });
+    await dispatch({ t: "redraft", worktreeId: task.id, seq: 1 }, ctx, services);
+    expect(services.drafts.text(task.id)).toBe("look at this");
+    const [again, text] = services.drafts.attachments(task.id);
+    expect(again).toMatchObject({ ...input, bytes: 9 });
+    // a new upload, so the message it came from keeps its own copy
+    const upload = again?.kind === "image" ? again.upload : "";
+    expect(upload).not.toBe(img.upload);
+    expect(await Bun.file(store.uploads.path(upload)!).text()).toBe("png bytes");
+    expect(text).toEqual({ kind: "paste", text: "a long paste", name: "log.txt" });
+    // only a message the person sent can come back
+    await expect(dispatch({ t: "redraft", worktreeId: task.id, seq: 0 }, ctx, services)).rejects.toThrow(
+      "no longer in this chat",
+    );
+  });
+
   test("a first keystroke on the plus warms its agent once; an empty box, a task's box and a spare still warming do not", async () => {
     const { services, ctx, repo, agents } = make();
     const r = await services.repos.register(repo);
@@ -860,7 +1113,8 @@ describe("handlers", () => {
       kind: "image" as const,
       name: "a.png",
       mimeType: "image/png" as const,
-      data: "UE5H",
+      upload: (await services.attachments.uploads.put("image", "image/png", [Buffer.from("PNG")])).upload,
+      bytes: 3,
       width: 2,
       height: 1,
     };
@@ -884,11 +1138,7 @@ describe("handlers", () => {
     writeFileSync(join(repo, "notes.txt"), "a new file\n");
     // one set of changes cannot go three ways
     await expect(
-      dispatch(
-        { t: "create-worktree", repoId: r.id, prompt: "x", carry: true, variant: { group: "g", index: 1, of: 2 } },
-        ctx,
-        services,
-      ),
+      dispatch({ t: "create-worktree", repoId: r.id, prompt: "x", carry: true, variants: 2 }, ctx, services),
     ).rejects.toBeInstanceOf(UserError);
     expect(readFileSync(join(repo, "README.md"), "utf8")).toBe(`${readme}started by hand\n`);
 

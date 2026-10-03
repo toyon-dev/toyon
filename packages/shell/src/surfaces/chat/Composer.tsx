@@ -15,15 +15,17 @@ import {
   landPolicy,
   nextNumbers,
   numbered,
+  numbersAfter,
 } from "@toyon/shared";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { previewBus, togglePick } from "../../app/previewBus.ts";
 import { listFiles, openFile } from "../../state/actions/file.ts";
 import { terminalItems } from "../../state/actions/proc.ts";
 import { archiveWorktrees, shipOp } from "../../state/actions/worktree.ts";
-import { toInput } from "../../state/attach.ts";
+import { takeBackQueued, toInput } from "../../state/attach.ts";
 import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
 import { openSource } from "../../state/openSource.ts";
+import { isUploading } from "../../state/pending.ts";
 import { useChatCentred, useGreenfield, useLocalField, usePreviewId } from "../../state/selectors.ts";
 import { canCarry, composerBoxOf, type Draft, trunkOf } from "../../state/store.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
@@ -36,6 +38,7 @@ import { useListNav } from "../../ui/listNav.ts";
 import { useContextMenu } from "../../ui/menu.ts";
 import { Ring } from "../../ui/Ring.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
+import { uploadUrl } from "../../ws.ts";
 import { greenfieldContext } from "../center/greenfield.ts";
 import { canPull, originNote } from "../chips/baseNote.ts";
 import { EffortChip, useNewWorktreeEffort } from "../chips/EffortChip.tsx";
@@ -63,8 +66,8 @@ import { runLine, runOf, runTicking } from "../runs.ts";
 import { chord, commandSource, folderList, pickLabel, procTrouble } from "../util.ts";
 import { AskBox } from "./AskBox.tsx";
 import { openAsk } from "./ask.ts";
+import { FileChip } from "./FileChip.tsx";
 import { ImageChip } from "./ImageChip.tsx";
-import { dataUrl } from "./images.ts";
 import { MentionText, openMention } from "./Mentions.tsx";
 import { filterCommands, insertAt, triggerAt } from "./mentions.ts";
 import { isMode, mergeCommands, ownCommandOf, ownCommands } from "./ownCommands.ts";
@@ -127,6 +130,8 @@ function insertionFor(r: Row): string {
   if (r.kind === "folder") return `@${r.path}/ `;
   return r.kind === "changes" ? "@changes " : `@${r.path} `;
 }
+
+const STILL_UPLOADING = "still uploading what is attached; send again in a moment";
 
 /** The message box: the text (kept per row), picked-element, image and paste attachments, the row
  * saying what runs where the message goes, and the per-worktree tools (terminal, element picker).
@@ -703,6 +708,14 @@ export function Composer({
     else land();
   };
 
+  const uploading = attachments.some(isUploading);
+  // A send takes the box: the daemon empties it as the frame arrives, and fills it again if no
+  // agent took the message. So the daemon is told the box's exact words first (a keystroke may
+  // still be waiting out its pause, and a recalled message was never a draft there), and the
+  // frame goes before this tab empties its own.
+  const leaveBox = () => {
+    if (boxId) sock?.send({ t: "set-draft", boxId, text, clientId });
+  };
   // attachments alone are a message: a pasted error or a picked element often says it all
   const send = () => {
     if (!boxId || blank) return;
@@ -714,17 +727,21 @@ export function Composer({
         refuse("nothing runs here until it is restored");
         return;
       }
+      if (uploading) {
+        refuse(STILL_UPLOADING);
+        return;
+      }
       const sent = attachments.length ? attachments.map(toInput) : undefined;
+      leaveBox();
       sock?.send({
         t: "restore-worktree",
         archiveId: archived.id,
         clientId,
         message: { text: text.trim(), attachments: sent },
+        boxId,
       });
-      if (attachments.length) dispatch({ a: "clear-attachments", id: boxId });
       dispatch({ a: "restoring", id: boxId, text: text.trim() });
-      dispatch({ a: "sent", id: boxId });
-      setText("");
+      dispatch({ a: "sent-box", id: boxId });
       return;
     }
     if (!active || !id) return;
@@ -763,9 +780,16 @@ export function Composer({
       refuse("choose an agent above first");
       return;
     }
+    // a message names an upload by the id the daemon answers with, so it waits for that answer; the
+    // words stay in the box, and enter again sends them
+    if (uploading) {
+      refuse(STILL_UPLOADING);
+      return;
+    }
     const prompt = typed ? typed.args : text.trim();
     const context = buildContext();
     const sent = attachments.length ? attachments.map(toInput) : undefined;
+    leaveBox();
     // a typed mode is the chip's next value too, so the box remembers it the way the chip does
     if (mode) setMode(mode);
     if (spawning) {
@@ -796,21 +820,12 @@ export function Composer({
           agent: spawnAgent,
           ...(newModel ? { model: newModel } : {}),
           ...(newEffort ? { effort: newEffort } : {}),
+          boxId,
         });
-      } else if (draft && draft.variants > 1) {
-        const group = Math.random().toString(36).slice(2, 10);
-        // the first attempt is this row; its siblings are made beside it
-        for (let i = 0; i < draft.variants; i++) {
-          sock?.send({
-            t: "create-worktree",
-            ...from,
-            ...(i === 0 ? here : {}),
-            prompt,
-            variant: { group, index: i + 1, of: draft.variants },
-          });
-        }
       } else {
-        sock?.send({ t: "create-worktree", ...from, ...here, prompt });
+        // one frame however many attempts: the daemon makes the group, this row first
+        const variants = draft && draft.variants > 1 ? { variants: draft.variants } : {};
+        sock?.send({ t: "create-worktree", ...from, ...here, ...variants, prompt, boxId });
       }
     } else {
       // the session reads these when it opens, and the daemon handles frames in order, so they are
@@ -819,12 +834,9 @@ export function Composer({
         sock?.send({ t: "set-worktree-model", worktreeId: id, model: newModel });
         sock?.send({ t: "set-worktree-effort", worktreeId: id, effort: newEffort });
       }
-      sock?.send({ t: "chat", worktreeId: id, clientId, text: prompt, context, attachments: sent });
+      sock?.send({ t: "chat", worktreeId: id, clientId, text: prompt, context, attachments: sent, boxId });
     }
-    if (attachments.length) dispatch({ a: "clear-attachments", id: boxId });
-    // after the draft is cleared: a walk ending in a send puts the log back first, and the send wins
-    setText("");
-    dispatch({ a: "sent", id: boxId });
+    dispatch({ a: "sent-box", id: boxId });
     // the reply lands in the dock, so the dock comes back with the message that started it
     if (greenfield) dispatch({ a: "show-chat" });
   };
@@ -868,6 +880,8 @@ export function Composer({
   // the number each chip will carry on send, counting each kind on from this session's: a message
   // that starts a worktree starts that worktree's session, so its count starts over
   const sentBefore = spawning ? [] : chat.map((c) => (c.kind === "user" ? c.attachments : undefined));
+  // a queued message takes its numbers ahead of what is written here
+  const queued = spawning ? [] : queue.flatMap((q) => q.attachments ?? []);
   const dir = active ? active.worktree.path : null;
   const plan = active?.worktree.plan;
   // the stop stands in for the field's esc, so it goes with the field when an ask card takes its
@@ -896,18 +910,30 @@ export function Composer({
         </div>
       )}
       {boxId &&
-        numbered(attachments, nextNumbers(sentBefore)).map(([item, n]) => {
+        numbered(attachments, numbersAfter(nextNumbers(sentBefore), queued)).map(([item, n]) => {
           const detach = () => dispatch({ a: "detach", id: boxId, key: item.key });
           if (item.kind === "image")
             return (
               <ImageChip
                 key={item.key}
-                src={dataUrl(item)}
+                src={item.local ?? uploadUrl(item.upload)}
                 n={n}
                 name={item.name}
                 width={item.width}
                 height={item.height}
                 bytes={item.bytes}
+                uploading={item.uploading}
+                onRemove={detach}
+              />
+            );
+          if (item.kind === "file")
+            return (
+              <FileChip
+                key={item.key}
+                name={item.name}
+                bytes={item.bytes}
+                href={item.text && item.upload ? uploadUrl(item.upload) : undefined}
+                uploading={item.uploading}
                 onRemove={detach}
               />
             );
@@ -1048,8 +1074,7 @@ export function Composer({
                 const queued = queue.at(-1);
                 if (up && !e.metaKey && !walk && text === "" && id && !drafting && queued !== undefined) {
                   e.preventDefault();
-                  sock?.send({ t: "unqueue", worktreeId: id, index: queue.length - 1 });
-                  walkTo({ walk: null, text: queued });
+                  takeBackQueued(store, sock, id, queue.length - 1);
                   return;
                 }
                 // while walking the arrows are the walk's however many lines the entry has; in a box

@@ -1,4 +1,4 @@
-import { isFileMsg, isTermMsg, PROTOCOL_VERSION, type ServerMsg } from "@toyon/shared";
+import { type AttachmentInput, isFileMsg, isTermMsg, PROTOCOL_VERSION, type ServerMsg } from "@toyon/shared";
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./app/App.tsx";
@@ -11,6 +11,7 @@ import { FileSync } from "./state/fileSync.ts";
 import { migrateStorage, STORAGE } from "./state/keys.ts";
 import { settleLoose } from "./state/looseSync.ts";
 import { isOpenedMsg, openFromOutside, refusedFromOutside } from "./state/openOutside.ts";
+import { type PendingAttachment, settledInputs } from "./state/pending.ts";
 import { initialState, isLayout, type Layout } from "./state/store.ts";
 import { ErrorBoundary, markStaleBuild } from "./ui/ErrorBoundary.tsx";
 import "./styles/tokens.css";
@@ -105,6 +106,7 @@ function syncDrafts() {
   /** boxes with text not sent yet: the text the wait was last set for, its timer, and when the
    * first unsent keystroke came */
   const waiting = new Map<string, { text: string; timer: ReturnType<typeof setTimeout>; since: number }>();
+  const sends = sendsSeen();
   const flush = (id: string) => {
     clearTimeout(waiting.get(id)?.timer);
     waiting.delete(id);
@@ -119,6 +121,12 @@ function syncDrafts() {
   };
   store.subscribe(() => {
     for (const [id, l] of Object.entries(store.getState().local)) {
+      if (sends.another(id, l.sent)) {
+        // the daemon emptied the box as the message arrived, so the clear here is already said
+        clearTimeout(waiting.get(id)?.timer);
+        waiting.delete(id);
+        sent.set(id, "");
+      }
       if (l.mark?.by === "walk" || (sent.get(id) ?? "") === l.draft) continue;
       if (!l.draft) {
         flush(id);
@@ -149,6 +157,58 @@ function syncDrafts() {
       if (waiting.has(boxId)) return false;
       sent.set(boxId, text);
       return true;
+    },
+  };
+}
+
+/** Notices each message this tab sends from a box, by the box's count of them. A send takes the
+ * box: the daemon empties it as the frame arrives, so the tab's own clear is not told again. Told
+ * again, it could land after a fast refusal had put the message back, and wipe it. */
+function sendsSeen() {
+  const counted = new Map<string, number>();
+  return {
+    /** whether box `id` has sent a message since this was last asked */
+    another(id: string, count = 0): boolean {
+      if ((counted.get(id) ?? 0) === count) return false;
+      counted.set(id, count);
+      return true;
+    },
+  };
+}
+
+/** What is attached in each box goes to the daemon as it changes, for the reasons its text does,
+ * and at once: a chip is a deliberate act, not a keystroke, and a message sent a moment later has
+ * to find its uploads still named. Only what has landed is told; an upload in flight is this
+ * tab's alone. What the daemon last said a box holds counts as sent, so its frames are not echoed. */
+function syncAttachments() {
+  /** each box's list as it was last looked at: the store changes on every chat frame, and an
+   * unchanged array is an unchanged list */
+  const seen = new Map<string, readonly PendingAttachment[]>();
+  const sent = new Map<string, string>();
+  const sends = sendsSeen();
+  store.subscribe(() => {
+    for (const [id, l] of Object.entries(store.getState().local)) {
+      // as for the text: the daemon took the list with the message
+      if (sends.another(id, l.sent)) sent.set(id, "[]");
+      if (seen.get(id) === l.attachments) continue;
+      seen.set(id, l.attachments);
+      const items = settledInputs(l.attachments);
+      const raw = JSON.stringify(items);
+      if ((sent.get(id) ?? "[]") === raw) continue;
+      sent.set(id, raw);
+      sock.send({ t: "set-attachments", boxId: id, items, clientId: store.getState().clientId });
+    }
+  });
+  return {
+    /** what the daemon holds, before the store applies it: a hello is the whole set */
+    hello(lists: Record<string, AttachmentInput[]>) {
+      sent.clear();
+      seen.clear();
+      for (const [id, items] of Object.entries(lists)) sent.set(id, JSON.stringify(items));
+    },
+    /** another tab's list for a box, before the store applies it */
+    heard(boxId: string, items: AttachmentInput[]) {
+      sent.set(boxId, JSON.stringify(items));
     },
   };
 }
@@ -210,8 +270,18 @@ const sock = new DaemonSocket(
         return;
       }
       heardVersion = msg.version;
+      // a box whose message went out while the socket was down is empty, whatever this hello says
+      const sentDown = new Set(sock.sentWhileDown());
+      if (sentDown.size) {
+        const kept = <T,>(byBox: Record<string, T>) =>
+          Object.fromEntries(Object.entries(byBox).filter(([id]) => !sentDown.has(id)));
+        msg.drafts = kept(msg.drafts);
+        msg.attachments = kept(msg.attachments);
+      }
       drafts.hello(msg.drafts);
+      pending.hello(msg.attachments);
     }
+    if (msg.t === "attachments" && msg.clientId !== store.getState().clientId) pending.heard(msg.boxId, msg.items);
     if (msg.t === "draft" && msg.clientId !== store.getState().clientId && !drafts.heard(msg.boxId, msg.text)) return;
     if (isTermMsg(msg)) {
       terminalBus.deliver(msg);
@@ -260,6 +330,7 @@ window.addEventListener("vite:preloadError", markStaleBuild);
 // drafts reach the daemon as they are typed and the editor flushes on pagehide, so a reload or a ⌘W
 // has nothing to ask about.
 const drafts = syncDrafts();
+const pending = syncAttachments();
 
 // The hello the inline script in index.html asked for before this bundle loaded. Applied through
 // the same reducer as the socket's, so the first paint is the real project; a daemon that is down
@@ -275,6 +346,7 @@ const booted = (window.toyonBoot ?? Promise.resolve(null)).then((boot) => {
   const msg = boot as ServerMsg | null;
   if (msg && typeof msg === "object" && msg.t === "hello" && msg.protocol === PROTOCOL_VERSION) {
     heardVersion ??= msg.version;
+    pending.hello(msg.attachments);
     store.dispatch({ a: "server", msg });
   }
 });

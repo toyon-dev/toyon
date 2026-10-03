@@ -85,14 +85,14 @@ describe("readText", () => {
     ({ size, arrayBuffer: async () => bytes.buffer }) as unknown as File;
 
   test("decodes utf-8", async () => {
-    expect(await readText(file(new TextEncoder().encode("hej så")))).toBe("hej så");
+    expect(await readText(file(new TextEncoder().encode("hej så")), 1024)).toBe("hej så");
   });
 
   test("a binary comes back null rather than a screen of replacement characters", async () => {
-    expect(await readText(file(new Uint8Array([0xff, 0xfe, 0x00, 0x80])))).toBeNull();
+    expect(await readText(file(new Uint8Array([0xff, 0xfe, 0x00, 0x80])), 1024)).toBeNull();
   });
 
-  test("something enormous is not what anyone meant to paste", async () => {
-    expect(await readText(file(new TextEncoder().encode("x"), 50 * 1024 * 1024))).toBeNull();
+  test("more than the caller will show is not read at all", async () => {
+    expect(await readText(file(new TextEncoder().encode("x"), 50 * 1024 * 1024), 1024)).toBeNull();
   });
 });

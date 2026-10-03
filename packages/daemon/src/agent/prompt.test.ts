@@ -1,6 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import type { ContentBlock } from "@agentclientprotocol/sdk";
-import { ambientBlock, buildPrompt, pasteCaption, pickCaption, previewContext, SYSTEM_APPEND } from "./prompt.ts";
+import {
+  ambientBlock,
+  buildPrompt,
+  fileCaption,
+  pasteCaption,
+  pickCaption,
+  previewContext,
+  SYSTEM_APPEND,
+} from "./prompt.ts";
 
 const ref = {
   kind: "image" as const,
@@ -26,7 +34,15 @@ const pick = {
   text: "Save",
   html: "<button>Save</button>",
 };
-const image = { kind: "image" as const, ref, bytes: Buffer.from("abc") };
+const image = { kind: "image" as const, ref, bytes: Buffer.from("abc"), path: "/store/wt/2.png" };
+const file = {
+  kind: "file" as const,
+  n: 1,
+  name: "run.jsonl",
+  bytes: 108_544,
+  text: true,
+  file: "1-run.jsonl",
+};
 const picked = "An element the user picked in the preview:";
 /** each block's first line, or its type when it is not text */
 const heads = (blocks: ContentBlock[]) => blocks.map((b) => (b.type === "text" ? b.text.split("\n")[0] : b.type));
@@ -112,7 +128,7 @@ describe("buildPrompt", () => {
   test("images lead, each behind its numbered caption; the prefix stays on the text block", () => {
     const blocks = buildPrompt("what is this", undefined, SYSTEM_APPEND, [image]);
     expect(blocks).toEqual([
-      { type: "text", text: "Image 2: shot.png (10×5)" },
+      { type: "text", text: "Image 2: shot.png (10×5), saved at /store/wt/2.png" },
       { type: "image", mimeType: "image/png", data: "YWJj" },
       { type: "text", text: `${SYSTEM_APPEND}\n\nwhat is this` },
     ]);
@@ -149,11 +165,36 @@ describe("buildPrompt", () => {
     expect(heads(blocks)).toEqual([
       `${picked} <Button /> used at src/pages/Home.tsx:40, its own JSX at src/ui/Button.tsx:12, text "Save"`,
       "Pasted text 1 (2 lines, 17 chars), begins: line one",
-      "Image 2: shot.png (10×5)",
+      "Image 2: shot.png (10×5), saved at /store/wt/2.png",
       "image",
       "do it",
       "[ctx]",
     ]);
+  });
+
+  test("a file goes as the path its copy is stored at, never as its bytes", () => {
+    const blocks = buildPrompt("what failed", undefined, undefined, [
+      { kind: "file", ref: file, path: "/store/wt/1-run.jsonl" },
+    ]);
+    expect(blocks).toEqual([
+      {
+        type: "text",
+        text: "A file the user attached: run.jsonl (106 KB), saved at /store/wt/1-run.jsonl. Read or search it there.",
+      },
+      { type: "text", text: "what failed" },
+    ]);
+    expect(fileCaption({ ...file, bytes: 3 * 1024 * 1024 }, "/p")).toContain("(3.0 MB)");
+  });
+
+  test("a short file's text follows its caption, fenced, and the path is still named", () => {
+    const ref = { ...file, name: "tsconfig.json", bytes: 16 };
+    const blocks = buildPrompt("is this right", undefined, undefined, [
+      { kind: "file", ref, path: "/store/wt/1-tsconfig.json", text: '{"strict":true}\n' },
+    ]);
+    expect(blocks[0]).toEqual({
+      type: "text",
+      text: 'A file the user attached: tsconfig.json (1 KB), saved at /store/wt/1-tsconfig.json.\n<attached-file 1>\n{"strict":true}\n\n</attached-file>',
+    });
   });
 
   test("a paste from a file says so in the caption", () => {
@@ -201,7 +242,7 @@ describe("buildPrompt with a leading slash command", () => {
     expect(blocks).toEqual([
       { type: "text", text: "/review the auth flow" },
       { type: "text", text: SYSTEM_APPEND },
-      { type: "text", text: "Image 2: shot.png (10×5)" },
+      { type: "text", text: "Image 2: shot.png (10×5), saved at /store/wt/2.png" },
       { type: "image", mimeType: "image/png", data: "YWJj" },
     ]);
   });

@@ -16,7 +16,7 @@ import type { FileServerMsg, ServerMsg, TermServerMsg } from "./ws.ts";
  * an unknown `t` there is a zod failure the person reads as a wall of discriminator values. The
  * same goes for a new required field on an existing kind.
  */
-export const PROTOCOL_VERSION = 83;
+export const PROTOCOL_VERSION = 84;
 
 /** the largest file the editor opens or saves, in characters (a read counts bytes, which is never
  * fewer). A larger one opens read-only with nothing in it, and a save of more is refused before any
@@ -34,7 +34,23 @@ export const IMAGE_MAX_BYTES = 5 * 1024 * 1024;
  * wall of prose has few lines, a stack trace has short ones. */
 export const PASTE_MIN_CHARS = 1200;
 export const PASTE_MIN_LINES = 10;
+/** the most text a paste puts in the prompt. Clipboard text past it is attached as a file, which
+ * the agent reads or searches where the daemon stored it. */
 export const PASTE_MAX_CHARS = 100_000;
+
+/** the most text a file puts in the prompt beside the path to its stored copy: a config, a short
+ * script or log is read at once, with no tool call the agent might skip. A longer one goes as its
+ * path alone. Characters, as the paste bound is. */
+export const FILE_INLINE_CHARS = 20_000;
+
+/** the largest image or file one upload carries */
+export const UPLOAD_MAX_BYTES = 100 * 1024 * 1024;
+
+/** how many attempts one prompt can be run as, side by side */
+export const VARIANTS_MAX = 3;
+
+/** the name clipboard text too long to paste is attached under */
+export const PASTED_FILE_NAME = "pasted-text.txt";
 
 /** the terminal frames, which go to the terminal bus rather than through the store. The type-only
  * import above erases, so this file reaches nothing at runtime. */

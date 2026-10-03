@@ -104,6 +104,19 @@ export interface PasteRef {
   file: string;
 }
 
+/** a file the user attached, of any type. The agent is told where the stored copy is and reads it
+ * there; the prompt never carries its bytes. `n` counts per kind, same rule as ImageRef. */
+export interface FileRef {
+  kind: "file";
+  n: number;
+  name: string;
+  bytes: number;
+  /** the bytes read as text, so the chip can show them */
+  text: boolean;
+  /** basename under the store's <worktreeId>/ directory */
+  file: string;
+}
+
 /** an element picked in the preview. Nothing is stored for it, so the ref is the whole of it. Its
  * paths are relative to the checkout it was picked in, which makes them read the same in any
  * worktree of the repo the message goes to. `text` and `html` are what the bridge captured, at the
@@ -116,7 +129,7 @@ export interface PickRef extends PickMeta {
 }
 
 /** what a sent message carried, in the order it was attached */
-export type AttachmentRef = ImageRef | PasteRef | PickRef;
+export type AttachmentRef = ImageRef | PasteRef | FileRef | PickRef;
 
 /** one slash command the worktree's agent session advertises. `name` is verbatim as the agent
  * gave it: the Claude adapter re-expands `/mcp:server:cmd` on the way back, so normalising it

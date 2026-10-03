@@ -8,6 +8,7 @@ import { makePaths } from "../../core/paths.ts";
 import { GIT } from "../../git/exec.ts";
 import { AttachmentStore } from "../attachments.ts";
 import { AgentRegistry, BUILTIN_AGENTS } from "../registry.ts";
+import { UploadStore } from "../uploads.ts";
 import { AcpSession } from "./session.ts";
 import { spawnAcp } from "./transport.ts";
 
@@ -47,7 +48,7 @@ describe.skipIf(!enabled)("opencode via ACP (integration)", () => {
       connect: (app, spec, prepared) => spawnAcp(app, reg.launch(spec, prepared), wt, "it"),
       launch: (spec) => reg.command(spec),
       transcriptsDir: t.paths.transcriptsDir,
-      attachments: new AttachmentStore(t.paths.attachmentsDir),
+      attachments: new AttachmentStore(t.paths.attachmentsDir, new UploadStore(t.paths.uploadsDir)),
       getSessionId: () => sessionId,
       setSessionId: (id) => {
         sessionId = id;

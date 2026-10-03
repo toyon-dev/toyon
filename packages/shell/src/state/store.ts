@@ -73,6 +73,7 @@ import {
   toyonDark,
 } from "@toyon/shared";
 import { owedJump } from "../app/unseenJump.ts";
+import { stoppedBy } from "../surfaces/chat/ask.ts";
 import { dotClass } from "../surfaces/util.ts";
 import { mergeLinks } from "./links.ts";
 import { fromInputs, type PendingAttachment } from "./pending.ts";
@@ -267,6 +268,9 @@ export interface WorktreeLocal {
   /** the open ask the person set aside with escape to write a message instead: the plain box is
    * back, with a line offering the ask, until it is answered or a newer one arrives */
   askParked?: string;
+  /** the question a stop closed, brought back into the box to be answered as a message; without
+   * it that question is a line at the top of the plain box */
+  askRevived?: string;
   /** the slash commands this worktree's agent advertises; empty until it has run once */
   commands: AgentCommand[];
   /** which stream the terminal pane is showing for this worktree: its shell or one of its procs.
@@ -1275,6 +1279,8 @@ export type Action =
   | { a: "ask-park"; id: string; askId: string }
   /** bring the parked ask back into the box */
   | { a: "ask-unpark"; id: string }
+  /** the question a stop closed takes the box again, or with no `askId` gives it back */
+  | { a: "ask-revive"; id: string; askId?: string }
   /** the tab opened `openUrl` */
   | { a: "opened-url" }
   | { a: "set-draft"; id: string; text: string }
@@ -1416,17 +1422,20 @@ function runningOf(chat: ChatItem[], was: WorktreeLocal["running"]): WorktreeLoc
 }
 
 /** The box's answers and the parked ask belong to one ask. A new ask starts over and takes the box
- * back from a parked one; the close of the ask they belong to ends them; anything else leaves
- * them be. */
+ * back from a parked or a revived one; the close of the ask they belong to ends them; anything
+ * else leaves them be. A stop closes the ask and keeps its answers, since the question can still
+ * be answered as a message. */
 function askSettled(l: WorktreeLocal, ev: AgentEvent): WorktreeLocal {
   const asked = ev.type === "agent-question" || ev.type === "agent-permission";
   const closed = ev.type === "agent-ask-end" ? ev.id : null;
   if (!asked && !closed) return l;
-  const { ask, askParked, ...rest } = l;
+  const stopped = ev.type === "agent-ask-end" && stoppedBy(ev.outcome);
+  const { ask, askParked, askRevived, ...rest } = l;
   return {
     ...rest,
-    ...(ask && !asked && ask.id !== closed ? { ask } : {}),
+    ...(ask && !asked && (ask.id !== closed || stopped) ? { ask } : {}),
     ...(askParked && !asked && askParked !== closed ? { askParked } : {}),
+    ...(askRevived && !asked ? { askRevived } : {}),
   };
 }
 
@@ -1775,6 +1784,10 @@ function reduce(s: State, action: Action): State {
       return withLocal(s, action.id, (l) => ({ ...l, askParked: action.askId }));
     case "ask-unpark":
       return withLocal(s, action.id, ({ askParked: _parked, ...l }) => l);
+    case "ask-revive":
+      return withLocal(s, action.id, ({ askRevived: _revived, ...l }) =>
+        action.askId ? { ...l, askRevived: action.askId } : l,
+      );
     case "opened-url":
       return s.openUrl ? { ...s, openUrl: null } : s;
     case "set-draft":

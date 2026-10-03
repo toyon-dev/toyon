@@ -24,6 +24,7 @@ import {
   sendPage,
   setNote,
   shellChord,
+  stoppedAsk,
   stripRecommended,
   walk,
 } from "./ask.ts";
@@ -49,6 +50,29 @@ describe("openAsk", () => {
     expect(openAsk(chat)?.id).toBe("k2");
     expect(openAsk(chat.slice(0, 1))).toBeNull();
     expect(openAsk([])).toBeNull();
+  });
+});
+
+describe("stoppedAsk", () => {
+  const ask = (id: string, outcome?: "answered" | "skipped" | "cancelled" | "expired"): ChatItem => ({
+    kind: "ask",
+    id,
+    ask: { kind: "question", message: "Which?", questions: one },
+    ...(outcome ? { outcome } : {}),
+  });
+  test("is the question a stop or a restart closed, while nothing was said after it", () => {
+    expect(stoppedAsk([ask("k1", "cancelled")])?.id).toBe("k1");
+    expect(stoppedAsk([ask("k1", "expired"), { kind: "assistant", text: "…" }])?.id).toBe("k1");
+    expect(stoppedAsk([ask("k1", "cancelled"), { kind: "user", text: "never mind" }])).toBeNull();
+    expect(stoppedAsk([ask("k1", "cancelled"), ask("k2", "answered")])).toBeNull();
+    expect(stoppedAsk([ask("k1", "skipped")])).toBeNull();
+    expect(stoppedAsk([ask("k1")])).toBeNull();
+  });
+  test("is never a permission: the call it gated went with the turn", () => {
+    const chat: ChatItem[] = [
+      { kind: "ask", id: "p", ask: { kind: "permission", title: "Run it?", choices: [] }, outcome: "cancelled" },
+    ];
+    expect(stoppedAsk(chat)).toBeNull();
   });
 });
 

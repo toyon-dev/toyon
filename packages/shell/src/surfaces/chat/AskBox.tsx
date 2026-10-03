@@ -7,6 +7,9 @@
 // The root is the focused element and reads its own keys, and every key has a button behind it:
 // the digit and the click run the same handler, so nothing here is keyboard-only. Escape parks the
 // ask and gives the plain box back; the ask stays open, since it is still what the agent waits on.
+//
+// A question the turn was stopped under comes back into the same box (`onAnswer`): nothing waits
+// on it, so its answer is the composer's to send as a message, and there is nothing to skip.
 
 import type { AskAnswer } from "@toyon/shared";
 import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -106,9 +109,20 @@ function useAskFocus(root: Root, id: string) {
   };
 }
 
-export function AskBox({ item, worktreeId, rootRef }: { item: AskItem; worktreeId: string; rootRef: Root }) {
+export function AskBox({
+  item,
+  worktreeId,
+  rootRef,
+  onAnswer,
+}: {
+  item: AskItem;
+  worktreeId: string;
+  rootRef: Root;
+  /** the ask is a question a stop closed: its answers go here instead of to the waiting call */
+  onAnswer?: (answers: AskAnswer[]) => void;
+}) {
   return item.ask.kind === "question" ? (
-    <QuestionBody item={item} ask={item.ask} worktreeId={worktreeId} root={rootRef} />
+    <QuestionBody item={item} ask={item.ask} worktreeId={worktreeId} root={rootRef} onAnswer={onAnswer} />
   ) : (
     <PermissionBody item={item} ask={item.ask} worktreeId={worktreeId} root={rootRef} />
   );
@@ -122,11 +136,13 @@ function QuestionBody({
   ask,
   worktreeId,
   root,
+  onAnswer,
 }: {
   item: AskItem;
   ask: Extract<AskItem["ask"], { kind: "question" }>;
   worktreeId: string;
   root: Root;
+  onAnswer?: (answers: AskAnswer[]) => void;
 }) {
   const onBlur = useAskFocus(root, item.id);
   const sock = useSock();
@@ -153,8 +169,14 @@ function QuestionBody({
   const write = (next: AskAnswer[], at: number) =>
     dispatch({ a: "ask-draft", id: worktreeId, ask: { id: item.id, draft: next, current: at } });
 
-  const send = (answers?: AskAnswer[]) =>
-    sock?.send({ t: "agent-answer", worktreeId, askId: item.id, ...(answers ? { answers } : {}) });
+  const send = (answers?: AskAnswer[]) => {
+    if (!onAnswer)
+      return sock?.send({ t: "agent-answer", worktreeId, askId: item.id, ...(answers ? { answers } : {}) });
+    if (answers) onAnswer(answers);
+  };
+  /** escape gives the plain box back and leaves the question a line at its top */
+  const park = () =>
+    dispatch(onAnswer ? { a: "ask-revive", id: worktreeId } : { a: "ask-park", id: worktreeId, askId: item.id });
   const submit = () => {
     if (canSubmit(questions, draft)) send(draft);
   };
@@ -231,7 +253,7 @@ function QuestionBody({
       // the app-wide esc would close a pane or stop the turn
       e.preventDefault();
       e.stopPropagation();
-      return dispatch({ a: "ask-park", id: worktreeId, askId: item.id });
+      return park();
     }
     if (isEnter(e) && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
@@ -258,7 +280,7 @@ function QuestionBody({
       e.preventDefault();
       return type(false);
     }
-    if (e.key === "s") {
+    if (e.key === "s" && !onAnswer) {
       e.preventDefault();
       return send();
     }
@@ -314,10 +336,12 @@ function QuestionBody({
           add a note
         </Button>
       )}
-      <Button tone="quiet" size="md" onClick={() => send()}>
-        <Kbd k="s" chip />
-        skip
-      </Button>
+      {!onAnswer && (
+        <Button tone="quiet" size="md" onClick={() => send()}>
+          <Kbd k="s" chip />
+          skip
+        </Button>
+      )}
     </div>
   );
 

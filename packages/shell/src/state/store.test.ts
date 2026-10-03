@@ -733,6 +733,28 @@ describe("chat folding", () => {
     expect(s.local.a?.askParked).toBeUndefined();
   });
 
+  test("a stop keeps the box's answers, and the stopped question can take the box again", () => {
+    let s = run([
+      hello(wt("a")),
+      agent("a", { type: "agent-question", id: "k1", message: "Which?", questions, ts: 0 }),
+    ]);
+    const ask = { id: "k1", draft: [{ selected: ["a"] }], current: 0 };
+    s = reducer(s, { a: "ask-draft", id: "a", ask });
+    s = reducer(s, { a: "ask-park", id: "a", askId: "k1" });
+    s = reducer(s, agent("a", { type: "agent-ask-end", id: "k1", outcome: "cancelled", ts: 1 }));
+    expect(s.local.a?.ask).toEqual(ask);
+    expect(s.local.a?.askParked).toBeUndefined();
+    s = reducer(s, { a: "ask-revive", id: "a", askId: "k1" });
+    expect(s.local.a?.askRevived).toBe("k1");
+    s = reducer(s, { a: "ask-revive", id: "a" });
+    expect(s.local.a?.askRevived).toBeUndefined();
+    // a new ask takes the box from a revived one, and starts its answers over
+    s = reducer(s, { a: "ask-revive", id: "a", askId: "k1" });
+    s = reducer(s, agent("a", { type: "agent-question", id: "k2", message: "And?", questions, ts: 2 }));
+    expect(s.local.a?.askRevived).toBeUndefined();
+    expect(s.local.a?.ask).toBeUndefined();
+  });
+
   test("a new ask starts over and takes the box back from a parked one", () => {
     let s = run([
       hello(wt("a")),

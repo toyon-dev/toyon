@@ -2,7 +2,7 @@
 // a DOM. An ask holds up to four questions and is answered in one go, because the wire is one
 // request with one response; the box shows one question at a time and the keyboard walks them.
 
-import type { AskAnswer, AskQuestion } from "@toyon/shared";
+import type { AskAnswer, AskOutcome, AskQuestion } from "@toyon/shared";
 import type { ChatItem } from "../../state/store.ts";
 
 export type AskItem = Extract<ChatItem, { kind: "ask" }>;
@@ -20,6 +20,23 @@ export function shellChord(e: { key: string; metaKey: boolean; ctrlKey: boolean;
 export function openAsk(chat: ChatItem[]): AskItem | null {
   const item = chat.findLast((i) => i.kind === "ask" && !i.outcome);
   return item?.kind === "ask" ? item : null;
+}
+
+/** the ask closed under the person rather than by them: the turn was stopped, or the daemon
+ * restarted, and nothing is waiting on an answer any more */
+export function stoppedBy(outcome: AskOutcome | undefined): boolean {
+  return outcome === "cancelled" || outcome === "expired";
+}
+
+/** The question a stop closed, while it is still the last word in the chat: the agent has it in
+ * its context, so an answer sent as a message reads as the answer, and asking the agent to ask
+ * again is a turn spent to get the same box back. A message of the person's after it means the
+ * chat has moved on. A permission has no such afterlife, since the call it gated went with the
+ * turn. */
+export function stoppedAsk(chat: ChatItem[]): AskItem | null {
+  const item = chat.findLast((i) => i.kind === "ask" || i.kind === "user");
+  if (item?.kind !== "ask" || item.ask.kind !== "question") return null;
+  return stoppedBy(item.outcome) ? item : null;
 }
 
 /** what the transcript row says while the ask is open: the questions by their headers, else the

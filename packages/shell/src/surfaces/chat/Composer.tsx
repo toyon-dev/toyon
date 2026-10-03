@@ -1,6 +1,7 @@
 import type {
   AgentCommand,
   ArchivedWorktree,
+  AskAnswer,
   GitFileStatus,
   ModelChoice,
   OwnedWorktree,
@@ -65,7 +66,7 @@ import {
 import { runLine, runOf, runTicking } from "../runs.ts";
 import { chord, commandSource, folderList, pickLabel, procTrouble } from "../util.ts";
 import { AskBox } from "./AskBox.tsx";
-import { askLine, openAsk } from "./ask.ts";
+import { answerLines, askLine, answered as hasAnswer, openAsk, stoppedAsk } from "./ask.ts";
 import { FileChip } from "./FileChip.tsx";
 import { ImageChip } from "./ImageChip.tsx";
 import { MentionText, openMention } from "./Mentions.tsx";
@@ -193,8 +194,15 @@ export function Composer({
   // escape to write a message instead: then the plain box is back with a line offering it
   const ask = useMemo(() => (id && !drafting ? openAsk(chat) : null), [id, drafting, chat]);
   const askParked = useLocalField(id, "askParked");
-  const askUp = ask && askParked !== ask.id ? ask : null;
-  const parked = ask && askParked === ask.id ? ask : null;
+  // A question the turn was stopped under is still worth its answer, so it keeps the line a parked
+  // one has, and from there the box, until a message is sent: the stop was meant, so the plain box
+  // is what comes back, and the answer goes as a message of the person's own.
+  const sending = useLocalField(id, "sending");
+  const stopped = useMemo(() => (id && !drafting && !sending ? stoppedAsk(chat) : null), [id, drafting, sending, chat]);
+  const askRevived = useLocalField(id, "askRevived");
+  const revived = !ask && stopped && askRevived === stopped.id ? stopped : null;
+  const askUp = ask && askParked !== ask.id ? ask : revived;
+  const parked = ask ? (askParked === ask.id ? ask : null) : stopped && !revived ? stopped : null;
   const askRef = useRef<HTMLDivElement>(null);
   const touch = useTouch();
   // the frame on screen: while drafting the lead's own preview, which is what the picker picks
@@ -874,6 +882,19 @@ export function Composer({
     if (greenfield) dispatch({ a: "show-chat" });
   };
 
+  // The answer to a question the turn was stopped under: a message like any other, in the words the
+  // transcript reads an answer back in. It carries no box, since what is written in the plain box
+  // is a draft of its own and stays there.
+  const answerStopped = (answers: AskAnswer[]) => {
+    if (!id || revived?.ask.kind !== "question") return;
+    // nothing picked and nothing typed is nothing to say: the question goes back to its line
+    if (!answers.some(hasAnswer)) return dispatch({ a: "ask-revive", id });
+    const prompt = answerLines(revived.ask.questions, answers).join("\n");
+    sock?.send({ t: "chat", worktreeId: id, clientId, text: prompt, context: buildContext() });
+    dispatch({ a: "sending", id, message: { text: prompt } });
+    dispatch({ a: "ask-revive", id });
+  };
+
   // The description typed on the new-project view, in the box of the project it just made. It is
   // sent from here rather than from the page so that the first message of a project made there is
   // the same message as any other: the same context blocks, the same stamping on a main that has
@@ -955,7 +976,7 @@ export function Composer({
               tone="strong"
               data-tip="Bring the question back into the box"
               onClick={() => {
-                dispatch({ a: "ask-unpark", id });
+                dispatch(parked.outcome ? { a: "ask-revive", id, askId: parked.id } : { a: "ask-unpark", id });
                 dispatch({ a: "focus-chat" });
               }}
             >
@@ -1062,7 +1083,13 @@ export function Composer({
         />
       )}
       {askUp && id ? (
-        <AskBox key={askUp.id} item={askUp} worktreeId={id} rootRef={askRef} />
+        <AskBox
+          key={askUp.id}
+          item={askUp}
+          worktreeId={id}
+          rootRef={askRef}
+          onAnswer={revived ? answerStopped : undefined}
+        />
       ) : (
         <div className={cx("composer-field", shellCmd !== null && "shell", walk && "recalled")}>
           <TextArea

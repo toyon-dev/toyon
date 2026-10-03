@@ -648,6 +648,34 @@ describe("chat folding", () => {
     expect(s.local.a?.chat[0]).toMatchObject({ outcome: "answered", choiceId: "ok" });
   });
 
+  test("a permission keeps the row of the call it gates, and a yes leaves that row alone", () => {
+    const choices = [
+      { id: "ok", name: "Yes", kind: "allow_once" as const },
+      { id: "no", name: "No", kind: "reject_once" as const },
+    ];
+    const tool = agent("a", { type: "tool-start", toolId: "t1", name: "Bash", input: { command: "ls" } });
+    const ask = agent("a", { type: "agent-permission", id: "k1", title: "ls", choices, toolId: "t1", ts: 0 });
+    const open = run([hello(wt("a")), tool, ask]);
+    expect(open.local.a?.chat.map((i) => i.kind)).toEqual(["tool", "ask"]);
+    // the output has a row to land in, and the verdict would only say the command again
+    let s = reducer(open, agent("a", { type: "agent-ask-end", id: "k1", outcome: "answered", choiceId: "ok", ts: 1 }));
+    s = reducer(s, agent("a", { type: "tool-end", toolId: "t1", output: "a.txt", isError: false }));
+    expect(s.local.a?.chat).toMatchObject([{ kind: "tool", id: "t1", output: "a.txt", done: true }]);
+    // a no stays under the row as the verdict
+    s = reducer(open, agent("a", { type: "agent-ask-end", id: "k1", outcome: "answered", choiceId: "no", ts: 1 }));
+    expect(s.local.a?.chat).toMatchObject([{ kind: "tool" }, { kind: "ask", toolId: "t1", choiceId: "no" }]);
+  });
+
+  test("a plan's card takes the place of its call's row", () => {
+    const choices = [{ id: "ok", name: "Yes", kind: "allow_once" as const }];
+    const s = run([
+      hello(wt("a")),
+      agent("a", { type: "tool-start", toolId: "t1", name: "ExitPlanMode", input: {}, kind: "switch_mode" }),
+      agent("a", { type: "agent-permission", id: "k1", title: "Approve Plan", choices, toolId: "t1", ts: 0 }),
+    ]);
+    expect(s.local.a?.chat.map((i) => i.kind)).toEqual(["ask"]);
+  });
+
   test("a plan written to the worktree reaches the card as the file to open", () => {
     const choices = [{ id: "ok", name: "Yes", kind: "allow_once" as const }];
     const s = run([

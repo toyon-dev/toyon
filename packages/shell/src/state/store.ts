@@ -141,6 +141,8 @@ export type ChatItem =
       ask:
         | { kind: "question"; message: string; questions: AskQuestion[] }
         | { kind: "permission"; title: string; detail?: string; plan?: string; choices: AskChoice[] };
+      /** the row of the call a permission gates, which stays in the log to show what the call did */
+      toolId?: string;
       outcome?: AskOutcome;
       answers?: AskAnswer[];
       choiceId?: string;
@@ -2622,8 +2624,8 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
         id: event.id,
         ask: { kind: "question", message: event.message, questions: event.questions },
       });
-    case "agent-permission":
-      return addAsk(items, event.toolId, {
+    case "agent-permission": {
+      const card: AskCard = {
         kind: "ask",
         id: event.id,
         ask: {
@@ -2633,10 +2635,21 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
           ...(event.plan ? { plan: event.plan } : {}),
           choices: event.choices,
         },
-      });
+      };
+      // a plan's call does nothing but ask, so its card takes the row like a question's. A command
+      // or an edit runs once it is let through, and its row is where the output lands.
+      const gated = items.findLast((i) => i.kind === "tool" && i.id === event.toolId);
+      if (gated?.kind !== "tool" || event.plan || gated.toolKind === "switch_mode")
+        return addAsk(items, event.toolId, card);
+      return [...items, { ...card, toolId: gated.id }];
+    }
     case "agent-ask-end": {
       const idx = items.findLastIndex((i) => i.kind === "ask" && i.id === event.id && !i.outcome);
       if (idx === -1) return items;
+      const open = items[idx] as AskCard;
+      // a call let through reads as any other call: its row says what ran, and a verdict line
+      // beside it would say the command twice
+      if (open.toolId && allowed(open, event.choiceId)) return [...items.slice(0, idx), ...items.slice(idx + 1)];
       const next = items.slice();
       next[idx] = {
         ...(next[idx] as Extract<ChatItem, { kind: "ask" }>),
@@ -2666,6 +2679,13 @@ function cutRow(items: ChatItem[], messageId: string): number {
   while (at >= 0 && items[at]?.kind === "user") at--;
   const row = items[at];
   return row?.kind === "assistant" && row.messageId === messageId ? at : -1;
+}
+
+type AskCard = Extract<ChatItem, { kind: "ask" }>;
+
+function allowed(card: AskCard, choiceId: string | undefined): boolean {
+  if (card.ask.kind !== "permission" || !choiceId) return false;
+  return !!card.ask.choices.find((c) => c.id === choiceId)?.kind.startsWith("allow");
 }
 
 /** A card and the tool row it came from are one call, so the card takes the row's place: a

@@ -3,7 +3,8 @@
 // same questions read as the ask said twice. Parked, the ask is out of sight, so the row is one
 // line saying what is being asked, and pressing it brings the question back into the box. Closed,
 // the row reads a permission's verdict back, or says why a question got no answer; a question the
-// person answered is the log's own message pair, not a row here.
+// person answered is the log's own message pair, not a row here, and a call the person let through
+// is its own tool row.
 
 import { useDispatch } from "../../state/context.tsx";
 import { useLocalField } from "../../state/selectors.ts";
@@ -41,7 +42,8 @@ export function AskRow({ item, worktreeId }: { item: AskItem; worktreeId?: strin
     const chosen = choices.find((c) => c.id === item.choiceId);
     return (
       <div className="ask-closed">
-        <div className="ask-lead">{title}</div>
+        {/* the call's own row is still in the log and already names it */}
+        {!item.toolId && <div className="ask-lead">{title}</div>}
         <div className="ask-answered">{chosen ? chosen.name : (note ?? "closed")}</div>
       </div>
     );

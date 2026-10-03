@@ -149,6 +149,10 @@ export function ChatLog({
       return mine;
     });
   }, [queue, sentNumbers]);
+  // Every send passes through the daemon's queue on its way to the agent, for as long as the
+  // session takes to open or a hold on the tree lasts. The bubble drawn at the press is that same
+  // message, so its queued row would say it twice and lift the log by a row until it drained.
+  const echoed = sending?.message ? queue.findIndex((q) => q.text === sending.message?.text) : -1;
   const logRef = useRef<HTMLDivElement>(null);
   // a hand resting on the transcript: select-all is the conversation, not the shell around it
   useSelectAllWithin(logRef);
@@ -483,42 +487,44 @@ export function ChatLog({
         {/* only an agent that cannot take a message mid-turn leaves one waiting here. The rest go
             into the turn as they are sent, and read as an ordinary message in the place they landed. */}
         {id &&
-          queue.map((message, i) => (
-            <div
-              // biome-ignore lint/suspicious/noArrayIndexKey: the queue is messages in send order; position is the identity, and a removed entry closes the gap
-              key={`q-${i}`}
-              className="msg-user queued-msg"
-            >
-              <span className="queued-tag">
-                <Icon name="clock" className="icon-inline" />
-                queued
-              </span>
-              <div className="queued-text">
-                {message.attachments && (
-                  <QueuedChips
-                    items={message.attachments}
-                    next={queuedNumbers[i] ?? sentNumbers}
-                    worktreeId={id}
-                    dir={active?.worktree.path ?? null}
-                    onOpen={(path, line) => openSource(store, sock, id, path, line)}
+          queue.map((message, i) =>
+            i === echoed ? null : (
+              <div
+                // biome-ignore lint/suspicious/noArrayIndexKey: the queue is messages in send order; position is the identity, and a removed entry closes the gap
+                key={`q-${i}`}
+                className="msg-user queued-msg"
+              >
+                <span className="queued-tag">
+                  <Icon name="clock" className="icon-inline" />
+                  queued
+                </span>
+                <div className="queued-text">
+                  {message.attachments && (
+                    <QueuedChips
+                      items={message.attachments}
+                      next={queuedNumbers[i] ?? sentNumbers}
+                      worktreeId={id}
+                      dir={active?.worktree.path ?? null}
+                      onOpen={(path, line) => openSource(store, sock, id, path, line)}
+                    />
+                  )}
+                  {message.text}
+                </div>
+                <span className="queued-actions">
+                  <IconButton
+                    icon="edit"
+                    label="Edit: removes from queue, puts it back in the input"
+                    onClick={() => takeBackQueued(store, sock, id, i)}
                   />
-                )}
-                {message.text}
+                  <IconButton
+                    icon="close"
+                    label="Remove from queue"
+                    onClick={() => sock?.send({ t: "unqueue", worktreeId: id, index: i })}
+                  />
+                </span>
               </div>
-              <span className="queued-actions">
-                <IconButton
-                  icon="edit"
-                  label="Edit: removes from queue, puts it back in the input"
-                  onClick={() => takeBackQueued(store, sock, id, i)}
-                />
-                <IconButton
-                  icon="close"
-                  label="Remove from queue"
-                  onClick={() => sock?.send({ t: "unqueue", worktreeId: id, index: i })}
-                />
-              </span>
-            </div>
-          ))}
+            ),
+          )}
         {tail}
         {/* sent from an archived page: newer than the archive it asks back from, so it reads under
             that note, and it stays until the restored agent has the message */}

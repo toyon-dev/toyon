@@ -1575,7 +1575,7 @@ describe("streams and notices", () => {
       agent("a", { type: "landed", message: "a is on main", archiveIds: ["b"], ts: 0 }),
       server({ t: "shipped", worktreeId: "a", ok: true, message: "a is on main" }),
     ]);
-    expect(localOf(merged, "a").chat).toEqual([{ kind: "landed", text: "a is on main", archiveIds: ["b"] }]);
+    expect(localOf(merged, "a").chat).toEqual([{ kind: "landed", text: "a is on main", archiveIds: ["b"], ts: 0 }]);
     expect(merged.openUrl).toBeNull();
     const pr = run([...base, server({ t: "shipped", worktreeId: "a", ok: true, message: "m", url: "u" })]);
     expect(localOf(pr, "a").chat).toEqual([]);
@@ -2733,7 +2733,7 @@ describe("a landing op in flight", () => {
       server({ t: "shipped", worktreeId: "a", ok: true, message: "a is on main" }),
     ]);
     expect(s.shipping).toEqual({});
-    expect(localOf(s, "a").chat).toEqual([{ kind: "landed", text: "a is on main", archiveIds: [] }]);
+    expect(localOf(s, "a").chat).toEqual([{ kind: "landed", text: "a is on main", archiveIds: [], ts: 0 }]);
   });
 });
 

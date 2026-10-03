@@ -2,8 +2,7 @@ import type { ArchivedWorktree } from "@toyon/shared";
 import { restoreArchived } from "../../state/actions/archive.ts";
 import { useSock, useStore } from "../../state/context.tsx";
 import { Button } from "../../ui/Button.tsx";
-import { spanWords } from "../util.ts";
-import { DaemonRow } from "./DaemonRow.tsx";
+import { DaemonRow, useAgo } from "./DaemonRow.tsx";
 import { dollars } from "./usage.ts";
 
 /** The last thing in a removed worktree's chat: what happened to it, and the way back. It is in
@@ -24,10 +23,18 @@ export function ArchivedNote({ item }: { item: ArchivedWorktree }) {
   const note = item.restorable
     ? `Toyon kept ${kept}${cost}. A message sent below restores it first.`
     : `Its commits were not kept, so there is nothing to restore${cost}; its row's menu on the rail can delete it for good.`;
+  const ago = useAgo(item.archivedAt);
   return (
-    <DaemonRow icon="archive" word="archived" tone="quiet" below={<div className="daemon-below row-dim">{note}</div>}>
+    <DaemonRow
+      icon="archive"
+      word="archived"
+      tone="quiet"
+      at={item.archivedAt}
+      below={<div className="daemon-below row-dim">{note}</div>}
+    >
       <span className="daemon-text">
-        {spanWords(Date.now() - item.archivedAt)} ago{item.landed ? ", after it was merged into main" : ""}
+        {ago}
+        {item.landed ? ", after it was merged into main" : ""}
       </span>
       {item.restorable && (
         <Button variant="inline" tone="strong" onClick={() => restoreArchived(sock, item.id, clientId)}>

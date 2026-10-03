@@ -22,7 +22,7 @@ import { elapsed, spanWords } from "../util.ts";
 import { AskRow } from "./AskRow.tsx";
 import { answeredQuestion, answerLines } from "./ask.ts";
 import { chatLink, openChatLink } from "./chatLink.ts";
-import { DaemonRow } from "./DaemonRow.tsx";
+import { DaemonRow, useAgo } from "./DaemonRow.tsx";
 import { FileChip } from "./FileChip.tsx";
 import {
   runCalls,
@@ -1044,29 +1044,38 @@ export const ChatItemView = memo(function ChatItemView({
     case "landed":
       return <LandedRow item={item} />;
     case "restored":
-      // the gap in the chat, said in the daemon's own row: how long it sat in the archive and what
-      // came back, so what reads before and after it is one conversation with a pause
-      return (
-        <DaemonRow icon="reload" word="restored" tone="quiet">
-          <span className="daemon-text">
-            after {spanWords(item.ts - item.archivedAt)} in the archive, back on {item.branch}
-            {item.uncommitted ? " with its uncommitted changes" : ""}
-          </span>
-        </DaemonRow>
-      );
+      return <RestoredRow item={item} />;
   }
 });
 
-/** the daemon's word on a land that merged, kept on the chat the way the graft divider is. The
+/** the gap in the chat, said in the daemon's own row: how long it sat in the archive and what came
+ * back, so what reads before and after it is one conversation with a pause. When it came back is
+ * the tip's to say: the row sits mid-chat, where nothing around it is timed. */
+function RestoredRow({ item }: { item: Extract<ChatItem, { kind: "restored" }> }) {
+  return (
+    <DaemonRow icon="reload" word="restored" tone="quiet" at={item.ts}>
+      <span className="daemon-text">
+        after {spanWords(item.ts - item.archivedAt)} in the archive, back on {item.branch}
+        {item.uncommitted ? " with its uncommitted changes" : ""}
+      </span>
+    </DaemonRow>
+  );
+}
+
+/** the daemon's word on a land that merged, kept on the chat the way the graft divider is, with
+ * how long ago it was: the row is the one record of the land a chat read later still shows. The
  * variant siblings it leaves behind are offered here, where the land is read, for as long as they
  * are still rows. */
 function LandedRow({ item }: { item: Extract<ChatItem, { kind: "landed" }> }) {
   const sock = useSock();
   const dispatch = useDispatch();
   const left = useStore((s) => item.archiveIds.filter((id) => worktreeById(s, id) !== null).length);
+  const ago = useAgo(item.ts);
   return (
-    <DaemonRow icon="check" word="landed" tone="aqua">
-      <span className="daemon-text">{item.text}</span>
+    <DaemonRow icon="check" word="landed" tone="aqua" at={item.ts}>
+      <span className="daemon-text">
+        {item.text}, {ago}
+      </span>
       {left > 0 && (
         <Button variant="inline" tone="strong" onClick={() => archiveWorktrees(sock, dispatch, item.archiveIds)}>
           {left > 1 ? `archive ${left} worktrees` : "archive the other worktree"}

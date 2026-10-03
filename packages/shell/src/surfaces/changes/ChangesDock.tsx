@@ -213,7 +213,8 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
   const above = archived ? rows.length : 0;
   const total = (showChanges ? rows.length : 0) + (showHist ? histRows.length : 0);
   // an archived worktree's history is only its own commits, so the titles say instead which landing
-  // carried each run of them, and which never landed
+  // carried each run of them, and which never landed. One landing that carried all of them has
+  // nothing to tell apart: the chat's landed row says when, and each commit row its own age.
   const keptTitles = useMemo(() => {
     const titles = new Map<number, string>();
     if (!archived) return titles;
@@ -222,6 +223,7 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
       const at = r.commit.landedAt ?? 0;
       if (!r.file) counts.set(at, (counts.get(at) ?? 0) + 1);
     }
+    if (counts.size === 1 && !counts.has(0)) return titles;
     let last: number | undefined;
     histRows.forEach((r, i) => {
       const at = r.commit.landedAt ?? 0;

@@ -354,8 +354,7 @@
   /* The section belongs to the open panel and nothing of it reaches the strip: a section you cannot
    read the label of is not worth the pixels. It is the one place the rail lays out differently in
    the two states, and safe because everything here sits below the worktree rows, so nothing anyone
-   aims at moves when it appears. Marked by type and colour alone: a rule across the rail reads as
-   a divider between peers, and these rows are not main's peers.
+   aims at moves when it appears.
    They show on the panel's own timing, or the labels land in the strip a fifth of a second before
    the panel moves. Display cannot ease, so the discrete transition holds the rows in the flow
    until the fade out ends. The starting style is nested in the open rule for its specificity, and
@@ -369,6 +368,16 @@
     transition:
       display var(--rail-slide) allow-discrete var(--rail-wait),
       opacity var(--rail-slide) ease var(--rail-wait);
+  }
+  /* That timing is the panel's and not a section's: rows a heading has just unfolded mount into a
+     panel that is already open, and the starting style above would hold them back the hover's
+     wait and then fade them, a third of a second after the press. The heading is under the
+     pointer or holds the keyboard at that moment, which the unfurl never is, since a heading
+     cannot be reached until the panel is open. A screen has no strip to unfurl from at all. */
+  :where([data-hover]) .rail-disc-head:hover ~ .rail-disc-item,
+  .rail-disc-head:focus-visible ~ .rail-disc-item,
+  .rail-screen .rail-disc-item {
+    transition: none;
   }
   /* a section's row with a press on it: the shape, the rule above and the text are the shared
      ones, and what is the rail's is its columns */

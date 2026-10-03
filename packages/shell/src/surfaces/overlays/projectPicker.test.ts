@@ -125,14 +125,14 @@ describe("rowsFor: a name", () => {
     expect(rows("../escape", { target: target({ parentExists: false }) })).toEqual([]);
   });
 
-  test("an empty query lists the projects, then the way to start one", () => {
-    expect(rows("")).toEqual([{ kind: "new" }]);
+  test("an empty query lists the projects, then the ways to start one and to open one", () => {
+    expect(rows("")).toEqual([{ kind: "new" }, { kind: "disk" }]);
     const repos = [repo("cookbook", "/Users/k/Projects/cookbook"), repo("bike", "/Users/k/Projects/bike")];
-    expect(rows("", { repos }).map((r) => r.kind)).toEqual(["repo", "repo", "new"]);
+    expect(rows("", { repos }).map((r) => r.kind)).toEqual(["repo", "repo", "new", "disk"]);
   });
 
-  test("the standing row is only for an empty query: a typed name has its own create row", () => {
-    expect(rows("brand-new").some((r) => r.kind === "new")).toBe(false);
+  test("the standing rows are only for an empty query: a typed name has its own create row", () => {
+    expect(rows("brand-new").some((r) => r.kind === "new" || r.kind === "disk")).toBe(false);
   });
 
   test("a pasted git URL is a clone, not a name", () => {
@@ -156,7 +156,7 @@ describe("rowsFor: an import in flight", () => {
   test("a clone in flight is listed with the projects, after the ones you can open", () => {
     const repos = [repo("cookbook", "/Users/k/Projects/cookbook")];
     const out = rows("", { repos, pending: [importing] });
-    expect(out.map((r) => r.kind)).toEqual(["repo", "pending", "new"]);
+    expect(out.map((r) => r.kind)).toEqual(["repo", "pending", "new", "disk"]);
   });
 
   test("it is findable by name and by url, since half of one is what you would type", () => {

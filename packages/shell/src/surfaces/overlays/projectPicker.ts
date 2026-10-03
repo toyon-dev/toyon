@@ -23,7 +23,9 @@ export type Row =
   | { kind: "create"; name: string; parent: string | null }
   | { kind: "clone"; url: string; name: string }
   /** the way in for someone who does not know a name can be typed here: the form, with nothing filled */
-  | { kind: "new" };
+  | { kind: "new" }
+  /** the way to a project already on disk, said in words beside the way to make one */
+  | { kind: "disk" };
 
 /** a typed path is a filesystem query rather than a name filter */
 export const looksLikePath = (q: string) => /^(~|\/|\.\.?\/)/.test(q.trim());
@@ -93,8 +95,8 @@ export function rowsFor(input: {
       .filter((p) => byName(q, p.name, p.url))
       .map((p): Row => ({ kind: "pending", pending: p }));
     const listed = [...repos, ...pending];
-    // last, so it never pushes a project off the top of the list, and ↑ from the first row reaches it
-    if (!q) return [...listed, { kind: "new" }];
+    // last, so they never push a project off the top of the list, and ↑ from the first row reaches them
+    if (!q) return [...listed, { kind: "new" }, { kind: "disk" }];
     // a URL is not a name and not a path: it is the third thing someone pastes in here
     const url = gitUrl(q);
     if (url) return listed.length > 0 ? listed : [{ kind: "clone", url: url.url, name: url.name }];

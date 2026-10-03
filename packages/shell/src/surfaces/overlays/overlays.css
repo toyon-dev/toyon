@@ -17,7 +17,7 @@
       direction: rtl;
     }
   }
-  /* the project list's standing row: its icon rides inside the label, the way a ref row's does */
+  /* the project list's standing rows: the icon rides inside the label, the way a ref row's does */
   .new-project-row {
     & .picker-label {
       display: flex;

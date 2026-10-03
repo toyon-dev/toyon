@@ -98,6 +98,9 @@ export function ProjectPicker({ form }: { form: ProjectsOverlay["form"] }) {
       }),
     });
 
+  /** the disk form: the folder button and the "open folder" row are one way in, said twice */
+  const browse = () => dispatch({ a: "open", overlay: { kind: "projects", form: "disk" } });
+
   return (
     <ListPicker<Row>
       anchored={form === "pill"}
@@ -110,13 +113,7 @@ export function ProjectPicker({ form }: { form: ProjectsOverlay["form"] }) {
         )
       }
       trailing={
-        form === "disk" ? undefined : (
-          <IconButton
-            icon="folder"
-            label="Find a project on disk"
-            onClick={() => dispatch({ a: "open", overlay: { kind: "projects", form: "disk" } })}
-          />
-        )
+        form === "disk" ? undefined : <IconButton icon="folder" label="Find a project on disk" onClick={browse} />
       }
       items={[]}
       filter={filter}
@@ -136,9 +133,11 @@ export function ProjectPicker({ form }: { form: ProjectsOverlay["form"] }) {
                   ? `clone:${r.url}`
                   : r.kind === "new"
                     ? "new-project"
-                    : `new:${r.parent ?? ""}/${r.name}`
+                    : r.kind === "disk"
+                      ? "open-folder"
+                      : `new:${r.parent ?? ""}/${r.name}`
       }
-      rowClass={(r) => cx("picker-row", r.kind === "new" && "new-project-row")}
+      rowClass={(r) => cx("picker-row", (r.kind === "new" || r.kind === "disk") && "new-project-row")}
       onQuery={onQuery}
       // a folder completes to itself with a trailing slash, so tab keeps walking down the tree
       completionOf={(r) => (r.kind === "dir" ? (r.entry.isRepo ? r.entry.path : `${r.entry.path}/`) : null)}
@@ -150,6 +149,8 @@ export function ProjectPicker({ form }: { form: ProjectsOverlay["form"] }) {
         if (r.kind === "clone") return ask("clone", r.name, r.url);
         if (r.kind === "create" && !r.parent) return ask("create", r.name);
         if (r.kind === "new") return ask("create", "");
+        // the disk form replaces this one, so this returns ahead of the close below too
+        if (r.kind === "disk") return browse();
 
         if (r.kind === "pending") dispatch({ a: "watch-import", id: r.pending.id });
         else if (r.kind === "repo") dispatch({ a: "activate-repo", id: r.repo.id });
@@ -185,10 +186,12 @@ export function ProjectPicker({ form }: { form: ProjectsOverlay["form"] }) {
                   ? "clones it"
                   : active?.kind === "new"
                     ? "starts one"
-                    : "opens",
+                    : active?.kind === "disk"
+                      ? "browses"
+                      : "opens",
         back: "closes",
       })}
-      // an empty query always has the "new project" row, so there is always something typed here
+      // an empty query always has the standing rows, so there is always something typed here
       empty="nothing here; keep typing a path (~/… or /…)"
       row={(r) =>
         r.kind === "repo" ? (
@@ -207,6 +210,15 @@ export function ProjectPicker({ form }: { form: ProjectsOverlay["form"] }) {
               <>
                 <Icon name="plus" className="icon-inline" />
                 new project
+              </>
+            }
+          />
+        ) : r.kind === "disk" ? (
+          <PaletteRow
+            label={
+              <>
+                <Icon name="folder" className="icon-inline" />
+                open folder
               </>
             }
           />

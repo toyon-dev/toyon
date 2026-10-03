@@ -90,7 +90,7 @@ import {
   takeMainIn,
   UNWATCHED,
 } from "../git/land.ts";
-import { withRepoLock } from "../git/lock.ts";
+import { withFetchLock, withRepoLock } from "../git/lock.ts";
 import { logCommits, commitFiles as readCommitFiles } from "../git/log.ts";
 import {
   aheadBehind,
@@ -1926,7 +1926,7 @@ export class WorktreeService {
    * the trunk's record either way, since every count against origin is as true as it */
   private async fetchBase(wt: WorktreeInfo, repo: RepoInfo, w: LandWatch): Promise<ShipResult> {
     if (!baseIsRemote(repo)) return { ok: true, message: `${baseOf(repo)} here is the base` };
-    const r = await fetchBase(wt.path, repo, w);
+    const r = await withFetchLock(repo.path, () => fetchBase(wt.path, repo, w));
     this.trunk.noteFetch(repo.id, { ok: r.ok, err: r.message });
     return r;
   }

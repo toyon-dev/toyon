@@ -9,7 +9,7 @@ import { fireAndForget, log } from "../core/log.ts";
 import type { StateStore } from "../core/state.ts";
 import { GIT, NO_PROMPT, run } from "../git/exec.ts";
 import { fastForwardFetched, type LandWatch, refused, type TrunkFf, UNWATCHED } from "../git/land.ts";
-import { withRepoLock } from "../git/lock.ts";
+import { withFetchLock, withRepoLock } from "../git/lock.ts";
 import { behindUpstream } from "../git/status.ts";
 
 export interface TrunkDeps {
@@ -61,7 +61,7 @@ export class Trunk {
       this.lastFetch.set(path, Date.now());
       fireAndForget(
         "fetch",
-        run(GIT, ["fetch", "--quiet"], path, NO_PROMPT).then(async (r) => {
+        withFetchLock(path, () => run(GIT, ["fetch", "--quiet"], path, NO_PROMPT)).then(async (r) => {
           const main = this.d.state.worktree(mainId);
           if (main) this.noteFetch(main.repoId, r);
           if (!r.ok) {
@@ -91,7 +91,7 @@ export class Trunk {
     const last = this.lastFetch.get(repo.path) ?? 0;
     if (Date.now() - last < OPEN_FETCH_MIN_MS) return;
     this.lastFetch.set(repo.path, Date.now());
-    const f = await run(GIT, ["fetch", "--quiet"], repo.path, NO_PROMPT);
+    const f = await withFetchLock(repo.path, () => run(GIT, ["fetch", "--quiet"], repo.path, NO_PROMPT));
     this.noteFetch(repo.id, f);
     if (!f.ok) {
       log.warn("fetch", `could not fetch ${repo.path}: ${f.err.slice(0, 200)}`);
@@ -124,7 +124,7 @@ export class Trunk {
     if (!repo || !main) return { ok: false, message: "no main checkout to pull" };
     this.lastFetch.set(repo.path, Date.now());
     w.step(`pulling ${repo.defaultBranch} from origin`);
-    const f = await w.git(repo.path, ["fetch", "--quiet"]);
+    const f = await withFetchLock(repo.path, () => w.git(repo.path, ["fetch", "--quiet"]));
     this.noteFetch(repo.id, f);
     if (!f.ok) return { ok: false, message: refused("fetch failed", f) };
     this.d.invalidateCounts();

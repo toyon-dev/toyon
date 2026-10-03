@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { withRepoLock } from "./lock.ts";
+import { withFetchLock, withRepoLock } from "./lock.ts";
 
 // The lock is a per-repo promise chain: mutations of one repo's shared git state run one at a
 // time, a failure does not poison the chain, and different repos never wait on each other.
@@ -37,4 +37,23 @@ test("different repos interleave", async () => {
   });
   await Promise.all([a, b]);
   expect(order).toEqual(["y", "x"]);
+});
+
+test("fetches of one repo run one at a time, and never wait on the repo lock", async () => {
+  const order: string[] = [];
+  const held = withRepoLock("/f", async () => {
+    await tick();
+    await tick();
+    order.push("repo-end");
+  });
+  const a = withFetchLock("/f", async () => {
+    order.push("a-start");
+    await tick();
+    order.push("a-end");
+  });
+  const b = withFetchLock("/f", async () => {
+    order.push("b-start");
+  });
+  await Promise.all([held, a, b]);
+  expect(order).toEqual(["a-start", "a-end", "b-start", "repo-end"]);
 });

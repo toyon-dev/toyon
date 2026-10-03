@@ -20,5 +20,13 @@ export function withRepoLock<T>(repoPath: string, fn: () => Promise<T> | T): Pro
   return withLock(repoPath, fn);
 }
 
+/** One fetch at a time per repo. Every worktree shares the main checkout's remote-tracking refs,
+ * and two fetches that both find origin's main moved race to write it: the loser exits non-zero
+ * with "cannot lock ref" though the ref is where it should be. Its own key, not the repo's: a
+ * fetch holds the network for seconds, and nothing that mutates the checkout waits on that. */
+export function withFetchLock<T>(repoPath: string, fn: () => Promise<T> | T): Promise<T> {
+  return withLock(`fetch:${repoPath}`, fn);
+}
+
 /** the key a file's editor writes and discards share; prefixed so it never meets a repo's path */
 export const fileLockKey = (absPath: string) => `file:${absPath}`;

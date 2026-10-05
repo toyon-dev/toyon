@@ -66,8 +66,8 @@
     min-height: 0;
     display: flex;
     flex-direction: column;
-    /* the bar's tabs hang over the top of the log (phone.css) and go while it is read down, so
-       the log starts under them and whatever stands at its top stands clear of them */
+    /* the bar's tabs hang over the top of the log (phone.css) and go while it is scrolled away
+       from its end, so the log starts under them and whatever stands at its top stands clear of them */
     --log-cover: var(--phone-strip, 0px);
     & .chat-log {
       padding-top: calc(12px + var(--log-cover));
@@ -78,8 +78,8 @@
       background: var(--surface1);
       min-height: var(--row-height-sm);
     }
-    /* Read down, a box that holds nothing is one line: the field, with the stop if the agent has
-       the turn. It grows the log at its foot, where nothing moves under the thumb. A press in it
+    /* Away from the end, a box that holds nothing is one line: the field, with the stop if the
+       agent has the turn. It grows the log at its foot, where nothing moves under the thumb. A press in it
        is the caret arriving, and the whole box is back for the keyboard coming up. */
     & .chat-input.lean:not(:focus-within) {
       --composer-min: 0;

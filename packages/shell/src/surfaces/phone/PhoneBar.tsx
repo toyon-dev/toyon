@@ -34,16 +34,18 @@ import { ago, dotClass } from "../util.ts";
 export function PhoneBar({
   screen,
   tabs,
-  over,
+  fold,
 }: {
   screen: "home" | "chat";
   tabs?: ReactNode;
-  /** the screen under the bar is a transcript: the tabs hang over its top instead of standing on
-   * it, so they can fold into the row while it is read without the text moving under the thumb */
-  over?: boolean;
+  /** The tabs sit in the row, in the name's seat, and the bar is that one row: for the app and the
+   * code, which want the screen and say whose they are themselves. A transcript folds the bar
+   * itself, while it is scrolled away from its end; there the tabs' own strip hangs over the top
+   * of the log instead of standing on it, so the fold moves no text under the thumb. */
+  fold?: boolean;
 }) {
   const dispatch = useDispatch();
-  const away = useStore((s) => s.reading) && over;
+  const reading = useStore((s) => s.reading);
   const repo = useActiveRepo();
   const repos = useStore((s) => s.repos);
   const active = useActive();
@@ -89,9 +91,9 @@ export function PhoneBar({
             onClick={() => dispatch({ a: "screen", to: "home" })}
           />
         )}
-        {/* read down, the row holds the tabs where the name was: the name is the one thing in the
-            bar that is only read, and by then it has been */}
-        {away && tabs ? (
+        {/* folded, the row holds the tabs where the name was: the name is the one thing in the bar
+            that is only read, and by then it has been */}
+        {tabs && (fold || reading) ? (
           <div className="phone-row-tabs">{tabs}</div>
         ) : (
           <div className="phone-title">
@@ -162,8 +164,8 @@ export function PhoneBar({
       {/* the worktree's faces, in the header rather than under it: the bar's own edge then runs
           under the control, and the control sits on the bar's ground, where a sunken track and a
           raised pill are both a rung away from what they stand on */}
-      {tabs && (
-        <div className="phone-tabs-seat" data-over={over || undefined} data-away={away || undefined}>
+      {tabs && !fold && (
+        <div className="phone-tabs-seat" data-away={reading || undefined}>
           <div className="phone-tabs">{tabs}</div>
         </div>
       )}

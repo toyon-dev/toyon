@@ -990,7 +990,7 @@ export function Composer({
   // place: there esc parks the question, and a stop beside the ask's send read as the send's
   // opposite on one line
   const stopShown = stoppable && !askUp;
-  // down a long log on a phone the box is a line, for as long as it holds nothing and asks
+  // away from the end of the log on a phone the box is a line, for as long as it holds nothing and asks
   // nothing; the stylesheet keeps it whole while the caret is in it
   const reading = useStore((s) => s.reading);
   const lean = onScreen && reading && blank && !askUp && !parked && !copied;

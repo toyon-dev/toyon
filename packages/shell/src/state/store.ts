@@ -717,9 +717,9 @@ export interface State {
   /** the window has no hover, so a tap is the only pointer: what the desk shows on hover has to be
    * reachable another way, on either frame */
   touch: boolean;
-  /** The reader is going down a transcript on the phone frame, away from its end: the bar folds
-   * its tabs into its row, where the name was, and a blank composer gives up its height, until they turn back up or reach the end.
-   * The log on screen sets it (ChatLog); the desk never reads it. */
+  /** The transcript on the phone frame is scrolled away from its end: the bar folds its tabs into
+   * its row, where the name was, and a blank composer gives up its height, until the end is back
+   * in view. The log on screen sets it (ChatLog); the desk never reads it. */
   reading: boolean;
   /** one-shot: the changes panel starts closed and opens itself the first time the active
    * worktree has something to show, unless a remembered layout or a hand has already decided it */
@@ -1363,7 +1363,7 @@ export type Action =
   | { a: "frame"; v: Frame }
   /** the window's input changed: hover appeared or went (a tablet's trackpad attached) */
   | { a: "touch"; v: boolean }
-  /** the reader started down a long transcript on the phone frame, or stopped */
+  /** the transcript on the phone frame left its end, or came back to it */
   | { a: "reading"; on: boolean }
   /** hold the collapsed rail's peek open while the worktree walk runs, or let it fall closed */
   | { a: "rail-peek"; on: boolean }

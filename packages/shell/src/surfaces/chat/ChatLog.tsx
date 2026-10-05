@@ -114,11 +114,6 @@ function QueuedChips({
 /** no spawn at work: one frozen set, so a turn that is over keys the same placement every render */
 const NONE: ReadonlySet<string> = new Set();
 
-/** how far from the end the reader must be for the phone's bars to give way as they start down:
- * more than a composer's height, since the box collapsing hands the log that much, and a reader
- * nearer the end than that would arrive on the spot and have it all put back */
-const READ_ROOM = 240;
-
 /** the transcript for the active worktree: items, working indicator, waiting messages, jump-down pill.
  * `lead` is a line the conversation starts from: the first child of the log, so it sits on the
  * composer in an empty chat and scrolls up as the conversation grows, the way a message would.
@@ -216,17 +211,13 @@ export function ChatLog({
       )}
     </div>
   );
-  // On a phone the bars follow the same hand, the way the browser's own do: going down a long log
-  // is reading it, so the bar's tabs and a blank composer give their room up; turning back up, or
-  // arriving at the end, is reaching for them. Unlike the pill they hold when the hand rests: a
-  // bar that came back on its own would move over the line just settled on.
+  // On a phone, a reader anywhere but the end wants the screen for the log: the bar folds to its
+  // row and a blank composer to a line, and both stay that way until the end is back in view. By
+  // place and not by the hand, unlike the pill: bars that came and went with each turn of the
+  // thumb were a thing to watch, and the end is the one place the box and the name are for.
   useEffect(() => {
-    if (!phone) return;
-    const el = logRef.current;
-    if (!follow.offEnd || follow.moving === "up") dispatch({ a: "reading", on: false });
-    else if (follow.moving === "down" && el && el.scrollHeight - el.scrollTop - el.clientHeight > READ_ROOM)
-      dispatch({ a: "reading", on: true });
-  }, [phone, follow.offEnd, follow.moving, dispatch]);
+    dispatch({ a: "reading", on: phone && follow.offEnd });
+  }, [phone, follow.offEnd, dispatch]);
   useEffect(() => () => dispatch({ a: "reading", on: false }), [dispatch]);
 
   // The composer's walk back through what was sent marks the row it is on and brings that row to

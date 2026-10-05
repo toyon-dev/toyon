@@ -23,3 +23,10 @@ export function compactAdvice(fraction: number): string {
   if (fraction < 0.8) return `${full}: worth doing between tasks`;
   return `${full}: do it before the next task`;
 }
+
+/** the same advice for the ring's tooltip, which already gives the fill: only once there is
+ * something to do, since "no need yet" answers a question a hover has not asked */
+export function compactNudge(fraction: number): string | undefined {
+  if (fraction < 0.5) return undefined;
+  return fraction < 0.8 ? "worth compacting between tasks" : "compact before the next task";
+}

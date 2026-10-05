@@ -78,7 +78,7 @@ import { PasteChip } from "./PasteChip.tsx";
 import { PickChip } from "./PickChip.tsx";
 import { type Step, stepWalk, type WalkKey } from "./recall.ts";
 import { shellCommandOf, shellContext } from "./shellMode.ts";
-import { compactAdvice, dollars, tokens } from "./usage.ts";
+import { compactAdvice, compactNudge, dollars, tokens } from "./usage.ts";
 import { attachCopied, useComposerPaste } from "./useIntake.ts";
 
 /** a frozen empty list, so a selector returning it does not read as a change every render */
@@ -352,6 +352,8 @@ export function Composer({
     : midTurn
       ? "wait for the turn to end"
       : undefined;
+  // the tooltip passes the advice on only where the agent can act on it
+  const nudge = canCompact && usage ? compactNudge(usage.used / usage.size) : undefined;
   const compactItems = () => [
     {
       id: "compact",
@@ -1431,7 +1433,7 @@ export function Composer({
                 icon={<Ring fraction={usage.used / usage.size} />}
                 tone="chrome"
                 label={`${Math.round((100 * usage.used) / usage.size)}% of context`}
-                detail={`${tokens(usage.used)} of ${tokens(usage.size)}${usage.cost !== undefined ? ` · ${dollars(usage.cost)} this session` : ""}`}
+                detail={`${tokens(usage.used)} of ${tokens(usage.size)}${usage.cost !== undefined ? ` · ${dollars(usage.cost)} this session` : ""}${nudge ? ` · ${nudge}` : ""}`}
                 // a summary cannot be taken back, so a click only opens the menu a right-click does:
                 // compacting is the press on its row
                 onClick={(e) => cm.openUnder(e.currentTarget, compactItems)}

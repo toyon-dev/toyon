@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { compactAdvice, dollars, tokens } from "./usage.ts";
+import { compactAdvice, compactNudge, dollars, tokens } from "./usage.ts";
 
 describe("tokens", () => {
   test("reads like speech", () => {
@@ -25,5 +25,13 @@ describe("compactAdvice", () => {
     expect(compactAdvice(0.12)).toBe("12% full: plenty of room, no need yet");
     expect(compactAdvice(0.64)).toBe("64% full: worth doing between tasks");
     expect(compactAdvice(0.91)).toBe("91% full: do it before the next task");
+  });
+});
+
+describe("compactNudge", () => {
+  test("says nothing while there is room", () => {
+    expect(compactNudge(0.12)).toBeUndefined();
+    expect(compactNudge(0.64)).toBe("worth compacting between tasks");
+    expect(compactNudge(0.91)).toBe("compact before the next task");
   });
 });

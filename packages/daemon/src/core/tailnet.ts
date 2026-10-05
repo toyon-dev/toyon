@@ -6,15 +6,17 @@ import type { TailnetPhone } from "@toyon/shared";
 interface Status {
   Peer?: Record<
     string,
-    { HostName?: string; DNSName?: string; OS?: string; Online?: boolean; TailscaleIPs?: string[] | null } | null
+    { HostName?: string; DNSName?: string; OS?: string; TailscaleIPs?: string[] | null } | null
   > | null;
 }
 
 const PHONE_OS = new Set(["android", "ios"]);
 
-/** a phone as the status lists it: `online` is the coordination server's word, which a phone that
- * has gone idle loses while it still carries traffic, so it is trusted only when true */
-export interface ListedPhone extends TailnetPhone {
+/** A phone as the status lists it. Its `Online` is the coordination server's word and wrong both
+ * ways for minutes at a time: an idle phone loses it while it still carries traffic, and one just
+ * switched off keeps it. Only a ping says whether the phone answers. */
+export interface ListedPhone {
+  name: string;
   ip: string | null;
 }
 
@@ -32,7 +34,7 @@ export function tailnetPhones(json: string): ListedPhone[] | null {
   for (const p of Object.values(st.Peer ?? {})) {
     if (!p || !PHONE_OS.has((p.OS ?? "").toLowerCase())) continue;
     const name = p.HostName || (p.DNSName ?? "").split(".")[0] || "a phone";
-    phones.push({ name, online: p.Online === true, ip: p.TailscaleIPs?.[0] ?? null });
+    phones.push({ name, ip: p.TailscaleIPs?.[0] ?? null });
   }
   return phones;
 }
@@ -56,8 +58,12 @@ function cli(bin: string): TailscaleRun {
   };
 }
 
-/** The phones on the tailnet and whether each answers now; null when Tailscale is missing or not
- * running. A phone the status calls offline is pinged before it is reported so. */
+/** One ping, done at the first answer: without `--until-direct=false` a pong that came through a
+ * relay exits as a failure. */
+const ping = (ip: string) => ["ping", "--until-direct=false", "--c", "1", "--timeout", PING_TIMEOUT, ip];
+
+/** The phones on the tailnet and whether each answers a ping now; null when Tailscale is missing
+ * or not running. */
 export async function readTailnetPhones(
   run: TailscaleRun | null = ((bin) => (bin ? cli(bin) : null))(Bun.which("tailscale")),
 ): Promise<TailnetPhone[] | null> {
@@ -65,10 +71,5 @@ export async function readTailnetPhones(
   const st = await run(["status", "--json"]);
   const listed = st.ok ? tailnetPhones(st.out) : null;
   if (listed === null) return null;
-  return Promise.all(
-    listed.map(async ({ name, online, ip }) => ({
-      name,
-      online: online || (ip !== null && (await run(["ping", "--c", "1", "--timeout", PING_TIMEOUT, ip])).ok),
-    })),
-  );
+  return Promise.all(listed.map(async ({ name, ip }) => ({ name, online: ip !== null && (await run(ping(ip))).ok })));
 }

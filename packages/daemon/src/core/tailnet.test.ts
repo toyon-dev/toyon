@@ -4,22 +4,22 @@ import { readTailnetPhones, tailnetPhones } from "./tailnet.ts";
 
 const status = (peers: object[]) => JSON.stringify({ Peer: Object.fromEntries(peers.map((p, i) => [`k${i}`, p])) });
 
-test("phones are the android and iOS peers, with whether each is connected", () => {
+test("phones are the android and iOS peers", () => {
   const json = status([
     { HostName: "Pixel 10 Pro", OS: "android", Online: true, TailscaleIPs: ["100.1.1.1"] },
     { HostName: "", DNSName: "kyles-iphone.tail.ts.net.", OS: "iOS", Online: false },
     { HostName: "box", OS: "linux", Online: true },
   ]);
   expect(tailnetPhones(json)).toEqual([
-    { name: "Pixel 10 Pro", online: true, ip: "100.1.1.1" },
-    { name: "kyles-iphone", online: false, ip: null },
+    { name: "Pixel 10 Pro", ip: "100.1.1.1" },
+    { name: "kyles-iphone", ip: null },
   ]);
 });
 
-test("a phone the status calls offline is on when it answers a ping", async () => {
+test("a phone is on when it answers a ping, whatever the status calls it", async () => {
   const json = status([
     { HostName: "idle", OS: "android", Online: false, TailscaleIPs: ["100.1.1.1"] },
-    { HostName: "gone", OS: "android", Online: false, TailscaleIPs: ["100.1.1.2"] },
+    { HostName: "gone", OS: "android", Online: true, TailscaleIPs: ["100.1.1.2"] },
   ]);
   const phones = await readTailnetPhones(async (args) =>
     args[0] === "status" ? { ok: true, out: json } : { ok: args.at(-1) === "100.1.1.1", out: "" },

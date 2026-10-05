@@ -64,12 +64,18 @@ function useTailnetPhones(host: string | null, waiting: boolean): TailnetPhone[]
   useEffect(() => {
     if (!tailnet || !waiting) return;
     let live = true;
-    const ask = () => void pairPhones().then((p) => live && setPhones(p));
+    let id: ReturnType<typeof setTimeout> | undefined;
+    // the next ask waits for this answer: a phone that is off holds one for the length of a ping
+    const ask = () =>
+      void pairPhones().then((p) => {
+        if (!live) return;
+        setPhones(p);
+        id = setTimeout(ask, PHONES_EVERY_MS);
+      });
     ask();
-    const id = setInterval(ask, PHONES_EVERY_MS);
     return () => {
       live = false;
-      clearInterval(id);
+      clearTimeout(id);
     };
   }, [tailnet, waiting]);
   return tailnet ? phones : undefined;

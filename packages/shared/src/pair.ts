@@ -51,6 +51,6 @@ export function tailnetLine(phones: TailnetPhone[] | null): { ok: boolean; text:
   const off = phones.map((p) => p.name);
   return {
     ok: false,
-    text: `${listed(off)} ${off.length > 1 ? "are" : "is"} off your tailnet. Turn Tailscale on there first.`,
+    text: `${listed(off)} ${off.length > 1 ? "are" : "is"} not answering on your tailnet. Check Tailscale is on there.`,
   };
 }

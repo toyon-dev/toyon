@@ -10,7 +10,7 @@ import { useEffect } from "react";
 import { CHECK_SETTLE_MS, versionRow } from "../../app/versionRow.ts";
 import { agentItems } from "../../state/actions/agent.ts";
 import { projectItems } from "../../state/actions/project.ts";
-import { appearanceLabel } from "../../state/actions/settings.ts";
+import { appearanceLabel, keepAwakeLabel } from "../../state/actions/settings.ts";
 import { versionItems } from "../../state/actions/version.ts";
 import { useDarkNow, useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { useActiveRepo } from "../../state/selectors.ts";
@@ -39,6 +39,7 @@ export function KeysHelp() {
   const prefs = useStore((s) => s.themePrefs);
   const themes = useStore((s) => s.themes);
   const chatSide = useStore((s) => s.chatSide);
+  const keepAwake = useStore((s) => s.keepAwake);
   const dark = useDarkNow();
   const agents = useStore((s) => s.agents);
   const repo = useActiveRepo();
@@ -104,10 +105,19 @@ export function KeysHelp() {
               {chatSide}
             </Button>
           </div>
-          {/* under the preferences, since it is the one row here nobody sets: which Toyon this
-              is, and what is happening to it. The bar's chips show only what needs a person; this
+          {/* the version under the preferences, since it is the one row here nobody sets: which
+              Toyon this is, and what is happening to it. The bar's chips show only what needs a person; this
               row is always there, so someone asking "am I current" has one place to look. */}
           <div className="section-title keys-h">Toyon</div>
+          {/* the daemon's own, so only where the daemon has it to offer: a Mac it can hold awake */}
+          {keepAwake !== null && (
+            <div className="keys-setting">
+              <span className="keys-d">keep the Mac awake</span>
+              <Button variant="field" mono onClick={() => open({ a: "open", overlay: { kind: "keep-awake" } })}>
+                {keepAwakeLabel[keepAwake]}
+              </Button>
+            </div>
+          )}
           <VersionRow />
           <ManagedHint />
         </div>

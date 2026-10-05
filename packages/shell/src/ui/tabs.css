@@ -140,4 +140,31 @@
       font-weight: var(--weight-strong);
     }
   }
+  /* On a filled track the seats are even, so the pill is one shape of the list's own that moves
+   between them, and the open tab paints nothing itself. Its place is arithmetic on the seat's
+   index and the count (Tabs.tsx): a seat is the track less its gaps over the count, and a
+   percentage in a translate is the pill's own width, so one step is a seat and a gap. Only the
+   move eases; a seat that changes width (a tab added, the phone turned) lands at once. The tabs
+   are positioned and come after it, so the labels paint over the pill with no z-index. */
+  .tabs-segmented.tabs-fill .tabs-list {
+    position: relative;
+    &::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 0;
+      width: calc((100% - (var(--tabs-count) - 1) * 2px) / var(--tabs-count));
+      border-radius: var(--radius-md);
+      background: var(--tabs-ground, var(--surface0));
+      transform: translateX(calc(var(--tabs-at) * (100% + 2px)));
+      transition: transform 0.2s cubic-bezier(0.2, 0, 0, 1);
+      @media (prefers-reduced-motion: reduce) {
+        transition: none;
+      }
+    }
+  }
+  .tabs-segmented.tabs-fill .tab[data-state~="current"] {
+    background: none;
+  }
 }

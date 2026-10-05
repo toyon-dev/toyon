@@ -1,4 +1,4 @@
-import { type KeyboardEvent, type ReactNode, useRef } from "react";
+import { type CSSProperties, type KeyboardEvent, type ReactNode, useRef } from "react";
 import { cx } from "./cx.ts";
 import { step } from "./listNav.ts";
 import { type MenuEntry, useContextMenu } from "./menu.ts";
@@ -41,7 +41,8 @@ export type TabsProps<Id extends string> = {
   font?: "ui" | "mono";
   /** a segmented control rather than a strip: a rounded track with the open tab raised out of it
    * as a pill. For a strip that heads a whole screen with a strip of its own further down, where
-   * two joined strips read as one thing twice. */
+   * two joined strips read as one thing twice. With `fill` the pill slides to the tab that opens,
+   * which counts on even seats: no `fit` or `far` tab in a filled segmented strip. */
   segmented?: boolean;
   /** a cluster on the strip's far end, outside the scrolling list: a pane's close */
   end?: ReactNode;
@@ -76,6 +77,10 @@ export function Tabs<Id extends string>({
 }: TabsProps<Id>) {
   const cm = useContextMenu(owner);
   const list = useRef<HTMLDivElement>(null);
+  const at = Math.max(
+    0,
+    items.findIndex((it) => it.id === current),
+  );
   // roving tabindex: the open tab is the one in the tab order, and the arrows move between them
   const onKeyDown = (e: KeyboardEvent) => {
     if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
@@ -88,7 +93,16 @@ export function Tabs<Id extends string>({
   };
   return (
     <div className={cx("tabs", fill && "tabs-fill", font === "mono" && "tabs-mono", segmented && "tabs-segmented")}>
-      <div className="tabs-list" role="tablist" aria-label={label} ref={list} onKeyDown={onKeyDown}>
+      <div
+        className="tabs-list"
+        role="tablist"
+        aria-label={label}
+        ref={list}
+        onKeyDown={onKeyDown}
+        // where the pill stands and how many seats the track has: the stylesheet places it from
+        // these alone, so it slides between seats with nothing measured
+        style={segmented ? ({ "--tabs-at": at, "--tabs-count": items.length } as CSSProperties) : undefined}
+      >
         {items.map((it) => {
           const open = it.id === current;
           return (

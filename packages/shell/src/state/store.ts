@@ -25,6 +25,7 @@ import type {
   FileServerMsg,
   GitFileStatus,
   InstallMethod,
+  KeepAwakeMode,
   LogLine,
   ManagedView,
   OwnedWorktree,
@@ -350,6 +351,7 @@ export type Overlay =
   /** theme picker: which pref slot Enter writes */
   | { kind: "theme"; slot: "theme" | "light" | "dark" }
   | { kind: "appearance" }
+  | { kind: "keep-awake" }
   /** default-agent picker */
   | { kind: "agent" }
   /** one agent's page in settings: who it is, the files it reads, the MCP servers it loads */
@@ -745,6 +747,8 @@ export interface State {
   home: string;
   /** hello's `folderDialog`: whether the view's folder buttons open Finder where the person is */
   folderDialog: boolean;
+  /** hello's `keepAwake`: when the daemon keeps its machine awake, null where it cannot */
+  keepAwake: KeepAwakeMode | null;
   /** hello's `remote`: the public name, and how previews are addressed when the shell was opened
    * through it */
   remote: RemoteView | null;
@@ -914,6 +918,7 @@ export function initialState(opts: InitialOpts): State {
     paths: { query: "", entries: [], target: null },
     home: "",
     folderDialog: false,
+    keepAwake: null,
     remote: null,
     managed: MANAGED_NONE,
     paired: false,
@@ -1214,6 +1219,7 @@ function withoutMark(l: WorktreeLocal, by: ChatMark["by"]): WorktreeLocal {
 export const isSubPicker = (o: Overlay) =>
   o.kind === "theme" ||
   o.kind === "appearance" ||
+  o.kind === "keep-awake" ||
   o.kind === "agent" ||
   o.kind === "agent-page" ||
   o.kind === "choose-folder";
@@ -2187,6 +2193,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
         agentChosen: msg.agentChosen,
         home: msg.home,
         folderDialog: msg.folderDialog,
+        keepAwake: msg.keepAwake,
         remote: msg.remote,
         managed: msg.managed,
         paired: msg.paired,
@@ -2228,6 +2235,8 @@ function onServer(s: State, msg: StoreServerMsg): State {
       return { ...s, themes: msg.themes, themePrefs: msg.prefs };
     case "daylight":
       return { ...s, daylight: { dark: msg.dark, until: msg.until } };
+    case "keep-awake":
+      return { ...s, keepAwake: msg.mode };
     case "agents":
       return { ...s, agents: msg.agents, defaultAgent: msg.defaultAgent, agentChosen: msg.agentChosen };
     case "agent-config": {

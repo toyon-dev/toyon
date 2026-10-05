@@ -22,6 +22,7 @@ import type {
   FileBlame,
   GitFileStatus,
   InstallMethod,
+  KeepAwakeMode,
   LogLine,
   PathEntry,
   PathTarget,
@@ -37,7 +38,7 @@ import type {
   UpdateState,
   WorktreeStatus,
 } from "../model.ts";
-import { LOGIN_STREAM, SHELL_STREAM } from "../model.ts";
+import { KEEP_AWAKE_MODES, LOGIN_STREAM, SHELL_STREAM } from "../model.ts";
 import type { PageEntry, WorktreePages } from "../routes.ts";
 import type { AgentCommand, AgentEvent, AskAnswer, PasteSource, PickMeta, PickRef } from "./events.ts";
 import {
@@ -88,6 +89,9 @@ export type ServerMsg =
       /** the daemon can open the OS folder dialog where the person is: a macOS daemon running
        * locally. Anywhere else the dialog would open on a screen nobody at this shell can see. */
       folderDialog: boolean;
+      /** when the daemon holds off the machine's idle sleep: the line in settings. Null where it
+       * has no way to (not a Mac, or turned off where it was started), and settings has no line. */
+      keepAwake: KeepAwakeMode | null;
       /** the public name when there is one, and how a shell served from it reaches each preview:
        * `w<id>.<name>` routed by the daemon's own listener, or `<name>:<proxy port>` */
       remote: RemoteView | null;
@@ -125,6 +129,7 @@ export type ServerMsg =
    * Only the appearance mode that follows daylight reads it, and the shell asks again at `until`. */
   | { t: "daylight"; dark: boolean; until: number }
   | { t: "agents"; agents: AgentInfo[]; defaultAgent: string; agentChosen: boolean }
+  | { t: "keep-awake"; mode: KeepAwakeMode | null }
   /** the files an agent reads and the MCP servers it will load, on request from settings */
   | ({ t: "agent-config" } & AgentConfigInfo)
   | { t: "repos"; repos: RepoInfo[] }
@@ -808,6 +813,7 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
    * cloud daemon sits in whatever zone its VM does. Answered with `daylight`. */
   z.object({ t: z.literal("zone"), tz: z.string().max(100) }),
   z.object({ t: z.literal("set-default-agent"), agent: id }),
+  z.object({ t: z.literal("set-keep-awake"), mode: z.enum(KEEP_AWAKE_MODES) }),
   /** (re)download an agent's adapter; progress arrives as `agents` broadcasts */
   z.object({ t: z.literal("install-agent"), agent: id }),
   /** log the worktree's agent in with one of the methods it offered; a key rides along when asked for */

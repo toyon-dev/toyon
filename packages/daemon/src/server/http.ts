@@ -36,6 +36,8 @@ export interface WsData {
   bytes: number;
   /** the worktree this socket's tab is showing; null while it shows none or is hidden */
   view: string | null;
+  /** the shell on this socket was opened through the front: from another device */
+  remote?: true;
   /** set on a socket a remote preview name upgraded: it is bridged to the app, never a shell */
   preview?: { handler: PreviewHandler; data: PreviewData };
 }
@@ -171,6 +173,7 @@ export function createFetch(opts: HttpOpts) {
         sent: 0,
         bytes: 0,
         view: null,
+        ...(remoteShell ? { remote: true as const } : {}),
       };
       // a wrong token is still upgraded, then closed with WS_CLOSE_UNAUTHORIZED from `open`: a
       // browser reports a refused handshake as a bare 1006, the same as a daemon that is down, and

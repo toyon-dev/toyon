@@ -11,6 +11,7 @@ import { agentConfigFiles, describeAgentConfig } from "../agent/config.ts";
 import type { AgentRegistry } from "../agent/registry.ts";
 import { coalesce } from "../agent/transcript.ts";
 import { GONE, uploadIds } from "../agent/uploads.ts";
+import type { KeepAwake } from "../core/awake.ts";
 import type { FolderDialog } from "../core/dialog.ts";
 import { UserError } from "../core/errors.ts";
 import type { Hub } from "../core/hub.ts";
@@ -60,6 +61,7 @@ export interface Services {
   idle: IdlePolicy;
   /** the daemon's own stop, once nothing has been connected or working for a while */
   idleExit: Pick<IdleExit, "clients">;
+  keepAwake: Pick<KeepAwake, "setting" | "remoteShells">;
   /** one-off commands from the composer's `!` mode */
   exec: ExecService;
   /** the setup, check and commit runs out on each worktree, and the stop on them */
@@ -759,6 +761,11 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     s.agents.require(msg.agent);
     s.state.setDefaultAgent(msg.agent);
     s.hub.emit("agentsChanged");
+  },
+
+  "set-keep-awake"(msg, _ctx, s) {
+    s.state.setKeepAwake(msg.mode);
+    s.hub.emit("keepAwakeChanged");
   },
 
   "rescan-themes"(_msg, _ctx, s) {

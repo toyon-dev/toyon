@@ -103,6 +103,7 @@ function harness() {
     agentChosen: true,
     home: "/h",
     folderDialog: false,
+    keepAwake: null,
     remote: null,
     paired: false,
     gitIdentity: true,

@@ -160,3 +160,7 @@ Copies start when you open them, not when the daemon boots. A copy nobody has lo
 `TOYON_PROC_SLEEP_MS` sets the delay in milliseconds, and `off` turns the clock off.
 
 The daemon stops itself too. Once no window or preview has been open and nothing has been working for half an hour, it exits, and the next `toyon` or Dock launch starts one again. An agent mid-turn, a command, a clone or a build after a land all count as working, so nothing is cut off. A daemon reached over the network, one on a deployed machine, or one you ran yourself in a terminal never stops on its own; `TOYON_STOP_AFTER_MS` sets the delay in milliseconds anywhere, and `off` turns it off.
+
+On a Mac the daemon also holds off the machine's own idle sleep while Toyon is in use, so a laptop on battery does not stop the work a minute after your last keypress. In use means an agent is mid-turn, a command is running, or a shell is open from another device. A phone that disconnects, and a question waiting on you where a phone could answer it, each hold the Mac for half an hour more, and then it may sleep; the question is still there when it wakes. Closing the lid sleeps as it always does.
+
+"keep the Mac awake" in settings has three values. "while in use" is the default. "always" holds for as long as the daemon runs, on battery too, for a Mac left open as a server. "off" leaves the Mac's sleep alone. `TOYON_KEEP_AWAKE=off` turns it off for a daemon whatever settings says.

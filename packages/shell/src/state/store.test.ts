@@ -132,6 +132,7 @@ const helloIn = (repos: RepoInfo[], ...w: WorktreeStatus[]): Action =>
     agentChosen: true,
     home: "/home/t",
     folderDialog: false,
+    keepAwake: null,
     remote: null,
     paired: false,
     gitIdentity: true,

@@ -85,12 +85,18 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
   // every socket that was let in, shell or preview: what the daemon's own idle stop counts. A
   // preview page open on its own, with no shell, is still someone using it.
   const linked = new Set<ServerWebSocket<WsData>>();
+  // the ones that came from another device, a shell or a preview page on the remote name: someone
+  // is using this machine from somewhere its own keyboard cannot tell
+  const counted = () => {
+    s.idleExit.clients(linked.size);
+    s.keepAwake.remoteShells([...linked].filter((ws) => ws.data.remote || ws.data.preview).length);
+  };
   const link = (ws: ServerWebSocket<WsData>) => {
     linked.add(ws);
-    s.idleExit.clients(linked.size);
+    counted();
   };
   const unlink = (ws: ServerWebSocket<WsData>) => {
-    if (linked.delete(ws)) s.idleExit.clients(linked.size);
+    if (linked.delete(ws)) counted();
   };
 
   const raw = (ws: ServerWebSocket<WsData>, json: string) => {
@@ -339,6 +345,7 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
       agentChosen: s.state.defaultAgent !== undefined,
     }) satisfies ServerMsg;
   s.hub.on("agentsChanged", () => broadcast(agentsMsg()));
+  s.hub.on("keepAwakeChanged", () => broadcast({ t: "keep-awake", mode: s.keepAwake.setting() }));
   s.hub.on("selfChanged", () => broadcast({ t: "self", self: s.self.get() }));
   // every tab, not the worktree's subscribers: the person who landed has moved on to some other
   // row by now, and the shell reads a main worktree's error under whichever composer is on screen
@@ -376,6 +383,7 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
       agentChosen: s.state.defaultAgent !== undefined,
       home: homedir(),
       folderDialog: process.platform === "darwin" && !cloud.enabled,
+      keepAwake: s.keepAwake.setting(),
       remote: opts.remote && { host: opts.remote.host, previews: opts.remote.previews },
       paired: s.state.paired,
       gitIdentity: await s.repos.gitIdentity(),

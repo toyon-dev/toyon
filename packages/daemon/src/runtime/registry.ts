@@ -412,6 +412,19 @@ export class RuntimeRegistry {
     return false;
   }
 
+  /** What the machine itself is needed for: something running on its own (a turn, a command), a
+   * card that only a person can move, or nothing. Narrower than `busy`: an agent in error or one
+   * with a message still queued is owed something, but nothing is running that sleep would stop. */
+  demand(): "working" | "waiting" | null {
+    if (this.holds.size > 0) return "working";
+    let waiting = false;
+    for (const rt of this.runtimes.values()) {
+      if (rt.agent.status === "working") return "working";
+      if (rt.agent.status === "waiting") waiting = true;
+    }
+    return waiting ? "waiting" : null;
+  }
+
   markSetup(id: string, on: boolean): void {
     if (on) this.settingUp.add(id);
     else this.settingUp.delete(id);

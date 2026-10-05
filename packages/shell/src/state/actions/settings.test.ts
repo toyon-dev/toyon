@@ -16,6 +16,7 @@ describe("the settings menu", () => {
         agents: [{ id: "claude", name: "Claude" } as AgentInfo],
         defaultAgent: "claude",
         chatSide: "left",
+        keepAwake: null,
       },
       { sock: null, dispatch: () => {} },
     );
@@ -42,5 +43,28 @@ describe("the settings menu", () => {
         .filter((i) => i.sub)
         .map((i) => i.id),
     ).toEqual(["theme", "appearance", "agent", "theme-dark", "theme-light"]);
+  });
+
+  test("the keep-awake line shows where the daemon has it, naming the current value", () => {
+    const row = (keepAwake: "use" | "always" | "off" | null) =>
+      settingsItems(
+        {
+          themePrefs: { mode: "system", dark: "t-dark", light: "t-light" },
+          themes: [],
+          systemDark: true,
+          daylight: null,
+          agents: [],
+          defaultAgent: "claude",
+          chatSide: "left",
+          keepAwake,
+        },
+        { sock: null, dispatch: () => {} },
+      )
+        .filter(isItem)
+        .find((i) => i.id === "keep-awake");
+    expect(row(null)).toBeUndefined();
+    expect(row("use")?.detail).toBe("while in use");
+    expect(row("always")?.detail).toBe("always");
+    expect(row("off")?.detail).toBe("off");
   });
 });

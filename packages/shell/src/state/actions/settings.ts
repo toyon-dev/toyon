@@ -1,4 +1,4 @@
-import { resolveTheme, type ThemePrefs } from "@toyon/shared";
+import { type KeepAwakeMode, resolveTheme, type ThemePrefs } from "@toyon/shared";
 import { clipboardOfferState, setClipboardOffer } from "../../app/clipboardOffer.ts";
 import { grouped, type MenuEntry } from "../../ui/menu.ts";
 import { darkNow, type State } from "../store.ts";
@@ -9,6 +9,12 @@ export const appearanceLabel: Record<ThemePrefs["mode"], string> = {
   light: "light",
   system: "follow system",
   daylight: "follow daylight",
+};
+
+export const keepAwakeLabel: Record<KeepAwakeMode, string> = {
+  use: "while in use",
+  always: "always",
+  off: "off",
 };
 
 /** browser file dialog to raw theme text (the daemon parses JSONC and converts) */
@@ -25,7 +31,7 @@ export function pickThemeFile(onText: (name: string, source: string) => void) {
 
 export type SettingsState = Pick<
   State,
-  "themePrefs" | "themes" | "systemDark" | "daylight" | "agents" | "defaultAgent" | "chatSide"
+  "themePrefs" | "themes" | "systemDark" | "daylight" | "agents" | "defaultAgent" | "chatSide" | "keepAwake"
 >;
 
 /** What the settings card holds, as a list: the gear's right-click and the palette's settings
@@ -83,6 +89,20 @@ export function settingsItems(s: SettingsState, { sock, dispatch }: Deps): MenuE
             },
           ]),
     ],
+    // the daemon's own, so only where the daemon has it to offer: a Mac it can hold awake
+    ...(s.keepAwake === null
+      ? []
+      : [
+          [
+            {
+              id: "keep-awake",
+              label: "keep the Mac awake…",
+              detail: keepAwakeLabel[s.keepAwake],
+              sub: true,
+              onClick: () => dispatch({ a: "open", overlay: { kind: "keep-awake" } }),
+            },
+          ],
+        ]),
     [
       {
         id: "theme-import",

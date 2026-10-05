@@ -28,6 +28,7 @@ import { makeAnswerRecapper, makeLander, makePlanner } from "./agent/tasks.ts";
 import { transcriptPathFor } from "./agent/transcript.ts";
 import { UploadStore } from "./agent/uploads.ts";
 import { locateAssets, pruneAssets } from "./core/assets.ts";
+import { idleSleepAssertion, KeepAwake } from "./core/awake.ts";
 import { cloud } from "./core/cloud.ts";
 import { folderDialog } from "./core/dialog.ts";
 import { Hub } from "./core/hub.ts";
@@ -310,6 +311,15 @@ const idleExit = new IdleExit({
   afterMs: stopAfter,
 });
 
+// a machine that idle-sleeps stops the turn under way and the daemon a phone is answering from
+const keepAwake = new KeepAwake({
+  hub,
+  demand: () => runtime.demand(),
+  assert: idleSleepAssertion(process.env.TOYON_KEEP_AWAKE),
+  mode: () => state.keepAwake,
+  answerable: remote !== null,
+});
+
 const { branded, stop: stopServer } = startServer({
   port,
   token,
@@ -331,6 +341,7 @@ const { branded, stop: stopServer } = startServer({
     runtime,
     idle,
     idleExit,
+    keepAwake,
     exec,
     runs,
     refs,
@@ -453,6 +464,7 @@ async function shutdown(signal: string, opts: { respawn?: boolean } = {}) {
   shuttingDown = true;
   log.info("daemon", `${signal}: stopping dev servers`);
   idleExit.stop();
+  keepAwake.stop();
   // before the sockets close: what the tabs show now is what the next daemon brings back
   idle.shutdown();
   // before the agents close: a verdict mid-question stays pending for the next daemon

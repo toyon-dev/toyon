@@ -576,6 +576,11 @@ export function applyLog(lines: LogLine[], proc: string, line: string, retract =
 /** "waiting" means blocked on a person (an open ask card), not on the model */
 export type AgentStatus = "idle" | "working" | "waiting" | "error";
 
+/** When the daemon holds off its machine's idle sleep: while Toyon is in use (an agent working, a
+ * question waiting, a shell open from another device), whenever it runs, or never. */
+export const KEEP_AWAKE_MODES = ["use", "always", "off"] as const;
+export type KeepAwakeMode = (typeof KEEP_AWAKE_MODES)[number];
+
 /** Who an agent says it is paying as. Both builtin adapters push this over ACP's `_auth/status_update`
  * extension, so it is what the agent itself reports, not what toyon guesses from its files. */
 export interface AuthStatus {

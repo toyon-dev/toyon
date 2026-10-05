@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import type { AgentCommand, ModelChoice, RepoInfo, ThemePrefs, WorktreeInfo } from "@toyon/shared";
+import type { AgentCommand, KeepAwakeMode, ModelChoice, RepoInfo, ThemePrefs, WorktreeInfo } from "@toyon/shared";
 import { UserError } from "./errors.ts";
 import { log } from "./log.ts";
 import { ensureDirs, type Paths } from "./paths.ts";
@@ -25,6 +25,8 @@ export interface PersistedState {
   theme?: ThemePrefs;
   /** registry id new worktrees get when the prompt does not pick one */
   defaultAgent?: string;
+  /** the keep-awake line in settings, kept only once it is moved off "use" */
+  keepAwake?: Exclude<KeepAwakeMode, "use">;
   /** each repo's preview pages and how much they are used (routes/frecency.ts), by repo id then
    * page. Beside the repo rather than on RepoInfo, which is broadcast whole on every config change
    * and would carry this to every tab each time. */
@@ -346,6 +348,15 @@ export class StateStore {
   clearDefaultAgent() {
     if (this.state.defaultAgent === undefined) return;
     delete this.state.defaultAgent;
+    this.save();
+  }
+
+  get keepAwake(): KeepAwakeMode {
+    return this.state.keepAwake ?? "use";
+  }
+  setKeepAwake(mode: KeepAwakeMode) {
+    if (mode === "use") delete this.state.keepAwake;
+    else this.state.keepAwake = mode;
     this.save();
   }
 

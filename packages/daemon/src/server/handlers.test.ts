@@ -220,6 +220,7 @@ function make() {
     runtime,
     idle,
     idleExit: { clients: () => {} },
+    keepAwake: { setting: () => null, remoteShells: () => {} },
     exec,
     runs: worktrees.runs,
     refs,

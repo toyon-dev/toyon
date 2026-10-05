@@ -7,6 +7,7 @@ import { ChatsPicker } from "./ChatsPicker.tsx";
 import { CommandPalette } from "./CommandPalette.tsx";
 import { ElementSources } from "./ElementSources.tsx";
 import { FolderPicker } from "./FolderPicker.tsx";
+import { KeepAwakePicker } from "./KeepAwakePicker.tsx";
 import { KeysHelp } from "./KeysHelp.tsx";
 import { PairCard } from "./PairCard.tsx";
 import { ProjectPicker } from "./ProjectPicker.tsx";
@@ -38,6 +39,7 @@ export function Overlays() {
       {overlay?.kind === "pair" && <PairCard />}
       {overlay?.kind === "theme" && <ThemePicker slot={overlay.slot} />}
       {overlay?.kind === "appearance" && <AppearancePicker />}
+      {overlay?.kind === "keep-awake" && <KeepAwakePicker />}
       {overlay?.kind === "agent" && <AgentPicker />}
       {overlay?.kind === "agent-page" && <AgentPage agentId={overlay.agent} />}
       {overlay?.kind === "commands" && !phone && <CommandPalette />}

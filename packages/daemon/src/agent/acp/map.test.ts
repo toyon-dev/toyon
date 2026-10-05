@@ -6,6 +6,7 @@ import {
   mapCommands,
   mapStopReason,
   mapUpdate,
+  preempted,
   release,
   summarizeToolOutput,
   type ToolMemos,
@@ -262,6 +263,47 @@ describe("mapUpdate", () => {
       memos,
     );
     expect(release("h2", memos.get("h2")!)).toBeNull();
+  });
+
+  test("a call a steer cut after a field closed ends unwritten when the agent answers with a call", () => {
+    const open = (toolCallId: string, meta?: Record<string, unknown>): SessionUpdate => ({
+      sessionUpdate: "tool_call",
+      toolCallId,
+      title: "Terminal",
+      kind: "execute",
+      status: "pending",
+      rawInput: {},
+      ...(meta ? { _meta: meta } : {}),
+    });
+    const memos: ToolMemos = new Map();
+    run([open("k1")], memos);
+    preempted(memos);
+    // the field that was closing trails in after the steer, and then the answer to it opens
+    expect(
+      run(
+        [{ sessionUpdate: "tool_call_update", toolCallId: "k1", title: "ls", rawInput: { command: "ls" } }, open("k2")],
+        memos,
+      ).map((e) => [e.type, "toolId" in e && e.toolId]),
+    ).toEqual([
+      ["tool-end", "k1"],
+      ["tool-start", "k2"],
+    ]);
+    // a call whose whole input was held when the steer landed, and was running: its result says so
+    const running: ToolMemos = new Map();
+    run(
+      [open("k3"), { sessionUpdate: "tool_call_update", toolCallId: "k3", title: "ls", rawInput: { command: "ls" } }],
+      running,
+    );
+    preempted(running);
+    expect(run([{ sessionUpdate: "tool_call_update", toolCallId: "k3", status: "completed" }], running)).toMatchObject([
+      { type: "tool-update", toolId: "k3", input: { command: "ls" } },
+      { type: "tool-end", toolId: "k3" },
+    ]);
+    // a subagent's call is not the generation a steer pre-empts
+    const nested: ToolMemos = new Map();
+    run([open("k4", { claudeCode: { parentToolUseId: "task1" } })], nested);
+    preempted(nested);
+    expect(nested.get("k4")!.cut).toBeUndefined();
   });
 
   test("a subagent writing a call is read apart from the main agent, and the other way round", () => {

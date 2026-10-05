@@ -39,6 +39,8 @@ export interface ToolMemo {
   /** what the adapter has refined that the shell has not been sent: an input that may be half
    * written waits here until something says the call is whole (`tool_call_update`, `release`) */
   held?: ToolRefine;
+  /** a message steered into the turn landed while the call was being written (`preempted`) */
+  cut?: boolean;
   /** the call that spawned this one, so a subagent's stream is read apart from the main agent's */
   parent?: string;
   /** the call starts a subagent, so its return may be only the launch (endOf) */
@@ -172,6 +174,17 @@ export function release(toolId: string, memo: ToolMemo): AgentEvent | null {
   return memo.ended ? null : { type: "tool-update", toolId, ...held };
 }
 
+/** A steered message was injected: the main agent's generation is pre-empted, so a call of its own
+ * still being written will not run, whatever part of its input has arrived or trails in after.
+ * Marked rather than ended here, because a call whose whole input is held looks the same and may
+ * be running already: that one ends by its status, and a cut one by whatever answers the steer
+ * (`abandoned`). A subagent's calls are its own generation and are left alone. */
+export function preempted(memos: ToolMemos) {
+  for (const memo of memos.values()) {
+    if (!memo.ended && memo.writing && !memo.parent) memo.cut = true;
+  }
+}
+
 /** The calls still waiting for their input when this stream moved on, ended: nothing more is coming
  * for them. The Claude adapter finishes one call's input before it opens the next, two calls in one
  * message included, and its prose never follows a call it is still writing; so a call with no
@@ -184,12 +197,13 @@ export function release(toolId: string, memo: ToolMemo): AgentEvent | null {
  * A call with an input held is the exception when what arrives is another call (`opening`): the
  * earlier call of two in one message looks exactly like that, whole and about to run, so its input
  * goes out and the row stays open. A call cut off after a field closed and answered with a call
- * reads the same on the wire, and keeps its row until the turn ends. */
+ * reads the same on the wire, so it is told apart by the steer that cut it (`preempted`): its
+ * input never goes out, and the row ends as one that was never written. */
 function abandoned(memos: ToolMemos, parent: string | undefined, opening = false): AgentEvent[] {
   const out: AgentEvent[] = [];
   for (const [toolId, memo] of memos) {
     if (memo.ended || !memo.writing || memo.parent !== parent) continue;
-    if (opening && memo.held) {
+    if (opening && memo.held && !memo.cut) {
       const sent = release(toolId, memo);
       if (sent) out.push(sent);
       continue;

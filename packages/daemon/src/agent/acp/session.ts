@@ -39,7 +39,7 @@ import { askOnce } from "./ask.ts";
 import { AUTH_STATUS_UPDATE_METHOD, parseAuthStatus, supportsLogout } from "./authstatus.ts";
 import { BackgroundTasks } from "./background.ts";
 import { parseForm, toContent } from "./elicit.ts";
-import { endOfAsk, mapCommands, mapStopReason, mapUpdate, release, type ToolMemos } from "./map.ts";
+import { endOfAsk, mapCommands, mapStopReason, mapUpdate, preempted, release, type ToolMemos } from "./map.ts";
 import { currentValues, type LiveOptions, type OptionCategory, readModeOption, readOptions } from "./options.ts";
 import { STEER_METHOD, type SteerOutcome, steerOutcome, supportsSteering } from "./steering.ts";
 import type { AcpLink } from "./transport.ts";
@@ -505,7 +505,9 @@ export class AcpSession implements AgentAdapter {
       }
       this.clearReaper();
       log.warn(this.d.worktreeId, "steered message started a turn of the agent's own");
+      return;
     }
+    if (this.live === live) preempted(live.tools);
   }
 
   /** off the unanswered list; false when a stop has already moved it to the queue */
@@ -1090,8 +1092,9 @@ export class AcpSession implements AgentAdapter {
     const held = memo?.held;
     if (!memo || !held) return;
     const t = setTimeout(() => {
-      // a later update replaced what was held or sent it on, and a turn that ended took the row
-      if (this.live !== live || memo.held !== held || !(this.running || this.own)) return;
+      // a later update replaced what was held or sent it on, and a turn that ended took the row.
+      // A call a steer cut is quiet because nothing more is coming, not because it is whole.
+      if (this.live !== live || memo.held !== held || memo.cut || !(this.running || this.own)) return;
       const sent = release(toolId, memo);
       if (sent) this.forward(live, [sent]);
     }, this.d.inputHoldMs ?? INPUT_HOLD_MS);

@@ -500,7 +500,7 @@ export function ChatLog({
               >
                 <span className="queued-tag">
                   <Icon name="clock" className="icon-inline" />
-                  queued
+                  <span className="queued-word">queued</span>
                 </span>
                 <div className="queued-text">
                   {message.attachments && (
@@ -536,7 +536,7 @@ export function ChatLog({
           <div className="msg-user queued-msg">
             <span className="queued-tag">
               <Icon name="clock" className="icon-inline" />
-              {found ? "taking over" : "restoring"}
+              <span className="queued-word">{found ? "taking over" : "restoring"}</span>
             </span>
             <span className="queued-text">{restoring}</span>
           </div>

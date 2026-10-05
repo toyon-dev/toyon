@@ -213,11 +213,21 @@
     background: var(--surface1);
     display: flex;
     gap: 8px;
-    align-items: baseline;
+    align-items: flex-start;
+  }
+  /* the tag and the actions are each a box one line of the message tall, centred in it, so all
+     three sit on the message's first line however far it wraps. A baseline cannot do this: an icon
+     has none, and a box that leads with one hangs its bottom edge on the text's baseline. */
+  .queued-tag,
+  .queued-actions {
+    height: 1lh;
+    align-items: center;
   }
   .queued-tag {
-    font: var(--type-ui-sm);
     color: var(--yellow);
+  }
+  .queued-word {
+    font: var(--type-ui-sm);
   }
   .queued-text {
     flex: 1;

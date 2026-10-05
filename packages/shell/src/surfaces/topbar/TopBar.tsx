@@ -345,7 +345,8 @@ function Offer({
  * line a failed build printed under it. There is no dismiss: the checkout does not move back, so
  * the chip stays until it is acted on. A build the page watched finish leaves the chip offering
  * the reload, since the bar going quiet would otherwise be the only sign that this page is now the
- * stale half; the reload itself is what clears it. */
+ * stale half; the reload itself is what clears it. With a restart owed as well the chip offers
+ * that alone, and the page reloads when the daemon is back. */
 function SelfOffer() {
   const self = useStore((s) => s.self);
   const rebuilt = useStore((s) => s.rebuilt);

@@ -252,13 +252,18 @@ installPhoneHistory(store);
 
 // The daemon's version as this page first heard it. A later hello naming another version, or
 // another protocol, is a daemon that restarted onto an install: this page's code is from before it
-// and the files on disk are the new ones, so a reload is the whole fix and needs no asking.
+// and the files on disk are the new ones, so a reload is the whole fix and needs no asking. The
+// same goes for a daemon back from a restart this page heard announced, when the page watched a
+// build finish: a checkout's version and protocol can both hold still across one, and the page
+// would come back as the stale half with a reload still to ask for.
 let heardVersion: string | null = null;
 
 const sock = new DaemonSocket(
   (msg) => {
     if (msg.t === "hello") {
-      if (heardVersion !== null && (msg.version !== heardVersion || msg.protocol !== PROTOCOL_VERSION)) {
+      const { rebuilt, update } = store.getState();
+      const restarted = rebuilt && update?.restarting != null;
+      if (heardVersion !== null && (restarted || msg.version !== heardVersion || msg.protocol !== PROTOCOL_VERSION)) {
         sock.dispose();
         window.location.reload();
         return;

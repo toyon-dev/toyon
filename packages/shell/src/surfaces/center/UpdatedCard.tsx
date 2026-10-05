@@ -7,7 +7,6 @@ import { daemonPid, restartDaemon, restartWaiting } from "../../ws.ts";
 
 const COPY = {
   title: "Toyon was updated",
-  body: "The Toyon running is older than the one installed. Restart it to finish the update.",
   waiting: "Restarting Toyon. This page reloads when it is back.",
 } as const;
 
@@ -36,14 +35,15 @@ async function watch(before: number | null, onHeard: (heard: Heard) => void) {
 }
 
 /** This page was served from files an install put on disk, by a daemon still running the code from
- * before it. A reload would load the same files against the same daemon, so the card offers the
- * restart, over HTTP because the socket has stopped, and reloads once a new daemon answers. The
- * daemon waits out every chat mid-reply first, which can be minutes of a page that reads as hung,
+ * before it. A reload would load the same files against the same daemon, and nothing on this page
+ * works until the two are level, so the card asks for the restart itself, over HTTP because the
+ * socket has stopped, and reloads once a new daemon answers. The button is left for a restart the
+ * daemon refused. The daemon waits out every chat mid-reply first, which can be minutes of a page that reads as hung,
  * and the rail that would show those chats is empty because nothing can be read off this daemon's
  * socket. So the card lists them itself, a row leaving "replying" as its chat settles, and offers
  * the way past them. */
 export function UpdatedCard() {
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState(true);
   const [refused, setRefused] = useState<string | null>(null);
   const [wait, setWait] = useState<Wait>(NO_WAIT);
   /** the daemon that took the request; set once, so a second press does not start a second watch */
@@ -55,48 +55,52 @@ export function UpdatedCard() {
     [],
   );
 
+  const restart = useCallback(
+    async (now: boolean) => {
+      setBusy(true);
+      setRefused(null);
+      const before = asked.current ?? { pid: await daemonPid() };
+      const refusal = await restartDaemon(now);
+      if (refusal) {
+        setBusy(asked.current !== null);
+        setRefused(refusal);
+        return;
+      }
+      if (now) setWait(NO_WAIT);
+      if (asked.current) return;
+      asked.current = before;
+      void watch(before.pid, hear);
+    },
+    [hear],
+  );
+
   // The daemon remembers a restart it was asked for; this page does not survive a reload, and a
   // reload is what anyone tries on a page that looks stuck. So the card asks first, and takes up
-  // the wait where the page before it left off rather than offering the restart again.
+  // the wait where the page before it left off rather than asking for the restart again.
   useEffect(() => {
     let live = true;
     void (async () => {
       const [pid, heard] = await Promise.all([daemonPid(), restartWaiting()]);
-      if (!live || heard === null || asked.current) return;
+      if (!live || asked.current) return;
+      if (heard === null) {
+        void restart(false);
+        return;
+      }
       asked.current = { pid };
-      setBusy(true);
       hear(heard);
       void watch(pid, hear);
     })();
     return () => {
       live = false;
     };
-  }, [hear]);
-
-  const restart = async (now: boolean) => {
-    setBusy(true);
-    setRefused(null);
-    const before = asked.current ?? { pid: await daemonPid() };
-    const refusal = await restartDaemon(now);
-    if (refusal) {
-      setBusy(asked.current !== null);
-      setRefused(refusal);
-      return;
-    }
-    if (now) setWait(NO_WAIT);
-    if (asked.current) return;
-    asked.current = before;
-    void watch(before.pid, hear);
-  };
+  }, [hear, restart]);
 
   const waiting = busy && wait.held.length > 0;
   const rows = waiting ? restartRows(wait.seen, wait.held, wait.asking) : [];
   return (
     <CrashCard
       title={COPY.title}
-      body={
-        refused ?? (waiting ? restartHeldLine(wait.held.length, wait.seen.length) : busy ? COPY.waiting : COPY.body)
-      }
+      body={refused ?? (waiting ? restartHeldLine(wait.held.length, wait.seen.length) : COPY.waiting)}
       action={
         waiting ? (
           <Button variant="outline" onClick={() => void restart(true)}>

@@ -23,7 +23,8 @@ export interface SelfNotice {
  * `rebuilt` is this page's own knowledge: it watched a build finish, so what is on disk is newer
  * than what it runs, and the daemon's state has nothing to say about that. The reload comes after
  * a rebuild the daemon still asks for, since the page it would load is behind the branch too, and
- * ahead of a restart, because it is the cheap one and the page it loads reads that ask fresh.
+ * after a restart, because a stale page reloads itself when the restarted daemon answers: one
+ * press covers both, where a reload first would only load a page that asks for the restart.
  *
  * `branch` is the project's own default branch name, so the text says what the person actually
  * typed into the land box rather than assuming it is called main.
@@ -35,7 +36,12 @@ export function selfNotice(self: SelfState | null, repos: RepoInfo[], rebuilt = 
     return { text: "Rebuilding Toyon stopped", detail: self.buildFailed, build: "try again", busy: false };
   }
   if (self?.rebuild) return { text: `Toyon's shell is behind ${branch}`, build: "rebuild", busy: false };
+  if (self?.restart) {
+    const text = rebuilt
+      ? `Toyon itself is behind ${branch}; this page reloads once it has restarted`
+      : `Toyon itself is behind ${branch}`;
+    return { text, restart: true, busy: false };
+  }
   if (rebuilt) return { text: "Toyon's shell was rebuilt while this page was open", reload: true, busy: false };
-  if (self?.restart) return { text: `Toyon itself is behind ${branch}`, restart: true, busy: false };
   return null;
 }

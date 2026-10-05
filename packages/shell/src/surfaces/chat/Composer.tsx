@@ -20,6 +20,7 @@ import {
   numbersAfter,
 } from "@toyon/shared";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { clipboardOfferDone, useCopied } from "../../app/clipboardOffer.ts";
 import { previewBus, togglePick } from "../../app/previewBus.ts";
 import { listFiles, openFile } from "../../state/actions/file.ts";
 import { terminalItems } from "../../state/actions/proc.ts";
@@ -78,7 +79,7 @@ import { PickChip } from "./PickChip.tsx";
 import { type Step, stepWalk, type WalkKey } from "./recall.ts";
 import { shellCommandOf, shellContext } from "./shellMode.ts";
 import { dollars, tokens } from "./usage.ts";
-import { useComposerPaste } from "./useIntake.ts";
+import { attachCopied, useComposerPaste } from "./useIntake.ts";
 
 /** a frozen empty list, so a selector returning it does not read as a change every render */
 const NO_CHOICES: ModelChoice[] = [];
@@ -221,6 +222,7 @@ export function Composer({
   // a project with nothing to run has no page to pick from, so the picker's button goes
   const chatCentred = useChatCentred();
   const { onPaste, onPasteKey, onPasteKeyUp } = useComposerPaste(boxId, id);
+  const copied = useCopied();
   const setText = (t: string) => boxId && dispatch({ a: "set-draft", id: boxId, text: t });
   const clientId = useStore((s) => s.clientId);
   const repo = useStore((s) => s.repos.find((r) => r.id === active?.worktree.repoId) ?? null);
@@ -1023,6 +1025,37 @@ export function Composer({
             </Button>{" "}
             {askLine(parked)}
           </span>
+        </div>
+      )}
+      {/* what is on the clipboard, before it is pasted: the same shape as the question's way back,
+          the word to press and then what it takes. Only in a box that takes a message, and not
+          over an ask, which has the box. */}
+      {copied && boxId && !askUp && (active || takes) && (
+        <div className="composer-ask">
+          <Icon name="copy" className="icon-inline" />
+          <span className="composer-ask-line">
+            <Button
+              variant="inline"
+              tone="strong"
+              data-tip="Attach it, as a paste would"
+              onClick={() => {
+                attachCopied(store, boxId, copied);
+                focusBox();
+              }}
+            >
+              attach
+            </Button>{" "}
+            {copied.kind === "image"
+              ? "the image you copied"
+              : `the text you copied, ${copied.text.split("\n").length} lines`}
+          </span>
+          <IconButton
+            icon="close"
+            tone="quiet"
+            className="composer-copied-close"
+            label="Not this one"
+            onClick={clipboardOfferDone}
+          />
         </div>
       )}
       {boxId &&

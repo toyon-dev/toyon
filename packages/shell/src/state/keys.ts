@@ -36,6 +36,8 @@ export const STORAGE = {
   railWidth: "toyon-rail-w",
   /** which side of the window the chat dock stands on, the rail outside it: "left" | "right" */
   chatSide: "toyon-chat-side",
+  /** "1" while the composer offers what is on the clipboard */
+  clipboardOffer: "toyon-clipboard-offer",
   /** every project's layout, keyed by repo id: {"<repo>":{changes,changesTab,chat,term,design}} */
   layouts: "toyon-layouts",
   /** this tab's id (sessionStorage): worktrees created here steal focus, others don't */

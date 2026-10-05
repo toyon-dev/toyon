@@ -1,4 +1,5 @@
 import { resolveTheme, type ThemePrefs } from "@toyon/shared";
+import { clipboardOfferState, setClipboardOffer } from "../../app/clipboardOffer.ts";
 import { grouped, type MenuEntry } from "../../ui/menu.ts";
 import { darkNow, type State } from "../store.ts";
 import type { Deps } from "./deps.ts";
@@ -33,6 +34,7 @@ export type SettingsState = Pick<
 export function settingsItems(s: SettingsState, { sock, dispatch }: Deps): MenuEntry[] {
   const prefs = s.themePrefs;
   const themeName = (tid: string) => s.themes.find((t) => t.id === tid)?.name ?? tid;
+  const clipboard = clipboardOfferState();
   return grouped([
     [
       {
@@ -68,6 +70,18 @@ export function settingsItems(s: SettingsState, { sock, dispatch }: Deps): MenuE
         detail: s.chatSide,
         onClick: () => dispatch({ a: "toggle-chat-side" }),
       },
+      // only where the browser keeps a grant for reading the clipboard; the first press that
+      // turns it on is where the browser asks
+      ...(clipboard.access === "none"
+        ? []
+        : [
+            {
+              id: "clipboard-offer",
+              label: "offer what is copied",
+              detail: clipboard.access === "denied" ? "blocked in site settings" : clipboard.on ? "on" : "off",
+              onClick: () => setClipboardOffer(!clipboard.on),
+            },
+          ]),
     ],
     [
       {

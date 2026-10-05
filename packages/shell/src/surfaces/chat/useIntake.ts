@@ -1,5 +1,6 @@
 import { FILE_MAX_CHARS, isLongPaste, limitMessage } from "@toyon/shared";
 import { useEffect, useRef } from "react";
+import { type Copied, clipboardOfferDone, clipboardPasted } from "../../app/clipboardOffer.ts";
 import { readCopiedSource } from "../../app/copiedSource.ts";
 import { createFile, nextSeq } from "../../state/actions/file.ts";
 import { attachFiles, attachText, attachUpload, mentionInChat, noticeIn, roomIn, treeBox } from "../../state/attach.ts";
@@ -130,6 +131,14 @@ async function attachImages(store: Store, boxId: string | null, files: File[]) {
   const failed = results.find((r) => r.status === "rejected");
   if (failed) noticeIn(store, boxId, String((failed as PromiseRejectedResult).reason?.message ?? failed.reason));
   else if (files.length > room) noticeIn(store, boxId, `kept ${room} of ${files.length}: ${limitMessage("image")}`);
+}
+
+/** the clipboard's offer, taken: the chip a paste of it would have made */
+export function attachCopied(store: Store, boxId: string, copied: Copied) {
+  if (copied.kind === "image")
+    void attachImages(store, boxId, [new File([copied.blob], "image.png", { type: copied.blob.type })]);
+  else attachText(store, boxId, copied.text);
+  clipboardOfferDone();
 }
 
 /** the box a drop lands in: the one the composer on screen writes in. Read at drop time, like the
@@ -367,6 +376,7 @@ export function useComposerPaste(boxId: string | null, worktreeId: string | null
     plain.current = false;
   };
   const onPaste = (e: React.ClipboardEvent) => {
+    clipboardPasted();
     const images = imageFiles(e.clipboardData);
     if (images.length > 0) {
       e.preventDefault();

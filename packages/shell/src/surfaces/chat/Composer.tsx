@@ -78,7 +78,7 @@ import { PasteChip } from "./PasteChip.tsx";
 import { PickChip } from "./PickChip.tsx";
 import { type Step, stepWalk, type WalkKey } from "./recall.ts";
 import { shellCommandOf, shellContext } from "./shellMode.ts";
-import { dollars, tokens } from "./usage.ts";
+import { compactAdvice, dollars, tokens } from "./usage.ts";
 import { attachCopied, useComposerPaste } from "./useIntake.ts";
 
 /** a frozen empty list, so a selector returning it does not read as a change every render */
@@ -346,14 +346,19 @@ export function Composer({
   // toyon's own `/` rows, ahead of the agent's: the modes and the seat's verbs, typed by name
   // (ownCommands.ts has the rules)
   const ownRows = useMemo(() => ownCommands(describeLand(landPolicy(repo?.config ?? {}), repo?.defaultBranch)), [repo]);
-  const compactable = canCompact && !midTurn;
   const compact = () => id && sock?.send({ t: "chat", worktreeId: id, text: "/compact" });
+  const compactOff = !canCompact
+    ? "this agent offers no compact command"
+    : midTurn
+      ? "wait for the turn to end"
+      : undefined;
   const compactItems = () => [
     {
       id: "compact",
       label: "compact the context",
-      detail: "shrink the chat to a summary",
-      disabled: !canCompact ? "this agent offers no compact command" : midTurn ? "wait for the turn to end" : undefined,
+      // a row that is off says why on its one detail line; one that can run says whether it should
+      detail: compactOff || !usage ? undefined : compactAdvice(usage.used / usage.size),
+      disabled: compactOff,
       onClick: compact,
     },
   ];
@@ -1426,13 +1431,10 @@ export function Composer({
                 icon={<Ring fraction={usage.used / usage.size} />}
                 tone="chrome"
                 label={`${Math.round((100 * usage.used) / usage.size)}% of context`}
-                detail={`${tokens(usage.used)} of ${tokens(usage.size)}${usage.cost !== undefined ? ` · ${dollars(usage.cost)} this session` : ""}${compactable ? " · click to compact" : ""}`}
-                // a click does the one thing there is to do about a full context; when it cannot, the
-                // menu says why, and it is the right-click menu at all times
-                onClick={(e) => {
-                  if (compactable) compact();
-                  else cm.openUnder(e.currentTarget, compactItems);
-                }}
+                detail={`${tokens(usage.used)} of ${tokens(usage.size)}${usage.cost !== undefined ? ` · ${dollars(usage.cost)} this session` : ""}`}
+                // a summary cannot be taken back, so a click only opens the menu a right-click does:
+                // compacting is the press on its row
+                onClick={(e) => cm.openUnder(e.currentTarget, compactItems)}
                 {...cm.contextMenu(compactItems)}
               />
             )}

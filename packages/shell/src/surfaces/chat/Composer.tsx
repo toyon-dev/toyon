@@ -79,7 +79,7 @@ import { PickChip } from "./PickChip.tsx";
 import { type Step, stepWalk, type WalkKey } from "./recall.ts";
 import { shellCommandOf, shellContext } from "./shellMode.ts";
 import { compactAdvice, compactNudge, dollars, tokens } from "./usage.ts";
-import { attachCopied, useComposerPaste } from "./useIntake.ts";
+import { attachCopied, pickAttachments, useComposerPaste } from "./useIntake.ts";
 
 /** a frozen empty list, so a selector returning it does not read as a change every render */
 const NO_CHOICES: ModelChoice[] = [];
@@ -1442,6 +1442,16 @@ export function Composer({
             )}
           </span>
           <span className="spawn-tools">
+            {/* the way in for a picture or a file where there is no paste or drop to bring it: a
+              phone, above all. Only in a box that takes a message. */}
+            {boxId && (active || takes) && (
+              <IconButton
+                icon="attach"
+                tone="chrome"
+                label={onScreen ? "Attach a picture" : "Attach a picture or a file"}
+                onClick={() => pickAttachments(store, boxId, { images: onScreen })}
+              />
+            )}
             {/* the terminal is one shell per worktree, so it belongs with the other per-worktree
               actions rather than in the app's top bar. Not on an empty project, a chat Toyon is not
               running or a phone's screen: the pane is hidden there or has no procs to show, and a

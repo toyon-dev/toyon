@@ -141,6 +141,30 @@ export function attachCopied(store: Store, boxId: string, copied: Copied) {
   clipboardOfferDone();
 }
 
+/** files of any kind on their way to the composer: pictures as images, everything else as files */
+function attachAny(store: Store, boxId: string | null, files: File[]) {
+  const isImage = (f: File) => f.type.startsWith("image/");
+  void attachImages(store, boxId, files.filter(isImage));
+  attachFiles(
+    store,
+    boxId,
+    files.filter((f) => !isImage(f)),
+  );
+}
+
+/** The browser's file dialog, for a composer nothing can be pasted or dropped into: a phone's
+ * keyboard offers a picture only to a field that takes one, and a textarea takes text. `images`
+ * asks for pictures alone, which on a phone opens the photo picker, the newest screenshot first,
+ * in place of the file browser. */
+export function pickAttachments(store: Store, boxId: string, { images = false } = {}) {
+  const input = document.createElement("input");
+  input.type = "file";
+  input.multiple = true;
+  if (images) input.accept = "image/*";
+  input.onchange = () => attachAny(store, boxId, Array.from(input.files ?? []));
+  input.click();
+}
+
 /** the box a drop lands in: the one the composer on screen writes in. Read at drop time, like the
  * pending counts. */
 function dropBox(store: Store): string | null {
@@ -152,13 +176,10 @@ function dropBox(store: Store): string | null {
  * by name, since the browser hands over no bytes for one */
 function dropOnChat(store: Store, dropped: Dropped[]) {
   const boxId = dropBox(store);
-  const files = dropped.filter((d) => !d.folder).map((d) => d.file);
-  const isImage = (f: File) => f.type.startsWith("image/");
-  void attachImages(store, boxId, files.filter(isImage));
-  attachFiles(
+  attachAny(
     store,
     boxId,
-    files.filter((f) => !isImage(f)),
+    dropped.filter((d) => !d.folder).map((d) => d.file),
   );
   // after the attaching, which answers an earlier notice
   const folder = dropped.find((d) => d.folder);

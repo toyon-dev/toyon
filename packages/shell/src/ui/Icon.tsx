@@ -48,6 +48,7 @@ export type IconName =
   | "pr"
   | "clock"
   | "archive"
+  | "attach"
   | "phone"
   | "dot";
 
@@ -152,6 +153,9 @@ const ICON_PATHS: Record<IconName, string> = {
   // a storage box: a wide lid over a narrower body, with the short handle slot that keeps it from
   // reading as a plain card. Put away and kept, where `trash` is gone and `close` is a press
   archive: "M2.4 3.2h11.2v2.8H2.4z M3.4 6v6.1a.9.9 0 0 0 .9.9h7.4a.9.9 0 0 0 .9-.9V6 M6.6 8.6h2.8",
+  // a paperclip: the one wire, turned twice
+  attach:
+    "M13.7 7.4 8.2 12.9a3.6 3.6 0 0 1-5.1-5.1l5.5-5.5a2.4 2.4 0 0 1 3.4 3.4l-5.5 5.5a1.2 1.2 0 0 1-1.7-1.7l5.1-5.1",
   // a step that happened under a name we cannot read: a marker, deliberately without a meaning
   dot: "M8 4.6a3.4 3.4 0 1 0 0 6.8 3.4 3.4 0 1 0 0-6.8z",
 };

@@ -2645,9 +2645,10 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
   const last = items[items.length - 1];
   const stamp = seq === undefined ? {} : { seq };
   switch (event.type) {
-    case "user-message":
+    case "fix-asked":
       // Toyon's own message is the reason it was sent, not a bubble: nobody typed it
-      if (event.asked) return [...items, { kind: "asked", why: event.asked.why }];
+      return [...items, { kind: "asked", why: event.why }];
+    case "user-message":
       return [
         ...items,
         {

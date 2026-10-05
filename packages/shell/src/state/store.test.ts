@@ -443,10 +443,11 @@ describe("chat folding", () => {
     const s = run([
       hello(wt("a")),
       agent("a", {
-        type: "user-message",
+        type: "fix-asked",
         text: "The repo's check failed. Fix what it reports.",
         ts: 0,
-        asked: { kind: "check", why: "the check failed" },
+        kind: "check",
+        why: "the check failed",
       }),
     ]);
     expect(s.local.a?.chat).toEqual([{ kind: "asked", why: "the check failed" }]);

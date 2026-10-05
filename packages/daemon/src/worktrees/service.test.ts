@@ -747,6 +747,7 @@ describe("usage on the row", () => {
       paths: w.paths,
       agents: w.registry,
       namer: async () => null,
+      fix: w.fix,
     });
     expect((await again.rows()).find((r) => r.id === cold.id)?.usage).toEqual({ used: 900, size: 4000 });
   });

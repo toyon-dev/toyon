@@ -223,7 +223,11 @@ describe("landing", () => {
     // a fake records no turns, so each message is put on its transcript the way a session would
     const heard = () => {
       const m = agent.sent.at(-1)!;
-      agent.note({ type: "user-message", text: m.text, ts: 1, ...(m.asked ? { asked: m.asked } : {}) });
+      agent.note(
+        m.asked
+          ? { type: "fix-asked", text: m.text, ts: 1, ...m.asked }
+          : { type: "user-message", text: m.text, ts: 1 },
+      );
     };
     const check = fixPrompt({ kind: "check", command: "bun run check" });
     w.hub.emit("checkFailed", wt.id, "bun run check");

@@ -23,10 +23,11 @@ const done = (toolId: string, isError?: boolean): AgentEvent => ({
 
 describe("a message Toyon sent itself", () => {
   const fix: AgentEvent = {
-    type: "user-message",
+    type: "fix-asked",
     text: "The repo's check failed. Fix what it reports.",
     ts: 5,
-    asked: { kind: "check", why: "the check failed" },
+    kind: "check",
+    why: "the check failed",
   };
   test("starts a turn as the failure it was sent for, never as the person's words", () => {
     const turns = turnsSince(log(user("add a header", 1), start(2), say("Added."), end(3), fix, start(6), end(7)), 0);

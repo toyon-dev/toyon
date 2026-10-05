@@ -70,7 +70,7 @@ export function world() {
   });
   const turns = new TurnService({ state, hub, transcript: (id) => runtime.agentFor(id)?.transcript() ?? [] });
   const repos = new RepoRegistry({ state, hub, runtime, worktrees, ...noSelf(state, hub) });
-  return { ...t, state, hub, runtime, worktrees, turns, repos, registry: agents, naming, cache, refused, ...f };
+  return { ...t, state, hub, runtime, worktrees, turns, repos, registry: agents, naming, cache, refused, fix, ...f };
 }
 
 /** the world under test, fresh before each test of a file that called useWorld() */

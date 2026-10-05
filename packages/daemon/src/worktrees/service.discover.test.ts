@@ -357,6 +357,7 @@ describe("main against origin", () => {
       paths: w.paths,
       agents: w.registry,
       namer: async () => null,
+      fix: w.fix,
     });
   const headOf = (path: string) => sh(path, "git", "rev-parse", "HEAD").trim();
 

@@ -20,10 +20,11 @@ describe("saidRows", () => {
   test("a message Toyon sent itself is no row: nobody typed it, and nobody would search for it", () => {
     const rows = saidRows([
       e(0, {
-        type: "user-message",
+        type: "fix-asked",
         text: "The repo's check failed. Fix what it reports.",
         ts: 10,
-        asked: { kind: "check", why: "the check failed" },
+        kind: "check",
+        why: "the check failed",
       }),
       e(1, { type: "turn-start", ts: 11 }),
       e(2, { type: "text-delta", text: "Fixed." }),

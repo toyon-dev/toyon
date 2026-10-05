@@ -17,11 +17,12 @@ export interface FixServiceDeps {
   runtime: Pick<RuntimeRegistry, "agentFor">;
 }
 
-/** why the last message on a transcript was sent, when it was Toyon's own */
-function lastAsked(entries: readonly TranscriptEntry[]): Asked | undefined {
+/** what the last message on a transcript was sent to fix, when it was Toyon's own */
+function lastAsked(entries: readonly TranscriptEntry[]): Asked["kind"] | undefined {
   for (let i = entries.length - 1; i >= 0; i--) {
     const e = entries[i]!.event;
-    if (e.type === "user-message") return e.asked;
+    if (e.type === "fix-asked") return e.kind;
+    if (e.type === "user-message") return undefined;
   }
   return undefined;
 }
@@ -43,7 +44,7 @@ export class FixService {
     if (!wt || isMain(wt)) return false;
     const agent = this.d.runtime.agentFor(worktreeId);
     if (!agent) return false;
-    if (reason.kind === "check" && lastAsked(agent.transcript())?.kind === "check") return false;
+    if (reason.kind === "check" && lastAsked(agent.transcript()) === "check") return false;
     agent.send(fixPrompt(reason), { asked: { kind: reason.kind, why: fixWhy(reason) } });
     return true;
   }

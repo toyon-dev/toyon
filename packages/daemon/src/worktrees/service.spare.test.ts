@@ -10,6 +10,7 @@ import { StateStore } from "../core/state.ts";
 import { git } from "../git/exec.ts";
 import { RepoRegistry } from "../repos/registry.ts";
 import { RuntimeRegistry } from "../runtime/registry.ts";
+import { FixService } from "./fix.ts";
 import { WorktreeService } from "./service.ts";
 
 // The spare that stands in for main, a daemon's boot over what it left, and what the rail reads off a row: its counts and its unseen ring.
@@ -329,6 +330,7 @@ describe("boot", () => {
       paths: w.paths,
       agents: w.registry,
       namer: async () => null,
+      fix: new FixService({ state: state2, hub: hub2, runtime: runtime2 }),
     });
     const repos2 = new RepoRegistry({
       state: state2,
@@ -392,6 +394,7 @@ describe("boot", () => {
         paths: w.paths,
         agents: w.registry,
         namer: async () => null,
+        fix: new FixService({ state: state2, hub: hub2, runtime: runtime2 }),
       });
       const repos2 = new RepoRegistry({
         state: state2,

@@ -67,8 +67,13 @@ export function turnsSince(entries: readonly TranscriptEntry[], seenAt: number):
         // steered into the turn still running; a failed turn is over even without its turn-end, so
         // a message after one waits for the turn it starts
         const into = open && open.stop === undefined && open.error === undefined && !open.auth ? open : null;
-        if (e.asked) (into?.fixes ?? pendingFixes).push(e.asked.why);
-        else (into?.asks ?? pending).push(e.text);
+        (into?.asks ?? pending).push(e.text);
+        break;
+      }
+      case "fix-asked": {
+        // Toyon's own message opens or joins a turn the same way, as the failure it names
+        const into = open && open.stop === undefined && open.error === undefined && !open.auth ? open : null;
+        (into?.fixes ?? pendingFixes).push(e.why);
         break;
       }
       case "turn-start":
@@ -165,7 +170,7 @@ export function factsOf(turns: readonly TurnSlice[], end: TurnEnd, ask?: string)
 
 /** the first thing anyone asked here: the task itself, whatever the title has become */
 export function firstAskOf(entries: readonly TranscriptEntry[]): string | undefined {
-  for (const { event: e } of entries) if (e.type === "user-message" && !e.asked && e.text.trim()) return e.text;
+  for (const { event: e } of entries) if (e.type === "user-message" && e.text.trim()) return e.text;
   return undefined;
 }
 

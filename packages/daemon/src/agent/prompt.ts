@@ -63,7 +63,7 @@ export function fixWhy(r: FixReason): string {
 /** What the agent is sent when a hook refuses a commit or a push the person pressed: the hook's
  * output is on the transcript already, as the row before this message. Never a commit-msg hook,
  * which judges the message and not the tree: that one is answered with a new message. */
-export function hookFixPrompt(hook: string): string {
+function hookFixPrompt(hook: string): string {
   return [
     `The ${hook} hook refused that, and what it printed is in the command output just before this message.`,
     "Fix what it complains about, inside this worktree.",
@@ -74,7 +74,7 @@ export function hookFixPrompt(hook: string): string {
 /** What the agent is sent to clear a conflict, in the words of how the base was being taken in:
  * a merge made to clear a rebase's conflict is one more thing the next sync has to work around,
  * and a merge left uncommitted is not in the branch for it to find. */
-export function conflictFixPrompt(base: string, how: "rebase" | "merge"): string {
+function conflictFixPrompt(base: string, how: "rebase" | "merge"): string {
   return how === "rebase"
     ? `Rebase this branch onto ${base} and resolve the conflicts, keeping any uncommitted changes, then verify the app still works.`
     : `Merge ${base} into this branch, resolve the conflicts and commit the merge, then verify the app still works.`;
@@ -82,7 +82,7 @@ export function conflictFixPrompt(base: string, how: "rebase" | "merge"): string
 
 /** What the agent is sent when the repo's check fails after its turn: the check's output is on the
  * transcript already, as the row before this message. */
-export function checkFixPrompt(command: string): string {
+function checkFixPrompt(command: string): string {
   return [
     `The repo's check, \`${command}\`, failed, and what it printed is in the command output just before this message.`,
     "Fix what it reports, inside this worktree.",

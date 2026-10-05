@@ -8,6 +8,7 @@ import { SelfWatch } from "../core/self.ts";
 import { StateStore } from "../core/state.ts";
 import { GIT } from "../git/exec.ts";
 import { RuntimeRegistry } from "../runtime/registry.ts";
+import { FixService } from "../worktrees/fix.ts";
 import { WorktreeService } from "../worktrees/service.ts";
 import { AfterLand } from "./afterLand.ts";
 import { RepoRegistry } from "./registry.ts";
@@ -24,7 +25,15 @@ function world(own = false, settled?: () => Promise<void>) {
   const f = fakeFactories();
   const agents = fakeAgents(t.paths.agentsDir);
   const runtime = new RuntimeRegistry({ hub, state, paths: t.paths, agents, bridgeScript: () => "", ...f.factories });
-  const worktrees = new WorktreeService({ state, hub, runtime, paths: t.paths, agents, namer: async () => null });
+  const worktrees = new WorktreeService({
+    state,
+    hub,
+    runtime,
+    paths: t.paths,
+    agents,
+    namer: async () => null,
+    fix: new FixService({ state, hub, runtime }),
+  });
   // the registry keeps a repo at the root git reports, its real path, and the self watch matches on it exactly
   const self = new SelfWatch(own ? realpathSync(t.repo) : null);
   const afterLand = new AfterLand({ state, hub, self, settled });

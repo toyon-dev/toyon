@@ -424,7 +424,7 @@ export class AcpSession implements AgentAdapter {
     // no bubble to take back, so it is never drawn as queued, and the row saying why it was sent
     // stands from the moment of the failure
     if (asked) {
-      this.emit({ type: "user-message", text, ts: Date.now(), asked });
+      this.emit({ type: "fix-asked", text, ts: Date.now(), ...asked });
       item.recorded = { attachments: [] };
     }
     // held from here until the message is recorded, which for a queued one is turns away

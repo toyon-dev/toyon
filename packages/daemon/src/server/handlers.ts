@@ -554,7 +554,7 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
       ? s.runtime.ensureAgent(r.wt).agent.transcript()
       : (s.worktrees.archivedTranscript(msg.worktreeId) ?? []);
     const event = events.find((e) => e.seq === msg.seq)?.event;
-    if (event?.type !== "user-message" || event.asked) throw new UserError("that message is no longer in this chat");
+    if (event?.type !== "user-message") throw new UserError("that message is no longer in this chat");
     const items: AttachmentInput[] = [];
     for (const ref of event.attachments ?? []) {
       const item = await s.attachments.reattach(msg.worktreeId, ref, (file) =>

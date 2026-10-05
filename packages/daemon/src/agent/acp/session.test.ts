@@ -592,9 +592,10 @@ describe("AcpSession", () => {
     w.session.send("Fix what the check reports.", { asked: { kind: "check", why: "the check failed" } });
     await w.idle();
     expect(w.events[0]).toMatchObject({
-      type: "user-message",
+      type: "fix-asked",
       text: "Fix what the check reports.",
-      asked: { kind: "check", why: "the check failed" },
+      kind: "check",
+      why: "the check failed",
     });
     expect(fake.prompts[0]!.prompt[0]).toEqual({ type: "text", text: "Fix what the check reports." });
     await w.session.close();

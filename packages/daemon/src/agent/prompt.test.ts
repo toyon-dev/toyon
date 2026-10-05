@@ -79,6 +79,12 @@ describe("SYSTEM_APPEND", () => {
     // only context is then its reasoning summary, folded as a thought, or nothing
     expect(SYSTEM_APPEND).toContain("the question itself states what you propose and why");
   });
+  test("puts the text typed beside a pick above the pick", () => {
+    // the adapter hands the agent the option as the answer and the text as a note on it, so a
+    // recommended option picked with "I can't decide" beside it reads as a yes unless told otherwise
+    expect(SYSTEM_APPEND).toContain("the text outranks the pick");
+    expect(SYSTEM_APPEND).toContain("change nothing until they have decided");
+  });
 });
 
 describe("ambientBlock", () => {

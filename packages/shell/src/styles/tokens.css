@@ -129,6 +129,13 @@
      things, so either has to move without the other. */
     --row-height-sm-phone: 36px;
     --row-height-phone: 52px;
+    /* a line of the tool log. On the desk it is the -sm tier. Under a thumb it does not take that
+     tier's 36px: a turn stacks twenty of these between paragraphs of prose, and at a tap target's
+     height each one stood further apart than the lines of the reply around it, so the log read as
+     a list of buttons and not as text to skip over. 28px keeps the row tappable and close to the
+     pitch of the 15px prose (22.5px) it sits in. */
+    --row-height-log: var(--row-height-sm);
+    --row-height-log-phone: 28px;
     /* the horizontal padding of a full-bleed row: the text column every list sits on */
     --row-inset: 12px;
 

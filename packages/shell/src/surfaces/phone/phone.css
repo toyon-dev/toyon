@@ -15,6 +15,7 @@
   .phone {
     --row-height: var(--row-height-phone);
     --row-height-sm: var(--row-height-sm-phone);
+    --row-height-log: var(--row-height-log-phone);
     --type-ui-sm: var(--type-ui-sm-phone);
     --type-ui: var(--type-ui-phone);
     --size-mono: var(--size-mono-phone);

@@ -325,7 +325,7 @@
      mark is 13px and the word that joins it brings a 19.5px line box, against the 14px a tool row
      takes of the column once its -5px margins meet the log's gap, so the tail stepped by a few
      pixels each way. The same floor and the same overlap make every shape of this line one height. */
-    min-height: var(--row-height-sm);
+    min-height: var(--row-height-log);
     margin-block: -5px;
   }
   /* the mark and the count sit on one line, the mark on the text's own midline */
@@ -394,7 +394,7 @@
       background: var(--accent);
     }
     & summary {
-      min-height: var(--row-height-sm);
+      min-height: var(--row-height-log);
       /* the row's own tier, said again on the seat: an inherited colour was computed on .tool-row,
        above the rung this seat moves, so a lifted summary would keep the colour it had at rest */
       color: var(--text2);

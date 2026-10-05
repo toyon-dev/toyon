@@ -322,7 +322,7 @@ describe("landing", () => {
     sh(w.repo, "git", "commit", "-qam", "ours");
     const { result } = await w.worktrees.land(wt.id);
     expect(result.ok).toBe(false);
-    expect(result.conflict).toBe(true);
+    expect(result.conflict).toBe("rebase");
     expect((await git(wt.path, "status", "--porcelain")).out).toBe("");
     expect(readFileSync(join(wt.path, "README.md"), "utf8")).toBe("theirs\n");
     expect((await git(wt.path, "log", "-1", "--format=%s")).out).toBe("theirs");
@@ -470,9 +470,50 @@ describe("landing", () => {
     sh(w.repo, "git", "commit", "-qam", "ours");
     const { result } = await w.worktrees.sync(wt.id);
     expect(result.ok).toBe(false);
-    expect(result.conflict).toBe(true);
+    expect(result.conflict).toBe("rebase");
     expect((await git(wt.path, "status", "--porcelain")).out).toBe("");
     expect(readFileSync(join(wt.path, "README.md"), "utf8")).toBe("theirs\n");
+  });
+
+  test("a branch that merged main to clear a conflict is merged with after, never rebased back into it", async () => {
+    const repoId = await registered();
+    const wt = await w.worktrees.create(repoId, "feature");
+    writeFileSync(join(wt.path, "README.md"), "theirs\n");
+    sh(wt.path, "git", "commit", "-qam", "theirs");
+    writeFileSync(join(w.repo, "README.md"), "ours\n");
+    sh(w.repo, "git", "commit", "-qam", "ours");
+    expect((await w.worktrees.sync(wt.id)).result.conflict).toBe("rebase");
+    // the conflict resolved by a merge, the way an agent may do it whatever it was asked
+    expect((await git(wt.path, "merge", "main")).ok).toBe(false);
+    writeFileSync(join(wt.path, "README.md"), "both\n");
+    sh(wt.path, "git", "commit", "-qam", "merge main");
+    writeFileSync(join(w.repo, "newer.txt"), "x\n");
+    sh(w.repo, "git", "add", "newer.txt");
+    sh(w.repo, "git", "commit", "-qm", "main moves again");
+    const { result } = await w.worktrees.sync(wt.id);
+    expect(result).toMatchObject({ ok: true });
+    expect(readFileSync(join(wt.path, "README.md"), "utf8")).toBe("both\n");
+    expect(existsSync(join(wt.path, "newer.txt"))).toBe(true);
+    expect((await w.worktrees.gitStatus(wt.id))?.behind).toBe(0);
+  });
+
+  test("a landing by rebase refuses a branch that holds a merge, and main stays where it was", async () => {
+    const repoId = await registered();
+    const wt = await w.worktrees.create(repoId, "feature");
+    writeFileSync(join(wt.path, "feature.txt"), "x\n");
+    sh(wt.path, "git", "add", "-A");
+    sh(wt.path, "git", "commit", "-qm", "add feature");
+    sh(w.repo, "git", "commit", "--allow-empty", "-qm", "main moves on");
+    sh(wt.path, "git", "merge", "-q", "--no-edit", "main");
+    const was = (await git(w.repo, "rev-parse", "main")).out;
+    w.state.requireRepo(repoId).config.land = { method: "rebase" };
+    const { result } = await w.worktrees.land(wt.id);
+    expect(result).toMatchObject({ ok: false, conflict: "rebase" });
+    expect(result.message).toContain("merge commit");
+    expect((await git(w.repo, "rev-parse", "main")).out).toBe(was);
+    // one commit is still a way to land it
+    w.state.requireRepo(repoId).config.land = { method: "squash" };
+    expect((await w.worktrees.land(wt.id)).result.ok).toBe(true);
   });
 
   describe("a sync over uncommitted work", () => {
@@ -535,10 +576,26 @@ describe("landing", () => {
       const [before, was] = [await porcelain(wt.path), await head(wt.path)];
       mainMoves("mine.txt", "main's\n");
       const { result } = await w.worktrees.sync(wt.id);
-      expect(result).toMatchObject({ ok: false, conflict: true });
+      expect(result).toMatchObject({ ok: false, conflict: "rebase" });
       expect(await head(wt.path)).toBe(was);
       expect(await porcelain(wt.path)).toBe(before);
       expect(readFileSync(join(wt.path, "mine.txt"), "utf8")).toBe("edited\n");
+      await noTrace(wt.path);
+    });
+
+    test("a merge staged and not committed refuses it, and the merge is still in progress after", async () => {
+      const wt = await dirtyWorktree();
+      mainMoves("newer.txt", "x\n");
+      sh(wt.path, "git", "commit", "-qam", "mine again");
+      sh(wt.path, "git", "merge", "-q", "--no-commit", "--no-ff", "main");
+      const [before, was] = [await porcelain(wt.path), await head(wt.path)];
+      const { result } = await w.worktrees.sync(wt.id);
+      expect(result.ok).toBe(false);
+      expect(result.conflict).toBeUndefined();
+      expect(result.message).toContain("merge is unfinished");
+      expect((await git(wt.path, "rev-parse", "-q", "--verify", "MERGE_HEAD")).ok).toBe(true);
+      expect(await head(wt.path)).toBe(was);
+      expect(await porcelain(wt.path)).toBe(before);
       await noTrace(wt.path);
     });
 

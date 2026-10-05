@@ -3,6 +3,7 @@
 // rather than merged with it, so a branch reads as if it started from today's main and every
 // method after that is one command; a branch someone adopted keeps its history and is merged with.
 
+import { existsSync } from "node:fs";
 import {
   baseIsRemote,
   baseOf,
@@ -20,8 +21,10 @@ export interface ShipResult {
   ok: boolean;
   url?: string;
   message: string;
-  /** the rebase or merge hit conflicts and was aborted; the one failure an agent can be asked to resolve */
-  conflict?: true;
+  /** the rebase or merge hit conflicts and was aborted, or the branch holds a merge a landing by
+   * rebase cannot take: the failures an agent can be asked to resolve, named by what clears them
+   * so the ask is for the same thing */
+  conflict?: "rebase" | "merge";
   /** the PR the route opened or found, for the record */
   pr?: Omit<PrState, "at">;
 }
@@ -211,9 +214,32 @@ async function putBack(worktreePath: string, defaultBr: string, aside: Aside, ta
   };
 }
 
-/** Take main into the branch: a rebase for a branch toyon owns, a merge for one it adopted. Both
+const MIDWAY = [
+  ["MERGE_HEAD", "merge"],
+  ["rebase-merge", "rebase"],
+  ["rebase-apply", "rebase"],
+  ["CHERRY_PICK_HEAD", "cherry-pick"],
+  ["REVERT_HEAD", "revert"],
+] as const;
+
+/** The operation stopped halfway in the worktree, if any: a merge staged and not committed, a
+ * rebase waiting on a conflict. Its record is a file under the git dir, which no stash holds and
+ * a hard reset deletes, so carrying the tree across a sync would hand the changes back as
+ * ordinary staged files with the merge forgotten: committed like that, main's commits read as
+ * the branch's own work. */
+async function midway(worktreePath: string): Promise<string | null> {
+  const args = MIDWAY.flatMap(([file]) => ["--git-path", file]);
+  const r = await git(worktreePath, "rev-parse", "--path-format=absolute", ...args);
+  if (!r.ok) return null;
+  const at = r.out.split("\n").findIndex((file) => file && existsSync(file));
+  return MIDWAY[at]?.[1] ?? null;
+}
+
+/** Take main into the branch: a rebase for a branch toyon owns, a merge for one it adopted or one
+ * that holds a merge already. Both
  * leave the tree as it was on a conflict. A dirty tree is refused, unless the caller asks for the
- * uncommitted work to be carried across: set aside, and put back over the new base. */
+ * uncommitted work to be carried across: set aside, and put back over the new base. A merge or
+ * rebase left unfinished in the tree is refused either way. */
 export async function takeMainIn(
   worktreePath: string,
   defaultBr: string,
@@ -221,6 +247,10 @@ export async function takeMainIn(
   w: LandWatch = UNWATCHED,
   carry = false,
 ): Promise<ShipResult> {
+  const unfinished = await midway(worktreePath);
+  if (unfinished) {
+    return { ok: false, message: `a ${unfinished} is unfinished here: finish or abort it first` };
+  }
   if (!carry) {
     const cErr = await requireClean(worktreePath);
     if (cErr) return cErr;
@@ -233,6 +263,19 @@ export async function takeMainIn(
   return aside ? putBack(worktreePath, defaultBr, aside, taken) : taken;
 }
 
+/** A landing by rebase puts the branch's commits on main as they are, so a merge among them lands
+ * too, on a main the method keeps to one line. Flattening it here would drop whatever the merge
+ * resolved without a word, so the branch is refused and the rebase is asked for instead. */
+export async function requireLinear(worktreePath: string, base: string): Promise<ShipResult | null> {
+  const merges = await git(worktreePath, "rev-list", "--merges", "--count", `${base}..HEAD`);
+  if (!merges.ok || merges.out === "0") return null;
+  return {
+    ok: false,
+    conflict: "rebase",
+    message: `the branch holds a merge commit, which landing by rebase would put on ${base}: ask the agent to rebase onto ${base} first`,
+  };
+}
+
 async function bringIn(
   worktreePath: string,
   defaultBr: string,
@@ -240,17 +283,21 @@ async function bringIn(
   behind: number,
   w: LandWatch,
 ): Promise<ShipResult> {
-  if (own) {
+  // a rebase replays the branch's commits and drops the merges among them, and with a merge goes
+  // the conflict it resolved: the rebase would meet that conflict again on every sync, whatever
+  // was done about it. A branch that holds one is merged with, which keeps the resolution.
+  const merges = own ? await git(worktreePath, "rev-list", "--merges", "--count", `${defaultBr}..HEAD`) : null;
+  if (own && merges?.out === "0") {
     w.step(`rebasing onto ${defaultBr}`);
     const r = await w.git(worktreePath, ["rebase", defaultBr]);
     if (!r.ok) {
       await git(worktreePath, "rebase", "--abort");
       const files = overwritten(r.text);
       if (files.length) return { ok: false, message: untrackedInTheWay(defaultBr, files) };
-      const ask = `rebase onto ${defaultBr} conflicts: ask the agent to bring ${defaultBr} in and resolve them`;
+      const ask = `rebase onto ${defaultBr} conflicts: ask the agent to rebase onto ${defaultBr} and resolve them`;
       return {
         ok: false,
-        conflict: true,
+        conflict: "rebase",
         message: r.shown ? `${ask}; the conflicts are on the chat` : `${ask} (${r.text.slice(0, 200)})`,
       };
     }
@@ -464,7 +511,7 @@ async function mergeFailure(cwd: string, m: StepResult, conflictMessage: string)
     await git(cwd, "merge", "--abort");
     return {
       ok: false,
-      conflict: true,
+      conflict: "merge",
       message: m.shown
         ? `${conflictMessage}; the conflicts are on the chat`
         : `${conflictMessage} (${m.text.slice(0, 200)})`,

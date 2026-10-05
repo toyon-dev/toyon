@@ -84,6 +84,7 @@ import {
   openPr,
   pushBranch,
   pushLanding,
+  requireLinear,
   type ShipResult,
   STEP_TIMEOUT_MS,
   squashMessage,
@@ -1818,11 +1819,13 @@ export class WorktreeService {
       const committed = await this.commitIfDirty(wt, message);
       if (committed && !committed.ok) return committed;
       committedHere = committed !== null;
+      const method = policy.merge ?? DEFAULT_MERGE_METHOD;
+      const merged = own && method === "rebase" ? await requireLinear(wt.path, base) : null;
+      if (merged) return merged;
       const taken = await takeMainIn(wt.path, base, own, w);
       if (!taken.ok) return taken;
       // read before the landing moves main and the branch restarts from it
       const mark = await landingMark(wt.path, base);
-      const method = policy.merge ?? DEFAULT_MERGE_METHOD;
       const squash = method === "squash" ? await squashMessage(wt.path, base, suggested) : "";
       const landed = await landLocally(wt.path, wt.branch, repo.path, repo.defaultBranch, method, squash, w);
       if (!landed.ok) return landed;
@@ -1876,6 +1879,8 @@ export class WorktreeService {
     // the rebase dropped every commit: origin's main holds this work already, pushed by a hand
     // toyon did not see. Nothing to build or push; the row lands on the record as it stands.
     let already = false;
+    const merged = own && method === "rebase" ? await requireLinear(wt.path, base) : null;
+    if (merged) return { result: merged };
     for (let attempt = 0; ; attempt++) {
       const fetched = await this.fetchBase(wt, repo, w);
       if (!fetched.ok) return { result: fetched };

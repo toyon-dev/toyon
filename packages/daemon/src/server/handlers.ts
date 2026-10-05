@@ -4,7 +4,7 @@
 
 import { randomBytes } from "node:crypto";
 import type { AttachmentInput, ClientMsg, FileBlame, ServerMsg, WorktreeInfo } from "@toyon/shared";
-import { isLead, pickTheme, SHELL_STREAM } from "@toyon/shared";
+import { baseOf, isLead, pickTheme, SHELL_STREAM } from "@toyon/shared";
 import type { AgentAccounts } from "../agent/accounts.ts";
 import type { AttachmentStore } from "../agent/attachments.ts";
 import { agentConfigFiles, describeAgentConfig } from "../agent/config.ts";
@@ -149,6 +149,15 @@ const notify = async (s: Services, ctx: HandlerCtx, worktreeId: string, msg: Shi
 };
 
 const requireRun = (s: Services, id: string): WorktreeInfo => s.worktrees.requireRun(id);
+
+/** The prompt that asks an agent to clear a conflict, in the words of how the base was being
+ * taken in: a merge made to clear a rebase's conflict is one more thing the next sync has to
+ * work around, and a merge left uncommitted is not in the branch for it to find. */
+function conflictPrompt(base: string, how: "rebase" | "merge"): string {
+  return how === "rebase"
+    ? `Rebase this branch onto ${base} and resolve the conflicts, keeping any uncommitted changes, then verify the app still works.`
+    : `Merge ${base} into this branch, resolve the conflicts and commit the merge, then verify the app still works.`;
+}
 
 export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
   async subscribe(msg, ctx, s) {
@@ -428,10 +437,9 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
   async land(msg, ctx, s) {
     const { result } = await s.worktrees.land(msg.worktreeId, msg.message);
     // the same prefilled prompt sync offers on a conflict: the one failure an agent can be asked to fix
+    const repo = s.state.repo(s.state.worktree(msg.worktreeId)?.repoId ?? "");
     const suggestion =
-      !result.ok && result.conflict
-        ? "Bring main into this branch and resolve the conflicts, then verify the app still works."
-        : undefined;
+      !result.ok && result.conflict && repo ? conflictPrompt(baseOf(repo), result.conflict) : undefined;
     // a PR opened or merged: GitHub's word on it follows, so the box can say where it stands
     if (result.ok && (result.pr || s.state.worktree(msg.worktreeId)?.pr)) {
       fireAndForget(msg.worktreeId, s.prs.refresh(msg.worktreeId), "pr refresh");
@@ -454,14 +462,14 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     // a prefilled prompt is for a conflict, and only where there is an agent to prompt: uncommitted
     // work that no longer fits over the base is a plain refusal (the person commits it first), and
     // a found worktree has no composer for the suggestion to land in
-    const prompt = !result.ok && result.conflict && s.state.worktree(msg.worktreeId);
+    const prompt = !result.ok && s.state.worktree(msg.worktreeId) ? result.conflict : undefined;
     await notify(
       s,
       ctx,
       msg.worktreeId,
       prompt
         ? shipped(msg.worktreeId, false, `sync conflicts with ${base}: prompt prefilled in chat`, {
-            suggestion: `Merge ${base} into this branch and resolve the conflicts, then verify the app still works.`,
+            suggestion: conflictPrompt(base, prompt),
           })
         : shipped(msg.worktreeId, result.ok, result.message),
     );

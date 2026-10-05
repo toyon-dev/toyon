@@ -1057,6 +1057,20 @@ describe("handlers", () => {
     expect(readFileSync(join(wt.path, "README.md"), "utf8")).toBe("mine, uncommitted\n");
   });
 
+  test("a sync that conflicts prefills the rebase toyon's own branch is synced by, never a merge", async () => {
+    const { services, ctx, replies, repo } = make();
+    const r = await services.repos.register(repo);
+    r.needsSetup = false;
+    const wt = await services.worktrees.create(r.id, "feature");
+    writeFileSync(join(wt.path, "README.md"), "theirs\n");
+    sh(wt.path, "git", "commit", "-qam", "theirs");
+    writeFileSync(join(repo, "README.md"), "ours\n");
+    sh(repo, "git", "commit", "-qam", "ours");
+    await dispatch({ t: "sync-main", worktreeId: wt.id }, ctx, services);
+    const t = replies.find((m) => m.t === "shipped");
+    expect(t && "suggestion" in t ? t.suggestion : undefined).toStartWith("Rebase this branch onto main ");
+  });
+
   test("chat hands the text, context and attachments to the agent", async () => {
     const { services, ctx, repo, agents } = make();
     const r = await services.repos.register(repo);

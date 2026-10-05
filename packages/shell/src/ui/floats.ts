@@ -97,6 +97,9 @@ export function createFloats({ schedule = defer }: { schedule?: (fn: () => void)
   let entries: Entry[] = [];
   // the control under the gesture that is running now, which is what a float opening in it was opened by
   let press: Element | null = null;
+  // a tap that closed a float is spent on closing it: a finger has no pointer resting on the row
+  // under the float to say what else the tap would do, so the click it ends in goes nowhere
+  let spent = false;
 
   const dismissAll = (why: DismissReason) => {
     for (const e of [...entries].reverse()) e.dismiss?.(why);
@@ -128,13 +131,28 @@ export function createFloats({ schedule = defer }: { schedule?: (fn: () => void)
       // before the press is recorded: what closes is decided by the floats that were open when it landed
       const onPointerDown = (e: Event) => {
         const target = e.target as Node | null;
-        if (target) for (const entry of dismissedBy(entries, target)) entry.dismiss?.("outside");
+        const closing = target ? dismissedBy(entries, target) : [];
+        for (const entry of closing) entry.dismiss?.("outside");
+        spent = closing.length > 0 && (e as PointerEvent).pointerType === "touch";
+        // the click is stopped below; this stops the focus the tap would move, and the keyboard with it
+        if (spent) e.preventDefault();
         press = controlOf(e.target);
       };
       // the clear waits a task, so a float opening in the click that follows still sees the control
       const clear = () => schedule(() => (press = null));
+      // a touch that turned into a scroll ends in no click, so there is none left to stop
+      const onCancel = () => {
+        spent = false;
+        clear();
+      };
       // a click with no press behind it came from the keyboard, and names its own control
       const onClick = (e: Event) => {
+        if (spent) {
+          spent = false;
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
         if (press) return;
         press = controlOf(e.target);
         clear();
@@ -151,14 +169,14 @@ export function createFloats({ schedule = defer }: { schedule?: (fn: () => void)
 
       doc.addEventListener("pointerdown", onPointerDown, true);
       doc.addEventListener("pointerup", clear, true);
-      doc.addEventListener("pointercancel", clear, true);
+      doc.addEventListener("pointercancel", onCancel, true);
       doc.addEventListener("click", onClick, true);
       win.addEventListener("keydown", onKeyDown, true);
       win.addEventListener("blur", onBlur);
       return () => {
         doc.removeEventListener("pointerdown", onPointerDown, true);
         doc.removeEventListener("pointerup", clear, true);
-        doc.removeEventListener("pointercancel", clear, true);
+        doc.removeEventListener("pointercancel", onCancel, true);
         doc.removeEventListener("click", onClick, true);
         win.removeEventListener("keydown", onKeyDown, true);
         win.removeEventListener("blur", onBlur);

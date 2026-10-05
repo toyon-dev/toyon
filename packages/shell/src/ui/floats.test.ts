@@ -184,6 +184,71 @@ describe("the gesture a float opened in", () => {
   });
 });
 
+describe("a tap that closes a float", () => {
+  const tap = (target: unknown, pointerType: string) => {
+    const seen: string[] = [];
+    const event = (name: string) => ({
+      target,
+      pointerType,
+      preventDefault: () => seen.push(`${name}:prevented`),
+      stopPropagation: () => seen.push(`${name}:stopped`),
+    });
+    return { seen, down: event("down"), click: event("click") };
+  };
+
+  test("is spent on closing it, so the row under the float is not pressed", () => {
+    const h = harness();
+    const closed: string[] = [];
+    const open = h.stack.register({
+      box: asElement(node()),
+      dismiss: () => {
+        closed.push("picker");
+        h.stack.unregister(open);
+      },
+    });
+    const t = tap(node(), "touch");
+    h.fire("doc:pointerdown", t.down);
+    h.fire("doc:pointerup", {});
+    h.fire("doc:click", t.click);
+    expect(closed).toEqual(["picker"]);
+    expect(t.seen).toEqual(["down:prevented", "click:prevented", "click:stopped"]);
+    // the next tap is its own
+    const next = tap(node(), "touch");
+    h.fire("doc:pointerdown", next.down);
+    h.fire("doc:click", next.click);
+    expect(next.seen).toEqual([]);
+  });
+
+  test("lands when it closed nothing: a tap inside the float, or on the control that toggles it", () => {
+    const h = harness();
+    const box = node();
+    h.stack.register({ box: asElement(box), dismiss: () => {} });
+    const t = tap(box.child(), "touch");
+    h.fire("doc:pointerdown", t.down);
+    h.fire("doc:click", t.click);
+    expect(t.seen).toEqual([]);
+  });
+
+  test("a mouse press that closes a float still lands on what it pressed", () => {
+    const h = harness();
+    h.stack.register({ box: asElement(node()), dismiss: () => {} });
+    const t = tap(node(), "mouse");
+    h.fire("doc:pointerdown", t.down);
+    h.fire("doc:click", t.click);
+    expect(t.seen).toEqual([]);
+  });
+
+  test("a touch that became a scroll leaves the next click alone", () => {
+    const h = harness();
+    h.stack.register({ box: asElement(node()), dismiss: () => {} });
+    const t = tap(node(), "touch");
+    h.fire("doc:pointerdown", t.down);
+    h.fire("doc:pointercancel", {});
+    h.fire("doc:click", t.click);
+    expect(t.seen).toEqual(["down:prevented"]);
+  });
+});
+
 describe("the keyboard and the preview", () => {
   test("a key reaches the topmost float alone", () => {
     const h = harness();

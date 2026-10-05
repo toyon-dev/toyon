@@ -24,6 +24,12 @@
     inset: 0;
     background: var(--scrim);
   }
+  /* A dropdown under a finger dims what it covers, as a sheet does: the tap that closes it does
+     nothing else (floats.ts), and a page left lit would say its rows were still live. The browser
+     draws the backdrop under the box, in the top layer with it. */
+  [data-touch] .overlay-box.anchored::backdrop {
+    background: var(--scrim);
+  }
   /* The title bar is the window's drag region. A float over it is not in the bar's layout, so the
      bar's own exemptions cannot reach it and it says so itself: without this, a press on a row that
      overlaps the bar drags the window instead. */

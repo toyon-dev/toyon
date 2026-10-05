@@ -990,9 +990,13 @@ export function Composer({
   // place: there esc parks the question, and a stop beside the ask's send read as the send's
   // opposite on one line
   const stopShown = stoppable && !askUp;
+  // down a long log on a phone the box is a line, for as long as it holds nothing and asks
+  // nothing; the stylesheet keeps it whole while the caret is in it
+  const reading = useStore((s) => s.reading);
+  const lean = onScreen && reading && blank && !askUp && !parked && !copied;
 
   return (
-    <div className={cx("composer chat-input", stopShown && "stopping")}>
+    <div className={cx("composer chat-input", stopShown && "stopping", lean && "lean")}>
       {/* the plan this worktree runs on, from the card's arrival until a newer one replaces it:
           the card and the row that reads it back scroll away while the work goes on, and this
           row does not */}

@@ -21,6 +21,8 @@
     --size-mono: var(--size-mono-phone);
     --size-mono-sm: var(--size-mono-sm-phone);
     font: var(--type-ui);
+    /* the strip of tabs under the bar's row, as a height: what hangs over a transcript's top */
+    --phone-strip: calc(var(--row-height-sm) + 10px);
   }
 
   /* The row under the strip, holding the one column. It is the desk's .docks with a single column in
@@ -40,12 +42,57 @@
      over a strip read as the same thing twice. On the bar's ground the track is sunken and the pill
      is the element tier, each a rung from the bar in its own direction, so which face is open is
      one shape and not a shade of text. */
-  .phone-tabs {
-    flex-shrink: 0;
-    padding: 0 14px 10px;
+  .phone-tabs,
+  .phone-row-tabs {
     --tabs-ground: var(--element1);
     --tabs-strip: var(--sunken);
     --tabs-height: var(--row-height-sm);
+  }
+  .phone-tabs {
+    flex-shrink: 0;
+    padding: 0 14px 10px;
+  }
+  /* the same control in the bar's row, in the name's seat, while a transcript is read down: the
+     row is a row's height either way, so the bar's foot does not move for the swap */
+  .phone-row-tabs {
+    flex: 1;
+    min-width: 0;
+    transition: opacity 0.15s ease;
+    @starting-style {
+      opacity: 0;
+    }
+  }
+  /* Over a transcript the strip is not in the bar's flow: it hangs from the bar's foot over the
+     top of the log, which is padded to clear it (chat.css), and slides up out of its seat while
+     the log is read down, when the row above takes the control in. Hung rather than collapsed, because a bar that changed height would
+     move the log's top edge, and every line with it, under the thumb doing the scrolling. The
+     seat starts on the bar's own rule and the strip draws one at its foot, so the bar keeps one
+     edge either way; the seat clips, so the strip leaves at the bar's foot and never shows
+     through the row above. Hidden once it has gone, which takes it out of reach of a press and
+     of the keyboard. */
+  .phone-tabs-seat[data-over] {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    overflow: hidden;
+    & > .phone-tabs {
+      background: var(--surface1);
+      border-bottom: 1px solid var(--border0);
+      transition:
+        translate 0.15s ease,
+        visibility 0s;
+    }
+    &[data-away] {
+      pointer-events: none;
+      & > .phone-tabs {
+        translate: 0 -100%;
+        visibility: hidden;
+        transition:
+          translate 0.15s ease,
+          visibility 0s 0.15s;
+      }
+    }
   }
 
   /* the running app, in place: one frame, the column's width, on the centre's own ground. Hidden
@@ -81,6 +128,9 @@
   .phone-bar {
     display: flex;
     flex-direction: column;
+    /* the strip hung from its foot paints over the screen that follows it */
+    position: relative;
+    z-index: 1;
     background: var(--surface1);
     border-bottom: 1px solid var(--border0);
     /* a phone's top edge is under a notch or a status bar, and the window starts behind it */

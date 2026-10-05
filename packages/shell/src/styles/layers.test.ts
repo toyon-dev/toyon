@@ -18,6 +18,7 @@ const SRC = new URL("..", import.meta.url).pathname;
 /** every z-index the shell keeps, and the isolated root it counts inside */
 const LOCAL_LAYERS: Record<string, { root: string; why: string }> = {
   ".top-bar[data-pinned]": { root: ".app", why: "the bar held on a pinch-zoomed view, over the docks" },
+  ".phone-bar": { root: ".app", why: "the strip of tabs hung from the bar's foot, over the screen under it" },
   ".dock-resize": { root: ".docks", why: "the grab strip over the seam between two docks" },
   ".rail:not(.pinned) .rail-panel": { root: ".docks", why: "the peek covers the chat dock and its grab strip" },
   ".tool-row.spawn[open]::before": {

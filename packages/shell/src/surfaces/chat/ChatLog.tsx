@@ -11,10 +11,10 @@ import {
   SHELL_TOOL,
   type WorktreeStatus,
 } from "@toyon/shared";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { previewBus } from "../../app/previewBus.ts";
 import { takeBackQueued } from "../../state/attach.ts";
-import { useSock, useStoreInstance } from "../../state/context.tsx";
+import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
 import { openSource } from "../../state/openSource.ts";
 import { useLocalField } from "../../state/selectors.ts";
 import { localOf } from "../../state/store.ts";
@@ -114,6 +114,11 @@ function QueuedChips({
 /** no spawn at work: one frozen set, so a turn that is over keys the same placement every render */
 const NONE: ReadonlySet<string> = new Set();
 
+/** how far from the end the reader must be for the phone's bars to give way as they start down:
+ * more than a composer's height, since the box collapsing hands the log that much, and a reader
+ * nearer the end than that would arrive on the spot and have it all put back */
+const READ_ROOM = 240;
+
 /** the transcript for the active worktree: items, working indicator, waiting messages, jump-down pill.
  * `lead` is a line the conversation starts from: the first child of the log, so it sits on the
  * composer in an empty chat and scrolls up as the conversation grows, the way a message would.
@@ -135,6 +140,8 @@ export function ChatLog({
 }) {
   const sock = useSock();
   const store = useStoreInstance();
+  const dispatch = useDispatch();
+  const phone = useStore((s) => s.frame === "phone");
   const id = active?.worktree.id ?? archived?.id ?? found?.id ?? null;
   const items = useLocalField(id, "chat");
   const queue = useLocalField(id, "queue");
@@ -209,6 +216,18 @@ export function ChatLog({
       )}
     </div>
   );
+  // On a phone the bars follow the same hand, the way the browser's own do: going down a long log
+  // is reading it, so the bar's tabs and a blank composer give their room up; turning back up, or
+  // arriving at the end, is reaching for them. Unlike the pill they hold when the hand rests: a
+  // bar that came back on its own would move over the line just settled on.
+  useEffect(() => {
+    if (!phone) return;
+    const el = logRef.current;
+    if (!follow.offEnd || follow.moving === "up") dispatch({ a: "reading", on: false });
+    else if (follow.moving === "down" && el && el.scrollHeight - el.scrollTop - el.clientHeight > READ_ROOM)
+      dispatch({ a: "reading", on: true });
+  }, [phone, follow.offEnd, follow.moving, dispatch]);
+  useEffect(() => () => dispatch({ a: "reading", on: false }), [dispatch]);
 
   // The composer's walk back through what was sent marks the row it is on and brings that row to
   // the top of the log, so what came after it is what fills the pane. A walk that ends in a blank box

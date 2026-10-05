@@ -31,8 +31,19 @@ import { ago, dotClass } from "../util.ts";
  * themselves never reorder for it, since the rail's order is a send's. The menu is the palette:
  * with no chords, every verb without a visible control is reachable only through it.
  */
-export function PhoneBar({ screen, tabs }: { screen: "home" | "chat"; tabs?: ReactNode }) {
+export function PhoneBar({
+  screen,
+  tabs,
+  over,
+}: {
+  screen: "home" | "chat";
+  tabs?: ReactNode;
+  /** the screen under the bar is a transcript: the tabs hang over its top instead of standing on
+   * it, so they can fold into the row while it is read without the text moving under the thumb */
+  over?: boolean;
+}) {
   const dispatch = useDispatch();
+  const away = useStore((s) => s.reading) && over;
   const repo = useActiveRepo();
   const repos = useStore((s) => s.repos);
   const active = useActive();
@@ -78,27 +89,33 @@ export function PhoneBar({ screen, tabs }: { screen: "home" | "chat"; tabs?: Rea
             onClick={() => dispatch({ a: "screen", to: "home" })}
           />
         )}
-        <div className="phone-title">
-          {home && repos.length > 1 ? (
-            // the desk pill's form: the switcher opens over the name that was tapped, not in the
-            // middle of a screen the thumb is nowhere near
-            <span className="phone-drop phone-switch">
-              <Button
-                size="md"
-                tone="chrome"
-                on={switching}
-                onClick={() => dispatch({ a: "toggle", overlay: { kind: "projects", form: "pill" } })}
-              >
-                {title}
-                <Icon name="caret" className="icon-inline" />
-              </Button>
-              {switching && <ProjectPicker form="pill" />}
-            </span>
-          ) : (
-            <span className="phone-name">{title}</span>
-          )}
-          {line && <span className={cx("phone-sub", asks && "phone-sub-asks")}>{line}</span>}
-        </div>
+        {/* read down, the row holds the tabs where the name was: the name is the one thing in the
+            bar that is only read, and by then it has been */}
+        {away && tabs ? (
+          <div className="phone-row-tabs">{tabs}</div>
+        ) : (
+          <div className="phone-title">
+            {home && repos.length > 1 ? (
+              // the desk pill's form: the switcher opens over the name that was tapped, not in the
+              // middle of a screen the thumb is nowhere near
+              <span className="phone-drop phone-switch">
+                <Button
+                  size="md"
+                  tone="chrome"
+                  on={switching}
+                  onClick={() => dispatch({ a: "toggle", overlay: { kind: "projects", form: "pill" } })}
+                >
+                  {title}
+                  <Icon name="caret" className="icon-inline" />
+                </Button>
+                {switching && <ProjectPicker form="pill" />}
+              </span>
+            ) : (
+              <span className="phone-name">{title}</span>
+            )}
+            {line && <span className={cx("phone-sub", asks && "phone-sub-asks")}>{line}</span>}
+          </div>
+        )}
         {owed && (
           <Button
             size="md"
@@ -145,7 +162,11 @@ export function PhoneBar({ screen, tabs }: { screen: "home" | "chat"; tabs?: Rea
       {/* the worktree's faces, in the header rather than under it: the bar's own edge then runs
           under the control, and the control sits on the bar's ground, where a sunken track and a
           raised pill are both a rung away from what they stand on */}
-      {tabs && <div className="phone-tabs">{tabs}</div>}
+      {tabs && (
+        <div className="phone-tabs-seat" data-over={over || undefined} data-away={away || undefined}>
+          <div className="phone-tabs">{tabs}</div>
+        </div>
+      )}
     </div>
   );
 }

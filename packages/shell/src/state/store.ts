@@ -717,6 +717,10 @@ export interface State {
   /** the window has no hover, so a tap is the only pointer: what the desk shows on hover has to be
    * reachable another way, on either frame */
   touch: boolean;
+  /** The reader is going down a transcript on the phone frame, away from its end: the bar folds
+   * its tabs into its row, where the name was, and a blank composer gives up its height, until they turn back up or reach the end.
+   * The log on screen sets it (ChatLog); the desk never reads it. */
+  reading: boolean;
   /** one-shot: the changes panel starts closed and opens itself the first time the active
    * worktree has something to show, unless a remembered layout or a hand has already decided it */
   changesAuto: boolean;
@@ -905,6 +909,7 @@ export function initialState(opts: InitialOpts): State {
     screen: opts.storedActive ? "chat" : "home",
     frame: opts.frame ?? "desk",
     touch: opts.touch ?? false,
+    reading: false,
     changesAuto: true,
     zen: false,
     focusTerm: 0,
@@ -1358,6 +1363,8 @@ export type Action =
   | { a: "frame"; v: Frame }
   /** the window's input changed: hover appeared or went (a tablet's trackpad attached) */
   | { a: "touch"; v: boolean }
+  /** the reader started down a long transcript on the phone frame, or stopped */
+  | { a: "reading"; on: boolean }
   /** hold the collapsed rail's peek open while the worktree walk runs, or let it fall closed */
   | { a: "rail-peek"; on: boolean }
   /** open or close the active project's discovered section */
@@ -1956,6 +1963,8 @@ function reduce(s: State, action: Action): State {
     }
     case "touch":
       return s.touch === action.v ? s : { ...s, touch: action.v };
+    case "reading":
+      return s.reading === action.on ? s : { ...s, reading: action.on };
     case "rail-peek":
       return s.railPeek === action.on ? s : { ...s, railPeek: action.on };
     case "toggle-discovered": {

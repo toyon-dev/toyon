@@ -104,6 +104,7 @@ export function PhoneFrame() {
       <Menus />
       <PhoneBar
         screen={onWorktree ? "chat" : "home"}
+        over={tab === "chat" && !editor}
         tabs={
           onWorktree &&
           say === null && (

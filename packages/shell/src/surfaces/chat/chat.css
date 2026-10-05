@@ -61,6 +61,34 @@
     min-height: 0;
     display: flex;
     flex-direction: column;
+    /* the bar's tabs hang over the top of the log (phone.css) and go while it is read down, so
+       the log starts under them and whatever stands at its top stands clear of them */
+    --log-cover: var(--phone-strip, 0px);
+    & .chat-log {
+      padding-top: calc(12px + var(--log-cover));
+    }
+    /* Read down, a box that holds nothing is one line: the field, with the stop if the agent has
+       the turn. It grows the log at its foot, where nothing moves under the thumb. A press in it
+       is the caret arriving, and the whole box is back for the keyboard coming up. */
+    & .chat-input.lean:not(:focus-within) {
+      --composer-min: 0;
+      & .composer-plan,
+      & .composer-notice,
+      & .composer-knobs,
+      & .composer-notes,
+      & .composer-subline {
+        display: none;
+      }
+      /* the height as well as the floor: a textarea left to itself is two rows tall */
+      & .composer-field textarea {
+        min-height: 1lh;
+        height: 1lh;
+      }
+      & .composer-ghost {
+        white-space: nowrap;
+        text-overflow: ellipsis;
+      }
+    }
     & .chat-input {
       --composer-min: 96px;
       background: var(--sunken-floor);

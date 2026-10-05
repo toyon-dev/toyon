@@ -4,6 +4,7 @@
 // step, the tests, and not the sum.
 
 import { resolve } from "node:path";
+import { holdMachineSlot } from "./slot.ts";
 
 const STEPS: Record<string, string[]> = {
   typecheck: ["run", "typecheck"],
@@ -12,6 +13,9 @@ const STEPS: Record<string, string[]> = {
   bridge: ["run", "--cwd", "packages/bridge", "build"],
 };
 const root = resolve(import.meta.dir, "..");
+
+// queued behind the machine's other runs before any step starts
+await holdMachineSlot("check");
 
 const runs = Object.entries(STEPS).map(async ([name, args]) => {
   const proc = Bun.spawn([process.execPath, ...args], { cwd: root, stdout: "pipe", stderr: "pipe" });

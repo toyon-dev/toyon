@@ -7,6 +7,7 @@
 
 import { availableParallelism } from "node:os";
 import { resolve } from "node:path";
+import { holdMachineSlot } from "./slot.ts";
 
 // One shard for every two cores, eight at most. The git fixtures are all spawns, and more test
 // processes than the machine can serve make every fixed wait in the suite miss: a three-core CI
@@ -18,6 +19,9 @@ const args = process.argv.slice(2);
 // bunfig's [test] timeout does not reach Bun 1.4.2, which then stops a test at five seconds; the
 // git fixtures need the room it asks for whenever the machine is busy with a second run
 if (!args.some((arg) => arg.startsWith("--timeout"))) args.unshift("--timeout", "20000");
+
+// queued behind the machine's other runs; inside `check` the slot is already held
+await holdMachineSlot("test");
 
 const runs = Array.from({ length: SHARDS }, async (_, i) => {
   const proc = Bun.spawn([process.execPath, "test", `--shard=${i + 1}/${SHARDS}`, ...args], {

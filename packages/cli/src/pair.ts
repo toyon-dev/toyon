@@ -1,7 +1,7 @@
 // `toyon pair`: a one-time code for a phone, drawn in the terminal to scan. The phone opens the
 // remote name with the code, trades it for the token, and adds the machine to toyon.cloud.
 
-import type { PairMint } from "@toyon/shared";
+import { isTailnetName, type PairMint, type TailnetPhone, tailnetLine } from "@toyon/shared";
 import { qrModules, qrText } from "@toyon/shared/qr";
 import { base, health, readToken } from "./daemon.ts";
 
@@ -21,6 +21,12 @@ export async function printPairCode(): Promise<string | null> {
   console.log(`\n${qrText(qrModules(mint.url))}\n`);
   console.log("Scan with your phone's camera. The code works once and lasts 2 minutes.");
   console.log(mint.url);
+  if (isTailnetName(new URL(mint.url).hostname)) {
+    // a daemon that cannot say still leaves the plain line: the phone needs Tailscale on either way
+    const r = await fetch(`${base}/pair/phones`, { headers: { authorization: `Bearer ${token}` } }).catch(() => null);
+    const phones = r?.ok ? ((await r.json()) as TailnetPhone[] | null) : null;
+    console.log(tailnetLine(phones).text);
+  }
   return null;
 }
 

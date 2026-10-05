@@ -22,6 +22,7 @@ import { UserError } from "../core/errors.ts";
 import { fireAndForget, log } from "../core/log.ts";
 import { lag, type SocketStats } from "../core/metrics.ts";
 import { PairCodes } from "../core/pair.ts";
+import { readTailnetPhones } from "../core/tailnet.ts";
 import type { DraftStore } from "../drafts/store.ts";
 import { setWaitingColors } from "../runtime/proxy.ts";
 import { dispatch, openedFrame, type Services } from "./handlers.ts";
@@ -417,6 +418,7 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
         s.state.notePaired();
         broadcast({ t: "paired" });
       },
+      phones: () => readTailnetPhones(),
     }),
     websocket: {
       // idleTimeout and sendPings stay at Bun's defaults (120 s, on): they are what close a tab that

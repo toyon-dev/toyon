@@ -5,6 +5,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import {
   addressedByPort,
   hostPreviews,
+  isTailnetName,
   launcherAddLink,
   PREVIEW_PORTS,
   parseRemote,
@@ -86,7 +87,8 @@ export async function remote(cmd: Extract<Command, { kind: "remote" }>): Promise
       if (removed > 0) console.log(`removed Toyon's ${removed} tailscale serve entries`);
     } catch (e) {
       if (!(e instanceof TailscaleError)) throw e;
-      if (was?.host.endsWith(".ts.net")) console.error(`toyon: could not remove tailscale serve entries: ${e.message}`);
+      if (was && isTailnetName(was.host))
+        console.error(`toyon: could not remove tailscale serve entries: ${e.message}`);
     }
   } else if (cmd.to !== null) {
     r = { host: cmd.to, previews: cmd.ports ? portPreviews(cmd.to) : hostPreviews(cmd.to) };

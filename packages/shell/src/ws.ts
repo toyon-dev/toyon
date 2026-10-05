@@ -5,6 +5,7 @@ import {
   RESTART_NOW,
   type RestartWait,
   type ServerMsg,
+  type TailnetPhone,
   type Uploaded,
   WS_CLOSE_UNAUTHORIZED,
 } from "@toyon/shared";
@@ -112,6 +113,16 @@ export async function restartWaiting(): Promise<{ waiting: string[]; asking: str
 
 /** A one-time code for a phone, or the line to show instead: the daemon's own refusal, or that it
  * could not be reached. */
+/** the phones on the machine's tailnet, for the pairing card; null when there is nothing to say */
+export async function pairPhones(): Promise<TailnetPhone[] | null> {
+  try {
+    const r = await fetch("/pair/phones", { headers: { authorization: `Bearer ${getToken()}` } });
+    return r.ok ? ((await r.json()) as TailnetPhone[] | null) : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function mintPair(): Promise<PairMint | string> {
   try {
     const r = await fetch("/pair", { method: "POST", headers: { authorization: `Bearer ${getToken()}` } });

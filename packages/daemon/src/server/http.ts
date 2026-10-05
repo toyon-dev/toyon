@@ -3,7 +3,16 @@
 
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { type PairMint, type PairRedeem, pairLink, RESTART_NOW, type Remote, type RestartWait } from "@toyon/shared";
+import {
+  isTailnetName,
+  type PairMint,
+  type PairRedeem,
+  pairLink,
+  RESTART_NOW,
+  type Remote,
+  type RestartWait,
+  type TailnetPhone,
+} from "@toyon/shared";
 import type { Server } from "bun";
 import { type AttachmentStore, drawnType } from "../agent/attachments.ts";
 import { isUploadKind } from "../agent/uploads.ts";
@@ -73,6 +82,8 @@ export interface HttpOpts {
   pair: PairCodes;
   /** a code was just redeemed */
   onPaired: () => void;
+  /** the phones on this machine's tailnet; null when Tailscale cannot be asked */
+  phones: () => Promise<TailnetPhone[] | null>;
 }
 
 /** a year, and never revalidate: for a name that cannot mean different bytes later */
@@ -209,6 +220,16 @@ export function createFetch(opts: HttpOpts) {
       const { code, ms } = opts.pair.mint();
       const body: PairMint = { code, url: pairLink(remote.host, code), ms };
       return Response.json(body, { headers: { "cache-control": NO_STORE } });
+    }
+
+    // Whether a phone could open the link at all, for the card that shows the code. A tailnet name
+    // resolves only on a connected device, and a phone that is not one never loads a page of ours.
+    if (url.pathname === "/pair/phones" && req.method === "GET") {
+      if (!sameSecret(req.headers.get("authorization"), `Bearer ${opts.token}`)) {
+        return new Response("unauthorized", { status: 401 });
+      }
+      const phones = remote && isTailnetName(remote.host) ? await opts.phones() : null;
+      return Response.json(phones, { headers: { "cache-control": NO_STORE } });
     }
 
     // The phone's side: the code for the token, and the preview grant with it as /bootstrap gives

@@ -87,6 +87,7 @@ const opts: HttpOpts = {
   restartWait: () => ({ waiting: restartWaiting, asking: ["pick a colour"] }),
   pair: new PairCodes(),
   onPaired: () => {},
+  phones: async () => null,
 };
 const fetch = createFetch(opts);
 const req = (path: string, init: RequestInit & { host?: string } = {}) =>
@@ -122,6 +123,21 @@ describe("pair", () => {
     remote(req("/pair", { method: "POST", headers: { authorization: auth } }), srv());
   const redeem = (code: string, headers: Record<string, string> = https, host = name) =>
     remote(req("/pair/redeem", { method: "POST", host, headers, body: JSON.stringify({ code }) }), srv());
+
+  test("phones are asked of Tailscale only for a tailnet name, and only with the token", async () => {
+    const phones = [{ name: "Pixel", online: false }];
+    const at = (host: string) =>
+      createFetch({
+        ...opts,
+        remote: { host, previews: `https://${host}:{port}`, front: "local" },
+        phones: async () => phones,
+      });
+    const ask = (f: ReturnType<typeof createFetch>, auth = "Bearer secret") =>
+      f(req("/pair/phones", { headers: { authorization: auth } }), srv());
+    expect(await (await ask(at("mac.tail1234.ts.net")))?.json()).toEqual(phones);
+    expect(await (await ask(at(name)))?.json()).toBeNull();
+    expect((await ask(at("mac.tail1234.ts.net"), "Bearer wrong"))?.status).toBe(401);
+  });
 
   test("a code needs the token, and a public name for its link", async () => {
     expect((await mint("Bearer wrong"))?.status).toBe(401);
@@ -624,6 +640,7 @@ describe("static shell", () => {
     restartWait: () => ({ waiting: null, asking: [] }),
     pair: new PairCodes(),
     onPaired: () => {},
+    phones: async () => null,
   });
 
   test("a route falls back to index.html so the SPA can handle it", async () => {

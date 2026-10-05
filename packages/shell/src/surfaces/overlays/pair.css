@@ -47,6 +47,12 @@
     margin: 0;
     color: var(--text1);
   }
+  /* what the phone needs before the code can work; in the line's colour when it names a problem */
+  .pair-note {
+    margin: 0;
+    font: var(--type-ui-sm);
+    color: var(--text1);
+  }
   .pair-left {
     font-variant-numeric: tabular-nums;
   }

@@ -39,6 +39,11 @@
     & .chat-centre-note {
       margin: 0;
     }
+    /* the daemon's band is surface0, which is this ground: here it is the chrome's tier instead,
+       the same one rung from what it lies on that it is in the dock */
+    & .daemon-row {
+      background: var(--surface1);
+    }
     /* lower than the dock's floor: at this width 160px reads as a form rather than a reply. On the
        centre's ground --sunken is a shade from invisible; the floor's own recess is the one for it */
     & .chat-input {
@@ -66,6 +71,12 @@
     --log-cover: var(--phone-strip, 0px);
     & .chat-log {
       padding-top: calc(12px + var(--log-cover));
+    }
+    /* the daemon's band is surface0, which is this ground, so it takes the bar's tier. Its floor
+       is the small row's: the full row here is a thumb's 52px, and this row is read, not pressed */
+    & .daemon-row {
+      background: var(--surface1);
+      min-height: var(--row-height-sm);
     }
     /* Read down, a box that holds nothing is one line: the field, with the stop if the agent has
        the turn. It grows the log at its foot, where nothing moves under the thumb. A press in it

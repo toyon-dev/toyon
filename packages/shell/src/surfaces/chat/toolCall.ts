@@ -114,12 +114,13 @@ const SED_IN_PLACE = /(^|\s)(-[A-Za-z]*[iI]|--in-place)/;
 
 /** what stands at the head of a command and only sets the scene: `cd dir &&`, a variable set for
  * the rest of it (`N=notes.md &&`, `export CI=1;`, `FOO=1 cmd`), and an `echo "heading" &&` that
- * labels what the next command prints. The work is whatever comes next, so the verb is read from
- * there. A value that runs something (`f=$(grep x)`) is not skipped whole, nor is an echo sent to a
- * file, and such a row keeps the kind's glyph. */
+ * labels what the next command prints, and a `mkdir -p dir &&` that makes room for what follows. The
+ * work is whatever comes next, so the verb is read from there. A value that runs something
+ * (`f=$(grep x)`) is not skipped whole, nor is an echo sent to a file, and such a row keeps the
+ * kind's glyph. */
 const SCENE_WORD = String.raw`(?:"[^"]*"|'[^']*'|[^\s;&|]+)`;
 const SCENE = new RegExp(
-  String.raw`^\s*(?:(?:cd|echo)\s+${SCENE_WORD}\s*(?:&&|;)|(?:export\s+)?[A-Za-z_]\w*=(?:"[^"]*"|'[^']*'|[^\s;&|()\`]*)\s*(?:&&|;|(?=\s)))\s*`,
+  String.raw`^\s*(?:(?:cd|echo)\s+${SCENE_WORD}\s*(?:&&|;)|mkdir(?:\s+${SCENE_WORD})+\s*(?:&&|;)|(?:export\s+)?[A-Za-z_]\w*=(?:"[^"]*"|'[^']*'|[^\s;&|()\`]*)\s*(?:&&|;|(?=\s)))\s*`,
 );
 
 /** a script fed to python on stdin that writes a file: how an agent makes an edit its own edit tool
@@ -145,6 +146,18 @@ function sedWrites(command: string): boolean {
   return command.split(SEPARATOR).some((part) => /^\s*(?:\S*\/)?sed\s/.test(part) && SED_IN_PLACE.test(part));
 }
 
+/** every command in the chain is a removal. An `rm` with other work after it is very often clearing
+ * a scratch directory for that work, and the trash would name the row after its first step; which
+ * verb the row is really about cannot be told from here, so it keeps the kind's glyph. `|` and `||`
+ * do not end the removal: `rm -rf x 2>&1 | tail` and `rm x || true` are still one. */
+function onlyRemoves(rest: string): boolean {
+  return rest
+    .split(/&&|;|\n/)
+    .map((part) => afterScene(part).trim().split(/\s+/)[0] ?? "")
+    .filter(Boolean)
+    .every((first) => VERB_ICON[first.slice(first.lastIndexOf("/") + 1)] === "trash");
+}
+
 function verbIcon(command: string): IconName | undefined {
   const rest = afterScene(command).trim();
   const first = rest.split(/\s+/)[0] ?? "";
@@ -156,6 +169,7 @@ function verbIcon(command: string): IconName | undefined {
     const head = rest.split(SEPARATOR)[0] ?? "";
     if (TO_FILE.test(head)) return verb === "cat" && head.includes("<<") ? "edit" : undefined;
   }
+  if (icon === "trash" && !onlyRemoves(rest)) return undefined;
   if (icon) return icon;
   if (PYTHON.test(verb)) return rest.includes("<<") && WRITES_FILE.test(rest) ? "edit" : undefined;
   return VERB_ICON[verb];

@@ -393,6 +393,20 @@ describe("toolLabel", () => {
     expect(toolLabel({ ...call, input: { command: 'echo "== status" && git status' } }).icon).toBe("branch");
     expect(toolLabel({ ...call, input: { command: 'echo "x" > a.txt && cat a.txt' } }).icon).toBe("run");
     expect(toolLabel({ ...call, input: { command: "echo done" } }).icon).toBe("run");
+    // and a mkdir that makes room for what follows; alone it is the work
+    expect(
+      toolLabel({ ...call, input: { command: "mkdir -p out/a out/b && cat > out/a/x.ts <<'EOF'\nx\nEOF" } }).icon,
+    ).toBe("edit");
+    expect(toolLabel({ ...call, input: { command: "mkdir -p out" } }).icon).toBe("folder");
+    // an rm with other work after it is a step of that work, and the row is not named a delete for it
+    const scratch = 'cd /w/wt && d=~/Library/Caches/t && rm -rf "$d" && mkdir -p "$d" && TMPDIR="$d" bun run check';
+    expect(toolLabel({ ...call, input: { command: scratch } }).icon).toBe("run");
+    expect(toolLabel({ ...call, input: { command: "rm a.ts && git status" } }).icon).toBe("run");
+    expect(toolLabel({ ...call, input: { command: "rm a.ts; ls" } }).icon).toBe("run");
+    // a chain of nothing but removals is still one, as is an rm that is piped or allowed to fail
+    expect(toolLabel({ ...call, input: { command: "cd /w/wt && rm -rf dist && rmdir out;" } }).icon).toBe("trash");
+    expect(toolLabel({ ...call, input: { command: "rm -rfv dist 2>&1 | tail -5" } }).icon).toBe("trash");
+    expect(toolLabel({ ...call, input: { command: "rm a.ts || true" } }).icon).toBe("trash");
     // a script fed to python that writes a file is an edit; one that only prints is a run
     const rewrite = "python3 - <<'EOF'\np='a.ts'; s=open(p).read()\nopen(p,'w').write(s.replace('a','b'))\nEOF";
     expect(toolLabel({ ...call, input: { command: rewrite } }).icon).toBe("edit");

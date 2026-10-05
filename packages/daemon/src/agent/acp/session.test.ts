@@ -1116,6 +1116,20 @@ describe("AcpSession", () => {
     await w.session.close();
   });
 
+  test("a send racing both warm-ups shares their one session, so its reply is heard", async () => {
+    const fake = fakeAgent(say("ok"));
+    const w = world(fake);
+    // the first keystroke, the `/` menu and enter, all before the agent has answered session/new
+    const warmed = [w.session.warm(), w.session.warmCommands()];
+    w.session.send("hi");
+    await Promise.all(warmed);
+    await w.idle();
+    expect(fake.newSessions).toHaveLength(1);
+    expect(fake.prompts).toHaveLength(1);
+    expect(w.types()).toContain("text-delta");
+    await w.session.close();
+  });
+
   test("warm starts the session under the record's agent, and restart drops the process for the next send", async () => {
     const fake = fakeAgent(say("ok"));
     const w = world(fake);

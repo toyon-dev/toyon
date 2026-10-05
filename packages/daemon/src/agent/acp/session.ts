@@ -225,6 +225,7 @@ export class AcpSession implements AgentAdapter {
   private conn: Conn | null = null;
   /** the spawn in flight, shared by whoever asks for the connection meanwhile */
   private connecting: Promise<Conn> | null = null;
+  private opening: { conn: Conn; live: Promise<Live> } | null = null;
   private live: Live | null = null;
   private reaper: ReturnType<typeof setTimeout> | null = null;
   /** The turn the agent is on with no prompt out, or null. Claude Code runs a background command
@@ -870,10 +871,22 @@ export class AcpSession implements AgentAdapter {
     }
   }
 
-  /** the worktree's session on the connection: resumed when the agent remembers it, else new */
+  /** the worktree's session on the connection, started once; concurrent callers share the start.
+   * A warm-up and the send it was for arrive together, and a session each would leave the prompt
+   * on one while the updates of another are the ones listened to. */
   private async ensureLive(why: string): Promise<Live> {
     const conn = await this.ensureConn(why);
+    if (this.opening?.conn === conn) return this.opening.live;
     if (this.live?.conn === conn) return this.live;
+    const live = this.openLive(conn).finally(() => {
+      if (this.opening?.live === live) this.opening = null;
+    });
+    this.opening = { conn, live };
+    return live;
+  }
+
+  /** resumed when the agent remembers the session, else new */
+  private async openLive(conn: Conn): Promise<Live> {
     const additionalDirectories = conn.bounds.gitDir ? [conn.bounds.gitDir] : [];
     let sessionId = this.d.getSessionId();
     let modes: acp.SessionModeState | null | undefined;
@@ -915,7 +928,7 @@ export class AcpSession implements AgentAdapter {
     this.emit({ type: "session-info", sessionId: sessionId!, ...currentValues(options) });
     this.learn(options);
     const modeOption = modes ? null : readModeOption(configOptions);
-    this.live = {
+    const live: Live = {
       conn,
       sessionId: sessionId!,
       prefixPending: !resumed && conn.spec.systemPrompt === "prompt-prefix",
@@ -925,16 +938,17 @@ export class AcpSession implements AgentAdapter {
       modeConfigId: modeOption?.id ?? null,
       options,
     };
+    this.live = live;
     // the worktree's mode, model and effort, applied now so a resumed session does not answer its
     // first prompt with whatever the agent remembered. Effort last: its choices depend on the model
-    await this.applyMode(this.live);
-    await this.applyOption(this.live, "model");
-    await this.applyOption(this.live, "thought_level");
+    await this.applyMode(live);
+    await this.applyOption(live, "model");
+    await this.applyOption(live, "thought_level");
     // the push that landed while session/new was in flight, now that the id is known. Only when
     // there is one: an agent that does not re-push on resume keeps the list it already had.
     const pushed = conn.commands.get(sessionId!);
     if (pushed) this.setCommands(pushed);
-    return this.live;
+    return live;
   }
 
   /** the worktree's mode is the record's, read fresh: a switch in the composer between two

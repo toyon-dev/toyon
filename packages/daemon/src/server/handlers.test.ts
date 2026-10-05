@@ -35,6 +35,7 @@ import { RuntimeRegistry } from "../runtime/registry.ts";
 import { ThemeStore } from "../themes/store.ts";
 import { UpdateService } from "../update/service.ts";
 import { ChatSearch } from "../worktrees/chats.ts";
+import { FixService } from "../worktrees/fix.ts";
 import { PrService } from "../worktrees/prs.ts";
 import { RefSearch } from "../worktrees/refs.ts";
 import { WorktreeService } from "../worktrees/service.ts";
@@ -120,6 +121,7 @@ function make() {
     agents,
     drafts,
     namer: async () => null,
+    fix: new FixService({ state, hub, runtime }),
   });
   const turns = new TurnService({ state, hub, transcript: (id) => runtime.agentFor(id)?.transcript() ?? [] });
   // no tree behind this daemon, so nothing lands on it and afterLand has nothing to run
@@ -1052,13 +1054,13 @@ describe("handlers", () => {
     await dispatch({ t: "sync-main", worktreeId: wt.id }, ctx, services);
     const t = replies.find((m) => m.t === "shipped");
     expect(t).toMatchObject({ t: "shipped", ok: false });
-    expect(t && "suggestion" in t ? t.suggestion : undefined).toBeUndefined();
+    expect(t && "asked" in t ? t.asked : undefined).toBeUndefined();
     expect(lastShipped(replies) ?? (t?.t === "shipped" ? t.message : "")).toContain("uncommitted");
     expect(readFileSync(join(wt.path, "README.md"), "utf8")).toBe("mine, uncommitted\n");
   });
 
-  test("a sync that conflicts prefills the rebase toyon's own branch is synced by, never a merge", async () => {
-    const { services, ctx, replies, repo } = make();
+  test("a sync that conflicts asks the agent for the rebase toyon's own branch is synced by, never a merge", async () => {
+    const { services, ctx, replies, repo, agents } = make();
     const r = await services.repos.register(repo);
     r.needsSetup = false;
     const wt = await services.worktrees.create(r.id, "feature");
@@ -1067,8 +1069,12 @@ describe("handlers", () => {
     writeFileSync(join(repo, "README.md"), "ours\n");
     sh(repo, "git", "commit", "-qam", "ours");
     await dispatch({ t: "sync-main", worktreeId: wt.id }, ctx, services);
-    const t = replies.find((m) => m.t === "shipped");
-    expect(t && "suggestion" in t ? t.suggestion : undefined).toStartWith("Rebase this branch onto main ");
+    // the agent has it as Toyon's own message, and the frame says there is nothing left to draw
+    expect(replies.find((m) => m.t === "shipped")).toMatchObject({ ok: false, asked: true });
+    expect(agents.get(wt.id)?.sent.at(-1)).toMatchObject({
+      text: expect.stringMatching(/^Rebase this branch onto main /),
+      asked: { kind: "conflict", why: "the branch needs a rebase onto main" },
+    });
   });
 
   test("chat hands the text, context and attachments to the agent", async () => {

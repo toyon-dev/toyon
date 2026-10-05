@@ -233,7 +233,9 @@ export type ServerMsg =
       ok: boolean;
       url?: string;
       message: string;
-      suggestion?: string;
+      /** a failure the agent was sent a turn to fix: the transcript has it as Toyon's own row, so
+       * there is nothing to draw for it here */
+      asked?: true;
     }
   /** the files on disk now; the submodules, which are entries but not files; and what git ignores,
    * a folder ignored whole named once with a trailing slash */
@@ -704,6 +706,10 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
    * worktree's landing on the rows frame; refused while its agent is mid-turn. A `note` is what
    * the person typed after the verb, for the commit message to carry. */
   z.object({ t: z.literal("judge"), worktreeId: id, note: z.string().max(500).optional() }),
+  /** send the worktree's agent the turn that fixes a dev server that crashed or never answered;
+   * on a lead, whose box starts work, the fix is the worktree that box would start. `clientId` as
+   * on create-worktree. */
+  z.object({ t: z.literal("fix-preview"), worktreeId: id, clientId: z.string().max(64).optional() }),
   z.object({ t: z.literal("reveal"), worktreeId: id, path: relPath.optional() }),
   z.object({ t: z.literal("stop-agent"), worktreeId: id }),
   /** the person is looking at this worktree right now: clears the rail's unseen ring */

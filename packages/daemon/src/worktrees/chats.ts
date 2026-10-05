@@ -73,7 +73,8 @@ export function saidRows(entries: TranscriptEntry[]): SaidRow[] {
   for (const { seq, event } of coalesce(entries)) {
     if (event.type === "user-message") {
       turnTs = event.ts;
-      push(seq, "user", event.text, event.ts);
+      // Toyon's own message is a row saying why it was sent, not words anyone would look for
+      if (!event.asked) push(seq, "user", event.text, event.ts);
     } else if (event.type === "turn-start") {
       turnTs = event.ts;
     } else if (event.type === "text-delta") {

@@ -181,7 +181,7 @@ export function firstPrompt(transcript: string): string | undefined {
     if (!line.includes('"user-message"')) continue;
     try {
       const event = (JSON.parse(line) as { event?: AgentEvent }).event;
-      if (event?.type === "user-message") return event.text.slice(0, 500);
+      if (event?.type === "user-message" && !event.asked) return event.text.slice(0, 500);
     } catch {
       // a torn line is the transcript loader's to report; the next message will do
     }

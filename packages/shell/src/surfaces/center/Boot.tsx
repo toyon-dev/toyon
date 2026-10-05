@@ -1,18 +1,10 @@
-import {
-  isLead,
-  isProvisional,
-  type LogLine,
-  type OwnedWorktree,
-  type ProcState,
-  type SparePhase,
-} from "@toyon/shared";
+import type { LogLine, OwnedWorktree, ProcState, SparePhase } from "@toyon/shared";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { Button } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { useSecondsSince } from "../../ui/hooks.ts";
 import { View } from "../../ui/View.tsx";
 import { RUN_STATUS_TIP, runLine, runOf, runStopTip, runTicking } from "../runs.ts";
-import { procFixPrompt } from "./fixPrompt.ts";
 
 /** the line before any proc exists. A spare says how far along it is, since the plus is looked at
  * while it is made and "starting dev servers" would be a lie for a row still copying deps. */
@@ -50,17 +42,9 @@ export function Boot({ worktree, log }: { worktree: OwnedWorktree; log: LogLine[
   const parked = !!worktree.worktree.parked && procs.length === 0;
   const startPreview = () => sock?.send({ t: "preview-start", worktreeId: worktree.id });
   const setupStoppable = setupRun && (setupRun.status === "running" || setupRun.status === "detached");
-  // the diagnosis is specific enough to hand over: the agent gets it, the command, the tail and
-  // the rule, and the daemon restarts the proc when its turn ends. The lead has no task yet, so its
-  // fix is the worktree its box would start: the provisional row itself, made the task, or a
-  // worktree of main's own, whose procs start from the same broken command.
-  const askAgent = () => {
-    const prompt = procFixPrompt(worktree, log);
-    if (isLead(worktree.worktree)) {
-      const from = isProvisional(worktree.worktree) ? { worktreeId: worktree.id } : {};
-      sock?.send({ t: "create-worktree", clientId, repoId: worktree.repoId, prompt, ...from });
-    } else sock?.send({ t: "chat", worktreeId: worktree.id, text: prompt });
-  };
+  // the diagnosis is specific enough to hand over: the daemon writes the agent the command, the
+  // tail and the rule, and restarts the proc when the turn ends
+  const askAgent = () => sock?.send({ t: "fix-preview", worktreeId: worktree.id, clientId });
   return (
     <View wide>
       {procs.length === 0 ? (

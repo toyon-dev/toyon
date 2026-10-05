@@ -59,6 +59,7 @@ export function landPrompt(i: LandInput): string {
 function turnBlock(t: TurnSlice): string {
   const lines: string[] = [];
   if (t.asks.length) lines.push(`User asked: ${clip(t.asks.join(" / "), 400)}`);
+  if (t.fixes.length) lines.push(`Toyon, not the user, asked for a fix: ${clip(t.fixes.join(" / "), 400)}`);
   if (t.reply.trim()) lines.push(`Agent ended with: ${clip(t.reply, 1_000)}`);
   return lines.join("\n");
 }

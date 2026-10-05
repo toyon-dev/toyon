@@ -114,6 +114,8 @@ export type ChatItem =
       background?: boolean;
     }
   | { kind: "error"; text: string }
+  /** a message Toyon sent the agent itself, as the reason it was sent: what failed */
+  | { kind: "asked"; why: string }
   | { kind: "blocked"; tool: string; path: string; reason: string }
   /** a divider: what follows was said in another worktree, grafted in here */
   | { kind: "grafted"; title: string; branch: string }
@@ -248,12 +250,11 @@ export interface WorktreeLocal {
   pages?: WorktreePages;
   /** links this worktree's preview pages showed, for an app with no route table; this session only */
   links?: PageLink[];
-  /** the composer's unsent text; survives switching worktrees, and is where the daemon's
-   * conflict-resolution suggestion lands */
+  /** the composer's unsent text; survives switching worktrees */
   draft: string;
   /** The row the log marks. A walk is set while up and down are walking the composer back through
    * what was sent, with `draft` holding the entry walked to, and any other write to the draft ends
-   * it: a keystroke, a suggestion. A reveal lasts until a message is sent or the worktree is left. */
+   * it. A reveal lasts until a message is sent or the worktree is left. */
   mark?: ChatMark;
   /** what is attached to the message being written, in the order it was attached; `key` is local,
    * and the daemon numbers each kind on send */
@@ -2488,23 +2489,20 @@ function onServer(s: State, msg: StoreServerMsg): State {
     }
     case "shipped": {
       const id = msg.worktreeId;
-      // a suggestion lands in that worktree's composer, where the failure line above it and the
-      // unread ring on its row say where to look. It does not select the worktree: the op ran for
-      // seconds, and the person may be reading another chat by the time it answers.
-      const settled = msg.suggestion ? withLocal(s, id, (l) => ({ ...l, draft: msg.suggestion! })) : s;
       // An op the daemon listed comes to rest on the frame that stops listing it, which follows
       // this word by a moment; retiring it here would let a frame built before it ended put the
       // spinner back. A press it never listed (an op over before its frame) rests here.
       const next = {
-        ...settled,
-        shipping: retireShipping(settled.shipping, (w) => w === id && settled.shipping[w]?.sent === true),
-        openUrl: msg.ok && msg.url ? msg.url : settled.openUrl,
+        ...s,
+        shipping: retireShipping(s.shipping, (w) => w === id && s.shipping[w]?.sent === true),
+        openUrl: msg.ok && msg.url ? msg.url : s.openUrl,
       };
       // What happened is read where the work is: a failure as a line on the worktree's chat, or
       // under the composer for an op with no worktree (a batch). A land that merged is on the
       // transcript as the daemon's own event, so it reads back after a reload; a success with
-      // nothing to offer says nothing here, since the panel and the row show it.
-      if (!msg.ok) return id ? answerFor(next, id, msg.message) : noticeOnScreen(next, msg.message);
+      // nothing to offer says nothing here, since the panel and the row show it. So does a failure
+      // the agent was sent to fix: the transcript has that as Toyon's own row.
+      if (!msg.ok && !msg.asked) return id ? answerFor(next, id, msg.message) : noticeOnScreen(next, msg.message);
       return next;
     }
     case "files":
@@ -2648,6 +2646,8 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
   const stamp = seq === undefined ? {} : { seq };
   switch (event.type) {
     case "user-message":
+      // Toyon's own message is the reason it was sent, not a bubble: nobody typed it
+      if (event.asked) return [...items, { kind: "asked", why: event.asked.why }];
       return [
         ...items,
         {

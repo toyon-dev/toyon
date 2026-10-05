@@ -418,8 +418,15 @@ export class AcpSession implements AgentAdapter {
   }
 
   private post(text: string, opts: SendOpts = {}) {
-    const { context, attachments } = opts;
+    const { context, attachments, asked } = opts;
     const item: QueueItem = { text, context, ...(attachments?.length ? { attachments } : {}) };
+    // Toyon's own message is recorded as it is sent, however long it waits for its turn: it has
+    // no bubble to take back, so it is never drawn as queued, and the row saying why it was sent
+    // stands from the moment of the failure
+    if (asked) {
+      this.emit({ type: "user-message", text, ts: Date.now(), asked });
+      item.recorded = { attachments: [] };
+    }
     // held from here until the message is recorded, which for a queued one is turns away
     this.d.attachments.uploads.hold(uploadIds(attachments));
     // sending during a turn means "while you are doing that": an agent that takes steering reads the

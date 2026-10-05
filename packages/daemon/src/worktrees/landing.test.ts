@@ -95,8 +95,11 @@ function world(opts: Opts = {}) {
   /** the check run's status on the record as each check was called */
   const runsSeen: Array<string | undefined> = [];
   const judged: string[] = [];
+  /** the checks whose failure was handed on for the agent to fix */
+  const fixed: string[] = [];
   /** the prompts the answer question was asked with */
   const recapped: string[] = [];
+  hub.on("checkFailed", (_id, command) => fixed.push(command));
   const runs = new RunService({ state, hub });
   const service = new LandingService({
     state,
@@ -186,6 +189,7 @@ function world(opts: Opts = {}) {
     checks,
     quiet,
     judged,
+    fixed,
     recapped,
     settle,
     settled,
@@ -235,6 +239,20 @@ describe("LandingService", () => {
       ready: false,
       checkTail: "src/App.tsx(3,1): error TS2322\n2 errors",
     });
+    // handed on once the verdict is on the row, for the turn that fixes it
+    expect(w.fixed).toEqual(["bun run check"]);
+  });
+
+  test("a check that fails after a discard is not handed to the agent", async () => {
+    w = world({ check: "bun run check", exit: 1, output: "1 error\n" });
+    w.dirty();
+    w.wt()!.landing = { at: 1, check: "pass", ready: true, subject: "add the feature", fingerprint: "old" };
+    const settledAt = w.settled();
+    w.service.recheck("w1");
+    await settledAt;
+    expect(w.wt()?.landing?.check).toBe("fail");
+    // the person just took work out: an agent set going on what is left could put it back
+    expect(w.fixed).toEqual([]);
   });
 
   test("the box reads pending while the check runs, then the verdict with its message and the turn its sentence", async () => {

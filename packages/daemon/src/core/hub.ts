@@ -24,6 +24,12 @@ export interface HubEvents {
   turnSettled: (worktreeId: string, turn: LastTurn) => void;
   /** the repo's check exited 0 in the worktree: what the tree built to pass it is worth keeping */
   checkPassed: (worktreeId: string) => void;
+  /** the repo's check failed on its own exit, after a turn or a press: the agent's work is what
+   * it judged, so the failure is the agent's to fix */
+  checkFailed: (worktreeId: string, command: string) => void;
+  /** a commit-msg hook refused a landing's message, with the end of what it said: the message is
+   * owed again, written to answer it */
+  messageRefused: (worktreeId: string, said: string) => void;
   queue: (worktreeId: string, items: QueuedMessage[]) => void;
   /** the worktree's agent advertised a new slash-command list */
   agentCommands: (worktreeId: string, commands: AgentCommand[]) => void;

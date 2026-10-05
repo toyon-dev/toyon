@@ -62,6 +62,7 @@ import { UpdateService } from "./update/service.ts";
 import { BackendShare } from "./worktrees/backend.ts";
 import { ArtifactCache } from "./worktrees/cache.ts";
 import { ChatSearch } from "./worktrees/chats.ts";
+import { FixService } from "./worktrees/fix.ts";
 import { LandingService } from "./worktrees/landing.ts";
 import { PrService } from "./worktrees/prs.ts";
 import { RefSearch } from "./worktrees/refs.ts";
@@ -178,6 +179,7 @@ const exec = new ExecService({ state, runtime, shipping: (id): Shipping | undefi
 // what a worktree built to pass the check, kept for the next one; it publishes on the hub's
 // checkPassed and restores from inside the service's setup
 const cache = new ArtifactCache({ paths, state, hub });
+const fix = new FixService({ state, hub, runtime });
 const worktrees = new WorktreeService({
   state,
   hub,
@@ -188,6 +190,7 @@ const worktrees = new WorktreeService({
   cache,
   watch: (id, command, run) => exec.watch(id, command, run),
   runs,
+  fix,
 });
 // a worktree whose changes touch a proc it reaches on main takes that proc over
 new BackendShare({ state, hub, runtime, own: (id, names) => worktrees.ownProcs(id, names) });

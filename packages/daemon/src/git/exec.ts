@@ -197,8 +197,9 @@ export async function runLive(
 
 /** what a watched command left: the two pipes apart, as `run` gives them, and together in
  * arrival order, which is as close to what a terminal showed as two pipes allow. A command
- * killed at its ceiling (`exit: "timeout"`) carries the ceiling, so the message can say it. */
-export type Watched = GitResult & { text: string; ceilingMs?: number };
+ * killed at its ceiling (`exit: "timeout"`) carries the ceiling, so the message can say it, and one
+ * whose hooks were watched carries the hook that exited non-zero, which is what refused it. */
+export type Watched = GitResult & { text: string; ceilingMs?: number; hook?: string };
 
 /** a trace2 event as git writes it to the fd it was given: the two fields the hook watch reads */
 interface Trace2Event {
@@ -207,6 +208,7 @@ interface Trace2Event {
   child_class?: string;
   child_id?: number;
   hook_name?: string;
+  code?: number;
 }
 
 /** Which hook git is in, read off its own trace: git says when it starts a child and what class
@@ -214,9 +216,10 @@ interface Trace2Event {
  * `git diff` inside pre-commit), whose own children are not this command's hooks. `onHook` gets
  * the name as the hook starts and `undefined` as it ends; anything on the pipe that is not a
  * line of JSON is skipped, since the pipe is git's to write and a hook's stray write to fd 3
- * is not an error here. */
-function watchHooks(stream: Readable | null, onHook: (hook: string | undefined) => void): void {
-  if (!stream) return;
+ * is not an error here. Returns the read of which hook exited non-zero, for when git has. */
+function watchHooks(stream: Readable | null, onHook: (hook: string | undefined) => void): () => string | undefined {
+  let failed: string | undefined;
+  if (!stream) return () => failed;
   const dec = new TextDecoder();
   let buf = "";
   const open = new Map<number, string>();
@@ -235,11 +238,14 @@ function watchHooks(stream: Readable | null, onHook: (hook: string | undefined) 
       if (ev.event === "child_start" && ev.child_class === "hook" && ev.hook_name) {
         open.set(ev.child_id, ev.hook_name);
         onHook(ev.hook_name);
-      } else if (ev.event === "child_exit" && open.delete(ev.child_id)) {
+      } else if (ev.event === "child_exit" && open.has(ev.child_id)) {
+        if (ev.code) failed = open.get(ev.child_id);
+        open.delete(ev.child_id);
         onHook(open.size > 0 ? [...open.values()].pop() : undefined);
       }
     }
   });
+  return () => failed;
 }
 
 /**
@@ -309,7 +315,7 @@ export function runWatched(
       if (child.pid) fireAndForget("git", killGroup(child.pid, exited), `stopping ${cmd} ${args[0] ?? ""}`);
     };
     if (child.pid) opts.onSpawn?.(child.pid, kill);
-    if (opts.onHook) watchHooks(child.stdio[3] as Readable | null, opts.onHook);
+    const failedHook = opts.onHook ? watchHooks(child.stdio[3] as Readable | null, opts.onHook) : undefined;
     if (opts.timeoutMs) {
       timer = setTimeout(() => {
         timedOut = true;
@@ -345,6 +351,7 @@ export function runWatched(
         exit,
         text,
         ...(timedOut && opts.timeoutMs ? { ceilingMs: opts.timeoutMs } : {}),
+        ...(failedHook?.() ? { hook: failedHook() } : {}),
       });
     });
   });

@@ -439,6 +439,18 @@ describe("chat folding", () => {
       setSystemTime();
     }
   });
+  test("a message Toyon sent the agent itself is its reason on the chat, never a bubble", () => {
+    const s = run([
+      hello(wt("a")),
+      agent("a", {
+        type: "user-message",
+        text: "The repo's check failed. Fix what it reports.",
+        ts: 0,
+        asked: { kind: "check", why: "the check failed" },
+      }),
+    ]);
+    expect(s.local.a?.chat).toEqual([{ kind: "asked", why: "the check failed" }]);
+  });
   test("text deltas append to the open assistant item; a user message starts a new one", () => {
     const s = run([
       hello(wt("a")),
@@ -1467,17 +1479,15 @@ describe("drafts", () => {
     s = run([hello(wt("a"))], s);
     expect(s.chats.r).toBeUndefined();
   });
-  test("a sync-conflict suggestion lands in that worktree's draft without selecting it", () => {
+  test("a failure the agent was sent to fix draws nothing: the transcript's own row says it", () => {
     const s = run([
       hello(wt("main", "main"), wt("a")),
       { a: "activate", id: "main" },
-      server({ t: "shipped", worktreeId: "a", ok: false, message: "conflicts", suggestion: "Merge main and fix" }),
+      server({ t: "shipped", worktreeId: "a", ok: false, message: "conflicts", asked: true }),
     ]);
-    // the op ran for seconds; whatever chat is being read stays on screen
     expect(s.activeId).toBe("main");
-    expect(s.local.a?.draft).toBe("Merge main and fix");
-    // the failure is read on that worktree's chat, above the box the suggestion filled
-    expect(localOf(s, "a").chat.at(-1)).toEqual({ kind: "error", text: "conflicts" });
+    expect(localOf(s, "a").chat).toEqual([]);
+    expect(s.local.a?.draft ?? "").toBe("");
   });
 });
 

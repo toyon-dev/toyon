@@ -85,6 +85,14 @@ export class LandingService {
 
   constructor(private d: LandingServiceDeps) {
     d.hub.on("turnSettled", (id, turn) => fireAndForget(id, this.settle(id, turn), "landing verdict"));
+    // the message a hook turned down is written again, told what the hook said
+    d.hub.on("messageRefused", (id, said) =>
+      fireAndForget(
+        id,
+        this.judge(id, `The commit-msg hook refused the last message, saying: ${said}`),
+        "landing message after a refusal",
+      ),
+    );
     d.hub.on("agentStatus", (id, status) => {
       this.note(id, status);
       if (status === "working") this.turnStarts(id);
@@ -294,6 +302,7 @@ export class LandingService {
     let check: Landing["check"] = "none";
     let checkTail: string | undefined;
     let waited = 0;
+    let exit: ExecResult["exit"] | undefined;
     const command = repo.config.check?.trim();
     if (command) {
       const ceiling = timeoutFor(repo.config, "check");
@@ -318,6 +327,7 @@ export class LandingService {
       }
       run.finish(r.exit);
       if (!live()) return;
+      exit = r.exit;
       check = r.exit === 0 ? "pass" : "fail";
       if (r.exit === "timeout") {
         // the first line of the tail is what the placeholder says, so the ceiling goes first
@@ -381,6 +391,12 @@ export class LandingService {
       `landing: check ${check}${landing.why ? ", doubted" : ""}${opts.ask ? "" : ", check only"}, ${Date.now() - started}ms${waited > 100 ? ` (waited ${waited}ms for a check slot)` : ""}`,
     );
     this.d.worktrees.setLanding(worktreeId, landing);
+    // After the verdict is on the row, since the turn this starts is what takes the verdict down.
+    // Not for a check killed at its ceiling or stopped, which names nothing to fix, and not for
+    // the quiet one after a discard: the person just took work out, and an agent set going on
+    // what is left could put it back.
+    if (command && check === "fail" && typeof exit === "number" && !opts.quiet)
+      this.d.hub.emit("checkFailed", worktreeId, command);
   }
 
   /** whether the work touches a migration while the tree names a shared database or stack and

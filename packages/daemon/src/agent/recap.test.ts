@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentEvent, ToolKind } from "@toyon/shared";
-import { factsOf, openAskOf, parseRecap, turnsSince } from "./recap.ts";
+import { factsOf, firstAskOf, openAskOf, parseRecap, turnsSince } from "./recap.ts";
 
 const log = (...events: AgentEvent[]) => events.map((event, seq) => ({ seq, event }));
 const user = (text: string, ts: number): AgentEvent => ({ type: "user-message", text, ts });
@@ -21,6 +21,25 @@ const done = (toolId: string, isError?: boolean): AgentEvent => ({
   ...(isError ? { isError } : {}),
 });
 
+describe("a message Toyon sent itself", () => {
+  const fix: AgentEvent = {
+    type: "user-message",
+    text: "The repo's check failed. Fix what it reports.",
+    ts: 5,
+    asked: { kind: "check", why: "the check failed" },
+  };
+  test("starts a turn as the failure it was sent for, never as the person's words", () => {
+    const turns = turnsSince(log(user("add a header", 1), start(2), say("Added."), end(3), fix, start(6), end(7)), 0);
+    expect(turns.map((t) => [t.asks, t.fixes])).toEqual([
+      [["add a header"], []],
+      [[], ["the check failed"]],
+    ]);
+  });
+  test("is not the task, even when it is the first thing on the transcript", () => {
+    expect(firstAskOf(log(fix, user("add a header", 9)))).toBe("add a header");
+  });
+});
+
 describe("turnsSince", () => {
   test("a turn is its message, its tools and how it ended; the reply is what came after the last tool", () => {
     const turns = turnsSince(
@@ -37,7 +56,7 @@ describe("turnsSince", () => {
       0,
     );
     expect(turns).toEqual([
-      { asks: ["add a header"], reply: "Added it.", edits: 1, toolErrors: 0, stop: "end_turn", newestTs: 9 },
+      { asks: ["add a header"], fixes: [], reply: "Added it.", edits: 1, toolErrors: 0, stop: "end_turn", newestTs: 9 },
     ]);
   });
 
@@ -105,7 +124,7 @@ describe("turnsSince", () => {
   test("a refused login before any turn started still makes one", () => {
     const auth: AgentEvent = { type: "agent-auth-required", agent: "claude", agentName: "Claude", methods: [], ts: 2 };
     expect(turnsSince(log(user("hi", 1), auth), 0)).toEqual([
-      { asks: ["hi"], reply: "", edits: 0, toolErrors: 0, auth: true, newestTs: 2 },
+      { asks: ["hi"], fixes: [], reply: "", edits: 0, toolErrors: 0, auth: true, newestTs: 2 },
     ]);
   });
 });

@@ -1063,6 +1063,12 @@ export const ChatItemView = memo(function ChatItemView({
           <span className="tool-hint">{item.branch}</span>
         </DaemonRow>
       );
+    case "asked":
+      return (
+        <DaemonRow icon="chat" word="agent asked" tone="quiet">
+          <span className="daemon-text">{item.why}</span>
+        </DaemonRow>
+      );
     case "landed":
       return <LandedRow item={item} />;
     case "restored":

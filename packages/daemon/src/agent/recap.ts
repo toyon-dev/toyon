@@ -10,6 +10,8 @@ import type { TranscriptEntry } from "./transcript.ts";
 export interface TurnSlice {
   /** what the person sent: the message that started it, and any steered in while it ran */
   asks: string[];
+  /** what Toyon sent itself, as the failure each asked the agent to fix; never the person's words */
+  fixes: string[];
   /** the agent's text after its last tool call: how it ended, not the narration on the way there */
   reply: string;
   edits: number;
@@ -35,8 +37,8 @@ export function clip(text: string, max = CLIP): string {
   return line.length > max ? `${line.slice(0, max - 1)}…` : line;
 }
 
-function slice(asks: string[], ts: number): TurnSlice {
-  return { asks, reply: "", edits: 0, toolErrors: 0, newestTs: ts };
+function slice(asks: string[], fixes: string[], ts: number): TurnSlice {
+  return { asks, fixes, reply: "", edits: 0, toolErrors: 0, newestTs: ts };
 }
 
 /** The turns whose newest event is after `seenAt`, and always the last one: arriving while a turn
@@ -46,25 +48,29 @@ function slice(asks: string[], ts: number): TurnSlice {
 export function turnsSince(entries: readonly TranscriptEntry[], seenAt: number): TurnSlice[] {
   const turns: TurnSlice[] = [];
   let pending: string[] = [];
+  let pendingFixes: string[] = [];
   let open: TurnSlice | null = null;
   const writes = new Set<string>();
   /** the refusing choices of each permission card still open, by card */
   const refusals = new Map<string, Set<string>>();
   const start = (ts: number) => {
-    const t = slice(pending, ts);
+    const t = slice(pending, pendingFixes, ts);
     pending = [];
+    pendingFixes = [];
     turns.push(t);
     return t;
   };
   for (const { event: e } of entries) {
     if (open && "ts" in e) open.newestTs = Math.max(open.newestTs, e.ts);
     switch (e.type) {
-      case "user-message":
+      case "user-message": {
         // steered into the turn still running; a failed turn is over even without its turn-end, so
         // a message after one waits for the turn it starts
-        if (open && open.stop === undefined && open.error === undefined && !open.auth) open.asks.push(e.text);
-        else pending.push(e.text);
+        const into = open && open.stop === undefined && open.error === undefined && !open.auth ? open : null;
+        if (e.asked) (into?.fixes ?? pendingFixes).push(e.asked.why);
+        else (into?.asks ?? pending).push(e.text);
         break;
+      }
       case "turn-start":
         open = start(e.ts);
         break;
@@ -159,7 +165,7 @@ export function factsOf(turns: readonly TurnSlice[], end: TurnEnd, ask?: string)
 
 /** the first thing anyone asked here: the task itself, whatever the title has become */
 export function firstAskOf(entries: readonly TranscriptEntry[]): string | undefined {
-  for (const { event: e } of entries) if (e.type === "user-message" && e.text.trim()) return e.text;
+  for (const { event: e } of entries) if (e.type === "user-message" && !e.asked && e.text.trim()) return e.text;
   return undefined;
 }
 

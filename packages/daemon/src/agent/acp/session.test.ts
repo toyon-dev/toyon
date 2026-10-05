@@ -586,6 +586,20 @@ describe("AcpSession", () => {
     await w.session.close();
   });
 
+  test("a message Toyon sends itself is recorded with its reason, and reaches the agent as its words", async () => {
+    const fake = fakeAgent(say("on it"));
+    const w = world(fake);
+    w.session.send("Fix what the check reports.", { asked: { kind: "check", why: "the check failed" } });
+    await w.idle();
+    expect(w.events[0]).toMatchObject({
+      type: "user-message",
+      text: "Fix what the check reports.",
+      asked: { kind: "check", why: "the check failed" },
+    });
+    expect(fake.prompts[0]!.prompt[0]).toEqual({ type: "text", text: "Fix what the check reports." });
+    await w.session.close();
+  });
+
   test("a turn: user-message, turn-start, session-info, deltas, turn-end; transcript on disk; status back to idle", async () => {
     const fake = fakeAgent(say("hello"));
     const w = world(fake);

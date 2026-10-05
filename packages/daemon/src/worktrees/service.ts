@@ -21,6 +21,7 @@ import {
   describeDuration,
   type GitFileStatus,
   hasOwnBranch,
+  isLead,
   isMain,
   isProvisional,
   isWriteTool,
@@ -48,6 +49,7 @@ import type { OptionField } from "../agent/acp/options.ts";
 import { attachmentsDirFor, isAttachmentFile } from "../agent/attachments.ts";
 import { canonical } from "../agent/bounds.ts";
 import { PLANS_DIR } from "../agent/planDoc.ts";
+import { type FixReason, fixPrompt } from "../agent/prompt.ts";
 import { firstAskOf } from "../agent/recap.ts";
 import type { AgentRegistry } from "../agent/registry.ts";
 import { makeNamer, taskText } from "../agent/tasks.ts";
@@ -115,6 +117,7 @@ import { type ArchiveRecord, type ChatFiles, firstPrompt, lastUsage, summarize, 
 import { ArchivedGit } from "./archivedGit.ts";
 import type { ArtifactCache } from "./cache.ts";
 import { discoverIn, type FoundWorktree } from "./discover.ts";
+import type { FixService } from "./fix.ts";
 import { branchSlug, cleanTitle, freeSlot, shortId, titleFrom, variantLens } from "./naming.ts";
 import { SparePool } from "./spare.ts";
 import { mainOf, Trunk } from "./trunk.ts";
@@ -265,7 +268,13 @@ export interface WorktreeServiceDeps {
   /** the setup and commit runs as the rows carry them; the daemon shares one with the landing
    * service and the handlers, a test may leave it to the service */
   runs?: RunService;
+  /** how a failure the agent can fix is sent to it; without one nothing is */
+  fix?: Pick<FixService, "ask">;
 }
+
+/** a landing op's result as the service hands it on: `asked` when the agent was sent the turn that
+ * fixes the failure, which the transcript then says in the line's place */
+export type Shipped = ShipResult & { asked?: true };
 
 /** the row's command as a person would have typed it: a plain word as is, anything else quoted.
  * A commit message shows its subject; the row is a record of what ran, not a line to paste. */
@@ -1590,9 +1599,10 @@ export class WorktreeService {
         const run = (onText: (text: string) => void, signal?: AbortSignal) =>
           stepRun(cwd, args, onText, signal, {
             timeoutMs: ceiling,
-            ...(handle
-              ? { onSpawn: handle.spawned, onHook: (hook) => handle.stage(hook ? `${hook} hook` : undefined) }
-              : {}),
+            ...(handle ? { onSpawn: handle.spawned } : {}),
+            // every step's hooks are watched, a push's as much as a commit's: the one that exits
+            // non-zero is what refused the step, and only git's trace says which
+            onHook: (hook) => handle?.stage(hook ? `${hook} hook` : undefined),
           });
         const watched = async () => {
           if (!this.d.watch) return run(() => {});
@@ -1645,7 +1655,7 @@ export class WorktreeService {
    * commit stands even when the rebase after it conflicts, since the work is safer committed. The
    * worktree stays, marked landed once the work is on main here, so the conversation can go on;
    * closing it is its own press. Returns any variant siblings to offer up. */
-  async land(worktreeId: string, message?: string): Promise<{ result: ShipResult; archiveIds?: string[] }> {
+  async land(worktreeId: string, message?: string): Promise<{ result: Shipped; archiveIds?: string[] }> {
     const { wt, repo } = this.landable(worktreeId, "land");
     // inside the op, so the press is the one out on the row from its first tick
     const out = await this.ship(wt.id, "land", async (): Promise<{ result: ShipResult; archiveIds?: string[] }> => {
@@ -1655,7 +1665,50 @@ export class WorktreeService {
       return this.landOp(wt, repo, message);
     });
     if (out.result.ok && out.archiveIds) this.noteLanded(wt, out.result.message, out.archiveIds);
-    return out;
+    return { ...out, result: this.fixShip(wt, out.result, baseOf(repo)) };
+  }
+
+  /** What a landing op's failure asks of the agent, after the op, whose hold on the queue is gone
+   * by now. A hook that refused a commit or a push printed why on the transcript, and a rebase or
+   * merge that stopped on conflicts names what to merge: both are the agent's to fix. A
+   * commit-msg hook judged the message and not the tree, so the message is written again with
+   * what the hook said, and the line says so. The op is not run again when the fix is in: the fix
+   * changes what the press was about, and the check after the turn offers the word on the new
+   * tree. */
+  private fixShip(wt: WorktreeInfo, result: ShipResult, base: string): Shipped {
+    if (result.ok) return result;
+    if (result.hook?.name === "commit-msg") {
+      this.d.hub.emit("messageRefused", wt.id, result.hook.said);
+      return { ...result, message: "the commit-msg hook refused the message: another is being written" };
+    }
+    const reason: FixReason | null = result.hook
+      ? { kind: "hook", hook: result.hook.name }
+      : result.conflict
+        ? { kind: "conflict", base, how: result.conflict }
+        : null;
+    return reason && this.d.fix?.ask(wt.id, reason) ? { ...result, asked: true } : result;
+  }
+
+  /** The boot pane's "ask the agent to fix it", for a dev server that crashed or never answered:
+   * the diagnosis, the command and the output tail, as the daemon holds them. The lead has no
+   * task yet, so its fix is the worktree its box would start, with the diagnosis as its task: the
+   * provisional row itself, or a worktree of main's own, whose procs start from the same broken
+   * command. */
+  async fixPreview(worktreeId: string, clientId?: string): Promise<void> {
+    const wt = this.d.state.requireWorktree(worktreeId);
+    const reason: FixReason = {
+      kind: "preview",
+      procs: this.d.runtime.get(worktreeId)?.procs?.states() ?? [],
+      log: this.d.runtime.recentLogs(worktreeId),
+    };
+    if (!isLead(wt)) {
+      if (!this.d.fix?.ask(worktreeId, reason)) throw new UserError("worktree still starting; try again in a moment");
+      return;
+    }
+    await this.create(wt.repoId, fixPrompt(reason), {
+      ...(clientId ? { createdBy: clientId } : {}),
+      ...(isProvisional(wt) ? { worktreeId } : {}),
+    });
   }
 
   /** A land pressed mid-turn was offered on the verdict's tree, and the agent can write a file
@@ -2029,7 +2082,7 @@ export class WorktreeService {
    * because there both refuse a dirty tree before touching it and abort on a conflict, so the
    * directory is left as it was found in every case but success. A worktree toyon runs is dirty as
    * a rule (its agent never commits), so there the uncommitted work is carried across the sync. */
-  async sync(worktreeId: string): Promise<{ result: ShipResult; base: string }> {
+  async sync(worktreeId: string): Promise<{ result: Shipped; base: string }> {
     const r = this.readable(worktreeId);
     if (!r) throw new UserError("that worktree is gone");
     if (r.wt && isMain(r.wt)) throw new UserError("sync from a worktree, not main");
@@ -2062,7 +2115,7 @@ export class WorktreeService {
       }
       return taken;
     });
-    return { result, base: r.base };
+    return { result: r.wt ? this.fixShip(r.wt, result, r.base) : result, base: r.base };
   }
 
   /** Fast-forward main to its upstream, the trunk's own way (a fetch, then the fast-forward under
@@ -2086,11 +2139,12 @@ export class WorktreeService {
     });
   }
 
-  async commit(worktreeId: string, message: string): Promise<ShipResult> {
+  async commit(worktreeId: string, message: string): Promise<Shipped> {
     const wt = this.d.state.requireWorktree(worktreeId);
     const m = message.trim();
     if (!m) throw new UserError("commit message required");
-    return this.ship(wt.id, "commit", () => this.commitRecorded(wt, m));
+    const base = baseOf(this.d.state.requireRepo(wt.repoId));
+    return this.fixShip(wt, await this.ship(wt.id, "commit", () => this.commitRecorded(wt, m)), base);
   }
 
   /** stored, not cached: the first frame of a page load reads it before git has been asked */

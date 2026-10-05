@@ -3,7 +3,7 @@
 // it; the others get it prepended to the first prompt of a session.
 
 import type { ContentBlock } from "@agentclientprotocol/sdk";
-import type { FileRef, ImageRef, PasteRef, PickRef, ProcStatus } from "@toyon/shared";
+import type { FileRef, ImageRef, LogLine, PasteRef, PickRef, ProcState, ProcStatus } from "@toyon/shared";
 import { attachmentLabel, fmtBytes, lineSpan } from "@toyon/shared";
 import type { Stored } from "./attachments.ts";
 
@@ -22,6 +22,104 @@ export const SYSTEM_APPEND = [
   "When you scaffold a project, write its .gitignore (dependencies, build output, local env files) before installing anything, so an install never leaves thousands of untracked files for the user to wade through or commit.",
   "When you scaffold a project or change how it installs or starts, finish by updating the settings file Toyon already reads, or writing .toyon/settings.json when there is none, so the preview can run it.",
 ].join(" ");
+
+/** A failure the agent can fix, as whoever met it names it: a hook that refused a commit or a push,
+ * a rebase or merge that stopped on conflicts, the repo's check, a dev server that will not come
+ * up. Each is one message to the agent and one line for the person reading the chat. */
+export type FixReason =
+  | { kind: "hook"; hook: string }
+  | { kind: "conflict"; base: string; how: "rebase" | "merge" }
+  | { kind: "check"; command: string }
+  | { kind: "preview"; procs: readonly ProcState[]; log: readonly LogLine[] };
+
+/** what the agent is told */
+export function fixPrompt(r: FixReason): string {
+  switch (r.kind) {
+    case "hook":
+      return hookFixPrompt(r.hook);
+    case "conflict":
+      return conflictFixPrompt(r.base, r.how);
+    case "check":
+      return checkFixPrompt(r.command);
+    case "preview":
+      return procFixPrompt(r.procs, r.log);
+  }
+}
+
+/** what the row on the chat says in the message's place: what failed, in a few words */
+export function fixWhy(r: FixReason): string {
+  switch (r.kind) {
+    case "hook":
+      return `the ${r.hook} hook refused the ${r.hook.includes("push") ? "push" : "commit"}`;
+    case "conflict":
+      return r.how === "rebase" ? `the branch needs a rebase onto ${r.base}` : `the branch needs ${r.base} merged in`;
+    case "check":
+      return "the check failed";
+    case "preview":
+      return "the dev server is not reachable";
+  }
+}
+
+/** What the agent is sent when a hook refuses a commit or a push the person pressed: the hook's
+ * output is on the transcript already, as the row before this message. Never a commit-msg hook,
+ * which judges the message and not the tree: that one is answered with a new message. */
+export function hookFixPrompt(hook: string): string {
+  return [
+    `The ${hook} hook refused that, and what it printed is in the command output just before this message.`,
+    "Fix what it complains about, inside this worktree.",
+    "Do not skip the hook, do not edit it or its configuration to get past it, and do not commit: Toyon runs the check when your turn ends, and the user lands from there.",
+  ].join(" ");
+}
+
+/** What the agent is sent to clear a conflict, in the words of how the base was being taken in:
+ * a merge made to clear a rebase's conflict is one more thing the next sync has to work around,
+ * and a merge left uncommitted is not in the branch for it to find. */
+export function conflictFixPrompt(base: string, how: "rebase" | "merge"): string {
+  return how === "rebase"
+    ? `Rebase this branch onto ${base} and resolve the conflicts, keeping any uncommitted changes, then verify the app still works.`
+    : `Merge ${base} into this branch, resolve the conflicts and commit the merge, then verify the app still works.`;
+}
+
+/** What the agent is sent when the repo's check fails after its turn: the check's output is on the
+ * transcript already, as the row before this message. */
+export function checkFixPrompt(command: string): string {
+  return [
+    `The repo's check, \`${command}\`, failed, and what it printed is in the command output just before this message.`,
+    "Fix what it reports, inside this worktree.",
+    "Do not weaken the check or its configuration to get past it. Toyon runs it again when your turn ends.",
+  ].join(" ");
+}
+
+/** how much output the agent gets: the tail that holds the error, not the scrollback */
+const PROC_TAIL = 40;
+
+/** What "ask the agent to fix it" sends when a dev server never answered or crashed: the
+ * supervisor's diagnosis, the command and the port it was given, the output tail, and the one
+ * rule the fix has to satisfy. The agent edits inside its worktree; the daemon restarts a crashed
+ * or unreachable proc when the turn ends, so the loop closes without another click. */
+export function procFixPrompt(procs: readonly ProcState[], log: readonly LogLine[]): string {
+  const bad = procs.filter((p) => p.status === "crashed" || p.status === "unreachable");
+  const lines = bad.map((p) => `- \`${p.name}\`: \`${p.command}\`, started with PORT=${p.port}. ${procDiagnosis(p)}`);
+  const tail = log
+    .slice(-PROC_TAIL)
+    .map((l) => `[${l.proc}] ${l.line}`)
+    .join("\n");
+  return [
+    "The dev server in this worktree is not reachable, so the preview is empty.",
+    "",
+    ...lines,
+    "",
+    tail ? `Last output:\n\`\`\`\n${tail}\n\`\`\`` : "It produced no output.",
+    "",
+    "Find the cause and fix it. The command must run in the foreground and listen on the port in the PORT environment variable, which Toyon sets differently for each worktree. If the tool takes its port from a flag instead (Vite does), make the app read PORT, for Vite `server.port: Number(process.env.PORT)` with `strictPort: true`, or add the flag to the start command in toyon's settings file. When your turn ends toyon restarts the process and checks again.",
+  ].join("\n");
+}
+
+function procDiagnosis(p: ProcState): string {
+  if (p.detail) return p.detail;
+  if (p.status === "crashed") return p.exitCode != null ? `It exited with code ${p.exitCode}.` : "It crashed.";
+  return "It never answered on that port.";
+}
 
 /** where the project's preview stands as a message goes out, for the block that tells the agent */
 export interface PreviewStanding {

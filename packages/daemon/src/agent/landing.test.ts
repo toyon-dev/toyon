@@ -63,7 +63,18 @@ describe("parseLanding", () => {
 });
 
 describe("landPrompt", () => {
-  const turn = (asks: string[], reply: string) => ({ asks, reply, edits: 1, toolErrors: 0, newestTs: 1 });
+  const turn = (asks: string[], reply: string) => ({ asks, fixes: [], reply, edits: 1, toolErrors: 0, newestTs: 1 });
+
+  test("a fix Toyon asked for is named as Toyon's, so the message is not written as if the person asked", () => {
+    const p = landPrompt({
+      title: "dark mode",
+      turns: [{ ...turn([], "Fixed the two lint errors."), fixes: ["the pre-commit hook refused the commit"] }],
+      diffStat: "",
+      recentSubjects: [],
+    });
+    expect(p).toContain("Toyon, not the user, asked for a fix: the pre-commit hook refused the commit");
+    expect(p).not.toContain("User asked");
+  });
 
   test("carries the task, the recent subjects, the newest turns and the diff", () => {
     const p = landPrompt({

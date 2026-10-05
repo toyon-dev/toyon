@@ -17,6 +17,19 @@ const said = (seq: number, text: string, ts: number) => e(seq, { type: "user-mes
 const jsonl = (entries: TranscriptEntry[]) => entries.map((x) => `${JSON.stringify(x)}\n`).join("");
 
 describe("saidRows", () => {
+  test("a message Toyon sent itself is no row: nobody typed it, and nobody would search for it", () => {
+    const rows = saidRows([
+      e(0, {
+        type: "user-message",
+        text: "The repo's check failed. Fix what it reports.",
+        ts: 10,
+        asked: { kind: "check", why: "the check failed" },
+      }),
+      e(1, { type: "turn-start", ts: 11 }),
+      e(2, { type: "text-delta", text: "Fixed." }),
+    ]);
+    expect(rows.map(({ role, text }) => ({ role, text }))).toEqual([{ role: "assistant", text: "Fixed." }]);
+  });
   test("a message is a row, and a run of prose is one row named by its first seq with its turn's time", () => {
     const rows = saidRows([
       said(0, "tidy the footer", 10),

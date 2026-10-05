@@ -1,35 +1,4 @@
-import type { LogLine, ProcState, RepoInfo, SharedServices, WorktreeStatus } from "@toyon/shared";
-
-/** how much output the agent gets: the tail that holds the error, not the scrollback */
-const TAIL = 40;
-
-/** What "ask the agent to fix it" sends when a dev server never answered or crashed: the
- * supervisor's diagnosis, the command and the port it was given, the output tail, and the one
- * rule the fix has to satisfy. The agent edits inside its worktree; the daemon restarts a crashed
- * or unreachable proc when the turn ends, so the loop closes without another click. */
-export function procFixPrompt(w: WorktreeStatus, log: LogLine[]): string {
-  const bad = w.procs.filter((p) => p.status === "crashed" || p.status === "unreachable");
-  const lines = bad.map((p) => `- \`${p.name}\`: \`${p.command}\`, started with PORT=${p.port}. ${describe(p)}`);
-  const tail = log
-    .slice(-TAIL)
-    .map((l) => `[${l.proc}] ${l.line}`)
-    .join("\n");
-  return [
-    "The dev server in this worktree is not reachable, so the preview is empty.",
-    "",
-    ...lines,
-    "",
-    tail ? `Last output:\n\`\`\`\n${tail}\n\`\`\`` : "It produced no output.",
-    "",
-    "Find the cause and fix it. The command must run in the foreground and listen on the port in the PORT environment variable, which Toyon sets differently for each worktree. If the tool takes its port from a flag instead (Vite does), make the app read PORT, for Vite `server.port: Number(process.env.PORT)` with `strictPort: true`, or add the flag to the start command in toyon's settings file. When your turn ends toyon restarts the process and checks again.",
-  ].join("\n");
-}
-
-function describe(p: ProcState): string {
-  if (p.detail) return p.detail;
-  if (p.status === "crashed") return p.exitCode != null ? `It exited with code ${p.exitCode}.` : "It crashed.";
-  return "It never answered on that port.";
-}
+import type { RepoInfo, SharedServices } from "@toyon/shared";
 
 /** What "ask the agent to keep them apart" sends from the setup pane when the tree names a
  * database or a compose stack and the settings keep no worktree apart from the others. Toyon does

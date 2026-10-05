@@ -1,7 +1,15 @@
 // What the rest of the daemon needs from an agent session. AcpSession (agent/acp/session.ts) is
 // the implementation; tests use a fake.
 
-import type { AgentCommand, AgentEvent, AgentStatus, AskAnswer, AttachmentInput, QueuedMessage } from "@toyon/shared";
+import type {
+  AgentCommand,
+  AgentEvent,
+  AgentStatus,
+  AskAnswer,
+  Asked,
+  AttachmentInput,
+  QueuedMessage,
+} from "@toyon/shared";
 
 /** a login the agent's own CLI runs in a terminal */
 export interface LoginRun {
@@ -37,6 +45,8 @@ export interface SendOpts {
   context?: string[];
   /** in the order they were attached, which is the order the prompt carries them in */
   attachments?: AttachmentInput[];
+  /** the message is Toyon's own, sent for this reason, and the transcript records it as such */
+  asked?: Asked;
 }
 
 export interface AgentAdapter {

@@ -5,6 +5,7 @@ import { SHELL_TOOL } from "@toyon/shared";
 import type { FakeAgent } from "../../test/helpers/fakes.ts";
 import { sh } from "../../test/helpers/tmp-repo.ts";
 import { registered, setRoute, until, useWorld, w } from "../../test/helpers/world.ts";
+import { fixPrompt } from "../agent/prompt.ts";
 import { UserError } from "../core/errors.ts";
 import { GIT, git } from "../git/exec.ts";
 import { CARRIED } from "../git/land.ts";
@@ -169,6 +170,85 @@ describe("landing", () => {
     sh(w.repo, "git", "config", "core.hooksPath", hooks);
   };
   const recorded = (id: string) => (w.runtime.agentFor(id) as unknown as FakeAgent).recorded;
+  /** what the agent was sent after the message that made the worktree, and its words alone */
+  const sent = (id: string) =>
+    (w.runtime.agentFor(id) as unknown as FakeAgent).sent.slice(1).map(({ text, asked }) => ({ text, asked }));
+  const asked = (id: string) => sent(id).map((m) => m.text);
+
+  test("a commit git itself refuses asks nobody; a hook's refusal is the agent's, as Toyon's own message", async () => {
+    const repoId = await registered();
+    const wt = await w.worktrees.create(repoId, "feature");
+    const before = w.state.worktree(wt.id)?.promptedAt;
+    writeFileSync(join(wt.path, "feature.txt"), "x\n");
+    // no hook here: an index someone else holds is git's own refusal, with nothing to fix
+    const lock = join((await git(wt.path, "rev-parse", "--absolute-git-dir")).out, "index.lock");
+    writeFileSync(lock, "");
+    const plain = await w.worktrees.commit(wt.id, "add feature");
+    expect(plain.ok).toBe(false);
+    expect(plain.asked).toBeUndefined();
+    expect(asked(wt.id)).toEqual([]);
+    rmSync(lock);
+    refusingHook(["one file rejected"]);
+    const refused = await w.worktrees.commit(wt.id, "add feature");
+    expect(refused.asked).toBe(true);
+    expect(sent(wt.id)).toEqual([
+      {
+        text: fixPrompt({ kind: "hook", hook: "pre-commit" }),
+        asked: { kind: "hook", why: "the pre-commit hook refused the commit" },
+      },
+    ]);
+    // not the person's send: the rail sorts on theirs
+    expect(w.state.worktree(wt.id)?.promptedAt).toBe(before);
+  });
+
+  test("a commit-msg hook's refusal is answered with a new message, not a turn", async () => {
+    const repoId = await registered();
+    const wt = await w.worktrees.create(repoId, "feature");
+    refusingHook(["subject over 72 characters"], "commit-msg");
+    writeFileSync(join(wt.path, "feature.txt"), "x\n");
+    const result = await w.worktrees.commit(wt.id, "add feature");
+    expect(result).toMatchObject({
+      ok: false,
+      message: "the commit-msg hook refused the message: another is being written",
+    });
+    expect(result.asked).toBeUndefined();
+    expect(asked(wt.id)).toEqual([]);
+    expect(w.refused).toEqual([[wt.id, "subject over 72 characters\nand on stderr"]]);
+  });
+
+  test("a failed check is the agent's to fix once, until a message that is not that ask", async () => {
+    const repoId = await registered();
+    const wt = await w.worktrees.create(repoId, "feature");
+    const agent = w.runtime.agentFor(wt.id) as unknown as FakeAgent;
+    // a fake records no turns, so each message is put on its transcript the way a session would
+    const heard = () => {
+      const m = agent.sent.at(-1)!;
+      agent.note({ type: "user-message", text: m.text, ts: 1, ...(m.asked ? { asked: m.asked } : {}) });
+    };
+    const check = fixPrompt({ kind: "check", command: "bun run check" });
+    w.hub.emit("checkFailed", wt.id, "bun run check");
+    expect(sent(wt.id)).toEqual([{ text: check, asked: { kind: "check", why: "the check failed" } }]);
+    heard();
+    // the fix turn ends in the same check: a second failure waits for the person
+    w.hub.emit("checkFailed", wt.id, "bun run check");
+    expect(asked(wt.id)).toEqual([check]);
+    await w.worktrees.send(wt.id, { text: "try the other way" });
+    heard();
+    w.hub.emit("checkFailed", wt.id, "bun run check");
+    expect(asked(wt.id)).toEqual([check, "try the other way", check]);
+  });
+
+  test("the boot pane's fix is the agent's, with the daemon's own diagnosis", async () => {
+    const repoId = await registered();
+    const wt = await w.worktrees.create(repoId, "feature");
+    await w.worktrees.fixPreview(wt.id);
+    expect(sent(wt.id)).toEqual([
+      {
+        text: expect.stringContaining("The dev server in this worktree is not reachable"),
+        asked: { kind: "preview", why: "the dev server is not reachable" },
+      },
+    ]);
+  });
 
   test("a commit a hook refuses goes on the transcript whole, as the rows a ! command leaves", async () => {
     const repoId = await registered();
@@ -178,6 +258,9 @@ describe("landing", () => {
     const result = await w.worktrees.commit(wt.id, "add feature\n\nwith a body");
     expect(result.ok).toBe(false);
     expect(result.message).toBe("commit refused: what git and its hooks printed is on the chat");
+    // the hook's output is on the transcript, so the turn that fixes it is sent, not left to type
+    expect(result.asked).toBe(true);
+    expect(asked(wt.id)).toEqual([fixPrompt({ kind: "hook", hook: "pre-commit" })]);
     const rows = recorded(wt.id);
     expect(rows.map((e) => e.type)).toEqual(["tool-start", "tool-end"]);
     const start = rows[0];
@@ -209,6 +292,12 @@ describe("landing", () => {
     const { result } = await w.worktrees.land(wt.id, "add feature");
     expect(result.ok).toBe(false);
     expect(result.message).toBe("push failed: what git and its hooks printed is on the chat");
+    expect(sent(wt.id)).toEqual([
+      {
+        text: fixPrompt({ kind: "hook", hook: "pre-push" }),
+        asked: { kind: "hook", why: "the pre-push hook refused the push" },
+      },
+    ]);
     const rows = recorded(wt.id);
     expect(rows.map((e) => e.type)).toEqual(["tool-start", "tool-end"]);
     // the push runs in the worktree, so its row is the plain command
@@ -323,6 +412,14 @@ describe("landing", () => {
     const { result } = await w.worktrees.land(wt.id);
     expect(result.ok).toBe(false);
     expect(result.conflict).toBe("rebase");
+    // resolving them is the agent's, so it is sent the turn and the composer is left alone
+    expect(result.asked).toBe(true);
+    expect(sent(wt.id)).toEqual([
+      {
+        text: fixPrompt({ kind: "conflict", base: "main", how: "rebase" }),
+        asked: { kind: "conflict", why: "the branch needs a rebase onto main" },
+      },
+    ]);
     expect((await git(wt.path, "status", "--porcelain")).out).toBe("");
     expect(readFileSync(join(wt.path, "README.md"), "utf8")).toBe("theirs\n");
     expect((await git(wt.path, "log", "-1", "--format=%s")).out).toBe("theirs");
@@ -471,6 +568,8 @@ describe("landing", () => {
     const { result } = await w.worktrees.sync(wt.id);
     expect(result.ok).toBe(false);
     expect(result.conflict).toBe("rebase");
+    expect(result.asked).toBe(true);
+    expect(asked(wt.id)).toEqual([fixPrompt({ kind: "conflict", base: "main", how: "rebase" })]);
     expect((await git(wt.path, "status", "--porcelain")).out).toBe("");
     expect(readFileSync(join(wt.path, "README.md"), "utf8")).toBe("theirs\n");
   });

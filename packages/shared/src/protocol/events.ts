@@ -196,8 +196,16 @@ export interface AskChoice {
 
 export type AskOutcome = "answered" | "skipped" | "cancelled" | "expired";
 
+/** Why Toyon sent the agent a message nobody typed: something failed that the agent can fix. The
+ * transcript keeps it on the message, which is drawn as Toyon's own row saying `why` and not as
+ * a bubble of the person's. */
+export interface Asked {
+  kind: "hook" | "conflict" | "check" | "preview";
+  why: string;
+}
+
 export type AgentEvent =
-  | { type: "user-message"; text: string; ts: number; attachments?: AttachmentRef[] }
+  | { type: "user-message"; text: string; ts: number; attachments?: AttachmentRef[]; asked?: Asked }
   | { type: "turn-start"; ts: number }
   /** `messageId` names the agent's message the chunk belongs to, when it says. A message sent
    * mid-reply lands in the transcript between that reply's chunks, and the id is what tells the

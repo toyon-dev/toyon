@@ -25,6 +25,9 @@ export interface ShipResult {
    * rebase cannot take: the failures an agent can be asked to resolve, named by what clears them
    * so the ask is for the same thing */
   conflict?: "rebase" | "merge";
+  /** the hook that refused the step and the end of what it printed, when the whole of it is on
+   * the chat for an agent to read */
+  hook?: { name: string; said: string };
   /** the PR the route opened or found, for the record */
   pr?: Omit<PrState, "at">;
 }
@@ -80,6 +83,18 @@ export function refused(what: string, r: StepResult, n = 200): string {
   return `${what}: ${r.shown ? "what git and its hooks printed is on the chat" : r.err.slice(0, n)}`;
 }
 
+/** a step git refused, as the result: `refused`'s message, and the hook that turned it down when
+ * the step ran to its own exit and what the hook printed is on the chat. A step stopped or killed
+ * at its ceiling names no hook: nothing refused it. */
+export function refusal(what: string, r: StepResult, n = 200): ShipResult {
+  const name = r.shown && typeof r.exit === "number" ? r.hook : undefined;
+  return {
+    ok: false,
+    message: refused(what, r, n),
+    ...(name ? { hook: { name, said: r.text.trim().slice(-400) } } : {}),
+  };
+}
+
 /** User-initiated commit of everything in the worktree, with the user's message. */
 export async function commitWorktree(
   worktreePath: string,
@@ -90,7 +105,7 @@ export async function commitWorktree(
   await git(worktreePath, "add", "-A");
   w.step("committing");
   const c = await w.git(worktreePath, ["commit", "-m", message]);
-  if (!c.ok) return { ok: false, message: refused("commit refused", c) };
+  if (!c.ok) return refusal("commit refused", c);
   return { ok: true, message: `committed: ${message}` };
 }
 
@@ -355,7 +370,7 @@ export async function landLocally(
     const c = await w.git(repoPath, ["commit", "-m", message]);
     if (!c.ok) {
       await git(repoPath, "reset", "--hard", "HEAD");
-      return { ok: false, message: refused("squash commit refused", c) };
+      return refusal("squash commit refused", c);
     }
     return { ok: true, message: `squashed ${branch} onto ${defaultBr}` };
   }
@@ -437,7 +452,7 @@ export async function landingCommit(
     const c = await w.git(worktreePath, ["commit", "-m", message]);
     if (!c.ok) {
       await git(worktreePath, "reset", "--soft", head.out);
-      return { ok: false, message: refused("squash commit refused", c) };
+      return refusal("squash commit refused", c);
     }
     const sha = await git(worktreePath, "rev-parse", "HEAD");
     return { ok: true, sha: sha.out, message: `squashed ${branch} onto ${base}` };
@@ -448,14 +463,14 @@ export async function landingCommit(
     if (method === "squash") {
       w.step(`squashing onto ${base}`);
       const s = await w.git(worktreePath, ["merge", "--squash", branch]);
-      if (!s.ok) return { ok: false, message: refused("squash refused", s) };
+      if (!s.ok) return refusal("squash refused", s);
       const c = await w.git(worktreePath, ["commit", "-m", message]);
-      if (!c.ok) return { ok: false, message: refused("squash commit refused", c) };
+      if (!c.ok) return refusal("squash commit refused", c);
     } else {
       w.step(`merging into ${base}`);
       // the subject git would write on main itself; on a detached HEAD it says "into HEAD"
       const m = await w.git(worktreePath, ["merge", "--no-ff", "-m", `Merge branch '${branch}'`, branch]);
-      if (!m.ok) return { ok: false, message: refused("merge refused", m) };
+      if (!m.ok) return refusal("merge refused", m);
     }
     const sha = await git(worktreePath, "rev-parse", "HEAD");
     return { ok: true, sha: sha.out, message: `${method === "squash" ? "squashed" : "merged"} ${branch} onto ${base}` };
@@ -498,7 +513,7 @@ export async function pushLanding(
   const moved = /\[rejected\]|fetch first|non-fast-forward|cannot lock ref/.test(p.err);
   return moved
     ? { ok: false, moved: true, message: `${defaultBr} on ${tracked.remote} moved while landing` }
-    : { ok: false, message: refused("push failed", p, 300) };
+    : refusal("push failed", p, 300);
 }
 
 /** A conflict leaves a merge in progress that must be aborted; any other failure (dirty index,
@@ -573,7 +588,7 @@ export async function pushBranch(worktreePath: string, branch: string, w: LandWa
     await git(worktreePath, "update-ref", "-d", `refs/remotes/origin/${branch}`);
     push = await w.git(worktreePath, args);
   }
-  if (!push.ok) return { ok: false, message: refused("push failed", push, 300) };
+  if (!push.ok) return refusal("push failed", push, 300);
   return { ok: true, message: `pushed ${branch}` };
 }
 

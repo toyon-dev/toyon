@@ -13,6 +13,7 @@ import { AfterLand } from "../../src/repos/afterLand.ts";
 import { RepoRegistry } from "../../src/repos/registry.ts";
 import { RuntimeRegistry } from "../../src/runtime/registry.ts";
 import { ArtifactCache } from "../../src/worktrees/cache.ts";
+import { FixService } from "../../src/worktrees/fix.ts";
 import { WorktreeService } from "../../src/worktrees/service.ts";
 import { TurnService } from "../../src/worktrees/turns.ts";
 import { fakeAgents, fakeFactories } from "./fakes.ts";
@@ -48,6 +49,10 @@ export function world() {
   const naming = { reply: null as string | null, calls: 0, gate: Promise.resolve() };
   // the version commands answered without a shell, so the key is the lockfiles and the platform
   const cache = new ArtifactCache({ paths: t.paths, state, hub, tool: async () => "1.0" });
+  /** the landing messages a hook refused, each with what the hook said */
+  const refused: Array<[worktreeId: string, said: string]> = [];
+  hub.on("messageRefused", (id, said) => refused.push([id, said]));
+  const fix = new FixService({ state, hub, runtime });
   const worktrees = new WorktreeService({
     state,
     hub,
@@ -61,10 +66,11 @@ export function world() {
       return naming.reply;
     },
     watch: (id, command, run) => exec.watch(id, command, run),
+    fix,
   });
   const turns = new TurnService({ state, hub, transcript: (id) => runtime.agentFor(id)?.transcript() ?? [] });
   const repos = new RepoRegistry({ state, hub, runtime, worktrees, ...noSelf(state, hub) });
-  return { ...t, state, hub, runtime, worktrees, turns, repos, registry: agents, naming, cache, ...f };
+  return { ...t, state, hub, runtime, worktrees, turns, repos, registry: agents, naming, cache, refused, ...f };
 }
 
 /** the world under test, fresh before each test of a file that called useWorld() */

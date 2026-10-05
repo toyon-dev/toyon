@@ -1566,8 +1566,13 @@ function reduce(s: State, action: Action): State {
   switch (action.a) {
     case "connected":
       // a retry's bare close keeps the last diagnosis: the probe that follows replaces it, and
-      // showing "connecting" in between would flicker the pane on every backoff
-      return { ...s, connected: action.v, connectFailure: action.v ? null : (action.failure ?? s.connectFailure) };
+      // showing "connecting" in between would flicker the pane on every backoff. A null withdraws
+      // it: one made while the page was hidden says nothing about now.
+      return {
+        ...s,
+        connected: action.v,
+        connectFailure: action.v ? null : action.failure === undefined ? s.connectFailure : action.failure,
+      };
     case "activate": {
       // the phone goes with the selection: choosing a row is choosing to read it. Set here and not
       // inside activate(), which every worktrees frame runs to keep the selection valid, and which

@@ -1650,6 +1650,7 @@ describe("streams and notices", () => {
     const down = run([{ a: "connected", v: false, failure: "down" }]);
     expect(down.connectFailure).toBe("down");
     expect(run([{ a: "connected", v: false }], down).connectFailure).toBe("down");
+    expect(run([{ a: "connected", v: false, failure: null }], down).connectFailure).toBeNull();
     expect(run([{ a: "connected", v: true }], down).connectFailure).toBeNull();
   });
   test("a protocol mismatch marks the tab incompatible and disconnected", () => {

@@ -148,11 +148,12 @@ export async function daemonPid(): Promise<number | null> {
 /** reconnect delay: 1s doubling to 30s, with jitter so many tabs don't stampede a restarting daemon */
 const BACKOFF_MIN = 1000;
 const BACKOFF_MAX = 30_000;
-/** How long the socket has to stay down before the screen is told why. A phone in a pocket loses
- * its socket every time (the daemon gives up an unanswered tab after two idle minutes) and wakes
- * holding the close it slept through, so naming a cause on the way back would replace the app with
- * "the daemon is not running" for the length of one reconnect. A real outage keeps the socket down
- * past this and says so. */
+/** How long the socket has to stay down, in front of someone, before the screen is told why. A
+ * phone in a pocket loses its socket every time (the daemon gives up an unanswered tab after two
+ * idle minutes), and every retry and probe it makes from the background fails with the network
+ * asleep. So time spent hidden does not count: coming back starts the wait over and withdraws
+ * whatever was worked out in the dark, or the app would be replaced by "the daemon is not running"
+ * for the length of one reconnect. A real outage keeps the socket down past this and says so. */
 const SETTLE = 1500;
 /** messages kept while disconnected; subscribe-shaped ones are deduped by worktree */
 const QUEUE_MAX = 50;
@@ -169,8 +170,11 @@ export class DaemonSocket {
   private closed = false;
   private attempt = 0;
   private timer: ReturnType<typeof setTimeout> | null = null;
-  /** when the socket went down with nothing connected since, or null while it is up */
+  /** when the socket went down with nothing connected since, or when the page was last come back
+   * to if that is later; null while it is up */
   private downAt: number | null = null;
+  /** the code of the last close, which the probe reads */
+  private downCode = 0;
   /** the pending "say why" (see SETTLE); cancelled by a socket that comes back first */
   private sayTimer: ReturnType<typeof setTimeout> | null = null;
   /** the boxes a message was sent from while the socket was down, until the next hello asks */
@@ -178,7 +182,8 @@ export class DaemonSocket {
 
   constructor(
     private onMsg: (msg: ServerMsg) => void,
-    /** `failure` names why the socket is down once that is known; null while it is being worked out */
+    /** `failure` names why the socket is down once that is known, null withdraws the one named, and
+     * leaving it out keeps it */
     private onStatus: (connected: boolean, failure?: ConnectFailure | null) => void,
   ) {
     this.connect();
@@ -187,15 +192,22 @@ export class DaemonSocket {
   }
 
   /** Coming back to the page, or back onto a network, is the moment to try again: the phone was
-   * asleep while the backoff grew and the retry it is waiting on can be half a minute out. */
+   * asleep while the backoff grew and the retry it is waiting on can be half a minute out. A socket
+   * still connecting was started on the network that went away, so it is replaced, not waited on. */
   private wake = () => {
     if (this.closed || document.visibilityState !== "visible") return;
-    const state = this.ws?.readyState;
-    if (state === WebSocket.OPEN || state === WebSocket.CONNECTING) return;
+    if (this.ws?.readyState === WebSocket.OPEN) return;
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
     this.attempt = 0;
+    if (this.downAt !== null) {
+      this.downAt = Date.now();
+      this.onStatus(false, null);
+      this.armSay();
+    }
+    const stale = this.ws;
     this.connect();
+    stale?.close();
   };
 
   /** A close with no code says nothing: a daemon that is down, a proxy that refuses upgrades and a
@@ -211,22 +223,32 @@ export class DaemonSocket {
     }
   }
 
-  /** Work out why the socket is down and hand it up, once it has been down long enough to be worth
-   * a sentence (SETTLE). A socket that comes back first clears the pending one, so a drop nobody
-   * had time to notice never reaches the screen. */
+  /** Note the socket is down and, once it has been down long enough to be worth a sentence
+   * (SETTLE), work out why and hand it up. A socket that comes back first clears the pending one,
+   * so a drop nobody had time to notice never reaches the screen. */
   private say(code: number) {
     this.downAt ??= Date.now();
+    this.downCode = code;
+    this.armSay();
+  }
+
+  /** The probe runs when the wait is over and not when the socket closed: a phone waking up has no
+   * network for its first moments, and a probe sent then would call a running daemon down. */
+  private armSay() {
+    if (this.downAt === null) return;
     const down = this.downAt;
-    this.diagnose(code).then((failure) => {
-      if (this.closed || this.downAt === null || this.downAt !== down) return;
-      if (this.sayTimer) clearTimeout(this.sayTimer);
-      this.sayTimer = setTimeout(
-        () => {
-          if (!this.closed && this.downAt !== null) this.onStatus(false, failure);
-        },
-        Math.max(0, down + SETTLE - Date.now()),
-      );
-    });
+    const current = () => !this.closed && this.downAt === down && document.visibilityState === "visible";
+    if (this.sayTimer) clearTimeout(this.sayTimer);
+    this.sayTimer = setTimeout(
+      () => {
+        // hidden: nobody is reading, and coming back arms this again
+        if (!current()) return;
+        this.diagnose(this.downCode).then((failure) => {
+          if (current()) this.onStatus(false, failure);
+        });
+      },
+      Math.max(0, down + SETTLE - Date.now()),
+    );
   }
 
   private connect() {

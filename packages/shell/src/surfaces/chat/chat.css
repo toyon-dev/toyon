@@ -582,6 +582,14 @@
       flex: 0 0 auto;
       color: var(--text1);
     }
+    /* a command of the person's own that exited clean: the glyph's box, after the command it
+   closes, at the status word's tier so it reads as the row's answer and not as more of the line */
+    & .tool-done {
+      flex: 0 0 auto;
+      width: 13px;
+      height: 13px;
+      color: var(--text1);
+    }
     /* a call written into the batch but not started: not running, so it holds still, and not done,
    so it sits fainter than a finished row, the way a message queued behind the turn does */
     &.queued > summary {

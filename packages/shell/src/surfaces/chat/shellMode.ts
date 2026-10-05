@@ -22,6 +22,14 @@ export function commandOf(item: ChatItem): string | null {
   return typeof input?.command === "string" ? input.command : null;
 }
 
+/** the row's command ran to its end and exited clean. A failure paints the row and a running one
+ * shines, but a clean exit that printed nothing (`git add -A`) left the same line a command that
+ * never ran would, so the row says it. The agent's own calls stay unmarked: its reply is what says
+ * how they went. */
+export function ranClean(items: ChatItem[]): boolean {
+  return items.length > 0 && items.every((t) => commandOf(t) !== null && t.kind === "tool" && t.done && !t.isError);
+}
+
 /** how much of one command's output the agent is shown: enough for a log or a listing, not a
  * whole file the agent could read for itself */
 const CONTEXT_CHARS = 6_000;

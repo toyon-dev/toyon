@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ChatItem } from "../../state/store.ts";
-import { shellCommandOf, shellContext } from "./shellMode.ts";
+import { ranClean, shellCommandOf, shellContext } from "./shellMode.ts";
 
 const run = (command: string, output?: string, done = true): ChatItem => ({
   kind: "tool",
@@ -76,5 +76,19 @@ describe("shellContext", () => {
       toolKind: "execute",
     };
     expect(shellContext([user("hi"), check])).toEndWith("$ bun run check\n2 errors\nexit 1");
+  });
+});
+
+describe("ranClean", () => {
+  test("a command that exited clean, whether or not it printed", () => {
+    expect(ranClean([run("git add -A")])).toBe(true);
+    expect(ranClean([run("ls", "```\na\n```")])).toBe(true);
+  });
+  test("not while it runs, and not when it failed", () => {
+    expect(ranClean([run("sleep 9", undefined, false)])).toBe(false);
+    expect(ranClean([{ ...run("false", "exit 1"), isError: true } as ChatItem])).toBe(false);
+  });
+  test("the agent's own calls stay unmarked", () => {
+    expect(ranClean([agentRun("ls")])).toBe(false);
   });
 });

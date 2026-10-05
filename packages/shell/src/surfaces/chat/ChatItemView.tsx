@@ -41,6 +41,7 @@ import { netOfCalls } from "./mergeDiffs.ts";
 import { Painted } from "./Painted.tsx";
 import { PasteChip } from "./PasteChip.tsx";
 import { PickChip } from "./PickChip.tsx";
+import { ranClean } from "./shellMode.ts";
 import { languageOf, paintCode, paintDiff, pathInDiff } from "./syntax.ts";
 import { normalizeThoughtMarkdown, thoughtLine, thoughtSteps } from "./thought.ts";
 import {
@@ -644,8 +645,12 @@ export const ToolRow = memo(
         (t) => !toolLabel(t, roots).command && toolBlocks(t, t.output ?? "").length === 0 && !t.images?.length,
       );
     const calls = run ? runCalls(run) : 0;
+    const clean = ranClean(tools);
     const what =
-      [label, hint].filter(Boolean).join(" ") + (background ? ", in the background" : "") + (waits ? ", queued" : "");
+      [label, hint].filter(Boolean).join(" ") +
+      (background ? ", in the background" : "") +
+      (waits ? ", queued" : "") +
+      (clean ? ", done" : "");
     // no count while the call is still being written: a spawn's "0 calls" beside the mark read as
     // a subagent that had started and done nothing
     const count = writing
@@ -705,6 +710,8 @@ export const ToolRow = memo(
             {background && <span className="tool-status">in the background</span>}
             {/* the row is faint and still (chat.css), and the word says what the faintness means */}
             {waits && <span className="tool-status">queued</span>}
+            {/* the mark is drawn, so the fold's label carries the word for it */}
+            {clean && <Icon name="check" className="tool-done" />}
             {age >= QUIET_AFTER && (
               <span className={cx("tool-age", inner >= 0 && "tool-age-folded")}>{elapsed(age)}</span>
             )}

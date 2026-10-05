@@ -199,7 +199,11 @@ const SCROLL_REST = 1200;
  * jumped for) would measure as the reader having left, so an event that finds the scroller still
  * pinned and still where the pin put it changes nothing. A row taken out moves the scroller with
  * no resize to observe (the end came up to meet it), so the pin is taken again as the row leaves:
- * left for the event, a message landing in the same gap would be measured as the reader's.
+ * left for the event, a message landing in the same gap would be measured as the reader's. The
+ * scroller may shrink in the same commit (the question taking the composer back as the waiting row
+ * leaves): the browser clamps to the end at the old height first, which is a box's growth short of
+ * the end at the new one, so the pin also knows the place a clamp leaves it by the height it last
+ * pinned at.
  * While pinned the scroller takes no scroll anchoring: the end is the pin's to keep, and the
  * browser's own adjustment is a move the pin did not make. A composer that shrinks clamps the
  * scroller up, the message landing under it gives the room back, and anchoring returns the
@@ -230,6 +234,8 @@ export function useTail(
   const pinned = useRef(true);
   // where the pin last put the scroller, as the element reported it back
   const held = useRef<number | null>(null);
+  // and the scroller's height then
+  const room = useRef(0);
   const [offEnd, setOffEnd] = useState(false);
   const [offStart, setOffStart] = useState(false);
   const [away, setAway] = useState(false);
@@ -273,6 +279,7 @@ export function useTail(
     if (!el) return;
     el.scrollTop = el.scrollHeight;
     held.current = el.scrollTop;
+    room.current = el.clientHeight;
     hold(true);
     setOffEnd(false);
     setAway(false);
@@ -306,6 +313,7 @@ export function useTail(
     const pin = () => {
       el.scrollTop = el.scrollHeight;
       held.current = el.scrollTop;
+      room.current = el.clientHeight;
     };
     const ro = new ResizeObserver(() => {
       if (pinned.current) pin();
@@ -317,8 +325,10 @@ export function useTail(
         for (const n of r.addedNodes) if (n instanceof Element) ro.observe(n);
         for (const n of r.removedNodes) if (n instanceof Element) ro.unobserve(n);
       }
-      // only from the end: a scroller that a jump elsewhere has moved is the scroll event's to read
-      if (pinned.current && el.scrollHeight - el.scrollTop - el.clientHeight < TAIL_SLACK) pin();
+      // only from the end, at this height or the one last pinned at: a scroller that a jump
+      // elsewhere has moved is the scroll event's to read
+      const end = el.scrollHeight - el.scrollTop;
+      if (pinned.current && (end - el.clientHeight < TAIL_SLACK || Math.abs(end - room.current) < 1)) pin();
     });
     mo.observe(el, { childList: true });
     return () => {

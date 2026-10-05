@@ -251,7 +251,7 @@
      moves no text; its corners are square, so the edge stands on a straight side. */
     &[data-state~="cursor"] {
       --row-edge-color: var(--accent);
-      background: var(--element1);
+      background: var(--element0);
       --text1: var(--ink0);
       --text2: var(--ink1);
       margin: -4px -6px;
@@ -409,11 +409,15 @@
     & summary::-webkit-details-marker {
       display: none;
     }
-    /* the project pill's vocabulary, on a row instead of a button: a fill under the pointer, and the
-   same fill held while the row is open, since the header is the control you are still holding.
-   The seat lifts the ladder a rung and every child rides it: the icon, the name and the shine all
-   name the skip tier, and on element1 the colour itself would be 1.06:1. */
-    :where([data-hover]) &:not(.leaf) summary:hover,
+    /* a fill under the pointer, and the picked one held while the row is open, since the header is
+   the control you are still holding. The seat lifts the ladder a rung and every child rides it:
+   the icon, the name and the shine all name the skip tier, and on element1 the colour itself
+   would be 1.06:1. */
+    :where([data-hover]) &:not(.leaf) summary:hover {
+      background: var(--element0);
+      --text1: var(--ink0);
+      --text2: var(--ink1);
+    }
     &[open] > summary {
       background: var(--element1);
       --text1: var(--ink0);
@@ -435,7 +439,7 @@
     [data-touch] &:not(.leaf) summary {
       transition: background-color 0.35s ease-out;
       &:active {
-        background: var(--element1);
+        background: var(--element0);
         --text1: var(--ink0);
         --text2: var(--ink1);
         transition: none;
@@ -778,7 +782,9 @@
     }
     :where([data-hover]) & .dl.more:not(:disabled):hover {
       color: var(--text0);
-      background: var(--surface2);
+      background: var(--element0);
+      --text1: var(--ink0);
+      --text2: var(--ink1);
     }
   }
 
@@ -1459,6 +1465,9 @@
      often the only thing telling two options apart, so it is read rather than skipped. */
   .ask-desc {
     grid-column: 2 / -1;
+    /* held still under the cursor: the seat's lift would carry it to the label's tier, and a row
+       whose label, description and note are one colour has no first line to find */
+    color: var(--ink1);
   }
   /* the cursor row's own key, at the far end of the label's line */
   .ask-hint {

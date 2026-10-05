@@ -137,12 +137,15 @@
   /* .menu-open is the hover held: the row whose context menu is up keeps its lifted seat after the
    pointer has left it for the menu */
   .row {
-    :where([data-hover]) &:hover,
+    :where([data-hover]) &:hover:where(:not(.row-keyed)),
     &.menu-open {
       background: var(--element0);
       color: var(--text0);
     }
   }
+  /* .row-keyed is a row in a list the arrows walk, where the cursor is the one highlight and the
+   pointer only moves it. It takes no :hover: a pointer left resting on a row kept that row lit
+   after the arrows had walked the cursor off it, two highlights for one cursor. */
   /* a press on touch, the row's answer to a finger in place of the hover it cannot have */
   [data-touch] .row {
     transition: background-color 0.35s ease-out;
@@ -188,7 +191,7 @@
    on a file or a commit it is the keyboard cursor and moves no background. Any other surface with
    a seat of its own opts in with the same two lines. */
   .row {
-    :where([data-hover]) &:hover,
+    :where([data-hover]) &:hover:where(:not(.row-keyed)),
     &[data-state~="current"],
     &.menu-open {
       --text1: var(--ink0);

@@ -175,10 +175,12 @@ function MenuRow({
         ? { role: "menuitem" }
         : { role: "menuitemcheckbox", "aria-checked": item.checked })}
       aria-disabled={off || undefined}
-      className={cx("row", item.danger && "danger", detail !== undefined && "row-tall", off && "disabled")}
+      className={cx("row row-keyed", item.danger && "danger", detail !== undefined && "row-tall", off && "disabled")}
       data-state={rowState({ cursor, checked: item.checked })}
-      // the pointer and the arrows drive one highlight, not two; a row that is off takes neither
-      onMouseEnter={off ? undefined : onEnter}
+      // the pointer and the arrows drive one highlight, not two; a row that is off takes neither.
+      // mousemove, not mouseenter: the pointer takes the cursor back when it moves on the row the
+      // arrows walked away from
+      onMouseMove={off || cursor ? undefined : onEnter}
       onClick={() => {
         if (off) return;
         item.onClick();

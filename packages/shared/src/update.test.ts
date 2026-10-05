@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { installCommand, installMethod, newer, registryHost } from "./update.ts";
+import { installCommand, installMethod, newer, registryHost, restartCommand } from "./update.ts";
 
 describe("installMethod", () => {
   test("reads the install from where the package sits", () => {
@@ -22,6 +22,23 @@ describe("installCommand", () => {
     expect(installCommand("bun", "0.3.0")).toEqual(["bun", "add", "-g", "toyon@0.3.0"]);
     expect(installCommand("npx", "0.3.0")).toBeNull();
     expect(installCommand("none", "0.3.0")).toBeNull();
+  });
+});
+
+describe("restartCommand", () => {
+  test("an npx copy names itself, since the toyon on PATH is another install or none", () => {
+    expect(restartCommand("npx", "0.9.0")).toBe("npx toyon@0.9.0 restart");
+    expect(restartCommand("npm", "0.9.0")).toBe("toyon restart");
+    expect(restartCommand("bun", "0.9.0")).toBe("toyon restart");
+    expect(restartCommand("none", "0.9.0")).toBe("toyon restart");
+  });
+
+  test("an npx copy beside a global install moves that install, from the registry npx used", () => {
+    expect(restartCommand("npx", "0.9.0", "npm", "https://registry.npmjs.org/")).toBe(
+      "npm install -g toyon@0.9.0 --registry=https://registry.npmjs.org/ && toyon restart",
+    );
+    expect(restartCommand("npx", "0.9.0", "bun")).toBe("bun add -g toyon@0.9.0 && toyon restart");
+    expect(restartCommand("npm", "0.9.0", "npm", "https://registry.npmjs.org/")).toBe("toyon restart");
   });
 });
 

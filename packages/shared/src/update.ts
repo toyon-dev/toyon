@@ -23,6 +23,24 @@ export function installCommand(method: InstallMethod, version: string): string[]
   return null;
 }
 
+/** What a person types to restart the daemon onto `version`. A bare `toyon` is whatever is on
+ * PATH, which under npx is an older global install or nothing at all. Beside a global install
+ * (`onPath`) the command moves that install first, from the registry npx was given, since the
+ * machine's own may not list the version yet; a daemon started out of npx's cache would be put
+ * back by the next bare `toyon restart`. With none, the command names the copy that is running. */
+export function restartCommand(
+  method: InstallMethod,
+  version: string,
+  onPath: InstallMethod = "none",
+  registry: string | null = null,
+): string {
+  if (method !== "npx") return "toyon restart";
+  const install = installCommand(onPath, version);
+  if (!install) return `npx toyon@${version} restart`;
+  if (registry) install.push(`--registry=${registry}`);
+  return `${install.join(" ")} && toyon restart`;
+}
+
 /** What stands in for a registry in a sentence: its host, since the path npm's config carries
  * (`/artifactory/api/npm/npm-packages/`) says nothing a person needs; the words as given when it
  * is not a URL; "the npm registry" when nothing has asked yet. */

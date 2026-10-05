@@ -6,6 +6,7 @@ import { describeManaged, type ManagedResolved, WS_CLOSE_UNAUTHORIZED } from "@t
 import { loadManaged } from "@toyon/shared/managed-load";
 import pkg from "../package.json" with { type: "json" };
 import { alive, base, type Health, health, home, logFile, port, readPid, readToken, tokenFile } from "./daemon.ts";
+import { restartCmd } from "./layout.ts";
 import {
   bwrapBlockedAdvice,
   bwrapStartError,
@@ -62,7 +63,7 @@ export function policyLines(m: ManagedResolved, daemon: Health["managed"] | unde
   else if (m.source === null) lines.push(line(true, "policy", "none"));
   else lines.push(line(true, "policy", `${m.source}: ${describeManaged(m.policy).join(", ") || "nothing turned off"}`));
   if (daemon && (daemon.source !== m.source || daemon.hash !== m.hash)) {
-    lines.push(line(false, "daemon", "read an older policy; `toyon restart` applies this one"));
+    lines.push(line(false, "daemon", `read an older policy; \`${restartCmd}\` applies this one`));
   }
   return lines;
 }
@@ -81,7 +82,7 @@ export function agentLines(agents: NonNullable<Health["agents"]>): Line[] {
       a.installed === null
         ? `${a.id} ${a.pinned} is not installed`
         : `${a.id} runs ${a.installed}, not the pinned ${a.pinned}`;
-    if (a.error) lines.push(line(false, "agents", `${state}: ${a.error}. \`toyon restart\` tries again`));
+    if (a.error) lines.push(line(false, "agents", `${state}: ${a.error}. \`${restartCmd}\` tries again`));
     else lines.push(line(true, "agents", `${state}; it may still be installing`));
   }
   return lines;
@@ -153,7 +154,7 @@ export async function doctor(): Promise<number> {
         line(
           false,
           "version",
-          `cli is ${pkg.version} and the daemon is ${version}; \`toyon restart\` brings them level`,
+          `cli is ${pkg.version} and the daemon is ${version}; \`${restartCmd}\` brings them level`,
         ),
       );
     }

@@ -3,12 +3,11 @@
 // finishes first, the same as the update chip in the app.
 
 import { spawnSync } from "node:child_process";
-import { join } from "node:path";
-import { installCommand, installMethod, newer } from "@toyon/shared";
+import { installCommand, newer } from "@toyon/shared";
 import { loadManaged } from "@toyon/shared/managed-load";
 import pkg from "../package.json" with { type: "json" };
 import { base, health, readToken } from "./daemon.ts";
-import { here, packaged } from "./layout.ts";
+import { method, restartCmd } from "./layout.ts";
 import { refusedByPolicy } from "./policy.ts";
 
 /** how long to watch for the new daemon before saying it is waiting on a reply */
@@ -22,7 +21,6 @@ export async function update(): Promise<number> {
     console.error("updates are turned off for this machine (TOYON_UPDATES=off)");
     return 1;
   }
-  const method = installMethod(packaged ? join(here, "..", "package.json") : null);
   if (method === "none") {
     console.error(
       "toyon update works on a global npm or bun install, and this Toyon is not one; update it the way it was installed",
@@ -86,7 +84,7 @@ async function restartOnto(version: string): Promise<number> {
   const token = readToken();
   if (!token) {
     console.error(
-      "the daemon token is missing, so the daemon cannot be asked to restart; `toyon restart` does it by hand",
+      `the daemon token is missing, so the daemon cannot be asked to restart; \`${restartCmd}\` does it by hand`,
     );
     return 1;
   }

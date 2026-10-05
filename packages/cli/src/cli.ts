@@ -12,6 +12,7 @@ import { type Command, HELP, parseArgs } from "./args.ts";
 import { base, health, logFile, port, readToken, shellUrl, startDaemon } from "./daemon.ts";
 import { deploy } from "./deploy/fly.ts";
 import { doctor } from "./doctor.ts";
+import { restartCmd } from "./layout.ts";
 import { logs } from "./logs.ts";
 import { openUrl } from "./openUrl.ts";
 import { pair } from "./pair.ts";
@@ -60,7 +61,7 @@ async function open(cmd: Extract<Command, { kind: "open" }>): Promise<number> {
     }
   } else if (behind(running.version)) {
     // the page this opens is served by the running daemon, so say it is not the one installed
-    console.log(`toyon: the running daemon is ${running.version ?? "older"}; \`toyon restart\` starts ${pkg.version}`);
+    console.log(`toyon: the running daemon is ${running.version ?? "older"}; \`${restartCmd}\` starts ${pkg.version}`);
   }
 
   const token = readToken();
@@ -132,7 +133,7 @@ async function run(cmd: Command): Promise<number> {
       const h = await health();
       if (!h) console.log(`toyon ${pkg.version}`);
       else if (!behind(h.version)) console.log(`toyon ${pkg.version} (daemon ${h.version} running)`);
-      else console.log(`toyon ${pkg.version} (daemon ${h.version ?? "?"} running; \`toyon restart\` to update)`);
+      else console.log(`toyon ${pkg.version} (daemon ${h.version ?? "?"} running; \`${restartCmd}\` to update)`);
       return 0;
     }
     case "stop":

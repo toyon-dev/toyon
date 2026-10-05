@@ -13,19 +13,24 @@ export function FoundNote({ row }: { row: WorktreeStatus }) {
   const clientId = useStore((s) => s.clientId);
   const home = useStore((s) => s.home);
   const dir = home && row.path.startsWith(`${home}/`) ? `~${row.path.slice(home.length)}` : row.path;
+  // the head is the word and where the directory is; the line under it says only that the box
+  // below does what the offer does. What taking over gives the row is what the offer's word means.
   const note = row.locked
-    ? "Taking it over would put Toyon's agent in a directory something else is working in, so that stays off until the lock goes."
-    : "Taking it over lists it with your worktrees and gives it an agent. Your files are left alone: nothing is installed, and its preview stays off until you start it or the agent writes a file. A message sent below takes it over first.";
+    ? "Toyon would be working in a directory something else is using, so taking it over waits for the lock to go."
+    : "A message sent below takes over this branch.";
   return (
     <DaemonRow
       icon={row.locked ? "lock" : "branch"}
-      word={row.locked ? "held" : "found"}
+      word={row.locked ? "held" : "discovered"}
       tone="quiet"
       below={<div className="daemon-below row-dim">{note}</div>}
     >
+      {/* the path in the mono the grafted row names a branch in: a code chip in the head outweighs
+          the word beside it. Inside the sentence, which is what grows and keeps the offer at the
+          row's far end. */}
       <span className="daemon-text">
-        {row.locked ? `by ${row.lockReason ?? "another tool"}, at ` : "not run by Toyon, at "}
-        <code>{dir}</code>
+        {row.locked && `by ${row.lockReason ?? "another tool"}, at `}
+        <span className="tool-hint">{dir}</span>
       </span>
       {!row.locked && (
         <Button

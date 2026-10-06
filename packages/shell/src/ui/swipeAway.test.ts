@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { swipeAxis, swipeEnds } from "./swipeAway.ts";
+import { flung, leaveMs, releaseSpeed, swipeAxis } from "./swipeAway.ts";
 
 describe("whose a touch is", () => {
   test("nobody's until it has travelled", () => {
@@ -14,18 +14,59 @@ describe("whose a touch is", () => {
   });
 });
 
-describe("where a drag let go leaves the thing", () => {
-  test("a short slow drag drops it back", () => {
-    expect(swipeEnds({ dy: 40, ms: 600 })).toBe(false);
+describe("the speed a finger let go at", () => {
+  test("is read over the tail of the drag, not from where it started", () => {
+    // a slow start, then a flick down
+    const speed = releaseSpeed(
+      [
+        { y: 0, t: 0 },
+        { y: 10, t: 400 },
+        { y: 20, t: 500 },
+        { y: 100, t: 560 },
+      ],
+      560,
+    );
+    expect(speed).toBeCloseTo(80 / 60);
+    expect(flung(speed)).toBe(true);
   });
-  test("a long one takes it away, either way", () => {
-    expect(swipeEnds({ dy: 120, ms: 900 })).toBe(true);
-    expect(swipeEnds({ dy: -120, ms: 900 })).toBe(true);
+  test("a finger that stopped and lifted is going nowhere however far it came", () => {
+    const speed = releaseSpeed(
+      [
+        { y: 0, t: 0 },
+        { y: 300, t: 200 },
+      ],
+      600,
+    );
+    expect(speed).toBe(0);
+    expect(flung(speed)).toBe(false);
   });
-  test("a throw takes it away before it has gone far", () => {
-    expect(swipeEnds({ dy: -40, ms: 60 })).toBe(true);
+  test("a slow drag to the edge is put down, and drops back", () => {
+    const speed = releaseSpeed(
+      [
+        { y: 380, t: 900 },
+        { y: 400, t: 1000 },
+      ],
+      1000,
+    );
+    expect(flung(speed)).toBe(false);
   });
-  test("a twitch is not a throw", () => {
-    expect(swipeEnds({ dy: 12, ms: 10 })).toBe(false);
+  test("a throw upward is signed that way", () => {
+    expect(
+      releaseSpeed(
+        [
+          { y: 200, t: 0 },
+          { y: 100, t: 50 },
+        ],
+        50,
+      ),
+    ).toBe(-2);
+  });
+});
+
+describe("how long the throw takes", () => {
+  test("the rest of the way at the finger's speed, within reason", () => {
+    expect(leaveMs(400, 2)).toBe(200);
+    expect(leaveMs(800, 1)).toBe(320);
+    expect(leaveMs(50, 4)).toBe(120);
   });
 });

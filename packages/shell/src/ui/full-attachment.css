@@ -17,17 +17,24 @@
       background: var(--surface2);
     }
     /* a finger carrying the picture off (swipeAway.ts): it follows, and the scrim thins the further
-       it goes, so what is under shows before the box is gone */
+       it goes, so what is under shows before the box is gone. Thrown, it flies off at the finger's
+       speed; put down, it drops back with a little give, so the hand reads that it was held. */
     &[data-swipe] {
       background: color-mix(in srgb, var(--scrim) calc((1 - var(--swipe-fade, 0)) * 100%), transparent);
       & img {
         transform: translateY(var(--swipe-y, 0));
       }
     }
-    &:is([data-swipe="settle"], [data-swipe="leave"]) {
-      transition: background-color 0.18s ease-out;
+    &[data-swipe="settle"] {
+      transition: background-color 0.26s ease-out;
       & img {
-        transition: transform 0.18s ease-out;
+        transition: transform 0.26s cubic-bezier(0.2, 1.4, 0.4, 1);
+      }
+    }
+    &[data-swipe="leave"] {
+      transition: background-color var(--swipe-ms) ease-in;
+      & img {
+        transition: transform var(--swipe-ms) ease-in;
       }
       @media (prefers-reduced-motion: reduce) {
         &,

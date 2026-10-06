@@ -75,6 +75,10 @@ export interface AgentAdapter {
   /** drop the process, keeping the session id and the transcript: the next message spawns the
    * agent the record names now */
   restart(): Promise<void>;
+  /** the worktree's mode changed: an agent that is up is put in it now, a turn running or not,
+   * so a message steered into that turn is answered in the new mode. One that is not up gets it
+   * before its next prompt as always; nothing is spawned for it. */
+  modeChanged(): void;
   /** context (live-page state) reaches the prompt but never the visible transcript */
   send(text: string, opts?: SendOpts): void;
   /** hold the queue: a message sent meanwhile waits in it, drawn as queued, rather than start a

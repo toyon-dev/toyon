@@ -777,14 +777,12 @@ export class WorktreeService {
   }
 
   /** what the agent may do here without asking. Nothing restarts: the session reads the record
-   * before its next turn and every permission request, so it holds from the next prompt on. */
+   * before every permission request, and an agent that is up is told the mode now, so it holds
+   * for the turn already running as well as the next prompt. */
   setMode(worktreeId: string, mode: PermissionMode) {
-    const wt = this.d.state.requireWorktree(worktreeId);
-    if (wt.kind === "spare") throw new UserError("no mode for a spare worktree");
-    if (wt.mode === mode) return;
-    wt.mode = mode;
-    this.d.state.save();
+    if (!this.d.state.setMode(worktreeId, mode)) return;
     this.d.hub.emit("worktreesChanged");
+    this.d.runtime.agentFor(worktreeId)?.modeChanged();
   }
 
   /** which of its models the agent runs here, from the next turn on. An empty id means its own

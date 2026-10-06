@@ -2388,6 +2388,53 @@ describe("AcpSession permission modes", () => {
     await w.session.close();
   });
 
+  test("a mode changed mid-turn reaches the running agent, so a steered message is answered in it", async () => {
+    let mode: "auto" | "ask" | "plan" = "auto";
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    const fake = fakeAgent(
+      async (p, client) => {
+        await gate;
+        return say("done")(p, client);
+      },
+      { withModes: true, currentMode: "agent", steering: true },
+    );
+    const w = world(fake, codexSpec, 60_000, undefined, { mode: () => mode });
+    w.session.send("build it");
+    await waitFor(() => fake.prompts.length === 1);
+    expect(fake.modes).toEqual([]);
+    // the chip flips to plan while the turn runs, then a message says so
+    mode = "plan";
+    w.session.modeChanged();
+    await waitFor(() => fake.modes.length === 1);
+    expect(fake.modes).toEqual(["read-only"]);
+    w.session.send("plan the rest instead");
+    await waitFor(() => fake.steers.length === 1);
+    release();
+    await w.idle();
+    // already in it: the next turn sets nothing more
+    w.session.send("still planning");
+    await w.idle();
+    expect(fake.modes).toEqual(["read-only"]);
+    await w.session.close();
+  });
+
+  test("a mode change with no agent up spawns nothing; the next turn applies it", async () => {
+    let mode: "auto" | "ask" | "plan" = "auto";
+    const fake = fakeAgent(say("ok"), { withModes: true, currentMode: "agent" });
+    const w = world(fake, codexSpec, 60_000, undefined, { mode: () => mode });
+    mode = "plan";
+    w.session.modeChanged();
+    await Bun.sleep(20);
+    expect(fake.newSessions).toHaveLength(0);
+    w.session.send("plan it");
+    await w.idle();
+    expect(fake.modes).toEqual(["read-only"]);
+    await w.session.close();
+  });
+
   test("a mode the agent changed on its own is remembered, so the next turn corrects it", async () => {
     const fake = fakeAgent(
       async (p, client) => {

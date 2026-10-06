@@ -38,6 +38,10 @@ export class FakeAgent implements AgentAdapter {
     this.restarts++;
     this.runningAgent = null;
   }
+  modeChanges = 0;
+  modeChanged() {
+    this.modeChanges++;
+  }
   pgid: number | null = null;
   /** the registry's ear for the process group, wired by the factory */
   onProcess: (() => void) | null = null;

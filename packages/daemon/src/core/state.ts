@@ -1,6 +1,14 @@
 import { randomBytes } from "node:crypto";
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import type { AgentCommand, KeepAwakeMode, ModelChoice, RepoInfo, ThemePrefs, WorktreeInfo } from "@toyon/shared";
+import type {
+  AgentCommand,
+  KeepAwakeMode,
+  ModelChoice,
+  PermissionMode,
+  RepoInfo,
+  ThemePrefs,
+  WorktreeInfo,
+} from "@toyon/shared";
 import { UserError } from "./errors.ts";
 import { log } from "./log.ts";
 import { ensureDirs, type Paths } from "./paths.ts";
@@ -305,6 +313,19 @@ export class StateStore {
     else this.state.bootAt = id;
     this.save();
   }
+  /** the worktree's permission mode. Returns whether it changed, so the caller can skip a
+   * broadcast that says nothing new. Set by a person (the chip, through the worktree service, which
+   * also tells a running agent) and by a plan approval (the session's dep, where the agent has
+   * already switched itself). A spare has no mode to set. */
+  setMode(worktreeId: string, mode: PermissionMode): boolean {
+    const wt = this.requireWorktree(worktreeId);
+    if (wt.kind === "spare") throw new UserError("no mode for a spare worktree");
+    if (wt.mode === mode) return false;
+    wt.mode = mode;
+    this.save();
+    return true;
+  }
+
   session(worktreeId: string): string | undefined {
     return this.state.sessions[worktreeId];
   }

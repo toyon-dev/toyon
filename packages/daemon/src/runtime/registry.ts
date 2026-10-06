@@ -217,12 +217,10 @@ function defaultAgent(
       d.state.setCachedCommands(d.state.requireWorktree(wt.id).agent ?? "", wt.repoId, commands),
     // the record, read fresh: the composer changes it between turns and a plan approval sets it
     mode: () => d.state.requireWorktree(wt.id).mode ?? DEFAULT_PERMISSION_MODE,
+    // the record only: the agent switched itself on the approval and reports it, so nothing is
+    // pushed back at it (the service's setMode, the person's path, does push)
     setMode: (mode) => {
-      const w = d.state.requireWorktree(wt.id);
-      if (w.mode === mode) return;
-      w.mode = mode;
-      d.state.save();
-      d.hub.emit("worktreesChanged");
+      if (d.state.setMode(wt.id, mode)) d.hub.emit("worktreesChanged");
     },
     onPlan: async (markdown) => {
       const w = d.state.worktree(wt.id);

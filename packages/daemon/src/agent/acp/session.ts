@@ -303,6 +303,18 @@ export class AcpSession implements AgentAdapter {
     await this.warm();
   }
 
+  /** The record's mode changed under a session that is up: apply it now rather than at the next
+   * prompt. A turn may be running; the composer chip is the person reaching into it (plan mode
+   * flipped on while the agent is already working, then a message steered in to say so), and the
+   * adapters set the mode on the live query. A session still opening applies the record itself
+   * when it settles, and one not up at all is left alone: the next turn's applyMode covers it.
+   * A refusal only logs; the mode is read again before every permission, so writes still hold. */
+  modeChanged(): void {
+    const live = this.live;
+    if (!live || this.stopped) return;
+    fireAndForget(this.d.worktreeId, this.applyMode(live), "mode change mid-session");
+  }
+
   /** Start the session now, so the first message meets a process that is up: the plus warms its
    * agent on the first keystroke, seconds before enter. Best effort, like the commands warm-up;
    * a failure is the send's to report properly. */

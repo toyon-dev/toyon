@@ -1244,6 +1244,10 @@ describe("handlers", () => {
     expect(services.state.worktree(made.id)?.effort).toBeUndefined();
     await dispatch({ t: "set-worktree-mode", worktreeId: made.id, mode: "plan" }, ctx, services);
     expect(services.state.worktree(made.id)?.mode).toBe("plan");
+    // the agent is told at once, so a turn already running takes the mode; the same mode again says nothing
+    expect(agents.get(made.id)?.modeChanges).toBe(1);
+    await dispatch({ t: "set-worktree-mode", worktreeId: made.id, mode: "plan" }, ctx, services);
+    expect(agents.get(made.id)?.modeChanges).toBe(1);
     await dispatch({ t: "set-worktree-model", worktreeId: made.id, model: "big" }, ctx, services);
     expect(services.state.worktree(made.id)?.model).toBe("big");
     await dispatch({ t: "set-worktree-model", worktreeId: made.id, model: "" }, ctx, services);

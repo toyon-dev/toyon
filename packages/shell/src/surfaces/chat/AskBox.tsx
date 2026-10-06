@@ -236,8 +236,9 @@ function QuestionBody({
       // the typed answer's field reads its own keys. Enter is the answer, the way it is on a row:
       // on to what is still open, or the send when nothing is, since what is typed here is one
       // line nearly every time; shift+enter is the line break for the other times, and the chord
-      // sends from anywhere. An on-screen keyboard has no shift to hold, so there return is the
-      // line break and the send is the button under the field. Escape and tab go back to the
+      // sends from anywhere. On an on-screen keyboard return answers too, unlike the composer's,
+      // where it breaks the line: a message is prose and a note on a pick is not, and the key
+      // itself says what it does (`enterKeyHint` on the field). Escape and tab go back to the
       // options, and a field left blank goes with them.
       if (e.key === "Escape" || (e.key === "Tab" && !e.shiftKey)) {
         e.preventDefault();
@@ -251,7 +252,7 @@ function QuestionBody({
       } else if (isEnter(e) && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
         submit();
-      } else if (isEnter(e) && !e.shiftKey && !touch) {
+      } else if (isEnter(e) && !e.shiftKey) {
         e.preventDefault();
         const next = dropBlankNote(draft, current);
         root.current?.focus();
@@ -321,15 +322,15 @@ function QuestionBody({
 
   /** the actions under a page: the send where a pick alone is not one (several questions, or a
    * multi-select), the note on the pick where the agent takes one and a pick is made, and the
-   * skip. A field open on a lone question has no send where there is a keyboard: enter in it is
-   * the send, as enter on a row is, and a button arriving under the list moved the box; on touch
-   * it has one. Nothing lists the keys: the arrows, enter and escape are what they are
-   * everywhere, and the one key that is not says so on its row. Each page carries its own foot;
-   * it sits at the page's floor so the send is in one place whichever page is open. The agent's
-   * stop is not here: it keeps the box's corner, as it does over the plain field. */
+   * skip. A field open on a lone question has no send: enter in it is the send, as enter on a
+   * row is, on every keyboard, and a button arriving under the list moved the box. Nothing lists
+   * the keys: the arrows, enter and escape are what they are everywhere, and the one key that is
+   * not says so on its row. Each page carries its own foot; it sits at the page's floor so the
+   * send is in one place whichever page is open. The agent's stop is not here: it keeps the
+   * box's corner, as it does over the plain field. */
   const foot = (qq?: (typeof questions)[number], a?: AskAnswer) => (
     <div className="ask-foot">
-      {(!qq || !pickSends(qq) || (touch && a?.note !== undefined)) && (
+      {(!qq || !pickSends(qq)) && (
         <Button variant="outline" size="md" disabled={!canSubmit(questions, draft)} onClick={submit}>
           send
         </Button>
@@ -362,7 +363,11 @@ function QuestionBody({
     const ownState = rowState({ cursor: open && !touch && cursor === qq.options.length, checked: owning });
     const toOwn = () => cursor !== qq.options.length && setCursor(qq.options.length);
     /* the field a row holds once something is typed against it: the "other" row's answer, or a
-       note on the pick, under the row it is about. One line that grows with what is typed. */
+       note on the pick, under the row it is about. One line that grows with what is typed. The
+       on-screen keyboard's return key is named for what enter does from here: on a lone question
+       the answer is the send, with several it walks on (to a question still open, or the send
+       page). Decided by the shape of the ask and not by the draft, so the label does not flip
+       under the thumb as the first character lands. */
     const field = (placeholder: string) => (
       <TextArea
         ref={open ? own : undefined}
@@ -370,6 +375,7 @@ function QuestionBody({
         font="ui"
         rows={1}
         className="ask-own-field"
+        enterKeyHint={sendPage(questions) === -1 ? "send" : "next"}
         placeholder={placeholder}
         value={a?.note ?? ""}
         onChange={(e) => write(setNote(draft, i, e.target.value), i)}

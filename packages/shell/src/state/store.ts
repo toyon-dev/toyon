@@ -1656,7 +1656,10 @@ function reduce(s: State, action: Action): State {
         .map((w, i) => ({ id: w.id, i, far: Math.abs(i - at), up: !isLead(w.worktree) && dotClass(w) === "running" }))
         .filter((w) => w.up && w.far > 0)
         .sort((a, b) => a.far - b.far || b.i - a.i)[0]?.id;
-      return activate(hidden, waiting ?? done ?? owed ?? up ?? landingIn(hidden, s.activeRepoId));
+      const next = activate(hidden, waiting ?? done ?? owed ?? up ?? landingIn(hidden, s.activeRepoId));
+      // the phone shows one worktree at a time, so a jump there is a screen the person never asked
+      // for: the row goes and the list is what is left, where they pick the next one themselves
+      return s.frame === "phone" ? { ...next, screen: "home" } : next;
     }
     case "shipping": {
       // one op per worktree at a time: the daemon serializes them under the repo lock anyway,

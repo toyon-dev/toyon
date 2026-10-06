@@ -2621,6 +2621,16 @@ describe("archiving a worktree", () => {
     expect(s.draft).not.toBeNull();
   });
 
+  test("on the phone, archiving the open worktree goes back to the list rather than into another row", () => {
+    const onPhone = initialState({ clientId: ME, frame: "phone" });
+    const open = run([three(), { a: "activate", id: "a" }, { a: "screen", to: "chat" }], onPhone);
+    const s = reducer(open, { a: "archive-worktrees", ids: ["a"] });
+    expect(s.screen).toBe("home");
+    expect(ids(s)).toEqual(["main", "b"]);
+    // a row on the list archived from its menu leaves the list up
+    expect(reducer(s, { a: "archive-worktrees", ids: ["b"] }).screen).toBe("home");
+  });
+
   test("archiving the active worktree lands on the next row the rail owes the person", () => {
     const five = (over: Record<string, Partial<WorktreeStatus>>) =>
       hello(...[wt("main", "main"), wt("a"), wt("b"), wt("c"), wt("d")].map((w) => ({ ...w, ...over[w.id] })));

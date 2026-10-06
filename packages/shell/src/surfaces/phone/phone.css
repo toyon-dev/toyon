@@ -157,6 +157,16 @@
     min-height: var(--row-height);
     padding: 4px 14px;
   }
+  /* installed, the status bar above the strip is painted the strip's own colour (the manifest
+     says so), and the two read as one tall band with the name low in it. The row gives up its top
+     padding, and its floor comes down by the same so that a row holding the tabs instead of the
+     name is still the same height and the bar's foot stays put for the swap. */
+  @media (display-mode: standalone) {
+    .phone-bar-row {
+      padding-top: 0;
+      min-height: calc(var(--row-height) - 4px);
+    }
+  }
 
   /* Two lines: what you are looking at, and its state under it, which is what the row's line said
      in the list and what a hover would say on a desk. From the start, not centred: the controls

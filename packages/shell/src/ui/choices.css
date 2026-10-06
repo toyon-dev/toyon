@@ -29,11 +29,15 @@
     }
   }
   /* the digit is how the row is reached, in a gutter of its own so the labels line up under each
-     other however many rows there are. Each part names its column: where the digit is not drawn,
-     the label must not fall into the gutter it left empty. */
+     other however many rows there are. Each part names its column, so on a touch window, where
+     no digit is drawn, the gutter closes and the label does not fall into it. */
   .choice-num {
     grid-column: 1;
     justify-content: flex-end;
+  }
+  .choices-touch .picker-item.choice {
+    grid-template-columns: 0 1fr auto;
+    column-gap: 0;
   }
   .choice-label {
     grid-column: 2;

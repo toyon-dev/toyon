@@ -121,15 +121,6 @@
         max-height: 8lh;
       }
     }
-    /* the ask's number keys are a hardware keyboard's idiom; on a screen the options are tapped,
-       and the digit's gutter goes with the digit */
-    & .choice-num {
-      display: none;
-    }
-    & .choice {
-      grid-template-columns: 0 1fr;
-      column-gap: 0;
-    }
   }
 
   .chat-wrap {

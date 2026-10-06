@@ -72,7 +72,9 @@ export function Choices({
     e.currentTarget.querySelector("textarea")?.focus();
   };
   return (
-    <div className={cx("choices", hover && "choices-hover")}>
+    // the digits are a hardware keyboard's idiom: on a touch window the rows are tapped, and the
+    // gutter goes with the digit
+    <div className={cx("choices", hover && "choices-hover", touch && "choices-touch")}>
       {rows.map((row, i) => {
         const on = !touch && cursor === i;
         const state = rowState({ cursor: on, checked: row.checked });
@@ -82,7 +84,7 @@ export function Choices({
         const toRow = () => onCursor && cursor !== i && onCursor(i);
         const body = (
           <>
-            <Kbd k={String(i + 1)} className="choice-num row-dim" />
+            {!touch && <Kbd k={String(i + 1)} className="choice-num row-dim" />}
             <span className="choice-label">{row.label}</span>
             {!touch && row.hint && (
               <span className={cx("choice-hint row-dim", on && row.hint.on !== false && "on")}>

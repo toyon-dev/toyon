@@ -118,7 +118,9 @@ export function PhoneBar({
             {line && <span className={cx("phone-sub", asks && "phone-sub-asks")}>{line}</span>}
           </div>
         )}
-        {owed && (
+        {/* over the app and the code the row is the tabs', and the count beside them squeezes the
+            three out of their seat; the list and the chat still say it */}
+        {owed && !fold && (
           <Button
             size="md"
             tone="primary"

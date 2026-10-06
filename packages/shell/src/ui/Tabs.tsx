@@ -44,6 +44,12 @@ export type TabsProps<Id extends string> = {
    * two joined strips read as one thing twice. With `fill` the pill slides to the tab that opens,
    * which counts on even seats: no `fit` or `far` tab in a filled segmented strip. */
   segmented?: boolean;
+  /** no recess and no track: the labels stand on the parent's own ground, each sized to itself,
+   * and the open one is marked by a rule under its label. For a strip inside a screen whose header
+   * is already a control, where a recess or a track makes a second band under the first, and the
+   * joined form has nothing to join to because the ground over, in and under the strip is one
+   * colour. The mark is a line rather than a fill, so it is a different shape from both. */
+  quiet?: boolean;
   /** a cluster on the strip's far end, outside the scrolling list: a pane's close */
   end?: ReactNode;
   /** the strip's accessible name */
@@ -71,6 +77,7 @@ export function Tabs<Id extends string>({
   fill,
   font,
   segmented,
+  quiet,
   end,
   label,
   owner,
@@ -92,7 +99,15 @@ export function Tabs<Id extends string>({
     list.current?.querySelectorAll<HTMLElement>('[role="tab"]')[items.indexOf(next)]?.focus();
   };
   return (
-    <div className={cx("tabs", fill && "tabs-fill", font === "mono" && "tabs-mono", segmented && "tabs-segmented")}>
+    <div
+      className={cx(
+        "tabs",
+        fill && "tabs-fill",
+        font === "mono" && "tabs-mono",
+        segmented && "tabs-segmented",
+        quiet && "tabs-quiet",
+      )}
+    >
       <div
         className="tabs-list"
         role="tablist"

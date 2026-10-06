@@ -36,23 +36,25 @@
     display: none;
   }
   /* The panel as a phone's screen: the column, not a dock beside a centre. No width to give and no
-     floor to keep. It keeps the dock's own ground rather than taking the screen's: its strip's
-     open tab is painted in that ground, and on the screen's the open tab and the track were two
-     shades of the same dark with nothing joined to anything. The seam goes, at the mirrored
-     rule's class count plus one: there is nothing beside a screen to face. */
+     floor to keep. It keeps the dock's own ground, which is the bar's, so the bar and the lists
+     under it are one surface. The seam goes, at the mirrored rule's class count plus one: there
+     is nothing beside a screen to face. */
   .changes-screen {
     width: auto;
     flex: 1;
     min-width: 0;
+    /* the dense row, which is the control's in the bar above and the file rows' under it: at the
+       dock's full row the labels floated mid-row with their rule far below them */
+    --tabs-height: var(--row-height-sm);
   }
   .app[data-chat-side] .changes-dock.changes-screen {
     border-inline: 0;
   }
   /* The files tab is an icon sized to itself, which on a dock leaves the words their room. On a
-     screen the two word tabs split the whole width, and beside them a folder in a pointer's 40px
-     read as squeezed in and was a small target for a thumb. */
-  .changes-screen .tab-fit .tab-btn {
-    padding-inline: 24px;
+     screen the strip is the quiet form and every tab is sized to itself, where a folder in a
+     pointer's inset was a small target for a thumb; a wider inset, which its rule stays inside. */
+  .changes-screen .tab-fit {
+    --tab-inset: 18px;
   }
   .app[data-chat-side="left"] .changes-dock {
     border-right: 0;

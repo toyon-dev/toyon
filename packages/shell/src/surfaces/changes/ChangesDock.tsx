@@ -622,10 +622,13 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
       style={onScreen ? undefined : { width }}
     >
       {/* the strip holds words alone, so a tab never shifts as the work moves; what the working
-          tree holds is said on the changes tab's hover, beside its key */}
+          tree holds is said on the changes tab's hover, beside its key. On a screen it is the quiet
+          form: the bar over it already holds a control, and a second recess under that read as a
+          band heavier than the one above it */}
       {!archived && (
         <Tabs<ChangesTab>
-          fill
+          fill={!onScreen}
+          quiet={onScreen}
           owner="changes-tabs"
           label="changes panel"
           items={[

@@ -82,7 +82,9 @@
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    padding: 0 var(--row-inset);
+    /* a parent widens one tab's inset for a thumb (`--tab-inset`); the quiet form's rule reads
+       the same value so it stays under the label and not under the padding */
+    padding: 0 var(--tab-inset, var(--row-inset));
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -166,5 +168,34 @@
   }
   .tabs-segmented.tabs-fill .tab[data-state~="current"] {
     background: none;
+  }
+
+  /* The strip with no recess (Tabs.tsx, `quiet`): the labels on the parent's own ground, a hairline
+   under all of them where the list begins, and the open label marked by a rule at its foot in its
+   own colour, spanning the label and not the tab's inset. Nothing is filled, hover included: a block
+   lighting under a label would be the band this form exists to not draw. The labels take the label
+   tier, since a quiet strip heads a screen and is pressed with a thumb, and keep one weight: a tab
+   sized to its text would move its neighbours as it went bold. */
+  .tabs-quiet {
+    background: none;
+    box-shadow: inset 0 -1px var(--border0);
+  }
+  .tabs-quiet .tab {
+    font: var(--type-ui);
+    :where([data-hover]) &:hover {
+      background: none;
+    }
+    &[data-state~="current"] {
+      background: none;
+      &::after {
+        content: "";
+        position: absolute;
+        left: var(--tab-inset, var(--row-inset));
+        right: var(--tab-inset, var(--row-inset));
+        bottom: 0;
+        height: 2px;
+        background: currentColor;
+      }
+    }
   }
 }

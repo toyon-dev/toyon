@@ -18,7 +18,6 @@ import {
   chatChordAction,
   isChatCentred,
   isFirstRun,
-  isSubPicker,
   localOf,
   previewIdOf,
   routeTarget,
@@ -68,6 +67,15 @@ export function useChords() {
       if (pane === "terminal") store.dispatch({ a: "toggle-terminal" });
       else if (pane === "editor") store.dispatch({ a: "close-editor" });
       else if (pane === "design") store.dispatch({ a: "toggle-design" });
+    };
+    // The Finder dialog is another app's window. An Escape that reaches the page while it is up
+    // was meant for it, so it closes the dialog and nothing else: not the form it was opened from,
+    // and not whatever holds the caret, which is why this is taken on the way down.
+    const onFolderEscape = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || !store.getState().choosingFolder) return;
+      e.stopImmediatePropagation();
+      sock?.send({ t: "cancel-folder" });
+      store.dispatch({ a: "choosing-folder", v: false });
     };
     const onKey = (e: KeyboardEvent) => {
       onMods(e);
@@ -274,17 +282,10 @@ export function useChords() {
           }
         }
       } else if (e.key === "Escape") {
-        // The Finder dialog is another app's window. An Escape that reaches the page while it is up
-        // was meant for it, so it closes the dialog and leaves the form it was opened from alone.
-        if (s.choosingFolder) {
-          sock?.send({ t: "cancel-folder" });
-          dispatch({ a: "choosing-folder", v: false });
-        } else if (s.overlay) {
-          // sub-pickers go back to the palette they came from; everything else just closes
-          dispatch({ a: "close", back: isSubPicker(s.overlay) });
-        }
+        // An open box is not on this ladder: it takes its Escape as the topmost float
+        // (ui/Overlay.tsx), ahead of whatever holds the caret under it.
         // the new-project view: back to the project behind it, unless the page is waiting on an answer
-        else if (s.newProject) {
+        if (s.newProject) {
           if (s.newProject.phase === "editing") dispatch({ a: "close-new-project" });
         } else if (s.picking) {
           // (while picking, the bridge cancels on its own Escape; this covers focus in the shell)
@@ -303,6 +304,7 @@ export function useChords() {
         else closePane();
       }
     };
+    window.addEventListener("keydown", onFolderEscape, true);
     window.addEventListener("keydown", onKey);
     window.addEventListener("keyup", onKeyUp);
     window.addEventListener("pointermove", onMods);
@@ -310,6 +312,7 @@ export function useChords() {
     // the release lands in whatever window took the keyboard, so leaving this one ends the peek
     window.addEventListener("blur", endPeek);
     return () => {
+      window.removeEventListener("keydown", onFolderEscape, true);
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("keyup", onKeyUp);
       window.removeEventListener("pointermove", onMods);

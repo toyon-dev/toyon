@@ -1,4 +1,6 @@
 import type { ReactNode } from "react";
+import { useStoreInstance } from "../state/context.tsx";
+import { isSubPicker } from "../state/store.ts";
 import { cx } from "./cx.ts";
 import { Float } from "./Float.tsx";
 import "./overlay.css";
@@ -13,8 +15,8 @@ export type Anchored = { flip?: Flip; margin?: number; matchWidth?: number };
 type Props = {
   /** absent = the box can't be dismissed (first-run config must be confirmed) */
   onClose?: () => void;
-  /** Escape while this is the topmost float. A box the store owns leaves this alone: its Escape
-   * belongs to the ladder in app/keys.ts, which knows what is behind it. */
+  /** Escape while this is the topmost float, for a box the store does not own. One it does own
+   * leaves this alone and is closed through the store, back to the palette it came from. */
   onEscape?: () => void;
   boxClass?: string;
   /** no box chrome: the children bring their own cards (shortcuts + settings) */
@@ -48,6 +50,7 @@ function Dropdown({
   id,
   children,
 }: Omit<Props, "anchored"> & { anchored: Anchored }) {
+  const onKey = useEscape(onEscape);
   return (
     <Float
       className={cx(bare ? "" : "overlay-box", "anchored", boxClass)}
@@ -56,7 +59,7 @@ function Dropdown({
       placement={{ side: "bottom", align: "start", cover: true, margin: 0, ...anchored }}
       coverBy={coverBy}
       onDismiss={onClose ? () => onClose() : undefined}
-      onKey={onEscape ? escapeOnly(onEscape) : undefined}
+      onKey={onKey}
     >
       {children}
     </Float>
@@ -73,12 +76,13 @@ function Dropdown({
  * against the box it holds.
  */
 function Centred({ onClose, onEscape, boxClass = "", bare = false, id, children }: Omit<Props, "anchored">) {
+  const onKey = useEscape(onEscape);
   return (
     <Float
       className="overlay scrim"
       id={id}
       onDismiss={onClose ? () => onClose() : undefined}
-      onKey={onEscape ? escapeOnly(onEscape) : undefined}
+      onKey={onKey}
       onClick={(e) => {
         if (onClose && e.target === e.currentTarget) onClose();
       }}
@@ -88,9 +92,26 @@ function Centred({ onClose, onEscape, boxClass = "", bare = false, id, children 
   );
 }
 
-/** the stack hands the topmost float every key; a box that only answers Escape ends that one alone */
-const escapeOnly = (fn: () => void) => (e: KeyboardEvent) => {
-  if (e.key !== "Escape") return;
-  e.stopPropagation();
-  fn();
-};
+/**
+ * The stack hands the topmost float every key before whatever holds the caret hears it; a box
+ * answers Escape and ends that one alone. That order is the point: a box with nothing to type in
+ * leaves the caret where it was (a terminal, an open row in the chat, a find field), and each of
+ * those answers Escape for itself. A box the store owns closes through the store, and a sub-picker
+ * goes back to the palette it came from.
+ */
+function useEscape(onEscape?: () => void) {
+  const store = useStoreInstance();
+  return (e: KeyboardEvent) => {
+    if (e.key !== "Escape") return;
+    if (onEscape) {
+      e.stopPropagation();
+      onEscape();
+      return;
+    }
+    const s = store.getState();
+    // the Finder dialog is above every box, and its Escape is taken in app/keys.ts
+    if (!s.overlay || s.choosingFolder) return;
+    e.stopPropagation();
+    store.dispatch({ a: "close", back: isSubPicker(s.overlay) });
+  };
+}

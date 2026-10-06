@@ -123,7 +123,7 @@ export function ListPicker<T>({
    * wrapper, which is what it is placed against) instead of a centred overlay over the preview */
   anchored?: boolean | Anchored;
   /** Escape while this picker is the topmost float, for one that the store does not own: a chip's
-   * panel is local state, and the ladder in app/keys.ts would shut whatever the chip sits in */
+   * panel is local state, and closing through the store would shut whatever the chip sits in */
   onEscape?: () => void;
   /** before the caret: what the query is already scoped to, as a chip */
   lead?: ReactNode;

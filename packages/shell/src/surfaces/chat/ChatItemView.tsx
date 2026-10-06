@@ -386,9 +386,9 @@ function Fold({
           if (treeKey([{ depth: 0, open }], 0, e.key)) toggle();
           return;
         }
-        // Escape belongs to the row that has focus. Anything less local (the overlay, picker,
-        // terminal and diff ladder in app/keys.ts) keeps the key otherwise, and a second press
-        // falls through to it.
+        // Escape belongs to the row that has focus. Anything less local (the terminal and diff
+        // ladder in app/keys.ts) keeps the key otherwise, and a second press falls through to it.
+        // A box open over the log took the key before it got here.
         if (e.key !== "Escape" || !open) return;
         e.stopPropagation();
         setPinned(false);

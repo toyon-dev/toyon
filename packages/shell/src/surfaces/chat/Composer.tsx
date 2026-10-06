@@ -1212,13 +1212,6 @@ export function Composer({
               // an IME builds a word out of several keystrokes; a menu opening mid-composition would
               // fight the candidate list
               if (e.nativeEvent.isComposing) return;
-              // a box with nothing to type in opens over the composer and leaves the caret here, so
-              // its esc arrives through this handler: it goes on to the app-wide ladder, which
-              // closes what is on top, rather than to the menu, the walk or the turn underneath
-              if (e.key === "Escape") {
-                const s = store.getState();
-                if (s.overlay || s.choosingFolder) return;
-              }
               if (menuOpen) {
                 if (e.key === "Escape") {
                   // no overlay is open, so the app-wide esc would toggle the terminal instead

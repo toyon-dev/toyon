@@ -112,7 +112,7 @@ export function KeysHelp() {
           {/* the daemon's own, so only where the daemon has it to offer: a Mac it can hold awake */}
           {keepAwake !== null && (
             <div className="keys-setting">
-              <span className="keys-d">keep the Mac awake</span>
+              <span className="keys-d">keep awake</span>
               <Button variant="field" mono onClick={() => open({ a: "open", overlay: { kind: "keep-awake" } })}>
                 {keepAwakeLabel[keepAwake]}
               </Button>

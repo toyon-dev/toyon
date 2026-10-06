@@ -96,7 +96,7 @@ export function settingsItems(s: SettingsState, { sock, dispatch }: Deps): MenuE
           [
             {
               id: "keep-awake",
-              label: "keep the Mac awake…",
+              label: "keep awake…",
               detail: keepAwakeLabel[s.keepAwake],
               sub: true,
               onClick: () => dispatch({ a: "open", overlay: { kind: "keep-awake" } }),

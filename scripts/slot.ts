@@ -15,8 +15,11 @@ import { join } from "node:path";
 
 const STALE_MS = 30_000;
 const POLL_MS = 1_000;
-/** the gate's steps start each other (`check` runs `test`): set for a child of a run that holds a slot */
+/** the gate's steps start each other (`check` runs `test`): set in the env of a child of a run that
+ * holds a slot, so it goes straight through instead of queueing for a second one behind its parent */
 const HELD = "TOYON_CHECK_SLOT_HELD";
+/** this process holds a slot, or was started by one that does */
+let held = false;
 
 export interface SlotOpts {
   dir: string;
@@ -55,19 +58,30 @@ export async function takeSlot(opts: SlotOpts): Promise<() => void> {
 /** Hold one of the machine's slots for as long as this process lives. TOYON_CHECK_SLOTS names the
  * count outright; a child of a run that already holds one goes straight through. */
 export async function holdMachineSlot(name: string): Promise<void> {
-  if (process.env[HELD]) return;
+  if (process.env[HELD]) {
+    held = true;
+    return;
+  }
   const max = Number(process.env.TOYON_CHECK_SLOTS) || 2;
   const release = await takeSlot({
     dir: join(homedir(), ".cache", "toyon-check"),
     max,
     onWait: () => console.error(`${name}: waiting for a slot; this machine runs ${max} at a time`),
   });
-  process.env[HELD] = "1";
+  held = true;
   process.on("exit", release);
   // a signal's default ends the process without the exit handlers; a run killed outright (-9)
   // leaves its file to go stale
   process.on("SIGINT", () => process.exit(130));
   process.on("SIGTERM", () => process.exit(143));
+}
+
+/** The env to start a gated step with. It carries the slot this run holds, so the step runs under
+ * it rather than waiting for one of its own; a run that holds none hands down nothing, and the
+ * step gates itself. Built here and not written into process.env, which Bun's children do not
+ * inherit as written: a parent that forgot to pass it would wait on its own child for ever. */
+export function heldEnv(): Record<string, string | undefined> {
+  return held ? { ...process.env, [HELD]: "1" } : { ...process.env };
 }
 
 function claim(path: string, staleMs: number): boolean {

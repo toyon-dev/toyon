@@ -4,7 +4,7 @@
 // step, the tests, and not the sum.
 
 import { resolve } from "node:path";
-import { holdMachineSlot } from "./slot.ts";
+import { heldEnv, holdMachineSlot } from "./slot.ts";
 
 const STEPS: Record<string, string[]> = {
   typecheck: ["run", "typecheck"],
@@ -18,11 +18,8 @@ const root = resolve(import.meta.dir, "..");
 await holdMachineSlot("check");
 
 const runs = Object.entries(STEPS).map(async ([name, args]) => {
-  // Bun's default child env is the one this process was launched with, not process.env as written
-  // since, so the slot held above has to be passed on by hand: a `test` step that does not hear of
-  // it queues for a slot of its own, and two checks running together wait on each other for ever.
-  const env = { ...process.env };
-  const proc = Bun.spawn([process.execPath, ...args], { cwd: root, env, stdout: "pipe", stderr: "pipe" });
+  // the slot goes down to each step (`test` gates itself when run alone), so none queues for one of its own
+  const proc = Bun.spawn([process.execPath, ...args], { cwd: root, env: heldEnv(), stdout: "pipe", stderr: "pipe" });
   const [out, err, code] = await Promise.all([
     new Response(proc.stdout).text(),
     new Response(proc.stderr).text(),

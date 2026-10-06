@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { WorktreeStatus } from "@toyon/shared";
 import type { Store } from "../state/context.tsx";
 import { type Action, initialState, reducer, type State } from "../state/store.ts";
+import type { Entry } from "../ui/floats.ts";
 import { type HistoryHost, installPhoneHistory } from "./phoneHistory.ts";
 
 const row = (id: string): WorktreeStatus =>
@@ -96,6 +97,43 @@ function tab(entries: unknown[] = [null]) {
   return { host, back: () => move(-1), forward: () => move(1), settle, depths, index: () => index };
 }
 
+/** the float stack as the history reads it: a box opens and closes, and a swipe shuts one, which
+ * goes when its close has rendered (here, when the test says) */
+function stack() {
+  let entries: Entry[] = [];
+  const watchers = new Set<() => void>();
+  const tell = () => {
+    for (const fn of watchers) fn();
+  };
+  const shut: Entry[] = [];
+  return {
+    boxes: {
+      open: () => entries,
+      watch: (fn: () => void) => {
+        watchers.add(fn);
+        return () => watchers.delete(fn);
+      },
+      shut: (e: Entry) => {
+        shut.push(e);
+      },
+    },
+    shut,
+    open(dismissable = true): Entry {
+      const e = { box: {}, trigger: null, parent: null, dismiss: dismissable ? () => {} : undefined } as Entry;
+      entries = [...entries, e];
+      tell();
+      return e;
+    },
+    close(e: Entry) {
+      entries = entries.filter((x) => x !== e);
+      tell();
+    },
+  };
+}
+
+/** the count of open boxes is read a microtask after the stack changes */
+const commit = () => Promise.resolve();
+
 describe("phone history", () => {
   test("opening a worktree stands it on an entry over the list, and back returns to the list", () => {
     const { store } = storeOf(phone());
@@ -170,5 +208,101 @@ describe("phone history", () => {
     installPhoneHistory(store, t.host);
     store.dispatch({ a: "screen", to: "chat" });
     expect(t.depths()).toEqual([0]);
+  });
+
+  test("back with a box open closes the box and stays on the screen", async () => {
+    const { store } = storeOf(phone({ screen: "chat" }));
+    const t = tab();
+    const f = stack();
+    installPhoneHistory(store, t.host, f.boxes);
+    const box = f.open();
+    await commit();
+    expect(t.depths()).toEqual([0, 1, 2]);
+    t.back();
+    expect(f.shut).toEqual([box]);
+    expect(store.getState().screen).toBe("chat");
+    f.close(box);
+    await commit();
+    t.settle();
+    expect(t.index()).toBe(1);
+    t.back();
+    expect(store.getState().screen).toBe("home");
+  });
+
+  test("a box closed by hand walks its entry down", async () => {
+    const { store } = storeOf(phone({ screen: "chat" }));
+    const t = tab();
+    const f = stack();
+    installPhoneHistory(store, t.host, f.boxes);
+    const box = f.open();
+    await commit();
+    f.close(box);
+    await commit();
+    t.settle();
+    expect(t.index()).toBe(1);
+    expect(f.shut).toEqual([]);
+    expect(store.getState().screen).toBe("chat");
+  });
+
+  test("boxes close one swipe at a time, topmost first", async () => {
+    const { store } = storeOf(phone({ screen: "chat" }));
+    const t = tab();
+    const f = stack();
+    installPhoneHistory(store, t.host, f.boxes);
+    const picker = f.open();
+    const menu = f.open();
+    await commit();
+    expect(t.depths()).toEqual([0, 1, 2]);
+    t.back();
+    expect(f.shut).toEqual([menu]);
+    f.close(menu);
+    await commit();
+    expect(t.index()).toBe(2);
+    t.back();
+    expect(f.shut).toEqual([menu, picker]);
+    expect(store.getState().screen).toBe("chat");
+  });
+
+  test("one box opening as another closes keeps the entry", async () => {
+    const { store } = storeOf(phone());
+    const t = tab();
+    const f = stack();
+    installPhoneHistory(store, t.host, f.boxes);
+    const menu = f.open();
+    await commit();
+    f.close(menu);
+    f.open();
+    await commit();
+    t.settle();
+    expect(t.depths()).toEqual([0, 1]);
+    expect(t.index()).toBe(1);
+  });
+
+  test("a box nothing dismisses takes no entry", async () => {
+    const { store } = storeOf(phone({ screen: "chat" }));
+    const t = tab();
+    const f = stack();
+    installPhoneHistory(store, t.host, f.boxes);
+    f.open(false);
+    await commit();
+    expect(t.depths()).toEqual([0, 1]);
+    t.back();
+    expect(store.getState().screen).toBe("home");
+  });
+
+  test("forward into a closed box's entry opens nothing", async () => {
+    const { store } = storeOf(phone());
+    const t = tab();
+    const f = stack();
+    installPhoneHistory(store, t.host, f.boxes);
+    const box = f.open();
+    await commit();
+    t.back();
+    f.close(box);
+    await commit();
+    t.forward();
+    expect(store.getState().screen).toBe("home");
+    t.settle();
+    expect(t.index()).toBe(0);
   });
 });

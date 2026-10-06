@@ -49,6 +49,8 @@ type Props = Omit<HTMLAttributes<HTMLDivElement>, "style"> & {
   raiseKey?: unknown;
   onDismiss?: (why: DismissReason) => void;
   onKey?: (e: KeyboardEvent) => void;
+  /** what its Escape does, for the phone's swipe back, where that is more than a dismissal */
+  onBack?: () => void;
   /** the control it opened from, when the gesture cannot say: a dropdown names its button */
   trigger?: Element | null;
   /** the element it is about, which places it in the stack without toggling it: a right-click
@@ -85,6 +87,7 @@ export function Float({
   raiseKey,
   onDismiss,
   onKey,
+  onBack,
   trigger,
   from,
   boxRef,
@@ -94,8 +97,8 @@ export function Float({
 }: Props) {
   const ref = useRef<HTMLDivElement | null>(null);
   // the props the effects read, so none of them re-runs when a callback is rebuilt
-  const live = useRef({ anchor, placement, coverBy, onDismiss, onKey, trigger, from });
-  live.current = { anchor, placement, coverBy, onDismiss, onKey, trigger, from };
+  const live = useRef({ anchor, placement, coverBy, onDismiss, onKey, onBack, trigger, from });
+  live.current = { anchor, placement, coverBy, onDismiss, onKey, onBack, trigger, from };
 
   const placeNow = useCallback(() => {
     const el = ref.current;
@@ -135,7 +138,7 @@ export function Float({
       el.popover = "manual";
       if (!el.matches(":popover-open")) el.showPopover();
     }
-    const { onDismiss: dismiss, onKey: key, trigger: by, from: about } = live.current;
+    const { onDismiss: dismiss, onKey: key, onBack: back, trigger: by, from: about } = live.current;
     const entry =
       dismiss || key
         ? floats.register({
@@ -144,6 +147,7 @@ export function Float({
             from: about,
             dismiss: dismiss ? (why) => live.current.onDismiss?.(why) : undefined,
             onKey: key ? (e) => live.current.onKey?.(e) : undefined,
+            back: back ? () => live.current.onBack?.() : undefined,
           })
         : null;
     return () => {

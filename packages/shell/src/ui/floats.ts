@@ -32,6 +32,8 @@ export type Entry = {
   dismiss?: (why: DismissReason) => void;
   /** the keyboard while this is the topmost float */
   onKey?: (e: KeyboardEvent) => void;
+  /** what its Escape does, for a way back that is not a key */
+  back?: () => void;
 };
 
 export type Registration = {
@@ -43,6 +45,7 @@ export type Registration = {
   from?: Element | null;
   dismiss?: (why: DismissReason) => void;
   onKey?: (e: KeyboardEvent) => void;
+  back?: () => void;
 };
 
 /** what a press counts as: the control it landed on, not the glyph inside it */
@@ -85,6 +88,12 @@ export type FloatStack = {
   /** the float a key belongs to */
   top(): Entry | null;
   open(): readonly Entry[];
+  /** told whenever a float opens or closes */
+  watch(fn: () => void): () => void;
+  /** Closes a float the way Escape would, for a way back that is not a key: the phone's swipe.
+   * Its own way back goes first (a sub-picker goes back to its palette rather than away); one
+   * that names none is dismissed like a press outside it. */
+  shut(e: Entry): void;
   install(win: Window): () => void;
 };
 
@@ -100,6 +109,10 @@ export function createFloats({ schedule = defer }: { schedule?: (fn: () => void)
   // a tap that closed a float is spent on closing it: a finger has no pointer resting on the row
   // under the float to say what else the tap would do, so the click it ends in goes nowhere
   let spent = false;
+  const watchers = new Set<() => void>();
+  const changed = () => {
+    for (const fn of [...watchers]) fn();
+  };
 
   const dismissAll = (why: DismissReason) => {
     for (const e of [...entries].reverse()) e.dismiss?.(why);
@@ -117,15 +130,26 @@ export function createFloats({ schedule = defer }: { schedule?: (fn: () => void)
         parent: parentOf(entries, r.from ?? trigger),
         dismiss: r.dismiss,
         onKey: r.onKey,
+        back: r.back,
       };
       entries = [...entries, entry];
+      changed();
       return entry;
     },
     unregister(entry: Entry) {
       entries = entries.filter((e) => e !== entry);
+      changed();
     },
     top: () => entries[entries.length - 1] ?? null,
     open: () => entries,
+    watch(fn: () => void) {
+      watchers.add(fn);
+      return () => watchers.delete(fn);
+    },
+    shut(entry: Entry) {
+      if (entry.back) entry.back();
+      else entry.dismiss?.("outside");
+    },
     install(win: Window): () => void {
       const doc = win.document;
       // before the press is recorded: what closes is decided by the floats that were open when it landed

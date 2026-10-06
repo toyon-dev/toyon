@@ -50,7 +50,7 @@ function Dropdown({
   id,
   children,
 }: Omit<Props, "anchored"> & { anchored: Anchored }) {
-  const onKey = useEscape(onEscape);
+  const { onKey, back } = useEscape(onEscape);
   return (
     <Float
       className={cx(bare ? "" : "overlay-box", "anchored", boxClass)}
@@ -60,6 +60,7 @@ function Dropdown({
       coverBy={coverBy}
       onDismiss={onClose ? () => onClose() : undefined}
       onKey={onKey}
+      onBack={() => back() || onClose?.()}
     >
       {children}
     </Float>
@@ -76,13 +77,14 @@ function Dropdown({
  * against the box it holds.
  */
 function Centred({ onClose, onEscape, boxClass = "", bare = false, id, children }: Omit<Props, "anchored">) {
-  const onKey = useEscape(onEscape);
+  const { onKey, back } = useEscape(onEscape);
   return (
     <Float
       className="overlay scrim"
       id={id}
       onDismiss={onClose ? () => onClose() : undefined}
       onKey={onKey}
+      onBack={() => back() || onClose?.()}
       onClick={(e) => {
         if (onClose && e.target === e.currentTarget) onClose();
       }}
@@ -97,21 +99,24 @@ function Centred({ onClose, onEscape, boxClass = "", bare = false, id, children 
  * answers Escape and ends that one alone. That order is the point: a box with nothing to type in
  * leaves the caret where it was (a terminal, an open row in the chat, a find field), and each of
  * those answers Escape for itself. A box the store owns closes through the store, and a sub-picker
- * goes back to the palette it came from.
+ * goes back to the palette it came from. `back` is that answer without the key, for the phone's
+ * swipe, and says whether there was anything of the box's to close.
  */
 function useEscape(onEscape?: () => void) {
   const store = useStoreInstance();
-  return (e: KeyboardEvent) => {
-    if (e.key !== "Escape") return;
+  const back = (): boolean => {
     if (onEscape) {
-      e.stopPropagation();
       onEscape();
-      return;
+      return true;
     }
     const s = store.getState();
     // the Finder dialog is above every box, and its Escape is taken in app/keys.ts
-    if (!s.overlay || s.choosingFolder) return;
-    e.stopPropagation();
+    if (!s.overlay || s.choosingFolder) return false;
     store.dispatch({ a: "close", back: isSubPicker(s.overlay) });
+    return true;
   };
+  const onKey = (e: KeyboardEvent) => {
+    if (e.key === "Escape" && back()) e.stopPropagation();
+  };
+  return { onKey, back };
 }

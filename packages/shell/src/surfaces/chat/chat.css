@@ -1541,14 +1541,37 @@
       visibility: visible;
     }
   }
-  .ask-preview {
-    margin: 6px 0 0;
-    padding: 6px 8px;
-    background: var(--sunken);
-    border-radius: var(--radius);
+  /* What stands under the question to be read before it is answered: the command a yes would run,
+     the cursor row's preview, a plan with no file behind it. One band across the strip on the
+     strip's floor, the way the rows under it bleed to its edges and a command sits in its call's
+     band in the log; a box inside the box with corners of its own read as a card in a place that
+     draws none. The text keeps the column the question starts in. It can be long, so it scrolls in
+     the band rather than the page, and the band is positioned because it is the box a fenced
+     block's copy control (.code-copy) is placed in. Set in code, the band's text is the block, so
+     the fenced block takes no ground or corners of its own and wraps as the log's commands do; a
+     preview is a drawing and keeps its lines where they were put. A plan is prose, and its own
+     fenced blocks stay the chips they are in any rendered markdown. */
+  .ask-block {
+    position: relative;
+    max-height: 40vh;
+    overflow-y: auto;
+    margin: 8px var(--picker-bleed) 0;
+    padding: 6px var(--picker-inset);
+    background: var(--sunken-floor);
     color: var(--text1);
-    overflow-x: auto;
+  }
+  .ask-code pre {
+    margin: 0;
+    padding: 0;
+    background: none;
+    border-radius: 0;
+    font: var(--type-mono-sm);
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .ask-still pre {
     white-space: pre;
+    overflow-x: auto;
   }
   /* what is typed against a row, in the row: the "other" row's answer where its description
      stood, or a note on the pick under its description. One line that grows with what is typed,
@@ -1607,34 +1630,6 @@
     &.answered {
       background: var(--ink1);
     }
-  }
-  /* the command a yes would run, under the sentence that asked for it: the code face the call's
-     row shows it in once it ran, so the card and the row agree on what a command looks like. It
-     wraps rather than scrolls sideways, since a pipeline is read whole before it is let through,
-     and sits a tier under the sentence, which is the question. */
-  .ask-cmd {
-    max-height: 40vh;
-    overflow-y: auto;
-    margin: 8px 0 0;
-    padding: 6px 10px;
-    background: var(--sunken-floor);
-    border-radius: var(--radius);
-    font: var(--type-mono-sm);
-    color: var(--text1);
-    white-space: pre-wrap;
-    word-break: break-word;
-  }
-  /* what the agent proposes when no file was written for it: prose a person reads, and it can be
-     long, so it scrolls in the box rather than the page */
-  .ask-detail {
-    max-height: 40vh;
-    overflow-y: auto;
-    margin-top: 8px;
-    padding: 8px 10px;
-    background: var(--sunken-floor);
-    border-radius: var(--radius);
-    /* the box a fenced block's copy control (.code-copy) is placed in; it scrolls with the prose */
-    position: relative;
   }
   /* ---- the ask in the transcript ----
      A permission's verdict, or a question closed with no answer, reads back in the quiet tier; a

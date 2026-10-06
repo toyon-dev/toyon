@@ -485,7 +485,11 @@ function QuestionBody({
             </div>
           )}
         </div>
-        {under?.preview && <pre className="ask-preview">{under.preview}</pre>}
+        {under?.preview && (
+          <div className="ask-block ask-code ask-still">
+            <pre>{under.preview}</pre>
+          </div>
+        )}
         {foot(qq, a)}
       </div>
     );
@@ -579,6 +583,9 @@ function PermissionBody({
   const html = useMemo(() => (ask.detail && !plan ? renderMarkdown(ask.detail) : ""), [ask.detail, plan]);
   const detail = useRef<HTMLDivElement>(null);
   const codeCopy = useCodeCopy(detail);
+  // the command's band is its own copy root: someone saying no often runs the command themselves
+  const cmd = useRef<HTMLDivElement>(null);
+  const cmdCopy = useCodeCopy(cmd);
   const readPlan = () => {
     // the caret stays on the ask, which is what the agent is blocked on
     if (plan && active === worktreeId)
@@ -622,10 +629,15 @@ function PermissionBody({
       </div>
       {/* the command a yes would run, under the sentence that asked for it, read the way the
           call's row reads it: without the shell an adapter wrapped it in */}
-      {ask.command && <pre className="ask-cmd">{unwrapShell(ask.command)}</pre>}
+      {ask.command && (
+        <div ref={cmd} className="ask-block ask-code">
+          <pre>{unwrapShell(ask.command)}</pre>
+          {cmdCopy}
+        </div>
+      )}
       {html && (
-        // the markup goes into a child of the detail so the detail keeps a child of its own beside it
-        <div ref={detail} className="ask-detail md">
+        // the markup goes into a child of the band so the band keeps a child of its own beside it
+        <div ref={detail} className="ask-block md">
           {/* biome-ignore lint/security/noDangerouslySetInnerHtml: html is DOMPurify-sanitized markdown */}
           <div dangerouslySetInnerHTML={{ __html: html }} />
           {codeCopy}

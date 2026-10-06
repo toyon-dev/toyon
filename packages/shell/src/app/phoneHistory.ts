@@ -1,5 +1,5 @@
 import type { Store } from "../state/context.tsx";
-import { archivedPageOf, type State, worktreeById } from "../state/store.ts";
+import { archivedPageOf, isChatCentred, type State, worktreeById } from "../state/store.ts";
 import { type Entry, type FloatStack, floats } from "../ui/floats.ts";
 
 /**
@@ -8,10 +8,12 @@ import { type Entry, type FloatStack, floats } from "../ui/floats.ts";
  * leaves Toyon for whatever the tab held before it, and a tab opened from toyon.cloud held nothing:
  * a blank page.
  *
- * The screens stack three deep: the list, a worktree over it, and a file's diff over that. Each
- * level stands on an entry of its own, marked with its depth, so going back is the browser moving
- * one entry down and this module closing whatever stands above the entry it landed on. The tabs of
- * one worktree are one level: a tab is a choice of what to look at, not somewhere the person went.
+ * The screens stack four deep: the list, a worktree's chat over it, another of its tabs over the
+ * chat, and a file's diff over whichever tab it opened from. Each level stands on an entry of its
+ * own, marked with its depth, so going back is the browser moving one entry down and this module
+ * closing whatever stands above the entry it landed on. A worktree opens on its chat, so the chat
+ * is what back from another tab returns to; the other tabs share one level between them, because
+ * moving from one to the other is a choice of what to look at, not somewhere the person went.
  *
  * A box over the screen (a picture at full size, a menu, the settings, a picker) is one more level
  * on top of whichever screen it covers, because the phone has no Escape and the swipe is the key
@@ -39,7 +41,10 @@ export function depthOf(s: State): number | null {
   // the same test PhoneFrame draws by: a row that went while its screen was open is the list
   const onWorktree = s.screen !== "home" && (worktreeById(s, s.activeId) !== null || archivedPageOf(s) !== null);
   if (!onWorktree) return 0;
-  return s.editor ? 2 : 1;
+  // the tab PhoneFrame draws: a preview the row has none of is its chat
+  const previewed = worktreeById(s, s.activeId) !== null && !isChatCentred(s) && archivedPageOf(s) === null;
+  const offChat = s.screen === "changes" || (s.screen === "preview" && previewed);
+  return 1 + (offChat ? 1 : 0) + (s.editor ? 1 : 0);
 }
 
 export interface HistoryHost {
@@ -133,15 +138,16 @@ export function installPhoneHistory(
     }
     if (now > at) {
       // back: the diff shuts onto the tab under it (a move to the tab already open does that),
-      // and below a worktree is the list
-      store.dispatch(at === 0 ? { a: "screen", to: "home" } : { a: "screen", to: s.screen });
+      // below another tab is the chat, and below the chat is the list
+      const to = at === 0 ? "home" : s.editor && at === screens - 1 ? s.screen : "chat";
+      store.dispatch({ a: "screen", to });
     } else if (ours && walks > 0) {
       // the first of two walks down (a box that closed as the screen under it dropped a level)
       // lands above where the screen is, which is what forward looks like; the second is coming
       return;
     } else if (!ours && now === 0 && s.activeId && !isOver(e.state)) {
-      // forward from the list into the row it came back from; a diff above that is not
-      // remembered, and neither is a box, so the sync below walks the entry for either back down
+      // forward from the list into the row it came back from; a tab or a diff above its chat is
+      // not remembered, and neither is a box, so the sync below walks the entry for any back down
       store.dispatch({ a: "screen", to: "chat" });
     }
     sync();

@@ -156,13 +156,61 @@ describe("phone history", () => {
     expect(store.getState().screen).toBe("home");
   });
 
-  test("the tabs of one worktree add no entries", () => {
+  test("back from another tab returns to the chat, and then to the list", () => {
     const { store } = storeOf(phone());
     const t = tab();
     installPhoneHistory(store, t.host);
     store.dispatch({ a: "screen", to: "chat" });
     store.dispatch({ a: "screen", to: "changes" });
+    expect(t.depths()).toEqual([0, 1, 2]);
+    t.back();
+    expect(store.getState().screen).toBe("chat");
+    t.back();
+    expect(store.getState().screen).toBe("home");
+  });
+
+  test("the tabs beside the chat share one entry", () => {
+    const { store } = storeOf(phone());
+    const t = tab();
+    installPhoneHistory(store, t.host);
+    store.dispatch({ a: "screen", to: "changes" });
+    store.dispatch({ a: "screen", to: "preview" });
+    store.dispatch({ a: "screen", to: "changes" });
+    expect(t.depths()).toEqual([0, 1, 2]);
+    expect(t.index()).toBe(2);
+  });
+
+  test("the chat tab picked by hand walks the other tab's entry down", () => {
+    const { store } = storeOf(phone());
+    const t = tab();
+    installPhoneHistory(store, t.host);
+    store.dispatch({ a: "screen", to: "changes" });
     store.dispatch({ a: "screen", to: "chat" });
+    t.settle();
+    expect(t.index()).toBe(1);
+    expect(store.getState().screen).toBe("chat");
+    t.back();
+    expect(store.getState().screen).toBe("home");
+  });
+
+  test("the bar's back from another tab goes to the list in one walk", () => {
+    const { store } = storeOf(phone());
+    const t = tab();
+    installPhoneHistory(store, t.host);
+    store.dispatch({ a: "screen", to: "changes" });
+    store.dispatch({ a: "screen", to: "home" });
+    t.settle();
+    expect(t.index()).toBe(0);
+    expect(store.getState().screen).toBe("home");
+  });
+
+  test("a preview the row has none of is its chat", () => {
+    const { store } = storeOf(
+      phone({ archivedPage: "x", archived: { r: [{ id: "x" }] } as unknown as State["archived"] }),
+    );
+    const t = tab();
+    installPhoneHistory(store, t.host);
+    store.dispatch({ a: "screen", to: "preview" });
     expect(t.depths()).toEqual([0, 1]);
   });
 
@@ -171,10 +219,12 @@ describe("phone history", () => {
     const t = tab();
     installPhoneHistory(store, t.host);
     set({ ...store.getState(), editor: {} as State["editor"] });
-    expect(t.depths()).toEqual([0, 1, 2]);
+    expect(t.depths()).toEqual([0, 1, 2, 3]);
     t.back();
     expect(store.getState().editor).toBeNull();
     expect(store.getState().screen).toBe("changes");
+    t.back();
+    expect(store.getState().screen).toBe("chat");
     t.back();
     expect(store.getState().screen).toBe("home");
   });

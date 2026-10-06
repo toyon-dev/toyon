@@ -1261,6 +1261,9 @@ export type Action =
   /** this tab sent a message from the box, which the daemon has taken: the box is empty here too,
    * and the log jumps to its end */
   | { a: "sent-box"; id: string }
+  /** this tab answered the agent's ask: the log jumps to its end the way a send does, and the
+   * plain box's draft stays, since the ask took the box over without taking what was written in it */
+  | { a: "answered"; id: string }
   /** a landing op went out for this worktree: show it working until the shipped frame */
   | { a: "shipping"; id: string; op: ShipOp }
   /** an "open project" request went to the daemon: adopt the repo it adds */
@@ -1636,6 +1639,8 @@ function reduce(s: State, action: Action): State {
         attachments: [],
         sent: (l.sent ?? 0) + 1,
       }));
+    case "answered":
+      return withLocal(s, action.id, (l) => ({ ...l, sent: (l.sent ?? 0) + 1 }));
     case "archive-worktrees": {
       const ids = action.ids.filter((id) => !s.archiving.includes(id) && worktreeById(s, id));
       if (ids.length === 0) return s;

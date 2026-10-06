@@ -958,6 +958,7 @@ export function Composer({
     const prompt = answerLines(revived.ask.questions, answers).join("\n");
     sock?.send({ t: "chat", worktreeId: id, clientId, text: prompt, context: buildContext() });
     dispatch({ a: "sending", id, message: { text: prompt } });
+    dispatch({ a: "answered", id });
     dispatch({ a: "ask-revive", id });
   };
 

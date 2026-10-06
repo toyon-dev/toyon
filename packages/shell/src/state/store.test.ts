@@ -1380,6 +1380,12 @@ describe("drafts", () => {
     s = run([{ a: "sent-box", id: "a" }], s);
     expect(s.local.a?.sent).toBe(2);
   });
+  test("an answer to an ask counts as a send for the log, and leaves the plain box's draft alone", () => {
+    let s = run([hello(wt("a")), { a: "set-draft", id: "a", text: "half a thought" }]);
+    s = run([{ a: "answered", id: "a" }], s);
+    expect(s.local.a?.sent).toBe(1);
+    expect(s.local.a?.draft).toBe("half a thought");
+  });
   test("a message no agent took comes back to its box, words and chips, with the reason under it", () => {
     const item = { kind: "file" as const, upload: "u1", name: "run.jsonl", bytes: 9, text: true };
     let s = run([hello(wt("a"), wt("b")), { a: "sent-box", id: "a" }]);

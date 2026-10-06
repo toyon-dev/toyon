@@ -180,9 +180,14 @@ function QuestionBody({
     dispatch({ a: "ask-draft", id: worktreeId, ask: { id: item.id, draft: next, current: at } });
 
   const send = (answers?: AskAnswer[]) => {
-    if (!onAnswer)
-      return sock?.send({ t: "agent-answer", worktreeId, askId: item.id, ...(answers ? { answers } : {}) });
-    if (answers) onAnswer(answers);
+    if (onAnswer) {
+      if (answers) onAnswer(answers);
+      return;
+    }
+    sock?.send({ t: "agent-answer", worktreeId, askId: item.id, ...(answers ? { answers } : {}) });
+    // the answer is the reader's message to the agent, and the turn going on is what they wait for
+    // now: the log goes to its end from wherever they had scrolled to read, as it does on a send
+    dispatch({ a: "answered", id: worktreeId });
   };
   /** escape gives the plain box back and leaves the question a line at its top */
   const park = () =>
@@ -581,7 +586,10 @@ function PermissionBody({
   useOnChange([item.id, plan], readPlan);
   const decide = (i: number) => {
     const choice = ask.choices[i];
-    if (choice) sock?.send({ t: "agent-decide", worktreeId, askId: item.id, choiceId: choice.id });
+    if (!choice) return;
+    sock?.send({ t: "agent-decide", worktreeId, askId: item.id, choiceId: choice.id });
+    // the decision is the reader's word to the agent: the log goes to its end as it does on a send
+    dispatch({ a: "answered", id: worktreeId });
   };
 
   const onKeyDown = (e: React.KeyboardEvent) => {

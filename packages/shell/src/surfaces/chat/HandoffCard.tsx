@@ -1,9 +1,10 @@
 // The handoff card: a proposal to continue this work in another open project, in the composer box
 // the way an ask is, because the box is where the person is looking and nothing has started until
 // they say so. It is laid out as the permission card is, since it asks the same shape of question:
-// the proposal at the head, the message in the shared block, and the choices as numbered rows
-// reached by digit, arrow or click. Go makes the worktree there; not now closes the card; the
-// third row is the note that rides with go, opened in place the way the ask's own answer is.
+// the proposal at the head, the message in the shared block, and the two choices as numbered rows
+// reached by digit, arrow or click. Go makes the worktree there; not now closes the card. A note
+// is the ask's note: `n` on the go row opens the field under it and makes go the pick, since the
+// note is written for the agent go starts, and Enter in the field is then the go.
 //
 // On the ask's pieces: the root takes the keyboard and reads its keys, every key has a row behind
 // it, Escape parks the card and gives the plain box back, and the note is the box's ask draft so
@@ -28,11 +29,10 @@ import { useCodeCopy } from "./useCodeCopy.tsx";
 const BLANK: AskAnswer[] = [{ selected: [] }];
 
 /** the rows, in digit order: go first, so Enter on an untouched card is the go; the refusal
- * second, in the permission card's red; the note last, as the ask's own answer is */
+ * second, in the permission card's red */
 const GO = 0;
 const NOT_NOW = 1;
-const NOTE = 2;
-const ROWS = 3;
+const ROWS = 2;
 
 export function HandoffCard({
   item,
@@ -51,6 +51,7 @@ export function HandoffCard({
   const draft = stored?.id === item.id ? stored.draft : BLANK;
   // undefined is the field shut; "" is the field open with nothing typed yet
   const note = draft[0]?.note;
+  const noting = note !== undefined;
   const write = (next: AskAnswer[]) =>
     dispatch({ a: "ask-draft", id: worktreeId, ask: { id: item.id, draft: next, current: 0 } });
   const field = useRef<HTMLTextAreaElement>(null);
@@ -69,18 +70,14 @@ export function HandoffCard({
     // the decision is the reader's word, so the log goes to its end as it does on a send
     dispatch({ a: "answered", id: worktreeId });
   };
-  /** the note's field, opened in its row; the caret goes in once it is painted, the commit after this one */
+  /** `n`: the note's field opens under go, which becomes the pick without moving on, since the
+   * note is still to be written; the caret goes in once it is painted, the commit after this one */
   const openNote = () => {
-    if (note === undefined) write(setNote(draft, 0, ""));
-    setCursor(NOTE);
+    if (!noting) write(setNote(draft, 0, ""));
+    setCursor(GO);
     requestAnimationFrame(() => field.current?.focus());
   };
-  /** what a row does when picked, by digit, Enter or click */
-  const pick = (i: number) => {
-    if (i === GO) return answer(true);
-    if (i === NOT_NOW) return answer(false);
-    if (i === NOTE) return openNote();
-  };
+  const pick = (i: number) => answer(i === GO);
   /** escape gives the plain box back and leaves the card a line at its top */
   const park = () => dispatch({ a: "ask-park", id: worktreeId, askId: item.id });
   /** back to the rows from the field, a field left blank going with it */
@@ -98,12 +95,15 @@ export function HandoffCard({
 
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.target instanceof HTMLTextAreaElement) {
-      // Enter in the field never decides: on the ask, Enter in the field sends because a pick was
-      // made first, and here nothing has been picked yet, so a person finishing a note with Enter
-      // and meaning not now would have said go. Enter, Escape and Tab go back to the rows with
-      // the note kept, where the next Enter is the cursor's row; Shift+Enter breaks a line, since
-      // a note can be a few. A field left blank goes with the way back.
-      if ((isEnter(e) && !e.shiftKey) || e.key === "Escape" || (e.key === "Tab" && !e.shiftKey)) {
+      // the field sits on the go row, which `n` made the pick: Enter in it is the go with the
+      // note, as Enter in the ask's field sends its pick. Shift+Enter breaks a line, since a note
+      // can be a few. Escape and Tab go back to the rows, and a field left blank goes with them.
+      if (isEnter(e) && !e.shiftKey) {
+        e.preventDefault();
+        e.stopPropagation();
+        return answer(true);
+      }
+      if (e.key === "Escape" || (e.key === "Tab" && !e.shiftKey)) {
         e.preventDefault();
         e.stopPropagation();
         toRoot();
@@ -130,9 +130,27 @@ export function HandoffCard({
       e.preventDefault();
       return pick(Number(e.key) - 1);
     }
+    if (e.key === "n") {
+      e.preventDefault();
+      return openNote();
+    }
   };
 
-  const state = (i: number) => rowState({ cursor: !touch && i === cursor });
+  const goBody = (
+    <>
+      <Kbd k="1" className="ask-num row-dim" />
+      <span className="ask-label">go</span>
+      {/* the one key that acts on a row rather than the card, said on the row it would act on:
+          at the end of the label's line, shown on the cursor's row alone while no note is open,
+          and the room kept either way so the label wraps the same */}
+      {!touch && (
+        <span className={cx("ask-hint row-dim", cursor === GO && !noting && "on")}>
+          <Kbd k="n" /> add context
+        </span>
+      )}
+      {starting && <span className="ask-desc row-dim">starting</span>}
+    </>
+  );
 
   return (
     <div ref={root} className="ask-box" tabIndex={-1} onKeyDown={onKeyDown} onBlur={onBlur}>
@@ -157,24 +175,46 @@ export function HandoffCard({
         {codeCopy}
       </div>
       <div className="ask-options">
+        {noting ? (
+          // go with a note open on it holds the note's field and is the pick, marked the one way
+          // this app marks a selection; it is no longer a button, since it holds the field
+          <div
+            className="picker-item ask-opt row-edge"
+            data-state={rowState({ cursor: !touch && cursor === GO, checked: true })}
+            onMouseMove={() => cursor !== GO && setCursor(GO)}
+            onMouseDown={toField}
+          >
+            {goBody}
+            <TextArea
+              ref={field}
+              bare
+              font="ui"
+              rows={1}
+              className="ask-own-field"
+              enterKeyHint="send"
+              placeholder="a note for the agent there, sent with go"
+              value={note}
+              onChange={(e) => write(setNote(draft, 0, e.target.value))}
+            />
+          </div>
+        ) : (
+          <button
+            type="button"
+            className="picker-item ask-opt row-edge"
+            data-state={rowState({ cursor: !touch && cursor === GO })}
+            disabled={starting}
+            // mousemove, not mouseenter: a row arriving under a stationary pointer must not steal
+            // the highlight the keyboard is on
+            onMouseMove={() => cursor !== GO && setCursor(GO)}
+            onClick={() => pick(GO)}
+          >
+            {goBody}
+          </button>
+        )}
         <button
           type="button"
-          className="picker-item ask-opt row-edge"
-          data-state={state(GO)}
-          disabled={starting}
-          // mousemove, not mouseenter: a row arriving under a stationary pointer must not steal
-          // the highlight the keyboard is on
-          onMouseMove={() => cursor !== GO && setCursor(GO)}
-          onClick={() => pick(GO)}
-        >
-          <Kbd k="1" className="ask-num row-dim" />
-          <span className="ask-label">go</span>
-          {starting && <span className="ask-desc row-dim">starting</span>}
-        </button>
-        <button
-          type="button"
-          className={cx("picker-item ask-opt row-edge", "deny")}
-          data-state={state(NOT_NOW)}
+          className="picker-item ask-opt row-edge deny"
+          data-state={rowState({ cursor: !touch && cursor === NOT_NOW })}
           disabled={starting}
           onMouseMove={() => cursor !== NOT_NOW && setCursor(NOT_NOW)}
           onClick={() => pick(NOT_NOW)}
@@ -182,45 +222,6 @@ export function HandoffCard({
           <Kbd k="2" className="ask-num row-dim" />
           <span className="ask-label">not now</span>
         </button>
-        {/* the note as one more row, numbered after the choices so it lines up with them and is
-            reached the same way; it opens the field in place rather than deciding anything */}
-        {note === undefined ? (
-          <button
-            type="button"
-            className="picker-item ask-opt row-edge"
-            data-state={state(NOTE)}
-            disabled={starting}
-            onMouseMove={() => cursor !== NOTE && setCursor(NOTE)}
-            onClick={() => pick(NOTE)}
-          >
-            <Kbd k="3" className="ask-num row-dim" />
-            <span className="ask-label">add context</span>
-            <span className="ask-desc row-dim">a note sent with go</span>
-          </button>
-        ) : (
-          // once the note is being written, the field is the row's description: it takes that
-          // line, so opening it moves nothing. The row is no longer a button, since it holds the field.
-          <div
-            className="picker-item ask-opt row-edge"
-            data-state={state(NOTE)}
-            onMouseMove={() => cursor !== NOTE && setCursor(NOTE)}
-            onMouseDown={toField}
-          >
-            <Kbd k="3" className="ask-num row-dim" />
-            <span className="ask-label">add context</span>
-            <TextArea
-              ref={field}
-              bare
-              font="ui"
-              rows={1}
-              className="ask-own-field"
-              enterKeyHint="done"
-              placeholder="a note sent with go; enter returns to the rows"
-              value={note}
-              onChange={(e) => write(setNote(draft, 0, e.target.value))}
-            />
-          </div>
-        )}
       </div>
     </div>
   );

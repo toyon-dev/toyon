@@ -26,8 +26,10 @@ export function applyTheme(theme: Theme, opts: { remember?: boolean } = {}) {
   // What the platform paints above the page. An installed window's caption area (window-controls-
   // overlay) is the bar's ground, which the bar runs into. A phone's status bar is the screen's
   // ground: the phone frame paints the inset under it the same, so the two agree whichever one
-  // the platform shows. Read once per theme: the frame a phone draws never flips, and a desk
-  // window narrowed under the phone width keeps a caption area the bar's colour either way.
+  // the platform shows. A phone's installed app reads the static literals (index.html, the
+  // manifest), which carry the phone's answer; this sets it for the desk. Read once per theme: the frame a phone
+  // draws never flips, and a desk window narrowed under the phone width keeps a caption area the
+  // bar's colour either way.
   const above = frameNow() === "phone" ? theme.colors.surface0 : theme.colors.surface1;
   document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')?.setAttribute("content", above);
   if (opts.remember === false) return;

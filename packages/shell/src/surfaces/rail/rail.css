@@ -614,12 +614,16 @@
     -webkit-line-clamp: 2;
     overflow: hidden;
   }
-  /* The right side of a screen's row is one thing: the counts and then the time, centred on the
-     row's two lines. The control column is the desk's: its kebab shows on a hover a phone never
-     has and its time has moved in beside the counts (Rail.tsx), so both go and the column shrinks
-     to a margin. Behind is nearly always there and says only "stale"; on one column it is a number
-     beside a number. Scoped to the column, since the time beside the counts and the one that ends
-     an archived row are the ones a screen shows. */
+  /* The right side of a screen's row is one thing: the counts and then the time, on the name's
+     line, where the desk's row keeps them and where a mail list keeps its time. In the flow, so
+     the row keeps clear exactly the width the figures take, in their own font, and the line under
+     the name wraps onto a line of its own at the row's full width. Centred over the two lines
+     they sat at a different offset on a short row and a tall one, and the row had to reserve
+     their width by arithmetic. The control column is the desk's: its kebab shows on a hover a
+     phone never has and its time has moved in beside the counts (Rail.tsx), so both go and the
+     column shrinks to a margin. Behind is nearly always there and says only "stale"; on one
+     column it is a number beside a number. Scoped to the column, since the time beside the
+     counts and the one that ends an archived row are the ones a screen shows. */
   .rail-screen .rail-item .rail-gut .rail-at,
   .rail-screen .rail-item .rail-gut .rail-more,
   .rail-screen .rail-disc-item .rail-gut .rail-at,
@@ -627,29 +631,7 @@
   .rail-screen .rail-behind {
     display: none;
   }
-  .rail-screen .rail-item {
-    /* Room on the right for the counts and the time to stand in, out of the lines the name and the
-       line under it wrap on: the time's three characters, then a count column's three and its gap
-       for each column this row draws (--rail-fig-cols, from Rail.tsx), then the row's own gap. A
-       fixed hundred pixels fit every column the list could draw and left most of it empty on the
-       usual row, which draws one or none, and the line under each name broke a third of the way
-       short of the time. The figures are in the mono and the row's own ch is the UI face's, so the
-       widths are written against the mono sizes rather than in ch: three characters at six tenths
-       of an em each, the widest advance in the mono stack (SF Mono is a little under that). */
-    padding-right: calc(
-      var(--rail-pad-r) +
-      var(--size-mono-sm) *
-      1.8 +
-      var(--rail-fig-cols, 0) *
-      (var(--size-mono) * 1.8 + 6px) +
-      8px
-    );
-  }
   .rail-screen .rail-item .rail-counts {
-    position: absolute;
-    right: var(--rail-pad-r);
-    top: 50%;
-    translate: 0 -50%;
     /* the time is a rung smaller than the counts and shares their line */
     align-items: baseline;
   }

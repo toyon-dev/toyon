@@ -1,0 +1,5 @@
+{
+  "name": "toyon-tally",
+  "version": "0.1.0",
+  "description": "Counts tool calls and adds a /tally command: the smallest mod, for the Claude integration test"
+}

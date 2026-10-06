@@ -25,7 +25,28 @@ Toyon serves each agent a few tools of its own over MCP, from the daemon on this
 
 ## Claude Code
 
-Claude Code is installed on first start. It loads your user, project and local settings, so permission rules, hooks, slash commands, plugins and MCP servers work as they do in the terminal.
+Claude Code is installed on first start. It loads your user, project and local settings, so permission rules, hooks, slash commands, installed plugins and MCP servers work as they do in the terminal.
+
+What the terminal gets from a flag or from your shell does not arrive on its own: Toyon starts the agent from the Dock, with no shell in between. Give it those in `~/.toyon/agents.json`, under the agent's id, with no `command`:
+
+```json
+{
+  "claude": {
+    "env": { "CLAUDE_CONFIG_DIR": "/Users/me/.claude-work" },
+    "meta": {
+      "claudeCode": {
+        "options": {
+          "plugins": [{ "type": "local", "path": "/Users/me/.claude/mods/sprint-fast" }]
+        }
+      }
+    }
+  }
+}
+```
+
+`env` is added to the agent's environment, over what it starts with. `meta` rides every chat session of that agent, and is the adapter's own extension channel: Claude's takes any option of the Agent SDK under `claudeCode.options`, so `plugins` loads a plugin from a folder the way `--plugin-dir` does, `agents` adds agents, and `mcpServers` adds servers. Paths are absolute. Toyon's own rules go over `meta`, so they cannot be tuned away. Codex takes the same two fields; what its `meta` carries is its adapter's to say. The daemon reads the file when it starts.
+
+A mod, a plugin whose hooks are functions, runs its hooks here whether it is installed or loaded from a folder: a command it adds is in the command list, and its text reply lands in the chat. What a mod draws in the terminal, a pane or a line by the spinner, does not appear; the chat is not the terminal.
 
 ## Codex
 

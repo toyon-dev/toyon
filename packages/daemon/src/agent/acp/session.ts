@@ -965,6 +965,7 @@ export class AcpSession implements AgentAdapter {
   /** resumed when the agent remembers the session, else new */
   private async openLive(conn: Conn): Promise<Live> {
     const additionalDirectories = conn.bounds.gitDir ? [conn.bounds.gitDir] : [];
+    const meta = sessionMeta(conn.spec);
     let sessionId = this.d.getSessionId();
     let modes: acp.SessionModeState | null | undefined;
     let configOptions: acp.SessionConfigOption[] | null | undefined;
@@ -979,7 +980,7 @@ export class AcpSession implements AgentAdapter {
           cwd: this.d.cwd,
           mcpServers: conn.mcpServers,
           additionalDirectories,
-          ...(conn.spec.systemPrompt === "meta-append" ? { _meta: { systemPrompt: { append: SYSTEM_APPEND } } } : {}),
+          ...(meta ? { _meta: meta } : {}),
         });
         modes = r.modes;
         configOptions = r.configOptions;
@@ -994,7 +995,7 @@ export class AcpSession implements AgentAdapter {
         cwd: this.d.cwd,
         mcpServers: conn.mcpServers,
         additionalDirectories,
-        ...(conn.spec.systemPrompt === "meta-append" ? { _meta: { systemPrompt: { append: SYSTEM_APPEND } } } : {}),
+        ...(meta ? { _meta: meta } : {}),
       });
       sessionId = r.sessionId;
       modes = r.modes;
@@ -1509,6 +1510,17 @@ export function permissionParts(params: acp.RequestPermissionRequest): Permissio
  * or quota, and asking someone to log in again would not help. */
 const REJECTED_CREDENTIAL_RE =
   /\b401\b|unauthorized|invalid[\s_-]?api[\s_-]?key|authentication[\s_-]?(error|failed)|api key (is )?(invalid|expired|incorrect)|incorrect api key|(token|credential)s? (have |has )?expired|expired (token|credential)|not (logged in|authenticated)/i;
+
+/** `_meta` on the chat's session/new and resume: the person's tuning from agents.json under
+ * toyon's own keys, so the rules ride every session and a tuning that names the same key does not
+ * take them away. A resumed query is built from this request alone, so both carry the same one. */
+export function sessionMeta(spec: AgentSpec): Record<string, unknown> | undefined {
+  const meta = {
+    ...spec.meta,
+    ...(spec.systemPrompt === "meta-append" ? { systemPrompt: { append: SYSTEM_APPEND } } : {}),
+  };
+  return Object.keys(meta).length > 0 ? meta : undefined;
+}
 
 /** a login method that runs in a terminal: ACP's terminal type, whose args follow the adapter's own
  * command, or a terminal-auth `_meta`, whose args follow the agent binary alone */

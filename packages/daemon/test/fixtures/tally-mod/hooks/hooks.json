@@ -1,0 +1,4 @@
+{
+  "description": "The toyon-tally hooks module",
+  "modules": ["./register.js"]
+}

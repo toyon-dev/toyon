@@ -25,7 +25,7 @@ Every key is optional. A key that is absent is allowed. Unknown keys are ignored
 | `deploy` | boolean | `false`: `toyon deploy` refuses, and the "add to toyon.cloud" row in the app is greyed. |
 | `remote` | `"any"`, `"tailscale"` or `"off"` | `off`: `toyon remote` refuses and the daemon ignores a `remote.json` it finds. `tailscale`: only a `*.ts.net` name is accepted, so the shell opens over your tailnet and nowhere else. |
 | `agents` | list of agent ids | Only the agents listed exist: the others are gone from the picker and are never installed. The builtin ids are `claude`, `codex` and `opencode`. |
-| `customAgents` | boolean | `false`: `~/.toyon/agents.json` is ignored, so nobody can add an agent of their own or shadow a builtin with one. |
+| `customAgents` | boolean | `false`: `~/.toyon/agents.json` is ignored, so nobody can add an agent of their own, shadow a builtin with one, or tune a builtin's environment and sessions. |
 | `brandedListener` | boolean | `false`: the daemon does not bind port 80 for `http://toyon.localhost`; the shell is at `http://toyon.localhost:4141` only. |
 | `planSignIn` | boolean | `false`: signing in with a personal Claude plan is not offered in the chat, and a request for it is refused. Keys and gateways still work. |
 

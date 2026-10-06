@@ -1238,6 +1238,25 @@ describe("AcpSession", () => {
     await w.session.close();
   });
 
+  test("the agent's tuning from agents.json rides session/new and resume under toyon's own keys", async () => {
+    const fake = fakeAgent(say("ok"));
+    const plugins = [{ type: "local", path: "/home/me/mods/sprint" }];
+    const meta = { claudeCode: { options: { plugins } }, systemPrompt: { append: "mine" } };
+    const w = world(fake, { ...claudeSpec, meta }, 10);
+    w.session.send("first");
+    await w.idle();
+    const expected = { claudeCode: { options: { plugins } }, systemPrompt: { append: SYSTEM_APPEND } };
+    expect(fake.newSessions[0]!._meta).toEqual(expected);
+    for (let i = 0; i < 100 && !w.links[0]!.killed; i++) await Bun.sleep(5);
+    w.session.send("second");
+    await w.idle();
+    expect(fake.resumes[0]!._meta).toEqual(expected);
+    // a side question runs bare: the tuning is the chat's, not the namer's
+    expect(await w.session.ask("sys", "name this")).toBe("ok");
+    expect(fake.newSessions[1]!._meta).toEqual({ systemPrompt: "sys" });
+    await w.session.close();
+  });
+
   test("a failed session/resume falls back to session/new and the stored id moves on", async () => {
     const fake = fakeAgent(say("x"));
     const w = world(fake, claudeSpec, 10);

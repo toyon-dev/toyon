@@ -9,7 +9,7 @@ import {
   BUILTIN_AGENTS,
   type Installer,
   managedSpecs,
-  parseCustomAgents,
+  parseAgentsFile,
 } from "./registry.ts";
 import type { Prepared } from "./sandbox.ts";
 
@@ -86,7 +86,7 @@ describe("agent registry", () => {
     expect(changes.at(-1)).toEqual(["claude:ok", "codex:ok", "opencode:not installed"]);
     const l = reg.launch(reg.require("claude"), prepared);
     expect(l.command).toBe(process.execPath);
-    expect(l.env).toEqual({ FROM_SETUP: "1" });
+    expect(l.env).toEqual({ CLAUDE_CODE_ENABLE_FUNCTION_HOOKS: "1", FROM_SETUP: "1" });
     expect(l.args[0]).toMatch(/claude-agent-acp\/dist\/index\.js$/);
     expect(JSON.parse(readFileSync(join(l.args[0]!, "../../package.json"), "utf8")).version).toBe("0.84.0");
     // already at the pinned version: nothing to do
@@ -185,54 +185,84 @@ describe("agent registry", () => {
   });
 
   test("custom agents: valid entries are kept, invalid ones skipped, builtins can be shadowed", () => {
-    const specs = parseCustomAgents(
+    const specs = parseAgentsFile(
       JSON.stringify({
         gemini: {
           name: "Gemini CLI",
           command: "gemini",
           args: ["--experimental-acp"],
           env: { A: "1" },
+          meta: { gemini: { tools: [] } },
           quickModel: "gemini-flash",
         },
         "Bad Id": { command: "x" },
         nocmd: { name: "no command" },
         badargs: { command: "x", args: "nope" },
+        badmeta: { command: "x", meta: ["nope"] },
         badconf: { command: "x", confinement: "claude-settings" },
         unknownconf: { command: "x", confinement: "jail" },
         boxed: { command: "x", confinement: "toyon-sandbox" },
         claude: { command: "my-claude-acp", confinement: "adapter-sandbox", mode: "agent" },
       }),
+      BUILTIN_AGENTS,
     );
-    expect(specs.map((s) => s.id)).toEqual(["gemini", "boxed", "claude"]);
-    expect(specs[1]).toMatchObject({ confinement: "toyon-sandbox" });
-    specs.splice(1, 1);
-    expect(specs[0]).toMatchObject({
+    // a shadow takes the builtin's place, so the order the rail lists agents in does not move
+    expect(specs.map((s) => s.id)).toEqual(["claude", "codex", "opencode", "gemini", "boxed"]);
+    expect(specs[0]).toMatchObject({ builtin: false, confinement: "adapter-sandbox", mode: "agent" });
+    expect(specs[3]).toMatchObject({
       name: "Gemini CLI",
       run: { kind: "command", command: "gemini", args: ["--experimental-acp"] },
       env: { A: "1" },
+      meta: { gemini: { tools: [] } },
       confinement: "none",
       systemPrompt: "prompt-prefix",
       quickModel: "gemini-flash",
     });
-    expect(specs[1]).toMatchObject({ confinement: "adapter-sandbox", mode: "agent" });
-    const reg = new AgentRegistry([...BUILTIN_AGENTS, ...specs], tmp());
+    expect(specs[4]).toMatchObject({ confinement: "toyon-sandbox" });
+    const reg = new AgentRegistry(specs, tmp());
     expect(reg.get("claude")?.builtin).toBe(false);
-    expect(parseCustomAgents("not json")).toEqual([]);
-    expect(parseCustomAgents("[]")).toEqual([]);
+    expect(parseAgentsFile("not json", BUILTIN_AGENTS)).toEqual(BUILTIN_AGENTS);
+    expect(parseAgentsFile("[]", BUILTIN_AGENTS)).toEqual(BUILTIN_AGENTS);
+  });
+
+  test("an entry under a builtin's id with no command tunes it: env over its own, meta on its sessions", () => {
+    const specs = parseAgentsFile(
+      JSON.stringify({
+        claude: {
+          env: { CLAUDE_CONFIG_DIR: "/home/me/.claude-work" },
+          meta: { claudeCode: { options: { plugins: [{ type: "local", path: "/home/me/mods/sprint" }] } } },
+        },
+        codex: { env: { OPENAI_BASE_URL: "http://proxy" } },
+        opencode: { meta: "nope" },
+        gemini: { env: { A: "1" } },
+      }),
+      BUILTIN_AGENTS,
+    );
+    expect(specs.map((s) => s.id)).toEqual(["claude", "codex", "opencode"]);
+    const claude = specs[0]!;
+    expect(claude.builtin).toBe(true);
+    expect(claude.run).toEqual(BUILTIN_AGENTS[0]!.run);
+    expect(claude.env).toEqual({ ...BUILTIN_AGENTS[0]!.env, CLAUDE_CONFIG_DIR: "/home/me/.claude-work" });
+    expect(claude.meta).toEqual({
+      claudeCode: { options: { plugins: [{ type: "local", path: "/home/me/mods/sprint" }] } },
+    });
+    expect(claude.sideMeta).toEqual(BUILTIN_AGENTS[0]!.sideMeta);
+    // the builtin's own env stays under the tuning
+    expect(specs[1]!.env).toEqual({ ...BUILTIN_AGENTS[1]!.env, OPENAI_BASE_URL: "http://proxy" });
+    expect(specs[2]).toBe(BUILTIN_AGENTS[2]);
+    // the builtins themselves are left as they were
+    expect(BUILTIN_AGENTS[0]!.meta).toBeUndefined();
+    expect(BUILTIN_AGENTS[1]!.env).not.toHaveProperty("OPENAI_BASE_URL");
   });
 
   test("the managed policy: an allowlist drops a builtin, and custom agents off drops the file's entries, a shadowing one included", () => {
-    const custom = parseCustomAgents(
+    const all = parseAgentsFile(
       JSON.stringify({ gemini: { command: "gemini" }, claude: { command: "my-claude" } }),
+      BUILTIN_AGENTS,
     );
-    const all = [...BUILTIN_AGENTS, ...custom];
     const ids = (specs: AgentSpec[]) => specs.map((s) => s.id);
     expect(ids(managedSpecs(all, { agents: null, customAgents: true }))).toEqual(ids(all));
-    expect(ids(managedSpecs(all, { agents: ["claude", "codex"], customAgents: true }))).toEqual([
-      "claude",
-      "codex",
-      "claude",
-    ]);
+    expect(ids(managedSpecs(all, { agents: ["claude", "codex"], customAgents: true }))).toEqual(["claude", "codex"]);
     // an id nothing answers to is ignored rather than refused
     expect(ids(managedSpecs(all, { agents: ["codex", "nope"], customAgents: true }))).toEqual(["codex"]);
     const builtinsOnly = managedSpecs(all, { agents: null, customAgents: false });
@@ -243,9 +273,10 @@ describe("agent registry", () => {
     expect(reg.defaultId("codex")).toBe("codex");
     expect(reg.defaultId("claude")).toBe("codex");
     expect(reg.defaultId(undefined)).toBe("codex");
-    expect(new AgentRegistry(managedSpecs(all, { agents: null, customAgents: false }), tmp()).defaultId("gemini")).toBe(
-      "claude",
-    );
+    // custom agents off: the file is never read, so the builtin stands where its shadow would have
+    expect(
+      new AgentRegistry(managedSpecs(BUILTIN_AGENTS, { agents: null, customAgents: false }), tmp()).defaultId("gemini"),
+    ).toBe("claude");
   });
 
   test("an agent in toyon's sandbox launches inside it; its own command line stays unwrapped for a login", () => {

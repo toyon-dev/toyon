@@ -73,6 +73,11 @@ export interface AgentSpec {
   /** `_meta` on session/new for a side session (a question toyon asks for itself): whatever this
    * adapter needs to run one bare, without the chat's tools or a saved conversation */
   sideMeta?: Record<string, unknown>;
+  /** the person's own `_meta` on the chat's session/new and resume, from agents.json: ACP's
+   * extension channel, which is where an adapter takes what its terminal takes as flags. Claude's
+   * reads every SDK option under `claudeCode.options`: a plugin loaded from a folder, extra agents,
+   * an MCP config. Toyon's own keys go over it, so the rules cannot be tuned away. */
+  meta?: Record<string, unknown>;
   /** the model a side question runs on while the agent still offers it: a short question answered
    * well by the agent's smallest model should not cost what the chat's model costs. An agent whose
    * models depend on what the person logged into picks one from the offered ids instead (quick.ts). */
@@ -88,9 +93,16 @@ export const BUILTIN_AGENTS: AgentSpec[] = [
     short: "Claude",
     builtin: true,
     run: { kind: "npm-bin", pkg: "@agentclientprotocol/claude-agent-acp", version: "0.84.0", bin: "claude-agent-acp" },
-    // The adapter reads NO_BROWSER to choose its login: set, it offers the TUI's /login, which
-    // prints a link and takes the pasted code; unset, `auth login` opens a browser the cloud lacks.
-    ...(cloud.enabled ? { env: { NO_BROWSER: "1" } } : {}),
+    env: {
+      // A plugin's hooks module (a "mod": hooks as functions, which can add commands) loads in the
+      // terminal but sits behind a rollout flag under the SDK, where the adapter runs Claude Code
+      // 2.1.284; this is that build's early-access switch, read off its debug log. Without it an
+      // installed mod's commands are missing here while they work in the terminal.
+      CLAUDE_CODE_ENABLE_FUNCTION_HOOKS: "1",
+      // The adapter reads NO_BROWSER to choose its login: set, it offers the TUI's /login, which
+      // prints a link and takes the pasted code; unset, `auth login` opens a browser the cloud lacks.
+      ...(cloud.enabled ? { NO_BROWSER: "1" } : {}),
+    },
     // That login opens the whole Claude Code app for its /login: a folder trust prompt, a theme
     // picker, and a session left running once it is done. `auth login` is the same Anthropic flow
     // alone, the link and the pasted code, and it exits, which is how toyon knows it finished.
@@ -396,9 +408,16 @@ export class AgentRegistry {
 
 const ID_RE = /^[a-z][a-z0-9-]{0,31}$/;
 
-/** ~/.toyon/agents.json: { "<id>": { name, command, args?, env?, confinement?, loginHint?, mode?, planMode?, quickModel? } } */
-export function parseCustomAgents(raw: string): AgentSpec[] {
-  const out: AgentSpec[] = [];
+const isRecord = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
+
+/** ~/.toyon/agents.json over the builtins: { "<id>": { name, command, args?, env?, meta?, confinement?,
+ * loginHint?, mode?, planMode?, quickModel? } }. An entry with a `command` is an agent of the
+ * person's own, in a builtin's place when it takes its id. An entry under a builtin's id with no
+ * `command` keeps the builtin and tunes it: `env` goes over its own, `meta` rides its sessions.
+ * That is where what the terminal gets from the shell or a flag reaches an agent toyon starts
+ * from the Dock, with no shell in between. */
+export function parseAgentsFile(raw: string, builtins: AgentSpec[]): AgentSpec[] {
+  const out = [...builtins];
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
@@ -406,45 +425,63 @@ export function parseCustomAgents(raw: string): AgentSpec[] {
     log.warn("agents", "agents.json is not valid JSON; ignoring it", e);
     return out;
   }
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+  if (!isRecord(parsed)) {
     log.warn("agents", "agents.json must be an object keyed by agent id; ignoring it");
     return out;
   }
-  for (const [id, v] of Object.entries(parsed as Record<string, unknown>)) {
+  for (const [id, v] of Object.entries(parsed)) {
     const e = (v ?? {}) as Record<string, unknown>;
     const str = (k: string) => (typeof e[k] === "string" && (e[k] as string).trim() ? (e[k] as string) : undefined);
     const command = str("command");
+    const at = out.findIndex((s) => s.id === id);
+    const tunes = !command && at >= 0 && out[at]!.builtin;
     const why = !ID_RE.test(id)
       ? "id must be lowercase letters, digits and dashes"
-      : !command
-        ? 'needs a non-empty "command"'
+      : !command && !tunes
+        ? 'needs a non-empty "command" (only a builtin is tuned without one)'
         : e.args !== undefined && !(Array.isArray(e.args) && e.args.every((a) => typeof a === "string"))
           ? '"args" must be an array of strings'
-          : e.env !== undefined &&
-              !(e.env && typeof e.env === "object" && Object.values(e.env).every((x) => typeof x === "string"))
+          : e.env !== undefined && !(isRecord(e.env) && Object.values(e.env).every((x) => typeof x === "string"))
             ? '"env" must be an object of strings'
-            : // claude-settings is Claude Code's settings file and nothing another agent reads
-              e.confinement !== undefined &&
-                (e.confinement === "claude-settings" || !CONFINEMENTS.includes(e.confinement as Confinement))
-              ? '"confinement" must be "none", "adapter-sandbox" or "toyon-sandbox"'
-              : null;
+            : e.meta !== undefined && !isRecord(e.meta)
+              ? '"meta" must be an object'
+              : // claude-settings is Claude Code's settings file and nothing another agent reads
+                e.confinement !== undefined &&
+                  (e.confinement === "claude-settings" || !CONFINEMENTS.includes(e.confinement as Confinement))
+                ? '"confinement" must be "none", "adapter-sandbox" or "toyon-sandbox"'
+                : null;
     if (why) {
       log.warn("agents", `agents.json: skipping "${id}": ${why}`);
       continue;
     }
-    out.push({
+    const env = e.env as Record<string, string> | undefined;
+    const meta = e.meta as Record<string, unknown> | undefined;
+    if (tunes) {
+      const base = out[at]!;
+      out[at] = {
+        ...base,
+        ...(env ? { env: { ...base.env, ...env } } : {}),
+        ...(meta ? { meta } : {}),
+      };
+      continue;
+    }
+    const spec: AgentSpec = {
       id,
       name: str("name") ?? id,
       builtin: false,
       run: { kind: "command", command: command!, ...(e.args ? { args: e.args as string[] } : {}) },
-      ...(e.env ? { env: e.env as Record<string, string> } : {}),
+      ...(env ? { env } : {}),
+      ...(meta ? { meta } : {}),
       confinement: (e.confinement as Confinement | undefined) ?? "none",
       systemPrompt: "prompt-prefix",
       ...(str("mode") ? { mode: str("mode") } : {}),
       ...(str("planMode") ? { modes: { plan: str("planMode"), build: str("mode") } } : {}),
       ...(str("quickModel") ? { quickModel: str("quickModel") } : {}),
       loginHint: str("loginHint") ?? `${str("name") ?? id} is not logged in`,
-    });
+    };
+    // in the builtin's place, so the rail's order does not depend on who shadowed what
+    if (at >= 0) out[at] = spec;
+    else out.push(spec);
   }
   return out;
 }
@@ -460,20 +497,18 @@ export function managedSpecs(specs: AgentSpec[], managed: ManagedAgents): AgentS
 }
 
 /** builtins plus the user's file, less what the policy withholds; a custom entry may shadow a
- * builtin id on purpose, which is one of the things the policy can forbid */
+ * builtin id on purpose, which is one of the things the policy can forbid. The whole file goes
+ * with that, a tuned builtin included: a policy that keeps people from bringing an agent keeps
+ * them from loading code into one as well. */
 export function loadAgentRegistry(
   agentsFile: string,
   agentsDir: string,
   sandbox?: SandboxCheck,
   managed: ManagedAgents = MANAGED_DEFAULTS,
 ): AgentRegistry {
-  const custom =
-    managed.customAgents && existsSync(agentsFile) ? parseCustomAgents(readFileSync(agentsFile, "utf8")) : [];
-  return new AgentRegistry(
-    managedSpecs([...BUILTIN_AGENTS, ...custom], managed),
-    agentsDir,
-    undefined,
-    undefined,
-    sandbox,
-  );
+  const specs =
+    managed.customAgents && existsSync(agentsFile)
+      ? parseAgentsFile(readFileSync(agentsFile, "utf8"), BUILTIN_AGENTS)
+      : BUILTIN_AGENTS;
+  return new AgentRegistry(managedSpecs(specs, managed), agentsDir, undefined, undefined, sandbox);
 }

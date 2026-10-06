@@ -3,13 +3,13 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { AgentEvent } from "@toyon/shared";
+import type { AgentCommand, AgentEvent } from "@toyon/shared";
 import { sh, tmpRepo } from "../../../test/helpers/tmp-repo.ts";
 import { makePaths } from "../../core/paths.ts";
 import { GIT } from "../../git/exec.ts";
 import { AttachmentStore } from "../attachments.ts";
 import { askFreshAgent } from "../oneshot.ts";
-import { AgentRegistry, BUILTIN_AGENTS } from "../registry.ts";
+import { AgentRegistry, type AgentSpec, BUILTIN_AGENTS, parseAgentsFile } from "../registry.ts";
 import { SETTINGS_REL } from "../sandbox.ts";
 import { NAME_SYSTEM, namePrompt, PLAN_SYSTEM, parseName, parsePlan, planPrompt } from "../tasks.ts";
 import { UploadStore } from "../uploads.ts";
@@ -30,13 +30,14 @@ const creds =
   keychain();
 const enabled = process.env.TOYON_TEST_CLAUDE === "1" && creds;
 
-function world() {
+function world(specs: AgentSpec[] = BUILTIN_AGENTS) {
   const t = tmpRepo();
   const wt = join(t.repo, "..", "wt");
   sh(t.repo, GIT, "worktree", "add", "-q", "-b", "feat", wt, "main");
   // the real adapter, installed into the machine's ~/.toyon/agents once and reused across runs
-  const registry = new AgentRegistry(BUILTIN_AGENTS, makePaths().agentsDir);
+  const registry = new AgentRegistry(specs, makePaths().agentsDir);
   const events: AgentEvent[] = [];
+  let commands: AgentCommand[] = [];
   let sessionId: string | undefined;
   const uploads = new UploadStore(t.paths.uploadsDir);
   const session = new AcpSession({
@@ -53,6 +54,9 @@ function world() {
     },
     onEvent: (e) => events.push(e),
     onStatus: () => {},
+    onCommandsLearned: (c) => {
+      commands = c;
+    },
     idleMs: 60_000,
   });
   const settle = async () => {
@@ -63,7 +67,7 @@ function world() {
       .filter((e) => e.type === "text-delta")
       .map((e) => (e as { text: string }).text)
       .join("");
-  return { t, wt, events, session, settle, said, uploads };
+  return { t, wt, events, session, settle, said, uploads, commands: () => commands };
 }
 
 describe.skipIf(!enabled)("claude via ACP (integration)", () => {
@@ -177,6 +181,26 @@ describe.skipIf(!enabled)("claude via ACP (integration)", () => {
         `no block; the agent said: ${said()}`,
       ).toBe(true);
       expect(existsSync(outside)).toBe(false);
+    } finally {
+      await session.close();
+      t.cleanup();
+    }
+  }, 180_000);
+
+  test("a mod loaded from a folder through agents.json adds its command, and the command answers without the model", async () => {
+    const mod = join(import.meta.dir, "../../../test/fixtures/tally-mod");
+    const file = JSON.stringify({
+      claude: { meta: { claudeCode: { options: { plugins: [{ type: "local", path: mod }] } } } },
+    });
+    const { t, events, session, settle, said, commands } = world(parseAgentsFile(file, BUILTIN_AGENTS));
+    try {
+      session.send("/tally");
+      await settle();
+      expect(session.status).toBe("idle");
+      // the mod's own reply, from its command.run hook: no tool ran and no model answered
+      expect(said()).toContain("Claude has made 0 tool calls since this mod loaded");
+      expect(events.filter((e) => e.type === "tool-start")).toHaveLength(0);
+      expect(commands().some((c) => c.name === "tally")).toBe(true);
     } finally {
       await session.close();
       t.cleanup();

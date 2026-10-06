@@ -65,7 +65,7 @@ import {
   verbLine,
   verdictLine,
 } from "../recap.ts";
-import { runLine, runOf, runTicking } from "../runs.ts";
+import { runLine, runOf, runTicking, useLastingRun } from "../runs.ts";
 import { chord, commandSource, folderList, pickLabel, procTrouble } from "../util.ts";
 import { AskBox } from "./AskBox.tsx";
 import { answerLines, askLine, answered as hasAnswer, openAsk, stoppedAsk } from "./ask.ts";
@@ -651,18 +651,20 @@ export function Composer({
   // way the commit box says them; the count ticks here from the daemon's stamp
   const commitRun = runOf(active, "commit");
   const checkRun = runOf(active, "check");
-  const shownRun = landingNow ? commitRun : checkRun;
+  // only once it has lasted, the way a step is named: a commit with no hooks is over before its
+  // count could be read, and the count came and went on the line inside a second
+  const shownRun = useLastingRun(landingNow ? commitRun : checkRun);
   const runSecs = useSecondsSince(runTicking(shownRun) ? shownRun?.since : undefined);
   const blocked = !landing
     ? null
-    : landing.check === "pending" && checkRun && checkRun.status !== "terminated"
+    : landing.check === "pending" && checkRun && shownRun === checkRun
       ? runLine("Checking the work", checkRun, runSecs)
       : landingLine(landing, dirty, quick, agentInfo?.name);
   // the same words in the same places as before the press, so nothing shifts under the shine; the
   // colon comes only with a step's name, which replaces the line anyway
   const landLine = verb && landingNow ? (heldStep ? `${verb.word}: ${heldStep}` : `${verb.word} ${verb.line}`) : null;
   const landingText =
-    landLine && commitRun && commitRun.status !== "terminated" ? runLine(landLine, commitRun, runSecs) : landLine;
+    landLine && commitRun && shownRun === commitRun ? runLine(landLine, commitRun, runSecs) : landLine;
   // the empty box's line, first match wins: what the box is for when it is not a worktree's, then
   // the next step on the work, then what the work is waiting on, then where the last turn left it,
   // then how to start

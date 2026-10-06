@@ -1,11 +1,13 @@
 import { type RunKind, type RunState, type RunStatus, shortDuration, type WorktreeStatus } from "@toyon/shared";
+import { STEP_HOLD_MS, useHeld } from "../ui/hooks.ts";
 import { elapsed } from "./util.ts";
 
 /**
  * The wait on a run (setup, the check, a commit with its hooks), in words. A run is a process
  * that can take twenty minutes on a real suite, so the line under the word it stands behind says
  * three things: what it is on, how long it has been against its ceiling, and whether it is still
- * being watched. Pure, the way rowLine is: the fields are the whole logic, and the test holds them.
+ * being watched. The words are pure, the way rowLine is: the fields are the whole logic, and the
+ * test holds them.
  */
 
 /** the run of that kind on the row, if the daemon lists one */
@@ -16,6 +18,16 @@ export function runOf(w: Pick<WorktreeStatus, "worktree"> | null | undefined, ki
 /** whether the run's clock is going: the count since `since` is only a wait while it is */
 export function runTicking(run: RunState | undefined): boolean {
   return run?.status === "running" || run?.status === "detached";
+}
+
+/** The run once it has proved a wait, for a line that counts it: a commit with no hooks is over
+ * in well under a second, and a count against its ceiling shown from the start is on the line and
+ * gone again before it can be read. Held as long as a landing step is, so the two arrive together.
+ * Keyed on the stamp, which a run keeps from queued to its end. */
+export function useLastingRun(run: RunState | undefined): RunState | undefined {
+  const since = run && run.status !== "terminated" ? run.since : undefined;
+  const held = useHeld(since, STEP_HOLD_MS);
+  return since !== undefined && held === since ? run : undefined;
 }
 
 /** What the line says after the word, as fields a middot joins: the stage when there is one,

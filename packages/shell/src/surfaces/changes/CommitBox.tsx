@@ -19,7 +19,7 @@ import { useContextMenu } from "../../ui/menu.ts";
 import { tip } from "../../ui/Tooltip.tsx";
 import { behindNote } from "../chips/baseNote.ts";
 import { checkTip, messageGap, prCanMerge } from "../recap.ts";
-import { RUN_STATUS_TIP, runFacts, runOf, runStopTip, runTicking } from "../runs.ts";
+import { RUN_STATUS_TIP, runFacts, runOf, runStopTip, runTicking, useLastingRun } from "../runs.ts";
 
 /** The foot of the changes panel, built like the chat composer: a message box over a row that says
  * where you are on the left and what you can do on the right. The message box shows the suggested
@@ -61,7 +61,10 @@ export function CommitBox({
   // ceiling, and whether it is still watched; the count ticks here, from the daemon's stamp
   const commitRun = runOf(active, "commit");
   const checkRun = runOf(active, "check");
-  const shownRun = op ? commitRun : checkRun;
+  const askedRun = op ? commitRun : checkRun;
+  // only once it has lasted: a commit with no hooks is over before its count could be read, and
+  // a line that came and went under the word moved the box twice inside a second
+  const shownRun = useLastingRun(askedRun);
   const runSecs = useSecondsSince(runTicking(shownRun) ? shownRun?.since : undefined);
   const [msg, setMsg] = useState("");
   useOnChange([id], () => setMsg(""));
@@ -179,13 +182,13 @@ export function CommitBox({
   // line wrapped there four deep in a narrow dock. A terminated run is over, and the verdict or
   // the shipped word says what it gave up after; the check over with the message still being
   // written says so.
-  const facts = !shownRun
+  const facts = !askedRun
     ? checking && !op
       ? "writing the message"
       : null
-    : shownRun.status === "terminated"
-      ? null
-      : runFacts(shownRun, runSecs).join(" · ");
+    : shownRun
+      ? runFacts(shownRun, runSecs).join(" · ")
+      : null;
   // the one stop the box offers: on the run its line is about, while there is a process to kill
   const stoppable = shownRun && (shownRun.status === "running" || shownRun.status === "detached") ? shownRun : null;
   const stop = stoppable && (

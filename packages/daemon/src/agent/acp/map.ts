@@ -15,9 +15,9 @@ import {
   type AgentCommand,
   type AgentEvent,
   emptyInput,
-  isWrittenKind,
   TOOL_SEARCH,
   type ToolImage,
+  writingCall,
 } from "@toyon/shared";
 import { log } from "../../core/log.ts";
 import { toolImage } from "../attachments.ts";
@@ -34,7 +34,7 @@ export interface ToolMemo {
   content: ToolCallContent[];
   rawOutput?: unknown;
   ended: boolean;
-  /** the agent is still writing the call: its kind takes an input and none has been forwarded */
+  /** the agent is still writing the call: it takes an input (writingCall) and none has been forwarded */
   writing: boolean;
   /** what the adapter has refined that the shell has not been sent: an input that may be half
    * written waits here until something says the call is whole (`tool_call_update`, `release`) */
@@ -258,7 +258,7 @@ export function mapUpdate(
         content: update.content ?? [],
         rawOutput: update.rawOutput,
         ended: false,
-        writing: isWrittenKind(head.kind) && emptyInput(input),
+        writing: writingCall(head, input),
         ...(spawn.parentToolId ? { parent: spawn.parentToolId } : {}),
         ...(spawn.subagent ? { spawns: true } : {}),
       };
@@ -291,7 +291,7 @@ export function mapUpdate(
           input,
           content: [],
           ended: false,
-          writing: isWrittenKind(update.kind ?? undefined) && emptyInput(input),
+          writing: writingCall({ name: update.name ?? "", kind: update.kind ?? undefined }, input),
           ...(spawn.parentToolId ? { parent: spawn.parentToolId } : {}),
           ...(spawn.subagent ? { spawns: true } : {}),
         };

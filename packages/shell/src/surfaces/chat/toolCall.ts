@@ -10,6 +10,7 @@ import {
   type ToolKind,
   type WrittenKind,
   wordSpans,
+  writingCall,
 } from "@toyon/shared";
 import type { IconName } from "../../ui/Icon.tsx";
 /** How a tool call reads in the transcript: the two halves of its summary line, and the blocks of
@@ -326,11 +327,11 @@ export function composing(call: ToolCall): string {
   // brief is what the agent writes here, and until it lands the row would say "Task" with a
   // count of no calls, which reads as a subagent that never started
   if (call.subagent) return "writing the brief";
+  if (!writingCall({ name: call.name, kind }, call.input)) return "";
   // an ask has no kind, and its question is the longest input an agent types that nobody sees
   // arrive: the adapter's placeholder ("Asking for your input") says the person is being waited
   // on while there is nothing yet to answer
-  if (call.name === ASK_TOOL) return "writing the question";
-  return isWrittenKind(kind) ? WRITING[kind] : "";
+  return isWrittenKind(kind) ? WRITING[kind] : "writing the question";
 }
 
 /** the blocks to show under the row: the adapter repeats the description as the first line of the

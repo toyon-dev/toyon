@@ -306,6 +306,54 @@ describe("mapUpdate", () => {
     expect(nested.get("k4")!.cut).toBeUndefined();
   });
 
+  test("an ask a steer cut while the question was being written ends when the agent moves on", () => {
+    // the adapter sends an ask with no kind of its own, so the question is what says it is written.
+    // Left open it would hold the head of the batch for the rest of the turn: every command and
+    // edit after it reads as queued, and the stale row shines with the count beside it.
+    const ask = (toolCallId: string): SessionUpdate => ({
+      sessionUpdate: "tool_call",
+      toolCallId,
+      name: "AskUserQuestion",
+      title: "Asking for your input",
+      kind: "other",
+      status: "pending",
+      rawInput: {},
+    });
+    // answered in prose: the message sent mid-turn was a question, so the agent talks instead
+    expect(
+      run([ask("a1"), { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "The better fix" } }]),
+    ).toMatchObject([{ type: "tool-start", toolId: "a1" }, { type: "tool-end", toolId: "a1" }, { type: "text-delta" }]);
+    // answered with a call
+    expect(
+      run([
+        ask("a2"),
+        { sessionUpdate: "tool_call", toolCallId: "c1", title: "Terminal", kind: "execute", rawInput: {} },
+      ]).map((e) => [e.type, "toolId" in e && e.toolId]),
+    ).toEqual([
+      ["tool-start", "a2"],
+      ["tool-end", "a2"],
+      ["tool-start", "c1"],
+    ]);
+    // an ask whose question is in is whole: the next call releases its input and leaves it open
+    // for the card and the answer
+    const memos: ToolMemos = new Map();
+    expect(
+      run(
+        [
+          ask("a3"),
+          { sessionUpdate: "tool_call_update", toolCallId: "a3", rawInput: { questions: [{ question: "Go?" }] } },
+          { sessionUpdate: "tool_call", toolCallId: "c2", title: "Terminal", kind: "execute", rawInput: {} },
+        ],
+        memos,
+      ).map((e) => [e.type, "toolId" in e && e.toolId]),
+    ).toEqual([
+      ["tool-start", "a3"],
+      ["tool-update", "a3"],
+      ["tool-start", "c2"],
+    ]);
+    expect(memos.get("a3")).toMatchObject({ ended: false, writing: false });
+  });
+
   test("a subagent writing a call is read apart from the main agent, and the other way round", () => {
     const meta = { claudeCode: { parentToolUseId: "task1" } };
     const events = run([

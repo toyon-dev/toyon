@@ -370,6 +370,13 @@ describe("groupTools", () => {
       { at: 0, n: 1 },
       { at: 1, n: 1 },
     ]);
+    // an ask cut off before its question was written: no kind of its own, named by the tool
+    const asked = (extra: Partial<ChatItem> = {}) =>
+      tool("other", "", { name: "AskUserQuestion", title: "Asking for your input", input: {}, ...extra });
+    expect(shape([tool("edit", "/wt/a.ts"), asked(), tool("edit", "/wt/a.ts")], ["/wt"])).toEqual([{ at: 0, n: 2 }]);
+    expect(shape([asked({ done: false })])).toEqual([{ at: 0, n: 1 }]);
+    // one with its question in ran: a card took its row, and a done one left standing is kept
+    expect(shape([asked({ input: { questions: [] } })])).toEqual([{ at: 0, n: 1 }]);
   });
 
   test("two subagents reading one file do not fold into each other's row", () => {

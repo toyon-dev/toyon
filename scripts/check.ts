@@ -18,7 +18,11 @@ const root = resolve(import.meta.dir, "..");
 await holdMachineSlot("check");
 
 const runs = Object.entries(STEPS).map(async ([name, args]) => {
-  const proc = Bun.spawn([process.execPath, ...args], { cwd: root, stdout: "pipe", stderr: "pipe" });
+  // Bun's default child env is the one this process was launched with, not process.env as written
+  // since, so the slot held above has to be passed on by hand: a `test` step that does not hear of
+  // it queues for a slot of its own, and two checks running together wait on each other for ever.
+  const env = { ...process.env };
+  const proc = Bun.spawn([process.execPath, ...args], { cwd: root, env, stdout: "pipe", stderr: "pipe" });
   const [out, err, code] = await Promise.all([
     new Response(proc.stdout).text(),
     new Response(proc.stderr).text(),

@@ -103,9 +103,10 @@ function pathGroups(path: string, dir: string | null, onReveal?: () => void): Me
   return [open, [{ id: "copy-path", label: "copy path", onClick: () => copyText(path) }]];
 }
 
-/** a row that is about a path and nothing else: a blocked call naming the file it wanted */
-export function pathItems(path: string, dir: string | null): MenuEntry[] {
-  return grouped(pathGroups(path, dir));
+/** a row that is about a path and nothing else: a blocked call naming the file it wanted, or the
+ * plan a worktree runs on, which is a file of the worktree and so can be shown in Finder */
+export function pathItems(path: string, dir: string | null, onReveal?: () => void): MenuEntry[] {
+  return grouped(pathGroups(path, dir, onReveal));
 }
 
 /** a picked element: the file it was rendered from, which is the call site when the pick found

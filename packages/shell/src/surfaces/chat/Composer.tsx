@@ -23,6 +23,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { clipboardOfferDone, useCopied } from "../../app/clipboardOffer.ts";
 import { previewBus, togglePick } from "../../app/previewBus.ts";
 import { listFiles, openFile } from "../../state/actions/file.ts";
+import { pathItems } from "../../state/actions/message.ts";
 import { terminalItems } from "../../state/actions/proc.ts";
 import { archiveWorktrees, shipOp } from "../../state/actions/worktree.ts";
 import { takeBackQueued, toInput } from "../../state/attach.ts";
@@ -1020,7 +1021,12 @@ export function Composer({
           the card and the row that reads it back scroll away while the work goes on, and this
           row does not */}
       {plan && active && (
-        <div className="composer-plan">
+        <div
+          className="composer-plan"
+          {...cm.contextMenu(() =>
+            pathItems(plan, dir, () => sock?.send({ t: "reveal", worktreeId: active.worktree.id, path: plan })),
+          )}
+        >
           <Icon name="text" className="icon-inline" />
           <Button
             variant="inline"

@@ -220,6 +220,15 @@ export function App() {
       localStorage.setItem(STORAGE.active, activeId);
     } catch {}
   }, [activeId]);
+  // kept for this tab alone, so a reload comes back to the row it was reading and a fresh launch
+  // opens the list. The desk moves `screen` without drawing it, so only the phone writes.
+  const phoneRow = useStore((s) => (s.frame === "phone" ? s.screen !== "home" : null));
+  useEffect(() => {
+    if (phoneRow === null) return;
+    try {
+      sessionStorage.setItem(STORAGE.phoneRow, phoneRow ? "1" : "0");
+    } catch {}
+  }, [phoneRow]);
   useEffect(() => {
     if (!activeRepoId) return;
     try {

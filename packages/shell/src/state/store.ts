@@ -710,8 +710,9 @@ export interface State {
   unreadHold: string | null;
   /** the layout each project was last left in; the active one's is `layout` itself */
   layouts: Record<string, Layout>;
-  /** Where the phone frame is. The desk never reads it. Not persisted: it is where you are, not a
-   * setting, and the row you were last on is remembered already. */
+  /** Where the phone frame is. The desk never reads it. Only whether it was on a row is kept, and
+   * only across a reload of this tab (App.tsx): the tab is where you are, not a setting, and the
+   * row you were last on is remembered already. */
   screen: Screen;
   /** Which frame this window draws (app/phone.ts). The panels a project remembers are the desk's
    * layout, so `reducer` writes them only while this is the desk, whatever action moved a flag: a
@@ -831,6 +832,8 @@ export interface InitialOpts {
   /** the sun as the last page load left it, so following daylight paints right away */
   daylight?: { dark: boolean; until: number } | null;
   storedActive?: string | null;
+  /** this tab's phone frame was on the stored row when it reloaded */
+  storedPhoneRow?: boolean;
   /** project selected before the last reload, restored on hello */
   storedRepo?: string | null;
   /** the worktree panel was left open, so it starts open rather than peeking */
@@ -907,9 +910,11 @@ export function initialState(opts: InitialOpts): State {
     railPeek: false,
     unreadHold: null,
     layouts: opts.storedLayouts ?? {},
-    // a reload on a phone comes back to the row it was reading, not to the list: the row is what
-    // was remembered, so landing on home would throw away the one thing the session knew
-    screen: opts.storedActive ? "chat" : "home",
+    // a phone opens on the list, which says who needs it. A reload of the tab it was reading in
+    // (the system drops a page left in the background) comes back to the row instead. The stored
+    // row alone does not say it was read: one is stored the whole time, the row hello lands on
+    // before anything is chosen included
+    screen: opts.storedActive && opts.storedPhoneRow ? "chat" : "home",
     frame: opts.frame ?? "desk",
     touch: opts.touch ?? false,
     reading: false,

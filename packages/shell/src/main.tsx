@@ -230,6 +230,7 @@ const store = createStore(
     systemDark: prefersDark(),
     daylight: cachedDaylight(),
     storedActive: read(localStorage, STORAGE.active),
+    storedPhoneRow: read(sessionStorage, STORAGE.phoneRow) === "1",
     storedRepo: read(localStorage, STORAGE.repo),
     storedRailOpen: read(localStorage, STORAGE.rail) === "1",
     storedChatSide: read(localStorage, STORAGE.chatSide) === "right" ? "right" : "left",

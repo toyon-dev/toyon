@@ -200,8 +200,9 @@ describe("active worktree", () => {
 describe("the phone's screen", () => {
   const panelFlags = (s: State) => ({ layout: s.layout, layouts: s.layouts });
 
-  test("a remembered row comes back to its chat, and a cold start to the list", () => {
-    expect(initialState({ clientId: ME, storedActive: "a" }).screen).toBe("chat");
+  test("a reload on a row comes back to its chat, and a fresh launch to the list", () => {
+    expect(initialState({ clientId: ME, storedActive: "a", storedPhoneRow: true }).screen).toBe("chat");
+    expect(initialState({ clientId: ME, storedActive: "a" }).screen).toBe("home");
     expect(initial.screen).toBe("home");
   });
 

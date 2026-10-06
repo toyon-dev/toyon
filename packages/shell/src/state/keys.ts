@@ -2,6 +2,9 @@
 export const STORAGE = {
   /** last selected worktree id, restored on reload */
   active: "toyon-active",
+  /** "1" while the phone frame is on a row (sessionStorage): a reload of this tab comes back to
+   * the row, and a fresh launch opens the list */
+  phoneRow: "toyon-phone-row",
   /** last selected project (repo id), restored on reload */
   repo: "toyon-repo",
   /** the worktree each project was left on, keyed by repo id: {"<repo>":"<worktree>"} */

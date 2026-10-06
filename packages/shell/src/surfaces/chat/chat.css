@@ -58,9 +58,8 @@
      measure is the window, since at 390px the centre's padding would take a gutter from a line
      that has none to give.
 
-     The floor is declared here and not as a token: each region sets --composer-min on the element
-     it owns, and an element declaration beats an inherited one, so a root value would be dead.
-     Three lines; the on-screen keyboard takes the rest and the transcript gives way to it. */
+     The box has no floor of its own here: the field's two lines are it, the on-screen keyboard
+     takes the rest and the transcript gives way to it. */
   .chat-screen {
     flex: 1;
     min-height: 0;
@@ -82,7 +81,6 @@
        agent has the turn. It grows the log at its foot, where nothing moves under the thumb. A press in it
        is the caret arriving, and the whole box is back for the keyboard coming up. */
     & .chat-input.lean:not(:focus-within) {
-      --composer-min: 0;
       & .composer-plan,
       & .composer-notice,
       & .composer-knobs,
@@ -101,12 +99,20 @@
       }
     }
     & .chat-input {
-      --composer-min: 96px;
       background: var(--sunken-floor);
       /* the box's own 10px, and under it the gesture bar a notched phone draws over the window */
       padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
       & .pick-chip {
         background: var(--surface0);
+      }
+      /* the dock's five-line floor is a desk's: under a keyboard it left the transcript a strip.
+         Here the field is as tall as what is typed, from two lines to eight, and scrolls past that,
+         so the room goes to the log until the message asks for it. A browser without field-sizing
+         keeps the two lines and scrolls. */
+      & .composer-field textarea {
+        field-sizing: content;
+        min-height: 2lh;
+        max-height: 8lh;
       }
     }
     /* the ask's number keys are a hardware keyboard's idiom; on a screen the options are tapped,

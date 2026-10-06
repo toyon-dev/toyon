@@ -174,7 +174,10 @@
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    padding-inline: 6px;
+    /* the name starts 16px in, the screen's one inset: where the icons' glyphs sit inside their
+       boxes at the row's 14px, where the dot's left edge is on the list below, and where the time
+       ends on the right. At 6px the name stood at 20, on the dot's centre rather than its edge. */
+    padding-inline: 2px;
     /* the column's width is the bar's to give, never the text's to ask for: a recap under the
        name is a sentence, and as a nowrap line it was the bar's min-content, which the app grid
        honoured by growing past the window, which a phone then zoomed out to fit. Contained, the

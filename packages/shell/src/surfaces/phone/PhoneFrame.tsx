@@ -47,9 +47,6 @@ export function PhoneFrame() {
   const connected = useStore((s) => s.connected);
   const heard = useStore((s) => s.heard);
   const connectFailure = useStore((s) => s.connectFailure);
-  // the rail is mirrored by the hand the chat stands on, which is the only thing the attribute
-  // reaches here: the docks it also turns are the desk's and are not mounted
-  const chatSide = useStore((s) => s.chatSide);
   const touch = useTouch();
 
   // the socket being down wins over everything, and having no project at all comes next: the same
@@ -101,7 +98,11 @@ export function PhoneFrame() {
     <div
       ref={rootRef}
       className="app phone"
-      data-chat-side={chatSide}
+      // The attribute reaches one thing here, the rail's mirror, since the docks it also turns are
+      // the desk's and are not mounted. A phone has no hand for the chat to stand on, so the list
+      // is pinned to the mirrored shape, dot first, rather than flipping with a desk preference
+      // nothing on a phone can see or set.
+      data-chat-side="left"
       data-touch={touch || undefined}
       data-hover={!touch || undefined}
     >

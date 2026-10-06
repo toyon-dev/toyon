@@ -573,6 +573,14 @@
   .app[data-chat-side] .rail.rail-screen .rail-panel {
     border-inline: 0;
   }
+  /* The dot leads every row on a screen (PhoneFrame pins the hand), with the screen's one inset
+     on both of its sides: 16px off the edge, and 16px to the name, which the mirrored block's
+     12px margin and the row's 8px gap would make 20. The name then starts at 40, and the line
+     under it with it, through --rail-say-l, which reads this margin. Four classes, to outrank the
+     mirrored block's three. */
+  .app[data-chat-side] .rail.rail-screen {
+    --rail-dot-mr: 8px;
+  }
   /* an archived row's blank seat is a row with something missing on a phone, where there is no hover
      to say what the blank means: the ring says it, a worktree doing nothing, the same mark a found
      row carries */

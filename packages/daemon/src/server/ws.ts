@@ -418,6 +418,10 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
       managed: { source: opts.managed.source, hash: opts.managed.hash },
       preview: (id) => s.runtime.get(id)?.proxy?.handler ?? null,
       bootstrap: helloFrame,
+      manifestColors: () => {
+        const { surface0, surface1 } = s.themes.current().colors;
+        return { bar: surface1, ground: surface0 };
+      },
       open: (path) => s.opens.open(path),
       restart: (now) => s.restarter.request({ now }),
       restartWait: () => ({ waiting: s.restarter.waitingOn(), asking: s.restarter.asking() }),

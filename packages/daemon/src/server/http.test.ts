@@ -65,6 +65,7 @@ const opts: HttpOpts = {
   managed: { source: null, hash: null },
   preview: () => null,
   bootstrap: async () => ({ t: "hello", repos: [{ id: "r1" }] }),
+  manifestColors: () => ({ bar: "#111111", ground: "#222222" }),
   open: async (path) => {
     if (path === "/bad.bin") throw new UserError("bad.bin is not a text file");
     if (path === "/boom") throw new Error("disk on fire");
@@ -617,6 +618,7 @@ describe("static shell", () => {
   afterAll(() => rmSync(dist, { recursive: true, force: true }));
   writeFileSync(join(dist, "index.html"), "<!doctype html><title>toyon</title>");
   writeFileSync(join(dist, "sw.js"), "// worker");
+  writeFileSync(join(dist, "manifest.json"), JSON.stringify({ name: "Toyon", theme_color: "#000000" }));
   mkdirSync(join(dist, "assets"));
   writeFileSync(join(dist, "assets", "index-abc123.js"), "export default 1;");
   const serve = createFetch({
@@ -636,6 +638,7 @@ describe("static shell", () => {
     preview: () => null,
     metrics: () => ({ lag: 0 }),
     bootstrap: async () => ({}),
+    manifestColors: () => ({ bar: "#111111", ground: "#222222" }),
     restart: async () => null,
     restartWait: () => ({ waiting: null, asking: [] }),
     pair: new PairCodes(),
@@ -643,6 +646,11 @@ describe("static shell", () => {
     phones: async () => null,
   });
 
+  test("the manifest carries the chosen theme's colours, whatever the file on disk says", async () => {
+    const r = await serve(req("/manifest.json"), srv());
+    expect(r?.headers.get("cache-control")).toBe("no-store");
+    expect(await r?.json()).toEqual({ name: "Toyon", theme_color: "#111111", background_color: "#222222" });
+  });
   test("a route falls back to index.html so the SPA can handle it", async () => {
     const r = await serve(req("/some/deep/route"), srv());
     expect(r?.status).toBe(200);

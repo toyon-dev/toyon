@@ -86,6 +86,9 @@ export interface HttpOpts {
   onPaired: () => void;
   /** the phones on this machine's tailnet; null when Tailscale cannot be asked */
   phones: () => Promise<TailnetPhone[] | null>;
+  /** the chosen theme's grounds, for the manifest: the bar a phone draws above an installed shell
+   * and the launch screen behind it */
+  manifestColors: () => { bar: string; ground: string };
 }
 
 /** a year, and never revalidate: for a name that cannot mean different bytes later */
@@ -375,6 +378,15 @@ export function createFetch(opts: HttpOpts) {
     const file = join(opts.shellDist, rel.replaceAll("..", ""));
     const hashed = rel.startsWith("/assets/");
     if (existsSync(file) && Bun.file(file).size > 0) {
+      // some browsers colour an installed app's bars from the manifest alone and never read the
+      // page's theme-color, so the file on disk is only the shape: the colours are the theme's
+      if (rel === "/manifest.json") {
+        const { bar, ground } = opts.manifestColors();
+        const manifest = { ...(await Bun.file(file).json()), theme_color: bar, background_color: ground };
+        return Response.json(manifest, {
+          headers: { "content-type": "application/manifest+json", "cache-control": NO_STORE },
+        });
+      }
       return new Response(Bun.file(file), { headers: { "cache-control": hashed ? IMMUTABLE : NO_STORE } });
     }
     // a hashed asset that is gone means the shell was rebuilt under an open tab. Falling through to

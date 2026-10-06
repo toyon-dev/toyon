@@ -9,7 +9,7 @@
     "window-controls-overlay"
   ],
   "background_color": "#32302d",
-  "theme_color": "#32302d",
+  "theme_color": "#3d3835",
   "icons": [
     {
       "src": "/icon.svg",

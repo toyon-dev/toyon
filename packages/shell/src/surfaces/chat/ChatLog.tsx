@@ -575,7 +575,17 @@ export function ChatLog({
           </div>
         )}
       </div>
-      {find && <DocumentFind root={logRef} body={logRef} seed={find.seed} seq={find.seq} onClose={closeFind} />}
+      {find && (
+        <DocumentFind
+          root={logRef}
+          body={logRef}
+          seed={find.seed}
+          seq={find.seq}
+          onClose={closeFind}
+          // a match brought into view is a scroll the pin did not make and the reader did not drive
+          onReveal={follow.read}
+        />
+      )}
       {jump}
     </div>
   );

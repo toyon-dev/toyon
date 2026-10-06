@@ -95,6 +95,7 @@ export function DocumentFind({
   seed,
   seq,
   onClose,
+  onReveal,
 }: {
   root: RefObject<HTMLElement | null>;
   body: RefObject<HTMLElement | null>;
@@ -102,6 +103,8 @@ export function DocumentFind({
   seq: number;
   /** the match the reader was on when the box closed, for the document to keep as its selection */
   onClose: (current: Range | null) => void;
+  /** the box was scrolled to bring a match into view, for a root that follows its own end */
+  onReveal?: () => void;
 }) {
   const [query, setQuery] = useState(seed);
   const [found, setFound] = useState<Found>(NOTHING);
@@ -161,9 +164,12 @@ export function DocumentFind({
     const range = found.ranges[at];
     // a scroll asked for waits for a match to scroll to: the first render after a query has none yet
     if (!range) return;
-    if (show.current && root.current) reveal(root.current, range);
+    if (show.current && root.current) {
+      reveal(root.current, range);
+      onReveal?.();
+    }
     show.current = false;
-  }, [found, at, root]);
+  }, [found, at, root, onReveal]);
 
   useLayoutEffect(() => unpaint, []);
 

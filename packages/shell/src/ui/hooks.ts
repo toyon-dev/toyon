@@ -188,36 +188,42 @@ const TAIL_SLACK = 40;
  * enough that it is gone before the reader has settled into reading */
 const SCROLL_REST = 1200;
 
+/** how long after the reader's last push a scroll event is still theirs: a wheel tick or a key
+ * press scrolls in the frame after it, a smooth scroll a frame or two later, and a trackpad glide
+ * keeps sending wheel events for as long as it lasts */
+const HAND_MS = 150;
+
+/** the keys the browser scrolls a box with, when nothing in it takes them first */
+const SCROLL_KEYS = new Set(["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " "]);
+
 /** A scroller that tails what it holds, the way a terminal does: the end stays in view while the
  * reader is at the end, and the moment they scroll up it stops following. Growth is watched in
  * the layout (the box, every child, and children as they come and go), not in state: a pin keyed
- * on data has to name every source of growth and misses the next. "At the end" is read from the
- * element when it scrolls, never from where a jump meant to land: a programmatic scroll dispatches
- * its event in the frame's scroll steps, before the observers deliver, so a reader taken elsewhere
- * is known to have left before anything could pull them back. The one event not read that way is
- * the pin's own: it too arrives a frame late, and whatever landed in between (the message a send
- * jumped for) would measure as the reader having left, so an event that finds the scroller still
- * pinned and still where the pin put it changes nothing. A row taken out moves the scroller with
- * no resize to observe (the end came up to meet it), so the pin is taken again as the row leaves:
- * left for the event, a message landing in the same gap would be measured as the reader's. The
- * scroller may shrink in the same commit (the question taking the composer back as the waiting row
- * leaves): the browser clamps to the end at the old height first, which is a box's growth short of
- * the end at the new one, so the pin also knows the place a clamp leaves it by the height it last
- * pinned at.
+ * on data has to name every source of growth and misses the next.
+ * Whether the reader has left the end is read from the element only while the reader is the one
+ * moving it: a wheel, a finger, a scroll key, or a pointer held down on the box (a scrollbar drag,
+ * a selection pulled past the edge) just before the scroll event. The scroller moves for other
+ * reasons too, and none of them is the reader leaving: the box under it growing clamps it up, a row
+ * taken out brings the end up to meet it, the browser's scroll anchoring holds the text above still
+ * while the end moves, and the pin's own move arrives as an event a frame late with whatever landed
+ * in between. Read from position alone, each of those measured as a reader scrolling up and needed
+ * a rule of its own to tell apart. Here a scroll event with no hand behind it changes nothing while
+ * pinned, and the next observer tick sets the end again. A scroll that neither the pin nor the
+ * reader made (a jump to a marked row, a match brought into view) is reported by its maker through
+ * `read`, which takes the position as it stands.
+ * Off the end, position alone decides the way back: the reader reaching the end pins again, and
+ * so does the end coming into view by itself, since either way it is in view.
  * While pinned the scroller takes no scroll anchoring: the end is the pin's to keep, and the
- * browser's own adjustment is a move the pin did not make. A composer that shrinks clamps the
- * scroller up, the message landing under it gives the room back, and anchoring returns the
- * scroller to where it was, short of the message; the event for that reads as the reader leaving.
+ * browser's own adjustment is a move the pin did not make.
  * `offEnd` and `offStart` say the reader is away from either end now, by the same slack, for a
  * control at each end that offers the rest of the way; `away` says `news` changed while they were
  * off the end, and it is a value and not the layout because a row the reader opened themselves
- * grows the same way a message arriving does. `moving` is the way the reader is pushing the scroller, by wheel or finger, and
- * null once they have rested: a control that follows the motion, the way a phone's address bar
- * does, shows for the direction they are already going and hides when they settle to read. A
- * scroll the layout or a jump caused is not motion; a scrollbar drag is missed, and a person
- * dragging the bar has the whole log under their hand already. `read` is for a caller that
- * moved the scroller itself and wants the answer now. The element is read when the effect mounts,
- * so it must be rendered from the first paint. */
+ * grows the same way a message arriving does. `moving` is the way the reader is pushing the
+ * scroller, by wheel or finger, and null once they have rested: a control that follows the motion,
+ * the way a phone's address bar does, shows for the direction they are already going and hides
+ * when they settle to read. A scroll the layout or a jump caused is not motion; a scrollbar drag is
+ * missed, and a person dragging the bar has the whole log under their hand already. The element
+ * is read when the effect mounts, so it must be rendered from the first paint. */
 export function useTail(
   ref: RefObject<HTMLElement | null>,
   news?: unknown,
@@ -232,10 +238,10 @@ export function useTail(
   read: () => void;
 } {
   const pinned = useRef(true);
-  // where the pin last put the scroller, as the element reported it back
-  const held = useRef<number | null>(null);
-  // and the scroller's height then
-  const room = useRef(0);
+  // when the reader last pushed the scroller, by wheel, finger or key
+  const hand = useRef(Number.NEGATIVE_INFINITY);
+  // and whether a pointer is down on it, which scrolls for as long as it is held
+  const pressed = useRef(false);
   const [offEnd, setOffEnd] = useState(false);
   const [offStart, setOffStart] = useState(false);
   const [away, setAway] = useState(false);
@@ -278,57 +284,82 @@ export function useTail(
     const el = ref.current;
     if (!el) return;
     el.scrollTop = el.scrollHeight;
-    held.current = el.scrollTop;
-    room.current = el.clientHeight;
     hold(true);
     setOffEnd(false);
     setAway(false);
   }, [ref, hold]);
-  // the scroll event keeps the rest current, so this only moves
+  // the reader's own press, so the scroll it makes is read as theirs; the scroll event keeps the
+  // rest current, so this only moves
   const start = useCallback(() => {
-    if (ref.current) ref.current.scrollTop = 0;
+    const el = ref.current;
+    if (!el) return;
+    hand.current = performance.now();
+    el.scrollTop = 0;
   }, [ref]);
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
     hold(pinned.current);
+    const byHand = () => pressed.current || performance.now() - hand.current < HAND_MS;
     const onScroll = () => {
-      if (pinned.current && el.scrollTop === held.current) setOffStart(el.scrollTop >= TAIL_SLACK);
+      if (pinned.current && !byHand()) setOffStart(el.scrollTop >= TAIL_SLACK);
       else read();
     };
     el.addEventListener("scroll", onScroll, { passive: true });
-    const onWheel = (e: WheelEvent) => push(e.deltaY);
+    const touch = () => {
+      hand.current = performance.now();
+    };
+    const onWheel = (e: WheelEvent) => {
+      touch();
+      push(e.deltaY);
+    };
     const onTouchStart = (e: TouchEvent) => {
+      touch();
       lastTouch.current = e.touches[0]?.clientY ?? null;
     };
     const onTouchMove = (e: TouchEvent) => {
+      touch();
       const y = e.touches[0]?.clientY;
       if (y === undefined || lastTouch.current === null) return;
       push(lastTouch.current - y);
       lastTouch.current = y;
     };
+    const onPointerDown = () => {
+      pressed.current = true;
+    };
+    const onPointerUp = () => {
+      pressed.current = false;
+    };
+    // a key the browser scrolls with, from focus inside the box or from none at all (the body),
+    // which it takes to the box last pressed. Heard on the document, after a row's own handler has
+    // had its say: a key one took scrolls nothing, and marking the hand for it costs nothing.
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!SCROLL_KEYS.has(e.key)) return;
+      const t = e.target;
+      if (t === document.body || (t instanceof Node && el.contains(t))) touch();
+    };
     el.addEventListener("wheel", onWheel, { passive: true });
     el.addEventListener("touchstart", onTouchStart, { passive: true });
     el.addEventListener("touchmove", onTouchMove, { passive: true });
+    el.addEventListener("pointerdown", onPointerDown, { passive: true });
+    window.addEventListener("pointerup", onPointerUp, { passive: true });
+    window.addEventListener("pointercancel", onPointerUp, { passive: true });
+    document.addEventListener("keydown", onKeyDown);
     const pin = () => {
       el.scrollTop = el.scrollHeight;
-      held.current = el.scrollTop;
-      room.current = el.clientHeight;
     };
     const ro = new ResizeObserver(() => {
       if (pinned.current) pin();
     });
     ro.observe(el);
     for (const child of el.children) ro.observe(child);
+    // a row taken out moves the scroller with no resize to observe: the end came up to meet it
     const mo = new MutationObserver((records) => {
       for (const r of records) {
         for (const n of r.addedNodes) if (n instanceof Element) ro.observe(n);
         for (const n of r.removedNodes) if (n instanceof Element) ro.unobserve(n);
       }
-      // only from the end, at this height or the one last pinned at: a scroller that a jump
-      // elsewhere has moved is the scroll event's to read
-      const end = el.scrollHeight - el.scrollTop;
-      if (pinned.current && (end - el.clientHeight < TAIL_SLACK || Math.abs(end - room.current) < 1)) pin();
+      if (pinned.current) pin();
     });
     mo.observe(el, { childList: true });
     return () => {
@@ -336,6 +367,10 @@ export function useTail(
       el.removeEventListener("wheel", onWheel);
       el.removeEventListener("touchstart", onTouchStart);
       el.removeEventListener("touchmove", onTouchMove);
+      el.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("pointerup", onPointerUp);
+      window.removeEventListener("pointercancel", onPointerUp);
+      document.removeEventListener("keydown", onKeyDown);
       mo.disconnect();
       ro.disconnect();
       if (rest.current) clearTimeout(rest.current);

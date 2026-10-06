@@ -419,6 +419,11 @@
     background-clip: text;
     -webkit-text-fill-color: transparent;
     animation: shine 2.6s linear infinite;
+    /* the sweep moves a background, which only the main thread can repaint, once a frame for as
+       long as the text shines. On a layer of its own the repaint is this box; in the page's layer
+       it is the page. The hint names opacity because that applies to an inline span as it does to
+       a block, and the layer is what is wanted, not the property. */
+    will-change: opacity;
   }
   @keyframes shine {
     from {
@@ -438,6 +443,7 @@
       -webkit-text-fill-color: currentColor;
       color: var(--text0);
       animation: none;
+      will-change: auto;
     }
   }
 

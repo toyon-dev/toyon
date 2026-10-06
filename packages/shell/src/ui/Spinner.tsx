@@ -23,6 +23,16 @@ export function Spinner({
     <span
       className={cx("spinner", size === "dot" && "spinner-dot", variant === "squares" && "spinner-squares", className)}
       aria-hidden="true"
-    />
+    >
+      {/* the squares are four cells of their own, so each can fade on the compositor (spinner.css) */}
+      {variant === "squares" && (
+        <>
+          <span />
+          <span />
+          <span />
+          <span />
+        </>
+      )}
+    </span>
   );
 }

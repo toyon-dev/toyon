@@ -91,15 +91,12 @@ export function HandoffCard({
 
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.target instanceof HTMLTextAreaElement) {
-      // enter in the field is the go, as enter in the ask's field is its send: the note is
-      // written for the go. Shift+Enter breaks a line, since a note can be a few. Escape and Tab
-      // go back to the rows, and a field left blank goes with them.
-      if (isEnter(e) && !e.shiftKey) {
-        e.preventDefault();
-        e.stopPropagation();
-        return decide(0);
-      }
-      if (e.key === "Escape" || (e.key === "Tab" && !e.shiftKey)) {
+      // Enter in the field never decides: on the ask, Enter in the field sends because a pick was
+      // made first, and here nothing has been picked yet, so a person finishing a note with Enter
+      // and meaning not now would have said go. Enter, Escape and Tab go back to the rows with
+      // the note kept, where the next Enter is the cursor's row; Shift+Enter breaks a line, since
+      // a note can be a few. A field left blank goes with the way back.
+      if ((isEnter(e) && !e.shiftKey) || e.key === "Escape" || (e.key === "Tab" && !e.shiftKey)) {
         e.preventDefault();
         e.stopPropagation();
         toRoot();
@@ -181,8 +178,8 @@ export function HandoffCard({
               font="ui"
               rows={1}
               className="ask-own-field"
-              enterKeyHint="send"
-              placeholder={`context for the agent in ${item.repo.name}, sent with go`}
+              enterKeyHint="done"
+              placeholder={`context for the agent in ${item.repo.name}, sent with go; enter returns to the rows`}
               value={note}
               onChange={(e) => write(setNote(draft, 0, e.target.value))}
             />

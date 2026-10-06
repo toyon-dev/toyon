@@ -90,13 +90,37 @@ function requestedAuthority(req: Request): string {
 
 const forbidden = (body = "forbidden") => ({ kind: "refused", response: new Response(body, { status: 403 }) }) as const;
 
+/** The public name over plain http, sent to https. A browser given the bare name tries http first,
+ * and the only listener a peer off the box can reach is the port-80 one, so that is what a
+ * "forbidden" there would have meant. The token rides in the fragment, which the wire never
+ * carries and a redirect keeps, so nothing is lost. The target is the configured name, never the
+ * request's Host; temporary, so a browser does not keep sending the name to https after
+ * `toyon remote off`. */
+function toHttps(req: Request, host: string): Door {
+  const url = new URL(req.url);
+  const location = `https://${host}${url.pathname}${url.search}`;
+  return {
+    kind: "refused",
+    response: new Response(`open ${location} instead`, {
+      status: 302,
+      headers: { location, "cache-control": "no-store" },
+    }),
+  };
+}
+
 /** Who comes in. `listener` is the daemon's own port, or a worktree's preview port. With no public
  * name a preview port answers as it always has: it binds loopback and serves the local shell. */
 export function door(req: Request, peer: string, remote: Remote | null, listener: "daemon" | "preview"): Door {
   if (remote === null && listener === "preview") return { kind: "local" };
   // the port-80 listener binds wildcard (macOS allows low ports unprivileged only on 0.0.0.0), and
   // a local front connects from loopback, so the peer check holds everywhere but behind an edge
-  if (remote?.front !== "edge" && !isLoopbackPeer(peer)) return forbidden();
+  if (remote?.front !== "edge" && !isLoopbackPeer(peer)) {
+    const typed = requestedAuthority(req).replace(/:80$/, "");
+    const browsing = req.method === "GET" || req.method === "HEAD";
+    return remote && listener === "daemon" && browsing && typed === remote.host
+      ? toHttps(req, remote.host)
+      : forbidden();
+  }
 
   // DNS-rebinding defense: a name is admitted only if it is loopback, or the one public name
   const authority = requestedAuthority(req);

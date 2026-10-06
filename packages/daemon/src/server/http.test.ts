@@ -223,9 +223,13 @@ describe("guards, remote mode", () => {
     expect(r?.status).toBe(403);
     expect(await r?.text()).toContain("https");
   });
-  test("a peer off this machine is still refused: the front is local", async () => {
+  test("a peer off this machine is sent to https and gets nothing: the front is local", async () => {
     const r = await remote(req("/health", { host: "toyon.example.com", headers: https }), srv("100.64.0.7"));
-    expect(r?.status).toBe(403);
+    expect(r?.status).toBe(302);
+    expect(r?.headers.get("location")).toBe("https://toyon.example.com/health");
+    expect(await r?.text()).not.toContain("pid");
+    const other = await remote(req("/health", { host: "evil.example", headers: https }), srv("100.64.0.7"));
+    expect(other?.status).toBe(403);
   });
   test("any other name is refused, including labels under the remote name that are not a preview", async () => {
     for (const host of [

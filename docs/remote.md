@@ -72,4 +72,4 @@ A host with a single public port needs your own wildcard domain and the `w{id}` 
 
 The link carries the token, and the token is a shell on that machine: keep it to yourself. A project whose server bakes another server's address into its bundle (`API_URL` and the like) points the browser at `127.0.0.1`, which a phone cannot reach; a project with one server works.
 
-The daemon still listens on loopback only. A front on the same machine admits one name, over https only, and on a Fly machine the platform's proxy is that front. A preview reached through the name also needs a cookie the toyon page is given, which the dev server behind it never sees. The rest of the boundary is in [trust.md](trust.md).
+The daemon still listens on loopback only. A front on the same machine admits one name, over https only, and on a Fly machine the platform's proxy is that front. The name typed without `https://` is sent to it; the token in the link stays in the browser through that. A preview reached through the name also needs a cookie the toyon page is given, which the dev server behind it never sees. The rest of the boundary is in [trust.md](trust.md).

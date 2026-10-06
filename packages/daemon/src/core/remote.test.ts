@@ -146,7 +146,41 @@ describe("door", () => {
     expect(door(at("127.0.0.1:4141"), "127.0.0.1", edge, "daemon").kind).toBe("refused");
   });
   test("a local front keeps the peer check on every listener", () => {
-    expect(door(at("toyon.example.com", https), "100.64.0.7", byHost, "daemon").kind).toBe("refused");
-    expect(door(at("127.0.0.1:10001"), "100.64.0.7", byHost, "preview").kind).toBe("refused");
+    const refused = (d: ReturnType<typeof door>) => (d.kind === "refused" ? d.response.status : d.kind);
+    expect(refused(door(at("127.0.0.1:10001"), "100.64.0.7", byHost, "preview"))).toBe(403);
+    expect(refused(door(at("toyon.example.com"), "100.64.0.7", byHost, "preview"))).toBe(403);
+    expect(refused(door(at("other.example"), "100.64.0.7", byHost, "daemon"))).toBe(403);
+    expect(refused(door(at("wab12.toyon.example.com"), "100.64.0.7", byHost, "daemon"))).toBe(403);
+    expect(refused(door(at("toyon.example.com:8080"), "100.64.0.7", byHost, "daemon"))).toBe(403);
+    expect(refused(door(at("toyon.example.com"), "100.64.0.7", null, "daemon"))).toBe(403);
+  });
+  test("the public name typed without https from off the box is sent to https, fragment and all", () => {
+    const sent = (req: Request, headers = {}) => {
+      const d = door(
+        new Request(req, { headers: { host: new URL(req.url).host, ...headers } }),
+        "100.64.0.7",
+        byHost,
+        "daemon",
+      );
+      if (d.kind !== "refused") throw new Error(`admitted as ${d.kind}`);
+      return [d.response.status, d.response.headers.get("location"), d.response.headers.get("cache-control")];
+    };
+    expect(sent(at("toyon.example.com"))).toEqual([302, "https://toyon.example.com/", "no-store"]);
+    expect(sent(at("toyon.example.com:80"))).toEqual([302, "https://toyon.example.com/", "no-store"]);
+    expect(sent(new Request("http://toyon.example.com/some/page?x=1"))).toEqual([
+      302,
+      "https://toyon.example.com/some/page?x=1",
+      "no-store",
+    ]);
+    // a peer off the box reached the plain-http listener whatever its headers claim
+    expect(sent(at("toyon.example.com"), https)[0]).toBe(302);
+    // a browser follows; anything else gets the plain refusal
+    const post = door(
+      new Request("http://toyon.example.com/", { method: "POST", headers: { host: "toyon.example.com" } }),
+      "100.64.0.7",
+      byHost,
+      "daemon",
+    );
+    expect(post.kind === "refused" && post.response.status).toBe(403);
   });
 });

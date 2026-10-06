@@ -70,6 +70,20 @@ export function rowLine(w: WorktreeStatus, ctx: RowContext): string {
 }
 
 /**
+ * Whether a row reads a rung down on a screen. Every row there is a name at the top tier over a
+ * line a tier below, and a page of twenty at the same weight says nothing about which ones matter.
+ * A row goes quiet when nothing is happening on it: no agent, no server, no git op out, and no
+ * turn finished since anyone looked. Those keep the top tier, which then means something. A dot
+ * with a colour keeps its name's tier too, since a coloured dot beside a quiet name reads as two
+ * rows disagreeing. A found row is quiet already, by its own class.
+ */
+export function rowQuiet(w: WorktreeStatus, op?: ShipOp | null): boolean {
+  if (!isOwned(w) || op) return false;
+  const d = dotClass(w);
+  return (d === "idle" || d === "asleep") && !w.unseen;
+}
+
+/**
  * The lines under the state in an owned row's card on a desk: where the work stands, so a hover
  * is enough to decide whether to switch. The recap first, since it says what the work is; on a
  * busy row the record's recap is the previous stop's, so it is marked and dated there, or under

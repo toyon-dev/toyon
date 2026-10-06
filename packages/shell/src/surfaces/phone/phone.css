@@ -197,9 +197,12 @@
     font-weight: var(--weight-strong);
     color: var(--text0);
   }
+  /* a rung under the name, not two: the rows on the screen below read their line a rung under
+     their name (rail.css lifts their ladder), and the bar's line is the same line, so it stands
+     the same distance under its name. At the skip tier it was the faintest text on the screen. */
   .phone-sub {
     font: var(--type-ui-sm);
-    color: var(--text2);
+    color: var(--text1);
   }
   /* the state that is asking for you takes the waiting dot's colour, as the dot beside its row does */
   .phone-sub-asks {

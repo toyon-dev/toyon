@@ -54,6 +54,7 @@ import {
   leadLines,
   OFFLINE_LINE,
   rowLine,
+  rowQuiet,
 } from "./rowLine.ts";
 
 /** a count in its 3ch column; past three digits the exact number stops meaning anything here */
@@ -338,7 +339,14 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
       <button
         key={id}
         type="button"
-        className={cx("row row-edge", owned ? "rail-item" : "row-quiet rail-disc-item", menuOpen && "menu-open")}
+        className={cx(
+          "row row-edge",
+          owned ? "rail-item" : "row-quiet rail-disc-item",
+          // a screen's rows are the work, read at arm's length, and the ones with nothing
+          // happening step down a rung so the ones that matter stand out (rowQuiet)
+          onScreen && rowQuiet(w, op) && "row-quiet",
+          menuOpen && "menu-open",
+        )}
         // an archived worktree's page marks its own row, and the row underneath does not read as picked.
         // A screen marks none: the mark says which worktree the pane beside the rail is showing, and
         // the home screen is reached by leaving that worktree, with nothing beside it.
@@ -626,8 +634,16 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
         offline && "offline",
       )}
       // the docks row's width for the drawer; a screen's width is the window's (rail.css), and an
-      // inline value here would outrank it
-      style={width !== undefined && !onScreen ? ({ "--rail-width": `${width}px` } as CSSProperties) : undefined}
+      // inline value here would outrank it. A screen says how many count columns the list draws
+      // (behind is not among them there), so each row keeps only that much clear for the figures
+      // and the line under a name runs on into the rest.
+      style={
+        onScreen
+          ? ({ "--rail-fig-cols": kinds.filter((k) => k !== "behind").length } as CSSProperties)
+          : width !== undefined
+            ? ({ "--rail-width": `${width}px` } as CSSProperties)
+            : undefined
+      }
       onClick={
         touch && !onScreen && !railOpen
           ? (e) => {

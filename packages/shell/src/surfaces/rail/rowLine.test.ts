@@ -11,6 +11,7 @@ import {
   OFFLINE_LINE,
   type RowContext,
   rowLine,
+  rowQuiet,
 } from "./rowLine.ts";
 
 // The order of the line's answers is the whole logic, and each step below was chosen against the
@@ -126,6 +127,29 @@ const withTurn = (over: Partial<WorktreeStatus> = {}, worktree: Partial<Worktree
   return w as WorktreeStatus & { worktree: NonNullable<WorktreeStatus["worktree"]> };
 };
 const pr = { number: 12, url: "u", state: "open" as const, checks: "pending" as const, at: 3 };
+
+describe("a row's tier on a screen", () => {
+  const running = [{ name: "web", status: "running" } as never];
+  test("a row with nothing happening reads a rung down", () => {
+    expect(rowQuiet(owned())).toBe(true);
+    expect(rowQuiet(owned({ procs: [{ name: "web", status: "asleep" } as never] }))).toBe(true);
+    expect(rowQuiet(owned({}, { lastTurn: done }))).toBe(true);
+  });
+  test("a live dot keeps the top tier", () => {
+    expect(rowQuiet(owned({ agent: "working" }))).toBe(false);
+    expect(rowQuiet(owned({ agent: "waiting" }))).toBe(false);
+    expect(rowQuiet(owned({ procs: running }))).toBe(false);
+    expect(rowQuiet(owned({ procs: [{ name: "web", status: "crashed" } as never] }))).toBe(false);
+    expect(rowQuiet(owned({}, { landed: true }))).toBe(false);
+  });
+  test("a turn nobody has looked at, or a git op out, keeps it too", () => {
+    expect(rowQuiet(owned({ unseen: true }))).toBe(false);
+    expect(rowQuiet(owned(), "land")).toBe(false);
+  });
+  test("a found row is quiet by its own class, not this", () => {
+    expect(rowQuiet(found())).toBe(false);
+  });
+});
 
 describe("the lines under a card's state", () => {
   test("the recap, and no branch", () => {

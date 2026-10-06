@@ -47,9 +47,9 @@ export interface RowContext {
   needsSetup: boolean;
   /** where the row is, as the person wrote it (a ~ for home) */
   path: string;
-  /** how long since someone last sent here, when the line is to carry it: on a screen the control
-   * column that held the time on a desk is gone, and the time reads better after the state than
-   * stacked in a column beside the counts */
+  /** how long since someone last sent here, when the line is to carry it: the phone's bar over a
+   * worktree's page, which has no column for it. A row on the rail keeps the time in a seat of its
+   * own, on a screen as on a desk, so the times read down one edge. */
   at?: string;
   /** the git op the row's dot slot is showing as a spinner (`shipShown`), if one is out */
   op?: ShipOp | null;

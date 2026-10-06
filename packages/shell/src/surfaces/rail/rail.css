@@ -609,12 +609,12 @@
     -webkit-line-clamp: 2;
     overflow: hidden;
   }
-  /* The right side of a screen's row is one thing: the counts, centred on the row's two lines. The
-     control column's time has moved into the line under the name (rowLine's `at`), and its kebab
-     shows on a hover a phone never has, so both go and the column shrinks to a margin. Behind is
-     nearly always there and says only "stale"; on one column it is a number beside a number.
-     Scoped to the column, since an archived row, which has no line under its name, keeps its time at
-     the end of the row itself. */
+  /* The right side of a screen's row is one thing: the counts and then the time, centred on the
+     row's two lines. The control column is the desk's: its kebab shows on a hover a phone never
+     has and its time has moved in beside the counts (Rail.tsx), so both go and the column shrinks
+     to a margin. Behind is nearly always there and says only "stale"; on one column it is a number
+     beside a number. Scoped to the column, since the time beside the counts and the one that ends
+     an archived row are the ones a screen shows. */
   .rail-screen .rail-item .rail-gut .rail-at,
   .rail-screen .rail-item .rail-gut .rail-more,
   .rail-screen .rail-disc-item .rail-gut .rail-at,
@@ -623,14 +623,23 @@
     display: none;
   }
   .rail-screen .rail-item {
-    /* room on the right for the counts to stand in, out of the line the name and badges wrap on */
-    padding-right: calc(var(--rail-pad-r) + 72px);
+    /* room on the right for the counts and the time to stand in, out of the line the name and
+       badges wrap on */
+    padding-right: calc(var(--rail-pad-r) + 100px);
   }
   .rail-screen .rail-item .rail-counts {
     position: absolute;
     right: var(--rail-pad-r);
     top: 50%;
     translate: 0 -50%;
+    /* the time is a rung smaller than the counts and shares their line */
+    align-items: baseline;
+  }
+  /* the counts' box, as in the desk's column: three characters aligned to the far side, the edge an
+     archived row's time ends on, so the times read down one line through both sections */
+  .rail-screen .rail-counts .rail-at {
+    width: 3ch;
+    text-align: right;
   }
   /* An archived row keeps to one line here. The archive is the only section that grows without
      bound, so a second line on each of them pushes the worktrees anyone is working in off the

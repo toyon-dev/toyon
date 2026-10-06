@@ -531,6 +531,10 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
               {counts.behind ? count(counts.behind) : ""}
             </span>
           )}
+          {/* On a screen the time stands past the counts, the control column's seat on a desk, so it
+              ends where an archived row's does and the times read down one edge. The lead is never
+              sent to and keeps the seat empty, which holds its counts in their own columns. */}
+          {onScreen && owned && <span className="rail-at row-dim">{onLead ? "" : ago(sentAt(owned.worktree))}</span>}
         </span>
         {(() => {
           if (op) return <Spinner size="dot" />;
@@ -587,8 +591,6 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
               offline,
               needsSetup: asksSetup(owned ? repoOf(owned) : null),
               path: wtDirLabel(w),
-              // the time the desk's control column carries; the lead is never sent to
-              at: owned && !onLead ? ago(sentAt(owned.worktree)) : undefined,
               op,
             })}
           </span>

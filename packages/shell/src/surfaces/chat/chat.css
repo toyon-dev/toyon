@@ -123,10 +123,10 @@
     }
     /* the ask's number keys are a hardware keyboard's idiom; on a screen the options are tapped,
        and the digit's gutter goes with the digit */
-    & .ask-num {
+    & .choice-num {
       display: none;
     }
-    & .ask-opt {
+    & .choice {
       grid-template-columns: 0 1fr;
       column-gap: 0;
     }
@@ -1478,68 +1478,15 @@
   .ask-text {
     overflow-wrap: anywhere;
   }
-  .ask-options {
-    margin: 8px var(--picker-bleed) 0;
-  }
-  /* A row is a block, not a flex row: the digit in a gutter, the label on the first line, and the
-   description wrapping under the label at the row's full width. Side by side, the description
-   started at a different x on every row and, in a narrow dock, wrapped into a column one word
-   wide. Prose, not a path: the palette rows are mono because they hold literals you also type, and
-   an option's label and description are neither. The description is often the only thing telling
-   two options apart, so it wraps rather than ellipsising the way the slash menu's do. */
-  .ask-opt {
-    display: grid;
-    grid-template-columns: 14px 1fr auto;
-    column-gap: 8px;
-    align-items: baseline;
-    padding-block: 5px;
-    font: var(--type-ui);
-    white-space: normal;
-    /* your answer, marked the one way this app marks a selection */
-    &[data-state~="checked"] {
-      --row-edge-color: var(--accent);
-    }
-    /* saying no to the agent stops something mid-flight, which is what the danger tone is for. It
-     sits on the label rather than the row, so the seat still lifts under the pointer like any other. */
-    &.deny .ask-label {
-      color: var(--red);
-    }
-    /* the agent's own convention for the option it would pick, read off the label and worn as a
-     badge, so the label itself is the choice and nothing more */
-    & .badge-recommended {
-      margin-left: 6px;
-      font: var(--type-ui-sm);
-    }
-  }
-  /* the digit is how the row is reached, in a gutter of its own so the labels line up under each
-   other however many options there are. Each part names its column: on a phone the digit is not
-   drawn, and the label must not fall into the gutter it left empty. */
-  .ask-num {
-    grid-column: 1;
-    justify-content: flex-end;
-  }
-  .ask-label {
-    grid-column: 2;
-    color: var(--text0);
-  }
-  /* a row's own description, under its label, on every row. The scan tier, the row's own: it is
-     often the only thing telling two options apart, so it is read rather than skipped. */
-  .ask-desc {
-    grid-column: 2 / -1;
-    /* held still under the cursor: the seat's lift would carry it to the label's tier, and a row
-       whose label, description and note are one colour has no first line to find */
+  /* under the sentence, what to know before answering it: the scan tier, held still */
+  .ask-sub {
     color: var(--ink1);
   }
-  /* the cursor row's own key, at the far end of the label's line */
-  .ask-hint {
-    grid-column: 3;
-    grid-row: 1;
+  /* the agent's own convention for the option it would pick, read off the label and worn as a
+     badge, so the label itself is the choice and nothing more */
+  .choice-label .badge-recommended {
+    margin-left: 6px;
     font: var(--type-ui-sm);
-    white-space: nowrap;
-    visibility: hidden;
-    &.on {
-      visibility: visible;
-    }
   }
   /* What stands under the question to be read before it is answered: the command a yes would run,
      the cursor row's preview, a plan with no file behind it. One band across the strip on the
@@ -1573,20 +1520,6 @@
     white-space: pre;
     overflow-x: auto;
   }
-  /* what is typed against a row, in the row: the "other" row's answer where its description
-     stood, or a note on the pick under its description. One line that grows with what is typed,
-     so the "other" row is the height it was before the field opened. */
-  .ask-own-field {
-    grid-column: 2 / -1;
-    min-width: 0;
-    resize: none;
-    field-sizing: content;
-    /* the prompt is the last thing on the row to read: a rung under the description above it,
-       and the same tier as the words it replaces on the "other" row */
-    &::placeholder {
-      color: var(--text2);
-    }
-  }
   /* the actions under a page, at the page's floor: every page stands at the tallest one's height,
    and the slack goes above this row, so the send sits in one place whichever page is open. The
    agent's stop is the box's corner control, over the ask as over the plain field: down here at
@@ -1606,18 +1539,6 @@
   }
   .composer.stopping .ask-tabs .tabs-list {
     padding-right: 24px;
-  }
-  /* the send page's rows: each question's pick read back after its header, a note under it on the
-   description line as it was typed, and a press on the row opens that question. Nothing is
-   checked here, since the row is a way back, not a pick. */
-  .ask-sum {
-    color: var(--text0);
-    /* no cursor walks these rows, so the pointer's seat is theirs to draw */
-    :where([data-hover]) &:hover {
-      background: var(--element0);
-      --text1: var(--ink0);
-      --text2: var(--ink1);
-    }
   }
   /* the dot on each tab: filled once that question has an answer. An empty one is the raised
      surface, which is the colour of the seat a hovered closed tab lifts to, so there it takes the

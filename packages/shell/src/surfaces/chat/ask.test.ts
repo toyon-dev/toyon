@@ -20,11 +20,9 @@ import {
   ownChosen,
   pageCount,
   recommended,
-  rowForDigit,
   rowsOf,
   sendPage,
   setNote,
-  shellChord,
   stoppedAsk,
   stripRecommended,
   walk,
@@ -180,16 +178,6 @@ describe("the typed answer", () => {
 });
 
 describe("the keyboard's view of the ask", () => {
-  test("a digit means the nth row of the question on screen, the other row counted", () => {
-    expect(rowForDigit(two[1], 2)).toBe(1);
-    expect(rowForDigit(two[1], 4)).toBe(-1);
-    expect(rowForDigit(two[1], 0)).toBe(-1);
-    expect(rowForDigit(undefined, 1)).toBe(-1);
-    const noted = q("auth", ["Cookies", "JWT"], { note: { label: "Other" } });
-    expect(rowForDigit(noted, 3)).toBe(2);
-    expect(rowForDigit(noted, 4)).toBe(-1);
-  });
-
   test("arriving at a question lands on its pick, else its first option", () => {
     expect(cursorFor(two[1], { selected: [] })).toBe(0);
     expect(cursorFor(two[1], { selected: ["mysql"] })).toBe(2);
@@ -316,27 +304,5 @@ describe("answerParts", () => {
     expect(answerParts(one[0]!, { selected: [], note: "neither" })).toEqual({ pick: "neither" });
     expect(answerParts(own, { selected: [] })).toEqual({ pick: "skipped" });
     expect(answerParts(own, undefined)).toEqual({ pick: "skipped" });
-  });
-});
-
-describe("shellChord", () => {
-  const key = (key: string, mods: Partial<{ metaKey: boolean; ctrlKey: boolean; altKey: boolean }> = {}) => ({
-    key,
-    metaKey: false,
-    ctrlKey: false,
-    altKey: false,
-    ...mods,
-  });
-  test("a chat switch or a rail walk is not a pick, however the card reads the bare key", () => {
-    expect(shellChord(key("1", { metaKey: true }))).toBe(true);
-    expect(shellChord(key("ArrowDown", { altKey: true }))).toBe(true);
-    expect(shellChord(key("Tab", { ctrlKey: true }))).toBe(true);
-    expect(shellChord(key("1"))).toBe(false);
-    expect(shellChord(key("Enter"))).toBe(false);
-  });
-  test("the send chord is the card's own", () => {
-    expect(shellChord(key("Enter", { metaKey: true }))).toBe(false);
-    expect(shellChord(key("NumpadEnter", { ctrlKey: true }))).toBe(false);
-    expect(shellChord(key("Enter", { altKey: true }))).toBe(true);
   });
 });

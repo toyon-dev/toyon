@@ -7,15 +7,6 @@ import type { ChatItem } from "../../state/store.ts";
 
 export type AskItem = Extract<ChatItem, { kind: "ask" }>;
 
-/** a key the shell owns while the card holds the keyboard: ⌘1-9 switches the chat, ⌥↑/↓ walks
- * the rail, and both reach the card first. The card reads only the bare key, or ⌘1 pressed to
- * leave would pick option 1 and, on a one-question card, send it. ⌘⏎ is the card's own send. */
-export function shellChord(e: { key: string; metaKey: boolean; ctrlKey: boolean; altKey: boolean }): boolean {
-  const enter = e.key === "Enter" || e.key === "NumpadEnter";
-  if (enter && (e.metaKey || e.ctrlKey) && !e.altKey) return false;
-  return e.metaKey || e.ctrlKey || e.altKey;
-}
-
 /** the ask the box shows: the newest one nothing has closed, or none */
 export function openAsk(chat: ChatItem[]): AskItem | null {
   const item = chat.findLast((i) => i.kind === "ask" && !i.outcome);
@@ -154,11 +145,6 @@ export function answeredQuestion(
 ): { message: string; questions: AskQuestion[]; answers: AskAnswer[] | undefined } | null {
   if (item.outcome !== "answered" || item.ask.kind !== "question") return null;
   return { message: item.ask.message, questions: item.ask.questions, answers: item.answers };
-}
-
-/** the row a digit means: the nth of the question on screen, the "other" row counted, or -1 */
-export function rowForDigit(q: AskQuestion | undefined, digit: number): number {
-  return digit >= 1 && digit <= rowsOf(q) ? digit - 1 : -1;
 }
 
 /** where the cursor lands on arriving at a question: its pick, the "other" row when the typed

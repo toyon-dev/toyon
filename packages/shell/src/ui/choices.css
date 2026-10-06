@@ -1,0 +1,79 @@
+/* Choices (Choices.tsx): the numbered rows a card offers, the digit gutter, the cursor, the
+   description, the row's own key, and the field a row holds once something is typed against it. */
+@layer tokens, base, surfaces;
+@layer base {
+  /* the rows are a picker's rows and bleed out of the padded box they sit in, the way .picker-list
+     does: --picker-bleed undoes its padding for the row bands, --picker-inset puts it back inside
+     the row, so the labels stay in the column the text above them starts in */
+  .choices {
+    margin: 8px var(--picker-bleed, 0) 0;
+  }
+  /* a picker's row (the seat under the cursor, the bleed and inset) with a shape of its own; the
+     compound selector is what makes the shape win over .picker-item's single line whichever of
+     the two stylesheets reached the page first */
+  .picker-item.choice {
+    display: grid;
+    grid-template-columns: 14px 1fr auto;
+    column-gap: 8px;
+    align-items: baseline;
+    padding-block: 5px;
+    font: var(--type-ui);
+    white-space: normal;
+    &[data-state~="checked"] {
+      --row-edge-color: var(--accent);
+    }
+    /* the danger tone sits on the label rather than the row, so the seat still lifts under the
+       pointer like any other */
+    &.choice-deny .choice-label {
+      color: var(--red);
+    }
+  }
+  /* the digit is how the row is reached, in a gutter of its own so the labels line up under each
+     other however many rows there are. Each part names its column: where the digit is not drawn,
+     the label must not fall into the gutter it left empty. */
+  .choice-num {
+    grid-column: 1;
+    justify-content: flex-end;
+  }
+  .choice-label {
+    grid-column: 2;
+    color: var(--text0);
+  }
+  /* the scan tier, the row's own, held still under the cursor: the seat's lift would carry it to
+     the label's tier, and a row whose label, description and note are one colour has no first
+     line to find */
+  .choice-desc {
+    grid-column: 2 / -1;
+    color: var(--ink1);
+  }
+  /* the cursor row's own key, at the far end of the label's line */
+  .choice-hint {
+    grid-column: 3;
+    grid-row: 1;
+    font: var(--type-ui-sm);
+    white-space: nowrap;
+    visibility: hidden;
+    &.on {
+      visibility: visible;
+    }
+  }
+  /* the field takes the description's line, so opening it moves nothing */
+  .choice-field {
+    grid-column: 2 / -1;
+    min-width: 0;
+    resize: none;
+    field-sizing: content;
+    /* the prompt is the last thing on the row to read: a rung under the description above it */
+    &::placeholder {
+      color: var(--text2);
+    }
+  }
+  /* no cursor walks these rows, so the pointer's seat is theirs to draw */
+  .choices-hover .choice {
+    :where([data-hover]) &:hover {
+      background: var(--element0);
+      --text1: var(--ink0);
+      --text2: var(--ink1);
+    }
+  }
+}

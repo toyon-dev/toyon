@@ -630,10 +630,10 @@
   .rail-screen .rail-item {
     /* Room on the right for the counts and the time to stand in, out of the lines the name and the
        line under it wrap on: the time's three characters, then a count column's three and its gap
-       for each column the list draws (--rail-fig-cols, from Rail.tsx), then the row's own gap. A
+       for each column this row draws (--rail-fig-cols, from Rail.tsx), then the row's own gap. A
        fixed hundred pixels fit every column the list could draw and left most of it empty on the
-       usual list, which draws one, and the line under each name broke a third of the way short
-       of the time. The figures are in the mono and the row's own ch is the UI face's, so the
+       usual row, which draws one or none, and the line under each name broke a third of the way
+       short of the time. The figures are in the mono and the row's own ch is the UI face's, so the
        widths are written against the mono sizes rather than in ch: three characters at six tenths
        of an em each, the widest advance in the mono stack (SF Mono is a little under that). */
     padding-right: calc(

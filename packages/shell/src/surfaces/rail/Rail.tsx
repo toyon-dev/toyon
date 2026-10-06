@@ -358,6 +358,19 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
           current: !onScreen && id === activeId && !archivedPage,
           checked: sel.includes(id),
         })}
+        // On a screen the figures stand over the row's right padding (rail.css), so the row says
+        // how many count columns it draws and keeps only that much clear; the line under its name
+        // runs on into the rest. Its own columns, not the list's: the columns are anchored to the
+        // far edge, so a row that draws only dirty keeps dirty under the dirty above it whether or
+        // not another row draws ahead, and one row's +N does not cost every other row a column.
+        // Behind is never drawn on a screen, and ahead alone takes the dirty column (slid).
+        style={
+          onScreen
+            ? ({
+                "--rail-fig-cols": (cols.has("ahead") ? 1 : 0) + (cols.has("dirty") && !slid ? 1 : 0),
+              } as CSSProperties)
+            : undefined
+        }
         // one tip per row, on the row: the dot's state in words with the dot restated beside it,
         // since the real one is at the far end of the row from where the tip sits. A tip per
         // element would swap fifty times as the mouse crosses the panel. Badges and the crashed
@@ -638,16 +651,8 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
         offline && "offline",
       )}
       // the docks row's width for the drawer; a screen's width is the window's (rail.css), and an
-      // inline value here would outrank it. A screen says how many count columns the list draws
-      // (behind is not among them there), so each row keeps only that much clear for the figures
-      // and the line under a name runs on into the rest.
-      style={
-        onScreen
-          ? ({ "--rail-fig-cols": kinds.filter((k) => k !== "behind").length } as CSSProperties)
-          : width !== undefined
-            ? ({ "--rail-width": `${width}px` } as CSSProperties)
-            : undefined
-      }
+      // inline value here would outrank it
+      style={width !== undefined && !onScreen ? ({ "--rail-width": `${width}px` } as CSSProperties) : undefined}
       onClick={
         touch && !onScreen && !railOpen
           ? (e) => {

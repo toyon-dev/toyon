@@ -2575,6 +2575,7 @@ describe("AcpSession options", () => {
 
   test("an effort the current model has not got is left alone, and the agent's own change is absorbed", async () => {
     let effort: string | undefined = "high";
+    const changed: string[] = [];
     const fake: FakeAgent = fakeAgent(
       async (p, client) => {
         // the agent switches its own effort mid-turn (a slash command would)
@@ -2589,12 +2590,15 @@ describe("AcpSession options", () => {
     );
     const w = world(fake, claudeSpec, 60_000, undefined, {
       option: (c) => (c === "thought_level" ? effort : undefined),
+      onOptionChanged: (c, v) => changed.push(`${c}=${v}`),
     });
     w.session.send("one");
     await w.idle();
     expect(fake.configs).toEqual(["effort=high"]);
-    // the update is the truth now: the next turn asks for high again, since the record still says so
+    // the update is the truth now, and the record is told; our own switch above was not reported
     expect(infos(w.events).at(-1)).toEqual({ model: "test-model", effort: "default" });
+    expect(changed).toEqual(["thought_level=default"]);
+    // a record that did not follow puts its value back on the next turn
     w.session.send("two");
     await w.idle();
     expect(fake.configs).toEqual(["effort=high", "effort=high"]);
@@ -2604,6 +2608,41 @@ describe("AcpSession options", () => {
     w.session.send("three");
     await w.idle();
     expect(fake.configs).toEqual(["effort=high", "effort=high"]);
+    await w.session.close();
+  });
+
+  test("a model the agent switched to in the chat holds once the record follows", async () => {
+    let model: string | undefined = "big-model";
+    const changed: string[] = [];
+    const fake: FakeAgent = fakeAgent(async (p, client) => {
+      // a /model in the chat on the first turn: the agent moves and pushes the new list. The
+      // second turn pushes the same list again, as an adapter re-listing its choices would.
+      if (fake.prompts.length === 1) fake.model = "test-model";
+      await client.notify(acp.methods.client.session.update, {
+        sessionId: p.sessionId,
+        update: { sessionUpdate: "config_option_update", configOptions: fake.options() },
+      });
+      return { stopReason: "end_turn" };
+    });
+    const w = world(fake, claudeSpec, 60_000, undefined, {
+      option: (c) => (c === "model" ? model : undefined),
+      // the record follows, as the runtime's does
+      onOptionChanged: (c, v) => {
+        changed.push(`${c}=${v}`);
+        if (c === "model") model = v;
+      },
+    });
+    w.session.send("one");
+    await w.idle();
+    expect(fake.configs).toEqual(["model=big-model"]);
+    expect(changed).toEqual(["model=test-model"]);
+    expect(infos(w.events).at(-1)).toEqual({ model: "test-model" });
+    // the next turn finds the record and the agent agreeing: nothing is put back, and the
+    // re-listed choices with nothing moved report nothing
+    w.session.send("two");
+    await w.idle();
+    expect(fake.configs).toEqual(["model=big-model"]);
+    expect(changed).toEqual(["model=test-model"]);
     await w.session.close();
   });
 });

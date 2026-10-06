@@ -252,6 +252,16 @@ function defaultAgent(
       const agentId = d.state.requireWorktree(wt.id).agent ?? "";
       if (d.state.setCachedOptions(agentId, category, choices)) d.hub.emit("agentsChanged");
     },
+    // the chat's choice becomes the record's, so the picker shows what runs and the next turn
+    // keeps it rather than putting the picker's old value back
+    onOptionChanged: (category, value) => {
+      const w = d.state.requireWorktree(wt.id);
+      const field = OPTION_FIELDS[category];
+      if (w[field] === value) return;
+      w[field] = value;
+      d.state.save();
+      d.hub.emit("worktreesChanged");
+    },
     ...(mcp ? { mcp: { open: () => mcp.open(wt.id), close: () => mcp.close(wt.id) } } : {}),
   });
   agent.onQueueChange = () => d.hub.emit("queue", wt.id, agent.queueItems);

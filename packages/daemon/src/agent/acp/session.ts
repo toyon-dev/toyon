@@ -104,6 +104,10 @@ export interface AcpSessionDeps {
    * the picker. Only categories present are reported: an agent that has effort on some models
    * and not others keeps the last list it gave rather than flapping off. */
   onOptionsLearned?: (category: OptionCategory, choices: ModelChoice[]) => void;
+  /** the agent moved to another value in the category on its own (a slash command in the chat
+   * does). The record is expected to follow: the next turn re-applies the record before its
+   * prompt, so one that still named the old value would put it back. */
+  onOptionChanged?: (category: OptionCategory, value: string) => void;
   /** where the preview stands, as a block after every message; read as each goes out, since the
    * port belongs to the runtime and not to this session */
   preview?: () => string | undefined;
@@ -1119,8 +1123,16 @@ export class AcpSession implements AgentAdapter {
       live.modeId = params.update.currentModeId;
       return;
     }
-    // the agent changed its own model or effort (a slash command can): keep the comparison honest
-    if (params.update.sessionUpdate === "config_option_update") this.absorb(live, params.update.configOptions);
+    // the agent changed its own model or effort (a slash command can): the record is told, since
+    // the next turn applies the record and would otherwise undo the switch. Only the categories
+    // whose value moved: an update that only re-lists the choices pins nothing.
+    if (params.update.sessionUpdate === "config_option_update") {
+      const before = live.options;
+      this.absorb(live, params.update.configOptions);
+      for (const [category, opt] of live.options) {
+        if (before.get(category)?.current !== opt.current) this.d.onOptionChanged?.(category, opt.current);
+      }
+    }
     // a picture a call returned is written as the tool-end that names it goes out; the http side
     // waits on the write, so the row's fetch never beats the bytes to the disk
     const events = mapUpdate(

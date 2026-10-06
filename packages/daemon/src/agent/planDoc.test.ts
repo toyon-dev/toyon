@@ -24,6 +24,21 @@ describe("plan documents", () => {
     expect(await writePlanDoc(repo, "# four")).toBe(`${PLANS_DIR}/4.md`);
   });
 
+  test("a plan re-sent unchanged names the file already there", async () => {
+    expect(await writePlanDoc(repo, "# one")).toBe(`${PLANS_DIR}/1.md`);
+    // an agent answering a question in plan mode submits the same plan again
+    expect(await writePlanDoc(repo, "# one")).toBe(`${PLANS_DIR}/1.md`);
+    expect(await writePlanDoc(repo, "# one\n")).toBe(`${PLANS_DIR}/1.md`);
+    expect(existsSync(join(repo, PLANS_DIR, "2.md"))).toBe(false);
+    // only the newest counts: a revision that goes back to an older wording is still a new round
+    expect(await writePlanDoc(repo, "# two")).toBe(`${PLANS_DIR}/2.md`);
+    expect(await writePlanDoc(repo, "# one")).toBe(`${PLANS_DIR}/3.md`);
+    // a file the person edited in the pane no longer says what the agent proposed
+    writeFileSync(join(repo, PLANS_DIR, "3.md"), "# one, edited\n");
+    expect(await writePlanDoc(repo, "# one")).toBe(`${PLANS_DIR}/4.md`);
+    expect(readFileSync(join(repo, PLANS_DIR, "3.md"), "utf8")).toBe("# one, edited\n");
+  });
+
   test("the folder is kept out of git once, as a whole", async () => {
     await writePlanDoc(repo, "# one");
     await writePlanDoc(repo, "# two");

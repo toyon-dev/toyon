@@ -15,6 +15,7 @@ export * from "./land.ts";
 export * from "./launcher.ts";
 export * from "./managed.ts";
 export * from "./model.ts";
+export * from "./output.ts";
 export * from "./pair.ts";
 export * from "./paste.ts";
 export * from "./ports.ts";

@@ -69,10 +69,12 @@ import { runLine, runOf, runTicking } from "../runs.ts";
 import { chord, commandSource, folderList, pickLabel, procTrouble } from "../util.ts";
 import { AskBox } from "./AskBox.tsx";
 import { answerLines, askLine, answered as hasAnswer, openAsk, stoppedAsk } from "./ask.ts";
+import { ComposerOffer } from "./ComposerOffer.tsx";
 import { FileChip } from "./FileChip.tsx";
 import { ImageChip } from "./ImageChip.tsx";
 import { MentionText, openMention } from "./Mentions.tsx";
 import { filterCommands, insertAt, triggerAt } from "./mentions.ts";
+import { dismissOffer, offerOf, useDismissedOffers } from "./offer.ts";
 import { isMode, mergeCommands, ownCommandOf, ownCommands } from "./ownCommands.ts";
 import { PasteChip } from "./PasteChip.tsx";
 import { PickChip } from "./PickChip.tsx";
@@ -223,6 +225,20 @@ export function Composer({
   const chatCentred = useChatCentred();
   const { onPaste, onPasteKey, onPasteKeyUp } = useComposerPaste(boxId, id);
   const copied = useCopied();
+  // a failure waiting for a press, read off the chat: the last row, when the daemon marked it
+  const dismissedOffers = useDismissedOffers();
+  const fixOffer = useMemo(
+    () =>
+      id && !drafting
+        ? offerOf(chat, {
+            queued: queue.length,
+            sending: !!sending,
+            ask: !!(askUp || parked),
+            dismissed: dismissedOffers,
+          })
+        : null,
+    [id, drafting, chat, queue.length, sending, askUp, parked, dismissedOffers],
+  );
   const setText = (t: string) => boxId && dispatch({ a: "set-draft", id: boxId, text: t });
   const clientId = useStore((s) => s.clientId);
   const repo = useStore((s) => s.repos.find((r) => r.id === active?.worktree.repoId) ?? null);
@@ -1020,54 +1036,49 @@ export function Composer({
           and then what it is about. One line for it, since the log's own line already says the
           turn is waiting. */}
       {parked && id && (
-        <div className="composer-ask">
-          <Icon name="chat" className="icon-inline" />
-          <span className="composer-ask-line">
-            <Button
-              variant="inline"
-              tone="strong"
-              data-tip="Bring the question back into the box"
-              onClick={() => {
-                dispatch(parked.outcome ? { a: "ask-revive", id, askId: parked.id } : { a: "ask-unpark", id });
-                dispatch({ a: "focus-chat" });
-              }}
-            >
-              answer
-            </Button>{" "}
-            {askLine(parked)}
-          </span>
-        </div>
+        <ComposerOffer
+          icon="chat"
+          verb="answer"
+          tip="Bring the question back into the box"
+          onPress={() => {
+            dispatch(parked.outcome ? { a: "ask-revive", id, askId: parked.id } : { a: "ask-unpark", id });
+            dispatch({ a: "focus-chat" });
+          }}
+        >
+          {askLine(parked)}
+        </ComposerOffer>
+      )}
+      {/* a command that failed and that Toyon did not hand to the agent on its own: the same shape,
+          the word that sends it and then what failed. What it printed goes with the press. */}
+      {fixOffer && id && (
+        <ComposerOffer
+          icon="run"
+          verb={fixOffer.verb}
+          tip="Send the agent what it printed and ask for a fix"
+          onPress={() => sock?.send({ t: "fix", worktreeId: id, toolId: fixOffer.toolId })}
+          onDismiss={() => dismissOffer(fixOffer.toolId)}
+        >
+          what failed in <code>{fixOffer.command}</code>
+        </ComposerOffer>
       )}
       {/* what is on the clipboard, before it is pasted: the same shape as the question's way back,
           the word to press and then what it takes. Only in a box that takes a message, and not
           over an ask, which has the box. */}
       {copied && boxId && !askUp && (active || takes) && (
-        <div className="composer-ask">
-          <Icon name="copy" className="icon-inline" />
-          <span className="composer-ask-line">
-            <Button
-              variant="inline"
-              tone="strong"
-              data-tip="Attach it, as a paste would"
-              onClick={() => {
-                attachCopied(store, boxId, copied);
-                focusBox();
-              }}
-            >
-              attach
-            </Button>{" "}
-            {copied.kind === "image"
-              ? "the image you copied"
-              : `the text you copied, ${copied.text.split("\n").length} lines`}
-          </span>
-          <IconButton
-            icon="close"
-            tone="quiet"
-            className="composer-copied-close"
-            label="Not this one"
-            onClick={clipboardOfferDone}
-          />
-        </div>
+        <ComposerOffer
+          icon="copy"
+          verb="attach"
+          tip="Attach it, as a paste would"
+          onPress={() => {
+            attachCopied(store, boxId, copied);
+            focusBox();
+          }}
+          onDismiss={clipboardOfferDone}
+        >
+          {copied.kind === "image"
+            ? "the image you copied"
+            : `the text you copied, ${copied.text.split("\n").length} lines`}
+        </ComposerOffer>
       )}
       {boxId &&
         numbered(attachments, numbersAfter(nextNumbers(sentBefore), queued)).map(([item, n]) => {

@@ -349,6 +349,7 @@ const { branded, stop: stopServer } = startServer({
     drafts,
     prs,
     landing,
+    fix,
     themes,
     agents,
     accounts,

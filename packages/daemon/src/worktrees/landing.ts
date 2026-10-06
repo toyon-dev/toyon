@@ -302,7 +302,7 @@ export class LandingService {
     let check: Landing["check"] = "none";
     let checkTail: string | undefined;
     let waited = 0;
-    let exit: ExecResult["exit"] | undefined;
+    let ran: ExecResult | undefined;
     const command = repo.config.check?.trim();
     if (command) {
       const ceiling = timeoutFor(repo.config, "check");
@@ -327,7 +327,7 @@ export class LandingService {
       }
       run.finish(r.exit);
       if (!live()) return;
-      exit = r.exit;
+      ran = r;
       check = r.exit === 0 ? "pass" : "fail";
       if (r.exit === "timeout") {
         // the first line of the tail is what the placeholder says, so the ceiling goes first
@@ -395,8 +395,8 @@ export class LandingService {
     // Not for a check killed at its ceiling or stopped, which names nothing to fix, and not for
     // the quiet one after a discard: the person just took work out, and an agent set going on
     // what is left could put it back.
-    if (command && check === "fail" && typeof exit === "number" && !opts.quiet)
-      this.d.hub.emit("checkFailed", worktreeId, command);
+    if (command && check === "fail" && ran && typeof ran.exit === "number" && !opts.quiet)
+      this.d.hub.emit("checkFailed", worktreeId, { toolId: ran.toolId, command, text: ran.text });
   }
 
   /** whether the work touches a migration while the tree names a shared database or stack and

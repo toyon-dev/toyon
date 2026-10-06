@@ -1972,6 +1972,21 @@ describe("AcpSession ask cards", () => {
     await w.session.close();
   });
 
+  test("Toyon's own message leaves an open card for the person to answer", async () => {
+    const fake = fakeAgent(asks());
+    const w = world(fake);
+    w.session.send("go");
+    await waitFor(() => !!openAsk(w.events));
+    w.session.send("Fix what the hook complains about.", {
+      asked: { kind: "hook", why: "the pre-commit hook refused the commit" },
+    });
+    expect(w.types()).toContain("fix-asked");
+    // nobody answered: a hook refused while the card was up, and the card is still the person's
+    expect(w.types()).not.toContain("agent-ask-end");
+    expect(openAsk(w.events)).toBeTruthy();
+    await w.session.close();
+  });
+
   test("stopping the turn cancels the card instead of leaving the agent blocked on it", async () => {
     const fake = fakeAgent(asks());
     const w = world(fake);

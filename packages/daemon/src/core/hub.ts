@@ -25,8 +25,9 @@ export interface HubEvents {
   /** the repo's check exited 0 in the worktree: what the tree built to pass it is worth keeping */
   checkPassed: (worktreeId: string) => void;
   /** the repo's check failed on its own exit, after a turn or a press: the agent's work is what
-   * it judged, so the failure is the agent's to fix */
-  checkFailed: (worktreeId: string, command: string) => void;
+   * it judged, so the failure is the agent's to fix. `run` is the check as its row holds it: the
+   * row, the command and what it printed. */
+  checkFailed: (worktreeId: string, run: { toolId: string; command: string; text: string }) => void;
   /** a commit-msg hook refused a landing's message, with the end of what it said: the message is
    * owed again, written to answer it */
   messageRefused: (worktreeId: string, said: string) => void;

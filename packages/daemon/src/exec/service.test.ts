@@ -141,6 +141,30 @@ describe("ExecService.watch", () => {
     expect(end?.type === "tool-end" && end.output).toBe("```\nhook says no\n```\nexit 1");
   });
 
+  test("a step a hook refused is marked fixable by the hook; a rejected push is nobody's to fix", async () => {
+    const { exec, agent } = world();
+    const hooked = await exec.watch("w1", 'git commit -m "x"', async () => ({
+      exit: 1,
+      text: "lint: 2 errors\n",
+      hook: "pre-commit",
+    }));
+    const end = agent.recorded[1];
+    expect(end).toMatchObject({
+      type: "tool-end",
+      toolId: hooked.toolId,
+      fixable: { kind: "hook", hook: "pre-commit" },
+    });
+    // git's own refusal names no hook: origin moved, or there is no network
+    await exec.watch("w1", "git push origin main", step([" ! [rejected] main (fetch first)"], 1));
+    const rejected = agent.recorded[3];
+    expect(rejected?.type === "tool-end" && rejected.isError).toBe(true);
+    expect(rejected?.type === "tool-end" && rejected.fixable).toBeUndefined();
+    // a hook killed at the ceiling refused nothing
+    await exec.watch("w1", 'git commit -m "x"', async () => ({ exit: "timeout", text: "", hook: "pre-commit" }));
+    const gaveUp = agent.recorded[5];
+    expect(gaveUp?.type === "tool-end" && gaveUp.fixable).toBeUndefined();
+  });
+
   test("a step still running after the wait gets its row live, and the end replaces what streamed", async () => {
     const { exec, agent } = world(10);
     const r = await exec.watch("w1", "git push origin main", step(["tests 1/2", "tests 2/2"], 0, 30));
@@ -219,6 +243,34 @@ describe("ExecService.exec", () => {
     expect(end?.type === "tool-end" && end.output).toContain("exit 3");
   });
 
+  test("a failure on the command's own exit is marked fixable, by what ran it; a pass is not", async () => {
+    const { exec, agent } = world();
+    const failed = await exec.exec("w1", "echo no; exit 2");
+    expect(agent.recorded.at(-1)).toMatchObject({
+      type: "tool-end",
+      toolId: failed.toolId,
+      fixable: { kind: "command" },
+    });
+    await exec.exec("w1", "exit 1", CHECK_TOOL);
+    expect(agent.recorded.at(-1)).toMatchObject({ type: "tool-end", fixable: { kind: "check" } });
+    await exec.exec("w1", "true");
+    const passed = agent.recorded.at(-1);
+    expect(passed?.type === "tool-end" && passed.fixable).toBeUndefined();
+  });
+
+  test("a command somebody stopped is not marked fixable, even where its shell exits on a number", async () => {
+    const { exec, agent } = world();
+    // the trap turns the signal into an ordinary exit code, which alone would read as a failure
+    const done = exec.exec("w1", "trap 'exit 1' TERM; echo up; sleep 30 & wait");
+    await until(agent, () => agent.recorded.some((e) => e.type === "tool-delta"));
+    await exec.stop("w1");
+    await done;
+    await until(agent, () => agent.recorded.at(-1)?.type === "tool-end");
+    const end = agent.recorded.at(-1);
+    expect(end?.type === "tool-end" && end.isError).toBe(true);
+    expect(end?.type === "tool-end" && end.fixable).toBeUndefined();
+  }, 15_000);
+
   test("what a command prints streams into its row as it goes, and the end replaces it", async () => {
     const { exec, agent } = world();
     const r = await exec.exec("w1", "echo one; sleep 0.05; echo two");
@@ -270,6 +322,8 @@ describe("ExecService.exec", () => {
     expect(timed.exit).toBe("timeout");
     const end = agent.recorded.at(-1);
     expect(end?.type === "tool-end" && end.output).toBe("gave up after 1 second");
+    // nothing failed: the ceiling gave up on it
+    expect(end?.type === "tool-end" && end.fixable).toBeUndefined();
   }, 15_000);
 
   test("a command that passes is not an error, and run() is the same call without the answer", async () => {

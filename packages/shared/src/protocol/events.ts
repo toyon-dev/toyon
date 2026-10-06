@@ -198,8 +198,20 @@ export type AskOutcome = "answered" | "skipped" | "cancelled" | "expired";
 
 /** Why Toyon sent the agent a message nobody typed: something failed that the agent can fix */
 export interface Asked {
-  kind: "hook" | "conflict" | "check" | "preview";
+  kind: "hook" | "conflict" | "check" | "command" | "preview";
   why: string;
+  /** the row of the command that failed, when the failure was one: what it printed went to the
+   * agent with this message, and its row is not offered or attached again */
+  toolId?: string;
+}
+
+/** A command's row that ended in something the agent can be asked to fix: a `!` command or the
+ * repo's check that failed on its own exit, or a landing step a hook refused. Written by the
+ * daemon on the rows it ran itself, never on an agent's own call. */
+export interface Fixable {
+  kind: "command" | "check" | "hook";
+  /** the hook that refused the step, for kind `hook` */
+  hook?: string;
 }
 
 export type AgentEvent =
@@ -245,8 +257,17 @@ export type AgentEvent =
   | { type: "tool-delta"; toolId: string; text: string }
   /** `images` are the pictures the call returned, which the row shows in place of output it has
    * none of: a read of a png says nothing in words. `detached` is a spawn whose call returned with
-   * its subagent launched and still to do its work. */
-  | { type: "tool-end"; toolId: string; output?: string; isError?: boolean; images?: ToolImage[]; detached?: boolean }
+   * its subagent launched and still to do its work. `fixable` is the daemon's word that the
+   * failure can be handed to the agent. */
+  | {
+      type: "tool-end";
+      toolId: string;
+      output?: string;
+      isError?: boolean;
+      images?: ToolImage[];
+      detached?: boolean;
+      fixable?: Fixable;
+    }
   | { type: "turn-end"; stopReason: string; ts: number }
   /** the agent's running figures after a reply: context tokens in use of the window's size, and
    * the session's spend so far when the agent prices itself (Claude does; a rate-limit notice

@@ -96,10 +96,10 @@ function world(opts: Opts = {}) {
   const runsSeen: Array<string | undefined> = [];
   const judged: string[] = [];
   /** the checks whose failure was handed on for the agent to fix */
-  const fixed: string[] = [];
+  const fixed: Array<{ toolId: string; command: string; text: string }> = [];
   /** the prompts the answer question was asked with */
   const recapped: string[] = [];
-  hub.on("checkFailed", (_id, command) => fixed.push(command));
+  hub.on("checkFailed", (_id, run) => fixed.push(run));
   const runs = new RunService({ state, hub });
   const service = new LandingService({
     state,
@@ -132,7 +132,7 @@ function world(opts: Opts = {}) {
       o?.onSpawn?.(4242, () => {});
       started.push(id);
       if (opts.slow) await new Promise<void>((end) => ends.set(id, end));
-      return { exit: opts.exit ?? 0, text: opts.output ?? "" };
+      return { exit: opts.exit ?? 0, text: opts.output ?? "", toolId: `check-${checks.length}` };
     },
     ...(opts.verdict === "none"
       ? {}
@@ -240,7 +240,10 @@ describe("LandingService", () => {
       checkTail: "src/App.tsx(3,1): error TS2322\n2 errors",
     });
     // handed on once the verdict is on the row, for the turn that fixes it
-    expect(w.fixed).toEqual(["bun run check"]);
+    // with the row and what the check printed, which is what the agent is shown
+    expect(w.fixed).toEqual([
+      { toolId: "check-1", command: "bun run check", text: "src/App.tsx(3,1): error TS2322\n2 errors\n" },
+    ]);
   });
 
   test("a check that fails after a discard is not handed to the agent", async () => {
@@ -674,7 +677,7 @@ describe("LandingService", () => {
         },
       },
       transcript: () => [],
-      check: async () => ({ exit: 0, text: "" }),
+      check: async () => ({ exit: 0, text: "", toolId: "check-1" }),
       judge: async () => ({ ready: true, subject: "add the feature" }),
     });
     const settledAt = w.settled();

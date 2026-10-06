@@ -25,9 +25,11 @@ export interface ShipResult {
    * rebase cannot take: the failures an agent can be asked to resolve, named by what clears them
    * so the ask is for the same thing */
   conflict?: "rebase" | "merge";
-  /** the hook that refused the step and the end of what it printed, when the whole of it is on
-   * the chat for an agent to read */
-  hook?: { name: string; said: string };
+  /** the step that stopped on the conflict, when one ran and its row is on the chat: a branch
+   * refused for holding a merge ran nothing */
+  step?: StepRow;
+  /** the hook that refused the step, and the step as its row on the chat holds it */
+  hook?: StepRow & { name: string };
   /** the PR the route opened or found, for the record */
   pr?: Omit<PrState, "at">;
 }
@@ -45,9 +47,21 @@ export interface StepOpts {
   onHook?: (hook: string | undefined) => void;
 }
 
+/** a step as its row on the chat holds it: the row, the command it names, and what it printed */
+export interface StepRow {
+  toolId: string;
+  command: string;
+  text: string;
+}
+
 /** what a step left, and whether what it printed is on the chat already, so the message can
- * point there rather than quote it */
-export type StepResult = Watched & { shown?: boolean };
+ * point there rather than quote it; `toolId` and `command` are that row's */
+export type StepResult = Watched & { shown?: boolean; toolId?: string; command?: string };
+
+/** the failed step's row, when what it printed went on the chat */
+function rowOf(r: StepResult): StepRow | undefined {
+  return r.shown && r.toolId && r.command ? { toolId: r.toolId, command: r.command, text: r.text } : undefined;
+}
 
 /** How a landing's steps are run. `step` names the one starting, for the person waiting on the
  * press; `git` runs one git command with its output watched, so a hook's minutes read live and
@@ -87,11 +101,11 @@ export function refused(what: string, r: StepResult, n = 200): string {
  * the step ran to its own exit and what the hook printed is on the chat. A step stopped or killed
  * at its ceiling names no hook: nothing refused it. */
 export function stepRefused(what: string, r: StepResult, n = 200): ShipResult {
-  const name = r.shown && typeof r.exit === "number" ? r.hook : undefined;
+  const row = typeof r.exit === "number" && r.hook ? rowOf(r) : undefined;
   return {
     ok: false,
     message: refused(what, r, n),
-    ...(name ? { hook: { name, said: r.text.trim().slice(-400) } } : {}),
+    ...(row && r.hook ? { hook: { ...row, name: r.hook } } : {}),
   };
 }
 
@@ -310,9 +324,11 @@ async function bringIn(
       const files = overwritten(r.text);
       if (files.length) return { ok: false, message: untrackedInTheWay(defaultBr, files) };
       const ask = `rebase onto ${defaultBr} conflicts: ask the agent to rebase onto ${defaultBr} and resolve them`;
+      const step = rowOf(r);
       return {
         ok: false,
         conflict: "rebase",
+        ...(step ? { step } : {}),
         message: r.shown ? `${ask}; the conflicts are on the chat` : `${ask} (${r.text.slice(0, 200)})`,
       };
     }
@@ -524,9 +540,11 @@ async function mergeFailure(cwd: string, m: StepResult, conflictMessage: string)
   const conflict = /CONFLICT|Automatic merge failed/.test(m.text);
   if (conflict) {
     await git(cwd, "merge", "--abort");
+    const step = rowOf(m);
     return {
       ok: false,
       conflict: "merge",
+      ...(step ? { step } : {}),
       message: m.shown
         ? `${conflictMessage}; the conflicts are on the chat`
         : `${conflictMessage} (${m.text.slice(0, 200)})`,

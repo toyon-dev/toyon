@@ -23,6 +23,7 @@ import type {
   DesignIndex,
   FileBlame,
   FileServerMsg,
+  Fixable,
   GitFileStatus,
   InstallMethod,
   KeepAwakeMode,
@@ -113,10 +114,12 @@ export type ChatItem =
       /** the call's own process has exited and what it started is still running: the row is not
        * done, and says why not */
       background?: boolean;
+      /** the daemon ran this command and it failed in a way the agent can be asked to fix */
+      fixable?: Fixable;
     }
   | { kind: "error"; text: string }
   /** a message Toyon sent the agent itself, as the reason it was sent: what failed */
-  | { kind: "asked"; why: string }
+  | { kind: "asked"; why: string; toolId?: string }
   | { kind: "blocked"; tool: string; path: string; reason: string }
   /** a divider: what follows was said in another worktree, grafted in here */
   | { kind: "grafted"; title: string; branch: string }
@@ -2666,7 +2669,7 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
   switch (event.type) {
     case "fix-asked":
       // Toyon's own message is the reason it was sent, not a bubble: nobody typed it
-      return [...items, { kind: "asked", why: event.why }];
+      return [...items, { kind: "asked", why: event.why, ...(event.toolId ? { toolId: event.toolId } : {}) }];
     case "user-message":
       return [
         ...items,
@@ -2748,6 +2751,7 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
         isError: event.isError,
         ...(event.images?.length ? { images: event.images } : {}),
         ...(event.detached ? { detached: true } : {}),
+        ...(event.fixable ? { fixable: event.fixable } : {}),
         done: true,
       };
       return next;

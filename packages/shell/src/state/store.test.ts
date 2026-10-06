@@ -447,6 +447,25 @@ describe("chat folding", () => {
     ]);
     expect(s.local.a?.chat).toEqual([{ kind: "asked", why: "the check failed" }]);
   });
+  test("a failed command keeps the daemon's mark that it can be fixed, and the ask about it names its row", () => {
+    const s = run([
+      hello(wt("a")),
+      agent("a", { type: "tool-start", toolId: "t1", name: "shell", input: { command: "bun test" } }),
+      agent("a", { type: "tool-end", toolId: "t1", output: "exit 1", isError: true, fixable: { kind: "command" } }),
+      agent("a", {
+        type: "fix-asked",
+        text: "Fix it.",
+        ts: 0,
+        kind: "command",
+        why: "`bun test` failed",
+        toolId: "t1",
+      }),
+    ]);
+    expect(s.local.a?.chat).toMatchObject([
+      { kind: "tool", id: "t1", done: true, fixable: { kind: "command" } },
+      { kind: "asked", why: "`bun test` failed", toolId: "t1" },
+    ]);
+  });
   test("text deltas append to the open assistant item; a user message starts a new one", () => {
     const s = run([
       hello(wt("a")),

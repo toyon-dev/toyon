@@ -964,8 +964,8 @@
       white-space: nowrap;
     }
   }
-  /* the clipboard's offer wears the ask line's shape, with its way out at the row's end */
-  .composer-copied-close {
+  /* an offer that can be turned down has its way out at the row's end */
+  .composer-ask-close {
     margin-left: auto;
   }
   /* the frame is base's (.composer); the tall floor is the dock's own. Scoped to the dock rather

@@ -49,7 +49,7 @@ import type { OptionField } from "../agent/acp/options.ts";
 import { attachmentsDirFor, isAttachmentFile } from "../agent/attachments.ts";
 import { canonical } from "../agent/bounds.ts";
 import { PLANS_DIR } from "../agent/planDoc.ts";
-import { type FixReason, fixPrompt } from "../agent/prompt.ts";
+import { type Failure, fixPrompt } from "../agent/prompt.ts";
 import { firstAskOf } from "../agent/recap.ts";
 import type { AgentRegistry } from "../agent/registry.ts";
 import { makeNamer, taskText } from "../agent/tasks.ts";
@@ -130,6 +130,9 @@ const LOCAL_CONFIG_FILES = [".env", ".env.local", ".env.development", ".env.deve
 
 /** names the block in info/exclude, so a later setup rewrites that one and leaves the rest */
 const BASE_IGNORE = "base .gitignore";
+/** how much of what a commit-msg hook printed the next message is written against: its last
+ * lines, where the complaint is */
+const REFUSAL_CHARS = 400;
 
 export type Variant = { group: string; index: number; of: number };
 
@@ -260,16 +263,16 @@ export interface WorktreeServiceDeps {
   cache?: Pick<ArtifactCache, "restore">;
   /** a git step a landing runs, watched onto the worktree's transcript as the rows a `!` command
    * leaves (ExecService.watch): live while it runs long, whole when it fails */
-  watch?: <T extends { exit: number | string | null; text: string }>(
+  watch?: <T extends { exit: number | string | null; text: string; hook?: string }>(
     worktreeId: string,
     command: string,
     run: (onText: (text: string) => void, signal: AbortSignal) => Promise<T>,
-  ) => Promise<T & { shown: boolean }>;
+  ) => Promise<T & { shown: boolean; toolId: string }>;
   /** the setup and commit runs as the rows carry them; the daemon shares one with the landing
    * service and the handlers, a test may leave it to the service */
   runs?: RunService;
   /** how a failure the agent can fix is sent to it */
-  fix: Pick<FixService, "ask">;
+  fix: Pick<FixService, "report">;
 }
 
 /** a landing op's result as the service hands it on: `asked` when the agent was sent the turn that
@@ -1580,8 +1583,8 @@ export class WorktreeService {
 
   /** The watch a landing's steps run under: each step's name goes to the row's subscribers, so
    * the press says what it is on instead of spinning, and each git command runs through
-   * ExecService.watch, so a hook's minutes read live on the chat and its refusal reaches the agent
-   * with the next message. A command in the main checkout is named with its `-C`, since the row
+   * ExecService.watch, so a hook's minutes read live on the chat and its refusal is whole for the
+   * message that asks the agent to fix it. A command in the main checkout is named with its `-C`, since the row
    * sits on a worktree's chat. A worktree with no transcript yet runs the steps plain.
    *
    * A commit is the step with a suite in it (pre-commit), so it runs under the settings' commit
@@ -1606,8 +1609,9 @@ export class WorktreeService {
           });
         const watched = async () => {
           if (!this.d.watch) return run(() => {});
+          const command = `${where} ${commandLine(args)}`;
           try {
-            return await this.d.watch(wt.id, `${where} ${commandLine(args)}`, run);
+            return { ...(await this.d.watch(wt.id, command, run)), command };
           } catch (e) {
             // no transcript to write to (the agent is not up yet): the step runs plain, and the line
             // under the box carries git's first words
@@ -1678,15 +1682,16 @@ export class WorktreeService {
   private fixShip(wt: WorktreeInfo, result: ShipResult, base: string): ShipOutcome {
     if (result.ok) return result;
     if (result.hook?.name === "commit-msg") {
-      this.d.hub.emit("messageRefused", wt.id, result.hook.said);
+      this.d.hub.emit("messageRefused", wt.id, result.hook.text.trim().slice(-REFUSAL_CHARS));
       return { ...result, message: "the commit-msg hook refused the message: another is being written" };
     }
-    const reason: FixReason | null = result.hook
-      ? { kind: "hook", hook: result.hook.name }
+    const { hook } = result;
+    const failure: Failure | null = hook
+      ? { kind: "hook", hook: hook.name, toolId: hook.toolId, command: hook.command, text: hook.text }
       : result.conflict
-        ? { kind: "conflict", base, how: result.conflict }
+        ? { kind: "conflict", base, how: result.conflict, ...(result.step ? { step: result.step } : {}) }
         : null;
-    return reason && this.d.fix.ask(wt.id, reason) ? { ...result, asked: true } : result;
+    return failure && this.d.fix.report(wt.id, failure) ? { ...result, asked: true } : result;
   }
 
   /** The boot pane's "ask the agent to fix it", for a dev server that crashed or never answered:
@@ -1696,16 +1701,17 @@ export class WorktreeService {
    * command. */
   async fixPreview(worktreeId: string, clientId?: string): Promise<void> {
     const wt = this.d.state.requireWorktree(worktreeId);
-    const reason: FixReason = {
+    const failure: Failure = {
       kind: "preview",
       procs: this.d.runtime.get(worktreeId)?.procs?.states() ?? [],
       log: this.d.runtime.recentLogs(worktreeId),
     };
     if (!isLead(wt)) {
-      if (!this.d.fix.ask(worktreeId, reason)) throw new UserError("worktree still starting; try again in a moment");
+      if (!this.d.fix.report(worktreeId, failure, { pressed: true }))
+        throw new UserError("worktree still starting; try again in a moment");
       return;
     }
-    await this.create(wt.repoId, fixPrompt(reason), {
+    await this.create(wt.repoId, fixPrompt(failure), {
       ...(clientId ? { createdBy: clientId } : {}),
       ...(isProvisional(wt) ? { worktreeId } : {}),
     });

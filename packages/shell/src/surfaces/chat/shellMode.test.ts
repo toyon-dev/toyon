@@ -65,6 +65,16 @@ describe("shellContext", () => {
     expect(ctx.length).toBeLessThan(6_200);
   });
 
+  test("a row Toyon's own message was sent to fix is left out: its output went with that message", () => {
+    const chat: ChatItem[] = [
+      user("hi"),
+      run("bun test", "```\n1 fail\n```\nexit 1"),
+      { kind: "asked", why: "`bun test` failed", toolId: "bun test" },
+      run("git status", "```\nclean\n```"),
+    ];
+    expect(shellContext(chat)).toEndWith("printed:\n$ git status\nclean");
+  });
+
   test("the repo's check rides along too, so 'fix it' after a failed check carries the failure", () => {
     const check: ChatItem = {
       kind: "tool",

@@ -410,10 +410,11 @@ export class AcpSession implements AgentAdapter {
 
   /** A message from the person. One sent past an open card is their answer to it: the agent is
    * blocked on the card and would read nothing until it closed, so the card closes as passed and
-   * the message is what the turn carries on with. */
+   * the message is what the turn carries on with. Toyon's own message answers nothing: the card
+   * is the person's to answer, and the message waits behind it. */
   send(text: string, opts: SendOpts = {}) {
     if (this.stopped) return log.warn(this.d.worktreeId, "send after close dropped");
-    for (const ask of [...this.asks.values()]) ask.settle("skipped");
+    if (!opts.asked) for (const ask of [...this.asks.values()]) ask.settle("skipped");
     this.post(text, opts);
   }
 

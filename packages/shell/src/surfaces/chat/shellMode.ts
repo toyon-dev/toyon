@@ -1,7 +1,7 @@
 // The composer's `!` mode: a draft that leads with `!` is a command for the worktree's shell rather
 // than a message for the agent. Pure, like mentions.ts, so the rules have tests.
 
-import { CHECK_TOOL, SHELL_TOOL } from "@toyon/shared";
+import { CHECK_TOOL, clipOutput, SHELL_TOOL } from "@toyon/shared";
 import type { ChatItem } from "../../state/store.ts";
 import { parseToolOutput } from "./toolCall.ts";
 
@@ -30,30 +30,17 @@ export function ranClean(items: ChatItem[]): boolean {
   return items.length > 0 && items.every((t) => commandOf(t) !== null && t.kind === "tool" && t.done && !t.isError);
 }
 
-/** how much of one command's output the agent is shown: enough for a log or a listing, not a
- * whole file the agent could read for itself */
-const CONTEXT_CHARS = 6_000;
-/** of that, how much is the opening. The rest is the end, because a test run or a hook prints
- * what went wrong and its summary last, and an opening alone of a long run is the part that passed */
-const HEAD_CHARS = 1_500;
-
-/** the output within CONTEXT_CHARS: whole when it fits, else its opening and its end with a note
- * of how much between them went */
-export function clipOutput(text: string): string {
-  if (text.length <= CONTEXT_CHARS) return text;
-  const cut = text.length - CONTEXT_CHARS;
-  return `${text.slice(0, HEAD_CHARS)}\n[${cut} characters cut here]\n${text.slice(text.length - (CONTEXT_CHARS - HEAD_CHARS))}`;
-}
-
 /** the commands run since the person's last message, with what they printed, for the agent to
  * read with the next one: `!git log` followed by "why did this break" is the point of the mode.
- * Nothing older: that was answered already, or belongs to a question that has moved on. */
+ * Nothing older: that was answered already, or belongs to a question that has moved on. Nor a row
+ * Toyon's own message was sent to fix, whose output went to the agent with that message. */
 export function shellContext(chat: ChatItem[]): string | undefined {
   const runs: string[] = [];
+  const asked = new Set(chat.flatMap((i) => (i.kind === "asked" && i.toolId ? [i.toolId] : [])));
   for (let i = chat.length - 1; i >= 0; i--) {
     const item = chat[i]!;
     if (item.kind === "user") break;
-    if (item.kind !== "tool" || !item.done) continue;
+    if (item.kind !== "tool" || !item.done || asked.has(item.id)) continue;
     const command = commandOf(item);
     if (command === null) continue;
     const text = parseToolOutput(item.output ?? "")

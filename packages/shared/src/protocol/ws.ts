@@ -715,6 +715,9 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
    * on a lead, whose box starts work, the fix is the worktree that box would start. `clientId` as
    * on create-worktree. */
   z.object({ t: z.literal("fix-preview"), worktreeId: id, clientId: z.string().max(64).optional() }),
+  /** send the worktree's agent the turn that fixes the failed command on this row, with what it
+   * printed: the press on an offer the daemon made by marking the row's end fixable */
+  z.object({ t: z.literal("fix"), worktreeId: id, toolId: z.string().min(1).max(200) }),
   z.object({ t: z.literal("reveal"), worktreeId: id, path: relPath.optional() }),
   z.object({ t: z.literal("stop-agent"), worktreeId: id }),
   /** the person is looking at this worktree right now: clears the rail's unseen ring */

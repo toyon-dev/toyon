@@ -174,6 +174,11 @@ describe("landing", () => {
   const sent = (id: string) =>
     (w.runtime.agentFor(id) as unknown as FakeAgent).sent.slice(1).map(({ text, asked }) => ({ text, asked }));
   const asked = (id: string) => sent(id).map((m) => m.text);
+  /** what Toyon attached behind its last message: the failed command and what it printed */
+  const shown = (id: string) => (w.runtime.agentFor(id) as unknown as FakeAgent).sent.at(-1)?.context;
+  /** a failed command for a prompt that only names it: the row and the output are not in its words */
+  const ran = (command = "") => ({ toolId: "t", command, text: "" });
+  const row = expect.any(String);
 
   test("a commit git itself refuses asks nobody; a hook's refusal is the agent's, as Toyon's own message", async () => {
     const repoId = await registered();
@@ -193,8 +198,8 @@ describe("landing", () => {
     expect(refused.asked).toBe(true);
     expect(sent(wt.id)).toEqual([
       {
-        text: fixPrompt({ kind: "hook", hook: "pre-commit" }),
-        asked: { kind: "hook", why: "the pre-commit hook refused the commit" },
+        text: fixPrompt({ kind: "hook", hook: "pre-commit", ...ran() }),
+        asked: { kind: "hook", why: "the pre-commit hook refused the commit", toolId: row },
       },
     ]);
     // not the person's send: the rail sorts on theirs
@@ -229,16 +234,21 @@ describe("landing", () => {
           : { type: "user-message", text: m.text, ts: 1 },
       );
     };
-    const check = fixPrompt({ kind: "check", command: "bun run check" });
-    w.hub.emit("checkFailed", wt.id, "bun run check");
-    expect(sent(wt.id)).toEqual([{ text: check, asked: { kind: "check", why: "the check failed" } }]);
+    const check = fixPrompt({ kind: "check", ...ran("bun run check") });
+    const failed = (n: number) => ({ toolId: `check-${n}`, command: "bun run check", text: `${n} errors\n` });
+    w.hub.emit("checkFailed", wt.id, failed(1));
+    expect(sent(wt.id)).toEqual([
+      { text: check, asked: { kind: "check", why: "the check failed", toolId: "check-1" } },
+    ]);
+    // what the check printed goes with the message: nothing else puts it in front of the agent
+    expect(shown(wt.id)).toEqual(["What Toyon ran, and what it printed:\n$ bun run check\n1 errors"]);
     heard();
     // the fix turn ends in the same check: a second failure waits for the person
-    w.hub.emit("checkFailed", wt.id, "bun run check");
+    w.hub.emit("checkFailed", wt.id, failed(2));
     expect(asked(wt.id)).toEqual([check]);
     await w.worktrees.send(wt.id, { text: "try the other way" });
     heard();
-    w.hub.emit("checkFailed", wt.id, "bun run check");
+    w.hub.emit("checkFailed", wt.id, failed(3));
     expect(asked(wt.id)).toEqual([check, "try the other way", check]);
   });
 
@@ -264,7 +274,11 @@ describe("landing", () => {
     expect(result.message).toBe("commit refused: what git and its hooks printed is on the chat");
     // the hook's output is on the transcript, so the turn that fixes it is sent, not left to type
     expect(result.asked).toBe(true);
-    expect(asked(wt.id)).toEqual([fixPrompt({ kind: "hook", hook: "pre-commit" })]);
+    expect(asked(wt.id)).toEqual([fixPrompt({ kind: "hook", hook: "pre-commit", ...ran() })]);
+    // and the agent is shown what the hook printed, attached behind the message that asks
+    expect(shown(wt.id)).toEqual([
+      'What Toyon ran, and what it printed:\n$ git commit -m "add feature"\na dash in copy: src/x.ts:3\none file rejected\nand on stderr',
+    ]);
     const rows = recorded(wt.id);
     expect(rows.map((e) => e.type)).toEqual(["tool-start", "tool-end"]);
     const start = rows[0];
@@ -273,6 +287,7 @@ describe("landing", () => {
     });
     const end = rows[1];
     expect(end?.type === "tool-end" && end.isError).toBe(true);
+    expect(end?.type === "tool-end" && end.fixable).toEqual({ kind: "hook", hook: "pre-commit" });
     expect(end?.type === "tool-end" && end.output).toBe(
       "```\na dash in copy: src/x.ts:3\none file rejected\nand on stderr\n```\nexit 1",
     );
@@ -298,8 +313,8 @@ describe("landing", () => {
     expect(result.message).toBe("push failed: what git and its hooks printed is on the chat");
     expect(sent(wt.id)).toEqual([
       {
-        text: fixPrompt({ kind: "hook", hook: "pre-push" }),
-        asked: { kind: "hook", why: "the pre-push hook refused the push" },
+        text: fixPrompt({ kind: "hook", hook: "pre-push", ...ran() }),
+        asked: { kind: "hook", why: "the pre-push hook refused the push", toolId: row },
       },
     ]);
     const rows = recorded(wt.id);
@@ -420,8 +435,8 @@ describe("landing", () => {
     expect(result.asked).toBe(true);
     expect(sent(wt.id)).toEqual([
       {
-        text: fixPrompt({ kind: "conflict", base: "main", how: "rebase" }),
-        asked: { kind: "conflict", why: "the branch needs a rebase onto main" },
+        text: fixPrompt({ kind: "conflict", base: "main", how: "rebase", step: ran() }),
+        asked: { kind: "conflict", why: "the branch needs a rebase onto main", toolId: row },
       },
     ]);
     expect((await git(wt.path, "status", "--porcelain")).out).toBe("");
@@ -573,7 +588,7 @@ describe("landing", () => {
     expect(result.ok).toBe(false);
     expect(result.conflict).toBe("rebase");
     expect(result.asked).toBe(true);
-    expect(asked(wt.id)).toEqual([fixPrompt({ kind: "conflict", base: "main", how: "rebase" })]);
+    expect(asked(wt.id)).toEqual([fixPrompt({ kind: "conflict", base: "main", how: "rebase", step: ran() })]);
     expect((await git(wt.path, "status", "--porcelain")).out).toBe("");
     expect(readFileSync(join(wt.path, "README.md"), "utf8")).toBe("theirs\n");
   });

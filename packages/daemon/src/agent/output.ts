@@ -23,3 +23,11 @@ export function formatOutput(text: string, exit: number | string | null, truncat
   parts.push(...notes);
   return parts.join("\n");
 }
+
+/** what the command printed, back out of a row's stored output: the text inside the fence, with
+ * the notes under it gone. The text may hold fences of its own, so the last one closes it. */
+export function unformatOutput(output: string): string {
+  if (!output.startsWith("```\n")) return "";
+  const close = output.lastIndexOf("\n```");
+  return close < 4 ? "" : output.slice(4, close);
+}

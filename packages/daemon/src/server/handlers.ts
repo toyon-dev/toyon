@@ -36,6 +36,7 @@ import { daylightNow } from "../themes/daylight.ts";
 import type { ThemeStore } from "../themes/store.ts";
 import type { UpdateService } from "../update/service.ts";
 import type { ChatSearch } from "../worktrees/chats.ts";
+import type { FixService } from "../worktrees/fix.ts";
 import type { LandingService } from "../worktrees/landing.ts";
 import type { PrService } from "../worktrees/prs.ts";
 import type { RefSearch } from "../worktrees/refs.ts";
@@ -77,6 +78,8 @@ export interface Services {
   /** whether a worktree's work is ready to land, and the message it would land with: the verdict
    * asked for by hand, and the check alone again after a discard */
   landing: Pick<LandingService, "judge" | "recheck">;
+  /** the press on a failed command's offer: the agent is sent the turn that fixes it */
+  fix: Pick<FixService, "press">;
   themes: ThemeStore;
   agents: AgentRegistry;
   /** per-agent login state, and the one write on it (sign out) */
@@ -596,6 +599,10 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
 
   async "fix-preview"(msg, _ctx, s) {
     await s.worktrees.fixPreview(msg.worktreeId, msg.clientId);
+  },
+
+  fix(msg, _ctx, s) {
+    s.fix.press(msg.worktreeId, msg.toolId);
   },
 
   async "write-file"(msg, ctx, s) {

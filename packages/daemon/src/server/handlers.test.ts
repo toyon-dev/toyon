@@ -113,6 +113,7 @@ function make() {
     uploads,
     saveDelayMs: 0,
   });
+  const fix = new FixService({ state, hub, runtime });
   const worktrees = new WorktreeService({
     state,
     hub,
@@ -121,7 +122,7 @@ function make() {
     agents,
     drafts,
     namer: async () => null,
-    fix: new FixService({ state, hub, runtime }),
+    fix,
   });
   const turns = new TurnService({ state, hub, transcript: (id) => runtime.agentFor(id)?.transcript() ?? [] });
   // no tree behind this daemon, so nothing lands on it and afterLand has nothing to run
@@ -228,6 +229,7 @@ function make() {
     drafts,
     prs,
     landing,
+    fix,
     themes,
     agents,
     accounts,
@@ -1076,6 +1078,29 @@ describe("handlers", () => {
       text: expect.stringMatching(/^Rebase this branch onto main /),
       asked: { kind: "conflict", why: "the branch needs a rebase onto main" },
     });
+  });
+
+  test("fix hands a failed command's row to the agent, and only a row the daemon marked", async () => {
+    const { services, ctx, repo, agents } = make();
+    const r = await services.repos.register(repo);
+    r.needsSetup = false;
+    const wt = await services.worktrees.create(r.id, "feature");
+    const failed = await services.exec.exec(wt.id, "echo 2 tests failed; exit 1");
+    const agent = agents.get(wt.id)!;
+    // a command that failed is offered, never sent: many fail on purpose
+    expect(agent.sent.filter((m) => m.asked)).toEqual([]);
+    await dispatch({ t: "fix", worktreeId: wt.id, toolId: failed.toolId }, ctx, services);
+    expect(agent.sent.at(-1)).toMatchObject({
+      text: expect.stringContaining("The user ran `echo 2 tests failed; exit 1` and it failed"),
+      asked: { kind: "command", why: "`echo 2 tests failed; exit 1` failed", toolId: failed.toolId },
+      context: ["The command that failed, and what it printed:\n$ echo 2 tests failed; exit 1\n2 tests failed"],
+    });
+    // a command that passed has no offer to press, whatever a client sends
+    const passed = await services.exec.exec(wt.id, "true");
+    await expect(dispatch({ t: "fix", worktreeId: wt.id, toolId: passed.toolId }, ctx, services)).rejects.toThrow(
+      "nothing to fix on that row",
+    );
+    expect(agent.sent.filter((m) => m.asked)).toHaveLength(1);
   });
 
   test("chat hands the text, context and attachments to the agent", async () => {

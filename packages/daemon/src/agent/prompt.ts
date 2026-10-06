@@ -4,7 +4,7 @@
 
 import type { ContentBlock } from "@agentclientprotocol/sdk";
 import type { FileRef, ImageRef, LogLine, PasteRef, PickRef, ProcState, ProcStatus } from "@toyon/shared";
-import { attachmentLabel, fmtBytes, lineSpan } from "@toyon/shared";
+import { attachmentLabel, clipOutput, fmtBytes, lineSpan } from "@toyon/shared";
 import type { Stored } from "./attachments.ts";
 
 export const SYSTEM_APPEND = [
@@ -24,49 +24,96 @@ export const SYSTEM_APPEND = [
   "When you scaffold a project or change how it installs or starts, finish by updating the settings file Toyon already reads, or writing .toyon/settings.json when there is none, so the preview can run it.",
 ].join(" ");
 
-/** A failure the agent can fix, as whoever met it names it: a hook that refused a commit or a push,
- * a rebase or merge that stopped on conflicts, the repo's check, a dev server that will not come
- * up. Each is one message to the agent and one line for the person reading the chat. */
-export type FixReason =
-  | { kind: "hook"; hook: string }
-  | { kind: "conflict"; base: string; how: "rebase" | "merge" }
-  | { kind: "check"; command: string }
+/** a failed command as its row on the transcript holds it: the row, the command it names, and
+ * what it printed */
+export interface FailedRun {
+  toolId: string;
+  command: string;
+  text: string;
+}
+
+/** A failure, as whoever met it names it: a hook that refused a commit or a push, a rebase or
+ * merge that stopped on conflicts, the repo's check, a command the person ran, a dev server that
+ * will not come up. Each is one message to the agent and one line for the person reading the
+ * chat; whether it is sent unasked or waits for a press is not said here (see RESPONSE). */
+export type Failure =
+  | ({ kind: "hook"; hook: string } & FailedRun)
+  /** `step` is the rebase or merge that stopped, when one ran */
+  | { kind: "conflict"; base: string; how: "rebase" | "merge"; step?: FailedRun }
+  | ({ kind: "check" } & FailedRun)
+  | ({ kind: "command" } & FailedRun)
   | { kind: "preview"; procs: readonly ProcState[]; log: readonly LogLine[] };
 
-/** what the agent is told */
-export function fixPrompt(r: FixReason): string {
-  switch (r.kind) {
+/** the command a failure is about, when it is about one */
+export function failedRun(f: Failure): FailedRun | undefined {
+  switch (f.kind) {
     case "hook":
-      return hookFixPrompt(r.hook);
-    case "conflict":
-      return conflictFixPrompt(r.base, r.how);
     case "check":
-      return checkFixPrompt(r.command);
+    case "command":
+      return f;
+    case "conflict":
+      return f.step;
     case "preview":
-      return procFixPrompt(r.procs, r.log);
+      return undefined;
   }
 }
 
-/** what the row on the chat says in the message's place: what failed, in a few words */
-export function fixWhy(r: FixReason): string {
-  switch (r.kind) {
+/** what the agent is told */
+export function fixPrompt(f: Failure): string {
+  switch (f.kind) {
     case "hook":
-      return `the ${r.hook} hook refused the ${r.hook.includes("push") ? "push" : "commit"}`;
+      return hookFixPrompt(f.hook);
     case "conflict":
-      return r.how === "rebase" ? `the branch needs a rebase onto ${r.base}` : `the branch needs ${r.base} merged in`;
+      return conflictFixPrompt(f.base, f.how, !!f.step);
+    case "check":
+      return checkFixPrompt(f.command);
+    case "command":
+      return commandFixPrompt(f.command);
+    case "preview":
+      return procFixPrompt(f.procs, f.log);
+  }
+}
+
+/** how much of a command the chat's line names before it is cut */
+const WHY_COMMAND_CHARS = 60;
+
+/** what the row on the chat says in the message's place: what failed, in a few words */
+export function fixWhy(f: Failure): string {
+  switch (f.kind) {
+    case "hook":
+      return `the ${f.hook} hook refused the ${f.hook.includes("push") ? "push" : "commit"}`;
+    case "conflict":
+      return f.how === "rebase" ? `the branch needs a rebase onto ${f.base}` : `the branch needs ${f.base} merged in`;
     case "check":
       return "the check failed";
+    case "command": {
+      const line = f.command.split("\n")[0] ?? "";
+      return `\`${line.length > WHY_COMMAND_CHARS ? `${line.slice(0, WHY_COMMAND_CHARS)}...` : line}\` failed`;
+    }
     case "preview":
       return "the dev server is not reachable";
   }
 }
 
-/** What the agent is sent when a hook refuses a commit or a push the person pressed: the hook's
- * output is on the transcript already, as the row before this message. Never a commit-msg hook,
- * which judges the message and not the tree: that one is answered with a new message. */
+/** The paragraph that shows the agent what failed: the command and what it printed, clipped the
+ * way a `!` command's output is behind a person's message. It rides behind the message as
+ * context, since Toyon's own message has no composer to attach it, and the heading is its own:
+ * the person did not run a hook or the check. Nothing for a failure that is not about a command,
+ * or whose message already carries what was printed. */
+export function failureContext(f: Failure): string | undefined {
+  const run = failedRun(f);
+  if (!run) return undefined;
+  const shown = clipOutput(run.text.replace(/\n+$/, ""));
+  const what = f.kind === "command" ? "The command that failed" : "What Toyon ran";
+  return `${what}, and what it printed:\n$ ${run.command}${shown ? `\n${shown}` : "\n(it printed nothing)"}`;
+}
+
+/** What the agent is sent when a hook refuses a commit or a push the person pressed. Never a
+ * commit-msg hook, which judges the message and not the tree: that one is answered with a new
+ * message. */
 function hookFixPrompt(hook: string): string {
   return [
-    `The ${hook} hook refused that, and what it printed is in the command output just before this message.`,
+    `The ${hook} hook refused that, and what it printed is attached below.`,
     "Fix what it complains about, inside this worktree.",
     "Do not skip the hook, do not edit it or its configuration to get past it, and do not commit: Toyon runs the check when your turn ends, and the user lands from there.",
   ].join(" ");
@@ -74,20 +121,32 @@ function hookFixPrompt(hook: string): string {
 
 /** What the agent is sent to clear a conflict, in the words of how the base was being taken in:
  * a merge made to clear a rebase's conflict is one more thing the next sync has to work around,
- * and a merge left uncommitted is not in the branch for it to find. */
-function conflictFixPrompt(base: string, how: "rebase" | "merge"): string {
-  return how === "rebase"
-    ? `Rebase this branch onto ${base} and resolve the conflicts, keeping any uncommitted changes, then verify the app still works.`
-    : `Merge ${base} into this branch, resolve the conflicts and commit the merge, then verify the app still works.`;
+ * and a merge left uncommitted is not in the branch for it to find. `shown` when the step that
+ * stopped is attached. */
+function conflictFixPrompt(base: string, how: "rebase" | "merge", shown: boolean): string {
+  const ask =
+    how === "rebase"
+      ? `Rebase this branch onto ${base} and resolve the conflicts, keeping any uncommitted changes, then verify the app still works.`
+      : `Merge ${base} into this branch, resolve the conflicts and commit the merge, then verify the app still works.`;
+  return shown ? `${ask} What git printed when Toyon tried is attached below.` : ask;
 }
 
-/** What the agent is sent when the repo's check fails after its turn: the check's output is on the
- * transcript already, as the row before this message. */
+/** what the agent is sent when the repo's check fails after its turn */
 function checkFixPrompt(command: string): string {
   return [
-    `The repo's check, \`${command}\`, failed, and what it printed is in the command output just before this message.`,
+    `The repo's check, \`${command}\`, failed, and what it printed is attached below.`,
     "Fix what it reports, inside this worktree.",
     "Do not weaken the check or its configuration to get past it. Toyon runs it again when your turn ends.",
+  ].join(" ");
+}
+
+/** What the agent is sent when the person hands it a command of their own that failed. The
+ * command may have failed for a reason outside the tree, and the agent is told it may say so. */
+function commandFixPrompt(command: string): string {
+  return [
+    `The user ran \`${command}\` and it failed; what it printed is attached below.`,
+    "Find the cause and fix it, inside this worktree.",
+    "If the cause is not in this worktree, say what it is instead of changing anything.",
   ].join(" ");
 }
 

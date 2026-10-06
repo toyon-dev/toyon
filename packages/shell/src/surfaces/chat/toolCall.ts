@@ -322,11 +322,14 @@ const WRITING: Record<WrittenKind, string> = {
  * `cutOff` in group.ts reads it by. */
 export function composing(call: ToolCall): string {
   const kind = call.toolKind;
-  if (!emptyInput(call.input)) return "";
   // a spawn's kind is "think", which is whole on arrival for every other call of that kind; the
   // brief is what the agent writes here, and until it lands the row would say "Task" with a
-  // count of no calls, which reads as a subagent that never started
-  if (call.subagent) return "writing the brief";
+  // count of no calls, which reads as a subagent that never started. The brief is the last field
+  // of the call and the one that takes a minute to type: the description closes a beat in and
+  // names the row, and the daemon lets it through after a quiet second (map.ts), so the row is
+  // written until the brief itself is in, not until some field is.
+  if (call.subagent) return field(call, "prompt") ? "" : "writing the brief";
+  if (!emptyInput(call.input)) return "";
   if (!writingCall({ name: call.name, kind }, call.input)) return "";
   // an ask has no kind, and its question is the longest input an agent types that nobody sees
   // arrive: the adapter's placeholder ("Asking for your input") says the person is being waited

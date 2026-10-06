@@ -635,7 +635,10 @@ export const ToolRow = memo(
     // a guardian review's line is its verdict, read off the report it printed (toolCall.ts)
     const guardian = isGuardian(head);
     const name = writing ? "" : guardian ? "Guardian" : text.name;
-    const hint = writing || (guardian ? guardianHint(head.output ?? "") : text.hint);
+    // a spawn's description lands ahead of its brief (composing): it names the row meanwhile,
+    // and the mark takes the count's slot, where the calls will tick once the subagent starts
+    const briefed = writing && head.subagent ? text.hint : "";
+    const hint = briefed || writing || (guardian ? guardianHint(head.output ?? "") : text.hint);
     // nothing under the line: no subagent rows, no net change, and no call that ran a command or
     // printed a block (ToolPart draws nothing for those). Read the same way ToolPart does, so the
     // row is a leaf exactly when opening it would show nothing.
@@ -701,7 +704,7 @@ export const ToolRow = memo(
                 event, but an edit sits here for the whole replacement, and a mark alone for ten
                 seconds read as a stalled tool, so the phrase is there for whoever comes to ask.
                 It still names the row for the fold's label. */}
-            {writing ? (
+            {writing && !briefed ? (
               <span className="tool-writing" data-tip={hint}>
                 <Spinner variant="squares" />
               </span>
@@ -717,6 +720,11 @@ export const ToolRow = memo(
               <span className={cx("tool-age", inner >= 0 && "tool-age-folded")}>{elapsed(age)}</span>
             )}
             {count && <span className="tool-count">{count}</span>}
+            {briefed && (
+              <span className="tool-writing" data-tip={writing}>
+                <Spinner variant="squares" />
+              </span>
+            )}
             {stoppable && (
               <IconButton
                 icon="stop"

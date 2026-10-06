@@ -332,8 +332,18 @@ describe("toolLabel", () => {
     expect(composing({ name: "Task", title: "Task", toolKind: "think", input: {}, subagent: true })).toBe(
       "writing the brief",
     );
+    // the description closes first and the brief streams on for a minute: still written
     expect(
       composing({ name: "Task", title: "Task", toolKind: "think", input: { description: "Map it" }, subagent: true }),
+    ).toBe("writing the brief");
+    expect(
+      composing({
+        name: "Task",
+        title: "Map it",
+        toolKind: "think",
+        input: { description: "Map it", prompt: "Map the daemon" },
+        subagent: true,
+      }),
     ).toBe("");
   });
 

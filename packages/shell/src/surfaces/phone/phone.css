@@ -25,6 +25,16 @@
     --phone-strip: calc(var(--row-height-sm) + 10px);
   }
 
+  /* No pinch on the phone: the frame is already sized for the hand, and a stray second finger
+   left the whole app magnified and panning. Panning stays, since every list here scrolls. Two
+   things lift the lock. A picture or a paste held at full size is the thing worth a closer look,
+   and touch-action only narrows down the tree, so the frame lets go rather than the float asking.
+   And a window already zoomed (a pinch carried out of that view, the platform zooming to a
+   focused field) keeps its pinch until it is back at rest. */
+  .phone:not([data-zoomed]):not(:has(.attach-full)) {
+    touch-action: pan-x pan-y;
+  }
+
   /* The row under the strip, holding the one column. It is the desk's .docks with a single column in
    it, and it exists for the same reason .docks has min-height 0: .app's second row is 1fr, whose
    floor is the tallest thing in it, so a grid item that lets its content size it grows to the

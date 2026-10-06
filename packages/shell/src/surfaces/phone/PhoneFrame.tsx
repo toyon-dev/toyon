@@ -1,7 +1,9 @@
+import { useRef } from "react";
 import { useDispatch, useStore } from "../../state/context.tsx";
 import { useActive, useArchivedPage, useChatCentred, useFoundPage, useTouch } from "../../state/selectors.ts";
 import type { Screen } from "../../state/store.ts";
 import { IconButton } from "../../ui/Button.tsx";
+import { useZoomMark } from "../../ui/hooks.ts";
 import { Menus } from "../../ui/Menu.tsx";
 import { type TabItem, Tabs } from "../../ui/Tabs.tsx";
 import { Tooltips } from "../../ui/Tooltip.tsx";
@@ -32,6 +34,8 @@ const HAS_TOKEN = hasToken();
  * which matters here because a phone drops its connection every time it goes in a pocket.
  */
 export function PhoneFrame() {
+  const rootRef = useRef<HTMLDivElement>(null);
+  useZoomMark(rootRef);
   const dispatch = useDispatch();
   const screen = useStore((s) => s.screen);
   const active = useActive();
@@ -95,6 +99,7 @@ export function PhoneFrame() {
 
   return (
     <div
+      ref={rootRef}
       className="app phone"
       data-chat-side={chatSide}
       data-touch={touch || undefined}

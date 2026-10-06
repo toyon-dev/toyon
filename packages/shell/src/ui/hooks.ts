@@ -457,6 +457,25 @@ export function passPinch(e: { ctrlKey: boolean; stopPropagation: () => void }):
   if (e.ctrlKey) e.stopPropagation();
 }
 
+/** Marks an element `data-zoomed` while the window is pinch-zoomed, for a stylesheet that locks
+ * the pinch at rest: a lock that held while zoomed would leave no way back out. */
+export function useZoomMark(ref: RefObject<HTMLElement | null>): void {
+  useEffect(() => {
+    const view = window.visualViewport;
+    if (!view) return;
+    const mark = () => {
+      const el = ref.current;
+      if (!el) return;
+      // a hair over 1 is rounding at the end of a pinch back out, not a zoom
+      if (view.scale < 1.01) delete el.dataset.zoomed;
+      else el.dataset.zoomed = "";
+    };
+    mark();
+    view.addEventListener("resize", mark);
+    return () => view.removeEventListener("resize", mark);
+  }, [ref]);
+}
+
 /** Holds a full-width strip at its own size on the top edge of a pinch-zoomed window. The pinch
  * magnifies the page under a view that pans over it, and nothing in CSS follows that view, so the
  * element is told where the view is and how far it is zoomed (`--pin-x`, `--pin-y`,

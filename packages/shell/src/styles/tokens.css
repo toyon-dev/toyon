@@ -132,10 +132,12 @@
     /* a line of the tool log. On the desk it is the -sm tier. Under a thumb it does not take that
      tier's 36px: a turn stacks twenty of these between paragraphs of prose, and at a tap target's
      height each one stood further apart than the lines of the reply around it, so the log read as
-     a list of buttons and not as text to skip over. 28px keeps the row tappable and close to the
-     pitch of the 15px prose (22.5px) it sits in. */
+     a list of buttons and not as text to skip over. 24px is the pitch of the prose it sits in (15px
+     at 1.5 is 22.5px), so a run of calls steps like the lines of a reply. The 13px mono is smaller
+     than that prose, so the same pitch still leaves each row more air than a wrapped line gets. A
+     thumb that lands a row off opens the neighbouring call, which costs one more tap. */
     --row-height-log: var(--row-height-sm);
-    --row-height-log-phone: 28px;
+    --row-height-log-phone: 24px;
     /* the horizontal padding of a full-bleed row: the text column every list sits on */
     --row-inset: 12px;
 

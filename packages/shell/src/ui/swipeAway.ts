@@ -13,9 +13,10 @@ const TAIL_MS = 100;
 const TAP_MS = 400;
 /** the drop back, in the stylesheet too */
 const SETTLE_MS = 260;
-/** the throw plays at the finger's own speed, within reason */
-const LEAVE_MIN_MS = 120;
-const LEAVE_MAX_MS = 320;
+/** the throw plays at the finger's own speed, within reason: the cap keeps a throw that was only
+ * just one from drifting off */
+const LEAVE_MIN_MS = 80;
+const LEAVE_MAX_MS = 220;
 
 export type Touch1 = { dx: number; dy: number };
 export type Sample = { y: number; t: number };

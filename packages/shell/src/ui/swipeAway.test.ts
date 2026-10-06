@@ -66,7 +66,7 @@ describe("the speed a finger let go at", () => {
 describe("how long the throw takes", () => {
   test("the rest of the way at the finger's speed, within reason", () => {
     expect(leaveMs(400, 2)).toBe(200);
-    expect(leaveMs(800, 1)).toBe(320);
-    expect(leaveMs(50, 4)).toBe(120);
+    expect(leaveMs(800, 1)).toBe(220);
+    expect(leaveMs(50, 4)).toBe(80);
   });
 });

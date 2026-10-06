@@ -31,10 +31,12 @@
         transition: transform 0.26s cubic-bezier(0.2, 1.4, 0.4, 1);
       }
     }
+    /* linear: the throw carries on at the speed the finger let go at, and an easing that starts from
+       rest would stall it in the hand first */
     &[data-swipe="leave"] {
-      transition: background-color var(--swipe-ms) ease-in;
+      transition: background-color var(--swipe-ms) linear;
       & img {
-        transition: transform var(--swipe-ms) ease-in;
+        transition: transform var(--swipe-ms) linear;
       }
       @media (prefers-reduced-motion: reduce) {
         &,

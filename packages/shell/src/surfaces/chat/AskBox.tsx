@@ -165,6 +165,17 @@ function QuestionBody({
   // first row before anything was tapped and read as a choice already made, beside the badge
   const touch = useTouch();
   const own = useRef<HTMLTextAreaElement>(null);
+  // the caret goes into the field before the on-screen keyboard is up; the keyboard then takes
+  // half the window, the pages shrink to what is left, and the field is below their new foot
+  useEffect(() => {
+    const view = window.visualViewport;
+    if (!view) return;
+    const show = () => {
+      if (own.current && own.current === document.activeElement) own.current.scrollIntoView({ block: "nearest" });
+    };
+    view.addEventListener("resize", show);
+    return () => view.removeEventListener("resize", show);
+  }, []);
   const write = (next: AskAnswer[], at: number) =>
     dispatch({ a: "ask-draft", id: worktreeId, ask: { id: item.id, draft: next, current: at } });
 

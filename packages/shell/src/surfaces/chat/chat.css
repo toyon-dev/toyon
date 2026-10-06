@@ -71,6 +71,11 @@
     & .chat-log {
       padding-top: calc(12px + var(--log-cover));
     }
+    /* the log gives way to a tall box, but not past the strip's height: a box that took the whole
+       column put its own first lines under the strip, where no scroll brings them out */
+    & .chat-wrap {
+      min-height: var(--log-cover);
+    }
     /* the daemon's band is surface0, which is this ground, so it takes the bar's tier. Its floor
        is the small row's: the full row here is a thumb's 52px, and this row is read, not pressed */
     & .daemon-row {
@@ -1442,10 +1447,20 @@
   /* the pages, one per question and one for the send, stacked in one cell: the box stands as tall
    as the tallest of them from the first paint, so walking the tabs moves nothing above the strip.
    A page not open is kept and unseen, by visibility rather than display so it still has its height,
-   and an unseen page takes no focus and is read to nobody. */
+   and an unseen page takes no focus and is read to nobody.
+   The pages are what scrolls when the box is taller than the column can give it, which is a
+   phone with its keyboard up: the box is squeezed to what is left and, unscrolled, the rows past
+   its foot (the typed answer's field among them) lay under the keyboard out of reach. The
+   scroller reaches out to the strip's edges and pads back in, so the row bands still bleed
+   through its clip. */
   .ask-pages {
     display: grid;
     min-width: 0;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    margin-inline: var(--picker-bleed);
+    padding-inline: var(--picker-inset);
   }
   .ask-page {
     grid-area: 1 / 1;

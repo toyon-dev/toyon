@@ -261,6 +261,7 @@ export function EditorPane({
                 line={line}
                 focus={editor.focus}
                 readOnly={history || !disk.writable || onScreen}
+                numbers={!onScreen}
                 theme={theme}
                 sync={sync}
                 // the editor knows the lines; whose file they are, and at which commit, is the

@@ -99,9 +99,12 @@ monaco.editor.addKeybindingRules(
   ).map(([command, keybinding]) => ({ keybinding, command: `-${command}` })),
 );
 
-function editorOptions(readOnly: boolean) {
+function editorOptions(readOnly: boolean, numbers: boolean) {
   return {
     readOnly,
+    // the diff numbers both sides, two columns that take a fifth of a phone's width before any
+    // code; the +/- strip still says which lines changed
+    lineNumbers: numbers ? ("on" as const) : ("off" as const),
     automaticLayout: true,
     theme: THEME,
     scrollBeyondLastLine: false,
@@ -256,6 +259,7 @@ export default function Editor({
   line,
   focus,
   readOnly,
+  numbers,
   theme,
   sync,
   onLineHover,
@@ -276,6 +280,8 @@ export default function Editor({
   /** the keyboard follows the file in */
   focus: boolean;
   readOnly: boolean;
+  /** whether the gutter numbers its lines */
+  numbers: boolean;
   theme: Theme;
   sync: EditorSync;
   onLineHover?: (line: number | null) => void;
@@ -427,7 +433,7 @@ export default function Editor({
     if (!el || !m) return;
     const restored = m.place;
     const unchanged = m.original.getValue() === m.modified.getValue();
-    const options = editorOptions(readOnlyRef.current);
+    const options = editorOptions(readOnlyRef.current, numbers);
     let diffEditor: monaco.editor.IStandaloneDiffEditor | null = null;
     let code: monaco.editor.IStandaloneCodeEditor;
     if (view === "file") {

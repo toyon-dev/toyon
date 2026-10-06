@@ -1282,7 +1282,10 @@ export function Composer({
                 dispatch({ a: "edit-commit" });
                 return;
               }
-              if (e.key === "Enter" && !e.shiftKey) {
+              // an on-screen keyboard has no shift to hold with return, so there return breaks the
+              // line and the button in the row below sends; a hardware keyboard on the same screen
+              // sends with ⌘ or ctrl
+              if (e.key === "Enter" && (touch ? e.metaKey || e.ctrlKey : !e.shiftKey)) {
                 e.preventDefault();
                 send();
               } else if (e.key === "Backspace" && text === "" && removeLast()) {
@@ -1498,6 +1501,19 @@ export function Composer({
                 on={picking === "chat"}
                 disabled={!frameId}
                 onClick={() => frameId && togglePick(frameId, picking, dispatch, "chat")}
+              />
+            )}
+            {/* the send where return breaks the line: a touch window, and last in the row, under
+              the thumb. A press that moved focus to the button would drop the keyboard between
+              two messages, so the press keeps the caret where it is. */}
+            {touch && boxId && (active || takes) && (
+              <IconButton
+                icon="send"
+                tone="primary"
+                label="Send"
+                disabled={blank}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={send}
               />
             )}
           </span>

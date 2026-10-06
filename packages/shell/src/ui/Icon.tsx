@@ -49,6 +49,7 @@ export type IconName =
   | "clock"
   | "archive"
   | "attach"
+  | "send"
   | "phone"
   | "dot";
 
@@ -86,6 +87,8 @@ const ICON_PATHS: Record<IconName, string> = {
   // the same chevron pointing up: the way back to the start of a log, opposite the way to its end
   "caret-up": "M4.5 9.5 8 6l3.5 3.5",
   stop: "M4.5 4.5h7v7h-7z",
+  // an arrow up the box: the message leaves the field for the log above it
+  send: "M8 13V3.2 M4 7.2 8 3.2l4 4",
   // arrow leaving a pane, for a link that opens outside the app
   external: "M9 3h4v4 M13 3 8 8 M11.5 9.5V13H3V4.5h3.5",
   plus: "M8 3.5v9 M3.5 8h9",

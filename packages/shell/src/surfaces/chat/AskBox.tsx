@@ -236,8 +236,9 @@ function QuestionBody({
       // the typed answer's field reads its own keys. Enter is the answer, the way it is on a row:
       // on to what is still open, or the send when nothing is, since what is typed here is one
       // line nearly every time; shift+enter is the line break for the other times, and the chord
-      // sends from anywhere. Escape and tab go back to the options, and a field left blank goes
-      // with them.
+      // sends from anywhere. An on-screen keyboard has no shift to hold, so there return is the
+      // line break and the send is the button under the field. Escape and tab go back to the
+      // options, and a field left blank goes with them.
       if (e.key === "Escape" || (e.key === "Tab" && !e.shiftKey)) {
         e.preventDefault();
         e.stopPropagation();
@@ -250,7 +251,7 @@ function QuestionBody({
       } else if (isEnter(e) && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
         submit();
-      } else if (isEnter(e) && !e.shiftKey) {
+      } else if (isEnter(e) && !e.shiftKey && !touch) {
         e.preventDefault();
         const next = dropBlankNote(draft, current);
         root.current?.focus();

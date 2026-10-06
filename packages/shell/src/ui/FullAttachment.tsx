@@ -1,7 +1,8 @@
-import type { ReactNode } from "react";
+import { type ReactNode, useRef } from "react";
 import { IconButton } from "./Button.tsx";
 import { Float } from "./Float.tsx";
 import { type MenuEntry, useContextMenu } from "./menu.ts";
+import { useSwipeAway } from "./swipeAway.ts";
 import "./full-attachment.css";
 
 /**
@@ -9,7 +10,9 @@ import "./full-attachment.css";
  *
  * Shown here rather than opened as a tab, because the installed app has no browser chrome: a window
  * navigated to the daemon's copy has no address bar, no back and no Escape, and nothing left on the
- * page leads to the shell. Escape, the close button, or a press beside the thing takes it down.
+ * page leads to the shell. Escape, the close button, or a press beside the thing takes it down. A
+ * picture goes under a finger as well, tapped or swiped up or down: on a phone it fills the window
+ * and leaves nothing beside it to press.
  *
  * `menu` is the opener's own, offered anywhere in this view: the float is drawn inside the opener's
  * row, so without one a right-click here would open the row's menu about a message. `owner` names
@@ -27,9 +30,12 @@ export function FullAttachment({
   children: ReactNode;
 }) {
   const cm = useContextMenu(owner);
+  const box = useRef<HTMLDivElement | null>(null);
+  useSwipeAway(box, "img", onClose);
   return (
     <Float
       className="attach-full scrim"
+      boxRef={box}
       onDismiss={onClose}
       onKey={(e) => {
         if (e.key !== "Escape") return;

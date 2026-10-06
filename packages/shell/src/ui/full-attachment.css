@@ -16,6 +16,26 @@
       box-shadow: var(--elevation-overlay);
       background: var(--surface2);
     }
+    /* a finger carrying the picture off (swipeAway.ts): it follows, and the scrim thins the further
+       it goes, so what is under shows before the box is gone */
+    &[data-swipe] {
+      background: color-mix(in srgb, var(--scrim) calc((1 - var(--swipe-fade, 0)) * 100%), transparent);
+      & img {
+        transform: translateY(var(--swipe-y, 0));
+      }
+    }
+    &:is([data-swipe="settle"], [data-swipe="leave"]) {
+      transition: background-color 0.18s ease-out;
+      & img {
+        transition: transform 0.18s ease-out;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        &,
+        & img {
+          transition: none;
+        }
+      }
+    }
     & .btn-icon {
       position: absolute;
       top: 12px;

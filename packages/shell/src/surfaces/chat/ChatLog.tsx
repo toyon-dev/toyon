@@ -114,6 +114,10 @@ function QueuedChips({
 /** no spawn at work: one frozen set, so a turn that is over keys the same placement every render */
 const NONE: ReadonlySet<string> = new Set();
 
+/** how far up from the end a phone's bars fold: more than the height a composer gives the log as
+ * it folds, with the tail's own slack to spare, so the fold never puts the reader on the end */
+const READ_ROOM = 240;
+
 /** the transcript for the active worktree: items, working indicator, waiting messages, jump-down pill.
  * `lead` is a line the conversation starts from: the first child of the log, so it sits on the
  * composer in an empty chat and scrolls up as the conversation grows, the way a message would.
@@ -211,12 +215,27 @@ export function ChatLog({
       )}
     </div>
   );
-  // On a phone, a reader anywhere but the end wants the screen for the log: the bar folds to its
-  // row and a blank composer to a line, and both stay that way until the end is back in view. By
-  // place and not by the hand, unlike the pill: bars that came and went with each turn of the
-  // thumb were a thing to watch, and the end is the one place the box and the name are for.
+  // On a phone, a reader up in the log wants the screen for it: the bar folds to its row and a
+  // blank composer to a line, and both stay that way until the end is back in view. By place and
+  // not by the hand, unlike the pill: bars that came and went with each turn of the thumb were a
+  // thing to watch, and the end is the one place the box and the name are for. The fold waits
+  // until they are READ_ROOM up, where leaving the end is enough to unfold, because the box
+  // folding hands the log its height at the foot: a reader nearer the end than that is at the end
+  // once it has, which unfolds the box, which pins them back to where they set out from.
   useEffect(() => {
-    dispatch({ a: "reading", on: phone && follow.offEnd });
+    const el = logRef.current;
+    if (!phone || !follow.offEnd || !el) {
+      dispatch({ a: "reading", on: false });
+      return;
+    }
+    const far = () => {
+      if (el.scrollHeight - el.scrollTop - el.clientHeight <= READ_ROOM) return;
+      dispatch({ a: "reading", on: true });
+      el.removeEventListener("scroll", far);
+    };
+    far();
+    el.addEventListener("scroll", far, { passive: true });
+    return () => el.removeEventListener("scroll", far);
   }, [phone, follow.offEnd, dispatch]);
   useEffect(() => () => dispatch({ a: "reading", on: false }), [dispatch]);
 

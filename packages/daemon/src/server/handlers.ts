@@ -8,6 +8,7 @@ import { isLead, pickTheme, SHELL_STREAM } from "@toyon/shared";
 import type { AgentAccounts } from "../agent/accounts.ts";
 import type { AttachmentStore } from "../agent/attachments.ts";
 import { agentConfigFiles, describeAgentConfig } from "../agent/config.ts";
+import type { ToyonMcp } from "../agent/mcp.ts";
 import type { AgentRegistry } from "../agent/registry.ts";
 import { coalesce } from "../agent/transcript.ts";
 import { GONE, uploadIds } from "../agent/uploads.ts";
@@ -37,6 +38,7 @@ import type { ThemeStore } from "../themes/store.ts";
 import type { UpdateService } from "../update/service.ts";
 import type { ChatSearch } from "../worktrees/chats.ts";
 import type { FixService } from "../worktrees/fix.ts";
+import type { HandoffService } from "../worktrees/handoff.ts";
 import type { LandingService } from "../worktrees/landing.ts";
 import type { PrService } from "../worktrees/prs.ts";
 import type { RefSearch } from "../worktrees/refs.ts";
@@ -80,6 +82,10 @@ export interface Services {
   landing: Pick<LandingService, "judge" | "recheck">;
   /** the press on a failed command's offer: the agent is sent the turn that fixes it */
   fix: Pick<FixService, "press">;
+  /** work continued in another project: the card's answer, and the verb that asks for one */
+  handoff: Pick<HandoffService, "answer" | "ask">;
+  /** Toyon's own tools for the agents, served over MCP by the http layer */
+  mcp: Pick<ToyonMcp, "fetch">;
   themes: ThemeStore;
   agents: AgentRegistry;
   /** per-agent login state, and the one write on it (sign out) */
@@ -742,6 +748,18 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
   "agent-decide"(msg, _ctx, s) {
     requireRun(s, msg.worktreeId);
     s.runtime.agentFor(msg.worktreeId)?.answer(msg.askId, { kind: "choice", choiceId: msg.choiceId });
+  },
+
+  // the card's events are the word on it, on every tab; only a refusal comes back here, as the
+  // error frame tagged with the worktree
+  async "handoff-answer"(msg, _ctx, s) {
+    requireRun(s, msg.worktreeId);
+    await s.handoff.answer(msg.worktreeId, msg.id, msg.go, msg.note);
+  },
+
+  async "handoff-ask"(msg, _ctx, s) {
+    requireRun(s, msg.worktreeId);
+    await s.handoff.ask(msg.worktreeId, msg.repoId, msg.text);
   },
 
   "agent-config"(msg, ctx, s) {

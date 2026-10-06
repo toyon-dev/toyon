@@ -320,7 +320,11 @@ describe("landing", () => {
     w.worktrees.setPr(wt.id, { number: 7, url: "https://x/pull/7", state: "open", at: 1 });
     squashedOnOrigin(other, origin, "theirs");
     w.worktrees.setPr(wt.id, { number: 7, url: "https://x/pull/7", state: "merged", at: 2 });
+    const landedIds: string[] = [];
+    w.hub.on("landed", (id) => landedIds.push(id));
     expect((await w.worktrees.prMerged(wt.id)).ok).toBe(true);
+    // the poll's landing reaches the hub as a press's does
+    expect(landedIds).toEqual([wt.id]);
     // the branch keeps its own commit, so it reads as ahead of origin's main for good; the
     // landed tip is what says the work is there
     expect((await git(wt.path, "rev-parse", "HEAD")).out).toBe(tip);

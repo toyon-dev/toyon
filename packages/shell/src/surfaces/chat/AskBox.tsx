@@ -51,7 +51,7 @@ import { renderMarkdown } from "./markdown.ts";
 import { unwrapShell } from "./toolCall.ts";
 import { useCodeCopy } from "./useCodeCopy.tsx";
 
-type Root = RefObject<HTMLDivElement>;
+export type Root = RefObject<HTMLDivElement>;
 
 /** an element that is keeping the keyboard for good reason: an editor, a terminal, a field
  * elsewhere. The box's own textarea and a row in the transcript or the rail are not. */
@@ -69,7 +69,7 @@ function holdsKeyboard(el: Element | null): boolean {
  * preview) keeps what it landed on. It waits for the press to be let go: focus moving under a
  * held button ends the drag, so a selection begun in the transcript never got past its first
  * character. */
-function useAskFocus(root: Root, id: string) {
+export function useAskFocus(root: Root, id: string) {
   useOnChange([id], () => {
     // rAF because the root is painted in the same commit that mounts it
     const f = requestAnimationFrame(() => {
@@ -128,8 +128,8 @@ export function AskBox({
   );
 }
 
-const isDigit = (key: string) => key.length === 1 && key >= "1" && key <= "9";
-const isEnter = (e: React.KeyboardEvent) => e.key === "Enter" || e.key === "NumpadEnter";
+export const isDigit = (key: string) => key.length === 1 && key >= "1" && key <= "9";
+export const isEnter = (e: React.KeyboardEvent) => e.key === "Enter" || e.key === "NumpadEnter";
 
 function QuestionBody({
   item,

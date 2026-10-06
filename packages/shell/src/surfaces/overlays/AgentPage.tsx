@@ -2,7 +2,7 @@ import type { AgentConfigFile, McpServerInfo } from "@toyon/shared";
 import { useEffect } from "react";
 import { agentItems } from "../../state/actions/agent.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
-import { useActiveRepo } from "../../state/selectors.ts";
+import { useActiveWorktreeRepo } from "../../state/selectors.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
 import { useContextMenu } from "../../ui/menu.ts";
 import { Overlay } from "../../ui/Overlay.tsx";
@@ -15,7 +15,8 @@ import { authLabel, authTip } from "./KeysHelp.tsx";
 export function AgentPage({ agentId }: { agentId: string }) {
   const dispatch = useDispatch();
   const sock = useSock();
-  const repo = useActiveRepo();
+  // the agent's files are read for the project of the worktree on screen, a guest's own included
+  const repo = useActiveWorktreeRepo();
   const home = useStore((s) => s.home);
   const agent = useStore((s) => s.agents.find((a) => a.id === agentId) ?? null);
   const config = useStore((s) => s.agentConfigs[agentId] ?? null);

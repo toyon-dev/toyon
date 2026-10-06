@@ -30,7 +30,7 @@ import type { AttachmentStore, Stored } from "../attachments.ts";
 import { agentModeFor, modeAfterPlan } from "../modes.ts";
 import { formatOutput } from "../output.ts";
 import { decide, decideUnattended, pickOption } from "../policy.ts";
-import { ambientBlock, buildPrompt, SYSTEM_APPEND } from "../prompt.ts";
+import { ambientBlock, buildPrompt, handoffLandedContext, SYSTEM_APPEND } from "../prompt.ts";
 import type { AgentSpec } from "../registry.ts";
 import { type Bounds, type Prepared, prepareLaunch } from "../sandbox.ts";
 import { Transcript, type TranscriptEntry, transcriptPathFor } from "../transcript.ts";
@@ -110,6 +110,10 @@ export interface AcpSessionDeps {
   /** the adapter's process group came up (`true`, right after the spawn and before initialize,
    * so a daemon dying mid-start still has it on record) or went (`false`), for the ledger */
   onProcess?: (pgid: number, up: boolean) => void;
+  /** Toyon's own tools for this worktree's agent, served over MCP: `open` mints the entry (and
+   * the bearer in it) for a process that takes HTTP servers, `close` retires it with the process.
+   * Absent where there is nothing to hand them to (tests, a probe). */
+  mcp?: { open: () => acp.McpServer; close: () => void };
 }
 
 const DEFAULT_IDLE_MS = Number(process.env.TOYON_AGENT_IDLE_MS) || 5 * 60_000;
@@ -149,6 +153,9 @@ interface Conn {
   acceptsImages: boolean;
   /** `_meta.steering` from initialize: whether a message may join the turn already running */
   steering: boolean;
+  /** Toyon's own MCP server for the worktree's session, when the agent takes HTTP servers;
+   * empty otherwise. Side sessions never get it: no chat behind them, no card to raise. */
+  mcpServers: acp.McpServer[];
   /** side sessions (ask): text listeners by session id */
   side: Map<string, (text: string) => void>;
   /** commands pushed per session id, including sessions we have not adopted yet. Adapters send
@@ -240,6 +247,11 @@ export class AcpSession implements AgentAdapter {
   /** ask cards waiting on a person, by ask id. The agent's request stays open on the wire until
    * one of these settles, and that is what blocks its turn. */
   private asks = new Map<string, PendingAsk>();
+  /** handoff cards waiting on a person, by proposal id. The tool answers the agent at once (its
+   * client times a call out before a person would answer), so nothing on the wire holds the turn;
+   * the open card is what the row reads `waiting` from. Seeded from the transcript and kept by
+   * the events that open and close one, so it survives a restart. */
+  private openHandoffs = new Set<string>();
   private log: Transcript;
   /** the number the next attachment of each kind takes in this worktree's session; continues across
    * daemon restarts because the transcript remembers every attachment sent */
@@ -287,6 +299,17 @@ export class AcpSession implements AgentAdapter {
       const output = [formatOutput(text, 0, false), "ended with the daemon that was watching it"].filter(Boolean);
       this.emit({ type: "tool-end", toolId, output: output.join("\n"), isError: true });
     }
+    // a handoff card is answered through the daemon, not the agent's process, so one the daemon
+    // died under is still open: the row reads waiting from it again
+    for (const { event } of this.log.entries) this.trackHandoff(event);
+    if (this.openHandoffs.size > 0) this.syncStatus();
+  }
+
+  /** the open handoff cards follow their events; true when the set changed */
+  private trackHandoff(event: AgentEvent): boolean {
+    if (event.type === "handoff-proposed") return this.openHandoffs.add(event.id).size > 0;
+    if (event.type === "handoff" || event.type === "handoff-declined") return this.openHandoffs.delete(event.id);
+    return false;
   }
 
   get commands(): AgentCommand[] {
@@ -331,6 +354,10 @@ export class AcpSession implements AgentAdapter {
 
   get runningAgent(): string | null {
     return this.conn?.spec.id ?? null;
+  }
+
+  get mcpTools(): boolean | null {
+    return this.conn ? this.conn.mcpServers.length > 0 : null;
   }
 
   /** set at the spawn rather than read off `conn`, which exists only once initialize has answered */
@@ -408,6 +435,7 @@ export class AcpSession implements AgentAdapter {
 
   note(event: AgentEvent) {
     this.emit(event);
+    if (this.trackHandoff(event)) this.syncStatus();
   }
 
   private emit(event: AgentEvent) {
@@ -599,7 +627,9 @@ export class AcpSession implements AgentAdapter {
         this.interrupted = false;
         this.steered = [];
       }
-      this.setStatus("idle");
+      // a handoff card proposed during the turn is still a person's answer owed once the turn is
+      // over: the row keeps reading waiting from it, not idle
+      this.setStatus(this.openHandoffs.size > 0 ? "waiting" : "idle");
     } catch (e) {
       if (this.conn && (isAuthRequired(e) || this.rejectedCredential(e))) {
         const rejected = !isAuthRequired(e);
@@ -806,9 +836,27 @@ export class AcpSession implements AgentAdapter {
   }
 
   /** what the shell attached when the message was sent, then where the preview stands now that
-   * it is going out, wrapped as one block */
+   * it is going out, then what landed elsewhere since the last message, wrapped as one block */
   private contextFor(item: QueueItem): string | undefined {
-    return ambientBlock([...(item.context ?? []), this.d.preview?.()]);
+    return ambientBlock([...(item.context ?? []), this.d.preview?.(), ...this.landedSince()]);
+  }
+
+  /** One sentence per worktree this one handed work to that has landed since the message before
+   * this one. Derived from the transcript rather than kept: the message going out is the newest
+   * record on it, so the events between the one before and it are what this prompt is the first to
+   * carry, and the next prompt starts past them. */
+  private landedSince(): string[] {
+    const entries = this.log.entries;
+    const isMessage = (e: AgentEvent) => e.type === "user-message" || e.type === "fix-asked";
+    let i = entries.length - 1;
+    while (i >= 0 && !isMessage(entries[i]!.event)) i--;
+    const out: string[] = [];
+    for (i--; i >= 0; i--) {
+      const e = entries[i]!.event;
+      if (isMessage(e)) break;
+      if (e.type === "handoff-landed") out.unshift(handoffLandedContext(e.title, e.repoName, e.url));
+    }
+    return out;
   }
 
   /** the adapter process, spawned and initialized once; concurrent callers share the spawn.
@@ -849,6 +897,7 @@ export class AcpSession implements AgentAdapter {
         log.warn(this.d.worktreeId, "agent process exited while idle");
         this.conn = null;
         this.live = null;
+        this.d.mcp?.close();
         this.cancelAsks();
         this.tasks.endAll("the agent stopped, and the command with it");
         this.endOwn("interrupted");
@@ -881,6 +930,8 @@ export class AcpSession implements AgentAdapter {
         deleteSupported: !!init.agentCapabilities?.sessionCapabilities?.delete,
         acceptsImages: init.agentCapabilities?.promptCapabilities?.image === true,
         steering: supportsSteering(init),
+        // the SDK types the capability as an object; both bundled adapters send `true`
+        mcpServers: takesHttpMcp(init) && this.d.mcp ? [this.d.mcp.open()] : [],
         side,
         commands,
       };
@@ -922,7 +973,7 @@ export class AcpSession implements AgentAdapter {
         const r = await conn.ctx.request(acp.methods.agent.session.resume, {
           sessionId,
           cwd: this.d.cwd,
-          mcpServers: [],
+          mcpServers: conn.mcpServers,
           additionalDirectories,
           ...(conn.spec.systemPrompt === "meta-append" ? { _meta: { systemPrompt: { append: SYSTEM_APPEND } } } : {}),
         });
@@ -937,7 +988,7 @@ export class AcpSession implements AgentAdapter {
     if (!resumed) {
       const r = await conn.ctx.request(acp.methods.agent.session.new, {
         cwd: this.d.cwd,
-        mcpServers: [],
+        mcpServers: conn.mcpServers,
         additionalDirectories,
         ...(conn.spec.systemPrompt === "meta-append" ? { _meta: { systemPrompt: { append: SYSTEM_APPEND } } } : {}),
       });
@@ -1279,10 +1330,12 @@ export class AcpSession implements AgentAdapter {
   }
 
   /** a card is opened inside a running turn, so the turn's own status would say "working" while
-   * the agent is in fact blocked on a person */
+   * the agent is in fact blocked on a person; a handoff card holds no turn at all, and is still
+   * a person's answer owed */
   private syncStatus() {
     if (this.status === "error") return;
-    this.setStatus(this.asks.size > 0 ? "waiting" : this.running || this.own ? "working" : "idle");
+    const waiting = this.asks.size > 0 || this.openHandoffs.size > 0;
+    this.setStatus(waiting ? "waiting" : this.running || this.own ? "working" : "idle");
   }
 
   /** Updates with no prompt out are the agent working on its own. The first word or call opens a
@@ -1357,6 +1410,8 @@ export class AcpSession implements AgentAdapter {
     const conn = this.conn;
     this.conn = null;
     this.live = null;
+    // the bearer the process held goes with it; the next spawn mints its own
+    this.d.mcp?.close();
     if (!conn) return;
     log.info(this.d.worktreeId, `agent ${conn.spec.id} stopped: ${why} (pid ${conn.link.pid ?? "unknown"})`);
     conn.link.conn.close();
@@ -1367,6 +1422,13 @@ export class AcpSession implements AgentAdapter {
 
 function isAuthRequired(e: unknown): boolean {
   return e instanceof acp.RequestError && e.code === -32000;
+}
+
+/** whether the agent takes an HTTP MCP server at session start. The SDK types the flag as an
+ * object or null; both bundled adapters send a boolean, so either spelling of yes counts. */
+function takesHttpMcp(init: acp.InitializeResponse): boolean {
+  const http: unknown = init.agentCapabilities?.mcpCapabilities?.http;
+  return http === true || (typeof http === "object" && http !== null);
 }
 
 /** how many lines of a proposed file the card shows before it cuts */

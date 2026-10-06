@@ -1,6 +1,8 @@
 // Agent stream events: the daemon's ACP session maps session/update notifications onto these, and
 // the transcript JSONL stores them, so the shape is the ACP one with the fields the shell renders.
 
+import type { PermissionMode } from "../model.ts";
+
 /** the tool name on a command the person ran from the composer (`!ls`): the daemon records it on
  * the transcript as a tool call so it renders where the agent's own commands do, and the shell
  * keys on the name to open the row, since its output is the reason it was run */
@@ -21,6 +23,14 @@ export const TOOL_SEARCH = "ToolSearch";
  * row's place once the question is in, so the row is only ever seen while the agent writes it: the
  * shell keys on the name to say so, under the glyph the ask itself wears. */
 export const ASK_TOOL = "AskUserQuestion";
+
+/** The MCP server the daemon serves each agent, carrying Toyon's own tools. Adapters prefix a
+ * tool's name with it (Claude: `mcp__toyon__handoff`), so the daemon folds every spelling back to
+ * the bare name and the shell keys rows on that. */
+export const TOYON_MCP_SERVER = "toyon";
+
+/** Toyon's first tool of its own: a proposal to continue the work in another open project */
+export const HANDOFF_TOOL = "handoff";
 
 /** ACP's tool categories; what the shell keys "did this turn edit anything" on */
 export type ToolKind =
@@ -198,7 +208,7 @@ export type AskOutcome = "answered" | "skipped" | "cancelled" | "expired";
 
 /** Why Toyon sent the agent a message nobody typed: something failed that the agent can fix */
 export interface Asked {
-  kind: "hook" | "conflict" | "check" | "command" | "preview";
+  kind: "hook" | "conflict" | "check" | "command" | "preview" | "handoff";
   why: string;
   /** the row of the command that failed, when the failure was one: what it printed went to the
    * agent with this message, and its row is not offered or attached again */
@@ -298,6 +308,31 @@ export type AgentEvent =
    * the row reads back after a reload. `archiveIds` are the variant siblings the land leaves
    * behind, offered on the row for as long as they are still rows */
   | { type: "landed"; message: string; archiveIds: string[]; ts: number }
+  /** a proposal to continue this work in another open project: the agent's through its handoff
+   * tool, or the person's through the verb (`by`). A card until a `handoff` or `handoff-declined`
+   * with the same id closes it. `message` is what the other project's agent would start from, as
+   * written; `title` the name its row would take; `mode` the permission mode it would start in,
+   * which is this worktree's. The card shows the project's `path` beside its name, since two open
+   * projects can share a name. */
+  | {
+      type: "handoff-proposed";
+      id: string;
+      repo: { id: string; name: string; path: string };
+      message: string;
+      title?: string;
+      by: "agent" | "person";
+      mode: PermissionMode;
+      ts: number;
+    }
+  /** the person said go: `worktreeId` is the row made in the other project */
+  | { type: "handoff"; id: string; worktreeId: string; repoId: string; repoName: string; title: string; ts: number }
+  /** the card closed with no worktree made: a press, or `outcome` says what else, with `reason`
+   * in the daemon's words */
+  | { type: "handoff-declined"; id: string; outcome?: "failed"; reason?: string; ts: number }
+  /** a worktree this one handed off to has landed there; `url` is its pull request when the
+   * landing was one. Kept on the transcript so the row reads back after a reload, and read by the
+   * next prompt so the agent here hears it too. */
+  | { type: "handoff-landed"; worktreeId: string; repoName: string; title: string; url?: string; ts: number }
   /** a restore brought this worktree back from the archive: the daemon's word on it, kept on the
    * transcript so the chat reads why it stops and picks up again. `archivedAt` is when it went,
    * `branch` what the commits came back on (a new name when the old one was taken meanwhile), and

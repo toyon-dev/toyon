@@ -68,6 +68,9 @@ export function decide(
         reason: "The call named no file path, so Toyon cannot tell whether it stays inside the worktree.",
       };
     }
+    // A call that names no path and is not a write: an MCP tool, Toyon's own handoff among them.
+    // It writes nothing here, and what handoff proposes is the person's to decide on its own card,
+    // so a permission card in front of it would be two gates for one decision. Allowed in every mode.
     return { kind: "allow" };
   }
   for (const raw of paths) {

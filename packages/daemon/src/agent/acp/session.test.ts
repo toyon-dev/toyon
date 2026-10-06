@@ -107,6 +107,8 @@ function fakeAgent(
     authMeta?: boolean;
     /** refuse initialize, as an adapter whose install is broken does */
     failInit?: boolean;
+    /** advertise HTTP MCP servers the way the bundled adapters do, as a boolean */
+    mcpHttp?: boolean;
   } = {},
 ): FakeAgent {
   const f: FakeAgent = {
@@ -197,6 +199,7 @@ function fakeAgent(
           // every real adapter advertises load; the point is that toyon must not take it
           loadSession: true,
           promptCapabilities: { image: opts.images ?? false },
+          ...(opts.mcpHttp ? { mcpCapabilities: { http: true, sse: true } } : {}),
           ...(opts.logout ? { auth: { logout: {} } } : {}),
           sessionCapabilities: {
             ...(f.resumeSession ? { resume: {} } : {}),
@@ -2727,5 +2730,160 @@ describe("permissionParts", () => {
         }),
       ),
     ).toEqual({ title: "Edit a.ts", detail: "`a.ts`\n\n```\ny\n```" });
+  });
+});
+
+describe("AcpSession handoff", () => {
+  /** a recording stand-in for Toyon's MCP server: each open mints a new entry, closes are counted */
+  const mcpDep = () => {
+    const opened: acp.McpServer[] = [];
+    let closes = 0;
+    return {
+      opened,
+      closes: () => closes,
+      mcp: {
+        open: () => {
+          const entry: acp.McpServer = {
+            type: "http",
+            name: "toyon",
+            url: "http://127.0.0.1:4141/mcp/w",
+            headers: [{ name: "Authorization", value: `Bearer b${opened.length + 1}` }],
+          };
+          opened.push(entry);
+          return entry;
+        },
+        close: () => {
+          closes++;
+        },
+      },
+    };
+  };
+  const proposed = (id: string): AgentEvent => ({
+    type: "handoff-proposed",
+    id,
+    repo: { id: "r2", name: "other", path: "/p/other" },
+    message: "do it there",
+    by: "agent",
+    mode: "auto",
+    ts: 1,
+  });
+
+  test("an agent that takes HTTP MCP gets Toyon's server on session/new and on resume, with one bearer per process", async () => {
+    const d = mcpDep();
+    const fake = fakeAgent(say("ok"), { mcpHttp: true });
+    const w = world(fake, claudeSpec, 10, undefined, { mcp: d.mcp });
+    expect(w.session.mcpTools).toBeNull();
+    w.session.send("first");
+    await w.idle();
+    expect(w.session.mcpTools).toBe(true);
+    expect(fake.newSessions[0]!.mcpServers).toEqual([d.opened[0]!]);
+    // the reaper takes the process and its bearer; the next spawn gets a fresh one, on the resume
+    for (let i = 0; i < 100 && !w.links[0]!.killed; i++) await Bun.sleep(5);
+    expect(d.closes()).toBe(1);
+    expect(w.session.mcpTools).toBeNull();
+    w.session.send("second");
+    await w.idle();
+    expect(d.opened).toHaveLength(2);
+    expect(fake.resumes[0]!.mcpServers).toEqual([d.opened[1]!]);
+    expect(d.opened[1]!).not.toEqual(d.opened[0]!);
+    await w.session.close();
+    expect(d.closes()).toBe(2);
+  });
+
+  test("without the capability the session gets no server and mcpTools reads false", async () => {
+    const d = mcpDep();
+    const fake = fakeAgent(say("ok"));
+    const w = world(fake, claudeSpec, 60_000, undefined, { mcp: d.mcp });
+    w.session.send("hi");
+    await w.idle();
+    expect(w.session.mcpTools).toBe(false);
+    expect(fake.newSessions[0]!.mcpServers).toEqual([]);
+    expect(d.opened).toHaveLength(0);
+    await w.session.close();
+  });
+
+  test("a handoff card holds the row at waiting while idle, and its closers let it go", async () => {
+    const fake = fakeAgent(say("ok"));
+    const w = world(fake);
+    w.session.send("hi");
+    await w.idle();
+    expect(w.session.status).toBe("idle");
+    w.session.note(proposed("h1"));
+    expect(w.session.status).toBe("waiting");
+    w.session.note({ type: "handoff-declined", id: "h1", ts: 2 });
+    expect(w.session.status).toBe("idle");
+    w.session.note(proposed("h2"));
+    expect(w.session.status).toBe("waiting");
+    w.session.note({
+      type: "handoff",
+      id: "h2",
+      worktreeId: "b",
+      repoId: "r2",
+      repoName: "other",
+      title: "Fix it",
+      ts: 3,
+    });
+    expect(w.session.status).toBe("idle");
+    await w.session.close();
+  });
+
+  test("a card proposed during a turn keeps the row waiting once the turn is over", async () => {
+    const fake = fakeAgent(say("ok"));
+    const w = world(fake);
+    w.session.send("hi");
+    // the tool's note lands while the turn runs, as it does for the real agent
+    w.session.note(proposed("h1"));
+    for (let i = 0; i < 400 && !w.types().includes("turn-end"); i++) await Bun.sleep(5);
+    expect(w.types()).toContain("turn-end");
+    expect(w.session.status).toBe("waiting");
+    w.session.note({ type: "handoff-declined", id: "h1", ts: 2 });
+    expect(w.session.status).toBe("idle");
+    await w.session.close();
+  });
+
+  test("a transcript with an open proposal seeds waiting on construction; a closed one does not", async () => {
+    const fake = fakeAgent(say("ok"));
+    const first = world(fake);
+    first.session.note(proposed("h1"));
+    first.session.note(proposed("h2"));
+    first.session.note({ type: "handoff-declined", id: "h1", ts: 2 });
+    await first.session.close();
+    const again = world(fake, claudeSpec, 60_000, first.id);
+    expect(again.session.status).toBe("waiting");
+    expect(again.statuses).toEqual(["waiting"]);
+    again.session.note({ type: "handoff-declined", id: "h2", ts: 3 });
+    expect(again.session.status).toBe("idle");
+    await again.session.close();
+    const settled = world(fake, claudeSpec, 60_000, first.id);
+    expect(settled.session.status).toBe("idle");
+    expect(settled.statuses).toEqual([]);
+    await settled.session.close();
+  });
+
+  test("a landing elsewhere since the last message rides on the next prompt's ambient block once", async () => {
+    const fake = fakeAgent(say("ok"));
+    const w = world(fake);
+    w.session.send("one");
+    await w.idle();
+    w.session.note({
+      type: "handoff-landed",
+      worktreeId: "b",
+      repoName: "other",
+      title: "Fix the adapter",
+      url: "https://x/pull/7",
+      ts: 2,
+    });
+    w.session.send("two");
+    await w.idle();
+    w.session.send("three");
+    await w.idle();
+    const texts = fake.prompts.map((p) => p.prompt.map((b) => (b as { text: string }).text));
+    expect(texts[0]).toEqual(["one"]);
+    expect(texts[1]).toEqual([
+      "two",
+      `[Attached by Toyon:\nThe work this worktree handed off to other, "Fix the adapter", has landed there (https://x/pull/7); anything here that waited on it, such as a pinned version or a hand-patched copy, can take the real change now.]`,
+    ]);
+    expect(texts[2]).toEqual(["three"]);
+    await w.session.close();
   });
 });

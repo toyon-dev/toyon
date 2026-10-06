@@ -157,6 +157,16 @@ describe("policy.decide", () => {
   });
 });
 
+describe("policy.decide, Toyon's own tool", () => {
+  test("a pathless call to the handoff tool is allowed in every mode: its card is the gate", () => {
+    const call = req({ kind: "other", name: "mcp__toyon__handoff", rawInput: { project: "b", message: "m" } });
+    for (const mode of ["auto", "ask", "plan"] as const) {
+      expect(decide(call, bounds, wt, mode).kind).toBe("allow");
+      expect(decide(call, bounds, wt, mode, false).kind).toBe("allow");
+    }
+  });
+});
+
 describe("policy.pickOption", () => {
   test("allow picks allow_once, never allow_always", () => {
     expect(pickOption(claudeOptions, { kind: "allow" })).toEqual({

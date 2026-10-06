@@ -7,6 +7,7 @@ import {
   useActive,
   useActiveId,
   useActiveRepo,
+  useActiveWorktreeRepo,
   useArchivedPage,
   useFoundPage,
   useOffline,
@@ -56,6 +57,8 @@ export function PhoneBar({
   const dispatch = useDispatch();
   const reading = useStore((s) => s.reading);
   const repo = useActiveRepo();
+  // the row's own project, for what is said of the row: a guest's setup is its project's to ask
+  const rowRepo = useActiveWorktreeRepo();
   const repos = useStore((s) => s.repos);
   const active = useActive();
   const activeId = useActiveId();
@@ -89,7 +92,7 @@ export function PhoneBar({
         : active
           ? rowLine(active, {
               offline,
-              needsSetup: asksSetup(repo),
+              needsSetup: asksSetup(rowRepo),
               path: active.worktree.path,
               at: ago(sentAt(active.worktree)),
             })

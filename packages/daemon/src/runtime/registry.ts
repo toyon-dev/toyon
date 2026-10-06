@@ -9,6 +9,7 @@ import { AcpSession } from "../agent/acp/session.ts";
 import { spawnAcp } from "../agent/acp/transport.ts";
 import type { AgentAdapter, LoginRun } from "../agent/adapter.ts";
 import { AttachmentStore } from "../agent/attachments.ts";
+import type { ToyonMcp } from "../agent/mcp.ts";
 import { planEdited, writePlanDoc } from "../agent/planDoc.ts";
 import { type PreviewStanding, previewContext } from "../agent/prompt.ts";
 import type { AgentRegistry } from "../agent/registry.ts";
@@ -83,6 +84,8 @@ export interface RuntimeDeps {
   machine?: { bootId: () => Promise<string | null>; psGroups: () => Promise<PsRow[]> };
   /** kills a group another daemon left; the real signal when absent */
   reclaim?: (pgid: number) => Promise<void>;
+  /** Toyon's own tools for each worktree's agent, over MCP (agent/mcp.ts); absent in tests */
+  mcp?: Pick<ToyonMcp, "open" | "close">;
   /** factories, overridable so tests run without spawning anything. `onProcess` is told when the
    * agent's process group comes up or goes, so the ledger follows it. */
   makeAgent?: (
@@ -184,6 +187,7 @@ function defaultAgent(
   preview: () => PreviewStanding | null,
   onProcess: () => void,
 ): AgentAdapter {
+  const mcp = d.mcp;
   const agent = new AcpSession({
     worktreeId: wt.id,
     cwd: wt.path,
@@ -248,6 +252,7 @@ function defaultAgent(
       const agentId = d.state.requireWorktree(wt.id).agent ?? "";
       if (d.state.setCachedOptions(agentId, category, choices)) d.hub.emit("agentsChanged");
     },
+    ...(mcp ? { mcp: { open: () => mcp.open(wt.id), close: () => mcp.close(wt.id) } } : {}),
   });
   agent.onQueueChange = () => d.hub.emit("queue", wt.id, agent.queueItems);
   agent.onCommandsChange = (commands) => d.hub.emit("agentCommands", wt.id, commands);

@@ -5,6 +5,7 @@ import type { ArchivedWorktree, OwnedWorktree, RepoInfo, WorktreeStatus } from "
 import { useSettled } from "../ui/hooks.ts";
 import { useStore } from "./context.tsx";
 import {
+  activeWorktreeRepoId,
   archivedPageOf,
   asksSetup,
   currentTheme,
@@ -73,8 +74,14 @@ export const useArchivedPage = (): ArchivedWorktree | null => useStore(archivedP
 /** the found worktree whose page the centre shows (an element of the rows, so its identity holds) */
 export const useFoundPage = (): WorktreeStatus | null => useStore(foundPageOf);
 
-/** the project the shell is scoped to (an element of the repos array, so its identity is stable) */
+/** the rail's project: the one the shell is scoped to (an element of the repos array, so its
+ * identity is stable). What is about the rail reads this; what is about the worktree on screen
+ * reads `useActiveWorktreeRepo`, since a guest row's project is not the rail's. */
 export const useActiveRepo = (): RepoInfo | null => useStore((s) => repoById(s, s.activeRepoId));
+
+/** the project of the worktree on screen: a guest's own, else the rail's (an element of the repos
+ * array, so its identity is stable) */
+export const useActiveWorktreeRepo = (): RepoInfo | null => useStore((s) => repoById(s, activeWorktreeRepoId(s)));
 
 /** the per-worktree record (the shared EMPTY_LOCAL when unknown, so the identity is stable).
  * Prefer useLocalField: the record's identity changes on every log line and keystroke. */

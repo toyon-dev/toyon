@@ -1,6 +1,6 @@
 import type { OwnedWorktree } from "@toyon/shared";
 import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
-import { useActiveRepo } from "../../state/selectors.ts";
+import { useActiveWorktreeRepo } from "../../state/selectors.ts";
 import { localOf, newProjectState } from "../../state/store.ts";
 import { Button } from "../../ui/Button.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
@@ -20,7 +20,7 @@ export function Greenfield({ active }: { active: OwnedWorktree }) {
   const dispatch = useDispatch();
   const sock = useSock();
   const store = useStoreInstance();
-  const repo = useActiveRepo();
+  const repo = useActiveWorktreeRepo();
   const home = useStore((s) => s.home);
   const title = active.worktree.title;
 

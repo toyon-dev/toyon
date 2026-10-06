@@ -69,6 +69,9 @@ export interface AgentAdapter {
   warm(): Promise<void>;
   /** the registry id of the agent whose process is up, or null while none is */
   readonly runningAgent: string | null;
+  /** whether the agent's live session was given Toyon's own tools (the handoff tool over MCP):
+   * null until a process is up and has said what it takes, so a caller can warm it first */
+  readonly mcpTools: boolean | null;
   /** the process group of the adapter up, from its spawn until it is gone, for the ledger the next
    * daemon reclaims from; null while none is */
   readonly pgid: number | null;

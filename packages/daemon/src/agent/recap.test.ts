@@ -207,6 +207,33 @@ describe("openAskOf", () => {
     expect(openAskOf(log(q, p, closed("p")))).toBe("Which port?");
     expect(openAskOf(log(q, closed("q")))).toBeUndefined();
   });
+
+  test("a handoff proposal is a card until a handoff or a decline with its id", () => {
+    const h: AgentEvent = {
+      type: "handoff-proposed",
+      id: "h",
+      repo: { id: "r2", name: "claude-agent-acp", path: "/p/acp" },
+      message: "fix it there",
+      by: "agent",
+      mode: "auto",
+      ts: 1,
+    };
+    expect(openAskOf(log(h))).toBe("Continue in claude-agent-acp?");
+    expect(openAskOf(log(h, { type: "handoff-declined", id: "h", ts: 2 }))).toBeUndefined();
+    const went: AgentEvent = {
+      type: "handoff",
+      id: "h",
+      worktreeId: "b",
+      repoId: "r2",
+      repoName: "claude-agent-acp",
+      title: "Fix it",
+      ts: 2,
+    };
+    expect(openAskOf(log(h, went))).toBeUndefined();
+    // a question opened after the card is the newer one
+    const q: AgentEvent = { type: "agent-question", id: "q", message: "Which port?", questions: [], ts: 3 };
+    expect(openAskOf(log(h, q))).toBe("Which port?");
+  });
 });
 
 describe("parseRecap", () => {

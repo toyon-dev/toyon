@@ -13,7 +13,7 @@ import { projectItems } from "../../state/actions/project.ts";
 import { appearanceLabel, keepAwakeLabel } from "../../state/actions/settings.ts";
 import { versionItems } from "../../state/actions/version.ts";
 import { useDarkNow, useDispatch, useSock, useStore } from "../../state/context.tsx";
-import { useActiveRepo } from "../../state/selectors.ts";
+import { useActiveWorktreeRepo } from "../../state/selectors.ts";
 import type { Action } from "../../state/store.ts";
 import { Button } from "../../ui/Button.tsx";
 import { Kbd } from "../../ui/Kbd.tsx";
@@ -42,7 +42,8 @@ export function KeysHelp() {
   const keepAwake = useStore((s) => s.keepAwake);
   const dark = useDarkNow();
   const agents = useStore((s) => s.agents);
-  const repo = useActiveRepo();
+  // the worktree's project, not the rail's: a guest row's settings are its own project's
+  const repo = useActiveWorktreeRepo();
   const open = (a: Action) => {
     dispatch({ a: "palette-return", v: { mode: "keys", q: "" } });
     dispatch(a);

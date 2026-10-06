@@ -6,8 +6,8 @@
 
 import { type AgentCommand, PERMISSION_MODES, type PermissionMode } from "@toyon/shared";
 
-/** the names toyon answers itself: a mode, or the seat's verb */
-export type OwnName = PermissionMode | "check" | "land" | "archive";
+/** the names toyon answers itself: a mode, the seat's verb, or the handoff to another project */
+export type OwnName = PermissionMode | "check" | "land" | "archive" | "handoff";
 
 /** a draft that leads with one of toyon's own commands: the name, and whatever followed it */
 export type OwnInvocation = { name: OwnName; args: string };
@@ -26,6 +26,11 @@ export function ownCommands(landLine: string): AgentCommand[] {
     },
     { name: "land", description: landLine },
     { name: "archive", description: "archive this worktree once its work has landed" },
+    {
+      name: "handoff",
+      description: "continue this work in another project; Toyon starts a worktree there with your message",
+      hint: "<project> [<message>]",
+    },
   ];
 }
 

@@ -34,6 +34,8 @@ const owned = (over: Partial<OwnedWorktree> = {}): OwnedWorktree =>
 const deps = { sock: null, dispatch: () => {} };
 /** the page open on the daemon's own machine, where an editor or Finder can open the path */
 const here = { hostname: "localhost" };
+/** another open project, for the rows that need a second one */
+const other = { id: "r2", name: "acp", path: "/acp", defaultBranch: "main", config: { run: {} } } as never;
 /** the list as read: a label per item, a bar where a rule sits between groups */
 const labels = (items: MenuEntry[]) => items.map((i) => (isItem(i) ? i.label : "|"));
 
@@ -42,7 +44,7 @@ describe("a worktree's actions", () => {
     const quiet = worktreeItems(
       owned(),
       null,
-      { layout: { ...defaultLayout, changes: true }, shipping: {}, frame: "desk" as const },
+      { layout: { ...defaultLayout, changes: true }, shipping: {}, frame: "desk" as const, repos: [] },
       deps,
       here,
     );
@@ -60,13 +62,15 @@ describe("a worktree's actions", () => {
       "|",
       "land",
       "|",
+      "continue in another project…",
+      "|",
       // nothing written, so the remove asks nothing and loses its ellipsis
       "archive",
     ]);
     const busy = worktreeItems(
       owned({ agent: "working", dirty: 2, behind: 3 }),
       null,
-      { layout: { ...defaultLayout, changes: false }, shipping: {}, frame: "desk" as const },
+      { layout: { ...defaultLayout, changes: false }, shipping: {}, frame: "desk" as const, repos: [] },
       deps,
       { graft: () => {}, ...here },
     );
@@ -87,6 +91,8 @@ describe("a worktree's actions", () => {
       "sync from main (3 behind)",
       "land",
       "|",
+      "continue in another project…",
+      "|",
       "archive…",
     ]);
   });
@@ -95,7 +101,7 @@ describe("a worktree's actions", () => {
     const away = worktreeItems(
       owned(),
       null,
-      { layout: { ...defaultLayout, changes: true }, shipping: {}, frame: "desk" as const },
+      { layout: { ...defaultLayout, changes: true }, shipping: {}, frame: "desk" as const, repos: [] },
       deps,
       {
         hostname: "box.tail1234.ts.net",
@@ -106,7 +112,7 @@ describe("a worktree's actions", () => {
 
   test("on the phone the terminal and the paths go, and view changes opens the changes tab", () => {
     const sent: unknown[] = [];
-    const phone = { layout: { ...defaultLayout, changes: true }, shipping: {}, frame: "phone" as const };
+    const phone = { layout: { ...defaultLayout, changes: true }, shipping: {}, frame: "phone" as const, repos: [] };
     const away = { hostname: "box.tail1234.ts.net" };
     const items = worktreeItems(
       owned({ dirty: 2, transcript: "/t/w1.jsonl", sessionId: "s-1" }),
@@ -124,6 +130,8 @@ describe("a worktree's actions", () => {
       "mark as unread",
       "|",
       "land",
+      "|",
+      "continue in another project…",
       "|",
       "archive…",
     ]);
@@ -143,7 +151,7 @@ describe("a worktree's actions", () => {
   });
 
   test("hands the chat over as a file path and a session id, but not from main, which has no chat", () => {
-    const s = { layout: { ...defaultLayout, changes: true }, shipping: {}, frame: "desk" as const };
+    const s = { layout: { ...defaultLayout, changes: true }, shipping: {}, frame: "desk" as const, repos: [] };
     const copies = (items: MenuEntry[]) => labels(items).slice(3, 7);
     const chat = worktreeItems(owned({ transcript: "/t/w1.jsonl", sessionId: "s-1" }), null, s, deps, here);
     expect(copies(chat)).toEqual(["copy path", "copy branch name", "copy transcript path", "copy session id"]);
@@ -158,7 +166,13 @@ describe("a worktree's actions", () => {
     const items = worktreeItems(
       owned({ behind: 3 }),
       null,
-      { layout: { ...defaultLayout, changes: true }, shipping: { w1: { op: "land" } }, frame: "desk" as const },
+      {
+        layout: { ...defaultLayout, changes: true },
+        shipping: { w1: { op: "land" } },
+        frame: "desk" as const,
+        // two projects, so the handoff row is live and only the landing ops are off
+        repos: [other, other],
+      },
       deps,
       here,
     );
@@ -171,7 +185,7 @@ describe("a worktree's actions", () => {
     const ringed = worktreeItems(
       owned({ unseen: true }),
       null,
-      { layout: { ...defaultLayout, changes: true }, shipping: {}, frame: "desk" as const },
+      { layout: { ...defaultLayout, changes: true }, shipping: {}, frame: "desk" as const, repos: [] },
       deps,
       here,
     );
@@ -179,7 +193,7 @@ describe("a worktree's actions", () => {
     const quiet = worktreeItems(
       owned(),
       null,
-      { layout: { ...defaultLayout, changes: true }, shipping: {}, frame: "desk" as const },
+      { layout: { ...defaultLayout, changes: true }, shipping: {}, frame: "desk" as const, repos: [] },
       deps,
       here,
     );
@@ -203,12 +217,39 @@ describe("a worktree's actions", () => {
     const items = worktreeItems(
       owned(),
       repo,
-      { layout: { ...defaultLayout, changes: true }, shipping: {}, frame: "desk" as const },
+      { layout: { ...defaultLayout, changes: true }, shipping: {}, frame: "desk" as const, repos: [] },
       deps,
       here,
     );
     const run = items.filter(isItem).filter((i) => i.id.startsWith("profile:"));
     expect(run.map((i) => `${i.label}${i.checked ? " *" : ""}`)).toEqual(["run with fe *", "run with full"]);
+  });
+
+  test("the handoff is off with its reason under one project, live with two, and absent on the lead", () => {
+    const s = { layout: { ...defaultLayout, changes: true }, shipping: {}, frame: "desk" as const, repos: [] };
+    const row = (items: MenuEntry[]) => items.filter(isItem).find((i) => i.id === "handoff");
+    const alone = row(worktreeItems(owned(), null, s, deps, here));
+    expect(alone?.label).toBe("continue in another project…");
+    expect(alone?.disabled).toBe("open another project first");
+    expect(alone?.sub).toBe(true);
+    const sent: unknown[] = [];
+    const two = row(
+      worktreeItems(
+        owned(),
+        null,
+        { ...s, repos: [other, other] },
+        { sock: null, dispatch: (a) => sent.push(a) },
+        here,
+      ),
+    );
+    expect(two?.disabled).toBeUndefined();
+    two?.onClick();
+    expect(sent).toEqual([{ a: "open", overlay: { kind: "handoff", worktreeId: "w1" } }]);
+    // the lead has no chat to propose it from
+    const main = owned({ worktree: { ...info, kind: "main" } });
+    expect(row(worktreeItems(main, null, { ...s, repos: [other, other] }, deps, here))).toBeUndefined();
+    const spare = owned({ worktree: { ...info, kind: "spare" } });
+    expect(row(worktreeItems(spare, null, { ...s, repos: [other, other] }, deps, here))).toBeUndefined();
   });
 
   test("a found worktree has the short list and never a remove", () => {

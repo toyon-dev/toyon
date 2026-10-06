@@ -28,7 +28,6 @@ import { Spinner } from "../../ui/Spinner.tsx";
 import { selectedText, useKeyWithin, useSelectAllWithin } from "../../ui/selectAll.ts";
 import { uploadUrl } from "../../ws.ts";
 import { elapsed, isBusy, pickLabel } from "../util.ts";
-import { openAsk } from "./ask.ts";
 import { ChatItemView, QUIET_AFTER, ThoughtRow, ToolRow } from "./ChatItemView.tsx";
 import { FileChip } from "./FileChip.tsx";
 import {
@@ -41,6 +40,7 @@ import {
   runningRow,
   spawnsAtWork,
 } from "./group.ts";
+import { openCard } from "./handoff.ts";
 import { ImageChip } from "./ImageChip.tsx";
 import { PasteChip } from "./PasteChip.tsx";
 import { PickChip } from "./PickChip.tsx";
@@ -310,8 +310,8 @@ export function ChatLog({
   // again and this row is the log's word that the turn is waiting on you.
   const askParked = useLocalField(id, "askParked");
   const askInBox = useMemo(() => {
-    const ask = openAsk(items);
-    return !!ask && askParked !== ask.id;
+    const card = openCard(items);
+    return !!card && askParked !== card.id;
   }, [items, askParked]);
   const wt = active?.worktree;
   // one array per worktree: a fresh one on every render would defeat the rows' memo. An archived

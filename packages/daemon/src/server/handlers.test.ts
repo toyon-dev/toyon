@@ -168,6 +168,19 @@ function make() {
       landingCalls.push(`recheck ${id}`);
     },
   };
+  // the handoff's own behaviour is handoff.test.ts's; here only that the fields reach it and a
+  // refusal comes back
+  const handoffCalls: string[] = [];
+  const handoff = {
+    answer: async (id: string, card: string, go: boolean, note?: string) => {
+      handoffCalls.push(`answer ${id} ${card} ${go}${note ? ` note=${note}` : ""}`);
+    },
+    ask: async (id: string, repoId: string, text?: string) => {
+      handoffCalls.push(`ask ${id} ${repoId}${text ? ` text=${text}` : ""}`);
+      if (text === "") throw new UserError("Write what it should do first");
+    },
+  };
+  const mcp = { fetch: async () => new Response("not here", { status: 404 }) };
   const planned: string[][] = [];
   const chosen: Array<string | null> = [];
   const restarts: number[] = [];
@@ -230,6 +243,8 @@ function make() {
     prs,
     landing,
     fix,
+    handoff,
+    mcp,
     themes,
     agents,
     accounts,
@@ -279,6 +294,7 @@ function make() {
     planArgs,
     restarts,
     landingCalls,
+    handoffCalls,
     ...f,
   };
 }
@@ -1305,6 +1321,28 @@ describe("handlers", () => {
       ["k2", { kind: "answers", answers: undefined }],
       ["k3", { kind: "choice", choiceId: "cancel" }],
     ]);
+  });
+
+  test("a handoff card's answer and the verb reach the service with their fields; a refusal is the error frame", async () => {
+    const { services, ctx, repo, handoffCalls } = make();
+    const r = await services.repos.register(repo);
+    const main = services.state.worktrees.find((x) => x.repoId === r.id)!;
+    await dispatch({ t: "handoff-answer", worktreeId: main.id, id: "h1", go: true, note: "and tests" }, ctx, services);
+    await dispatch({ t: "handoff-answer", worktreeId: main.id, id: "h2", go: false }, ctx, services);
+    await dispatch({ t: "handoff-ask", worktreeId: main.id, repoId: "r2", text: "fix the form" }, ctx, services);
+    expect(handoffCalls).toEqual([
+      `answer ${main.id} h1 true note=and tests`,
+      `answer ${main.id} h2 false`,
+      `ask ${main.id} r2 text=fix the form`,
+    ]);
+    await expect(
+      dispatch({ t: "handoff-ask", worktreeId: main.id, repoId: "r2", text: "" }, ctx, services),
+    ).rejects.toBeInstanceOf(UserError);
+    // a worktree Toyon does not run is refused before the service hears of it
+    await expect(
+      dispatch({ t: "handoff-answer", worktreeId: "nope", id: "h1", go: true }, ctx, services),
+    ).rejects.toBeInstanceOf(UserError);
+    expect(handoffCalls).toHaveLength(4);
   });
 
   test("an ask answer for a worktree that is gone is a toast, not a crash", async () => {

@@ -26,12 +26,16 @@ export class FakeAgent implements AgentAdapter {
   warms = 0;
   /** the agent whose process is up; the warm-up counts as spawning the registry's default */
   runningAgent: string | null = null;
+  /** what a test says the agent took at session start; a warm-up settles a null to `warmedTools` */
+  mcpTools: boolean | null = null;
+  warmedTools: boolean | null = true;
   async warmCommands() {
     await this.warm();
   }
   async warm() {
     this.warms++;
     this.runningAgent ??= "claude";
+    this.mcpTools ??= this.warmedTools;
   }
   restarts = 0;
   async restart() {

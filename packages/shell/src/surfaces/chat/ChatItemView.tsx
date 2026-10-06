@@ -34,6 +34,7 @@ import {
   type ToolEntry,
   type ToolItem,
 } from "./group.ts";
+import { HandoffLandedRow, HandoffRow } from "./HandoffRow.tsx";
 import { SentImageChip } from "./ImageChip.tsx";
 import { MentionText, openMention } from "./Mentions.tsx";
 import { useMarkdown } from "./markdown.ts";
@@ -1080,6 +1081,10 @@ export const ChatItemView = memo(function ChatItemView({
       );
     case "landed":
       return <LandedRow item={item} />;
+    case "handoff":
+      return <HandoffRow item={item} />;
+    case "handoff-landed":
+      return <HandoffLandedRow item={item} />;
     case "restored":
       return <RestoredRow item={item} />;
     case "adopted":

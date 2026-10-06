@@ -7,8 +7,10 @@ import {
   type RepoInfo,
   type ShipOp,
   type TrunkStatus,
+  type WorktreeInfo,
   type WorktreeStatus,
 } from "@toyon/shared";
+import { openCard } from "../surfaces/chat/handoff.ts";
 import { addToChat, attachPick } from "./attach.ts";
 import { createStore } from "./context.tsx";
 import { isUploading, settledInputs, toInput } from "./pending.ts";
@@ -23,6 +25,7 @@ import {
   type EditorDisk,
   type EditorView,
   EMPTY_LOCAL,
+  guestOf,
   initialState,
   isBare,
   isChatCentred,
@@ -52,6 +55,7 @@ function wt(
   kind: "main" | "worktree" | "spare" = "worktree",
   createdBy?: string,
   repoId = "r",
+  from?: WorktreeInfo["from"],
 ): WorktreeStatus {
   return {
     id,
@@ -69,6 +73,7 @@ function wt(
       title: id,
       createdAt: 0,
       ...(createdBy ? { createdBy } : {}),
+      ...(from ? { from } : {}),
     },
     procs: [],
     agent: "idle",
@@ -3046,5 +3051,213 @@ describe("the checkout's build", () => {
     const daemonOnly = server({ t: "self", self: { repoId: "r1", rebuild: false, restart: true, building: true } });
     const done = server({ t: "self", self: { repoId: "r1", rebuild: false, restart: true, building: false } });
     expect(run([hello(wt("a")), daemonOnly, done]).rebuilt).toBe(false);
+  });
+});
+
+describe("a handoff", () => {
+  // the agent in r1's worktree `a` proposes continuing in r2; on go the daemon makes `g` there,
+  // pointing back at `a`, which is what makes `g` a guest of r1's rail
+  const proposal: AgentEvent = {
+    type: "handoff-proposed",
+    id: "h1",
+    repo: { id: "r2", name: "r2", path: "/p/r2" },
+    message: "bump the pin",
+    by: "agent",
+    mode: "auto",
+    ts: 1,
+  };
+  const went: AgentEvent = {
+    type: "handoff",
+    id: "h1",
+    worktreeId: "g",
+    repoId: "r2",
+    repoName: "r2",
+    title: "Bump the pin",
+    ts: 2,
+  };
+  const guest = (origin = "a", originRepo = "r1") =>
+    wt("g", "worktree", undefined, "r2", {
+      kind: "worktree",
+      ref: "toyon/a",
+      origin: { id: origin, repoId: originRepo },
+    });
+  const rows = () => [
+    wt("m1", "main", undefined, "r1"),
+    wt("a", "worktree", undefined, "r1"),
+    wt("m2", "main", undefined, "r2"),
+    wt("b", "worktree", undefined, "r2"),
+  ];
+  const both = (...extra: WorktreeStatus[]) => helloIn([repo("r1"), repo("r2")], ...rows(), ...extra);
+  const ids = (s: State) => s.visible.map((w) => w.worktree.id);
+
+  test("a proposal is a card in the box; the handoff closes it with where the work went", () => {
+    const s = run([hello(wt("a")), agent("a", proposal)]);
+    expect(s.local.a?.chat).toEqual([
+      {
+        kind: "handoff",
+        id: "h1",
+        repo: { id: "r2", name: "r2", path: "/p/r2" },
+        message: "bump the pin",
+        by: "agent",
+        mode: "auto",
+        state: "proposed",
+        ts: 1,
+      },
+    ]);
+    expect(openCard(s.local.a?.chat ?? [])?.id).toBe("h1");
+    const after = reducer(s, agent("a", went));
+    expect(after.local.a?.chat).toHaveLength(1);
+    expect(after.local.a?.chat[0]).toMatchObject({ state: "continued", worktreeId: "g", title: "Bump the pin" });
+    expect(openCard(after.local.a?.chat ?? [])).toBeNull();
+  });
+
+  test("a decline closes it too, with the daemon's reason when the worktree could not be made", () => {
+    const s = run([hello(wt("a")), agent("a", proposal)]);
+    const pressed = reducer(s, agent("a", { type: "handoff-declined", id: "h1", ts: 2 }));
+    expect(pressed.local.a?.chat[0]).toMatchObject({ state: "declined" });
+    expect(pressed.local.a?.chat[0]).not.toHaveProperty("reason");
+    const failed = reducer(
+      s,
+      agent("a", { type: "handoff-declined", id: "h1", outcome: "failed", reason: "no agent", ts: 2 }),
+    );
+    expect(failed.local.a?.chat[0]).toMatchObject({ state: "declined", reason: "no agent" });
+    // a decline with no card to close changes nothing
+    expect(reducer(pressed, agent("a", { type: "handoff-declined", id: "h1", ts: 3 })).local.a?.chat).toEqual(
+      pressed.local.a?.chat,
+    );
+  });
+
+  test("a landing elsewhere is a row", () => {
+    const s = run([
+      hello(wt("a")),
+      agent("a", {
+        type: "handoff-landed",
+        worktreeId: "g",
+        repoName: "r2",
+        title: "Bump the pin",
+        url: "https://x/1",
+        ts: 3,
+      }),
+    ]);
+    expect(s.local.a?.chat).toEqual([
+      { kind: "handoff-landed", worktreeId: "g", repoName: "r2", title: "Bump the pin", url: "https://x/1", ts: 3 },
+    ]);
+  });
+
+  test("a continued event with no proposal still leaves the record", () => {
+    const s = run([hello(wt("a")), agent("a", went)]);
+    expect(s.local.a?.chat).toHaveLength(1);
+    expect(s.local.a?.chat[0]).toMatchObject({
+      kind: "handoff",
+      id: "h1",
+      state: "continued",
+      worktreeId: "g",
+      title: "Bump the pin",
+      repo: { id: "r2", name: "r2" },
+      message: "",
+    });
+  });
+
+  test("a proposal on the row on screen opens a shut chat, the way an ask does", () => {
+    let s = run([hello(wt("a"), wt("b"))]);
+    s = { ...s, layout: { ...s.layout, chat: false } };
+    s = reducer(s, agent("b", proposal));
+    expect(s.layout.chat).toBe(false);
+    s = reducer(s, agent("a", proposal));
+    expect(s.layout.chat).toBe(true);
+  });
+
+  test("the note draft and a parked card end with the card, and a new proposal takes the box back", () => {
+    let s = run([hello(wt("a")), agent("a", proposal)]);
+    const ask = { id: "h1", draft: [{ selected: [], note: "mind the lockfile" }], current: 0 };
+    s = reducer(s, { a: "ask-draft", id: "a", ask });
+    s = reducer(s, { a: "ask-park", id: "a", askId: "h1" });
+    expect(s.local.a).toMatchObject({ ask, askParked: "h1" });
+    const closed = reducer(s, agent("a", went));
+    expect(closed.local.a?.ask).toBeUndefined();
+    expect(closed.local.a?.askParked).toBeUndefined();
+    const declined = reducer(s, agent("a", { type: "handoff-declined", id: "h1", ts: 2 }));
+    expect(declined.local.a?.ask).toBeUndefined();
+    expect(declined.local.a?.askParked).toBeUndefined();
+    const next = reducer(s, agent("a", { ...proposal, id: "h2", ts: 3 }));
+    expect(next.local.a?.ask).toBeUndefined();
+    expect(next.local.a?.askParked).toBeUndefined();
+  });
+
+  test("a guest is on this rail while its origin is, and leaves with it", () => {
+    let s = run([both(guest())]);
+    expect(s.activeRepoId).toBe("r1");
+    expect(ids(s)).toEqual(expect.arrayContaining(["m1", "a", "g"]));
+    expect(ids(s)).not.toContain("b");
+    expect(guestOf(s.visible.find((w) => w.id === "g")!, "r1", s.rows)?.id).toBe("a");
+    // on its own project's rail it is a plain row
+    const own = reducer(s, { a: "activate-repo", id: "r2" });
+    expect(ids(own)).toEqual(expect.arrayContaining(["m2", "b", "g"]));
+    expect(guestOf(own.visible.find((w) => w.id === "g")!, "r2", own.rows)).toBeNull();
+    // the origin gone, the guest goes from this rail with it
+    s = reducer(s, worktrees(wt("m1", "main", undefined, "r1"), ...rows().slice(2), guest()));
+    expect(ids(s)).toEqual(["m1"]);
+    // an origin whose archive is still in flight takes its guest with it
+    const archiving = reducer(run([both(guest())]), { a: "archive-worktrees", ids: ["a"] });
+    expect(ids(archiving)).toEqual(["m1"]);
+  });
+
+  test("a guest is absent from a third project's rail, and a handoff from a row not here is no guest", () => {
+    let s = run([helloIn([repo("r1"), repo("r2"), repo("r3")], ...rows(), wt("m3", "main", undefined, "r3"), guest())]);
+    s = reducer(s, { a: "activate-repo", id: "r3" });
+    expect(ids(s)).toEqual(["m3"]);
+    // a row whose origin names this rail but is of some other project is not this rail's either
+    const stray = run([both(guest("b", "r1"))]);
+    expect(ids(stray)).not.toContain("g");
+  });
+
+  test("choosing a guest keeps the rail, and remembers the guest as its own project's landing", () => {
+    let s = run([both(guest()), { a: "activate", id: "a" }]);
+    s = reducer(s, { a: "activate", id: "g" });
+    expect(s.activeId).toBe("g");
+    expect(s.activeRepoId).toBe("r1");
+    expect(s.lastActive.r1).toBe("a");
+    expect(s.lastActive.r2).toBe("g");
+    // the other project opens on it, and coming back lands where this rail was left
+    s = reducer(s, { a: "activate-repo", id: "r2" });
+    expect(s.activeId).toBe("g");
+    expect(s.activeRepoId).toBe("r2");
+    s = reducer(s, { a: "activate-repo", id: "r1" });
+    expect(s.activeId).toBe("a");
+    // the chat is centred by the worktree's project, not the rail's
+    const pageless2 = helloIn([repo("r1"), pageless("r2")], ...rows(), guest());
+    const onGuest = run([pageless2, { a: "activate", id: "g" }]);
+    expect(onGuest.activeRepoId).toBe("r1");
+    expect(isChatCentred(onGuest)).toBe(true);
+    expect(isChatCentred(reducer(onGuest, { a: "activate", id: "a" }))).toBe(false);
+  });
+
+  test("with the origin gone the selection on a guest falls back inside the rail's project", () => {
+    const s = run([both(guest()), { a: "activate", id: "a" }, { a: "activate", id: "g" }]);
+    // the origin removed: the frame keeps the guest, which is still listed, and the rail lands
+    const gone = reducer(s, worktrees(wt("m1", "main", undefined, "r1"), ...rows().slice(2), guest()));
+    expect(gone.activeRepoId).toBe("r1");
+    expect(gone.activeId).toBe("m1");
+    // the origin archived from this tab, its row off screen before the daemon answers
+    const archived = reducer(s, { a: "archive-worktrees", ids: ["a"] });
+    expect(archived.activeRepoId).toBe("r1");
+    expect(archived.activeId).toBe("m1");
+  });
+
+  test("a reload on a guest comes back to the rail it was read from", () => {
+    const from = initialState({ clientId: ME, storedActive: "g", storedRepo: "r1" });
+    const s = run([both(guest())], from);
+    expect(s.activeId).toBe("g");
+    expect(s.activeRepoId).toBe("r1");
+    // stored on the guest's own rail, it comes back there
+    const own = run([both(guest())], initialState({ clientId: ME, storedActive: "g", storedRepo: "r2" }));
+    expect(own.activeRepoId).toBe("r2");
+  });
+
+  test("a handoff-made row never steals focus: no tab asked for it", () => {
+    const s = run([both(), { a: "activate", id: "a" }]);
+    const next = reducer(s, worktrees(...rows(), guest()));
+    expect(next.activeId).toBe("a");
+    expect(ids(next)).toContain("g");
   });
 });

@@ -832,6 +832,101 @@ describe("tool searches", () => {
   });
 });
 
+describe("handoff", () => {
+  // Claude's spelling of an MCP tool: the server's name and the tool's, joined; kind `other`, and
+  // the project only in the input, which may trail the call
+  const start = (rawInput?: unknown): SessionUpdate => ({
+    sessionUpdate: "tool_call",
+    toolCallId: "h1",
+    name: "mcp__toyon__handoff",
+    title: "mcp__toyon__handoff",
+    kind: "other",
+    status: "pending",
+    ...(rawInput !== undefined ? { rawInput } : {}),
+  });
+
+  test("the row is Toyon's own handoff, named for the project once the input has it", () => {
+    expect(run([start({ project: "claude-agent-acp", message: "m" })])).toEqual([
+      {
+        type: "tool-start",
+        toolId: "h1",
+        name: "handoff",
+        input: { project: "claude-agent-acp", message: "m" },
+        kind: "other",
+        title: "Continue in claude-agent-acp",
+      },
+    ]);
+  });
+
+  test("a late input fills the title, and the adapter's own spelling never replaces the folded name", () => {
+    const memos: ToolMemos = new Map();
+    expect(run([start()], memos)).toEqual([
+      {
+        type: "tool-start",
+        toolId: "h1",
+        name: "handoff",
+        input: { locations: [] },
+        kind: "other",
+        title: "Continue in another project",
+      },
+    ]);
+    expect(
+      run(
+        [
+          {
+            sessionUpdate: "tool_call_update",
+            toolCallId: "h1",
+            name: "mcp__toyon__handoff",
+            title: "mcp__toyon__handoff",
+            rawInput: { project: "other", message: "m" },
+            content: [],
+          },
+        ],
+        memos,
+      ),
+    ).toEqual([
+      { type: "tool-update", toolId: "h1", title: "Continue in other", input: { project: "other", message: "m" } },
+    ]);
+    expect(memos.get("h1")?.name).toBe("handoff");
+  });
+
+  test("other spellings fold too, and another server's handoff is left alone", () => {
+    const named = (name: string) =>
+      run([{ sessionUpdate: "tool_call", toolCallId: "x", name, title: name, kind: "other", status: "pending" }])[0];
+    expect(named("toyon/handoff")).toMatchObject({ name: "handoff" });
+    expect(named("mcp__toyon__handoff")).toMatchObject({ name: "handoff" });
+    expect(named("mcp__other__handoff")).toMatchObject({ name: "mcp__other__handoff" });
+  });
+
+  test("any tool of Toyon's folds to its bare name: titled as the adapter did, else as the name", () => {
+    const call = (title: string): SessionUpdate => ({
+      sessionUpdate: "tool_call",
+      toolCallId: "d1",
+      name: "mcp__toyon__design_check",
+      title,
+      kind: "other",
+      status: "pending",
+    });
+    expect(run([call("mcp__toyon__design_check")])[0]).toMatchObject({
+      name: "design_check",
+      title: "design_check",
+      kind: "other",
+    });
+    expect(run([call("Check #ff0000 for a token")])[0]).toMatchObject({
+      name: "design_check",
+      title: "Check #ff0000 for a token",
+    });
+    // the adapter's update repeats its own spelling; the folded name holds
+    const memos: ToolMemos = new Map();
+    run([call("mcp__toyon__design_check")], memos);
+    run(
+      [{ sessionUpdate: "tool_call_update", toolCallId: "d1", name: "mcp__toyon__design_check", content: [] }],
+      memos,
+    );
+    expect(memos.get("d1")?.name).toBe("design_check");
+  });
+});
+
 describe("mapCommands", () => {
   test("lifts the hint out of the input, defaults a missing description", () => {
     expect(mapCommands([{ name: "review", description: "look at a PR", input: { hint: "<pr>" } }])).toEqual([

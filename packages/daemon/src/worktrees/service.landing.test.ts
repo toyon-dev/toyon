@@ -26,9 +26,13 @@ describe("landing", () => {
     const wt = await w.worktrees.create(repoId, "feature");
     writeFileSync(join(wt.path, "feature.txt"), "x\n");
     expect((await w.worktrees.commit(wt.id, "add feature")).ok).toBe(true);
+    const landedIds: string[] = [];
+    w.hub.on("landed", (id) => landedIds.push(id));
     const { result, archiveIds } = await w.worktrees.land(wt.id);
     expect(result.ok).toBe(true);
     expect(archiveIds).toEqual([]);
+    // the hub hears of it too, after the row's own word, for a worktree that handed this work off
+    expect(landedIds).toEqual([wt.id]);
     // the word on it goes on the transcript, where a reload reads it back
     expect(w.agents.get(wt.id)!.recorded.at(-1)).toMatchObject({
       type: "landed",

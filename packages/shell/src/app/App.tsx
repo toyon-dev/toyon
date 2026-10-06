@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef } from "react";
 import { useDispatch, useSock, useStore, useStoreInstance } from "../state/context.tsx";
 import { STORAGE } from "../state/keys.ts";
 import { useActive, useActiveId, useActiveRow, useArchivedPage, useRows, useTheme } from "../state/selectors.ts";
+import { activeWorktreeRepoId } from "../state/store.ts";
 import { useFileDrop } from "../surfaces/chat/useIntake.ts";
 import { PhoneFrame } from "../surfaces/phone/PhoneFrame.tsx";
 import { applyTheme, bridgeThemeMsg, onPrefersDarkChange, rememberDaylight } from "../theme.ts";
@@ -167,16 +168,19 @@ export function App() {
   // its open changes lists, at most once every few seconds, since a focus bounce through a dialog is
   // not a trip away.
   const recountedAt = useRef(0);
+  // the row on screen is another project's when it is a guest of this rail: its counts are recounted too
+  const rowRepoId = useStore((s) => activeWorktreeRepoId(s));
   useEffect(() => {
     if (!sock || !connected || !activeRepoId) return;
     const onFocus = () => {
       if (Date.now() - recountedAt.current < RECOUNT_AFTER_MS) return;
       recountedAt.current = Date.now();
       sock.send({ t: "refresh-git", repoId: activeRepoId });
+      if (rowRepoId && rowRepoId !== activeRepoId) sock.send({ t: "refresh-git", repoId: rowRepoId });
     };
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
-  }, [sock, connected, activeRepoId]);
+  }, [sock, connected, activeRepoId, rowRepoId]);
 
   // paint the selected theme (or the picker's live preview); previews get the accent for their overlays
   useEffect(() => {

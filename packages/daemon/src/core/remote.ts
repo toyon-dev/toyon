@@ -65,7 +65,7 @@ export function sameSecret(given: string | null, want: string): boolean {
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
-const isLoopbackPeer = (ip: string) => ip === "127.0.0.1" || ip === "::1" || ip.startsWith("::ffff:127.");
+export const isLoopbackPeer = (ip: string) => ip === "127.0.0.1" || ip === "::1" || ip.startsWith("::ffff:127.");
 // *.localhost is safe: browsers hardwire it to loopback and public DNS cannot serve it (RFC 6761)
 const isLoopbackHost = (h: string) => h === "127.0.0.1" || h === "localhost" || h.endsWith(".localhost");
 

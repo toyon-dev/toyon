@@ -46,6 +46,21 @@ describe("spare pool", () => {
     if (spare) expect(() => w.worktrees.setEffort(spare.id, "high")).toThrow(UserError);
   });
 
+  test("a claim with a given title clears the spare's placeholder mark, asks no namer and keeps from", async () => {
+    const repoId = await registered();
+    await w.worktrees.spare.ensure(repoId);
+    const spare = w.state.worktrees.find((x) => x.kind === "spare")!;
+    const from = { kind: "worktree" as const, ref: "toyon/origin", origin: { id: "o1", repoId: "r0" } };
+    const wt = await w.worktrees.create(repoId, "use the spare", { title: "Fix the form", from });
+    expect(wt.id).toBe(spare.id);
+    expect(wt.title).toBe("Fix the form");
+    expect(wt.unnamed).toBeUndefined();
+    expect(wt.from).toEqual(from);
+    await until(() => wt.branch === "toyon/fix-the-form");
+    await settle();
+    expect(w.naming.calls).toBe(0);
+  });
+
   test("the warm spare is the lead row, main leaves the list for it, and a claim keeps the row's id", async () => {
     const repoId = await registered();
     const main = w.state.worktrees.find((x) => x.repoId === repoId && x.kind === "main")!;

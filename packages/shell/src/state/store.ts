@@ -35,6 +35,7 @@ import type {
   PathEntry,
   PathTarget,
   PendingRepo,
+  PermissionMode,
   PickVerb,
   QueuedMessage,
   RefHit,
@@ -60,6 +61,7 @@ import {
   applyLog,
   builtinThemes,
   canArchive,
+  DEFAULT_PERMISSION_MODE,
   defaultThemePrefs,
   isEditTool,
   isLead,
@@ -156,7 +158,25 @@ export type ChatItem =
       outcome?: AskOutcome;
       answers?: AskAnswer[];
       choiceId?: string;
-    };
+    }
+  /** a proposal to continue the work in another open project: a card in the box while `proposed`,
+   * then the record of where it went (`continued`, with the row made there) or that it did not
+   * (`declined`, with the daemon's `reason` when the worktree could not be made) */
+  | {
+      kind: "handoff";
+      id: string;
+      repo: { id: string; name: string; path: string };
+      message: string;
+      title?: string;
+      by: "agent" | "person";
+      mode: PermissionMode;
+      state: "proposed" | "continued" | "declined";
+      worktreeId?: string;
+      reason?: string;
+      ts: number;
+    }
+  /** the daemon's word that a worktree this one handed off to landed in its project */
+  | { kind: "handoff-landed"; worktreeId: string; repoName: string; title: string; url?: string; ts: number };
 
 export interface GitInfo {
   files: GitFileStatus[];
@@ -367,7 +387,9 @@ export type Overlay =
   /** the route bar's list of pages, opened over the address field */
   | { kind: "routes" }
   /** the lines a picked element with no recorded source may be written on, when none is clearly it */
-  | { kind: "element-sources"; worktreeId: string; hits: SearchHit[] };
+  | { kind: "element-sources"; worktreeId: string; hits: SearchHit[] }
+  /** the other open projects, one of which this worktree's work continues in */
+  | { kind: "handoff"; worktreeId: string };
 
 /** the project switcher: pick a registered repo, or type a path to open another. `pill` hangs off
  * the pill in the bar, for a click on it; `center` is the same switcher over the preview, for a key
@@ -1031,11 +1053,24 @@ export function asksSetup(repo: RepoInfo | null | undefined): boolean {
   return !!repo?.needsSetup && !repo.assumed;
 }
 
-/** The active project runs nothing, so the chat is what the centre shows, and the chat dock and the
- * controls that work on a page go. Reads only the repos, so the app menu and the palette can ask it
- * with the state they already hold. */
-export function isChatCentred(s: Pick<State, "repos" | "activeRepoId">): boolean {
-  const repo = s.activeRepoId ? s.repos.find((r) => r.id === s.activeRepoId) : undefined;
+/** The project of what is on screen: the active row's, which is another project's when the row is
+ * a guest of this rail, else the rail's. Under an archived page the page is the rail's project's,
+ * so the row underneath does not answer. What is about the worktree (its chat's centring, its
+ * settings, the name in the header) reads this; what is about the rail reads `activeRepoId`. */
+export function activeWorktreeRepoId(
+  s: Pick<State, "rows" | "activeId" | "activeRepoId" | "archivedPage">,
+): string | null {
+  const row = s.archivedPage ? null : rowById(s, s.activeId);
+  return row?.repoId ?? s.activeRepoId;
+}
+
+/** The project on screen runs nothing, so the chat is what the centre shows, and the chat dock and
+ * the controls that work on a page go. Reads only the rows and repos, so the app menu and the
+ * palette can ask it with the state they already hold. */
+export function isChatCentred(
+  s: Pick<State, "repos" | "rows" | "activeId" | "activeRepoId" | "archivedPage">,
+): boolean {
+  const repo = repoById(s, activeWorktreeRepoId(s));
   return !!repo && runsNothing(repo);
 }
 
@@ -1093,14 +1128,35 @@ export function routeTarget(s: State): { worktreeId: string; repoId: string } | 
   return wt && previewUp(wt) ? { worktreeId: wt.worktree.id, repoId: wt.repoId } : null;
 }
 
-/** the active repo's owned rows in rail order; every repo's when nothing is selected (a daemon with
- * no repos). A row whose remove is in flight is already gone from the person's point of view.
- * Sorted here and never in `rows`: the preview frames are keyed children in `rows` order, and a
- * frame moved in the DOM reloads. */
+/** The row a guest of `repoId`'s rail started from, or null when `w` is no guest there: a guest is
+ * another project's worktree made by a handoff from one of this rail's rows, listed here for as
+ * long as that row is. Own rows are never guests, and a handoff whose origin is gone, not toyon's
+ * or of some third project leaves the row to its own rail alone. */
+export function guestOf(w: OwnedWorktree, repoId: string, rows: readonly WorktreeStatus[]): OwnedWorktree | null {
+  const from = w.worktree.from;
+  if (w.repoId === repoId || from?.kind !== "worktree" || from.origin.repoId !== repoId) return null;
+  const origin = rows.find((r) => r.id === from.origin.id);
+  return origin && isOwned(origin) && origin.repoId === repoId ? origin : null;
+}
+
+/** a row this rail lists: one of its own project's, or a guest whose origin is still among `rows` */
+function onRail(w: OwnedWorktree, repoId: string, rows: readonly WorktreeStatus[]): boolean {
+  return w.repoId === repoId || guestOf(w, repoId, rows) !== null;
+}
+
+/** the rows minus the ones whose remove is in flight: gone from the person's point of view */
+function liveRows(rows: WorktreeStatus[], archiving: string[]): WorktreeStatus[] {
+  return archiving.length ? rows.filter((w) => !archiving.includes(w.id)) : rows;
+}
+
+/** the active repo's owned rows in rail order, its guests among them; every repo's when nothing is
+ * selected (a daemon with no repos). A row whose remove is in flight is already gone from the
+ * person's point of view, and so is a guest whose origin's is: the guest rule reads the rows that
+ * are left. Sorted here and never in `rows`: the preview frames are keyed children in `rows`
+ * order, and a frame moved in the DOM reloads. */
 function visibleOf(rows: WorktreeStatus[], repoId: string | null, archiving: string[]): OwnedWorktree[] {
-  const owned = rows.filter(isOwned);
-  const shown = archiving.length ? owned.filter((w) => !archiving.includes(w.id)) : owned;
-  return railOrder(repoId ? shown.filter((w) => w.repoId === repoId) : shown);
+  const shown = liveRows(rows, archiving).filter(isOwned);
+  return railOrder(repoId ? shown.filter((w) => onRail(w, repoId, shown)) : shown);
 }
 
 /** the same narrowing for the rows toyon did not create */
@@ -1161,13 +1217,18 @@ const sameShipping = (a: ShipEntry | undefined, b: ShipEntry | undefined) =>
   !!a && !!b && a.op === b.op && a.step === b.step && a.sent === b.sent;
 
 /** select a worktree, and with it its repo (a chord or a rail click never leaves you scoped to
- * a project that is not the one on screen) */
+ * a project that is not the one on screen). A row this rail lists keeps the rail: choosing a
+ * guest shows its project's work in the centre without moving anyone off the rail it was chosen
+ * from, and a click on the row it came from is the way back. */
 function activate(s: State, id: string | null): State {
   const row = rowById(s, id);
+  const stays = !!row && isOwned(row) && !!s.activeRepoId && onRail(row, s.activeRepoId, s.rows);
   // a found worktree can be selected too: it has a shell and a pane of its own, just nothing
   // toyon runs. It is deliberately not written to lastActive, which is the landing spot for a
-  // project and should be somewhere that still exists next time.
-  const activeRepoId = row?.repoId ?? s.activeRepoId;
+  // project and should be somewhere that still exists next time. A guest is remembered as its own
+  // project's landing, never this rail's: switching to that project lands on it, and this rail
+  // comes back to its own last row.
+  const activeRepoId = stays ? s.activeRepoId : (row?.repoId ?? s.activeRepoId);
   const lastActive = row && isOwned(row) ? { ...s.lastActive, [row.repoId]: row.id } : s.lastActive;
   // leaving a worktree ends the hit a search landed on there
   const leaving = s.activeId !== id ? s.activeId : null;
@@ -1224,7 +1285,8 @@ export const isSubPicker = (o: Overlay) =>
   o.kind === "keep-awake" ||
   o.kind === "agent" ||
   o.kind === "agent-page" ||
-  o.kind === "choose-folder";
+  o.kind === "choose-folder" ||
+  o.kind === "handoff";
 
 /** what reaches the reducer: terminal frames are routed to the pane, file answers to fileSync, and
  * a file opened from outside the shell, or refused to a link that asked, to its opener, before
@@ -1448,13 +1510,14 @@ function runningOf(chat: ChatItem[], was: WorktreeLocal["running"]): WorktreeLoc
   return was?.id === head.id ? was : { id: head.id, at: Date.now() };
 }
 
-/** The box's answers and the parked ask belong to one ask. A new ask starts over and takes the box
- * back from a parked or a revived one; the close of the ask they belong to ends them; anything
+/** The box's answers and the parked ask belong to one card. A new card starts over and takes the box
+ * back from a parked or a revived one; the close of the card they belong to ends them; anything
  * else leaves them be. A stop closes the ask and keeps its answers, since the question can still
- * be answered as a message. */
+ * be answered as a message. A handoff card is one of these: its note is the box's draft, and it
+ * closes with the handoff or the decline that answers it. */
 function askSettled(l: WorktreeLocal, ev: AgentEvent): WorktreeLocal {
-  const asked = ev.type === "agent-question" || ev.type === "agent-permission";
-  const closed = ev.type === "agent-ask-end" ? ev.id : null;
+  const asked = ev.type === "agent-question" || ev.type === "agent-permission" || ev.type === "handoff-proposed";
+  const closed = ev.type === "agent-ask-end" || ev.type === "handoff" || ev.type === "handoff-declined" ? ev.id : null;
   if (!asked && !closed) return l;
   const stopped = ev.type === "agent-ask-end" && stoppedBy(ev.outcome);
   const { ask, askParked, askRevived, ...rest } = l;
@@ -1546,8 +1609,20 @@ function closeArchivedPage(s: State): State {
   return { ...s, archivedPage: null, ...(orphaned ? { editor: null } : {}) };
 }
 
+/** An active row that is not of the rail's project and that the rail no longer lists: a guest
+ * whose origin was removed or archived, or whose own project was forgotten. The selection stayed
+ * on it through the frame (its row is still listed, so the frame kept it), and the rail would show
+ * nothing marked, so it lands where the rail's project lands. */
+function strayed(s: State): State {
+  const rail = s.activeRepoId;
+  if (!rail) return s;
+  const active = worktreeById(s, s.activeId);
+  if (!active || active.repoId === rail || onRail(active, rail, liveRows(s.rows, s.archiving))) return s;
+  return activate(s, landingIn(s, rail));
+}
+
 export function reducer(s: State, action: Action): State {
-  let next = withLauncher(reduce(s, action));
+  let next = withLauncher(strayed(reduce(s, action)));
   // a hold is only for the row it was made on: selecting anything else, however it happened, ends it
   if (next.unreadHold !== null && next.activeId !== next.unreadHold) next = { ...next, unreadHold: null };
   // the page is for an item in the project on screen: the item restored or deleted, or the project
@@ -2187,13 +2262,16 @@ function onServer(s: State, msg: StoreServerMsg): State {
           ? s.storedActive
           : landingIn(s, repoId, msg.rows);
       const wt = msg.rows.find((w) => w.id === activeId);
+      // the rail the row was read from, when the row is on it: a reload on a guest comes back to
+      // the rail it was chosen from, not to the guest's own project
+      const onStored = !!repoId && !!wt && isOwned(wt) && onRail(wt, repoId, msg.rows);
       return {
         ...s,
         heard: true,
         repos: msg.repos,
         rows: msg.rows,
         activeId,
-        activeRepoId: wt?.repoId ?? repoId ?? msg.repos[0]?.id ?? null,
+        activeRepoId: onStored ? repoId : (wt?.repoId ?? repoId ?? msg.repos[0]?.id ?? null),
         trunks: msg.trunks,
         archiving: s.archiving.length ? [] : s.archiving,
         shipping: shippingFrom({}, msg.rows, msg.trunks),
@@ -2391,6 +2469,10 @@ function onServer(s: State, msg: StoreServerMsg): State {
         // selection chose nothing: status reads push one whenever a count moves, and one landing
         // between a file opening and its read closed the pane under the person who opened it
         editor: activeId === s.activeId ? s.editor : null,
+        // nor does it move the rail: a guest whose origin this frame dropped is still listed, so
+        // the selection holds, and following its own project would switch the rail under the
+        // person; the stray rule lands it inside the rail's project instead
+        ...(activeId === s.activeId ? { activeRepoId: s.activeRepoId } : {}),
         // the archived page stays up through a frame for the same reason; a worktree this tab just
         // made is the one it restored, and that row is what to look at now
         archivedPage: fresh ? null : s.archivedPage,
@@ -2453,8 +2535,12 @@ function onServer(s: State, msg: StoreServerMsg): State {
         const turn = next.local[id]!.turn;
         if (turn.edits && !turn.hmr) next = { ...next, reloadReq: { id, n: (next.reloadReq?.n ?? 0) + 1 } };
       }
-      // the question goes in the box, so the box has to be on screen, the way a notice's does
-      if ((ev.type === "agent-question" || ev.type === "agent-permission") && id === s.activeId)
+      // the question goes in the box, so the box has to be on screen, the way a notice's does; so
+      // does a handoff's card, which is the same box
+      if (
+        (ev.type === "agent-question" || ev.type === "agent-permission" || ev.type === "handoff-proposed") &&
+        id === s.activeId
+      )
         next = revealChat(next);
       return next;
     }
@@ -2781,6 +2867,67 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
       return [...items, { kind: "grafted", title: event.title, branch: event.branch }];
     case "landed":
       return [...items, { kind: "landed", text: event.message, archiveIds: event.archiveIds, ts: event.ts }];
+    case "handoff-proposed":
+      return [
+        ...items,
+        {
+          kind: "handoff",
+          id: event.id,
+          repo: event.repo,
+          message: event.message,
+          ...(event.title ? { title: event.title } : {}),
+          by: event.by,
+          mode: event.mode,
+          state: "proposed",
+          ts: event.ts,
+        },
+      ];
+    case "handoff": {
+      const idx = items.findLastIndex((i) => i.kind === "handoff" && i.id === event.id && i.state === "proposed");
+      // the record of where the work went belongs on the chat whether or not the proposal was seen
+      // (a torn transcript line); with no card to close it stands on its own, and says only what
+      // the event does
+      if (idx === -1)
+        return [
+          ...items,
+          {
+            kind: "handoff",
+            id: event.id,
+            repo: { id: event.repoId, name: event.repoName, path: "" },
+            message: "",
+            title: event.title,
+            by: "agent",
+            mode: DEFAULT_PERMISSION_MODE,
+            state: "continued",
+            worktreeId: event.worktreeId,
+            ts: event.ts,
+          },
+        ];
+      const next = items.slice();
+      const card = next[idx] as HandoffCard;
+      next[idx] = { ...card, state: "continued", worktreeId: event.worktreeId, title: event.title };
+      return next;
+    }
+    case "handoff-declined": {
+      const idx = items.findLastIndex((i) => i.kind === "handoff" && i.id === event.id && i.state === "proposed");
+      if (idx === -1) return items;
+      const next = items.slice();
+      const card = next[idx] as HandoffCard;
+      next[idx] = { ...card, state: "declined", ...(event.reason ? { reason: event.reason } : {}) };
+      return next;
+    }
+    case "handoff-landed":
+      return [
+        ...items,
+        {
+          kind: "handoff-landed",
+          worktreeId: event.worktreeId,
+          repoName: event.repoName,
+          title: event.title,
+          ...(event.url ? { url: event.url } : {}),
+          ts: event.ts,
+        },
+      ];
     case "restored":
       return [
         ...items,
@@ -2877,6 +3024,7 @@ function cutRow(items: ChatItem[], messageId: string): number {
 }
 
 type AskCard = Extract<ChatItem, { kind: "ask" }>;
+type HandoffCard = Extract<ChatItem, { kind: "handoff" }>;
 
 function allowed(card: AskCard, choiceId: string | undefined): boolean {
   if (card.ask.kind !== "permission" || !choiceId) return false;

@@ -17,6 +17,11 @@ Each agent signs in with its own login, from the chat. MCP servers run as each a
 | Subagents | yes | yes | no |
 | Effort levels | yes | yes | no |
 | Steering mid-turn | yes | yes | no |
+| Toyon's own tools | yes | yes | read off its first start; expected no |
+
+## Toyon's own tools
+
+Toyon serves each agent a few tools of its own over MCP, from the daemon on this machine. Claude Code and Codex take them because both accept an HTTP MCP server at session start; whether OpenCode does is read off its first start. The first tool is `handoff`: when a change belongs in another project you have open, the agent proposes continuing there, and a card appears in the chat with the project, the message the other agent would start from and the permission mode it would run in. Nothing starts until you say so. The "continue in another project" verb works without the tool by raising the same card from your own words.
 
 ## Claude Code
 

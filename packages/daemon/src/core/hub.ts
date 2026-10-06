@@ -81,6 +81,10 @@ export interface HubEvents {
   /** something the daemon ran on a worktree's behalf, unasked, stopped: `message` is read as a
    * daemon error on that worktree, where a failure nobody requested would otherwise sit in a log */
   failed: (worktreeId: string, message: string) => void;
+  /** the worktree's work is on its project's main: a land here, or its pull request merged. A
+   * worktree another one handed work to tells that one here, so the two services need not know
+   * each other. */
+  landed: (worktreeId: string) => void;
 }
 
 type Listener<K extends keyof HubEvents> = HubEvents[K];

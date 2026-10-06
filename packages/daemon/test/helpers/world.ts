@@ -14,6 +14,7 @@ import { RepoRegistry } from "../../src/repos/registry.ts";
 import { RuntimeRegistry } from "../../src/runtime/registry.ts";
 import { ArtifactCache } from "../../src/worktrees/cache.ts";
 import { FixService } from "../../src/worktrees/fix.ts";
+import { HandoffService } from "../../src/worktrees/handoff.ts";
 import { WorktreeService } from "../../src/worktrees/service.ts";
 import { TurnService } from "../../src/worktrees/turns.ts";
 import { fakeAgents, fakeFactories } from "./fakes.ts";
@@ -70,7 +71,28 @@ export function world() {
   });
   const turns = new TurnService({ state, hub, transcript: (id) => runtime.agentFor(id)?.transcript() ?? [] });
   const repos = new RepoRegistry({ state, hub, runtime, worktrees, ...noSelf(state, hub) });
-  return { ...t, state, hub, runtime, worktrees, turns, repos, registry: agents, naming, cache, refused, fix, ...f };
+  const handoff = new HandoffService({
+    state,
+    hub,
+    runtime,
+    create: (repoId, prompt, opts) => worktrees.create(repoId, prompt, opts),
+  });
+  return {
+    ...t,
+    state,
+    hub,
+    runtime,
+    worktrees,
+    turns,
+    repos,
+    registry: agents,
+    naming,
+    cache,
+    refused,
+    fix,
+    handoff,
+    ...f,
+  };
 }
 
 /** the world under test, fresh before each test of a file that called useWorld() */

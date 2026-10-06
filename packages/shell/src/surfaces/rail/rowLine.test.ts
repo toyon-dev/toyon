@@ -7,6 +7,7 @@ import {
   archivedWindow,
   cardFigures,
   cardLines,
+  guestLine,
   leadLines,
   OFFLINE_LINE,
   type RowContext,
@@ -57,6 +58,14 @@ const found = (over: Partial<WorktreeStatus> = {}): WorktreeStatus => {
 };
 
 const done = { at: 1, end: "done" as const, facts: { turns: 1, edits: 2, toolErrors: 0 } };
+
+describe("guestLine", () => {
+  test("names the project and the row on this rail the work came from", () => {
+    expect(guestLine("claude-agent-acp", "Bump the adapter")).toBe(
+      "in claude-agent-acp, started from Bump the adapter",
+    );
+  });
+});
 
 describe("the line under a row's name", () => {
   test("the time since the last send follows a state, which is a word; a recap carries its own", () => {

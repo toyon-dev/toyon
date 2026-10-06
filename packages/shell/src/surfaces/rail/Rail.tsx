@@ -31,7 +31,7 @@ import {
   useVisibleDiscovered,
   useVisibleWorktrees,
 } from "../../state/selectors.ts";
-import { asksSetup, trunkOf } from "../../state/store.ts";
+import { asksSetup, guestOf, trunkOf } from "../../state/store.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
 import { Icon } from "../../ui/Icon.tsx";
 import { useContextMenu, useMenu } from "../../ui/menu.ts";
@@ -51,6 +51,7 @@ import {
   cardFigures,
   cardLines,
   FOUND_LINE,
+  guestLine,
   leadLines,
   OFFLINE_LINE,
   rowLine,
@@ -172,7 +173,11 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
   });
   const repos = useStore((s) => s.repos);
   const shipping = useStore((s) => s.shipping);
+  const rows = useStore((s) => s.rows);
   const repoOf = (w: OwnedWorktree) => repos.find((r) => r.id === w.repoId) ?? null;
+  /** the row a guest of this rail started from, when `w` is one: another project's worktree a
+   * handoff made from here, listed on this rail while its origin is */
+  const originOf = (w: OwnedWorktree) => (activeRepoId ? guestOf(w, activeRepoId, rows) : null);
   const cm = useContextMenu("rail");
   // the one menu, read here for two things: the peek stays open while the menu is the rail's, and
   // the row it is about stays lifted while the pointer is over the menu rather than the row
@@ -192,7 +197,8 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
   const [sel, setSel] = useState<string[]>([]);
 
   const toggleSel = (w: OwnedWorktree) => {
-    if (!canGraft(w.worktree)) return;
+    // a guest is another project's: the daemon refuses a graft across projects
+    if (!canGraft(w.worktree) || originOf(w)) return;
     setGraftMode(true);
     setSel((s) => (s.includes(w.worktree.id) ? s.filter((x) => x !== w.worktree.id) : [...s, w.worktree.id]));
   };
@@ -216,8 +222,9 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
   /** what a row can do: the long list for ours, the short one for a found worktree */
   const rowItems = (w: WorktreeStatus) =>
     isOwned(w)
-      ? worktreeItems(w, repoOf(w), { layout, shipping, frame }, deps, {
-          graft: graftWith,
+      ? worktreeItems(w, repoOf(w), { layout, shipping, frame, repos }, deps, {
+          // no graft line on a guest: nothing on this rail is of its project
+          ...(originOf(w) ? {} : { graft: graftWith }),
           hostname: location.hostname,
         })
       : discoveredItems(w, { clientId, frame }, deps, location.hostname);
@@ -335,7 +342,10 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
     const slid = !!counts.ahead && !counts.dirty;
     const id = w.id;
     const menuOpen = menu?.owner === "rail" && menu.key === id;
-    const showCheck = owned && graftMode && canGraft(owned.worktree) && id !== activeId;
+    // a guest of this rail: the row it started from, and the project it belongs to
+    const origin = owned ? originOf(owned) : null;
+    const guestRepo = origin && owned ? repoOf(owned) : null;
+    const showCheck = owned && !origin && graftMode && canGraft(owned.worktree) && id !== activeId;
     // a landing op out from this row takes the dot's slot, and with it the row's word: the tip
     // and the line under the name say what the spinner is doing, not the state it covers
     const op = shipShown(w, shipping[id]?.op);
@@ -372,8 +382,14 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
               placement: tipSide,
               card: true,
               aside: cardFigures(w),
-              // main has no turn to recap: its lines say whether it is fresh
-              detail: isLead(owned.worktree) ? leadLines(worktrees, archived, trunk, base) : cardLines(owned),
+              // main has no turn to recap: its lines say whether it is fresh. A guest's first line
+              // says whose it is and where it came from, since the row's mark says only the project
+              detail: isLead(owned.worktree)
+                ? leadLines(worktrees, archived, trunk, base)
+                : [
+                    ...(origin && guestRepo ? [guestLine(guestRepo.name, origin.worktree.title)] : []),
+                    ...cardLines(owned),
+                  ],
               dot: offline ? undefined : op ? "spinner" : dotClass(w),
             })
           : tip(
@@ -408,7 +424,7 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
           // in graft mode the row you are on is the stock the others go onto, marked by its edge,
           // and has nothing to check; every other graftable row is a source to check or uncheck.
           // A shift-click on it opens the mode with nothing checked yet.
-          if (owned && (graftMode || e.shiftKey)) {
+          if (owned && !origin && (graftMode || e.shiftKey)) {
             if (id === activeId) setGraftMode(true);
             else toggleSel(owned);
           }
@@ -515,6 +531,9 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
             <span className="act">pick</span>
           </span>
         )}
+        {/* a guest's project, in the dim tier before the counts: the one place the row says it is
+            not this project's. No glyph; the name is the mark. */}
+        {guestRepo && <span className="rail-guest row-dim">{guestRepo.name}</span>}
         {/* Ordered by how often a column is filled, rarest nearest the name: a leading empty column
             is not drawn and the name runs into its space, so the count few rows have is the one that
             costs the least. Ahead and dirty in colour, side by side: they are the two you act on.
@@ -662,8 +681,11 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
             <div className="rail-graft">
               {(() => {
                 // the row you are on takes the others: it keeps its agent, procs and port, and
-                // the checked ones are merged into it and removed
-                const target = worktrees.find((w) => w.worktree.id === activeId && canGraft(w.worktree));
+                // the checked ones are merged into it and removed. Never a guest: it is another
+                // project's, and the daemon refuses a graft across projects
+                const target = worktrees.find(
+                  (w) => w.worktree.id === activeId && canGraft(w.worktree) && !originOf(w),
+                );
                 const sources = sel.filter((id) => id !== target?.worktree.id);
                 const names = sources
                   .map((id) => worktrees.find((w) => w.worktree.id === id)?.worktree.title ?? id)

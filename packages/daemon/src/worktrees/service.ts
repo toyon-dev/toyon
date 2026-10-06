@@ -224,6 +224,11 @@ export interface CreateOpts {
   carry?: boolean;
   /** the provisional row the message was typed in, which becomes the worktree in place */
   worktreeId?: string;
+  /** the row's name from birth, when the caller already has one: no provisional title from the
+   * prompt's first words, and the namer is never asked */
+  title?: string;
+  /** where the worktree came from, when it was made from somewhere: a handoff names its origin */
+  from?: WorktreeInfo["from"];
 }
 
 /** what became of main's uncommitted files when a worktree was made from it */
@@ -412,7 +417,8 @@ export class WorktreeService {
     // the title is the prompt's first words until the agent names it; variants share a base so they
     // read as siblings in the list. The branch is born on the directory's id and takes the title's
     // slug with the name.
-    const base = titleFrom(task);
+    const given = cleanTitle(opts.title ?? "") || undefined;
+    const base = given ?? titleFrom(task);
     const title = variant ? `${base} v${variant.index}` : base;
 
     // one set of changes can only move once
@@ -430,6 +436,9 @@ export class WorktreeService {
     if (claimed) {
       if (variant) claimed.variant = variant;
       if (opts.createdBy) claimed.createdBy = opts.createdBy;
+      // the claim stamped the prompt's words as a name still to be found; a given name is final
+      if (given) delete claimed.unnamed;
+      if (opts.from) claimed.from = opts.from;
       // made from a prompt, which is a send
       claimed.promptedAt = claimed.createdAt;
       // the spare's agent has no process yet; it reads the stamps on its first prompt
@@ -451,7 +460,7 @@ export class WorktreeService {
       const rt = this.d.runtime.ensureAgent(claimed);
       if (rt.agent.runningAgent !== null && rt.agent.runningAgent !== agent) await rt.agent.restart();
       rt.agent.send(agentPrompt, { context: withCarry(context, carried), attachments });
-      this.scheduleNaming(claimed, task, variant);
+      this.nameOrAsk(claimed, task, given, variant);
       if (carried.unmoved) throw new UserError(carried.unmoved, { delivered: true });
       return claimed;
     }
@@ -482,12 +491,13 @@ export class WorktreeService {
       kind: "worktree",
       proxyPort: await allocateProxyPort(),
       title,
-      unnamed: true,
+      ...(given ? {} : { unnamed: true }),
       createdAt: Date.now(),
       // made from a prompt, which is a send
       promptedAt: Date.now(),
       agent,
       ...(variant ? { variant } : {}),
+      ...(opts.from ? { from: opts.from } : {}),
       ...(opts.createdBy ? { createdBy: opts.createdBy } : {}),
       ...(profile !== undefined ? { profile } : {}),
       ...(opts.mode ? { mode: opts.mode } : {}),
@@ -499,9 +509,19 @@ export class WorktreeService {
     // setup + procs warm in the background; the agent starts immediately
     this.launch(wt, repo, repo.path);
     this.d.runtime.ensureAgent(wt).agent.send(agentPrompt, { context: withCarry(context, carried), attachments });
-    this.scheduleNaming(wt, task, variant);
+    this.nameOrAsk(wt, task, given, variant);
     if (carried.unmoved) throw new UserError(carried.unmoved, { delivered: true });
     return wt;
+  }
+
+  /** the branch follows the title: a title given at birth moves it now, as the namer's answer
+   * would have, and the namer is never asked; without one the namer is */
+  private nameOrAsk(wt: WorktreeInfo, task: string, given: string | undefined, variant?: Variant) {
+    if (given === undefined) {
+      this.scheduleNaming(wt, task, variant);
+      return;
+    }
+    fireAndForget(wt.id, this.rename(wt.id, given), "branch for the given title");
   }
 
   /** What became of main's uncommitted work when a worktree was made from it. Asked to `move`, the
@@ -1732,6 +1752,8 @@ export class WorktreeService {
    * The siblings ride along for the row to offer, for as long as they are still rows. */
   private noteLanded(wt: WorktreeInfo, message: string, archiveIds: string[]) {
     this.d.runtime.ensureAgent(wt).agent.note({ type: "landed", message, archiveIds, ts: Date.now() });
+    // after the row's own word: a worktree that handed this work off hears of it from here
+    this.d.hub.emit("landed", wt.id);
   }
 
   /** the variant siblings a land leaves behind: what the landed row offers to archive */

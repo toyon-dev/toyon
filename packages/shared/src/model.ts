@@ -346,7 +346,12 @@ export interface WorktreeInfo {
   /** where this worktree came from when it was opened onto something that already existed: a
    * local branch, a remote one, or a PR pulled in to review. The opposite direction from `prUrl`,
    * which is a PR made from the worktree. Absent on a task toyon started from a prompt. */
-  from?: { kind: "branch" | "remote" | "pr"; ref: string; pr?: { number: number; url: string; title: string } };
+  from?:
+    | { kind: "branch" | "remote" | "pr"; ref: string; pr?: { number: number; url: string; title: string } }
+    /** made by a handoff from a worktree of another project: `ref` is that worktree's branch and
+     * `origin` the row it came from. Kept as history once the origin is gone; while the origin is
+     * listed, this row shows on its rail too. */
+    | { kind: "worktree"; ref: string; origin: { id: string; repoId: string } };
   /** the shell tab that asked for it (client nonce); that tab focuses it, others don't */
   createdBy?: string;
   /** registry id of the agent working here (stamped at creation, or on first use for older rows) */

@@ -89,7 +89,13 @@ const opts: HttpOpts = {
   pair: new PairCodes(),
   onPaired: () => {},
   phones: async () => null,
+  mcp: async (_req, worktreeId) => {
+    mcpHits.push(worktreeId);
+    return new Response("mcp", { status: 200 });
+  },
 };
+/** the worktree ids the MCP route handed on */
+const mcpHits: string[] = [];
 const fetch = createFetch(opts);
 const req = (path: string, init: RequestInit & { host?: string } = {}) =>
   new Request(`http://${init.host ?? "localhost"}${path}`, {
@@ -312,6 +318,35 @@ describe("guards, a local front with previews on ports", () => {
   test("no preview is routed by name: previews answer on their own ports", async () => {
     const r = await ports(req("/", { host: "wa1b2c3.box.tail1234.ts.net", headers: https }), srv());
     expect(r?.status).toBe(403);
+  });
+});
+
+describe("the agent's tools at /mcp/<id>", () => {
+  const edge = createFetch({
+    ...opts,
+    remote: { host: "app.fly.dev", previews: "https://app.fly.dev:{port}", front: "edge" },
+  });
+  test("a loopback peer reaches the handler with the worktree id, before the door", async () => {
+    mcpHits.length = 0;
+    const r = await fetch(req("/mcp/w1", { method: "POST", host: "127.0.0.1:4141" }), srv());
+    expect(r?.status).toBe(200);
+    expect(await r?.text()).toBe("mcp");
+    // behind an edge the door refuses every loopback name; the agent on that machine still gets in
+    const far = await edge(req("/mcp/w2", { method: "POST", host: "127.0.0.1:4141" }), srv("::1"));
+    expect(far?.status).toBe(200);
+    expect(mcpHits).toEqual(["w1", "w2"]);
+  });
+  test("a peer that is not loopback is refused, whatever the front", async () => {
+    mcpHits.length = 0;
+    expect((await fetch(req("/mcp/w1", { method: "POST" }), srv("10.0.0.5")))?.status).toBe(403);
+    expect((await edge(req("/mcp/w1", { method: "POST" }), srv("172.19.0.2")))?.status).toBe(403);
+    expect(mcpHits).toEqual([]);
+  });
+  test("no id, or more than an id, is not found", async () => {
+    mcpHits.length = 0;
+    expect((await fetch(req("/mcp/", { method: "POST" }), srv()))?.status).toBe(404);
+    expect((await fetch(req("/mcp/a/b", { method: "POST" }), srv()))?.status).toBe(404);
+    expect(mcpHits).toEqual([]);
   });
 });
 
@@ -648,6 +683,7 @@ describe("static shell", () => {
     pair: new PairCodes(),
     onPaired: () => {},
     phones: async () => null,
+    mcp: opts.mcp,
   });
 
   test("the manifest carries the chosen theme's colours, whatever the file on disk says", async () => {

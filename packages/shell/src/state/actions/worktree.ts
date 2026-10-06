@@ -104,7 +104,7 @@ export function worktreeActions(sock: DaemonSocket | null, dispatch: Dispatch) {
   };
 }
 
-export type WorktreeItemState = Pick<State, "layout" | "shipping" | "frame">;
+export type WorktreeItemState = Pick<State, "layout" | "shipping" | "frame" | "repos">;
 
 /** Everything a worktree of ours can do, in the order the rail's menu shows it; the palette reads
  * the same list with the title appended. `graft` is the rail's own multi-select, so only the rail
@@ -121,13 +121,15 @@ export function worktreeItems(
 ): MenuEntry[] {
   const id = w.worktree.id;
   const acts = worktreeActions(sock, dispatch);
-  // seven groups: stop, go to it, copy from it, run it, change it, land it; then remove on its own
+  // eight groups: stop, go to it, copy from it, run it, change it, land it, hand it on; then
+  // remove on its own
   const stop: MenuItem[] = [];
   const go: MenuItem[] = [];
   const copy: MenuItem[] = [];
   const run: MenuItem[] = [];
   const change: MenuItem[] = [];
   const land: MenuItem[] = [];
+  const handoff: MenuItem[] = [];
   const gone: MenuItem[] = [];
   // stop stays offered while an ask is open: that is the way out of a question you do not want
   // to answer
@@ -239,6 +241,18 @@ export function worktreeItems(
       onClick: () => shipOp(sock, dispatch, { t: "land", worktreeId: id }),
     });
   }
+  // continue the work in another open project: a worktree of that project, started from this
+  // one's chat. Only a task has work to hand on; the lead has no chat to propose it from. With
+  // one project open the row stays, off, so the verb is learnt before it is needed.
+  if (w.worktree.kind === "worktree") {
+    handoff.push({
+      id: "handoff",
+      label: "continue in another project…",
+      sub: true,
+      disabled: s.repos.length < 2 ? "open another project first" : undefined,
+      onClick: () => dispatch({ a: "open", overlay: { kind: "handoff", worktreeId: id } }),
+    });
+  }
   // the ellipsis is the promise of a question, so an archive that asks nothing drops it
   if (canArchive(w.worktree)) {
     gone.push({
@@ -249,7 +263,7 @@ export function worktreeItems(
       onClick: () => acts.archive(w),
     });
   }
-  return grouped([stop, go, copy, run, change, land, gone]);
+  return grouped([stop, go, copy, run, change, land, handoff, gone]);
 }
 
 /** A discovered worktree is a directory toyon does not own, so this stays short on purpose.

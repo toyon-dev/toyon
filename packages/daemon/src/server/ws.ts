@@ -431,6 +431,7 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
         broadcast({ t: "paired" });
       },
       phones: () => readTailnetPhones(),
+      mcp: (req, id) => s.mcp.fetch(req, id),
     }),
     websocket: {
       // idleTimeout and sendPings stay at Bun's defaults (120 s, on): they are what close a tab that

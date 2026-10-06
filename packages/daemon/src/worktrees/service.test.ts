@@ -64,6 +64,20 @@ describe("create / remove", () => {
     expect(w.procs.get(wt.id)?.started.map((p) => p.name)).toEqual(["web"]);
   });
 
+  test("a title given at birth is the row's name: no placeholder, the namer never asked, the branch its slug, and from kept", async () => {
+    const repoId = await registered();
+    const from = { kind: "worktree" as const, ref: "toyon/origin", origin: { id: "o1", repoId: "r0" } };
+    const wt = await w.worktrees.create(repoId, "the message the other agent wrote", { title: " Fix the form ", from });
+    expect(wt.title).toBe("Fix the form");
+    expect(wt.unnamed).toBeUndefined();
+    expect(wt.from).toEqual(from);
+    expect(w.state.worktree(wt.id)?.from).toEqual(from);
+    await until(() => wt.branch === "toyon/fix-the-form");
+    await settle();
+    expect(w.naming.calls).toBe(0);
+    expect(wt.unnamed).toBeUndefined();
+  });
+
   test("gitignored local config is copied in, and an existing file is left alone", async () => {
     const repoId = await registered();
     writeFileSync(join(w.repo, ".dev.vars"), "AUTH_SECRET=frombase\n");

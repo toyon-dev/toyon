@@ -21,6 +21,7 @@ import { AgentAccounts } from "./agent/accounts.ts";
 import { spawnAcp } from "./agent/acp/transport.ts";
 import { AttachmentStore } from "./agent/attachments.ts";
 import { LinuxSandbox } from "./agent/linuxSandbox.ts";
+import { ToolSet, ToyonMcp } from "./agent/mcp.ts";
 import { OptionProbe } from "./agent/probe.ts";
 import { loadAgentRegistry } from "./agent/registry.ts";
 import { prepareLaunch } from "./agent/sandbox.ts";
@@ -64,6 +65,7 @@ import { BackendShare } from "./worktrees/backend.ts";
 import { ArtifactCache } from "./worktrees/cache.ts";
 import { ChatSearch } from "./worktrees/chats.ts";
 import { FixService } from "./worktrees/fix.ts";
+import { HandoffService } from "./worktrees/handoff.ts";
 import { LandingService } from "./worktrees/landing.ts";
 import { PrService } from "./worktrees/prs.ts";
 import { RefSearch } from "./worktrees/refs.ts";
@@ -147,7 +149,14 @@ const accounts = new AgentAccounts({
 accounts.onChange = () => hub.emit("agentsChanged");
 const uploads = new UploadStore(paths.uploadsDir);
 const attachments = new AttachmentStore(paths.attachmentsDir, uploads);
-const runtime = new RuntimeRegistry({
+// Toyon's own tools for the agents, at the daemon's bound port once it is listening: the literal
+// loopback address, since that is what the daemon binds and what the /mcp/ route admits
+let mcpPort = port;
+// the services that own a tool register it below, once they exist; the server asks the set only
+// when an agent calls
+const tools = new ToolSet();
+const mcp = new ToyonMcp({ url: (id) => `http://127.0.0.1:${mcpPort}/mcp/${id}`, version: pkg.version, tools });
+const runtime: RuntimeRegistry = new RuntimeRegistry({
   hub,
   state,
   paths,
@@ -165,6 +174,7 @@ const runtime = new RuntimeRegistry({
   shown: (id): boolean => idle.isShown(id),
   // asked only when a start is, after the service below exists
   mainLeads: (repoId): boolean => worktrees.spare.current(repoId) === null,
+  mcp,
 });
 const drafts = new DraftStore({
   file: paths.draftsFile,
@@ -195,6 +205,14 @@ const worktrees = new WorktreeService({
 });
 // a worktree whose changes touch a proc it reaches on main takes that proc over
 new BackendShare({ state, hub, runtime, own: (id, names) => worktrees.ownProcs(id, names) });
+// work continued in another open project; it makes worktrees through the service's own create
+const handoff = new HandoffService({
+  state,
+  hub,
+  runtime,
+  create: (repoId, prompt, opts) => worktrees.create(repoId, prompt, opts),
+});
+tools.add(handoff);
 // before the server: its agentStatus listener has to run ahead of the one that broadcasts the rows
 const turns = new TurnService({
   state,
@@ -320,7 +338,11 @@ const keepAwake = new KeepAwake({
   answerable: remote !== null,
 });
 
-const { branded, stop: stopServer } = startServer({
+const {
+  server,
+  branded,
+  stop: stopServer,
+} = startServer({
   port,
   token,
   shellDist: SHELL_DIST,
@@ -350,6 +372,8 @@ const { branded, stop: stopServer } = startServer({
     prs,
     landing,
     fix,
+    handoff,
+    mcp,
     themes,
     agents,
     accounts,
@@ -362,6 +386,8 @@ const { branded, stop: stopServer } = startServer({
     folderDialog: folderDialog(),
   },
 });
+// the port as bound, which is the option's unless the environment picked 0 for a free one
+mcpPort = server.port ?? port;
 
 // every origin the shell can be loaded from: the injected bridge accepts commands from, and
 // reports to, these only. Behind an edge nothing is loopback, so the public name is the one.

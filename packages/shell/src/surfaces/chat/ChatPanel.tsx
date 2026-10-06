@@ -1,7 +1,7 @@
 import type { ArchivedWorktree, WorktreeStatus } from "@toyon/shared";
 import { useMemo } from "react";
 import { useDispatch, useStore, useStoreInstance } from "../../state/context.tsx";
-import { useActive, useActiveRepo, useDraft, useLocalField } from "../../state/selectors.ts";
+import { useActive, useActiveWorktreeRepo, useDraft, useLocalField } from "../../state/selectors.ts";
 import { Button } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { ArchivedNote } from "./ArchivedNote.tsx";
@@ -43,7 +43,8 @@ export function ChatPanel({
   // sent, and the row has not become the task yet: the choices are spent at the press, so their
   // row leaves then and the log grows into its place in one step, with the message at its foot
   const sending = useLocalField(active?.worktree.id, "sending");
-  const repo = useActiveRepo();
+  // the worktree's own project: the chat on screen is a guest's as often as the rail's
+  const repo = useActiveWorktreeRepo();
   // a project toyon opened on the chat without asking says what it went by, where the conversation
   // starts, with the way to say otherwise; a confirmed one was answered by the person and needs no line
   const assumed = placement === "centre" && !archived && repo?.assumed ? repo : null;

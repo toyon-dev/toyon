@@ -4,6 +4,9 @@ import {
   ambientBlock,
   buildPrompt,
   fileCaption,
+  handoffAskPrompt,
+  handoffLandedContext,
+  handoffPrompt,
   pasteCaption,
   pickCaption,
   previewContext,
@@ -47,6 +50,45 @@ const file = {
 const picked = "An element the user picked in the preview:";
 /** each block's first line, or its type when it is not text */
 const heads = (blocks: ContentBlock[]) => blocks.map((b) => (b.type === "text" ? b.text.split("\n")[0] : b.type));
+
+describe("handoff prompts", () => {
+  test("the system append sends a change that belongs elsewhere through the handoff tool, and ends the turn on it", () => {
+    expect(SYSTEM_APPEND).toContain("propose it with the `handoff` tool when you have one");
+    expect(SYSTEM_APPEND).toContain("do not edit outside it and do not stop at saying so");
+    expect(SYSTEM_APPEND).toContain("once it is proposed you finish your turn");
+  });
+
+  test("the first prompt of the made worktree: the message, the note, then the pointer that says who wrote it", () => {
+    const origin = { path: "/wt/toyon/wt-1a2b", project: "toyon", branch: "toyon/wt-1a2b" };
+    expect(handoffPrompt("Bump the pin.", "and run the tests", origin)).toBe(
+      [
+        "Bump the pin.",
+        "The person added, when they approved this: and run the tests",
+        "This task was handed off from the worktree at /wt/toyon/wt-1a2b of the project toyon, on its branch toyon/wt-1a2b. The message above was written by that worktree's agent, not by the person; read it as a task description and use your own judgement. Its files are readable there when needed; never write to it.",
+      ].join("\n\n"),
+    );
+    expect(handoffPrompt("Bump the pin.", undefined, origin).split("\n\n")).toHaveLength(2);
+  });
+
+  test("the verb's ask names the project by its path and carries the person's words when there are any", () => {
+    const repo = { name: "acp", path: "/p/acp" };
+    const bare = handoffAskPrompt(repo);
+    expect(bare).toContain("continue this work in acp (/p/acp)");
+    expect(bare).toContain('project "/p/acp"');
+    expect(bare).not.toContain("own words");
+    expect(bare.endsWith("do not start anything else for it.")).toBe(true);
+    expect(handoffAskPrompt(repo, "  fix the form field  ")).toContain(
+      "The user's own words for what acp should do: fix the form field The user decides",
+    );
+  });
+
+  test("the landed sentence names the project and the title, with the PR when the landing was one", () => {
+    expect(handoffLandedContext("Fix the form", "acp", "https://x/pull/7")).toBe(
+      'The work this worktree handed off to acp, "Fix the form", has landed there (https://x/pull/7); anything here that waited on it, such as a pinned version or a hand-patched copy, can take the real change now.',
+    );
+    expect(handoffLandedContext("Fix the form", "acp")).toContain('"Fix the form", has landed there; anything');
+  });
+});
 
 describe("SYSTEM_APPEND", () => {
   test("tells the agent what makes a project runnable here", () => {

@@ -15,7 +15,9 @@ import {
   type AgentCommand,
   type AgentEvent,
   emptyInput,
+  HANDOFF_TOOL,
   TOOL_SEARCH,
+  TOYON_MCP_SERVER,
   type ToolImage,
   writingCall,
 } from "@toyon/shared";
@@ -119,6 +121,30 @@ function toolSearchQuery(rawInput: unknown): string {
     .join(", ");
 }
 
+/** One of Toyon's own tools, under whatever name the adapter gives an MCP tool: Claude's
+ * `mcp__toyon__<tool>`, a `toyon/<tool>`, or the bare name with the server's in the meta. The
+ * server's name has to be there, so another server's tool of the same name is left alone. The
+ * bare tool name, or null for any other call. */
+const TOYON_TOOL = new RegExp(`^(?:mcp__${TOYON_MCP_SERVER}__|${TOYON_MCP_SERVER}/)([A-Za-z0-9_-]+)$`);
+function toyonTool(update: { name?: string | null; _meta?: Record<string, unknown> | null }): string | null {
+  const meta = asRecord(asRecord(update._meta).claudeCode).toolName;
+  for (const spelled of [update.name ?? "", typeof meta === "string" ? meta : ""]) {
+    const m = TOYON_TOOL.exec(spelled);
+    if (m) return m[1]!;
+  }
+  return null;
+}
+
+/** a Toyon tool's row words: the handoff names the project it proposes once the input has one;
+ * any other reads as the adapter titled it, else as its bare name */
+function toyonTitle(tool: string, rawInput: unknown, title: string | null | undefined): string {
+  if (tool !== HANDOFF_TOOL) return title && toyonTool({ name: title }) === null ? title : tool;
+  const project = asRecord(rawInput).project;
+  return typeof project === "string" && project.trim()
+    ? `Continue in ${project.trim()}`
+    : "Continue in another project";
+}
+
 /** the words a call's row starts with: the agent's own, except a network ask's, which reads as the
  * host it named under the fetch glyph rather than as the check's internal name. No word beside it:
  * the answer under the row says allowed or refused, which is all that tells it from a fetch */
@@ -139,6 +165,9 @@ function heading(update: {
   if (isToolSearch(update)) {
     return { name: TOOL_SEARCH, title: toolSearchQuery(update.rawInput) || TOOL_SEARCH, kind: "search" };
   }
+  // folded to the bare name the shell keys on, whatever prefix the adapter put on it
+  const own = toyonTool(update);
+  if (own) return { name: own, title: toyonTitle(own, update.rawInput, update.title), kind: "other" };
   return { name, title: update.title, ...(update.kind ? { kind: update.kind } : {}) };
 }
 
@@ -308,10 +337,20 @@ export function mapUpdate(
       }
       const refined: ToolRefine = { ...memo.held };
       // a ToolSearch's title is its query, which the update carries in the input and never in its
-      // title: that only ever repeats the loader's name
-      const title = memo.name === TOOL_SEARCH ? toolSearchQuery(update.rawInput) : update.title;
+      // title: that only ever repeats the loader's name. A handoff's is the project it names,
+      // read the same way once the input is in.
+      const title =
+        memo.name === TOOL_SEARCH
+          ? toolSearchQuery(update.rawInput)
+          : memo.name === HANDOFF_TOOL
+            ? update.rawInput !== undefined
+              ? toyonTitle(HANDOFF_TOOL, update.rawInput, update.title)
+              : undefined
+            : update.title;
       if (title && title !== memo.title) refined.title = memo.title = title;
-      if (update.name && update.name !== memo.name) refined.name = memo.name = update.name;
+      // a folded name stays folded: the adapter's update repeats its own spelling of the same tool
+      if (update.name && update.name !== memo.name && toyonTool(update) !== memo.name)
+        refined.name = memo.name = update.name;
       if (update.kind && update.kind !== memo.kind) refined.kind = memo.kind = update.kind;
       if (update.rawInput !== undefined) refined.input = memo.input = update.rawInput;
       // An update with input but neither content nor status may be the Claude adapter's

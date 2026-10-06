@@ -7,7 +7,7 @@ const planLine = PERMISSION_MODES.find((m) => m.id === "plan")?.description;
 
 describe("ownCommands", () => {
   test("one row per mode with the chip's line, then the seat's verbs", () => {
-    expect(own.map((c) => c.name)).toEqual(["auto", "ask", "plan", "check", "land", "archive"]);
+    expect(own.map((c) => c.name)).toEqual(["auto", "ask", "plan", "check", "land", "archive", "handoff"]);
     for (const m of PERMISSION_MODES) expect(own.find((c) => c.name === m.id)?.description).toBe(m.description);
     expect(own.find((c) => c.name === "land")?.description).toBe("Commit and merge into main here");
   });
@@ -15,6 +15,14 @@ describe("ownCommands", () => {
   test("a mode takes a description, so the inserted ghost has something to say", () => {
     expect(own.find((c) => c.name === "plan")?.hint).toBe("[<description>]");
     expect(own.find((c) => c.name === "archive")?.hint).toBeUndefined();
+  });
+
+  test("handoff names the project and takes the message after it", () => {
+    const row = own.find((c) => c.name === "handoff");
+    expect(row?.hint).toBe("<project> [<message>]");
+    expect(row?.description).toContain("another project");
+    expect(ownCommandOf("/handoff acp bump the pin", own)).toEqual({ name: "handoff", args: "acp bump the pin" });
+    expect(ownCommandOf("/handoff", own)).toEqual({ name: "handoff", args: "" });
   });
 
   test("check takes a note for the commit message; land and archive take nothing", () => {

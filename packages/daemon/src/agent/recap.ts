@@ -138,13 +138,16 @@ function countWrite(t: TurnSlice, writes: Set<string>, toolId: string, ev: Param
   t.edits++;
 }
 
-/** what the newest card nothing has closed is asking */
+/** what the newest card nothing has closed is asking. A handoff proposal is a card too: the
+ * person has Go and Not now in front of them, so the row and the jump chord treat it as an ask */
 export function openAskOf(entries: readonly TranscriptEntry[]): string | undefined {
   const open = new Map<string, string>();
   for (const { event: e } of entries) {
     if (e.type === "agent-question") open.set(e.id, e.message);
     else if (e.type === "agent-permission") open.set(e.id, e.title);
     else if (e.type === "agent-ask-end") open.delete(e.id);
+    else if (e.type === "handoff-proposed") open.set(e.id, `Continue in ${e.repo.name}?`);
+    else if (e.type === "handoff" || e.type === "handoff-declined") open.delete(e.id);
   }
   const last = [...open.values()].at(-1)?.trim();
   return last ? clip(last) : undefined;

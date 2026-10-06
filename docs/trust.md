@@ -12,6 +12,10 @@ Agents run confined. Everything a shell command spawns runs inside an OS sandbox
 
 Opening a repository in Toyon runs its setup and its dev server, and each agent runs what the repository configures for it, OpenCode's `.opencode/plugin` among them. Open the ones you trust.
 
+## Toyon's own tools
+
+Toyon serves its own tools to each agent over MCP, on the daemon's loopback address, behind a bearer minted for that one worktree's agent process. The bearer grants exactly those tools on that one chat and nothing else. It is made fresh each time the agent's process starts, lives in the daemon's memory only, is never written to disk or to a log, and dies with the process. Like Codex's token, it shows in the agent's own process arguments, where the adapter passes the server's address. The daemon's own token is a different secret and never opens this route. A tool that would change anything asks you first, on a card in the chat: the first tool, `handoff`, proposes continuing the work in another open project, and anything that can read the agent's arguments can propose such a card, which you then read in full, with the project and the permission mode named on it, and decline. A worktree made from a handoff starts in the same permission mode as the chat that proposed it, and its first message says another agent wrote it.
+
 ## Permission modes
 
 Each chat has a permission mode, shown next to the prompt. **auto**, the default, lets edits and sandboxed commands run and asks only when the agent proposes a plan. **ask** turns every edit and every command into a question in the message box before it runs. **plan** puts the agent in its read-only mode; the plan comes back as a question in the same box, and approving it chooses whether the work runs in auto or ask. Three versions can run in auto while the one touching your database runs in ask.

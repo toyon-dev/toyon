@@ -102,6 +102,34 @@ describe("buildCommands", () => {
     pair?.run();
     expect(actions).toEqual([{ a: "open", overlay: { kind: "pair" } }]);
   });
+  test("the handoff stays off the palette with one project open, and is on it with two", () => {
+    const ids = (s: CommandState) => buildCommands(s, () => {}, null, wt, repo).map((c) => c.id);
+    expect(ids(state)).not.toContain("wt:handoff");
+    const other = { ...repo, id: "r2", name: "acp", path: "/acp" } as RepoInfo;
+    expect(ids({ ...state, repos: [repo, other] })).toContain("wt:handoff");
+  });
+  test("a guest's switch row names its project, since the rail's mark does", () => {
+    const other = { ...repo, id: "r2", name: "acp", path: "/acp" } as RepoInfo;
+    const guest = {
+      ...wt,
+      id: "g",
+      repoId: "r2",
+      name: "bump the pin",
+      worktree: {
+        ...wt.worktree,
+        id: "g",
+        repoId: "r2",
+        title: "bump the pin",
+        from: { kind: "worktree", ref: "toyon/feature", origin: { id: "w1", repoId: "r" } },
+      },
+    } as unknown as OwnedWorktree;
+    const s = { ...state, repos: [repo, other], rows: [wt, guest], visible: [wt, guest] };
+    const labels = buildCommands(s, () => {}, null, wt, repo).map((c) => c.label);
+    expect(labels).toContain("switch to bump the pin in acp");
+    // the same row on its own project's rail is a plain switch
+    const own = { ...s, activeId: "g", activeRepoId: "r2", visible: [guest] };
+    expect(buildCommands(own, () => {}, null, wt, repo).map((c) => c.label)).toContain("switch to bump the pin");
+  });
   // the settings menu shows the theme rows as a group under a rule; the palette has no rules, so
   // the group is a word in front of each, and typing that word lists them all
   test("lists the whole theme cluster under its word", () => {

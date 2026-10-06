@@ -8,7 +8,7 @@ import { settingsItems } from "../../state/actions/settings.ts";
 import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
 import {
   useActive,
-  useActiveRepo,
+  useActiveWorktreeRepo,
   useBare,
   useChatCentred,
   useLocalField,
@@ -162,14 +162,17 @@ export function TopBar({ center }: { center: HTMLDivElement | null }) {
   );
 }
 
-/** Zed-style, beside the panel toggle at the bar's start: the project the shell is scoped to; opens the switcher
- * as a dropdown right under itself, so the list appears where the click already was. It carries no
- * mark for activity in other projects: beside the name, a mark reads as being about this project,
- * and the switcher's rows already say which project is working. */
+/** Zed-style, beside the panel toggle at the bar's start: the project of the worktree on screen,
+ * which is the rail's unless the row is a guest of this rail, when it names the guest's own; opens
+ * the switcher as a dropdown right under itself, so the list appears where the click already was.
+ * It carries no mark for activity in other projects: beside the name, a mark reads as being about
+ * this project, and the switcher's rows already say which project is working. */
 function ProjectPill() {
   const dispatch = useDispatch();
   const sock = useSock();
-  const repo = useActiveRepo();
+  const repo = useActiveWorktreeRepo();
+  // the menu's verbs act on the project named, and on a guest offer the switch to its own rail
+  const railRepoId = useStore((s) => s.activeRepoId);
   const repos = useStore((s) => s.repos);
   // the pill opens the switcher, so one level in is the switch itself, the roomier form the
   // switcher's folder button opens, and the open project's own verbs, the ones its row carries
@@ -189,7 +192,7 @@ function ProjectPill() {
           onClick: () => dispatch({ a: "open", overlay: { kind: "projects", form: "disk" } }),
         },
       ],
-      repo ? projectItems(repo, repo.id, { sock, dispatch }) : [],
+      repo ? projectItems(repo, railRepoId, { sock, dispatch }) : [],
     ]);
   // the other forms draw over the preview instead; this is only the panel that drops out of here
   const open = useStore((s) => s.overlay?.kind === "projects" && s.overlay.form === "pill");

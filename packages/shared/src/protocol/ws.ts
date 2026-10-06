@@ -838,6 +838,19 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   }),
   /** click one of the options on a permission card */
   z.object({ t: z.literal("agent-decide"), worktreeId: id, askId: z.string().max(64), choiceId: z.string().max(200) }),
+  /** answer a handoff card: go makes the worktree in the other project, with `note` added to the
+   * message the agent wrote; not go closes the card */
+  z.object({
+    t: z.literal("handoff-answer"),
+    worktreeId: id,
+    id: z.string().max(64),
+    go: z.boolean(),
+    note: z.string().max(5_000).optional(),
+  }),
+  /** the verb: continue this worktree's work in project `repoId`. `text` is the person's own words
+   * for what that project should do; the agent is asked to propose it when it has the tool, and
+   * the card is raised from the text alone when it has not */
+  z.object({ t: z.literal("handoff-ask"), worktreeId: id, repoId: id, text: prompt.optional() }),
   /** drop this agent's stored credential (ACP logout), whatever worktree it was logged in from */
   z.object({ t: z.literal("agent-logout"), agent: id }),
   /** settings: the files this agent reads and the MCP servers it will load, for the repo when given */

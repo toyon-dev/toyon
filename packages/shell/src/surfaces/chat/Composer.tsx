@@ -69,9 +69,11 @@ import {
 import { runLine, runOf, runTicking, useLastingRun } from "../runs.ts";
 import { chord, commandSource, folderList, pickLabel, procTrouble } from "../util.ts";
 import { AskBox } from "./AskBox.tsx";
-import { answerLines, askLine, answered as hasAnswer, openAsk, stoppedAsk } from "./ask.ts";
+import { answerLines, answered as hasAnswer, stoppedAsk } from "./ask.ts";
 import { ComposerOffer } from "./ComposerOffer.tsx";
 import { FileChip } from "./FileChip.tsx";
+import { HandoffCard } from "./HandoffCard.tsx";
+import { cardLine, openCard, parseHandoffArgs } from "./handoff.ts";
 import { ImageChip } from "./ImageChip.tsx";
 import { MentionText, openMention } from "./Mentions.tsx";
 import { filterCommands, insertAt, triggerAt } from "./mentions.ts";
@@ -203,9 +205,10 @@ export function Composer({
   const walk = mark?.by === "walk" ? mark : undefined;
   const chat = useLocalField(id, "chat");
   const queue = useLocalField(id, "queue");
-  // the agent's open question takes the box until it is answered, unless it was set aside with
-  // escape to write a message instead: then the plain box is back with a line offering it
-  const ask = useMemo(() => (id && !drafting ? openAsk(chat) : null), [id, drafting, chat]);
+  // the agent's open question, or a handoff proposed to the person, takes the box until it is
+  // answered, unless it was set aside with escape to write a message instead: then the plain box
+  // is back with a line offering it
+  const card = useMemo(() => (id && !drafting ? openCard(chat) : null), [id, drafting, chat]);
   const askParked = useLocalField(id, "askParked");
   // A question the turn was stopped under is still worth its answer, so it keeps the line a parked
   // one has, and from there the box, until a message is sent: the stop was meant, so the plain box
@@ -213,9 +216,9 @@ export function Composer({
   const sending = useLocalField(id, "sending");
   const stopped = useMemo(() => (id && !drafting && !sending ? stoppedAsk(chat) : null), [id, drafting, sending, chat]);
   const askRevived = useLocalField(id, "askRevived");
-  const revived = !ask && stopped && askRevived === stopped.id ? stopped : null;
-  const askUp = ask && askParked !== ask.id ? ask : revived;
-  const parked = ask ? (askParked === ask.id ? ask : null) : stopped && !revived ? stopped : null;
+  const revived = !card && stopped && askRevived === stopped.id ? stopped : null;
+  const askUp = card && askParked !== card.id ? card : revived;
+  const parked = card ? (askParked === card.id ? card : null) : stopped && !revived ? stopped : null;
   const askRef = useRef<HTMLDivElement>(null);
   const touch = useTouch();
   // the frame on screen: while drafting the lead's own preview, which is what the picker picks
@@ -242,6 +245,7 @@ export function Composer({
   );
   const setText = (t: string) => boxId && dispatch({ a: "set-draft", id: boxId, text: t });
   const clientId = useStore((s) => s.clientId);
+  const repos = useStore((s) => s.repos);
   const repo = useStore((s) => s.repos.find((r) => r.id === active?.worktree.repoId) ?? null);
   const defaultAgent = useStore((s) => s.defaultAgent);
   const agentChosen = useStore((s) => s.agentChosen);
@@ -762,8 +766,23 @@ export function Composer({
   const refuse = (text: string) => boxId && dispatch({ a: "notice", id: boxId, text });
   // the seat's verb by name. The seat only offers it from an empty box, so this reads the facts
   // under it rather than the seat, and says why when there is nothing for the word to do.
-  const runSeat = (name: "check" | "land" | "archive", args = "") => {
+  const runSeat = (name: "check" | "land" | "archive" | "handoff", args = "") => {
     if (!active || !id) return;
+    if (name === "handoff") {
+      // the other project's agent starts from this chat, and a worktree not yet made has none
+      if (spawning) return refuse("a new worktree has nothing to continue yet");
+      const parsed = parseHandoffArgs(args, repos, active.worktree.repoId);
+      if ("pick" in parsed) dispatch({ a: "open", overlay: { kind: "handoff", worktreeId: id } });
+      else if ("error" in parsed) refuse(parsed.error);
+      else
+        sock?.send({
+          t: "handoff-ask",
+          worktreeId: id,
+          repoId: parsed.repo.id,
+          ...(parsed.text ? { text: parsed.text } : {}),
+        });
+      return;
+    }
     if (name === "archive") {
       if (hasLanded || prClosed) archiveWorktrees(sock, dispatch, [id]);
       else refuse("archive is for a landed worktree; this one has not landed");
@@ -861,7 +880,7 @@ export function Composer({
     const typed = ownCommandOf(text, ownRows);
     const mode = typed && isMode(typed.name) ? typed.name : undefined;
     if (typed && !mode) {
-      runSeat(typed.name as "check" | "land" | "archive", typed.args);
+      runSeat(typed.name as "check" | "land" | "archive" | "handoff", typed.args);
       setText("");
       return;
     }
@@ -1050,11 +1069,15 @@ export function Composer({
           verb="answer"
           tip="Bring the question back into the box"
           onPress={() => {
-            dispatch(parked.outcome ? { a: "ask-revive", id, askId: parked.id } : { a: "ask-unpark", id });
+            dispatch(
+              parked.kind === "ask" && parked.outcome
+                ? { a: "ask-revive", id, askId: parked.id }
+                : { a: "ask-unpark", id },
+            );
             dispatch({ a: "focus-chat" });
           }}
         >
-          {askLine(parked)}
+          {cardLine(parked)}
         </ComposerOffer>
       )}
       {/* a command that failed and that Toyon did not hand to the agent on its own: the same shape,
@@ -1186,13 +1209,17 @@ export function Composer({
         />
       )}
       {askUp && id ? (
-        <AskBox
-          key={askUp.id}
-          item={askUp}
-          worktreeId={id}
-          rootRef={askRef}
-          onAnswer={revived ? answerStopped : undefined}
-        />
+        askUp.kind === "ask" ? (
+          <AskBox
+            key={askUp.id}
+            item={askUp}
+            worktreeId={id}
+            rootRef={askRef}
+            onAnswer={revived ? answerStopped : undefined}
+          />
+        ) : (
+          <HandoffCard key={askUp.id} item={askUp} worktreeId={id} rootRef={askRef} />
+        )
       ) : (
         <div className={cx("composer-field", shellCmd !== null && "shell", walk && "recalled")}>
           <TextArea

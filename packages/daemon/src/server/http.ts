@@ -19,7 +19,7 @@ import { isUploadKind } from "../agent/uploads.ts";
 import { UserError } from "../core/errors.ts";
 import { log } from "../core/log.ts";
 import type { PairCodes } from "../core/pair.ts";
-import { door, grantCookie, passPreview, previewGrant, sameSecret } from "../core/remote.ts";
+import { door, grantCookie, isLoopbackPeer, passPreview, previewGrant, sameSecret } from "../core/remote.ts";
 import type { Opened } from "../files/open.ts";
 import type { RepoRegistry } from "../repos/registry.ts";
 import type { PreviewData, PreviewHandler } from "../runtime/proxy.ts";
@@ -89,6 +89,8 @@ export interface HttpOpts {
   /** the chosen theme's grounds, for the manifest: the bar a phone draws above an installed shell
    * and the launch screen behind it */
   manifestColors: () => { bar: string; ground: string };
+  /** Toyon's own tools for a worktree's agent, over MCP (agent/mcp.ts); the bearer check is its own */
+  mcp: (req: Request, worktreeId: string) => Promise<Response>;
 }
 
 /** a year, and never revalidate: for a name that cannot mean different bytes later */
@@ -132,6 +134,18 @@ export function createFetch(opts: HttpOpts) {
     // Behind an edge, the platform's health check comes from inside its own network and names the
     // machine's address rather than the public name. /health carries nothing a caller could use.
     if (remote?.front === "edge" && url.pathname === "/health") return health();
+
+    // An agent on this machine calling Toyon's tools. It reaches the daemon by its loopback
+    // address in every mode, and behind an edge the door refuses a loopback name as someone
+    // guessing, so this route sits in front of it with a guard of its own: a loopback peer, and
+    // the per-worktree bearer checked inside.
+    if (url.pathname.startsWith("/mcp/")) {
+      const peer = srv.requestIP(req)?.address ?? "";
+      if (!isLoopbackPeer(peer)) return new Response("forbidden", { status: 403 });
+      const worktreeId = url.pathname.slice("/mcp/".length);
+      if (!worktreeId || worktreeId.includes("/")) return new Response("not found", { status: 404 });
+      return opts.mcp(req, worktreeId);
+    }
 
     const d = door(req, srv.requestIP(req)?.address ?? "", remote, "daemon");
     if (d.kind === "refused") return d.response;

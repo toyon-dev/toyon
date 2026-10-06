@@ -38,6 +38,10 @@ export const FOUND_LINE = "Not run by Toyon";
 /** what the lead's tap does, the verb the desk shows on hover */
 export const LEAD_LINE = "new worktree";
 
+/** the first line of a guest row's card: whose project the row is, and which row on this rail
+ * handed the work off to it, since the mark on the row says only the project */
+export const guestLine = (repoName: string, originTitle: string) => `in ${repoName}, started from ${originTitle}`;
+
 /** the dots that mean something is happening, or has broken, right now */
 const IN_FLIGHT: ReadonlySet<DotState> = new Set(["waiting", "working", "starting", "failed", "crashed"]);
 

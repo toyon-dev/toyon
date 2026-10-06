@@ -14,7 +14,7 @@ import { projectItems } from "../../state/actions/project.ts";
 import { settingsItems } from "../../state/actions/settings.ts";
 import { worktreeItems } from "../../state/actions/worktree.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
-import { type Action, isChatCentred, repoById, type State, worktreeById } from "../../state/store.ts";
+import { type Action, guestOf, isChatCentred, repoById, type State, worktreeById } from "../../state/store.ts";
 import { isItem, type MenuEntry } from "../../ui/menu.ts";
 import type { DaemonSocket } from "../../ws.ts";
 import { chord, rowLabel } from "../util.ts";
@@ -96,9 +96,12 @@ export function buildCommands(
   state.visible.forEach((w, i) => {
     if (w.worktree.id === id) return;
     const v = w.worktree.variant;
+    // a guest of this rail is another project's row: the line says whose, as the rail's mark does
+    const guest = state.activeRepoId && guestOf(w, state.activeRepoId, state.rows);
+    const whose = guest ? ` in ${state.repos.find((r) => r.id === w.repoId)?.name ?? w.repoId}` : "";
     add(
       `go:${w.worktree.id}`,
-      `switch to ${rowLabel(w, repo)}${v ? ` (v${v.index}/${v.of})` : ""}`,
+      `switch to ${rowLabel(w, repo)}${v ? ` (v${v.index}/${v.of})` : ""}${whose}`,
       () => dispatch({ a: "activate", id: w.worktree.id }),
       worktreeChord(i, state.visible.length),
     );

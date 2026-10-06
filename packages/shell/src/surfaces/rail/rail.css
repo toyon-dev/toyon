@@ -558,6 +558,11 @@
     /* where the line under a name starts: with the dot at the far end the name leads the row, and
        the mirrored block moves this past the dot's seat when the dot leads instead */
     --rail-say-l: 0px;
+    /* the ladder a rung up: a drawer's rows are scanned beside the work, and here they are the
+       work, read at arm's length with the line under each name a tier below it. At the desk's
+       tiers that line stood at the skip tier, 2.6:1 on the ground. */
+    --text1: var(--ink0);
+    --text2: var(--ink1);
     flex: 1;
     min-height: 0;
   }
@@ -656,7 +661,7 @@
     min-width: 3ch;
     text-align: right;
   }
-  /* the current row's edge is at the near edge on a phone, the left, whichever hand the chat is on:
+  /* a checked row's edge is at the near edge on a phone, the left, whichever hand the chat is on:
      the far edge the desk's marker rides is a drawer's, and a screen has none. Five classes, to
      outrank the mirrored block's four. */
   .app[data-chat-side] .rail.rail-screen .rail-item::before,

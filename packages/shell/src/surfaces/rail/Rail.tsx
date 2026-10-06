@@ -235,7 +235,7 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
         "row row-edge row-quiet rail-disc-item rail-arch-item",
         menu?.owner === "rail" && menu.key === a.id && "menu-open",
       )}
-      data-state={rowState({ current: archivedPage?.id === a.id })}
+      data-state={rowState({ current: !onScreen && archivedPage?.id === a.id })}
       {...tip(archivedState(a), undefined, {
         placement: tipSide,
         card: true,
@@ -339,8 +339,13 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
         key={id}
         type="button"
         className={cx("row row-edge", owned ? "rail-item" : "row-quiet rail-disc-item", menuOpen && "menu-open")}
-        // an archived worktree's page marks its own row, and the row underneath does not read as picked
-        data-state={rowState({ current: id === activeId && !archivedPage, checked: sel.includes(id) })}
+        // an archived worktree's page marks its own row, and the row underneath does not read as picked.
+        // A screen marks none: the mark says which worktree the pane beside the rail is showing, and
+        // the home screen is reached by leaving that worktree, with nothing beside it.
+        data-state={rowState({
+          current: !onScreen && id === activeId && !archivedPage,
+          checked: sel.includes(id),
+        })}
         // one tip per row, on the row: the dot's state in words with the dot restated beside it,
         // since the real one is at the far end of the row from where the tip sits. A tip per
         // element would swap fifty times as the mouse crosses the panel. Badges and the crashed

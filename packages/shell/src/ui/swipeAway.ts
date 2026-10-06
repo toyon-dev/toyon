@@ -71,10 +71,15 @@ export function useSwipeAway(box: RefObject<HTMLElement | null>, grip: string, o
     let samples: Sample[] = [];
     let timer = 0;
     const put = (y: number, state: "drag" | "settle" | "leave", ms?: number) => {
+      if (ms !== undefined) el.style.setProperty("--swipe-ms", `${ms}ms`);
+      if (el.dataset.swipe !== state) {
+        el.dataset.swipe = state;
+        // the state names the transition and the value is what it plays; written in one style
+        // update the move can land with no transition to play it, so the state is flushed first
+        void el.offsetWidth;
+      }
       el.style.setProperty("--swipe-y", `${y}px`);
       el.style.setProperty("--swipe-fade", `${Math.min(1, Math.abs(y) / (window.innerHeight / 2))}`);
-      if (ms !== undefined) el.style.setProperty("--swipe-ms", `${ms}ms`);
-      el.dataset.swipe = state;
     };
     const rest = () => {
       el.style.removeProperty("--swipe-y");

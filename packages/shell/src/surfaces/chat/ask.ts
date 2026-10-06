@@ -122,6 +122,18 @@ export function answerText(q: AskQuestion, a: AskAnswer | undefined): string {
   return note ? `${labels.join(", ")}: ${note}` : labels.join(", ");
 }
 
+/** the same answer in two lines, for the send page, where a note has a line of its own under the
+ * pick: run on after a colon it hid where the pick ended, and its own colons competed with the
+ * join. The first line names what the note is on: the picks, or for a typed answer the "other" row
+ * it was typed in, so the row reads the way it was answered. Nothing answered is the caller's. */
+export function answerParts(q: AskQuestion, a: AskAnswer | undefined): { pick: string; note?: string } {
+  const labels = (a?.selected ?? []).map((v) => stripRecommended(q.options.find((o) => o.value === v)?.label ?? v));
+  const note = a?.note?.trim() || undefined;
+  if (labels.length > 0) return note ? { pick: labels.join(", "), note } : { pick: labels.join(", ") };
+  if (note && q.note) return { pick: q.note.label, note };
+  return { pick: note ?? "skipped" };
+}
+
 /** what the person said, once an ask is answered: the transcript reads the exchange back as a
  * message pair, the agent's message and then this in the person's bubble. A lone question is its
  * answer alone; several are one line each, the header a label on its answer, since the agent

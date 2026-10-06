@@ -1584,8 +1584,9 @@
   .composer.stopping .ask-tabs .tabs-list {
     padding-right: 24px;
   }
-  /* the send page's rows: each question's answer read back after its header, and a press on the
-   row opens that question. Nothing is checked here, since the row is a way back, not a pick. */
+  /* the send page's rows: each question's pick read back after its header, a note under it on the
+   description line as it was typed, and a press on the row opens that question. Nothing is
+   checked here, since the row is a way back, not a pick. */
   .ask-sum {
     color: var(--text0);
     /* no cursor walks these rows, so the pointer's seat is theirs to draw */

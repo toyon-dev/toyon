@@ -5,6 +5,7 @@ import {
   advance,
   answeredQuestion,
   answerLines,
+  answerParts,
   answerText,
   askLine,
   canSubmit,
@@ -302,6 +303,19 @@ describe("answerText", () => {
     expect(answerText(one[0]!, undefined)).toBe("skipped");
     // the suffix was the box's badge, and the read-back is the label alone
     expect(answerText(q("a", ["Cookies (Recommended)"]), { selected: ["cookies (recommended)"] })).toBe("Cookies");
+  });
+});
+
+describe("answerParts", () => {
+  const own = q("auth", ["Cookies", "JWT"], { note: { label: "Something else" } });
+  test("the pick on its line and the note under it; a typed answer sits under the row it was typed in", () => {
+    expect(answerParts(own, { selected: ["cookies", "jwt"] })).toEqual({ pick: "Cookies, JWT" });
+    expect(answerParts(own, { selected: ["jwt"], note: " for now " })).toEqual({ pick: "JWT", note: "for now" });
+    expect(answerParts(own, { selected: ["jwt"], note: "  " })).toEqual({ pick: "JWT" });
+    expect(answerParts(own, { selected: [], note: "neither" })).toEqual({ pick: "Something else", note: "neither" });
+    expect(answerParts(one[0]!, { selected: [], note: "neither" })).toEqual({ pick: "neither" });
+    expect(answerParts(own, { selected: [] })).toEqual({ pick: "skipped" });
+    expect(answerParts(own, undefined)).toEqual({ pick: "skipped" });
   });
 });
 

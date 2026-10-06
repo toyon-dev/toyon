@@ -28,7 +28,7 @@ import {
   type AskItem,
   advance,
   answered,
-  answerText,
+  answerParts,
   canSubmit,
   choose,
   cursorFor,
@@ -526,7 +526,7 @@ function QuestionBody({
             </div>
             <div className="ask-options">
               {questions.map((qq, i) => {
-                const has = answered(draft[i]);
+                const parts = answered(draft[i]) ? answerParts(qq, draft[i]) : undefined;
                 return (
                   <button
                     key={qq.id}
@@ -540,8 +540,9 @@ function QuestionBody({
                     <Kbd k={String(i + 1)} className="ask-num row-dim" />
                     <span className="ask-label">
                       <span className="row-dim">{qq.header || `question ${i + 1}`}</span>{" "}
-                      <span className={cx(!has && "row-dim")}>{has ? answerText(qq, draft[i]) : "no answer yet"}</span>
+                      <span className={cx(!parts && "row-dim")}>{parts ? parts.pick : "no answer yet"}</span>
                     </span>
+                    {parts?.note && <span className="ask-desc">{parts.note}</span>}
                   </button>
                 );
               })}

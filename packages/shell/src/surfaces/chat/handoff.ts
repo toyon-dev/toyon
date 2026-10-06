@@ -26,20 +26,6 @@ export function cardLine(card: BoxCard): string {
   return card.kind === "ask" ? askLine(card) : `Continue in ${card.repo.name}?`;
 }
 
-/** past this many lines the message is folded, with the fold line saying how many there are */
-export const FOLD_LINES = 40;
-
-export function lineCount(message: string): number {
-  return message.split("\n").length;
-}
-
-/** The message is shown whole, since it is what the other project's agent starts from and the
- * person is the one gate on it. Only a long one folds, and never one holding a code fence: a
- * command hidden under a fold is the one thing the card exists to put in front of the person. */
-export function needsFold(message: string): boolean {
-  return lineCount(message) > FOLD_LINES && !/^\s*(```|~~~)/m.test(message);
-}
-
 /** the answer to the card: `note` rides with go alone, trimmed, and a blank one is left off */
 export function handoffAnswer(
   item: HandoffItem,

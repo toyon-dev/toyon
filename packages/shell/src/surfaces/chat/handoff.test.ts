@@ -1,15 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { RepoInfo } from "@toyon/shared";
 import type { ChatItem } from "../../state/store.ts";
-import {
-  cardLine,
-  FOLD_LINES,
-  type HandoffItem,
-  handoffAnswer,
-  needsFold,
-  openCard,
-  parseHandoffArgs,
-} from "./handoff.ts";
+import { cardLine, type HandoffItem, handoffAnswer, openCard, parseHandoffArgs } from "./handoff.ts";
 
 const repo = (id: string, name = id): RepoInfo => ({
   id,
@@ -54,18 +46,6 @@ describe("cardLine", () => {
   test("a handoff's line is the question its card asks; an ask keeps its own", () => {
     expect(cardLine(handoff())).toBe("Continue in acp?");
     expect(cardLine(ask("k1") as Extract<ChatItem, { kind: "ask" }>)).toBe("Which?");
-  });
-});
-
-describe("needsFold", () => {
-  const lines = (n: number) => Array.from({ length: n }, (_, i) => `line ${i}`).join("\n");
-  test("only a message past the fold's length folds", () => {
-    expect(needsFold(lines(FOLD_LINES))).toBe(false);
-    expect(needsFold(lines(FOLD_LINES + 1))).toBe(true);
-  });
-  test("a message holding a code fence never folds: a command must not hide under the fold", () => {
-    expect(needsFold(`${lines(FOLD_LINES + 1)}\n\`\`\`sh\nrm -rf /\n\`\`\``)).toBe(false);
-    expect(needsFold(`${lines(FOLD_LINES + 1)}\n~~~\nx\n~~~`)).toBe(false);
   });
 });
 

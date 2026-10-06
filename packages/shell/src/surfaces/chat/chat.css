@@ -1631,35 +1631,6 @@
       background: var(--ink1);
     }
   }
-  /* the handoff's message: what the other project's agent would start from, shown whole, since
-     the person is the one gate on it, so it grows with the box rather than scrolling inside it.
-     Only a long one folds (needsFold), to a height in rows, with the strip's floor fading over the
-     cut so the message reads as cut and not as ended; the line under it opens the rest. */
-  .handoff-detail {
-    margin-top: 8px;
-    padding: 8px 10px;
-    background: var(--sunken-floor);
-    border-radius: var(--radius);
-    /* the box a fenced block's copy control (.code-copy) is placed in */
-    position: relative;
-    &.folded {
-      max-height: calc(var(--row-height-sm) * 10);
-      overflow: hidden;
-      &::after {
-        content: "";
-        position: absolute;
-        inset: auto 0 0 0;
-        height: calc(var(--row-height-sm) * 2);
-        background: linear-gradient(to bottom, transparent, var(--sunken-floor));
-        pointer-events: none;
-      }
-    }
-  }
-  /* the fold's line sits under the message at its start, not stretched across the box */
-  .handoff-fold {
-    align-self: flex-start;
-    margin-top: 4px;
-  }
   /* ---- the ask in the transcript ----
      A permission's verdict, or a question closed with no answer, reads back in the quiet tier; a
      question the person answered is a message pair, the agent's prose and the person's bubble,

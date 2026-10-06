@@ -328,8 +328,8 @@ export function sameRun(a: ToolEntry[] | undefined, b: ToolEntry[] | undefined):
  * It stays open until the agent writes something else worth reading: its next words, or its next
  * thought. A call landing does not close it, since a call no longer puts anything in its place.
  * Any message ends the search, the one that started the turn included, so a thought from the turn
- * before is never reopened. A subagent's row is not a candidate: it opens on its own rule, while
- * the subagent runs, and its report is not the main agent's words. */
+ * before is never reopened. A subagent's row is not a candidate: it is a run of calls, folded like
+ * the main agent's own, and its report is not the main agent's words. */
 export function openRow(entries: ChatEntry[]): number {
   for (let i = entries.length - 1; i >= 0; i--) {
     const entry = entries[i]!;

@@ -621,11 +621,12 @@ export const ToolRow = memo(
     // The log decides which row opens itself, and it hands the row two answers: the turn's one
     // self-opening row (openRow in group.ts, reasoning only) and the newest `!` command, which is
     // open from the start because what it printed is the reason the person ran it. A subagent's
-    // row is the third case and decides for itself: open while its own call runs, since its rows
-    // are where the work is, and closed once that returns, when what it did is a line with a count
-    // and the message after it says what came of it. A background spawn's row stays closed while
-    // its subagent works: opening on each of its calls would flap the fold shut and open.
-    const auto = !!live || (!!run && alive);
+    // row is not a third case: its calls are tool calls like the main agent's own, which fold to a
+    // line, and the shine, the count ticking and the seconds beside it already say it is at work.
+    // Open, it listed twenty reads nobody asked to read, and folded them all at once when the
+    // subagent returned, under the words that say what came of it. A click pins it open for
+    // whoever wants to watch.
+    const auto = !!live;
     const text = toolLabel(head, roots);
     // the agent is still typing the call: the row says what it is typing, in the slot the path or
     // command will take, and the glyph alone names the kind, as on every row that has its detail

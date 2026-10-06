@@ -4,6 +4,7 @@
 
 import type { ShellToBridgeMsg, Theme } from "@toyon/shared";
 import { accentOf, contrastFg, themeToCssVars, toyonDark } from "@toyon/shared";
+import { frameNow } from "./app/phone.ts";
 import { STORAGE } from "./state/keys.ts";
 
 export function cachedTheme(): Theme {
@@ -22,8 +23,13 @@ export function applyTheme(theme: Theme, opts: { remember?: boolean } = {}) {
   for (const [k, v] of Object.entries(themeToCssVars(theme))) root.style.setProperty(k, v);
   root.style.colorScheme = theme.kind;
   root.dataset.theme = theme.kind;
-  // installed PWA (window-controls-overlay): the caption area takes this color
-  document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')?.setAttribute("content", theme.colors.surface1);
+  // What the platform paints above the page. An installed window's caption area (window-controls-
+  // overlay) is the bar's ground, which the bar runs into. A phone's status bar is the screen's
+  // ground: the phone frame paints the inset under it the same, so the two agree whichever one
+  // the platform shows. Read once per theme: the frame a phone draws never flips, and a desk
+  // window narrowed under the phone width keeps a caption area the bar's colour either way.
+  const above = frameNow() === "phone" ? theme.colors.surface0 : theme.colors.surface1;
+  document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')?.setAttribute("content", above);
   if (opts.remember === false) return;
   try {
     localStorage.setItem(STORAGE.theme, JSON.stringify(theme));

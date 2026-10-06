@@ -22,7 +22,13 @@
     --size-mono-sm: var(--size-mono-sm-phone);
     font: var(--type-ui);
     /* the strip of tabs under the bar's row, as a height: what hangs over a transcript's top */
-    --phone-strip: calc(var(--row-height-sm) + 10px);
+    --phone-strip: calc(var(--row-height-sm) + 6px);
+    /* A phone's top edge is under a notch or a status bar, and the window starts behind it. The
+       inset is the screen's ground and not the bar's: painted the bar's colour it joined the bar
+       into one band a third taller than the bar, with the name low in it, which read as a bar
+       that had been padded. On the ground, the status bar is the system's and the bar is the
+       strip under it. */
+    padding-top: env(safe-area-inset-top, 0px);
   }
 
   /* No pinch on the phone: the frame is already sized for the hand, and a stray second finger
@@ -58,9 +64,11 @@
     --tabs-strip: var(--sunken);
     --tabs-height: var(--row-height-sm);
   }
+  /* the foot's room is the row's own under the line above the control, so the control stands as
+     far from the bar's foot as from the name */
   .phone-tabs {
     flex-shrink: 0;
-    padding: 0 14px 10px;
+    padding: 0 14px 6px;
   }
   /* the same control in the bar's row, in the name's seat: over the app and the code always, and
      over a transcript while it is scrolled away from its end. The row is a row's height either
@@ -144,8 +152,6 @@
     z-index: 1;
     background: var(--surface1);
     border-bottom: 1px solid var(--border0);
-    /* a phone's top edge is under a notch or a status bar, and the window starts behind it */
-    padding-top: env(safe-area-inset-top, 0px);
   }
   .phone-bar-row {
     display: flex;
@@ -156,16 +162,6 @@
     /* a row's height at least; two lines of title (the name and its state) may take a little more */
     min-height: var(--row-height);
     padding: 4px 14px;
-  }
-  /* installed, the status bar above the strip is painted the strip's own colour (the manifest
-     says so), and the two read as one tall band with the name low in it. The row gives up its top
-     padding, and its floor comes down by the same so that a row holding the tabs instead of the
-     name is still the same height and the bar's foot stays put for the swap. */
-  @media (display-mode: standalone) {
-    .phone-bar-row {
-      padding-top: 0;
-      min-height: calc(var(--row-height) - 4px);
-    }
   }
 
   /* Two lines: what you are looking at, and its state under it, which is what the row's line said
@@ -209,8 +205,8 @@
     color: var(--accent);
   }
   /* the name as the project switcher, when there are projects to switch between: the same seat in
-     the bar, the button's own face and colour, and its box pulled back so the name starts where
-     the line under it does */
+     the bar, the name's own face inside the control, and the box pulled back so the name starts
+     where the line under it does */
   .phone-switch {
     max-width: 100%;
     margin-inline-start: -8px;

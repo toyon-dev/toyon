@@ -113,13 +113,16 @@ export function PhoneBar({
               // the desk pill's form: the switcher opens over the name that was tapped, not in the
               // middle of a screen the thumb is nowhere near
               <span className="phone-drop phone-switch">
+                {/* the name inside keeps the name's face, as the desk pill's does, so this row and
+                    a worktree's read as one bar: the control's own box at the compact size adds
+                    a pixel to the title, where the thumb size stood the name four lower and the
+                    row taller than the one a worktree gets */}
                 <Button
-                  size="md"
                   tone="chrome"
                   on={switching}
                   onClick={() => dispatch({ a: "toggle", overlay: { kind: "projects", form: "pill" } })}
                 >
-                  {title}
+                  <span className="phone-name">{title}</span>
                   <Icon name="caret" className="icon-inline" />
                 </Button>
                 {switching && <ProjectPicker form="pill" />}

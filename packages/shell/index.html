@@ -9,8 +9,10 @@
       name="viewport"
       content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content"
     />
-    <!-- the bar a phone or an installed window draws above the page: the dark theme's header
-         ground, the same literal as the manifest's, which is all some browsers ever read -->
+    <!-- the bar a phone or an installed window draws above the page, for the first paint: the dark
+         theme's header ground, the same literal as the manifest's, which is all some browsers ever
+         read. The theme applied at load sets it for the frame (theme.ts): the bar's ground on a
+         desk, the screen's on a phone. -->
     <meta name="theme-color" content="#3d3835" />
     <link rel="manifest" href="/manifest.json" />
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />

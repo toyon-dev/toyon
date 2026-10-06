@@ -65,8 +65,8 @@
     min-height: 0;
     display: flex;
     flex-direction: column;
-    /* the bar's tabs hang over the top of the log (phone.css) and go while it is scrolled away
-       from its end, so the log starts under them and whatever stands at its top stands clear of them */
+    /* the bar's name strip hangs over the top of the log (phone.css) and goes while it is scrolled
+       away from its end, so the log starts under it and whatever stands at its top stands clear of it */
     --log-cover: var(--phone-strip, 0px);
     & .chat-log {
       padding-top: calc(12px + var(--log-cover));

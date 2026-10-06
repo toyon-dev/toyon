@@ -24,14 +24,21 @@ import { ago, dotClass, shipLabel, shipShown } from "../util.ts";
 /**
  * The strip at the top of the phone. The list and a worktree are a master and its detail, so the
  * way between them is back, not tabs; a worktree's chat, app and changes are tabs within the
- * detail, under this bar. The plus stands in for the lead's row, which the screen does not list.
+ * detail, in this bar's row. The plus stands in for the lead's row, which the screen does not list.
+ *
+ * The row holds what is pressed, and never changes shape for a scroll or a tab: back, the three
+ * faces, the menu. What is read, the worktree's name and its state, stands in a strip under the
+ * row over the chat, and goes while the transcript is scrolled away from its end; the app and the
+ * code want the screen and say whose they are through the open tab, so they have no strip. The
+ * list has no tabs, and there the name takes the row.
  *
  * The line under a worktree's title is the row's line from the list (rowLine), in the same words,
  * so the screen reads as the row opened. The lead is the exception, as it is on the list: its name
  * is a directory nobody chose and a send replaces, so the title says what the page is for and the
- * line says which project the worktree will be made in. The count before the menu says what needs you; the rows
- * themselves never reorder for it, since the rail's order is a send's. The menu is the palette:
- * with no chords, every verb without a visible control is reachable only through it.
+ * line says which project the worktree will be made in. The count at the strip's end (or before
+ * the menu, on the list) says what needs you; the rows themselves never reorder for it, since the
+ * rail's order is a send's. The menu is the palette: with no chords, every verb without a visible
+ * control is reachable only through it.
  */
 export function PhoneBar({
   screen,
@@ -40,10 +47,10 @@ export function PhoneBar({
 }: {
   screen: "home" | "chat";
   tabs?: ReactNode;
-  /** The tabs sit in the row, in the name's seat, and the bar is that one row: for the app and the
-   * code, which want the screen and say whose they are themselves. A transcript folds the bar
-   * itself, while it is scrolled away from its end; there the tabs' own strip hangs over the top
-   * of the log instead of standing on it, so the fold moves no text under the thumb. */
+  /** The bar is its one row, with no strip under it: for the app and the code, and for a diff
+   * over any tab. A transcript folds the strip itself, while it is scrolled away from its end;
+   * the strip hangs over the top of the log instead of standing on it, so the fold moves no text
+   * under the thumb. */
   fold?: boolean;
 }) {
   const dispatch = useDispatch();
@@ -92,6 +99,47 @@ export function PhoneBar({
   const asks = !home && !archivedPage && !!active && dotClass(active) === "waiting";
   const switching = useStore((s) => s.overlay?.kind === "projects" && s.overlay.form === "pill");
   const commands = useStore((s) => s.overlay?.kind === "commands");
+  // the two lines: what you are looking at, and its state. In the row where there are no tabs
+  // (the list, or a worktree while the socket is down), in the strip under the row where there are
+  const titleBlock = (
+    <div className="phone-title">
+      {home && repos.length > 1 ? (
+        // the desk pill's form: the switcher opens over the name that was tapped, not in the
+        // middle of a screen the thumb is nowhere near
+        <span className="phone-drop phone-switch">
+          {/* the name inside keeps the name's face, as the desk pill's does, so this row and a
+              worktree's strip read as one name: the control's own box at the compact size adds a
+              pixel to the title, where the thumb size stood the name four lower and the row taller */}
+          <Button
+            tone="chrome"
+            on={switching}
+            onClick={() => dispatch({ a: "toggle", overlay: { kind: "projects", form: "pill" } })}
+          >
+            <span className="phone-name">{title}</span>
+            <Icon name="caret" className="icon-inline" />
+          </Button>
+          {switching && <ProjectPicker form="pill" />}
+        </span>
+      ) : (
+        <span className="phone-name">{title}</span>
+      )}
+      {line && <span className={cx("phone-sub", asks && "phone-sub-asks")}>{line}</span>}
+    </div>
+  );
+  // beside the name, wherever the name is: in the row the tabs would squeeze it out of their
+  // seat, and over the app and the code nothing says it, as nothing names the worktree there
+  const owedButton = owed && (
+    <Button
+      size="md"
+      tone="primary"
+      onClick={() => {
+        const to = unseenJump(visible, activeId, 1);
+        if (to) dispatch({ a: "activate", id: to.activate });
+      }}
+    >
+      {owed.n} {owed.tier}
+    </Button>
+  );
   return (
     <div className="phone-bar">
       <div className="phone-bar-row">
@@ -103,50 +151,8 @@ export function PhoneBar({
             onClick={() => dispatch({ a: "screen", to: "home" })}
           />
         )}
-        {/* folded, the row holds the tabs where the name was: the name is the one thing in the bar
-            that is only read, and by then it has been */}
-        {tabs && (fold || reading) ? (
-          <div className="phone-row-tabs">{tabs}</div>
-        ) : (
-          <div className="phone-title">
-            {home && repos.length > 1 ? (
-              // the desk pill's form: the switcher opens over the name that was tapped, not in the
-              // middle of a screen the thumb is nowhere near
-              <span className="phone-drop phone-switch">
-                {/* the name inside keeps the name's face, as the desk pill's does, so this row and
-                    a worktree's read as one bar: the control's own box at the compact size adds
-                    a pixel to the title, where the thumb size stood the name four lower and the
-                    row taller than the one a worktree gets */}
-                <Button
-                  tone="chrome"
-                  on={switching}
-                  onClick={() => dispatch({ a: "toggle", overlay: { kind: "projects", form: "pill" } })}
-                >
-                  <span className="phone-name">{title}</span>
-                  <Icon name="caret" className="icon-inline" />
-                </Button>
-                {switching && <ProjectPicker form="pill" />}
-              </span>
-            ) : (
-              <span className="phone-name">{title}</span>
-            )}
-            {line && <span className={cx("phone-sub", asks && "phone-sub-asks")}>{line}</span>}
-          </div>
-        )}
-        {/* over the app and the code the row is the tabs', and the count beside them squeezes the
-            three out of their seat; the list and the chat still say it */}
-        {owed && !fold && (
-          <Button
-            size="md"
-            tone="primary"
-            onClick={() => {
-              const to = unseenJump(visible, activeId, 1);
-              if (to) dispatch({ a: "activate", id: to.activate });
-            }}
-          >
-            {owed.n} {owed.tier}
-          </Button>
-        )}
+        {tabs ? <div className="phone-tabs">{tabs}</div> : titleBlock}
+        {!tabs && owedButton}
         {home && lead && (
           <IconButton
             icon="plus"
@@ -178,12 +184,15 @@ export function PhoneBar({
           )}
         </span>
       </div>
-      {/* the worktree's faces, in the header rather than under it: the bar's own edge then runs
-          under the control, and the control sits on the bar's ground, where a sunken track and a
-          raised pill are both a rung away from what they stand on */}
+      {/* the name and its state, under the row over the chat: the one part of the bar that is only
+          read, so the one part that may go while the reader is up in the log, and by then it has
+          been read */}
       {tabs && !fold && (
-        <div className="phone-tabs-seat" data-away={reading || undefined}>
-          <div className="phone-tabs">{tabs}</div>
+        <div className="phone-title-seat" data-away={reading || undefined}>
+          <div className="phone-title-strip">
+            {titleBlock}
+            {owedButton}
+          </div>
         </div>
       )}
     </div>

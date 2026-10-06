@@ -21,8 +21,10 @@
     --size-mono: var(--size-mono-phone);
     --size-mono-sm: var(--size-mono-sm-phone);
     font: var(--type-ui);
-    /* the strip of tabs under the bar's row, as a height: what hangs over a transcript's top */
-    --phone-strip: calc(var(--row-height-sm) + 6px);
+    /* the strip under the bar's row holding the name and its state, as a height: what hangs over
+       a transcript's top. A row's height, which two lines of text sit in with a little air, so
+       the strip and the row above it read as two equal bands of one bar. */
+    --phone-strip: var(--row-height);
     /* A phone's top edge is under a notch or a status bar, and the window starts behind it. The
        inset is the screen's ground and not the bar's: painted the bar's colour it joined the bar
        into one band a third taller than the bar, with the name low in it, which read as a bar
@@ -53,58 +55,36 @@
     min-width: 0;
   }
 
-  /* The worktree's three faces, one open, as a segmented control (Tabs.tsx) in the bar. Not a
-     joined strip: the changes face holds a strip of its own (changes, history, files), and a strip
-     over a strip read as the same thing twice. On the bar's ground the track is sunken and the pill
-     is the element tier, each a rung from the bar in its own direction, so which face is open is
-     one shape and not a shade of text. */
-  .phone-tabs,
-  .phone-row-tabs {
+  /* The worktree's three faces, one open, as a segmented control (Tabs.tsx) in the bar's row,
+     between back and the menu, on every face and at every scroll: the thumb finds them in one
+     place. Not a joined strip: the changes face holds a strip of its own (changes, history,
+     files), and a strip over a strip read as the same thing twice. On the bar's ground the track
+     is sunken and the pill is the element tier, each a rung from the bar in its own direction, so
+     which face is open is one shape and not a shade of text. */
+  .phone-tabs {
     --tabs-ground: var(--element1);
     --tabs-strip: var(--sunken);
     --tabs-height: var(--row-height-sm);
-  }
-  /* the foot's room is the row's own under the line above the control, so the control stands as
-     far from the bar's foot as from the name */
-  .phone-tabs {
-    flex-shrink: 0;
-    padding: 0 14px 6px;
-  }
-  /* the same control in the bar's row, in the name's seat: over the app and the code always, and
-     over a transcript while it is scrolled away from its end. The row is a row's height either
-     way, so the bar's foot does not move for the swap. */
-  .phone-row-tabs {
     flex: 1;
     min-width: 0;
-    transition: opacity 0.15s ease;
-    @starting-style {
-      opacity: 0;
-    }
   }
-  /* The strip is not in the bar's flow: it stands only over a transcript, hung from the bar's
-     foot over the top of the log, which is padded to clear it (chat.css), and slides up out of its
-     seat while the log is away from its end, when the row above takes the control in. Hung rather
-     than collapsed, because a bar that changed height would move the log's top edge, and every
-     line with it, under the thumb doing the scrolling. The seat starts on the bar's own rule and
-     the strip draws one at its foot, so the bar keeps one edge either way; the seat clips, so the
-     strip leaves at the bar's foot and never shows through the row above. Hidden once it has
-     gone, which takes it out of reach of a press and of the keyboard. */
-  .phone-tabs-seat {
+  /* The name and its state are not in the bar's flow: they stand only over a transcript, hung from
+     the bar's foot over the top of the log, which is padded to clear them (chat.css), and slide up
+     out of their seat while the log is away from its end. Hung rather than collapsed, because a
+     bar that changed height would move the log's top edge, and every line with it, under the
+     thumb doing the scrolling. The seat starts on the bar's own rule and the strip draws one at
+     its foot, so the bar keeps one edge either way; the seat clips, so the strip leaves at the
+     bar's foot and never shows through the row above. Hidden once it has gone, which takes the
+     count beside the name out of reach of a press and of the keyboard. */
+  .phone-title-seat {
     position: absolute;
     top: 100%;
     left: 0;
     right: 0;
     overflow: hidden;
-    & > .phone-tabs {
-      background: var(--surface1);
-      border-bottom: 1px solid var(--border0);
-      transition:
-        translate 0.15s ease,
-        visibility 0s;
-    }
     &[data-away] {
       pointer-events: none;
-      & > .phone-tabs {
+      & > .phone-title-strip {
         translate: 0 -100%;
         visibility: hidden;
         transition:
@@ -112,6 +92,20 @@
           visibility 0s 0.15s;
       }
     }
+  }
+  /* the strip's height is the one the log is padded by, so it is set and not measured: the two
+     lines sit centred in it, and the count that needs you at its end, in the row's own gutter */
+  .phone-title-strip {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    height: var(--phone-strip);
+    padding: 0 14px;
+    background: var(--surface1);
+    border-bottom: 1px solid var(--border0);
+    transition:
+      translate 0.15s ease,
+      visibility 0s;
   }
 
   /* the running app, in place: one frame, the column's width, on the centre's own ground. Hidden

@@ -1608,6 +1608,22 @@
       background: var(--ink1);
     }
   }
+  /* the command a yes would run, under the sentence that asked for it: the code face the call's
+     row shows it in once it ran, so the card and the row agree on what a command looks like. It
+     wraps rather than scrolls sideways, since a pipeline is read whole before it is let through,
+     and sits a tier under the sentence, which is the question. */
+  .ask-cmd {
+    max-height: 40vh;
+    overflow-y: auto;
+    margin: 8px 0 0;
+    padding: 6px 10px;
+    background: var(--sunken-floor);
+    border-radius: var(--radius);
+    font: var(--type-mono-sm);
+    color: var(--text1);
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
   /* what the agent proposes when no file was written for it: prose a person reads, and it can be
      long, so it scrolls in the box rather than the page */
   .ask-detail {

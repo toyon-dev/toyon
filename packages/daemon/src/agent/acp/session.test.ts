@@ -12,7 +12,7 @@ import type { AgentSpec } from "../registry.ts";
 import type { Bounds } from "../sandbox.ts";
 import { UploadStore } from "../uploads.ts";
 import { AUTH_STATUS_UPDATE_METHOD } from "./authstatus.ts";
-import { AcpSession, type AcpSessionDeps } from "./session.ts";
+import { AcpSession, type AcpSessionDeps, permissionParts } from "./session.ts";
 import { STEER_METHOD } from "./steering.ts";
 import type { AcpLink } from "./transport.ts";
 
@@ -2608,5 +2608,77 @@ describe("AcpSession process group", () => {
     expect(w.session.pgid).toBe(1001);
     expect(w.processes.at(-1)).toEqual([1000, false]);
     await w.session.close();
+  });
+});
+
+describe("permissionParts", () => {
+  const options: acp.PermissionOption[] = [{ optionId: "ok", name: "Yes", kind: "allow_once" }];
+  const request = (toolCall: acp.RequestPermissionRequest["toolCall"]): acp.RequestPermissionRequest => ({
+    sessionId: "s",
+    toolCall,
+    options,
+  });
+  const command = "cd pkg && ls | head";
+
+  test("a command's sentence is the title and the command goes apart, whichever the adapter made the title", () => {
+    // the command as the title, the sentence as content
+    expect(
+      permissionParts(
+        request({
+          toolCallId: "t1",
+          name: "Bash",
+          title: command,
+          kind: "execute",
+          rawInput: { command, description: "List the package" },
+          content: [{ type: "content", content: { type: "text", text: "List the package" } }],
+        }),
+      ),
+    ).toEqual({ title: "List the package", command });
+    // the sentence as the title, said again as content
+    expect(
+      permissionParts(
+        request({
+          toolCallId: "t1",
+          name: "Bash",
+          title: "List the package",
+          kind: "execute",
+          rawInput: { command },
+          content: [{ type: "content", content: { type: "text", text: "List the package" } }],
+        }),
+      ),
+    ).toEqual({ title: "List the package", command });
+  });
+
+  test("a command the agent wrote no sentence for is asked about in toyon's words", () => {
+    // the tool's bare name stands in for a title on such a request, and is not the question either
+    const parts = permissionParts(
+      request({ toolCallId: "t1", name: "Bash", title: "Bash", kind: "execute", rawInput: { command }, content: [] }),
+    );
+    expect(parts).toEqual({ title: "run this command?", command });
+  });
+
+  test("a plan and an edit read as before: the call's title over its markdown", () => {
+    expect(
+      permissionParts(
+        request({
+          toolCallId: "t1",
+          title: "Approve Plan",
+          kind: "switch_mode",
+          rawInput: { plan: "# the plan" },
+          content: [],
+        }),
+      ),
+    ).toEqual({ title: "Approve Plan", detail: "# the plan" });
+    expect(
+      permissionParts(
+        request({
+          toolCallId: "t1",
+          title: "Edit a.ts",
+          kind: "edit",
+          rawInput: { file_path: "a.ts" },
+          content: [{ type: "diff", path: "a.ts", oldText: "x", newText: "y" }],
+        }),
+      ),
+    ).toEqual({ title: "Edit a.ts", detail: "`a.ts`\n\n```\ny\n```" });
   });
 });

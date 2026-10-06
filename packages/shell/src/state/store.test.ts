@@ -685,9 +685,19 @@ describe("chat folding", () => {
       { id: "no", name: "No", kind: "reject_once" as const },
     ];
     const tool = agent("a", { type: "tool-start", toolId: "t1", name: "Bash", input: { command: "ls" } });
-    const ask = agent("a", { type: "agent-permission", id: "k1", title: "ls", choices, toolId: "t1", ts: 0 });
+    const ask = agent("a", {
+      type: "agent-permission",
+      id: "k1",
+      title: "List the files",
+      command: "ls",
+      choices,
+      toolId: "t1",
+      ts: 0,
+    });
     const open = run([hello(wt("a")), tool, ask]);
     expect(open.local.a?.chat.map((i) => i.kind)).toEqual(["tool", "ask"]);
+    // the sentence and the command reach the card apart, so it can set them in their own faces
+    expect(open.local.a?.chat[1]).toMatchObject({ ask: { title: "List the files", command: "ls" } });
     // the output has a row to land in, and the verdict would only say the command again
     let s = reducer(open, agent("a", { type: "agent-ask-end", id: "k1", outcome: "answered", choiceId: "ok", ts: 1 }));
     s = reducer(s, agent("a", { type: "tool-end", toolId: "t1", output: "a.txt", isError: false }));

@@ -48,6 +48,7 @@ import {
   walk,
 } from "./ask.ts";
 import { renderMarkdown } from "./markdown.ts";
+import { unwrapShell } from "./toolCall.ts";
 import { useCodeCopy } from "./useCodeCopy.tsx";
 
 type Root = RefObject<HTMLDivElement>;
@@ -619,6 +620,9 @@ function PermissionBody({
       <div className="ask-head">
         <div className="ask-text">{ask.title}</div>
       </div>
+      {/* the command a yes would run, under the sentence that asked for it, read the way the
+          call's row reads it: without the shell an adapter wrapped it in */}
+      {ask.command && <pre className="ask-cmd">{unwrapShell(ask.command)}</pre>}
       {html && (
         // the markup goes into a child of the detail so the detail keeps a child of its own beside it
         <div ref={detail} className="ask-detail md">

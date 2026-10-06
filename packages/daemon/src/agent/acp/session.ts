@@ -1143,7 +1143,8 @@ export class AcpSession implements AgentAdapter {
    * hold its request open until one is clicked */
   private async askPermission(params: acp.RequestPermissionRequest): Promise<acp.RequestPermissionResponse> {
     const plan = params.toolCall.kind === "switch_mode";
-    const detail = permissionDetail(params);
+    const parts = permissionParts(params);
+    const detail = parts.detail ?? "";
     // the document is written before the card goes out, so the card names a file that is already
     // there to open; a worktree that would not take it leaves the plan on the card
     const planPath = plan ? ((await this.d.onPlan?.(detail)) ?? null) : null;
@@ -1156,7 +1157,8 @@ export class AcpSession implements AgentAdapter {
       (id) => ({
         type: "agent-permission",
         id,
-        title: params.toolCall.title ?? params.toolCall.name ?? "the agent needs a decision",
+        title: parts.title,
+        ...(parts.command ? { command: parts.command } : {}),
         ...(detail ? { detail } : {}),
         ...(planPath ? { plan: planPath } : {}),
         choices,
@@ -1358,26 +1360,61 @@ function isAuthRequired(e: unknown): boolean {
 /** how many lines of a proposed file the card shows before it cuts */
 const DETAIL_LINES = 80;
 
-/** What the card shows under its title: a plan's markdown, an edit's diff, a command's line. The
- * two agents put the plan in different places (Claude's ExitPlanMode renders it as a text content
- * block, Codex's plan review sends only rawInput.plan), and an edit arrives as a diff block whose
- * new text is what a person has to read to say yes. */
-export function permissionDetail(params: acp.RequestPermissionRequest): string {
-  const parts: string[] = [];
-  for (const c of params.toolCall.content ?? []) {
-    if (c.type === "content" && c.content.type === "text") parts.push(c.content.text);
+/** what the card is made of: a title that is always prose, the command a yes would run, and
+ * markdown for what is neither (a plan, an edit's diff) */
+export interface PermissionParts {
+  title: string;
+  command?: string;
+  detail?: string;
+}
+
+function stringField(raw: unknown, key: string): string | undefined {
+  const v = raw && typeof raw === "object" ? (raw as Record<string, unknown>)[key] : undefined;
+  return typeof v === "string" && v.trim() ? v : undefined;
+}
+
+/** The two agents put the plan in different places (Claude's ExitPlanMode renders it as a text
+ * content block, Codex's plan review sends only rawInput.plan), and an edit arrives as a diff block
+ * whose new text is what a person has to read to say yes. A command's request names the command
+ * and the agent's sentence for it in different places too, and which of the two is the title has
+ * changed between adapter versions; the input is where both are stable, so the command is read
+ * from there and the sentence is the input's description, else whichever text the request carries
+ * that is not the command. The card's title is the sentence, so a four-line pipeline is never what
+ * a person reads as the question, and the command goes apart for the code face. */
+export function permissionParts(params: acp.RequestPermissionRequest): PermissionParts {
+  const { toolCall } = params;
+  const parts: { text: boolean; md: string }[] = [];
+  for (const c of toolCall.content ?? []) {
+    if (c.type === "content" && c.content.type === "text") parts.push({ text: true, md: c.content.text });
     else if (c.type === "diff") {
       const lines = c.newText.split("\n");
       const shown = lines.slice(0, DETAIL_LINES).join("\n");
       const more = lines.length > DETAIL_LINES ? `\n… ${lines.length - DETAIL_LINES} more lines` : "";
-      parts.push(`\`${c.path}\`\n\n\`\`\`\n${shown}${more}\n\`\`\``);
+      parts.push({ text: false, md: `\`${c.path}\`\n\n\`\`\`\n${shown}${more}\n\`\`\`` });
     }
   }
-  if (parts.length > 0) return parts.join("\n\n");
-  const raw = params.toolCall.rawInput as { plan?: unknown; command?: unknown } | undefined;
-  if (typeof raw?.plan === "string") return raw.plan;
-  if (typeof raw?.command === "string") return `\`\`\`sh\n${raw.command}\n\`\`\``;
-  return "";
+  const raw = toolCall.rawInput;
+  const command = stringField(raw, "command");
+  if (!command) {
+    const detail = parts.map((p) => p.md).join("\n\n") || stringField(raw, "plan") || "";
+    return { title: toolCall.title ?? toolCall.name ?? "the agent needs a decision", ...(detail ? { detail } : {}) };
+  }
+  const same = (a: string, b: string) => a.trim() === b.trim();
+  // never the command itself, and never the tool's bare name, which an adapter sends as the title
+  // when the agent wrote no sentence
+  const prose = (s: string | undefined) => (s && !same(s, command) && s !== toolCall.name ? s : undefined);
+  const title =
+    stringField(raw, "description") ??
+    parts.find((p) => p.text && prose(p.md))?.md ??
+    prose(toolCall.title ?? undefined) ??
+    "run this command?";
+  // the sentence and the command have their own places on the card; a text that repeats either
+  // is not detail
+  const detail = parts
+    .filter((p) => !(p.text && (same(p.md, title) || same(p.md, command))))
+    .map((p) => p.md)
+    .join("\n\n");
+  return { title, command, ...(detail ? { detail } : {}) };
 }
 
 /** ACP's auth_required code means "no credential"; a credential the provider rejected has no code

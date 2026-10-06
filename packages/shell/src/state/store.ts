@@ -150,7 +150,7 @@ export type ChatItem =
       id: string;
       ask:
         | { kind: "question"; message: string; questions: AskQuestion[] }
-        | { kind: "permission"; title: string; detail?: string; plan?: string; choices: AskChoice[] };
+        | { kind: "permission"; title: string; command?: string; detail?: string; plan?: string; choices: AskChoice[] };
       /** the row of the call a permission gates, which stays in the log to show what the call did */
       toolId?: string;
       outcome?: AskOutcome;
@@ -2825,6 +2825,7 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
         ask: {
           kind: "permission",
           title: event.title,
+          ...(event.command ? { command: event.command } : {}),
           ...(event.detail ? { detail: event.detail } : {}),
           ...(event.plan ? { plan: event.plan } : {}),
           choices: event.choices,

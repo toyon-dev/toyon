@@ -175,8 +175,10 @@
     /* a row: the control column at the far edge, 16px at the near */
     --rail-pad-l: var(--rail-gut);
     --rail-pad-r: 16px;
-    /* the dot's inset from the counts: its centre lands 20px from the near edge */
-    --rail-dot-ml: 12px;
+    /* the dot's inset from the counts: with the row's 8px gap it is the 16px the padding gives the
+       dot on its other side, so the dot sits at the centre of the strip with the same room each
+       way and the name starts on the strip's far edge */
+    --rail-dot-ml: 8px;
     /* lengths, never a bare 0: the lock and the clock take 2.5px off these inside calc(), where a
        unitless 0 is invalid and the margin silently falls back to 0 */
     --rail-dot-mr: 0px;
@@ -506,7 +508,7 @@
     --rail-pad-l: 16px;
     --rail-pad-r: var(--rail-gut);
     --rail-dot-ml: 0px;
-    --rail-dot-mr: 12px;
+    --rail-dot-mr: 8px;
     /* on a screen, the line under a name starts where the name does, and here the dot's seat is in
        front of it: the dot's 8px, its margin, and the row's 8px gap */
     --rail-say-l: calc(8px + var(--rail-dot-mr) + 8px);
@@ -572,14 +574,6 @@
    showed as a hairline down the edge of the screen. */
   .app[data-chat-side] .rail.rail-screen .rail-panel {
     border-inline: 0;
-  }
-  /* The dot leads every row on a screen (PhoneFrame pins the hand), with the screen's one inset
-     on both of its sides: 16px off the edge, and 16px to the name, which the mirrored block's
-     12px margin and the row's 8px gap would make 20. The name then starts at 40, and the line
-     under it with it, through --rail-say-l, which reads this margin. Four classes, to outrank the
-     mirrored block's three. */
-  .app[data-chat-side] .rail.rail-screen {
-    --rail-dot-mr: 8px;
   }
   /* an archived row's blank seat is a row with something missing on a phone, where there is no hover
      to say what the blank means: the ring says it, a worktree doing nothing, the same mark a found

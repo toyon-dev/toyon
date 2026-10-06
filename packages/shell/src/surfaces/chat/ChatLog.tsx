@@ -200,15 +200,19 @@ export function ChatLog({
   useOnChange([id], () => follow.jump());
   const upSeg = follow.offStart && follow.moving === "up";
   const downSeg = follow.offEnd && (follow.moving === "down" || follow.away);
+  // A press on a segment keeps the caret where it is. On a phone the pill is tapped with the
+  // keyboard up, and a press that moved focus to the button would drop it: the log grows by the
+  // keyboard's height under the finger, and the tap is spent on that instead of the jump.
+  const keepCaret = (e: React.MouseEvent) => e.preventDefault();
   const jump = (upSeg || downSeg) && (
     <div className={cx("jump", follow.away && "jump-news")}>
       {upSeg && (
-        <button className="jump-up" onClick={follow.start} data-tip="Jump to start">
+        <button className="jump-up" onMouseDown={keepCaret} onClick={follow.start} data-tip="Jump to start">
           <Icon name="caret-up" className="icon-inline" />
         </button>
       )}
       {downSeg && (
-        <button className="jump-down" onClick={follow.jump} data-tip="Jump to latest">
+        <button className="jump-down" onMouseDown={keepCaret} onClick={follow.jump} data-tip="Jump to latest">
           <Icon name="caret" className="icon-inline" />
           {follow.away && " new messages"}
         </button>

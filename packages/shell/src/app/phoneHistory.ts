@@ -84,13 +84,19 @@ export function installPhoneHistory(
     return null;
   };
 
+  // walks this module asked for whose popstate has not come yet
+  let walks = 0;
+
   const sync = () => {
     const screens = depthOf(store.getState());
     if (screens === null) return;
     const want = screens + (topBox() ? 1 : 0);
     if (want === at) return;
     if (want > at) for (let d = at + 1; d <= want; d++) h.pushState({ [KEY]: d, [OVER]: d > screens }, "");
-    else h.go(want - at);
+    else {
+      h.go(want - at);
+      walks++;
+    }
     at = want;
   };
 
@@ -109,6 +115,8 @@ export function installPhoneHistory(
   };
 
   const onPop = (e: PopStateEvent) => {
+    const ours = walks > 0;
+    if (ours) walks--;
     at = depthIn(e.state) ?? 0;
     const s = store.getState();
     const screens = depthOf(s);
@@ -127,7 +135,11 @@ export function installPhoneHistory(
       // back: the diff shuts onto the tab under it (a move to the tab already open does that),
       // and below a worktree is the list
       store.dispatch(at === 0 ? { a: "screen", to: "home" } : { a: "screen", to: s.screen });
-    } else if (now === 0 && s.activeId && !isOver(e.state)) {
+    } else if (ours && walks > 0) {
+      // the first of two walks down (a box that closed as the screen under it dropped a level)
+      // lands above where the screen is, which is what forward looks like; the second is coming
+      return;
+    } else if (!ours && now === 0 && s.activeId && !isOver(e.state)) {
       // forward from the list into the row it came back from; a diff above that is not
       // remembered, and neither is a box, so the sync below walks the entry for either back down
       store.dispatch({ a: "screen", to: "chat" });

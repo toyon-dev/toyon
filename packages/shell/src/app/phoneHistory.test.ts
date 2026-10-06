@@ -305,4 +305,21 @@ describe("phone history", () => {
     t.settle();
     expect(t.index()).toBe(0);
   });
+
+  test("a box closing as its screen drops a level never shows the screen again", async () => {
+    const { store } = storeOf(phone({ screen: "chat" }));
+    const t = tab();
+    const f = stack();
+    installPhoneHistory(store, t.host, f.boxes);
+    const box = f.open();
+    await commit();
+    const seen: string[] = [];
+    store.subscribe(() => seen.push(store.getState().screen));
+    store.dispatch({ a: "screen", to: "home" });
+    f.close(box);
+    await commit();
+    t.settle();
+    expect(seen).toEqual(["home"]);
+    expect(t.index()).toBe(0);
+  });
 });

@@ -58,7 +58,7 @@
      measure is the window, since at 390px the centre's padding would take a gutter from a line
      that has none to give.
 
-     The box has no floor of its own here: the field's two lines are it, the on-screen keyboard
+     The box has no floor of its own here: the field's three lines are it, the on-screen keyboard
      takes the rest and the transcript gives way to it. */
   .chat-screen {
     flex: 1;
@@ -106,12 +106,13 @@
         background: var(--surface0);
       }
       /* the dock's five-line floor is a desk's: under a keyboard it left the transcript a strip.
-         Here the field is as tall as what is typed, from two lines to eight, and scrolls past that,
-         so the room goes to the log until the message asks for it. A browser without field-sizing
-         keeps the two lines and scrolls. */
+         Here the field is as tall as what is typed, from three lines to eight, and scrolls past that,
+         so the room goes to the log until the message asks for it. Three and not two, because the
+         suggestion drawn in an empty box wraps to two and would fill it edge to edge. A browser
+         without field-sizing keeps the three lines and scrolls. */
       & .composer-field textarea {
         field-sizing: content;
-        min-height: 2lh;
+        min-height: 3lh;
         max-height: 8lh;
       }
     }

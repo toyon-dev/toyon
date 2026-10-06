@@ -1074,8 +1074,11 @@ export const ChatItemView = memo(function ChatItemView({
         </DaemonRow>
       );
     case "asked":
+      // the row is Toyon's message to the agent, not the agent's: the glyph is the one the composer
+      // sends with, and the word says the ask happened, since this row stands in for the offer
+      // button on the failed row above it
       return (
-        <DaemonRow icon="chat" word="agent asked" tone="quiet">
+        <DaemonRow icon="send" word="asked" tone="quiet">
           <span className="daemon-text">{item.why}</span>
         </DaemonRow>
       );

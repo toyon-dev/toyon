@@ -1940,7 +1940,14 @@ function reduce(s: State, action: Action): State {
     case "screen":
       // the diff a file opens as lies over whichever tab it came from, so any tab, the one under
       // it included, and the way back are all a way out of it
-      return s.screen === action.to && !s.editor ? s : { ...s, screen: action.to, editor: null };
+      if (s.screen === action.to && !s.editor) return s;
+      // the code tab is reached to read the work, so arriving at it lands on the changes; the tree
+      // and the history are a tap away, and a diff closed over the tab leaves it where it was
+      return {
+        ...(action.to === "changes" && s.screen !== "changes" ? withLayout(s, { changesTab: "changes" }) : s),
+        screen: action.to,
+        editor: null,
+      };
     case "frame": {
       if (s.frame === action.v) return s;
       const next = { ...s, frame: action.v };

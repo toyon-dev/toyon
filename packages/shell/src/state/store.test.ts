@@ -218,6 +218,15 @@ describe("the phone's screen", () => {
     expect(run([worktrees(wt("main", "main"), wt("a"))], s).screen).toBe("home");
   });
 
+  test("arriving at the code tab lands on the changes, and a diff closed over it leaves its tab alone", () => {
+    const at = run([hello(wt("main", "main"), wt("a")), { a: "activate", id: "a" }]);
+    expect(at.layout.changesTab).toBe("files");
+    const code = run([{ a: "screen", to: "changes" }], at);
+    expect(code.layout.changesTab).toBe("changes");
+    const over = run([{ a: "changes-tab", v: "history" }, opening({ path: "x.ts", seq: 1 })], code);
+    expect(run([{ a: "screen", to: "changes" }], over).layout.changesTab).toBe("history");
+  });
+
   test("a tab or the way back closes the diff over the screen, the tab under it included", () => {
     const open = run([
       hello(wt("main", "main"), wt("a")),

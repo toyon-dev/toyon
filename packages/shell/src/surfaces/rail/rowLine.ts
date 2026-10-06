@@ -64,9 +64,11 @@ export function rowLine(w: WorktreeStatus, ctx: RowContext): string {
   const state = stateLabel(w, ctx.needsSetup);
   const turn = w.worktree.lastTurn;
   // a recap carries its own time ("Finished 4h ago.") or is the agent's sentence, which the time
-  // would trail after a clamp; the state is a word, and the time is what makes it a line
+  // would trail after a clamp; the state is a word, and the time is what makes it a line. Under a
+  // minute the time is "now", and beside a state that is happening now it says nothing: the rail
+  // keeps it there because its column reads down an edge, but in a line it is the word again.
   if (!IN_FLIGHT.has(dotClass(w)) && turn) return recapLine(turn);
-  return ctx.at ? `${state} · ${ctx.at}` : state;
+  return ctx.at && ctx.at !== "now" ? `${state} · ${ctx.at}` : state;
 }
 
 /**

@@ -62,6 +62,8 @@ describe("the line under a row's name", () => {
   test("the time since the last send follows a state, which is a word; a recap carries its own", () => {
     expect(rowLine(owned({ agent: "working" }), ctx({ at: "4m" }))).toBe("Agent working · 4m");
     expect(rowLine(owned(), ctx({ at: "2d" }))).toBe("Idle · 2d");
+    // a send under a minute ago is "now", which beside a live state is the state said twice
+    expect(rowLine(owned({ agent: "working" }), ctx({ at: "now" }))).toBe("Agent working");
     const turn = { ...done, recap: { at: 2, text: "Dropped the second handler" } };
     expect(rowLine(owned({}, { lastTurn: turn }), ctx({ at: "4m" }))).toBe("Dropped the second handler.");
     // never on the lead (it is never sent to) or a found row (nobody sent there); the caller knows

@@ -11,7 +11,7 @@ import {
   SHELL_TOOL,
   type WorktreeStatus,
 } from "@toyon/shared";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type ComponentProps, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { previewBus } from "../../app/previewBus.ts";
 import { takeBackQueued } from "../../state/attach.ts";
 import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
@@ -31,12 +31,14 @@ import { elapsed, isBusy, pickLabel } from "../util.ts";
 import { ChatItemView, QUIET_AFTER, ThoughtRow, ToolRow } from "./ChatItemView.tsx";
 import { FileChip } from "./FileChip.tsx";
 import {
+  type ChatEntry,
   groupTools,
   indexOfSeq,
   openRow,
   ownCallRunning,
   placeSpawns,
   queuedRows,
+  reuseEntries,
   runningRow,
   spawnsAtWork,
 } from "./group.ts";
@@ -45,6 +47,7 @@ import { ImageChip } from "./ImageChip.tsx";
 import { PasteChip } from "./PasteChip.tsx";
 import { PickChip } from "./PickChip.tsx";
 import { isBlank } from "./recall.ts";
+import { cachedRows, type RowCache } from "./rowCache.ts";
 import { chatPanel } from "./useIntake.ts";
 
 /** the panel the log sits in, whichever placement mounted it: ⌘F from the composer under the log
@@ -113,6 +116,12 @@ function QueuedChips({
 
 /** no spawn at work: one frozen set, so a turn that is over keys the same placement every render */
 const NONE: ReadonlySet<string> = new Set();
+
+/** a row of the log: which component draws it, with what (rowCache.ts) */
+type LogRow =
+  | { kind: "tool"; props: ComponentProps<typeof ToolRow> }
+  | { kind: "thought"; props: ComponentProps<typeof ThoughtRow> }
+  | { kind: "item"; props: ComponentProps<typeof ChatItemView> };
 
 /** how far up from the end a phone's bars fold: more than the height a composer gives the log as
  * it folds, with the tail's own slack to spare, so the fold never puts the reader on the end */
@@ -328,7 +337,17 @@ export function ChatLog({
   // when closed, so a fan-out of three says which one is slow. Nothing floats once the turn is over:
   // a turn that ended on a subagent's call would otherwise hold its row at the foot for good.
   const atWork = useMemo(() => (busy ? spawnsAtWork(items) : NONE), [busy, items]);
-  const { flow: entries, floating } = useMemo(() => placeSpawns(grouped, atWork), [grouped, atWork]);
+  const placed = useMemo(() => placeSpawns(grouped, atWork), [grouped, atWork]);
+  const floating = placed.floating;
+  // a row that prints the same as last render is last render's entry (reuseEntries), which is what
+  // lets the row cache below hand React the element it had; the array itself holds when every row
+  // did, and so does everything read off it below. Kept across renders in a ref: it is this
+  // render's own output, so the write is safe to repeat.
+  const lastFlow = useRef<ChatEntry[]>([]);
+  const entries = useMemo(() => {
+    lastFlow.current = reuseEntries(lastFlow.current, placed.flow);
+    return lastFlow.current;
+  }, [placed]);
   // the one row that opens itself while the agent runs; everything else in the turn is a line.
   // A turn stopped on a question is still the turn: the thought before the ask stays open while
   // the box waits, since it is the case the question is made from.
@@ -387,46 +406,63 @@ export function ChatLog({
   // every switch of worktree, so a clock of its own would start over)
   const running = useLocalField(id, "running");
 
+  // The rows: last render's element wherever the row gets the same props (rowCache.ts), so a token
+  // streaming into the foot of a long log costs the rows above it nothing. `worktreeId` is among
+  // every row's props, so another worktree's row under the same number is never handed over. The
+  // cache is written during render because it is this render's own output: an element is a pure
+  // function of its props, so a render React threw away leaves nothing in it that the next one
+  // could not have made itself.
+  const fileRoot = active?.worktree.path;
+  const rowOf = (entry: ChatEntry, i: number): LogRow =>
+    "spawn" in entry
+      ? { kind: "tool", props: { tools: [entry.spawn], run: entry.run, roots, worktreeId: id } }
+      : "tools" in entry
+        ? {
+            kind: "tool",
+            props: {
+              tools: entry.tools,
+              next: entry.next,
+              live: i === liveRow || i === newestShell,
+              since: i === countingRow ? running?.at : undefined,
+              queued: queued.has(i),
+              roots,
+              worktreeId: id,
+              // a `!` command is never grouped, so the walk's index is the row's own
+              marked: entry.at === markAt,
+            },
+          }
+        : entry.item.kind === "thinking"
+          ? {
+              kind: "thought",
+              props: { item: entry.item, open: i === liveRow, streaming: i === streaming, worktreeId: id, fileRoot },
+            }
+          : {
+              kind: "item",
+              props: {
+                item: entry.item,
+                worktreeId: id,
+                onPickHover,
+                marked: entry.at === markAt,
+                streaming: working && i === entries.length - 1,
+              },
+            };
+  const rowCache = useRef<RowCache<LogRow>>(new Map());
+  const cached = cachedRows(rowCache.current, entries, rowOf, (entry, row) =>
+    row.kind === "tool" ? (
+      <ToolRow key={entry.at} {...row.props} />
+    ) : row.kind === "thought" ? (
+      <ThoughtRow key={entry.at} {...row.props} />
+    ) : (
+      <ChatItemView key={entry.at} {...row.props} />
+    ),
+  );
+  rowCache.current = cached.cache;
+
   return (
     <div className="chat-wrap">
       <div className="chat-log" ref={logRef}>
         {lead}
-        {entries.map((entry, i) =>
-          "spawn" in entry ? (
-            <ToolRow key={entry.at} tools={[entry.spawn]} run={entry.run} roots={roots} worktreeId={id} />
-          ) : "tools" in entry ? (
-            <ToolRow
-              key={entry.at}
-              tools={entry.tools}
-              next={entry.next}
-              live={i === liveRow || i === newestShell}
-              since={i === countingRow ? running?.at : undefined}
-              queued={queued.has(i)}
-              roots={roots}
-              worktreeId={id}
-              // a `!` command is never grouped, so the walk's index is the row's own
-              marked={entry.at === markAt}
-            />
-          ) : entry.item.kind === "thinking" ? (
-            <ThoughtRow
-              key={entry.at}
-              item={entry.item}
-              open={i === liveRow}
-              streaming={i === streaming}
-              worktreeId={id}
-              fileRoot={active?.worktree.path}
-            />
-          ) : (
-            <ChatItemView
-              key={entry.at}
-              item={entry.item}
-              worktreeId={id}
-              onPickHover={onPickHover}
-              marked={entry.at === markAt}
-              streaming={working && i === entries.length - 1}
-            />
-          ),
-        )}
+        {cached.rows}
         {/* the subagents at work and the commands running in the background, under everything
             that landed since they started: the same row, with the same key, so it keeps its fold
             and moves rather than remounts when it settles */}

@@ -1,6 +1,7 @@
 import createDOMPurify from "dompurify";
 import { marked } from "marked";
 import { useEffect, useRef, useState } from "react";
+import { STREAM_TICK_MS } from "../../state/coalesce.ts";
 import { worktreeFileUrl } from "../../ws.ts";
 import { closePendingLink, PENDING_LINK } from "./linkTail.ts";
 import { dunder } from "./markdownDunder.ts";
@@ -102,8 +103,9 @@ export function renderMarkdown(text: string, options?: MarkdownOptions): string 
   }
 }
 
-/** parsing a long text on every change is O(n²) while it streams in; re-render at most every
- * ~100ms and settle immediately once the text stops changing */
+/** parsing a long text on every change is O(n²) while it streams in, or while it is typed into
+ * the editor beside its preview; re-render at most once a reading tick (the cadence streamed text
+ * reaches the store at, coalesce.ts) and settle at once when the text stops changing */
 export function useMarkdown(text: string, options?: MarkdownOptions): string {
   const [html, setHtml] = useState(() => renderMarkdown(text, options));
   const lastAt = useRef(0);
@@ -117,7 +119,7 @@ export function useMarkdown(text: string, options?: MarkdownOptions): string {
       worktreeId !== undefined && dir !== undefined ? { worktreeId, dir, version: version ?? null } : undefined;
     const at = base || fileRoot || streaming ? { base, fileRoot, streaming } : undefined;
     const since = performance.now() - lastAt.current;
-    if (since >= 100) {
+    if (since >= STREAM_TICK_MS) {
       lastAt.current = performance.now();
       setHtml(renderMarkdown(text, at));
       return;
@@ -125,7 +127,7 @@ export function useMarkdown(text: string, options?: MarkdownOptions): string {
     const t = setTimeout(() => {
       lastAt.current = performance.now();
       setHtml(renderMarkdown(text, at));
-    }, 100 - since);
+    }, STREAM_TICK_MS - since);
     return () => clearTimeout(t);
   }, [text, worktreeId, dir, version, fileRoot, streaming]);
   return html;

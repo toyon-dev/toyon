@@ -6,6 +6,7 @@ import { frameNow, installFrame, touchNow } from "./app/phone.ts";
 import { installPhoneHistory } from "./app/phoneHistory.ts";
 import { terminalBus } from "./app/terminalBus.ts";
 import { settleCreate } from "./state/actions/file.ts";
+import { coalesceDeltas } from "./state/coalesce.ts";
 import { createStore, StoreProvider } from "./state/context.tsx";
 import { FileSync } from "./state/fileSync.ts";
 import { migrateStorage, STORAGE } from "./state/keys.ts";
@@ -259,6 +260,9 @@ installPhoneHistory(store);
 // would come back as the stale half with a reload still to ask for.
 let heardVersion: string | null = null;
 
+// streamed chunks reach the store on the reading tick (coalesce.ts); everything else goes straight in
+const toStore = coalesceDeltas((msg) => store.dispatch({ a: "server", msg }));
+
 const sock = new DaemonSocket(
   (msg) => {
     if (msg.t === "hello") {
@@ -313,7 +317,7 @@ const sock = new DaemonSocket(
       refusedFromOutside(store, msg);
       return;
     }
-    store.dispatch({ a: "server", msg });
+    toStore(msg);
   },
   (v, failure) => store.dispatch({ a: "connected", v, failure }),
 );

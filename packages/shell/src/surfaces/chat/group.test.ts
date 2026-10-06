@@ -8,6 +8,7 @@ import {
   ownCallRunning,
   placeSpawns,
   queuedRows,
+  reuseEntries,
   runCalls,
   runningInRun,
   runningRow,
@@ -53,6 +54,60 @@ const shapeOf = (e: ChatEntry): { at: number; n: number; run?: { at: number; n: 
   "spawn" in e
     ? { at: e.at, n: 1, run: e.run.map((r) => ({ at: r.at, n: r.tools.length })) }
     : { at: e.at, n: "tools" in e ? e.tools.length : 0 };
+
+describe("reuseEntries", () => {
+  const roots = ["/wt"];
+  const items = [text("a"), tool("edit", "/wt/a.ts"), tool("read", "/wt/b.ts"), text("hello")];
+
+  test("the same items again give last render's entries, array and all", () => {
+    const prev = groupTools(items, roots);
+    expect(reuseEntries(prev, groupTools(items, roots))).toBe(prev);
+  });
+
+  test("a token into the message at the foot leaves every row above it as it was", () => {
+    const prev = groupTools(items, roots);
+    const last = items.at(-1) as Extract<ChatItem, { kind: "assistant" }>;
+    const next = groupTools([...items.slice(0, -1), { ...last, text: "hello w" }], roots);
+    const out = reuseEntries(prev, next);
+    expect(out).not.toBe(prev);
+    expect(out.slice(0, 3)).toEqual(prev.slice(0, 3));
+    expect(out[0]).toBe(prev[0]!);
+    expect(out[1]).toBe(prev[1]!);
+    expect(out[2]).toBe(prev[2]!);
+    expect(out[3]).toBe(next[3]!);
+  });
+
+  test("a call joining a run makes that row new and no other", () => {
+    const prev = groupTools(items, roots);
+    const grown = [...items.slice(0, 3), tool("read", "/wt/b.ts"), items[3]!];
+    const next = groupTools(grown, roots);
+    const out = reuseEntries(prev, next);
+    expect(out[0]).toBe(prev[0]!);
+    expect(out[1]).toBe(prev[1]!);
+    expect(out[2]).toBe(next[2]!);
+    expect(out[2]!.at).toBe(2);
+    expect("tools" in out[2]! && out[2].tools.length).toBe(2);
+    // the message moved down a place, so it is a new row under a new number
+    expect(out[3]).toBe(next[3]!);
+    expect(out[3]!.at).toBe(4);
+  });
+
+  test("a spawn whose subagent spoke again is a new row", () => {
+    const sp = spawn("s1", "look around");
+    const child = (p: string) => tool("read", p, { parentToolId: "s1" });
+    const before = [sp, child("/wt/a.ts")];
+    const prev = groupTools(before, roots);
+    const same = reuseEntries(prev, groupTools(before, roots));
+    expect(same).toBe(prev);
+    const out = reuseEntries(prev, groupTools([...before, child("/wt/c.ts")], roots));
+    expect(out[0]).not.toBe(prev[0]!);
+  });
+
+  test("with nothing from before, the entries are this render's", () => {
+    const next = groupTools(items, roots);
+    expect(reuseEntries([], next)).toBe(next);
+  });
+});
 
 describe("groupTools", () => {
   test("edits to one file, back to back, are one row", () => {

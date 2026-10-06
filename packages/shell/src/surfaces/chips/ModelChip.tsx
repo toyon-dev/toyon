@@ -1,4 +1,5 @@
 import type { AgentInfo, ModelChoice } from "@toyon/shared";
+import { useMemo } from "react";
 import { STORAGE } from "../../state/keys.ts";
 import { ChipPicker } from "../../ui/ChipPicker.tsx";
 import { usePersisted } from "../../ui/hooks.ts";
@@ -72,7 +73,9 @@ export function AgentModelChip({
   onChange: (agent: string, model: string) => void;
   onClose?: () => void;
 }) {
-  const { rows, shown } = agentModelRows(agents, agent, model);
+  // the composer renders on every change to the chat, and the rows are the same until an agent's
+  // list or the choice changes
+  const { rows, shown } = useMemo(() => agentModelRows(agents, agent, model), [agents, agent, model]);
   if (rows.length === 0) return null;
   // the chip names only the model, so the tooltip carries the whole row: "Claude Fable 5.1"
   const row = rows.find((o) => o.id === shown);

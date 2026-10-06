@@ -1,4 +1,5 @@
 import type { ModelChoice } from "@toyon/shared";
+import { useMemo } from "react";
 import { ChipPicker } from "../../ui/ChipPicker.tsx";
 import "./chips.css";
 import { choiceRows } from "./choiceRows.ts";
@@ -35,11 +36,13 @@ export function OptionChip({
   onChange: (id: string) => void;
   onClose?: () => void;
 }) {
+  // the composer renders on every change to the chat, and the rows are the same until the agent's
+  // list or the choice changes
+  const { rows, shown, picked } = useMemo(
+    () => choiceRows(choices, value, current, { label: defaultLabel, description: defaultDescription }),
+    [choices, value, current, defaultLabel, defaultDescription],
+  );
   if (choices.length === 0) return null;
-  const { rows, shown, picked } = choiceRows(choices, value, current, {
-    label: defaultLabel,
-    description: defaultDescription,
-  });
   const row = rows.find((o) => o.id === shown);
   const label = row?.chip ?? row?.label ?? shown;
   return (

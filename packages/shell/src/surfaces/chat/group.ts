@@ -321,6 +321,32 @@ export function sameRun(a: ToolEntry[] | undefined, b: ToolEntry[] | undefined):
   );
 }
 
+/** Last render's entries wherever this render's print the same, so a row that has not changed is
+ * the same object: the log hands React the element it made for it last time (rowCache.ts), and a
+ * streamed token into the message at the foot costs the rows above it nothing. Grouping builds
+ * fresh wrappers on every pass, so what is compared is what the rows' own memo compares: the calls
+ * on the row, the call it is shining for, the item, the subagent's run. The array itself comes back
+ * when every entry did, in its place, and everything derived from it holds still too. */
+export function reuseEntries(prev: ChatEntry[], next: ChatEntry[]): ChatEntry[] {
+  if (prev.length === 0) return next;
+  const before = new Map<number, ChatEntry>();
+  for (const e of prev) before.set(e.at, e);
+  let whole = prev.length === next.length;
+  const out = next.map((e, i) => {
+    const p = before.get(e.at);
+    const kept = p !== undefined && sameEntry(p, e) ? p : e;
+    if (kept !== prev[i]) whole = false;
+    return kept;
+  });
+  return whole ? prev : out;
+}
+
+function sameEntry(a: ChatEntry, b: ChatEntry): boolean {
+  if ("spawn" in a) return "spawn" in b && a.spawn === b.spawn && a.end === b.end && sameRun(a.run, b.run);
+  if ("tools" in a) return "tools" in b && a.next === b.next && sameTools(a.tools, b.tools);
+  return "item" in b && a.item === b.item;
+}
+
 /** Which row of the turn opens itself while the agent works, or -1. Reasoning is the only thing that
  * does. A thought is prose addressed to the reader and it is the last the agent said about what it
  * is doing, so it stays up while the calls under it tick by. A diff does not open itself: the row

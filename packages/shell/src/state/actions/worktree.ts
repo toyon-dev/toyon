@@ -104,12 +104,14 @@ export function worktreeActions(sock: DaemonSocket | null, dispatch: Dispatch) {
   };
 }
 
-export type WorktreeItemState = Pick<State, "layout" | "shipping">;
+export type WorktreeItemState = Pick<State, "layout" | "shipping" | "frame">;
 
 /** Everything a worktree of ours can do, in the order the rail's menu shows it; the palette reads
  * the same list with the title appended. `graft` is the rail's own multi-select, so only the rail
  * passes it and the palette has no graft line. `hostname` is where the page is open: the Finder
- * row only means something on the daemon's own machine. */
+ * row only means something on the daemon's own machine. The phone frame has no terminal pane and
+ * no shell to paste a path or a session id into, so those rows are the desk's; the branch name
+ * stays, since it is read as much as it is pasted. */
 export function worktreeItems(
   w: OwnedWorktree,
   repo: RepoInfo | null,
@@ -132,36 +134,44 @@ export function worktreeItems(
   if (isBusy(w))
     stop.push({ id: "stop", label: "stop agent", onClick: () => sock?.send({ t: "stop-agent", worktreeId: id }) });
   const idle = !s.shipping[id];
-  if ((w.dirty ?? 0) > 0 || (w.ahead ?? 0) > 0 || !s.layout.changes) {
+  const phone = s.frame === "phone";
+  // the phone's changes are a tab, always there, so its row is offered for work to read and not
+  // for a panel to open
+  if ((w.dirty ?? 0) > 0 || (w.ahead ?? 0) > 0 || (!phone && !s.layout.changes)) {
     go.push({
       id: "changes",
       label: `view changes${(w.dirty ?? 0) > 0 ? ` (${w.dirty})` : ""}`,
       onClick: () => {
         dispatch({ a: "activate", id });
-        if (!s.layout.changes) dispatch({ a: "toggle-changes" });
+        if (phone) dispatch({ a: "screen", to: "changes" });
+        else if (!s.layout.changes) dispatch({ a: "toggle-changes" });
       },
     });
   }
-  go.push({
-    id: "terminal",
-    label: "open terminal",
-    // asked for, so the terminal takes the keyboard even when the pane was already open elsewhere
-    onClick: () => {
-      dispatch({ a: "activate", id });
-      dispatch({ a: "focus-terminal" });
-    },
-  });
+  if (!phone) {
+    go.push({
+      id: "terminal",
+      label: "open terminal",
+      // asked for, so the terminal takes the keyboard even when the pane was already open elsewhere
+      onClick: () => {
+        dispatch({ a: "activate", id });
+        dispatch({ a: "focus-terminal" });
+      },
+    });
+  }
   go.push(...revealItems(() => sock?.send({ t: "reveal", worktreeId: id }), ui.hostname));
-  copy.push({ id: "copy-path", label: "copy path", onClick: () => copyText(w.path) });
+  if (!phone) copy.push({ id: "copy-path", label: "copy path", onClick: () => copyText(w.path) });
   copy.push({ id: "copy-branch", label: "copy branch name", onClick: () => copyText(w.worktree.branch) });
   // what a second agent is pointed at: the chat as a file it can read, and the id the agent's
   // own CLI resumes. A path rather than a link, since a link would carry the token. The lead has
   // no chat, so nothing to hand over there.
   const { transcript, sessionId } = w;
-  if (transcript && !isLead(w.worktree)) {
+  if (!phone && transcript && !isLead(w.worktree)) {
     copy.push({ id: "copy-transcript", label: "copy transcript path", onClick: () => copyText(transcript) });
   }
-  if (sessionId) copy.push({ id: "copy-session", label: "copy session id", onClick: () => copyText(sessionId) });
+  if (!phone && sessionId) {
+    copy.push({ id: "copy-session", label: "copy session id", onClick: () => copyText(sessionId) });
+  }
   // main runs procs too, and is where switching is wanted most; flat items, the menu has no
   // submenus. The one running now is on the list with its check, so the list also answers which.
   // Not on the provisional row: the worktree it starts takes its profile from the intro's chip.
@@ -251,11 +261,12 @@ export function worktreeItems(
  * which is what keeps that true. `git worktree remove` is where it belongs. */
 export function discoveredItems(
   d: WorktreeStatus,
-  s: Pick<State, "clientId">,
+  s: Pick<State, "clientId" | "frame">,
   { sock, dispatch }: Deps,
   hostname: string,
 ): MenuEntry[] {
   const items: MenuItem[] = [];
+  const phone = s.frame === "phone";
   // held by another tool: the line stays, off, saying who has it
   const adopt: MenuItem[] = [
     {
@@ -273,14 +284,18 @@ export function discoveredItems(
       onClick: () => sock?.send({ t: "sync-main", worktreeId: d.id }),
     });
   }
-  items.push({
-    id: "shell",
-    label: "open a shell here",
-    onClick: () => {
-      dispatch({ a: "activate", id: d.id });
-      dispatch({ a: "focus-terminal" });
-    },
-  });
+  // the phone has no terminal pane and nowhere to paste the path, so neither row is offered there
+  if (!phone) {
+    items.push({
+      id: "shell",
+      label: "open a shell here",
+      onClick: () => {
+        dispatch({ a: "activate", id: d.id });
+        dispatch({ a: "focus-terminal" });
+      },
+    });
+  }
   items.push(...revealItems(() => sock?.send({ t: "reveal", worktreeId: d.id }), hostname));
-  return grouped([adopt, items, [{ id: "copy-path", label: "copy path", onClick: () => copyText(d.path) }]]);
+  const copy: MenuItem[] = phone ? [] : [{ id: "copy-path", label: "copy path", onClick: () => copyText(d.path) }];
+  return grouped([adopt, items, copy]);
 }

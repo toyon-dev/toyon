@@ -3,6 +3,7 @@ import { dollars } from "../../surfaces/chat/usage.ts";
 import { ago } from "../../surfaces/util.ts";
 import { grouped, type MenuEntry, type MenuItem } from "../../ui/menu.ts";
 import type { DaemonSocket } from "../../ws.ts";
+import type { State } from "../store.ts";
 import { copyText, type Deps } from "./deps.ts";
 
 /** what an archived worktree's row says beside its title, in the picker and on the rail: how it
@@ -35,26 +36,30 @@ export function restoreArchived(sock: DaemonSocket | null, archiveId: string, cl
 
 /** an archived worktree: bring it back, or let it go. Deleting is the one verb here that cannot be
  * undone, so it asks and sits apart. */
-export function archivedItems(a: ArchivedWorktree, clientId: string, { sock, dispatch }: Deps): MenuEntry[] {
+export function archivedItems(
+  a: ArchivedWorktree,
+  s: Pick<State, "clientId" | "frame">,
+  { sock, dispatch }: Deps,
+): MenuEntry[] {
   const back: MenuItem[] = [
     {
       id: "restore",
       label: "restore",
       disabled: a.restorable ? undefined : "its commits were not kept",
       onClick: () => {
-        restoreArchived(sock, a.id, clientId);
+        restoreArchived(sock, a.id, s.clientId);
         dispatch({ a: "close" });
       },
     },
   ];
   // the chat is still a file, moved under the archive, so it can be handed to another tool from
-  // here as well as from a live row
-  const copy: MenuItem[] = [
-    { id: "copy-branch", label: "copy branch name", onClick: () => copyText(a.branch) },
-    { id: "copy-transcript", label: "copy transcript path", onClick: () => copyText(a.transcript) },
-  ];
+  // here as well as from a live row. Not from the phone, which has no shell to paste it into.
+  const copy: MenuItem[] = [{ id: "copy-branch", label: "copy branch name", onClick: () => copyText(a.branch) }];
   const { sessionId } = a;
-  if (sessionId) copy.push({ id: "copy-session", label: "copy session id", onClick: () => copyText(sessionId) });
+  if (s.frame !== "phone") {
+    copy.push({ id: "copy-transcript", label: "copy transcript path", onClick: () => copyText(a.transcript) });
+    if (sessionId) copy.push({ id: "copy-session", label: "copy session id", onClick: () => copyText(sessionId) });
+  }
   const gone: MenuItem[] = [
     {
       id: "delete",

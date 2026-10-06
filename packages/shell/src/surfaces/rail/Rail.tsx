@@ -116,6 +116,7 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
   // an archived worktree's page is up: its row is the marked one, over the active row underneath
   const archivedPage = useArchivedPage();
   const clientId = useStore((s) => s.clientId);
+  const frame = useStore((s) => s.frame);
   const activeRepoId = useStore((s) => s.activeRepoId);
   const connected = useStore((s) => s.connected);
   // the section's count is on the rail before anyone opens it, so ask for the list on the way in;
@@ -215,8 +216,11 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
   /** what a row can do: the long list for ours, the short one for a found worktree */
   const rowItems = (w: WorktreeStatus) =>
     isOwned(w)
-      ? worktreeItems(w, repoOf(w), { layout, shipping }, deps, { graft: graftWith, hostname: location.hostname })
-      : discoveredItems(w, { clientId }, deps, location.hostname);
+      ? worktreeItems(w, repoOf(w), { layout, shipping, frame }, deps, {
+          graft: graftWith,
+          hostname: location.hostname,
+        })
+      : discoveredItems(w, { clientId, frame }, deps, location.hostname);
 
   /* the archive keeps its own count column, reserved list-wide the way the worktrees' are, and not
      drawn at all when no archived row has a number to put in it */
@@ -244,7 +248,7 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
         aside: archivedFigures(a),
       })}
       onClick={() => dispatch({ a: "open-archived", id: a.id })}
-      {...cm.contextMenu(() => archivedItems(a, clientId, deps), a.id)}
+      {...cm.contextMenu(() => archivedItems(a, { clientId, frame }, deps), a.id)}
     >
       {/* biome-ignore lint/a11y/useKeyWithClickEvents: on touch the whole seat opens the menu the kebab in it opens, since the kebab shows on a hover that never comes; the row menu carries the same actions for the keyboard */}
       <span
@@ -253,7 +257,7 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
           touch
             ? (e) => {
                 e.stopPropagation();
-                cm.openUnder(e.currentTarget, () => archivedItems(a, clientId, deps), a.id);
+                cm.openUnder(e.currentTarget, () => archivedItems(a, { clientId, frame }, deps), a.id);
               }
             : undefined
         }
@@ -265,7 +269,7 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
           {...tip("Actions")}
           onClick={(e) => {
             e.stopPropagation();
-            cm.openUnder(e.currentTarget, () => archivedItems(a, clientId, deps), a.id);
+            cm.openUnder(e.currentTarget, () => archivedItems(a, { clientId, frame }, deps), a.id);
           }}
         >
           <Icon name="more" />

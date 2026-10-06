@@ -26,6 +26,7 @@ export function ChatsPicker({ repoId, scope: opened }: { repoId: string; scope: 
   const dispatch = useDispatch();
   const sock = useSock();
   const clientId = useStore((s) => s.clientId);
+  const frame = useStore((s) => s.frame);
   const results = useStore((s) => s.chats[repoId]);
   const live = useVisibleWorktrees();
   const archived = useStore((s) => s.archived[repoId]);
@@ -103,7 +104,9 @@ export function ChatsPicker({ repoId, scope: opened }: { repoId: string; scope: 
         dispatch({ a: "close" });
       }}
       onBack={() => dispatch({ a: "close" })}
-      rowMenu={(r) => (r.kind === "chat" && r.archived ? archivedItems(r.archived, clientId, { sock, dispatch }) : [])}
+      rowMenu={(r) =>
+        r.kind === "chat" && r.archived ? archivedItems(r.archived, { clientId, frame }, { sock, dispatch }) : []
+      }
       placeholder={scope === "names" ? "find a chat by name…" : "search in chats…"}
       keys={(active) => ({
         nav: "moves",

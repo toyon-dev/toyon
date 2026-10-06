@@ -42,7 +42,7 @@ describe("a worktree's actions", () => {
     const quiet = worktreeItems(
       owned(),
       null,
-      { layout: { ...defaultLayout, changes: true }, shipping: {} },
+      { layout: { ...defaultLayout, changes: true }, shipping: {}, frame: "desk" as const },
       deps,
       here,
     );
@@ -66,7 +66,7 @@ describe("a worktree's actions", () => {
     const busy = worktreeItems(
       owned({ agent: "working", dirty: 2, behind: 3 }),
       null,
-      { layout: { ...defaultLayout, changes: false }, shipping: {} },
+      { layout: { ...defaultLayout, changes: false }, shipping: {}, frame: "desk" as const },
       deps,
       { graft: () => {}, ...here },
     );
@@ -92,14 +92,58 @@ describe("a worktree's actions", () => {
   });
 
   test("from another device the Finder row goes, since nothing there could open", () => {
-    const away = worktreeItems(owned(), null, { layout: { ...defaultLayout, changes: true }, shipping: {} }, deps, {
-      hostname: "box.tail1234.ts.net",
-    });
+    const away = worktreeItems(
+      owned(),
+      null,
+      { layout: { ...defaultLayout, changes: true }, shipping: {}, frame: "desk" as const },
+      deps,
+      {
+        hostname: "box.tail1234.ts.net",
+      },
+    );
     expect(labels(away).slice(0, 4)).toEqual(["open terminal", "|", "copy path", "copy branch name"]);
   });
 
+  test("on the phone the terminal and the paths go, and view changes opens the changes tab", () => {
+    const sent: unknown[] = [];
+    const phone = { layout: { ...defaultLayout, changes: true }, shipping: {}, frame: "phone" as const };
+    const away = { hostname: "box.tail1234.ts.net" };
+    const items = worktreeItems(
+      owned({ dirty: 2, transcript: "/t/w1.jsonl", sessionId: "s-1" }),
+      null,
+      phone,
+      { sock: null, dispatch: (a) => sent.push(a) },
+      away,
+    );
+    expect(labels(items)).toEqual([
+      "view changes (2)",
+      "|",
+      "copy branch name",
+      "|",
+      "rename…",
+      "mark as unread",
+      "|",
+      "land",
+      "|",
+      "archive…",
+    ]);
+    items
+      .filter(isItem)
+      .find((i) => i.id === "changes")
+      ?.onClick?.();
+    expect(sent).toEqual([
+      { a: "activate", id: "w1" },
+      { a: "screen", to: "changes" },
+    ]);
+    // the changes tab is always there, so a row with nothing written has no row for it
+    expect(labels(worktreeItems(owned(), null, phone, deps, away))).not.toContain("view changes");
+    const found = { id: "d1", repoId: "r", name: "stray", path: "/r/stray", branch: "stray", agent: "idle" };
+    const short = discoveredItems(found as WorktreeStatus, { clientId: "c", frame: "phone" }, deps, away.hostname);
+    expect(labels(short)).toEqual(["take over"]);
+  });
+
   test("hands the chat over as a file path and a session id, but not from main, which has no chat", () => {
-    const s = { layout: { ...defaultLayout, changes: true }, shipping: {} };
+    const s = { layout: { ...defaultLayout, changes: true }, shipping: {}, frame: "desk" as const };
     const copies = (items: MenuEntry[]) => labels(items).slice(3, 7);
     const chat = worktreeItems(owned({ transcript: "/t/w1.jsonl", sessionId: "s-1" }), null, s, deps, here);
     expect(copies(chat)).toEqual(["copy path", "copy branch name", "copy transcript path", "copy session id"]);
@@ -114,7 +158,7 @@ describe("a worktree's actions", () => {
     const items = worktreeItems(
       owned({ behind: 3 }),
       null,
-      { layout: { ...defaultLayout, changes: true }, shipping: { w1: { op: "land" } } },
+      { layout: { ...defaultLayout, changes: true }, shipping: { w1: { op: "land" } }, frame: "desk" as const },
       deps,
       here,
     );
@@ -127,7 +171,7 @@ describe("a worktree's actions", () => {
     const ringed = worktreeItems(
       owned({ unseen: true }),
       null,
-      { layout: { ...defaultLayout, changes: true }, shipping: {} },
+      { layout: { ...defaultLayout, changes: true }, shipping: {}, frame: "desk" as const },
       deps,
       here,
     );
@@ -135,7 +179,7 @@ describe("a worktree's actions", () => {
     const quiet = worktreeItems(
       owned(),
       null,
-      { layout: { ...defaultLayout, changes: true }, shipping: {} },
+      { layout: { ...defaultLayout, changes: true }, shipping: {}, frame: "desk" as const },
       deps,
       here,
     );
@@ -159,7 +203,7 @@ describe("a worktree's actions", () => {
     const items = worktreeItems(
       owned(),
       repo,
-      { layout: { ...defaultLayout, changes: true }, shipping: {} },
+      { layout: { ...defaultLayout, changes: true }, shipping: {}, frame: "desk" as const },
       deps,
       here,
     );
@@ -177,7 +221,7 @@ describe("a worktree's actions", () => {
       agent: "idle",
       behind: 1,
     } as WorktreeStatus;
-    const items = discoveredItems(found, { clientId: "c" }, deps, "localhost");
+    const items = discoveredItems(found, { clientId: "c", frame: "desk" as const }, deps, "localhost");
     expect(labels(items)).toEqual([
       "take over",
       "|",
@@ -189,7 +233,7 @@ describe("a worktree's actions", () => {
     ]);
     const held = discoveredItems(
       { ...found, locked: true, lockReason: "zed", behind: 0 },
-      { clientId: "c" },
+      { clientId: "c", frame: "desk" as const },
       deps,
       "box.tail1234.ts.net",
     );

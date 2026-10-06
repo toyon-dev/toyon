@@ -36,7 +36,7 @@ export const OFFLINE_LINE = "Lost the daemon; retrying";
 export const FOUND_LINE = "Not run by Toyon";
 
 /** what the lead's tap does, the verb the desk shows on hover */
-const LEAD_LINE = "new worktree";
+export const LEAD_LINE = "new worktree";
 
 /** the dots that mean something is happening, or has broken, right now */
 const IN_FLIGHT: ReadonlySet<DotState> = new Set(["waiting", "working", "starting", "failed", "crashed"]);

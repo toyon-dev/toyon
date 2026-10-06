@@ -18,8 +18,8 @@ import { cx } from "../../ui/cx.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { CommandPalette } from "../overlays/CommandPalette.tsx";
 import { ProjectPicker } from "../overlays/ProjectPicker.tsx";
-import { rowLine } from "../rail/rowLine.ts";
-import { ago, dotClass } from "../util.ts";
+import { LEAD_LINE, OFFLINE_LINE, rowLine } from "../rail/rowLine.ts";
+import { ago, dotClass, shipLabel, shipShown } from "../util.ts";
 
 /**
  * The strip at the top of the phone. The list and a worktree are a master and its detail, so the
@@ -27,7 +27,9 @@ import { ago, dotClass } from "../util.ts";
  * detail, under this bar. The plus stands in for the lead's row, which the screen does not list.
  *
  * The line under a worktree's title is the row's line from the list (rowLine), in the same words,
- * so the screen reads as the row opened. The count before the menu says what needs you; the rows
+ * so the screen reads as the row opened. The lead is the exception, as it is on the list: its name
+ * is a directory nobody chose and a send replaces, so the title says what the page is for and the
+ * line says which project the worktree will be made in. The count before the menu says what needs you; the rows
  * themselves never reorder for it, since the rail's order is a send's. The menu is the palette:
  * with no chords, every verb without a visible control is reachable only through it.
  */
@@ -57,9 +59,13 @@ export function PhoneBar({
   const owed = needsYou(visible, activeId);
   const lead = visible.find((w) => isLead(w.worktree));
   const home = screen === "home";
+  const onLead = !home && !archivedPage && !!active && isLead(active.worktree);
+  const leadOp = useStore((s) => (onLead && active ? shipShown(active, s.shipping[active.id]?.op) : null));
   const title = home
     ? (repo?.name ?? null)
-    : (archivedPage?.title ?? active?.worktree.title ?? foundPage?.name ?? null);
+    : onLead
+      ? LEAD_LINE
+      : (archivedPage?.title ?? active?.worktree.title ?? foundPage?.name ?? null);
   const tasks = visible.filter((w) => !isLead(w.worktree)).length;
   const line = home
     ? tasks === 0
@@ -67,16 +73,22 @@ export function PhoneBar({
       : `${tasks} ${tasks === 1 ? "worktree" : "worktrees"}`
     : archivedPage
       ? archivedHint(archivedPage)
-      : active
-        ? rowLine(active, {
-            offline,
-            needsSetup: asksSetup(repo),
-            path: active.worktree.path,
-            at: isLead(active.worktree) ? undefined : ago(sentAt(active.worktree)),
-          })
-        : foundPage
-          ? rowLine(foundPage, { offline, needsSetup: false, path: foundPage.path })
-          : null;
+      : onLead
+        ? offline
+          ? OFFLINE_LINE
+          : leadOp
+            ? shipLabel(leadOp)
+            : (repo?.name ?? null)
+        : active
+          ? rowLine(active, {
+              offline,
+              needsSetup: asksSetup(repo),
+              path: active.worktree.path,
+              at: ago(sentAt(active.worktree)),
+            })
+          : foundPage
+            ? rowLine(foundPage, { offline, needsSetup: false, path: foundPage.path })
+            : null;
   const asks = !home && !archivedPage && !!active && dotClass(active) === "waiting";
   const switching = useStore((s) => s.overlay?.kind === "projects" && s.overlay.form === "pill");
   const commands = useStore((s) => s.overlay?.kind === "commands");

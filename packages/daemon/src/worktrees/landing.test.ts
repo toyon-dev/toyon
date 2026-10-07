@@ -464,7 +464,9 @@ describe("LandingService", () => {
     expect(w.recapped.length).toBe(1);
     expect(w.recapped[0]).toContain("Task: feature");
     expect(w.recapped[0]).toContain("User asked: do we still recap with no files changed?");
-    expect(w.recapped[0]).toContain("Agent ended with: No. The sentence rides with the verdict.");
+    expect(w.recapped[0]).toContain(
+      "Agent's last word, where the work stands now: No. The sentence rides with the verdict.",
+    );
     expect(w.recapped[0]).not.toContain("Diff summary");
     expect(w.wt()?.lastTurn?.recap?.text).toBe(
       "Asked whether a clean turn gets a recap; it does not, the row shows the facts.",

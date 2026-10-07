@@ -14,6 +14,7 @@ export const LAND_SYSTEM =
 const LAND_ASK = [
   "A coding agent just stopped in a git worktree. Decide whether the work is finished and ready to merge, or still in progress: a question the agent is waiting on, a step it said it would do next, or a part of the request it did not get to.",
   "The agent never commits: every change is left uncommitted for the user, and the agent saying so is normal, not a sign the work is unfinished.",
+  "The replies are oldest first and the agent's last word is where the work stands now; it supersedes the earlier ones. A check, test or job an earlier reply said was still running is done if the last word says so, and is a step still to do only when the last word itself is waiting on it.",
   "Reply with exactly this shape and nothing else:",
   "Line 1: READY, or NOT READY: <what is still left to do, under 8 words, about the change itself and not the conversation>",
   "Line 2: blank",
@@ -50,17 +51,28 @@ export function landPrompt(i: LandInput): string {
   if (i.note?.trim())
     head.push(`Note from the user for the commit message, to be reflected in its wording: ${clip(i.note.trim(), 500)}`);
   const diff = `Diff summary:\n${i.diffStat.trim() || "(none)"}`;
-  let blocks = i.turns.slice(-LAND_TURNS).map(turnBlock);
+  let blocks = turnBlocks(i.turns);
   const size = () => [...head, "", ...blocks, "", diff].join("\n\n").length;
   while (blocks.length > 1 && size() > LAND_CHARS) blocks = blocks.slice(1);
   return [head.join("\n"), blocks.join("\n\n"), diff].join("\n\n");
 }
 
-function turnBlock(t: TurnSlice): string {
+/** the newest turns, oldest first, with the last reply marked as the one that counts: a turn the
+ * agent's own background job woke has no ask in front of it, so without the mark a quick model
+ * cannot tell which reply is current and reads a job an earlier reply left running as still running */
+function turnBlocks(turns: readonly TurnSlice[]): string[] {
+  const newest = turns.slice(-LAND_TURNS);
+  return newest.map((t, n) => turnBlock(t, n === newest.length - 1));
+}
+
+function turnBlock(t: TurnSlice, last: boolean): string {
   const lines: string[] = [];
   if (t.asks.length) lines.push(`User asked: ${clip(t.asks.join(" / "), 400)}`);
   if (t.fixes.length) lines.push(`Toyon, not the user, asked for a fix: ${clip(t.fixes.join(" / "), 400)}`);
-  if (t.reply.trim()) lines.push(`Agent ended with: ${clip(t.reply, 1_000)}`);
+  if (t.reply.trim())
+    lines.push(
+      `${last ? "Agent's last word, where the work stands now" : "Agent ended with"}: ${clip(t.reply, 1_000)}`,
+    );
   return lines.join("\n");
 }
 
@@ -77,7 +89,7 @@ export type AnswerInput = Pick<LandInput, "title" | "firstAsk" | "turns">;
 export function answerPrompt(i: AnswerInput): string {
   const head = [ANSWER_ASK, "", `Task: ${clip(i.title, 200)}`];
   if (i.firstAsk) head.push(`First request: ${clip(i.firstAsk, 300)}`);
-  let blocks = i.turns.slice(-LAND_TURNS).map(turnBlock);
+  let blocks = turnBlocks(i.turns);
   const size = () => [...head, "", ...blocks].join("\n\n").length;
   while (blocks.length > 1 && size() > LAND_CHARS) blocks = blocks.slice(1);
   return [head.join("\n"), blocks.join("\n\n")].join("\n\n");

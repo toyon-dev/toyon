@@ -116,9 +116,31 @@ describe("landPrompt", () => {
     expect(p).toContain("Task: dark mode");
     expect(p).toContain("First request: make a dark mode");
     expect(p).toContain("User asked: is it accessible?");
-    expect(p).toContain("Agent ended with: Yes, the contrast passes.");
+    expect(p).toContain("Agent's last word, where the work stands now: Yes, the contrast passes.");
     expect(p).not.toContain("Diff summary");
     expect(p).not.toContain("READY");
+  });
+
+  test("the last reply is marked as current, so a job an earlier reply left running is not read as still running", () => {
+    // a turn woken by the agent's own background job has no ask in front of it
+    const p = landPrompt({
+      title: "machines",
+      turns: [
+        turn(
+          ["keep going"],
+          "Cleanup is done. The only thing outstanding is the full check running in the background.",
+        ),
+        turn([], "All findings are fixed and the full check is green."),
+      ],
+      diffStat: "",
+      recentSubjects: [],
+    });
+    expect(p).toContain("Agent ended with: Cleanup is done.");
+    expect(p).toContain(
+      "Agent's last word, where the work stands now: All findings are fixed and the full check is green.",
+    );
+    expect(p).toContain("the agent's last word is where the work stands now");
+    expect(p.indexOf("Agent ended with")).toBeLessThan(p.indexOf("Agent's last word"));
   });
 
   test("drops the oldest turns first when the prompt runs long", () => {

@@ -244,7 +244,9 @@ export interface WorktreeLocal {
   queue: QueuedMessage[];
   /** a message sent from an archived page or a found worktree's, shown as sent while the worktree
    * becomes toyon's to run: gone when its own message reaches the chat, when the daemon hands it
-   * back unsent, or, for a found one, with the row it was sent from */
+   * back unsent, or, for a found one, with the row it was sent from. Empty for the page's own
+   * restore press, which has no words to wait for: it goes with the row's first chat frame, or
+   * with the daemon's refusal */
   restoring?: string;
   /** a message sent to an agent that is not mid-turn, until the daemon's word catches up: the log
    * shows the bubble and the working mark from the press, so the wait reads as the turn it becomes
@@ -1464,6 +1466,13 @@ function settled(l: WorktreeLocal): WorktreeLocal {
   return rest;
 }
 
+/** A refused restore ends the one its page shows under way, and the offer comes back. Only the
+ * page's own press: a message's refusal comes as `unsent`, with the box it goes back into. */
+function notRestoring(s: State, id?: string): State {
+  if (!id || s.local[id]?.restoring === undefined) return s;
+  return withLocal(s, id, ({ restoring: _refused, ...l }) => l);
+}
+
 /** A refusal ends the wait it answers: the row it names, or every row when it names none. */
 function notSending(s: State, id?: string): State {
   const ids = Object.keys(s.local).filter((k) => s.local[k]?.sending && (!id || k === id));
@@ -2552,9 +2561,10 @@ function onServer(s: State, msg: StoreServerMsg): State {
         if (event.type === "usage") usage = figuresOf(event);
       }
       // a message an archived page sent stays shown until the transcript has it: a socket back
-      // mid-restore hears it here rather than live
+      // mid-restore hears it here rather than live. A bare restore press waits for no words, so
+      // the row's first frame ends it.
       const heard = (text: string) =>
-        msg.events.some(({ event }) => event.type === "user-message" && event.text === text);
+        !text || msg.events.some(({ event }) => event.type === "user-message" && event.text === text);
       return withLocal(s, msg.worktreeId, ({ restoring, sending, ...l }) => ({
         ...l,
         ...(sending && !(sending.message && heard(sending.message.text)) ? { sending } : {}),
@@ -2696,7 +2706,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
       const page = s.newProject;
       const refused = page?.phase === "creating" && !page.repoId;
       const next = {
-        ...notSending(s, id),
+        ...notSending(notRestoring(s, id), id),
         archiving: id
           ? s.archiving.includes(id)
             ? s.archiving.filter((w) => w !== id)

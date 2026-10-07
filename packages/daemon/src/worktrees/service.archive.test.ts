@@ -141,6 +141,32 @@ describe("archive", () => {
     expect(w.worktrees.archivedTranscript(wt.id)).toBeNull();
   });
 
+  test("a restore asked for twice brings back one row, and a message sent meanwhile reaches it", async () => {
+    const repoId = await registered();
+    const { wt } = await workedOn(repoId);
+    await w.worktrees.archiveWorktree(wt.id);
+    // the page stays up until the row is listed: two presses of restore, and a message typed in
+    // between, all before the first has checked anything out
+    const [first, second, typed] = await Promise.all([
+      w.worktrees.restore(wt.id, "tab-1"),
+      w.worktrees.restore(wt.id, "tab-1"),
+      w.worktrees.restore(wt.id, "tab-1", { text: "and the header" }),
+    ]);
+    await settle();
+    expect(second).toBe(first);
+    expect(typed).toBe(first);
+    expect(w.state.worktrees.filter((x) => x.id === wt.id)).toHaveLength(1);
+    expect(existsSync(first.path)).toBe(true);
+    expect(w.agents.get(wt.id)?.sent.map((m) => m.text)).toEqual(["and the header"]);
+    // a press that lands after the row is back is answered with the row, and its message goes to
+    // the row's agent rather than being refused as an archive that is gone
+    const again = await w.worktrees.restore(wt.id, "tab-1", { text: "once more" });
+    await settle();
+    expect(again).toBe(first);
+    expect(w.state.worktrees.filter((x) => x.id === wt.id)).toHaveLength(1);
+    expect(w.agents.get(wt.id)?.sent.map((m) => m.text)).toEqual(["and the header", "once more"]);
+  });
+
   test("the plans a worktree was shown go with its chat, read on its page, and come back on restore", async () => {
     const repoId = await registered();
     const { wt } = await workedOn(repoId);

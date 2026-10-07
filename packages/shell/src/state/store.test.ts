@@ -1335,6 +1335,17 @@ describe("drafts", () => {
     s = run([server({ t: "backfill", worktreeId: "a", events: [{ seq: 0, event: said }] })], s);
     expect(s.local.a?.restoring).toBeUndefined();
   });
+  test("the page's own restore press shows the row on its way, until its chat arrives or the daemon refuses", () => {
+    // no words to wait for: the row's first frame, here the daemon's word on the restore, ends it
+    let s = run([hello(wt("b")), { a: "restoring", id: "a", text: "" }]);
+    expect(s.local.a?.restoring).toBe("");
+    const back = { type: "restored" as const, archivedAt: 0, branch: "toyon/a", uncommitted: false, ts: 1 };
+    s = run([server({ t: "backfill", worktreeId: "a", events: [{ seq: 0, event: back }] })], s);
+    expect(s.local.a?.restoring).toBeUndefined();
+    // refused: the offer comes back on the page, which is still showing
+    s = run([{ a: "restoring", id: "a", text: "" }, server({ t: "error", message: "gone", worktreeId: "a" })], s);
+    expect(s.local.a?.restoring).toBeUndefined();
+  });
   test("a send from the lead row shows as sent and working until the row says so itself", () => {
     let s = run([
       hello(wt("main", "main"), wt("sp", "spare")),

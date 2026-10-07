@@ -600,14 +600,15 @@ export function ChatLog({
           )}
         {tail}
         {/* sent from an archived page or a found worktree's: newer than the note it answers, so it
-            reads under it, and it stays until the worktree's agent has the message */}
+            reads under it, and it stays until the worktree's agent has the message. The page's
+            own restore press has no words: the tag alone says the row is on its way */}
         {restoring !== undefined && (
           <div className="msg-user queued-msg">
             <span className="queued-tag">
               <Icon name="clock" className="icon-inline" />
               <span className="queued-word">{found ? "taking over" : "restoring"}</span>
             </span>
-            <span className="queued-text">{restoring}</span>
+            {restoring && <span className="queued-text">{restoring}</span>}
           </div>
         )}
       </div>

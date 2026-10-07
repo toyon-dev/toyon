@@ -2,7 +2,6 @@ import type { ArchivedWorktree } from "@toyon/shared";
 import { dollars } from "../../surfaces/chat/usage.ts";
 import { ago } from "../../surfaces/util.ts";
 import { grouped, type MenuEntry, type MenuItem } from "../../ui/menu.ts";
-import type { DaemonSocket } from "../../ws.ts";
 import type { State } from "../store.ts";
 import { copyText, type Deps } from "./deps.ts";
 
@@ -29,9 +28,12 @@ export function archivedHint(a: ArchivedWorktree): string {
   return parts.filter(Boolean).join(" · ");
 }
 
-/** bring an archived worktree back; this tab focuses its row when the daemon lists it */
-export function restoreArchived(sock: DaemonSocket | null, archiveId: string, clientId: string) {
+/** bring an archived worktree back; this tab focuses its row when the daemon lists it. The page
+ * shows the restore under way until then, and its offer goes with it, so a second press while the
+ * daemon is slow has nothing to land on. */
+export function restoreArchived({ sock, dispatch }: Deps, archiveId: string, clientId: string) {
   sock?.send({ t: "restore-worktree", archiveId, clientId });
+  dispatch({ a: "restoring", id: archiveId, text: "" });
 }
 
 /** an archived worktree: bring it back, or let it go. Deleting is the one verb here that cannot be
@@ -47,7 +49,7 @@ export function archivedItems(
       label: "restore",
       disabled: a.restorable ? undefined : "its commits were not kept",
       onClick: () => {
-        restoreArchived(sock, a.id, s.clientId);
+        restoreArchived({ sock, dispatch }, a.id, s.clientId);
         dispatch({ a: "close" });
       },
     },

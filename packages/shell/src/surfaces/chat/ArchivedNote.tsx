@@ -1,6 +1,7 @@
 import type { ArchivedWorktree } from "@toyon/shared";
 import { restoreArchived } from "../../state/actions/archive.ts";
-import { useSock, useStore } from "../../state/context.tsx";
+import { useDispatch, useSock, useStore } from "../../state/context.tsx";
+import { useLocalField } from "../../state/selectors.ts";
 import { Button } from "../../ui/Button.tsx";
 import { DaemonRow, useAgo } from "./DaemonRow.tsx";
 import { dollars } from "./usage.ts";
@@ -10,10 +11,13 @@ import { dollars } from "./usage.ts";
  * conversation, and it is the daemon's row, like the word on a land. The restore offer lives here,
  * and a message sent from the box below restores as well: a rail row that restored on its own
  * click was too easy to hit on the way to another row, and typing is not something that happens
- * on the way past. */
+ * on the way past. The offer goes with the press: the page stays until the row is listed, which
+ * can take a while behind a landing, and a second press would ask for a second worktree. */
 export function ArchivedNote({ item }: { item: ArchivedWorktree }) {
   const sock = useSock();
+  const dispatch = useDispatch();
   const clientId = useStore((s) => s.clientId);
+  const restoring = useLocalField(item.id, "restoring");
   // the sentence beside the word fits one line, the way the landed row's does, and the note under
   // it says only what the word does not: what was kept, and that the box below restores as well.
   // That the directory and branch are gone is what archived means; what restoring does is what
@@ -36,8 +40,8 @@ export function ArchivedNote({ item }: { item: ArchivedWorktree }) {
         {ago}
         {item.landed ? ", after it was merged into main" : ""}
       </span>
-      {item.restorable && (
-        <Button variant="inline" tone="strong" onClick={() => restoreArchived(sock, item.id, clientId)}>
+      {item.restorable && restoring === undefined && (
+        <Button variant="inline" tone="strong" onClick={() => restoreArchived({ sock, dispatch }, item.id, clientId)}>
           restore
         </Button>
       )}

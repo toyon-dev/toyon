@@ -302,6 +302,11 @@ export class WorktreeService {
   private archive: WorktreeArchive;
   /** archives under way, by worktree id: a click during a sweep joins the one already running */
   private archiving = new Map<string, Promise<ArchivedWorktree | null>>();
+  /** restores under way, by archive id: a second press of restore, or a message typed into the
+   * page meanwhile, joins the one already running. Let through, a second restore of the same id
+   * checks out a second directory under the same record, or fails on the first's path and removes
+   * it on the way out. */
+  private restoring = new Map<string, Promise<WorktreeInfo>>();
   /** worktrees whose directory is being removed. A forced remove empties a big tree over seconds
    * and git answers honestly about a half-empty one, so a status read in that window reports every
    * file still in it as deleted: 15k of them on a 20k-file tree. Reads answer from the last counts
@@ -1180,8 +1185,24 @@ export class WorktreeService {
   /** Put an archived worktree back as it was removed: its branch at the commit it was on, its
    * uncommitted work over that, unstaged, and its chat. The agent resumes its own session when the
    * directory is the same one, since that is what the session is keyed by. A `message` was typed
-   * into the archived chat: it goes to the agent the way a new worktree's first one does. */
+   * into the archived chat: it goes to the agent the way a new worktree's first one does. One
+   * restore per id at a time, and an id that is a row already is that row: the page stays on
+   * screen until the row is listed, so a second press, or a message sent meanwhile, is asked of
+   * the worktree the first press brings back. */
   async restore(archiveId: string, createdBy?: string, message?: RestoreMessage): Promise<WorktreeInfo> {
+    const running = this.restoring.get(archiveId);
+    const live = running ? await running : this.d.state.worktree(archiveId);
+    if (live) {
+      if (message)
+        await this.send(live.id, { text: message.text, clientId: createdBy, attachments: message.attachments });
+      return live;
+    }
+    const done = this.bringBack(archiveId, createdBy, message).finally(() => this.restoring.delete(archiveId));
+    this.restoring.set(archiveId, done);
+    return done;
+  }
+
+  private async bringBack(archiveId: string, createdBy?: string, message?: RestoreMessage): Promise<WorktreeInfo> {
     const rec = this.archive.get(archiveId);
     if (!rec) throw new UserError("that archived worktree is gone");
     const old = rec.worktree;

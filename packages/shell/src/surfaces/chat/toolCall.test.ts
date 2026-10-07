@@ -357,9 +357,18 @@ describe("toolLabel", () => {
     expect(toolLabel(asked)).toMatchObject({ name: "", icon: "chat", hint: "Which one?" });
   });
 
-  test("a tool with no kind takes its glyph from its name, and keeps the name on the row", () => {
-    const skill = { name: "Skill", input: { skill: "dataviz" } };
-    expect(toolLabel(skill)).toMatchObject({ name: "Skill", icon: "layers" });
+  test("a tool with no kind takes its glyph from its name, and prints the name only where the row has nothing else", () => {
+    // the glyph says skill; the row says what was typed, not the adapter's "Load skill: x"
+    const skill = { name: "Skill", title: "Load skill: dataviz", input: { skill: "dataviz" } };
+    expect(toolLabel(skill)).toMatchObject({ name: "", icon: "layers", hint: "/dataviz" });
+    const ran = { ...skill, title: "Load skill: code-review", input: { skill: "code-review", args: "high" } };
+    expect(toolLabel(ran)).toMatchObject({ name: "", icon: "layers", hint: "/code-review high" });
+    // no skill named yet: the adapter's title stands in, still without the name in front
+    expect(toolLabel({ name: "Skill", title: "Load skill", input: {} })).toMatchObject({
+      name: "",
+      hint: "Load skill",
+    });
+    // nothing but the name to print: it prints
     const output = { name: "TaskOutput", title: "TaskOutput", toolKind: "other" as const, input: {} };
     expect(toolLabel(output)).toMatchObject({ name: "TaskOutput", icon: "terminal" });
     // named only by its title

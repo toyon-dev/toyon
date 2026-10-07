@@ -65,6 +65,8 @@ const KIND_ICON: Record<ToolKind, IconName> = {
   other: "dot",
 };
 
+const SKILL_TOOL = "Skill";
+
 /** Claude's tools that arrive with no kind, which would otherwise all wear the dot: the glyph is
  * picked by the tool's name instead. A Map, since a name is the agent's string and an object would
  * answer "constructor". A tool not listed here and not kinded (an MCP server's) keeps the dot. */
@@ -76,8 +78,20 @@ const NAME_ICON = new Map<string, IconName>([
   // what a background command or subagent printed
   ["TaskOutput", "terminal"],
   // a packaged set of instructions loaded over the agent's own
-  ["Skill", "layers"],
+  [SKILL_TOOL, "layers"],
 ]);
+
+/** Claude loading a skill, the packaged instructions a person runs as a slash command. The adapter
+ * titles every such call "Load skill: x", whether the skill only loaded or ran forked for a minute
+ * across twenty calls (its calls then nest under the row, which wears the fork glyph), so the row
+ * says what was typed instead: the slash form, with the args after it. */
+function skillForm(call: ToolCall): string {
+  if (call.name !== SKILL_TOOL) return "";
+  const skill = field(call, "skill").trim();
+  if (!skill) return "";
+  const args = field(call, "args").trim();
+  return args ? `/${skill} ${args}` : `/${skill}`;
+}
 
 /** a run row's verb says more than "execute" does: `grep -rn x .` is a search and `git commit` is a
  * commit, and the column reads better following the command than the kind. Conservative on purpose:
@@ -244,7 +258,7 @@ export function guardianHint(output: string): string {
 export function toolLabel(call: ToolCall, roots: string[] = []): ToolRowText {
   const command = unwrapShell(field(call, "command"));
   const v = filePathOf(call) || command || field(call, "path") || field(call, "pattern");
-  const raw = v || (call.title && call.title !== call.name ? call.title : "");
+  const raw = v || skillForm(call) || (call.title && call.title !== call.name ? call.title : "");
   // Claude's Bash tool sends a sentence of its own ("Build the project"); it beats the command as
   // the row's label, and the command still shows inside
   const detail = relPath(field(call, "description") || raw, roots);
@@ -258,10 +272,11 @@ export function toolLabel(call: ToolCall, roots: string[] = []): ToolRowText {
   // second word for the shine to cross. So it prints where the glyph says nothing (a call with no
   // kind of its own) and for a ToolSearch, whose words alone would read as a search of the code.
   // Toyon's own rows (a `!` command, the check after a turn) carry a name for the log to find
-  // them by, not a word to print: the glyph and the command already say what ran
-  // An ask has no kind either, but it has a glyph of its own, the one its parked row wears.
+  // them by, not a word to print: the glyph and the command already say what ran.
+  // A call with no kind whose name picks its glyph (an ask, a skill, a monitor) is said by that
+  // glyph the same way: "Skill" before "/code-review" is the glyph again as a word.
   const ask = call.name === ASK_TOOL;
-  const glyphSays = (kind !== "other" || ask) && call.name !== TOOL_SEARCH;
+  const glyphSays = (kind !== "other" || NAME_ICON.has(call.name)) && call.name !== TOOL_SEARCH;
   const own =
     detail && (glyphSays || call.name === call.title || call.name === SHELL_TOOL || call.name === CHECK_TOOL)
       ? ""

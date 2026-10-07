@@ -94,6 +94,35 @@ describe("preview proxy", () => {
     }
   });
 
+  // Chrome keys an origin's process placement once per browsing context group, by the first
+  // document it loads from the origin, so the header has to be on the placeholder and on every
+  // answer the app gives, not only its HTML.
+  test("every document the preview serves asks Chrome for its own process", async () => {
+    const up = upstream("<html><head></head><body>hi</body></html>", "text/html; charset=utf-8");
+    const proxy = proxyTo(up.port ?? 0);
+    const waiting = startProxy({
+      port: freePort(),
+      hostname: "127.0.0.1",
+      remote: null,
+      grant: previewGrant("secret"),
+      bridgeScript: () => "",
+      getTarget: () => null,
+    });
+    try {
+      const page = await fetch(`http://127.0.0.1:${proxy.port}/`);
+      expect(page.headers.get("origin-agent-cluster")).toBe("?1");
+      const asset = await fetch(`http://127.0.0.1:${proxy.port}/data.json`);
+      expect(asset.headers.get("origin-agent-cluster")).toBe("?1");
+      const placeholder = await fetch(`http://127.0.0.1:${waiting.port}/`);
+      expect(placeholder.status).toBe(503);
+      expect(placeholder.headers.get("origin-agent-cluster")).toBe("?1");
+    } finally {
+      proxy.stop();
+      waiting.stop();
+      up.stop(true);
+    }
+  });
+
   // An open that closes reads as success to every reconnecting client: it resets the backoff and
   // the retry becomes a hot loop, with whatever it sent in between dropped in the proxy.
   test("a websocket the app refuses fails the handshake instead of opening first", async () => {

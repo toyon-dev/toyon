@@ -65,6 +65,24 @@ export interface PreviewOpts {
 /** Vite's client polls the server this way while its HMR socket is down */
 const VITE_PING = "text/x-vite-ping";
 
+/** Chrome puts frames of one site in one renderer process, and a site is scheme plus registrable
+ * domain with the port ignored: `w<id>.toyon.localhost:<port>` is the shell's own site, on purpose,
+ * so cookie login works inside the iframe. The one process is the cost. A preview that runs out
+ * of memory or crashes takes the shell down with it, and every other preview too. This header asks
+ * for an origin-keyed agent cluster, which Chrome takes as the hint to give the origin its own
+ * process; the origin is still same-site, so its cookies still count as first-party. Chrome keys
+ * an origin once per browsing context group, by the first document it loads from it, so the
+ * placeholder has to carry the header as well as the app's pages: a placeholder without it would
+ * pin the app that follows into the shared process. */
+const ORIGIN_KEYED = "origin-agent-cluster";
+
+function placeholder(status: number): Response {
+  return new Response(waitingPage(), {
+    status,
+    headers: { "content-type": "text/html; charset=utf-8", "retry-after": "2", [ORIGIN_KEYED]: "?1" },
+  });
+}
+
 export function previewHandler(opts: PreviewOpts): PreviewHandler {
   const hostPart = (t: ProxyTarget) => (t.host.includes(":") ? `[${t.host}]` : t.host);
 
@@ -84,12 +102,7 @@ export function previewHandler(opts: PreviewOpts): PreviewHandler {
       let target = opts.getTarget();
       if (target == null && !machine && opts.ready) target = await opts.ready();
 
-      if (target == null) {
-        return new Response(waitingPage(), {
-          status: 503,
-          headers: { "content-type": "text/html; charset=utf-8", "retry-after": "2" },
-        });
-      }
+      if (target == null) return placeholder(503);
 
       // WebSocket upgrade: dial the upstream first, and only then accept the browser's handshake.
       // Accepting first turns a socket the app refuses (an auth check on connect, a path it does
@@ -121,10 +134,7 @@ export function previewHandler(opts: PreviewOpts): PreviewHandler {
           redirect: "manual",
         });
       } catch {
-        return new Response(waitingPage(), {
-          status: 502,
-          headers: { "content-type": "text/html; charset=utf-8", "retry-after": "2" },
-        });
+        return placeholder(502);
       }
 
       const html = (res.headers.get("content-type") ?? "").includes("text/html");
@@ -135,10 +145,13 @@ export function previewHandler(opts: PreviewOpts): PreviewHandler {
       const encoded = res.headers.has("content-encoding");
       const cookies = res.headers.getSetCookie();
       const grantSet = cookies.some(setsGrant);
-      if (!html && !encoded && !grantSet) return res;
       const h = new Headers(res.headers);
-      h.delete("content-length");
-      h.delete("content-encoding");
+      // on every answer, not only HTML: whatever the frame navigates to is a document to Chrome
+      h.set(ORIGIN_KEYED, "?1");
+      if (html || encoded) {
+        h.delete("content-length");
+        h.delete("content-encoding");
+      }
       if (grantSet) {
         h.delete("set-cookie");
         for (const c of cookies) if (!setsGrant(c)) h.append("set-cookie", c);

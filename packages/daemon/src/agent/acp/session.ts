@@ -18,6 +18,7 @@ import type {
   AttachmentInput,
   AttachmentKind,
   AuthMethodInfo,
+  CommandOrigin,
   ModelChoice,
   PermissionMode,
   QueuedMessage,
@@ -29,6 +30,7 @@ import type { AuthObservation } from "../accounts.ts";
 import type { AgentAdapter, AskOpts, AskReply, AuthOutcome, SendOpts } from "../adapter.ts";
 import type { AttachmentStore, Stored } from "../attachments.ts";
 import { agentModeFor, modeAfterPlan } from "../modes.ts";
+import { markOrigins } from "../origins.ts";
 import { formatOutput } from "../output.ts";
 import { decide, decideUnattended, pickOption } from "../policy.ts";
 import { ambientBlock, buildPrompt, handoffLandedContext, SYSTEM_APPEND } from "../prompt.ts";
@@ -77,6 +79,10 @@ export interface AcpSessionDeps {
   seedCommands?: () => AgentCommand[];
   /** the list this agent advertised, kept for the next worktree on the same repo */
   onCommandsLearned?: (commands: AgentCommand[]) => void;
+  /** which names on that list the person wrote, by where the file sits (agent/origins.ts). Read
+   * on every push, which is when a skill added to the folder shows up: the agent re-lists on its
+   * own reload, and the folders are a handful of entries. */
+  commandOrigins?: () => Map<string, CommandOrigin>;
   /** how long an idle adapter process lives after its last turn */
   idleMs?: number;
   /** how long a turn the agent started on its own may go quiet before it is over */
@@ -1108,7 +1114,8 @@ export class AcpSession implements AgentAdapter {
     // still null). Buffered rather than published, because an ask session's list lands before
     // askOnce has registered its id in `side` and must not win over the worktree's own.
     if (params.update.sessionUpdate === "available_commands_update") {
-      const mapped = mapCommands(params.update.availableCommands);
+      const origins = this.d.commandOrigins?.() ?? new Map();
+      const mapped = markOrigins(mapCommands(params.update.availableCommands), origins);
       commands.set(params.sessionId, mapped);
       if (this.live && params.sessionId === this.live.sessionId) this.setCommands(mapped);
       return;
@@ -1557,6 +1564,12 @@ function authMethodInfo(m: acp.AuthMethod): AuthMethodInfo {
 function sameCommands(a: AgentCommand[], b: AgentCommand[]): boolean {
   return (
     a.length === b.length &&
-    a.every((c, i) => c.name === b[i]?.name && c.description === b[i]?.description && c.hint === b[i]?.hint)
+    a.every(
+      (c, i) =>
+        c.name === b[i]?.name &&
+        c.description === b[i]?.description &&
+        c.hint === b[i]?.hint &&
+        c.origin === b[i]?.origin,
+    )
   );
 }

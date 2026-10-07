@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { PERMISSION_MODES } from "@toyon/shared";
-import { mergeCommands, ownCommandOf, ownCommands } from "./ownCommands.ts";
+import { browseCommands, commandTiers, mergeCommands, ownCommandOf, ownCommands } from "./ownCommands.ts";
 
 const own = ownCommands("Commit and merge into main here");
 const planLine = PERMISSION_MODES.find((m) => m.id === "plan")?.description;
@@ -51,6 +51,41 @@ describe("mergeCommands", () => {
     const plans = mergeCommands(own, agent).filter((c) => c.name === "plan");
     expect(plans).toHaveLength(1);
     expect(plans[0]?.description).toBe(planLine);
+  });
+
+  test("the person's own rows lead toyon's, in the agent's order, and a name toyon owns stays toyon's", () => {
+    const list = [
+      { name: "standup", description: "standup (user)", origin: "user" as const },
+      { name: "land", description: "a skill named like the verb", origin: "project" as const },
+      ...agent,
+      { name: "aws", description: "debug the envs", origin: "project" as const },
+    ];
+    const names = mergeCommands(own, list).map((c) => c.name);
+    expect(names).toEqual(["standup", "aws", ...own.map((c) => c.name), "compact"]);
+    expect(mergeCommands(own, list).find((c) => c.name === "land")?.origin).toBeUndefined();
+    const tiers = commandTiers(own, list);
+    expect(tiers.yours.map((c) => c.name)).toEqual(["standup", "aws"]);
+    expect(tiers.rest.map((c) => c.name)).toEqual(["compact"]);
+  });
+});
+
+describe("browseCommands", () => {
+  const list = [
+    { name: "aws", description: "debug the envs", origin: "project" as const },
+    { name: "compact", description: "free up context" },
+    { name: "model", description: "set the model" },
+    { name: "plan", description: "its own plan" },
+  ];
+
+  test("a bare slash shows the person's rows and toyon's, and counts what a letter would find", () => {
+    const { rows, more } = browseCommands(own, list);
+    expect(rows.map((c) => c.name)).toEqual(["aws", ...own.map((c) => c.name)]);
+    // the agent's plan is toyon's row already, so it is neither shown twice nor counted as hidden
+    expect(more).toBe(2);
+  });
+
+  test("before the agent has advertised anything, toyon's rows alone and nothing to find", () => {
+    expect(browseCommands(own, [])).toEqual({ rows: own, more: 0 });
   });
 });
 

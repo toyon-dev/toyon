@@ -23,4 +23,8 @@
     align-items: baseline;
     gap: 4px;
   }
+  /* the note sits at the far end, so it reads as an aside to the keys and not a fourth one */
+  .key-note {
+    margin-left: auto;
+  }
 }

@@ -10,6 +10,7 @@ import { spawnAcp } from "../agent/acp/transport.ts";
 import type { AgentAdapter, LoginRun } from "../agent/adapter.ts";
 import { AttachmentStore } from "../agent/attachments.ts";
 import type { ToyonMcp } from "../agent/mcp.ts";
+import { commandFolders, readCommandOrigins } from "../agent/origins.ts";
 import { planEdited, writePlanDoc } from "../agent/planDoc.ts";
 import { type PreviewStanding, previewContext } from "../agent/prompt.ts";
 import type { AgentRegistry } from "../agent/registry.ts";
@@ -191,22 +192,23 @@ function defaultAgent(
   onProcess: () => void,
 ): AgentAdapter {
   const mcp = d.mcp;
+  // resolved at spawn time: a spare is stamped with the task's agent when claimed, and rows from
+  // before the registry existed get the default the first time they are used
+  const spec = () => {
+    const w = d.state.requireWorktree(wt.id);
+    if (!w.agent) {
+      w.agent = d.agents.defaultId(d.state.defaultAgent);
+      d.state.save();
+      d.hub.emit("worktreesChanged");
+    }
+    return d.agents.require(w.agent);
+  };
   const agent = new AcpSession({
     worktreeId: wt.id,
     cwd: wt.path,
     preview: () => previewContext(preview()),
     onProcess,
-    // resolved at spawn time: a spare is stamped with the task's agent when claimed, and rows from
-    // before the registry existed get the default the first time they are used
-    spec: () => {
-      const w = d.state.requireWorktree(wt.id);
-      if (!w.agent) {
-        w.agent = d.agents.defaultId(d.state.defaultAgent);
-        d.state.save();
-        d.hub.emit("worktreesChanged");
-      }
-      return d.agents.require(w.agent);
-    },
+    spec,
     connect: (app, spec, prepared) => spawnAcp(app, d.agents.launch(spec, prepared), wt.path, wt.id),
     launch: (spec) => d.agents.command(spec),
     planSignIn: () => d.managed?.planSignIn ?? true,
@@ -223,6 +225,8 @@ function defaultAgent(
     seedCommands: () => d.state.cachedCommands(d.state.requireWorktree(wt.id).agent ?? "", wt.repoId),
     onCommandsLearned: (commands) =>
       d.state.setCachedCommands(d.state.requireWorktree(wt.id).agent ?? "", wt.repoId, commands),
+    // the spec at call time too: the folders depend on which agent this row runs
+    commandOrigins: () => readCommandOrigins(commandFolders(spec(), wt.path)),
     // the record, read fresh: the composer changes it between turns and a plan approval sets it
     mode: () => d.state.requireWorktree(wt.id).mode ?? DEFAULT_PERMISSION_MODE,
     // the record only: the agent switched itself on the approval and reports it, so nothing is

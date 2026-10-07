@@ -38,6 +38,7 @@ export function InlinePicker<T>({
   nav,
   listRef,
   empty,
+  note,
 }: {
   results: T[];
   keyOf: (t: T) => string;
@@ -46,6 +47,8 @@ export function InlinePicker<T>({
   nav: ListNav<T>;
   listRef: RefObject<HTMLDivElement>;
   empty: ReactNode;
+  /** a quiet word at the end of the key strip: what the list is leaving out, and how to reach it */
+  note?: ReactNode;
 }) {
   return (
     <Float className="inline-picker" anchor="parent" placement={INLINE}>
@@ -73,6 +76,7 @@ export function InlinePicker<T>({
           ["tab", "inserts"],
           ["esc", "dismisses"],
         ]}
+        note={note}
       />
     </Float>
   );

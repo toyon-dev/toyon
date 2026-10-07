@@ -34,12 +34,30 @@ export function ownCommands(landLine: string): AgentCommand[] {
   ];
 }
 
-/** toyon's rows ahead of the agent's, minus any agent row named like one of toyon's. An agent's
- * own `plan` switches the agent for one turn while the chip never knew, so the typed name goes to
- * the chip; the agent's mode is still what toyon sets on its behalf. */
-export function mergeCommands(own: AgentCommand[], agent: AgentCommand[]): AgentCommand[] {
+/** the `/` menu's three tiers, in rank order: the person's own skills and commands (the ones the
+ * daemon found on disk, in the agent's order), toyon's, then the rest of the agent's as given.
+ * An agent row named like one of toyon's is dropped wherever it came from: an agent's own `plan`
+ * switches the agent for one turn while the chip never knew, so the typed name goes to the chip;
+ * the agent's mode is still what toyon sets on its behalf. */
+export function commandTiers(own: AgentCommand[], agent: AgentCommand[]) {
   const taken = new Set(own.map((c) => c.name));
-  return [...own, ...agent.filter((c) => !taken.has(c.name))];
+  const free = agent.filter((c) => !taken.has(c.name));
+  return { yours: free.filter((c) => c.origin), own, rest: free.filter((c) => !c.origin) };
+}
+
+/** every row, tier by tier: what a typed letter searches, and the order a tie falls back on */
+export function mergeCommands(own: AgentCommand[], agent: AgentCommand[]): AgentCommand[] {
+  const t = commandTiers(own, agent);
+  return [...t.yours, ...t.own, ...t.rest];
+}
+
+/** the menu before a letter is typed: the person's own rows and toyon's, the way the agent's own
+ * terminal leads with what the person wrote, and how many of the agent's a letter would find. The
+ * built-ins are many and the same in every project, so they wait for a letter instead of burying
+ * the rows made for this one. */
+export function browseCommands(own: AgentCommand[], agent: AgentCommand[]): { rows: AgentCommand[]; more: number } {
+  const t = commandTiers(own, agent);
+  return { rows: [...t.yours, ...t.own], more: t.rest.length };
 }
 
 /** the command a draft leads with, when it is one of toyon's; null for a message, a `!` command or

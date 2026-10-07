@@ -108,6 +108,14 @@ describe("filterCommands", () => {
     expect(filterCommands(cmds, "delivery").map((c) => c.name)).toEqual(["receive"]);
     expect(filterCommands(cmds, "zzz")).toEqual([]);
   });
+  test("names that match alike keep the list's order, which ranks whose they are over the alphabet", () => {
+    const tied = [
+      { name: "sync", description: "the person's own", origin: "project" as const },
+      { name: "ship", description: "the agent's" },
+    ];
+    expect(filterCommands(tied, "s").map((c) => c.name)).toEqual(["sync", "ship"]);
+    expect(filterCommands([...tied].reverse(), "s").map((c) => c.name)).toEqual(["ship", "sync"]);
+  });
 });
 
 describe("mentionSpans: the references in a sent message", () => {

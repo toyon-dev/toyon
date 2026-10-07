@@ -130,15 +130,19 @@ export function insertAt(text: string, span: { from: number; to: number }, repla
  * change" and four more before anything actually called plan. The description is still worth
  * searching when the name is unguessable (`/chart` should find a skill named dataviz), so it stays
  * as a fallback rather than a competitor.
+ *
+ * Equal scores keep the list's own order, which is the order the rows rank in before a letter is
+ * typed: the person's own, toyon's, the agent's (ownCommands.ts `mergeCommands`). So two names
+ * that match alike settle by whose they are, not by the alphabet.
  */
 export function filterCommands(commands: AgentCommand[], q: string): AgentCommand[] {
   const needle = q.trim().toLowerCase();
   if (!needle) return commands;
   const ranked = (score: (c: AgentCommand) => number) =>
     commands
-      .map((c) => ({ c, score: score(c) }))
+      .map((c, i) => ({ c, i, score: score(c) }))
       .filter((x) => x.score > 0)
-      .sort((a, b) => b.score - a.score || a.c.name.localeCompare(b.c.name))
+      .sort((a, b) => b.score - a.score || a.i - b.i)
       .map((x) => x.c);
   const byName = ranked((c) => commandScore(c.name, needle));
   return byName.length > 0 ? byName : ranked((c) => commandScore(c.description, needle));

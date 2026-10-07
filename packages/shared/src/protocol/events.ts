@@ -149,7 +149,15 @@ export interface AgentCommand {
   description: string;
   /** what the arguments are, when the command takes any */
   hint?: string;
+  /** where the person wrote it, when the daemon found it on disk under that name: a skill or
+   * command file in the project, in their home folder, or in a plugin folder their agents.json
+   * loads. Absent for what the agent brings of its own (built-ins, bundled and marketplace skills,
+   * a command a mod registers at runtime), which the agent never says apart. The `/` menu leads
+   * with these before anything else. */
+  origin?: CommandOrigin;
 }
+
+export type CommandOrigin = "project" | "user" | "plugin";
 
 /** one way to log the agent in, as it advertised over ACP */
 export interface AuthMethodInfo {

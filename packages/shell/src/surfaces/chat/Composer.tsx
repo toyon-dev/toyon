@@ -77,7 +77,7 @@ import { ImageChip } from "./ImageChip.tsx";
 import { MentionText, openMention } from "./Mentions.tsx";
 import { filterCommands, insertAt, triggerAt } from "./mentions.ts";
 import { dismissOffer, offerOf, useDismissedOffers } from "./offer.ts";
-import { isMode, mergeCommands, ownCommandOf, ownCommands } from "./ownCommands.ts";
+import { browseCommands, isMode, mergeCommands, ownCommandOf, ownCommands } from "./ownCommands.ts";
 import { PasteChip } from "./PasteChip.tsx";
 import { PermissionCard } from "./PermissionCard.tsx";
 import { PickChip } from "./PickChip.tsx";
@@ -434,8 +434,11 @@ export function Composer({
   const triggerQuery = trigger?.query;
   const rows = useMemo((): Row[] => {
     if (triggerQuery === undefined) return [];
-    if (triggerKind === "command")
+    if (triggerKind === "command") {
+      // a bare `/` browses what was made for this project; a letter searches everything the agent has
+      if (!triggerQuery.trim()) return browseCommands(ownRows, commands).rows.map(cmdRow);
       return filterCommands(mergeCommands(ownRows, commands), triggerQuery).slice(0, 8).map(cmdRow);
+    }
     const out: Row[] = [];
     // "review @changes" is the common ask and should not need one chip per file
     const changed = git?.files.length ?? 0;
@@ -443,6 +446,11 @@ export function Composer({
     out.push(...rankMentions(files ?? [], folders, git?.files ?? [], triggerQuery, 8));
     return out;
   }, [triggerKind, triggerQuery, files, folders, git, commands, ownRows]);
+  // the agent's rows a bare `/` leaves out, said on the menu's key strip so they are not lost
+  const more =
+    triggerKind === "command" && triggerQuery !== undefined && !triggerQuery.trim()
+      ? browseCommands(ownRows, commands).more
+      : 0;
 
   const composerRef = useRef<HTMLTextAreaElement>(null);
   // the marks over the field scroll with it, or a long draft's underlines sit under the wrong words
@@ -1232,6 +1240,7 @@ export function Composer({
           nav={nav}
           listRef={listRef}
           empty={emptyMenu(trigger.kind, files, commands.length, source !== null)}
+          note={more > 0 ? `type to find ${more} more` : undefined}
           row={(r) => {
             // the letter column only while the live status has a letter to put in it
             const gutter = (git?.files.length ?? 0) > 0;

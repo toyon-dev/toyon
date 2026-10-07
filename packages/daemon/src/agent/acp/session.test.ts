@@ -1116,6 +1116,27 @@ describe("AcpSession", () => {
     await w.session.close();
   });
 
+  test("a pushed command the origins dep knows is marked with where it sits; the rest stay the agent's", async () => {
+    const fake = fakeAgent(say("ok"), {
+      commands: {
+        s1: [
+          { name: "tidy", description: "mine" },
+          { name: "compact", description: "its own" },
+        ],
+      },
+    });
+    const w = world(fake, claudeSpec, 60_000, `w${Math.random().toString(36).slice(2, 8)}`, {
+      commandOrigins: () => new Map([["tidy", "project"]]),
+    });
+    w.session.send("hi");
+    await w.idle();
+    expect(w.session.commands).toEqual([
+      { name: "tidy", description: "mine", origin: "project" },
+      { name: "compact", description: "its own" },
+    ]);
+    await w.session.close();
+  });
+
   test("an ask session's commands never clobber the worktree's", async () => {
     const fake = fakeAgent(say("ok"), {
       commands: { s1: [{ name: "review", description: "mine" }], s2: [{ name: "namer", description: "theirs" }] },

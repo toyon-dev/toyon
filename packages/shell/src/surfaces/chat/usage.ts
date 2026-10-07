@@ -2,6 +2,8 @@
 // reports cumulative figures (the session's spend so far, the context as of the last reply), so
 // the per-turn number is a difference the store already took; this only formats.
 
+import type { AgentLimits } from "@toyon/shared";
+
 /** tokens as people say them: 812, 9.5k, 42k, 200k */
 export function tokens(n: number): string {
   if (n < 1000) return String(Math.round(n));
@@ -29,4 +31,64 @@ export function compactAdvice(fraction: number): string {
 export function compactNudge(fraction: number): string | undefined {
   if (fraction < 0.5) return undefined;
   return fraction < 0.8 ? "worth compacting between tasks" : "compact before the next task";
+}
+
+// ---- the plan's windows, the account's rather than this worktree's ----
+
+type WindowKey = keyof AgentLimits["windows"];
+const WINDOW_NAMES: Record<WindowKey, string> = { five_hour: "5-hour limit", seven_day: "weekly limit" };
+const WINDOW_KEYS: WindowKey[] = ["five_hour", "seven_day"];
+
+/** a window still running: one past its reset has emptied, and nothing has read it since */
+function running(limits: AgentLimits, now: number): Array<{ key: WindowKey; used: number; resetsAt: number }> {
+  return WINDOW_KEYS.flatMap((key) => {
+    const w = limits.windows[key];
+    return w && w.resetsAt > now ? [{ key, used: w.used, resetsAt: w.resetsAt }] : [];
+  });
+}
+
+/** the window nearest its cap, as the fraction the ring's level draws: empty once every window
+ * has reset, until the next reply reads them again */
+export function limitLevel(limits: AgentLimits, now: number): number {
+  return Math.min(1, Math.max(0, ...running(limits, now).map((w) => w.used)));
+}
+
+const pct = (used: number) => `${Math.round(100 * used)}%`;
+
+/** the tooltip's first line when the ring has no context to speak of: a new worktree, whose box
+ * shows the account's windows alone */
+export function limitLabel(limits: AgentLimits, now: number): string {
+  const [top] = running(limits, now).sort((a, b) => b.used - a.used);
+  return top ? `${pct(top.used)} of the ${WINDOW_NAMES[top.key]}` : "plan limits reset";
+}
+
+/** when a window empties, for its line: the clock when that is today, the date and clock when not */
+export function resetWord(resetsAt: number, now: number, locale?: string): string {
+  const then = new Date(resetsAt);
+  const today = new Date(now);
+  const sameDay = then.toDateString() === today.toDateString();
+  return new Intl.DateTimeFormat(locale, {
+    ...(sameDay ? {} : { month: "short", day: "numeric" }),
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(then);
+}
+
+/** one line per window for the tooltip, the way Claude Code's own usage screen words them, with
+ * the agent's warning on the window it is about. `when` words a reset time; the default reads
+ * the clock in the person's locale. */
+export function limitLines(limits: AgentLimits, now: number, when = (ms: number) => resetWord(ms, now)): string[] {
+  return WINDOW_KEYS.flatMap((key) => {
+    const w = limits.windows[key];
+    if (!w) return [];
+    const name = WINDOW_NAMES[key];
+    if (w.resetsAt <= now) return [`${name}: reset ${when(w.resetsAt)}, read again on the next reply`];
+    const warn =
+      limits.binding === key && limits.status === "rejected"
+        ? ", out until then"
+        : limits.binding === key && limits.status === "allowed_warning"
+          ? ", nearly out"
+          : "";
+    return [`${name}: ${pct(w.used)} used, resets ${when(w.resetsAt)}${warn}`];
+  });
 }

@@ -215,6 +215,7 @@ function defaultAgent(
     onStatus: (status) => d.hub.emit("agentStatus", wt.id, status),
     beforeTurn: async () => d.turnStarting?.(wt.id),
     onAuth: (agentId, o) => d.accounts?.observe(agentId, o),
+    onLimits: (agentId, limits) => d.accounts?.observeLimits(agentId, limits),
     // read at call time, for the same reason as `spec`
     seedCommands: () => d.state.cachedCommands(d.state.requireWorktree(wt.id).agent ?? "", wt.repoId),
     onCommandsLearned: (commands) =>

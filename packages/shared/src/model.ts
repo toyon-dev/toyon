@@ -598,6 +598,29 @@ export interface AuthStatus {
   account?: { email?: string; organization?: string; plan?: string };
 }
 
+/** one window of a subscription's rate limit, as the agent last read it off a reply: the fraction
+ * spent (past 1 when a window is overrun) and when the window empties, in ms */
+export interface LimitWindow {
+  used: number;
+  resetsAt: number;
+}
+
+/** How much of its plan an agent's account has used. Per account, not per worktree: every session
+ * of the agent reads the same figures off its replies, and the latest to speak is kept. Absent on
+ * an API key or a gateway, where no plan window applies. */
+export interface AgentLimits {
+  /** the agent's own word on the window nearest its cap: whether the next reply goes through */
+  status: "allowed" | "allowed_warning" | "rejected";
+  /** which window that word is about (`five_hour`, `seven_day`, a per-model week) */
+  binding?: string;
+  windows: {
+    five_hour?: LimitWindow;
+    seven_day?: LimitWindow;
+  };
+  /** when the agent said so, in ms: the figures stand still between replies */
+  at: number;
+}
+
 /** one entry of the daemon's agent registry, as the shell's pickers see it */
 export interface AgentInfo {
   id: string;
@@ -619,6 +642,8 @@ export interface AgentInfo {
   quick?: true;
   /** the identity it last reported, from any connection; absent until one has run */
   auth?: AuthStatus;
+  /** how much of its plan the account has used, from the last reply any of its sessions heard */
+  limits?: AgentLimits;
   /** it advertised ACP's logout method, so settings can offer to sign it out */
   canLogout?: boolean;
   /** the models it advertised the last time a session opened; absent until one has */

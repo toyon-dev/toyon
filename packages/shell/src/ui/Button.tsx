@@ -118,8 +118,8 @@ type IconProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, "children" | "ari
     label: string;
     /** shortcut shown set apart in the tooltip, and folded into the accessible name */
     hint?: string;
-    /** a second line under the tooltip's text: the figures behind a gauge */
-    detail?: string;
+    /** the lines under the tooltip's text, one each: the figures behind a gauge */
+    detail?: string | string[];
     /** the sibling verb and its key, a row under the tooltip's text */
     also?: TipAlso;
     /** a mark over the glyph's corner, positioned by the caller's class: the composer's terminal

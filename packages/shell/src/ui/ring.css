@@ -1,14 +1,14 @@
-/* Ring: a fraction drawn as an arc. See Ring.tsx for where it sits. */
+/* Ring: a fraction drawn as an arc, and a second one as a level inside it. See Ring.tsx. */
 @layer tokens, base, surfaces;
 @layer base {
   /* the arc starts at twelve o'clock, which is where a gauge reads from; the track is the same
    colour at a quarter strength so the ring reads as a whole shape at any fill, the way the spinner
-   does, and the fill takes currentColor like an Icon */
+   does, and the fill takes currentColor like an Icon. Only the arc turns: the level inside fills
+   from the bottom and would fill sideways if the whole glyph did. */
   .ring {
     display: inline-block;
     flex-shrink: 0;
     vertical-align: -2px;
-    transform: rotate(-90deg);
     & circle {
       fill: none;
       stroke: currentColor;
@@ -19,6 +19,12 @@
     }
     & .ring-fill {
       stroke-linecap: round;
+      transform: rotate(-90deg);
+      transform-box: view-box;
+      transform-origin: center;
+    }
+    & .ring-level {
+      fill: currentColor;
     }
   }
 }

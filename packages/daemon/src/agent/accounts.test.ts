@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import * as acp from "@agentclientprotocol/sdk";
-import type { AgentInfo, AuthStatus } from "@toyon/shared";
+import type { AgentInfo, AgentLimits, AuthStatus } from "@toyon/shared";
 import { fakeAgents } from "../../test/helpers/fakes.ts";
 import { AgentAccounts, type AgentAccountsDeps } from "./accounts.ts";
 import { AUTH_STATUS_UPDATE_METHOD } from "./acp/authstatus.ts";
@@ -88,6 +88,36 @@ describe("AgentAccounts", () => {
     w.accounts.observe("claude", { canLogout: true, status: { ...max, account: { email: "who@example.com" } } });
     expect(w.changes()).toBe(1);
     w.accounts.observe("claude", { status: { kind: "none", label: "Not logged in" } });
+    expect(w.changes()).toBe(2);
+  });
+
+  test("the plan figures a reply reported sit on the agent's row, and the latest word wins", () => {
+    const w = world();
+    const first: AgentLimits = { status: "allowed", windows: { five_hour: { used: 0.2, resetsAt: 9_000 } }, at: 1 };
+    w.accounts.observeLimits("claude", first);
+    expect(w.accounts.describe(infos())[0]!.limits).toEqual(first);
+    expect(w.accounts.describe(infos())[1]!.limits).toBeUndefined();
+    const later: AgentLimits = { ...first, windows: { five_hour: { used: 0.3, resetsAt: 9_000 } }, at: 2 };
+    w.accounts.observeLimits("claude", later);
+    expect(w.accounts.describe(infos())[0]!.limits).toEqual(later);
+    expect(w.changes()).toBe(2);
+    // the credentials observed on the same agent and the figures keep each other
+    w.accounts.observe("claude", { status: max });
+    expect(w.accounts.describe(infos())[0]).toMatchObject({ auth: max, limits: later });
+  });
+
+  test("the same figures read off another reply are not a change the shell has to hear about", () => {
+    const w = world();
+    const read: AgentLimits = {
+      status: "allowed",
+      binding: "five_hour",
+      windows: { five_hour: { used: 0.2, resetsAt: 9_000 }, seven_day: { used: 0.1, resetsAt: 90_000 } },
+      at: 1,
+    };
+    w.accounts.observeLimits("claude", read);
+    w.accounts.observeLimits("claude", { ...read, at: 2 });
+    expect(w.changes()).toBe(1);
+    w.accounts.observeLimits("claude", { ...read, status: "allowed_warning", at: 3 });
     expect(w.changes()).toBe(2);
   });
 

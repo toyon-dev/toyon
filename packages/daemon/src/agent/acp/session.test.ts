@@ -3,7 +3,7 @@ import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmS
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as acp from "@agentclientprotocol/sdk";
-import type { AgentCommand, AgentEvent, AgentStatus, AuthStatus } from "@toyon/shared";
+import type { AgentCommand, AgentEvent, AgentLimits, AgentStatus, AuthStatus } from "@toyon/shared";
 import type { AuthObservation } from "../accounts.ts";
 import { AttachmentStore } from "../attachments.ts";
 import { PLANS_DIR, planEdited, writePlanDoc } from "../planDoc.ts";
@@ -314,6 +314,7 @@ function world(
   const events: AgentEvent[] = [];
   const statuses: AgentStatus[] = [];
   const auths: Array<[string, AuthObservation]> = [];
+  const limits: Array<[string, AgentLimits]> = [];
   let sessionId: string | undefined;
   const processes: Array<[number, boolean]> = [];
   const links: Array<{ pid: number; killed: boolean; exit: () => void }> = [];
@@ -351,6 +352,7 @@ function world(
     onEvent: (e) => events.push(e),
     onStatus: (s) => statuses.push(s),
     onAuth: (agentId, o) => auths.push([agentId, o]),
+    onLimits: (agentId, l) => limits.push([agentId, l]),
     onProcess: (pgid, up) => processes.push([pgid, up]),
     idleMs,
     prepare: async () => ({ bounds, env: {} }),
@@ -360,7 +362,7 @@ function world(
     for (let i = 0; i < 200 && (session.status === "working" || session.queueLength > 0); i++) await Bun.sleep(5);
   };
   const types = () => events.map((e) => e.type);
-  return { session, events, statuses, auths, types, idle, links, processes, sessionId: () => sessionId, id };
+  return { session, events, statuses, auths, limits, types, idle, links, processes, sessionId: () => sessionId, id };
 }
 
 describe("AcpSession", () => {
@@ -1468,6 +1470,43 @@ describe("AcpSession", () => {
     w.session.send("a");
     await w.idle();
     expect(w.auths).toEqual([["claude", { canLogout: false }]]);
+    await w.session.close();
+  });
+
+  test("the plan figures riding a usage update go to the agent's record, and the figures still reach the chat", async () => {
+    const fake = fakeAgent(async (p, client) => {
+      const usage = { sessionUpdate: "usage_update" as const, used: 42_300, size: 200_000 };
+      await client.notify(acp.methods.client.session.update, { sessionId: p.sessionId, update: usage });
+      await client.notify(acp.methods.client.session.update, {
+        sessionId: p.sessionId,
+        update: {
+          ...usage,
+          _meta: {
+            "_claude/rateLimit": {
+              status: "allowed",
+              rateLimitType: "five_hour",
+              unifiedWindows: { five_hour: { utilization: 0.75, resetsAt: 1_700_010_000 } },
+            },
+          },
+        },
+      });
+      return { stopReason: "end_turn" };
+    });
+    const w = world(fake);
+    w.session.send("a");
+    await w.idle();
+    expect(w.events.filter((e) => e.type === "usage")).toHaveLength(2);
+    expect(w.limits.map(([agent, l]) => [agent, { ...l, at: 0 }])).toEqual([
+      [
+        "claude",
+        {
+          status: "allowed",
+          binding: "five_hour",
+          windows: { five_hour: { used: 0.75, resetsAt: 1_700_010_000_000 } },
+          at: 0,
+        },
+      ],
+    ]);
     await w.session.close();
   });
 

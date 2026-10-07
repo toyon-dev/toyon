@@ -7,7 +7,7 @@
 // cache; a login stays in the chat, where the auth card can also run a method that needs a terminal.
 
 import * as acp from "@agentclientprotocol/sdk";
-import type { AgentInfo, AuthStatus } from "@toyon/shared";
+import type { AgentInfo, AgentLimits, AuthStatus } from "@toyon/shared";
 import { UserError } from "../core/errors.ts";
 import { log } from "../core/log.ts";
 import { AUTH_STATUS_UPDATE_METHOD, parseAuthStatus, supportsLogout } from "./acp/authstatus.ts";
@@ -29,7 +29,7 @@ export interface AgentAccountsDeps {
 }
 
 export class AgentAccounts {
-  private known = new Map<string, { status?: AuthStatus; canLogout: boolean }>();
+  private known = new Map<string, { status?: AuthStatus; canLogout: boolean; limits?: AgentLimits }>();
   private busy = new Map<string, Promise<void>>();
   /** the shell shows login state in settings, so a change is an `agents` broadcast */
   onChange: (() => void) | null = null;
@@ -48,12 +48,28 @@ export class AgentAccounts {
     if (before.canLogout !== entry.canLogout || !same(before.status, entry.status)) this.onChange?.();
   }
 
+  /** a reply reporting how much of the account's plan is spent. The latest word wins whichever
+   * worktree heard it: the windows are the account's, and every session reads the same ones. */
+  observeLimits(agentId: string, limits: AgentLimits): void {
+    const before = this.known.get(agentId) ?? { canLogout: false, status: undefined };
+    const entry = { ...before, limits };
+    this.known.set(agentId, entry);
+    // the same figures again (the SDK repeats them when only the reset time's rounding moves)
+    // are not news; `at` alone moving is left out of the comparison for that reason
+    if (!sameLimits(before.limits, limits)) this.onChange?.();
+  }
+
   /** what settings shows per row, folded into the registry's own view of each agent */
   describe(infos: AgentInfo[]): AgentInfo[] {
     return infos.map((info) => {
       const k = this.known.get(info.id);
       if (!k) return info;
-      return { ...info, ...(k.status ? { auth: k.status } : {}), ...(k.canLogout ? { canLogout: true } : {}) };
+      return {
+        ...info,
+        ...(k.status ? { auth: k.status } : {}),
+        ...(k.canLogout ? { canLogout: true } : {}),
+        ...(k.limits ? { limits: k.limits } : {}),
+      };
     });
   }
 
@@ -102,6 +118,17 @@ export class AgentAccounts {
       await link.kill();
     }
   }
+}
+
+function sameLimits(a: AgentLimits | undefined, b: AgentLimits | undefined): boolean {
+  if (!a || !b) return a === b;
+  const win = (x: AgentLimits["windows"]["five_hour"]) => (x ? `${x.used}@${x.resetsAt}` : "");
+  return (
+    a.status === b.status &&
+    a.binding === b.binding &&
+    win(a.windows.five_hour) === win(b.windows.five_hour) &&
+    win(a.windows.seven_day) === win(b.windows.seven_day)
+  );
 }
 
 function same(a: AuthStatus | undefined, b: AuthStatus | undefined): boolean {

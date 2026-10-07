@@ -83,7 +83,7 @@ import { PasteChip } from "./PasteChip.tsx";
 import { PickChip } from "./PickChip.tsx";
 import { type Step, stepWalk, type WalkKey } from "./recall.ts";
 import { shellCommandOf, shellContext } from "./shellMode.ts";
-import { compactAdvice, compactNudge, dollars, tokens } from "./usage.ts";
+import { compactAdvice, compactNudge, dollars, limitLabel, limitLevel, limitLines, tokens } from "./usage.ts";
 import { attachCopied, pickAttachments, useComposerPaste } from "./useIntake.ts";
 
 /** a frozen empty list, so a selector returning it does not read as a change every render */
@@ -368,13 +368,22 @@ export function Composer({
   // (ownCommands.ts has the rules)
   const ownRows = useMemo(() => ownCommands(describeLand(landPolicy(repo?.config ?? {}), repo?.defaultBranch)), [repo]);
   const compact = () => id && sock?.send({ t: "chat", worktreeId: id, text: "/compact" });
-  const compactOff = !canCompact
-    ? "this agent offers no compact command"
-    : midTurn
-      ? "wait for the turn to end"
-      : undefined;
+  const compactOff = spawning
+    ? "nothing to compact until the first reply"
+    : !canCompact
+      ? "this agent offers no compact command"
+      : midTurn
+        ? "wait for the turn to end"
+        : undefined;
   // the tooltip passes the advice on only where the agent can act on it
   const nudge = canCompact && usage ? compactNudge(usage.used / usage.size) : undefined;
+  // The ring: this worktree's context as the arc, and inside it the account's plan as a level.
+  // The plan is the agent's, so a new worktree already has it to show, with no arc yet; a draft
+  // stacked on a worktree shows the plan alone too, since that worktree's context is not its own.
+  const limits = agentInfo?.limits;
+  const ringUsage = spawning ? undefined : usage;
+  const ringShown = (!!id || spawning) && !!(ringUsage || limits);
+  const now = Date.now();
   const compactItems = () => [
     {
       id: "compact",
@@ -1475,12 +1484,30 @@ export function Composer({
                 />
               )
             )}
-            {usage && !spawning && id && (
+            {ringShown && (
               <IconButton
-                icon={<Ring fraction={usage.used / usage.size} />}
+                icon={
+                  <Ring
+                    fraction={ringUsage ? ringUsage.used / ringUsage.size : 0}
+                    level={limits ? limitLevel(limits, now) : undefined}
+                  />
+                }
                 tone="chrome"
-                label={`${Math.round((100 * usage.used) / usage.size)}% of context`}
-                detail={`${tokens(usage.used)} of ${tokens(usage.size)}${usage.cost !== undefined ? ` · ${dollars(usage.cost)} this session` : ""}${nudge ? ` · ${nudge}` : ""}`}
+                label={
+                  ringUsage
+                    ? `${Math.round((100 * ringUsage.used) / ringUsage.size)}% of context`
+                    : limits
+                      ? limitLabel(limits, now)
+                      : ""
+                }
+                detail={[
+                  ...(ringUsage
+                    ? [
+                        `${tokens(ringUsage.used)} of ${tokens(ringUsage.size)}${ringUsage.cost !== undefined ? ` · ${dollars(ringUsage.cost)} this session` : ""}${nudge ? ` · ${nudge}` : ""}`,
+                      ]
+                    : []),
+                  ...(limits ? limitLines(limits, now) : []),
+                ]}
                 // a summary cannot be taken back, so a click only opens the menu a right-click does:
                 // compacting is the press on its row
                 onClick={(e) => cm.openUnder(e.currentTarget, compactItems)}

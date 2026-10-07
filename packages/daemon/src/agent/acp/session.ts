@@ -10,6 +10,7 @@ import * as acp from "@agentclientprotocol/sdk";
 import type {
   AgentCommand,
   AgentEvent,
+  AgentLimits,
   AgentStatus,
   AskAnswer,
   AskChoice,
@@ -41,6 +42,7 @@ import { BackgroundTasks } from "./background.ts";
 import { parseForm, toContent } from "./elicit.ts";
 import { endOfAsk, mapCommands, mapStopReason, mapUpdate, preempted, release, type ToolMemos } from "./map.ts";
 import { currentValues, type LiveOptions, type OptionCategory, readModeOption, readOptions } from "./options.ts";
+import { parseRateLimit } from "./ratelimit.ts";
 import { STEER_METHOD, type SteerOutcome, steerOutcome, supportsSteering } from "./steering.ts";
 import type { AcpLink } from "./transport.ts";
 
@@ -68,6 +70,9 @@ export interface AcpSessionDeps {
   onStatus: AgentStatusListener;
   /** whatever this connection learns about the agent's credentials, for the per-agent cache */
   onAuth?: (agentId: string, o: AuthObservation) => void;
+  /** how much of its plan the account has used, as a reply reported it: per agent, like the
+   * credentials, since every worktree on the agent spends the same windows */
+  onLimits?: (agentId: string, limits: AgentLimits) => void;
   /** what the `/` menu shows before this worktree's own agent has advertised anything */
   seedCommands?: () => AgentCommand[];
   /** the list this agent advertised, kept for the next worktree on the same repo */
@@ -1117,6 +1122,12 @@ export class AcpSession implements AgentAdapter {
     const live = this.live;
     if (!live || params.sessionId !== live.sessionId) {
       return log.debug(this.d.worktreeId, `acp: update for another session ${params.sessionId} dropped`);
+    }
+    // the plan figures ride the context figures, but they are the account's and not this
+    // worktree's: they go to the agent's record, not into the transcript with the rest
+    if (params.update.sessionUpdate === "usage_update" && this.conn) {
+      const limits = parseRateLimit(params.update._meta, Date.now());
+      if (limits) this.d.onLimits?.(this.conn.spec.id, limits);
     }
     // the agent left plan mode on its own (an approved ExitPlanMode does): remember, so the next
     // turn's applyMode compares against what it is in, not what we last asked for

@@ -763,21 +763,21 @@ describe("chat folding", () => {
   test("the box's answers and a parked ask live per worktree, and end with the ask", () => {
     const question = agent("a", { type: "agent-question", id: "k1", message: "Which?", questions, ts: 0 });
     let s = run([hello(wt("a"), wt("b")), question]);
-    const ask = { id: "k1", draft: [{ selected: ["a"] }], current: 0 };
-    s = reducer(s, { a: "ask-draft", id: "a", ask });
-    s = reducer(s, { a: "ask-park", id: "a", askId: "k1" });
-    expect(s.local.a).toMatchObject({ ask, askParked: "k1" });
-    expect(s.local.b?.askParked).toBeUndefined();
-    s = reducer(s, { a: "ask-unpark", id: "a" });
-    expect(s.local.a?.askParked).toBeUndefined();
-    expect(s.local.a?.ask).toEqual(ask);
+    const card = { id: "k1", draft: [{ selected: ["a"] }], current: 0 };
+    s = reducer(s, { a: "card-draft", id: "a", card });
+    s = reducer(s, { a: "card-park", id: "a", cardId: "k1" });
+    expect(s.local.a).toMatchObject({ card, cardParked: "k1" });
+    expect(s.local.b?.cardParked).toBeUndefined();
+    s = reducer(s, { a: "card-unpark", id: "a" });
+    expect(s.local.a?.cardParked).toBeUndefined();
+    expect(s.local.a?.card).toEqual(card);
     // an end for another ask leaves them be; the end of this one takes both
-    s = reducer(s, { a: "ask-park", id: "a", askId: "k1" });
+    s = reducer(s, { a: "card-park", id: "a", cardId: "k1" });
     s = reducer(s, agent("a", { type: "agent-ask-end", id: "other", outcome: "answered", ts: 1 }));
-    expect(s.local.a).toMatchObject({ ask, askParked: "k1" });
+    expect(s.local.a).toMatchObject({ card, cardParked: "k1" });
     s = reducer(s, agent("a", { type: "agent-ask-end", id: "k1", outcome: "answered", ts: 2 }));
-    expect(s.local.a?.ask).toBeUndefined();
-    expect(s.local.a?.askParked).toBeUndefined();
+    expect(s.local.a?.card).toBeUndefined();
+    expect(s.local.a?.cardParked).toBeUndefined();
   });
 
   test("a stop keeps the box's answers, and the stopped question can take the box again", () => {
@@ -785,12 +785,12 @@ describe("chat folding", () => {
       hello(wt("a")),
       agent("a", { type: "agent-question", id: "k1", message: "Which?", questions, ts: 0 }),
     ]);
-    const ask = { id: "k1", draft: [{ selected: ["a"] }], current: 0 };
-    s = reducer(s, { a: "ask-draft", id: "a", ask });
-    s = reducer(s, { a: "ask-park", id: "a", askId: "k1" });
+    const card = { id: "k1", draft: [{ selected: ["a"] }], current: 0 };
+    s = reducer(s, { a: "card-draft", id: "a", card });
+    s = reducer(s, { a: "card-park", id: "a", cardId: "k1" });
     s = reducer(s, agent("a", { type: "agent-ask-end", id: "k1", outcome: "cancelled", ts: 1 }));
-    expect(s.local.a?.ask).toEqual(ask);
-    expect(s.local.a?.askParked).toBeUndefined();
+    expect(s.local.a?.card).toEqual(card);
+    expect(s.local.a?.cardParked).toBeUndefined();
     s = reducer(s, { a: "ask-revive", id: "a", askId: "k1" });
     expect(s.local.a?.askRevived).toBe("k1");
     s = reducer(s, { a: "ask-revive", id: "a" });
@@ -799,7 +799,7 @@ describe("chat folding", () => {
     s = reducer(s, { a: "ask-revive", id: "a", askId: "k1" });
     s = reducer(s, agent("a", { type: "agent-question", id: "k2", message: "And?", questions, ts: 2 }));
     expect(s.local.a?.askRevived).toBeUndefined();
-    expect(s.local.a?.ask).toBeUndefined();
+    expect(s.local.a?.card).toBeUndefined();
   });
 
   test("a new ask starts over and takes the box back from a parked one", () => {
@@ -807,11 +807,11 @@ describe("chat folding", () => {
       hello(wt("a")),
       agent("a", { type: "agent-question", id: "k1", message: "Which?", questions, ts: 0 }),
     ]);
-    s = reducer(s, { a: "ask-draft", id: "a", ask: { id: "k1", draft: [{ selected: ["a"] }], current: 0 } });
-    s = reducer(s, { a: "ask-park", id: "a", askId: "k1" });
+    s = reducer(s, { a: "card-draft", id: "a", card: { id: "k1", draft: [{ selected: ["a"] }], current: 0 } });
+    s = reducer(s, { a: "card-park", id: "a", cardId: "k1" });
     s = reducer(s, agent("a", { type: "agent-question", id: "k2", message: "And?", questions, ts: 1 }));
-    expect(s.local.a?.ask).toBeUndefined();
-    expect(s.local.a?.askParked).toBeUndefined();
+    expect(s.local.a?.card).toBeUndefined();
+    expect(s.local.a?.cardParked).toBeUndefined();
   });
 
   test("an ask on the worktree on screen opens a shut chat, the way a notice does", () => {
@@ -3184,19 +3184,19 @@ describe("a handoff", () => {
 
   test("the note draft and a parked card end with the card, and a new proposal takes the box back", () => {
     let s = run([hello(wt("a")), agent("a", proposal)]);
-    const ask = { id: "h1", draft: [{ selected: [], note: "mind the lockfile" }], current: 0 };
-    s = reducer(s, { a: "ask-draft", id: "a", ask });
-    s = reducer(s, { a: "ask-park", id: "a", askId: "h1" });
-    expect(s.local.a).toMatchObject({ ask, askParked: "h1" });
+    const card = { id: "h1", draft: [{ selected: [], note: "mind the lockfile" }], current: 0 };
+    s = reducer(s, { a: "card-draft", id: "a", card });
+    s = reducer(s, { a: "card-park", id: "a", cardId: "h1" });
+    expect(s.local.a).toMatchObject({ card, cardParked: "h1" });
     const closed = reducer(s, agent("a", went));
-    expect(closed.local.a?.ask).toBeUndefined();
-    expect(closed.local.a?.askParked).toBeUndefined();
+    expect(closed.local.a?.card).toBeUndefined();
+    expect(closed.local.a?.cardParked).toBeUndefined();
     const declined = reducer(s, agent("a", { type: "handoff-declined", id: "h1", ts: 2 }));
-    expect(declined.local.a?.ask).toBeUndefined();
-    expect(declined.local.a?.askParked).toBeUndefined();
+    expect(declined.local.a?.card).toBeUndefined();
+    expect(declined.local.a?.cardParked).toBeUndefined();
     const next = reducer(s, agent("a", { ...proposal, id: "h2", ts: 3 }));
-    expect(next.local.a?.ask).toBeUndefined();
-    expect(next.local.a?.askParked).toBeUndefined();
+    expect(next.local.a?.card).toBeUndefined();
+    expect(next.local.a?.cardParked).toBeUndefined();
   });
 
   test("a guest is on this rail while its origin is, and leaves with it", () => {

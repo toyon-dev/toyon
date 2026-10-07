@@ -317,11 +317,11 @@ export function ChatLog({
   // the ask in the box under the log, with the stop on its own floor: a row here saying the agent
   // waits, with a second stop, said what the box already says. Parked, the box is the plain one
   // again and this row is the log's word that the turn is waiting on you.
-  const askParked = useLocalField(id, "askParked");
+  const cardParked = useLocalField(id, "cardParked");
   const askInBox = useMemo(() => {
     const card = openCard(items);
-    return !!card && askParked !== card.id;
-  }, [items, askParked]);
+    return !!card && cardParked !== card.id;
+  }, [items, cardParked]);
   const wt = active?.worktree;
   // one array per worktree: a fresh one on every render would defeat the rows' memo. An archived
   // chat's paths are under the directory it had, which is gone but is still what they are relative to

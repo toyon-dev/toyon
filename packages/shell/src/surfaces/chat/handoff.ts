@@ -10,10 +10,10 @@ import { type AskItem, askLine } from "./ask.ts";
 export type HandoffItem = Extract<ChatItem, { kind: "handoff" }>;
 
 /** what can hold the composer box: an open ask, or a handoff still proposed */
-export type BoxCard = AskItem | HandoffItem;
+export type CardItem = AskItem | HandoffItem;
 
 /** the card the box shows: the newest one nothing has closed, or none */
-export function openCard(chat: ChatItem[]): BoxCard | null {
+export function openCard(chat: ChatItem[]): CardItem | null {
   const item = chat.findLast(
     (i) => (i.kind === "ask" && !i.outcome) || (i.kind === "handoff" && i.state === "proposed"),
   );
@@ -22,7 +22,7 @@ export function openCard(chat: ChatItem[]): BoxCard | null {
 
 /** the line that stands for the card once it is set aside: the ask's own, or the question the
  * handoff card asks */
-export function cardLine(card: BoxCard): string {
+export function cardLine(card: CardItem): string {
   return card.kind === "ask" ? askLine(card) : `Continue in ${card.repo.name}?`;
 }
 

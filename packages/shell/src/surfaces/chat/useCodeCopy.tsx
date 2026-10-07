@@ -11,7 +11,7 @@ const INSET = 4;
 /** the fenced block an element is in, if any: rendered markdown's, or the one the ask's band
  * holds when the band itself is set in code */
 export function codeBlockAt(target: Element): HTMLElement | null {
-  return target.closest<HTMLElement>(".md pre, .ask-code pre");
+  return target.closest<HTMLElement>(".md pre, .card-code pre");
 }
 
 /** the text of the fenced block under the pointer, for a menu opened on one */

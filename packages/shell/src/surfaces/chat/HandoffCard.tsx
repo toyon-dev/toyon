@@ -13,7 +13,7 @@ import { useLocalField } from "../../state/selectors.ts";
 import { type Choice, Choices } from "../../ui/Choices.tsx";
 import { handleChoiceKey } from "../../ui/choiceKeys.ts";
 import { dropBlankNote, setNote } from "./ask.ts";
-import { BoxCard, CardBand, CardHead, type Root } from "./BoxCard.tsx";
+import { Card, CardBand, CardHead, type Root } from "./Card.tsx";
 import { type HandoffItem, handoffAnswer } from "./handoff.ts";
 import { renderMarkdown } from "./markdown.ts";
 
@@ -36,13 +36,13 @@ export function HandoffCard({
 }) {
   const sock = useSock();
   const dispatch = useDispatch();
-  const stored = useLocalField(worktreeId, "ask");
+  const stored = useLocalField(worktreeId, "card");
   const draft = stored?.id === item.id ? stored.draft : BLANK;
   // undefined is the field shut; "" is the field open with nothing typed yet
   const note = draft[0]?.note;
   const noting = note !== undefined;
   const write = (next: AskAnswer[]) =>
-    dispatch({ a: "ask-draft", id: worktreeId, ask: { id: item.id, draft: next, current: 0 } });
+    dispatch({ a: "card-draft", id: worktreeId, card: { id: item.id, draft: next, current: 0 } });
   const field = useRef<HTMLTextAreaElement>(null);
   const [cursor, setCursor] = useState(GO);
   // Go went out and the daemon is making the worktree: the handoff event closes the card, or a
@@ -66,7 +66,7 @@ export function HandoffCard({
   };
   const pick = (i: number) => answer(i === GO);
   /** escape gives the plain box back and leaves the card a line at its top */
-  const park = () => dispatch({ a: "ask-park", id: worktreeId, askId: item.id });
+  const park = () => dispatch({ a: "card-park", id: worktreeId, cardId: item.id });
   /** back to the rows from the field, a field left blank going with it */
   const leaveField = () => {
     const next = dropBlankNote(draft, 0);
@@ -116,7 +116,7 @@ export function HandoffCard({
   ];
 
   return (
-    <BoxCard root={root} id={item.id} onKeyDown={onKeyDown}>
+    <Card root={root} id={item.id} onKeyDown={onKeyDown}>
       {/* where it goes and in what mode, since two open projects can share a name and the mode
           is what the new agent may do without asking: auto is said in those words, because this
           message, written by an agent, becomes that agent's first prompt with no card in
@@ -137,6 +137,6 @@ export function HandoffCard({
           another project's agent will start from, so nothing of it is folded away */}
       <CardBand html={html} />
       <Choices rows={rows} cursor={cursor} onCursor={setCursor} onPick={pick} />
-    </BoxCard>
+    </Card>
   );
 }

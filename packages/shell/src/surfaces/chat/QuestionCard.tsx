@@ -1,21 +1,18 @@
-// The agent asked something and its turn is stopped until this is answered, so the question takes
-// the message box (BoxCard). Two bodies behind one root: a question (one of up to four on screen
-// at a time, a tab strip of their headers across the top, one send for the lot) and a permission
-// (the agent's own options, one press each).
+// The agent asked a question and its turn is stopped until it is answered, so the question takes
+// the message box as a card (Card): one of up to four on screen at a time, a tab strip of their
+// headers across the top, and one send for the lot.
 //
 // A question the turn was stopped under comes back into the same box (`onAnswer`): nothing waits
 // on it, so its answer is the composer's to send as a message, and there is nothing to skip.
 
 import type { AskAnswer, AskQuestion } from "@toyon/shared";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { openFile } from "../../state/actions/file.ts";
-import { useDispatch, useSock, useStore } from "../../state/context.tsx";
+import { useDispatch, useSock } from "../../state/context.tsx";
 import { useLocalField } from "../../state/selectors.ts";
 import { Button } from "../../ui/Button.tsx";
 import { type Choice, type ChoiceField, Choices } from "../../ui/Choices.tsx";
 import { handleChoiceKey } from "../../ui/choiceKeys.ts";
 import { cx } from "../../ui/cx.ts";
-import { useOnChange } from "../../ui/hooks.ts";
 import { Kbd } from "../../ui/Kbd.tsx";
 import { Tabs } from "../../ui/Tabs.tsx";
 import {
@@ -39,40 +36,19 @@ import {
   stripRecommended,
   walk,
 } from "./ask.ts";
-import { BoxCard, CardBand, CardFoot, CardHead, type Root } from "./BoxCard.tsx";
-import { renderMarkdown } from "./markdown.ts";
-import { unwrapShell } from "./toolCall.ts";
+import { Card, CardBand, CardFoot, CardHead, type Root } from "./Card.tsx";
 
-export function AskBox({
-  item,
-  worktreeId,
-  rootRef,
-  onAnswer,
-}: {
-  item: AskItem;
-  worktreeId: string;
-  rootRef: Root;
-  /** the ask is a question a stop closed: its answers go here instead of to the waiting call */
-  onAnswer?: (answers: AskAnswer[]) => void;
-}) {
-  return item.ask.kind === "question" ? (
-    <QuestionBody item={item} ask={item.ask} worktreeId={worktreeId} root={rootRef} onAnswer={onAnswer} />
-  ) : (
-    <PermissionBody item={item} ask={item.ask} worktreeId={worktreeId} root={rootRef} />
-  );
-}
-
-function QuestionBody({
+export function QuestionCard({
   item,
   ask,
   worktreeId,
-  root,
+  rootRef: root,
   onAnswer,
 }: {
   item: AskItem;
   ask: Extract<AskItem["ask"], { kind: "question" }>;
   worktreeId: string;
-  root: Root;
+  rootRef: Root;
   onAnswer?: (answers: AskAnswer[]) => void;
 }) {
   const sock = useSock();
@@ -80,7 +56,7 @@ function QuestionBody({
   const { message, questions } = ask;
   // the answers so far and the question on screen live in the store, so switching worktrees and
   // parking keep them; the cursor is this mount's own and lands on the question's pick
-  const stored = useLocalField(worktreeId, "ask");
+  const stored = useLocalField(worktreeId, "card");
   const held = useMemo(
     () => (stored?.id === item.id ? stored : { id: item.id, draft: emptyDraft(questions), current: 0 }),
     [stored, item.id, questions],
@@ -105,7 +81,7 @@ function QuestionBody({
     return () => view.removeEventListener("resize", show);
   }, []);
   const write = (next: AskAnswer[], at: number) =>
-    dispatch({ a: "ask-draft", id: worktreeId, ask: { id: item.id, draft: next, current: at } });
+    dispatch({ a: "card-draft", id: worktreeId, card: { id: item.id, draft: next, current: at } });
 
   const send = (answers?: AskAnswer[]) => {
     if (onAnswer) {
@@ -119,7 +95,7 @@ function QuestionBody({
   };
   /** escape gives the plain box back and leaves the question a line at its top */
   const park = () =>
-    dispatch(onAnswer ? { a: "ask-revive", id: worktreeId } : { a: "ask-park", id: worktreeId, askId: item.id });
+    dispatch(onAnswer ? { a: "ask-revive", id: worktreeId } : { a: "card-park", id: worktreeId, cardId: item.id });
   const submit = () => {
     if (canSubmit(questions, draft)) send(draft);
   };
@@ -310,7 +286,7 @@ function QuestionBody({
         field: owning ? field("your own answer") : undefined,
       });
     return (
-      <div key={qq.id} className={cx("ask-page", !open && "ask-page-off")}>
+      <div key={qq.id} className={cx("card-page", !open && "card-page-off")}>
         <CardHead>{qq.text || message}</CardHead>
         <Choices
           rows={rows}
@@ -329,12 +305,12 @@ function QuestionBody({
   };
 
   return (
-    <BoxCard root={root} id={item.id} onKeyDown={onKeyDown}>
+    <Card root={root} id={item.id} onKeyDown={onKeyDown}>
       {/* the questions as tabs across the top: the headers are the agent's short names for them,
           and the one open joins the page under it. A dot on each says which are answered. The
           send stands apart at the far end: it is the step after the questions, not one of them. */}
       {questions.length > 1 && (
-        <div className="ask-tabs">
+        <div className="card-tabs">
           <Tabs
             label="questions"
             owner="ask"
@@ -342,7 +318,7 @@ function QuestionBody({
               ...questions.map((qq, i) => ({
                 id: String(i),
                 label: qq.header || `question ${i + 1}`,
-                lead: <span className={cx("dot ask-step", answered(draft[i]) && "answered")} />,
+                lead: <span className={cx("dot card-step", answered(draft[i]) && "answered")} />,
               })),
               { id: String(questions.length), label: "send", far: true },
             ]}
@@ -355,13 +331,13 @@ function QuestionBody({
           />
         </div>
       )}
-      <div className="ask-pages">
+      <div className="card-pages">
         {questions.map(page)}
         {/* the send page: each question's pick read back after its header, a note under it on the
             description line as it was typed, and a press on the row opens that question. Nothing
             is checked here, since the row is a way back, not a pick. */}
         {sendPage(questions) !== -1 && (
-          <div className={cx("ask-page", !review && "ask-page-off")}>
+          <div className={cx("card-page", !review && "card-page-off")}>
             <CardHead>Send these answers?</CardHead>
             <Choices
               hover
@@ -386,73 +362,6 @@ function QuestionBody({
           </div>
         )}
       </div>
-    </BoxCard>
+    </Card>
   );
 }
-
-function PermissionBody({
-  item,
-  ask,
-  worktreeId,
-  root,
-}: {
-  item: AskItem;
-  ask: Extract<AskItem["ask"], { kind: "permission" }>;
-  worktreeId: string;
-  root: Root;
-}) {
-  const sock = useSock();
-  const dispatch = useDispatch();
-  const active = useStore((s) => s.activeId);
-  const [cursor, setCursor] = useState(0);
-  const plan = ask.plan;
-  // a plan is a file toyon wrote to the worktree, read in the pane as the document it is; only an
-  // ask with no file behind it still carries its markdown
-  const html = useMemo(() => (ask.detail && !plan ? renderMarkdown(ask.detail) : ""), [ask.detail, plan]);
-  const readPlan = () => {
-    // the caret stays on the ask, which is what the agent is blocked on
-    if (plan && active === worktreeId)
-      openFile({ sock, dispatch }, { worktreeId, path: plan, view: "preview", focus: false });
-  };
-  // the plan opens beside the box as the ask arrives: it is what the options are asking about
-  useOnChange([item.id, plan], readPlan);
-  const decide = (i: number) => {
-    const choice = ask.choices[i];
-    if (!choice) return;
-    sock?.send({ t: "agent-decide", worktreeId, askId: item.id, choiceId: choice.id });
-    // the decision is the reader's word to the agent: the log goes to its end as it does on a send
-    dispatch({ a: "answered", id: worktreeId });
-  };
-  const onKeyDown = (e: React.KeyboardEvent) => {
-    handleChoiceKey(e, {
-      count: ask.choices.length,
-      cursor,
-      onCursor: setCursor,
-      onPick: decide,
-      onEscape: () => dispatch({ a: "ask-park", id: worktreeId, askId: item.id }),
-    });
-  };
-
-  return (
-    <BoxCard root={root} id={item.id} onKeyDown={onKeyDown}>
-      <CardHead>{ask.title}</CardHead>
-      {/* the command a yes would run, under the sentence that asked for it, read the way the
-          call's row reads it: without the shell an adapter wrapped it in */}
-      {ask.command && <CardBand code={unwrapShell(ask.command)} />}
-      {html && <CardBand html={html} />}
-      <Choices
-        rows={ask.choices.map((c) => ({ label: c.name, tone: c.kind.startsWith("reject") ? "deny" : undefined }))}
-        cursor={cursor}
-        onCursor={setCursor}
-        onPick={decide}
-      />
-    </BoxCard>
-  );
-}
-
-/** what closed the ask, when it was not an answer */
-export const CLOSED: Record<string, string> = {
-  skipped: "you skipped this",
-  cancelled: "the turn was stopped before you answered",
-  expired: "Toyon restarted before you answered",
-};

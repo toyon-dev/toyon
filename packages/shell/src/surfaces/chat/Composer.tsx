@@ -68,7 +68,6 @@ import {
 } from "../recap.ts";
 import { runLine, runOf, runTicking, useLastingRun } from "../runs.ts";
 import { chord, commandSource, folderList, pickLabel, procTrouble } from "../util.ts";
-import { AskBox } from "./AskBox.tsx";
 import { answerLines, answered as hasAnswer, stoppedAsk } from "./ask.ts";
 import { ComposerOffer } from "./ComposerOffer.tsx";
 import { FileChip } from "./FileChip.tsx";
@@ -80,7 +79,9 @@ import { filterCommands, insertAt, triggerAt } from "./mentions.ts";
 import { dismissOffer, offerOf, useDismissedOffers } from "./offer.ts";
 import { isMode, mergeCommands, ownCommandOf, ownCommands } from "./ownCommands.ts";
 import { PasteChip } from "./PasteChip.tsx";
+import { PermissionCard } from "./PermissionCard.tsx";
 import { PickChip } from "./PickChip.tsx";
+import { QuestionCard } from "./QuestionCard.tsx";
 import { type Step, stepWalk, type WalkKey } from "./recall.ts";
 import { shellCommandOf, shellContext } from "./shellMode.ts";
 import { compactAdvice, compactNudge, dollars, limitLabel, limitLevel, limitLines, tokens } from "./usage.ts";
@@ -211,7 +212,7 @@ export function Composer({
   // answered, unless it was set aside with escape to write a message instead: then the plain box
   // is back with a line offering it
   const card = useMemo(() => (id && !drafting ? openCard(chat) : null), [id, drafting, chat]);
-  const askParked = useLocalField(id, "askParked");
+  const cardParked = useLocalField(id, "cardParked");
   // A question the turn was stopped under is still worth its answer, so it keeps the line a parked
   // one has, and from there the box, until a message is sent: the stop was meant, so the plain box
   // is what comes back, and the answer goes as a message of the person's own.
@@ -219,9 +220,9 @@ export function Composer({
   const stopped = useMemo(() => (id && !drafting && !sending ? stoppedAsk(chat) : null), [id, drafting, sending, chat]);
   const askRevived = useLocalField(id, "askRevived");
   const revived = !card && stopped && askRevived === stopped.id ? stopped : null;
-  const askUp = card && askParked !== card.id ? card : revived;
-  const parked = card ? (askParked === card.id ? card : null) : stopped && !revived ? stopped : null;
-  const askRef = useRef<HTMLDivElement>(null);
+  const cardUp = card && cardParked !== card.id ? card : revived;
+  const parked = card ? (cardParked === card.id ? card : null) : stopped && !revived ? stopped : null;
+  const cardRef = useRef<HTMLDivElement>(null);
   const touch = useTouch();
   // the frame on screen: while drafting the lead's own preview, which is what the picker picks
   // from and the page context describes
@@ -239,11 +240,11 @@ export function Composer({
         ? offerOf(chat, {
             queued: queue.length,
             sending: !!sending,
-            ask: !!(askUp || parked),
+            card: !!(cardUp || parked),
             dismissed: dismissedOffers,
           })
         : null,
-    [id, drafting, chat, queue.length, sending, askUp, parked, dismissedOffers],
+    [id, drafting, chat, queue.length, sending, cardUp, parked, dismissedOffers],
   );
   const setText = (t: string) => boxId && dispatch({ a: "set-draft", id: boxId, text: t });
   const clientId = useStore((s) => s.clientId);
@@ -429,7 +430,7 @@ export function Composer({
   // the marks over the field scroll with it, or a long draft's underlines sit under the wrong words
   const marksRef = useRef<HTMLDivElement>(null);
   // the keyboard's place in the box: the ask while one is up, else the textarea
-  const focusBox = () => (askRef.current ?? composerRef.current)?.focus();
+  const focusBox = () => (cardRef.current ?? composerRef.current)?.focus();
   const refocus = focusBox;
   // An empty project's page is this one box, so it takes the caret when a project lands on it: made
   // from the form, whose close left focus on the body, or switched to. Only when nothing else has
@@ -461,12 +462,12 @@ export function Composer({
   // root, which held the keyboard, went with it. Only when the keyboard is nowhere: a hand elsewhere
   // stays. Not for a switch to another worktree, whose box never held the ask, and an answer on a
   // touch window leaves the caret out, since it would raise the keyboard over the reply being read.
-  const askUpId = askUp?.id;
-  const askWas = useRef({ id, askUpId });
-  useOnChange([id, askUpId], () => {
-    const was = askWas.current;
-    askWas.current = { id, askUpId };
-    if (askUpId || !was.askUpId || was.id !== id) return;
+  const cardUpId = cardUp?.id;
+  const cardWas = useRef({ id, cardUpId });
+  useOnChange([id, cardUpId], () => {
+    const was = cardWas.current;
+    cardWas.current = { id, cardUpId };
+    if (cardUpId || !was.cardUpId || was.id !== id) return;
     if (centred !== !!greenfield || (touch && !parked)) return;
     const f = requestAnimationFrame(() => {
       const held = document.activeElement;
@@ -1039,11 +1040,11 @@ export function Composer({
   // the stop stands in for the field's esc, so it goes with the field when an ask card takes its
   // place: there esc parks the question, and a stop beside the ask's send read as the send's
   // opposite on one line
-  const stopShown = stoppable && !askUp;
+  const stopShown = stoppable && !cardUp;
   // away from the end of the log on a phone the box is a line, for as long as it holds nothing and asks
   // nothing; the stylesheet keeps it whole while the caret is in it
   const reading = useStore((s) => s.reading);
-  const lean = onScreen && reading && blank && !askUp && !parked && !copied;
+  const lean = onScreen && reading && blank && !cardUp && !parked && !copied;
 
   return (
     <div className={cx("composer chat-input", stopShown && "stopping", lean && "lean")}>
@@ -1088,7 +1089,7 @@ export function Composer({
             dispatch(
               parked.kind === "ask" && parked.outcome
                 ? { a: "ask-revive", id, askId: parked.id }
-                : { a: "ask-unpark", id },
+                : { a: "card-unpark", id },
             );
             dispatch({ a: "focus-chat" });
           }}
@@ -1112,7 +1113,7 @@ export function Composer({
       {/* what is on the clipboard, before it is pasted: the same shape as the question's way back,
           the word to press and then what it takes. Only in a box that takes a message, and not
           over an ask, which has the box. */}
-      {copied && boxId && !askUp && (active || takes) && (
+      {copied && boxId && !cardUp && (active || takes) && (
         <ComposerOffer
           icon="copy"
           verb="attach"
@@ -1224,17 +1225,20 @@ export function Composer({
           }}
         />
       )}
-      {askUp && id ? (
-        askUp.kind === "ask" ? (
-          <AskBox
-            key={askUp.id}
-            item={askUp}
+      {cardUp && id ? (
+        cardUp.kind === "handoff" ? (
+          <HandoffCard key={cardUp.id} item={cardUp} worktreeId={id} rootRef={cardRef} />
+        ) : cardUp.ask.kind === "question" ? (
+          <QuestionCard
+            key={cardUp.id}
+            item={cardUp}
+            ask={cardUp.ask}
             worktreeId={id}
-            rootRef={askRef}
+            rootRef={cardRef}
             onAnswer={revived ? answerStopped : undefined}
           />
         ) : (
-          <HandoffCard key={askUp.id} item={askUp} worktreeId={id} rootRef={askRef} />
+          <PermissionCard key={cardUp.id} item={cardUp} ask={cardUp.ask} worktreeId={id} rootRef={cardRef} />
         )
       ) : (
         <div className={cx("composer-field", shellCmd !== null && "shell", walk && "recalled")}>
@@ -1439,7 +1443,7 @@ export function Composer({
       {/* the row reads left to right as where this goes, then what runs there: each chip after the
           target is about the target. A chip's panel takes focus while it is up, so the caret goes
           back when it closes. Not while the ask holds the box: its foot is the row. */}
-      {!askUp && (
+      {!cardUp && (
         <div className="hint composer-knobs">
           <span className="spawn-left">
             {choosing ? (

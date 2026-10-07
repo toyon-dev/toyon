@@ -943,7 +943,7 @@
      two stack as one column of glyphs: the glyph in the row's own tier, then the word that brings
      the question back and what is asked, a tier under the word as the line after the box's other
      verb is. One line: the question in full is a press away. */
-  .composer-ask {
+  .composer-offer {
     display: flex;
     align-items: center;
     gap: 6px;
@@ -953,7 +953,7 @@
     & > .icon-inline {
       flex: none;
     }
-    & .composer-ask-line {
+    & .composer-offer-line {
       min-width: 0;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -961,7 +961,7 @@
     }
   }
   /* an offer that can be turned down has its way out at the row's end */
-  .composer-ask-close {
+  .composer-offer-close {
     margin-left: auto;
   }
   /* the frame is base's (.composer); the tall floor is the dock's own. Scoped to the dock rather
@@ -1406,13 +1406,14 @@
       --text2: var(--ink1);
     }
   }
-  /* ---- the ask ----
-   The agent asked something and its turn is stopped until it is answered, so the question takes
+  /* ---- the card ----
+   The agent is stopped on the person (a question, a permission, a handoff), so the card takes
    the message box: the keyboard is already there, the box never scrolls away, and the strip is
    full bleed by design (the frame is base's .composer). One question at a time; the keys walk
-   them. Nothing here draws a card: the strip's sunken ground is the box, and the checked row's
-   edge is the one mark, where a card's own accent edge beside it read as two red bars. */
-  .ask-box {
+   them. Nothing here draws a ground of its own: the strip's sunken ground is the box, and the
+   checked row's edge is the one mark, where a bounded box's own accent edge beside it read as two
+   red bars. */
+  .card {
     display: flex;
     flex-direction: column;
     flex: 1;
@@ -1427,12 +1428,12 @@
   /* the questions as a tab strip heading the box, full bleed:
    the recess is the strip's floor, and the open tab is the strip's own ground showing through, so
    it joins the question under it. First in the strip it takes the strip's top padding back. */
-  .ask-tabs {
+  .card-tabs {
     margin: 0 var(--picker-bleed) 8px;
     --tabs-strip: var(--sunken-floor);
     --tabs-ground: var(--sunken);
   }
-  .ask-box:first-child .ask-tabs {
+  .card:first-child .card-tabs {
     margin-top: -10px;
   }
   /* the pages, one per question and one for the send, stacked in one cell: the box stands as tall
@@ -1444,7 +1445,7 @@
    its foot (the typed answer's field among them) lay under the keyboard out of reach. The
    scroller reaches out to the strip's edges and pads back in, so the row bands still bleed
    through its clip. */
-  .ask-pages {
+  .card-pages {
     display: grid;
     min-width: 0;
     flex: 1;
@@ -1453,24 +1454,24 @@
     margin-inline: var(--picker-bleed);
     padding-inline: var(--picker-inset);
   }
-  .ask-page {
+  .card-page {
     grid-area: 1 / 1;
     display: flex;
     flex-direction: column;
     min-width: 0;
   }
-  .ask-page-off {
+  .card-page-off {
     visibility: hidden;
   }
-  .ask-head {
+  .card-head {
     color: var(--text0);
   }
   /* the question itself wraps; a long one is still one question */
-  .ask-text {
+  .card-text {
     overflow-wrap: anywhere;
   }
   /* under the sentence, what to know before answering it: the scan tier, held still */
-  .ask-sub {
+  .card-sub {
     color: var(--ink1);
   }
   /* the agent's own convention for the option it would pick, read off the label and worn as a
@@ -1482,14 +1483,14 @@
   /* What stands under the question to be read before it is answered: the command a yes would run,
      the cursor row's preview, a plan with no file behind it. One band across the strip on the
      strip's floor, the way the rows under it bleed to its edges and a command sits in its call's
-     band in the log; a box inside the box with corners of its own read as a card in a place that
-     draws none. The text keeps the column the question starts in. It can be long, so it scrolls in
+     band in the log; a box inside the box with corners of its own read as a bounded thing in a
+     place that draws none. The text keeps the column the question starts in. It can be long, so it scrolls in
      the band rather than the page, and the band is positioned because it is the box a fenced
      block's copy control (.code-copy) is placed in. Set in code, the band's text is the block, so
      the fenced block takes no ground or corners of its own and wraps as the log's commands do; a
      preview is a drawing and keeps its lines where they were put. A plan is prose, and its own
      fenced blocks stay the chips they are in any rendered markdown. */
-  .ask-block {
+  .card-band {
     position: relative;
     max-height: 40vh;
     overflow-y: auto;
@@ -1498,7 +1499,7 @@
     background: var(--sunken-floor);
     color: var(--text1);
   }
-  .ask-code pre {
+  .card-code pre {
     margin: 0;
     padding: 0;
     background: none;
@@ -1507,7 +1508,7 @@
     white-space: pre-wrap;
     word-break: break-word;
   }
-  .ask-still pre {
+  .card-still pre {
     white-space: pre;
     overflow-x: auto;
   }
@@ -1515,7 +1516,7 @@
    and the slack goes above this row, so the send sits in one place whichever page is open. The
    agent's stop is the box's corner control, over the ask as over the plain field: down here at
    the row's far end it was the send's opposite on the send's own line. */
-  .ask-foot {
+  .card-foot {
     display: flex;
     align-items: center;
     gap: 8px;
@@ -1525,16 +1526,16 @@
   /* whatever is first in the box keeps the corner clear for the stop (Composer): the question
      when it heads the box, the tab strip's list when the strip does, so the far tab does not
      sit under the glyph */
-  .composer.stopping .ask-box > .ask-pages:first-child .ask-head {
+  .composer.stopping .card > .card-pages:first-child .card-head {
     padding-right: 24px;
   }
-  .composer.stopping .ask-tabs .tabs-list {
+  .composer.stopping .card-tabs .tabs-list {
     padding-right: 24px;
   }
   /* the dot on each tab: filled once that question has an answer. An empty one is the raised
      surface, which is the colour of the seat a hovered closed tab lifts to, so there it takes the
      skip tier held still or it is gone. */
-  .ask-step {
+  .card-step {
     background: var(--surface2);
     :where([data-hover]) :where(.tab:not([data-state~="current"]):hover) & {
       background: var(--ink2);

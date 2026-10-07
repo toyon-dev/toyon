@@ -194,7 +194,7 @@ export interface GitInfo {
 
 /** what the box holds against one ask (surfaces/chat/ask.ts): one answer per question, and the
  * question on screen */
-export interface AskDraft {
+export interface CardDraft {
   id: string;
   draft: AskAnswer[];
   current: number;
@@ -294,10 +294,10 @@ export interface WorktreeLocal {
   refusedLink?: { href: string; message: string };
   /** the answers being put together to the agent's open question, and which question the box is
    * on: kept here so switching worktrees and parking the ask keep them; gone when the ask closes */
-  ask?: AskDraft;
+  card?: CardDraft;
   /** the open ask the person set aside with escape to write a message instead: the plain box is
    * back, with a line offering the ask, until it is answered or a newer one arrives */
-  askParked?: string;
+  cardParked?: string;
   /** the question a stop closed, brought back into the box to be answered as a message; without
    * it that question is a line at the top of the plain box */
   askRevived?: string;
@@ -1368,11 +1368,11 @@ export type Action =
    * the last refusal is done with */
   | { a: "link-refused"; id: string; v: { href: string; message: string } | null }
   /** the answers so far to the ask on this worktree's box, and the question it is on */
-  | { a: "ask-draft"; id: string; ask: AskDraft }
+  | { a: "card-draft"; id: string; card: CardDraft }
   /** set the open ask aside: the plain box comes back, the ask stays open for the agent */
-  | { a: "ask-park"; id: string; askId: string }
+  | { a: "card-park"; id: string; cardId: string }
   /** bring the parked ask back into the box */
-  | { a: "ask-unpark"; id: string }
+  | { a: "card-unpark"; id: string }
   /** the question a stop closed takes the box again, or with no `askId` gives it back */
   | { a: "ask-revive"; id: string; askId?: string }
   /** the tab opened `openUrl` */
@@ -1536,11 +1536,11 @@ function askSettled(l: WorktreeLocal, ev: AgentEvent): WorktreeLocal {
   const closed = ev.type === "agent-ask-end" || ev.type === "handoff" || ev.type === "handoff-declined" ? ev.id : null;
   if (!asked && !closed) return l;
   const stopped = ev.type === "agent-ask-end" && stoppedBy(ev.outcome);
-  const { ask, askParked, askRevived, ...rest } = l;
+  const { card, cardParked, askRevived, ...rest } = l;
   return {
     ...rest,
-    ...(ask && !asked && (ask.id !== closed || stopped) ? { ask } : {}),
-    ...(askParked && !asked && askParked !== closed ? { askParked } : {}),
+    ...(card && !asked && (card.id !== closed || stopped) ? { card } : {}),
+    ...(cardParked && !asked && cardParked !== closed ? { cardParked } : {}),
     ...(askRevived && !asked ? { askRevived } : {}),
   };
 }
@@ -1906,12 +1906,12 @@ function reduce(s: State, action: Action): State {
       return withLocal(revealChat(s), action.id, (l) => ({ ...l, notice: action.text }));
     case "link-refused":
       return withLocal(s, action.id, ({ refusedLink: _was, ...l }) => (action.v ? { ...l, refusedLink: action.v } : l));
-    case "ask-draft":
-      return withLocal(s, action.id, (l) => ({ ...l, ask: action.ask }));
-    case "ask-park":
-      return withLocal(s, action.id, (l) => ({ ...l, askParked: action.askId }));
-    case "ask-unpark":
-      return withLocal(s, action.id, ({ askParked: _parked, ...l }) => l);
+    case "card-draft":
+      return withLocal(s, action.id, (l) => ({ ...l, card: action.card }));
+    case "card-park":
+      return withLocal(s, action.id, (l) => ({ ...l, cardParked: action.cardId }));
+    case "card-unpark":
+      return withLocal(s, action.id, ({ cardParked: _parked, ...l }) => l);
     case "ask-revive":
       return withLocal(s, action.id, ({ askRevived: _revived, ...l }) =>
         action.askId ? { ...l, askRevived: action.askId } : l,

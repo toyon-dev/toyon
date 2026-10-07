@@ -16,7 +16,7 @@ export interface OfferStanding {
   /** a message is on its way out */
   sending: boolean;
   /** a question has the box, or is set aside at the top of it */
-  ask: boolean;
+  card: boolean;
   /** the rows whose offer was turned down */
   dismissed: ReadonlySet<string>;
 }
@@ -27,7 +27,7 @@ export interface OfferStanding {
  * itself, which lands after the row. Nothing while a message is queued or going out or a question
  * is up: the box is about that. */
 export function offerOf(chat: readonly ChatItem[], at: OfferStanding): Offer {
-  if (at.queued > 0 || at.sending || at.ask) return null;
+  if (at.queued > 0 || at.sending || at.card) return null;
   const last = chat.at(-1);
   if (last?.kind !== "tool" || !last.done || !last.fixable || at.dismissed.has(last.id)) return null;
   if (chat.some((i) => i.kind === "asked" && i.toolId === last.id)) return null;

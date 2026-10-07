@@ -22,7 +22,7 @@ const passed = (id: string, command: string): ChatItem => ({
   done: true,
   toolKind: "execute",
 });
-const rest: OfferStanding = { queued: 0, sending: false, ask: false, dismissed: new Set() };
+const rest: OfferStanding = { queued: 0, sending: false, card: false, dismissed: new Set() };
 
 describe("offerOf", () => {
   test("a failed command the daemon marked, last in the chat, is offered by its row", () => {
@@ -61,7 +61,7 @@ describe("offerOf", () => {
     const chat = [failed("t1", "bun test")];
     expect(offerOf(chat, { ...rest, queued: 1 })).toBeNull();
     expect(offerOf(chat, { ...rest, sending: true })).toBeNull();
-    expect(offerOf(chat, { ...rest, ask: true })).toBeNull();
+    expect(offerOf(chat, { ...rest, card: true })).toBeNull();
   });
 
   test("an offer turned down stays down, by its row", () => {

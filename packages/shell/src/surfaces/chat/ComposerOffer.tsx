@@ -22,16 +22,22 @@ export function ComposerOffer({
   children: ReactNode;
 }) {
   return (
-    <div className="composer-ask">
+    <div className="composer-offer">
       <Icon name={icon} className="icon-inline" />
-      <span className="composer-ask-line">
+      <span className="composer-offer-line">
         <Button variant="inline" tone="strong" data-tip={tip} onClick={onPress}>
           {verb}
         </Button>{" "}
         {children}
       </span>
       {onDismiss && (
-        <IconButton icon="close" tone="quiet" className="composer-ask-close" label="Not this one" onClick={onDismiss} />
+        <IconButton
+          icon="close"
+          tone="quiet"
+          className="composer-offer-close"
+          label="Not this one"
+          onClick={onDismiss}
+        />
       )}
     </div>
   );

@@ -72,7 +72,7 @@ function useCardFocus(root: Root, id: string) {
   };
 }
 
-export function BoxCard({
+export function Card({
   root,
   id,
   onKeyDown,
@@ -86,7 +86,7 @@ export function BoxCard({
 }) {
   const onBlur = useCardFocus(root, id);
   return (
-    <div ref={root} className="ask-box" tabIndex={-1} onKeyDown={onKeyDown} onBlur={onBlur}>
+    <div ref={root} className="card" tabIndex={-1} onKeyDown={onKeyDown} onBlur={onBlur}>
       {children}
     </div>
   );
@@ -95,9 +95,9 @@ export function BoxCard({
 /** the sentence the card asks, and under it what the person should know before answering */
 export function CardHead({ children, sub }: { children: ReactNode; sub?: ReactNode }) {
   return (
-    <div className="ask-head">
-      <div className="ask-text">{children}</div>
-      {sub && <div className="ask-sub">{sub}</div>}
+    <div className="card-head">
+      <div className="card-text">{children}</div>
+      {sub && <div className="card-sub">{sub}</div>}
     </div>
   );
 }
@@ -113,14 +113,14 @@ export function CardBand(props: { code: string; still?: boolean } | { html: stri
   if ("html" in props)
     return (
       // the markup goes into a child of the band so the band keeps a child of its own beside it
-      <div ref={band} className="ask-block md">
+      <div ref={band} className="card-band md">
         {/* biome-ignore lint/security/noDangerouslySetInnerHtml: html is DOMPurify-sanitized markdown */}
         <div dangerouslySetInnerHTML={{ __html: props.html }} />
         {copy}
       </div>
     );
   return (
-    <div ref={props.still ? undefined : band} className={cx("ask-block ask-code", props.still && "ask-still")}>
+    <div ref={props.still ? undefined : band} className={cx("card-band card-code", props.still && "card-still")}>
       <pre>{props.code}</pre>
       {!props.still && copy}
     </div>
@@ -129,5 +129,5 @@ export function CardBand(props: { code: string; still?: boolean } | { html: stri
 
 /** the actions under the choices, at the card's floor */
 export function CardFoot({ children }: { children: ReactNode }) {
-  return <div className="ask-foot">{children}</div>;
+  return <div className="card-foot">{children}</div>;
 }

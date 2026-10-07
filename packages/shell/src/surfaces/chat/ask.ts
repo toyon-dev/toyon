@@ -212,3 +212,10 @@ export function recommended(label: string): boolean {
 export function stripRecommended(label: string): string {
   return label.replace(RECOMMENDED, "");
 }
+
+/** what closed the ask, when it was not an answer */
+export const CLOSED: Record<string, string> = {
+  skipped: "you skipped this",
+  cancelled: "the turn was stopped before you answered",
+  expired: "Toyon restarted before you answered",
+};

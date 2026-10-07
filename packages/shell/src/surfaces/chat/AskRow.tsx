@@ -4,8 +4,8 @@
 // in a place that scrolls away. A question the person answered is the log's own message pair, and
 // a call the person let through is its own tool row.
 
-import { CLOSED } from "./AskBox.tsx";
 import type { AskItem } from "./ask.ts";
+import { CLOSED } from "./ask.ts";
 
 export function AskRow({ item }: { item: AskItem }) {
   if (!item.outcome) return null;

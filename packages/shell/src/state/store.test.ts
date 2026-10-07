@@ -891,6 +891,33 @@ describe("chat folding", () => {
     expect(tools.map((t) => t.done)).toEqual([true, true]);
     expect(tools[1]).not.toHaveProperty("output");
   });
+
+  test("an agent error closes the calls it cut off: a failed turn sends no turn-end", () => {
+    const s = run([
+      hello(wt("a")),
+      agent("a", { type: "turn-start", ts: 0 }),
+      agent("a", { type: "tool-start", toolId: "t1", name: "Bash", input: {} }),
+      agent("a", { type: "tool-end", toolId: "t1", output: "ok", isError: false }),
+      // the API died while the agent was still writing this call: its input never finished
+      agent("a", { type: "tool-start", toolId: "t2", name: "", input: {} }),
+      agent("a", {
+        type: "tool-start",
+        toolId: "t3",
+        name: "",
+        input: { command: "bun run dev", run_in_background: true },
+      }),
+      agent("a", { type: "tool-update", toolId: "t3", background: true }),
+      agent("a", { type: "agent-error", message: "API Error: Can't reach the API server (ENOTFOUND)", ts: 0 }),
+    ]);
+    const tools = s.local.a!.chat.filter((i) => i.kind === "tool");
+    expect(tools.map((t) => t.done)).toEqual([true, true, false]);
+    expect(tools[1]).not.toHaveProperty("output");
+    expect(s.local.a?.chat.at(-1)).toEqual({
+      kind: "error",
+      text: "API Error: Can't reach the API server (ENOTFOUND)",
+    });
+    expect(s.local.a?.running).toBeUndefined();
+  });
 });
 
 describe("preview reload after a turn", () => {

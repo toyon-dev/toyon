@@ -2510,11 +2510,12 @@ function onServer(s: State, msg: StoreServerMsg): State {
       let next = withLocal(s, id, (l) => {
         const chat = applyEvent(l.chat, ev, msg.seq);
         // a call marked as running on in the background has returned to the agent, and a turn's end
-        // closes what it left open: the head moves on those too
+        // or failure closes what it left open: the head moves on those too
         const moved =
           ev.type === "tool-start" ||
           ev.type === "tool-end" ||
           ev.type === "turn-end" ||
+          ev.type === "agent-error" ||
           (ev.type === "tool-update" && ev.background);
         const running = moved ? runningOf(chat, l.running) : l.running;
         let turn = l.turn;
@@ -2873,12 +2874,16 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
       };
       return next;
     }
-    case "agent-error":
+    case "agent-error": {
+      // the failure ends the turn without a turn-end (the daemon drops the agent instead), so a
+      // call the API died under would otherwise shine and count its seconds for good
+      const cut = closeOpenCalls(items);
       // Claude reports a usage limit as prose and then fails the turn with the same sentence; the
       // error row takes the prose's place rather than saying it twice
       if (last?.kind === "assistant" && repeats(event.message, last.text))
-        return [...items.slice(0, -1), { kind: "error", text: event.message }];
-      return [...items, { kind: "error", text: event.message }];
+        return [...cut.slice(0, -1), { kind: "error", text: event.message }];
+      return [...cut, { kind: "error", text: event.message }];
+    }
     case "agent-blocked":
       return [...items, { kind: "blocked", tool: event.tool, path: event.path, reason: event.reason }];
     case "grafted":
@@ -3019,17 +3024,20 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
       };
       return next;
     }
-    case "turn-end": {
-      // a row reads as running by whether its call ended, and a turn cut off (a stop, a daemon
-      // restart) leaves calls with no end: what the turn left open closes with it. A row held open
-      // for a command running in the background outlives the turn by design, and its own end
-      // closes it (the daemon writes one, at the latest when it restarts).
-      const cut = (i: ChatItem) => i.kind === "tool" && !i.done && !i.background;
-      return items.some(cut) ? items.map((i) => (cut(i) ? { ...i, done: true } : i)) : items;
-    }
+    case "turn-end":
+      return closeOpenCalls(items);
     default:
       return items;
   }
+}
+
+/** A row reads as running by whether its call ended, and a turn cut off (a stop, a daemon
+ * restart, a failure) leaves calls with no end: what the turn left open closes with it. A row
+ * held open for a command running in the background outlives the turn by design, and its own
+ * end closes it (the daemon writes one, at the latest when it restarts). */
+function closeOpenCalls(items: ChatItem[]): ChatItem[] {
+  const cut = (i: ChatItem) => i.kind === "tool" && !i.done && !i.background;
+  return items.some(cut) ? items.map((i) => (cut(i) ? { ...i, done: true } : i)) : items;
 }
 
 /** the prose row a chunk of `messageId` continues, when only the person's bubbles separate them;

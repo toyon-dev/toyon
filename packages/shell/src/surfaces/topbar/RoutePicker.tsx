@@ -56,7 +56,7 @@ export function RouteRow({ row }: { row: Row }) {
       <span className="picker-label">{row.title}</span>
       <RoutePath row={row} />
       {row.kind === "go" ? (
-        <span className="picker-hint row-dim">go</span>
+        <span className="picker-hint row-dim">as typed</span>
       ) : row.badge ? (
         <span className={row.badge === "new" ? "badge-new" : "badge-changed"}>{row.badge}</span>
       ) : null}

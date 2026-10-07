@@ -117,6 +117,16 @@ describe("typing", () => {
     expect(typed("pri", history, app)).toEqual(["Pricing /pricing", "go /pri"]);
   });
 
+  test("a whole typed path leads, however many pages sit under it", () => {
+    const ids = [entry("/orders/1856"), entry("/orders/2018")];
+    expect(typed("/orders", ids, [])).toEqual(["go /orders", "Orders /orders/1856", "Orders /orders/2018"]);
+    expect(typed("/orders/", ids, [])).toEqual(["go /orders/", "Orders /orders/1856", "Orders /orders/2018"]);
+    // back inside a segment, the page completing it leads again
+    expect(typed("/orders/20", ids, [])).toEqual(["Orders /orders/2018", "go /orders/20"]);
+    // a template's literal part, typed whole, is a place too
+    expect(typed("users", [], app)).toEqual(["go /users", "Users /users/[id] template"]);
+  });
+
   test("with nothing starting that way, the typed path leads", () => {
     expect(typed("xyz", history, app)).toEqual(["go /xyz"]);
     const routes = [route("/docs/getting-started")];

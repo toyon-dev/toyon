@@ -346,8 +346,17 @@ function typedRows(m: PageModel, query: string, here: string | null): Row[] {
   }
   if (rows.some((r) => r.score === 100)) return rows.map(strip);
   const go: Row = { kind: "go", path: goPath, title: humanize(filled?.path ?? goPath) };
-  // a path that leads with a prefix match keeps the highlight, so tab's ghost stays on it
-  return filled || (rows[0]?.score ?? 0) < 80 ? [go, ...rows.map(strip)] : [...rows.map(strip), go];
+  // a page still completing the segment being typed keeps the highlight, so tab's ghost stays on it;
+  // a whole typed path is a place of its own and leads, however many pages sit under it
+  const top = rows[0];
+  const completing = !filled && top !== undefined && top.score >= 80 && insideSegment(top.path, n);
+  return completing ? [...rows.map(strip), go] : [go, ...rows.map(strip)];
+}
+
+/** the path goes on past the needle within the segment the needle ends in */
+function insideSegment(path: string, n: string): boolean {
+  const rest = path.replace(/^\//, "").toLowerCase().slice(n.length);
+  return !n.endsWith("/") && rest.length > 0 && !/^[/?#]/.test(rest);
 }
 
 /**

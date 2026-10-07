@@ -26,33 +26,38 @@ export interface ChordLabel {
   hidden?: true;
 }
 
+/** The card reads each section in the order written here, so the order is the rule: the rows a
+ * hand reaches for most sit at the top, and a chord that only toyon has (element to chat, the
+ * command palette) sits above a key every browser already taught (reload). A new chord goes where
+ * it is reached for, not at the end of its section. Nothing sorts by key: a person scans for the
+ * verb and reads the key beside it. */
 export const CHORD_LABELS: Record<ChordId, ChordLabel> = {
-  "quick-open": { label: "jump to file", section: "Find" },
   commands: { label: "command palette", section: "Find", advertise: { key: "F1", when: "firefox" } },
+  "quick-open": { label: "jump to file", section: "Find" },
   search: { label: "search in files", section: "Find" },
   chats: { label: "search in chats", section: "Find" },
-  changes: { label: "changes panel", section: "Panels" },
-  files: { label: "files panel", section: "Panels" },
-  "panel-tab-prev": { label: "previous panel tab", section: "Panels", hidden: true },
-  "panel-tab-next": { label: "next panel tab", section: "Panels" },
-  composer: { label: "chat panel, with the editor's selection", section: "Panels" },
-  rail: { label: "worktree panel", section: "Panels" },
-  keys: { label: "settings & shortcuts", section: "Panels" },
-  terminal: { label: "terminal", section: "Panels" },
-  design: { label: "design system", section: "Panels" },
-  "term-tab": { label: "next terminal tab", section: "Panels" },
+  pick: { label: "element to chat", section: "Preview" },
+  inspect: { label: "element to code", section: "Preview" },
   routes: { label: "go to page", section: "Preview" },
   reload: { label: "reload the preview", section: "Preview" },
+  zen: { label: "full-bleed preview", section: "Preview" },
   // never on the card: they are the browser's own back and forward keys, and the hand already has
   // them; the bar's arrows carry the hint for anyone who wonders
   back: { label: "back in the preview", section: "Preview", hidden: true },
   forward: { label: "forward in the preview", section: "Preview", hidden: true },
+  composer: { label: "chat panel, with the editor's selection", section: "Panels" },
+  changes: { label: "changes panel", section: "Panels" },
+  files: { label: "files panel", section: "Panels" },
+  terminal: { label: "terminal", section: "Panels" },
+  rail: { label: "worktree panel", section: "Panels" },
+  "panel-tab-next": { label: "next panel tab", section: "Panels" },
+  "panel-tab-prev": { label: "previous panel tab", section: "Panels", hidden: true },
+  "term-tab": { label: "next terminal tab", section: "Panels" },
+  design: { label: "design system", section: "Panels" },
+  keys: { label: "settings & shortcuts", section: "Panels" },
   // never on the card: it is only live in an installed app, and there it is the key the hand
   // already presses to close a pane
   close: { label: "close the pane", section: "Panels", hidden: true },
-  pick: { label: "element to chat", section: "Preview" },
-  inspect: { label: "element to code", section: "Preview" },
-  zen: { label: "full-bleed preview", section: "Preview" },
   new: { label: "new worktree", section: "Worktrees", advertise: { key: "n", when: "pwa" } },
   worktree: { label: "switch worktree", section: "Worktrees" },
   "wt-prev": { label: "previous worktree", section: "Worktrees", advertise: { key: "Tab", when: "pwa" } },

@@ -26,9 +26,14 @@
   /* html alone: its value is the viewport's, which is what stops the window rubber-banding. On
      body too, body is a scroller of its own that ends the scroll chain, and a pinch-zoomed
      window can no longer be panned. Not in a frame, for the same reason one level up: the
-     viewport of a framed page ends the chain into the window that holds it. */
+     viewport of a framed page ends the chain into the window that holds it.
+     The vertical axis only. Sideways, the same value is the switch for the browser's swipe back
+     and forward, and a swipe over the preview walks that page's history the way it would in a
+     tab of its own. The gesture is the viewport's, so it answers a swipe over the chat as well,
+     the way any page holding a frame does, and what runs off the end of a code block or the tabs
+     strip reaches it the same way. (scroll.test.ts) */
   html:not([data-framed]) {
-    overscroll-behavior: none;
+    overscroll-behavior-y: none;
   }
   /* selected text sits on the picked seat, the tier the editor pane already selects in, so a
      drag across the chat and one across a file read as the same act. The text is named too: the

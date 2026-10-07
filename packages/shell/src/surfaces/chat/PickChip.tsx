@@ -62,6 +62,14 @@ export function PickChip({
   // the host the file is on: the daemon's, for the editor rows a path offers
   const { host } = useUrls();
   const chip = useRef<HTMLDivElement | null>(null);
+  // a remove unmounts the chip under the pointer, so no mouseleave follows: the hover ends here or
+  // the outline it put on the preview stays
+  const remove = onRemove
+    ? () => {
+        onHover?.(false);
+        onRemove();
+      }
+    : undefined;
   return (
     <div
       ref={chip}
@@ -69,7 +77,7 @@ export function PickChip({
       data-tip={tipText}
       onMouseEnter={() => onHover?.(true)}
       onMouseLeave={() => onHover?.(false)}
-      {...cm.contextMenu(() => pickItems(pick, { dir, remove: onRemove, host }))}
+      {...cm.contextMenu(() => pickItems(pick, { dir, remove, host }))}
     >
       <span className="pick-target">
         <Icon name="pick" className="icon-inline" /> {pickLabel(pick)}
@@ -92,7 +100,7 @@ export function PickChip({
           </span>
         )}
       </span>
-      {onRemove && <IconButton icon="close" label="Remove attachment" tone="quiet" onClick={onRemove} />}
+      {remove && <IconButton icon="close" label="Remove attachment" tone="quiet" onClick={remove} />}
       {worktreeId && lead?.line && (
         <ChipPeek chip={chip}>
           <SourcePeek worktreeId={worktreeId} path={lead.path} line={lead.line} />

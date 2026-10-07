@@ -1,9 +1,10 @@
 // WebSocket side of the daemon: socket registry, hello, inbound validation + dispatch, and the
 // table of what gets pushed when a hub event fires.
 
-import { homedir } from "node:os";
+import { homedir, hostname } from "node:os";
 import {
   type ManagedResolved,
+  machineLabel,
   managedView,
   PROTOCOL_VERSION,
   parseClientMsg,
@@ -19,6 +20,7 @@ import type { Server, ServerWebSocket } from "bun";
 import { lacksQuickModel } from "../agent/tasks.ts";
 import { cloud } from "../core/cloud.ts";
 import { UserError } from "../core/errors.ts";
+import type { GrantCodes } from "../core/grants.ts";
 import { fireAndForget, log } from "../core/log.ts";
 import { lag, type SocketStats } from "../core/metrics.ts";
 import { PairCodes } from "../core/pair.ts";
@@ -72,6 +74,10 @@ export interface ServerOpts {
   services: Services;
   /** where a shell authenticated from, passed on to the bridge script (see BridgeScript) */
   noteShellOrigin: (origin: string | null) => void;
+  /** a shell on another machine has paired here and is trusted from now on */
+  onTrusted: (origin: string) => void;
+  /** the one-time codes a shell on another machine spends to open a preview here */
+  grants: GrantCodes;
   /** the public name and its front (core/remote.ts), or null */
   remote: Remote | null;
   /** the managed policy as read at boot: hello carries it, /health names its source and hash,
@@ -379,7 +385,8 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
       home: homedir(),
       folderDialog: process.platform === "darwin" && !cloud.enabled,
       keepAwake: s.keepAwake.setting(),
-      remote: opts.remote && { host: opts.remote.host, previews: opts.remote.previews },
+      remote: opts.remote,
+      machine: machineLabel(hostname(), opts.remote),
       paired: s.state.paired,
       gitIdentity: await s.repos.gitIdentity(),
       pending: s.repos.pending,
@@ -421,10 +428,22 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
       restart: (now) => s.restarter.request({ now }),
       restartWait: () => ({ waiting: s.restarter.waitingOn(), asking: s.restarter.asking() }),
       pair: new PairCodes(),
-      onPaired: () => {
-        s.state.notePaired();
+      grants: opts.grants,
+      onPaired: (origin) => {
+        // A redeem from this machine's own name is a phone's camera opening the link: the phone
+        // now holds the token, which is what the bar's offer of a code was for. A redeem from a
+        // page this machine did not serve is a shell elsewhere (another machine's desk, or the
+        // app installed from it) that now holds the token: its origin is answered across origins
+        // from here on, and the bar still owes the person's phone its code.
+        const own = origin === null || origin === `https://${opts.remote?.host}`;
+        if (own) s.state.notePaired();
+        else {
+          s.state.trustOrigin(origin);
+          if (s.state.trustedOrigins.includes(origin)) opts.onTrusted(origin);
+        }
         broadcast({ t: "paired" });
       },
+      trusted: () => s.state.trustedOrigins,
       phones: () => readTailnetPhones(),
       mcp: (req, id) => s.mcp.fetch(req, id),
     }),

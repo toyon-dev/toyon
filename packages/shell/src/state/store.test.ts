@@ -124,6 +124,7 @@ const helloIn = (repos: RepoInfo[], ...w: WorktreeStatus[]): Action =>
   server({
     t: "hello",
     version: "0",
+    machine: "box",
     install: "npm",
     registry: null,
     protocol: PROTOCOL_VERSION,
@@ -159,6 +160,9 @@ function run(actions: Action[], from: State = initial): State {
 }
 
 describe("active worktree", () => {
+  test("hello names the machine, for a shell that lists several", () => {
+    expect(run([hello(wt("main", "main"))]).machine).toBe("box");
+  });
   test("hello picks the first worktree when nothing is active", () => {
     expect(run([hello(wt("main", "main"), wt("a"))]).activeId).toBe("main");
   });

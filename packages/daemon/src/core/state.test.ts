@@ -94,6 +94,22 @@ describe("state", () => {
     expect(store.seenOf("a")).toBeUndefined();
   });
 
+  test("a paired shell origin is kept once, https or loopback http, the newest sixteen", () => {
+    const store = new StateStore(paths, { repos: [], worktrees: [], sessions: {} });
+    store.trustOrigin("https://home.tail1234.ts.net");
+    store.trustOrigin("http://home.tail1234.ts.net");
+    store.trustOrigin("http://10.0.0.7:4141");
+    store.trustOrigin("https://home.tail1234.ts.net/path");
+    store.trustOrigin("https://home.tail1234.ts.net");
+    // the desk's own daemon serves its page over plain http on a loopback name
+    store.trustOrigin("http://127.0.0.1:4141");
+    expect(store.trustedOrigins).toEqual(["https://home.tail1234.ts.net", "http://127.0.0.1:4141"]);
+    for (let i = 0; i < 20; i++) store.trustOrigin(`https://m${i}.example`);
+    expect(store.trustedOrigins.length).toBe(16);
+    expect(store.trustedOrigins[0]).toBe("https://m4.example");
+    expect(loadState(paths).trustedOrigins?.at(-1)?.origin).toBe("https://m19.example");
+  });
+
   test("corrupt file is backed up, not silently discarded", () => {
     writeFileSync(paths.stateFile, '{"repos": [');
     const s = loadState(paths);

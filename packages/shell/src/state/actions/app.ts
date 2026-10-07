@@ -160,6 +160,12 @@ export function appItems(s: AppState, { sock, dispatch }: Deps): MenuEntry[] {
       onClick: () => sock?.send({ t: "restart-daemon" }),
     });
   }
+  // another machine's code or link, read here: this page lists that machine too, beside this one
+  app.push({
+    id: "add-machine",
+    label: "add a machine",
+    onClick: () => dispatch({ a: "open", overlay: { kind: "add-machine" } }),
+  });
   // A machine with a public name is listed at toyon.cloud per browser, so a phone or a second
   // laptop that opened it here adds it from here. The link carries the name, never the token.
   if (s.remote) {

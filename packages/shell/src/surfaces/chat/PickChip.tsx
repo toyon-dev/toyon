@@ -1,7 +1,7 @@
 import type { PickMeta } from "@toyon/shared";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { pickItems } from "../../state/actions/message.ts";
-import { useFileSync, useSock, useStore } from "../../state/context.tsx";
+import { useFileSync, useSock, useStore, useUrls } from "../../state/context.tsx";
 import { archivedPageOf, localOf } from "../../state/store.ts";
 import { IconButton } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
@@ -59,6 +59,8 @@ export function PickChip({
       label
     );
   const cm = useContextMenu("chat");
+  // the host the file is on: the daemon's, for the editor rows a path offers
+  const { host } = useUrls();
   const chip = useRef<HTMLDivElement | null>(null);
   return (
     <div
@@ -67,7 +69,7 @@ export function PickChip({
       data-tip={tipText}
       onMouseEnter={() => onHover?.(true)}
       onMouseLeave={() => onHover?.(false)}
-      {...cm.contextMenu(() => pickItems(pick, { dir, remove: onRemove }))}
+      {...cm.contextMenu(() => pickItems(pick, { dir, remove: onRemove, host }))}
     >
       <span className="pick-target">
         <Icon name="pick" className="icon-inline" /> {pickLabel(pick)}

@@ -4,7 +4,7 @@ import { askAgent, mentionInChat, mentionOf, treeBox } from "../attach.ts";
 import type { Store } from "../context.tsx";
 import { readingView, rowById, type State } from "../store.ts";
 import { copyText, type Deps } from "./deps.ts";
-import { editorItems, revealItems } from "./editor.ts";
+import { daemonHost, editorItems, revealItems } from "./editor.ts";
 import { openFile } from "./file.ts";
 
 /** Why the tree may not make a file here, or undefined when it may. Main is the launcher: a file
@@ -73,7 +73,7 @@ export function treeItems(
   ];
   // where the file is: shown in Finder, or its path on the clipboard
   const where: MenuItem[] = [
-    ...revealItems(() => deps.sock?.send({ t: "reveal", worktreeId, path })),
+    ...revealItems(() => deps.sock?.send({ t: "reveal", worktreeId, path }), daemonHost(deps.sock)),
     { id: "copy-path", label: "copy path", onClick: () => copyText(`${dir}/${path}`) },
     { id: "copy-relative-path", label: "copy relative path", onClick: () => copyText(path) },
   ];
@@ -89,6 +89,6 @@ export function treeSpaceItems(
 ): MenuEntry[] {
   return grouped([
     [newFileItem(store, wt.worktreeId, "", newFile)],
-    editorItems(wt.dir, () => deps.sock?.send({ t: "reveal", worktreeId: wt.worktreeId })),
+    editorItems(wt.dir, () => deps.sock?.send({ t: "reveal", worktreeId: wt.worktreeId }), daemonHost(deps.sock)),
   ]);
 }

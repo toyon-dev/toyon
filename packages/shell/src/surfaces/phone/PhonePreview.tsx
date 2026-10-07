@@ -1,4 +1,6 @@
 import type { OwnedWorktree } from "@toyon/shared";
+import { useMachine } from "../../state/context.tsx";
+import { useGrantedUrl } from "../../state/previewGrant.ts";
 import { previewUp } from "../../state/store.ts";
 import { View } from "../../ui/View.tsx";
 import { stateLabel } from "../util.ts";
@@ -20,11 +22,29 @@ import { stateLabel } from "../util.ts";
  * the worktree is what wakes it (App's `view` effect runs on the phone too), so the line resolves
  * into the frame on its own.
  */
-export function PhonePreview({ active, url, hidden }: { active: OwnedWorktree; url: string; hidden: boolean }) {
+export function PhonePreview({
+  gated,
+  active,
+  url,
+  hidden,
+}: {
+  /** the frame's first request carries a one-time code (previewGrant.ts) */
+  gated: boolean;
+  active: OwnedWorktree;
+  url: string;
+  hidden: boolean;
+}) {
+  // On another machine the frame's first request carries a one-time code; until it is minted
+  // there is no address to open, and the line below stands a moment longer. The code is asked for
+  // only once the app is up, since it is good for a minute and spent by the request that carries
+  // it: minted while the dev server was still installing, it would be dead by the time the frame
+  // first loaded, and the refusal page would reload that dead code forever.
+  const up = previewUp(active);
+  const src = useGrantedUrl(useMachine(), up ? url : null, gated);
   return (
     <div className="phone-preview" hidden={hidden}>
-      {previewUp(active) ? (
-        <iframe className="phone-preview-frame" src={url} title={active.worktree.title} />
+      {up && src ? (
+        <iframe className="phone-preview-frame" src={src} title={active.worktree.title} />
       ) : (
         <View wide>
           <p className="status-line">{stateLabel(active)}</p>

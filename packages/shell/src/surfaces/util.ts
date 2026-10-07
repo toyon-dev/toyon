@@ -2,6 +2,7 @@ import {
   type ChordId,
   chordLabel,
   isLead,
+  isLoopbackHost,
   isOwned,
   type ProcState,
   type ProcStatus,
@@ -31,13 +32,18 @@ import {
  * A shell served from the public name (hello's `remote`) came through a TLS front, and the daemon
  * says where previews live under it. Routed by name, every preview rides the front's one port
  * under its own label: same site as the shell again, for the same reasons. On their own ports the
- * front holds no wildcard certificate: still same site, but one cookie jar for every worktree. */
-export function previewUrl(worktreeId: string, proxyPort: number, remote: RemoteView | null): string {
-  const h = location.hostname;
-  if (remote !== null && h === remote.host) return `${previewOrigin(remote.previews, worktreeId, proxyPort)}/`;
-  if (h.endsWith(".localhost")) return `http://w${worktreeId}.${h}:${proxyPort}/`;
-  if (h === "127.0.0.1" || h === "localhost") return `http://127.0.0.1:${proxyPort}/`;
-  return `${location.protocol}//${h}:${proxyPort}/`;
+ * front holds no wildcard certificate: still same site, but one cookie jar for every worktree.
+ *
+ * `host` is the daemon's, not the page's: a shell that lists several machines frames another
+ * machine's previews under that machine's name, and a name that is not loopback is reached over
+ * https, since the daemon itself never listens off loopback. */
+export function previewUrl(worktreeId: string, proxyPort: number, remote: RemoteView | null, host: string): string {
+  if (remote !== null && host === remote.host) return `${previewOrigin(remote.previews, worktreeId, proxyPort)}/`;
+  if (host.endsWith(".localhost")) return `http://w${worktreeId}.${host}:${proxyPort}/`;
+  // a loopback proxy speaks plain http; `localhost` is read as the address so the frame and the
+  // page agree on a name whatever the resolver says
+  if (isLoopbackHost(host)) return `http://${host === "localhost" ? "127.0.0.1" : host}:${proxyPort}/`;
+  return `https://${host}:${proxyPort}/`;
 }
 
 /** fiber lineNumbers may be preamble-shifted (daemon derives the offset per file) */

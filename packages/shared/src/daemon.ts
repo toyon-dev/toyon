@@ -1,6 +1,8 @@
 // What the CLI and the daemon agree on about the daemon's home directory and its front door,
 // without the CLI importing daemon code (the npm package ships them as separate bundles).
 
+import { isTailnetName } from "./pair.ts";
+
 /** file names under TOYON_HOME; the CLI reads them, the daemon writes them */
 export const DAEMON_FILES = {
   token: "token",
@@ -33,14 +35,46 @@ export interface Remote {
   front: "local" | "edge";
 }
 
-/** what the shell needs of it: where previews live */
+/** the shape `remote.json` holds: the name and where previews live. The front is not in the file;
+ * the daemon works it out at boot, and the hello frame carries the whole `Remote`. */
 export type RemoteView = Pick<Remote, "host" | "previews">;
+
+/** What a machine is called in a shell that lists several. A tailnet name's first label is the
+ * device's name on the tailnet, which is what the person called it; any other public name says
+ * less about the box than its own hostname does, so the hostname's first label stands in. */
+export function machineLabel(hostname: string, remote: Pick<Remote, "host"> | null): string {
+  const of = (name: string) => name.split(".")[0]?.toLowerCase() ?? "";
+  if (remote && isTailnetName(remote.host)) return of(remote.host) || of(hostname);
+  return of(hostname) || "toyon";
+}
+
+/** the query parameter a one-time preview grant rides in, for a preview on a machine the page was
+ * not served from: `https://w3.box.ts.net/?toyon_grant=<code>` */
+export const PREVIEW_GRANT_PARAM = "toyon_grant";
+
+/** what `POST /preview-grant` answers: a code, and how long it can be spent. A duration rather than
+ * a time, because the page that asked may not share the daemon's clock. */
+export interface PreviewGrantMint {
+  code: string;
+  ms: number;
+}
 
 /** the preview ports a port-addressed front forwards, when TOYON_PROXY_PORTS does not say: each is
  * declared to the front up front, so they cannot be ephemeral */
 export const PREVIEW_PORTS = { from: 10001, to: 10008 } as const;
 
 const DNS_NAME = /^(?=.{1,253}$)[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$/;
+
+/** A host name that can only mean this machine: the loopback addresses (an IPv6 one as a URL's
+ * hostname carries its brackets), `localhost`, and `*.localhost`, which browsers hardwire to
+ * loopback and public DNS cannot serve (RFC 6761). The daemon admits these names without a public
+ * name set, a page on one is open on the daemon's own machine, and a token over plain http is safe
+ * only to one of them. */
+export function isLoopbackHost(host: string): boolean {
+  return (
+    host === "127.0.0.1" || host === "::1" || host === "[::1]" || host === "localhost" || host.endsWith(".localhost")
+  );
+}
 
 /** A name a TLS front on this machine can hold a certificate for: a dotted DNS name, lowercase, no
  * scheme or port. Not an IP (the last label is never all digits) and not a *.localhost name, which

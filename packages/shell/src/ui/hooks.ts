@@ -35,10 +35,16 @@ export function useFocusOnMount<T extends HTMLElement>(select = false, when = tr
 /** useState backed by localStorage (per browser); `parse` validates/clamps what was stored. The
  * value is held with its key, so a key that changes (the model remembered per agent, when the
  * draft's agent does) reads its own entry instead of keeping the last key's value. */
-export function usePersisted<T>(key: string, fallback: T, parse: (raw: string | null) => T | undefined) {
+export function usePersisted<T>(
+  key: string,
+  fallback: T,
+  parse: (raw: string | null) => T | undefined,
+  /** where the value lives: the window's localStorage, or one machine's slice of it */
+  store: { get(key: string): string | null; set(key: string, value: string): void } = WINDOW_STORAGE,
+) {
   const read = (): T => {
     try {
-      return parse(localStorage.getItem(key)) ?? fallback;
+      return parse(store.get(key)) ?? fallback;
     } catch {
       return fallback;
     }
@@ -51,11 +57,17 @@ export function usePersisted<T>(key: string, fallback: T, parse: (raw: string | 
   const set = (v: T) => {
     setHeld({ key, value: v });
     try {
-      localStorage.setItem(key, typeof v === "boolean" ? (v ? "1" : "0") : String(v));
+      store.set(key, typeof v === "boolean" ? (v ? "1" : "0") : String(v));
     } catch {}
   };
   return [value, set] as const;
 }
+
+/** the window's own storage, for what is about this window and not one machine */
+const WINDOW_STORAGE = {
+  get: (key: string) => localStorage.getItem(key),
+  set: (key: string, value: string) => localStorage.setItem(key, value),
+};
 
 /** Pointer-drag resize: returns an onPointerDown for the handle. `measure` maps the pointer (and
  * the handle, for a size taken from where its own box sits) to a size; body gets `.resizing` and

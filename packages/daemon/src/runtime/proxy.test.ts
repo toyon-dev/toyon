@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Remote } from "@toyon/shared";
+import { GrantCodes } from "../core/grants.ts";
 import { previewGrant } from "../core/remote.ts";
 import { startProxy } from "./proxy.ts";
 
@@ -25,12 +26,15 @@ function freePort(): number {
   return p;
 }
 
+/** the one-time codes a shell on another machine spends to open a preview on a port here */
+const codes = new GrantCodes();
+
 function proxyTo(port: number, remote: Remote | null = null) {
   return startProxy({
     port: freePort(),
     hostname: "127.0.0.1",
     remote,
-    grant: previewGrant("secret"),
+    gate: remote && { grant: previewGrant("secret"), host: remote.host, redeem: (code) => codes.redeem(code) },
     bridgeScript: () => "",
     getTarget: () => ({ port, host: "127.0.0.1" }),
   });
@@ -104,7 +108,7 @@ describe("preview proxy", () => {
       port: freePort(),
       hostname: "127.0.0.1",
       remote: null,
-      grant: previewGrant("secret"),
+      gate: null,
       bridgeScript: () => "",
       getTarget: () => null,
     });
@@ -221,7 +225,7 @@ describe("preview proxy waking", () => {
       port: freePort(),
       hostname: "127.0.0.1",
       remote: null,
-      grant: previewGrant("secret"),
+      gate: null,
       bridgeScript: () => "",
       getTarget: () => target,
       onRequest: () => requests.push(Date.now()),
@@ -247,7 +251,7 @@ describe("preview proxy waking", () => {
       port: freePort(),
       hostname: "127.0.0.1",
       remote: null,
-      grant: previewGrant("secret"),
+      gate: null,
       bridgeScript: () => "",
       getTarget: () => null,
       ready: async () => null,
@@ -269,7 +273,7 @@ describe("preview proxy waking", () => {
       port: freePort(),
       hostname: "127.0.0.1",
       remote: null,
-      grant: previewGrant("secret"),
+      gate: null,
       bridgeScript: () => "",
       getTarget: () => ({ port: up.port ?? 0, host: "127.0.0.1" }),
       onRequest: () => requests++,
@@ -347,6 +351,32 @@ describe("preview port behind a port-addressed front", () => {
       });
       expect(res.status).toBe(200);
       expect(await res.text()).toBe("cookie=sid=1");
+    } finally {
+      proxy.stop();
+      up.stop(true);
+    }
+  });
+
+  test("a one-time code in the address becomes the cookie on this port, and the address loses it", async () => {
+    const up = cookieEcho();
+    const proxy = proxyTo(up.port ?? 0, remote);
+    try {
+      const { code } = codes.mint();
+      const res = await fetch(`http://127.0.0.1:${proxy.port}/app?x=1&toyon_grant=${code}`, {
+        headers: through(proxy.port, { "sec-fetch-site": "cross-site" }),
+        redirect: "manual",
+      });
+      expect(res.status).toBe(302);
+      expect(res.headers.get("location")).toBe("/app?x=1");
+      const cookie = res.headers.get("set-cookie") ?? "";
+      expect(cookie).toContain(`toyon_preview=${grant}`);
+      expect(cookie).toContain("Partitioned");
+      // spent: the same code opens nothing a second time
+      const again = await fetch(`http://127.0.0.1:${proxy.port}/app?toyon_grant=${code}`, {
+        headers: through(proxy.port),
+        redirect: "manual",
+      });
+      expect(again.status).toBe(403);
     } finally {
       proxy.stop();
       up.stop(true);

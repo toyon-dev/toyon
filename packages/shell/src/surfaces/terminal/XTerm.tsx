@@ -7,7 +7,7 @@ import { type ISearchOptions, SearchAddon } from "@xterm/addon-search";
 import { type ITheme, Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import { useEffect, useRef, useState } from "react";
-import { terminalBus } from "../../app/terminalBus.ts";
+import { useTerminalBus } from "../../state/context.tsx";
 import { FindBox } from "../../ui/FindBox.tsx";
 import { isFind } from "../../ui/find.ts";
 import { passPinch, useOnChange } from "../../ui/hooks.ts";
@@ -118,6 +118,7 @@ export default function XTerm({
   onEscape: () => void;
 }) {
   const box = useRef<HTMLDivElement>(null);
+  const terminalBus = useTerminalBus();
   const termRef = useRef<Terminal | null>(null);
   const searchRef = useRef<SearchAddon | null>(null);
   // ⌘F in the pane: the browser's find reads only the rows on screen, and the rail and the chat
@@ -260,7 +261,7 @@ export default function XTerm({
       termRef.current = null;
       searchRef.current = null;
     };
-  }, [worktreeId, stream, sock]);
+  }, [worktreeId, stream, sock, terminalBus]);
 
   // (re)open on every connection: the first time this mounts, and after a reconnect, when the
   // daemon may have restarted (fresh shell) or only the socket dropped (same shell, replayed)

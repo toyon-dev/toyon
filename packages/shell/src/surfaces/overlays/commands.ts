@@ -9,11 +9,13 @@ import { worktreeChord } from "@toyon/shared";
 import { useMemo } from "react";
 import { previewBus, togglePick } from "../../app/previewBus.ts";
 import { appItems } from "../../state/actions/app.ts";
+import { machineItems } from "../../state/actions/machine.ts";
 import { procItems } from "../../state/actions/proc.ts";
 import { projectItems } from "../../state/actions/project.ts";
 import { settingsItems } from "../../state/actions/settings.ts";
 import { worktreeItems } from "../../state/actions/worktree.ts";
-import { useDispatch, useSock, useStore } from "../../state/context.tsx";
+import { useDispatch, useMachines, useOtherMachines, useSock, useStore, useUrls } from "../../state/context.tsx";
+import type { OtherMachine } from "../../state/machines.ts";
 import { type Action, guestOf, isChatCentred, repoById, type State, worktreeById } from "../../state/store.ts";
 import { isItem, type MenuEntry } from "../../ui/menu.ts";
 import type { DaemonSocket } from "../../ws.ts";
@@ -28,12 +30,21 @@ export type Command = {
   sub?: boolean;
 };
 
+/** the other machines the page lists, and what the palette can do about them */
+export interface CrossMachine {
+  machines: OtherMachine[];
+  /** that machine on screen, open on that project */
+  switchTo: (origin: string, repoId: string) => void;
+  forget: (origin: string) => void;
+}
+
 export function buildCommands(
   state: CommandState,
   dispatch: (a: Action) => void,
   sock: DaemonSocket | null,
   active: OwnedWorktree | null,
   repo: RepoInfo | null,
+  cross: CrossMachine = { machines: [], switchTo: () => {}, forget: () => {} },
 ): Command[] {
   const cmds: Command[] = [];
   const add = (id: string, label: string, run: () => void, hint?: string, sub?: boolean) =>
@@ -110,6 +121,15 @@ export function buildCommands(
     if (r.id === repo?.id) continue;
     add(`repo:${r.id}`, `switch to project ${r.name}`, () => dispatch({ a: "activate-repo", id: r.id }));
   }
+  // the other machines' projects, each saying which machine, and the machine itself to forget
+  for (const m of cross.machines) {
+    for (const r of m.repos) {
+      add(`machine:${m.origin}:${r.id}`, `switch to project ${r.name} on ${m.name}`, () =>
+        cross.switchTo(m.origin, r.id),
+      );
+    }
+    add(`forget-machine:${m.origin}`, `forget ${m.name}`, () => cross.forget(m.origin));
+  }
   return cmds;
 }
 
@@ -148,6 +168,9 @@ export type CommandState = Pick<
 export function useCommands(): Command[] {
   const dispatch = useDispatch();
   const sock = useSock();
+  const { host } = useUrls();
+  const machines = useMachines();
+  const others = useOtherMachines();
   const picking = useStore((s) => s.picking);
   const layout = useStore((s) => s.layout);
   const chatSide = useStore((s) => s.chatSide);
@@ -196,9 +219,20 @@ export function useCommands(): Command[] {
       self,
       archivedPage,
       archived,
-      hostname: location.hostname,
+      hostname: host,
     };
-    return buildCommands(st, dispatch, sock, worktreeById(st, activeId), repoById(st, activeRepoId));
+    const cross: CrossMachine = {
+      machines: others,
+      switchTo: (origin, repoId) => {
+        machines.get(origin)?.store.dispatch({ a: "activate-repo", id: repoId });
+        machines.activate(origin);
+      },
+      forget: (origin) => {
+        const item = machineItems(machines, origin).find((it) => isItem(it) && it.id.startsWith("forget-machine:"));
+        if (item && isItem(item)) item.onClick();
+      },
+    };
+    return buildCommands(st, dispatch, sock, worktreeById(st, activeId), repoById(st, activeRepoId), cross);
   }, [
     picking,
     layout,
@@ -225,6 +259,9 @@ export function useCommands(): Command[] {
     archived,
     dispatch,
     sock,
+    host,
+    machines,
+    others,
   ]);
 }
 

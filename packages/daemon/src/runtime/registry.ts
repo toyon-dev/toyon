@@ -19,6 +19,7 @@ import { UserError } from "../core/errors.ts";
 import type { Hub } from "../core/hub.ts";
 import { fireAndForget, log } from "../core/log.ts";
 import type { Paths } from "../core/paths.ts";
+import type { PreviewGate } from "../core/remote.ts";
 import type { GroupEntry, StateStore } from "../core/state.ts";
 import { type ForwardOpts, type ForwardTarget, type ProcForwarder, startForward } from "./forward.ts";
 import { groupAlive, reclaimGroup } from "./kill.ts";
@@ -65,10 +66,10 @@ export interface RuntimeDeps {
   /** shared with the http layer that serves the images back; built from paths when absent */
   attachments?: AttachmentStore;
   bridgeScript: () => string;
-  /** the public name a front may forward preview ports under, and the grant they take
+  /** the public name a front may forward preview ports under, and the gate they check
    * (core/remote.ts); absent in tests, where previews answer loopback only */
   remote?: Remote | null;
-  grant?: string;
+  gate?: PreviewGate | null;
   /** the preview ports; the daemon's own when absent */
   ports?: PortLease;
   /** whether a tab shows the worktree; one shown never gives its preview port up. Absent in tests */
@@ -302,7 +303,7 @@ function defaultProxy(
     port: wt.proxyPort,
     hostname: cloud.bindHost,
     remote: d.remote ?? null,
-    grant: d.grant ?? "",
+    gate: d.gate ?? null,
     bridgeScript: d.bridgeScript,
     getTarget: () => previewTargetOf(procs, previewName),
     onRequest: wake.onRequest,

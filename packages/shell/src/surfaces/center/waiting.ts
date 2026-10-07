@@ -22,6 +22,15 @@ const CONNECT: Record<ConnectFailure | "probing", string> = {
   unauthorized: "this page's token is not the running daemon's.\nrun `toyon` again and open the link it prints",
 };
 
+/** the same, for a machine other than the one that served the page: what to do is to be done there */
+const FOREIGN: Record<ConnectFailure | "probing", (machine: string) => string> = {
+  probing: (m) => `connecting to ${m}…`,
+  down: (m) => `Toyon on ${m} is not answering.\nis Tailscale on here, and is Toyon running there?`,
+  blocked: (m) =>
+    `Toyon on ${m} is up, but this page's websocket to it never connected.\na proxy, VPN or browser extension is the usual cause`,
+  unauthorized: (m) => `this page's token for ${m} is not the one running there.\nforget ${m} here and pair it again`,
+};
+
 const NO_TOKEN =
   "no access token for this address.\non a phone, run `toyon pair` on the machine and scan the code: it works once and lasts 2 minutes.\notherwise run `toyon` in your repo, or open the full URL\n(with #token=…) printed in ~/.toyon/daemon.log";
 
@@ -35,6 +44,9 @@ export type Waiting = {
   projectChord: string;
   /** the active worktree's title, or null when nothing is open */
   title: string | null;
+  /** the machine on screen when it is not the one that served the page: its down line names it,
+   * since `toyon` is to be run there and not here */
+  machine?: string | null;
   needsSetup: boolean;
   busy: boolean;
   treeEmpty: boolean;
@@ -46,13 +58,14 @@ export type Waiting = {
  * since a phone in a pocket loses its socket far more often than a laptop does */
 export type Connection = Pick<
   Waiting,
-  "connected" | "heard" | "connectFailure" | "hasToken" | "projectChord" | "title"
+  "connected" | "heard" | "connectFailure" | "hasToken" | "projectChord" | "title" | "machine"
 >;
 
 /** the sentence while the socket is down or nothing is open, or null once there is a project to
  * talk about. The socket wins over everything, because nothing further is known. */
 export function connectionText(w: Connection): string | null {
   if (!w.connected && (!w.heard || w.connectFailure)) {
+    if (w.machine) return FOREIGN[w.connectFailure ?? "probing"](w.machine);
     return w.hasToken ? (CONNECT[w.connectFailure ?? "probing"] ?? CONNECT.probing) : NO_TOKEN;
   }
   // before hello there is nothing to say: the rows are about to arrive and a sentence would flash

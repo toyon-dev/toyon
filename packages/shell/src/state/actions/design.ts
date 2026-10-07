@@ -1,6 +1,6 @@
 import { grouped, type MenuEntry } from "../../ui/menu.ts";
 import { copyText, type Deps } from "./deps.ts";
-import { editorItems } from "./editor.ts";
+import { daemonHost, editorItems } from "./editor.ts";
 
 /** a token or a face in the design pane: nothing to open, since a value has no line to go to,
  * but the name and the value are both things to paste */
@@ -26,7 +26,7 @@ export function designRowItems(
   if (!path) return [];
   return grouped([
     [{ id: "source", label: "open source", onClick: onOpen }],
-    editorItems(`${wt.dir}/${path}`, () => sock?.send({ t: "reveal", worktreeId: wt.id, path })),
+    editorItems(`${wt.dir}/${path}`, () => sock?.send({ t: "reveal", worktreeId: wt.id, path }), daemonHost(sock)),
     [{ id: "copy-path", label: "copy path", onClick: () => copyText(path) }],
   ]);
 }

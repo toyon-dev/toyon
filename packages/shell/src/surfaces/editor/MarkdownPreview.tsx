@@ -1,7 +1,7 @@
 import { matchChord } from "@toyon/shared";
 import { type CSSProperties, useLayoutEffect, useRef, useState } from "react";
 import { openFile } from "../../state/actions/file.ts";
-import { useDispatch, useSock } from "../../state/context.tsx";
+import { useDispatch, useSock, useUrls } from "../../state/context.tsx";
 import { readingView } from "../../state/store.ts";
 import { DocumentFind } from "../../ui/DocumentFind.tsx";
 import { Float } from "../../ui/Float.tsx";
@@ -58,9 +58,10 @@ export function MarkdownPreview({
   onChat: (selected: string) => void;
 }) {
   const sock = useSock();
+  const urls = useUrls();
   const dispatch = useDispatch();
   const dir = dirOf(path);
-  const html = useMarkdown(text, version === undefined ? undefined : { base: { worktreeId, dir, version } });
+  const html = useMarkdown(text, version === undefined ? undefined : { base: { worktreeId, dir, version, urls } });
   const ref = useRef<HTMLDivElement>(null);
   const body = useRef<HTMLDivElement>(null);
   const [heads, setHeads] = useState<Heading[]>([]);

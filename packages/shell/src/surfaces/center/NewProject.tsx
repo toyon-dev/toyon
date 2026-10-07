@@ -1,7 +1,7 @@
 import type { ModelChoice } from "@toyon/shared";
 import { projectNameError } from "@toyon/shared";
 import { useEffect, useRef, useState } from "react";
-import { useDispatch, useSock, useStore } from "../../state/context.tsx";
+import { useDispatch, useMachine, useSock, useStore } from "../../state/context.tsx";
 import type { NewProjectState } from "../../state/store.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
 import { Field, TextArea } from "../../ui/Field.tsx";
@@ -39,6 +39,7 @@ const NO_CHOICES: ModelChoice[] = [];
 export function NewProject({ project }: { project: NewProjectState }) {
   const dispatch = useDispatch();
   const sock = useSock();
+  const { storage } = useMachine();
   const repos = useStore((s) => s.repos);
   const home = useStore((s) => s.home);
   const canAskFinder = useStore((s) => s.folderDialog);
@@ -88,7 +89,7 @@ export function NewProject({ project }: { project: NewProjectState }) {
     }
     // the same fast path main's composer takes: the agent picked here is the daemon's default, and
     // the project made in a moment starts on it
-    rememberNewWorktreeModel(agent, picked);
+    rememberNewWorktreeModel(storage, agent, picked);
     sock?.send({ t: "set-default-agent", agent });
   };
 

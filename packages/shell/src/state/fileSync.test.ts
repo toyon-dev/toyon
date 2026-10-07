@@ -90,6 +90,7 @@ function harness() {
   server({
     t: "hello",
     version: "0",
+    machine: "box",
     install: "npm",
     registry: null,
     protocol: PROTOCOL_VERSION,

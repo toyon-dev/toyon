@@ -1,10 +1,11 @@
 import { LOGIN_STREAM, type PickMeta, SHELL_TOOL, type ShipOp, type ToolImage } from "@toyon/shared";
 import { Fragment, memo, type ReactNode, useMemo, useRef, useState } from "react";
 import { copyText } from "../../state/actions/deps.ts";
+import { daemonHost } from "../../state/actions/editor.ts";
 import { openFile } from "../../state/actions/file.ts";
 import { type ChatLink, codeItems, imageItems, messageItems, pathItems } from "../../state/actions/message.ts";
 import { archiveWorktrees } from "../../state/actions/worktree.ts";
-import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
+import { useDispatch, useSock, useStore, useStoreInstance, useUrls } from "../../state/context.tsx";
 import { openSource } from "../../state/openSource.ts";
 import { type ChatItem, worktreeById } from "../../state/store.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
@@ -17,7 +18,6 @@ import { grouped, type MenuEntry, useContextMenu } from "../../ui/menu.ts";
 import { rowState } from "../../ui/rowState.ts";
 import { Spinner } from "../../ui/Spinner.tsx";
 import { treeKey } from "../../ui/treeNav.ts";
-import { attachmentUrl } from "../../ws.ts";
 import { elapsed, spanWords } from "../util.ts";
 import { AskRow } from "./AskRow.tsx";
 import { answeredQuestion, answerLines } from "./ask.ts";
@@ -214,7 +214,7 @@ function ToolOut({ blocks, path, worktreeId }: { blocks: PaintedBlock[]; path: s
  * at the window's size, as a sent image chip does. The file is the daemon's copy, so a picture the
  * agent took under /tmp is here whatever became of the original. */
 function ToolPicture({ image, worktreeId }: { image: ToolImage; worktreeId: string }) {
-  const src = attachmentUrl(worktreeId, image.file);
+  const src = useUrls().attachment(worktreeId, image.file);
   const [full, setFull] = useState(false);
   const cm = useContextMenu("chat");
   return (
@@ -921,6 +921,7 @@ export const ChatItemView = memo(function ChatItemView({
 }) {
   const store = useStoreInstance();
   const sock = useSock();
+  const urls = useUrls();
   const cm = useContextMenu("chat");
   const deps = { sock, dispatch: store.dispatch };
   // the worktree's directory, for a path a row names without its root
@@ -949,14 +950,14 @@ export const ChatItemView = memo(function ChatItemView({
             <div className="msg-attachments">
               {item.attachments.map((a) =>
                 a.kind === "image" ? (
-                  <SentImageChip key={`${a.kind}-${a.n}`} img={a} src={attachmentUrl(worktreeId, a.file)} />
+                  <SentImageChip key={`${a.kind}-${a.n}`} img={a} src={urls.attachment(worktreeId, a.file)} />
                 ) : a.kind === "file" ? (
                   <FileChip
                     key={`${a.kind}-${a.n}`}
                     className="in-chat"
                     name={a.name}
                     bytes={a.bytes}
-                    href={a.text ? attachmentUrl(worktreeId, a.file) : undefined}
+                    href={a.text ? urls.attachment(worktreeId, a.file) : undefined}
                   />
                 ) : a.kind === "paste" ? (
                   <PasteChip
@@ -968,7 +969,7 @@ export const ChatItemView = memo(function ChatItemView({
                     lines={a.lines}
                     chars={a.chars}
                     preview={a.preview}
-                    href={attachmentUrl(worktreeId, a.file)}
+                    href={urls.attachment(worktreeId, a.file)}
                   />
                 ) : (
                   <PickChip
@@ -1052,7 +1053,7 @@ export const ChatItemView = memo(function ChatItemView({
           word="blocked"
           tone="red"
           below={<div className="daemon-below row-dim">{item.reason}</div>}
-          {...cm.contextMenu(() => pathItems(item.path, dirOf()))}
+          {...cm.contextMenu(() => pathItems(item.path, dirOf(), undefined, daemonHost(deps.sock)))}
         >
           <span className="tool-name">{item.tool}</span>
           {item.path && <span className="tool-hint">{item.path}</span>}

@@ -1,4 +1,5 @@
 import type { RepoInfo } from "@toyon/shared";
+import { useMachine } from "../../state/context.tsx";
 import { STORAGE } from "../../state/keys.ts";
 import { profileNames } from "../../state/profiles.ts";
 import { ChipPicker } from "../../ui/ChipPicker.tsx";
@@ -12,6 +13,7 @@ export function useNewWorktreeProfile(repo: RepoInfo | null): [string | undefine
     STORAGE.profilePrefix + (repo?.id ?? ""),
     repo?.config.defaultProfile ?? "",
     (raw) => raw ?? undefined,
+    useMachine().storage,
   );
   // a remembered name the file no longer has falls back to the default
   const value = names.length === 0 ? undefined : names.includes(stored) ? stored : repo?.config.defaultProfile;

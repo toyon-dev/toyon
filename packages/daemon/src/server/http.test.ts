@@ -7,6 +7,7 @@ import type { Server } from "bun";
 import { AttachmentStore } from "../agent/attachments.ts";
 import { UploadStore } from "../agent/uploads.ts";
 import { UserError } from "../core/errors.ts";
+import { GrantCodes } from "../core/grants.ts";
 import { PairCodes } from "../core/pair.ts";
 import { previewGrant } from "../core/remote.ts";
 import type { RepoRegistry } from "../repos/registry.ts";
@@ -87,7 +88,9 @@ const opts: HttpOpts = {
   },
   restartWait: () => ({ waiting: restartWaiting, asking: ["pick a colour"] }),
   pair: new PairCodes(),
+  grants: new GrantCodes(),
   onPaired: () => {},
+  trusted: () => trustedOrigins,
   phones: async () => null,
   mcp: async (_req, worktreeId) => {
     mcpHits.push(worktreeId);
@@ -96,6 +99,8 @@ const opts: HttpOpts = {
 };
 /** the worktree ids the MCP route handed on */
 const mcpHits: string[] = [];
+/** the shell origins on other machines the daemon has come to trust; tests push onto it */
+const trustedOrigins: string[] = [];
 const fetch = createFetch(opts);
 const req = (path: string, init: RequestInit & { host?: string } = {}) =>
   new Request(`http://${init.host ?? "localhost"}${path}`, {
@@ -119,11 +124,16 @@ describe("bootstrap", () => {
 describe("pair", () => {
   const name = "toyon.example.com";
   let paired = 0;
+  /** the Origin each redeem came from */
+  const redeemedFrom: (string | null)[] = [];
   const remote = createFetch({
     ...opts,
     remote: { host: name, previews: `https://w{id}.${name}`, front: "local" },
     pair: new PairCodes(),
-    onPaired: () => paired++,
+    onPaired: (origin) => {
+      paired++;
+      redeemedFrom.push(origin);
+    },
   });
   const https = { "x-forwarded-proto": "https" };
   const mint = (auth = "Bearer secret") =>
@@ -185,6 +195,74 @@ describe("pair", () => {
     const r = await remote(req("/pair/redeem", { method: "POST", host: name, headers: https, body: "nope" }), srv());
     expect(r?.status).toBe(401);
   });
+
+  describe("across origins", () => {
+    const home = "https://home.tail1234.ts.net";
+    const cors = (r: Response | undefined) => r?.headers.get("access-control-allow-origin");
+
+    test("any origin may ask to redeem, and its redeem names where it came from", async () => {
+      const pre = await remote(
+        req("/pair/redeem", { method: "OPTIONS", host: name, headers: { ...https, origin: "https://stray.example" } }),
+        srv(),
+      );
+      expect(pre?.status).toBe(204);
+      expect(cors(pre)).toBe("https://stray.example");
+      expect(pre?.headers.get("access-control-allow-headers")).toContain("authorization");
+      expect(pre?.headers.get("vary")).toContain("Origin");
+
+      const { code } = (await (await mint())!.json()) as { code: string };
+      const ok = await redeem(code, { ...https, origin: home });
+      expect(ok?.status).toBe(200);
+      expect(cors(ok)).toBe(home);
+      expect(redeemedFrom.at(-1)).toBe(home);
+    });
+
+    test("the token routes answer a trusted origin and say nothing to an unknown one", async () => {
+      trustedOrigins.push(home);
+      try {
+        const trusted = await remote(
+          req("/pair", {
+            method: "POST",
+            host: name,
+            headers: { ...https, authorization: "Bearer secret", origin: home },
+          }),
+          srv(),
+        );
+        expect(trusted?.status).toBe(200);
+        expect(cors(trusted)).toBe(home);
+        expect(trusted?.headers.get("vary")).toContain("Origin");
+        const health = await remote(req("/health", { host: name, headers: { ...https, origin: home } }), srv());
+        expect(cors(health)).toBe(home);
+
+        const stray = await remote(
+          req("/pair", {
+            method: "POST",
+            host: name,
+            headers: { ...https, authorization: "Bearer secret", origin: "https://stray.example" },
+          }),
+          srv(),
+        );
+        expect(stray?.status).toBe(200);
+        expect(cors(stray)).toBeNull();
+        // a preflight from an unknown origin is not answered as one: the route sees an OPTIONS it
+        // has no handler for, and the browser reads the missing header as the refusal it is
+        const pre = await remote(
+          req("/pair", { method: "OPTIONS", host: name, headers: { ...https, origin: "https://stray.example" } }),
+          srv(),
+        );
+        expect(cors(pre)).toBeNull();
+      } finally {
+        trustedOrigins.length = 0;
+      }
+    });
+
+    test("on a loopback name a loopback origin is answered: a second daemon on this machine", async () => {
+      const r = await fetch(req("/health", { headers: { origin: "http://localhost:4242" } }), srv());
+      expect(cors(r)).toBe("http://localhost:4242");
+      const far = await fetch(req("/health", { headers: { origin: "https://home.tail1234.ts.net" } }), srv());
+      expect(cors(far)).toBeNull();
+    });
+  });
 });
 
 describe("guards", () => {
@@ -199,6 +277,12 @@ describe("guards", () => {
   test("*.localhost and 127.0.0.1 hosts pass", async () => {
     expect((await fetch(req("/health", { host: "toyon.localhost" }), srv()))?.status).toBe(200);
     expect((await fetch(req("/health", { host: "127.0.0.1:4141" }), srv("::1")))?.status).toBe(200);
+  });
+  test("/health names the machine, as hello does, so a shell adding it can say who answered", async () => {
+    const body = (await (await fetch(req("/health"), srv()))?.json()) as { machine?: unknown };
+    expect(typeof body.machine).toBe("string");
+    expect(body.machine).not.toBe("");
+    expect(body.machine).not.toContain(".");
   });
 });
 
@@ -253,6 +337,51 @@ describe("guards, remote mode", () => {
     const r = await remote(req("/health", { host: "wa1b2c3.toyon.example.com", headers: granted }), srv());
     expect(r?.status).toBe(200);
     expect(await r?.text()).toBe("app /health cookie=theme=dark; sid=1");
+  });
+  test("a one-time grant from /preview-grant opens a preview by name, then the address loses it", async () => {
+    const minted = await remote(
+      req("/preview-grant", {
+        method: "POST",
+        host: "toyon.example.com",
+        headers: { ...https, authorization: "Bearer secret" },
+      }),
+      srv(),
+    );
+    expect(minted?.status).toBe(200);
+    const { code, ms } = (await minted!.json()) as { code: string; ms: number };
+    expect(ms).toBeGreaterThan(0);
+    const r = await remote(
+      req(`/page?a=1&toyon_grant=${code}`, { host: "wa1b2c3.toyon.example.com", headers: https }),
+      srv(),
+    );
+    expect(r?.status).toBe(302);
+    expect(r?.headers.get("location")).toBe("/page?a=1");
+    expect(r?.headers.get("set-cookie")).toContain(`toyon_preview=${previewGrant("secret")}`);
+    const spent = await remote(
+      req(`/page?toyon_grant=${code}`, { host: "wa1b2c3.toyon.example.com", headers: https }),
+      srv(),
+    );
+    expect(spent?.status).toBe(403);
+  });
+  test("a grant needs the token, and a public name", async () => {
+    const r = await remote(req("/preview-grant", { method: "POST", host: "toyon.example.com", headers: https }), srv());
+    expect(r?.status).toBe(401);
+    const local = await fetch(
+      req("/preview-grant", { method: "POST", headers: { authorization: "Bearer secret" } }),
+      srv(),
+    );
+    expect(local?.status).toBe(400);
+  });
+  test("a preview is never answered across origins, whoever asks", async () => {
+    const r = await remote(
+      req("/health", {
+        host: "wa1b2c3.toyon.example.com",
+        headers: { ...granted, origin: "https://toyon.example.com" },
+      }),
+      srv(),
+    );
+    expect(r?.status).toBe(200);
+    expect(r?.headers.get("access-control-allow-origin")).toBeNull();
   });
   test("a request carrying only the grant reaches the app with no cookie header at all", async () => {
     const only = { ...https, cookie: `toyon_preview=${previewGrant("secret")}` };
@@ -681,7 +810,9 @@ describe("static shell", () => {
     restart: async () => null,
     restartWait: () => ({ waiting: null, asking: [] }),
     pair: new PairCodes(),
+    grants: new GrantCodes(),
     onPaired: () => {},
+    trusted: () => [],
     phones: async () => null,
     mcp: opts.mcp,
   });

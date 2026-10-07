@@ -225,4 +225,55 @@
   .phone .picker-input {
     min-height: var(--row-height);
   }
+
+  /* ---- The home screen with more than one machine: the others' rows first, then this one's
+     worktrees. The column is the one .rail-screen stood in alone, so the rail keeps its flex and
+     the machine rows take their own height above it. ---- */
+  .phone-home {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    min-width: 0;
+  }
+  .machine-rows {
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    background: var(--surface1);
+    /* a seam under the machines: the worktree list beneath is this machine's alone, and without
+       a line the two lists read as one */
+    border-bottom: 1px solid var(--border1);
+    padding-bottom: 4px;
+    /* the rows read at the screen's tiers, as the rail's do (rail.css lifts the same ladder) */
+    --text1: var(--ink0);
+    --text2: var(--ink1);
+  }
+  /* the head names the machine on screen: the rows under it are the others, so the screen says
+     where it is standing before it lists where else it could */
+  .machine-head {
+    padding: 0 var(--row-inset);
+  }
+  .machine-row {
+    justify-content: space-between;
+    min-height: var(--row-height);
+  }
+  .machine-name {
+    font: var(--type-ui);
+    color: var(--text1);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  /* what the machine needs of you, at the far end as the rail's counts are; a count that owes
+     something is the accent, as the owed button in the bar is */
+  .machine-line {
+    font: var(--type-ui-sm);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .machine-owed {
+    color: var(--accent);
+  }
 }

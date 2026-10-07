@@ -39,7 +39,7 @@ import type {
   PickVerb,
   QueuedMessage,
   RefHit,
-  RemoteView,
+  Remote,
   RepoInfo,
   SearchHit,
   SelfState,
@@ -373,6 +373,8 @@ export type Overlay =
   | { kind: "keys" }
   /** a one-time code for a phone, as a QR */
   | { kind: "pair" }
+  /** another machine's code or link, scanned or pasted here, so this page lists it too */
+  | { kind: "add-machine" }
   /** theme picker: which pref slot Enter writes */
   | { kind: "theme"; slot: "theme" | "light" | "dark" }
   | { kind: "appearance" }
@@ -783,7 +785,9 @@ export interface State {
   keepAwake: KeepAwakeMode | null;
   /** hello's `remote`: the public name, and how previews are addressed when the shell was opened
    * through it */
-  remote: RemoteView | null;
+  remote: Remote | null;
+  /** what the daemon calls its machine (hello's `machine`); null until the first hello */
+  machine: string | null;
   /** hello's `managed`: what whoever runs the machine turned off, and from which file. The
    * controls it governs go or grey here and say why; the refusing is the daemon's and the CLI's. */
   managed: ManagedView;
@@ -957,6 +961,7 @@ export function initialState(opts: InitialOpts): State {
     folderDialog: false,
     keepAwake: null,
     remote: null,
+    machine: null,
     managed: MANAGED_NONE,
     paired: false,
     pairings: 0,
@@ -1457,7 +1462,9 @@ export type Action =
   | { a: "term-ran" }
   | { a: "preview-theme"; theme: Theme | null }
   | { a: "system-dark"; v: boolean }
-  | { a: "incompatible" };
+  /** the daemon speaks another protocol than this page (`v` left out, or true); false withdraws
+   * it, for another machine's daemon heard again after an update there */
+  | { a: "incompatible"; v?: boolean };
 
 /** the send's placeholder is spent: the row speaks for itself, or the message came back */
 function settled(l: WorktreeLocal): WorktreeLocal {
@@ -2147,7 +2154,7 @@ function reduce(s: State, action: Action): State {
     case "system-dark":
       return { ...s, systemDark: action.v };
     case "incompatible":
-      return { ...s, incompatible: true, connected: false };
+      return action.v === false ? { ...s, incompatible: false } : { ...s, incompatible: true, connected: false };
     case "server":
       return onServer(s, action.msg);
   }
@@ -2303,6 +2310,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
         folderDialog: msg.folderDialog,
         keepAwake: msg.keepAwake,
         remote: msg.remote,
+        machine: msg.machine,
         managed: msg.managed,
         paired: msg.paired,
         gitIdentity: msg.gitIdentity,

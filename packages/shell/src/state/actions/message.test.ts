@@ -48,9 +48,9 @@ describe("message menus", () => {
   });
 
   test("a worktree file or folder with its checkout on disk: the editors, Finder, then the path", () => {
-    Object.defineProperty(globalThis, "location", { value: { hostname: "localhost" }, configurable: true });
     const sent: unknown[] = [];
-    const sock = { send: (m: unknown) => sent.push(m) } as unknown as Deps["sock"];
+    // the host is the daemon's, read off its socket: the file is on the machine the socket reaches
+    const sock = { send: (m: unknown) => sent.push(m), urls: { host: "localhost" } } as unknown as Deps["sock"];
     const link = { kind: "file", file: { path: "src/ui", folder: true } } as const;
     const items = messageItems(
       { kind: "assistant", text: "see" },

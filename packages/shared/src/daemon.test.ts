@@ -1,5 +1,24 @@
 import { describe, expect, test } from "bun:test";
-import { checkPreviews, isRemoteHost, matchPreview, parseRemote, previewOrigin } from "./daemon.ts";
+import {
+  checkPreviews,
+  isLoopbackHost,
+  isRemoteHost,
+  machineLabel,
+  matchPreview,
+  parseRemote,
+  previewOrigin,
+} from "./daemon.ts";
+
+describe("isLoopbackHost", () => {
+  test("the loopback addresses, as a Host header or a URL's hostname spells them, and *.localhost", () => {
+    for (const ok of ["127.0.0.1", "::1", "[::1]", "localhost", "toyon.localhost", "w3.toyon.localhost"]) {
+      expect(isLoopbackHost(ok)).toBe(true);
+    }
+    for (const bad of ["127.0.0.1.example", "localhost.example", "box.tail1234.ts.net", "", "10.0.0.2"]) {
+      expect(isLoopbackHost(bad)).toBe(false);
+    }
+  });
+});
 
 // The name in remote.json is one the CLI writes and the daemon trusts as a Host: both read it
 // through here, so a name one accepts the other cannot refuse.
@@ -54,6 +73,17 @@ describe("parseRemote", () => {
 
 // A preview pattern says where each worktree's preview lives under the public name. The daemon
 // matches requests against it and the shell fills it in, so one pattern serves every front.
+describe("machineLabel", () => {
+  test("a tailnet name's first label is the device's name; anything else falls back to the hostname's", () => {
+    expect(machineLabel("Kyles-MacBook.local", { host: "work.tail1234.ts.net" })).toBe("work");
+    expect(machineLabel("Kyles-MacBook.local", { host: "toyon.example.com" })).toBe("kyles-macbook");
+    expect(machineLabel("studio", null)).toBe("studio");
+  });
+  test("never empty: a hostname with nothing in it reads as toyon", () => {
+    expect(machineLabel("", null)).toBe("toyon");
+  });
+});
+
 describe("previews", () => {
   test("a name route, a port route, and the port on the name's own subdomain all serve the name", () => {
     expect(checkPreviews("https://w{id}.toyon.example.com", "toyon.example.com")).toBeNull();

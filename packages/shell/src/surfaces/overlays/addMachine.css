@@ -1,0 +1,59 @@
+/* The add-machine card: the camera over another machine's code, a field for its link, a line. */
+@layer tokens, base, surfaces;
+@layer surfaces {
+  .add-machine-stack {
+    width: min(360px, 90%);
+  }
+  .add-machine-card {
+    background: var(--surface1);
+    border: 1px solid var(--border1);
+    border-radius: var(--radius-lg);
+    padding: 18px 24px 16px;
+    box-shadow: var(--elevation-overlay);
+    font: var(--type-ui);
+    color: var(--text0);
+    display: grid;
+    gap: 10px;
+    justify-items: center;
+    text-align: center;
+  }
+  .add-machine-title {
+    font: var(--type-ui-lg);
+    font-weight: var(--weight-title);
+  }
+  /* the square is held while the camera starts, so the card does not jump when the feed lands */
+  .add-machine-frame {
+    width: 220px;
+    aspect-ratio: 1;
+    border-radius: var(--radius);
+    overflow: hidden;
+    background: var(--sunken);
+  }
+  .add-machine-camera {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .add-machine-line {
+    margin: 0;
+    color: var(--text1);
+  }
+  .add-machine-failed {
+    color: var(--text0);
+  }
+  .add-machine-form {
+    display: flex;
+    gap: 8px;
+    width: 100%;
+  }
+  .add-machine-field {
+    flex: 1;
+    min-width: 0;
+  }
+  .add-machine-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+  }
+}

@@ -10,10 +10,12 @@ import {
   projectNameError,
   type RepoInfo,
 } from "@toyon/shared";
+import type { OtherMachine } from "../../state/machines.ts";
 import { byName } from "./commands.ts";
 
 export type Row =
-  | { kind: "repo"; repo: RepoInfo }
+  /** a project; `machine` names the other machine it is on, absent for one on the machine on screen */
+  | { kind: "repo"; repo: RepoInfo; machine?: OtherMachine }
   /** a clone still running: pickable, so it can be watched or stopped */
   | { kind: "pending"; pending: PendingRepo }
   | { kind: "dir"; entry: PathEntry }
@@ -25,7 +27,9 @@ export type Row =
   /** the way in for someone who does not know a name can be typed here: the form, with nothing filled */
   | { kind: "new" }
   /** the way to a project already on disk, said in words beside the way to make one */
-  | { kind: "disk" };
+  | { kind: "disk" }
+  /** another machine's code or link, so its projects are listed here too */
+  | { kind: "add-machine" };
 
 /** a typed path is a filesystem query rather than a name filter */
 export const looksLikePath = (q: string) => /^(~|\/|\.\.?\/)/.test(q.trim());
@@ -83,6 +87,9 @@ export function rowsFor(input: {
   target: PathTarget | null;
   /** the query the daemon's entries and target actually describe (`paths.query`) */
   answered: string;
+  /** the other machines this page lists, each with its projects; their rows follow this
+   * machine's, grouped under the machine's name */
+  others?: OtherMachine[];
 }): Row[] {
   const q = input.query.trim();
   const dirRows = (): Row[] => input.entries.map((entry): Row => ({ kind: "dir", entry }));
@@ -95,8 +102,16 @@ export function rowsFor(input: {
       .filter((p) => byName(q, p.name, p.url))
       .map((p): Row => ({ kind: "pending", pending: p }));
     const listed = [...repos, ...pending];
-    // last, so they never push a project off the top of the list, and ↑ from the first row reaches them
-    if (!q) return [...listed, { kind: "new" }, { kind: "disk" }];
+    // another machine's projects, after everything about this one: a switch there is a bigger
+    // move than a switch here, and the machine's name over them says so
+    const elsewhere = (input.others ?? []).flatMap((machine) =>
+      machine.repos
+        .filter((r) => byName(q, r.name, r.path, machine.name))
+        .map((repo): Row => ({ kind: "repo", repo, machine })),
+    );
+    // last among this machine's rows, so they never push a project off the top of the list, and
+    // ↑ from the first row reaches them
+    if (!q) return [...listed, { kind: "new" }, { kind: "disk" }, { kind: "add-machine" }, ...elsewhere];
     // a URL is not a name and not a path: it is the third thing someone pastes in here
     const url = gitUrl(q);
     if (url) return listed.length > 0 ? listed : [{ kind: "clone", url: url.url, name: url.name }];
@@ -104,11 +119,13 @@ export function rowsFor(input: {
     // being taken: `site` finds toyon-site, and `projects` finds everything in ~/Projects. Only a
     // project already called exactly that is the project rather than an offer to make another.
     const same = (n: string) => n.toLowerCase() === q.toLowerCase();
-    if (input.repos.some((r) => same(r.name)) || input.pending.some((p) => same(p.name))) return listed;
-    if (projectNameError(q)) return listed;
+    if (input.repos.some((r) => same(r.name)) || input.pending.some((p) => same(p.name))) {
+      return [...listed, ...elsewhere];
+    }
+    if (projectNameError(q)) return [...listed, ...elsewhere];
     // `parent: null` means "wherever this person keeps projects", which the form fills in, because a
     // bare name says nothing about location
-    return [...listed, { kind: "create", name: q, parent: null }];
+    return [...listed, { kind: "create", name: q, parent: null }, ...elsewhere];
   }
 
   // The daemon is 150ms behind the keystrokes, so its answer routinely describes the previous

@@ -5,6 +5,7 @@ import {
   commandSource,
   elapsed,
   folderList,
+  previewUrl,
   procTrouble,
   rowLabel,
   shipLabel,
@@ -173,5 +174,22 @@ describe("commandSource", () => {
   test("another repo's worktrees never stand in, and no repo means no source", () => {
     expect(commandSource([wt("m2", "main", "r2")], "r1", "claude", "claude")).toBe(null);
     expect(commandSource([wt("m1", "main")], undefined, "claude", "claude")).toBe(null);
+  });
+});
+
+describe("previewUrl", () => {
+  test("the host is the daemon's, not the page's: loopback names, a branded name, a public name", () => {
+    expect(previewUrl("w1", 5173, null, "127.0.0.1")).toBe("http://127.0.0.1:5173/");
+    expect(previewUrl("w1", 5173, null, "localhost")).toBe("http://127.0.0.1:5173/");
+    expect(previewUrl("w1", 5173, null, "[::1]")).toBe("http://[::1]:5173/");
+    expect(previewUrl("w1", 5173, null, "toyon.localhost")).toBe("http://ww1.toyon.localhost:5173/");
+    const remote = { host: "work.tail1234.ts.net", previews: "https://work.tail1234.ts.net:{port}" };
+    expect(previewUrl("w1", 10001, remote, "work.tail1234.ts.net")).toBe("https://work.tail1234.ts.net:10001/");
+    expect(
+      previewUrl("w1", 10001, { host: "work.example", previews: "https://w{id}.work.example" }, "work.example"),
+    ).toBe("https://ww1.work.example/");
+  });
+  test("another machine's host is never loopback, so it is reached over https on the proxy port", () => {
+    expect(previewUrl("w1", 10001, null, "work.tail1234.ts.net")).toBe("https://work.tail1234.ts.net:10001/");
   });
 });

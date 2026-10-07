@@ -2,11 +2,14 @@
 // /uploads and /attachments (what the shell attached to chat messages), and the static shell. Business logic stays in the services it calls.
 
 import { existsSync } from "node:fs";
+import { hostname } from "node:os";
 import { join } from "node:path";
 import {
   isTailnetName,
+  machineLabel,
   type PairMint,
   type PairRedeem,
+  type PreviewGrantMint,
   pairLink,
   RESTART_NOW,
   type Remote,
@@ -17,12 +20,23 @@ import type { Server } from "bun";
 import { type AttachmentStore, drawnType } from "../agent/attachments.ts";
 import { isUploadKind } from "../agent/uploads.ts";
 import { UserError } from "../core/errors.ts";
+import type { GrantCodes } from "../core/grants.ts";
 import { log } from "../core/log.ts";
 import type { PairCodes } from "../core/pair.ts";
-import { door, grantCookie, isLoopbackPeer, passPreview, previewGrant, sameSecret } from "../core/remote.ts";
+import {
+  type Door,
+  door,
+  grantCookie,
+  isLoopbackPeer,
+  type PreviewGate,
+  passPreview,
+  previewGrant,
+  sameSecret,
+} from "../core/remote.ts";
 import type { Opened } from "../files/open.ts";
 import type { RepoRegistry } from "../repos/registry.ts";
 import type { PreviewData, PreviewHandler } from "../runtime/proxy.ts";
+import { isLoopbackOrigin, preflight, withCors } from "./cors.ts";
 
 export interface WsData {
   authed: boolean;
@@ -82,8 +96,12 @@ export interface HttpOpts {
   restartWait: () => RestartWait;
   /** the one-time codes a phone trades for the token */
   pair: PairCodes;
-  /** a code was just redeemed */
-  onPaired: () => void;
+  /** the one-time codes a page from another machine trades for a preview cookie */
+  grants: GrantCodes;
+  /** a code was just redeemed, from a page on `origin` (null when the browser sent none) */
+  onPaired: (origin: string | null) => void;
+  /** the shell origins on other machines that have paired here, whose pages may read answers */
+  trusted: () => string[];
   /** the phones on this machine's tailnet; null when Tailscale cannot be asked */
   phones: () => Promise<TailnetPhone[] | null>;
   /** the chosen theme's grounds, for the manifest: the bar a phone draws above an installed shell
@@ -117,6 +135,8 @@ function attachedHeaders(imageType: string | null): Record<string, string> {
 export function createFetch(opts: HttpOpts) {
   const grant = previewGrant(opts.token);
   const remote = opts.remote;
+  /** what a preview routed by name is checked against; the gate on each preview port is the same */
+  const gate: PreviewGate | null = remote && { grant, host: remote.host, redeem: (code) => opts.grants.redeem(code) };
   const health = () =>
     Response.json({
       ok: true,
@@ -124,31 +144,30 @@ export function createFetch(opts: HttpOpts) {
       pid: process.pid,
       branded: opts.branded(),
       remote: remote && { host: remote.host, previews: remote.previews },
+      machine: machineLabel(hostname(), remote),
       managed: opts.managed,
       ...(opts.metrics() as object),
     });
 
-  return async function fetch(req: Request, srv: Server<WsData>): Promise<Response | undefined> {
-    const url = new URL(req.url);
+  /** Which page may read the answer, by its Origin header; null for none. Any origin may redeem a
+   * pairing code, since that is how a shell on another machine first comes to be trusted; a trusted
+   * one may call everything behind the token; and on a loopback name a loopback origin may too,
+   * which is a second daemon on this machine, or the Vite dev shell. A preview is never answered
+   * across origins: what runs there is not toyon's. */
+  const corsAllow = (req: Request, url: URL, d: Door): string | null => {
+    const origin = req.headers.get("origin");
+    if (!origin || (d.kind !== "local" && d.kind !== "shell")) return null;
+    if (url.pathname === "/pair/redeem") return origin;
+    if (opts.trusted().includes(origin)) return origin;
+    return d.kind === "local" && isLoopbackOrigin(origin) ? origin : null;
+  };
 
-    // Behind an edge, the platform's health check comes from inside its own network and names the
-    // machine's address rather than the public name. /health carries nothing a caller could use.
-    if (remote?.front === "edge" && url.pathname === "/health") return health();
-
-    // An agent on this machine calling Toyon's tools. It reaches the daemon by its loopback
-    // address in every mode, and behind an edge the door refuses a loopback name as someone
-    // guessing, so this route sits in front of it with a guard of its own: a loopback peer, and
-    // the per-worktree bearer checked inside.
-    if (url.pathname.startsWith("/mcp/")) {
-      const peer = srv.requestIP(req)?.address ?? "";
-      if (!isLoopbackPeer(peer)) return new Response("forbidden", { status: 403 });
-      const worktreeId = url.pathname.slice("/mcp/".length);
-      if (!worktreeId || worktreeId.includes("/")) return new Response("not found", { status: 404 });
-      return opts.mcp(req, worktreeId);
-    }
-
-    const d = door(req, srv.requestIP(req)?.address ?? "", remote, "daemon");
-    if (d.kind === "refused") return d.response;
+  async function route(
+    req: Request,
+    srv: Server<WsData>,
+    url: URL,
+    d: Exclude<Door, { kind: "refused" }>,
+  ): Promise<Response | undefined> {
     /** the request came through the front for the shell's own name */
     const remoteShell = d.kind === "shell";
 
@@ -156,8 +175,8 @@ export function createFetch(opts: HttpOpts) {
     // reach the front could otherwise open a dev server, which is a wide surface (dev-only routes,
     // env values in responses, the bundler's file serving), so it takes the grant cookie the shell
     // was given, checked before saying whether the worktree exists.
-    if (d.kind === "preview" && d.worktreeId !== null) {
-      const pass = passPreview(req, grant);
+    if (d.kind === "preview" && d.worktreeId !== null && gate) {
+      const pass = passPreview(req, gate);
       if (!pass.ok) return pass.response;
       const handler = opts.preview(d.worktreeId);
       if (!handler) return new Response("no preview is running for this worktree", { status: 404 });
@@ -252,6 +271,18 @@ export function createFetch(opts: HttpOpts) {
       return Response.json(phones, { headers: { "cache-control": NO_STORE } });
     }
 
+    // A one-time code that opens a preview here from a page another machine served: that page's
+    // frames and tabs are on another site, so the cookie this machine's own shell gets never
+    // reaches them, and each carries a code in its address instead (core/remote.ts).
+    if (url.pathname === "/preview-grant" && req.method === "POST") {
+      if (!sameSecret(req.headers.get("authorization"), `Bearer ${opts.token}`)) {
+        return new Response("unauthorized", { status: 401 });
+      }
+      if (!remote) return new Response("previews here are not reached by name", { status: 400 });
+      const body: PreviewGrantMint = opts.grants.mint();
+      return Response.json(body, { headers: { "cache-control": NO_STORE } });
+    }
+
     // The phone's side: the code for the token, and the preview grant with it as /bootstrap gives
     // one. Only through the front for the public name, where the link in the code points; a page
     // on this machine already has the token and has nothing to pair.
@@ -261,7 +292,7 @@ export function createFetch(opts: HttpOpts) {
       if (typeof body.code !== "string" || !opts.pair.redeem(body.code)) {
         return new Response("code expired", { status: 401 });
       }
-      opts.onPaired();
+      opts.onPaired(req.headers.get("origin"));
       const reply: PairRedeem = { token: opts.token };
       return Response.json(reply, {
         headers: { "cache-control": NO_STORE, "set-cookie": grantCookie(grant, remote.host) },
@@ -410,5 +441,33 @@ export function createFetch(opts: HttpOpts) {
     const index = join(opts.shellDist, "index.html");
     if (existsSync(index)) return new Response(Bun.file(index), { headers: { "cache-control": NO_STORE } });
     return new Response("Toyon daemon running; shell not built (run: bun run build)", { status: 200 });
+  }
+
+  return async function fetch(req: Request, srv: Server<WsData>): Promise<Response | undefined> {
+    const url = new URL(req.url);
+
+    // Behind an edge, the platform's health check comes from inside its own network and names the
+    // machine's address rather than the public name. /health carries nothing a caller could use.
+    if (remote?.front === "edge" && url.pathname === "/health") return health();
+
+    // An agent on this machine calling Toyon's tools. It reaches the daemon by its loopback
+    // address in every mode, and behind an edge the door refuses a loopback name as someone
+    // guessing, so this route sits in front of it with a guard of its own: a loopback peer, and
+    // the per-worktree bearer checked inside.
+    if (url.pathname.startsWith("/mcp/")) {
+      const peer = srv.requestIP(req)?.address ?? "";
+      if (!isLoopbackPeer(peer)) return new Response("forbidden", { status: 403 });
+      const worktreeId = url.pathname.slice("/mcp/".length);
+      if (!worktreeId || worktreeId.includes("/")) return new Response("not found", { status: 404 });
+      return opts.mcp(req, worktreeId);
+    }
+
+    const d = door(req, srv.requestIP(req)?.address ?? "", remote, "daemon");
+    if (d.kind === "refused") return d.response;
+    // a page on another machine: its browser asks first, and reads the answer only if it is named
+    const allow = corsAllow(req, url, d);
+    if (allow && req.method === "OPTIONS") return preflight(allow);
+    const res = await route(req, srv, url, d);
+    return res && allow ? withCors(res, allow) : res;
   };
 }

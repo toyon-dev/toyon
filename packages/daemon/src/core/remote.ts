@@ -8,10 +8,12 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import {
   checkPreviews,
+  isLoopbackHost,
   isRemoteHost,
   MANAGED_DEFAULTS,
   type ManagedPolicy,
   matchPreview,
+  PREVIEW_GRANT_PARAM,
   parseRemote,
   portPreviews,
   type Remote,
@@ -66,8 +68,6 @@ export function sameSecret(given: string | null, want: string): boolean {
 }
 
 export const isLoopbackPeer = (ip: string) => ip === "127.0.0.1" || ip === "::1" || ip.startsWith("::ffff:127.");
-// *.localhost is safe: browsers hardwire it to loopback and public DNS cannot serve it (RFC 6761)
-const isLoopbackHost = (h: string) => h === "127.0.0.1" || h === "localhost" || h.endsWith(".localhost");
 
 export type Door =
   | { kind: "refused"; response: Response }
@@ -162,9 +162,21 @@ export function previewGrant(token: string): string {
 
 /** The Set-Cookie for a shell on `name`: `Domain` reaches every `w<id>.<name>`, and a cookie ignores
  * the port, so it reaches `<name>:<port>` too. Strict, so a link from another site never arrives
- * carrying it: the frames and tabs the shell opens are same-site and still do. */
-export function grantCookie(grant: string, name: string): string {
-  return `${PREVIEW_COOKIE}=${grant}; Domain=${name}; Path=/; Max-Age=34560000; HttpOnly; Secure; SameSite=Strict`;
+ * carrying it: the frames and tabs the shell opens are same-site and still do. `partitioned` is
+ * for a preview framed by a shell on another site (a Toyon served by another machine, off the
+ * tailnet): a Strict cookie is never sent into a cross-site frame, so the grant goes in that
+ * frame's own partition, where only that embedding can read it and nothing else gains a cookie. */
+export function grantCookie(grant: string, name: string, opts: { partitioned?: boolean } = {}): string {
+  const site = opts.partitioned ? "SameSite=None; Partitioned" : "SameSite=Strict";
+  return `${PREVIEW_COOKIE}=${grant}; Domain=${name}; Path=/; Max-Age=34560000; HttpOnly; Secure; ${site}`;
+}
+
+/** what a preview request is checked against: the grant a cookie must carry, the name the cookie
+ * is set for, and the one-time codes a page from another machine spends to get one */
+export interface PreviewGate {
+  grant: string;
+  host: string;
+  redeem: (code: string) => boolean;
 }
 
 /** whether the Cookie header carries the grant, and the header with every copy of it removed, so
@@ -190,23 +202,44 @@ export function takeGrant(cookie: string | null, grant: string): { ok: boolean; 
  * before the shell's bootstrap set the cookie recovers without anyone touching it. */
 export function passPreview(
   req: Request,
-  grant: string,
+  gate: PreviewGate,
 ): { ok: true; req: Request } | { ok: false; response: Response } {
-  const pass = takeGrant(req.headers.get("cookie"), grant);
-  if (!pass.ok) {
-    return {
-      ok: false,
-      response: new Response(
-        `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="refresh" content="3"></head>` +
-          `<body>This preview opens from Toyon; open your Toyon link first.</body></html>`,
-        { status: 403, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } },
-      ),
-    };
+  const pass = takeGrant(req.headers.get("cookie"), gate.grant);
+  const url = new URL(req.url);
+  const code = url.searchParams.get(PREVIEW_GRANT_PARAM);
+  // A page served by another machine opened this preview with a one-time code in the address. The
+  // code becomes the cookie, and the browser is sent to the same address without it, so a reload
+  // or a navigation inside the frame never carries a spent code. A browser that already holds the
+  // cookie is sent on without spending anything: a frame navigated to its address again (a dead
+  // frame's retry) would otherwise burn a code it did not need and fail on the second try.
+  if (code !== null) {
+    url.searchParams.delete(PREVIEW_GRANT_PARAM);
+    const location = `${url.pathname}${url.search}`;
+    if (!pass.ok && !gate.redeem(code)) return { ok: false, response: refusedPreview() };
+    const headers: Record<string, string> = { location, "cache-control": "no-store" };
+    // the frame is cross-site when the shell that framed it is on another site; a Strict cookie
+    // would never be sent into that frame, so it is partitioned to the embedding instead
+    if (!pass.ok) {
+      const partitioned = req.headers.get("sec-fetch-site") === "cross-site";
+      headers["set-cookie"] = grantCookie(gate.grant, gate.host, { partitioned });
+    }
+    return { ok: false, response: new Response(null, { status: 302, headers }) };
   }
+  if (!pass.ok) return { ok: false, response: refusedPreview() };
   const headers = new Headers(req.headers);
   if (pass.rest === null) headers.delete("cookie");
   else headers.set("cookie", pass.rest);
   return { ok: true, req: new Request(req, { headers }) };
+}
+
+/** the refusal: a page that reloads itself, so a frame that painted before the shell's bootstrap set
+ * the cookie recovers without anyone touching it */
+function refusedPreview(): Response {
+  return new Response(
+    `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="refresh" content="3"></head>` +
+      `<body>This preview opens from Toyon; open your Toyon link first.</body></html>`,
+    { status: 403, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } },
+  );
 }
 
 /** whether a Set-Cookie line sets the grant: an app on the same name could otherwise overwrite it

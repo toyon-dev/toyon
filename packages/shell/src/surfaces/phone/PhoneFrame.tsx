@@ -1,5 +1,6 @@
 import { useRef } from "react";
-import { useDispatch, useStore } from "../../state/context.tsx";
+import { useDispatch, useMachine, useMachines, useStore, useUrls } from "../../state/context.tsx";
+import { openPreview, previewsGated } from "../../state/previewGrant.ts";
 import { useActive, useArchivedPage, useChatCentred, useFoundPage, useTouch } from "../../state/selectors.ts";
 import type { Screen } from "../../state/store.ts";
 import { IconButton } from "../../ui/Button.tsx";
@@ -9,6 +10,7 @@ import { type TabItem, Tabs } from "../../ui/Tabs.tsx";
 import { Tooltips } from "../../ui/Tooltip.tsx";
 import { View } from "../../ui/View.tsx";
 import { hasToken } from "../../ws.ts";
+import { UpdatedCard } from "../center/UpdatedCard.tsx";
 import { connectionText } from "../center/waiting.ts";
 import { ChangesDock } from "../changes/ChangesDock.tsx";
 import { ChatPanel } from "../chat/ChatPanel.tsx";
@@ -16,6 +18,7 @@ import { EditorPane } from "../editor/EditorPane.tsx";
 import { Overlays } from "../overlays/Overlays.tsx";
 import { Rail } from "../rail/Rail.tsx";
 import { chord, previewUrl } from "../util.ts";
+import { MachineRows } from "./MachineRows.tsx";
 import { PhoneBar } from "./PhoneBar.tsx";
 import { PhonePreview } from "./PhonePreview.tsx";
 import "./phone.css";
@@ -48,16 +51,21 @@ export function PhoneFrame() {
   const heard = useStore((s) => s.heard);
   const connectFailure = useStore((s) => s.connectFailure);
   const touch = useTouch();
+  const machine = useMachine();
+  const machines = useMachines();
 
   // the socket being down wins over everything, and having no project at all comes next: the same
   // two sentences the centre says, and the only two of its that are not about a preview
+  const incompatible = useStore((s) => s.incompatible);
   const say = connectionText({
     connected,
     heard,
     connectFailure,
-    hasToken: HAS_TOKEN,
+    // another machine's token came with its pairing, so a page listing it always has one
+    hasToken: machine.serving ? HAS_TOKEN : true,
     projectChord: chord("project"),
     title: active?.worktree.title ?? null,
+    machine: machine.serving ? null : machines.displayName(machine.origin),
   });
 
   // a row that went while its screen was open (archived from the desk, or removed) leaves the
@@ -66,7 +74,8 @@ export function PhoneFrame() {
   // the app is the worktree's own, running: a project with nothing to run has no app, and an
   // archived worktree's page is about work that no longer runs
   const previewed = onWorktree && !chatCentred && !archivedPage ? active : null;
-  const url = previewed ? previewUrl(previewed.worktree.id, previewed.worktree.proxyPort, remote) : null;
+  const { host } = useUrls();
+  const url = previewed ? previewUrl(previewed.worktree.id, previewed.worktree.proxyPort, remote, host) : null;
   // the tab under the strip's mark: a preview the row has none of falls back to its chat
   const tab: Screen = screen === "preview" && !previewed ? "chat" : screen;
 
@@ -84,7 +93,7 @@ export function PhoneFrame() {
                 icon="external"
                 label="Open in browser"
                 tone="chrome"
-                onClick={() => window.open(url, "_blank")}
+                onClick={() => openPreview(machine, url, previewsGated(machine, remote))}
               />
             ),
           },
@@ -131,12 +140,20 @@ export function PhoneFrame() {
         {/* .center-root is the isolation root every overlay counts its rungs inside, so the phone's
             column is one too, and the palette opens over this screen the way it does over the desk's */}
         <div className="center-root">
-          {say !== null ? (
+          {incompatible && !machine.serving ? (
+            // another machine speaking another protocol: nothing of its can be shown, and no
+            // reload here would change that
+            <UpdatedCard foreign={machines.displayName(machine.origin)} />
+          ) : say !== null ? (
             <View wide>
               <p className="status-line">{say}</p>
             </View>
           ) : !onWorktree ? (
-            <Rail placement="screen" />
+            // the other machines first, then this one's worktrees: the list is the home screen
+            <div className="phone-home">
+              <MachineRows />
+              <Rail placement="screen" />
+            </div>
           ) : editor ? (
             // a file opened from the changes list or from a tool row in the chat: the diff over
             // whichever tab is open; its close returns there, and a tab or the way back shuts it
@@ -151,6 +168,7 @@ export function PhoneFrame() {
           {previewed && url && (
             <PhonePreview
               key={previewed.worktree.id}
+              gated={previewsGated(machine, remote)}
               active={previewed}
               url={url}
               hidden={tab !== "preview" || editor !== null}

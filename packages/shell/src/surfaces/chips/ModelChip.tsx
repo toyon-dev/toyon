@@ -1,6 +1,7 @@
 import type { AgentInfo, ModelChoice } from "@toyon/shared";
 import { useMemo } from "react";
-import { STORAGE } from "../../state/keys.ts";
+import { useMachine } from "../../state/context.tsx";
+import { type ScopedStorage, STORAGE } from "../../state/keys.ts";
 import { ChipPicker } from "../../ui/ChipPicker.tsx";
 import { usePersisted } from "../../ui/hooks.ts";
 import { agentModelRows, DEFAULT_OPTION, splitAgentModel } from "./choiceRows.ts";
@@ -12,18 +13,16 @@ export function useNewWorktreeModel(agentId: string | undefined): [string, (m: s
     STORAGE.modelPrefix + (agentId ?? ""),
     DEFAULT_OPTION,
     (raw) => raw ?? "",
+    useMachine().storage,
   );
   return [stored, setStored];
 }
 
 /** the same memory for an agent the hook above is not reading: picking another agent's model
- * stores it here just before the agent switches, and the hook reads it on the switch */
-export function rememberNewWorktreeModel(agentId: string, model: string) {
-  try {
-    localStorage.setItem(STORAGE.modelPrefix + agentId, model);
-  } catch {
-    // storage blocked (a private window): the agent still switches, only the model is not kept
-  }
+ * stores it here just before the agent switches, and the hook reads it on the switch. `storage`
+ * is the machine's slice (`useMachine().storage`): the agent ids are that daemon's. */
+export function rememberNewWorktreeModel(storage: ScopedStorage, agentId: string, model: string) {
+  storage.set(STORAGE.modelPrefix + agentId, model);
 }
 
 /** which of the agent's models answers here */

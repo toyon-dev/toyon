@@ -9,9 +9,26 @@ import type {
   ThemePrefs,
   WorktreeInfo,
 } from "@toyon/shared";
+import { isLoopbackHost } from "@toyon/shared";
 import { UserError } from "./errors.ts";
 import { log } from "./log.ts";
 import { ensureDirs, type Paths } from "./paths.ts";
+
+/** how many paired shell origins are kept; the oldest goes when a seventeenth pairs */
+const TRUSTED_MAX = 16;
+
+/** an origin a shell holding a token may be served from: an origin proper (no path, query or
+ * fragment), over https, or over http where the name can only mean that page's own machine */
+function isShellOrigin(origin: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(origin);
+  } catch {
+    return false;
+  }
+  if (url.origin !== origin) return false;
+  return url.protocol === "https:" || (url.protocol === "http:" && isLoopbackHost(url.hostname));
+}
 
 export interface PersistedState {
   repos: RepoInfo[];
@@ -46,6 +63,11 @@ export interface PersistedState {
   updateFailed?: { version: string; at: number };
   /** when a phone first redeemed a pairing code here; the desk stops offering one in the bar */
   pairedAt?: number;
+  /** The shell origins that have paired with this machine from another one (a Toyon served
+   * elsewhere redeemed a code here), newest last. Those pages talk to this daemon across origins,
+   * so its answers carry CORS headers for them. Trust is not authentication: every such request
+   * still needs the bearer token, which is why nothing here is ever revoked. */
+  trustedOrigins?: { origin: string; at: number }[];
   /** The process groups the daemon owns, per worktree (found ones included, under their disc- id):
    * every dev server, agent adapter, shell and login it spawned. The next daemon reads this to
    * reclaim what a crash or a kill left running, since a pgid otherwise lives only in the runtime. */
@@ -415,6 +437,22 @@ export class StateStore {
   notePaired() {
     if (this.state.pairedAt !== undefined) return;
     this.state.pairedAt = Date.now();
+    this.save();
+  }
+
+  /** the origins another machine's shell reaches this daemon from, oldest first */
+  get trustedOrigins(): string[] {
+    return (this.state.trustedOrigins ?? []).map((t) => t.origin);
+  }
+  /** Remember a shell origin that paired from another machine. Https, or plain http on a loopback
+   * name (a desk's own daemon serving its page at 127.0.0.1): the page there holds this machine's
+   * token, and any other plain-http page would have carried it across a network in the clear. The
+   * newest sixteen, since a person has that many machines in a lifetime, not a session. */
+  trustOrigin(origin: string) {
+    if (!isShellOrigin(origin)) return;
+    const list = (this.state.trustedOrigins ?? []).filter((t) => t.origin !== origin);
+    list.push({ origin, at: Date.now() });
+    this.state.trustedOrigins = list.slice(-TRUSTED_MAX);
     this.save();
   }
 

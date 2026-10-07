@@ -32,12 +32,13 @@ import { locateAssets, pruneAssets } from "./core/assets.ts";
 import { idleSleepAssertion, KeepAwake } from "./core/awake.ts";
 import { cloud } from "./core/cloud.ts";
 import { folderDialog } from "./core/dialog.ts";
+import { GrantCodes } from "./core/grants.ts";
 import { Hub } from "./core/hub.ts";
 import { IdleExit, stopAfterFrom } from "./core/idleExit.ts";
 import { fireAndForget, log } from "./core/log.ts";
 import { startLagSampler } from "./core/metrics.ts";
 import { ensureDirs, makePaths } from "./core/paths.ts";
-import { loadRemote, previewGrant } from "./core/remote.ts";
+import { loadRemote, type PreviewGate, previewGrant } from "./core/remote.ts";
 import { replacementRuns, respawn, restartable } from "./core/restart.ts";
 import { Restarter } from "./core/restarter.ts";
 import { SelfWatch } from "./core/self.ts";
@@ -99,6 +100,14 @@ const token = loadOrCreateToken(paths);
 const port = Number(process.env.TOYON_PORT ?? DAEMON_DEFAULT_PORT);
 // the public name: an edge's from the environment, a local front's from `toyon remote`
 const remote = loadRemote(paths.remoteFile, process.env, managed.policy);
+// the one-time codes a shell on another machine spends to open a preview here; one set for the
+// daemon's listener and every preview port, since a code is minted without knowing which will see it
+const grants = new GrantCodes();
+const previewGate: PreviewGate | null = remote && {
+  grant: previewGrant(token),
+  host: remote.host,
+  redeem: (code) => grants.redeem(code),
+};
 // a front that addresses previews by port has each one declared to it, so they cannot be ephemeral
 if (remote && addressedByPort(remote.previews)) pinProxyPorts(PREVIEW_PORTS);
 
@@ -168,7 +177,7 @@ const runtime: RuntimeRegistry = new RuntimeRegistry({
   // asked only when a turn is sent, after the service below exists
   turnStarting: (id): Promise<void> => worktrees.turnStarted(id),
   remote,
-  grant: previewGrant(token),
+  gate: previewGate,
   // asked only once the policy exists: the first view comes from a socket, after boot
   viewed: (id): boolean => idle.isViewed(id),
   shown: (id): boolean => idle.isShown(id),
@@ -348,6 +357,8 @@ const {
   shellDist: SHELL_DIST,
   version: pkg.version,
   noteShellOrigin: (origin) => bridge.learnShellOrigin(origin),
+  onTrusted: () => refreshShellOrigins(),
+  grants,
   remote,
   managed,
   services: {
@@ -390,21 +401,27 @@ const {
 mcpPort = server.port ?? port;
 
 // every origin the shell can be loaded from: the injected bridge accepts commands from, and
-// reports to, these only. Behind an edge nothing is loopback, so the public name is the one.
-bridge.setShellOrigins([
-  ...(remote?.front === "edge"
-    ? []
-    : [
-        `http://127.0.0.1:${port}`,
-        `http://localhost:${port}`,
-        `http://toyon.localhost:${port}`,
-        ...(branded ? ["http://toyon.localhost"] : []),
-        // the Vite dev shell frames the same previews
-        `http://127.0.0.1:${SHELL_DEV_PORT}`,
-        `http://localhost:${SHELL_DEV_PORT}`,
-      ]),
-  ...(remote ? [`https://${remote.host}`] : []),
-]);
+// reports to, these only. Behind an edge nothing is loopback, so the public name is the one. A
+// shell on another machine that paired here frames this machine's previews too, so its origin is
+// on the list from the moment it pairs; a handshake alone never widens it (learnShellOrigin).
+function refreshShellOrigins() {
+  bridge.setShellOrigins([
+    ...(remote?.front === "edge"
+      ? []
+      : [
+          `http://127.0.0.1:${port}`,
+          `http://localhost:${port}`,
+          `http://toyon.localhost:${port}`,
+          ...(branded ? ["http://toyon.localhost"] : []),
+          // the Vite dev shell frames the same previews
+          `http://127.0.0.1:${SHELL_DEV_PORT}`,
+          `http://localhost:${SHELL_DEV_PORT}`,
+        ]),
+    ...(remote ? [`https://${remote.host}`] : []),
+    ...state.trustedOrigins,
+  ]);
+}
+refreshShellOrigins();
 
 // after the bind, so a second daemon that lost the port never overwrites the first one's pid
 writeFileSync(paths.pidFile, `${process.pid}\n`);

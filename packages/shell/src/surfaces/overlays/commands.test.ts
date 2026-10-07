@@ -75,7 +75,7 @@ describe("buildCommands", () => {
   });
   test("a machine with a public name offers to add it to toyon.cloud, by name and without the token", () => {
     expect(buildCommands(state, () => {}, null, wt, repo).map((c) => c.id)).not.toContain("toyon-cloud");
-    const remote = { host: "my-toyon.fly.dev", previews: "https://my-toyon.fly.dev:{port}" };
+    const remote = { host: "my-toyon.fly.dev", previews: "https://my-toyon.fly.dev:{port}", front: "edge" as const };
     const opened: string[] = [];
     const g = globalThis as any;
     const saved = g.window;
@@ -90,7 +90,11 @@ describe("buildCommands", () => {
     }
   });
   test("a desk with a public name offers a code for a phone; a phone and a local machine do not", () => {
-    const remote = { host: "box.tailnet.ts.net", previews: "https://box.tailnet.ts.net:{port}" };
+    const remote = {
+      host: "box.tailnet.ts.net",
+      previews: "https://box.tailnet.ts.net:{port}",
+      front: "local" as const,
+    };
     const ids = (s: typeof state) => buildCommands(s, () => {}, null, wt, repo).map((c) => c.id);
     expect(ids(state)).not.toContain("pair");
     expect(ids({ ...state, remote, frame: "phone" })).not.toContain("pair");
@@ -143,6 +147,32 @@ describe("buildCommands", () => {
       "theme: rescan editor themes",
       "theme…",
     ]);
+  });
+
+  describe("other machines in the palette", () => {
+    test("their projects are rows naming the machine, and the machine can be forgotten", () => {
+      const calls: string[] = [];
+      const cross = {
+        machines: [
+          { origin: "https://work.tail1234.ts.net", name: "work", repos: [{ ...repo, id: "r2", name: "site" }] },
+        ],
+        switchTo: (origin: string, repoId: string) => calls.push(`switch ${origin} ${repoId}`),
+        forget: (origin: string) => calls.push(`forget ${origin}`),
+      };
+      const cmds = buildCommands(state, () => {}, null, wt, repo, cross);
+      const go = cmds.find((c) => c.id === "machine:https://work.tail1234.ts.net:r2");
+      expect(go?.label).toBe("switch to project site on work");
+      go?.run();
+      const forget = cmds.find((c) => c.id === "forget-machine:https://work.tail1234.ts.net");
+      expect(forget?.label).toBe("forget work");
+      forget?.run();
+      expect(calls).toEqual(["switch https://work.tail1234.ts.net r2", "forget https://work.tail1234.ts.net"]);
+      expect(cmds.map((c) => c.id)).toContain("add-machine");
+    });
+    test("with no other machine the palette is what it was", () => {
+      const ids = buildCommands(state, () => {}, null, wt, repo).map((c) => c.id);
+      expect(ids.some((id) => id.startsWith("machine:") || id.startsWith("forget-machine:"))).toBe(false);
+    });
   });
 });
 

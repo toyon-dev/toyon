@@ -1,6 +1,7 @@
 import { useMemo, useRef } from "react";
+import { useUrls } from "../../state/context.tsx";
 import { useOnChange } from "../../ui/hooks.ts";
-import { worktreeFileUrl } from "../../ws.ts";
+import type { DaemonUrls } from "../../ws.ts";
 import { assetPath, dirOf } from "../chat/markdownPaths.ts";
 
 /** where a page's relative assets are read from: the folder it sits in, in the worktree it is in */
@@ -8,6 +9,8 @@ interface HtmlBase {
   worktreeId: string;
   dir: string;
   version: string | null;
+  /** the daemon the page is on, which serves what sits beside it */
+  urls: DaemonUrls;
 }
 
 /** the attributes a page reaches beside itself through: a picture, a stylesheet, a poster, a
@@ -26,7 +29,7 @@ export function rebaseHtml(text: string, base: HtmlBase | null): string {
       const ref = el.getAttribute(attr);
       const path = ref === null ? null : assetPath(base.dir, ref);
       if (!path) continue;
-      el.setAttribute(attr, worktreeFileUrl(base.worktreeId, path, base.version));
+      el.setAttribute(attr, base.urls.worktreeFile(base.worktreeId, path, base.version));
       moved = true;
     }
   }
@@ -60,10 +63,11 @@ export function HtmlPreview({
   useOnChange([openSeq], () => {
     if (focus) ref.current?.focus();
   });
+  const urls = useUrls();
   const dir = dirOf(path);
   const doc = useMemo(
-    () => rebaseHtml(text, version === undefined ? null : { worktreeId, dir, version }),
-    [text, worktreeId, dir, version],
+    () => rebaseHtml(text, version === undefined ? null : { worktreeId, dir, version, urls }),
+    [text, worktreeId, dir, version, urls],
   );
   return (
     <div ref={ref} className="editor-viewer" tabIndex={-1}>

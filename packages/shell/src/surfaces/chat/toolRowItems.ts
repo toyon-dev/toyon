@@ -1,5 +1,5 @@
 import { copyText, type Deps } from "../../state/actions/deps.ts";
-import { editorItems } from "../../state/actions/editor.ts";
+import { daemonHost, editorItems } from "../../state/actions/editor.ts";
 import { openFile } from "../../state/actions/file.ts";
 import { grouped, type MenuEntry, type MenuItem } from "../../ui/menu.ts";
 import type { ToolItem } from "./group.ts";
@@ -31,9 +31,19 @@ export function toolRowItems(
       label: `open ${view}`,
       onClick: () => openFile(deps, { worktreeId: wt.id, path: rel, view }),
     });
-    open.push(...editorItems(`${wt.dir}/${rel}`, () => sock?.send({ t: "reveal", worktreeId: wt.id, path: rel })));
+    open.push(
+      ...editorItems(
+        `${wt.dir}/${rel}`,
+        () => sock?.send({ t: "reveal", worktreeId: wt.id, path: rel }),
+        daemonHost(sock),
+      ),
+    );
   } else if (rel.startsWith("/")) {
-    open.push(...editorItems(rel), { id: "copy-path", label: "copy path", onClick: () => copyText(rel) });
+    open.push(...editorItems(rel, undefined, daemonHost(sock)), {
+      id: "copy-path",
+      label: "copy path",
+      onClick: () => copyText(rel),
+    });
   }
   const copies: MenuItem[] = [];
   const command = toolLabel(head, roots).command;

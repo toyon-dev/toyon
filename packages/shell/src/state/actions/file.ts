@@ -2,7 +2,7 @@ import { type FileServerMsg, type GitFileStatus, renderedAs } from "@toyon/share
 import { grouped, type MenuEntry, type MenuItem } from "../../ui/menu.ts";
 import { type EditorView, EMPTY_LOCAL, type OpenFile, readingView, type State } from "../store.ts";
 import { copyText, type Deps } from "./deps.ts";
-import { editorItems } from "./editor.ts";
+import { daemonHost, editorItems } from "./editor.ts";
 
 /**
  * What decides that the file list is stale: the commit checked out, and the paths git says were
@@ -133,7 +133,9 @@ export function fileItems(
         showing ? dispatch({ a: "editor-view", v }) : openFile(deps, { worktreeId: wt.id, path, view: v, ref, since }),
     }));
   const abs = `${wt.dir}/${path}`;
-  const open = kept ? [] : editorItems(abs, () => sock?.send({ t: "reveal", worktreeId: wt.id, path }));
+  const open = kept
+    ? []
+    : editorItems(abs, () => sock?.send({ t: "reveal", worktreeId: wt.id, path }), daemonHost(sock));
   const copy: MenuItem[] = [{ id: "copy-path", label: "copy path", onClick: () => copyText(abs) }];
   const selectItems: MenuItem[] = select ? [{ id: "select", label: "select…", onClick: () => select(path) }] : [];
   const discardItems = discard

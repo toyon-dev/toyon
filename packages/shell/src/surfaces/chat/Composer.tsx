@@ -22,12 +22,13 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import { clipboardOfferDone, useCopied } from "../../app/clipboardOffer.ts";
 import { previewBus, togglePick } from "../../app/previewBus.ts";
+import { daemonHost } from "../../state/actions/editor.ts";
 import { listFiles, openFile } from "../../state/actions/file.ts";
 import { pathItems } from "../../state/actions/message.ts";
 import { terminalItems } from "../../state/actions/proc.ts";
 import { archiveWorktrees, shipOp } from "../../state/actions/worktree.ts";
 import { takeBackQueued, toInput } from "../../state/attach.ts";
-import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
+import { useDispatch, useMachine, useSock, useStore, useStoreInstance, useUrls } from "../../state/context.tsx";
 import { openSource } from "../../state/openSource.ts";
 import { isUploading } from "../../state/pending.ts";
 import { useChatCentred, useGreenfield, useLocalField, usePreviewId, useTouch } from "../../state/selectors.ts";
@@ -42,7 +43,6 @@ import { useListNav } from "../../ui/listNav.ts";
 import { useContextMenu } from "../../ui/menu.ts";
 import { Ring } from "../../ui/Ring.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
-import { uploadUrl } from "../../ws.ts";
 import { greenfieldContext } from "../center/greenfield.ts";
 import { canPull, originNote } from "../chips/baseNote.ts";
 import { EffortChip, useNewWorktreeEffort } from "../chips/EffortChip.tsx";
@@ -177,6 +177,8 @@ export function Composer({
   const onScreen = placement === "screen";
   const dispatch = useDispatch();
   const sock = useSock();
+  const urls = useUrls();
+  const { storage } = useMachine();
   const store = useStoreInstance();
   const drafting = !!draft;
   const id = active?.worktree.id ?? null;
@@ -279,7 +281,7 @@ export function Composer({
       setNewModel(model);
       return;
     }
-    rememberNewWorktreeModel(agent, model);
+    rememberNewWorktreeModel(storage, agent, model);
     if (drafting) dispatch({ a: "draft-agent", id: agent });
     else sock?.send({ t: "set-default-agent", agent });
   };
@@ -1052,7 +1054,12 @@ export function Composer({
         <div
           className="composer-plan"
           {...cm.contextMenu(() =>
-            pathItems(plan, dir, () => sock?.send({ t: "reveal", worktreeId: active.worktree.id, path: plan })),
+            pathItems(
+              plan,
+              dir,
+              () => sock?.send({ t: "reveal", worktreeId: active.worktree.id, path: plan }),
+              daemonHost(sock),
+            ),
           )}
         >
           <Icon name="text" className="icon-inline" />
@@ -1128,7 +1135,7 @@ export function Composer({
             return (
               <ImageChip
                 key={item.key}
-                src={item.local ?? uploadUrl(item.upload)}
+                src={item.local ?? urls.upload(item.upload)}
                 n={n}
                 name={item.name}
                 width={item.width}
@@ -1144,7 +1151,7 @@ export function Composer({
                 key={item.key}
                 name={item.name}
                 bytes={item.bytes}
-                href={item.text && item.upload ? uploadUrl(item.upload) : undefined}
+                href={item.text && item.upload ? urls.upload(item.upload) : undefined}
                 uploading={item.uploading}
                 onRemove={detach}
               />

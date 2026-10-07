@@ -126,9 +126,9 @@ describe("rowsFor: a name", () => {
   });
 
   test("an empty query lists the projects, then the ways to start one and to open one", () => {
-    expect(rows("")).toEqual([{ kind: "new" }, { kind: "disk" }]);
+    expect(rows("")).toEqual([{ kind: "new" }, { kind: "disk" }, { kind: "add-machine" }]);
     const repos = [repo("cookbook", "/Users/k/Projects/cookbook"), repo("bike", "/Users/k/Projects/bike")];
-    expect(rows("", { repos }).map((r) => r.kind)).toEqual(["repo", "repo", "new", "disk"]);
+    expect(rows("", { repos }).map((r) => r.kind)).toEqual(["repo", "repo", "new", "disk", "add-machine"]);
   });
 
   test("the standing rows are only for an empty query: a typed name has its own create row", () => {
@@ -156,7 +156,7 @@ describe("rowsFor: an import in flight", () => {
   test("a clone in flight is listed with the projects, after the ones you can open", () => {
     const repos = [repo("cookbook", "/Users/k/Projects/cookbook")];
     const out = rows("", { repos, pending: [importing] });
-    expect(out.map((r) => r.kind)).toEqual(["repo", "pending", "new", "disk"]);
+    expect(out.map((r) => r.kind)).toEqual(["repo", "pending", "new", "disk", "add-machine"]);
   });
 
   test("it is findable by name and by url, since half of one is what you would type", () => {
@@ -284,5 +284,32 @@ describe("folderRows", () => {
     expect(kinds(folders("/"))).toEqual(["here"]);
     expect(folders("projects")).toEqual([]);
     expect(folders("../")).toEqual([]);
+  });
+});
+
+describe("rowsFor: other machines", () => {
+  const work = {
+    origin: "https://work.tail1234.ts.net",
+    name: "work",
+    repos: [repo("site", "/w/site"), repo("api", "/w/api")],
+  };
+  test("their projects follow everything about this machine, each row naming its machine", () => {
+    const out = rows("", { repos: [repo("cookbook", "/Users/k/Projects/cookbook")], others: [work] });
+    expect(out.map((r) => r.kind)).toEqual(["repo", "new", "disk", "add-machine", "repo", "repo"]);
+    const far = out.filter((r) => r.kind === "repo" && r.machine);
+    expect(far.map((r) => (r.kind === "repo" ? r.repo.name : ""))).toEqual(["site", "api"]);
+    expect(far.map((r) => (r.kind === "repo" ? r.machine?.origin : ""))).toEqual([work.origin, work.origin]);
+  });
+  test("a name narrows every machine's list, and the machine's own name finds all of its projects", () => {
+    const out = rows("api", { repos: [repo("cookbook", "/Users/k/Projects/cookbook")], others: [work] });
+    expect(out.map((r) => (r.kind === "repo" ? r.repo.name : r.kind))).toEqual(["create", "api"]);
+    const byMachine = rows("work", { repos: [], others: [work] });
+    expect(byMachine.filter((r) => r.kind === "repo").length).toBe(2);
+  });
+  test("a project here with the typed name is still the project, with the far ones after it", () => {
+    const out = rows("site", { repos: [repo("site", "/Users/k/Projects/site")], others: [work] });
+    expect(
+      out.map((r) => (r.kind === "repo" ? `${r.repo.name}${r.machine ? `@${r.machine.name}` : ""}` : r.kind)),
+    ).toEqual(["site", "site@work"]);
   });
 });

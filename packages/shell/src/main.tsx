@@ -1,24 +1,18 @@
-import { type AttachmentInput, isFileMsg, isTermMsg, PROTOCOL_VERSION, type ServerMsg } from "@toyon/shared";
+import type { ServerMsg } from "@toyon/shared";
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./app/App.tsx";
 import { frameNow, installFrame, touchNow } from "./app/phone.ts";
 import { installPhoneHistory } from "./app/phoneHistory.ts";
-import { terminalBus } from "./app/terminalBus.ts";
-import { settleCreate } from "./state/actions/file.ts";
-import { coalesceDeltas } from "./state/coalesce.ts";
-import { createStore, StoreProvider } from "./state/context.tsx";
-import { FileSync } from "./state/fileSync.ts";
+import { MachinesProvider } from "./state/context.tsx";
 import { migrateStorage, STORAGE } from "./state/keys.ts";
-import { settleLoose } from "./state/looseSync.ts";
-import { isOpenedMsg, openFromOutside, refusedFromOutside } from "./state/openOutside.ts";
-import { type PendingAttachment, settledInputs } from "./state/pending.ts";
-import { initialState, isLayout, type Layout } from "./state/store.ts";
+import { createMachine } from "./state/machine.ts";
+import { createMachines, parseSavedMachines } from "./state/machines.ts";
 import { ErrorBoundary, markStaleBuild } from "./ui/ErrorBoundary.tsx";
 import "./styles/tokens.css";
 import "./styles/base.css";
-import { applyTheme, cachedDaylight, cachedTheme, prefersDark } from "./theme.ts";
-import { DaemonSocket } from "./ws.ts";
+import { applyTheme, cachedDaylight, cachedTheme, onPrefersDarkChange, prefersDark } from "./theme.ts";
+import { servingToken } from "./ws.ts";
 
 // tell an injected preview bridge that this document is a shell, so it leaves the chords to us
 // (toyon inside toyon: without this the outer shell takes every keystroke meant for this one)
@@ -26,7 +20,7 @@ window.__toyonShell = true;
 // a shell shown in another shell's preview: base.css lets its scrolls chain out to the window
 if (window.top !== window) document.documentElement.dataset.framed = "";
 
-migrateStorage();
+migrateStorage(location.origin);
 
 // paint the last-used theme before React mounts: the daemon's hello replaces it moments later
 const cached = cachedTheme();
@@ -38,180 +32,6 @@ function read(storage: Storage, key: string): string | null {
   } catch {
     return null;
   }
-}
-/** the layout each project was left in; an entry that does not fit (an older build's, or a hand's)
- * is dropped, and that project opens in the default layout */
-function storedLayouts(): Record<string, Layout> {
-  const out: Record<string, Layout> = {};
-  try {
-    const raw: unknown = JSON.parse(read(localStorage, STORAGE.layouts) ?? "{}");
-    if (!raw || typeof raw !== "object") return out;
-    for (const [id, l] of Object.entries(raw)) if (isLayout(l)) out[id] = l;
-  } catch {}
-  return out;
-}
-
-/** the worktree each project was left on; anything that is not a string pair is dropped, so a
- * hand-edited value costs a landing on main rather than a selection that names nothing */
-function storedLastActive(): Record<string, string> {
-  const out: Record<string, string> = {};
-  try {
-    const raw: unknown = JSON.parse(read(localStorage, STORAGE.lastActive) ?? "{}");
-    if (!raw || typeof raw !== "object") return out;
-    for (const [repoId, wtId] of Object.entries(raw as Record<string, unknown>)) {
-      if (typeof wtId === "string" && wtId) out[repoId] = wtId;
-    }
-  } catch {}
-  return out;
-}
-
-/** which projects had one of the rail's sections open. Anything that is not a boolean is dropped:
- * the cost of a bad value is a section that starts collapsed, which is the default anyway. */
-function storedSectionOpen(key: string): Record<string, boolean> {
-  const out: Record<string, boolean> = {};
-  try {
-    const raw: unknown = JSON.parse(read(localStorage, key) ?? "{}");
-    if (!raw || typeof raw !== "object") return out;
-    for (const [repoId, open] of Object.entries(raw as Record<string, unknown>)) {
-      if (typeof open === "boolean") out[repoId] = open;
-    }
-  } catch {}
-  return out;
-}
-
-/** the folders each worktree's files tab had open by hand. An entry that is not a list of strings
- * is dropped: the cost is a tree that starts folded, which is the default anyway. */
-function storedTreeOpen(): Record<string, string[]> {
-  const out: Record<string, string[]> = {};
-  try {
-    const raw: unknown = JSON.parse(read(localStorage, STORAGE.treeOpen) ?? "{}");
-    if (!raw || typeof raw !== "object") return out;
-    for (const [wtId, paths] of Object.entries(raw as Record<string, unknown>)) {
-      if (Array.isArray(paths) && paths.every((p) => typeof p === "string") && paths.length > 0) out[wtId] = paths;
-    }
-  } catch {}
-  return out;
-}
-
-/** a box sends its text once the typing has paused this long, and at least this often while it goes
- * on; an emptied box sends at once, so a message just sent does not come back in another tab's box */
-const DRAFT_QUIET_MS = 400;
-const DRAFT_MAX_WAIT_MS = 2_000;
-
-/** Each composer box's text to the daemon as it changes, so another tab or device and an archive
- * keep it. A store subscription rather than an App effect: the `local` record changes on every chat
- * frame, and this compares the drafts alone. What the daemon last said a box holds counts as sent,
- * so its own frames are never echoed back. A walk is a sent message on show, not a draft. */
-function syncDrafts() {
-  const sent = new Map<string, string>();
-  /** boxes with text not sent yet: the text the wait was last set for, its timer, and when the
-   * first unsent keystroke came */
-  const waiting = new Map<string, { text: string; timer: ReturnType<typeof setTimeout>; since: number }>();
-  const sends = sendsSeen();
-  const flush = (id: string) => {
-    clearTimeout(waiting.get(id)?.timer);
-    waiting.delete(id);
-    const l = store.getState().local[id];
-    if (!l || l.mark?.by === "walk") return;
-    if ((sent.get(id) ?? "") === l.draft) return;
-    sent.set(id, l.draft);
-    sock.send({ t: "set-draft", boxId: id, text: l.draft, clientId: store.getState().clientId });
-  };
-  const flushAll = () => {
-    for (const id of [...waiting.keys()]) flush(id);
-  };
-  store.subscribe(() => {
-    for (const [id, l] of Object.entries(store.getState().local)) {
-      if (sends.another(id, l.sent)) {
-        // the daemon emptied the box as the message arrived, so the clear here is already said
-        clearTimeout(waiting.get(id)?.timer);
-        waiting.delete(id);
-        sent.set(id, "");
-      }
-      if (l.mark?.by === "walk" || (sent.get(id) ?? "") === l.draft) continue;
-      if (!l.draft) {
-        flush(id);
-        continue;
-      }
-      // only a keystroke restarts the wait: a chat frame changes the store too, and must not
-      // hold a draft back while a reply streams in
-      const was = waiting.get(id);
-      if (was?.text === l.draft) continue;
-      clearTimeout(was?.timer);
-      const since = was?.since ?? Date.now();
-      const wait = Math.max(0, Math.min(DRAFT_QUIET_MS, since + DRAFT_MAX_WAIT_MS - Date.now()));
-      waiting.set(id, { text: l.draft, timer: setTimeout(flush, wait, id), since });
-    }
-  });
-  // leaving the box, or the page, is a pause long enough
-  window.addEventListener("focusout", flushAll);
-  window.addEventListener("pagehide", flushAll);
-  return {
-    /** what the daemon holds, before the store applies it: a hello is the whole set */
-    hello(drafts: Record<string, string>) {
-      sent.clear();
-      for (const [id, text] of Object.entries(drafts)) sent.set(id, text);
-    },
-    /** another tab's text for a box; false when this tab has keystrokes on their way for it, which
-     * would otherwise be written over by what they replace */
-    heard(boxId: string, text: string): boolean {
-      if (waiting.has(boxId)) return false;
-      sent.set(boxId, text);
-      return true;
-    },
-  };
-}
-
-/** Notices each message this tab sends from a box, by the box's count of them. A send takes the
- * box: the daemon empties it as the frame arrives, so the tab's own clear is not told again. Told
- * again, it could land after a fast refusal had put the message back, and wipe it. */
-function sendsSeen() {
-  const counted = new Map<string, number>();
-  return {
-    /** whether box `id` has sent a message since this was last asked */
-    another(id: string, count = 0): boolean {
-      if ((counted.get(id) ?? 0) === count) return false;
-      counted.set(id, count);
-      return true;
-    },
-  };
-}
-
-/** What is attached in each box goes to the daemon as it changes, for the reasons its text does,
- * and at once: a chip is a deliberate act, not a keystroke, and a message sent a moment later has
- * to find its uploads still named. Only what has landed is told; an upload in flight is this
- * tab's alone. What the daemon last said a box holds counts as sent, so its frames are not echoed. */
-function syncAttachments() {
-  /** each box's list as it was last looked at: the store changes on every chat frame, and an
-   * unchanged array is an unchanged list */
-  const seen = new Map<string, readonly PendingAttachment[]>();
-  const sent = new Map<string, string>();
-  const sends = sendsSeen();
-  store.subscribe(() => {
-    for (const [id, l] of Object.entries(store.getState().local)) {
-      // as for the text: the daemon took the list with the message
-      if (sends.another(id, l.sent)) sent.set(id, "[]");
-      if (seen.get(id) === l.attachments) continue;
-      seen.set(id, l.attachments);
-      const items = settledInputs(l.attachments);
-      const raw = JSON.stringify(items);
-      if ((sent.get(id) ?? "[]") === raw) continue;
-      sent.set(id, raw);
-      sock.send({ t: "set-attachments", boxId: id, items, clientId: store.getState().clientId });
-    }
-  });
-  return {
-    /** what the daemon holds, before the store applies it: a hello is the whole set */
-    hello(lists: Record<string, AttachmentInput[]>) {
-      sent.clear();
-      seen.clear();
-      for (const [id, items] of Object.entries(lists)) sent.set(id, JSON.stringify(items));
-    },
-    /** another tab's list for a box, before the store applies it */
-    heard(boxId: string, items: AttachmentInput[]) {
-      sent.set(boxId, JSON.stringify(items));
-    },
-  };
 }
 
 /** per-tab id: a worktree created from this tab steals focus here and nowhere else */
@@ -225,111 +45,45 @@ function clientId(): string {
   return id;
 }
 
-const store = createStore(
-  initialState({
-    cached,
-    systemDark: prefersDark(),
-    daylight: cachedDaylight(),
-    storedActive: read(localStorage, STORAGE.active),
-    storedPhoneRow: read(sessionStorage, STORAGE.phoneRow) === "1",
-    storedRepo: read(localStorage, STORAGE.repo),
-    storedRailOpen: read(localStorage, STORAGE.rail) === "1",
-    storedChatSide: read(localStorage, STORAGE.chatSide) === "right" ? "right" : "left",
-    storedLayouts: storedLayouts(),
-    storedLastActive: storedLastActive(),
-    storedDiscoveredOpen: storedSectionOpen(STORAGE.discoveredOpen),
-    storedArchivedOpen: storedSectionOpen(STORAGE.archivedOpen),
-    storedCommittedShut: storedSectionOpen(STORAGE.committedShut),
-    storedTurnOpen: storedSectionOpen(STORAGE.turnOpen),
-    storedTreeOpen: storedTreeOpen(),
-    clientId: clientId(),
-    // seeded rather than dispatched after mount, so the first paint is the right frame and the
-    // reducer never sees a desk action from a window that was a phone all along
-    frame: frameNow(),
-    touch: touchNow(),
-  }),
-);
-installFrame(store);
-installPhoneHistory(store);
-
-// The daemon's version as this page first heard it. A later hello naming another version, or
-// another protocol, is a daemon that restarted onto an install: this page's code is from before it
-// and the files on disk are the new ones, so a reload is the whole fix and needs no asking. The
-// same goes for a daemon back from a restart this page heard announced, when the page watched a
-// build finish: a checkout's version and protocol can both hold still across one, and the page
-// would come back as the stale half with a reload still to ask for.
-let heardVersion: string | null = null;
-
-// streamed chunks reach the store on the reading tick (coalesce.ts); everything else goes straight in
-const toStore = coalesceDeltas((msg) => store.dispatch({ a: "server", msg }));
-
-const sock = new DaemonSocket(
-  (msg) => {
-    if (msg.t === "hello") {
-      const { rebuilt, update } = store.getState();
-      const restarted = rebuilt && update?.restarting != null;
-      if (heardVersion !== null && (restarted || msg.version !== heardVersion || msg.protocol !== PROTOCOL_VERSION)) {
-        sock.dispose();
-        window.location.reload();
-        return;
-      }
-      // a first hello that disagrees: this page was served from files newer than the daemon
-      // running, and the card offers the restart that brings them level
-      if (msg.protocol !== PROTOCOL_VERSION) {
-        store.dispatch({ a: "incompatible" });
-        sock.dispose();
-        return;
-      }
-      heardVersion = msg.version;
-      // a box whose message went out while the socket was down is empty, whatever this hello says
-      const sentDown = new Set(sock.sentWhileDown());
-      if (sentDown.size) {
-        const kept = <T,>(byBox: Record<string, T>) =>
-          Object.fromEntries(Object.entries(byBox).filter(([id]) => !sentDown.has(id)));
-        msg.drafts = kept(msg.drafts);
-        msg.attachments = kept(msg.attachments);
-      }
-      drafts.hello(msg.drafts);
-      pending.hello(msg.attachments);
-    }
-    if (msg.t === "attachments" && msg.clientId !== store.getState().clientId) pending.heard(msg.boxId, msg.items);
-    if (msg.t === "draft" && msg.clientId !== store.getState().clientId && !drafts.heard(msg.boxId, msg.text)) return;
-    if (isTermMsg(msg)) {
-      terminalBus.deliver(msg);
-      return;
-    }
-    if (isFileMsg(msg)) {
-      // a write that made a new file from the files tab is answered to the create that sent it
-      if (msg.t === "file-written" && settleCreate(msg)) return;
-      files.receive(msg);
-      return;
-    }
-    // a granted file's save is answered to the loose sync that sent it
-    if (msg.t === "loose-written") {
-      settleLoose(msg);
-      return;
-    }
-    if (isOpenedMsg(msg)) {
-      openFromOutside(store, sock, msg);
-      return;
-    }
-    if (msg.t === "open-refused") {
-      refusedFromOutside(store, msg);
-      return;
-    }
-    toStore(msg);
+// The machines this page lists: the one that served it, from its own address and the token it
+// gave this browser, and every other it has paired with (state/machines.ts). Each has a store, a
+// socket and a slice of storage of its own; the browser's facts are read once here and shared.
+const env = {
+  cached,
+  systemDark: prefersDark(),
+  daylight: cachedDaylight(),
+  clientId: clientId(),
+  frame: frameNow(),
+  touch: touchNow(),
+  reload: () => window.location.reload(),
+};
+const machines = createMachines({
+  serving: { origin: location.origin, token: servingToken() },
+  saved: parseSavedMachines(read(localStorage, STORAGE.machines)),
+  build: (init) => createMachine(init, env),
+  persist: (saved) => {
+    try {
+      localStorage.setItem(STORAGE.machines, JSON.stringify(saved));
+    } catch {}
   },
-  (v, failure) => store.dispatch({ a: "connected", v, failure }),
-);
-
-// the open file's reads and saves, each paired with its answer and kept in step with the disk
-const files = new FileSync({
-  store,
-  send: (msg) => sock.send(msg),
-  timers: { set: (fn, ms) => setTimeout(fn, ms), clear: (id) => clearTimeout(id as ReturnType<typeof setTimeout>) },
-  win: window,
 });
-files.start();
+
+// the window's facts reach every store: a machine not on screen still lays its state out for the
+// frame it will be shown in, and follows the system's dark side
+installFrame({ dispatch: (a) => machines.broadcast(a) });
+onPrefersDarkChange((v) => machines.broadcast({ a: "system-dark", v }));
+// the phone's way back is one history per machine on screen: a switch starts it over on the
+// list of the machine switched to, which is where a switch lands
+let uninstallHistory = installPhoneHistory(machines.active().store);
+let shown = machines.active();
+machines.subscribe(() => {
+  const next = machines.active();
+  if (next === shown) return;
+  shown = next;
+  uninstallHistory();
+  if (next.store.getState().frame === "phone") next.store.dispatch({ a: "screen", to: "home" });
+  uninstallHistory = installPhoneHistory(next.store);
+});
 
 // a rebuilt shell rotates every hashed chunk name, so a tab open across a rebuild imports a URL the
 // daemon no longer has. Vite fires this before the rejection reaches render: flag it and let it
@@ -337,17 +91,11 @@ files.start();
 // to undefined and crash inside React.lazy anyway.
 window.addEventListener("vite:preloadError", markStaleBuild);
 
-// No leave dialog: the daemon keeps every agent and process, the shell reopens where it was, the
-// drafts reach the daemon as they are typed and the editor flushes on pagehide, so a reload or a ⌘W
-// has nothing to ask about.
-const drafts = syncDrafts();
-const pending = syncAttachments();
-
-// The hello the inline script in index.html asked for before this bundle loaded. Applied through
-// the same reducer as the socket's, so the first paint is the real project; a daemon that is down
-// answers null and the page paints as it always has. The render waits for it rather than racing
-// it: it is normally resolved long before this line runs, and a paint without it is the flash
-// this exists to remove.
+// The hello the inline script in index.html asked for before this bundle loaded, from the machine
+// that served the page. Applied through the same reducer as the socket's, so the first paint is
+// the real project; a daemon that is down answers null and the page paints as it always has. The
+// render waits for it rather than racing it: it is normally resolved long before this line runs,
+// and a paint without it is the flash this exists to remove.
 declare global {
   interface Window {
     toyonBoot?: Promise<unknown>;
@@ -355,20 +103,16 @@ declare global {
 }
 const booted = (window.toyonBoot ?? Promise.resolve(null)).then((boot) => {
   const msg = boot as ServerMsg | null;
-  if (msg && typeof msg === "object" && msg.t === "hello" && msg.protocol === PROTOCOL_VERSION) {
-    heardVersion ??= msg.version;
-    pending.hello(msg.attachments);
-    store.dispatch({ a: "server", msg });
-  }
+  if (msg && typeof msg === "object" && msg.t === "hello") machines.active().boot(msg);
 });
 
 booted.then(() =>
   createRoot(document.getElementById("root")!).render(
     <React.StrictMode>
       <ErrorBoundary>
-        <StoreProvider store={store} sock={sock} files={files}>
+        <MachinesProvider machines={machines}>
           <App />
-        </StoreProvider>
+        </MachinesProvider>
       </ErrorBoundary>
     </React.StrictMode>,
   ),

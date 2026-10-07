@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Remote } from "@toyon/shared";
-import { door, grantCookie, loadRemote, passPreview, setsGrant, takeGrant } from "./remote.ts";
+import { door, grantCookie, loadRemote, type PreviewGate, passPreview, setsGrant, takeGrant } from "./remote.ts";
 
 // The grant rides in the browser's Cookie header next to the app's own cookies. It is checked, then
 // taken off, so the dev server behind a preview sees exactly what the app set and nothing of toyon's.
@@ -33,6 +33,67 @@ describe("takeGrant", () => {
   });
 });
 
+/** a gate over one live code, `ok`; `spent` lists what was redeemed */
+function gate(ok = "ok", spent: string[] = []): PreviewGate {
+  return {
+    grant: "g",
+    host: "toyon.example.com",
+    redeem: (code) => {
+      spent.push(code);
+      return code === ok && spent.filter((c) => c === ok).length === 1;
+    },
+  };
+}
+
+describe("a grant by address, for a page another machine served", () => {
+  const at = (url: string, headers: Record<string, string> = {}) => passPreview(new Request(url, { headers }), gate());
+  const refused = (r: ReturnType<typeof passPreview>) => (r.ok ? -1 : r.response.status);
+
+  test("the code becomes a cookie and the address loses it, path and search kept", () => {
+    const r = at("https://w3.toyon.example.com/app/x?toyon_grant=ok&q=1");
+    expect(refused(r)).toBe(302);
+    if (r.ok) return;
+    expect(r.response.headers.get("location")).toBe("/app/x?q=1");
+    expect(r.response.headers.get("cache-control")).toBe("no-store");
+    expect(r.response.headers.get("set-cookie")).toContain("toyon_preview=g");
+    expect(r.response.headers.get("set-cookie")).toContain("SameSite=Strict");
+    expect(r.response.headers.get("set-cookie")).not.toContain("Partitioned");
+  });
+  test("the cookie is partitioned only when the frame is cross-site", () => {
+    const r = at("https://w3.toyon.example.com/?toyon_grant=ok", { "sec-fetch-site": "cross-site" });
+    if (r.ok) throw new Error("expected a redirect");
+    expect(r.response.headers.get("set-cookie")).toContain("SameSite=None; Partitioned");
+    const same = at("https://w3.toyon.example.com/?toyon_grant=ok", { "sec-fetch-site": "same-site" });
+    if (same.ok) throw new Error("expected a redirect");
+    expect(same.response.headers.get("set-cookie")).toContain("SameSite=Strict");
+  });
+  test("a code is spent once; a wrong or spent one is the usual refusal", () => {
+    const spent: string[] = [];
+    const g = gate("ok", spent);
+    expect(refused(passPreview(new Request("https://w3.toyon.example.com/?toyon_grant=ok"), g))).toBe(302);
+    expect(refused(passPreview(new Request("https://w3.toyon.example.com/?toyon_grant=ok"), g))).toBe(403);
+    expect(refused(passPreview(new Request("https://w3.toyon.example.com/?toyon_grant=no"), g))).toBe(403);
+  });
+  test("a browser that already holds the cookie is sent on without spending the code", () => {
+    const spent: string[] = [];
+    const r = passPreview(
+      new Request("https://w3.toyon.example.com/?toyon_grant=ok", { headers: { cookie: "toyon_preview=g" } }),
+      gate("ok", spent),
+    );
+    expect(refused(r)).toBe(302);
+    if (r.ok) return;
+    expect(r.response.headers.get("location")).toBe("/");
+    expect(r.response.headers.get("set-cookie")).toBeNull();
+    expect(spent).toEqual([]);
+  });
+  test("without the parameter nothing changes: the cookie passes and strips, its absence refuses", () => {
+    const ok = at("https://w3.toyon.example.com/a", { cookie: "sid=1; toyon_preview=g" });
+    expect(ok.ok).toBe(true);
+    if (ok.ok) expect(ok.req.headers.get("cookie")).toBe("sid=1");
+    expect(refused(at("https://w3.toyon.example.com/a"))).toBe(403);
+  });
+});
+
 describe("the grant on the wire", () => {
   test("the cookie reaches every name and port under the public name, and never rides a cross-site link", () => {
     const cookie = grantCookie("g", "toyon.example.com");
@@ -46,7 +107,7 @@ describe("the grant on the wire", () => {
     expect(setsGrant("sid=toyon_preview")).toBe(false);
   });
   test("a refusal is a page that reloads itself and is never kept", async () => {
-    const pass = passPreview(new Request("http://x.example/"), "g");
+    const pass = passPreview(new Request("http://x.example/"), gate());
     expect(pass.ok).toBe(false);
     if (pass.ok) return;
     expect(pass.response.status).toBe(403);

@@ -14,7 +14,7 @@ import {
 import { type ComponentProps, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { previewBus } from "../../app/previewBus.ts";
 import { takeBackQueued } from "../../state/attach.ts";
-import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
+import { useDispatch, useSock, useStore, useStoreInstance, useUrls } from "../../state/context.tsx";
 import { openSource } from "../../state/openSource.ts";
 import { useLocalField } from "../../state/selectors.ts";
 import { localOf } from "../../state/store.ts";
@@ -26,7 +26,6 @@ import { useOnChange, useSecondsSince, useTail } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { Spinner } from "../../ui/Spinner.tsx";
 import { selectedText, useKeyWithin, useSelectAllWithin } from "../../ui/selectAll.ts";
-import { uploadUrl } from "../../ws.ts";
 import { elapsed, isBusy, pickLabel } from "../util.ts";
 import { ChatItemView, QUIET_AFTER, ThoughtRow, ToolRow } from "./ChatItemView.tsx";
 import { FileChip } from "./FileChip.tsx";
@@ -74,6 +73,7 @@ function QueuedChips({
   dir: string | null;
   onOpen: (path: string, line: number) => void;
 }) {
+  const urls = useUrls();
   return (
     <div className="msg-attachments">
       {numbered(items, next).map(([a, n]) =>
@@ -81,7 +81,7 @@ function QueuedChips({
           <ImageChip
             key={`image-${n}`}
             className="in-chat"
-            src={uploadUrl(a.upload)}
+            src={urls.upload(a.upload)}
             n={n}
             name={a.name}
             width={a.width}
@@ -94,7 +94,7 @@ function QueuedChips({
             className="in-chat"
             name={a.name}
             bytes={a.bytes}
-            href={a.text ? uploadUrl(a.upload) : undefined}
+            href={a.text ? urls.upload(a.upload) : undefined}
           />
         ) : a.kind === "paste" ? (
           <PasteChip

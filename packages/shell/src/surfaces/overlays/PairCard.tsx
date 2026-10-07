@@ -1,12 +1,12 @@
 import { isTailnetName, type PairMint, type TailnetPhone, tailnetLine } from "@toyon/shared";
 import { qrModules } from "@toyon/shared/qr";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useDispatch, useStore } from "../../state/context.tsx";
+import { useDispatch, useStore, useUrls } from "../../state/context.tsx";
 import { Button } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { useOnChange } from "../../ui/hooks.ts";
 import { Overlay } from "../../ui/Overlay.tsx";
-import { mintPair, pairPhones } from "../../ws.ts";
+import { type DaemonUrls, mintPair, pairPhones } from "../../ws.ts";
 import "./pair.css";
 
 /** the light margin around the modules a camera looks for, in modules, as the standard asks */
@@ -58,7 +58,7 @@ const PHONES_EVERY_MS = 3000;
 
 /** For a tailnet name, the phones Tailscale lists and whether one is connected; undefined until
  * the first answer, and for any other name. */
-function useTailnetPhones(host: string | null, waiting: boolean): TailnetPhone[] | null | undefined {
+function useTailnetPhones(urls: DaemonUrls, host: string | null, waiting: boolean): TailnetPhone[] | null | undefined {
   const [phones, setPhones] = useState<TailnetPhone[] | null>();
   const tailnet = host !== null && isTailnetName(host);
   useEffect(() => {
@@ -67,7 +67,7 @@ function useTailnetPhones(host: string | null, waiting: boolean): TailnetPhone[]
     let id: ReturnType<typeof setTimeout> | undefined;
     // the next ask waits for this answer: a phone that is off holds one for the length of a ping
     const ask = () =>
-      void pairPhones().then((p) => {
+      void pairPhones(urls).then((p) => {
         if (!live) return;
         setPhones(p);
         id = setTimeout(ask, PHONES_EVERY_MS);
@@ -77,7 +77,7 @@ function useTailnetPhones(host: string | null, waiting: boolean): TailnetPhone[]
       live = false;
       clearTimeout(id);
     };
-  }, [tailnet, waiting]);
+  }, [tailnet, waiting, urls]);
   return tailnet ? phones : undefined;
 }
 
@@ -86,6 +86,7 @@ function useTailnetPhones(host: string | null, waiting: boolean): TailnetPhone[]
  * machine to toyon.cloud. A redeem anywhere shows here as the daemon's `paired` frame. */
 export function PairCard() {
   const dispatch = useDispatch();
+  const urls = useUrls();
   const host = useStore((s) => s.remote?.host ?? null);
   const pairings = useStore((s) => s.pairings);
   const [mint, setMint] = useState<PairMint | null>(null);
@@ -99,7 +100,7 @@ export function PairCard() {
     let live = true;
     setMint(null);
     setRefused(null);
-    void mintPair().then((r) => {
+    void mintPair(urls).then((r) => {
       if (!live) return;
       pairingsAtMint.current = pairings;
       if (typeof r === "string") setRefused(r);
@@ -113,7 +114,7 @@ export function PairCard() {
   const paired = mint !== null && pairings > pairingsAtMint.current;
   const spent = mint !== null && left === 0;
   const close = () => dispatch({ a: "close" });
-  const phones = useTailnetPhones(host, !paired && !refused);
+  const phones = useTailnetPhones(urls, host, !paired && !refused);
   const note = phones === undefined ? null : tailnetLine(phones);
 
   return (
@@ -135,8 +136,8 @@ export function PairCard() {
                 "This code has expired."
               ) : (
                 <>
-                  Scan with your phone's camera. The code works once; <span className="pair-left">{left}</span> seconds
-                  left.
+                  Scan from Toyon on your phone to add this machine there, or with your phone's camera to install it as
+                  a new app. The code works once; <span className="pair-left">{left}</span> seconds left.
                 </>
               )}
             </p>

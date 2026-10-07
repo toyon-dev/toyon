@@ -8,7 +8,7 @@ import { z } from "zod";
 import { ATTACHMENTS_PER_MESSAGE, limitMessage, overLimit } from "../attachment.ts";
 import { cachePathReason } from "../cache.ts";
 import { runShared } from "../config.ts";
-import type { RemoteView } from "../daemon.ts";
+import type { Remote } from "../daemon.ts";
 import { MAX_DURATION_MS, MIN_DURATION_MS, parseDuration } from "../duration.ts";
 import type { ManagedView } from "../managed.ts";
 import type {
@@ -59,6 +59,9 @@ export type ServerMsg =
   | {
       t: "hello";
       version: string;
+      /** what this machine is called in a shell that lists several (`machineLabel`): the tailnet
+       * device name, else the hostname's first label */
+      machine: string;
       /** how this Toyon was installed: what the settings card says under the version, and whether
        * a press there can ask for a newer one */
       install: InstallMethod;
@@ -93,8 +96,10 @@ export type ServerMsg =
        * has no way to (not a Mac, or turned off where it was started), and settings has no line. */
       keepAwake: KeepAwakeMode | null;
       /** the public name when there is one, and how a shell served from it reaches each preview:
-       * `w<id>.<name>` routed by the daemon's own listener, or `<name>:<proxy port>` */
-      remote: RemoteView | null;
+       * `w<id>.<name>` routed by the daemon's own listener, or `<name>:<proxy port>`. The front
+       * too: a shell that holds sockets to several machines keeps an edge machine's open only
+       * while looking at it, since an edge bills for a connection held. */
+      remote: Remote | null;
       /** a phone has redeemed a pairing code on this machine, at any time; until one has, the desk
        * offers the code in the bar */
       paired: boolean;

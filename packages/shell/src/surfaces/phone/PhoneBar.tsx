@@ -2,7 +2,7 @@ import { isLead, sentAt } from "@toyon/shared";
 import type { ReactNode } from "react";
 import { needsYou, unseenJump } from "../../app/unseenJump.ts";
 import { archivedHint } from "../../state/actions/archive.ts";
-import { useDispatch, useStore } from "../../state/context.tsx";
+import { useDispatch, useMachine, useMachineList, useMachines, useStore } from "../../state/context.tsx";
 import {
   useActive,
   useActiveId,
@@ -55,6 +55,8 @@ export function PhoneBar({
   fold?: boolean;
 }) {
   const dispatch = useDispatch();
+  const machines = useMachines();
+  const here = useMachine();
   const reading = useStore((s) => s.reading);
   const repo = useActiveRepo();
   // the row's own project, for what is said of the row: a guest's setup is its project's to ask
@@ -71,8 +73,10 @@ export function PhoneBar({
   const home = screen === "home";
   const onLead = !home && !archivedPage && !!active && isLead(active.worktree);
   const leadOp = useStore((s) => (onLead && active ? shipShown(active, s.shipping[active.id]?.op) : null));
+  // a machine with no project open yet (just added, or speaking another protocol) is named by
+  // the machine, so the list says where it is standing
   const title = home
-    ? (repo?.name ?? null)
+    ? (repo?.name ?? machines.displayName(here.origin))
     : onLead
       ? LEAD_LINE
       : (archivedPage?.title ?? active?.worktree.title ?? foundPage?.name ?? null);
@@ -101,12 +105,14 @@ export function PhoneBar({
             : null;
   const asks = !home && !archivedPage && !!active && dotClass(active) === "waiting";
   const switching = useStore((s) => s.overlay?.kind === "projects" && s.overlay.form === "pill");
+  // the switcher lists the other machines' projects too, so one project here is still a choice
+  const machineCount = useMachineList().length;
   const commands = useStore((s) => s.overlay?.kind === "commands");
   // the two lines: what you are looking at, and its state. In the row where there are no tabs
   // (the list, or a worktree while the socket is down), in the strip under the row where there are
   const titleBlock = (
     <div className="phone-title">
-      {home && repos.length > 1 ? (
+      {home && (repos.length > 1 || machineCount > 1) ? (
         // the desk pill's form: the switcher opens over the name that was tapped, not in the
         // middle of a screen the thumb is nowhere near
         <span className="phone-drop phone-switch">

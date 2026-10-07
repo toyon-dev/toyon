@@ -3,6 +3,8 @@
 // the code in the fragment. The page trades the code for the token once. The token is never drawn,
 // printed or photographed, and a code is worth nothing two minutes later.
 
+import { isLoopbackHost } from "./daemon.ts";
+
 /** how long a code can be redeemed after it is minted */
 export const PAIR_TTL_MS = 120_000;
 
@@ -21,6 +23,28 @@ export interface PairMint {
 /** what `POST /pair/redeem` answers for a live code */
 export interface PairRedeem {
   token: string;
+}
+
+/** What a link pasted into "add a machine" names: the machine's origin and a pairing code to trade
+ * there (the link a desk's QR carries), or the origin and the token itself (the `#token=` line
+ * `toyon` prints at start, which is how two daemons on one machine pair). Null for anything else.
+ * Only https, or a loopback name over http: a token over plain http to any other name would cross
+ * a network in the clear. */
+export function parsePairLink(
+  text: string,
+): { origin: string; code: string } | { origin: string; token: string } | null {
+  let url: URL;
+  try {
+    url = new URL(text.trim());
+  } catch {
+    return null;
+  }
+  if (url.protocol !== "https:" && !(url.protocol === "http:" && isLoopbackHost(url.hostname))) return null;
+  const code = url.hash.match(/pair=([A-Za-z0-9_-]+)/)?.[1];
+  if (code) return { origin: url.origin, code };
+  const token = url.hash.match(/token=([a-f0-9]+)/)?.[1];
+  if (token) return { origin: url.origin, token };
+  return null;
 }
 
 /** a tailnet name answers only for a device connected to that tailnet, so a phone with Tailscale

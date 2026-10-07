@@ -1,4 +1,5 @@
 import { editorItems, openedOnDaemonMachine } from "../../state/actions/editor.ts";
+import { useUrls } from "../../state/context.tsx";
 import { Button } from "../../ui/Button.tsx";
 import { Icon } from "../../ui/Icon.tsx";
 import { useContextMenu } from "../../ui/menu.ts";
@@ -7,14 +8,15 @@ import { useContextMenu } from "../../ui/menu.ts";
  * another device, where none of its rows can reach an editor */
 export function OpenInMenu({ absPath, onReveal }: { absPath: string; onReveal?: () => void }) {
   const cm = useContextMenu("editor");
-  if (!openedOnDaemonMachine(location.hostname)) return null;
+  const { host } = useUrls();
+  if (!openedOnDaemonMachine(host)) return null;
   return (
     <Button
       variant="outline"
       tone="quiet"
       mono
       className="deep-link"
-      {...cm.dropdown(() => editorItems(absPath, onReveal), "right")}
+      {...cm.dropdown(() => editorItems(absPath, onReveal, host), "right")}
     >
       open in <Icon name="caret" className="icon-inline" />
     </Button>

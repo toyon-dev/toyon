@@ -17,7 +17,7 @@ import {
   stripAnsi,
   UPLOAD_MAX_BYTES,
 } from "@toyon/shared";
-import { uploadAttachment } from "../ws.ts";
+import { type DaemonUrls, uploadAttachment } from "../ws.ts";
 import type { Store } from "./context.tsx";
 import type { PendingAttachment } from "./pending.ts";
 import { chatChordAction, composerBoxOf, type State, worktreeById } from "./store.ts";
@@ -38,6 +38,15 @@ export function roomIn(store: Store, boxId: string, kind: AttachmentKind): numbe
 const RETRY_FIRST_MS = 1_000;
 const RETRY_MAX_MS = 10_000;
 
+/** Which daemon a store's uploads go to. Bound where the store is built (state/machine.ts), so the
+ * many ways bytes reach a composer (a paste, a drop, the picker, the clipboard's offer) need no
+ * thread of their own for it; a store with none bound uploads nowhere, which reads as the daemon
+ * not answering. */
+const urlsByStore = new WeakMap<Store, DaemonUrls>();
+export function bindUploads(store: Store, urls: DaemonUrls) {
+  urlsByStore.set(store, urls);
+}
+
 /** an image or a file whose chip goes up now and whose bytes follow */
 type Uploadable = Extract<PendingAttachment, { kind: "image" | "file" }>;
 
@@ -48,14 +57,16 @@ export async function attachUpload(store: Store, boxId: string, chip: Uploadable
   const { local, ...settled } = chip;
   store.dispatch({ a: "attach", id: boxId, items: [{ ...chip, upload: "", uploading: true }] });
   const waiting = () => !!store.getState().local[boxId]?.attachments.some((a) => a.key === chip.key);
-  let up = await uploadAttachment(chip.kind, blob);
+  const urls = urlsByStore.get(store);
+  const send = () => (urls ? uploadAttachment(urls, chip.kind, blob) : Promise.resolve(null));
+  let up = await send();
   // The daemon is not answering: the chip waits and the upload is tried again until it lands or
   // the chip is taken off. Said once, under the box, since the chip itself reads as uploading.
   const waited = up === null;
   if (waited) noticeIn(store, boxId, `${chip.name}: Toyon is not answering; it attaches once it is back`);
   for (let wait = RETRY_FIRST_MS; up === null && waiting(); wait = Math.min(wait * 2, RETRY_MAX_MS)) {
     await new Promise((done) => setTimeout(done, wait));
-    if (waiting()) up = await uploadAttachment(chip.kind, blob);
+    if (waiting()) up = await send();
   }
   if (up === null) {
     // taken off while it waited

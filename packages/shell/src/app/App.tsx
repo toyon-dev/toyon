@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef } from "react";
-import { useDispatch, useSock, useStore, useStoreInstance } from "../state/context.tsx";
+import { useDispatch, useMachine, useSock, useStore, useStoreInstance } from "../state/context.tsx";
 import { STORAGE } from "../state/keys.ts";
 import { useActive, useActiveId, useActiveRow, useArchivedPage, useRows, useTheme } from "../state/selectors.ts";
 import { activeWorktreeRepoId } from "../state/store.ts";
 import { useFileDrop } from "../surfaces/chat/useIntake.ts";
 import { PhoneFrame } from "../surfaces/phone/PhoneFrame.tsx";
-import { applyTheme, bridgeThemeMsg, onPrefersDarkChange, rememberDaylight } from "../theme.ts";
+import { applyTheme, bridgeThemeMsg, rememberDaylight } from "../theme.ts";
 import { floats } from "../ui/floats.ts";
 import { useOnChange } from "../ui/hooks.ts";
 import { DeskFrame } from "./DeskFrame.tsx";
@@ -29,6 +29,9 @@ export function App() {
   const store = useStoreInstance();
   const dispatch = useDispatch();
   const sock = useSock();
+  // what this machine remembers of itself: the selection, the sections; the layout and the rail
+  // are the window's, whichever machine it shows
+  const { storage } = useMachine();
   const activeId = useActiveId();
   const activeRepoId = useStore((s) => s.activeRepoId);
   const active = useActive();
@@ -188,7 +191,6 @@ export function App() {
     applyTheme(theme, { remember: !previewing });
     previewBus.broadcast(bridgeThemeMsg(theme));
   }, [theme, previewing]);
-  useEffect(() => onPrefersDarkChange((v) => dispatch({ a: "system-dark", v })), [dispatch]);
 
   // Where the sun is has no media query behind it: the zone table lives in the daemon, so the shell
   // asks. It asks for every mode, not only the one that follows daylight, because the picker's row
@@ -219,26 +221,17 @@ export function App() {
   }, [daylight]);
 
   useEffect(() => {
-    if (!activeId) return;
-    try {
-      localStorage.setItem(STORAGE.active, activeId);
-    } catch {}
-  }, [activeId]);
+    if (activeId) storage.set(STORAGE.active, activeId);
+  }, [activeId, storage]);
   // kept for this tab alone, so a reload comes back to the row it was reading and a fresh launch
   // opens the list. The desk moves `screen` without drawing it, so only the phone writes.
   const phoneRow = useStore((s) => (s.frame === "phone" ? s.screen !== "home" : null));
   useEffect(() => {
-    if (phoneRow === null) return;
-    try {
-      sessionStorage.setItem(STORAGE.phoneRow, phoneRow ? "1" : "0");
-    } catch {}
-  }, [phoneRow]);
+    if (phoneRow !== null) storage.session.set(STORAGE.phoneRow, phoneRow ? "1" : "0");
+  }, [phoneRow, storage]);
   useEffect(() => {
-    if (!activeRepoId) return;
-    try {
-      localStorage.setItem(STORAGE.repo, activeRepoId);
-    } catch {}
-  }, [activeRepoId]);
+    if (activeRepoId) storage.set(STORAGE.repo, activeRepoId);
+  }, [activeRepoId, storage]);
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE.rail, railOpen ? "1" : "0");
@@ -258,41 +251,29 @@ export function App() {
   // and so is the selected worktree: switching projects after a reload lands where you left that
   // one, not on its main
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE.lastActive, JSON.stringify(lastActive));
-    } catch {}
-  }, [lastActive]);
+    storage.set(STORAGE.lastActive, JSON.stringify(lastActive));
+  }, [lastActive, storage]);
   // so is an opened discovered section: it is collapsed by default, and re-collapsing it on every
   // reload would make the one repo where you are watching stray worktrees the most annoying one
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE.discoveredOpen, JSON.stringify(discoveredOpen));
-    } catch {}
-  }, [discoveredOpen]);
+    storage.set(STORAGE.discoveredOpen, JSON.stringify(discoveredOpen));
+  }, [discoveredOpen, storage]);
   // and so is the archived section, for the same reason
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE.archivedOpen, JSON.stringify(archivedOpen));
-    } catch {}
-  }, [archivedOpen]);
+    storage.set(STORAGE.archivedOpen, JSON.stringify(archivedOpen));
+  }, [archivedOpen, storage]);
   // and a folded committed section, which would otherwise unfold over the work on every reload
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE.committedShut, JSON.stringify(committedShut));
-    } catch {}
-  }, [committedShut]);
+    storage.set(STORAGE.committedShut, JSON.stringify(committedShut));
+  }, [committedShut, storage]);
   // and an opened last turn section, for whoever reads the turn and not the pile
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE.turnOpen, JSON.stringify(turnOpen));
-    } catch {}
-  }, [turnOpen]);
+    storage.set(STORAGE.turnOpen, JSON.stringify(turnOpen));
+  }, [turnOpen, storage]);
   // the folders opened by hand in each files tab: a reload comes back to the tree as it was left
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE.treeOpen, JSON.stringify(treeOpen));
-    } catch {}
-  }, [treeOpen]);
+    storage.set(STORAGE.treeOpen, JSON.stringify(treeOpen));
+  }, [treeOpen, storage]);
 
   useChords();
   // only the chat panel attaches a dropped file, but the drag is intercepted app-wide: the

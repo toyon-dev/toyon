@@ -2,7 +2,7 @@ import createDOMPurify from "dompurify";
 import { marked } from "marked";
 import { useEffect, useRef, useState } from "react";
 import { STREAM_TICK_MS } from "../../state/coalesce.ts";
-import { worktreeFileUrl } from "../../ws.ts";
+import type { DaemonUrls } from "../../ws.ts";
 import { closePendingLink, PENDING_LINK } from "./linkTail.ts";
 import { dunder } from "./markdownDunder.ts";
 import { assetPath, codePath, outsidePath, worktreeLink } from "./markdownPaths.ts";
@@ -38,6 +38,8 @@ export interface MarkdownBase {
   worktreeId: string;
   dir: string;
   version: string | null;
+  /** the daemon the file is on, which serves its images */
+  urls: DaemonUrls;
 }
 
 export interface MarkdownOptions {
@@ -88,7 +90,7 @@ purify.addHook("afterSanitizeAttributes", (node) => {
   const base = rendering?.base;
   if (node.tagName === "IMG" && base) {
     const path = assetPath(base.dir, node.getAttribute("src") ?? "");
-    if (path) node.setAttribute("src", worktreeFileUrl(base.worktreeId, path, base.version));
+    if (path) node.setAttribute("src", base.urls.worktreeFile(base.worktreeId, path, base.version));
   }
 });
 
@@ -112,11 +114,14 @@ export function useMarkdown(text: string, options?: MarkdownOptions): string {
   const worktreeId = options?.base?.worktreeId;
   const dir = options?.base?.dir;
   const version = options?.base?.version;
+  const urls = options?.base?.urls;
   const fileRoot = options?.fileRoot;
   const streaming = options?.streaming;
   useEffect(() => {
     const base =
-      worktreeId !== undefined && dir !== undefined ? { worktreeId, dir, version: version ?? null } : undefined;
+      worktreeId !== undefined && dir !== undefined && urls !== undefined
+        ? { worktreeId, dir, version: version ?? null, urls }
+        : undefined;
     const at = base || fileRoot || streaming ? { base, fileRoot, streaming } : undefined;
     const since = performance.now() - lastAt.current;
     if (since >= STREAM_TICK_MS) {
@@ -129,6 +134,6 @@ export function useMarkdown(text: string, options?: MarkdownOptions): string {
       setHtml(renderMarkdown(text, at));
     }, STREAM_TICK_MS - since);
     return () => clearTimeout(t);
-  }, [text, worktreeId, dir, version, fileRoot, streaming]);
+  }, [text, worktreeId, dir, version, urls, fileRoot, streaming]);
   return html;
 }

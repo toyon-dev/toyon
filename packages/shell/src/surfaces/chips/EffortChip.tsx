@@ -1,4 +1,5 @@
 import type { ModelChoice } from "@toyon/shared";
+import { useMachine } from "../../state/context.tsx";
 import { STORAGE } from "../../state/keys.ts";
 import { usePersisted } from "../../ui/hooks.ts";
 import { DEFAULT_OPTION } from "./choiceRows.ts";
@@ -10,6 +11,7 @@ export function useNewWorktreeEffort(agentId: string | undefined): [string, (e: 
     STORAGE.effortPrefix + (agentId ?? ""),
     DEFAULT_OPTION,
     (raw) => raw ?? "",
+    useMachine().storage,
   );
   return [stored, setStored];
 }

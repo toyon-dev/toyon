@@ -4,7 +4,7 @@ import { writeCopiedSource } from "../../app/copiedSource.ts";
 import { previewBus } from "../../app/previewBus.ts";
 import { fileItems, viewsOf } from "../../state/actions/file.ts";
 import { addToChat } from "../../state/attach.ts";
-import { useDispatch, useFileSync, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
+import { useDispatch, useFileSync, useSock, useStore, useStoreInstance, useUrls } from "../../state/context.tsx";
 import type { FileSync } from "../../state/fileSync.ts";
 import { browserEnv, looseSync, NO_SYNC } from "../../state/looseSync.ts";
 import { useTheme } from "../../state/selectors.ts";
@@ -22,7 +22,6 @@ import { ErrorBoundary } from "../../ui/ErrorBoundary.tsx";
 import { useSettled } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { Pane } from "../../ui/Pane.tsx";
-import { looseFileUrl, worktreeFileUrl } from "../../ws.ts";
 import { FileViewer } from "./FileViewer.tsx";
 import { HtmlPreview } from "./HtmlPreview.tsx";
 import { MarkdownPreview } from "./MarkdownPreview.tsx";
@@ -80,6 +79,7 @@ export function EditorPane({
   const dispatch = useDispatch();
   const store = useStoreInstance();
   const sock = useSock();
+  const urls = useUrls();
   const files = useFileSync();
   const theme = useTheme();
   const { worktreeId, path, ref, since } = editor;
@@ -214,7 +214,7 @@ export function EditorPane({
         ) : viewer ? (
           <FileViewer
             kind={viewer}
-            src={grant ? looseFileUrl(grant.id, grant.version) : worktreeFileUrl(worktreeId, path, disk.version)}
+            src={grant ? urls.loose(grant.id, grant.version) : urls.worktreeFile(worktreeId, path, disk.version)}
             path={path}
             openSeq={editor.seq}
             focus={editor.focus}

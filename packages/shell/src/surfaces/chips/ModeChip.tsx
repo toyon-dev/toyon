@@ -1,4 +1,5 @@
 import { DEFAULT_PERMISSION_MODE, PERMISSION_MODES, type PermissionMode, type RepoInfo } from "@toyon/shared";
+import { useMachine } from "../../state/context.tsx";
 import { STORAGE } from "../../state/keys.ts";
 import { ChipPicker } from "../../ui/ChipPicker.tsx";
 import { cx } from "../../ui/cx.ts";
@@ -11,6 +12,7 @@ export function useNewWorktreeMode(repo: RepoInfo | null): [PermissionMode, (m: 
     STORAGE.modePrefix + (repo?.id ?? ""),
     DEFAULT_PERMISSION_MODE,
     (raw) => (PERMISSION_MODES.some((m) => m.id === raw) ? (raw as PermissionMode) : DEFAULT_PERMISSION_MODE),
+    useMachine().storage,
   );
   return [stored, setStored];
 }

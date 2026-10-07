@@ -1,7 +1,16 @@
-import { isOwned, type RepoInfo } from "@toyon/shared";
+import { isOwned, type RepoInfo, type WorktreeStatus } from "@toyon/shared";
 import { useCallback } from "react";
+import { machineItems } from "../../state/actions/machine.ts";
 import { importItems, projectItems } from "../../state/actions/project.ts";
-import { useDispatch, useSock, useStore } from "../../state/context.tsx";
+import {
+  useDispatch,
+  useMachine,
+  useMachineStore,
+  useMachines,
+  useOtherMachines,
+  useSock,
+  useStore,
+} from "../../state/context.tsx";
 import { newProjectState, type ProjectsOverlay } from "../../state/store.ts";
 import { IconButton } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
@@ -23,6 +32,12 @@ import { defaultParent, looksLikePath, type Row, rowsFor } from "./projectPicker
 export function ProjectPicker({ form }: { form: ProjectsOverlay["form"] }) {
   const dispatch = useDispatch();
   const sock = useSock();
+  const machines = useMachines();
+  const here = useMachine();
+  const hereName = machines.displayName(here.origin);
+  // the other machines' projects, each list read off that machine's store; listed under the
+  // machine's name after everything about this one
+  const others = useOtherMachines();
   const repos = useStore((s) => s.repos);
   // over the new-project view no project is the open one, so none is marked
   const current = useStore((s) => (s.newProject ? null : s.activeRepoId));
@@ -51,25 +66,12 @@ export function ProjectPicker({ form }: { form: ProjectsOverlay["form"] }) {
         entries: [...paths.entries].sort((a, b) => Number(b.isRepo) - Number(a.isRepo)),
         target: paths.target,
         answered: paths.query,
+        others,
       }),
-    [repos, paths, pending],
+    [repos, paths, pending, others],
   );
 
-  const hintFor = (r: RepoInfo) => {
-    const here = rows.filter((w) => w.repoId === r.id);
-    const mine = here.filter(isOwned).filter((w) => w.worktree.kind !== "spare");
-    const working = mine.filter(isBusy).length;
-    const n = mine.length - 1; // main is not a task
-    // "where's my stuff" is asked here, before the rail is on screen: a project with worktrees
-    // toyon did not make should say so at the point you are choosing it
-    const found = here.length - here.filter(isOwned).length;
-    const parts = [
-      n > 0 ? `${n} worktree${n === 1 ? "" : "s"}` : null,
-      working > 0 ? `${working} working` : null,
-      found > 0 ? `${found} discovered` : null,
-    ];
-    return parts.filter(Boolean).join(" · ") || undefined;
-  };
+  const hintFor = (r: RepoInfo) => hintOf(rows, r);
 
   const finish = () => dispatch({ a: "close" });
   const goBack = () => dispatch({ a: "close", back: true });
@@ -100,6 +102,15 @@ export function ProjectPicker({ form }: { form: ProjectsOverlay["form"] }) {
 
   /** the disk form: the folder button and the "open folder" row are one way in, said twice */
   const browse = () => dispatch({ a: "open", overlay: { kind: "projects", form: "disk" } });
+  /** the add-machine card takes this overlay's place */
+  const addMachine = () => dispatch({ a: "open", overlay: { kind: "add-machine" } });
+  /** a project on another machine: that machine comes on screen, open on the project */
+  const goElsewhere = (origin: string, repoId: string) => {
+    const m = machines.get(origin);
+    if (!m) return;
+    m.store.dispatch({ a: "activate-repo", id: repoId });
+    machines.activate(origin);
+  };
 
   return (
     <ListPicker<Row>
@@ -119,10 +130,15 @@ export function ProjectPicker({ form }: { form: ProjectsOverlay["form"] }) {
       filter={filter}
       // opens on the open project, as every picker opens on its current choice, so the edge and the
       // cursor start on one row; with no open project the clamp puts it on the first
-      initialIndex={(rs) => rs.findIndex((r) => r.kind === "repo" && r.repo.id === current)}
+      initialIndex={(rs) => rs.findIndex((r) => r.kind === "repo" && !r.machine && r.repo.id === current)}
+      // each machine's projects under its name, this machine's first; with one machine listed no
+      // head is drawn, since the rows then say what they are themselves
+      groupOf={(r) => (r.kind === "repo" && r.machine ? r.machine.name : hereName)}
       keyOf={(r) =>
         r.kind === "repo"
-          ? r.repo.id
+          ? r.machine
+            ? `${r.machine.origin}:${r.repo.id}`
+            : r.repo.id
           : r.kind === "dir"
             ? `d:${r.entry.path}`
             : r.kind === "open"
@@ -135,9 +151,13 @@ export function ProjectPicker({ form }: { form: ProjectsOverlay["form"] }) {
                     ? "new-project"
                     : r.kind === "disk"
                       ? "open-folder"
-                      : `new:${r.parent ?? ""}/${r.name}`
+                      : r.kind === "add-machine"
+                        ? "add-machine"
+                        : `new:${r.parent ?? ""}/${r.name}`
       }
-      rowClass={(r) => cx("picker-row", (r.kind === "new" || r.kind === "disk") && "new-project-row")}
+      rowClass={(r) =>
+        cx("picker-row", (r.kind === "new" || r.kind === "disk" || r.kind === "add-machine") && "new-project-row")
+      }
       onQuery={onQuery}
       // a folder completes to itself with a trailing slash, so tab keeps walking down the tree
       completionOf={(r) => (r.kind === "dir" ? (r.entry.isRepo ? r.entry.path : `${r.entry.path}/`) : null)}
@@ -151,8 +171,10 @@ export function ProjectPicker({ form }: { form: ProjectsOverlay["form"] }) {
         if (r.kind === "new") return ask("create", "");
         // the disk form replaces this one, so this returns ahead of the close below too
         if (r.kind === "disk") return browse();
+        if (r.kind === "add-machine") return addMachine();
 
         if (r.kind === "pending") dispatch({ a: "watch-import", id: r.pending.id });
+        else if (r.kind === "repo" && r.machine) goElsewhere(r.machine.origin, r.repo.id);
         else if (r.kind === "repo") dispatch({ a: "activate-repo", id: r.repo.id });
         else if (r.kind === "open") open(r.path);
         else if (r.kind === "dir")
@@ -164,11 +186,13 @@ export function ProjectPicker({ form }: { form: ProjectsOverlay["form"] }) {
       // a project row is a project: its setup and its forget are a right-click away, as they are
       // in the palette; a clone still running can be stopped from its row
       rowMenu={(r) =>
-        r.kind === "repo"
-          ? projectItems(r.repo, current, { sock, dispatch })
-          : r.kind === "pending"
-            ? importItems(r.pending, { sock, dispatch })
-            : []
+        r.kind === "repo" && r.machine
+          ? machineItems(machines, r.machine.origin)
+          : r.kind === "repo"
+            ? projectItems(r.repo, current, { sock, dispatch })
+            : r.kind === "pending"
+              ? importItems(r.pending, { sock, dispatch })
+              : []
       }
       placeholder={repos.length > 1 ? "switch project, or type a name or path" : "type a name or a path to start"}
       keys={(active) => ({
@@ -188,13 +212,19 @@ export function ProjectPicker({ form }: { form: ProjectsOverlay["form"] }) {
                     ? "starts one"
                     : active?.kind === "disk"
                       ? "browses"
-                      : "opens",
+                      : active?.kind === "add-machine"
+                        ? "adds one"
+                        : active?.kind === "repo" && active.machine
+                          ? "switches machine"
+                          : "opens",
         back: "closes",
       })}
       // an empty query always has the standing rows, so there is always something typed here
       empty="nothing here; keep typing a path (~/… or /…)"
       row={(r) =>
-        r.kind === "repo" ? (
+        r.kind === "repo" && r.machine ? (
+          <PaletteRow label={r.repo.name} hint={<MachineRepoHint origin={r.machine.origin} repo={r.repo} />} />
+        ) : r.kind === "repo" ? (
           <PaletteRow label={r.repo.name} current={r.repo.id === current} hint={hintFor(r.repo)} />
         ) : r.kind === "pending" ? (
           <PaletteRow label={r.pending.name} hint={r.pending.error ? "import failed" : "importing…"} />
@@ -222,12 +252,46 @@ export function ProjectPicker({ form }: { form: ProjectsOverlay["form"] }) {
               </>
             }
           />
+        ) : r.kind === "add-machine" ? (
+          <PaletteRow
+            label={
+              <>
+                <Icon name="globe" className="icon-inline" />
+                add a machine
+              </>
+            }
+          />
         ) : (
           <PaletteRow label={`create ${r.name}`} hint={r.parent ? `in ${r.parent}` : "new project"} />
         )
       }
     />
   );
+}
+
+/** the worktree counts a project on this machine shows, read from `rows` */
+function hintOf(rows: readonly WorktreeStatus[], r: RepoInfo): string | undefined {
+  const here = rows.filter((w) => w.repoId === r.id);
+  const mine = here.filter(isOwned).filter((w) => w.worktree.kind !== "spare");
+  const working = mine.filter(isBusy).length;
+  const n = mine.length - 1; // main is not a task
+  // "where's my stuff" is asked here, before the rail is on screen: a project with worktrees
+  // toyon did not make should say so at the point you are choosing it
+  const found = here.length - here.filter(isOwned).length;
+  const parts = [
+    n > 0 ? `${n} worktree${n === 1 ? "" : "s"}` : null,
+    working > 0 ? `${working} working` : null,
+    found > 0 ? `${found} discovered` : null,
+  ];
+  return parts.filter(Boolean).join(" · ") || undefined;
+}
+
+/** the same counts for a project on another machine, read off that machine's store */
+function MachineRepoHint({ origin, repo }: { origin: string; repo: RepoInfo }) {
+  const machines = useMachines();
+  const machine = machines.get(origin);
+  const rows = useMachineStore(machine ?? machines.active(), (s) => s.rows);
+  return <>{machine ? hintOf(rows, repo) : null}</>;
 }
 
 /** "github.com" out of a URL, for the hint on a clone row. Best effort: a hint is not worth a throw */

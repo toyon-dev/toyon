@@ -1,5 +1,6 @@
 import { useStore } from "../../state/context.tsx";
 import { useActiveId, useOverlay } from "../../state/selectors.ts";
+import { AddMachine } from "./AddMachine.tsx";
 import { AgentPage } from "./AgentPage.tsx";
 import { AgentPicker } from "./AgentPicker.tsx";
 import { AppearancePicker } from "./AppearancePicker.tsx";
@@ -38,6 +39,7 @@ export function Overlays() {
       )}
       {overlay?.kind === "keys" && <KeysHelp />}
       {overlay?.kind === "pair" && <PairCard />}
+      {overlay?.kind === "add-machine" && <AddMachine />}
       {overlay?.kind === "theme" && <ThemePicker slot={overlay.slot} />}
       {overlay?.kind === "appearance" && <AppearancePicker />}
       {overlay?.kind === "keep-awake" && <KeepAwakePicker />}

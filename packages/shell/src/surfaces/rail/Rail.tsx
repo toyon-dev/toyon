@@ -18,7 +18,7 @@ import {
   worktreeActions,
   worktreeItems,
 } from "../../state/actions/worktree.ts";
-import { useDispatch, useSock, useStore } from "../../state/context.tsx";
+import { useDispatch, useSock, useStore, useUrls } from "../../state/context.tsx";
 import { profileOf } from "../../state/profiles.ts";
 import {
   useActiveId,
@@ -88,6 +88,7 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
   const tipSide: TipPlacement = useStore((s) => s.chatSide) === "left" ? "right" : "left";
   const dispatch = useDispatch();
   const sock = useSock();
+  const { host } = useUrls();
   const worktrees = useVisibleWorktrees();
   // the lead (the spare, or main without one) is above the tasks (railOrder.ts): the row new work
   // is typed in. It wears what main itself says, since main is not a row while the spare stands
@@ -225,9 +226,9 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
       ? worktreeItems(w, repoOf(w), { layout, shipping, frame, repos }, deps, {
           // no graft line on a guest: nothing on this rail is of its project
           ...(originOf(w) ? {} : { graft: graftWith }),
-          hostname: location.hostname,
+          hostname: host,
         })
-      : discoveredItems(w, { clientId, frame }, deps, location.hostname);
+      : discoveredItems(w, { clientId, frame }, deps, host);
 
   /* the archive keeps its own count column, reserved list-wide the way the worktrees' are, and not
      drawn at all when no archived row has a number to put in it */

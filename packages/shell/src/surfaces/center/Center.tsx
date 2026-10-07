@@ -1,9 +1,17 @@
 import { isLead, isOwned, parseBridgeMsg } from "@toyon/shared";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { previewBus } from "../../app/previewBus.ts";
 import { nextSeq } from "../../state/actions/file.ts";
 import { attachPick } from "../../state/attach.ts";
-import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
+import {
+  useDispatch,
+  useMachine,
+  useMachines,
+  useSock,
+  useStore,
+  useStoreInstance,
+  useUrls,
+} from "../../state/context.tsx";
 import { STORAGE } from "../../state/keys.ts";
 import { openSource } from "../../state/openSource.ts";
 import {
@@ -45,6 +53,7 @@ function renavigate(el: HTMLIFrameElement | undefined) {
  * never will gives way to the boot pane that says what its procs are doing. */
 const CARRY_MS = 8_000;
 
+import { previewsGated, useGrantedUrls } from "../../state/previewGrant.ts";
 import { View } from "../../ui/View.tsx";
 import { ChatPanel } from "../chat/ChatPanel.tsx";
 import { fileDrop, noteFileDrag, plainDrop } from "../chat/useIntake.ts";
@@ -104,6 +113,9 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
   const heard = useStore((s) => s.heard);
   const connectFailure = useStore((s) => s.connectFailure);
   const remote = useStore((s) => s.remote);
+  const { host } = useUrls();
+  const machine = useMachine();
+  const machines = useMachines();
   const editor = useStore((s) => s.editor);
   // an empty project asks what to build before it asks how to start; the panes a previous project
   // left open (a project never laid out adopts what is on screen) hide, not close, until then, and
@@ -176,9 +188,12 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
   const deadFrames = useRef(new Set<string>());
   const helloSinceLoad = useRef(new Set<string>());
 
+  // navigate a dead frame again: on another machine with a fresh code, since the one in its
+  // address was spent by the request that opened it
+  const reopen = useRef((id: string) => renavigate(frameRefs.current.get(id)));
   useEffect(() => {
     previewBus.post = (id, m) => {
-      if (m.type === "reload" && deadFrames.current.has(id)) return renavigate(frameRefs.current.get(id));
+      if (m.type === "reload" && deadFrames.current.has(id)) return reopen.current(id);
       frameRefs.current.get(id)?.contentWindow?.postMessage({ __toyon: true, ...m }, originRefs.current.get(id) ?? "*");
     };
     previewBus.broadcast = (m) => {
@@ -382,10 +397,23 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
   useEffect(() => {
     setLoadedFrames((l) => (l.every((id) => mounted.includes(id)) ? l : l.filter((id) => mounted.includes(id))));
   }, [mounted]);
-  const frames = rows
-    .filter(isOwned)
-    .filter((w) => mounted.includes(w.id))
-    .map((w) => ({ id: w.worktree.id, port: w.worktree.proxyPort, title: w.worktree.title }));
+  const frames = useMemo(
+    () =>
+      rows
+        .filter(isOwned)
+        .filter((w) => mounted.includes(w.id))
+        .map((w) => ({
+          id: w.worktree.id,
+          port: w.worktree.proxyPort,
+          title: w.worktree.title,
+          url: previewUrl(w.worktree.id, w.worktree.proxyPort, remote, host),
+        })),
+    [rows, mounted, remote, host],
+  );
+  // each frame's address: as built here, or carrying a one-time code for another machine
+  const gated = previewsGated(machine, remote);
+  const granted = useGrantedUrls(machine, frames, gated);
+  reopen.current = (id) => (gated ? granted.renew(id) : renavigate(frameRefs.current.get(id)));
   // a dead frame's server coming back (a proc turning `running` after a restart) is its cue to
   // try again; a frame with a page on it is left alone, its app already reloads on its own
   const runningKey = frames
@@ -393,7 +421,7 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
     .map((f) => f.id)
     .join(" ");
   useOnChange([runningKey], () => {
-    for (const id of runningKey.split(" ")) if (deadFrames.current.has(id)) renavigate(frameRefs.current.get(id));
+    for (const id of runningKey.split(" ")) if (deadFrames.current.has(id)) reopen.current(id);
   });
 
   // The app on screen stays there while the one taking its place is still a blank frame, so a send
@@ -482,9 +510,10 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
     connected,
     heard,
     connectFailure,
-    hasToken: HAS_TOKEN,
+    hasToken: machine.serving ? HAS_TOKEN : true,
     projectChord: chord("project"),
     title: active?.worktree.title ?? null,
+    machine: machine.serving ? null : machines.displayName(machine.origin),
     needsSetup: !!needsSetup,
     busy,
     treeEmpty,
@@ -509,7 +538,7 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
               ref={(el) => {
                 if (el) {
                   frameRefs.current.set(f.id, el);
-                  originRefs.current.set(f.id, new URL(previewUrl(f.id, f.port, remote)).origin);
+                  originRefs.current.set(f.id, new URL(f.url).origin);
                 } else {
                   frameRefs.current.delete(f.id);
                   originRefs.current.delete(f.id);
@@ -521,7 +550,9 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
                 if (helloSinceLoad.current.delete(f.id)) deadFrames.current.delete(f.id);
                 else deadFrames.current.add(f.id);
               }}
-              src={previewUrl(f.id, f.port, remote)}
+              // no address yet (the code for another machine still on its way): the frame waits
+              // unmounted rather than opening an address it would be refused at
+              src={granted.urlOf(f.id) ?? undefined}
               title={f.title}
               style={{
                 display: f.id === shownId && !setupRepo && !watching && !bare && !chatCentred ? "block" : "none",
@@ -559,7 +590,9 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
                 !setupRepo &&
                 !watching &&
                 !greenfield &&
-                incompatible && <UpdatedCard />}
+                incompatible && (
+                  <UpdatedCard foreign={machine.serving ? undefined : machines.displayName(machine.origin)} />
+                )}
               {!activeReady &&
                 !activeDiscovered &&
                 !archivedPage &&

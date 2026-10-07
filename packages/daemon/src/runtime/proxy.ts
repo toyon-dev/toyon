@@ -10,7 +10,7 @@
 
 import type { Remote } from "@toyon/shared";
 import type { ServerWebSocket } from "bun";
-import { door, passPreview, setsGrant } from "../core/remote.ts";
+import { door, type PreviewGate, passPreview, setsGrant } from "../core/remote.ts";
 
 export interface PreviewData {
   upstream: WebSocket;
@@ -209,8 +209,9 @@ export function startProxy(
     hostname: string;
     /** the public name, whose front may forward this port (core/remote.ts) */
     remote: Remote | null;
-    /** what a preview reached through the public name must carry */
-    grant: string;
+    /** what a preview reached through the public name is checked against; null with no public name,
+     * when the door never answers "preview" */
+    gate: PreviewGate | null;
     /** message from the injected bridge script (element picker etc.) */
     onBridgeMessage?: (msg: unknown) => void;
   },
@@ -226,7 +227,8 @@ export function startProxy(
       if (d.kind === "refused") return d.response;
       let admitted = req;
       if (d.kind === "preview") {
-        const pass = passPreview(req, opts.grant);
+        if (!opts.gate) return new Response("forbidden", { status: 403 });
+        const pass = passPreview(req, opts.gate);
         if (!pass.ok) return pass.response;
         admitted = pass.req;
       }

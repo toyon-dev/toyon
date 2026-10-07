@@ -21,9 +21,9 @@ import { fireAndForget, log } from "../core/log.ts";
 import type { Paths } from "../core/paths.ts";
 import type { GroupEntry, StateStore } from "../core/state.ts";
 import { type ForwardOpts, type ForwardTarget, type ProcForwarder, startForward } from "./forward.ts";
-import { reclaimGroup } from "./kill.ts";
+import { groupAlive, reclaimGroup } from "./kill.ts";
 import { bootId, type PsRow, psGroups } from "./memory.ts";
-import { type Orphan, orphansIn, strayAdapters } from "./orphans.ts";
+import { type Orphan, orphansIn, strayAdapters, strayProcs } from "./orphans.ts";
 import { type PortLease, proxyPorts } from "./ports.ts";
 import { EMPTY_RUN, expandEnv, type ResolvedRun, resolveRun } from "./profile.ts";
 import { type ProxyTarget, startProxy, type WorktreeProxy } from "./proxy.ts";
@@ -84,6 +84,8 @@ export interface RuntimeDeps {
   machine?: { bootId: () => Promise<string | null>; psGroups: () => Promise<PsRow[]> };
   /** kills a group another daemon left; the real signal when absent */
   reclaim?: (pgid: number) => Promise<void>;
+  /** whether anything in a process group still answers a signal; the real check when absent */
+  groupAlive?: (pgid: number) => boolean;
   /** Toyon's own tools for each worktree's agent, over MCP (agent/mcp.ts); absent in tests */
   mcp?: Pick<ToyonMcp, "open" | "close">;
   /** factories, overridable so tests run without spawning anything. `onProcess` is told when the
@@ -1161,7 +1163,9 @@ export class RuntimeRegistry {
   /** The ledger entry for a worktree, rebuilt from what is live: each proc's pty, the adapter,
    * the shell, the login, or a found worktree's loose shell. Live ptys only, never `ProcState.pid`,
    * which a crash leaves set. An entry keeps its first `startedAt` across rebuilds; the reclaim
-   * matches a leader's start against it. */
+   * matches a leader's start against it. A group whose handle has gone while something in it still
+   * answers stays on the books: this daemon has nothing left to kill it with, and the next one
+   * reads the ledger. */
   private recordGroups(id: string) {
     const rt = this.runtimes.get(id) ?? this.stopping.get(id);
     const live: Array<{ name: string; pgid: number }> = [];
@@ -1180,13 +1184,19 @@ export class RuntimeRegistry {
     const before = new Map(this.deps.state.groups(id).map((g) => [g.pgid, g]));
     const now = Date.now();
     const next: GroupEntry[] = live.map((g) => ({ ...g, startedAt: before.get(g.pgid)?.startedAt ?? now }));
+    const alive = this.deps.groupAlive ?? groupAlive;
+    for (const [pgid, g] of before) {
+      if (!live.some((l) => l.pgid === pgid) && alive(pgid)) next.push(g);
+    }
     this.deps.state.setGroups(id, next);
   }
 
   /** Kill what the last daemon left running: the groups its ledger names that are still up with
-   * no daemon over them, and any adapter reparented to init. Before anything is spawned, so the
-   * memory and the ports come back before the first wake takes them. Then the ledger starts over
-   * under this boot. */
+   * no daemon over them, any adapter reparented to init, and anything reparented to init that runs
+   * from a worktree directory no record names (the ledger can lose a group to a crash before its
+   * write, or to a daemon from before it was kept). Before anything is spawned, so the memory and
+   * the ports come back before the first wake takes them. Then the ledger starts over under this
+   * boot. */
   async reclaimOrphans(): Promise<void> {
     const machine = this.deps.machine ?? { bootId, psGroups };
     const [boot, rows] = await Promise.all([machine.bootId(), machine.psGroups()]);
@@ -1197,6 +1207,12 @@ export class RuntimeRegistry {
       if (seen.has(row.pgid)) continue;
       seen.add(row.pgid);
       found.push({ worktreeId: "daemon", pgid: row.pgid, name: "adapter" });
+    }
+    const livePaths = new Set(state.worktrees.map((w) => w.path));
+    for (const o of strayProcs(rows, this.deps.paths.worktreesDir, livePaths)) {
+      if (seen.has(o.pgid)) continue;
+      seen.add(o.pgid);
+      found.push(o);
     }
     const reclaim = this.deps.reclaim ?? reclaimGroup;
     await Promise.all(

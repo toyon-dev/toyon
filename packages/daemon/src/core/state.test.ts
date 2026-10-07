@@ -105,27 +105,31 @@ describe("state", () => {
 });
 
 describe("process group ledger", () => {
-  test("load prunes groups whose worktree is gone and keeps a found worktree's", () => {
+  test("load prunes groups whose worktree is gone and keeps a found worktree's and the daemon's", () => {
     const g = [{ pgid: 1, name: "web", startedAt: 0 }];
     saveState(paths, {
       repos: [],
       worktrees: [wt("a")],
       sessions: {},
-      groups: { a: g, "disc-0123456789ab": g, gone: g },
+      groups: { a: g, "disc-0123456789ab": g, daemon: g, gone: g },
       bootAt: "b1",
     });
     const loaded = loadState(paths);
-    expect(Object.keys(loaded.groups ?? {}).sort()).toEqual(["a", "disc-0123456789ab"]);
+    expect(Object.keys(loaded.groups ?? {}).sort()).toEqual(["a", "daemon", "disc-0123456789ab"]);
     expect(loaded.bootAt).toBe("b1");
   });
 
-  test("a removed worktree takes its groups with it", () => {
-    const store = new StateStore(paths, { repos: [], worktrees: [wt("a")], sessions: {} });
+  test("a removed worktree hands the groups still on it to the daemon's bucket", () => {
+    const store = new StateStore(paths, { repos: [], worktrees: [wt("a"), wt("b")], sessions: {} });
     store.setGroups("a", [{ pgid: 1, name: "web", startedAt: 0 }]);
     expect(store.allGroups()).toEqual([{ worktreeId: "a", pgid: 1, name: "web", startedAt: 0 }]);
     store.removeWorktree("a");
     expect(store.groups("a")).toEqual([]);
-    expect(store.allGroups()).toEqual([]);
+    expect(store.allGroups()).toEqual([{ worktreeId: "daemon", pgid: 1, name: "web", startedAt: 0 }]);
+    // a second removal adds to the bucket; one with nothing on it leaves it alone
+    store.setGroups("b", [{ pgid: 2, name: "web", startedAt: 0 }]);
+    store.removeWorktree("b");
+    expect(store.groups("daemon").map((g) => g.pgid)).toEqual([1, 2]);
   });
 
   test("setGroups coalesces into one save, and flushGroups writes now", async () => {

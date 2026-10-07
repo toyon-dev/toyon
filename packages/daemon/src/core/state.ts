@@ -55,6 +55,10 @@ export interface PersistedState {
   bootAt?: string;
 }
 
+/** the ledger's key for what a removed worktree left running: nobody's but the daemon's to
+ * reclaim, and kept where the prune of unknown worktree ids cannot reach it */
+export const DAEMON_GROUPS = "daemon";
+
 /** one process group the daemon owns */
 export interface GroupEntry {
   pgid: number;
@@ -125,9 +129,10 @@ export function loadState(paths: Paths): PersistedState {
   for (const id of Object.keys(state.seen ?? {})) {
     if (!ids.has(id) && !id.startsWith("disc-")) delete state.seen?.[id];
   }
-  // the ledger too, with the same exception: a found worktree's shell has no record here either
+  // the ledger too, with the same exception: a found worktree's shell has no record here either,
+  // and what removed worktrees left is kept on purpose
   for (const id of Object.keys(state.groups ?? {})) {
-    if (!ids.has(id) && !id.startsWith("disc-")) delete state.groups?.[id];
+    if (!ids.has(id) && !id.startsWith("disc-") && id !== DAEMON_GROUPS) delete state.groups?.[id];
   }
   if (state.modelCache) {
     state.optionCache ??= {};
@@ -258,12 +263,18 @@ export class StateStore {
     this.state.worktrees.push(wt);
     this.save();
   }
-  /** drops the record and its session id; the caller has already stopped the runtime */
+  /** drops the record and its session id; the caller has already stopped the runtime. A group
+   * still on its books is one that outlived the stop: it moves to the daemon's own bucket, so the
+   * next boot still finds it with the worktree gone */
   removeWorktree(id: string) {
     this.state.worktrees = this.state.worktrees.filter((w) => w.id !== id);
     delete this.state.sessions[id];
     if (this.state.seen) delete this.state.seen[id];
-    if (this.state.groups) delete this.state.groups[id];
+    if (this.state.groups) {
+      const left = this.state.groups[id] ?? [];
+      delete this.state.groups[id];
+      if (left.length > 0) this.state.groups[DAEMON_GROUPS] = [...(this.state.groups[DAEMON_GROUPS] ?? []), ...left];
+    }
     this.save();
   }
 

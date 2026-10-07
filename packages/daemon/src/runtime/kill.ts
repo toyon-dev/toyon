@@ -5,15 +5,26 @@ const KILL_GRACE_MS = 3000;
 /** a SIGKILLed process exits almost immediately; don't hang on a stuck one */
 const EXIT_GRACE_MS = 200;
 
-/** SIGTERM the process group, SIGKILL after 3s. Resolves once `exited` settles (or shortly after
- * the SIGKILL), so a shutdown can wait for its children instead of orphaning them, with the signal
- * that ended the group, or nothing when it was already gone. The process must own its group:
- * spawned `detached`, or setsid()'d by a pty. */
-export async function killGroup(pid: number, exited: Promise<void>): Promise<NodeJS.Signals | undefined> {
+/** SIGTERM the process group, SIGKILL after the grace. Resolves once `exited` settles and nothing
+ * in the group answers any more (or shortly after the SIGKILL), so a shutdown can wait for its
+ * children instead of orphaning them, with the signal that ended the group, or nothing when it
+ * was already gone. The leader's exit alone does not settle it: a member that handles SIGTERM
+ * itself (vite closes its server before it exits) can outlive the leader, and one whose close
+ * hangs would otherwise sit under launchd with the dead leader's group id, out of reach. The
+ * process must own its group: spawned `detached`, or setsid()'d by a pty. */
+export async function killGroup(
+  pid: number,
+  exited: Promise<void>,
+  graceMs = KILL_GRACE_MS,
+): Promise<NodeJS.Signals | undefined> {
   if (!signalGroup(pid, "SIGTERM")) return undefined;
-  if (await within(exited, KILL_GRACE_MS)) return "SIGTERM";
+  const deadline = Date.now() + graceMs;
+  if (await within(exited, graceMs)) {
+    await groupGone(pid, deadline);
+    if (!groupAlive(pid)) return "SIGTERM";
+  }
   signalGroup(pid, "SIGKILL");
-  await within(exited, EXIT_GRACE_MS);
+  await Promise.all([within(exited, EXIT_GRACE_MS), groupGone(pid, Date.now() + EXIT_GRACE_MS)]);
   return "SIGKILL";
 }
 
@@ -60,12 +71,11 @@ export function groupAlive(pgid: number): boolean {
   }
 }
 
-/** Resolves once nothing in the group answers a signal. For a group this process did not spawn,
- * which gives no exit event, or one whose leader has exited while its children hold on. Polls
- * only as long as killGroup can be waiting on it: past that it resolves regardless, so a group
- * that will not die never keeps a timer alive. */
-export function groupGone(pgid: number): Promise<void> {
-  const deadline = Date.now() + KILL_GRACE_MS + EXIT_GRACE_MS + 500;
+/** Resolves once nothing in the group answers a signal, or at `deadline`, so a group that will
+ * not die never keeps a timer alive. For a group this process did not spawn, which gives no exit
+ * event, or one whose leader has exited while its children hold on. The default deadline is as
+ * long as killGroup can be waiting on it. */
+export function groupGone(pgid: number, deadline = Date.now() + KILL_GRACE_MS + EXIT_GRACE_MS + 500): Promise<void> {
   return new Promise<void>((resolve) => {
     const poll = () => {
       if (!groupAlive(pgid) || Date.now() >= deadline) return resolve();

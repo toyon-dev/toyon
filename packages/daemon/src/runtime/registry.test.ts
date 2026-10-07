@@ -59,6 +59,8 @@ function make(
     mainLeads?: (repoId: string) => boolean;
     /** the repo on the record, for what the registry resolves on its own (a take-over reads it) */
     repo?: RepoInfo;
+    /** which fake groups still answer; none, unless a test says, since fake pids are nobody's */
+    groupAlive?: (pgid: number) => boolean;
   } = {},
 ) {
   const t = tmpRepo();
@@ -84,6 +86,7 @@ function make(
     viewed: opts.viewed,
     shown: opts.shown,
     mainLeads: opts.mainLeads,
+    groupAlive: opts.groupAlive ?? (() => false),
     ...f.factories,
   });
   return { state, hub, registry, ...f };
@@ -778,7 +781,7 @@ describe("process group ledger", () => {
     expect(state.groups(wt.id)[0]!.startedAt).toBe(first);
   });
 
-  test("sleep, stop and removal clear it", async () => {
+  test("sleep and stop clear it; a removal hands what is still on it to the daemon's bucket", async () => {
     const { registry, state, hub, procs, terminals } = make();
     await registry.start(wt, repo);
     const web = procs.get(wt.id)!.spawnFake("web");
@@ -793,7 +796,23 @@ describe("process group ledger", () => {
     expect(state.groups(wt.id)).toEqual([]);
     state.setGroups(wt.id, [{ pgid: 9, name: "web", startedAt: 0 }]);
     state.removeWorktree(wt.id);
-    expect(state.allGroups()).toEqual([]);
+    expect(state.allGroups()).toEqual([{ worktreeId: "daemon", pgid: 9, name: "web", startedAt: 0 }]);
+  });
+
+  test("a group that outlives its pty stays on the books until nothing in it answers", async () => {
+    const alive = new Set<number>();
+    const { registry, state, hub, procs } = make({ groupAlive: (pgid) => alive.has(pgid) });
+    await registry.start(wt, repo);
+    const web = procs.get(wt.id)!.spawnFake("web");
+    hub.emit("proc", wt.id, running("web", web.pid));
+    // the pty is gone but a member of its group still answers: a server stuck mid-close
+    alive.add(web.pid);
+    web.exit(0);
+    hub.emit("proc", wt.id, { ...running("web", web.pid), status: "stopped" });
+    expect(pgids(state, wt.id)).toEqual([`web:${web.pid}`]);
+    alive.delete(web.pid);
+    hub.emit("proc", wt.id, { ...running("web", web.pid), status: "stopped" });
+    expect(pgids(state, wt.id)).toEqual([]);
   });
 
   test("a loose shell is recorded under its found id and goes with the prune", () => {
@@ -805,21 +824,26 @@ describe("process group ledger", () => {
     expect(state.groups("disc-abc")).toEqual([]);
   });
 
-  test("reclaimOrphans kills what the ledger names that is still up, and stray adapters", async () => {
+  test("reclaimOrphans kills what the ledger names that is still up, stray adapters, and what a removed worktree left", async () => {
     const t = tmpRepo();
     cleanup = t.cleanup;
     const now = Date.now();
+    const wtDir = (name: string) => `${t.paths.worktreesDir}/x/${name}`;
     const state = new StateStore(t.paths, {
       repos: [repo],
-      worktrees: [{ ...wt }],
+      worktrees: [{ ...wt }, { ...wt, id: "w2", path: wtDir("wt-live") }],
       sessions: {},
       groups: { w1: [{ pgid: 500, name: "web", startedAt: now - 60_000 }] },
       bootAt: "b1",
     });
     const killed: number[] = [];
+    const vite = (name: string) => `node ${wtDir(name)}/packages/shell/node_modules/.bin/vite`;
     const rows = [
       { pid: 510, pgid: 500, ppid: 1, startedAt: now - 60_000, command: "node vite" },
       { pid: 700, pgid: 700, ppid: 1, startedAt: now - 60_000, command: `node ${t.paths.agentsDir}/claude/x.js` },
+      // a server the ledger never had, from a worktree no record names, and one from a worktree still here
+      { pid: 800, pgid: 790, ppid: 1, startedAt: now - 60_000, command: vite("wt-gone") },
+      { pid: 810, pgid: 810, ppid: 1, startedAt: now - 60_000, command: vite("wt-live") },
     ];
     const registry = new RuntimeRegistry({
       hub: new Hub(),
@@ -834,7 +858,7 @@ describe("process group ledger", () => {
       ...fakeFactories().factories,
     });
     await registry.reclaimOrphans();
-    expect(killed.sort()).toEqual([500, 700]);
+    expect(killed.sort()).toEqual([500, 700, 790]);
     expect(state.allGroups()).toEqual([]);
     expect(state.bootAt).toBe("b1");
   });

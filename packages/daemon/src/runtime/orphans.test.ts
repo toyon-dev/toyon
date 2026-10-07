@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { PsRow } from "./memory.ts";
-import { orphansIn, strayAdapters } from "./orphans.ts";
+import { orphansIn, strayAdapters, strayProcs } from "./orphans.ts";
 
 const now = 1_700_000_000_000;
 const row = (pid: number, pgid: number, ppid: number, startedAt: number, command = "node vite"): PsRow => ({
@@ -50,6 +50,32 @@ describe("orphansIn", () => {
   test("an entry past the day is dropped", () => {
     const rows = [row(501, 500, 1, now - 60_000)];
     expect(orphansIn([entry(500, now - 25 * 3_600_000)], rows, "b1", "b1", now)).toEqual([]);
+  });
+});
+
+describe("strayProcs", () => {
+  const root = "/home/me/.toyon/worktrees.noindex";
+  const vite = (wt: string) => `node ${root}/toyon/${wt}/packages/shell/node_modules/.bin/vite`;
+
+  test("what runs under init from a worktree directory no record names is reclaimed, once per group", () => {
+    // the shape a lost ledger leaves: two servers for one removed worktree, one with esbuild still under it
+    const gone = row(65510, 65506, 1, now, vite("wt-5d5e"));
+    const sibling = row(65520, 65506, 65510, now, `${root}/toyon/wt-5d5e/node_modules/.bun/esbuild --service`);
+    const second = row(65600, 65600, 1, now, vite("wt-5d5e"));
+    const kept = row(700, 700, 1, now, vite("wt-e0c0"));
+    const owned = row(701, 701, 4321, now, vite("wt-5d5e"));
+    const elsewhere = row(702, 702, 1, now, "node /usr/local/lib/node_modules/vite/bin/vite.js");
+    const live = new Set([`${root}/toyon/wt-e0c0`]);
+    expect(strayProcs([gone, sibling, second, kept, owned, elsewhere], root, live)).toEqual([
+      { worktreeId: "daemon", pgid: 65506, name: "wt-5d5e" },
+      { worktreeId: "daemon", pgid: 65600, name: "wt-5d5e" },
+    ]);
+  });
+
+  test("the directory ends at the command's next argument", () => {
+    const r = row(10, 10, 1, now, `bun run --cwd ${root}/toyon/wt-abcd dev`);
+    expect(strayProcs([r], root, new Set())).toEqual([{ worktreeId: "daemon", pgid: 10, name: "wt-abcd" }]);
+    expect(strayProcs([r], root, new Set([`${root}/toyon/wt-abcd`]))).toEqual([]);
   });
 });
 

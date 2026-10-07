@@ -43,6 +43,31 @@ export function orphansIn(
   return out;
 }
 
+/** Processes reparented to init that run from a worktree directory no record names: what a
+ * removed worktree left, whichever daemon lost track of it. A dev server carries its path in its
+ * command (`node <worktree>/packages/shell/node_modules/.bin/vite`), and a copy still on the books
+ * is left alone, whoever is over it. One orphan per group, named for the directory. */
+export function strayProcs(rows: PsRow[], worktreesDir: string, livePaths: Set<string>): Orphan[] {
+  const root = worktreesDir.endsWith("/") ? worktreesDir : `${worktreesDir}/`;
+  const seen = new Set<number>();
+  const out: Orphan[] = [];
+  for (const r of rows) {
+    if (r.ppid !== 1 || seen.has(r.pgid) || r.pgid === process.pid) continue;
+    const at = r.command.indexOf(root);
+    if (at === -1) continue;
+    // <repo>/<wt-dir>, the two segments under the root; the command's next argument ends it
+    const [repoDir, wtDir] = r.command
+      .slice(at + root.length)
+      .split(/\s/, 1)[0]!
+      .split("/");
+    if (!repoDir || !wtDir) continue;
+    if (livePaths.has(`${root}${repoDir}/${wtDir}`)) continue;
+    seen.add(r.pgid);
+    out.push({ worktreeId: "daemon", pgid: r.pgid, name: wtDir });
+  }
+  return out;
+}
+
 /** Adapter processes reparented to init: a group leader under pid 1 running from the agents
  * directory. Whatever spawned it was toyon (a probe or a sign-out runs with no worktree and is
  * never in the ledger, and a daemon from before the ledger wrote none), and its daemon is gone. */

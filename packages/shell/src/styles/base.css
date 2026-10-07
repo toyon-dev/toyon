@@ -236,6 +236,31 @@
     background: var(--row-edge-color, transparent);
   }
 
+  /* ---- meter ---- */
+  /* A fraction as a thin bar, the way the ring draws one as an arc: the fill in currentColor, the
+   track the same colour at a quarter strength so the bar reads whole at any fill. The fraction
+   rides `--meter` on the fill, 0 to 1. */
+  .meter {
+    position: relative;
+    height: 4px;
+    border-radius: 2px;
+    overflow: hidden;
+    &::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: currentColor;
+      opacity: 0.25;
+    }
+  }
+  .meter-fill {
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: calc(100% * var(--meter, 0));
+    border-radius: 2px;
+    background: currentColor;
+  }
+
   /* ---- status dots ---- */
   /* Every colour here is an ink rather than a tier: a dot is read, not run, and one that shifted as
    the pointer crossed its row would read as the proc changing state. */

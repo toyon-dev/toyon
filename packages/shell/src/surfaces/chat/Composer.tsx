@@ -84,7 +84,8 @@ import { PickChip } from "./PickChip.tsx";
 import { QuestionCard } from "./QuestionCard.tsx";
 import { type Step, stepWalk, type WalkKey } from "./recall.ts";
 import { shellCommandOf, shellContext } from "./shellMode.ts";
-import { compactAdvice, compactNudge, dollars, limitLabel, limitLevel, limitLines, tokens } from "./usage.ts";
+import { UsagePanel } from "./UsagePanel.tsx";
+import { compactAdvice, compactNudge, limitLevel, limitSummary } from "./usage.ts";
 import { attachCopied, pickAttachments, useComposerPaste } from "./useIntake.ts";
 
 /** a frozen empty list, so a selector returning it does not read as a change every render */
@@ -387,6 +388,9 @@ export function Composer({
   const ringUsage = spawning ? undefined : usage;
   const ringShown = (!!id || spawning) && !!(ringUsage || limits);
   const now = Date.now();
+  // the panel behind the ring: a click opens it, and it goes with the worktree it was about
+  const [usageOpen, setUsageOpen] = useState(false);
+  useOnChange([id], () => setUsageOpen(false));
   const compactItems = () => [
     {
       id: "compact",
@@ -1496,34 +1500,48 @@ export function Composer({
               )
             )}
             {ringShown && (
-              <IconButton
-                icon={
-                  <Ring
-                    fraction={ringUsage ? ringUsage.used / ringUsage.size : 0}
-                    level={limits ? limitLevel(limits, now) : undefined}
+              <span className="usage-knob">
+                <IconButton
+                  icon={
+                    <Ring
+                      fraction={ringUsage ? ringUsage.used / ringUsage.size : 0}
+                      level={limits ? limitLevel(limits, now) : undefined}
+                    />
+                  }
+                  tone="chrome"
+                  on={usageOpen}
+                  // the hover is the glance: one figure, one line for the windows, the nudge once
+                  // there is one. The tokens, the cost and the resets wait in the panel.
+                  label={
+                    ringUsage
+                      ? `${Math.round((100 * ringUsage.used) / ringUsage.size)}% of context`
+                      : limits
+                        ? limitSummary(limits, now)
+                        : ""
+                  }
+                  detail={[...(ringUsage && limits ? [limitSummary(limits, now)] : []), ...(nudge ? [nudge] : [])]}
+                  // a summary cannot be taken back, so a click opens the panel and compacting is
+                  // the press on its row there; a right-click keeps the menu
+                  onClick={() => setUsageOpen((o) => !o)}
+                  {...cm.contextMenu(compactItems)}
+                />
+                {usageOpen && (
+                  <UsagePanel
+                    usage={ringUsage}
+                    limits={limits}
+                    now={now}
+                    compact={{
+                      off: compactOff,
+                      advice: ringUsage ? compactAdvice(ringUsage.used / ringUsage.size) : undefined,
+                      run: () => {
+                        setUsageOpen(false);
+                        compact();
+                      },
+                    }}
+                    onClose={() => setUsageOpen(false)}
                   />
-                }
-                tone="chrome"
-                label={
-                  ringUsage
-                    ? `${Math.round((100 * ringUsage.used) / ringUsage.size)}% of context`
-                    : limits
-                      ? limitLabel(limits, now)
-                      : ""
-                }
-                detail={[
-                  ...(ringUsage
-                    ? [
-                        `${tokens(ringUsage.used)} of ${tokens(ringUsage.size)}${ringUsage.cost !== undefined ? ` · ${dollars(ringUsage.cost)} this session` : ""}${nudge ? ` · ${nudge}` : ""}`,
-                      ]
-                    : []),
-                  ...(limits ? limitLines(limits, now) : []),
-                ]}
-                // a summary cannot be taken back, so a click only opens the menu a right-click does:
-                // compacting is the press on its row
-                onClick={(e) => cm.openUnder(e.currentTarget, compactItems)}
-                {...cm.contextMenu(compactItems)}
-              />
+                )}
+              </span>
             )}
           </span>
           <span className="spawn-tools">

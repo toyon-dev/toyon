@@ -4,9 +4,9 @@ import {
   compactAdvice,
   compactNudge,
   dollars,
-  limitLabel,
   limitLevel,
-  limitLines,
+  limitRows,
+  limitSummary,
   resetWord,
   tokens,
 } from "./usage.ts";
@@ -71,40 +71,41 @@ describe("limitLevel", () => {
   });
 });
 
-describe("limitLabel", () => {
-  test("names the fullest window, and says so when none is running", () => {
-    expect(limitLabel(both, NOW)).toBe("75% of the 5-hour limit");
-    expect(limitLabel(both, NOW + 2 * HOUR)).toBe("9% of the weekly limit");
-    expect(limitLabel(both, NOW + 6 * 24 * HOUR)).toBe("plan limits reset");
+describe("limitSummary", () => {
+  test("every running window in one glance, and a word for none", () => {
+    expect(limitSummary(both, NOW)).toBe("75% of the 5-hour window, 9% of the week");
+    expect(limitSummary(both, NOW + 2 * HOUR)).toBe("9% of the week");
+    expect(limitSummary(both, NOW + 6 * 24 * HOUR)).toBe("plan windows reset");
   });
 });
 
-describe("limitLines", () => {
-  test("one line per window, worded like the agent's own usage screen", () => {
-    expect(limitLines(both, NOW, clock)).toEqual([
-      "5-hour limit: 75% used, resets t+1h",
-      "weekly limit: 9% used, resets t+120h",
+describe("limitRows", () => {
+  test("a row per window, in the order the agent's own usage screen lists them", () => {
+    expect(limitRows(both, NOW, clock)).toEqual([
+      { key: "five_hour", name: "5-hour", used: 0.75, sub: "resets t+1h" },
+      { key: "seven_day", name: "this week", used: 0.09, sub: "resets t+120h" },
     ]);
   });
 
   test("the agent's warning lands on the window it is about", () => {
-    expect(limitLines({ ...both, status: "allowed_warning" }, NOW, clock)[0]).toBe(
-      "5-hour limit: 75% used, resets t+1h, nearly out",
-    );
-    expect(limitLines({ ...both, status: "rejected" }, NOW, clock)).toEqual([
-      "5-hour limit: 75% used, resets t+1h, out until then",
-      "weekly limit: 9% used, resets t+120h",
+    expect(limitRows({ ...both, status: "allowed_warning" }, NOW, clock)[0]?.sub).toBe("resets t+1h, nearly out");
+    expect(limitRows({ ...both, status: "rejected" }, NOW, clock).map((r) => r.sub)).toEqual([
+      "resets t+1h, out until then",
+      "resets t+120h",
     ]);
-    expect(limitLines({ ...both, binding: "seven_day_opus", status: "rejected" }, NOW, clock)[0]).toBe(
-      "5-hour limit: 75% used, resets t+1h",
+    expect(limitRows({ ...both, binding: "seven_day_opus", status: "rejected" }, NOW, clock)[0]?.sub).toBe(
+      "resets t+1h",
     );
   });
 
   test("a window past its reset says so rather than showing a figure nobody has read since", () => {
-    expect(limitLines(both, NOW + 2 * HOUR, clock)[0]).toBe("5-hour limit: reset t+1h, read again on the next reply");
-    expect(limitLines({ ...both, windows: { seven_day: both.windows.seven_day } }, NOW, clock)).toEqual([
-      "weekly limit: 9% used, resets t+120h",
-    ]);
+    expect(limitRows(both, NOW + 2 * HOUR, clock)[0]).toEqual({
+      key: "five_hour",
+      name: "5-hour",
+      used: 0,
+      sub: "reset t+1h, read again on the next reply",
+    });
+    expect(limitRows({ ...both, windows: { seven_day: both.windows.seven_day } }, NOW, clock)).toHaveLength(1);
   });
 });
 

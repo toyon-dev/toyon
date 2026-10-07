@@ -36,8 +36,10 @@ export function compactNudge(fraction: number): string | undefined {
 // ---- the plan's windows, the account's rather than this worktree's ----
 
 type WindowKey = keyof AgentLimits["windows"];
-const WINDOW_NAMES: Record<WindowKey, string> = { five_hour: "5-hour limit", seven_day: "weekly limit" };
 const WINDOW_KEYS: WindowKey[] = ["five_hour", "seven_day"];
+/** the window in a phrase ("43% of the 5-hour window") and at the head of its panel row */
+const WINDOW_PHRASE: Record<WindowKey, string> = { five_hour: "the 5-hour window", seven_day: "the week" };
+const WINDOW_NAME: Record<WindowKey, string> = { five_hour: "5-hour", seven_day: "this week" };
 
 /** a window still running: one past its reset has emptied, and nothing has read it since */
 function running(limits: AgentLimits, now: number): Array<{ key: WindowKey; used: number; resetsAt: number }> {
@@ -55,11 +57,10 @@ export function limitLevel(limits: AgentLimits, now: number): number {
 
 const pct = (used: number) => `${Math.round(100 * used)}%`;
 
-/** the tooltip's first line when the ring has no context to speak of: a new worktree, whose box
- * shows the account's windows alone */
-export function limitLabel(limits: AgentLimits, now: number): string {
-  const [top] = running(limits, now).sort((a, b) => b.used - a.used);
-  return top ? `${pct(top.used)} of the ${WINDOW_NAMES[top.key]}` : "plan limits reset";
+/** the windows in one glance, for the hover: "43% of the 5-hour window, 19% of the week" */
+export function limitSummary(limits: AgentLimits, now: number): string {
+  const parts = running(limits, now).map((w) => `${pct(w.used)} of ${WINDOW_PHRASE[w.key]}`);
+  return parts.length ? parts.join(", ") : "plan windows reset";
 }
 
 /** when a window empties, for its line: the clock when that is today, the date and clock when not */
@@ -74,21 +75,31 @@ export function resetWord(resetsAt: number, now: number, locale?: string): strin
   }).format(then);
 }
 
-/** one line per window for the tooltip, the way Claude Code's own usage screen words them, with
- * the agent's warning on the window it is about. `when` words a reset time; the default reads
- * the clock in the person's locale. */
-export function limitLines(limits: AgentLimits, now: number, when = (ms: number) => resetWord(ms, now)): string[] {
+export interface LimitRow {
+  key: WindowKey;
+  name: string;
+  /** the fraction spent, as reported: past 1 when the window is overrun */
+  used: number;
+  /** the line under the bar: when it resets, with the agent's warning when the window is the one
+   * it is about; or that it has reset and nothing has read it since */
+  sub: string;
+}
+
+/** a row per window for the panel, in the order Claude Code's own usage screen lists them.
+ * `when` words a reset time; the default reads the clock in the person's locale. */
+export function limitRows(limits: AgentLimits, now: number, when = (ms: number) => resetWord(ms, now)): LimitRow[] {
   return WINDOW_KEYS.flatMap((key) => {
     const w = limits.windows[key];
     if (!w) return [];
-    const name = WINDOW_NAMES[key];
-    if (w.resetsAt <= now) return [`${name}: reset ${when(w.resetsAt)}, read again on the next reply`];
+    const name = WINDOW_NAME[key];
+    if (w.resetsAt <= now)
+      return [{ key, name, used: 0, sub: `reset ${when(w.resetsAt)}, read again on the next reply` }];
     const warn =
       limits.binding === key && limits.status === "rejected"
         ? ", out until then"
         : limits.binding === key && limits.status === "allowed_warning"
           ? ", nearly out"
           : "";
-    return [`${name}: ${pct(w.used)} used, resets ${when(w.resetsAt)}${warn}`];
+    return [{ key, name, used: w.used, sub: `resets ${when(w.resetsAt)}${warn}` }];
   });
 }

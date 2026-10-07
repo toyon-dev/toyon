@@ -95,6 +95,8 @@ const NO_PATHS: string[] = [];
 
 /** the keys that move the caret along the text: pressing one in a recalled message is starting to edit it */
 const CARET_KEYS = new Set(["ArrowLeft", "ArrowRight", "Home", "End", "PageUp", "PageDown"]);
+/** a sweep across the chips should not flash the ring's panel up; the wait a tooltip takes */
+const USAGE_HOVER_MS = 150;
 
 /** the next step on the work, as the word leading the empty box's line */
 type Verb = {
@@ -391,9 +393,18 @@ export function Composer({
   const ringUsage = spawning ? undefined : usage;
   const ringShown = (!!id || spawning) && !!(ringUsage || limits);
   const now = Date.now();
-  // the panel behind the ring: a click opens it, and it goes with the worktree it was about
-  const [usageOpen, setUsageOpen] = useState(false);
-  useOnChange([id], () => setUsageOpen(false));
+  // The panel behind the ring is its hover: up after the pause a tooltip takes, while the pointer
+  // rests on the ring or on the panel. A click pins it, which is when the compact row joins it.
+  // Both go with the worktree they were about.
+  const [usageHover, setUsageHover] = useState(false);
+  const [usagePinned, setUsagePinned] = useState(false);
+  const usageTimer = useRef(0);
+  const closeUsage = () => {
+    window.clearTimeout(usageTimer.current);
+    setUsageHover(false);
+    setUsagePinned(false);
+  };
+  useOnChange([id], closeUsage);
   const compactItems = () => [
     {
       id: "compact",
@@ -1521,7 +1532,19 @@ export function Composer({
               )
             )}
             {ringShown && (
-              <span className="usage-knob">
+              // the panel is a DOM child of this wrapper even in the top layer, so leaving it and
+              // the ring together is the one mouseleave
+              <span
+                className="usage-knob"
+                onMouseEnter={() => {
+                  window.clearTimeout(usageTimer.current);
+                  usageTimer.current = window.setTimeout(() => setUsageHover(true), USAGE_HOVER_MS);
+                }}
+                onMouseLeave={() => {
+                  window.clearTimeout(usageTimer.current);
+                  setUsageHover(false);
+                }}
+              >
                 <IconButton
                   icon={
                     <Ring
@@ -1530,9 +1553,10 @@ export function Composer({
                     />
                   }
                   tone="chrome"
-                  on={usageOpen}
-                  // the hover is the glance: one figure, one line for the windows, the nudge once
-                  // there is one. The tokens, the cost and the resets wait in the panel.
+                  on={usagePinned}
+                  // the panel is the hover; the name is the screen reader's, with the nudge once
+                  // there is one
+                  silent
                   label={
                     ringUsage
                       ? `${Math.round((100 * ringUsage.used) / ringUsage.size)}% of context`
@@ -1541,25 +1565,33 @@ export function Composer({
                         : ""
                   }
                   detail={[...(ringUsage && limits ? [limitSummary(limits, now)] : []), ...(nudge ? [nudge] : [])]}
-                  // a summary cannot be taken back, so a click opens the panel and compacting is
+                  // a summary cannot be taken back, so a click pins the panel and compacting is
                   // the press on its row there; a right-click keeps the menu
-                  onClick={() => setUsageOpen((o) => !o)}
+                  onClick={() => setUsagePinned((o) => !o)}
                   {...cm.contextMenu(compactItems)}
                 />
-                {usageOpen && (
+                {(usageHover || usagePinned) && (
+                  // keyed on the pin: the hover's float was opened by no press, so the click that
+                  // pins it is an outside press to the stack and closes it. Mounting a new float in
+                  // that click makes the ring its trigger, whose next press toggles it closed.
                   <UsagePanel
+                    key={usagePinned ? "pinned" : "hover"}
                     usage={ringUsage}
                     limits={limits}
                     now={now}
-                    compact={{
-                      off: compactOff,
-                      advice: ringUsage ? compactAdvice(ringUsage.used / ringUsage.size) : undefined,
-                      run: () => {
-                        setUsageOpen(false);
-                        compact();
-                      },
-                    }}
-                    onClose={() => setUsageOpen(false)}
+                    compact={
+                      usagePinned
+                        ? {
+                            off: compactOff,
+                            advice: ringUsage ? compactAdvice(ringUsage.used / ringUsage.size) : undefined,
+                            run: () => {
+                              closeUsage();
+                              compact();
+                            },
+                          }
+                        : undefined
+                    }
+                    onClose={closeUsage}
                   />
                 )}
               </span>

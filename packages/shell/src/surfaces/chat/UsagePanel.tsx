@@ -15,9 +15,10 @@ const STALE_MS = 5 * 60_000;
 
 /**
  * The figures behind the ring, a bar each: this worktree's context, then the account's plan
- * windows, with what each one resets to under it. The one press they lead to, compacting, sits at
- * the foot behind a rule, so a click on the ring shows before it does. Anchored to the ring's
- * wrapper; a press outside, or Escape, closes it.
+ * windows, with when each one resets under it. This is the ring's hover, in place of a tooltip,
+ * so the reset times are a glance away. A click pins it and adds the one press the figures lead
+ * to, compacting, at the foot behind a rule; a press outside, or Escape, closes it. Anchored to
+ * the ring's wrapper.
  */
 export function UsagePanel({
   usage,
@@ -29,13 +30,14 @@ export function UsagePanel({
   usage: UsageFigures | undefined;
   limits: AgentLimits | undefined;
   now: number;
-  /** the compact row: why it is off, else the advice under it, and what the press does */
-  compact: { off?: string; advice?: string; run: () => void };
+  /** the compact row, once the panel is pinned: why it is off, else the advice under it, and
+   * what the press does. Absent while the panel is only being looked at. */
+  compact?: { off?: string; advice?: string; run: () => void };
   onClose: () => void;
 }) {
   const rows = limits ? limitRows(limits, now) : [];
   const stale = limits && now - limits.at > STALE_MS ? spanWords(now - limits.at) : null;
-  const cost = usage?.cost !== undefined ? ` · ${dollars(usage.cost)} this session` : "";
+  const cost = usage?.cost !== undefined ? ` · ${dollars(usage.cost)}` : "";
   return (
     <Float
       className="usage-panel"
@@ -60,11 +62,15 @@ export function UsagePanel({
         <Meter key={r.key} name={r.name} used={r.used} sub={r.sub} />
       ))}
       {stale && <div className="usage-stale hint">read {stale} ago</div>}
-      <hr className="usage-rule" />
-      <button type="button" className="row usage-compact" disabled={!!compact.off} onClick={compact.run}>
-        <span>compact the context</span>
-        <span className="usage-detail hint">{compact.off ?? compact.advice}</span>
-      </button>
+      {compact && (
+        <>
+          <hr className="usage-rule" />
+          <button type="button" className="row usage-compact" disabled={!!compact.off} onClick={compact.run}>
+            <span>compact the context</span>
+            <span className="usage-detail hint">{compact.off ?? compact.advice}</span>
+          </button>
+        </>
+      )}
     </Float>
   );
 }

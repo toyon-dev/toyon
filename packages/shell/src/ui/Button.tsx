@@ -122,6 +122,9 @@ type IconProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, "children" | "ari
     detail?: string | string[];
     /** the sibling verb and its key, a row under the tooltip's text */
     also?: TipAlso;
+    /** the name is the screen reader's alone: the control shows a box of its own on hover (the
+     * composer's ring opens its figures), and a tooltip over that box would be a second one */
+    silent?: boolean;
     /** a mark over the glyph's corner, positioned by the caller's class: the composer's terminal
      * button wears a dot while a proc is down. A slot rather than children, so the glyph stays the
      * one thing an icon button draws. */
@@ -135,6 +138,7 @@ export function IconButton({
   hint,
   detail,
   also,
+  silent,
   badge,
   tone,
   on,
@@ -143,8 +147,9 @@ export function IconButton({
   ...rest
 }: IconProps) {
   const cls = cx("btn-icon", tone && TONE[tone], on && "on", className);
+  const named = tip(label, hint, { detail, also });
   return (
-    <button className={cls} type={type} {...tip(label, hint, { detail, also })} {...rest}>
+    <button className={cls} type={type} {...(silent ? { "aria-label": named["aria-label"] } : named)} {...rest}>
       {typeof icon === "string" ? <Icon name={icon} /> : icon}
       {badge}
     </button>

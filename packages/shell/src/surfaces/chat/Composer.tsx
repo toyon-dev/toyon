@@ -346,6 +346,9 @@ export function Composer({
   // here, and then the word waits for the turn to end and the check to run on what it left.
   const holds = !!verdict?.ready && !verdict.stale && !landingLine(verdict, dirty, quick, agentInfo?.name);
   const landing = blank && (!midTurn || holds) ? verdict : undefined;
+  // a message the commit box can take: the panel draws its field only over uncommitted work, and
+  // a verdict keeps its subject past a commit made outside toyon, so the subject alone is not it
+  const messageEditable = dirty > 0 && !!landing?.subject;
   // what would land: the uncommitted files, or the committed ones when the tree is clean
   const landCount = dirty || (git?.committed?.length ?? 0);
   // the verb's states, in order: landed and nothing since (the box offers the one thing left,
@@ -637,7 +640,7 @@ export function Composer({
                     landFacts(landing, landCount),
                     behindFact(base, active?.behind),
                     shipHow,
-                    landing.subject ? "Tab edits the message first." : "",
+                    landing.subject && dirty > 0 ? "Tab from the word edits the message first." : "",
                   ]
                     .filter(Boolean)
                     .join(" "),
@@ -1333,12 +1336,22 @@ export function Composer({
                 return;
               }
               if (walk && CARET_KEYS.has(e.key)) keepRecalled();
-              // tab in the empty box, with a message suggested: the changes panel is where a commit
-              // message is edited (Enter breaks its lines there), so tab goes there with it
-              if (e.key === "Tab" && !e.shiftKey && text === "" && landing?.subject) {
-                e.preventDefault();
-                dispatch({ a: "edit-commit" });
-                return;
+              // tab in the empty box has one order whatever the word is: the word first, then the
+              // commit message, when there is one to edit. Focused by name rather than left to the
+              // browser, so a control between the field and the ghost never takes the press. With
+              // no word offered the message is next, as it is from the word.
+              if (e.key === "Tab" && !e.shiftKey && text === "") {
+                const word = e.currentTarget.closest(".composer")?.querySelector<HTMLButtonElement>(".composer-verb");
+                if (word && !word.disabled) {
+                  e.preventDefault();
+                  word.focus();
+                  return;
+                }
+                if (messageEditable) {
+                  e.preventDefault();
+                  dispatch({ a: "edit-commit" });
+                  return;
+                }
               }
               // an on-screen keyboard has no shift to hold with return, so there return breaks the
               // line and the button in the row below sends; a hardware keyboard on the same screen
@@ -1397,6 +1410,14 @@ export function Composer({
                       disabled={!!verb.ships && !!op}
                       {...tip(verb.tip, undefined, { placement: "top" })}
                       onClick={verb.run}
+                      // the step after the word: the changes panel is where a commit message is
+                      // edited (Enter breaks its lines there), so tab goes there with the message
+                      onKeyDown={(e) => {
+                        if (e.key === "Tab" && !e.shiftKey && messageEditable) {
+                          e.preventDefault();
+                          dispatch({ a: "edit-commit" });
+                        }
+                      }}
                     >
                       {verb.word}
                     </Button>

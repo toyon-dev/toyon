@@ -32,15 +32,15 @@ export interface ChordLabel {
  * it is reached for, not at the end of its section. Nothing sorts by key: a person scans for the
  * verb and reads the key beside it. */
 export const CHORD_LABELS: Record<ChordId, ChordLabel> = {
-  commands: { label: "command palette", section: "Find", advertise: { key: "F1", when: "firefox" } },
   "quick-open": { label: "jump to file", section: "Find" },
+  commands: { label: "command palette", section: "Find", advertise: { key: "F1", when: "firefox" } },
   search: { label: "search in files", section: "Find" },
   chats: { label: "search in chats", section: "Find" },
   pick: { label: "element to chat", section: "Preview" },
   inspect: { label: "element to code", section: "Preview" },
+  zen: { label: "full-bleed preview", section: "Preview" },
   routes: { label: "go to page", section: "Preview" },
   reload: { label: "reload the preview", section: "Preview" },
-  zen: { label: "full-bleed preview", section: "Preview" },
   // never on the card: they are the browser's own back and forward keys, and the hand already has
   // them; the bar's arrows carry the hint for anyone who wonders
   back: { label: "back in the preview", section: "Preview", hidden: true },

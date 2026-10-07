@@ -116,6 +116,7 @@ import { runSetup } from "../runtime/setup.ts";
 import { type ArchiveRecord, type ChatFiles, firstPrompt, lastUsage, summarize, WorktreeArchive } from "./archive.ts";
 import { ArchivedGit } from "./archivedGit.ts";
 import type { ArtifactCache } from "./cache.ts";
+import { COUNTS_FLOOR_MS, Counts, type RowCounts } from "./counts.ts";
 import { discoverIn, type FoundWorktree } from "./discover.ts";
 import type { FixService } from "./fix.ts";
 import { branchSlug, cleanTitle, freeSlot, shortId, titleFrom, variantLens } from "./naming.ts";
@@ -253,6 +254,12 @@ function withCarry(context: string[] | undefined, c: Carried): string[] | undefi
   return [...(context ?? []), line];
 }
 
+/** every row and trunk a frame carries numbers for */
+const idsOf = (rows: readonly { id: string }[], trunks: Record<string, TrunkStatus>) => [
+  ...rows.map((r) => r.id),
+  ...Object.values(trunks).map((t) => t.id),
+];
+
 export interface WorktreeServiceDeps {
   state: StateStore;
   hub: Hub;
@@ -312,10 +319,8 @@ export class WorktreeService {
    * file still in it as deleted: 15k of them on a 20k-file tree. Reads answer from the last counts
    * while an id is in here, and the row goes a moment later anyway. */
   private going = new Set<string>();
-  private countsCache = new Map<
-    string,
-    { ahead?: number; behind?: number; unpushed?: number; dirty: number; at: number }
-  >();
+  /** every row's badge numbers, read behind the frames rather than in them */
+  readonly counts: Counts;
   /** the HEAD each clean, level worktree was last asked about a hand landing at: one reflog read per move */
   private handChecked = new Map<string, string>();
   /** worktrees a name is being asked for: a turn that ends while the birth ask is still out does
@@ -323,6 +328,12 @@ export class WorktreeService {
   private naming = new Set<string>();
   /** per repo, because discovery asks git once for the whole repo rather than once per worktree */
   private discoverCache = new Map<string, { rows: FoundWorktree[]; at: number }>();
+  /** listings under way, by repo: a second ask for a repo being listed waits on that listing */
+  private relisting = new Map<string, Promise<boolean>>();
+  /** how many times the list was marked stale: a listing that began before a mark is for before it */
+  private listMark = 0;
+  /** the reads set off behind frames, with the frames they may send (see settled) */
+  private pending = new Set<Promise<unknown>>();
   /** the last usage figures per worktree: live from the stream, else read once from the transcript
    * on disk (null: read, and there were none) */
   private usage = new Map<string, WorktreeStatus["usage"] | null>();
@@ -330,14 +341,15 @@ export class WorktreeService {
   constructor(private d: WorktreeServiceDeps) {
     this.runs = d.runs ?? new RunService({ state: d.state, hub: d.hub });
     this.archive = new WorktreeArchive(d.paths.archiveDir);
+    this.counts = new Counts({
+      read: (id) => this.readCounts(id),
+      going: (id) => this.going.has(id),
+    });
     this.trunk = new Trunk({
       state: d.state,
       hub: d.hub,
-      counts: (main, defaultBranch, quick) =>
-        quick
-          ? Promise.resolve(this.countsQuick(main.id, quick))
-          : this.counts(main.id, main.path, defaultBranch, false),
-      invalidateCounts: () => this.invalidateCounts(),
+      counts: (main) => this.counts.get(main.id),
+      invalidateCounts: () => this.counts.stale(),
     });
     this.spare = new SparePool({
       state: d.state,
@@ -386,7 +398,7 @@ export class WorktreeService {
     // on that event, so what is dropped here is gone before the status frame goes out
     d.hub.on("turnSettled", (worktreeId, turn) => {
       // what the turn wrote is the count the rail should show now, not whenever its cache runs out
-      this.countsCache.delete(worktreeId);
+      this.counts.stale(worktreeId);
       // The name asked for at birth can come back empty: the ask went out on an agent that could
       // not reach its API, or the answer was not a name. The turn that just finished ran on a live
       // agent, so a row still on its placeholder is asked again, from the words the task started
@@ -553,12 +565,15 @@ export class WorktreeService {
     // left behind, so only a number for the agent: the rail's count of main, at most a few seconds
     // old, rather than a status of the whole checkout between enter and the message showing
     if (!move) {
-      const count = this.countsCache.get(this.mainOf(repo.id)?.id ?? "")?.dirty ?? 0;
+      const count = this.counts.get(this.mainOf(repo.id)?.id ?? "")?.dirty ?? 0;
       return { branch: main, moved: false, count };
     }
     let count = 0;
+    // what main is left holding, where that is known: clean, or everything it had
+    let left: number | undefined;
     const unmoved = await withRepoLock(repo.path, async (): Promise<string | undefined> => {
       count = (await statusFiles(repo.path)).length;
+      left = count;
       if (count === 0) return undefined;
       const before = await git(repo.path, "rev-parse", "-q", "--verify", "refs/stash");
       const pushed = await git(repo.path, "stash", "push", "--include-untracked", "-m", `toyon: into ${wt.title}`);
@@ -567,6 +582,8 @@ export class WorktreeService {
       const sha = after.out.trim();
       // nothing was taken after all (ignored files only), so nothing needs putting anywhere
       if (!after.ok || (before.ok && before.out.trim() === sha)) return undefined;
+      // taken: main is clean unless the pop below puts it all back, or fails to
+      left = 0;
       // stash drop and pop take stash@{n}, never a sha, and a stash pushed outside toyon in the
       // meantime would move ours down the list
       const entry = async () => {
@@ -598,13 +615,19 @@ export class WorktreeService {
       }
       const ref = await entry();
       const back = ref ? await git(repo.path, "stash", "pop", ref) : null;
+      // a pop that failed leaves main somewhere between the stash and the tree: not a number
+      left = back?.ok ? count : undefined;
       return back?.ok
         ? `the changes on ${main} did not apply in ${wt.title}, so they stayed on ${main}`
         : `the changes on ${main} did not apply in ${wt.title}; they are kept in git stash as "toyon: into ${wt.title}"`;
     });
-    // main's count in the rail is cached; it is clean now, or back to what it was
+    // main's count where it is known, since the next task born from here reads it before any frame
+    // has it read again; the rest of main's numbers follow
     const mainWt = this.mainOf(repo.id);
-    if (mainWt) this.countsCache.delete(mainWt.id);
+    if (mainWt) {
+      if (left !== undefined) this.counts.put(mainWt.id, { ...this.counts.get(mainWt.id), dirty: left });
+      this.counts.stale(mainWt.id);
+    }
     return { branch: main, moved: count > 0 && !unmoved, count, unmoved };
   }
 
@@ -1265,7 +1288,7 @@ export class WorktreeService {
     if (rec.sessionId && path === old.path) this.d.state.setSession(wt.id, rec.sessionId);
     const dropped = await git(repo.path, "update-ref", "-d", archiveRef(old.id));
     if (!dropped.ok) log.warn(old.id, `could not drop its archive ref: ${dropped.err}`);
-    this.countsCache.delete(wt.id);
+    this.counts.stale(wt.id);
     this.launch(wt, repo, repo.path);
     // the word on the restore goes on the transcript first, the way a land's does: the chat picks
     // up from where the archive cut it, and the row is what says how long the gap was
@@ -1391,8 +1414,7 @@ export class WorktreeService {
     }
     for (const w of sources) await this.discardWorktree(w.id);
     await this.refreshLanded(target);
-    this.countsCache.delete(target.id);
-    this.d.hub.emit("worktreesChanged");
+    await this.headMoved(target.id);
     return { target, grafted: sources.map((w) => w.title) };
   }
 
@@ -1615,7 +1637,7 @@ export class WorktreeService {
     const result = await commitWorktree(wt.path, message, this.landWatch(wt));
     if (result.ok) {
       await this.verdictSurvives(wt, { dropMessage: true });
-      this.headMoved(wt.id);
+      await this.headMoved(wt.id);
     }
     return result;
   }
@@ -1868,10 +1890,10 @@ export class WorktreeService {
         if (committed && !committed.ok) return { result: committed };
         const taken = await takeMainIn(wt.path, base, own, w);
         if (!taken.ok) return { result: taken };
-        this.headMoved(wt.id);
+        await this.headMoved(wt.id);
         const pushed = await pushBranch(wt.path, wt.branch, w);
         if (!pushed.ok) return { result: pushed };
-        this.headMoved(wt.id);
+        await this.headMoved(wt.id);
         this.setLanding(wt.id, undefined);
         const did = committed ? "committed and pushed" : "pushed";
         return { result: { ok: true, url: wt.pr.url, message: `${did}; PR #${wt.pr.number} has the new commits` } };
@@ -1882,7 +1904,7 @@ export class WorktreeService {
       const mark = await landingMark(wt.path, base);
       const taken = await takeMainIn(wt.path, base, own, w);
       if (!taken.ok) return { result: taken };
-      this.headMoved(wt.id);
+      await this.headMoved(wt.id);
       // the rebase dropped every commit: origin's main holds this work already, through a PR
       // merged where toyon did not see it. The row lands the way a merged PR lands it.
       if ((await aheadBehind(wt.path, base)).ahead === 0) {
@@ -1986,7 +2008,7 @@ export class WorktreeService {
       if (!fetched.ok) return { result: fetched };
       const taken = await takeMainIn(wt.path, base, own, w);
       if (!taken.ok) return { result: taken };
-      this.headMoved(wt.id);
+      await this.headMoved(wt.id);
       if ((await aheadBehind(wt.path, base)).ahead === 0) {
         already = true;
         sha = (await commitOf(wt.path, base)) ?? "";
@@ -1994,7 +2016,7 @@ export class WorktreeService {
       }
       const squash = method === "squash" ? await squashMessage(wt.path, base, suggested) : "";
       const built = await landingCommit(wt.path, wt.branch, base, method, squash, own, w);
-      this.headMoved(wt.id);
+      await this.headMoved(wt.id);
       if (!built.ok || !built.sha) return { result: built };
       sha = built.sha;
       const pushed = await pushLanding(wt.path, sha, repo.defaultBranch, w);
@@ -2056,7 +2078,7 @@ export class WorktreeService {
     if (!hasOwnBranch(wt)) return;
     const r = await git(wt.path, "reset", "--keep", base);
     if (!r.ok) log.warn(wt.id, `could not restart ${wt.branch} from ${base}: ${r.err}`);
-    this.headMoved(wt.id);
+    await this.headMoved(wt.id);
   }
 
   /** the base fetched before a land or a sync measures against it (fetchBase), with the fetch on
@@ -2156,7 +2178,7 @@ export class WorktreeService {
       }
       const taken = await withRepoLock(repo.path, () => takeMainIn(r.path, r.base, own, w, carry));
       if (taken.ok) {
-        this.headMoved(worktreeId);
+        await this.headMoved(worktreeId);
         // the same work over a newer base: the sentence and the message still describe it
         if (r.wt) await this.verdictSurvives(r.wt, { dropMessage: false });
       }
@@ -2178,10 +2200,8 @@ export class WorktreeService {
     const w: LandWatch = { step: (name) => this.step(worktreeId, name), git: UNWATCHED.git };
     return this.ship(worktreeId, "pull-main", async () => {
       const result = await this.trunk.pull(repo.id, w);
-      if (result.ok) {
-        this.invalidateCounts();
-        this.headMoved(worktreeId);
-      }
+      // main moved under every row: the op's closing frame carries all of them read again
+      if (result.ok && result.moved) await this.recountAll();
       return result;
     });
   }
@@ -2207,9 +2227,9 @@ export class WorktreeService {
     return this.trunk.sync(repoId);
   }
 
-  /** every project's trunk beside the rows frame (Trunk.all) */
-  async trunks(opts: { quick?: boolean } = {}): Promise<Record<string, TrunkStatus>> {
-    const all = await this.trunk.all(opts);
+  /** every project's trunk as it stands (Trunk.all), with the op running on it */
+  private trunksNow(): Record<string, TrunkStatus> {
+    const all = this.trunk.all();
     for (const t of Object.values(all)) {
       const shipping = this.ops.get(t.id);
       if (shipping) t.shipping = shipping;
@@ -2226,25 +2246,33 @@ export class WorktreeService {
     return found ?? undefined;
   }
 
-  private headMoved(worktreeId: string) {
-    this.countsCache.delete(worktreeId);
+  /** the row's HEAD moved under an op: its numbers are read again before the frame that says so,
+   * so the rail never shows the count the person just acted on */
+  private async headMoved(worktreeId: string) {
+    this.counts.stale(worktreeId);
+    await this.counts.refresh([worktreeId]);
     this.d.hub.emit("worktreesChanged");
+  }
+
+  /** main moved under every row: all of them read again now, for the frame of the op that moved it */
+  private async recountAll() {
+    this.counts.stale();
+    await this.counts.refresh(this.countedIds());
   }
 
   // ---- queries ----
 
   /** badge counts are stale: every row's when the default branch moved, one worktree's when only
-   * its own files did */
+   * its own files did. The numbers stand until the next frame has them read again. */
   invalidateCounts(worktreeId?: string) {
-    if (worktreeId) this.countsCache.delete(worktreeId);
-    else this.countsCache.clear();
+    this.counts.stale(worktreeId);
   }
 
   /** Files may have changed where toyon could not see them (another app, while the window was
    * behind it): the same refresh as the default branch moving, every row recounted and every open
    * changes list re-read. */
   recount(repoId: string) {
-    this.countsCache.clear();
+    this.counts.stale();
     this.d.hub.emit("repoTick", repoId);
     // the rows count against origin's main, so the window coming back is when to ask origin
     // again; the trunk fetches once a minute at most
@@ -2252,89 +2280,107 @@ export class WorktreeService {
     if (repo && baseIsRemote(repo)) fireAndForget(repoId, this.trunk.sync(repoId), "trunk sync");
   }
 
-  /** something under `.git/worktrees` changed: git's list is no longer what we last read */
+  /** something under `.git/worktrees` changed: git's list is no longer what we last read. The
+   * last list stands until it is read again, so a row on screen still answers by id meanwhile. */
   invalidateDiscovered() {
-    this.discoverCache.clear();
+    this.listMark++;
+    for (const cached of this.discoverCache.values()) cached.at = 0;
   }
 
-  /** A discovered row by id, from the last derivation only: no git, no await.
+  /** A discovered row by id, from the last list only: no git, no await.
    *
    * The terminal opens inside one synchronous block on purpose (see the `term-open` handler), so
    * this cannot shell out. Reading the cache is honest here because the person can only click a
-   * row that was pushed to them, and every push fills this cache: the watcher invalidates and then
-   * emits, and the emit re-derives before the frame goes out. */
+   * row that was pushed to them, and every push is this list as it stood. */
   discoveredById(id: string): FoundWorktree | null {
-    for (const { rows } of this.discoverCache.values()) {
-      const found = rows.find((r) => r.id === id);
-      if (found) return found;
-    }
-    return null;
+    return this.foundCached().find((r) => r.id === id) ?? null;
   }
 
-  /** the last found rows per repo whatever their age; a repo never listed counts as a miss */
-  private discoveredQuick(quick: { missed: boolean }): FoundWorktree[] {
-    return this.d.state.repos.flatMap((repo) => {
-      const cached = this.discoverCache.get(repo.id);
-      if (cached) return cached.rows;
-      quick.missed = true;
-      return [];
-    });
-  }
-
-  /** Worktrees git knows about that toyon does not, across every registered repo.
-   *
-   * Cached per repo on the same 10s floor as `counts()`: this runs on every `worktreesChanged`,
-   * which fires on every proc event, and a dev-server log line should not shell out to git. The
-   * watcher clears the cache when a worktree actually appears or goes, so the TTL bounds how often
-   * we ask when nothing has happened, not how long a real change stays invisible. */
+  /** Worktrees git knows about that toyon does not, across every registered repo: the list as
+   * last read, read again first for a repo not asked within the floor. */
   async discovered(): Promise<FoundWorktree[]> {
-    const perRepo = await Promise.all(
-      this.d.state.repos.map(async (repo) => {
-        const cached = this.discoverCache.get(repo.id);
-        if (cached && Date.now() - cached.at < 10_000) return cached.rows;
-        try {
-          const rows = await discoverIn(repo.id, repo.path, this.d.state.worktrees);
-          this.discoverCache.set(repo.id, { rows, at: Date.now() });
-          return rows;
-        } catch (e) {
-          log.warn(repo.id, "could not list this repo's worktrees", e);
-          return cached?.rows ?? [];
-        }
+    await this.relist(this.d.state.repos.filter((repo) => this.listDue(repo.id)));
+    return this.foundCached();
+  }
+
+  /** the found rows as last listed, with the repos not asked within the floor listed again behind
+   * the frame; one frame follows if a list moved */
+  private foundNow(): FoundWorktree[] {
+    const due = this.d.state.repos.filter((repo) => this.listDue(repo.id));
+    if (due.length) this.behind("discover", this.relist(due), "worktree list");
+    return this.foundCached();
+  }
+
+  /** the found rows as last listed, less any taken over since: a frame never shows a worktree
+   * twice, as toyon's and as found, however long the list takes to be read again */
+  private foundCached(): FoundWorktree[] {
+    const owned = new Set(this.d.state.worktrees.flatMap((w) => [w.id, w.path]));
+    return this.d.state.repos.flatMap((repo) =>
+      (this.discoverCache.get(repo.id)?.rows ?? []).filter((r) => !owned.has(r.id) && !owned.has(r.path)),
+    );
+  }
+
+  /** On the same floor as the counts: a frame goes out on every proc event, and a dev-server log
+   * line should not shell out to git. The watcher marks the list stale when a worktree actually
+   * appears or goes, so the floor bounds how often we ask when nothing has happened, not how long
+   * a real change stays invisible. */
+  private listDue(repoId: string): boolean {
+    const cached = this.discoverCache.get(repoId);
+    return !cached || Date.now() - cached.at >= COUNTS_FLOOR_MS;
+  }
+
+  /** git's list for each repo named, one listing per repo at a time; true when any list moved */
+  private async relist(repos: RepoInfo[]): Promise<boolean> {
+    const moved = await Promise.all(
+      repos.map((repo) => {
+        const running = this.relisting.get(repo.id);
+        if (running) return running;
+        const listing = (async () => {
+          const cached = this.discoverCache.get(repo.id);
+          try {
+            for (;;) {
+              const mark = this.listMark;
+              const rows = await discoverIn(repo.id, repo.path, this.d.state.worktrees);
+              // the watcher fired again while git was listing (a worktree add writes its files
+              // over several events): that list is from before it, so list again
+              if (mark !== this.listMark) continue;
+              this.discoverCache.set(repo.id, { rows, at: Date.now() });
+              // a first list that finds nothing is no move: the frame already showed no found rows
+              return JSON.stringify(cached?.rows ?? []) !== JSON.stringify(rows);
+            }
+          } catch (e) {
+            log.warn(repo.id, "could not list this repo's worktrees", e);
+            return false;
+          } finally {
+            this.relisting.delete(repo.id);
+          }
+        })();
+        this.relisting.set(repo.id, listing);
+        return listing;
       }),
     );
-    const rows = perRepo.flat();
     // a shell at a directory that is no longer a discovered worktree has nothing to belong to: it
     // was taken over (its worktree runs a real shell now), removed, or its repo was forgotten
-    this.d.runtime.pruneLooseShells(new Set(rows.map((r) => r.id)));
-    return rows;
+    this.d.runtime.pruneLooseShells(new Set(this.foundCached().map((r) => r.id)));
+    const any = moved.some(Boolean);
+    if (any) this.d.hub.emit("worktreesChanged");
+    return any;
   }
 
-  /** the badge numbers for one row, against the base. Main is not `countable`: it is counted
-   * against its upstream by the trunk, and a detached worktree has no branch to count either. */
-  private async counts(
-    id: string,
-    path: string,
-    base: string,
-    countable: boolean,
-  ): Promise<{ ahead?: number; behind?: number; unpushed?: number; dirty?: number }> {
-    const cached = this.countsCache.get(id);
-    if (cached && Date.now() - cached.at < 10_000) return cached;
-    if (this.going.has(id)) return cached ?? {};
-    try {
-      const ab = countable ? await aheadBehind(path, base) : await this.trunk.behind(id, path);
-      const dirty = (await statusFiles(path)).length;
-      const unpushed = await this.unpushed(id, path);
-      // the removal started while those reads were in flight: the number is the tree being
-      // deleted, not the work, and it must not reach the cache the rail reads
-      if (this.going.has(id)) return cached ?? {};
-      const fresh = { ...ab, ...(unpushed === undefined ? {} : { unpushed }), dirty, at: Date.now() };
-      this.countsCache.set(id, fresh);
-      return fresh;
-    } catch {
-      // git could not say (a checkout mid-removal, a lock held): the last counts stand, else none,
-      // and a count not known reads as work to the archive rule, so the row is kept
-      return cached ?? {};
-    }
+  /** the badge numbers for one row, a worktree of toyon's or one it found, against the base. Main
+   * is not counted against the base: the trunk counts it against its upstream, and a detached
+   * worktree has no branch to count either. Null for a row that is gone. */
+  private async readCounts(id: string): Promise<RowCounts | null> {
+    const wt = this.d.state.worktree(id);
+    const found = wt ? null : this.discoveredById(id);
+    const row = wt ?? found;
+    const repo = row && this.d.state.repo(row.repoId);
+    if (!row || !repo) return null;
+    const countable = wt ? !isMain(wt) : !!found?.branch;
+    const ab = countable ? await aheadBehind(row.path, baseOf(repo)) : await this.trunk.behind(id, row.path);
+    const dirty = (await statusFiles(row.path)).length;
+    const unpushed = await this.unpushed(id, row.path);
+    return { ...ab, ...(unpushed === undefined ? {} : { unpushed }), dirty };
   }
 
   /** what an open PR is missing: the commits here that origin's copy of the branch lacks. Only a
@@ -2348,11 +2394,9 @@ export class WorktreeService {
   /** a worktree's dirty files and commits ahead of main, from git now rather than the rail's cached
    * counts: what an archive of its own accord is decided on. Empty when git cannot say. */
   async freshCounts(worktreeId: string): Promise<{ ahead?: number; dirty?: number }> {
-    const wt = this.d.state.worktree(worktreeId);
-    const repo = wt && this.d.state.repo(wt.repoId);
-    if (!wt || !repo) return {};
-    this.countsCache.delete(worktreeId);
-    return this.counts(wt.id, wt.path, baseOf(repo), true);
+    // a tree being removed has no numbers to decide on: the last ones are the work that is leaving
+    if (this.going.has(worktreeId)) return {};
+    return (await this.counts.read(worktreeId)) ?? {};
   }
 
   /** Resolve an id for reading: a worktree toyon runs, the spare included (it is the row new work
@@ -2479,14 +2523,12 @@ export class WorktreeService {
     dirty: number,
     ab: { ahead?: number; behind?: number; unpushed?: number },
   ) {
-    const prev = this.countsCache.get(id);
+    const prev = this.counts.get(id);
     if (main && !prev) return;
     const ahead = main ? prev?.ahead : ab.ahead;
     const behind = main ? prev?.behind : ab.behind;
     const unpushed = main ? prev?.unpushed : ab.unpushed;
-    this.countsCache.set(id, { ahead, behind, unpushed, dirty, at: Date.now() });
-    if (prev?.dirty !== dirty || prev?.ahead !== ahead || prev?.behind !== behind || prev?.unpushed !== unpushed)
-      this.d.hub.emit("worktreesChanged");
+    if (this.counts.put(id, { ahead, behind, unpushed, dirty })) this.d.hub.emit("worktreesChanged");
   }
 
   /** the history tab's commit list. Unlike gitStatus this is asked for, not pushed: the panel
@@ -2547,19 +2589,60 @@ export class WorktreeService {
     this.d.hub.emit("worktreesChanged");
   }
 
-  /** every row the rail shows: toyon's own worktrees in state order, then the ones git knows
-   * about that toyon did not create. Both halves are awaited before either is returned, so a
-   * frame never shows a taken-over worktree twice or not at all.
-   *
-   * `quick` answers from what is already known and never shells out: the counts and the found
-   * rows come from their caches whatever their age, or are left off. It is the first frame of a
-   * page load, which should paint the project before git has been asked about it; when anything
-   * was missing the normal pass is queued behind it and its frame follows. */
-  async rows(opts: { quick?: boolean } = {}): Promise<WorktreeStatus[]> {
-    const quick = opts.quick ? { missed: false } : null;
-    const [owned, found] = await Promise.all([this.ownedRows(quick), this.foundRows(quick)]);
-    if (quick?.missed) setTimeout(() => this.d.hub.emit("worktreesChanged"), 0);
-    return [...owned, ...found];
+  /** The frame's worth: every row the rail shows, toyon's own worktrees in state order then the
+   * ones git knows about that toyon did not create, and each project's trunk beside them. Nothing
+   * here waits on git: the numbers and the found list are as last read, and what is older than
+   * the floor is read again behind the frame, which sends one of its own if something moved. So a
+   * frame costs what it costs to assemble, whatever the rail's size, and a send moves its row at
+   * the press. */
+  snapshot(): { rows: WorktreeStatus[]; trunks: Record<string, TrunkStatus> } {
+    const rows = [...this.ownedRows(), ...this.foundRows()];
+    const trunks = this.trunksNow();
+    const reading = this.counts.refresh(idsOf(rows, trunks));
+    if (reading) {
+      this.behind(
+        "counts",
+        reading.then((moved) => {
+          if (moved) this.d.hub.emit("worktreesChanged");
+        }),
+        "badge counts",
+      );
+    }
+    return { rows, trunks };
+  }
+
+  /** the rows half of the frame (snapshot) */
+  rows(): WorktreeStatus[] {
+    return this.snapshot().rows;
+  }
+
+  /** the trunks half of the frame (snapshot) */
+  trunks(): Record<string, TrunkStatus> {
+    return this.snapshot().trunks;
+  }
+
+  /** every row and trunk a frame carries numbers for */
+  private countedIds(): string[] {
+    return idsOf([...this.ownedRows(), ...this.foundCached()], this.trunksNow());
+  }
+
+  /** a read set off behind a frame, kept until it and the frame it may send are done */
+  private behind(tag: string, read: Promise<unknown>, what: string) {
+    this.pending.add(read);
+    const done = () => this.pending.delete(read);
+    read.then(done, done);
+    fireAndForget(tag, read, what);
+  }
+
+  /** every read a frame set off, counts and found list alike, and the frames they send: for a
+   * decision, or a test, that needs them as they stand. True when there was something to wait on. */
+  async settled(): Promise<boolean> {
+    let waited = false;
+    while (this.pending.size) {
+      waited = true;
+      await Promise.all(this.pending);
+    }
+    return waited;
   }
 
   private mainOf(repoId: string): WorktreeInfo | undefined {
@@ -2572,17 +2655,6 @@ export class WorktreeService {
     return this.spare.current(repoId)?.worktreeId ?? null;
   }
 
-  /** the cached counts for a row whatever their age, noting a miss for the quick pass */
-  private countsQuick(
-    id: string,
-    quick: { missed: boolean },
-  ): { ahead?: number; behind?: number; unpushed?: number; dirty?: number } {
-    const c = this.countsCache.get(id);
-    if (c) return c;
-    quick.missed = true;
-    return {};
-  }
-
   /** Whether a record is a rail row. A task always is. The repo's spare is, as the row new work
    * is typed in, from the moment it is reserved; main is one only while the repo has no spare to
    * stand in for it (setup unconfirmed, an empty project, a warm-up that failed), so the first-run
@@ -2593,63 +2665,50 @@ export class WorktreeService {
     return wt.kind === "spare" ? lead === wt.id : lead === null;
   }
 
-  private async ownedRows(quick: { missed: boolean } | null): Promise<WorktreeStatus[]> {
-    return Promise.all(
-      this.d.state.worktrees
-        .filter((wt) => this.isRow(wt))
-        .map(async (wt) => {
-          const rt = this.d.runtime.get(wt.id);
-          const repo = this.d.state.requireRepo(wt.repoId);
-          const { ahead, behind, unpushed, dirty } = quick
-            ? this.countsQuick(wt.id, quick)
-            : await this.counts(wt.id, wt.path, baseOf(repo), !isMain(wt));
-          return {
-            id: wt.id,
-            repoId: wt.repoId,
-            path: wt.path,
-            name: wt.title,
-            branch: wt.branch,
-            worktree: wt,
-            procs: rt?.procs?.states() ?? [],
-            borrowed: rt?.borrowed.size ? [...rt.borrowed] : undefined,
-            agent: rt?.agent.status ?? "idle",
-            login: !!rt?.login,
-            ahead,
-            behind,
-            unpushed,
-            dirty,
-            queued: rt?.agent.queueLength || undefined,
-            unseen: isUnseen(wt) || undefined,
-            usage: this.usageFor(wt.id),
-            transcript: transcriptPathFor(this.d.paths.transcriptsDir, wt.id),
-            sessionId: this.d.state.session(wt.id),
-            shipping: this.ops.get(wt.id),
-          };
-        }),
-    );
-  }
-
-  private async foundRows(quick: { missed: boolean } | null): Promise<WorktreeStatus[]> {
-    const found = quick ? this.discoveredQuick(quick) : await this.discovered();
-    return Promise.all(
-      found.map(async (f) => {
-        const repo = this.d.state.repo(f.repoId);
-        const { ahead, behind, dirty } = !repo
-          ? {}
-          : quick
-            ? this.countsQuick(f.id, quick)
-            : await this.counts(f.id, f.path, baseOf(repo), !!f.branch);
+  private ownedRows(): WorktreeStatus[] {
+    return this.d.state.worktrees
+      .filter((wt) => this.isRow(wt))
+      .map((wt) => {
+        const rt = this.d.runtime.get(wt.id);
+        const { ahead, behind, unpushed, dirty } = this.counts.get(wt.id) ?? {};
         return {
-          ...f,
-          procs: [],
-          agent: "idle" as const,
-          login: false,
+          id: wt.id,
+          repoId: wt.repoId,
+          path: wt.path,
+          name: wt.title,
+          branch: wt.branch,
+          worktree: wt,
+          procs: rt?.procs?.states() ?? [],
+          borrowed: rt?.borrowed.size ? [...rt.borrowed] : undefined,
+          agent: rt?.agent.status ?? "idle",
+          login: !!rt?.login,
           ahead,
           behind,
+          unpushed,
           dirty,
-          shipping: this.ops.get(f.id),
+          queued: rt?.agent.queueLength || undefined,
+          unseen: isUnseen(wt) || undefined,
+          usage: this.usageFor(wt.id),
+          transcript: transcriptPathFor(this.d.paths.transcriptsDir, wt.id),
+          sessionId: this.d.state.session(wt.id),
+          shipping: this.ops.get(wt.id),
         };
-      }),
-    );
+      });
+  }
+
+  private foundRows(): WorktreeStatus[] {
+    return this.foundNow().map((f) => {
+      const { ahead, behind, dirty } = this.counts.get(f.id) ?? {};
+      return {
+        ...f,
+        procs: [],
+        agent: "idle" as const,
+        login: false,
+        ahead,
+        behind,
+        dirty,
+        shipping: this.ops.get(f.id),
+      };
+    });
   }
 }

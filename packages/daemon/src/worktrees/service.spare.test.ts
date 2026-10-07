@@ -3,7 +3,7 @@ import { writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { fakeFactories } from "../../test/helpers/fakes.ts";
 import { sh, tmpRepo } from "../../test/helpers/tmp-repo.ts";
-import { noSelf, registered, settle, until, useWorld, w } from "../../test/helpers/world.ts";
+import { counted, noSelf, registered, settle, until, useWorld, w } from "../../test/helpers/world.ts";
 import { UserError } from "../core/errors.ts";
 import { Hub } from "../core/hub.ts";
 import { StateStore } from "../core/state.ts";
@@ -440,11 +440,11 @@ describe("boot", () => {
   });
 });
 
-// The rail's counts are cached for ten seconds and recounted on a frame, which on its own left a row
+// The rail's numbers are read behind a frame and stand for ten seconds, which on its own left a row
 // reading clean while its changes list showed files. Each of these moves the number without waiting
-// out the cache.
+// out the floor.
 describe("rail counts", () => {
-  const dirtyOf = async (id: string) => (await w.worktrees.rows()).find((x) => x.id === id)?.dirty;
+  const dirtyOf = async (id: string) => (await counted()).find((x) => x.id === id)?.dirty;
   const opened = async (repoId: string, branch: string) => {
     sh(w.repo, "git", "branch", branch, "main");
     const wt = await w.worktrees.openRef(repoId, "branch", branch);

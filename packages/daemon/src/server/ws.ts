@@ -198,28 +198,22 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
   });
 
   // ---- what a hub event pushes to clients ----
-  // single-flight: a burst of changes (five creates, ten proc events) yields one statuses() run
-  // in flight and at most one more after it, and snapshots can never land out of order
-  let statusesInFlight = false;
-  let statusesDirty = false;
+  // One frame per burst: the events of one tick (a create's save and its emit, ten proc events)
+  // build one snapshot, after the tick has finished changing state. The snapshot waits on nothing,
+  // so frames cannot land out of order and a send moves its row at the press.
+  let statusesQueued = false;
   const worktreesChanged = () => {
-    if (statusesInFlight) {
-      statusesDirty = true;
-      return;
-    }
-    statusesInFlight = true;
-    fireAndForget(
-      "ws",
-      (async () => {
-        do {
-          statusesDirty = false;
-          broadcast({ t: "worktrees", rows: await s.worktrees.rows(), trunks: await s.worktrees.trunks() });
-        } while (statusesDirty);
-      })().finally(() => {
-        statusesInFlight = false;
-      }),
-      "worktrees broadcast",
-    );
+    if (statusesQueued) return;
+    statusesQueued = true;
+    setTimeout(() => {
+      statusesQueued = false;
+      try {
+        const { rows, trunks } = s.worktrees.snapshot();
+        broadcast({ t: "worktrees", rows, trunks });
+      } catch (e) {
+        log.warn("ws", "worktrees broadcast failed", e);
+      }
+    }, 0);
   };
   s.hub.on("worktreesChanged", worktreesChanged);
   s.hub.on("agentStatus", worktreesChanged);
@@ -361,12 +355,13 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
     broadcast({ t: "attachments", boxId, items, ...(clientId ? { clientId } : {}) }),
   );
 
-  // What a page learns first, over the socket or over the bootstrap fetch that precedes it. Quick
-  // rows: the frame goes out from what is known and the counts follow, rather than every page
-  // load waiting on a git pass across every worktree.
+  // What a page learns first, over the socket or over the bootstrap fetch that precedes it. The
+  // rows go out from what is known and the counts follow, rather than every page load waiting on a
+  // git pass across every worktree.
   const helloFrame = async () => {
     // a page load is when an install done in a terminal first matters to anyone
     await s.update.refresh();
+    const { rows, trunks } = s.worktrees.snapshot();
     return {
       t: "hello",
       version,
@@ -374,8 +369,8 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
       registry: await s.update.registry(),
       protocol: PROTOCOL_VERSION,
       repos: s.state.repos,
-      rows: await s.worktrees.rows({ quick: true }),
-      trunks: await s.worktrees.trunks({ quick: true }),
+      rows,
+      trunks,
       themes: s.themes.themes,
       themePrefs: s.themes.prefs,
       agents: agentInfos(),

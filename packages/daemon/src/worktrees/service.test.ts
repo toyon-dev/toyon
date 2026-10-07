@@ -593,7 +593,7 @@ describe("empty tree", () => {
     const repo = await w.repos.register(dir);
     const main = w.state.worktrees.find((x) => x.repoId === repo.id && x.kind === "main")!;
     expect(main.empty).toBe(true);
-    expect((await w.worktrees.rows({ quick: true })).find((r) => r.id === main.id)?.worktree?.empty).toBe(true);
+    expect(w.worktrees.rows().find((r) => r.id === main.id)?.worktree?.empty).toBe(true);
     writeFileSync(join(dir, "index.html"), "<h1>hi</h1>\n");
     await w.worktrees.gitStatus(main.id);
     expect(w.state.requireWorktree(main.id).empty).toBe(false);
@@ -607,24 +607,34 @@ describe("empty tree", () => {
   });
 });
 
-describe("quick rows", () => {
-  test("answers from the caches without git, then queues the real pass", async () => {
+describe("rows from memory", () => {
+  test("a frame never waits on git: the numbers are read behind it, and a frame follows when they moved", async () => {
     const repoId = await registered();
     const main = w.state.worktrees.find((x) => x.repoId === repoId && x.kind === "main")!;
+    await settle();
     let changed = 0;
     w.hub.on("worktreesChanged", () => changed++);
-    // nothing cached yet: the row comes back without counts and a pass is queued behind it
-    const cold = await w.worktrees.rows({ quick: true });
+    // nothing read yet: the row comes back without counts, and the read goes on behind it
+    const cold = w.worktrees.rows();
     expect(cold.find((r) => r.id === main.id)?.dirty).toBeUndefined();
-    await settle();
+    await w.worktrees.settled();
     expect(changed).toBe(1);
-    // the full pass fills the cache; quick now answers with it and queues nothing
-    const full = await w.worktrees.rows();
-    expect(full.find((r) => r.id === main.id)?.dirty).toBe(0);
-    const warm = await w.worktrees.rows({ quick: true });
-    expect(warm.find((r) => r.id === main.id)?.dirty).toBe(0);
-    await settle();
+    expect(w.worktrees.rows().find((r) => r.id === main.id)?.dirty).toBe(0);
+    // within the floor: the same numbers, no git, no frame
+    await w.worktrees.settled();
     expect(changed).toBe(1);
+  });
+
+  test("a send moves its row at the press: the stamp is in the next frame, with no read in its way", async () => {
+    const repoId = await registered();
+    const main = w.state.worktrees.find((x) => x.repoId === repoId && x.kind === "main")!;
+    await settle();
+    let changed = 0;
+    w.hub.on("worktreesChanged", () => changed++);
+    const before = Date.now();
+    w.worktrees.markPrompted(main.id);
+    expect(changed).toBe(1);
+    expect(w.worktrees.rows().find((r) => r.id === main.id)?.worktree?.promptedAt).toBeGreaterThanOrEqual(before);
   });
 });
 

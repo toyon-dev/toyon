@@ -121,6 +121,18 @@ export async function registered(): Promise<string> {
 
 export const settle = () => new Promise((r) => setTimeout(r, 50));
 
+/** The frame with its numbers and found list read, not as last known: a frame never waits on git,
+ * so a test that asserts on a count or a found row waits here. A found row's own numbers come a
+ * read after the row does, hence the loop. */
+async function settledSnapshot(svc: WorktreeService) {
+  let snap = svc.snapshot();
+  while (await svc.settled()) snap = svc.snapshot();
+  return snap;
+}
+
+export const counted = async (svc = w.worktrees) => (await settledSnapshot(svc)).rows;
+export const countedTrunks = async (svc = w.worktrees) => (await settledSnapshot(svc)).trunks;
+
 /** the route set on the record and the base that follows from it, as a settings save leaves them */
 export async function setRoute(repoId: string, route: "merge" | "push" | "pr") {
   const repo = w.state.requireRepo(repoId);

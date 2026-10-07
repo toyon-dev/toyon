@@ -1206,7 +1206,8 @@ describe("handlers", () => {
 
     // without a move the files stay, and the agent is told they are not in its tree, by the count
     // the rail last read for main
-    await services.worktrees.rows();
+    services.worktrees.rows();
+    await services.worktrees.settled();
     await dispatch({ t: "create-worktree", repoId: r.id, prompt: "unrelated", context: ["ctx"] }, ctx, services);
     const fresh = services.state.worktrees.find((x) => x.kind === "worktree")!;
     expect(existsSync(join(fresh.path, "notes.txt"))).toBe(false);

@@ -4,6 +4,8 @@ import { dirname, join } from "node:path";
 import { sh } from "../../test/helpers/tmp-repo.ts";
 import {
   adoptDir,
+  counted,
+  countedTrunks,
   foreignWorktree,
   foundId,
   registered,
@@ -43,7 +45,7 @@ describe("discovery", () => {
     sh(dir, "git", "add", "wip.txt");
     sh(dir, "git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "theirs");
     writeFileSync(join(dir, "dirty.txt"), "y\n");
-    const rows = await w.worktrees.rows();
+    const rows = await counted();
     const found = rows.at(-1)!;
     expect(rows.slice(0, -1).every((r) => r.worktree)).toBe(true);
     expect(rows.some((r) => r.id === task.id)).toBe(true);
@@ -87,7 +89,7 @@ describe("adopt", () => {
     expect(wt.proxyPort).toBeGreaterThan(0);
     await settle();
 
-    const rows = await w.worktrees.rows();
+    const rows = await counted();
     expect(rows.find((s) => s.id === wt.id)?.worktree).toBe(wt);
     expect(rows.every((s) => s.worktree)).toBe(true);
     expect(await w.worktrees.discovered()).toEqual([]);
@@ -284,7 +286,7 @@ describe("main against origin", () => {
     const repoId = await withUpstream();
     const wt = await w.worktrees.create(repoId, "feature");
     w.worktrees.invalidateCounts();
-    let rows = await w.worktrees.rows();
+    let rows = await counted();
     const main = rows.find((r) => r.worktree && r.worktree.kind === "main")!;
     expect(main.behind).toBe(1);
     expect(main.ahead).toBeUndefined();
@@ -293,14 +295,14 @@ describe("main against origin", () => {
     // the push route lands on origin's main: the same row trails it by the commit main here lacks
     await setRoute(repoId, "push");
     expect(w.state.requireRepo(repoId).base).toBe("origin/main");
-    rows = await w.worktrees.rows();
+    rows = await counted();
     expect(rows.find((r) => r.id === wt.id)?.behind).toBe(1);
     expect(rows.find((r) => r.id === main.id)?.behind).toBe(1);
   });
 
   test("a main with no upstream has no count", async () => {
     await registered();
-    const main = (await w.worktrees.rows()).find((r) => r.worktree && r.worktree.kind === "main")!;
+    const main = (await counted()).find((r) => r.worktree && r.worktree.kind === "main")!;
     expect(main.behind).toBeUndefined();
   });
 
@@ -319,7 +321,7 @@ describe("main against origin", () => {
     const result = await w.worktrees.pull(main.id);
     expect(result).toMatchObject({ ok: true, message: "pulled 1 commit(s) from origin" });
     expect(frames).toBe(1);
-    const rows = await w.worktrees.rows();
+    const rows = await counted();
     expect(rows.find((r) => r.id === main.id)?.behind).toBe(0);
     expect(rows.find((r) => r.id === wt.id)?.behind).toBe(1);
     expect((await w.worktrees.pull(main.id)).message).toBe("already up to date with origin");
@@ -405,12 +407,12 @@ describe("main against origin", () => {
     const repoId = await withUpstream();
     const main = w.state.worktrees.find((x) => x.repoId === repoId && x.kind === "main")!;
     expect((await w.worktrees.pull(main.id)).ok).toBe(true);
-    const answered = (await w.worktrees.trunks())[repoId]!;
+    const answered = (await countedTrunks())[repoId]!;
     expect(answered.fetchedAt).toBeGreaterThan(0);
     expect(answered.fetchFailed).toBeUndefined();
     rmSync(join(dirname(w.repo), "origin.git"), { recursive: true, force: true });
     expect((await w.worktrees.pull(main.id)).ok).toBe(false);
-    const failed = (await w.worktrees.trunks())[repoId]!;
+    const failed = (await countedTrunks())[repoId]!;
     expect(failed.fetchedAt).toBe(answered.fetchedAt);
     expect(failed.fetchFailed).toMatch(/does not appear to be a git repos/);
   });
@@ -421,8 +423,8 @@ describe("main against origin", () => {
     const upstream = sh(w.repo, "git", "rev-parse", "origin/main").trim();
     await w.worktrees.syncTrunk(repoId);
     expect(headOf(w.repo)).toBe(upstream);
-    expect((await w.worktrees.trunks())[repoId]).toMatchObject({ id: main.id, behind: 0 });
-    expect((await w.worktrees.trunks())[repoId]?.stale).toBeUndefined();
+    expect((await countedTrunks())[repoId]).toMatchObject({ id: main.id, behind: 0 });
+    expect((await countedTrunks())[repoId]?.stale).toBeUndefined();
     // origin moves again within the minute: the plus opened now does not fetch, so nothing knows
     const b = pushUpstream("b");
     await w.worktrees.syncTrunk(repoId);
@@ -443,7 +445,7 @@ describe("main against origin", () => {
     const dirty = fresh();
     await dirty.syncTrunk(repoId);
     expect(headOf(w.repo)).toBe(before);
-    expect((await dirty.trunks())[repoId]).toMatchObject({ behind: 2, dirty: 1, stale: "dirty" });
+    expect((await countedTrunks(dirty))[repoId]).toMatchObject({ behind: 2, dirty: 1, stale: "dirty" });
     // the same edit under a name the pull does not touch is no reason to stand: main follows
     // and the file rides along, still uncommitted
     rmSync(join(w.repo, "wip.txt"));
@@ -451,8 +453,8 @@ describe("main against origin", () => {
     const aside = fresh();
     await aside.syncTrunk(repoId);
     expect(headOf(w.repo)).toBe(theirs);
-    expect((await aside.trunks())[repoId]).toMatchObject({ behind: 0, dirty: 1 });
-    expect((await aside.trunks())[repoId]?.stale).toBeUndefined();
+    expect((await countedTrunks(aside))[repoId]).toMatchObject({ behind: 0, dirty: 1 });
+    expect((await countedTrunks(aside))[repoId]?.stale).toBeUndefined();
     expect(sh(w.repo, "git", "status", "--porcelain")).toBe("?? aside.txt");
     // committed here instead: main has its own commit and origin has one too
     rmSync(join(w.repo, "aside.txt"));
@@ -460,7 +462,7 @@ describe("main against origin", () => {
     sh(w.repo, "git", "commit", "--allow-empty", "-qm", "mine");
     const diverged = fresh();
     await diverged.syncTrunk(repoId);
-    expect((await diverged.trunks())[repoId]).toMatchObject({ behind: 1, stale: "diverged" });
+    expect((await countedTrunks(diverged))[repoId]).toMatchObject({ behind: 1, stale: "diverged" });
     expect(sh(w.repo, "git", "log", "-1", "--format=%s").trim()).toBe("mine");
   });
 
@@ -468,7 +470,7 @@ describe("main against origin", () => {
     const repoId = await registered();
     const svc = fresh();
     await svc.syncTrunk(repoId);
-    const trunk = (await svc.trunks())[repoId]!;
+    const trunk = (await countedTrunks(svc))[repoId]!;
     expect(trunk.behind).toBeUndefined();
     expect(trunk.stale).toBe("no-upstream");
   });

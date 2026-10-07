@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { SHELL_TOOL } from "@toyon/shared";
 import type { FakeAgent } from "../../test/helpers/fakes.ts";
 import { sh } from "../../test/helpers/tmp-repo.ts";
-import { registered, setRoute, until, useWorld, w } from "../../test/helpers/world.ts";
+import { counted, registered, setRoute, until, useWorld, w } from "../../test/helpers/world.ts";
 import { fixPrompt } from "../agent/prompt.ts";
 import { UserError } from "../core/errors.ts";
 import { GIT, git } from "../git/exec.ts";
@@ -752,9 +752,9 @@ describe("landing", () => {
     await expect(w.worktrees.commit(wt.id, "  ")).rejects.toBeInstanceOf(UserError);
   });
 
-  // the rail's badges come from rows(), which caches counts for 10s; a landing op that moves
-  // the worktree's own HEAD has to drop that entry and push a frame, or the rail keeps showing the
-  // count the person just acted on
+  // the rail's badges stand for 10s between reads; a landing op that moves the worktree's own HEAD
+  // has to read them again before its frame, or the rail keeps showing the count the person just
+  // acted on
   test("sync and commit refresh the badge counts at once and push a worktrees frame", async () => {
     const repoId = await registered();
     const wt = await w.worktrees.create(repoId, "feature");
@@ -767,7 +767,7 @@ describe("landing", () => {
     w.hub.on("worktreesChanged", () => {
       if (!w.worktrees.shippingOf(wt.id)) frames++;
     });
-    const row = async () => (await w.worktrees.rows()).find((s) => s.id === wt.id)!;
+    const row = async () => (await counted()).find((s) => s.id === wt.id)!;
 
     sh(w.repo, "git", "commit", "--allow-empty", "-m", "main moves on");
     w.worktrees.invalidateCounts();

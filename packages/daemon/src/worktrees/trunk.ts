@@ -15,13 +15,8 @@ import { behindUpstream } from "../git/status.ts";
 export interface TrunkDeps {
   state: StateStore;
   hub: Hub;
-  /** main's badge numbers, cached the way every row's are (WorktreeService owns the cache);
-   * `quick` answers from what is cached and notes a miss */
-  counts: (
-    main: WorktreeInfo,
-    defaultBranch: string,
-    quick: { missed: boolean } | null,
-  ) => Promise<{ behind?: number; dirty?: number }>;
+  /** main's badge numbers as last read; WorktreeService owns the cache and reads behind the frames */
+  counts: (main: WorktreeInfo) => { behind?: number; dirty?: number } | undefined;
   /** every row's count is against main, so a main that moved makes all of them stale */
   invalidateCounts: () => void;
 }
@@ -159,30 +154,26 @@ export class Trunk {
   }
 
   /** Every project's main checkout as it stands: what the plus's row wears while a spare stands in
-   * for main, and what the composer's line under the knobs reads. `quick` answers from the counts
-   * already cached, like rows(), and a miss asks for the next frame. */
-  async all(opts: { quick?: boolean } = {}): Promise<Record<string, TrunkStatus>> {
-    const quick = opts.quick ? { missed: false } : null;
+   * for main, and what the composer's line under the knobs reads. The numbers are as last read,
+   * like the rows'; the frame that carries them asks for the next read. */
+  all(): Record<string, TrunkStatus> {
     const out: Record<string, TrunkStatus> = {};
-    await Promise.all(
-      this.d.state.repos.map(async (repo) => {
-        const main = mainOf(this.d.state, repo.id);
-        if (!main) return;
-        const { behind, dirty } = await this.d.counts(main, repo.defaultBranch, quick);
-        const stale = this.stale.get(repo.id);
-        const fetched = this.fetches.get(repo.id);
-        out[repo.id] = {
-          id: main.id,
-          ...(behind !== undefined ? { behind } : {}),
-          dirty: dirty ?? 0,
-          empty: main.empty === true,
-          ...(stale ? { stale } : {}),
-          ...(fetched?.at ? { fetchedAt: fetched.at } : {}),
-          ...(fetched?.failed ? { fetchFailed: fetched.failed } : {}),
-        };
-      }),
-    );
-    if (quick?.missed) setTimeout(() => this.d.hub.emit("worktreesChanged"), 0);
+    for (const repo of this.d.state.repos) {
+      const main = mainOf(this.d.state, repo.id);
+      if (!main) continue;
+      const { behind, dirty } = this.d.counts(main) ?? {};
+      const stale = this.stale.get(repo.id);
+      const fetched = this.fetches.get(repo.id);
+      out[repo.id] = {
+        id: main.id,
+        ...(behind !== undefined ? { behind } : {}),
+        dirty: dirty ?? 0,
+        empty: main.empty === true,
+        ...(stale ? { stale } : {}),
+        ...(fetched?.at ? { fetchedAt: fetched.at } : {}),
+        ...(fetched?.failed ? { fetchFailed: fetched.failed } : {}),
+      };
+    }
     return out;
   }
 }

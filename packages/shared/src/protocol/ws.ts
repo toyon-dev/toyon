@@ -857,12 +857,18 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   /** send the message that was refused for want of credentials again */
   z.object({ t: z.literal("agent-retry"), worktreeId: id }),
   /** answer an open question card. `answers` is positional, one per question the card asked;
-   * leaving it out is the skip button, which the agent hears as "the person passed" */
+   * leaving it out is the skip button, which the agent hears as "the person passed". What was
+   * attached to the card follows the answer into the turn as a message of the person's own, since
+   * the answer itself can carry only words; `boxId` is the card's box, emptied as the frame arrives
+   * the way a message's is */
   z.object({
     t: z.literal("agent-answer"),
     worktreeId: id,
     askId: z.string().max(64),
     answers: z.array(askAnswerSchema).max(8).optional(),
+    clientId: z.string().max(64).optional(),
+    attachments,
+    boxId,
   }),
   /** click one of the options on a permission card */
   z.object({ t: z.literal("agent-decide"), worktreeId: id, askId: z.string().max(64), choiceId: z.string().max(200) }),

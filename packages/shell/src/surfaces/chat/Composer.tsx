@@ -11,6 +11,7 @@ import type {
 import {
   baseOf,
   canLand,
+  cardBox,
   DEFAULT_PERMISSION_MODE,
   describeLand,
   isProvisional,
@@ -28,7 +29,7 @@ import { pathItems } from "../../state/actions/message.ts";
 import { terminalItems } from "../../state/actions/proc.ts";
 import { archiveWorktrees, shipOp } from "../../state/actions/worktree.ts";
 import { takeBackQueued, toInput } from "../../state/attach.ts";
-import { useDispatch, useMachine, useSock, useStore, useStoreInstance, useUrls } from "../../state/context.tsx";
+import { useDispatch, useMachine, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
 import { openSource } from "../../state/openSource.ts";
 import { isUploading } from "../../state/pending.ts";
 import { useChatCentred, useGreenfield, useLocalField, usePreviewId, useTouch } from "../../state/selectors.ts";
@@ -70,15 +71,13 @@ import { runLine, runOf, runTicking, useLastingRun } from "../runs.ts";
 import { chord, commandSource, folderList, pickLabel, procTrouble } from "../util.ts";
 import { answerLines, answered as hasAnswer, stoppedAsk } from "./ask.ts";
 import { ComposerOffer } from "./ComposerOffer.tsx";
-import { FileChip } from "./FileChip.tsx";
+import { DraftChip } from "./DraftChip.tsx";
 import { HandoffCard } from "./HandoffCard.tsx";
 import { cardLine, openCard, parseHandoffArgs } from "./handoff.ts";
-import { ImageChip } from "./ImageChip.tsx";
 import { MentionText, openMention } from "./Mentions.tsx";
 import { filterCommands, insertAt, triggerAt } from "./mentions.ts";
 import { dismissOffer, offerOf, useDismissedOffers } from "./offer.ts";
 import { browseCommands, isMode, mergeCommands, ownCommandOf, ownCommands } from "./ownCommands.ts";
-import { PasteChip } from "./PasteChip.tsx";
 import { PermissionCard } from "./PermissionCard.tsx";
 import { PickChip } from "./PickChip.tsx";
 import { QuestionCard } from "./QuestionCard.tsx";
@@ -86,7 +85,7 @@ import { type Step, stepWalk, type WalkKey } from "./recall.ts";
 import { shellCommandOf, shellContext } from "./shellMode.ts";
 import { UsagePanel } from "./UsagePanel.tsx";
 import { compactAdvice, compactNudge, limitLevel, limitSummary } from "./usage.ts";
-import { attachCopied, pickAttachments, useComposerPaste } from "./useIntake.ts";
+import { attachCopied, pickAttachments, STILL_UPLOADING, useComposerPaste } from "./useIntake.ts";
 
 /** a frozen empty list, so a selector returning it does not read as a change every render */
 const NO_CHOICES: ModelChoice[] = [];
@@ -143,8 +142,6 @@ function insertionFor(r: Row): string {
   return r.kind === "changes" ? "@changes " : `@${r.path} `;
 }
 
-const STILL_UPLOADING = "still uploading what is attached; send again in a moment";
-
 /** The message box: the text (kept per row), picked-element, image and paste attachments, the row
  * saying what runs where the message goes, and the per-worktree tools (terminal, element picker).
  *
@@ -181,7 +178,6 @@ export function Composer({
   const onScreen = placement === "screen";
   const dispatch = useDispatch();
   const sock = useSock();
-  const urls = useUrls();
   const { storage } = useMachine();
   const store = useStoreInstance();
   const drafting = !!draft;
@@ -224,6 +220,9 @@ export function Composer({
   const askRevived = useLocalField(id, "askRevived");
   const revived = !card && stopped && askRevived === stopped.id ? stopped : null;
   const cardUp = card && cardParked !== card.id ? card : revived;
+  // the revived card's own chips, dropped on it before or after the stop: they go in the answer
+  const revivedBox = revived ? cardBox(revived.id) : null;
+  const revivedItems = useLocalField(revivedBox, "attachments");
   const parked = card ? (cardParked === card.id ? card : null) : stopped && !revived ? stopped : null;
   const cardRef = useRef<HTMLDivElement>(null);
   const touch = useTouch();
@@ -1008,15 +1007,20 @@ export function Composer({
   };
 
   // The answer to a question the turn was stopped under: a message like any other, in the words the
-  // transcript reads an answer back in. It carries no box, since what is written in the plain box
-  // is a draft of its own and stays there.
+  // transcript reads an answer back in. It carries the card's box, not the plain one: what is
+  // written in the plain box is a draft of its own and stays there, and what was dropped on the
+  // card goes in this one message, since nothing waits for an answer to follow.
   const answerStopped = (answers: AskAnswer[]) => {
     if (!id || revived?.ask.kind !== "question") return;
     // nothing picked and nothing typed is nothing to say: the question goes back to its line
     if (!answers.some(hasAnswer)) return dispatch({ a: "ask-revive", id });
+    if (revivedItems.some(isUploading)) return refuse(STILL_UPLOADING);
     const prompt = answerLines(revived.ask.questions, answers).join("\n");
-    sock?.send({ t: "chat", worktreeId: id, clientId, text: prompt, context: buildContext() });
-    dispatch({ a: "sending", id, message: { text: prompt } });
+    const sent = revivedItems.length ? revivedItems.map(toInput) : undefined;
+    const from = sent && revivedBox ? { attachments: sent, boxId: revivedBox } : {};
+    sock?.send({ t: "chat", worktreeId: id, clientId, text: prompt, context: buildContext(), ...from });
+    if (sent && revivedBox) dispatch({ a: "clear-attachments", id: revivedBox });
+    dispatch({ a: "sending", id, message: { text: prompt, attachments: sent } });
     dispatch({ a: "answered", id });
     dispatch({ a: "ask-revive", id });
   };
@@ -1176,48 +1180,13 @@ export function Composer({
             : `the text you copied, ${copied.text.split("\n").length} lines`}
         </ComposerOffer>
       )}
+      {/* the chips are the draft's, like the text: an ask card takes the box whole, its answer
+          carries no attachment, and chips left in view over it read as part of the answer */}
       {boxId &&
+        !cardUp &&
         numbered(attachments, numbersAfter(nextNumbers(sentBefore), queued)).map(([item, n]) => {
           const detach = () => dispatch({ a: "detach", id: boxId, key: item.key });
-          if (item.kind === "image")
-            return (
-              <ImageChip
-                key={item.key}
-                src={item.local ?? urls.upload(item.upload)}
-                n={n}
-                name={item.name}
-                width={item.width}
-                height={item.height}
-                bytes={item.bytes}
-                uploading={item.uploading}
-                onRemove={detach}
-              />
-            );
-          if (item.kind === "file")
-            return (
-              <FileChip
-                key={item.key}
-                name={item.name}
-                bytes={item.bytes}
-                href={item.text && item.upload ? urls.upload(item.upload) : undefined}
-                uploading={item.uploading}
-                onRemove={detach}
-              />
-            );
-          if (item.kind === "paste")
-            return (
-              <PasteChip
-                key={item.key}
-                n={n}
-                name={item.name}
-                source={item.source}
-                lines={item.lines}
-                chars={item.chars}
-                preview={item.preview}
-                text={item.text}
-                onRemove={detach}
-              />
-            );
+          if (item.kind !== "pick") return <DraftChip key={item.key} item={item} n={n} onRemove={detach} />;
           return (
             <PickChip
               key={item.key}
@@ -1283,6 +1252,8 @@ export function Composer({
             ask={cardUp.ask}
             worktreeId={id}
             rootRef={cardRef}
+            numbers={numbersAfter(nextNumbers(sentBefore), queued)}
+            onScreen={onScreen}
             onAnswer={revived ? answerStopped : undefined}
           />
         ) : (

@@ -65,6 +65,7 @@ import {
   applyLog,
   builtinThemes,
   canArchive,
+  cardBox,
   DEFAULT_PERMISSION_MODE,
   defaultThemePrefs,
   isEditTool,
@@ -81,7 +82,7 @@ import {
   toyonDark,
 } from "@toyon/shared";
 import { owedJump } from "../app/unseenJump.ts";
-import { stoppedBy } from "../surfaces/chat/ask.ts";
+import { stoppedAsk, stoppedBy } from "../surfaces/chat/ask.ts";
 import { dotClass } from "../surfaces/util.ts";
 import { mergeLinks } from "./links.ts";
 import { fromInputs, type PendingAttachment } from "./pending.ts";
@@ -2588,6 +2589,23 @@ function onServer(s: State, msg: StoreServerMsg): State {
           ...(usage !== l.usage ? { usage } : {}),
         };
       });
+      // the card's box goes with the card: what was attached to it went behind the answer, or with
+      // a pass went nowhere. A stop keeps it with the answers, for the question revived. This tab's
+      // own, since the daemon's word that the box is empty carries this tab's name when it answered.
+      if (ev.type === "agent-ask-end" && !stoppedBy(ev.outcome) && next.local[cardBox(ev.id)]?.attachments.length)
+        next = withLocal(next, cardBox(ev.id), (l) => ({ ...l, attachments: [] }));
+      // a message after a stopped question is the person moving on from it: what was dropped on its
+      // card goes into the plain box, in sight and with whatever is sent next, instead of waiting in
+      // a box nothing shows any more. The answer revived from the card emptied its box before this.
+      if (ev.type === "user-message") {
+        const was = stoppedAsk(s.local[id]?.chat ?? []);
+        const box = was ? cardBox(was.id) : null;
+        const held = box ? (next.local[box]?.attachments ?? []) : [];
+        if (box && held.length) {
+          next = withLocal(next, box, (l) => ({ ...l, attachments: [] }));
+          next = withLocal(next, id, (l) => ({ ...l, attachments: [...l.attachments, ...held] }));
+        }
+      }
       if (ev.type === "turn-end") {
         // edits happened but nothing hot-updated: the change is outside HMR's reach
         // (backend/data) — ask the preview to reload itself

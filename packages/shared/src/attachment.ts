@@ -87,3 +87,7 @@ export interface Uploaded {
   bytes: number;
   text: boolean;
 }
+
+/** the box an ask card's attachments wait in: the card's own, apart from the composer's, since a
+ * drop on the card goes with the answer and not with the message being written behind it */
+export const cardBox = (askId: string): string => `card:${askId}`;

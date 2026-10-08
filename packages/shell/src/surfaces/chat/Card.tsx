@@ -76,17 +76,30 @@ export function Card({
   root,
   id,
   onKeyDown,
+  onKeyUp,
+  onPaste,
   children,
 }: {
   root: Root;
   /** the card's own id: a new one takes the keyboard */
   id: string;
   onKeyDown: (e: React.KeyboardEvent) => void;
+  onKeyUp?: (e: React.KeyboardEvent) => void;
+  /** a card that takes what is pasted on it, the way the composer's field does */
+  onPaste?: (e: React.ClipboardEvent) => void;
   children: ReactNode;
 }) {
   const onBlur = useCardFocus(root, id);
   return (
-    <div ref={root} className="card" tabIndex={-1} onKeyDown={onKeyDown} onBlur={onBlur}>
+    <div
+      ref={root}
+      className="card"
+      tabIndex={-1}
+      onKeyDown={onKeyDown}
+      onKeyUp={onKeyUp}
+      onPaste={onPaste}
+      onBlur={onBlur}
+    >
       {children}
     </div>
   );

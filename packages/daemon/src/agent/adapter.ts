@@ -29,6 +29,12 @@ export type AuthOutcome =
  * the agent is told about rather than being cut off mid-turn. */
 export type AskReply = { kind: "answers"; answers?: AskAnswer[] } | { kind: "choice"; choiceId: string };
 
+/** what was attached to the card an answer closes. An elicitation's answer carries only words,
+ * so the pictures follow it into the turn as a message of the person's own, right behind it. */
+export interface FollowUp {
+  attachments: AttachmentInput[];
+}
+
 /** which model a side question may run on. `require` asks only on the agent's quick model, for a
  * question that would rather go unasked than spend what the chat's model costs; `prefer` falls back
  * to the agent's default, for one whose answer is still wanted. */
@@ -107,7 +113,7 @@ export interface AgentAdapter {
   loggedIn(): void;
   /** answer (or skip) an open ask card. An id that already settled is a no-op: two shells can
    * be watching the same worktree, and the other one may have answered first. */
-  answer(askId: string, reply: AskReply): void;
+  answer(askId: string, reply: AskReply, followUp?: FollowUp): void;
   /** the worktree (or the daemon) is going away: stop the turn and kill the agent's process */
   close(): Promise<void>;
 }

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { RepoInfo } from "@toyon/shared";
 import type { ChatItem } from "../../state/store.ts";
-import { cardLine, type HandoffItem, handoffAnswer, openCard, parseHandoffArgs } from "./handoff.ts";
+import { cardDropBox, cardLine, type HandoffItem, handoffAnswer, openCard, parseHandoffArgs } from "./handoff.ts";
 
 const repo = (id: string, name = id): RepoInfo => ({
   id,
@@ -39,6 +39,16 @@ describe("openCard", () => {
     expect(openCard([handoff({ state: "continued" }), ask("k1", "answered")])).toBeNull();
     expect(openCard([handoff({ state: "declined" }), ask("k1")])?.id).toBe("k1");
     expect(openCard([])).toBeNull();
+  });
+});
+
+describe("cardDropBox", () => {
+  test("a question card with the box takes the drop; set aside, closed, or another kind, the composer does", () => {
+    expect(cardDropBox({ chat: [ask("k1")], cardParked: undefined })).toBe("card:k1");
+    expect(cardDropBox({ chat: [ask("k1")], cardParked: "k1" })).toBeNull();
+    expect(cardDropBox({ chat: [ask("k1", "answered")], cardParked: undefined })).toBeNull();
+    expect(cardDropBox({ chat: [ask("k1"), handoff()], cardParked: undefined })).toBeNull();
+    expect(cardDropBox(undefined)).toBeNull();
   });
 });
 

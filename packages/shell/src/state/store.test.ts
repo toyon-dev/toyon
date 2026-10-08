@@ -783,6 +783,39 @@ describe("chat folding", () => {
     expect(s.local.a?.cardParked).toBeUndefined();
   });
 
+  test("what is attached to a card goes with its close, and a stop keeps it for the revived question", () => {
+    const paste = { kind: "paste" as const, key: "p1", text: "a\nb", chars: 3, lines: 2, preview: "a" };
+    const question = agent("a", { type: "agent-question", id: "k1", message: "Which?", questions, ts: 0 });
+    let s = run([hello(wt("a")), question, { a: "attach", id: "card:k1", items: [paste] }]);
+    expect(s.local["card:k1"]?.attachments).toEqual([paste]);
+    // another card's close leaves it; a stop leaves it too, with the answers
+    s = reducer(s, agent("a", { type: "agent-ask-end", id: "other", outcome: "answered", ts: 1 }));
+    s = reducer(s, agent("a", { type: "agent-ask-end", id: "k1", outcome: "cancelled", ts: 2 }));
+    expect(s.local["card:k1"]?.attachments).toEqual([paste]);
+    s = reducer(s, agent("a", { type: "agent-ask-end", id: "k1", outcome: "answered", ts: 3 }));
+    expect(s.local["card:k1"]?.attachments).toEqual([]);
+  });
+
+  test("a message after a stopped question moves what its card held into the plain box", () => {
+    const paste = { kind: "paste" as const, key: "p1", text: "a\nb", chars: 3, lines: 2, preview: "a" };
+    const other = { kind: "paste" as const, key: "p2", text: "c", chars: 1, lines: 1, preview: "c" };
+    let s = run([
+      hello(wt("a")),
+      agent("a", { type: "agent-question", id: "k1", message: "Which?", questions, ts: 0 }),
+      { a: "attach", id: "card:k1", items: [paste] },
+      { a: "attach", id: "a", items: [other] },
+      agent("a", { type: "agent-ask-end", id: "k1", outcome: "cancelled", ts: 1 }),
+    ]);
+    expect(s.local["card:k1"]?.attachments).toEqual([paste]);
+    // the person sent something else: the card's chips join the box's own, after them
+    s = reducer(s, agent("a", { type: "user-message", text: "never mind", ts: 2 }));
+    expect(s.local["card:k1"]?.attachments).toEqual([]);
+    expect(s.local.a?.attachments).toEqual([other, paste]);
+    // and a message after that finds nothing to move
+    s = reducer(s, agent("a", { type: "user-message", text: "and so on", ts: 3 }));
+    expect(s.local.a?.attachments).toEqual([other, paste]);
+  });
+
   test("a stop keeps the box's answers, and the stopped question can take the box again", () => {
     let s = run([
       hello(wt("a")),

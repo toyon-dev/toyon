@@ -8,7 +8,7 @@ import type {
   WorktreeInfo,
 } from "@toyon/shared";
 import { AgentAccounts, type AgentAccountsDeps } from "../../src/agent/accounts.ts";
-import type { AgentAdapter, AskOpts, AskReply, SendOpts } from "../../src/agent/adapter.ts";
+import type { AgentAdapter, AskOpts, AskReply, FollowUp, SendOpts } from "../../src/agent/adapter.ts";
 import { AgentRegistry, type AgentSpec } from "../../src/agent/registry.ts";
 import type { ForwardOpts, ProcForwarder } from "../../src/runtime/forward.ts";
 import type { PreviewHandler, WorktreeProxy } from "../../src/runtime/proxy.ts";
@@ -90,9 +90,9 @@ export class FakeAgent implements AgentAdapter {
     this.asked.push([system, prompt, opts]);
     return this.askReply;
   }
-  answered: Array<[string, AskReply]> = [];
-  answer(askId: string, reply: AskReply) {
-    this.answered.push([askId, reply]);
+  answered: Array<[string, AskReply, FollowUp | undefined]> = [];
+  answer(askId: string, reply: AskReply, followUp?: FollowUp) {
+    this.answered.push([askId, reply, followUp]);
   }
   auths: Array<[string, string | undefined]> = [];
   async authenticate(methodId: string, apiKey?: string) {

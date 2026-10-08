@@ -1586,6 +1586,17 @@
     margin-top: auto;
     padding-top: 10px;
   }
+  /* the way a picture gets onto the card by hand, apart from the answer's own actions */
+  .card-attach {
+    margin-left: auto;
+  }
+  /* what is attached to the card, between the question and its options: rows like the composer's
+     chips, bled to the box's edge the same way, with a breath above the options under them */
+  .card-chips {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 6px;
+  }
   /* whatever is first in the box keeps the corner clear for the stop (Composer): the question
      when it heads the box, the tab strip's list when the strip does, so the far tab does not
      sit under the glyph */

@@ -24,6 +24,16 @@ const uploads = new UploadStore(join(home, "uploads"));
 /** an upload as a chip leaves it: on the daemon, named by nothing yet */
 const upload = async (kind: "image" | "file", mime: string, body: string) =>
   (await uploads.put(kind, mime, [Buffer.from(body)])).upload;
+/** a fresh upload each time: recording a message lets go of the one it was copied from */
+const shot = async (name = "shot.png") => ({
+  kind: "image" as const,
+  name,
+  mimeType: "image/png" as const,
+  upload: await upload("image", "image/png", "PNG"),
+  bytes: 3,
+  width: 8,
+  height: 4,
+});
 const wt = join(home, "wt");
 const bounds: Bounds = {
   root: wt,
@@ -1588,16 +1598,6 @@ describe("AcpSession", () => {
     });
   });
 
-  /** a fresh upload each time: recording a message lets go of the one it was copied from */
-  const shot = async (name = "shot.png") => ({
-    kind: "image" as const,
-    name,
-    mimeType: "image/png" as const,
-    upload: await upload("image", "image/png", "PNG"),
-    bytes: 3,
-    width: 8,
-    height: 4,
-  });
   const paste = (text: string, name?: string) => ({ kind: "paste" as const, text, ...(name ? { name } : {}) });
   const pick = {
     kind: "pick" as const,
@@ -2027,6 +2027,77 @@ describe("AcpSession ask cards", () => {
     expect(types.indexOf("agent-ask-end")).toBeLessThan(types.lastIndexOf("user-message"));
     expect(fake.steers).toHaveLength(1);
     expect(types.filter((t) => t === "turn-start")).toHaveLength(1);
+    await w.session.close();
+  });
+
+  /** a turn that asks, reports the answer, and then waits at `gate` before ending: room for what
+   * follows the answer to join the turn */
+  const asksThenWaits =
+    (gate: Promise<void>): PromptScript =>
+    async (p, client) => {
+      await asks()(p, client);
+      await gate;
+      return { stopReason: "end_turn" };
+    };
+
+  test("what was attached to the card follows the answer into the turn, as the person's own message", async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    const fake = fakeAgent(asksThenWaits(gate), { steering: true, images: true });
+    const w = world(fake);
+    w.session.send("go");
+    await waitFor(() => !!openAsk(w.events));
+    const id = openAsk(w.events)!;
+    w.session.answer(id, { kind: "answers", answers: [{ selected: ["a"] }] }, { attachments: [await shot()] });
+    await waitFor(() => fake.steers.length === 1);
+    // the card closed first, then the message went in behind the answer, picture and all
+    const types = w.types();
+    expect(types.indexOf("agent-ask-end")).toBeLessThan(types.lastIndexOf("user-message"));
+    expect(w.events.findLast((e) => e.type === "user-message")).toMatchObject({
+      text: 'with my answer to "Auth"',
+      attachments: [{ kind: "image", n: 1, name: "shot.png" }],
+    });
+    const prompt = fake.steers[0]!.prompt;
+    expect(prompt.some((b) => b.type === "image")).toBe(true);
+    expect(prompt.at(-1)).toEqual({ type: "text", text: 'with my answer to "Auth"' });
+    expect(saidBack(w.events)).toMatchObject({ action: "accept", content: { question_0: "a" } });
+    release();
+    await w.idle();
+    expect(types.filter((t) => t === "turn-start")).toHaveLength(1);
+    await w.session.close();
+  });
+
+  test("an agent that takes no steering reads what followed the answer as the next turn", async () => {
+    const fake = fakeAgent(asks(), { images: true });
+    const w = world(fake);
+    w.session.send("go");
+    await waitFor(() => !!openAsk(w.events));
+    w.session.answer(
+      openAsk(w.events)!,
+      { kind: "answers", answers: [{ selected: ["b"] }] },
+      { attachments: [await shot()] },
+    );
+    await w.idle();
+    expect(fake.steers).toHaveLength(0);
+    expect(fake.prompts).toHaveLength(2);
+    expect(fake.prompts[1]!.prompt.some((b) => b.type === "image")).toBe(true);
+    expect(w.types().filter((t) => t === "turn-start")).toHaveLength(2);
+    await w.session.close();
+  });
+
+  test("a pass sends nothing on, whatever was attached to the card", async () => {
+    const fake = fakeAgent(asks(), { steering: true, images: true });
+    const w = world(fake);
+    w.session.send("go");
+    await waitFor(() => !!openAsk(w.events));
+    w.session.answer(openAsk(w.events)!, { kind: "answers" }, { attachments: [await shot()] });
+    await w.idle();
+    expect(saidBack(w.events)).toEqual({ action: "decline" });
+    expect(fake.steers).toHaveLength(0);
+    expect(fake.prompts).toHaveLength(1);
+    expect(w.types().filter((t) => t === "user-message")).toHaveLength(1);
     await w.session.close();
   });
 

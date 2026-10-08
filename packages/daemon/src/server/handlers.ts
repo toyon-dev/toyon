@@ -750,9 +750,14 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
 
   // No UserError when the ask has already closed: two shells can watch one worktree, and the
   // loser of that race would read a refusal about a card that is about to disappear anyway.
-  "agent-answer"(msg, _ctx, s) {
+  // the card's box is taken with the frame like a message's: what was attached follows the answer
+  // into the turn, and a gone upload refuses the frame whole and fills the card's box again
+  async "agent-answer"(msg, ctx, s) {
     requireRun(s, msg.worktreeId);
-    s.runtime.agentFor(msg.worktreeId)?.answer(msg.askId, { kind: "answers", answers: msg.answers });
+    await sending(s, ctx, msg, msg.attachments, async () => {
+      const followUp = msg.attachments?.length ? { attachments: msg.attachments } : undefined;
+      s.runtime.agentFor(msg.worktreeId)?.answer(msg.askId, { kind: "answers", answers: msg.answers }, followUp);
+    });
   },
 
   "agent-decide"(msg, _ctx, s) {

@@ -9,6 +9,7 @@ import { useSock, useStoreInstance } from "../../state/context.tsx";
 import { composerBoxOf, type DropZone, worktreeById } from "../../state/store.ts";
 import type { DaemonSocket } from "../../ws.ts";
 import { parentOf } from "../changes/fileTree.ts";
+import { cardDropBox } from "./handoff.ts";
 import { imageFiles, otherFiles, type PreparedImage, prepareImage, readText } from "./images.ts";
 
 /** the chat panel, registered by ChatPanel wherever it is placed. The drop is handled on the window (a file dropped on
@@ -165,11 +166,17 @@ export function pickAttachments(store: Store, boxId: string, { images = false } 
   input.click();
 }
 
-/** the box a drop lands in: the one the composer on screen writes in. Read at drop time, like the
- * pending counts. */
+/** a send refused while a chip's upload is still on its way: the message would name an upload the
+ * daemon does not have yet */
+export const STILL_UPLOADING = "still uploading what is attached; send again in a moment";
+
+/** the box a drop lands in: the one the composer on screen writes in, or the question card that
+ * has the box, since a drop on the card goes with the answer and not with the message written
+ * behind it. Read at drop time, like the pending counts. */
 function dropBox(store: Store): string | null {
   const s = store.getState();
-  return composerBoxOf(worktreeById(s, s.activeId));
+  const active = worktreeById(s, s.activeId);
+  return cardDropBox(active ? s.local[active.worktree.id] : undefined) ?? composerBoxOf(active);
 }
 
 /** a drop on the chat panel: pictures as images, everything else as files, and a folder refused

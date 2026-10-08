@@ -173,6 +173,29 @@ describe("DraftStore attachments", () => {
     expect(heard).toEqual([]);
   });
 
+  test("a card's box empties when its card is answered or passed, and a stop keeps it", () => {
+    const { store, hub, lists, kept } = make();
+    store.setAttachments("card:k1", [file("u1")], "tab1");
+    store.setAttachments("card:k2", [file("u2")], "tab1");
+    lists.length = kept.length = 0;
+    hub.emit("agent", "wt-a", 1, { type: "agent-ask-end", id: "k1", outcome: "cancelled", ts: 0 });
+    expect(store.attachments("card:k1")).toEqual([file("u1")]);
+    expect(lists).toEqual([]);
+    // told under no tab's name: every tab hears it, the one that answered included
+    hub.emit("agent", "wt-a", 2, { type: "agent-ask-end", id: "k1", outcome: "answered", ts: 0 });
+    hub.emit("agent", "wt-a", 3, { type: "agent-ask-end", id: "k2", outcome: "skipped", ts: 0 });
+    expect(store.allAttachments()).toEqual({});
+    expect(lists).toEqual([
+      ["card:k1", 0, undefined],
+      ["card:k2", 0, undefined],
+    ]);
+    expect(kept.at(-1)).toEqual([]);
+    // a card that never had a box is nothing told
+    lists.length = 0;
+    hub.emit("agent", "wt-a", 4, { type: "agent-ask-end", id: "k3", outcome: "answered", ts: 0 });
+    expect(lists).toEqual([]);
+  });
+
   test("drop empties both, and prune drops the lists of boxes nothing names", () => {
     const { store, lists } = make();
     store.setAttachments("wt-a", [paste]);

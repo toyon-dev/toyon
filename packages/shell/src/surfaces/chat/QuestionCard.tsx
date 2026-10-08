@@ -5,11 +5,13 @@
 // A question the turn was stopped under comes back into the same box (`onAnswer`): nothing waits
 // on it, so its answer is the composer's to send as a message, and there is nothing to skip.
 
-import type { AskAnswer, AskQuestion } from "@toyon/shared";
+import { type AskAnswer, type AskQuestion, type AttachmentKind, cardBox, numbered } from "@toyon/shared";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useDispatch, useSock } from "../../state/context.tsx";
+import { toInput } from "../../state/attach.ts";
+import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
+import { isUploading } from "../../state/pending.ts";
 import { useLocalField } from "../../state/selectors.ts";
-import { Button } from "../../ui/Button.tsx";
+import { Button, IconButton } from "../../ui/Button.tsx";
 import { type Choice, type ChoiceField, Choices } from "../../ui/Choices.tsx";
 import { handleChoiceKey } from "../../ui/choiceKeys.ts";
 import { cx } from "../../ui/cx.ts";
@@ -37,23 +39,38 @@ import {
   walk,
 } from "./ask.ts";
 import { Card, CardBand, CardFoot, CardHead, type Root } from "./Card.tsx";
+import { DraftChip } from "./DraftChip.tsx";
+import { pickAttachments, STILL_UPLOADING, useComposerPaste } from "./useIntake.ts";
 
 export function QuestionCard({
   item,
   ask,
   worktreeId,
   rootRef: root,
+  numbers,
+  onScreen,
   onAnswer,
 }: {
   item: AskItem;
   ask: Extract<AskItem["ask"], { kind: "question" }>;
   worktreeId: string;
   rootRef: Root;
+  /** the number each kind's next chip takes, counted on from what this session has sent and queued */
+  numbers: Readonly<Record<AttachmentKind, number>>;
+  /** a phone: the attach button takes pictures alone, and the only way in */
+  onScreen: boolean;
   onAnswer?: (answers: AskAnswer[]) => void;
 }) {
   const sock = useSock();
   const dispatch = useDispatch();
+  const store = useStoreInstance();
+  const clientId = useStore((s) => s.clientId);
   const { message, questions } = ask;
+  // what is dropped, pasted or picked onto the card waits in the card's own box, apart from the
+  // message written behind it, and goes with the answer
+  const box = cardBox(item.id);
+  const items = useLocalField(box, "attachments");
+  const paste = useComposerPaste(box, worktreeId);
   // the answers so far and the question on screen live in the store, so switching worktrees and
   // parking keep them; the cursor is this mount's own and lands on the question's pick
   const stored = useLocalField(worktreeId, "card");
@@ -88,7 +105,19 @@ export function QuestionCard({
       if (answers) onAnswer(answers);
       return;
     }
-    sock?.send({ t: "agent-answer", worktreeId, askId: item.id, ...(answers ? { answers } : {}) });
+    // the chips go behind the answer as a message of the person's own; a pass takes none. This
+    // tab empties the card's box itself, since the daemon's word that it is empty carries this
+    // tab's name. The notice goes under the box the card has, where the hands are.
+    const carried = answers ? items : [];
+    if (carried.some(isUploading)) return dispatch({ a: "notice", id: worktreeId, text: STILL_UPLOADING });
+    sock?.send({
+      t: "agent-answer",
+      worktreeId,
+      askId: item.id,
+      ...(answers ? { answers } : {}),
+      ...(carried.length ? { attachments: carried.map(toInput), boxId: box, clientId } : {}),
+    });
+    if (carried.length) dispatch({ a: "clear-attachments", id: box });
     // the answer is the reader's message to the agent, and the turn going on is what they wait for
     // now: the log goes to its end from wherever they had scrolled to read, as it does on a send
     dispatch({ a: "answered", id: worktreeId });
@@ -169,6 +198,7 @@ export function QuestionCard({
   };
 
   const onKeyDown = (e: React.KeyboardEvent) => {
+    paste.onPasteKey(e);
     if (
       handleChoiceKey(e, {
         // the send page's rows are the questions, numbered the way the options are: the digit
@@ -232,7 +262,30 @@ export function QuestionCard({
           skip
         </Button>
       )}
+      {/* the way in for a picture where there is no paste or drop to bring it: a phone, above all.
+          At the far end, apart from the answer's own actions. */}
+      <IconButton
+        className="card-attach"
+        icon="attach"
+        tone="chrome"
+        label={onScreen ? "Attach a picture" : "Attach a picture or a file"}
+        onClick={() => pickAttachments(store, box, { images: onScreen })}
+      />
     </CardFoot>
+  );
+
+  /** what is attached to the card, as rows between the question and its options: it goes with the
+   * answer, so it stands where the answer is made. Only on the page that is open, since the pages
+   * off screen are in the DOM for their height alone. */
+  const chips = items.length > 0 && (
+    <div className="card-chips">
+      {numbered(items, numbers).map(([a, n]) => {
+        const detach = () => dispatch({ a: "detach", id: box, key: a.key });
+        // an element pick is the composer's: nothing brings one to a card
+        if (a.kind === "pick") return null;
+        return <DraftChip key={a.key} item={a} n={n} onRemove={detach} />;
+      })}
+    </div>
   );
 
   /** one question's page: its text, its options, the "other" row, the typed answer's field once
@@ -288,6 +341,7 @@ export function QuestionCard({
     return (
       <div key={qq.id} className={cx("card-page", !open && "card-page-off")}>
         <CardHead>{qq.text || message}</CardHead>
+        {open && chips}
         <Choices
           rows={rows}
           cursor={open ? cursor : undefined}
@@ -305,7 +359,7 @@ export function QuestionCard({
   };
 
   return (
-    <Card root={root} id={item.id} onKeyDown={onKeyDown}>
+    <Card root={root} id={item.id} onKeyDown={onKeyDown} onKeyUp={paste.onPasteKeyUp} onPaste={paste.onPaste}>
       {/* the questions as tabs across the top: the headers are the agent's short names for them,
           and the one open joins the page under it. A dot on each says which are answered. The
           send stands apart at the far end: it is the step after the questions, not one of them. */}
@@ -339,6 +393,7 @@ export function QuestionCard({
         {sendPage(questions) !== -1 && (
           <div className={cx("card-page", !review && "card-page-off")}>
             <CardHead>Send these answers?</CardHead>
+            {review && chips}
             <Choices
               hover
               rows={questions.map((qq, i) => {

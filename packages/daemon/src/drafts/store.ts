@@ -6,7 +6,7 @@
 // The attachment lists have a file of their own again, so the text's file keeps its shape.
 
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { type AttachmentInput, attachmentInputSchema } from "@toyon/shared";
+import { type AttachmentInput, attachmentInputSchema, cardBox } from "@toyon/shared";
 import { uploadIds } from "../agent/uploads.ts";
 import type { Hub } from "../core/hub.ts";
 import { log } from "../core/log.ts";
@@ -49,6 +49,13 @@ export class DraftStore {
       });
       if (items.length) this.lists[id] = items;
     }
+    // a card's box ends with the card the person closed: a pass, or the answer that already took
+    // it. Nothing then names its uploads, and every tab hears the box empty. A stop keeps it, with
+    // the card's answers: the question can still be answered as a message, and the chips go with it.
+    d.hub.on("agent", (_worktreeId, _seq, event) => {
+      if (event.type !== "agent-ask-end") return;
+      if (event.outcome === "answered" || event.outcome === "skipped") this.take(cardBox(event.id));
+    });
   }
 
   /** every box with text in it, for hello */

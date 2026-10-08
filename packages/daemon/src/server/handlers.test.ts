@@ -1334,11 +1334,58 @@ describe("handlers", () => {
     await dispatch({ t: "agent-answer", worktreeId: main.id, askId: "k2" }, ctx, services);
     await dispatch({ t: "agent-decide", worktreeId: main.id, askId: "k3", choiceId: "cancel" }, ctx, services);
     expect(agent.answered).toEqual([
-      ["k1", { kind: "answers", answers }],
+      ["k1", { kind: "answers", answers }, undefined],
       // no answers is the skip button, and the daemon must be able to tell it from an empty pick
-      ["k2", { kind: "answers", answers: undefined }],
-      ["k3", { kind: "choice", choiceId: "cancel" }],
+      ["k2", { kind: "answers", answers: undefined }, undefined],
+      ["k3", { kind: "choice", choiceId: "cancel" }, undefined],
     ]);
+  });
+
+  test("an answer with chips takes the card's box and hands them on behind the answer", async () => {
+    const { services, ctx, agents, repo, replies } = make();
+    const uploads = services.attachments.uploads;
+    const r = await services.repos.register(repo);
+    const main = services.state.worktrees.find((x) => x.repoId === r.id)!;
+    await opened(main.id, ctx, services);
+    const agent = agents.get(main.id)!;
+    const up = await uploads.put("file", "text/plain", [Buffer.from("notes")]);
+    const items = [{ kind: "file" as const, name: "notes.txt", ...up }];
+    await dispatch({ t: "set-attachments", boxId: "card:k1", items, clientId: "tab1" }, ctx, services);
+    const answers = [{ selected: ["a"] }];
+    await dispatch(
+      {
+        t: "agent-answer",
+        worktreeId: main.id,
+        askId: "k1",
+        answers,
+        attachments: items,
+        boxId: "card:k1",
+        clientId: "tab1",
+      },
+      ctx,
+      services,
+    );
+    expect(agent.answered).toEqual([["k1", { kind: "answers", answers }, { attachments: items }]]);
+    expect(services.drafts.attachments("card:k1")).toEqual([]);
+    expect(lastOf(replies, "unsent")).toBeUndefined();
+    // a chip whose upload is gone refuses the answer whole, and the box is filled again without it
+    const gone = [{ kind: "file" as const, name: "lost.txt", upload: "nope", bytes: 1, text: true }];
+    await dispatch({ t: "set-attachments", boxId: "card:k2", items: gone, clientId: "tab1" }, ctx, services);
+    await dispatch(
+      {
+        t: "agent-answer",
+        worktreeId: main.id,
+        askId: "k2",
+        answers,
+        attachments: gone,
+        boxId: "card:k2",
+        clientId: "tab1",
+      },
+      ctx,
+      services,
+    );
+    expect(agent.answered).toHaveLength(1);
+    expect(lastOf(replies, "unsent")).toMatchObject({ t: "unsent", boxId: "card:k2", items: [] });
   });
 
   test("a handoff card's answer and the verb reach the service with their fields; a refusal is the error frame", async () => {

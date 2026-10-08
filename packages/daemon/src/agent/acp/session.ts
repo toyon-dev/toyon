@@ -27,7 +27,7 @@ import { DEFAULT_PERMISSION_MODE, nextNumbers } from "@toyon/shared";
 import { UserError } from "../../core/errors.ts";
 import { fireAndForget, log } from "../../core/log.ts";
 import type { AuthObservation } from "../accounts.ts";
-import type { AgentAdapter, AskOpts, AskReply, AuthOutcome, SendOpts } from "../adapter.ts";
+import type { AgentAdapter, AskOpts, AskReply, AuthOutcome, FollowUp, SendOpts } from "../adapter.ts";
 import type { AttachmentStore, Stored } from "../attachments.ts";
 import { agentModeFor, modeAfterPlan } from "../modes.ts";
 import { markOrigins } from "../origins.ts";
@@ -228,6 +228,8 @@ function recorded(reply?: AskReply): { answers?: AskAnswer[]; choiceId?: string 
  * end event and forgets the card, and it is safe to call twice (the loser of a race does nothing). */
 interface PendingAsk {
   settle: (outcome: AskOutcome, reply?: AskReply) => void;
+  /** a question card's headers, what a message sent behind the answer names */
+  headers?: string[];
 }
 
 export class AcpSession implements AgentAdapter {
@@ -1321,6 +1323,7 @@ export class AcpSession implements AgentAdapter {
         return outcome === "skipped" ? { action: "decline" } : { action: "cancel" };
       },
       signal,
+      form.questions.map((q) => q.header || q.text || params.message),
     );
   }
 
@@ -1330,6 +1333,7 @@ export class AcpSession implements AgentAdapter {
     card: (id: string) => AgentEvent,
     respond: (outcome: AskOutcome, reply?: AskReply) => R,
     signal?: AbortSignal,
+    headers?: string[],
   ): Promise<R> {
     const id = randomUUID();
     return new Promise<R>((resolve) => {
@@ -1342,17 +1346,27 @@ export class AcpSession implements AgentAdapter {
       };
       const onAbort = () => settle("cancelled");
       signal?.addEventListener("abort", onAbort, { once: true });
-      this.asks.set(id, { settle });
+      this.asks.set(id, { settle, ...(headers ? { headers } : {}) });
       this.emit(card(id));
       this.syncStatus();
     });
   }
 
-  answer(askId: string, reply: AskReply) {
+  /** An answer closes its card. What was attached to the card cannot go in the answer (an
+   * elicitation's values are words), so it follows as a message of the person's own, posted
+   * straight after the settle: the turn is still running, so it joins it the way a message typed
+   * then would, behind the tool result the answer became. Posted, not sent: a send closes every
+   * other open card as passed, and this message answers nothing. A pass sends nothing on. */
+  answer(askId: string, reply: AskReply, followUp?: FollowUp) {
     const ask = this.asks.get(askId);
     // two shells can watch one worktree; the other one answering first is normal, not an error
     if (!ask) return log.debug(this.d.worktreeId, `answer for an ask that already closed (${askId})`);
-    ask.settle(reply.kind === "answers" && !reply.answers ? "skipped" : "answered", reply);
+    const skipped = reply.kind === "answers" && !reply.answers;
+    ask.settle(skipped ? "skipped" : "answered", reply);
+    if (skipped || !followUp?.attachments.length) return;
+    const headers = ask.headers ?? [];
+    const text = headers.length === 1 ? `with my answer to "${headers[0]}"` : "with my answers";
+    this.post(text, { attachments: followUp.attachments });
   }
 
   /** every open card goes away with the turn or the process it belonged to */

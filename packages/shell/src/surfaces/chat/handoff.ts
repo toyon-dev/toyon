@@ -3,8 +3,8 @@
 // shares the box with the agent's asks, and this is what decides which card the box shows, what
 // its line says once parked, and what the typed `/handoff` means.
 
-import type { ClientMsg, RepoInfo } from "@toyon/shared";
-import type { ChatItem } from "../../state/store.ts";
+import { type ClientMsg, cardBox, type RepoInfo } from "@toyon/shared";
+import type { ChatItem, WorktreeLocal } from "../../state/store.ts";
 import { type AskItem, askLine } from "./ask.ts";
 
 export type HandoffItem = Extract<ChatItem, { kind: "handoff" }>;
@@ -18,6 +18,15 @@ export function openCard(chat: ChatItem[]): CardItem | null {
     (i) => (i.kind === "ask" && !i.outcome) || (i.kind === "handoff" && i.state === "proposed"),
   );
   return item?.kind === "ask" || item?.kind === "handoff" ? item : null;
+}
+
+/** the box a drop on the chat goes to when a question card has the box: the card's own, since the
+ * drop goes with the answer and not with the message written behind the card. Null when the
+ * composer's field is what is on screen: no card, a card set aside, or one of another kind. */
+export function cardDropBox(l: Pick<WorktreeLocal, "chat" | "cardParked"> | undefined): string | null {
+  const card = l ? openCard(l.chat) : null;
+  if (card?.kind !== "ask" || card.ask.kind !== "question" || l?.cardParked === card.id) return null;
+  return cardBox(card.id);
 }
 
 /** the line that stands for the card once it is set aside: the ask's own, or the question the

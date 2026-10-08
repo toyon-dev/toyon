@@ -2,17 +2,18 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { IMAGE_MAX_BYTES } from "@toyon/shared";
+import { IMAGE_MAX_BYTES, KNOCK_MAX, type Knock } from "@toyon/shared";
 import type { Server } from "bun";
 import { AttachmentStore } from "../agent/attachments.ts";
 import { UploadStore } from "../agent/uploads.ts";
 import { UserError } from "../core/errors.ts";
 import { GrantCodes } from "../core/grants.ts";
-import { PairCodes } from "../core/pair.ts";
+import { Knocks } from "../core/knocks.ts";
 import { previewGrant } from "../core/remote.ts";
 import type { RepoRegistry } from "../repos/registry.ts";
 import type { PreviewHandler } from "../runtime/proxy.ts";
 import { createFetch, type HttpOpts, type WsData } from "./http.ts";
+import { type PairingDeps, pairingRoutes } from "./pairing.ts";
 
 // The daemon's front door in local mode: loopback peers and loopback Host headers only (DNS
 // rebinding), the token on /ws and /register, and /register mapping user mistakes to 400.
@@ -62,7 +63,7 @@ const opts: HttpOpts = {
   branded: () => false,
   metrics: () => ({ lag: 0 }),
   noteShellOrigin: (o) => learnedOrigins.push(o),
-  remote: null,
+  remote: () => null,
   managed: { source: null, hash: null },
   preview: () => null,
   bootstrap: async () => ({ t: "hello", repos: [{ id: "r1" }] }),
@@ -88,11 +89,11 @@ const opts: HttpOpts = {
     return restartRefusal;
   },
   restartWait: () => ({ waiting: restartWaiting, asking: ["pick a colour"] }),
-  pair: new PairCodes(),
   grants: new GrantCodes(),
-  onPaired: () => {},
+  tailscale: () => ({ state: "ready", name: "mac.tail1234.ts.net", line: "" }),
+  origins: { isLoopback: (o) => /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(o) },
+  pairing: (req, url, d) => pairing({})(req, url, d),
   trusted: () => trustedOrigins,
-  phones: async () => null,
   mcp: async (_req, worktreeId) => {
     mcpHits.push(worktreeId);
     return new Response("mcp", { status: 200 });
@@ -100,6 +101,58 @@ const opts: HttpOpts = {
 };
 /** the worktree ids the MCP route handed on */
 const mcpHits: string[] = [];
+/** what the remote switch was asked, in order */
+const switched: string[] = [];
+/** the machines handed over */
+const handed: { origin: string; token: string }[] = [];
+/** a hub that hears nothing */
+const quiet = { emit: () => {} };
+/** the pairing routes over the fixture's services, any of them replaced */
+function pairing(over: Partial<PairingDeps>) {
+  const remote = over.remote ?? (() => null);
+  return pairingRoutes({
+    token: "secret",
+    authed: (req) => req.headers.get("authorization") === "Bearer secret",
+    remote,
+    grantCookie: (r) => `toyon_preview=${previewGrant("secret")}; Domain=${r.host}`,
+    origins: {
+      isOwn: (o) => o === "http://localhost:4141" || o === `https://${remote()?.host}`,
+      isLoopback: (o) => /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(o),
+    },
+    knocks: new Knocks(quiet),
+    onLetIn: () => {},
+    tailnet: {
+      phones: async () => null,
+      machines: async () => [{ name: "work", host: "work.tail1234.ts.net", toyon: { machine: "work" } }],
+      // the Toyons elsewhere: the home desk and a second daemon on this box
+      isToyon: async (origin) => origin === "https://home.tail1234.ts.net" || origin === "http://localhost:4242",
+    },
+    remoteSwitch: {
+      turnOn: async () => {
+        switched.push("on");
+        return { host: "mac.tail1234.ts.net", previews: "https://mac.tail1234.ts.net:{port}", front: "local" };
+      },
+      use: (view) => {
+        switched.push(`use ${view.host}`);
+        return { ...view, front: "local" };
+      },
+      turnOff: async () => {
+        switched.push("off");
+      },
+    },
+    addMachine: (origin, token) => {
+      if (!origin.startsWith("https://") || new URL(origin).origin !== origin)
+        throw new UserError("not an https origin");
+      handed.push({ origin, token });
+    },
+    ...over,
+  });
+}
+/** a fetch over the fixture with the public name `host`, and its pairing routes over the same */
+function withRemote(host: string | null, over: Partial<PairingDeps> = {}, http: Partial<HttpOpts> = {}) {
+  const remote = () => (host ? { host, previews: `https://w{id}.${host}`, front: "local" as const } : null);
+  return createFetch({ ...opts, remote, pairing: pairing({ remote, ...over }), ...http });
+}
 /** the shell origins on other machines the daemon has come to trust; tests push onto it */
 const trustedOrigins: string[] = [];
 const fetch = createFetch(opts);
@@ -122,88 +175,151 @@ describe("bootstrap", () => {
   });
 });
 
-describe("pair", () => {
+describe("knock", () => {
   const name = "toyon.example.com";
-  let paired = 0;
-  /** the Origin each redeem came from */
-  const redeemedFrom: (string | null)[] = [];
-  const remote = createFetch({
-    ...opts,
-    remote: { host: name, previews: `https://w{id}.${name}`, front: "local" },
-    pair: new PairCodes(),
-    onPaired: (origin) => {
-      paired++;
-      redeemedFrom.push(origin);
-    },
-  });
+  /** the Origin each let-in came from */
+  const letInFrom: (string | null)[] = [];
+  const remote = withRemote(name, { onLetIn: (origin) => letInFrom.push(origin) });
   const https = { "x-forwarded-proto": "https" };
-  const mint = (auth = "Bearer secret") =>
-    remote(req("/pair", { method: "POST", headers: { authorization: auth } }), srv());
-  const redeem = (code: string, headers: Record<string, string> = https, host = name) =>
-    remote(req("/pair/redeem", { method: "POST", host, headers, body: JSON.stringify({ code }) }), srv());
+  const knock = (headers: Record<string, string> = https, host = name) =>
+    remote(req("/knock", { method: "POST", host, headers }), srv());
+  const poll = (id: string, headers: Record<string, string> = https, host = name) =>
+    remote(req(`/knock/${id}`, { host, headers }), srv());
+  const answer = (id: string, letIn: boolean, auth = "Bearer secret") =>
+    remote(
+      req(`/knock/${id}/answer`, {
+        method: "POST",
+        headers: { authorization: auth, "content-type": "application/json" },
+        body: JSON.stringify({ letIn }),
+      }),
+      srv(),
+    );
+  const waiting = async (): Promise<Knock[]> => {
+    const r = await remote(req("/knocks", { headers: { authorization: "Bearer secret" } }), srv());
+    return (await r!.json()) as Knock[];
+  };
 
   test("phones are asked of Tailscale only for a tailnet name, and only with the token", async () => {
     const phones = [{ name: "Pixel", online: false }];
     const at = (host: string) =>
-      createFetch({
-        ...opts,
-        remote: { host, previews: `https://${host}:{port}`, front: "local" },
-        phones: async () => phones,
+      withRemote(host, {
+        tailnet: { phones: async () => phones, machines: async () => null, isToyon: async () => false },
       });
     const ask = (f: ReturnType<typeof createFetch>, auth = "Bearer secret") =>
-      f(req("/pair/phones", { headers: { authorization: auth } }), srv());
+      f(req("/phones", { headers: { authorization: auth } }), srv());
     expect(await (await ask(at("mac.tail1234.ts.net")))?.json()).toEqual(phones);
     expect(await (await ask(at(name)))?.json()).toBeNull();
     expect((await ask(at("mac.tail1234.ts.net"), "Bearer wrong"))?.status).toBe(401);
   });
 
-  test("a code needs the token, and a public name for its link", async () => {
-    expect((await mint("Bearer wrong"))?.status).toBe(401);
-    const local = await fetch(req("/pair", { method: "POST", headers: { authorization: "Bearer secret" } }), srv());
-    expect(local?.status).toBe(400);
-    expect(await local?.text()).toContain("toyon remote");
-  });
-
-  test("the phone trades the code for the token and the preview grant, once", async () => {
-    const r = await mint();
+  test("a device knocks, the token holder lets it in, and the token comes once with the grant", async () => {
+    const r = await knock();
     expect(r?.status).toBe(200);
     expect(r?.headers.get("cache-control")).toContain("no-store");
-    const { code, url, ms } = (await r!.json()) as { code: string; url: string; ms: number };
-    expect(url).toBe(`https://${name}/#pair=${code}`);
-    expect(ms).toBeGreaterThan(0);
+    const { id, word } = (await r!.json()) as { id: string; word: string };
+    expect(word).toMatch(/^[a-z]+ [a-z]+$/);
+    expect(await (await poll(id))?.json()).toEqual({ state: "waiting" });
+    expect(await waiting()).toEqual([{ id, word, from: null }]);
+    expect((await remote(req("/knocks", { headers: { authorization: "Bearer wrong" } }), srv()))?.status).toBe(401);
 
-    const before = paired;
-    const ok = await redeem(code);
-    expect(ok?.status).toBe(200);
-    expect(await ok?.json()).toEqual({ token: "secret" });
-    expect(ok?.headers.get("set-cookie")).toContain(`toyon_preview=${previewGrant("secret")}`);
-    expect(paired).toBe(before + 1);
+    expect((await answer(id, true, "Bearer wrong"))?.status).toBe(401);
+    expect(letInFrom).toEqual([]);
+    expect((await answer(id, true))?.status).toBe(204);
+    expect(letInFrom).toEqual([null]);
+    expect(await waiting()).toEqual([]);
 
-    const again = await redeem(code);
-    expect(again?.status).toBe(401);
-    expect(await again?.text()).toBe("code expired");
-    expect(paired).toBe(before + 1);
+    const got = await poll(id);
+    expect(got?.status).toBe(200);
+    expect(await got?.json()).toEqual({ state: "let-in", token: "secret" });
+    expect(got?.headers.get("set-cookie")).toContain(`toyon_preview=${previewGrant("secret")}`);
+    expect((await poll(id))?.status).toBe(404);
+    expect((await answer(id, true))?.status).toBe(404);
   });
 
-  test("a redeem off the https front is refused before the code is spent", async () => {
-    const { code } = (await (await mint())!.json()) as { code: string };
-    expect((await redeem(code, {}))?.status).toBe(403);
-    expect((await redeem(code, https, "localhost"))?.status).toBe(404);
-    expect((await redeem(code))?.status).toBe(200);
+  test("a refused knock reads as refused, and lets nothing in", async () => {
+    const { id } = (await (await knock())!.json()) as { id: string };
+    const before = letInFrom.length;
+    expect((await answer(id, false))?.status).toBe(204);
+    expect(letInFrom.length).toBe(before);
+    expect(await (await poll(id))?.json()).toEqual({ state: "refused" });
   });
 
-  test("a body without a code is expired, not an error", async () => {
-    const r = await remote(req("/pair/redeem", { method: "POST", host: name, headers: https, body: "nope" }), srv());
-    expect(r?.status).toBe(401);
+  test("an answer that is not a yes or a no is a mistake, not a refusal", async () => {
+    const { id } = (await (await knock())!.json()) as { id: string };
+    const r = await remote(
+      req(`/knock/${id}/answer`, { method: "POST", headers: { authorization: "Bearer secret" }, body: "nope" }),
+      srv(),
+    );
+    expect(r?.status).toBe(400);
+    expect(await (await poll(id))?.json()).toEqual({ state: "waiting" });
+  });
+
+  test("a knock off the https front is refused; on the loopback name a second daemon knocks and a web page cannot", async () => {
+    expect((await knock({}))?.status).toBe(403);
+    const stray = await remote(
+      req("/knock", { method: "POST", headers: { origin: "https://home.tail1234.ts.net" } }),
+      srv(),
+    );
+    expect(stray?.status).toBe(403);
+    const local = await remote(req("/knock", { method: "POST", headers: { origin: "http://localhost:4242" } }), srv());
+    expect(local?.status).toBe(200);
+    const { id } = (await local!.json()) as { id: string };
+    expect((await waiting()).at(-1)).toMatchObject({ id, from: "http://localhost:4242" });
+    expect((await answer(id, true))?.status).toBe(204);
+    expect(letInFrom.at(-1)).toBe("http://localhost:4242");
+    // no front, no grant cookie: a loopback page reaches previews by port, which are not gated
+    const got = await poll(id, {}, "localhost");
+    expect(await got?.json()).toEqual({ state: "let-in", token: "secret" });
+    expect(got?.headers.get("set-cookie")).toBeNull();
+  });
+
+  test("a page from elsewhere knocks only when it answers as a Toyon itself", async () => {
+    const r = await knock({ ...https, origin: "https://evil.example" });
+    expect(r?.status).toBe(403);
+    expect(await r?.text()).toBe("not a Toyon page");
+  });
+
+  test("a knock from one of this daemon's own origins is a device here, not a page from elsewhere", async () => {
+    const r = await remote(req("/knock", { method: "POST", headers: { origin: "http://localhost:4141" } }), srv());
+    expect(r?.status).toBe(200);
+    const { id } = (await r!.json()) as { id: string };
+    expect((await waiting()).at(-1)).toMatchObject({ id, from: null });
+    await answer(id, true);
+    expect(letInFrom.at(-1)).toBeNull();
+  });
+
+  test("a page no shell could be served from may not even knock", async () => {
+    const r = await knock({ ...https, origin: "http://evil.example" });
+    expect(r?.status).toBe(403);
+    expect(await r?.text()).toBe("not a Toyon page");
+  });
+
+  test("on the public name one address holds two slots, named by the front", async () => {
+    const f = withRemote(name);
+    const by = (ip: string, header = "x-forwarded-for") =>
+      f(req("/knock", { method: "POST", host: name, headers: { ...https, [header]: ip } }), srv());
+    expect((await by("203.0.113.9, 10.0.0.1"))?.status).toBe(200);
+    expect((await by("203.0.113.9"))?.status).toBe(200);
+    expect((await by("203.0.113.9"))?.status).toBe(429);
+    expect((await by("203.0.113.9", "fly-client-ip"))?.status).toBe(429);
+    expect((await by("203.0.113.10"))?.status).toBe(200);
+  });
+
+  test("past the cap a knock is turned away", async () => {
+    const full = withRemote(null);
+    for (let i = 0; i < KNOCK_MAX; i++)
+      expect((await full(req("/knock", { method: "POST" }), srv()))?.status).toBe(200);
+    const r = await full(req("/knock", { method: "POST" }), srv());
+    expect(r?.status).toBe(429);
   });
 
   describe("across origins", () => {
     const home = "https://home.tail1234.ts.net";
     const cors = (r: Response | undefined) => r?.headers.get("access-control-allow-origin");
 
-    test("any origin may ask to redeem, and its redeem names where it came from", async () => {
+    test("any shell origin may knock and poll, and its let-in names where it came from", async () => {
       const pre = await remote(
-        req("/pair/redeem", { method: "OPTIONS", host: name, headers: { ...https, origin: "https://stray.example" } }),
+        req("/knock", { method: "OPTIONS", host: name, headers: { ...https, origin: "https://stray.example" } }),
         srv(),
       );
       expect(pre?.status).toBe(204);
@@ -211,22 +327,24 @@ describe("pair", () => {
       expect(pre?.headers.get("access-control-allow-headers")).toContain("authorization");
       expect(pre?.headers.get("vary")).toContain("Origin");
 
-      const { code } = (await (await mint())!.json()) as { code: string };
-      const ok = await redeem(code, { ...https, origin: home });
-      expect(ok?.status).toBe(200);
-      expect(cors(ok)).toBe(home);
-      expect(redeemedFrom.at(-1)).toBe(home);
+      const r = await knock({ ...https, origin: home });
+      expect(r?.status).toBe(200);
+      expect(cors(r)).toBe(home);
+      const { id } = (await r!.json()) as { id: string };
+      expect((await waiting()).at(-1)).toMatchObject({ id, from: home });
+      expect(cors(await poll(id, { ...https, origin: home }))).toBe(home);
+      await answer(id, true);
+      expect(letInFrom.at(-1)).toBe(home);
+      const got = await poll(id, { ...https, origin: home });
+      expect(cors(got)).toBe(home);
+      expect(await got?.json()).toEqual({ state: "let-in", token: "secret" });
     });
 
     test("the token routes answer a trusted origin and say nothing to an unknown one", async () => {
       trustedOrigins.push(home);
       try {
         const trusted = await remote(
-          req("/pair", {
-            method: "POST",
-            host: name,
-            headers: { ...https, authorization: "Bearer secret", origin: home },
-          }),
+          req("/knocks", { host: name, headers: { ...https, authorization: "Bearer secret", origin: home } }),
           srv(),
         );
         expect(trusted?.status).toBe(200);
@@ -236,8 +354,7 @@ describe("pair", () => {
         expect(cors(health)).toBe(home);
 
         const stray = await remote(
-          req("/pair", {
-            method: "POST",
+          req("/knocks", {
             host: name,
             headers: { ...https, authorization: "Bearer secret", origin: "https://stray.example" },
           }),
@@ -248,7 +365,7 @@ describe("pair", () => {
         // a preflight from an unknown origin is not answered as one: the route sees an OPTIONS it
         // has no handler for, and the browser reads the missing header as the refusal it is
         const pre = await remote(
-          req("/pair", { method: "OPTIONS", host: name, headers: { ...https, origin: "https://stray.example" } }),
+          req("/knocks", { method: "OPTIONS", host: name, headers: { ...https, origin: "https://stray.example" } }),
           srv(),
         );
         expect(cors(pre)).toBeNull();
@@ -263,6 +380,94 @@ describe("pair", () => {
       const far = await fetch(req("/health", { headers: { origin: "https://home.tail1234.ts.net" } }), srv());
       expect(cors(far)).toBeNull();
     });
+  });
+});
+
+describe("remote switch, tailnet and handed machines", () => {
+  const post = (
+    path: string,
+    body: unknown,
+    auth = "Bearer secret",
+    host?: string,
+    headers: Record<string, string> = {},
+  ) =>
+    fetch(
+      req(path, {
+        method: "POST",
+        host,
+        headers: { authorization: auth, "content-type": "application/json", ...headers },
+        body: JSON.stringify(body),
+      }),
+      srv(),
+    );
+
+  test("/remote turns the name on or off behind the token, and a refusal is read as one", async () => {
+    expect((await post("/remote", { tailscale: true }, "Bearer wrong"))?.status).toBe(401);
+    const on = await post("/remote", { tailscale: true });
+    expect(on?.status).toBe(200);
+    expect(((await on!.json()) as { remote: { host: string } }).remote.host).toBe("mac.tail1234.ts.net");
+    const off = await post("/remote", { off: true });
+    expect(off?.status).toBe(200);
+    expect(await off?.json()).toEqual({ remote: null });
+    expect(
+      (await post("/remote", { host: "toyon.example.com", previews: "https://w{id}.toyon.example.com" }))?.status,
+    ).toBe(200);
+    expect(switched).toEqual(["on", "off", "use toyon.example.com"]);
+    expect((await post("/remote", {}))?.status).toBe(400);
+    const refusing = withRemote(null, {
+      remoteSwitch: {
+        turnOn: async () => {
+          throw new UserError("Tailscale is signed out");
+        },
+        use: () => {
+          throw new UserError("no");
+        },
+        turnOff: async () => {},
+      },
+    });
+    const r = await refusing(
+      req("/remote", {
+        method: "POST",
+        headers: { authorization: "Bearer secret", "content-type": "application/json" },
+        body: JSON.stringify({ tailscale: true }),
+      }),
+      srv(),
+    );
+    expect(r?.status).toBe(409);
+    expect(await r?.text()).toBe("Tailscale is signed out");
+  });
+
+  test("/health says whether Tailscale could hold a name", async () => {
+    const body = (await (await fetch(req("/health"), srv()))?.json()) as { tailscale?: { state: string } };
+    expect(body.tailscale?.state).toBe("ready");
+  });
+
+  test("/tailnet lists the machines behind the token", async () => {
+    expect((await fetch(req("/tailnet", { headers: { authorization: "Bearer wrong" } }), srv()))?.status).toBe(401);
+    const r = await fetch(req("/tailnet", { headers: { authorization: "Bearer secret" } }), srv());
+    expect(await r?.json()).toEqual([{ name: "work", host: "work.tail1234.ts.net", toyon: { machine: "work" } }]);
+  });
+
+  test("/machines takes an https origin and its token, from this box or a shell through the front", async () => {
+    expect((await post("/machines", { origin: "https://app.fly.dev", token: "t" }, "Bearer wrong"))?.status).toBe(401);
+    expect((await post("/machines", { origin: "http://app.fly.dev", token: "t" }))?.status).toBe(400);
+    expect((await post("/machines", { origin: "https://app.fly.dev/x", token: "t" }))?.status).toBe(400);
+    expect((await post("/machines", { origin: "https://app.fly.dev" }))?.status).toBe(400);
+    expect((await post("/machines", { origin: "https://app.fly.dev", token: "t" }))?.status).toBe(204);
+    expect(handed).toEqual([{ origin: "https://app.fly.dev", token: "t" }]);
+    const name = "toyon.example.com";
+    const remote = withRemote(name);
+    const far = await remote(
+      req("/machines", {
+        method: "POST",
+        host: name,
+        headers: { "x-forwarded-proto": "https", authorization: "Bearer secret", "content-type": "application/json" },
+        body: JSON.stringify({ origin: "https://app.fly.dev", token: "t" }),
+      }),
+      srv(),
+    );
+    expect(far?.status).toBe(204);
+    expect(handed).toHaveLength(2);
   });
 });
 
@@ -296,7 +501,7 @@ describe("guards, remote mode", () => {
   };
   const remote = createFetch({
     ...opts,
-    remote: { host: "toyon.example.com", previews: "https://w{id}.toyon.example.com", front: "local" },
+    remote: () => ({ host: "toyon.example.com", previews: "https://w{id}.toyon.example.com", front: "local" }),
     preview: (id) => (id === "a1b2c3" ? app : null),
   });
   const https = { "x-forwarded-proto": "https" };
@@ -436,7 +641,7 @@ describe("guards, remote mode", () => {
 describe("guards, a local front with previews on ports", () => {
   const ports = createFetch({
     ...opts,
-    remote: { host: "box.tail1234.ts.net", previews: "https://box.tail1234.ts.net:{port}", front: "local" },
+    remote: () => ({ host: "box.tail1234.ts.net", previews: "https://box.tail1234.ts.net:{port}", front: "local" }),
   });
   const https = { "x-forwarded-proto": "https" };
 
@@ -454,7 +659,7 @@ describe("guards, a local front with previews on ports", () => {
 describe("the agent's tools at /mcp/<id>", () => {
   const edge = createFetch({
     ...opts,
-    remote: { host: "app.fly.dev", previews: "https://app.fly.dev:{port}", front: "edge" },
+    remote: () => ({ host: "app.fly.dev", previews: "https://app.fly.dev:{port}", front: "edge" }),
   });
   test("a loopback peer reaches the handler with the worktree id, before the door", async () => {
     mcpHits.length = 0;
@@ -483,7 +688,7 @@ describe("the agent's tools at /mcp/<id>", () => {
 describe("guards, an edge front", () => {
   const edge = createFetch({
     ...opts,
-    remote: { host: "app.fly.dev", previews: "https://app.fly.dev:{port}", front: "edge" },
+    remote: () => ({ host: "app.fly.dev", previews: "https://app.fly.dev:{port}", front: "edge" }),
   });
   const https = { "x-forwarded-proto": "https" };
   const flyPeer = "172.19.0.2";
@@ -807,7 +1012,10 @@ describe("static shell", () => {
     open: opts.open,
     branded: () => false,
     noteShellOrigin: () => {},
-    remote: null,
+    remote: () => null,
+    tailscale: () => null,
+    origins: opts.origins,
+    pairing: opts.pairing,
     managed: { source: null, hash: null },
     preview: () => null,
     metrics: () => ({ lag: 0 }),
@@ -816,11 +1024,8 @@ describe("static shell", () => {
     offline: () => ({ start: startLink, port: 4242 }),
     restart: async () => null,
     restartWait: () => ({ waiting: null, asking: [] }),
-    pair: new PairCodes(),
     grants: new GrantCodes(),
-    onPaired: () => {},
     trusted: () => [],
-    phones: async () => null,
     mcp: opts.mcp,
   });
 

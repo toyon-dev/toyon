@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { LOGIN_STREAM, type RepoInfo, SHELL_STREAM, type WorktreeInfo } from "@toyon/shared";
+import { LOGIN_STREAM, type Remote, type RepoInfo, SHELL_STREAM, type WorktreeInfo } from "@toyon/shared";
 import { fakeAgents, fakeFactories } from "../../test/helpers/fakes.ts";
 import { tmpRepo } from "../../test/helpers/tmp-repo.ts";
 import { UserError } from "../core/errors.ts";
@@ -47,6 +47,7 @@ function twoPorts(): PortLease & { held: Set<number> } {
     release: (port) => held.delete(port),
     ranged: () => true,
     label: () => "1-2",
+    setRange: () => {},
   };
 }
 
@@ -54,6 +55,8 @@ function make(
   opts: {
     worktrees?: WorktreeInfo[];
     ports?: PortLease;
+    /** the public name as it stands, for the range the proxies must sit in */
+    remote?: () => Remote | null;
     viewed?: (id: string) => boolean;
     shown?: (id: string) => boolean;
     mainLeads?: (repoId: string) => boolean;
@@ -83,6 +86,7 @@ function make(
     agents,
     bridgeScript: () => "",
     ports: opts.ports,
+    remote: opts.remote,
     viewed: opts.viewed,
     shown: opts.shown,
     mainLeads: opts.mainLeads,
@@ -607,6 +611,57 @@ describe("RuntimeRegistry sleep and wake", () => {
       expect(registry.get(a.id)?.proxy).not.toBe(first);
       expect(state.worktree(a.id)?.proxyPort).toBe(2);
       expect(state.worktree(b.id)?.proxyPort).toBe(1);
+    });
+
+    test("a public name turned on moves every running proxy onto a range port, and one left over sleeps", async () => {
+      // ephemeral until the name arrives, then the two-port range a front forwards
+      let ranged = false;
+      const held = new Set<number>();
+      const ports: PortLease = {
+        lease(current) {
+          if (!ranged) return current;
+          const port = pickProxyPort(current, { from: 1, to: 2 }, held, () => true);
+          if (port !== null) held.add(port);
+          return port;
+        },
+        release: (port) => held.delete(port),
+        ranged: () => ranged,
+        label: () => "1-2",
+        setRange: (r) => {
+          ranged = r !== null;
+          if (r === null) held.clear();
+        },
+      };
+      let remote: Remote | null = null;
+      const x = { ...a, proxyPort: 50001 };
+      const y = { ...b, proxyPort: 50002 };
+      const z = { ...c, proxyPort: 50003 };
+      const { registry, proxies, procs, state } = make({ worktrees: [x, y, z], ports, remote: () => remote });
+      await registry.start(x, repo);
+      await registry.start(y, repo);
+      await registry.start(z, repo);
+      const before = [x, y, z].map((w) => proxies.get(w.id)!);
+      expect(before.map((p) => p.port)).toEqual([50001, 50002, 50003]);
+
+      remote = { host: "mac.tail1234.ts.net", previews: "https://mac.tail1234.ts.net:{port}", front: "local" };
+      await registry.remoteChanged();
+      expect(before.every((p) => p.stopped)).toBe(true);
+      expect(state.worktree(x.id)?.proxyPort).toBe(1);
+      expect(state.worktree(y.id)?.proxyPort).toBe(2);
+      expect(proxies.get(x.id)?.port).toBe(1);
+      expect(proxies.get(y.id)?.port).toBe(2);
+      expect(held).toEqual(new Set([1, 2]));
+      // the dev servers behind them never stopped
+      expect(procs.get(x.id)?.asleep).toBe(false);
+      // the third had no port left and sleeps, as a start with none would
+      expect(registry.get(z.id)?.proxy).toBeNull();
+      expect(procs.get(z.id)?.asleep).toBe(true);
+      // the name gone: the range and the leases go, the proxies keep their ports
+      remote = null;
+      await registry.remoteChanged();
+      expect(ranged).toBe(false);
+      expect(held.size).toBe(0);
+      expect(proxies.get(x.id)?.stopped).toBe(false);
     });
 
     test("with every port held, the copy viewed longest ago sleeps and its port goes to the one opening", async () => {

@@ -73,7 +73,6 @@ async function open(cmd: Extract<Command, { kind: "open" }>): Promise<number> {
     console.log(`toyon: ${daemon.url}`);
     openUrl(daemon.url);
   }
-  if (daemon.remote) console.log(`toyon: remote at https://${daemon.remote.host}/#token=${daemon.token}`);
   return 0;
 }
 

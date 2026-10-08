@@ -22,7 +22,7 @@ Every key is optional. A key that is absent is allowed. Unknown keys are ignored
 | Key | Type | What it turns off |
 |---|---|---|
 | `updates` | boolean | `false`: Toyon never checks for or installs a newer version, and `toyon update` refuses. This governs self-update only; a person can still run `npx toyon@latest`, and pinning what runs is the job of your software allowlist. |
-| `deploy` | boolean | `false`: `toyon deploy` refuses, and the "add to toyon.cloud" row in the app is greyed. |
+| `deploy` | boolean | `false`: `toyon deploy` refuses. |
 | `remote` | `"any"`, `"tailscale"` or `"off"` | `off`: `toyon remote` refuses and the daemon ignores a `remote.json` it finds. `tailscale`: only a `*.ts.net` name is accepted, so the shell opens over your tailnet and nowhere else. |
 | `agents` | list of agent ids | Only the agents listed exist: the others are gone from the picker and are never installed. The builtin ids are `claude`, `codex` and `opencode`. |
 | `customAgents` | boolean | `false`: `~/.toyon/agents.json` is ignored, so nobody can add an agent of their own, shadow a builtin with one, or tune a builtin's environment and sessions. |

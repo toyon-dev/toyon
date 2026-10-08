@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { pairLink } from "./pair.ts";
+import { machineLink } from "./knock.ts";
 import { qrModules, qrText } from "./qr.ts";
 
 test("a short string is the smallest code, square, with its three finder corners dark", () => {
@@ -11,10 +11,10 @@ test("a short string is the smallest code, square, with its three finder corners
   expect(m[20]?.[0]).toBe(true);
 });
 
-test("a pair link on a long tailnet name stays coarse enough to scan across a desk", () => {
-  const url = pairLink("a-rather-long-machine-name.tail1234ab.ts.net", "AbCdEfGhIjKl");
-  // version 6 is 41 modules
-  expect(qrModules(url).length).toBeLessThanOrEqual(41);
+test("a machine's address on a long tailnet name stays coarse enough to scan across a desk", () => {
+  const url = machineLink("a-rather-long-machine-name.tail1234ab.ts.net");
+  // version 4 is 33 modules
+  expect(qrModules(url).length).toBeLessThanOrEqual(33);
 });
 
 test("the text form has a line per two module rows and a light quiet zone", () => {

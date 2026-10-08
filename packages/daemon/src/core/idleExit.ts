@@ -18,8 +18,10 @@ export interface IdleExitDeps {
   busy: () => boolean;
   /** stop the daemon; called at most once */
   exit: () => void;
-  /** how long nothing may be connected or working before the stop; null never stops on its own */
-  afterMs?: number | null;
+  /** how long nothing may be connected or working before the stop; null never stops on its own.
+   * Read each time it is needed, since a public name turned on while running makes the daemon
+   * the point and the window closing mean nothing. */
+  afterMs: () => number | null;
   /** the clock, for tests */
   now?: () => number;
   setTimer?: (fn: () => void, ms: number) => unknown;
@@ -55,11 +57,9 @@ export class IdleExit {
   private quietAt: number;
   private timer: unknown | null = null;
   private gone = false;
-  private readonly afterMs: number | null;
   private readonly now: () => number;
 
   constructor(private d: IdleExitDeps) {
-    this.afterMs = d.afterMs === undefined ? STOP_AFTER_MS : d.afterMs;
     this.now = d.now ?? Date.now;
     // boot counts as activity: a daemon started for a window that takes a while to open is not
     // idle yet
@@ -75,6 +75,8 @@ export class IdleExit {
     ] as const) {
       d.hub.on(event, () => this.stamp());
     }
+    // the window itself changes with the public name
+    d.hub.on("remoteChanged", () => this.reconsider());
     this.reconsider();
   }
 
@@ -95,12 +97,14 @@ export class IdleExit {
     this.reconsider();
   }
 
+  /** arm or disarm for the window as it stands */
   private reconsider(): void {
-    if (this.gone || this.afterMs === null || this.connected > 0) {
+    const after = this.d.afterMs();
+    if (this.gone || after === null || this.connected > 0) {
       this.disarm();
       return;
     }
-    this.arm(Math.max(0, this.quietAt + this.afterMs - this.now()));
+    this.arm(Math.max(0, this.quietAt + after - this.now()));
   }
 
   private arm(ms: number): void {
@@ -124,7 +128,8 @@ export class IdleExit {
 
   private fire(): void {
     this.timer = null;
-    if (this.gone || this.afterMs === null || this.connected > 0) return;
+    const after = this.d.afterMs();
+    if (this.gone || after === null || this.connected > 0) return;
     // work under way with nobody watching (an agent finishing a long turn) is its own activity: the
     // clock starts over from here, so the stop follows the work settling by the full window
     if (this.d.busy()) {
@@ -132,15 +137,12 @@ export class IdleExit {
       return;
     }
     const quiet = this.now() - this.quietAt;
-    if (quiet < this.afterMs) {
-      this.arm(this.afterMs - quiet);
+    if (quiet < after) {
+      this.arm(after - quiet);
       return;
     }
     this.gone = true;
-    log.info(
-      "daemon",
-      `nothing connected or working for ${humanMs(this.afterMs)}; stopping. The next open starts it again`,
-    );
+    log.info("daemon", `nothing connected or working for ${humanMs(after)}; stopping. The next open starts it again`);
     this.d.exit();
   }
 }

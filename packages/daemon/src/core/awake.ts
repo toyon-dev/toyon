@@ -27,7 +27,7 @@ export interface KeepAwakeDeps {
   mode: () => KeepAwakeMode;
   /** a shell can be opened from another device, so a question may be answered from one. Without
    * that the only person who can answer is at this machine, and awake already. */
-  answerable: boolean;
+  answerable: () => boolean;
   /** how long a question nobody answers, or a device that went away, keeps the machine up */
   waitMs?: number;
   /** the clock, for tests */
@@ -81,6 +81,8 @@ export class KeepAwake {
     });
     d.hub.on("holdsChanged", () => this.reconsider());
     d.hub.on("keepAwakeChanged", () => this.reconsider());
+    // a name turned on makes a question answerable from elsewhere, and the hold starts then
+    d.hub.on("remoteChanged", () => this.reconsider());
     this.reconsider();
   }
 
@@ -110,7 +112,7 @@ export class KeepAwake {
     this.disarm();
     const mode = this.d.mode();
     const demand = this.d.demand();
-    if (demand !== "waiting" || !this.d.answerable) this.waitingAt = null;
+    if (demand !== "waiting" || !this.d.answerable()) this.waitingAt = null;
     else this.waitingAt ??= this.now();
     if (mode === "off") {
       this.hold(false);

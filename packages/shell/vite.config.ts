@@ -40,6 +40,13 @@ export default defineConfig({
       "/files": target,
       // a granted file's picture, opened from outside every worktree, for the same viewer
       "/loose": target,
+      // a device with no token asking to be let in, and the page that answers it
+      "/knock": target,
+      "/knocks": target,
+      "/phones": target,
+      // the tailnet's machines for the add-machine card, and turning the name on from the pair card
+      "/tailnet": target,
+      "/remote": target,
     },
   },
 });

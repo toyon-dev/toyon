@@ -7,6 +7,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import {
+  acceptRemote,
   checkPreviews,
   isLoopbackHost,
   isRemoteHost,
@@ -18,6 +19,7 @@ import {
   portPreviews,
   type Remote,
 } from "@toyon/shared";
+import type { Hub } from "./hub.ts";
 import { log } from "./log.ts";
 
 /** An edge front is declared by the platform's environment (`toyon deploy fly` writes it); a local
@@ -40,23 +42,35 @@ export function loadRemote(
     return { host, previews, front: "edge" };
   }
   if (!existsSync(file)) return null;
-  if (managed.remote === "off") {
-    log.warn("remote", `${file} is ignored: remote access is turned off by your organization's policy`);
-    return null;
-  }
   const view = parseRemote(readFileSync(file, "utf8"));
   if (!view) {
     log.warn("remote", `${file} names no valid host or previews; remote access is off`);
     return null;
   }
-  if (managed.remote === "tailscale" && !view.host.endsWith(".ts.net")) {
-    log.warn(
-      "remote",
-      `${file} names ${view.host}; your organization's policy allows a tailnet name only, so remote access is off`,
-    );
+  const accepted = acceptRemote(view, managed);
+  if (typeof accepted === "string") {
+    log.warn("remote", `${file} is ignored: ${accepted}`);
     return null;
   }
-  return { ...view, front: "local" };
+  return { ...accepted, front: "local" };
+}
+
+/** The public name as it stands now. It is read on every request and every proxy start rather
+ * than captured at boot, so `toyon remote` and the card's "turn on" take effect at once; a change
+ * is the hub's `remoteChanged`, which the ports, the proxies, the bridge origins, the idle stop
+ * and the sockets each follow where they live. */
+export class RemoteSetting {
+  constructor(
+    private current: Remote | null,
+    private readonly hub: Hub,
+  ) {}
+  get(): Remote | null {
+    return this.current;
+  }
+  set(r: Remote | null): void {
+    this.current = r;
+    this.hub.emit("remoteChanged");
+  }
 }
 
 /** compare two secrets without leaking where they first differ */
@@ -73,8 +87,9 @@ export type Door =
   | { kind: "refused"; response: Response }
   /** a loopback name from this machine: the local shell, or a preview it frames */
   | { kind: "local" }
-  /** the public name itself, on the daemon's listener: the shell */
-  | { kind: "shell" }
+  /** the public name itself, on the daemon's listener: the shell. `client` is the device's own
+   * address as the front reports it, since the peer is the front. */
+  | { kind: "shell"; client: string }
   /** a preview under the public name: its worktree when routed by name, null on its own port */
   | { kind: "preview"; worktreeId: string | null };
 
@@ -147,7 +162,16 @@ export function door(req: Request, peer: string, remote: Remote | null, listener
     return forbidden(`${host} reaches Toyon over https only; the front must terminate TLS`);
   }
   if (listener === "preview") return { kind: "preview", worktreeId: null };
-  return worktreeId === null ? { kind: "shell" } : { kind: "preview", worktreeId };
+  return worktreeId === null ? { kind: "shell", client: clientAddress(req) ?? peer } : { kind: "preview", worktreeId };
+}
+
+/** the address a front says a request came from: Fly names it in its own header, tailscale serve
+ * and Caddy in the forwarded list, first entry; null when neither is there */
+function clientAddress(req: Request): string | null {
+  const fly = req.headers.get("fly-client-ip");
+  if (fly) return fly.trim();
+  const forwarded = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+  return forwarded || null;
 }
 
 /** the cookie that lets a browser past the gate on a preview under the public name */

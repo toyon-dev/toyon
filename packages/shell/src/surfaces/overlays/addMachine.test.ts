@@ -1,17 +1,33 @@
 import { describe, expect, test } from "bun:test";
-import { parsePairLink } from "@toyon/shared";
-import { failureLine, hostOf } from "./addMachine.ts";
+import { machineAddress } from "@toyon/shared";
+import { ADD_MACHINE, hostOf, knockFailureLine } from "./addMachine.ts";
 
 describe("the add-machine lines", () => {
   test("each failure says what to do next, naming the machine where that helps", () => {
-    expect(failureLine("expired", "https://work.tail1234.ts.net")).toBe(
-      "This code has expired; show a new one on the other machine.",
+    expect(knockFailureLine("refused", "https://work.tail1234.ts.net", "this page")).toBe(
+      "work.tail1234.ts.net did not let this page in.",
     );
-    expect(failureLine("not-toyon", "https://work.tail1234.ts.net")).toBe(
+    expect(knockFailureLine("gone", "https://work.tail1234.ts.net", "this page")).toBe(
+      "work.tail1234.ts.net stopped waiting. Ask again, and answer there within five minutes.",
+    );
+    expect(knockFailureLine("full", "https://work.tail1234.ts.net", "this page")).toBe(
+      "work.tail1234.ts.net has too many devices waiting already. Answer or turn those away there first.",
+    );
+    expect(knockFailureLine("not-toyon", "https://work.tail1234.ts.net", "this page")).toBe(
       "work.tail1234.ts.net is not a Toyon machine, or has no remote name set up.",
     );
-    expect(failureLine("unreachable", "https://work.tail1234.ts.net")).toBe(
+    expect(knockFailureLine("unreachable", "https://work.tail1234.ts.net", "this page")).toBe(
       "work.tail1234.ts.net did not answer. Is Tailscale on here, and is Toyon running there?",
+    );
+  });
+  test("the same failure on the machine's own address speaks of this device", () => {
+    expect(knockFailureLine("refused", "https://mac.tail1234.ts.net", "this device")).toBe(
+      "mac.tail1234.ts.net did not let this device in.",
+    );
+  });
+  test("the waiting line names the words the other screen shows", () => {
+    expect(ADD_MACHINE.waiting("https://work.tail1234.ts.net", "amber fox")).toBe(
+      "Toyon on work.tail1234.ts.net is asking whether to let amber fox in.",
     );
   });
   test("hostOf keeps a port and survives something that is not an origin", () => {
@@ -20,20 +36,16 @@ describe("the add-machine lines", () => {
   });
 });
 
-describe("parsePairLink", () => {
-  test("a pair link names the machine and the code; a token link the machine and the token", () => {
-    expect(parsePairLink("https://work.tail1234.ts.net/#pair=abc_-9")).toEqual({
-      origin: "https://work.tail1234.ts.net",
-      code: "abc_-9",
-    });
-    expect(parsePairLink(" http://127.0.0.1:4242/#token=0123abcd ")).toEqual({
-      origin: "http://127.0.0.1:4242",
-      token: "0123abcd",
-    });
+describe("machineAddress", () => {
+  test("an address, with or without https, a path or a fragment, is the machine's origin", () => {
+    expect(machineAddress("https://work.tail1234.ts.net/")).toBe("https://work.tail1234.ts.net");
+    expect(machineAddress(" work.tail1234.ts.net ")).toBe("https://work.tail1234.ts.net");
+    expect(machineAddress("https://work.tail1234.ts.net/#token=0123abcd")).toBe("https://work.tail1234.ts.net");
+    expect(machineAddress("http://127.0.0.1:4242/#token=0123abcd")).toBe("http://127.0.0.1:4242");
   });
-  test("plain http to a name off this machine, no fragment, or no url at all is nothing", () => {
-    expect(parsePairLink("http://work.tail1234.ts.net/#token=0123abcd")).toBeNull();
-    expect(parsePairLink("https://work.tail1234.ts.net/")).toBeNull();
-    expect(parsePairLink("work")).toBeNull();
+  test("plain http to a name off this machine, or nothing at all, is nothing", () => {
+    expect(machineAddress("http://work.tail1234.ts.net/")).toBeNull();
+    expect(machineAddress("")).toBeNull();
+    expect(machineAddress("not a name at all")).toBeNull();
   });
 });

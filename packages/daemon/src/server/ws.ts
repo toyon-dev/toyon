@@ -21,14 +21,18 @@ import { lacksQuickModel } from "../agent/tasks.ts";
 import { cloud } from "../core/cloud.ts";
 import { UserError } from "../core/errors.ts";
 import type { GrantCodes } from "../core/grants.ts";
+import type { Knocks } from "../core/knocks.ts";
 import { fireAndForget, log } from "../core/log.ts";
 import { lag, type SocketStats } from "../core/metrics.ts";
-import { PairCodes } from "../core/pair.ts";
-import { readTailnetPhones } from "../core/tailnet.ts";
+import type { Origins } from "../core/origins.ts";
+import { grantCookie, previewGrant, sameSecret } from "../core/remote.ts";
+import type { RemoteSwitch } from "../core/remoteSwitch.ts";
+import type { Tailnet } from "../core/tailnet.ts";
 import type { DraftStore } from "../drafts/store.ts";
 import { setWaitingColors } from "../runtime/proxy.ts";
 import { dispatch, openedFrame, type Services } from "./handlers.ts";
 import { createFetch, type WsData } from "./http.ts";
+import { pairingRoutes } from "./pairing.ts";
 
 /** how far behind a socket may fall before its terminal output is dropped instead of queued */
 const DROP_ABOVE_BYTES = 4 * 1024 * 1024;
@@ -76,12 +80,19 @@ export interface ServerOpts {
   noteShellOrigin: (origin: string | null) => void;
   /** the link a page starts a daemon here through, when this machine has what answers it */
   startLink: () => string | null;
-  /** a shell on another machine has paired here and is trusted from now on */
+  /** a shell on another machine has been let in here and is trusted from now on */
   onTrusted: (origin: string) => void;
   /** the one-time codes a shell on another machine spends to open a preview here */
   grants: GrantCodes;
-  /** the public name and its front (core/remote.ts), or null */
-  remote: Remote | null;
+  /** the public name and its front (core/remote.ts) as it stands now, or null */
+  remote: () => Remote | null;
+  remoteSwitch: RemoteSwitch;
+  tailnet: Tailnet;
+  origins: Origins;
+  /** the devices asking to be let in */
+  knocks: Knocks;
+  /** a knock was just let in, from a page on `from` (null for a page this machine served) */
+  onLetIn: (from: string | null) => void;
   /** the managed policy as read at boot: hello carries it, /health names its source and hash,
    * and the branded listener binds only where it allows */
   managed: ManagedResolved;
@@ -348,6 +359,16 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
     }) satisfies ServerMsg;
   s.hub.on("agentsChanged", () => broadcast(agentsMsg()));
   s.hub.on("keepAwakeChanged", () => broadcast({ t: "keep-awake", mode: s.keepAwake.setting() }));
+  s.hub.on("machinesChanged", () => broadcast({ t: "machines", machines: s.state.machines }));
+  s.hub.on("knocksChanged", () => broadcast({ t: "knocks", knocks: opts.knocks.pending(), letIn: s.state.letIn }));
+  s.hub.on("tailscaleChanged", () => {
+    const tailscale = opts.tailnet.readiness();
+    if (tailscale) broadcast({ t: "tailscale", tailscale });
+  });
+  s.hub.on("remoteChanged", () => {
+    const remote = opts.remote();
+    broadcast({ t: "remote", remote, machine: machineLabel(hostname(), remote) });
+  });
   s.hub.on("selfChanged", () => broadcast({ t: "self", self: s.self.get() }));
   // every tab, not the worktree's subscribers: the person who landed has moved on to some other
   // row by now, and the shell reads a main worktree's error under whichever composer is on screen
@@ -387,9 +408,12 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
       home: homedir(),
       folderDialog: process.platform === "darwin" && !cloud.enabled,
       keepAwake: s.keepAwake.setting(),
-      remote: opts.remote,
-      machine: machineLabel(hostname(), opts.remote),
-      paired: s.state.paired,
+      remote: opts.remote(),
+      machine: machineLabel(hostname(), opts.remote()),
+      tailscale: opts.tailnet.readiness(),
+      machines: s.state.machines,
+      letIn: s.state.letIn,
+      knocks: opts.knocks.pending(),
       gitIdentity: await s.repos.gitIdentity(),
       pending: s.repos.pending,
       visits: s.routes.historyAll(),
@@ -402,6 +426,7 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
   };
 
   let branded = false;
+  const authed = (req: Request) => sameSecret(req.headers.get("authorization"), `Bearer ${token}`);
   const serverConfig = {
     // an upload is the largest body anything sends; the store counts the bytes that arrive too
     maxRequestBodySize: UPLOAD_MAX_BYTES,
@@ -420,6 +445,23 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
       noteShellOrigin: opts.noteShellOrigin,
       offline: () => ({ start: opts.startLink(), port: opts.port }),
       remote: opts.remote,
+      tailscale: () => opts.tailnet.readiness(),
+      origins: opts.origins,
+      pairing: pairingRoutes({
+        token,
+        authed,
+        remote: opts.remote,
+        grantCookie: (remote) => grantCookie(previewGrant(token), remote.host),
+        origins: opts.origins,
+        knocks: opts.knocks,
+        onLetIn: opts.onLetIn,
+        tailnet: opts.tailnet,
+        remoteSwitch: opts.remoteSwitch,
+        addMachine: (origin, machineToken) => {
+          s.state.addMachine(origin, machineToken);
+          s.hub.emit("machinesChanged");
+        },
+      }),
       managed: { source: opts.managed.source, hash: opts.managed.hash },
       preview: (id) => s.runtime.get(id)?.proxy?.handler ?? null,
       bootstrap: helloFrame,
@@ -430,24 +472,8 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
       open: (path) => s.opens.open(path),
       restart: (now) => s.restarter.request({ now }),
       restartWait: () => ({ waiting: s.restarter.waitingOn(), asking: s.restarter.asking() }),
-      pair: new PairCodes(),
       grants: opts.grants,
-      onPaired: (origin) => {
-        // A redeem from this machine's own name is a phone's camera opening the link: the phone
-        // now holds the token, which is what the bar's offer of a code was for. A redeem from a
-        // page this machine did not serve is a shell elsewhere (another machine's desk, or the
-        // app installed from it) that now holds the token: its origin is answered across origins
-        // from here on, and the bar still owes the person's phone its code.
-        const own = origin === null || origin === `https://${opts.remote?.host}`;
-        if (own) s.state.notePaired();
-        else {
-          s.state.trustOrigin(origin);
-          if (s.state.trustedOrigins.includes(origin)) opts.onTrusted(origin);
-        }
-        broadcast({ t: "paired" });
-      },
       trusted: () => s.state.trustedOrigins,
-      phones: () => readTailnetPhones(),
       mcp: (req, id) => s.mcp.fetch(req, id),
     }),
     websocket: {

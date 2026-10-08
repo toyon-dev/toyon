@@ -1,8 +1,7 @@
-import { launcherAddLink } from "@toyon/shared";
 import { unseenJump } from "../../app/unseenJump.ts";
 import { chord } from "../../surfaces/util.ts";
 import { grouped, type MenuEntry, type MenuItem } from "../../ui/menu.ts";
-import { changesTabShown, isChatCentred, routeTarget, type State, worktreeById } from "../store.ts";
+import { canOfferPhone, changesTabShown, isChatCentred, routeTarget, type State, worktreeById } from "../store.ts";
 import type { Deps } from "./deps.ts";
 
 export type AppState = Pick<
@@ -20,6 +19,8 @@ export type AppState = Pick<
   | "self"
   | "archivedPage"
   | "archived"
+  | "knocks"
+  | "tailscale"
 >;
 
 /** The app's own actions, in three groups: somewhere to go, the panels, and the app itself. What
@@ -160,31 +161,26 @@ export function appItems(s: AppState, { sock, dispatch }: Deps): MenuEntry[] {
       onClick: () => sock?.send({ t: "restart-daemon" }),
     });
   }
-  // another machine's code or link, read here: this page lists that machine too, beside this one
+  // another machine's address, read here: this page lists that machine too, beside this one
   app.push({
     id: "add-machine",
     label: "add a machine",
     onClick: () => dispatch({ a: "open", overlay: { kind: "add-machine" } }),
   });
-  // A machine with a public name is listed at toyon.cloud per browser, so a phone or a second
-  // laptop that opened it here adds it from here. The link carries the name, never the token.
-  if (s.remote) {
-    // the code is for another device; a phone showing it would be asking itself to scan
-    if (s.frame === "desk") {
-      app.push({
-        id: "pair",
-        label: "open on your phone",
-        onClick: () => dispatch({ a: "open", overlay: { kind: "pair" } }),
-      });
-    }
-    const link = launcherAddLink(`https://${s.remote.host}`);
-    // a company that keeps its machines off toyon.cloud says so by policy; the row stays and
-    // says why, since a verb that vanishes teaches nothing
+  // the devices asking to be let in; the card opens by itself when one knocks, and this is the
+  // way back to it once it was closed
+  if (s.knocks.length > 0) {
     app.push({
-      id: "toyon-cloud",
-      label: "add to toyon.cloud",
-      ...(s.managed.deploy ? {} : { disabled: "managed by your organization" }),
-      onClick: () => window.open(link, "_blank"),
+      id: "pair",
+      label: `let a device in (${s.knocks.length})`,
+      onClick: () => dispatch({ a: "open", overlay: { kind: "pair" } }),
+    });
+  } else if (canOfferPhone(s)) {
+    // the address is for another device, and the card turns the name on when it is not yet
+    app.push({
+      id: "pair",
+      label: "open on your phone",
+      onClick: () => dispatch({ a: "open", overlay: { kind: "pair" } }),
     });
   }
   // a project with nothing to run has the chat as its centre, so there is no chat panel to toggle,

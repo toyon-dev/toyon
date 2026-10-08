@@ -54,6 +54,8 @@ describe("buildCommands", () => {
     remote: null,
     managed: MANAGED_NONE,
     frame: "desk",
+    knocks: [],
+    tailscale: { state: "not-installed", name: null, line: "" },
     hostname: "localhost",
   } as unknown as CommandState;
 
@@ -73,23 +75,7 @@ describe("buildCommands", () => {
     for (const id of pageVerbs) expect(ids).not.toContain(id);
     expect(ids).toContain("terminal");
   });
-  test("a machine with a public name offers to add it to toyon.cloud, by name and without the token", () => {
-    expect(buildCommands(state, () => {}, null, wt, repo).map((c) => c.id)).not.toContain("toyon-cloud");
-    const remote = { host: "my-toyon.fly.dev", previews: "https://my-toyon.fly.dev:{port}", front: "edge" as const };
-    const opened: string[] = [];
-    const g = globalThis as any;
-    const saved = g.window;
-    g.window = { open: (url: string) => opened.push(url) };
-    try {
-      const add = buildCommands({ ...state, remote }, () => {}, null, wt, repo).find((c) => c.id === "toyon-cloud");
-      expect(add?.label).toBe("add to toyon.cloud");
-      add?.run();
-      expect(opened).toEqual(["https://toyon.cloud/#add=https%3A%2F%2Fmy-toyon.fly.dev"]);
-    } finally {
-      g.window = saved;
-    }
-  });
-  test("a desk with a public name offers a code for a phone; a phone and a local machine do not", () => {
+  test("a desk with a public name, or Tailscale ready, offers the phone card; a phone and a bare machine do not", () => {
     const remote = {
       host: "box.tailnet.ts.net",
       previews: "https://box.tailnet.ts.net:{port}",
@@ -98,13 +84,22 @@ describe("buildCommands", () => {
     const ids = (s: typeof state) => buildCommands(s, () => {}, null, wt, repo).map((c) => c.id);
     expect(ids(state)).not.toContain("pair");
     expect(ids({ ...state, remote, frame: "phone" })).not.toContain("pair");
+    const ready = { state: "ready" as const, name: "box.tailnet.ts.net", line: "" };
+    expect(ids({ ...state, tailscale: ready })).toContain("pair");
     const actions: unknown[] = [];
-    const pair = buildCommands({ ...state, remote }, (a) => actions.push(a), null, wt, repo).find(
+    const phone = buildCommands({ ...state, remote }, (a) => actions.push(a), null, wt, repo).find(
       (c) => c.id === "pair",
     );
-    expect(pair?.label).toBe("open on your phone");
-    pair?.run();
+    expect(phone?.label).toBe("open on your phone");
+    phone?.run();
     expect(actions).toEqual([{ a: "open", overlay: { kind: "pair" } }]);
+  });
+  test("a device asking to be let in is a row anywhere, counted", () => {
+    const knocks = [{ id: "k1", word: "amber fox", from: null, since: 0 }];
+    const row = buildCommands({ ...state, knocks, frame: "phone" }, () => {}, null, wt, repo).find(
+      (c) => c.id === "pair",
+    );
+    expect(row?.label).toBe("let a device in (1)");
   });
   test("the handoff stays off the palette with one project open, and is on it with two", () => {
     const ids = (s: CommandState) => buildCommands(s, () => {}, null, wt, repo).map((c) => c.id);

@@ -4,6 +4,8 @@ import {
   holder,
   parseServeConfig,
   type Ran,
+  readiness,
+  readinessOf,
   serveTailnet,
   TailscaleError,
   tailnetName,
@@ -47,6 +49,30 @@ function fake(opts: { status?: Ran; serve?: string; fail?: string } = {}) {
   };
   return { ts, calls, changes: () => calls.filter((c) => c[0] === "serve" && c[1] !== "status") };
 }
+
+describe("readiness", () => {
+  test("every state short of a certificate is named, with the machine's name when it is known", () => {
+    expect(readinessOf(status())).toEqual({
+      state: "ready",
+      name: NAME,
+      line: `this machine is ${NAME} on your tailnet`,
+    });
+    expect(readinessOf(status({ BackendState: "NeedsLogin" }))).toMatchObject({ state: "signed-out", name: NAME });
+    expect(readinessOf(status({ BackendState: "NeedsMachineAuth" })).state).toBe("needs-approval");
+    expect(readinessOf(status({ BackendState: "Starting" })).state).toBe("not-running");
+    expect(readinessOf(status({ CurrentTailnet: { MagicDNSEnabled: false } })).state).toBe("magicdns-off");
+    expect(readinessOf(status({ CertDomains: null }))).toMatchObject({ state: "https-off", name: NAME });
+    expect(readinessOf("failed to connect to local Tailscale service; is Tailscale running?").state).toBe(
+      "not-running",
+    );
+  });
+  test("asked of the CLI: not installed when there is none, and not running when it says so", async () => {
+    expect((await readiness(tailscaleCli(null))).state).toBe("not-installed");
+    const down = fake({ status: { ok: false, out: "", err: "failed to connect to local Tailscale service" } });
+    expect((await readiness(down.ts)).state).toBe("not-running");
+    expect((await readiness(fake().ts)).state).toBe("ready");
+  });
+});
 
 describe("tailnetName", () => {
   test("reads the machine's name without the trailing dot", () => {

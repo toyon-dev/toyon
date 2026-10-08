@@ -12,6 +12,7 @@
     "./ports": "./src/ports.ts",
     "./protocol/bridge": "./src/protocol/bridge.ts",
     "./qr": "./src/qr.ts",
+    "./tailscale": "./src/tailscale.ts",
     "./themes": "./src/themes.ts",
     "./vscode-theme": "./src/vscode-theme.ts"
   },

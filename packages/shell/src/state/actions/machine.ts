@@ -19,10 +19,12 @@ export function machineItems(machines: Machines, origin: string): MenuEntry[] {
       onClick: () => {
         if (
           window.confirm(
-            `Forget ${name}?\n\nIt leaves the list here, and this browser forgets what it had selected there. Toyon on that machine is not touched; pair again to list it.`,
+            `Forget ${name}?\n\nIt leaves your list, here and in every browser Toyon on this machine serves, and this browser forgets what it had selected there. Toyon on that machine is not touched; pair again to list it.`,
           )
-        )
-          machines.remove(origin);
+        ) {
+          // the daemon that served this page keeps the list; its next frame drops the row here
+          machines.serving().sock.send({ t: "forget-machine", origin });
+        }
       },
     },
   ];

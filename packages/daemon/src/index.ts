@@ -5,18 +5,17 @@ import { rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  addressedByPort,
   CHECK_TOOL,
   DAEMON_DEFAULT_PORT,
   DAEMON_FILES,
   describeManaged,
   installCommand,
   installMethod,
-  PREVIEW_PORTS,
-  SHELL_DEV_PORT,
+  previewsLine,
   type Shipping,
 } from "@toyon/shared";
 import { loadManaged } from "@toyon/shared/managed-load";
+import { findTailscale, tailscaleCli } from "@toyon/shared/tailscale";
 import pkg from "../package.json" with { type: "json" };
 import { AgentAccounts } from "./agent/accounts.ts";
 import { spawnAcp } from "./agent/acp/transport.ts";
@@ -37,14 +36,18 @@ import { GrantCodes } from "./core/grants.ts";
 import { Helper, helperWanted } from "./core/helper.ts";
 import { Hub } from "./core/hub.ts";
 import { IdleExit, stopAfterFrom } from "./core/idleExit.ts";
+import { Knocks } from "./core/knocks.ts";
 import { fireAndForget, log } from "./core/log.ts";
 import { startLagSampler } from "./core/metrics.ts";
+import { Origins } from "./core/origins.ts";
 import { ensureDirs, makePaths } from "./core/paths.ts";
-import { loadRemote, type PreviewGate, previewGrant } from "./core/remote.ts";
+import { loadRemote, type PreviewGate, previewGrant, RemoteSetting } from "./core/remote.ts";
+import { RemoteSwitch } from "./core/remoteSwitch.ts";
 import { replacementRuns, respawn, restartable } from "./core/restart.ts";
 import { Restarter } from "./core/restarter.ts";
 import { SelfWatch } from "./core/self.ts";
 import { loadOrCreateToken, StateStore } from "./core/state.ts";
+import { Tailnet } from "./core/tailnet.ts";
 import { DesignService } from "./design/service.ts";
 import { DraftStore } from "./drafts/store.ts";
 import { ExecService } from "./exec/service.ts";
@@ -57,7 +60,6 @@ import { RouteService } from "./routes/service.ts";
 import { RunService } from "./runs/service.ts";
 import { BridgeScript } from "./runtime/bridge-script.ts";
 import { IdlePolicy } from "./runtime/idle.ts";
-import { pinProxyPorts } from "./runtime/ports.ts";
 import { RuntimeRegistry } from "./runtime/registry.ts";
 import { startServer } from "./server/ws.ts";
 import { ThemeStore } from "./themes/store.ts";
@@ -131,22 +133,27 @@ if (helper) {
     "the Dock helper",
   );
 }
-// the public name: an edge's from the environment, a local front's from `toyon remote`
-const remote = loadRemote(paths.remoteFile, process.env, managed.policy);
-// the one-time codes a shell on another machine spends to open a preview here; one set for the
-// daemon's listener and every preview port, since a code is minted without knowing which will see it
-const grants = new GrantCodes();
-const previewGate: PreviewGate | null = remote && {
-  grant: previewGrant(token),
-  host: remote.host,
-  redeem: (code) => grants.redeem(code),
-};
-// a front that addresses previews by port has each one declared to it, so they cannot be ephemeral
-if (remote && addressedByPort(remote.previews)) pinProxyPorts(PREVIEW_PORTS);
-
 const state = new StateStore(paths);
 const hub = new Hub();
 const bridge = new BridgeScript(BRIDGE_JS);
+// the public name: an edge's from the environment, a local front's from `toyon remote`. Live:
+// `toyon remote` and the card's "turn on" change it while running, and every reader asks each time
+const setting = new RemoteSetting(loadRemote(paths.remoteFile, process.env, managed.policy), hub);
+// the one-time codes a shell on another machine spends to open a preview here; one set for the
+// daemon's listener and every preview port, since a code is minted without knowing which will see it
+const grants = new GrantCodes();
+const previewGate = (): PreviewGate | null => {
+  const r = setting.get();
+  return r && { grant: previewGrant(token), host: r.host, redeem: (code) => grants.redeem(code) };
+};
+// Tailscale, as the daemon reads it and as it changes it
+const tailscale = tailscaleCli();
+const tailnet = new Tailnet({ ts: findTailscale() ? tailscale : null, hub });
+const remoteSwitch = new RemoteSwitch({ setting, ts: tailscale, port, file: paths.remoteFile, policy: managed.policy });
+// the devices asking to be let in
+const knocks = new Knocks(hub);
+// which origins are this daemon's own; `branded` is known once the listener is bound
+const origins = new Origins({ setting, port, branded: () => branded });
 // on Linux, whether bubblewrap can start, answered before the first agent listing
 const linuxSandbox = new LinuxSandbox();
 await linuxSandbox.refresh();
@@ -209,7 +216,7 @@ const runtime: RuntimeRegistry = new RuntimeRegistry({
   bridgeScript: () => bridge.get(),
   // asked only when a turn is sent, after the service below exists
   turnStarting: (id): Promise<void> => worktrees.turnStarted(id),
-  remote,
+  remote: () => setting.get(),
   gate: previewGate,
   // asked only once the policy exists: the first view comes from a socket, after boot
   viewed: (id): boolean => idle.isViewed(id),
@@ -360,7 +367,8 @@ const update = new UpdateService({
 // starts one again. Never on a machine reached remotely or a deployed one, where it is the point,
 // and never for a daemon someone ran in a terminal, which is theirs to stop.
 const attached = process.stdin.isTTY === true || process.stdout.isTTY === true;
-const stopAfter = stopAfterFrom(process.env.TOYON_STOP_AFTER_MS, { remote: remote !== null, terminal: attached });
+const stopAfter = () =>
+  stopAfterFrom(process.env.TOYON_STOP_AFTER_MS, { remote: setting.get() !== null, terminal: attached });
 const idleExit = new IdleExit({
   hub,
   busy: () => runtime.anyBusy() || repos.pending.length > 0 || afterLand.anyBusy() || update.get()?.installing === true,
@@ -377,7 +385,7 @@ const keepAwake = new KeepAwake({
   demand: () => runtime.demand(),
   assert: idleSleepAssertion(process.env.TOYON_KEEP_AWAKE),
   mode: () => state.keepAwake,
-  answerable: remote !== null,
+  answerable: () => setting.get() !== null,
 });
 
 const {
@@ -393,7 +401,23 @@ const {
   startLink: () => helper?.startLink() ?? null,
   onTrusted: () => refreshShellOrigins(),
   grants,
-  remote,
+  remote: () => setting.get(),
+  remoteSwitch,
+  tailnet,
+  origins,
+  knocks,
+  onLetIn: (origin) => {
+    // A knock from a page this machine served is a phone that opened the address: it holds the
+    // token now, which is what the bar's offer of the address was for. A knock from a page this
+    // machine did not serve is a shell elsewhere (another machine's desk, or the app installed
+    // from it): its origin is answered across origins from here on, and the bar still owes the
+    // person's phone the address.
+    if (origin === null) state.noteLetIn();
+    else {
+      state.trustOrigin(origin);
+      if (state.trustedOrigins.includes(origin)) refreshShellOrigins();
+    }
+  },
   managed,
   services: {
     state,
@@ -435,27 +459,21 @@ const {
 mcpPort = server.port ?? port;
 
 // every origin the shell can be loaded from: the injected bridge accepts commands from, and
-// reports to, these only. Behind an edge nothing is loopback, so the public name is the one. A
-// shell on another machine that paired here frames this machine's previews too, so its origin is
-// on the list from the moment it pairs; a handshake alone never widens it (learnShellOrigin).
+// reports to, these only. A shell on another machine let in here frames this machine's previews
+// too, so its origin is on the list from the moment it is in; a handshake alone never widens it
+// (learnShellOrigin). The name turning on or off changes the list, as does a let-in.
 function refreshShellOrigins() {
-  bridge.setShellOrigins([
-    ...(remote?.front === "edge"
-      ? []
-      : [
-          `http://127.0.0.1:${port}`,
-          `http://localhost:${port}`,
-          `http://toyon.localhost:${port}`,
-          ...(branded ? ["http://toyon.localhost"] : []),
-          // the Vite dev shell frames the same previews
-          `http://127.0.0.1:${SHELL_DEV_PORT}`,
-          `http://localhost:${SHELL_DEV_PORT}`,
-        ]),
-    ...(remote ? [`https://${remote.host}`] : []),
-    ...state.trustedOrigins,
-  ]);
+  bridge.setShellOrigins([...origins.own(), ...state.trustedOrigins]);
 }
 refreshShellOrigins();
+hub.on("remoteChanged", () => {
+  refreshShellOrigins();
+  // what Tailscale is ready for may read differently with the name on
+  fireAndForget("remote", tailnet.refresh(), "ask Tailscale");
+});
+// the first readiness is asked for now, not on the first hello; the `tailscale` frame carries it
+// to a shell that connected before it landed
+fireAndForget("remote", tailnet.start(), "ask Tailscale");
 
 // after the bind, so a second daemon that lost the port never overwrites the first one's pid
 writeFileSync(paths.pidFile, `${process.pid}\n`);
@@ -499,30 +517,18 @@ if (repoArg) {
   }
 }
 
-/** where previews live under the public name, for the startup lines */
-const previewsAt = (r: NonNullable<typeof remote>) =>
-  addressedByPort(r.previews)
-    ? `previews at ${r.previews}, ports ${PREVIEW_PORTS.from}-${PREVIEW_PORTS.to}`
-    : `previews at ${r.previews}`;
-
-if (remote?.front === "edge") {
-  console.log(`Toyon daemon on https://${remote.host}/ behind the edge, ${previewsAt(remote)}`);
-  console.log(`         token read from ${paths.tokenFile}; not printed`);
-} else {
-  const shellUrl = branded
-    ? `http://toyon.localhost/#token=${token}`
-    : `http://toyon.localhost:${port}/#token=${token}`;
-  console.log(`Toyon daemon on ${shellUrl}`);
-  console.log(`         (fallback: http://127.0.0.1:${port}/#token=${token})`);
-  if (remote) {
-    console.log(`         remote: https://${remote.host}/#token=${token}, through a TLS front on this port`);
-    console.log(`         ${previewsAt(remote)}`);
-    console.log("         the token grants a shell on this machine; keep the link to yourself");
+// One line to act on: the link, or behind an edge the name. The fallback address, what the token
+// grants and whether this run stops on its own are `toyon doctor`'s to say; a public name is
+// opened by its bare address and never with the token, so no second link is printed.
+{
+  const r = setting.get();
+  if (r?.front === "edge") {
+    console.log(`Toyon daemon on https://${r.host}/, ${previewsLine(r)}; token read from ${paths.tokenFile}`);
+  } else {
+    console.log(`Toyon daemon on http://toyon.localhost${branded ? "" : `:${port}`}/#token=${token}`);
+    if (r) console.log(`         remote: https://${r.host}/, ${previewsLine(r)}`);
   }
 }
-// the one case where the person can read it: a service run has no terminal, and its log says
-// when it stopped
-if (attached && stopAfter === null) console.log("         attached to a terminal; runs until stopped");
 // the policy in effect, one line per file that exists, so a boot log answers "why is X off"
 for (const src of managed.sources) {
   if (src.state === "absent") continue;
@@ -543,6 +549,7 @@ async function shutdown(signal: string, opts: { respawn?: boolean } = {}) {
   log.info("daemon", `${signal}: stopping dev servers`);
   idleExit.stop();
   keepAwake.stop();
+  tailnet.stop();
   // before the sockets close: what the tabs show now is what the next daemon brings back
   idle.shutdown();
   // before the agents close: a verdict mid-question stays pending for the next daemon

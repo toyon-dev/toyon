@@ -207,11 +207,12 @@ export function startProxy(
     port: number;
     /** loopback, or every interface behind an edge where each preview port is a public TLS port */
     hostname: string;
-    /** the public name, whose front may forward this port (core/remote.ts) */
-    remote: Remote | null;
+    /** the public name, whose front may forward this port (core/remote.ts), as it stands at each
+     * request: the name can be turned on while this proxy runs */
+    remote: () => Remote | null;
     /** what a preview reached through the public name is checked against; null with no public name,
      * when the door never answers "preview" */
-    gate: PreviewGate | null;
+    gate: () => PreviewGate | null;
     /** message from the injected bridge script (element picker etc.) */
     onBridgeMessage?: (msg: unknown) => void;
   },
@@ -223,12 +224,13 @@ export function startProxy(
     fetch: async (req, srv) => {
       // the same door as the daemon's own listener: a front that addresses previews by port
       // forwards this one, and it gets the same Host, https and grant rules
-      const d = door(req, srv.requestIP(req)?.address ?? "", opts.remote, "preview");
+      const d = door(req, srv.requestIP(req)?.address ?? "", opts.remote(), "preview");
       if (d.kind === "refused") return d.response;
       let admitted = req;
       if (d.kind === "preview") {
-        if (!opts.gate) return new Response("forbidden", { status: 403 });
-        const pass = passPreview(req, opts.gate);
+        const gate = opts.gate();
+        if (!gate) return new Response("forbidden", { status: 403 });
+        const pass = passPreview(req, gate);
         if (!pass.ok) return pass.response;
         admitted = pass.req;
       }

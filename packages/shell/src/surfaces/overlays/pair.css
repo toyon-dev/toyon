@@ -1,15 +1,12 @@
-/* The pairing card: a QR code for a phone's camera, what it is for, and a way to make another. */
+/* The pair card: this machine's address as a QR for a phone's camera, and the devices asking
+   to be let in, each with the two words it shows on its own screen. */
 @layer tokens, base, surfaces;
 @layer surfaces {
-  .pair-stack {
-    width: min(340px, 90%);
-  }
+  /* the overlay's own box (overlay.css) carries the ground, border, radius and shadow; the card
+     sets its width and lays its parts out centred */
   .pair-card {
-    background: var(--surface1);
-    border: 1px solid var(--border1);
-    border-radius: var(--radius-lg);
+    width: min(360px, 90%);
     padding: 18px 24px 16px;
-    box-shadow: var(--elevation-overlay);
     font: var(--type-ui);
     color: var(--text0);
     display: grid;
@@ -21,7 +18,6 @@
     font: var(--type-ui-lg);
     font-weight: var(--weight-title);
   }
-  /* the square is held before the code arrives, so the card does not jump when it does */
   .pair-frame {
     width: 220px;
     aspect-ratio: 1;
@@ -35,10 +31,6 @@
     & path {
       fill: var(--qr-ink);
     }
-    /* a spent code stays in place, faded, so it is plain there is nothing left to scan */
-    &.pair-qr-spent {
-      opacity: 0.15;
-    }
   }
   .pair-host {
     font: var(--type-ui-sm);
@@ -47,15 +39,35 @@
     margin: 0;
     color: var(--text1);
   }
-  /* what the phone needs before the code can work; in the line's colour when it names a problem */
+  /* what the phone needs before the address can open; in the line's colour when it names a problem */
   .pair-note {
     margin: 0;
     font: var(--type-ui-sm);
     color: var(--text1);
   }
-  .pair-left {
-    font-variant-numeric: tabular-nums;
+  /* one device asking: its words lead, since they are what the person checks against the other
+     screen, and the buttons sit under them where a thumb lands */
+  .pair-knock {
+    width: 100%;
+    display: grid;
+    gap: 8px;
+    padding: 10px 0 4px;
+    border-top: 1px solid var(--border1);
   }
+  .pair-knock-done {
+    color: var(--text1);
+  }
+  .pair-knock-line {
+    display: grid;
+    gap: 2px;
+  }
+  .pair-knock-done .knock-word {
+    color: var(--text1);
+  }
+  .pair-from {
+    color: var(--text1);
+  }
+  .pair-knock-actions,
   .pair-actions {
     display: flex;
     gap: 8px;

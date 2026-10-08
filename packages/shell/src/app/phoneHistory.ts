@@ -5,7 +5,7 @@ import { type Entry, type FloatStack, floats } from "../ui/floats.ts";
 /**
  * The phone's way back is the browser's too: the edge swipe on iOS, the back button or gesture on
  * Android. Nothing on the phone navigates the page, so without an entry per screen the gesture
- * leaves Toyon for whatever the tab held before it, and a tab opened from toyon.cloud held nothing:
+ * leaves Toyon for whatever the tab held before it, and a tab opened from a home-screen icon held nothing:
  * a blank page.
  *
  * The screens stack four deep: the list, a worktree's chat over it, another of its tabs over the

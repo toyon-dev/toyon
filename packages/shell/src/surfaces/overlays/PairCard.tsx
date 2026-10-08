@@ -1,19 +1,20 @@
-import { isTailnetName, type PairMint, type TailnetPhone, tailnetLine } from "@toyon/shared";
+import { isTailnetName, type Knock, machineLink, tailnetLine } from "@toyon/shared";
 import { qrModules } from "@toyon/shared/qr";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { useDispatch, useStore, useUrls } from "../../state/context.tsx";
 import { Button } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
-import { useOnChange } from "../../ui/hooks.ts";
+import { usePolled } from "../../ui/hooks.ts";
 import { Overlay } from "../../ui/Overlay.tsx";
-import { type DaemonUrls, mintPair, pairPhones } from "../../ws.ts";
+import { answerKnock, type DaemonUrls, tailnetPhones, turnOnRemote } from "../../ws.ts";
+import { hostOf } from "./addMachine.ts";
 import "./pair.css";
 
 /** the light margin around the modules a camera looks for, in modules, as the standard asks */
 const QUIET = 4;
 
 /** a QR code as one path of unit squares; the card's CSS paints it, so the colours stay tokens */
-function QrCode({ text, spent }: { text: string; spent: boolean }) {
+function QrCode({ text }: { text: string }) {
   const { size, d } = useMemo(() => {
     const m = qrModules(text);
     let path = "";
@@ -26,134 +27,152 @@ function QrCode({ text, spent }: { text: string; spent: boolean }) {
   }, [text]);
   return (
     <svg
-      className={cx("pair-qr", spent && "pair-qr-spent")}
+      className="pair-qr"
       viewBox={`0 0 ${size} ${size}`}
       shapeRendering="crispEdges"
       role="img"
-      aria-label="Pairing code"
+      aria-label="This machine's address"
     >
       <path d={d} />
     </svg>
   );
 }
 
-/** Seconds left on a code, ticking. The daemon gives a duration, so the clock here is this page's
- * own and may disagree with the daemon's by as long as the request took. */
-function useSecondsLeft(mint: PairMint | null): number {
-  const [left, setLeft] = useState(0);
-  useEffect(() => {
-    if (!mint) return;
-    const until = performance.now() + mint.ms;
-    const tick = () => setLeft(Math.max(0, Math.ceil((until - performance.now()) / 1000)));
-    tick();
-    const id = setInterval(tick, 250);
-    return () => clearInterval(id);
-  }, [mint]);
-  return left;
-}
-
-/** how often the card asks again while it waits for a scan: turning Tailscale on at the phone is
+/** how often the card asks again while it waits for a phone: turning Tailscale on at the phone is
  * the thing the person does next, and the line should follow it */
 const PHONES_EVERY_MS = 3000;
 
-/** For a tailnet name, the phones Tailscale lists and whether one is connected; undefined until
- * the first answer, and for any other name. */
-function useTailnetPhones(urls: DaemonUrls, host: string | null, waiting: boolean): TailnetPhone[] | null | undefined {
-  const [phones, setPhones] = useState<TailnetPhone[] | null>();
-  const tailnet = host !== null && isTailnetName(host);
-  useEffect(() => {
-    if (!tailnet || !waiting) return;
-    let live = true;
-    let id: ReturnType<typeof setTimeout> | undefined;
-    // the next ask waits for this answer: a phone that is off holds one for the length of a ping
-    const ask = () =>
-      void pairPhones(urls).then((p) => {
-        if (!live) return;
-        setPhones(p);
-        id = setTimeout(ask, PHONES_EVERY_MS);
-      });
-    ask();
-    return () => {
-      live = false;
-      clearTimeout(id);
-    };
-  }, [tailnet, waiting, urls]);
-  return tailnet ? phones : undefined;
+/** what a knock is called on the card: the page it came from, when that is not this machine's own */
+function knockFrom(k: Knock): string {
+  return k.from === null ? "A device that opened this address" : `A Toyon page at ${hostOf(k.from)}`;
 }
 
-/** "open on your phone": a one-time code as a QR. The phone's camera opens this machine's public
- * name with the code, the page there trades it for the token, and the phone is sent on to add the
- * machine to toyon.cloud. A redeem anywhere shows here as the daemon's `paired` frame. */
+/** one device asking, with the two words it shows on its own screen, and the answer */
+function KnockRow({
+  knock,
+  letIn,
+  onAnswer,
+}: {
+  knock: Knock;
+  /** the answer given here, or null while it waits */
+  letIn: boolean | null;
+  onAnswer: (letIn: boolean) => void;
+}) {
+  return (
+    <div className={cx("pair-knock", letIn !== null && "pair-knock-done")}>
+      <div className="pair-knock-line">
+        <span className="knock-word">{knock.word}</span>
+        <span className="pair-from">
+          {letIn === null ? `${knockFrom(knock)} wants in.` : letIn ? "is in." : "was turned away."}
+        </span>
+      </div>
+      {letIn === null && (
+        <div className="pair-knock-actions">
+          <Button tone="primary" onClick={() => onAnswer(true)}>
+            let in
+          </Button>
+          <Button variant="outline" onClick={() => onAnswer(false)}>
+            not now
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** The address for a phone's camera, once the machine has a name; before that, what turning one
+ * on means and the button that does it, or what Tailscale is missing. Only a desk shows this
+ * half: a phone showing the address would be asking itself to scan. */
+function Address({ urls, waitingOnPhone }: { urls: DaemonUrls; waitingOnPhone: boolean }) {
+  const host = useStore((s) => s.remote?.host ?? null);
+  const tailscale = useStore((s) => s.tailscale);
+  const [turning, setTurning] = useState(false);
+  const [refused, setRefused] = useState<string | null>(null);
+  // the phones are asked after while the address is up and no device has knocked yet: once one
+  // has, the phone is plainly connected
+  const tailnet = host !== null && isTailnetName(host);
+  const phones = usePolled(() => tailnetPhones(urls), PHONES_EVERY_MS, tailnet && waitingOnPhone);
+  const note = tailnet && phones !== undefined ? tailnetLine(phones) : null;
+  const turnOn = async () => {
+    setTurning(true);
+    setRefused(null);
+    const why = await turnOnRemote(urls);
+    setTurning(false);
+    if (why) setRefused(why);
+  };
+  if (host !== null) {
+    return (
+      <>
+        <div className="pair-frame">
+          <QrCode text={machineLink(host)} />
+        </div>
+        <div className="hint pair-host">{host}</div>
+        <p className="pair-line">
+          Scan it with your phone's camera. The phone asks to be let in, and the ask shows here. Another machine finds
+          this one under "add a machine".
+        </p>
+        {note && <p className={cx("pair-note", note.ok && "hint")}>{note.text}</p>}
+      </>
+    );
+  }
+  return (
+    <>
+      <p className="pair-line">
+        Your phone opens this machine at its tailnet name. Anyone on your tailnet you let in gets a shell here.
+      </p>
+      {tailscale === null ? (
+        <p className="pair-note">Asking Tailscale.</p>
+      ) : tailscale.state === "ready" ? (
+        <>
+          <div className="pair-knock-actions">
+            <Button tone="primary" busy={turning} onClick={() => void turnOn()}>
+              turn on
+            </Button>
+          </div>
+          {refused && <p className="pair-note">{refused}</p>}
+        </>
+      ) : (
+        <p className="pair-note">{tailscale.line}</p>
+      )}
+    </>
+  );
+}
+
+/** Pairing. On a desk the card leads with the machine's address, or with turning a name on, and
+ * under it the devices asking to be let in; elsewhere it is the asking devices alone, since that
+ * is what opened it. A device shows the same two words it is listed by here, so the person lets
+ * in the one they meant. Answered knocks stay on the card, with their answer, until it closes;
+ * the daemon's `knocks` frames keep the waiting ones true. */
 export function PairCard() {
   const dispatch = useDispatch();
   const urls = useUrls();
-  const host = useStore((s) => s.remote?.host ?? null);
-  const pairings = useStore((s) => s.pairings);
-  const [mint, setMint] = useState<PairMint | null>(null);
-  const [refused, setRefused] = useState<string | null>(null);
-  const [round, setRound] = useState(0);
-  // a pairing counts only when it comes after the code on screen was made
-  const pairingsAtMint = useRef(pairings);
-  const left = useSecondsLeft(mint);
-
-  useOnChange([round], () => {
-    let live = true;
-    setMint(null);
-    setRefused(null);
-    void mintPair(urls).then((r) => {
-      if (!live) return;
-      pairingsAtMint.current = pairings;
-      if (typeof r === "string") setRefused(r);
-      else setMint(r);
-    });
-    return () => {
-      live = false;
-    };
-  });
-
-  const paired = mint !== null && pairings > pairingsAtMint.current;
-  const spent = mint !== null && left === 0;
+  const desk = useStore((s) => s.frame === "desk");
+  const knocks = useStore((s) => s.knocks);
+  // what was answered here, with the answer, kept so the row says so after the daemon's list
+  // drops it
+  const [answered, setAnswered] = useState<{ knock: Knock; letIn: boolean }[]>([]);
   const close = () => dispatch({ a: "close" });
-  const phones = useTailnetPhones(urls, host, !paired && !refused);
-  const note = phones === undefined ? null : tailnetLine(phones);
+
+  const answer = (knock: Knock, letIn: boolean) => {
+    setAnswered((list) => (list.some((a) => a.knock.id === knock.id) ? list : [...list, { knock, letIn }]));
+    void answerKnock(urls, knock.id, letIn);
+  };
+  const waiting = knocks.filter((k) => !answered.some((a) => a.knock.id === k.id));
+  const rows = [...answered, ...waiting.map((knock) => ({ knock, letIn: null }))];
 
   return (
-    <Overlay bare boxClass="pair-stack" onClose={close}>
-      <div className="pair-card">
-        <div className="pair-title">Open on your phone</div>
-        {paired ? (
-          <p className="pair-line">Paired. Your phone lists this machine on toyon.cloud now.</p>
-        ) : refused ? (
-          <p className="pair-line">{refused}</p>
-        ) : (
-          <>
-            <div className="pair-frame">{mint && <QrCode text={mint.url} spent={spent} />}</div>
-            {host && <div className="hint pair-host">{host}</div>}
-            <p className="pair-line">
-              {!mint ? (
-                "Making a code."
-              ) : spent ? (
-                "This code has expired."
-              ) : (
-                <>
-                  Scan from Toyon on your phone to add this machine there, or with your phone's camera to install it as
-                  a new app. The code works once; <span className="pair-left">{left}</span> seconds left.
-                </>
-              )}
-            </p>
-            {note && <p className={cx("pair-note", note.ok && "hint")}>{note.text}</p>}
-          </>
-        )}
-        <div className="pair-actions">
-          {(spent || refused) && !paired && (
-            <Button variant="outline" onClick={() => setRound((n) => n + 1)}>
-              new code
-            </Button>
-          )}
-          <Button tone="quiet" onClick={close}>
-            done
-          </Button>
-        </div>
+    <Overlay boxClass="pair-card" onClose={close}>
+      <div className="pair-title">{desk ? "Open on your phone" : "Pair a device"}</div>
+      {desk && <Address urls={urls} waitingOnPhone={waiting.length === 0} />}
+      {rows.length === 0 && !desk && <p className="pair-line">Nothing is asking to be let in right now.</p>}
+      {waiting.length > 0 && <p className="pair-line">Let in the one whose words match the other screen.</p>}
+      {rows.map((r) => (
+        <KnockRow key={r.knock.id} knock={r.knock} letIn={r.letIn} onAnswer={(letIn) => answer(r.knock, letIn)} />
+      ))}
+      <div className="pair-actions">
+        <Button tone="quiet" onClick={close}>
+          done
+        </Button>
       </div>
     </Overlay>
   );

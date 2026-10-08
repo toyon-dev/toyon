@@ -10,13 +10,9 @@
 
 import { cloud } from "../core/cloud.ts";
 
+type Range = { from: number; to: number };
 const allocated = new Set<number>();
 let range = cloud.proxyPorts;
-
-/** pin the proxy range when the environment did not; called once at boot, before any allocation */
-export function pinProxyPorts(r: { from: number; to: number }) {
-  range ??= r;
-}
 
 function tryBind(port: number, hostname: string): number | null {
   try {
@@ -51,7 +47,6 @@ export async function allocateProxyPort(): Promise<number> {
   return range.from;
 }
 
-type Range = { from: number; to: number };
 const inRange = (port: number, r: Range | null) => r !== null && port >= r.from && port <= r.to;
 
 /** The port a proxy starting now listens on. With no range it is the one the worktree was made with.
@@ -80,6 +75,10 @@ export interface PortLease {
   /** whether the ports are the fixed few a front forwards, each worth keeping free */
   ranged(): boolean;
   label(): string;
+  /** The fixed range a public name's front forwards, or null for ephemeral ports again. The
+   * environment's range, when it set one, is not a name's to change. Leases in a range that goes
+   * are forgotten: nothing forwards those ports any more, and a running proxy keeps its port. */
+  setRange(r: Range | null): void;
 }
 
 export const proxyPorts: PortLease = {
@@ -93,6 +92,11 @@ export const proxyPorts: PortLease = {
   },
   ranged: () => range !== null,
   label: () => (range ? `${range.from}-${range.to}` : ""),
+  setRange(r) {
+    if (cloud.proxyPorts !== null) return;
+    if (range !== null && r === null) for (const p of allocated) if (inRange(p, range)) allocated.delete(p);
+    range = r;
+  },
 };
 
 /** mark a persisted port as taken (worktrees restored at boot keep their port); a range port is

@@ -24,7 +24,7 @@ function make(over: Partial<KeepAwakeDeps> = {}) {
       };
     },
     mode: () => "use",
-    answerable: true,
+    answerable: () => true,
     waitMs: 30 * MIN,
     now: () => now,
     setTimer: (fn, ms) => {
@@ -137,7 +137,7 @@ describe("KeepAwake", () => {
   });
 
   test("a question holds nothing where no other device can answer it", () => {
-    const { status, held } = make({ answerable: false });
+    const { status, held } = make({ answerable: () => false });
     status("working");
     expect(held()).toBe(1);
     status("waiting");

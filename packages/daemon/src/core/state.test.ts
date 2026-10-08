@@ -94,7 +94,7 @@ describe("state", () => {
     expect(store.seenOf("a")).toBeUndefined();
   });
 
-  test("a paired shell origin is kept once, https or loopback http, the newest sixteen", () => {
+  test("a let-in shell origin is kept once, https or loopback http, the newest sixteen", () => {
     const store = new StateStore(paths, { repos: [], worktrees: [], sessions: {} });
     store.trustOrigin("https://home.tail1234.ts.net");
     store.trustOrigin("http://home.tail1234.ts.net");

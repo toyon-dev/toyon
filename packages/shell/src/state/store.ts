@@ -27,11 +27,13 @@ import type {
   GitFileStatus,
   InstallMethod,
   KeepAwakeMode,
+  Knock,
   LogLine,
   ManagedView,
   OwnedWorktree,
   PageEntry,
   PageLink,
+  PairedMachine,
   PathEntry,
   PathTarget,
   PendingRepo,
@@ -46,6 +48,7 @@ import type {
   ServerMsg,
   ShipOp,
   Shipping,
+  TailscaleReadiness,
   TermServerMsg,
   Theme,
   ThemePrefs,
@@ -371,9 +374,9 @@ export type Overlay =
    * `names` opens it looking through their names alone: where a removed worktree is found again. */
   | { kind: "chats"; names?: true }
   | { kind: "keys" }
-  /** a one-time code for a phone, as a QR */
+  /** this machine's address for a phone, turning the name on, and the devices asking to be let in */
   | { kind: "pair" }
-  /** another machine's code or link, scanned or pasted here, so this page lists it too */
+  /** another machine's address, scanned or pasted here, so this page lists it too */
   | { kind: "add-machine" }
   /** theme picker: which pref slot Enter writes */
   | { kind: "theme"; slot: "theme" | "light" | "dark" }
@@ -791,10 +794,16 @@ export interface State {
   /** hello's `managed`: what whoever runs the machine turned off, and from which file. The
    * controls it governs go or grey here and say why; the refusing is the daemon's and the CLI's. */
   managed: ManagedView;
-  /** hello's `paired`: a phone has redeemed a code on this machine, so the bar stops offering one */
-  paired: boolean;
-  /** codes redeemed since this page loaded, so an open pairing card can tell its code was used */
-  pairings: number;
+  /** hello's `letIn`: a device opening this machine's address has been let in, so the bar stops
+   * offering the address in words */
+  letIn: boolean;
+  /** the devices asking to be let in right now, oldest first */
+  knocks: Knock[];
+  /** hello's `tailscale`: whether Tailscale here could hold a name, and what is missing if not;
+   * null until the daemon has asked once */
+  tailscale: TailscaleReadiness | null;
+  /** hello's `machines`: the ones this daemon was handed; main.tsx lists them beside this one */
+  handed: PairedMachine[];
   /** hello's `gitIdentity`: git can commit without asking, so the new-project view need not */
   gitIdentity: boolean;
   /** toyon is running out of a checkout that has moved on without it: work landed there that the
@@ -963,8 +972,10 @@ export function initialState(opts: InitialOpts): State {
     remote: null,
     machine: null,
     managed: MANAGED_NONE,
-    paired: false,
-    pairings: 0,
+    letIn: false,
+    knocks: [],
+    tailscale: null,
+    handed: [],
     // the page never shows before hello, which is what says otherwise
     gitIdentity: true,
     self: null,
@@ -1637,6 +1648,22 @@ function strayed(s: State): State {
   return activate(s, landingIn(s, rail));
 }
 
+/** The devices asking to be let in, as the daemon last said. A knock not seen before is a person
+ * who just did something on another device and is now looking here for the answer, so it opens
+ * the pair card where nothing else is open; one already open keeps its place, and the card lists
+ * what waits whenever it is opened. On a first connect nothing was seen before, so a device that
+ * waited through the connect opens it too. */
+function withKnocks(s: State, knocks: Knock[], letIn: boolean): State {
+  const fresh = knocks.some((k) => !s.knocks.some((o) => o.id === k.id));
+  const next = { ...s, knocks, letIn };
+  return fresh && next.overlay === null ? reducer(next, { a: "open", overlay: { kind: "pair" } }) : next;
+}
+
+/** a desk offers the phone card once this machine has a public name, or Tailscale could give it
+ * one; a phone showing the address would be asking itself to scan */
+export const canOfferPhone = (s: Pick<State, "frame" | "remote" | "tailscale">): boolean =>
+  s.frame === "desk" && (s.remote !== null || s.tailscale?.state === "ready");
+
 export function reducer(s: State, action: Action): State {
   let next = withLauncher(strayed(reduce(s, action)));
   // a hold is only for the row it was made on: selecting anything else, however it happened, ends it
@@ -2281,7 +2308,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
       // the rail the row was read from, when the row is on it: a reload on a guest comes back to
       // the rail it was chosen from, not to the guest's own project
       const onStored = !!repoId && !!wt && isOwned(wt) && onRail(wt, repoId, msg.rows);
-      return {
+      const next: State = {
         ...s,
         heard: true,
         repos: msg.repos,
@@ -2312,7 +2339,8 @@ function onServer(s: State, msg: StoreServerMsg): State {
         remote: msg.remote,
         machine: msg.machine,
         managed: msg.managed,
-        paired: msg.paired,
+        tailscale: msg.tailscale,
+        handed: msg.machines,
         gitIdentity: msg.gitIdentity,
         newProject:
           s.newProject ??
@@ -2329,6 +2357,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
         // an import this tab was watching may have finished while it was away
         activeImportId: msg.pending.some((x) => x.id === s.activeImportId) ? s.activeImportId : null,
       };
+      return withKnocks(next, msg.knocks, msg.letIn);
     }
     case "self": {
       // a build this page saw start and now sees end without a failure is one it is now behind,
@@ -2339,8 +2368,14 @@ function onServer(s: State, msg: StoreServerMsg): State {
       const ended = s.self?.building === true && s.self.rebuild && !msg.self?.building;
       return { ...s, self: msg.self, rebuilt: s.rebuilt || (ended && msg.self?.buildFailed === undefined) };
     }
-    case "paired":
-      return { ...s, paired: true, pairings: s.pairings + 1 };
+    case "remote":
+      return { ...s, remote: msg.remote, machine: msg.machine };
+    case "machines":
+      return { ...s, handed: msg.machines };
+    case "tailscale":
+      return { ...s, tailscale: msg.tailscale };
+    case "knocks":
+      return withKnocks(s, msg.knocks, msg.letIn);
     case "update":
       return { ...s, update: msg.update };
     case "update-checked":

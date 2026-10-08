@@ -482,6 +482,11 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     ctx.reply({ t: "self", self: s.self.get() });
   },
 
+  "forget-machine"(msg, _ctx, s) {
+    s.state.forgetMachine(msg.origin);
+    s.hub.emit("machinesChanged");
+  },
+
   async "restart-daemon"(_msg, _ctx, s) {
     const refused = await s.restarter.request();
     if (refused) throw new UserError(refused);

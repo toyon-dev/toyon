@@ -100,7 +100,7 @@ Copies start when you open them, and stop their servers when nobody has looked a
 
 ## Somewhere other than your laptop
 
-Toyon can also run on a box you open from your phone, or on your own Fly account with the laptop closed. This moves Toyon and its copies off your laptop; it does not publish your app. None of it passes through a Toyon server; there is none. `toyon remote` puts a box on your own domain behind Caddy or on your Tailscale tailnet, `toyon deploy fly up` builds a machine on your Fly account and prints the link, and the Dockerfile in the package runs on any host with a disk and a port range. A Fly machine measured about $4-6 a month in ordinary use, plus whatever your agents spend, and its first chat can sign in with your Claude plan. [toyon.cloud](https://toyon.cloud) keeps a list of your machines in your browser, and nothing else.
+Toyon can also run on a box you open from your phone, or on your own Fly account with the laptop closed. This moves Toyon and its copies off your laptop; it does not publish your app. None of it passes through a Toyon server; there is none. `toyon remote` puts a box on your own domain behind Caddy or on your Tailscale tailnet, `toyon deploy fly up` builds a machine on your Fly account and prints the link, and the Dockerfile in the package runs on any host with a disk and a port range. A Fly machine measured about $4-6 a month in ordinary use, plus whatever your agents spend, and its first chat can sign in with your Claude plan. A phone or a second machine pairs by opening the address and being let in from Toyon's window.
 
 These routes are new. How to set each one up, and what it has been checked with, is in [docs/remote.md](https://github.com/toyon-dev/toyon/blob/main/docs/remote.md).
 

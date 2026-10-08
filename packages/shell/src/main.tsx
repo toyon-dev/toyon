@@ -2,17 +2,18 @@ import type { ServerMsg } from "@toyon/shared";
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./app/App.tsx";
+import { LetMeIn } from "./app/LetMeIn.tsx";
 import { frameNow, installFrame, touchNow } from "./app/phone.ts";
 import { installPhoneHistory } from "./app/phoneHistory.ts";
 import { MachinesProvider } from "./state/context.tsx";
 import { migrateStorage, STORAGE } from "./state/keys.ts";
 import { createMachine } from "./state/machine.ts";
-import { createMachines, parseSavedMachines } from "./state/machines.ts";
+import { createMachines } from "./state/machines.ts";
 import { ErrorBoundary, markStaleBuild } from "./ui/ErrorBoundary.tsx";
 import "./styles/tokens.css";
 import "./styles/base.css";
 import { applyTheme, cachedDaylight, cachedTheme, onPrefersDarkChange, prefersDark } from "./theme.ts";
-import { servingToken } from "./ws.ts";
+import { hasToken, saveToken, servingToken } from "./ws.ts";
 
 // tell an injected preview bridge that this document is a shell, so it leaves the chords to us
 // (toyon inside toyon: without this the outer shell takes every keystroke meant for this one)
@@ -46,8 +47,9 @@ function clientId(): string {
 }
 
 // The machines this page lists: the one that served it, from its own address and the token it
-// gave this browser, and every other it has paired with (state/machines.ts). Each has a store, a
-// socket and a slice of storage of its own; the browser's facts are read once here and shared.
+// gave this browser, and every other that machine's daemon lists (state/machines.ts). Each has a
+// store, a socket and a slice of storage of its own; the browser's facts are read once here and
+// shared.
 const env = {
   cached,
   systemDark: prefersDark(),
@@ -59,13 +61,7 @@ const env = {
 };
 const machines = createMachines({
   serving: { origin: location.origin, token: servingToken() },
-  saved: parseSavedMachines(read(localStorage, STORAGE.machines)),
   build: (init) => createMachine(init, env),
-  persist: (saved) => {
-    try {
-      localStorage.setItem(STORAGE.machines, JSON.stringify(saved));
-    } catch {}
-  },
 });
 
 // the window's facts reach every store: a machine not on screen still lays its state out for the
@@ -106,13 +102,24 @@ const booted = (window.toyonBoot ?? Promise.resolve(null)).then((boot) => {
   if (msg && typeof msg === "object" && msg.t === "hello") machines.active().boot(msg);
 });
 
+// A browser that opened this address with no token has nothing to show but the ask: it knocks,
+// and the token a yes brings loads this page again as the shell.
+function letIn(token: string) {
+  saveToken(token);
+  window.location.reload();
+}
+const root = createRoot(document.getElementById("root")!);
 booted.then(() =>
-  createRoot(document.getElementById("root")!).render(
+  root.render(
     <React.StrictMode>
       <ErrorBoundary>
-        <MachinesProvider machines={machines}>
-          <App />
-        </MachinesProvider>
+        {!hasToken() ? (
+          <LetMeIn origin={location.origin} machine={location.host} onToken={letIn} />
+        ) : (
+          <MachinesProvider machines={machines}>
+            <App />
+          </MachinesProvider>
+        )}
       </ErrorBoundary>
     </React.StrictMode>,
   ),

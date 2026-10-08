@@ -5,17 +5,13 @@ import { existsSync } from "node:fs";
 import { hostname } from "node:os";
 import { join } from "node:path";
 import {
-  isTailnetName,
   machineLabel,
   OFFLINE_SLOTS,
-  type PairMint,
-  type PairRedeem,
   type PreviewGrantMint,
-  pairLink,
   RESTART_NOW,
   type Remote,
   type RestartWait,
-  type TailnetPhone,
+  type TailscaleReadiness,
 } from "@toyon/shared";
 import type { Server } from "bun";
 import { type AttachmentStore, drawnType } from "../agent/attachments.ts";
@@ -23,7 +19,7 @@ import { isUploadKind } from "../agent/uploads.ts";
 import { UserError } from "../core/errors.ts";
 import type { GrantCodes } from "../core/grants.ts";
 import { log } from "../core/log.ts";
-import type { PairCodes } from "../core/pair.ts";
+import type { Origins } from "../core/origins.ts";
 import {
   type Door,
   door,
@@ -37,7 +33,8 @@ import {
 import type { Opened } from "../files/open.ts";
 import type { RepoRegistry } from "../repos/registry.ts";
 import type { PreviewData, PreviewHandler } from "../runtime/proxy.ts";
-import { isLoopbackOrigin, preflight, withCors } from "./cors.ts";
+import { preflight, withCors } from "./cors.ts";
+import { openToAnyOrigin } from "./pairing.ts";
 
 export interface WsData {
   authed: boolean;
@@ -78,8 +75,15 @@ export interface HttpOpts {
   metrics: () => unknown;
   /** the origin a shell just authenticated from, for the bridge's list of who may frame a preview */
   noteShellOrigin: (origin: string | null) => void;
-  /** the public name and its front (core/remote.ts), or null when the shell is only opened here */
-  remote: Remote | null;
+  /** the public name and its front (core/remote.ts) as it stands now, or null when the shell is
+   * only opened here; read per request, since `toyon remote` and the card change it while running */
+  remote: () => Remote | null;
+  /** whether Tailscale here could hold a name, as last read; null before the first read */
+  tailscale: () => TailscaleReadiness | null;
+  /** which origins are this daemon's own (core/origins.ts) */
+  origins: Pick<Origins, "isLoopback">;
+  /** the pairing routes (pairing.ts): a reply, or undefined for a path that is not one of theirs */
+  pairing: (req: Request, url: URL, d: Exclude<Door, { kind: "refused" }>) => Promise<Response | undefined>;
   /** where the managed policy this daemon runs under came from, and a hash of it, so doctor can
    * tell a daemon that booted before IT pushed a newer file */
   managed: { source: string | null; hash: string | null };
@@ -95,16 +99,10 @@ export interface HttpOpts {
   restart: (now: boolean) => Promise<string | null>;
   /** what a requested restart waits on, and the chats it goes past */
   restartWait: () => RestartWait;
-  /** the one-time codes a phone trades for the token */
-  pair: PairCodes;
   /** the one-time codes a page from another machine trades for a preview cookie */
   grants: GrantCodes;
-  /** a code was just redeemed, from a page on `origin` (null when the browser sent none) */
-  onPaired: (origin: string | null) => void;
-  /** the shell origins on other machines that have paired here, whose pages may read answers */
+  /** the shell origins on other machines that have been let in here, whose pages may read answers */
   trusted: () => string[];
-  /** the phones on this machine's tailnet; null when Tailscale cannot be asked */
-  phones: () => Promise<TailnetPhone[] | null>;
   /** the chosen theme's grounds, for the manifest: the bar a phone draws above an installed shell
    * and the launch screen behind it */
   manifestColors: () => { bar: string; ground: string };
@@ -138,32 +136,38 @@ function attachedHeaders(imageType: string | null): Record<string, string> {
 
 export function createFetch(opts: HttpOpts) {
   const grant = previewGrant(opts.token);
-  const remote = opts.remote;
+  /** the token as a bearer: what every route a shell or the CLI calls on purpose sits behind */
+  const authed = (req: Request) => sameSecret(req.headers.get("authorization"), `Bearer ${opts.token}`);
+  const unauthorized = () => new Response("unauthorized", { status: 401 });
   /** what a preview routed by name is checked against; the gate on each preview port is the same */
-  const gate: PreviewGate | null = remote && { grant, host: remote.host, redeem: (code) => opts.grants.redeem(code) };
-  const health = () =>
-    Response.json({
+  const gateFor = (remote: Remote | null): PreviewGate | null =>
+    remote && { grant, host: remote.host, redeem: (code) => opts.grants.redeem(code) };
+  const health = async () => {
+    const remote = opts.remote();
+    return Response.json({
       ok: true,
       version: opts.version,
       pid: process.pid,
       branded: opts.branded(),
       remote: remote && { host: remote.host, previews: remote.previews },
       machine: machineLabel(hostname(), remote),
+      tailscale: opts.tailscale(),
       managed: opts.managed,
       ...(opts.metrics() as object),
     });
+  };
 
-  /** Which page may read the answer, by its Origin header; null for none. Any origin may redeem a
-   * pairing code, since that is how a shell on another machine first comes to be trusted; a trusted
-   * one may call everything behind the token; and on a loopback name a loopback origin may too,
-   * which is a second daemon on this machine, or the Vite dev shell. A preview is never answered
-   * across origins: what runs there is not toyon's. */
+  /** Which page may read the answer, by its Origin header; null for none. Any origin may knock and
+   * poll its knock, since that is how a shell on another machine first comes to be trusted; a
+   * trusted one may call everything behind the token; and on a loopback name a loopback origin may
+   * too, which is a second daemon on this machine, or the Vite dev shell. A preview is never
+   * answered across origins: what runs there is not toyon's. */
   const corsAllow = (req: Request, url: URL, d: Door): string | null => {
     const origin = req.headers.get("origin");
     if (!origin || (d.kind !== "local" && d.kind !== "shell")) return null;
-    if (url.pathname === "/pair/redeem") return origin;
+    if (openToAnyOrigin(url)) return origin;
     if (opts.trusted().includes(origin)) return origin;
-    return d.kind === "local" && isLoopbackOrigin(origin) ? origin : null;
+    return d.kind === "local" && opts.origins.isLoopback(origin) ? origin : null;
   };
 
   async function route(
@@ -174,11 +178,13 @@ export function createFetch(opts: HttpOpts) {
   ): Promise<Response | undefined> {
     /** the request came through the front for the shell's own name */
     const remoteShell = d.kind === "shell";
+    const remote = opts.remote();
 
     // A preview name is the app, whole: none of toyon's own routes answer under it. Anyone who can
     // reach the front could otherwise open a dev server, which is a wide surface (dev-only routes,
     // env values in responses, the bundler's file serving), so it takes the grant cookie the shell
     // was given, checked before saying whether the worktree exists.
+    const gate = gateFor(remote);
     if (d.kind === "preview" && d.worktreeId !== null && gate) {
       const pass = passPreview(req, gate);
       if (!pass.ok) return pass.response;
@@ -250,63 +256,22 @@ export function createFetch(opts: HttpOpts) {
       return refused ? new Response(refused, { status: 409 }) : new Response(null, { status: 202 });
     }
 
-    // A pairing code for a phone, asked for by something that already holds the token: the CLI or
-    // a shell. Only with a public name, since the link in the code names it and a phone has no
-    // other way to this machine.
-    if (url.pathname === "/pair" && req.method === "POST") {
-      if (!sameSecret(req.headers.get("authorization"), `Bearer ${opts.token}`)) {
-        return new Response("unauthorized", { status: 401 });
-      }
-      if (!remote) {
-        return new Response("Set up `toyon remote` first; pairing needs a name a phone can reach.", { status: 400 });
-      }
-      const { code, ms } = opts.pair.mint();
-      const body: PairMint = { code, url: pairLink(remote.host, code), ms };
-      return Response.json(body, { headers: { "cache-control": NO_STORE } });
-    }
-
-    // Whether a phone could open the link at all, for the card that shows the code. A tailnet name
-    // resolves only on a connected device, and a phone that is not one never loads a page of ours.
-    if (url.pathname === "/pair/phones" && req.method === "GET") {
-      if (!sameSecret(req.headers.get("authorization"), `Bearer ${opts.token}`)) {
-        return new Response("unauthorized", { status: 401 });
-      }
-      const phones = remote && isTailnetName(remote.host) ? await opts.phones() : null;
-      return Response.json(phones, { headers: { "cache-control": NO_STORE } });
-    }
+    // pairing: knocks and their answers, the tailnet, the name itself, and the machines handed over
+    const paired = await opts.pairing(req, url, d);
+    if (paired) return paired;
 
     // A one-time code that opens a preview here from a page another machine served: that page's
     // frames and tabs are on another site, so the cookie this machine's own shell gets never
     // reaches them, and each carries a code in its address instead (core/remote.ts).
     if (url.pathname === "/preview-grant" && req.method === "POST") {
-      if (!sameSecret(req.headers.get("authorization"), `Bearer ${opts.token}`)) {
-        return new Response("unauthorized", { status: 401 });
-      }
+      if (!authed(req)) return unauthorized();
       if (!remote) return new Response("previews here are not reached by name", { status: 400 });
       const body: PreviewGrantMint = opts.grants.mint();
       return Response.json(body, { headers: { "cache-control": NO_STORE } });
     }
 
-    // The phone's side: the code for the token, and the preview grant with it as /bootstrap gives
-    // one. Only through the front for the public name, where the link in the code points; a page
-    // on this machine already has the token and has nothing to pair.
-    if (url.pathname === "/pair/redeem" && req.method === "POST") {
-      if (!remote || !remoteShell) return new Response("not found", { status: 404 });
-      const body = (await req.json().catch(() => ({}))) as { code?: unknown };
-      if (typeof body.code !== "string" || !opts.pair.redeem(body.code)) {
-        return new Response("code expired", { status: 401 });
-      }
-      opts.onPaired(req.headers.get("origin"));
-      const reply: PairRedeem = { token: opts.token };
-      return Response.json(reply, {
-        headers: { "cache-control": NO_STORE, "set-cookie": grantCookie(grant, remote.host) },
-      });
-    }
-
     if (url.pathname === "/register" && req.method === "POST") {
-      if (!sameSecret(req.headers.get("authorization"), `Bearer ${opts.token}`)) {
-        return new Response("unauthorized", { status: 401 });
-      }
+      if (!authed(req)) return unauthorized();
       const body = (await req.json().catch(() => ({}))) as { path?: string };
       if (!body.path) return new Response("missing path", { status: 400 });
       try {
@@ -323,9 +288,7 @@ export function createFetch(opts: HttpOpts) {
     // that connects within the next while is told then, since the launcher opens the window after
     // this returns.
     if (url.pathname === "/open" && req.method === "POST") {
-      if (!sameSecret(req.headers.get("authorization"), `Bearer ${opts.token}`)) {
-        return new Response("unauthorized", { status: 401 });
-      }
+      if (!authed(req)) return unauthorized();
       const body = (await req.json().catch(() => ({}))) as { path?: string };
       if (!body.path) return new Response("missing path", { status: 400 });
       try {
@@ -341,9 +304,7 @@ export function createFetch(opts: HttpOpts) {
     // header's, and the answer is the id a message names it by. Refused before the body is read
     // when the length already says too much; the store counts what actually arrives.
     if (url.pathname === "/uploads" && req.method === "POST") {
-      if (!sameSecret(req.headers.get("authorization"), `Bearer ${opts.token}`)) {
-        return new Response("unauthorized", { status: 401 });
-      }
+      if (!authed(req)) return unauthorized();
       const kind = url.searchParams.get("kind");
       if (!isUploadKind(kind)) return new Response("missing kind", { status: 400 });
       const mime = (req.headers.get("content-type") ?? "").split(";")[0]?.trim().toLowerCase() ?? "";
@@ -463,7 +424,7 @@ export function createFetch(opts: HttpOpts) {
 
     // Behind an edge, the platform's health check comes from inside its own network and names the
     // machine's address rather than the public name. /health carries nothing a caller could use.
-    if (remote?.front === "edge" && url.pathname === "/health") return health();
+    if (opts.remote()?.front === "edge" && url.pathname === "/health") return health();
 
     // An agent on this machine calling Toyon's tools. It reaches the daemon by its loopback
     // address in every mode, and behind an edge the door refuses a loopback name as someone
@@ -477,7 +438,7 @@ export function createFetch(opts: HttpOpts) {
       return opts.mcp(req, worktreeId);
     }
 
-    const d = door(req, srv.requestIP(req)?.address ?? "", remote, "daemon");
+    const d = door(req, srv.requestIP(req)?.address ?? "", opts.remote(), "daemon");
     if (d.kind === "refused") return d.response;
     // a page on another machine: its browser asks first, and reads the answer only if it is named
     const allow = corsAllow(req, url, d);

@@ -8,8 +8,9 @@ import { z } from "zod";
 import { ATTACHMENTS_PER_MESSAGE, limitMessage, overLimit } from "../attachment.ts";
 import { cachePathReason } from "../cache.ts";
 import { runShared } from "../config.ts";
-import type { Remote } from "../daemon.ts";
+import type { PairedMachine, Remote, TailscaleReadiness } from "../daemon.ts";
 import { MAX_DURATION_MS, MIN_DURATION_MS, parseDuration } from "../duration.ts";
+import type { Knock } from "../knock.ts";
 import type { ManagedView } from "../managed.ts";
 import type {
   AgentConfigInfo,
@@ -100,9 +101,18 @@ export type ServerMsg =
        * too: a shell that holds sockets to several machines keeps an edge machine's open only
        * while looking at it, since an edge bills for a connection held. */
       remote: Remote | null;
-      /** a phone has redeemed a pairing code on this machine, at any time; until one has, the desk
-       * offers the code in the bar */
-      paired: boolean;
+      /** whether Tailscale here could hold a name for this machine: the bar offers "turn on" when
+       * it could and no name is set, and the card says what is missing when it cannot. Null until
+       * the daemon has asked once; the `tailscale` frame follows. */
+      tailscale: TailscaleReadiness | null;
+      /** other machines this daemon was handed (a deploy from this box): every shell that
+       * connects here lists them */
+      machines: PairedMachine[];
+      /** a device opening this machine's own address has been let in, at any time; until one has,
+       * the desk offers the address in the bar */
+      letIn: boolean;
+      /** the devices asking to be let in right now, oldest first */
+      knocks: Knock[];
       /** git has a name and email to commit with. Making a project commits, and someone who has
        * never used git has neither, so the new-project page asks for them when this is false. */
       gitIdentity: boolean;
@@ -124,8 +134,16 @@ export type ServerMsg =
   | { t: "themes"; themes: Theme[]; prefs: ThemePrefs }
   /** the daemon fell behind the checkout it runs from, caught up, or started catching up */
   | { t: "self"; self: SelfState | null }
-  /** a pairing code was just redeemed, so the card showing it can say so */
-  | { t: "paired" }
+  /** the machines this daemon was handed changed: a deploy from this box, or a forget */
+  | { t: "machines"; machines: PairedMachine[] }
+  /** the public name was turned on or off while running: what hello would say now */
+  | { t: "remote"; remote: Remote | null; machine: string }
+  /** whether Tailscale here could hold a name changed, or was first read */
+  | { t: "tailscale"; tailscale: TailscaleReadiness }
+  /** the devices asking to be let in changed: one knocked, or one was answered or gave up. With
+   * it whether any device opening this machine's own address has been let in yet, since a yes
+   * given on another screen or in the terminal is what moves the bar's offer to its icon. */
+  | { t: "knocks"; knocks: Knock[]; letIn: boolean }
   /** an install landed under the running daemon, or a requested restart moved on */
   | { t: "update"; update: UpdateState | null }
   /** the answer to a `check-update`, to the tab that asked */
@@ -666,6 +684,8 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
    * the wait is announced in `update`. Every shell reconnects on its own, so this is the only frame
    * that answers by going away. */
   z.object({ t: z.literal("restart-daemon") }),
+  /** drop a machine this daemon was handed, so it stops being listed on the next hello */
+  z.object({ t: z.literal("forget-machine"), origin: z.string().max(2048) }),
   /** try a failed update again: install the newest Toyon and restart onto it once no chat is
    * mid-reply */
   z.object({ t: z.literal("update-now") }),

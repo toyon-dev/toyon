@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import type { Remote } from "@toyon/shared";
+import type { PairedMachine, Remote } from "@toyon/shared";
 import { createStore } from "./context.tsx";
 import type { Machine, MachineInit } from "./machine.ts";
-import { createMachines, parseSavedMachines, type SavedMachine } from "./machines.ts";
+import { createMachines } from "./machines.ts";
 import { initialState } from "./store.ts";
 
 // The registry over fakes: which machine is active, which sockets are held, what is kept for
@@ -31,19 +31,18 @@ function fake(init: MachineInit, log: string[], remote: Remote | null = null): M
   };
 }
 
-const home: SavedMachine = { origin: "https://home.tail1234.ts.net", token: "h" };
-const work: SavedMachine = { origin: "https://work.tail1234.ts.net", token: "w" };
+const home: PairedMachine = { origin: "https://home.tail1234.ts.net", token: "h" };
+const work: PairedMachine = { origin: "https://work.tail1234.ts.net", token: "w" };
 
-function setup(saved: SavedMachine[] = [work]) {
+/** what the serving daemon lists, as its frame would say it */
+const listed = (machines: ReturnType<typeof createMachines>, list: PairedMachine[]) =>
+  machines.serving().store.dispatch({ a: "server", msg: { t: "machines", machines: list } } as never);
+
+function setup(list: PairedMachine[] = [work]) {
   const log: string[] = [];
-  const persisted: SavedMachine[][] = [];
-  const machines = createMachines({
-    serving: home,
-    saved,
-    build: (init) => fake(init, log),
-    persist: (s) => persisted.push(s),
-  });
-  return { log, persisted, machines };
+  const machines = createMachines({ serving: home, build: (init) => fake(init, log) });
+  listed(machines, list);
+  return { log, machines };
 }
 
 describe("machines", () => {
@@ -66,29 +65,38 @@ describe("machines", () => {
     expect(told).toBe(1);
   });
 
-  test("add lists a machine and keeps the list; a known origin with a new token is replaced", () => {
-    const { machines, persisted, log } = setup([]);
+  test("add lists a machine; a known origin with a new token is replaced", () => {
+    const { machines, log } = setup([]);
     machines.add(work);
     expect(machines.list().map((m) => m.origin)).toEqual([home.origin, work.origin]);
-    expect(persisted.at(-1)).toEqual([work]);
     expect(machines.add(work)).toBe(machines.get(work.origin) as Machine);
     machines.add({ ...work, token: "w2" });
     expect(log).toContain("dispose work");
     expect(machines.get(work.origin)?.token).toBe("w2");
-    expect(persisted.at(-1)).toEqual([{ ...work, token: "w2" }]);
   });
 
   test("remove disposes, clears what it remembered, falls back to the serving machine", () => {
-    const { machines, log, persisted } = setup();
+    const { machines, log } = setup();
     machines.activate(work.origin);
     machines.remove(work.origin);
     expect(log).toContain("dispose work");
     expect(log).toContain("clear work");
     expect(machines.active().origin).toBe(home.origin);
     expect(machines.list().length).toBe(1);
-    expect(persisted.at(-1)).toEqual([]);
     machines.remove(home.origin);
     expect(machines.list().length).toBe(1);
+  });
+
+  test("the list follows the serving daemon's frames: what they name is listed, what they drop goes, the serving one stays", () => {
+    const box = { origin: "https://box.tail1234.ts.net", token: "b" };
+    const { machines, log } = setup([work]);
+    listed(machines, [work, box, home]);
+    expect(machines.list().map((m) => m.origin)).toEqual([home.origin, work.origin, box.origin]);
+    listed(machines, [box]);
+    expect(machines.list().map((m) => m.origin)).toEqual([home.origin, box.origin]);
+    expect(log).toContain("dispose work");
+    listed(machines, []);
+    expect(machines.list().map((m) => m.origin)).toEqual([home.origin]);
   });
 
   test("an edge machine holds its socket only while active; a tailnet one stays connected", () => {
@@ -96,9 +104,9 @@ describe("machines", () => {
     const edge = { host: "work.fly.dev", previews: "https://work.fly.dev:{port}", front: "edge" as const };
     const machines = createMachines({
       serving: home,
-      saved: [work, { origin: "https://box.tail1234.ts.net", token: "b" }],
       build: (init) => fake(init, log, init.origin === work.origin ? edge : null),
     });
+    listed(machines, [work, { origin: "https://box.tail1234.ts.net", token: "b" }]);
     machines.activate(work.origin);
     machines.activate(home.origin);
     expect(log).toEqual(["resume work", "suspend work"]);
@@ -119,15 +127,5 @@ describe("machines", () => {
     expect(machines.displayName("https://home.other.ts.net")).toBe("home (home.other.ts.net)");
     const { machines: lone } = setup();
     expect(lone.displayName(work.origin)).toBe("work");
-  });
-});
-
-describe("parseSavedMachines", () => {
-  test("keeps origin-token pairs and drops anything else", () => {
-    expect(
-      parseSavedMachines(JSON.stringify([work, { origin: "work", token: "x" }, { origin: home.origin }, 3])),
-    ).toEqual([work]);
-    expect(parseSavedMachines("nope")).toEqual([]);
-    expect(parseSavedMachines(null)).toEqual([]);
   });
 });

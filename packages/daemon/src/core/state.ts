@@ -4,31 +4,19 @@ import type {
   AgentCommand,
   KeepAwakeMode,
   ModelChoice,
+  PairedMachine,
   PermissionMode,
   RepoInfo,
   ThemePrefs,
   WorktreeInfo,
 } from "@toyon/shared";
-import { isLoopbackHost } from "@toyon/shared";
+import { isShellOrigin } from "@toyon/shared";
 import { UserError } from "./errors.ts";
 import { log } from "./log.ts";
 import { ensureDirs, type Paths } from "./paths.ts";
 
-/** how many paired shell origins are kept; the oldest goes when a seventeenth pairs */
+/** how many let-in shell origins are kept; the oldest goes when a seventeenth is let in */
 const TRUSTED_MAX = 16;
-
-/** an origin a shell holding a token may be served from: an origin proper (no path, query or
- * fragment), over https, or over http where the name can only mean that page's own machine */
-function isShellOrigin(origin: string): boolean {
-  let url: URL;
-  try {
-    url = new URL(origin);
-  } catch {
-    return false;
-  }
-  if (url.origin !== origin) return false;
-  return url.protocol === "https:" || (url.protocol === "http:" && isLoopbackHost(url.hostname));
-}
 
 export interface PersistedState {
   repos: RepoInfo[];
@@ -61,13 +49,19 @@ export interface PersistedState {
   seen?: Record<string, SeenRecord>;
   /** the last update whose install failed, so the automatic path does not retry it every minute */
   updateFailed?: { version: string; at: number };
-  /** when a phone first redeemed a pairing code here; the desk stops offering one in the bar */
-  pairedAt?: number;
-  /** The shell origins that have paired with this machine from another one (a Toyon served
-   * elsewhere redeemed a code here), newest last. Those pages talk to this daemon across origins,
+  /** when a device opening this machine's own address was first let in; the desk's bar stops
+   * offering the address in words after that */
+  letInAt?: number;
+  /** The shell origins that have been let in to this machine from another one (a Toyon served
+   * elsewhere knocked here and was let in), newest last. Those pages talk to this daemon across origins,
    * so its answers carry CORS headers for them. Trust is not authentication: every such request
    * still needs the bearer token, which is why nothing here is ever revoked. */
   trustedOrigins?: { origin: string; at: number }[];
+  /** Other machines this daemon was handed, with their tokens: a deploy run from this box, or a
+   * shell it serves that another machine let in. Every shell that connects here lists them, so a
+   * pairing is done once per machine and not once per browser. The tokens sit on disk beside the
+   * git credentials, which grant as much. */
+  machines?: PairedMachine[];
   /** The process groups the daemon owns, per worktree (found ones included, under their disc- id):
    * every dev server, agent adapter, shell and login it spawned. The next daemon reads this to
    * reclaim what a crash or a kill left running, since a pgid otherwise lives only in the runtime. */
@@ -430,13 +424,36 @@ export class StateStore {
     this.save();
   }
 
-  get paired(): boolean {
-    return this.state.pairedAt !== undefined;
+  get letIn(): boolean {
+    return this.state.letInAt !== undefined;
   }
-  /** the first redeem is the one worth keeping; later ones change nothing anyone reads */
-  notePaired() {
-    if (this.state.pairedAt !== undefined) return;
-    this.state.pairedAt = Date.now();
+  /** the first let-in is the one worth keeping; later ones change nothing anyone reads */
+  noteLetIn() {
+    if (this.state.letInAt !== undefined) return;
+    this.state.letInAt = Date.now();
+    this.save();
+  }
+
+  /** the machines this daemon was handed, oldest first */
+  get machines(): PairedMachine[] {
+    return this.state.machines ?? [];
+  }
+  /** List a machine, replacing one already listed at that origin. Https only: its token would
+   * cross a network in the clear to any other, and a loopback daemon's shell is reached by its
+   * own link, not through a list. */
+  addMachine(origin: string, token: string) {
+    if (!isShellOrigin(origin) || !origin.startsWith("https://"))
+      throw new UserError(`${origin} is not an https origin`);
+    if (!token) throw new UserError("a machine is listed with its token");
+    const list = this.machines.filter((m) => m.origin !== origin);
+    list.push({ origin, token });
+    this.state.machines = list;
+    this.save();
+  }
+  forgetMachine(origin: string) {
+    const list = (this.state.machines ?? []).filter((m) => m.origin !== origin);
+    if (list.length === (this.state.machines ?? []).length) return;
+    this.state.machines = list;
     this.save();
   }
 
@@ -444,7 +461,7 @@ export class StateStore {
   get trustedOrigins(): string[] {
     return (this.state.trustedOrigins ?? []).map((t) => t.origin);
   }
-  /** Remember a shell origin that paired from another machine. Https, or plain http on a loopback
+  /** Remember a shell origin let in from another machine. Https, or plain http on a loopback
    * name (a desk's own daemon serving its page at 127.0.0.1): the page there holds this machine's
    * token, and any other plain-http page would have carried it across a network in the clear. The
    * newest sixteen, since a person has that many machines in a lifetime, not a session. */

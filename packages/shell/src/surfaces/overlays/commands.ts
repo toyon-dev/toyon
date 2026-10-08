@@ -160,6 +160,8 @@ export type CommandState = Pick<
   | "self"
   | "archivedPage"
   | "archived"
+  | "knocks"
+  | "tailscale"
 > & {
   /** where the page is open: a worktree's editor and Finder rows only exist on the daemon's machine */
   hostname: string;
@@ -194,6 +196,8 @@ export function useCommands(): Command[] {
   const self = useStore((s) => s.self);
   const archivedPage = useStore((s) => s.archivedPage);
   const archived = useStore((s) => s.archived);
+  const knocks = useStore((s) => s.knocks);
+  const tailscale = useStore((s) => s.tailscale);
   return useMemo(() => {
     const st: CommandState = {
       picking,
@@ -219,6 +223,8 @@ export function useCommands(): Command[] {
       self,
       archivedPage,
       archived,
+      knocks,
+      tailscale,
       hostname: host,
     };
     const cross: CrossMachine = {
@@ -257,6 +263,8 @@ export function useCommands(): Command[] {
     self,
     archivedPage,
     archived,
+    knocks,
+    tailscale,
     dispatch,
     sock,
     host,

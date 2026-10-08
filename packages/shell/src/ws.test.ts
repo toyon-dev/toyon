@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { daemonUrls } from "./ws.ts";
 
 // Every address the shell fetches from one daemon is built here, absolute, so the same shapes
-// reach the machine that served the page and one it paired with.
+// reach the machine that served the page and one that let it in.
 
 describe("daemonUrls", () => {
   test("a tailnet machine: https, wss, the token where each route reads it", () => {
@@ -20,8 +20,8 @@ describe("daemonUrls", () => {
     expect(u.restart(false)).toBe("https://work.tail1234.ts.net/restart?token=abc");
     expect(u.restart(true)).toContain("&now");
     expect(u.uploads("file")).toBe("https://work.tail1234.ts.net/uploads?kind=file");
-    expect(u.pair).toBe("https://work.tail1234.ts.net/pair");
-    expect(u.pairRedeem).toBe("https://work.tail1234.ts.net/pair/redeem");
+    expect(u.phones).toBe("https://work.tail1234.ts.net/phones");
+    expect(u.knockAnswer("k1")).toBe("https://work.tail1234.ts.net/knock/k1/answer");
     expect(u.previewGrant).toBe("https://work.tail1234.ts.net/preview-grant");
   });
   test("a loopback daemon on a port: plain ws, the port kept", () => {

@@ -2,7 +2,7 @@
 // setup has run, its process group and preview proxy.
 
 import type { LogLine, ManagedPolicy, ProcState, Remote, RepoInfo, WorktreeInfo, WorktreeKind } from "@toyon/shared";
-import { DEFAULT_PERMISSION_MODE, LOGIN_STREAM, SHELL_STREAM } from "@toyon/shared";
+import { addressedByPort, DEFAULT_PERMISSION_MODE, LOGIN_STREAM, PREVIEW_PORTS, SHELL_STREAM } from "@toyon/shared";
 import type { AgentAccounts } from "../agent/accounts.ts";
 import { OPTION_FIELDS } from "../agent/acp/options.ts";
 import { AcpSession } from "../agent/acp/session.ts";
@@ -68,9 +68,9 @@ export interface RuntimeDeps {
   attachments?: AttachmentStore;
   bridgeScript: () => string;
   /** the public name a front may forward preview ports under, and the gate they check
-   * (core/remote.ts); absent in tests, where previews answer loopback only */
-  remote?: Remote | null;
-  gate?: PreviewGate | null;
+   * (core/remote.ts), as they stand now; absent in tests, where previews answer loopback only */
+  remote?: () => Remote | null;
+  gate?: () => PreviewGate | null;
   /** the preview ports; the daemon's own when absent */
   ports?: PortLease;
   /** whether a tab shows the worktree; one shown never gives its preview port up. Absent in tests */
@@ -306,8 +306,8 @@ function defaultProxy(
   return startProxy({
     port: wt.proxyPort,
     hostname: cloud.bindHost,
-    remote: d.remote ?? null,
-    gate: d.gate ?? null,
+    remote: () => d.remote?.() ?? null,
+    gate: () => d.gate?.() ?? null,
     bridgeScript: d.bridgeScript,
     getTarget: () => previewTargetOf(procs, previewName),
     onRequest: wake.onRequest,
@@ -374,6 +374,16 @@ export class RuntimeRegistry {
     // a proc came up or went (a crash, a restart, a wake); an exit while asleep or stopped says
     // nothing here, and the sleep and stop paths record after their kills instead
     deps.hub.on("proc", (id) => this.recordGroups(id));
+    // a front that addresses previews by port has each one declared to it, so they cannot be
+    // ephemeral: the range is pinned before any proxy starts, and follows the name while running
+    this.ports.setRange(this.rangeFor());
+    deps.hub.on("remoteChanged", () => fireAndForget("remote", this.remoteChanged(), "move the previews"));
+  }
+
+  /** the fixed range the public name's front forwards, or null for none */
+  private rangeFor(): { from: number; to: number } | null {
+    const r = this.deps.remote?.() ?? null;
+    return r && addressedByPort(r.previews) ? PREVIEW_PORTS : null;
   }
 
   hold(id: string, tag: string): void {
@@ -498,6 +508,36 @@ export class RuntimeRegistry {
 
   private get ports(): PortLease {
     return this.deps.ports ?? proxyPorts;
+  }
+
+  /** The public name changed while copies run. A front forwards a fixed few ports, so every
+   * running proxy moves onto one of them: stopped, its port returned, started again on a leased
+   * one. The dev servers behind the proxies are not touched; the rows frame carries each new port
+   * to the shell, whose frame loads it. A copy for which no port is left sleeps, as a start with
+   * none would. With the name gone the range goes and running proxies keep their ports; the new
+   * name and gate reach a proxy through its getters either way. */
+  async remoteChanged(): Promise<void> {
+    this.ports.setRange(this.rangeFor());
+    if (!this.ports.ranged()) {
+      for (const id of [...this.leased.keys()]) this.returnLease(id);
+      return;
+    }
+    for (const [id, rt] of this.runtimes) {
+      if (!rt.proxy) continue;
+      const live = this.deps.state.worktree(id);
+      if (!live) continue;
+      rt.proxy.stop();
+      rt.proxy = null;
+      this.returnLease(id);
+      const port = this.ports.lease(live.proxyPort);
+      if (port === null) {
+        await this.sleep(id, `no preview port in ${this.ports.label()} was free for it`);
+        continue;
+      }
+      this.leased.set(id, port);
+      this.openProxy(rt, live, port);
+    }
+    this.deps.hub.emit("worktreesChanged");
   }
 
   /** the preview target once its proc answers, or null when nothing is coming: no procs, a proc

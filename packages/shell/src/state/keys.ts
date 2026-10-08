@@ -45,9 +45,6 @@ export const STORAGE = {
   layouts: "toyon-layouts",
   /** this tab's id (sessionStorage): worktrees created here steal focus, others don't */
   client: "toyon-client",
-  /** the other machines this browser has paired with, as [{origin, token}]; the machine that
-   * served the page is not listed, since the page is its listing */
-  machines: "toyon-machines",
   /** + repo id: the profile the composer last started a worktree with, for that repo */
   profilePrefix: "toyon-profile-",
   /** + repo id: the permission mode the composer last started a worktree with, for that repo */
@@ -79,7 +76,6 @@ export const WINDOW_KEYS: readonly Key[] = [
   STORAGE.layouts,
   STORAGE.token,
   STORAGE.client,
-  STORAGE.machines,
 ];
 
 /** What is about one machine's projects and worktrees, whose ids mean nothing on another machine:

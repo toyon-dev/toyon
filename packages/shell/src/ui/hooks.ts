@@ -554,3 +554,28 @@ export function usePinToView(ref: RefObject<HTMLElement | null>): void {
     };
   }, [ref]);
 }
+
+/** `fn`'s latest answer, asked again `everyMs` after each answer lands while `live`; undefined
+ * before the first. Each ask waits for the one before it, so a slow answer never piles up. */
+export function usePolled<T>(fn: () => Promise<T>, everyMs: number, live: boolean): T | undefined {
+  const [value, setValue] = useState<T>();
+  const latest = useRef(fn);
+  latest.current = fn;
+  useEffect(() => {
+    if (!live) return;
+    let on = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const ask = () =>
+      void latest.current().then((v) => {
+        if (!on) return;
+        setValue(v);
+        timer = setTimeout(ask, everyMs);
+      });
+    ask();
+    return () => {
+      on = false;
+      clearTimeout(timer);
+    };
+  }, [everyMs, live]);
+  return value;
+}

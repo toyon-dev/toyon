@@ -61,6 +61,14 @@ export interface HubEvents {
   agentsChanged: () => void;
   /** the keep-awake switch in settings was flipped */
   keepAwakeChanged: () => void;
+  /** the public name was set or cleared while running: `toyon remote`, or the card's "turn on" */
+  remoteChanged: () => void;
+  /** the machines this daemon was handed changed: a deploy from this box, or a forget */
+  machinesChanged: () => void;
+  /** the devices asking to be let in changed: one knocked, or one was answered or gave up */
+  knocksChanged: () => void;
+  /** whether Tailscale here could hold a name changed: signed in, HTTPS turned on, and so on */
+  tailscaleChanged: () => void;
   /** the order of a repo's most used preview pages changed */
   visitsChanged: (repoId: string) => void;
   /** a worktree's page badges moved: a page was opened, or left */

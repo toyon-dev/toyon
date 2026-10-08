@@ -8,11 +8,10 @@ import { Resolver } from "node:dns/promises";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { launcherAddLink, PREVIEW_PORTS, portPreviews } from "@toyon/shared";
+import { PREVIEW_PORTS, portPreviews } from "@toyon/shared";
 import { loadManaged } from "@toyon/shared/managed-load";
 import type { Command } from "../args.ts";
-import { home } from "../daemon.ts";
-import { openUrl } from "../openUrl.ts";
+import { daemonFetch, home } from "../daemon.ts";
 import { refusedByPolicy } from "../policy.ts";
 import { bunVersion, machineSources, writeMachineContext } from "./context.ts";
 
@@ -261,16 +260,22 @@ async function up(cmd: DeployCommand, bin: string): Promise<void> {
     if (!up) await Bun.sleep(2000);
   }
   if (!up) console.log(`it has not answered yet; \`fly logs -a ${cmd.name}\` shows what it is doing`);
-  printLinks(cmd.name, token);
+  await printLinks(cmd.name, token);
   console.log("the volume holds the only copy of anything not pushed to a remote");
-  // the list at toyon.cloud is where this machine is found again; the sign-in link stays printed only
-  openUrl(launcherAddLink(`https://${cmd.name}.fly.dev`));
 }
 
-function printLinks(app: string, token: string): void {
-  console.log(`\ntoyon: https://${app}.fly.dev/#token=${token}`);
+/** The new machine, listed in Toyon on this box when one runs: its daemon is handed the address
+ * and the token, and every shell that connects here lists it from then on. With no daemon the
+ * link is the way in, as it always was. */
+async function printLinks(app: string, token: string): Promise<void> {
+  const origin = `https://${app}.fly.dev`;
+  const handed = (await daemonFetch("/machines", { body: { origin, token } }))?.ok === true;
+  if (handed) {
+    console.log(`\ntoyon: ${app}.fly.dev is in your list; open Toyon here to use it, and pair your phone from there`);
+    return;
+  }
+  console.log(`\ntoyon: ${origin}/#token=${token}`);
   console.log("the link grants a shell on that machine; keep it to yourself");
-  console.log(`add it to your list at toyon.cloud: ${launcherAddLink(`https://${app}.fly.dev`)}`);
 }
 
 async function destroy(cmd: DeployCommand, bin: string): Promise<number> {
@@ -307,7 +312,7 @@ export async function deploy(cmd: DeployCommand): Promise<number> {
     if (cmd.action === "up") await up(cmd, bin);
     else if (cmd.action === "destroy") return await destroy(cmd, bin);
     else if (existsSync(tokenFile(cmd.name))) {
-      printLinks(cmd.name, readFileSync(tokenFile(cmd.name), "utf8").trim());
+      await printLinks(cmd.name, readFileSync(tokenFile(cmd.name), "utf8").trim());
     } else {
       throw new DeployError(`${cmd.name} was not deployed from this machine; its token is not in ${cloudDir}`);
     }

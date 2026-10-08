@@ -1,12 +1,13 @@
 import {
   type ClientMsg,
   type ConnectFailure,
-  type PairMint,
-  type PairRedeem,
+  type Knocked,
+  type KnockState,
   type PreviewGrantMint,
   RESTART_NOW,
   type RestartWait,
   type ServerMsg,
+  type TailnetMachine,
   type TailnetPhone,
   type Uploaded,
   WS_CLOSE_UNAUTHORIZED,
@@ -14,15 +15,12 @@ import {
 import { STORAGE } from "./state/keys.ts";
 
 /** The token of the machine that served this page: the fragment on a fresh link, storage on every
- * load after. Read by main.tsx alone; every other machine's token arrives through pairing and lives
- * on its `Machine`. */
+ * load after. Read by main.tsx alone; every other machine's token arrives when that machine lets
+ * this page in, and lives on its `Machine`. */
 export function servingToken(): string {
   const m = location.hash.match(/token=([a-f0-9]+)/);
   if (m?.[1]) {
-    // localStorage so an installed PWA (launches without the fragment) stays authed
-    try {
-      localStorage.setItem(STORAGE.token, m[1]);
-    } catch {}
+    saveToken(m[1]);
     return m[1];
   }
   try {
@@ -30,6 +28,14 @@ export function servingToken(): string {
   } catch {
     return "";
   }
+}
+
+/** the serving machine's token, kept in localStorage so an installed app (which launches without
+ * the fragment) and a page let in by a knock stay authed */
+export function saveToken(token: string): void {
+  try {
+    localStorage.setItem(STORAGE.token, token);
+  } catch {}
 }
 
 export function hasToken(): boolean {
@@ -60,9 +66,15 @@ export interface DaemonUrls {
   health: string;
   restart(now: boolean): string;
   uploads(kind: "image" | "file"): string;
-  pair: string;
-  pairPhones: string;
-  pairRedeem: string;
+  phones: string;
+  /** the other machines on this machine's tailnet, for the add-machine card */
+  tailnet: string;
+  /** the public name, turned on or off */
+  remote: string;
+  /** the daemon's list of other machines, one handed to it */
+  machines: string;
+  /** a knock's answer, from the page that holds this machine's token */
+  knockAnswer(id: string): string;
   previewGrant: string;
 }
 
@@ -83,9 +95,11 @@ export function daemonUrls(origin: string, token: string): DaemonUrls {
     health: `${u.origin}/health`,
     restart: (now) => `${u.origin}/restart?${q}${now ? `&${RESTART_NOW}` : ""}`,
     uploads: (kind) => `${u.origin}/uploads?kind=${kind}`,
-    pair: `${u.origin}/pair`,
-    pairPhones: `${u.origin}/pair/phones`,
-    pairRedeem: `${u.origin}/pair/redeem`,
+    phones: `${u.origin}/phones`,
+    tailnet: `${u.origin}/tailnet`,
+    remote: `${u.origin}/remote`,
+    machines: `${u.origin}/machines`,
+    knockAnswer: (id) => `${u.origin}/knock/${id}/answer`,
     previewGrant: `${u.origin}/preview-grant`,
   };
 }
@@ -153,27 +167,50 @@ export async function restartWaiting(urls: DaemonUrls): Promise<{ waiting: strin
   }
 }
 
-/** the phones on the machine's tailnet, for the pairing card; null when there is nothing to say */
-export async function pairPhones(urls: DaemonUrls): Promise<TailnetPhone[] | null> {
+/** a bearer GET answered as JSON; null when the daemon did not answer or refused */
+async function getJson<T>(urls: DaemonUrls, url: string): Promise<T | null> {
   try {
-    const r = await fetch(urls.pairPhones, { headers: bearer(urls) });
-    return r.ok ? ((await r.json()) as TailnetPhone[] | null) : null;
+    const r = await fetch(url, { headers: bearer(urls) });
+    return r.ok ? ((await r.json()) as T) : null;
   } catch {
     return null;
   }
 }
 
-/** A one-time code for a phone, or the line to show instead: the daemon's own refusal, or that it
- * could not be reached. */
-export async function mintPair(urls: DaemonUrls): Promise<PairMint | string> {
+/** a bearer JSON POST; null when it was taken, otherwise the daemon's refusal or that it is away */
+async function postJson(urls: DaemonUrls, url: string, body: unknown, away: string): Promise<string | null> {
   try {
-    const r = await fetch(urls.pair, { method: "POST", headers: bearer(urls) });
-    if (!r.ok) return (await r.text()) || "Toyon did not make a code";
-    return (await r.json()) as PairMint;
+    const r = await fetch(url, {
+      method: "POST",
+      headers: { ...bearer(urls), "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    return r.ok ? null : (await r.text()) || `refused (${r.status})`;
   } catch {
-    return "Toyon is not answering; try again once it is back.";
+    return away;
   }
 }
+
+/** the phones on the machine's tailnet, for the pair card; null when there is nothing to say */
+export const tailnetPhones = (urls: DaemonUrls) => getJson<TailnetPhone[] | null>(urls, urls.phones);
+
+/** the other machines on the tailnet and which run Toyon; null when Tailscale cannot be asked,
+ * or the daemon did not answer */
+export const tailnetMachines = (urls: DaemonUrls) => getJson<TailnetMachine[] | null>(urls, urls.tailnet);
+
+/** Turn the public name on through Tailscale. Null when it is on, and the `remote` frame says
+ * what it is; otherwise the daemon's refusal, which is what Tailscale is missing. */
+export const turnOnRemote = (urls: DaemonUrls) =>
+  postJson(urls, urls.remote, { tailscale: true }, "Toyon is not answering; try again once it is back.");
+
+/** Hand a machine just let in to the daemon that served this page, which keeps the one list and
+ * tells every shell it serves. Null when it took it. */
+export const handMachine = (urls: DaemonUrls, origin: string, token: string) =>
+  postJson(urls, urls.machines, { origin, token }, "Toyon here is not answering; the machine is not listed yet.");
+
+/** let a knocking device in, or not; the card's list follows the daemon's frames either way */
+export const answerKnock = (urls: DaemonUrls, id: string, letIn: boolean) =>
+  postJson(urls, urls.knockAnswer(id), { letIn }, "Toyon is not answering");
 
 /** a one-time code that opens one of this machine's previews from a page another machine served;
  * null when the daemon did not answer, and the frame waits for the next ask */
@@ -186,38 +223,52 @@ export async function mintPreviewGrant(urls: DaemonUrls): Promise<PreviewGrantMi
   }
 }
 
-/** why a pairing code could not be traded for another machine's token */
-export type RedeemFailure = "expired" | "not-toyon" | "unreachable";
+/** why a machine did not take a knock, or did not let this page in */
+export type KnockFailure = "full" | "not-toyon" | "unreachable" | "refused" | "gone";
 
-/** Trade a pairing code shown on another machine for that machine's token, from here. The daemon
- * there reads this page's Origin off the request and answers it across origins from then on. */
-export async function redeemPair(origin: string, code: string): Promise<{ token: string } | RedeemFailure> {
+/** how often a knocking page asks what became of its knock */
+export const KNOCK_POLL_MS = 2000;
+
+/** Ask the machine at `origin` to let this page in: knock, show the two words it is listed by
+ * there through `onWaiting`, and wait for the answer. The token, or why not: `gone` is a knock
+ * the machine no longer has, which is five minutes without an answer, or a daemon restarted
+ * there. A daemon that stops answering mid-wait is waited on, since a phone in a pocket drops and
+ * comes back; `signal` ends the wait, and a knock not yet sent when it fires is never sent. The
+ * daemon there reads this page's Origin off the knock, shows it on its card, and answers the page
+ * across origins once it is in. */
+export async function requestAccess(
+  origin: string,
+  signal: AbortSignal,
+  onWaiting: (word: string) => void,
+): Promise<{ token: string } | KnockFailure> {
+  let knocked: Partial<Knocked>;
   try {
-    const r = await fetch(`${origin}/pair/redeem`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ code }),
-    });
-    if (r.status === 401) return "expired";
+    const r = await fetch(`${origin}/knock`, { method: "POST", signal });
+    if (r.status === 429) return "full";
     if (!r.ok) return "not-toyon";
-    const body = (await r.json()) as Partial<PairRedeem>;
-    return typeof body.token === "string" && body.token ? { token: body.token } : "not-toyon";
+    knocked = (await r.json()) as Partial<Knocked>;
   } catch {
     // no route to the name (Tailscale off here, or the machine down), or a daemon there that does
     // not answer this origin: the browser reports both as the request failing
-    return "unreachable";
+    return signal.aborted ? "gone" : "unreachable";
   }
-}
-
-/** whether anything answers at `origin` at all, however it answers: for a machine added by a token
- * link, which this page may not yet be allowed to read answers from */
-export async function reachable(origin: string): Promise<boolean> {
-  try {
-    await fetch(`${origin}/health`, { mode: "no-cors", signal: AbortSignal.timeout(4000) });
-    return true;
-  } catch {
-    return false;
+  if (typeof knocked.id !== "string" || typeof knocked.word !== "string") return "not-toyon";
+  onWaiting(knocked.word);
+  while (!signal.aborted) {
+    try {
+      const r = await fetch(`${origin}/knock/${knocked.id}`, { cache: "no-store", signal });
+      if (r.status === 404) return "gone";
+      if (r.ok) {
+        const body = (await r.json()) as Partial<KnockState>;
+        if (body.state === "let-in" && typeof body.token === "string" && body.token) return { token: body.token };
+        if (body.state === "refused") return "refused";
+      }
+    } catch {
+      // the next ask will tell; an abort ends the loop at the top
+    }
+    await new Promise((f) => setTimeout(f, KNOCK_POLL_MS));
   }
+  return "gone";
 }
 
 /** the pid of the daemon answering, or null while none does: a new pid is a restart finished */

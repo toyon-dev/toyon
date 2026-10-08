@@ -1,7 +1,8 @@
 // What the CLI and the daemon agree on about the daemon's home directory and its front door,
 // without the CLI importing daemon code (the npm package ships them as separate bundles).
 
-import { isTailnetName } from "./pair.ts";
+import { isTailnetName } from "./knock.ts";
+import type { ManagedPolicy } from "./managed.ts";
 
 /** the URL scheme the hidden macOS helper bundle registers; a page can start nothing itself, and
  * a link on this scheme is the one way the shell's not-running page has of starting a daemon */
@@ -52,6 +53,22 @@ export interface Remote {
   front: "local" | "edge";
 }
 
+/** Whether Tailscale on a machine can hold a name for Toyon, and if not, what stands in the way,
+ * in the words the person reads on the card and in the terminal. `name` is the machine's own
+ * when it is known, whatever the state. */
+export interface TailscaleReadiness {
+  state: "ready" | "not-installed" | "not-running" | "signed-out" | "needs-approval" | "magicdns-off" | "https-off";
+  name: string | null;
+  /** the fix, or for `ready` the name as a sentence */
+  line: string;
+}
+
+/** another machine a shell lists beside the one that served it: where it is and how to speak to it */
+export interface PairedMachine {
+  origin: string;
+  token: string;
+}
+
 /** the shape `remote.json` holds: the name and where previews live. The front is not in the file;
  * the daemon works it out at boot, and the hello frame carries the whole `Remote`. */
 export type RemoteView = Pick<Remote, "host" | "previews">;
@@ -63,6 +80,41 @@ export function machineLabel(hostname: string, remote: Pick<Remote, "host"> | nu
   const of = (name: string) => name.split(".")[0]?.toLowerCase() ?? "";
   if (remote && isTailnetName(remote.host)) return of(remote.host) || of(hostname);
   return of(hostname) || "toyon";
+}
+
+/** An origin a shell holding a token may be served from, or a machine a shell may list: an
+ * origin proper (no path, query or fragment), over https, or over http where the name can only
+ * mean that page's own machine. A token would travel to any other plain-http origin in the clear. */
+export function isShellOrigin(origin: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(origin);
+  } catch {
+    return false;
+  }
+  if (url.origin !== origin) return false;
+  return url.protocol === "https:" || (url.protocol === "http:" && isLoopbackHost(url.hostname));
+}
+
+/** where previews live under a public name, as a phrase for a line someone reads */
+export function previewsLine(r: RemoteView): string {
+  return addressedByPort(r.previews)
+    ? `previews on ports ${PREVIEW_PORTS.from}-${PREVIEW_PORTS.to}`
+    : `previews at ${r.previews}`;
+}
+
+/** A remote setting as it may be applied, or why not: the one judge for the file read at start,
+ * a change made while running, and the CLI writing the file with no daemon up. The host comes
+ * back lowercased, since a name is matched against what a browser sends. */
+export function acceptRemote(view: RemoteView, policy: Pick<ManagedPolicy, "remote">): RemoteView | string {
+  if (policy.remote === "off") return "remote access is turned off by your organization's policy";
+  const host = view.host.toLowerCase();
+  if (!isRemoteHost(host)) return `${view.host} is not a name a front can answer for`;
+  if (policy.remote === "tailscale" && !isTailnetName(host)) {
+    return "your organization's policy allows remote access over Tailscale only";
+  }
+  const why = checkPreviews(view.previews, host);
+  return why ?? { host, previews: view.previews };
 }
 
 /** the query parameter a one-time preview grant rides in, for a preview on a machine the page was

@@ -33,8 +33,8 @@ function proxyTo(port: number, remote: Remote | null = null) {
   return startProxy({
     port: freePort(),
     hostname: "127.0.0.1",
-    remote,
-    gate: remote && { grant: previewGrant("secret"), host: remote.host, redeem: (code) => codes.redeem(code) },
+    remote: () => remote,
+    gate: () => remote && { grant: previewGrant("secret"), host: remote.host, redeem: (code) => codes.redeem(code) },
     bridgeScript: () => "",
     getTarget: () => ({ port, host: "127.0.0.1" }),
   });
@@ -107,8 +107,8 @@ describe("preview proxy", () => {
     const waiting = startProxy({
       port: freePort(),
       hostname: "127.0.0.1",
-      remote: null,
-      gate: null,
+      remote: () => null,
+      gate: () => null,
       bridgeScript: () => "",
       getTarget: () => null,
     });
@@ -224,8 +224,8 @@ describe("preview proxy waking", () => {
     const proxy = startProxy({
       port: freePort(),
       hostname: "127.0.0.1",
-      remote: null,
-      gate: null,
+      remote: () => null,
+      gate: () => null,
       bridgeScript: () => "",
       getTarget: () => target,
       onRequest: () => requests.push(Date.now()),
@@ -250,8 +250,8 @@ describe("preview proxy waking", () => {
     const proxy = startProxy({
       port: freePort(),
       hostname: "127.0.0.1",
-      remote: null,
-      gate: null,
+      remote: () => null,
+      gate: () => null,
       bridgeScript: () => "",
       getTarget: () => null,
       ready: async () => null,
@@ -272,8 +272,8 @@ describe("preview proxy waking", () => {
     const proxy = startProxy({
       port: freePort(),
       hostname: "127.0.0.1",
-      remote: null,
-      gate: null,
+      remote: () => null,
+      gate: () => null,
       bridgeScript: () => "",
       getTarget: () => ({ port: up.port ?? 0, host: "127.0.0.1" }),
       onRequest: () => requests++,

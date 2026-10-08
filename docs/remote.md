@@ -2,7 +2,16 @@
 
 Toyon can run on a box you open from your phone, or on your own Fly account with the laptop closed. None of it passes through a Toyon server; there is none. These routes are new. On Fly, a browser has opened the shell and two copies' previews, an agent's edit has shown up in a preview without a reload, and every refusal has been checked from outside. On a tailnet, a phone has opened the shell and a preview and seen an agent's edit arrive without a reload. The Caddy route has been checked with requests shaped like its own, and has not been opened from a phone yet. On a phone, the shell switches between the chat, the preview and the code with tabs in the bar.
 
-[toyon.cloud](https://toyon.cloud) keeps a list of your machines in your browser, and nothing else. `toyon deploy fly up` and `toyon remote` open it with the new machine added, and a machine's own menu has "add to toyon.cloud" for another browser. The link carries the address, never the token.
+## Pairing a device
+
+Every device gets in the same way: it opens the machine's address, asks to be let in, and shows two words. Toyon's window on the machine shows the same two words with one button, and a yes there opens the shell on the device. The token never leaves the machine except through that yes.
+
+- **Your phone.** Press the phone button in the bar. With Tailscale signed in and HTTPS on, the card offers "turn on", which sets up `tailscale serve` for Toyon and takes effect at once. The card then draws the address as a QR code; scan it with the phone's camera, and let the phone in when its two words appear on the card.
+- **Another machine.** In Toyon on the other machine, "add a machine" in the app menu lists the Toyons on your tailnet. Press "request access" on this one, and let it in here. A machine not on the tailnet, such as a Fly machine, goes in the address field underneath.
+- **A box with no window open on it**, such as a server over ssh: `toyon pair` turns the name on if it is off, prints the address, and answers each device from the terminal.
+- **A Fly machine** is listed in Toyon on the laptop that deployed it. Pair your phone with it from there.
+
+A knock that you did not expect shows too, named by where it came from. Nothing gets in until you press let in, and an unanswered knock is gone in five minutes. On a public name one address can hold only two of the waiting slots.
 
 A host needs a process that stays up, a disk that survives restarts, WebSockets, and either a wildcard name or a range of ports it forwards. That rules out serverless hosts and hosts that scale to zero with no disk.
 
@@ -23,7 +32,7 @@ toyon.example.com, *.toyon.example.com {
 }
 ```
 
-The wildcard certificate needs Caddy's DNS challenge, built with your DNS provider's module; the example uses Cloudflare's. Each copy's preview gets its own name under yours, so each keeps its own cookies. `toyon stop` then `toyon` applies the setting.
+The wildcard certificate needs Caddy's DNS challenge, built with your DNS provider's module; the example uses Cloudflare's. Each copy's preview gets its own name under yours, so each keeps its own cookies. The setting takes effect at once.
 
 ## Your own box on your tailnet, with no domain
 
@@ -33,7 +42,7 @@ Turn on MagicDNS and HTTPS certificates in the Tailscale admin console, sign the
 toyon remote --tailscale
 ```
 
-Toyon reads the box's name from Tailscale and sets up `tailscale serve` for itself on 443 and for previews on ports 10001-10008; Tailscale cannot issue a wildcard certificate, so each preview gets its own port and eight copies can run at once. If one of those ports already serves something else, the command stops before changing anything. `toyon remote off` removes every entry that proxies one of those ports to this machine, including one you set yourself in that shape, and leaves the rest; run it before `toyon uninstall`, which does not. `toyon stop` then `toyon` applies the setting. On this route every copy shares one set of cookies, so two copies of an app with a login sign each other out.
+Toyon reads the box's name from Tailscale and sets up `tailscale serve` for itself on 443 and for previews on ports 10001-10008; Tailscale cannot issue a wildcard certificate, so each preview gets its own port and eight copies can run at once. If one of those ports already serves something else, the command stops before changing anything. The phone button in the bar does the same without a terminal. `toyon remote off` removes every entry that proxies one of those ports to this machine, including one you set yourself in that shape, and leaves the rest; run it before `toyon uninstall`, which does not. The setting takes effect at once; copies already running move onto the forwarded ports. On this route every copy shares one set of cookies, so two copies of an app with a login sign each other out.
 
 ## Your own Fly account
 
@@ -41,7 +50,7 @@ Toyon reads the box's name from Tailscale and sets up `tailscale serve` for itse
 npx toyon deploy fly up my-toyon
 ```
 
-It needs flyctl signed in (`fly auth login`). An Anthropic API key in `ANTHROPIC_API_KEY` or `~/.toyon/cloud/anthropic.key` goes to the machine; without one, the first chat asks you to sign in with your Claude plan, in toyon's terminal, and the login stays on the volume. Toyon builds the machine in your Fly builder from the package you ran, gives it a 5 GB volume in the region closest to you, and prints the link. `--repo https://github.com/you/app.git` clones your repository onto it the first time; a private one needs a GitHub token with access to it in `GITHUB_TOKEN` or `~/.toyon/cloud/github.token`. `toyon deploy fly url my-toyon` prints the link again, and `toyon deploy fly destroy my-toyon` deletes the app and its volume.
+It needs flyctl signed in (`fly auth login`). An Anthropic API key in `ANTHROPIC_API_KEY` or `~/.toyon/cloud/anthropic.key` goes to the machine; without one, the first chat asks you to sign in with your Claude plan, in toyon's terminal, and the login stays on the volume. Toyon builds the machine in your Fly builder from the package you ran, gives it a 5 GB volume in the region closest to you, and lists it in Toyon on this machine, or prints the link when no Toyon runs here. `--repo https://github.com/you/app.git` clones your repository onto it the first time; a private one needs a GitHub token with access to it in `GITHUB_TOKEN` or `~/.toyon/cloud/github.token`. `toyon deploy fly url my-toyon` prints the link again, and `toyon deploy fly destroy my-toyon` deletes the app and its volume.
 
 - The machine measured about $4-6 a month in ordinary use and $10-11 left running all month, volume included, plus whatever your agents spend.
 - It stops when idle, but an open Toyon tab keeps it awake.

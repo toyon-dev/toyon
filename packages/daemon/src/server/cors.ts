@@ -4,8 +4,6 @@
 // so the daemon echoes the one Origin it has decided to answer (http.ts decides which). No
 // credentials flag: nothing here rides on cookies, the token is a header the page adds itself.
 
-import { isLoopbackHost } from "@toyon/shared";
-
 /** the headers a cross-origin page may send and the methods it may use */
 const ALLOW_HEADERS = "authorization, content-type";
 const ALLOW_METHODS = "GET, POST";
@@ -28,16 +26,4 @@ export function withCors(res: Response, origin: string): Response {
   res.headers.set("access-control-max-age", MAX_AGE);
   res.headers.append("vary", "Origin");
   return res;
-}
-
-/** a loopback shell origin, as the daemon's own are: the second daemon on this machine, or the Vite
- * dev shell, framing or calling the first */
-export function isLoopbackOrigin(origin: string): boolean {
-  try {
-    const u = new URL(origin);
-    if (u.protocol !== "http:" && u.protocol !== "https:") return false;
-    return isLoopbackHost(u.hostname);
-  } catch {
-    return false;
-  }
 }

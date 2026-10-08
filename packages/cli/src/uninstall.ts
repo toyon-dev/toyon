@@ -7,6 +7,7 @@ import { existsSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { DAEMON_FILES, LSREGISTER } from "@toyon/shared";
 import { alive, health, home, readPid } from "./daemon.ts";
+import { confirm } from "./prompt.ts";
 import { stop } from "./stop.ts";
 
 interface Persisted {
@@ -33,14 +34,6 @@ async function git(cwd: string, ...args: string[]): Promise<boolean> {
   } catch {
     return false;
   }
-}
-
-function confirm(question: string): Promise<boolean> {
-  process.stdout.write(`${question} [y/N] `);
-  return new Promise((resolve) => {
-    process.stdin.once("data", (chunk) => resolve(String(chunk).trim().toLowerCase().startsWith("y")));
-    process.stdin.once("end", () => resolve(false));
-  });
 }
 
 export async function uninstall(opts: { yes: boolean }): Promise<number> {

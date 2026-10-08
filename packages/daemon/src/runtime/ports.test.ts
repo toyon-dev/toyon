@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { pickProxyPort } from "./ports.ts";
+import { pickProxyPort, proxyPorts } from "./ports.ts";
 
 const range = { from: 10001, to: 10008 };
 const any = () => true;
@@ -22,5 +22,21 @@ describe("pickProxyPort", () => {
   test("null when running copies hold every port", () => {
     const all = new Set([10001, 10002, 10003, 10004, 10005, 10006, 10007, 10008]);
     expect(pickProxyPort(49948, range, all, any)).toBeNull();
+  });
+});
+
+describe("the range for a public name", () => {
+  test("a name sets the range, its leases hold, and the name going clears the range and the leases", () => {
+    // nothing pinned by the environment in tests, so this module's range is the name's to set
+    proxyPorts.setRange({ from: 48801, to: 48808 });
+    expect(proxyPorts.ranged()).toBe(true);
+    expect(proxyPorts.label()).toBe("48801-48808");
+    expect(proxyPorts.lease(48801)).toBe(48801);
+    proxyPorts.setRange(null);
+    expect(proxyPorts.ranged()).toBe(false);
+    // the lease is forgotten with the range, so a later name starts from a clean list
+    proxyPorts.setRange({ from: 48801, to: 48808 });
+    expect(proxyPorts.lease(48801)).toBe(48801);
+    proxyPorts.setRange(null);
   });
 });

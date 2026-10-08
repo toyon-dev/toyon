@@ -194,9 +194,9 @@ usage
   toyon remote --tailscale
                           open the shell from your tailnet at this machine's Tailscale name:
                           sets up tailscale serve for Toyon and ports 10001-10008
-  toyon pair              print a QR code to scan with your phone's camera: it opens the shell
-                          at the remote name, signed in, and adds it to toyon.cloud; the code
-                          works once and lasts 2 minutes
+  toyon pair              show this machine's address as a QR code for your phone, and let in
+                          each device that opens it, from this terminal; Toyon's window asks
+                          the same question when one is open
   toyon deploy fly up <name> [--region code] [--repo url]
                           run Toyon on your own Fly account at https://name.fly.dev with your own
                           keys; --repo clones that repository onto it the first time

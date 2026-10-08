@@ -14,7 +14,7 @@ import {
   useLocalField,
   usePreviewId,
 } from "../../state/selectors.ts";
-import { previewUp } from "../../state/store.ts";
+import { canOfferPhone, previewUp } from "../../state/store.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { useEdges, useEdgesOf, useOnChange, usePinToView, useWindowWidth } from "../../ui/hooks.ts";
@@ -118,7 +118,7 @@ export function TopBar({ center }: { center: HTMLDivElement | null }) {
           it hides everything, so it sits at the edge). The terminal toggle lives in the composer: one
           shell per worktree, not app chrome. */}
       <span className="bar-tools" ref={toolsRef}>
-        <PairButton />
+        <PhoneButton />
         <IconButton
           icon="settings"
           label="Settings & shortcuts"
@@ -400,18 +400,19 @@ function UpdateOffer() {
   );
 }
 
-/** A machine with a public name opens on a phone from here, at the head of the tools. Until a phone
- * has paired it says so in words, since nothing else tells anyone the machine can be opened
- * elsewhere; after that it is the phone icon alone, a tool like the ones beside it. Never on a
- * phone, which is the thing that would scan it. */
-function PairButton() {
+/** A machine that has a public name, or could (Tailscale signed in with HTTPS on), opens on a
+ * phone from here, at the head of the tools. Until a device has been let in it says so in words,
+ * since nothing else tells anyone the machine can be opened elsewhere; after that it is the phone
+ * icon alone, a tool like the ones beside it. Never on a phone, which is the thing that would
+ * scan it. */
+function PhoneButton() {
   const dispatch = useDispatch();
-  const shown = useStore((s) => s.remote !== null && s.frame === "desk");
-  const paired = useStore((s) => s.paired);
+  const shown = useStore(canOfferPhone);
+  const letIn = useStore((s) => s.letIn);
   const open = useStore((s) => s.overlay?.kind === "pair");
   if (!shown) return null;
   const toggle = () => dispatch({ a: "toggle", overlay: { kind: "pair" } });
-  if (paired) {
+  if (letIn) {
     return (
       <IconButton
         icon="phone"
@@ -428,7 +429,7 @@ function PairButton() {
       icon="phone"
       aria-expanded={open}
       onClick={toggle}
-      {...tip("Scan a code with your phone to open this machine there, signed in")}
+      {...tip("Open this machine on your phone, and let it in")}
     >
       open on phone
     </Offer>

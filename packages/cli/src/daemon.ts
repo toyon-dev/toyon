@@ -5,7 +5,7 @@ import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, openSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { DAEMON_DEFAULT_PORT, DAEMON_FILES, newer, type RemoteView } from "@toyon/shared";
+import { DAEMON_DEFAULT_PORT, DAEMON_FILES, newer, type RemoteView, type TailscaleReadiness } from "@toyon/shared";
 import pkg from "../package.json" with { type: "json" };
 import { daemonEntry, restartCmd } from "./layout.ts";
 
@@ -22,8 +22,10 @@ export interface Health {
   version?: string;
   pid?: number;
   branded?: boolean;
-  /** the public name the daemon started with; null when remote access is off */
+  /** the public name as the daemon holds it now; null when remote access is off */
   remote?: RemoteView | null;
+  /** whether Tailscale on that machine could hold a name, and what is missing if not */
+  tailscale?: TailscaleReadiness;
   lag?: { last: number; max: number; maxCause: string | null; over: number };
   worktrees?: { total: number; running: number };
   /** updates turned off for the machine and by whom, the registry they come from, or one the
@@ -47,6 +49,28 @@ export async function health(): Promise<Health | null> {
     const r = await fetch(`${base}/health`, { signal: AbortSignal.timeout(1000) });
     if (!r.ok) return null;
     return (await r.json()) as Health;
+  } catch {
+    return null;
+  }
+}
+
+/** A request to the running daemon behind its token: `path` under its base, a JSON body when one
+ * is given. Null when the daemon did not answer at all, which the verbs read as "not running". */
+export async function daemonFetch(
+  path: string,
+  init: { method?: string; body?: unknown } = {},
+): Promise<Response | null> {
+  const token = readToken();
+  if (!token) return null;
+  try {
+    return await fetch(`${base}${path}`, {
+      method: init.method ?? (init.body === undefined ? "GET" : "POST"),
+      headers: {
+        authorization: `Bearer ${token}`,
+        ...(init.body === undefined ? {} : { "content-type": "application/json" }),
+      },
+      body: init.body === undefined ? undefined : JSON.stringify(init.body),
+    });
   } catch {
     return null;
   }

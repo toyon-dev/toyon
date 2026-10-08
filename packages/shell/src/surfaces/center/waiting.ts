@@ -32,7 +32,7 @@ const FOREIGN: Record<ConnectFailure | "probing", (machine: string) => string> =
 };
 
 const NO_TOKEN =
-  "no access token for this address.\non a phone, run `toyon pair` on the machine and scan the code: it works once and lasts 2 minutes.\notherwise run `toyon` in your repo, or open the full URL\n(with #token=…) printed in ~/.toyon/daemon.log";
+  "no access token for this address.\nrun `toyon` in your repo, or open the full URL\n(with #token=…) printed in ~/.toyon/daemon.log";
 
 export type Waiting = {
   connected: boolean;

@@ -1,10 +1,11 @@
-// The machines this page lists: the one that served it, and every other it has paired with. One
-// is active and rendered; the others stay connected so their rows can say what they need, except
-// an edge machine (Fly), which runs for as long as a connection is open and so is held only while
-// looked at. With one machine listed nothing here shows: the page is exactly what it was before
-// it could list more.
+// The machines this page lists: the one that served it, and every other that machine's daemon
+// holds (hello's `machines`, kept there so a pairing is done once per machine and every browser
+// it serves lists the same). One is active and rendered; the others stay connected so their rows
+// can say what they need, except an edge machine (Fly), which runs for as long as a connection is
+// open and so is held only while looked at. With one machine listed nothing here shows: the page
+// is exactly what it was before it could list more.
 
-import type { RepoInfo } from "@toyon/shared";
+import type { PairedMachine, RepoInfo } from "@toyon/shared";
 import type { Machine, MachineInit } from "./machine.ts";
 import type { Action } from "./store.ts";
 
@@ -16,35 +17,29 @@ export interface OtherMachine {
   repos: RepoInfo[];
 }
 
-/** what is kept of another machine between page loads: where it is and how to speak to it */
-export interface SavedMachine {
-  origin: string;
-  token: string;
-}
-
 export interface MachinesInit {
-  serving: SavedMachine;
-  saved: SavedMachine[];
+  serving: PairedMachine;
   build: (init: MachineInit) => Machine;
-  /** the list to keep for the next load, the serving machine left out */
-  persist?: (saved: SavedMachine[]) => void;
 }
 
 export interface Machines {
   /** every machine, the serving one first, then the others in the order they were added */
   list(): Machine[];
   active(): Machine;
+  /** the machine that served this page: whose daemon keeps the list, and the way back */
+  serving(): Machine;
   /** the one by origin, or null */
   get(origin: string): Machine | null;
   /** what a machine is called on screen: its name, with its address after it when another
    * machine answers to the same name (two daemons on one box both say the box's name) */
   displayName(origin: string): string;
   activate(origin: string): void;
-  /** list a machine just paired with; one already listed takes the new token */
-  add(saved: SavedMachine): Machine;
+  /** list a machine just let in; one already listed takes the new token */
+  add(paired: PairedMachine): Machine;
   /** forget a machine: its socket closes, what it remembered goes, and the serving machine is
    * looked at if it was the one on screen. The serving machine cannot be forgotten. */
   remove(origin: string): void;
+
   /** the same action to every store: the window's frame, the system's dark side */
   broadcast(action: Action): void;
   /** hear about the list or the active machine changing */
@@ -85,21 +80,12 @@ export function createMachines(init: MachinesInit): Machines {
       }),
     );
   };
-  const persist = () => init.persist?.(others.map((m) => ({ origin: m.origin, token: m.token })));
-
-  for (const saved of init.saved) {
-    if (saved.origin === serving.origin || others.some((m) => m.origin === saved.origin)) continue;
-    const m = init.build({ ...saved, serving: false });
-    others.push(m);
-    watch(m);
-  }
-  listed = [serving, ...others];
-
   const all = () => listed;
 
-  return {
+  const api: Machines = {
     list: all,
     active: () => active,
+    serving: () => serving,
     get: (origin) => all().find((m) => m.origin === origin) ?? null,
     displayName(origin) {
       const m = all().find((x) => x.origin === origin);
@@ -116,21 +102,20 @@ export function createMachines(init: MachinesInit): Machines {
       hold(next);
       notify();
     },
-    add(saved) {
-      const known = others.find((m) => m.origin === saved.origin);
-      if (saved.origin === serving.origin) return serving;
+    add(paired) {
+      const known = others.find((m) => m.origin === paired.origin);
+      if (paired.origin === serving.origin) return serving;
       if (known) {
-        if (known.token === saved.token) return known;
-        // a new token for a known machine (it was paired again): the old socket is replaced
+        if (known.token === paired.token) return known;
+        // a new token for a known machine (it was let in again): the old socket is replaced
         watches.get(known.origin)?.();
         known.dispose();
         others.splice(others.indexOf(known), 1);
         if (active === known) active = serving;
       }
-      const m = init.build({ ...saved, serving: false });
+      const m = init.build({ ...paired, serving: false });
       others.push(m);
       watch(m);
-      persist();
       notify();
       return m;
     },
@@ -143,9 +128,9 @@ export function createMachines(init: MachinesInit): Machines {
       m.storage.clear();
       others.splice(others.indexOf(m), 1);
       if (active === m) active = serving;
-      persist();
       notify();
     },
+
     broadcast(action) {
       for (const m of all()) m.store.dispatch(action);
     },
@@ -154,23 +139,19 @@ export function createMachines(init: MachinesInit): Machines {
       return () => listeners.delete(fn);
     },
   };
-}
-
-/** the saved list as storage holds it; anything that is not a list of origin-token pairs is dropped */
-export function parseSavedMachines(raw: string | null): SavedMachine[] {
-  try {
-    const parsed: unknown = JSON.parse(raw ?? "[]");
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter(
-      (m): m is SavedMachine =>
-        !!m &&
-        typeof m === "object" &&
-        typeof (m as SavedMachine).origin === "string" &&
-        /^https?:\/\//.test((m as SavedMachine).origin) &&
-        typeof (m as SavedMachine).token === "string" &&
-        (m as SavedMachine).token !== "",
-    );
-  } catch {
-    return [];
-  }
+  // the other machines are the serving daemon's list: what its hello and `machines` frames name
+  // is listed, and what they drop goes
+  const sync = (list: PairedMachine[]) => {
+    for (const m of list) api.add(m);
+    for (const m of [...others]) if (!list.some((l) => l.origin === m.origin)) api.remove(m.origin);
+  };
+  let handed = serving.store.getState().handed;
+  serving.store.subscribe(() => {
+    const now = serving.store.getState().handed;
+    if (now === handed) return;
+    handed = now;
+    sync(handed);
+  });
+  sync(handed);
+  return api;
 }

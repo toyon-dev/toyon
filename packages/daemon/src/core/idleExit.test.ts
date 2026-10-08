@@ -17,7 +17,7 @@ function make(over: Partial<IdleExitDeps> = {}) {
     exit: () => {
       exits++;
     },
-    afterMs: 30 * MIN,
+    afterMs: () => 30 * MIN,
     now: () => now,
     setTimer: (fn, ms) => {
       pending = { fn, at: now + ms };
@@ -121,7 +121,7 @@ describe("IdleExit", () => {
   });
 
   test("a null window never arms", () => {
-    const { advance, exits, armed } = make({ afterMs: null });
+    const { advance, exits, armed } = make({ afterMs: () => null });
     expect(armed()).toBe(false);
     advance(24 * 60 * MIN);
     expect(exits()).toBe(0);

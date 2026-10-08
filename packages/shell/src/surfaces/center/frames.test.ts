@@ -6,23 +6,25 @@ const REPO: Record<string, string> = { main: "r", task: "r", elsewhere: "other" 
 const repoOf = (id: string) => REPO[id] ?? null;
 
 describe("the frame a switch carries", () => {
+  const sent = { leaving: "main", arriving: "task", carryTo: "task", repoOf };
+
   test("the one leaving, while the one a send moved onto is of the same project", () => {
-    expect(carriedFrame("main", "task", "task", repoOf)).toBe("main");
+    expect(carriedFrame(sent)).toBe("main");
   });
 
   test("nothing for a row chosen by hand: the person asked for it and sees it at once", () => {
-    expect(carriedFrame("main", "task", null, repoOf)).toBeNull();
-    expect(carriedFrame("main", "task", "main", repoOf)).toBeNull();
+    expect(carriedFrame({ ...sent, carryTo: null })).toBeNull();
+    expect(carriedFrame({ ...sent, carryTo: "main" })).toBeNull();
   });
 
   test("nothing when the projects differ: another project's app stands in for nothing", () => {
-    expect(carriedFrame("main", "elsewhere", "elsewhere", repoOf)).toBeNull();
+    expect(carriedFrame({ ...sent, arriving: "elsewhere", carryTo: "elsewhere" })).toBeNull();
   });
 
   test("nothing when there is no frame on either side, or it is the same frame", () => {
-    expect(carriedFrame(null, "task", "task", repoOf)).toBeNull();
-    expect(carriedFrame("main", null, null, repoOf)).toBeNull();
-    expect(carriedFrame("task", "task", "task", repoOf)).toBeNull();
+    expect(carriedFrame({ ...sent, leaving: null })).toBeNull();
+    expect(carriedFrame({ ...sent, arriving: null, carryTo: null })).toBeNull();
+    expect(carriedFrame({ ...sent, leaving: "task" })).toBeNull();
   });
 });
 

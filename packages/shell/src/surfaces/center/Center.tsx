@@ -440,7 +440,14 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
   const shownRef = useRef<string | null>(null);
   if (carryFrom !== previewId) {
     setCarryFrom(previewId);
-    setCarry(carriedFrame(shownRef.current, previewId, carryTo, (id) => rows.find((w) => w.id === id)?.repoId ?? null));
+    setCarry(
+      carriedFrame({
+        leaving: shownRef.current,
+        arriving: previewId,
+        carryTo,
+        repoOf: (id) => rows.find((w) => w.id === id)?.repoId ?? null,
+      }),
+    );
   }
   useEffect(() => {
     if (!carry) return;

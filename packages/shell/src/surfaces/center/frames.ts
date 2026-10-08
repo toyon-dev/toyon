@@ -13,14 +13,16 @@
 /** the frame a switch keeps on screen while the one coming in is still blank: the one leaving, if
  * the one coming in is the row a send moved the selection onto (`carryTo`) and both belong to the
  * same project. Another project's app is not a stand-in for this one, however briefly. */
-export function carriedFrame(
-  leaving: string | null,
-  arriving: string | null,
-  carryTo: string | null,
-  repoOf: (id: string) => string | null,
-): string | null {
-  if (!leaving || !arriving || leaving === arriving || arriving !== carryTo) return null;
-  return repoOf(leaving) === repoOf(arriving) ? leaving : null;
+export function carriedFrame(o: {
+  leaving: string | null;
+  arriving: string | null;
+  /** the row a send moved the selection onto, as the store names it; a hand's choice names none */
+  carryTo: string | null;
+  repoOf: (id: string) => string | null;
+}): string | null {
+  const { leaving, arriving } = o;
+  if (!leaving || !arriving || leaving === arriving || arriving !== o.carryTo) return null;
+  return o.repoOf(leaving) === o.repoOf(arriving) ? leaving : null;
 }
 
 /** what is painted: the selected worktree's frame once it has drawn a page, else the frame being

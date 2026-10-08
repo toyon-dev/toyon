@@ -6,7 +6,7 @@ import { parseArgs } from "./args.ts";
 
 describe("parseArgs", () => {
   test("nothing opens the current directory", () => {
-    expect(parseArgs([])).toEqual({ kind: "open", path: null, app: false, installApp: false });
+    expect(parseArgs([])).toEqual({ kind: "open", path: null, app: false });
   });
   test("a positional is the path to open", () => {
     expect(parseArgs(["~/projects/app"])).toMatchObject({ kind: "open", path: "~/projects/app" });
@@ -15,7 +15,12 @@ describe("parseArgs", () => {
   test("the app-window flags ride along with a path or without", () => {
     expect(parseArgs(["--app"])).toMatchObject({ kind: "open", path: null, app: true });
     expect(parseArgs([".", "--pwa"])).toMatchObject({ kind: "open", path: ".", app: true });
-    expect(parseArgs(["--install-app"])).toMatchObject({ kind: "open", installApp: true });
+  });
+  test("start takes nothing; helper takes whatever the system handed it", () => {
+    expect(parseArgs(["start"])).toEqual({ kind: "start" });
+    expect(parseArgs(["start", "."]).kind).toBe("error");
+    expect(parseArgs(["helper", "toyon://start"])).toEqual({ kind: "helper", args: ["toyon://start"] });
+    expect(parseArgs(["helper"])).toEqual({ kind: "helper", args: [] });
   });
   test("two paths or an unknown option are errors, not a guess", () => {
     expect(parseArgs(["a", "b"]).kind).toBe("error");

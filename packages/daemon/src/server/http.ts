@@ -7,6 +7,7 @@ import { join } from "node:path";
 import {
   isTailnetName,
   machineLabel,
+  OFFLINE_SLOTS,
   type PairMint,
   type PairRedeem,
   type PreviewGrantMint,
@@ -107,6 +108,9 @@ export interface HttpOpts {
   /** the chosen theme's grounds, for the manifest: the bar a phone draws above an installed shell
    * and the launch screen behind it */
   manifestColors: () => { bar: string; ground: string };
+  /** what the not-running page is told on the way out: the link that starts a daemon here, when
+   * the helper that answers it is in place (core/helper.ts), and the port this daemon is on */
+  offline: () => { start: string | null; port: number };
   /** Toyon's own tools for a worktree's agent, over MCP (agent/mcp.ts); the bearer check is its own */
   mcp: (req: Request, worktreeId: string) => Promise<Response>;
 }
@@ -430,6 +434,17 @@ export function createFetch(opts: HttpOpts) {
         const manifest = { ...(await Bun.file(file).json()), theme_color: bar, background_color: ground };
         return Response.json(manifest, {
           headers: { "content-type": "application/manifest+json", "cache-control": NO_STORE },
+        });
+      }
+      // the page the worker shows when nothing answers here is told now, while something does,
+      // whether this machine has the bundle a start link goes through
+      if (rel === "/offline.html") {
+        const { start, port } = opts.offline();
+        const html = (await Bun.file(file).text())
+          .replace(`${OFFLINE_SLOTS.start}=""`, `${OFFLINE_SLOTS.start}="${start ?? ""}"`)
+          .replace(`${OFFLINE_SLOTS.port}=""`, `${OFFLINE_SLOTS.port}="${port}"`);
+        return new Response(html, {
+          headers: { "content-type": "text/html; charset=utf-8", "cache-control": NO_STORE },
         });
       }
       return new Response(Bun.file(file), { headers: { "cache-control": hashed ? IMMUTABLE : NO_STORE } });

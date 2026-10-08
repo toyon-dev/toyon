@@ -1,14 +1,13 @@
-// The macOS app window: a Chromium `--app` window, or the installed PWA when a profile has one,
-// and the ~/Applications/Toyon.app bundle that launches the same thing from the Dock.
+// The macOS app window: a Chromium `--app` window, or the installed PWA when a profile has one.
+// The bundle that starts a daemon from the Dock is the daemon's own hidden helper
+// (daemon/core/helper.ts); the one Toyon a person sees in the Dock is the app Chromium installs.
 
 import { spawn, spawnSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { home, port } from "./daemon.ts";
-// the bundle's executable, compiled on the machine at install (why it is what it is: launcher.m)
-import launcherSource from "./launcher.m" with { type: "text" };
-import { daemonEntry, iconSvg } from "./layout.ts";
+import { type Daemon, home, shellUrl } from "./daemon.ts";
+import { openUrl } from "./openUrl.ts";
 
 const CHROMIUMS = ["Google Chrome", "Arc", "Brave Browser", "Microsoft Edge", "Chromium"];
 // each browser's profile root under ~/Library/Application Support
@@ -61,8 +60,18 @@ function findPwaId(browser: string, manifestId: string): string | null {
   return null;
 }
 
+/** the shell in an app window, or in the default browser where no Chromium is */
+export function showAppWindow(daemon: Daemon): void {
+  // app windows use the always-bound port so they never hit a dead :80
+  const appUrl = shellUrl(daemon.token, false);
+  console.log(`toyon: app window (${appUrl.split("#")[0]})`);
+  if (openAppWindow(appUrl)) return;
+  console.log("no Chromium browser found; opening in default browser");
+  openUrl(daemon.url);
+}
+
 /** true when a Chromium was found and told to open; false means fall back to the default browser */
-export function openAppWindow(appUrl: string): boolean {
+function openAppWindow(appUrl: string): boolean {
   const manifestId = new URL("/", appUrl).href;
   for (const app of CHROMIUMS) {
     if (spawnSync("open", ["-Ra", app]).status === 0) {
@@ -81,152 +90,4 @@ export function openAppWindow(appUrl: string): boolean {
     }
   }
   return false;
-}
-
-export function installApp(appUrl: string) {
-  const manifestId = new URL("/", appUrl).href;
-  const appDir = join(homedir(), "Applications", "Toyon.app");
-  const macos = join(appDir, "Contents", "MacOS");
-  const resources = join(appDir, "Contents", "Resources");
-  rmSync(appDir, { recursive: true, force: true }); // ours to regenerate; stale files break the signature
-  mkdirSync(macos, { recursive: true });
-  mkdirSync(resources, { recursive: true });
-  writeFileSync(
-    join(appDir, "Contents", "Info.plist"),
-    `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict>
-  <key>CFBundleName</key><string>Toyon</string>
-  <key>CFBundleDisplayName</key><string>Toyon</string>
-  <key>CFBundleIdentifier</key><string>dev.toyon.app</string>
-  <key>CFBundleVersion</key><string>0.0.1</string>
-  <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleExecutable</key><string>Toyon</string>
-  <key>CFBundleIconFile</key><string>AppIcon</string>
-  <!-- takes any file or folder dropped on it, without becoming the default opener for anything -->
-  <key>CFBundleDocumentTypes</key>
-  <array>
-    <dict>
-      <key>CFBundleTypeName</key><string>Anything</string>
-      <key>CFBundleTypeRole</key><string>Editor</string>
-      <key>LSHandlerRank</key><string>Alternate</string>
-      <key>LSItemContentTypes</key>
-      <array>
-        <string>public.item</string>
-        <string>public.folder</string>
-      </array>
-    </dict>
-  </array>
-</dict></plist>
-`,
-  );
-  // The launch logic is a shell script; the bundle's main executable is a tiny Mach-O that execs
-  // it, with the paths dropped on the Dock icon as its arguments. Gatekeeper on recent macOS
-  // refuses script-main-executable bundles as "damaged" even when ad-hoc signed; a real binary is
-  // accepted. Falls back to the script if clang is unavailable, and that cannot take a drop.
-  const launcher = join(resources, "launch.sh");
-  writeFileSync(
-    launcher,
-    `#!/bin/bash
-# Finder launches get a minimal PATH; find bun ourselves
-BUN=""
-for CAND in "$HOME/.bun/bin/bun" /opt/homebrew/bin/bun /usr/local/bin/bun; do
-  [ -x "$CAND" ] && BUN="$CAND" && break
-done
-
-# start the daemon if it isn't running
-if ! curl -s --max-time 1 http://127.0.0.1:${port}/health >/dev/null 2>&1; then
-  if [ -n "$BUN" ] && [ -f "${daemonEntry}" ]; then
-    nohup "$BUN" run "${daemonEntry}" >> "$HOME/.toyon/daemon.log" 2>&1 &
-    for _ in $(seq 1 40); do
-      curl -s --max-time 1 http://127.0.0.1:${port}/health >/dev/null 2>&1 && break
-      sleep 0.25
-    done
-  fi
-fi
-
-TOKEN=$(cat "$HOME/.toyon/token" 2>/dev/null)
-
-# what was dropped on the icon, or opened with it: each path goes to the daemon, which opens a
-# project, a file in one, or a file on its own, and holds it for the window opened below. A
-# refusal is logged in the daemon's words, since nothing here has a screen (the daemon says it in
-# the shell too); a success is logged as its status alone, since the reply carries the file's text.
-for P in "$@"; do
-  BODY=$("$BUN" -e 'console.log(JSON.stringify({ path: process.argv[1] }))' "$P" 2>/dev/null) || continue
-  REPLY=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H "Authorization: Bearer $TOKEN" \\
-    -H "content-type: application/json" --data "$BODY" http://127.0.0.1:${port}/open 2>/dev/null)
-  if [ "$REPLY" != "200" ]; then
-    REPLY="$REPLY $(curl -s -X POST -H "Authorization: Bearer $TOKEN" -H "content-type: application/json" \\
-      --data "$BODY" http://127.0.0.1:${port}/open 2>&1 | head -c 300)"
-  fi
-  echo "$(date '+%Y-%m-%d %H:%M:%S') open $P: $REPLY" >> "$HOME/.toyon/launcher.log"
-done
-
-URL="http://toyon.localhost:${port}/#token=$TOKEN"
-MANIFEST_ID="${manifestId}"
-CACHE_DIR="$HOME/.toyon/pwa"
-# installed PWA (native-style title bar) if any profile has it, else a plain app window.
-# The app id lives in the browser's sync DB right before the manifest id; cache it once found.
-find_pwa_id() { # $1 = data dir, $2 = cache file
-  local root="$HOME/Library/Application Support/$1" id p f
-  if [ -f "$2" ]; then
-    id=$(tr -d '[:space:]' < "$2")
-    for p in "$root"/*/; do [ -d "$p/Web Applications/Manifest Resources/$id" ] && { echo "$id"; return; }; done
-  fi
-  for p in "$root"/*/; do
-    for f in "$p/Sync Data/LevelDB/"*.log "$p/Sync Data/LevelDB/"*.ldb; do
-      [ -f "$f" ] || continue
-      # the record straddles newline bytes, so flatten before the line-based grep
-      id=$(LC_ALL=C tr '\\n\\0' '  ' < "$f" | LC_ALL=C grep -aoE "web_apps-dt-[a-p]{32}.{0,16}$MANIFEST_ID" 2>/dev/null | head -1 | LC_ALL=C sed -E 's/^web_apps-dt-([a-p]{32}).*/\\1/')
-      if [ -n "$id" ] && [ -d "$p/Web Applications/Manifest Resources/$id" ]; then
-        mkdir -p "$CACHE_DIR" && printf '%s' "$id" > "$2"; echo "$id"; return
-      fi
-    done
-  done
-}
-launch() { # $1 = browser name, $2 = data dir
-  local id; id=$(find_pwa_id "$2" "$CACHE_DIR/$(echo "$1" | tr -c 'A-Za-z0-9\n' '-').id")
-  if [ -n "$id" ]; then exec open -na "$1" --args --app-id="$id"; fi
-  exec open -na "$1" --args --app="$URL"
-}
-${CHROMIUMS.map((a) => `if open -Ra "${a}" 2>/dev/null; then launch "${a}" "${DATA_DIRS[a]}"; fi`).join("\n")}
-exec open "$URL"
-`,
-  );
-  chmodSync(launcher, 0o755);
-  const stub = join(macos, "Toyon");
-  const src = join(home, "launcher.m");
-  writeFileSync(src, launcherSource);
-  const cc = spawnSync("clang", ["-O2", "-fobjc-arc", "-framework", "Cocoa", "-o", stub, src], { stdio: "ignore" });
-  if (cc.status !== 0) {
-    // no compiler: ship the script as the executable (works on older macOS)
-    writeFileSync(stub, `#!/bin/bash\nexec /bin/bash "$(dirname "$0")/../Resources/launch.sh"\n`);
-    chmodSync(stub, 0o755);
-  }
-
-  // best-effort icon: rasterize the shell's SVG -> iconset -> icns
-  try {
-    const svg = iconSvg;
-    const tmp = join(home, "iconset.tmp");
-    const iconset = join(tmp, "AppIcon.iconset");
-    mkdirSync(iconset, { recursive: true });
-    spawnSync("qlmanage", ["-t", "-s", "1024", "-o", tmp, svg], { stdio: "ignore" });
-    const big = join(tmp, "icon.svg.png");
-    if (existsSync(big)) {
-      for (const size of [16, 32, 64, 128, 256, 512, 1024]) {
-        spawnSync("sips", ["-z", String(size), String(size), big, "--out", join(iconset, `icon_${size}x${size}.png`)], {
-          stdio: "ignore",
-        });
-      }
-      spawnSync("iconutil", ["-c", "icns", iconset, "-o", join(resources, "AppIcon.icns")], { stdio: "ignore" });
-    }
-  } catch {}
-  // Gatekeeper refuses an unsigned bundle outright ("damaged, move to Trash"); an ad-hoc signature
-  // is enough for a local wrapper. Must run after the last write into the bundle.
-  spawnSync("xattr", ["-cr", appDir], { stdio: "ignore" });
-  const signed = spawnSync("codesign", ["--force", "--deep", "-s", "-", appDir], { stdio: "ignore" }).status === 0;
-  if (!signed) console.warn("warning: could not codesign the app bundle; macOS may refuse to open it");
-  console.log(`installed ${appDir}; launch "Toyon" from Spotlight or drag it to the Dock`);
-  // launch through the bundle we just wrote, so a Gatekeeper problem shows up now, not later
-  spawn("open", ["-a", appDir], { stdio: "ignore" }).unref();
 }

@@ -1,8 +1,10 @@
 // The daemon stops itself once nothing has been connected to it and nothing has been working for
 // a while. Someone who launched Toyon from the Dock and quit the window has no terminal to type
-// `toyon stop` in, and no sign that a process is still up; the next open starts a daemon again,
-// since the launcher and `toyon` both start one when none answers. Off where the daemon is the
-// point: a machine reached remotely, or a deployed one.
+// `toyon stop` in, and no sign that a process is still up; the next open starts a daemon again:
+// `toyon` starts one when none answers, and the app in the Dock, which is only a page, lands on
+// the shell's not-running page (the service worker's offline.html), which starts one through the
+// hidden helper (core/helper.ts). Off where the daemon is the point: a machine reached remotely,
+// or a deployed one.
 
 import { humanMs } from "../runtime/idle.ts";
 import { cloud } from "./cloud.ts";

@@ -5,8 +5,9 @@ import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, openSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { DAEMON_DEFAULT_PORT, DAEMON_FILES, type RemoteView } from "@toyon/shared";
-import { daemonEntry } from "./layout.ts";
+import { DAEMON_DEFAULT_PORT, DAEMON_FILES, newer, type RemoteView } from "@toyon/shared";
+import pkg from "../package.json" with { type: "json" };
+import { daemonEntry, restartCmd } from "./layout.ts";
 
 export const port = Number(process.env.TOYON_PORT ?? DAEMON_DEFAULT_PORT);
 export const base = `http://127.0.0.1:${port}`;
@@ -92,6 +93,51 @@ export async function startDaemon(): Promise<boolean> {
     await Bun.sleep(250);
   }
   return (await health()) !== null;
+}
+
+/** A running daemon older than this CLI: an install landed and nothing restarted it. One too old to
+ * report its version is older too. A newer daemon is not one a restart from here should replace. */
+export function behind(daemonVersion: string | undefined): boolean {
+  return daemonVersion === undefined || newer(pkg.version, daemonVersion);
+}
+
+export interface Daemon {
+  token: string;
+  /** the shell's address: the portless branded host when the daemon bound it, else the port */
+  url: string;
+  /** the public name the daemon started with; null when remote access is off */
+  remote: RemoteView | null;
+}
+
+/** a daemon up, with its token and address in hand, or null with the reason already printed */
+export async function ensureDaemon(): Promise<Daemon | null> {
+  let running = await health();
+  if (!running) {
+    console.log("starting Toyon daemon…");
+    running = (await startDaemon()) ? await health() : null;
+    if (!running) {
+      console.error(`daemon failed to start; \`toyon logs\` shows why (${logFile})`);
+      return null;
+    }
+  } else if (behind(running.version)) {
+    // what opens is served by the running daemon, so say it is not the one installed
+    console.log(`toyon: the running daemon is ${running.version ?? "older"}; \`${restartCmd}\` starts ${pkg.version}`);
+  }
+  const token = readToken();
+  if (!token) {
+    console.error("daemon token missing; `toyon doctor` says where it looked");
+    return null;
+  }
+  return { token, url: shellUrl(token, running.branded === true), remote: running.remote ?? null };
+}
+
+/** a request to the daemon behind the token */
+export function post(route: string, token: string, body: unknown): Promise<Response> {
+  return fetch(`${base}${route}`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
 }
 
 /** the shell's address: the portless branded host when the daemon bound it, else the port */

@@ -5,13 +5,13 @@
 
 import { existsSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { newer } from "@toyon/shared";
 import pkg from "../package.json" with { type: "json" };
-import { installApp, openAppWindow } from "./app.ts";
+import { showAppWindow } from "./app.ts";
 import { type Command, HELP, parseArgs } from "./args.ts";
-import { base, health, logFile, port, readToken, shellUrl, startDaemon } from "./daemon.ts";
+import { behind, ensureDaemon, health, post } from "./daemon.ts";
 import { deploy } from "./deploy/fly.ts";
 import { doctor } from "./doctor.ts";
+import { helper } from "./helper.ts";
 import { restartCmd } from "./layout.ts";
 import { logs } from "./logs.ts";
 import { openUrl } from "./openUrl.ts";
@@ -28,12 +28,6 @@ import {
 import { stop } from "./stop.ts";
 import { uninstall } from "./uninstall.ts";
 import { update } from "./update.ts";
-
-/** A running daemon older than this CLI: an install landed and nothing restarted it. One too old to
- * report its version is older too. A newer daemon is not one a restart from here should replace. */
-function behind(daemonVersion: string | undefined): boolean {
-  return daemonVersion === undefined || newer(pkg.version, daemonVersion);
-}
 
 async function open(cmd: Extract<Command, { kind: "open" }>): Promise<number> {
   // an explicit path is registered whatever it is (the daemon says if it is not a repo); a bare
@@ -52,33 +46,14 @@ async function open(cmd: Extract<Command, { kind: "open" }>): Promise<number> {
     else if (blocked) console.log(bwrapBlockedAdvice(blocked, userNamespacesRestricted()));
   }
 
-  const running = await health();
-  if (!running) {
-    console.log("starting Toyon daemon…");
-    if (!(await startDaemon())) {
-      console.error(`daemon failed to start; \`toyon logs\` shows why (${logFile})`);
-      return 1;
-    }
-  } else if (behind(running.version)) {
-    // the page this opens is served by the running daemon, so say it is not the one installed
-    console.log(`toyon: the running daemon is ${running.version ?? "older"}; \`${restartCmd}\` starts ${pkg.version}`);
-  }
-
-  const token = readToken();
-  if (!token) {
-    console.error("daemon token missing; `toyon doctor` says where it looked");
-    return 1;
-  }
+  const daemon = await ensureDaemon();
+  if (!daemon) return 1;
 
   // a file is opened in the shell: in its worktree when it sits in one, on its own otherwise. The
   // daemon holds it for the window this goes on to open.
   const file = explicit && existsSync(target) && statSync(target).isFile();
   if (file) {
-    const res = await fetch(`${base}/open`, {
-      method: "POST",
-      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-      body: JSON.stringify({ path: target }),
-    });
+    const res = await post("/open", daemon.token, { path: target });
     if (!res.ok) {
       console.error(`could not open ${target}: ${await res.text()}`);
       return 1;
@@ -86,42 +61,36 @@ async function open(cmd: Extract<Command, { kind: "open" }>): Promise<number> {
     const opened = (await res.json()) as { kind: string };
     console.log(opened.kind === "file" ? `toyon: opening ${target} in its project` : `toyon: opening ${target}`);
   } else if (register) {
-    const res = await fetch(`${base}/register`, {
-      method: "POST",
-      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-      body: JSON.stringify({ path: target }),
-    });
+    const res = await post("/register", daemon.token, { path: target });
     if (!res.ok) {
       console.error(`could not open ${target}: ${await res.text()}`);
-      if (explicit || (!cmd.app && !cmd.installApp)) return 1;
+      if (explicit || !cmd.app) return 1;
     }
   }
 
-  // prefer the branded URL; browsers hardwire *.localhost to loopback
-  const branded = (await health())?.branded === true;
-  const url = shellUrl(token, branded);
-  // app windows use the always-bound port so they never hit a dead :80
-  const appUrl = `http://toyon.localhost:${port}/#token=${token}`;
-
-  if (cmd.installApp) {
-    installApp(appUrl);
-  } else if (cmd.app) {
-    console.log(`toyon: app window (${appUrl.split("#")[0]})`);
-    if (!openAppWindow(appUrl)) {
-      console.log("no Chromium browser found; opening in default browser");
-      openUrl(url);
-    }
-  } else {
-    console.log(`toyon: ${url}`);
-    openUrl(url);
+  if (cmd.app) showAppWindow(daemon);
+  else {
+    console.log(`toyon: ${daemon.url}`);
+    openUrl(daemon.url);
   }
-  const remote = (await health())?.remote;
-  if (remote) console.log(`toyon: remote at https://${remote.host}/#token=${token}`);
+  if (daemon.remote) console.log(`toyon: remote at https://${daemon.remote.host}/#token=${daemon.token}`);
+  return 0;
+}
+
+/** `toyon start`: the daemon up, the link printed, nothing opened */
+async function start(): Promise<number> {
+  const daemon = await ensureDaemon();
+  if (!daemon) return 1;
+  console.log(`toyon: ${daemon.url}`);
   return 0;
 }
 
 async function run(cmd: Command): Promise<number> {
   switch (cmd.kind) {
+    case "start":
+      return start();
+    case "helper":
+      return helper(cmd.args);
     case "help":
       process.stdout.write(HELP);
       return 0;

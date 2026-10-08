@@ -41,11 +41,17 @@ async function bundle(entry: string, name: string, external: string[] = []) {
 await bundle(join(pkgs, "daemon", "src", "index.ts"), "daemon.js", ["bun-pty"]);
 await bundle(join(pkgs, "cli", "src", "cli.ts"), "cli.js");
 cpSync(join(pkgs, "bridge", "dist", "bridge.js"), join(out, "bridge.js"));
+// the Dock helper's executable, built on a Mac only: the package is published from one, and the
+// Linux pack (the machine image) has no Dock to help
+await $`bun scripts/stub.ts`;
+const stub = join(pkgs, "daemon", "dist", "helper-stub");
+const hasStub = existsSync(stub);
+if (hasStub) cpSync(stub, join(out, "helper-stub"));
 // npm reads the package page from a README beside package.json, and a LICENSE there too; the
 // real ones live at the repo root, so the pack carries copies in (gitignored, refreshed every run)
 for (const f of ["README.md", "LICENSE"]) cpSync(join(root, f), join(pkgs, "cli", f));
 
-for (const f of ["daemon.js", "cli.js", "bridge.js", "shell/index.html"]) {
+for (const f of ["daemon.js", "cli.js", "bridge.js", "shell/index.html", ...(hasStub ? ["helper-stub"] : [])]) {
   const p = join(out, f);
   if (!existsSync(p)) throw new Error(`missing after pack: ${f}`);
   console.log(`${f.padEnd(18)} ${(statSync(p).size / 1024).toFixed(0).padStart(6)} KB`);

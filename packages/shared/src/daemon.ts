@@ -3,9 +3,26 @@
 
 import { isTailnetName } from "./pair.ts";
 
+/** the URL scheme the hidden macOS helper bundle registers; a page can start nothing itself, and
+ * a link on this scheme is the one way the shell's not-running page has of starting a daemon */
+export const APP_SCHEME = "toyon";
+/** the link on that scheme that asks for the daemon alone and no window */
+export const START_LINK = `${APP_SCHEME}://start`;
+/** the attributes on the not-running page's html element that the daemon fills on the way out:
+ * the start link, when the helper that answers it is on this machine, and the daemon's port */
+export const OFFLINE_SLOTS = { start: "data-start", port: "data-port" } as const;
+/** the Launch Services registry tool, which tells macOS a bundle exists or is gone */
+export const LSREGISTER =
+  "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister";
+
 /** file names under TOYON_HOME; the CLI reads them, the daemon writes them */
 export const DAEMON_FILES = {
   token: "token",
+  /** the hidden macOS helper bundle the daemon writes (core/helper.ts); `toyon uninstall`
+   * unregisters it before the home goes */
+  helper: "Toyon.app",
+  /** what the helper's run of the CLI printed */
+  launcherLog: "launcher.log",
   /** the daemon's own pid, written after the server binds and removed on a clean exit */
   pid: "daemon.pid",
   /** the persisted repos and worktrees; `toyon uninstall` reads it to clean up through git */

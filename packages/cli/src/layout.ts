@@ -40,5 +40,3 @@ export const restartCmd = restartCommand(
 
 /** what to hand bun to start the daemon */
 export const daemonEntry = packaged ? join(here, "daemon.js") : join(here, "../../daemon/src/index.ts");
-/** the shell's icon, for the macOS app bundle */
-export const iconSvg = packaged ? join(here, "shell", "icon.svg") : join(here, "../../shell/public/icon.svg");

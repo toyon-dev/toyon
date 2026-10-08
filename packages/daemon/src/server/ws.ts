@@ -74,6 +74,8 @@ export interface ServerOpts {
   services: Services;
   /** where a shell authenticated from, passed on to the bridge script (see BridgeScript) */
   noteShellOrigin: (origin: string | null) => void;
+  /** the link a page starts a daemon here through, when this machine has what answers it */
+  startLink: () => string | null;
   /** a shell on another machine has paired here and is trusted from now on */
   onTrusted: (origin: string) => void;
   /** the one-time codes a shell on another machine spends to open a preview here */
@@ -416,6 +418,7 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
       branded: () => branded,
       metrics,
       noteShellOrigin: opts.noteShellOrigin,
+      offline: () => ({ start: opts.startLink(), port: opts.port }),
       remote: opts.remote,
       managed: { source: opts.managed.source, hash: opts.managed.hash },
       preview: (id) => s.runtime.get(id)?.proxy?.handler ?? null,

@@ -2,12 +2,13 @@
 // No logic lives here; if a line here starts making decisions it belongs in a service.
 
 import { rmSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   addressedByPort,
   CHECK_TOOL,
   DAEMON_DEFAULT_PORT,
+  DAEMON_FILES,
   describeManaged,
   installCommand,
   installMethod,
@@ -33,6 +34,7 @@ import { idleSleepAssertion, KeepAwake } from "./core/awake.ts";
 import { cloud } from "./core/cloud.ts";
 import { folderDialog } from "./core/dialog.ts";
 import { GrantCodes } from "./core/grants.ts";
+import { Helper, helperWanted } from "./core/helper.ts";
 import { Hub } from "./core/hub.ts";
 import { IdleExit, stopAfterFrom } from "./core/idleExit.ts";
 import { fireAndForget, log } from "./core/log.ts";
@@ -83,6 +85,8 @@ const here = dirname(fileURLToPath(import.meta.url));
 const {
   shellDist: SHELL_DIST,
   bridgeJs: BRIDGE_JS,
+  helperStub: HELPER_STUB,
+  cliEntry: CLI_ENTRY,
   sourceRoot: SOURCE_ROOT,
   packageJson: PACKAGE_JSON,
 } = locateAssets(here);
@@ -98,6 +102,35 @@ const paths = makePaths();
 ensureDirs(paths);
 const token = loadOrCreateToken(paths);
 const port = Number(process.env.TOYON_PORT ?? DAEMON_DEFAULT_PORT);
+
+// the hidden bundle that lets the app in the Dock start a daemon (core/helper.ts)
+const helperApp = join(paths.home, DAEMON_FILES.helper);
+const helper = helperWanted({ platform: process.platform, cloud: cloud.enabled, port, home: process.env.TOYON_HOME })
+  ? new Helper({
+      dir: helperApp,
+      stub: HELPER_STUB,
+      bun: process.execPath,
+      cli: CLI_ENTRY,
+      log: join(paths.home, DAEMON_FILES.launcherLog),
+      icon: join(SHELL_DIST, "icon.svg"),
+      version: pkg.version,
+    })
+  : null;
+if (helper) {
+  fireAndForget(
+    "helper",
+    helper.ensure().then((result) => {
+      if (result === "written") log.info("helper", `wrote ${helperApp}`);
+      else if (result === "skipped") {
+        log.warn(
+          "helper",
+          `no helper stub at ${HELPER_STUB}, so the Dock app cannot start Toyon; \`bun run build\` makes it`,
+        );
+      }
+    }),
+    "the Dock helper",
+  );
+}
 // the public name: an edge's from the environment, a local front's from `toyon remote`
 const remote = loadRemote(paths.remoteFile, process.env, managed.policy);
 // the one-time codes a shell on another machine spends to open a preview here; one set for the
@@ -357,6 +390,7 @@ const {
   shellDist: SHELL_DIST,
   version: pkg.version,
   noteShellOrigin: (origin) => bridge.learnShellOrigin(origin),
+  startLink: () => helper?.startLink() ?? null,
   onTrusted: () => refreshShellOrigins(),
   grants,
   remote,

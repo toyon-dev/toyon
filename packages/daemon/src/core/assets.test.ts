@@ -39,6 +39,8 @@ describe("locateAssets", () => {
     expect(a).toEqual({
       shellDist: "/elsewhere/shell",
       bridgeJs: "/elsewhere/b.js",
+      helperStub: "/dist/helper-stub",
+      cliEntry: "/cli/src/cli.ts",
       sourceRoot: "/",
       packageJson: null,
     });

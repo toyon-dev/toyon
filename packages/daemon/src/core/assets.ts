@@ -9,6 +9,10 @@ import { join, resolve } from "node:path";
 export interface Assets {
   shellDist: string;
   bridgeJs: string;
+  /** the Dock helper's executable (scripts/stub.ts), built on a Mac; absent where none was */
+  helperStub: string;
+  /** the CLI's entry, for what runs it on the daemon's behalf (the Dock helper) */
+  cliEntry: string;
   /** the checkout the daemon is running from, or null for the npm package, which has no tree
    * behind it and so can never be behind one (core/self.ts) */
   sourceRoot: string | null;
@@ -23,6 +27,8 @@ export function locateAssets(here: string, env: NodeJS.ProcessEnv = process.env)
   return {
     shellDist: env.TOYON_SHELL_DIST ?? (packaged ? join(here, "shell") : join(here, "../../shell/dist")),
     bridgeJs: env.TOYON_BRIDGE_JS ?? (packaged ? join(here, "bridge.js") : join(here, "../../bridge/dist/bridge.js")),
+    helperStub: packaged ? join(here, "helper-stub") : join(here, "../dist/helper-stub"),
+    cliEntry: packaged ? join(here, "cli.js") : join(here, "../../cli/src/cli.ts"),
     sourceRoot: packaged ? null : resolve(here, "../../.."),
     packageJson: packaged ? join(here, "..", "package.json") : null,
   };

@@ -22,7 +22,7 @@ case "$changed" in
   *bun.lock*) bun install --frozen-lockfile ;;
 esac
 case "$changed" in
-  *bun.lock* | *packages/shell/* | *packages/bridge/* | *packages/shared/*) bun run build ;;
+  *bun.lock* | *packages/shell/* | *packages/bridge/* | *packages/shared/* | *launcher.m*) bun run build ;;
   *) echo "bundles built from $from cover this land; nothing to build" ;;
 esac
 mkdir -p "$dist"

@@ -4,9 +4,8 @@
 // npm's to remove.
 
 import { existsSync, readFileSync, rmSync } from "node:fs";
-import { homedir } from "node:os";
 import { join } from "node:path";
-import { DAEMON_FILES } from "@toyon/shared";
+import { DAEMON_FILES, LSREGISTER } from "@toyon/shared";
 import { alive, health, home, readPid } from "./daemon.ts";
 import { stop } from "./stop.ts";
 
@@ -48,7 +47,9 @@ export async function uninstall(opts: { yes: boolean }): Promise<number> {
   const state = readState();
   const repos = state.repos ?? [];
   const worktrees = (state.worktrees ?? []).filter((w) => w.kind !== "main");
-  const app = join(homedir(), "Applications", "Toyon.app");
+  // the hidden helper the daemon wrote: inside the home, so it goes with it, but macOS has it on
+  // record as the opener for toyon: links and must be told
+  const helper = join(home, DAEMON_FILES.helper);
   const branches = worktrees.map((w) => w.branch).filter((b): b is string => !!b && b.startsWith("toyon/"));
 
   console.log("toyon uninstall removes:");
@@ -59,7 +60,7 @@ export async function uninstall(opts: { yes: boolean }): Promise<number> {
     const repo = repos.find((r) => r.id === w.repoId);
     console.log(`    ${w.path}  (worktree of ${repo?.path ?? "?"})`);
   }
-  if (existsSync(app)) console.log(`  ${app}`);
+  if (existsSync(helper)) console.log(`  ${helper}  (the hidden helper that starts Toyon from the Dock app)`);
   console.log("and stops the daemon if it is running.");
   console.log(
     "it keeps: your repos, every branch Toyon made" +
@@ -84,8 +85,14 @@ export async function uninstall(opts: { yes: boolean }): Promise<number> {
       rmSync(w.path, { recursive: true, force: true });
     }
   }
+  if (existsSync(helper)) {
+    try {
+      await Bun.spawn([LSREGISTER, "-u", helper], { stdout: "ignore", stderr: "ignore" }).exited;
+    } catch {
+      // not macOS, or the tool moved: Launch Services drops a bundle it cannot find on its own
+    }
+  }
   rmSync(home, { recursive: true, force: true });
-  if (existsSync(app)) rmSync(app, { recursive: true, force: true });
   console.log("removed. `npm uninstall -g toyon` removes the command itself.");
   return 0;
 }

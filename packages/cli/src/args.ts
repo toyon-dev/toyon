@@ -4,7 +4,12 @@
 import { isRemoteHost } from "@toyon/shared";
 
 export type Command =
-  | { kind: "open"; path: string | null; app: boolean; installApp: boolean }
+  | { kind: "open"; path: string | null; app: boolean }
+  /** the daemon up and nothing opened */
+  | { kind: "start" }
+  /** what the hidden helper bundle runs with whatever the system handed it: a toyon: link, file
+   * URLs or paths (cli/helper.ts). Not for typing, so not in the help. */
+  | { kind: "helper"; args: string[] }
   | { kind: "stop" }
   | { kind: "restart" }
   | { kind: "update" }
@@ -29,6 +34,8 @@ export type Command =
   | { kind: "error"; message: string };
 
 const VERBS = new Set([
+  "start",
+  "helper",
   "stop",
   "restart",
   "update",
@@ -50,6 +57,9 @@ export function parseArgs(argv: string[]): Command {
   const [first, ...rest] = argv;
   if (first !== undefined && VERBS.has(first)) {
     switch (first) {
+      case "helper":
+        return { kind: "helper", args: rest };
+      case "start":
       case "stop":
       case "restart":
       case "update":
@@ -98,15 +108,13 @@ export function parseArgs(argv: string[]): Command {
 
   let path: string | null = null;
   let app = false;
-  let installApp = false;
   for (const a of argv) {
     if (a === "--app" || a === "--pwa") app = true;
-    else if (a === "--install-app") installApp = true;
     else if (a.startsWith("-")) return { kind: "error", message: `unknown option ${a}` };
     else if (path !== null) return { kind: "error", message: "Toyon opens one path at a time" };
     else path = a;
   }
-  return { kind: "open", path, app, installApp };
+  return { kind: "open", path, app };
 }
 
 function parseLogs(rest: string[]): Command {
@@ -167,6 +175,7 @@ usage
   toyon [path]            start the daemon if it is not running, register the repo at path
                           (or open the file at path: in its project, or on its own)
                           (default: the current directory) and open the shell
+  toyon start             start the daemon if it is not running, and open nothing
   toyon stop              stop the daemon and every dev server and agent it runs
   toyon restart           stop the daemon and start it again from what is installed now; every
                           shell reconnects on its own
@@ -198,7 +207,6 @@ usage
 
 options for toyon [path]
   --app                   open a Chromium app window (the installed Toyon app when there is one)
-  --install-app           write ~/Applications/Toyon.app and open it
 
 environment
   TOYON_HOME              where state lives (default ~/.toyon)

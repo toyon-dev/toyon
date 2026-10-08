@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en" data-start="" data-port="">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#32302d" />
+    <title>Toyon</title>
+    <!-- Served by sw.js when a navigation to the shell fails at the network: no daemon answers on
+         this origin. Nothing here may load from the server, since there is none, so the styles sit
+         inline and outside the shell's cascade. The colours are the shell's own, read from the last
+         theme it stored, with the dark theme's literals for a page that never stored one.
+
+         A page can start nothing itself. The daemon fills data-start on the html element with the
+         link that starts one through its hidden helper, when this machine has the helper, and
+         data-port with the port it listens on; the page follows the link on arrival and shows a
+         start under way, and offers the link as a button only once that start has had its time.
+         Without the link the page shows the command to type. -->
+    <style>
+      :root {
+        --surface0: #32302d;
+        --surface1: #3d3835;
+        --text0: #e6dcb6;
+        --text1: #9e927e;
+        --text2: #6a6055;
+        --face-ui: -apple-system, "Segoe UI", sans-serif;
+        --face-mono: ui-monospace, "SF Mono", Menlo, "DejaVu Sans Mono", monospace;
+        color-scheme: dark;
+      }
+      html {
+        background: var(--surface0);
+        color: var(--text0);
+        font: 400 15px / 1.5 var(--face-ui);
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+      }
+      /* an installed window draws no title bar of its own: this strip is where its controls sit,
+         and the one place a person can take hold of the window */
+      .offline-grip {
+        height: env(titlebar-area-height, 0px);
+        -webkit-app-region: drag;
+        app-region: drag;
+      }
+      .offline {
+        max-width: 34em;
+        margin: 0 auto;
+        padding: 18vh 24px 24px;
+      }
+      h1 {
+        font: 400 20px / 28px var(--face-ui);
+        margin: 0 0 12px;
+      }
+      p {
+        margin: 0 0 12px;
+      }
+      /* the shell's own mark for something under way, the band sweeping the words */
+      .offline-live {
+        background: linear-gradient(90deg, var(--text2) 30%, var(--text0) 45%, var(--text0) 55%, var(--text2) 70%);
+        background-size: 300% 100%;
+        -webkit-background-clip: text;
+        background-clip: text;
+        -webkit-text-fill-color: transparent;
+        animation: shine 2.6s linear infinite;
+      }
+      @keyframes shine {
+        from {
+          background-position: 150% 0;
+        }
+        to {
+          background-position: -150% 0;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .offline-live {
+          background: none;
+          -webkit-text-fill-color: currentColor;
+          animation: none;
+        }
+      }
+      .offline-hint {
+        color: var(--text1);
+      }
+      .offline-cmd,
+      .offline-start {
+        display: inline-block;
+        background: var(--surface1);
+        color: var(--text0);
+        padding: 6px 10px;
+        border: 0;
+        border-radius: 6px;
+        margin: 2px 0 14px;
+      }
+      .offline-cmd {
+        font: 400 13px / 1.5 var(--face-mono);
+      }
+      .offline-start {
+        font: 400 13px / 1.5 var(--face-ui);
+        padding: 6px 12px;
+        cursor: pointer;
+      }
+      .offline-code {
+        font: 400 13px / 1.5 var(--face-mono);
+        background: var(--surface1);
+        padding: 1px 5px;
+        border-radius: 4px;
+      }
+      a {
+        color: inherit;
+      }
+      [hidden] {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="offline-grip"></div>
+    <main class="offline">
+      <h1 id="title"></h1>
+      <p id="lead"></p>
+      <code class="offline-cmd" id="cmd" hidden>toyon</code>
+      <button class="offline-start" id="start" type="button" hidden>Start Toyon</button>
+      <p id="or" hidden>Or, in a terminal, run <code class="offline-code">toyon</code>.</p>
+      <p id="port" hidden>
+        Toyon is running on port <span id="portNum"></span> and not at this address.
+        <a id="portLink" href="">Open it there</a>.
+      </p>
+      <p class="offline-hint">This page opens Toyon by itself as soon as it answers.</p>
+    </main>
+    <script>
+      // the last theme the shell applied, so the page is the colour of the window it replaces
+      try {
+        const t = JSON.parse(localStorage.getItem("toyon-theme"));
+        for (const k of ["surface0", "surface1", "text0", "text1", "text2"]) {
+          if (typeof t?.colors?.[k] === "string") document.documentElement.style.setProperty(`--${k}`, t.colors[k]);
+        }
+        if (t?.kind === "light" || t?.kind === "dark") document.documentElement.style.colorScheme = t.kind;
+      } catch {}
+
+      const el = (id) => document.getElementById(id);
+      // the daemon's own test for a loopback name (isLoopbackHost in the shared package), which a
+      // page served from a cache cannot import
+      const loopback = (host) =>
+        host === "localhost" || host.endsWith(".localhost") || host === "127.0.0.1" || host === "[::1]";
+      const host = location.hostname;
+      const here = loopback(host);
+      const link = document.documentElement.dataset.start || null;
+      const port = document.documentElement.dataset.port;
+
+      // What the page says, by state: away (the daemon is on another machine), manual (no helper
+      // here, so the command to type), idle (a helper, but the daemon answers on its port and only
+      // this address is dead, so nothing to start), starting (the link followed, the shell's shine
+      // on the title), stalled (the start had its time and nothing answered: the button again, and
+      // the command too, since the link this page cached may outlive the helper it points at).
+      const STATES = {
+        away: { title: "Toyon is not answering", lead: ". The machine may be asleep, or Toyon stopped there." },
+        manual: { title: "Toyon is not running", lead: ". In a terminal, run:", cmd: true },
+        idle: { title: "Toyon is not running", lead: "." },
+        starting: { title: "Starting Toyon", live: true },
+        stalled: { title: "Toyon is not running", lead: ", and it did not start on its own.", button: true, or: true },
+      };
+      function render(state) {
+        const s = STATES[state];
+        const name = document.createElement("b");
+        name.textContent = host;
+        el("title").textContent = s.title;
+        el("title").classList.toggle("offline-live", s.live === true);
+        el("lead").hidden = s.lead === undefined;
+        if (s.lead !== undefined) el("lead").replaceChildren("Nothing answered at ", name, s.lead);
+        el("cmd").hidden = s.cmd !== true;
+        el("start").hidden = s.button !== true;
+        el("or").hidden = s.or !== true;
+      }
+
+      const alive = (url) => fetch(url, { cache: "no-store" }).then((r) => r.ok, () => false);
+      // the short address and the port are two listeners of one daemon; when only the short one
+      // is gone, the daemon is up and this page says where
+      const branded = host === "toyon.localhost" && location.port === "" && port !== "";
+      const other = `http://toyon.localhost:${port}/`;
+      el("portNum").textContent = port;
+      async function onPort() {
+        const up = branded && (await alive(`${other}health`));
+        if (up) el("portLink").href = other + location.hash;
+        el("port").hidden = !up;
+        return up;
+      }
+      async function tick() {
+        if (await alive("/health")) {
+          location.reload();
+          return;
+        }
+        await onPort();
+        setTimeout(tick, 1000);
+      }
+
+      // The link is an external scheme, so following it opens the helper and leaves this page
+      // where it is; the browser asks once before the first open. The helper waits ten seconds
+      // for the daemon after a cold start of the CLI, so the page waits twice that before saying
+      // the start did not take: an answer of no to the browser's question, or a browser that
+      // follows no link nobody pressed, ends there with the button.
+      let patience = null;
+      function starting() {
+        location.href = link;
+        render("starting");
+        clearTimeout(patience);
+        patience = setTimeout(() => render("stalled"), 20000);
+      }
+      el("start").addEventListener("click", starting);
+      (async () => {
+        // started on arrival: someone who opened Toyon wants it running
+        if (!here) render("away");
+        else if (!link) render("manual");
+        else if (await onPort()) render("idle");
+        else starting();
+        tick();
+      })();
+    </script>
+  </body>
+</html>

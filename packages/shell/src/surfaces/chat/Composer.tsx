@@ -235,9 +235,9 @@ export function Composer({
   const chatCentred = useChatCentred();
   const { onPaste, onPasteKey, onPasteKeyUp } = useComposerPaste(boxId, id);
   const copied = useCopied();
-  // a failure waiting for a press, read off the chat: the last row, when the daemon marked it
+  // a failure, a stop or an error waiting for a press, read off the chat: its last row
   const dismissedOffers = useDismissedOffers();
-  const fixOffer = useMemo(
+  const offer = useMemo(
     () =>
       id && !drafting
         ? offerOf(chat, {
@@ -1126,15 +1126,35 @@ export function Composer({
       )}
       {/* a command that failed and that Toyon did not hand to the agent on its own: the same shape,
           the word that sends it and then what failed. What it printed goes with the press. */}
-      {fixOffer && id && (
+      {offer?.verb === "fix" && id && (
         <ComposerOffer
           icon="run"
-          verb={fixOffer.verb}
+          verb={offer.verb}
           tip="Send the agent what it printed and ask for a fix"
-          onPress={() => sock?.send({ t: "fix", worktreeId: id, toolId: fixOffer.toolId })}
-          onDismiss={() => dismissOffer(fixOffer.toolId)}
+          onPress={() => sock?.send({ t: "fix", worktreeId: id, toolId: offer.toolId })}
+          onDismiss={() => dismissOffer(offer.key)}
         >
-          what failed in <code>{fixOffer.command}</code>
+          what failed in <code>{offer.command}</code>
+        </ComposerOffer>
+      )}
+      {/* the turn was stopped, or died on an error, and nothing has been said since: the way on
+          is a press, where the alternative is typing "continue" into the box. The word sends a
+          message of Toyon's own, so the log shows why it went and not a bubble nobody typed. */}
+      {offer?.verb === "continue" && id && (
+        <ComposerOffer
+          icon="send"
+          verb={offer.verb}
+          tip={
+            offer.after === "stop"
+              ? "Send the agent on from where its turn stopped"
+              : offer.again
+                ? "The last press ended in this same error. Send the agent on once more, or wait it out."
+                : "Send the agent on from where its turn failed"
+          }
+          onPress={() => sock?.send({ t: "continue", worktreeId: id })}
+          onDismiss={() => dismissOffer(offer.key)}
+        >
+          {offer.after === "stop" ? "where it stopped" : offer.again ? "after the same error again" : "after the error"}
         </ComposerOffer>
       )}
       {/* what is on the clipboard, before it is pasted: the same shape as the question's way back,

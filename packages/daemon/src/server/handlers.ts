@@ -80,8 +80,9 @@ export interface Services {
   /** whether a worktree's work is ready to land, and the message it would land with: the verdict
    * asked for by hand, and the check alone again after a discard */
   landing: Pick<LandingService, "judge" | "recheck">;
-  /** the press on a failed command's offer: the agent is sent the turn that fixes it */
-  fix: Pick<FixService, "press">;
+  /** the press on a failed command's offer, which sends the agent the turn that fixes it, and the
+   * press that sends it on after a stop or an error */
+  fix: Pick<FixService, "press" | "goOn">;
   /** work continued in another project: the card's answer, and the verb that asks for one */
   handoff: Pick<HandoffService, "answer" | "ask">;
   /** Toyon's own tools for the agents, served over MCP by the http layer */
@@ -614,6 +615,10 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
 
   fix(msg, _ctx, s) {
     s.fix.press(msg.worktreeId, msg.toolId);
+  },
+
+  continue(msg, _ctx, s) {
+    s.fix.goOn(msg.worktreeId);
   },
 
   async "write-file"(msg, ctx, s) {

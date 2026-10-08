@@ -743,6 +743,9 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   /** send the worktree's agent the turn that fixes the failed command on this row, with what it
    * printed: the press on an offer the daemon made by marking the row's end fixable */
   z.object({ t: z.literal("fix"), worktreeId: id, toolId: z.string().min(1).max(200) }),
+  /** send the worktree's agent on from a turn that was stopped or that failed, when that is the
+   * last thing in its chat: the press on the offer the box makes after a stop or an error */
+  z.object({ t: z.literal("continue"), worktreeId: id }),
   z.object({ t: z.literal("reveal"), worktreeId: id, path: relPath.optional() }),
   z.object({ t: z.literal("stop-agent"), worktreeId: id }),
   /** the person is looking at this worktree right now: clears the rail's unseen ring */

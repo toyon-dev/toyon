@@ -2,12 +2,23 @@
 // press on the boot pane or on a failed command's offer) names it as a Failure and reports it
 // here; the table says what follows. An ask is Toyon's own message to the agent, so the
 // transcript shows what failed where a bubble nobody typed would have stood. An offer is the same
-// ask waiting for a press.
+// ask waiting for a press. The press that sends the agent on after a stop or an error is answered
+// here too: not a failure to fix, but the same kind of message, Toyon's own and shown as its reason.
 
 import type { Asked } from "@toyon/shared";
 import { isMain } from "@toyon/shared";
 import { unformatOutput } from "../agent/output.ts";
-import { type FailedRun, type Failure, failedRun, failureContext, fixPrompt, fixWhy } from "../agent/prompt.ts";
+import {
+  type FailedRun,
+  type Failure,
+  failedRun,
+  failureContext,
+  fixPrompt,
+  fixWhy,
+  goOnPrompt,
+  goOnWhy,
+  type Stop,
+} from "../agent/prompt.ts";
 import type { TranscriptEntry } from "../agent/transcript.ts";
 import { UserError } from "../core/errors.ts";
 import type { Hub } from "../core/hub.ts";
@@ -50,6 +61,21 @@ function lastAsked(entries: readonly TranscriptEntry[]): Asked["kind"] | undefin
 /** the row was handed to the agent already */
 function askedFor(entries: readonly TranscriptEntry[], toolId: string): boolean {
   return entries.some(({ event }) => event.type === "fix-asked" && event.toolId === toolId);
+}
+
+/** How the chat ends, when it ends on a turn that was stopped or that failed and nothing has been
+ * said since: the same reading the box makes to offer the press, so a press on a stale page sends
+ * nothing. The figures a turn leaves behind it are not words, so they are read past. Null once
+ * anything else is the last thing, including the ask a press already sent. */
+export function lastStop(entries: readonly TranscriptEntry[]): Stop | null {
+  for (let i = entries.length - 1; i >= 0; i--) {
+    const e = entries[i]!.event;
+    if (e.type === "usage" || e.type === "session-info") continue;
+    if (e.type === "turn-end" && e.stopReason === "interrupted") return { kind: "stopped" };
+    if (e.type === "agent-error") return { kind: "failed", error: e.message };
+    return null;
+  }
+  return null;
 }
 
 /** The failure a fixable row stands for, rebuilt from what the transcript holds: the command its
@@ -115,5 +141,24 @@ export class FixService {
     if (!failure) throw new UserError("nothing to fix on that row");
     if (askedFor(entries, toolId)) return;
     if (!this.report(worktreeId, failure, { pressed: true })) throw new UserError("nothing runs on main");
+  }
+
+  /** The press that sends the agent on after a stop or an error: Toyon's own message, read off
+   * how the transcript ends and never from the client. A second press after the first was heard
+   * finds the ask last and sends nothing, like a second press on a row. An agent that failed has
+   * no process; its next send starts one, as a message of the person's would. */
+  goOn(worktreeId: string): void {
+    const wt = this.d.state.requireWorktree(worktreeId);
+    if (isMain(wt)) throw new UserError("nothing runs on main");
+    const agent = this.d.runtime.agentFor(worktreeId);
+    if (!agent) throw new UserError("worktree still starting; try again in a moment");
+    const entries = agent.transcript();
+    const stop = lastStop(entries);
+    if (!stop) {
+      // the page's offer was on a chat that has since moved on: already sent on, or spoken to
+      if (entries.at(-1)?.event.type === "fix-asked") return;
+      throw new UserError("nothing to go on from");
+    }
+    agent.send(goOnPrompt(stop), { asked: { kind: stop.kind, why: goOnWhy(stop) } });
   }
 }

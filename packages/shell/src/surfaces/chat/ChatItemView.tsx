@@ -1134,6 +1134,10 @@ export const ChatItemView = memo(function ChatItemView({
           <span className="daemon-text">{item.why}</span>
         </DaemonRow>
       );
+    case "stopped":
+      // the word alone, with the stop button's glyph: where the turn was cut is the whole news,
+      // and the box under the log offers the way on
+      return <DaemonRow icon="stop" word="stopped" tone="quiet" />;
     case "landed":
       return <LandedRow item={item} />;
     case "handoff":

@@ -223,9 +223,10 @@ export interface AskChoice {
 
 export type AskOutcome = "answered" | "skipped" | "cancelled" | "expired";
 
-/** Why Toyon sent the agent a message nobody typed: something failed that the agent can fix */
+/** Why Toyon sent the agent a message nobody typed: something failed that the agent can fix, or
+ * the person pressed to send it on after a turn that was stopped or that failed */
 export interface Asked {
-  kind: "hook" | "conflict" | "check" | "command" | "preview" | "handoff";
+  kind: "hook" | "conflict" | "check" | "command" | "preview" | "handoff" | "stopped" | "failed";
   why: string;
   /** the row of the command that failed, when the failure was one: what it printed went to the
    * agent with this message, and its row is not offered or attached again */

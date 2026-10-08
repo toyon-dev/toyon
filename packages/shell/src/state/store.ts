@@ -10,6 +10,7 @@ import type {
   ArchivedWorktree,
   AskAnswer,
   AskChoice,
+  Asked,
   AskOutcome,
   AskQuestion,
   AttachmentInput,
@@ -122,9 +123,14 @@ export type ChatItem =
       /** the daemon ran this command and it failed in a way the agent can be asked to fix */
       fixable?: Fixable;
     }
-  | { kind: "error"; text: string }
-  /** a message Toyon sent the agent itself, as the reason it was sent: what failed */
-  | { kind: "asked"; why: string; toolId?: string }
+  /** `seq` on the agent's own failure, the one the box offers to go on from; absent on a line the
+   * daemon answered with, which is about a press and not the turn */
+  | { kind: "error"; text: string; seq?: number }
+  /** the turn was stopped here, by a press: what the agent had got to is the rows above */
+  | { kind: "stopped"; seq?: number }
+  /** a message Toyon sent the agent itself, as the reason it was sent: what failed. `about` is
+   * the kind of thing it was sent for, which is how the box knows a press went on after an error */
+  | { kind: "asked"; about: Asked["kind"]; why: string; toolId?: string }
   | { kind: "blocked"; tool: string; path: string; reason: string }
   /** a divider: what follows was said in another worktree, grafted in here */
   | { kind: "grafted"; title: string; branch: string }
@@ -2822,7 +2828,10 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
   switch (event.type) {
     case "fix-asked":
       // Toyon's own message is the reason it was sent, not a bubble: nobody typed it
-      return [...items, { kind: "asked", why: event.why, ...(event.toolId ? { toolId: event.toolId } : {}) }];
+      return [
+        ...items,
+        { kind: "asked", about: event.kind, why: event.why, ...(event.toolId ? { toolId: event.toolId } : {}) },
+      ];
     case "user-message":
       return [
         ...items,
@@ -2916,8 +2925,8 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
       // Claude reports a usage limit as prose and then fails the turn with the same sentence; the
       // error row takes the prose's place rather than saying it twice
       if (last?.kind === "assistant" && repeats(event.message, last.text))
-        return [...cut.slice(0, -1), { kind: "error", text: event.message }];
-      return [...cut, { kind: "error", text: event.message }];
+        return [...cut.slice(0, -1), { kind: "error", text: event.message, ...stamp }];
+      return [...cut, { kind: "error", text: event.message, ...stamp }];
     }
     case "agent-blocked":
       return [...items, { kind: "blocked", tool: event.tool, path: event.path, reason: event.reason }];
@@ -3059,8 +3068,12 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
       };
       return next;
     }
-    case "turn-end":
-      return closeOpenCalls(items);
+    case "turn-end": {
+      const closed = closeOpenCalls(items);
+      // a stop is the person's press, so the log marks where it landed: the placeholder under
+      // the box says it stopped, and the cut above would otherwise read as a reply that trailed off
+      return event.stopReason === "interrupted" ? [...closed, { kind: "stopped", ...stamp }] : closed;
+    }
     default:
       return items;
   }

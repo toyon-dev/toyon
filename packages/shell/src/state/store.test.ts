@@ -458,7 +458,7 @@ describe("chat folding", () => {
         why: "the check failed",
       }),
     ]);
-    expect(s.local.a?.chat).toEqual([{ kind: "asked", why: "the check failed" }]);
+    expect(s.local.a?.chat).toEqual([{ kind: "asked", about: "check", why: "the check failed" }]);
   });
   test("a failed command keeps the daemon's mark that it can be fixed, and the ask about it names its row", () => {
     const s = run([
@@ -527,7 +527,7 @@ describe("chat folding", () => {
     ]);
     expect(s.local.a?.chat).toEqual([
       { kind: "user", text: "hi", seq: 0 },
-      { kind: "error", text: `Internal error: ${limit}` },
+      { kind: "error", text: `Internal error: ${limit}`, seq: 0 },
     ]);
     const other = run([
       hello(wt("a")),
@@ -893,6 +893,10 @@ describe("chat folding", () => {
     const tools = s.local.a!.chat.filter((i) => i.kind === "tool");
     expect(tools.map((t) => t.done)).toEqual([true, true]);
     expect(tools[1]).not.toHaveProperty("output");
+    // and the stop is marked where it landed; a turn that finished leaves no such row
+    expect(s.local.a?.chat.at(-1)).toEqual({ kind: "stopped", seq: 0 });
+    const finished = run([hello(wt("a")), agent("a", { type: "turn-end", stopReason: "end_turn", ts: 0 })]);
+    expect(finished.local.a?.chat).toEqual([]);
   });
 
   test("an agent error closes the calls it cut off: a failed turn sends no turn-end", () => {
@@ -918,6 +922,7 @@ describe("chat folding", () => {
     expect(s.local.a?.chat.at(-1)).toEqual({
       kind: "error",
       text: "API Error: Can't reach the API server (ENOTFOUND)",
+      seq: 0,
     });
     expect(s.local.a?.running).toBeUndefined();
   });

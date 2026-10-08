@@ -69,7 +69,7 @@ describe("shellContext", () => {
     const chat: ChatItem[] = [
       user("hi"),
       run("bun test", "```\n1 fail\n```\nexit 1"),
-      { kind: "asked", why: "`bun test` failed", toolId: "bun test" },
+      { kind: "asked", about: "command", why: "`bun test` failed", toolId: "bun test" },
       run("git status", "```\nclean\n```"),
     ];
     expect(shellContext(chat)).toEndWith("printed:\n$ git status\nclean");

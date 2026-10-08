@@ -28,9 +28,42 @@ describe("offerOf", () => {
   test("a failed command the daemon marked, last in the chat, is offered by its row", () => {
     expect(offerOf([{ kind: "user", text: "hi" }, failed("t1", "bun test")], rest)).toEqual({
       verb: "fix",
+      key: "t1",
       toolId: "t1",
       command: "bun test",
     });
+  });
+
+  test("a stop or an error the last turn ended on offers to go on, keyed by its place", () => {
+    const stop = { kind: "stopped", seq: 7 } as const;
+    const error = { kind: "error", text: "API Error: 529", seq: 9 } as const;
+    expect(offerOf([{ kind: "user", text: "hi" }, stop], rest)).toEqual({
+      verb: "continue",
+      key: "stopped:7",
+      after: "stop",
+    });
+    expect(offerOf([error], rest)).toEqual({ verb: "continue", key: "error:9", after: "error" });
+    // the ask the press sends lands after the row and retires it; so does anything else
+    expect(offerOf([stop, { kind: "asked", about: "stopped", why: "to go on after the stop" }], rest)).toBeNull();
+    expect(offerOf([error, { kind: "assistant", text: "Back." }], rest)).toBeNull();
+    expect(offerOf([stop], { ...rest, dismissed: new Set(["stopped:7"]) })).toBeNull();
+    // a line the daemon answered a press with is not the turn's end
+    expect(offerOf([{ kind: "error", text: "nothing runs on main" }], rest)).toBeNull();
+  });
+
+  test("the same error straight after a press that went on after it is offered as a repeat", () => {
+    const limit = "You've hit your session limit · resets 2:20pm (Europe/Berlin)";
+    const pressed = { kind: "asked", about: "failed", why: "to go on after the error" } as const;
+    const again = [{ kind: "error", text: limit, seq: 3 }, pressed, { kind: "error", text: limit, seq: 5 }] as const;
+    expect(offerOf([...again], rest)).toEqual({ verb: "continue", key: "error:5", after: "error", again: true });
+    // a different error, a turn that said something first, or a press after a stop: a fresh chance
+    expect(offerOf([{ kind: "error", text: "overloaded", seq: 3 }, pressed, again[2]], rest)).not.toHaveProperty(
+      "again",
+    );
+    expect(offerOf([again[0], pressed, { kind: "assistant", text: "On it." }, again[2]], rest)).not.toHaveProperty(
+      "again",
+    );
+    expect(offerOf([again[0], { ...pressed, about: "stopped" }, again[2]], rest)).not.toHaveProperty("again");
   });
 
   test("nothing for a failure the daemon did not mark, or a row still running", () => {
@@ -49,10 +82,11 @@ describe("offerOf", () => {
 
   test("a row Toyon already asked the agent about is not offered again", () => {
     const row = failed("t1", "bun run check", "check");
-    expect(offerOf([row, { kind: "asked", why: "the check failed", toolId: "t1" }], rest)).toBeNull();
+    const asked = { kind: "asked", about: "check", why: "the check failed", toolId: "t1" } as const;
+    expect(offerOf([row, asked], rest)).toBeNull();
     // the ask about an earlier check leaves the next failure on offer: the cap held the daemon back
     const again = failed("t2", "bun run check", "check");
-    expect(offerOf([row, { kind: "asked", why: "the check failed", toolId: "t1" }, again], rest)).toMatchObject({
+    expect(offerOf([row, asked, again], rest)).toMatchObject({
       toolId: "t2",
     });
   });

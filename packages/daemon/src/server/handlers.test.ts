@@ -1119,6 +1119,23 @@ describe("handlers", () => {
     expect(agent.sent.filter((m) => m.asked)).toHaveLength(1);
   });
 
+  test("continue sends the agent on after a stop, and only when the chat ends on one", async () => {
+    const { services, ctx, repo, agents } = make();
+    const r = await services.repos.register(repo);
+    r.needsSetup = false;
+    const wt = await services.worktrees.create(r.id, "feature");
+    const agent = agents.get(wt.id)!;
+    await expect(dispatch({ t: "continue", worktreeId: wt.id }, ctx, services)).rejects.toThrow(
+      "nothing to go on from",
+    );
+    agent.note({ type: "turn-end", stopReason: "interrupted", ts: 1 });
+    await dispatch({ t: "continue", worktreeId: wt.id }, ctx, services);
+    expect(agent.sent.at(-1)).toMatchObject({
+      text: expect.stringContaining("Your last turn was stopped before it finished"),
+      asked: { kind: "stopped", why: "to go on after the stop" },
+    });
+  });
+
   test("chat hands the text, context and attachments to the agent", async () => {
     const { services, ctx, repo, agents } = make();
     const r = await services.repos.register(repo);

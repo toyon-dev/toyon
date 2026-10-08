@@ -5,7 +5,7 @@ import type { FakeAgent } from "../../test/helpers/fakes.ts";
 import { registered, useWorld, w } from "../../test/helpers/world.ts";
 import { formatOutput } from "../agent/output.ts";
 import type { Failure } from "../agent/prompt.ts";
-import { RESPONSE } from "./fix.ts";
+import { lastStop, RESPONSE } from "./fix.ts";
 
 useWorld();
 
@@ -173,5 +173,67 @@ describe("FixService.press", () => {
     heard();
     w.fix.press(wt.id, "check-1");
     expect(asks()).toHaveLength(1);
+  });
+});
+
+describe("FixService.goOn", () => {
+  const stopped: AgentEvent = { type: "turn-end", stopReason: "interrupted", ts: 1 };
+  const failed: AgentEvent = { type: "agent-error", message: "API Error: 529 overloaded\n  at fetch", ts: 1 };
+
+  test("a stopped turn is sent on, as Toyon's own message that says why", async () => {
+    const { wt, agent, asks } = await setup();
+    agent.note({ type: "turn-start", ts: 1 });
+    agent.note(stopped);
+    w.fix.goOn(wt.id);
+    expect(asks()).toHaveLength(1);
+    expect(asks()[0]?.asked).toEqual({ kind: "stopped", why: "to go on after the stop" });
+    expect(asks()[0]?.text).toContain("stopped before it finished");
+    expect(asks()[0]?.context).toBeUndefined();
+  });
+
+  test("a failed turn is sent on with the error's first line in the message", async () => {
+    const { wt, agent, asks } = await setup();
+    agent.note({ type: "turn-start", ts: 1 });
+    agent.note(failed);
+    w.fix.goOn(wt.id);
+    expect(asks()[0]?.asked).toEqual({ kind: "failed", why: "to go on after the error" });
+    expect(asks()[0]?.text).toContain("ended in an error rather than finishing: API Error: 529 overloaded at fetch");
+  });
+
+  test("the figures a turn leaves behind it are read past; anything said since is not", () => {
+    const entry = (event: AgentEvent) => ({ seq: 0, event });
+    expect(lastStop([entry(stopped), entry({ type: "usage", used: 1, size: 2, ts: 1 })])).toEqual({ kind: "stopped" });
+    expect(lastStop([entry(failed), entry({ type: "session-info", sessionId: "s" })])).toMatchObject({
+      kind: "failed",
+    });
+    expect(lastStop([entry(stopped), entry({ type: "user-message", text: "go", ts: 2 })])).toBeNull();
+    expect(lastStop([entry({ type: "turn-end", stopReason: "end_turn", ts: 1 })])).toBeNull();
+    expect(lastStop([])).toBeNull();
+  });
+
+  test("a turn that finished, or a chat that moved on, has nothing to go on from", async () => {
+    const { wt, agent, asks } = await setup();
+    expect(() => w.fix.goOn(wt.id)).toThrow("nothing to go on from");
+    agent.note({ type: "turn-end", stopReason: "end_turn", ts: 1 });
+    expect(() => w.fix.goOn(wt.id)).toThrow("nothing to go on from");
+    agent.note(stopped);
+    agent.note({ type: "user-message", text: "never mind", ts: 2 });
+    expect(() => w.fix.goOn(wt.id)).toThrow("nothing to go on from");
+    expect(asks()).toEqual([]);
+  });
+
+  test("a second press after the first was heard sends nothing more", async () => {
+    const { wt, agent, asks, heard } = await setup();
+    agent.note(stopped);
+    w.fix.goOn(wt.id);
+    heard();
+    w.fix.goOn(wt.id);
+    expect(asks()).toHaveLength(1);
+  });
+
+  test("nothing is sent on main", async () => {
+    await setup();
+    const main = w.state.worktrees.find((x) => x.kind === "main")!;
+    expect(() => w.fix.goOn(main.id)).toThrow("nothing runs on main");
   });
 });

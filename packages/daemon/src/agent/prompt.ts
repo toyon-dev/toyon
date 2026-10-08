@@ -151,6 +151,37 @@ function commandFixPrompt(command: string): string {
   ].join(" ");
 }
 
+/** How the last turn ended, for the press that sends the agent on: stopped by the person, or
+ * failed on an error, with the error's words */
+export type Stop = { kind: "stopped" } | { kind: "failed"; error: string };
+
+/** how much of the error the agent is told: its first line, not a stack */
+const STOP_ERROR_CHARS = 300;
+
+/** What the agent is sent to go on from where its turn stopped or failed. The person pressed for
+ * it, so the turn is theirs to want; what the agent had done is on the tree whichever way the turn
+ * ended, and after a failure its process is a fresh one, so the message says where to pick up. */
+export function goOnPrompt(stop: Stop): string {
+  if (stop.kind === "stopped")
+    return [
+      "Your last turn was stopped before it finished.",
+      "Go on from where it stopped: what you had done is still in this worktree.",
+      "When you are done, say where the work stands.",
+    ].join(" ");
+  const line = stop.error.replace(/\s+/g, " ").trim();
+  const error = line.length > STOP_ERROR_CHARS ? `${line.slice(0, STOP_ERROR_CHARS)}...` : line;
+  return [
+    `Your last turn ended in an error rather than finishing: ${error}`,
+    "Go on from where it broke off: what you had done is still in this worktree.",
+    "If the same error comes back, say so instead of trying again.",
+  ].join(" ");
+}
+
+/** what the row on the chat says in the message's place: why the agent was sent on */
+export function goOnWhy(stop: Stop): string {
+  return stop.kind === "stopped" ? "to go on after the stop" : "to go on after the error";
+}
+
 /** how much output the agent gets: the tail that holds the error, not the scrollback */
 const PROC_TAIL = 40;
 

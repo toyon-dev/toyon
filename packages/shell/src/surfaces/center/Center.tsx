@@ -425,20 +425,22 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
     for (const id of runningKey.split(" ")) if (deadFrames.current.has(id)) reopen.current(id);
   });
 
-  // The app on screen stays there while the one taking its place is still a blank frame, so a send
-  // that starts a worktree does not blank the centre (frames.ts has the rules). The carry ends when
-  // that frame paints, and CARRY_MS after it began whether it did or not: a server that never
-  // answers is what the boot pane is for.
+  // The app on screen stays there while the one a send put in its place is still a blank frame, so
+  // a send that starts a worktree does not blank the centre (frames.ts has the rules; the store
+  // names that row). A row chosen by hand shows its own frame at once. The carry ends when that
+  // frame paints, and CARRY_MS after it began whether it did or not: a server that never answers
+  // is what the boot pane is for.
   //
   // Taken during the render that switches, not in an effect after it: an effect runs once that
   // render has painted, and the frame it paints is the one with nothing on screen. React re-renders
   // on a set during render before it paints anything, which is the whole point of doing it here.
+  const carryTo = useStore((s) => s.carryTo);
   const [carry, setCarry] = useState<string | null>(null);
   const [carryFrom, setCarryFrom] = useState<string | null>(previewId);
   const shownRef = useRef<string | null>(null);
   if (carryFrom !== previewId) {
     setCarryFrom(previewId);
-    setCarry(carriedFrame(shownRef.current, previewId, (id) => rows.find((w) => w.id === id)?.repoId ?? null));
+    setCarry(carriedFrame(shownRef.current, previewId, carryTo, (id) => rows.find((w) => w.id === id)?.repoId ?? null));
   }
   useEffect(() => {
     if (!carry) return;

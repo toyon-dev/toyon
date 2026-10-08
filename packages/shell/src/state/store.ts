@@ -699,6 +699,11 @@ export interface State {
   /** an "open project" was sent: the next repo the daemon adds becomes the active one */
   pendingOpen: boolean;
   activeId: string | null;
+  /** the row a send moved the selection onto without a hand choosing it: the lead the plus opened,
+   * or the worktree this tab's send made. The centre keeps the app that was on screen over that
+   * row's frame while it is still blank. A row chosen by hand is wanted at once, blank or not, so
+   * choosing one clears this. */
+  carryTo: string | null;
   /** this tab's id; a worktree created from here steals focus, one created elsewhere does not */
   clientId: string;
   /** worktree selected before the last reload, restored on hello */
@@ -931,6 +936,7 @@ export function initialState(opts: InitialOpts): State {
     lastActive: opts.storedLastActive ?? {},
     pendingOpen: false,
     activeId: null,
+    carryTo: null,
     clientId: opts.clientId,
     storedActive: opts.storedActive ?? null,
     storedRepo: opts.storedRepo ?? null,
@@ -1717,7 +1723,7 @@ function reduce(s: State, action: Action): State {
       // where a row is read and answered; its app is one tab away. Set here and not inside
       // activate(), which every worktrees frame runs to keep the selection valid, and which would
       // pull the phone off the list at the moment it is being read.
-      return { ...activate(s, action.id), screen: action.id ? "chat" : "home" };
+      return { ...activate(s, action.id), carryTo: null, screen: action.id ? "chat" : "home" };
     }
     case "open-draft": {
       // not on an empty project: a worktree off the root commit would take the scaffold to a
@@ -1729,6 +1735,7 @@ function reduce(s: State, action: Action): State {
       // pressed over would sit in front of it. The launcher rule in `reducer` makes the draft itself.
       return revealChat({
         ...activate(s, lead),
+        carryTo: lead,
         overlay: null,
         paletteReturn: null,
         focusChat: s.focusChat + 1,
@@ -1813,7 +1820,7 @@ function reduce(s: State, action: Action): State {
       const id = landingIn(left, action.id);
       // an explicit switch beats a pending one: a clone can take minutes, and its repo arriving
       // afterwards must not yank the person out of whatever they moved to in the meantime
-      return { ...activate(left, id), activeRepoId: action.id, pendingOpen: false };
+      return { ...activate(left, id), carryTo: null, activeRepoId: action.id, pendingOpen: false };
     }
     case "open-repo":
       return { ...s, pendingOpen: true };
@@ -2529,6 +2536,8 @@ function onServer(s: State, msg: StoreServerMsg): State {
         // selection chose nothing: status reads push one whenever a count moves, and one landing
         // between a file opening and its read closed the pane under the person who opened it
         editor: activeId === s.activeId ? s.editor : null,
+        // the row this tab's send made comes up behind the app that was on screen
+        ...(fresh && activeId === fresh.id ? { carryTo: fresh.id } : {}),
         // nor does it move the rail: a guest whose origin this frame dropped is still listed, so
         // the selection holds, and following its own project would switch the rail under the
         // person; the stray rule lands it inside the rail's project instead

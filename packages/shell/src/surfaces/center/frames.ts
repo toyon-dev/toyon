@@ -3,20 +3,23 @@
  *
  * Not always the selected worktree's. A frame mounts blank: the iframe is created when the
  * worktree's server answers, and the page inside it arrives some time after that, so painting it
- * straight away puts a white frame where an app was on screen a moment earlier. A switch keeps
- * the frame it is leaving until the one arriving has drawn a page. The rules are here rather than
- * in the component because each is a judgement: what may stand in for what.
+ * straight away puts a white frame where an app was on screen a moment earlier. A switch a send
+ * makes keeps the frame it is leaving until the one arriving has drawn a page. A switch a hand
+ * makes does not: the person asked for that row and is waiting to see it, and the app they left
+ * still on screen reads as the switch not having happened. The rules are here rather than in the
+ * component because each is a judgement: what may stand in for what.
  */
 
 /** the frame a switch keeps on screen while the one coming in is still blank: the one leaving, if
- * there is a frame coming in at all and both belong to the same project. Another project's app is
- * not a stand-in for this one, however briefly. */
+ * the one coming in is the row a send moved the selection onto (`carryTo`) and both belong to the
+ * same project. Another project's app is not a stand-in for this one, however briefly. */
 export function carriedFrame(
   leaving: string | null,
   arriving: string | null,
+  carryTo: string | null,
   repoOf: (id: string) => string | null,
 ): string | null {
-  if (!leaving || !arriving || leaving === arriving) return null;
+  if (!leaving || !arriving || leaving === arriving || arriving !== carryTo) return null;
   return repoOf(leaving) === repoOf(arriving) ? leaving : null;
 }
 

@@ -190,6 +190,13 @@ describe("active worktree", () => {
     expect(run([worktrees(wt("main", "main"), wt("fresh", "worktree", "tab-2"))], s).activeId).toBe("main");
     expect(run([worktrees(wt("main", "main"), wt("cli"))], s).activeId).toBe("main");
   });
+  test("the row a send moved onto is the one the centre carries the old app over; a hand's choice is not", () => {
+    const s = run([hello(wt("main", "main"))]);
+    const made = run([worktrees(wt("main", "main"), wt("fresh", "worktree", ME))], s);
+    expect(made.carryTo).toBe("fresh");
+    expect(run([worktrees(wt("main", "main"), wt("fresh", "worktree", "tab-2"))], s).carryTo).toBeNull();
+    expect(run([{ a: "activate", id: "main" }], made).carryTo).toBeNull();
+  });
   test("the first worktrees list after an empty state does not count as new", () => {
     expect(run([worktrees(wt("main", "main"), wt("a", "worktree", ME))]).activeId).toBe("main");
   });
@@ -1040,6 +1047,7 @@ describe("drafting a worktree", () => {
   test("open-draft goes to the lead and asks for the box, from a task or from the lead itself", () => {
     const s = run([{ a: "activate", id: "a" }, { a: "open-draft" }], found(wt("main", "main"), wt("a")));
     expect(s.activeId).toBe("main");
+    expect(s.carryTo).toBe("main");
     expect(s.draft).toEqual(fresh());
     expect(s.layout.chat).toBe(true);
     const again = reducer(s, { a: "open-draft" });

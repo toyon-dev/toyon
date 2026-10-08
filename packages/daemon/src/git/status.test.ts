@@ -1,8 +1,9 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { existsSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { tmpRepo } from "../../test/helpers/tmp-repo.ts";
-import { parsePorcelain, statusFiles, statusFilesWithCounts } from "./status.ts";
+import { sh, tmpRepo } from "../../test/helpers/tmp-repo.ts";
+import { GIT } from "./exec.ts";
+import { changedRanges, foldDropped, parsePorcelain, statusFiles, statusFilesWithCounts } from "./status.ts";
 
 describe("statusFiles", () => {
   const { repo, cleanup } = tmpRepo();
@@ -44,6 +45,47 @@ describe("parsePorcelain", () => {
   });
   test("empty output", () => {
     expect(parsePorcelain("")).toEqual([]);
+  });
+});
+
+describe("foldDropped", () => {
+  test("a path listed as deleted and untracked is one modified entry", () => {
+    expect(foldDropped(parsePorcelain("D  a.ts\n M b.ts\n?? a.ts\n?? c.ts\n"))).toEqual({
+      files: [
+        { xy: " M", path: "a.ts" },
+        { xy: " M", path: "b.ts" },
+        { xy: "??", path: "c.ts" },
+      ],
+      dropped: ["a.ts"],
+    });
+  });
+  test("a deletion on its own, or an untracked file on its own, is left as it is", () => {
+    const entries = parsePorcelain("D  a.ts\n?? b.ts\n");
+    expect(foldDropped(entries)).toEqual({ files: entries, dropped: [] });
+  });
+});
+
+describe("a file the index dropped but the disk still holds", () => {
+  const { repo, cleanup } = tmpRepo();
+  afterAll(cleanup);
+  // `git rm --cached` is the state the status panel drew twice: once deleted, once untracked, the
+  // same path under two rows, which the shell keys on the path alone
+  sh(repo, GIT, "rm", "-q", "--cached", "README.md");
+
+  test("is one row, counted from disk against HEAD rather than through the index", async () => {
+    writeFileSync(join(repo, "README.md"), "hello\nworld\n");
+    const expected = [{ xy: " M", path: "README.md", add: 1, del: 0 }];
+    expect(await statusFiles(repo)).toEqual(expected);
+    expect(await statusFiles(repo, "README.md")).toEqual(expected);
+    expect(await statusFilesWithCounts(repo)).toEqual(expected);
+  });
+  test("its changed lines are read the same way", async () => {
+    expect(await changedRanges(repo, "main", "README.md")).toEqual([[2, 2]]);
+  });
+  test("is no change at all when the bytes match HEAD", async () => {
+    writeFileSync(join(repo, "README.md"), "hello\n");
+    expect(await statusFiles(repo)).toEqual([]);
+    expect(await statusFilesWithCounts(repo)).toEqual([]);
   });
 });
 

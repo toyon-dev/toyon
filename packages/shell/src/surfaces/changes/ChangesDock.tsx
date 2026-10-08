@@ -693,7 +693,10 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
                 the committed one under it, or on an archived page from the history */}
               {(hasCommitted || archived) && <div className="section-title section-row">uncommitted</div>}
               {files.map((f, i) => (
-                <Fragment key={f.path}>
+                // the status is in the key with the path: a path the daemon lists twice must still
+                // be two keys, since React strands the elements behind a shared one and they stay
+                // on the page past the next worktree switch
+                <Fragment key={`${f.xy}:${f.path}`}>
                   {/* a title inside its section, not a section of its own: it says where the change
                       ends and its tests begin, so it takes no rule and repeats no section's name */}
                   {fileTests > 0 && i === fileSource && <div className="section-title changes-sub">tests</div>}

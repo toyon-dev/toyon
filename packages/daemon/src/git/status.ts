@@ -36,6 +36,15 @@ export async function treeFingerprint(worktreePath: string): Promise<string> {
 
 /** `only` narrows the status to those exact paths: a question about one file should not walk the tree */
 export async function statusFiles(worktreePath: string, ...only: string[]): Promise<GitFileStatus[]> {
+  return (await readStatus(worktreePath, only)).files;
+}
+
+/** the status, with the paths that `foldDropped` read against HEAD: their counts are already on
+ * the entry, and a diff over the index would report each as a whole file deleted */
+async function readStatus(
+  worktreePath: string,
+  only: string[],
+): Promise<{ files: GitFileStatus[]; folded: Set<string> }> {
   // -uall, because the default collapses a wholly-untracked directory into a single `dir/` entry:
   // not a path the panel can diff, count lines for, or discard. .gitignore still applies, so the
   // set of files this adds is the set a commit would have taken anyway. Literal pathspecs, so a
@@ -45,7 +54,46 @@ export async function statusFiles(worktreePath: string, ...only: string[]): Prom
     ? await gitRaw(worktreePath, "--literal-pathspecs", ...args, "--", ...only)
     : await gitRaw(worktreePath, ...args);
   if (!r.ok) throw new Error(`git status failed: ${r.err}`);
-  return parsePorcelain(r.out);
+  const { files, dropped } = foldDropped(parsePorcelain(r.out));
+  if (dropped.length === 0) return { files, folded: new Set() };
+  const counts = new Map(
+    await Promise.all(dropped.map(async (p) => [p, await diskAgainstHead(worktreePath, p)] as const)),
+  );
+  return {
+    // bytes that match HEAD are no change at all once `add -A` has put the file back
+    files: files.filter((f) => counts.get(f.path) !== null).map((f) => ({ ...f, ...(counts.get(f.path) ?? {}) })),
+    folded: new Set(dropped),
+  };
+}
+
+/** Porcelain lists a path twice when the index has dropped a file that is still on disk (`git rm
+ * --cached`, or a `git rm` followed by writing the file again): once as deleted, once as
+ * untracked. The panel draws one row per path, and the tool commits with `add -A`, which records
+ * that state as one modification against HEAD. One entry, then, and `dropped` names them so the
+ * reader can count them against HEAD rather than the index. */
+export function foldDropped(entries: GitFileStatus[]): { files: GitFileStatus[]; dropped: string[] } {
+  const untracked = new Set(entries.filter((f) => f.xy === "??").map((f) => f.path));
+  const dropped = entries.filter((f) => f.xy === "D " && untracked.has(f.path)).map((f) => f.path);
+  if (dropped.length === 0) return { files: entries, dropped };
+  const set = new Set(dropped);
+  return {
+    files: entries
+      .filter((f) => !(f.xy === "??" && set.has(f.path)))
+      .map((f) => (f.xy === "D " && set.has(f.path) ? { ...f, xy: " M" } : f)),
+    dropped,
+  };
+}
+
+/** Line counts of the file on disk against HEAD's copy, for a path the index no longer holds:
+ * git's blob-against-file form reads the working tree without going through the index. Null when
+ * the two match. A failed read (git too old for `--end-of-options`, no such path at HEAD) leaves
+ * the row uncounted rather than dropped. */
+async function diskAgainstHead(worktreePath: string, file: string): Promise<LineCounts | null> {
+  const r = await git(worktreePath, "diff", "--numstat", "--end-of-options", `HEAD:${file}`, file);
+  if (!r.ok) return {};
+  if (!r.out) return null;
+  const [counts] = parseNumstat(r.out).values();
+  return counts ?? {};
 }
 
 /** `git status --porcelain` (v1) → entries. Renames/copies (`R  old -> new`) report the NEW path:
@@ -126,18 +174,20 @@ const MAX_UNTRACKED_COUNTED = 500;
 
 /** Uncommitted files with +/- line counts vs HEAD (staged and unstaged combined). */
 export async function statusFilesWithCounts(worktreePath: string): Promise<GitFileStatus[]> {
-  const files = await statusFiles(worktreePath);
+  const { files, folded } = await readStatus(worktreePath, []);
   if (files.length === 0) return files;
   const counts = files.some((f) => f.xy !== "??") ? await numstat(worktreePath, "HEAD") : new Map<string, LineCounts>();
   const countUntracked = files.filter((f) => f.xy === "??").length <= MAX_UNTRACKED_COUNTED;
   return Promise.all(
     files.map(async (f) => ({
       ...f,
-      ...(f.xy === "??"
-        ? countUntracked
-          ? await untrackedLines(worktreePath, f.path)
-          : {}
-        : (counts.get(f.path) ?? {})),
+      ...(folded.has(f.path)
+        ? {}
+        : f.xy === "??"
+          ? countUntracked
+            ? await untrackedLines(worktreePath, f.path)
+            : {}
+          : (counts.get(f.path) ?? {})),
     })),
   );
 }
@@ -171,12 +221,17 @@ export async function changedRanges(
   defaultBr: string,
   file: string,
 ): Promise<Array<[number, number]>> {
-  const status = (await statusFiles(worktreePath, file)).find((f) => f.path === file);
+  const { files, folded } = await readStatus(worktreePath, [file]);
+  const status = files.find((f) => f.path === file);
   if (status?.xy === "??") return [[1, 1_000_000]];
   const base = await git(worktreePath, "merge-base", "HEAD", defaultBr);
   const ref = base.ok && base.out ? base.out : "HEAD";
-  const r = await git(worktreePath, "diff", "-U0", ref, "--", file);
-  if (!r.ok) return [];
+  // a file the index dropped is read from disk against the base's copy, as its counts are; one the
+  // base never had is new from its first line, as an untracked file is
+  const r = folded.has(file)
+    ? await git(worktreePath, "diff", "-U0", "--end-of-options", `${ref}:${file}`, file)
+    : await git(worktreePath, "diff", "-U0", ref, "--", file);
+  if (!r.ok) return folded.has(file) ? [[1, 1_000_000]] : [];
   const ranges: Array<[number, number]> = [];
   for (const m of r.out.matchAll(/^@@ [^+]*\+(\d+)(?:,(\d+))? @@/gm)) {
     const start = Number(m[1]);

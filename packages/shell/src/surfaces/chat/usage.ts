@@ -2,7 +2,15 @@
 // reports cumulative figures (the session's spend so far, the context as of the last reply), so
 // the per-turn number is a difference the store already took; this only formats.
 
-import type { AgentLimits } from "@toyon/shared";
+import type { AgentLimits, AuthStatus } from "@toyon/shared";
+
+/** who the plan windows belong to, as the agent reported it: the email, then the plan's name
+ * ("claude@example.com · Claude Max"). Nothing for a key or a gateway, which have no plan window,
+ * and nothing while the agent has not said. */
+export function accountLine(auth: AuthStatus | undefined): string | undefined {
+  if (auth?.kind !== "account") return undefined;
+  return [auth.account?.email, auth.label].filter(Boolean).join(" · ");
+}
 
 /** tokens as people say them: 812, 9.5k, 42k, 200k */
 export function tokens(n: number): string {

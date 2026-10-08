@@ -40,7 +40,7 @@ import { STEP_HOLD_MS, useHeld, useOnChange, useSecondsSince } from "../../ui/ho
 import { Icon } from "../../ui/Icon.tsx";
 import { InlinePicker } from "../../ui/InlinePicker.tsx";
 import { useListNav } from "../../ui/listNav.ts";
-import { useContextMenu } from "../../ui/menu.ts";
+import { useContextMenu, useMenu } from "../../ui/menu.ts";
 import { Ring } from "../../ui/Ring.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
 import { greenfieldContext } from "../center/greenfield.ts";
@@ -394,17 +394,18 @@ export function Composer({
   const ringShown = (!!id || spawning) && !!(ringUsage || limits);
   const now = Date.now();
   // The panel behind the ring is its hover: up after the pause a tooltip takes, while the pointer
-  // rests on the ring or on the panel. A click pins it, which is when the compact row joins it.
-  // Both go with the worktree they were about.
+  // rests on the ring or on the panel, and it goes with the worktree it was about. The press is
+  // another thing: a click opens the compact menu, the one a right-click opens, and never the
+  // figures again.
   const [usageHover, setUsageHover] = useState(false);
-  const [usagePinned, setUsagePinned] = useState(false);
   const usageTimer = useRef(0);
   const closeUsage = () => {
     window.clearTimeout(usageTimer.current);
     setUsageHover(false);
-    setUsagePinned(false);
   };
   useOnChange([id], closeUsage);
+  const menu = useMenu();
+  const usageMenuOpen = menu?.owner === "composer" && menu.key === "usage";
   const compactItems = () => [
     {
       id: "compact",
@@ -1546,6 +1547,8 @@ export function Composer({
               <span
                 className="usage-knob"
                 onMouseEnter={() => {
+                  // the menu is up over the ring; the figures would only cover it
+                  if (usageMenuOpen) return;
                   window.clearTimeout(usageTimer.current);
                   usageTimer.current = window.setTimeout(() => setUsageHover(true), USAGE_HOVER_MS);
                 }}
@@ -1562,7 +1565,7 @@ export function Composer({
                     />
                   }
                   tone="chrome"
-                  on={usagePinned}
+                  on={usageMenuOpen}
                   // the panel is the hover; the name is the screen reader's, with the nudge once
                   // there is one
                   silent
@@ -1574,34 +1577,15 @@ export function Composer({
                         : ""
                   }
                   detail={[...(ringUsage && limits ? [limitSummary(limits, now)] : []), ...(nudge ? [nudge] : [])]}
-                  // a summary cannot be taken back, so a click pins the panel and compacting is
-                  // the press on its row there; a right-click keeps the menu
-                  onClick={() => setUsagePinned((o) => !o)}
-                  {...cm.contextMenu(compactItems)}
+                  // a summary cannot be taken back, so a click opens the menu rather than
+                  // compacting, and the row there is the second press; a right-click opens the same
+                  {...cm.dropdown(compactItems, "left", "usage")}
+                  {...cm.contextMenu(compactItems, "usage")}
                 />
-                {(usageHover || usagePinned) && (
-                  // keyed on the pin: the hover's float was opened by no press, so the click that
-                  // pins it is an outside press to the stack and closes it. Mounting a new float in
-                  // that click makes the ring its trigger, whose next press toggles it closed.
-                  <UsagePanel
-                    key={usagePinned ? "pinned" : "hover"}
-                    usage={ringUsage}
-                    limits={limits}
-                    now={now}
-                    compact={
-                      usagePinned
-                        ? {
-                            off: compactOff,
-                            advice: ringUsage ? compactAdvice(ringUsage.used / ringUsage.size) : undefined,
-                            run: () => {
-                              closeUsage();
-                              compact();
-                            },
-                          }
-                        : undefined
-                    }
-                    onClose={closeUsage}
-                  />
+                {usageHover && (
+                  // the hover's float was opened by no press, so the click that opens the menu is
+                  // an outside press to the stack and closes it
+                  <UsagePanel usage={ringUsage} limits={limits} auth={agentInfo?.auth} now={now} onClose={closeUsage} />
                 )}
               </span>
             )}

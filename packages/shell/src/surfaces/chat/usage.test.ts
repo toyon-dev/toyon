@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentLimits } from "@toyon/shared";
 import {
+  accountLine,
   compactAdvice,
   compactNudge,
   dollars,
@@ -58,6 +59,18 @@ const both: AgentLimits = {
   at: NOW,
 };
 const clock = (ms: number) => `t+${(ms - NOW) / HOUR}h`;
+
+describe("accountLine", () => {
+  test("the email and the plan for an account; nothing for a key, a gateway or silence", () => {
+    expect(
+      accountLine({ kind: "account", label: "Claude Max", account: { email: "k@example.com", plan: "max" } }),
+    ).toBe("k@example.com · Claude Max");
+    expect(accountLine({ kind: "account", label: "Claude Pro" })).toBe("Claude Pro");
+    expect(accountLine({ kind: "api_key", label: "Anthropic API key", detail: "env" })).toBeUndefined();
+    expect(accountLine({ kind: "none", label: "not logged in" })).toBeUndefined();
+    expect(accountLine(undefined)).toBeUndefined();
+  });
+});
 
 describe("limitLevel", () => {
   test("draws the window nearest its cap, and nothing once every window has reset", () => {

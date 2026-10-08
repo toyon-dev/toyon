@@ -1,10 +1,10 @@
-import type { AgentLimits } from "@toyon/shared";
+import type { AgentLimits, AuthStatus } from "@toyon/shared";
 import type { CSSProperties } from "react";
 import type { UsageFigures } from "../../state/store.ts";
 import { Float } from "../../ui/Float.tsx";
 import type { Placement } from "../../ui/place.ts";
 import { spanWords } from "../util.ts";
-import { dollars, limitRows, tokens } from "./usage.ts";
+import { accountLine, dollars, limitRows, tokens } from "./usage.ts";
 
 /** above the ring at the foot of the box, turning over only when the window is too short */
 const PLACEMENT: Placement = { side: "top", align: "start", offset: 6, flip: "both", margin: 8 };
@@ -15,27 +15,27 @@ const STALE_MS = 5 * 60_000;
 
 /**
  * The figures behind the ring, a bar each: this worktree's context, then the account's plan
- * windows, with when each one resets under it. This is the ring's hover, in place of a tooltip,
- * so the reset times are a glance away. A click pins it and adds the one press the figures lead
- * to, compacting, at the foot behind a rule; a press outside, or Escape, closes it. Anchored to
- * the ring's wrapper.
+ * windows under the account they belong to, with when each one resets. This is the ring's hover,
+ * in place of a tooltip, so the reset times are a glance away; nothing in it is pressed. The press
+ * is the ring's own, and opens the compact menu. Anchored to the ring's wrapper.
  */
 export function UsagePanel({
   usage,
   limits,
+  auth,
   now,
-  compact,
   onClose,
 }: {
   usage: UsageFigures | undefined;
   limits: AgentLimits | undefined;
+  /** who the agent says it is paying as, heading the plan windows: they are the account's, not
+   * this worktree's, which the context bar above them is */
+  auth: AuthStatus | undefined;
   now: number;
-  /** the compact row, once the panel is pinned: why it is off, else the advice under it, and
-   * what the press does. Absent while the panel is only being looked at. */
-  compact?: { off?: string; advice?: string; run: () => void };
   onClose: () => void;
 }) {
   const rows = limits ? limitRows(limits, now) : [];
+  const who = rows.length ? accountLine(auth) : undefined;
   const stale = limits && now - limits.at > STALE_MS ? spanWords(now - limits.at) : null;
   const cost = usage?.cost !== undefined ? ` · ${dollars(usage.cost)}` : "";
   return (
@@ -58,19 +58,11 @@ export function UsagePanel({
           sub={`${tokens(usage.used)} of ${tokens(usage.size)}${cost}`}
         />
       )}
+      {who && <div className="usage-who section-title">{who}</div>}
       {rows.map((r) => (
         <Meter key={r.key} name={r.name} used={r.used} sub={r.sub} />
       ))}
       {stale && <div className="usage-stale hint">read {stale} ago</div>}
-      {compact && (
-        <>
-          <hr className="usage-rule" />
-          <button type="button" className="row usage-compact" disabled={!!compact.off} onClick={compact.run}>
-            <span>compact the context</span>
-            <span className="usage-detail hint">{compact.off ?? compact.advice}</span>
-          </button>
-        </>
-      )}
     </Float>
   );
 }

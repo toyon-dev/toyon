@@ -156,9 +156,11 @@ export function placement(
 /** What a menu is placed against: the row or trigger it hangs under, or the pointer that asked for
  * it, which is a rect with no size. 4px is both the gap under an anchor and the margin it keeps
  * from the window's edge, since a menu is a box against the chrome rather than a tip beside a
- * control. It never flips: a menu that jumped above the row it belongs to would read as another
- * row's, and the clamp keeps it on screen. */
-export function menuPlacement(spec: Pick<MenuSpec, "at" | "anchor" | "align">): {
+ * control. A menu about a row never flips: one that jumped above the row it belongs to would read
+ * as another row's, and the clamp keeps it on screen. A trigger's own list does turn over when
+ * there is no room under it: the trigger is the one thing it could be mistaken for, and clamped
+ * it would cover the very control whose next press closes it. */
+export function menuPlacement(spec: Pick<MenuSpec, "at" | "anchor" | "align" | "toggles">): {
   rect: Rect;
   placement: Placement;
 } {
@@ -167,7 +169,13 @@ export function menuPlacement(spec: Pick<MenuSpec, "at" | "anchor" | "align">): 
     return { rect: pointRect(spec.at ?? { x: 0, y: 0 }), placement: { side: "bottom", align: "start", margin: 4 } };
   return {
     rect: a,
-    placement: { side: "bottom", align: spec.align === "right" ? "end" : "start", offset: 4, margin: 4 },
+    placement: {
+      side: "bottom",
+      align: spec.align === "right" ? "end" : "start",
+      offset: 4,
+      margin: 4,
+      ...(spec.toggles ? { flip: "side" } : {}),
+    },
   };
 }
 
@@ -198,8 +206,9 @@ export function useContextMenu(owner: string) {
           },
         };
       },
-      /** a trigger's click opens the list under it; a second click closes it */
-      dropdown(build: () => MenuEntry[], align: "left" | "right" = "left") {
+      /** a trigger's click opens the list under it; a second click closes it. `key` names what it
+       * is about, for a trigger that wants to look pressed while its list is up. */
+      dropdown(build: () => MenuEntry[], align: "left" | "right" = "left", key?: string) {
         return {
           "aria-haspopup": "menu" as const,
           onClick: (e: ReactMouseEvent) => {
@@ -209,6 +218,7 @@ export function useContextMenu(owner: string) {
             menuStore.toggle({
               items: build(),
               owner,
+              key,
               target: el,
               toggles: true,
               anchor: el.getBoundingClientRect(),

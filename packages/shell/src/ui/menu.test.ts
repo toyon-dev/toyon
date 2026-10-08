@@ -14,7 +14,7 @@ import {
 import { place } from "./place.ts";
 
 /** where a 180x96 menu lands in a 1000x800 window */
-function box(spec: Pick<MenuSpec, "at" | "anchor" | "align">) {
+function box(spec: Pick<MenuSpec, "at" | "anchor" | "align" | "toggles">) {
   const { rect, placement } = menuPlacement(spec);
   const { x, y } = place(rect, { w: 180, h: 96 }, { w: 1000, h: 800 }, placement);
   return { x, y };
@@ -115,5 +115,11 @@ describe("where a menu opens", () => {
   test("and stays on screen at every edge", () => {
     expect(box({ at: { x: 990, y: 790 } })).toEqual({ x: 816, y: 700 });
     expect(box({ at: { x: -20, y: -20 } })).toEqual({ x: 4, y: 4 });
+  });
+
+  test("a row's menu at the foot of the window is clamped over it; a trigger's turns over above it", () => {
+    const anchor = { left: 300, right: 400, top: 760, bottom: 790 } as DOMRect;
+    expect(box({ anchor })).toEqual({ x: 300, y: 700 });
+    expect(box({ anchor, toggles: true })).toEqual({ x: 300, y: 660 });
   });
 });

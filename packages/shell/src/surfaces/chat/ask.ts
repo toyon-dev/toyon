@@ -147,6 +147,22 @@ export function answeredQuestion(
   return { message: item.ask.message, questions: item.ask.questions, answers: item.answers };
 }
 
+/** The plan the person decided, which the transcript shows as a message pair as well: the plan
+ * was the agent's turn, as the file toyon wrote (`file`) or the markdown the card showed when no
+ * file could be (`text`), and the option picked was the person's reply, the one that also set how
+ * the work after it runs. It reaches the log as a permission because the wire sends it as one,
+ * but a permission is let through or refused under the row of the call it gated, and a plan's
+ * call did nothing but ask: its card took the row's place (the store gives it no `toolId`), so
+ * once decided it is the one permission standing on its own. A plan closed under the person, by a
+ * stop or a restart, has no reply to read back and stays a quiet row. */
+export function decidedPlan(item: AskItem): { file: string | null; text: string; choice: string } | null {
+  if (item.outcome !== "answered" || item.ask.kind !== "permission" || item.toolId) return null;
+  const choice = item.ask.choices.find((c) => c.id === item.choiceId);
+  if (!choice) return null;
+  const file = item.ask.plan ?? null;
+  return { file, text: file ? "" : (item.ask.detail ?? ""), choice: choice.name };
+}
+
 /** where the cursor lands on arriving at a question: its pick, the "other" row when the typed
  * answer is the pick, else its first option */
 export function cursorFor(q: AskQuestion | undefined, a: AskAnswer | undefined): number {

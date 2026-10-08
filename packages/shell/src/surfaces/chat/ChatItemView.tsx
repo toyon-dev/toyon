@@ -20,7 +20,7 @@ import { Spinner } from "../../ui/Spinner.tsx";
 import { treeKey } from "../../ui/treeNav.ts";
 import { elapsed, spanWords } from "../util.ts";
 import { AskRow } from "./AskRow.tsx";
-import { answeredQuestion, answerLines } from "./ask.ts";
+import { answeredQuestion, answerLines, decidedPlan } from "./ask.ts";
 import { chatLink, openChatLink } from "./chatLink.ts";
 import { DaemonRow, useAgo } from "./DaemonRow.tsx";
 import { FileChip } from "./FileChip.tsx";
@@ -1018,27 +1018,75 @@ export const ChatItemView = memo(function ChatItemView({
       // bubble. Dimming it as a tool exchange put the sentence that decided the turn in the quiet
       // tier under the prose it caused.
       const said = answeredQuestion(item);
-      if (!said) return <AskRow item={item} />;
-      const answer = answerLines(said.questions, said.answers).join("\n");
-      // the bubble offers copy alone: a pick re-sent as prose is not the choice, so it takes no
-      // "edit in composer" and no place in the walk
-      const bubble = { kind: "assistant" as const, text: answer };
+      if (said) {
+        const answer = answerLines(said.questions, said.answers).join("\n");
+        // the bubble offers copy alone: a pick re-sent as prose is not the choice, so it takes no
+        // "edit in composer" and no place in the walk
+        const bubble = { kind: "assistant" as const, text: answer };
+        return (
+          <>
+            <Markdown
+              text={said.message}
+              menu={(link, code) =>
+                messageItems({ kind: "assistant", text: said.message }, worktreeId ?? null, deps, {
+                  link,
+                  code,
+                  dir: dirOf(),
+                })
+              }
+              worktreeId={worktreeId}
+              fileRoot={fileRoot()}
+            />
+            <div className="msg-user" {...cm.contextMenu(() => messageItems(bubble, worktreeId ?? null, deps))}>
+              {answer}
+            </div>
+          </>
+        );
+      }
+      // a plan the person decided is the same exchange: the plan was the agent's turn and the
+      // option picked the person's word, which set the mode for every turn after it. As a
+      // permission's quiet row it read as a policy outcome, the one decision toyon never makes
+      // for the person in the tier of the ones it does. The agent's side is the document: a row
+      // that opens the file toyon wrote, since the card declined to inline it once the file was
+      // there, else the markdown the card showed. The tool's title ("Approve Plan") is not the
+      // agent's sentence and names nothing the row does not, so it is not read back.
+      const plan = decidedPlan(item);
+      if (!plan) return <AskRow item={item} />;
+      const file = plan.file;
+      const bubble = { kind: "assistant" as const, text: plan.choice };
       return (
         <>
-          <Markdown
-            text={said.message}
-            menu={(link, code) =>
-              messageItems({ kind: "assistant", text: said.message }, worktreeId ?? null, deps, {
-                link,
-                code,
-                dir: dirOf(),
-              })
-            }
-            worktreeId={worktreeId}
-            fileRoot={fileRoot()}
-          />
+          {file ? (
+            <DaemonRow icon="file" word="plan" tone="quiet">
+              <span className="daemon-text">
+                <Button
+                  variant="inline"
+                  tone="strong"
+                  mono
+                  onClick={() => worktreeId && openFile(deps, { worktreeId, path: file, view: "preview" })}
+                >
+                  {file}
+                </Button>
+              </span>
+            </DaemonRow>
+          ) : (
+            plan.text && (
+              <Markdown
+                text={plan.text}
+                menu={(link, code) =>
+                  messageItems({ kind: "assistant", text: plan.text }, worktreeId ?? null, deps, {
+                    link,
+                    code,
+                    dir: dirOf(),
+                  })
+                }
+                worktreeId={worktreeId}
+                fileRoot={fileRoot()}
+              />
+            )
+          )}
           <div className="msg-user" {...cm.contextMenu(() => messageItems(bubble, worktreeId ?? null, deps))}>
-            {answer}
+            {plan.choice}
           </div>
         </>
       );

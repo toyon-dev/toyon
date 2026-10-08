@@ -1620,9 +1620,9 @@
     }
   }
   /* ---- the ask in the transcript ----
-     A permission's verdict, or a question closed with no answer, reads back in the quiet tier; a
-     question the person answered is a message pair, the agent's prose and the person's bubble,
-     and takes no row of its own. */
+     A permission's verdict, or a question or a plan closed with no answer, reads back in the
+     quiet tier; a question the person answered, and a plan they decided, is a message pair, the
+     agent's prose or the plan's row and the person's bubble, and takes no row of its own. */
   .ask-closed {
     color: var(--text2);
     & .ask-lead {

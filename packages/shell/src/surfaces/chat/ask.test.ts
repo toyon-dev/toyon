@@ -11,6 +11,7 @@ import {
   canSubmit,
   choose,
   cursorFor,
+  decidedPlan,
   dropBlankNote,
   emptyDraft,
   isOwnRow,
@@ -278,6 +279,55 @@ describe("answeredQuestion", () => {
         outcome: "answered",
         choiceId: "y",
       }),
+    ).toBeNull();
+  });
+});
+
+describe("decidedPlan", () => {
+  const choices = [
+    { id: "auto", name: "Yes, and use auto mode", kind: "allow_once" as const },
+    { id: "no", name: "No, keep planning", kind: "reject_once" as const },
+  ];
+  const plan = {
+    kind: "permission" as const,
+    title: "Approve Plan",
+    detail: "# plan",
+    plan: ".toyon/plan.md",
+    choices,
+  };
+
+  test("is the plan's file and the option picked, for either answer", () => {
+    expect(decidedPlan({ kind: "ask", id: "k", ask: plan, outcome: "answered", choiceId: "auto" })).toEqual({
+      file: ".toyon/plan.md",
+      text: "",
+      choice: "Yes, and use auto mode",
+    });
+    expect(decidedPlan({ kind: "ask", id: "k", ask: plan, outcome: "answered", choiceId: "no" })).toMatchObject({
+      choice: "No, keep planning",
+    });
+  });
+
+  test("a plan with no file behind it carries the markdown the card showed", () => {
+    const { plan: _, ...onCard } = plan;
+    expect(decidedPlan({ kind: "ask", id: "k", ask: onCard, outcome: "answered", choiceId: "auto" })).toEqual({
+      file: null,
+      text: "# plan",
+      choice: "Yes, and use auto mode",
+    });
+  });
+
+  test("is never a plan closed under the person, a permission on a call's row, or a question", () => {
+    expect(decidedPlan({ kind: "ask", id: "k", ask: plan })).toBeNull();
+    expect(decidedPlan({ kind: "ask", id: "k", ask: plan, outcome: "cancelled" })).toBeNull();
+    expect(decidedPlan({ kind: "ask", id: "k", ask: plan, outcome: "expired" })).toBeNull();
+    expect(decidedPlan({ kind: "ask", id: "k", ask: plan, outcome: "answered" })).toBeNull();
+    const gated = { kind: "permission" as const, title: "Write a.ts", choices };
+    expect(
+      decidedPlan({ kind: "ask", id: "k", ask: gated, toolId: "t1", outcome: "answered", choiceId: "no" }),
+    ).toBeNull();
+    const ask = { kind: "question" as const, message: "Which?", questions: one };
+    expect(
+      decidedPlan({ kind: "ask", id: "k", ask, outcome: "answered", answers: [{ selected: ["jwt"] }] }),
     ).toBeNull();
   });
 });

@@ -51,6 +51,28 @@
       }
     }
   }
+  /* The preview's size while it changes (sizeReadout.ts): hung under the bar at the top of the
+     frame, in the tooltip's box, since a thing floating over the app reads as one treatment or as
+     several accidents. Centred under the bar's route cluster rather than in a corner: a corner of
+     the page is where an app keeps its own nav. The frame tier's mono with its digits in columns,
+     so the numbers hold still while they tick. No pointer: a drag that crosses it must not break,
+     and the frame under it already takes none while a handle is held (app.css). */
+  .center-size {
+    position: absolute;
+    top: 8px;
+    left: 50%;
+    translate: -50%;
+    pointer-events: none;
+    padding: 3px 8px;
+    font: var(--type-mono-sm);
+    font-variant-numeric: tabular-nums;
+    color: var(--text1);
+    background: var(--surface1);
+    border: 1px solid var(--border1);
+    border-radius: var(--radius-md);
+    box-shadow: var(--elevation-float);
+    white-space: nowrap;
+  }
   .new-project-field {
     flex: 0 1 auto;
     min-width: 0;

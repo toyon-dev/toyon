@@ -68,6 +68,7 @@ import { Greenfield } from "./Greenfield.tsx";
 import { Import } from "./Import.tsx";
 import { NewProject } from "./NewProject.tsx";
 import { Setup } from "./Setup.tsx";
+import { useSizeReadout } from "./sizeReadout.ts";
 import { UpdatedCard } from "./UpdatedCard.tsx";
 import { waitingText } from "./waiting.ts";
 import "./center.css";
@@ -451,6 +452,12 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
   useEffect(() => {
     shownRef.current = shownId;
   });
+  // a frame is on screen: nothing of toyon's own stands over the centre (the setup pane, a clone
+  // being watched) and the project has something to run
+  const frameShown = shownId !== null && !setupRepo && !watching && !bare && !chatCentred;
+  // the frames' box is the app's window: its size is read off it while it changes
+  const [framesEl, setFramesEl] = useState<HTMLDivElement | null>(null);
+  const sizeReadout = useSizeReadout(framesEl, frameShown);
 
   // editor pane: draggable height + full-height toggle, persisted
   const [editorH, setEditorH] = usePersisted(STORAGE.editorHeight, 0, (raw) => {
@@ -531,7 +538,7 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
             !(zen && !chatCentred) && ((editor && editorFull) || (designOpen && designFull)) ? "none" : undefined,
         }}
       >
-        <div className="frames-wrap">
+        <div className="frames-wrap" ref={setFramesEl}>
           {frames.map((f) => (
             <iframe
               key={f.id}
@@ -554,11 +561,11 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
               // unmounted rather than opening an address it would be refused at
               src={granted.urlOf(f.id) ?? undefined}
               title={f.title}
-              style={{
-                display: f.id === shownId && !setupRepo && !watching && !bare && !chatCentred ? "block" : "none",
-              }}
+              style={{ display: frameShown && f.id === shownId ? "block" : "none" }}
             />
           ))}
+          {/* after the frames in flow, so it paints over the one on screen with no layer of its own */}
+          {sizeReadout && <span className="center-size">{sizeReadout}</span>}
           {/* the page stands in for every pane below: it is about a project that is not one of them */}
           {newProject ? (
             <NewProject project={newProject} />

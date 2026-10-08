@@ -779,7 +779,8 @@ export function Composer({
   }, [menuOpen, trigger?.kind, commands.length, id, source, sock, store, dispatch]);
 
   // ambient context: what the user is looking at, attached invisibly to every send as paragraphs
-  // of the one block the daemon wraps, which is where the opening lives
+  // of the one block the daemon wraps, which is where the opening lives. What the page threw is
+  // the daemon's own paragraph in that block: it holds the errors, this tab forwards them.
   const buildContext = (): string[] | undefined => {
     if (!active) return undefined;
     const parts: string[] = [];
@@ -791,7 +792,6 @@ export function Composer({
       } catch {}
     }
     if (pc.title) parts.push(`page title: ${pc.title}`);
-    if (pc.errors.length) parts.push(`recent console errors:\n${pc.errors.map((e) => `- ${e}`).join("\n")}`);
     const blocks: string[] = [];
     if (greenfield) blocks.push(greenfieldContext(active.worktree.title, repo?.configFile));
     if (parts.length > 0) blocks.push(`What the user is looking at right now:\n${parts.join("\n")}`);
@@ -1138,7 +1138,7 @@ export function Composer({
       )}
       {/* a command that failed and that Toyon did not hand to the agent on its own: the same shape,
           the word that sends it and then what failed. What it printed goes with the press. */}
-      {offer?.verb === "fix" && id && (
+      {offer?.verb === "fix" && "toolId" in offer && id && (
         <ComposerOffer
           icon="run"
           verb={offer.verb}
@@ -1147,6 +1147,19 @@ export function Composer({
           onDismiss={() => dismissOffer(offer.key)}
         >
           what failed in <code>{offer.command}</code>
+        </ComposerOffer>
+      )}
+      {/* the preview threw after the turn's edits, and the rows above say what: the same word,
+          and the press sends those rows. The daemon reads them off the transcript. */}
+      {offer?.verb === "fix" && "page" in offer && id && (
+        <ComposerOffer
+          icon="run"
+          verb={offer.verb}
+          tip="Send the agent what the preview threw and ask for a fix"
+          onPress={() => sock?.send({ t: "fix-page", worktreeId: id })}
+          onDismiss={() => dismissOffer(offer.key)}
+        >
+          what the preview threw
         </ComposerOffer>
       )}
       {/* the turn was stopped, or died on an error, and nothing has been said since: the way on

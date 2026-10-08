@@ -287,6 +287,10 @@ export interface WorktreeServiceDeps {
   runs?: RunService;
   /** how a failure the agent can fix is sent to it */
   fix: Pick<FixService, "report">;
+  /** what a worktree's preview page has thrown since it last loaded, as the paragraph a message
+   * carries: a worktree made from a lead's box carries the lead's, since that is the preview the
+   * person was looking at as they typed. Absent in tests. */
+  pageErrors?: (worktreeId: string) => string | undefined;
 }
 
 /** a landing op's result as the service hands it on: `asked` when the agent was sent the turn that
@@ -432,8 +436,16 @@ export class WorktreeService {
   // ---- create / remove / rename ----
 
   async create(repoId: string, prompt: string, opts: CreateOpts = {}): Promise<WorktreeInfo> {
-    const { variant, context, attachments } = opts;
+    const { variant, attachments } = opts;
     const repo = this.d.state.requireRepo(repoId);
+    // the row the message was typed on: the provisional one, else main's. What its preview has
+    // thrown goes with the first message when the worktree made is another row; the row itself
+    // says it behind every message of its own.
+    const lead = opts.worktreeId ?? this.d.state.worktrees.find((w) => w.repoId === repoId && isMain(w))?.id;
+    const context = (id: string): string[] | undefined => {
+      const threw = lead && lead !== id ? this.d.pageErrors?.(lead) : undefined;
+      return threw ? [...(opts.context ?? []), threw] : opts.context;
+    };
     // validated up front: an unknown or uninstalled agent is a refusal now, not a dead worktree later
     const agent = this.d.agents.require(opts.agent ?? this.d.state.defaultAgent ?? DEFAULT_AGENT_ID).id;
     const profile = this.checkProfile(repo, opts.profile);
@@ -484,7 +496,7 @@ export class WorktreeService {
       // agent of the time; a task that asked for another gets that one, spawned by the send
       const rt = this.d.runtime.ensureAgent(claimed);
       if (rt.agent.runningAgent !== null && rt.agent.runningAgent !== agent) await rt.agent.restart();
-      rt.agent.send(agentPrompt, { context: withCarry(context, carried), attachments });
+      rt.agent.send(agentPrompt, { context: withCarry(context(claimed.id), carried), attachments });
       this.nameOrAsk(claimed, task, given, variant);
       if (carried.unmoved) throw new UserError(carried.unmoved, { delivered: true });
       return claimed;
@@ -533,7 +545,7 @@ export class WorktreeService {
     const carried = await this.carryMain(repo, wt, !!opts.carry);
     // setup + procs warm in the background; the agent starts immediately
     this.launch(wt, repo, repo.path);
-    this.d.runtime.ensureAgent(wt).agent.send(agentPrompt, { context: withCarry(context, carried), attachments });
+    this.d.runtime.ensureAgent(wt).agent.send(agentPrompt, { context: withCarry(context(id), carried), attachments });
     this.nameOrAsk(wt, task, given, variant);
     if (carried.unmoved) throw new UserError(carried.unmoved, { delivered: true });
     return wt;

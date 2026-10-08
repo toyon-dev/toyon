@@ -1139,6 +1139,17 @@ export const ChatItemView = memo(function ChatItemView({
       // the word alone, with the stop button's glyph: where the turn was cut is the whole news,
       // and the box under the log offers the way on
       return <DaemonRow icon="stop" word="stopped" tone="quiet" />;
+    case "page-error":
+      // the preview's news, in the person's browser's words, under the edits it followed; the box
+      // under the log offers to send it, so the row itself carries no button
+      return (
+        <DaemonRow
+          icon="globe"
+          word="preview threw"
+          tone="quiet"
+          below={<code className="daemon-text">{item.message}</code>}
+        />
+      );
     case "landed":
       return <LandedRow item={item} />;
     case "handoff":

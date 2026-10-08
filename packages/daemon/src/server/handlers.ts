@@ -26,6 +26,8 @@ import type { DraftStore } from "../drafts/store.ts";
 import type { ExecService } from "../exec/service.ts";
 import type { OpenedFile, OpenService } from "../files/open.ts";
 import { type FileService, keptRead } from "../files/service.ts";
+import type { PageErrorService } from "../preview/errors.ts";
+import type { RenderService } from "../preview/render.ts";
 import type { AfterLand } from "../repos/afterLand.ts";
 import { browsePath, describeFolder } from "../repos/browse.ts";
 import type { RepoRegistry } from "../repos/registry.ts";
@@ -80,9 +82,14 @@ export interface Services {
   /** whether a worktree's work is ready to land, and the message it would land with: the verdict
    * asked for by hand, and the check alone again after a discard */
   landing: Pick<LandingService, "judge" | "recheck">;
-  /** the press on a failed command's offer, which sends the agent the turn that fixes it, and the
-   * press that sends it on after a stop or an error */
-  fix: Pick<FixService, "press" | "goOn">;
+  /** the press on a failed command's offer, which sends the agent the turn that fixes it, the
+   * press that sends it on after a stop or an error, and the press under what the preview threw */
+  fix: Pick<FixService, "press" | "goOn" | "pressPage">;
+  /** what each worktree's preview page threw, as the shell forwards it */
+  pageErrors: Pick<PageErrorService, "report" | "loaded">;
+  /** a page rendered for the agent in a tab's hidden frame: the tab's answer, and how the ask
+   * reaches a tab, which the socket layer sets */
+  render: Pick<RenderService, "rendered" | "courier">;
   /** work continued in another project: the card's answer, and the verb that asks for one */
   handoff: Pick<HandoffService, "answer" | "ask">;
   /** Toyon's own tools for the agents, served over MCP by the http layer */
@@ -250,6 +257,22 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
 
   "forget-visit"(msg, _ctx, s) {
     s.routes.forget(msg.repoId, msg.path);
+  },
+
+  "page-error"(msg, _ctx, s) {
+    s.pageErrors.report(msg.worktreeId, msg.message);
+  },
+
+  "page-loaded"(msg, _ctx, s) {
+    s.pageErrors.loaded(msg.worktreeId);
+  },
+
+  "fix-page"(msg, _ctx, s) {
+    s.fix.pressPage(msg.worktreeId);
+  },
+
+  rendered(msg, _ctx, s) {
+    s.render.rendered(msg);
   },
 
   async chat(msg, ctx, s) {

@@ -3,6 +3,7 @@
 // so the rules have tests; the one piece of state is which offers were turned down, kept for the
 // page's life as the clipboard's offer is.
 
+import { isEditTool } from "@toyon/shared";
 import { useSyncExternalStore } from "react";
 import type { ChatItem } from "../../state/store.ts";
 import { commandOf } from "./shellMode.ts";
@@ -11,6 +12,9 @@ import { commandOf } from "./shellMode.ts";
  * is remembered by: the row's own id, or the stop's place in the transcript. */
 export type Offer =
   | { verb: "fix"; key: string; toolId: string; command: string }
+  /** the preview threw after the turn's edits and nothing has been written or said since: the
+   * word sends the page rows above. `errors` is how many rows the press would send. */
+  | { verb: "fix"; key: string; page: { errors: number } }
   /** the agent's last turn was stopped by a press, or ended on an error: the word sends it on.
    * `again`: the error is the one the last press was sent after, word for word, so the press
    * already failed this way once (a usage limit until it resets) */
@@ -39,18 +43,48 @@ export function offerOf(chat: readonly ChatItem[], at: OfferStanding): Offer {
   if (at.queued > 0 || at.sending || at.card) return null;
   const last = chat.at(-1);
   if (!last) return null;
-  if (last.kind === "stopped" || last.kind === "error") {
+  // the preview's news lands after the turn, so a stop or an error is read past it, the way the
+  // daemon reads the transcript for the press: the way on comes before what the page threw
+  const said = chat.filter((i) => i.kind !== "page-error");
+  const end = said.at(-1);
+  if (end && (end.kind === "stopped" || end.kind === "error")) {
     // a line the daemon answered a press with has no seq: it is not the turn's end
-    if (last.seq === undefined) return null;
-    const key = `${last.kind}:${last.seq}`;
+    if (end.seq === undefined) return null;
+    const key = `${end.kind}:${end.seq}`;
     if (at.dismissed.has(key)) return null;
-    if (last.kind === "stopped") return { verb: "continue", key, after: "stop" };
-    return { verb: "continue", key, after: "error", ...(repeats(chat) ? { again: true as const } : {}) };
+    if (end.kind === "stopped") return { verb: "continue", key, after: "stop" };
+    return { verb: "continue", key, after: "error", ...(repeats(said) ? { again: true as const } : {}) };
   }
+  const page = pageOffer(chat, at.dismissed);
+  if (page !== undefined) return page;
   if (last.kind !== "tool" || !last.done || !last.fixable || at.dismissed.has(last.id)) return null;
   if (chat.some((i) => i.kind === "asked" && i.toolId === last.id)) return null;
   const command = commandOf(last);
   return command === null ? null : { verb: "fix", key: last.id, toolId: last.id, command };
+}
+
+/** What the preview threw after the chat's last edits: the page rows read back from the end,
+ * past the agent's own words and the rows that read the tree, until a message (the person's or
+ * Toyon's own) or a call that could have changed the tree (an edit, a command), past which the
+ * rows are about an older tree. The daemon reads the transcript the same way for the press.
+ * Undefined when no row is in reach, so the chat's other offers are read; null when the rows are
+ * there and the offer was turned down. */
+function pageOffer(chat: readonly ChatItem[], dismissed: ReadonlySet<string>): Offer | undefined {
+  let errors = 0;
+  let newest: number | undefined;
+  for (let i = chat.length - 1; i >= 0; i--) {
+    const item = chat[i]!;
+    if (item.kind === "page-error") {
+      newest ??= item.seq;
+      errors++;
+    } else if (item.kind === "user" || item.kind === "asked") break;
+    else if (item.kind === "tool" && isEditTool({ name: item.name, kind: item.toolKind })) break;
+  }
+  if (errors === 0) return undefined;
+  // a row with no place in the transcript is not one the daemon wrote
+  if (newest === undefined) return null;
+  const key = `page:${newest}`;
+  return dismissed.has(key) ? null : { verb: "fix", key, page: { errors } };
 }
 
 /** The error the chat ends on came straight after a press that went on after the same error: the

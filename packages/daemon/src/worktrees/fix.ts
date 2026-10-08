@@ -6,7 +6,7 @@
 // here too: not a failure to fix, but the same kind of message, Toyon's own and shown as its reason.
 
 import type { Asked } from "@toyon/shared";
-import { isMain } from "@toyon/shared";
+import { isEditTool, isMain } from "@toyon/shared";
 import { unformatOutput } from "../agent/output.ts";
 import {
   type FailedRun,
@@ -39,13 +39,15 @@ export interface FixServiceDeps {
  * with nobody told.
  *
  * A person's own command is offered and never sent: many fail on purpose. A dev server that is
- * down is offered by the boot pane's own button. */
+ * down is offered by the boot pane's own button. What the page threw after a turn's edits is
+ * offered under its rows: what goes to the agent is visible, and a press is what makes it so. */
 export const RESPONSE: Record<Failure["kind"], { does: "ask" | "offer"; once?: true }> = {
   hook: { does: "ask" },
   conflict: { does: "ask" },
   check: { does: "ask", once: true },
   command: { does: "offer" },
   preview: { does: "offer" },
+  page: { does: "offer" },
 };
 
 /** what the last message on a transcript was sent to fix, when it was Toyon's own */
@@ -70,12 +72,32 @@ function askedFor(entries: readonly TranscriptEntry[], toolId: string): boolean 
 export function lastStop(entries: readonly TranscriptEntry[]): Stop | null {
   for (let i = entries.length - 1; i >= 0; i--) {
     const e = entries[i]!.event;
-    if (e.type === "usage" || e.type === "session-info") continue;
+    // a page row is the preview's news, not the agent's: a stop with one after it is still a stop
+    if (e.type === "usage" || e.type === "session-info" || e.type === "page-error") continue;
     if (e.type === "turn-end" && e.stopReason === "interrupted") return { kind: "stopped" };
     if (e.type === "agent-error") return { kind: "failed", error: e.message };
     return null;
   }
   return null;
+}
+
+/** What the page threw after the chat's last edits and that nobody has sent on: the page rows
+ * read back from the end, oldest first, until a message (the person's or Toyon's own) or a call
+ * that could have changed the tree (an edit, a command), past which the rows are about an older
+ * tree. Empty when the chat has moved on, so a press on a stale page sends nothing. The box reads
+ * the chat the same way to offer the press. */
+export function lastPageErrors(entries: readonly TranscriptEntry[]): string[] {
+  const errors: string[] = [];
+  for (let i = entries.length - 1; i >= 0; i--) {
+    const e = entries[i]!.event;
+    if (e.type === "page-error") {
+      errors.unshift(e.message);
+      continue;
+    }
+    if (e.type === "user-message" || e.type === "fix-asked") break;
+    if (e.type === "tool-start" && isEditTool({ name: e.name, kind: e.kind })) break;
+  }
+  return errors;
 }
 
 /** The failure a fixable row stands for, rebuilt from what the transcript holds: the command its
@@ -142,6 +164,19 @@ export class FixService {
     if (!failure) throw new UserError("nothing to fix on that row");
     if (askedFor(entries, toolId)) return;
     if (!this.report(worktreeId, failure, { pressed: true })) throw new UserError("nothing runs on main");
+  }
+
+  /** The press under the page rows: what the preview threw after the agent's edits goes to it as
+   * Toyon's own message. The errors are read off the transcript, never taken from the client. A
+   * press on a chat that has moved on finds no rows and sends nothing, as a second press does. */
+  pressPage(worktreeId: string): void {
+    this.d.state.requireWorktree(worktreeId);
+    const agent = this.d.runtime.agentFor(worktreeId);
+    if (!agent) throw new UserError("worktree still starting; try again in a moment");
+    const errors = lastPageErrors(agent.transcript());
+    if (errors.length === 0) throw new UserError("nothing the preview threw to fix");
+    if (!this.report(worktreeId, { kind: "page", errors }, { pressed: true }))
+      throw new UserError("nothing runs on main");
   }
 
   /** The press that sends the agent on after a stop or an error: Toyon's own message, read off

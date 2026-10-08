@@ -54,6 +54,8 @@ import { ExecService } from "./exec/service.ts";
 import { OpenService } from "./files/open.ts";
 import { FileService } from "./files/service.ts";
 import { viewPr } from "./git/gh.ts";
+import { PageErrorService } from "./preview/errors.ts";
+import { RenderService } from "./preview/render.ts";
 import { AfterLand } from "./repos/afterLand.ts";
 import { RepoRegistry } from "./repos/registry.ts";
 import { RouteService } from "./routes/service.ts";
@@ -205,6 +207,13 @@ let mcpPort = port;
 // when an agent calls
 const tools = new ToolSet();
 const mcp = new ToyonMcp({ url: (id) => `http://127.0.0.1:${mcpPort}/mcp/${id}`, version: pkg.version, tools });
+// what each preview's page threw, as the shell forwards it; read behind every message, and put on
+// the transcript when a turn's edits are what it followed
+const pageErrors = new PageErrorService({
+  hub,
+  runtime: { agentFor: (id) => runtime.agentFor(id) },
+  known: (id) => state.worktree(id) !== undefined,
+});
 const runtime: RuntimeRegistry = new RuntimeRegistry({
   hub,
   state,
@@ -214,6 +223,7 @@ const runtime: RuntimeRegistry = new RuntimeRegistry({
   accounts,
   attachments,
   bridgeScript: () => bridge.get(),
+  pageErrors: (id) => pageErrors.ambient(id),
   // asked only when a turn is sent, after the service below exists
   turnStarting: (id): Promise<void> => worktrees.turnStarted(id),
   remote: () => setting.get(),
@@ -251,6 +261,7 @@ const worktrees = new WorktreeService({
   watch: (id, command, run) => exec.watch(id, command, run),
   runs,
   fix,
+  pageErrors: (id) => pageErrors.ambient(id),
 });
 // a worktree whose changes touch a proc it reaches on main takes that proc over
 new BackendShare({ state, hub, runtime, own: (id, names) => worktrees.ownProcs(id, names) });
@@ -262,6 +273,9 @@ const handoff = new HandoffService({
   create: (repoId, prompt, opts) => worktrees.create(repoId, prompt, opts),
 });
 tools.add(handoff);
+// a page rendered for the agent in a tab's hidden frame; the socket layer hands it the courier
+const render = new RenderService({ runtime, pageErrors });
+tools.add(render);
 // before the server: its agentStatus listener has to run ahead of the one that broadcasts the rows
 const turns = new TurnService({
   state,
@@ -445,6 +459,8 @@ const {
     prs,
     landing,
     fix,
+    pageErrors,
+    render,
     handoff,
     mcp,
     themes,

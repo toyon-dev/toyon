@@ -5,7 +5,7 @@ import type { FakeAgent } from "../../test/helpers/fakes.ts";
 import { registered, useWorld, w } from "../../test/helpers/world.ts";
 import { formatOutput } from "../agent/output.ts";
 import type { Failure } from "../agent/prompt.ts";
-import { lastStop, RESPONSE } from "./fix.ts";
+import { lastPageErrors, lastStop, RESPONSE } from "./fix.ts";
 
 useWorld();
 
@@ -60,6 +60,7 @@ describe("the response table", () => {
       check: { does: "ask", once: true },
       command: { does: "offer" },
       preview: { does: "offer" },
+      page: { does: "offer" },
     });
   });
 });
@@ -209,9 +210,12 @@ describe("FixService.goOn", () => {
     expect(asks()[0]?.text).toContain("ended in an error rather than finishing: API Error: 529 overloaded at fetch");
   });
 
-  test("the figures a turn leaves behind it are read past; anything said since is not", () => {
+  test("the figures a turn leaves behind it are read past, and so is the preview's news; anything said since is not", () => {
     const entry = (event: AgentEvent) => ({ seq: 0, event });
     expect(lastStop([entry(stopped), entry({ type: "usage", used: 1, size: 2, ts: 1 })])).toEqual({ kind: "stopped" });
+    expect(lastStop([entry(stopped), entry({ type: "page-error", message: "boom", ts: 1 })])).toEqual({
+      kind: "stopped",
+    });
     expect(lastStop([entry(failed), entry({ type: "session-info", sessionId: "s" })])).toMatchObject({
       kind: "failed",
     });
@@ -244,5 +248,64 @@ describe("FixService.goOn", () => {
     await setup();
     const main = w.state.worktrees.find((x) => x.kind === "main")!;
     expect(() => w.fix.goOn(main.id)).toThrow("nothing runs on main");
+  });
+});
+
+describe("FixService.pressPage", () => {
+  const threw = (message: string): AgentEvent => ({ type: "page-error", message, ts: 1 });
+  const write: AgentEvent = { type: "tool-start", toolId: "e1", name: "Edit", input: {}, kind: "edit" };
+
+  test("the page rows since the last edit go to the agent as Toyon's own message, oldest first", async () => {
+    const { wt, agent, asks } = await setup();
+    agent.note(write);
+    agent.note(threw("DIG: fullWidth on a small button (src/Button.tsx:41)"));
+    agent.note({ type: "turn-end", stopReason: "end_turn", ts: 1 });
+    agent.note(threw("unhandled rejection: TypeError: x"));
+    w.fix.pressPage(wt.id);
+    expect(asks()).toHaveLength(1);
+    expect(asks()[0]?.asked).toEqual({ kind: "page", why: "the preview threw" });
+    expect(asks()[0]?.text).toBe(
+      [
+        "After your last edits the preview threw this in the user's browser:",
+        "",
+        "- DIG: fullWidth on a small button (src/Button.tsx:41)",
+        "- unhandled rejection: TypeError: x",
+        "",
+        "Find the cause and fix it, inside this worktree. If your change did not cause it, say what did instead of changing anything.",
+      ].join("\n"),
+    );
+    expect(asks()[0]?.context).toBeUndefined();
+  });
+
+  test("rows an edit or a message came after are about an older tree: nothing to send", async () => {
+    const { wt, agent, asks, heard } = await setup();
+    expect(() => w.fix.pressPage(wt.id)).toThrow("nothing the preview threw to fix");
+    agent.note(threw("boom"));
+    agent.note(write);
+    expect(() => w.fix.pressPage(wt.id)).toThrow("nothing the preview threw to fix");
+    agent.note(threw("still"));
+    w.fix.pressPage(wt.id);
+    heard();
+    // the ask is the last thing now: a second press finds no rows after it
+    expect(() => w.fix.pressPage(wt.id)).toThrow("nothing the preview threw to fix");
+    expect(asks()).toHaveLength(1);
+    expect(asks()[0]?.text).toContain("- still");
+    expect(asks()[0]?.text).not.toContain("- boom");
+  });
+
+  test("lastPageErrors reads the rows back past a reply and a turn's end, and stops at a write", () => {
+    const entry = (event: AgentEvent) => ({ seq: 0, event });
+    expect(
+      lastPageErrors([
+        entry(threw("old")),
+        entry(write),
+        entry(threw("one")),
+        entry({ type: "turn-end", stopReason: "end_turn", ts: 1 }),
+        entry(threw("two")),
+        entry({ type: "usage", used: 1, size: 2, ts: 1 }),
+      ]),
+    ).toEqual(["one", "two"]);
+    expect(lastPageErrors([entry(threw("one")), entry({ type: "user-message", text: "ok", ts: 1 })])).toEqual([]);
+    expect(lastPageErrors([])).toEqual([]);
   });
 });

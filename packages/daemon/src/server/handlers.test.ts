@@ -27,6 +27,8 @@ import { ExecService } from "../exec/service.ts";
 import { OpenService } from "../files/open.ts";
 import { FileService } from "../files/service.ts";
 import { GIT } from "../git/exec.ts";
+import { PageErrorService } from "../preview/errors.ts";
+import { RenderService } from "../preview/render.ts";
 import { AfterLand } from "../repos/afterLand.ts";
 import { RepoRegistry } from "../repos/registry.ts";
 import { type RouteFs, RouteService } from "../routes/service.ts";
@@ -114,6 +116,8 @@ function make() {
     saveDelayMs: 0,
   });
   const fix = new FixService({ state, hub, runtime });
+  const pageErrors = new PageErrorService({ hub, runtime, known: (id) => state.worktree(id) !== undefined });
+  const render = new RenderService({ runtime, pageErrors, waitMs: 200 });
   const worktrees = new WorktreeService({
     state,
     hub,
@@ -243,6 +247,8 @@ function make() {
     prs,
     landing,
     fix,
+    pageErrors,
+    render,
     handoff,
     mcp,
     themes,
@@ -1117,6 +1123,48 @@ describe("handlers", () => {
       "nothing to fix on that row",
     );
     expect(agent.sent.filter((m) => m.asked)).toHaveLength(1);
+  });
+
+  test("what the page threw is held by the daemon, put on the transcript after a write, and sent on a press", async () => {
+    const { services, ctx, repo, agents } = make();
+    const r = await services.repos.register(repo);
+    r.needsSetup = false;
+    const wt = await services.worktrees.create(r.id, "feature");
+    const agent = agents.get(wt.id)!;
+    // before the turn wrote anything, the error is the page's own business: held, no row
+    await dispatch({ t: "page-error", worktreeId: wt.id, message: "boom (src/a.tsx:1)" }, ctx, services);
+    expect(agent.recorded.filter((e) => e.type === "page-error")).toEqual([]);
+    await expect(dispatch({ t: "fix-page", worktreeId: wt.id }, ctx, services)).rejects.toThrow(
+      "nothing the preview threw to fix",
+    );
+    // the page starting over forgets it; a write of the turn makes the next throw a row
+    await dispatch({ t: "page-loaded", worktreeId: wt.id }, ctx, services);
+    services.hub.emit("agent", wt.id, 0, { type: "tool-start", toolId: "t1", name: "Edit", input: {}, kind: "edit" });
+    await dispatch({ t: "page-error", worktreeId: wt.id, message: "crash on render (src/b.tsx:4)" }, ctx, services);
+    expect(agent.recorded.at(-1)).toMatchObject({ type: "page-error", message: "crash on render (src/b.tsx:4)" });
+    await dispatch({ t: "fix-page", worktreeId: wt.id }, ctx, services);
+    expect(agent.sent.at(-1)).toMatchObject({
+      text: expect.stringContaining("- crash on render (src/b.tsx:4)"),
+      asked: { kind: "page", why: "the preview threw" },
+    });
+  });
+
+  test("rendered answers the render the tab was asked for, and nothing else", async () => {
+    const { services, ctx, repo } = make();
+    const r = await services.repos.register(repo);
+    r.needsSetup = false;
+    const wt = await services.worktrees.create(r.id, "feature");
+    const render = services.render as RenderService;
+    const asked: Array<{ worktreeId: string; id: string; path: string }> = [];
+    render.courier = (worktreeId, msg) => {
+      asked.push({ worktreeId, id: msg.id, path: msg.path });
+      return true;
+    };
+    // the fake procs never run a preview: the tool refuses before any tab is asked
+    expect(await render.call(wt.id, { path: "/about" })).toMatchObject({ isError: true });
+    expect(asked).toEqual([]);
+    // an answer for no render out is dropped, not an error
+    await dispatch({ t: "rendered", worktreeId: wt.id, id: "nope", ok: true, errors: [] }, ctx, services);
   });
 
   test("continue sends the agent on after a stop, and only when the chat ends on one", async () => {

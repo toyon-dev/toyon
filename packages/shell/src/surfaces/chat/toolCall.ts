@@ -3,6 +3,7 @@ import {
   CHECK_TOOL,
   emptyInput,
   isWrittenKind,
+  PREVIEW_TOOL,
   SHELL_TOOL,
   type Span,
   splitSpanLines,
@@ -79,6 +80,8 @@ const NAME_ICON = new Map<string, IconName>([
   ["TaskOutput", "terminal"],
   // a packaged set of instructions loaded over the agent's own
   [SKILL_TOOL, "layers"],
+  // a page of the preview rendered for the agent, under the glyph the preview's own rows wear
+  [PREVIEW_TOOL, "globe"],
 ]);
 
 /** Claude loading a skill, the packaged instructions a person runs as a slash command. The adapter
@@ -277,8 +280,12 @@ export function toolLabel(call: ToolCall, roots: string[] = []): ToolRowText {
   // glyph the same way: "Skill" before "/code-review" is the glyph again as a word.
   const ask = call.name === ASK_TOOL;
   const glyphSays = (kind !== "other" || NAME_ICON.has(call.name)) && call.name !== TOOL_SEARCH;
+  // The preview tool's name is its word: beside a path alone the row would read as a visit, and
+  // the globe is the glyph the preview's own rows wear, so it says nothing about who asked.
   const own =
-    detail && (glyphSays || call.name === call.title || call.name === SHELL_TOOL || call.name === CHECK_TOOL)
+    detail &&
+    (glyphSays || call.name === call.title || call.name === SHELL_TOOL || call.name === CHECK_TOOL) &&
+    call.name !== PREVIEW_TOOL
       ? ""
       : call.name;
   // the glyph already says the kind, so the row prints a word only where one adds to it: the tool's

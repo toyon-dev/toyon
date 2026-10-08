@@ -40,6 +40,9 @@ export const TOYON_MCP_SERVER = "toyon";
 
 /** Toyon's first tool of its own: a proposal to continue the work in another open project */
 export const HANDOFF_TOOL = "handoff";
+/** Toyon's tool that renders a page of the worktree's preview in a browser the person has open
+ * and reports what it threw, or reports what the page has thrown since it last loaded */
+export const PREVIEW_TOOL = "preview";
 
 /** ACP's tool categories; what the shell keys "did this turn edit anything" on */
 export type ToolKind =
@@ -226,7 +229,8 @@ export type AskOutcome = "answered" | "skipped" | "cancelled" | "expired";
 /** Why Toyon sent the agent a message nobody typed: something failed that the agent can fix, or
  * the person pressed to send it on after a turn that was stopped or that failed */
 export interface Asked {
-  kind: "hook" | "conflict" | "check" | "command" | "preview" | "handoff" | "stopped" | "failed";
+  /** `preview` is a dev server that will not come up; `page` is what the page threw once it was up */
+  kind: "hook" | "conflict" | "check" | "command" | "preview" | "page" | "handoff" | "stopped" | "failed";
   why: string;
   /** the row of the command that failed, when the failure was one: what it printed went to the
    * agent with this message, and its row is not offered or attached again */
@@ -303,6 +307,10 @@ export type AgentEvent =
   | { type: "usage"; used: number; size: number; cost?: number; ts: number }
   | { type: "session-info"; sessionId: string; model?: string; effort?: string }
   | { type: "agent-error"; message: string; ts: number }
+  /** the preview's page threw after this turn's edits: the daemon's own row, written for an
+   * error that arrives between the first write of a turn and the next message, so the chat shows
+   * what the person's browser saw and the box can offer to send it */
+  | { type: "page-error"; message: string; ts: number }
   /** the turn was refused for want of credentials; the shell offers the methods as buttons.
    * `rejected` distinguishes "the credential it has was refused" from "it has none" — the second
    * comes from ACP's auth_required code, the first from reading the provider's 401 */

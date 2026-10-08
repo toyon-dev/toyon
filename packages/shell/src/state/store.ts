@@ -95,6 +95,9 @@ import { fromInputs, type PendingAttachment } from "./pending.ts";
  * can sit on different machines. */
 export type UsageFigures = { used: number; size: number; cost?: number; heard?: number };
 
+/** a page the daemon asked this tab to render for a worktree's agent: the ask's id, answered under it */
+export type RenderRequest = { worktreeId: string; id: string; path: string };
+
 export type ChatItem =
   /** `seq` on the rows a chat search can land on: the transcript entry the row starts at */
   | { kind: "user"; text: string; attachments?: AttachmentRef[]; seq?: number }
@@ -130,6 +133,10 @@ export type ChatItem =
   | { kind: "error"; text: string; seq?: number }
   /** the turn was stopped here, by a press: what the agent had got to is the rows above */
   | { kind: "stopped"; seq?: number }
+  /** the preview's page threw after the turn's edits, as the person's browser reported it: the
+   * daemon's row, and the box under the log offers to send it. `seq` is what a dismissal of that
+   * offer is remembered by. */
+  | { kind: "page-error"; message: string; seq?: number }
   /** a message Toyon sent the agent itself, as the reason it was sent: what failed. `about` is
    * the kind of thing it was sent for, which is how the box knows a press went on after an error */
   | { kind: "asked"; about: Asked["kind"]; why: string; toolId?: string }
@@ -268,8 +275,9 @@ export interface WorktreeLocal {
   /** how many messages this tab has sent from here: the log goes to its end on each, wherever
    * the reader had scrolled to, since the reply is what they are waiting for now */
   sent?: number;
-  /** live page state (route, title, recent errors) — ambient chat context */
-  page: { url?: string; title?: string; errors: string[] };
+  /** the page under the person's eyes (route, title): ambient chat context. What it threw is the
+   * daemon's to hold, forwarded as it happens; the daemon says it behind the next message. */
+  page: { url?: string; title?: string };
   /** did the current agent turn edit anything / did the page HMR */
   turn: { edits: boolean; hmr: boolean };
   /** changed line ranges cache by path (post-offset numbering from the daemon) */
@@ -359,7 +367,7 @@ export const EMPTY_LOCAL: WorktreeLocal = Object.freeze({
   chat: [],
   log: [],
   queue: [],
-  page: { errors: [] },
+  page: {},
   turn: { edits: false, hmr: false },
   changedRanges: {},
   commitFiles: {},
@@ -719,6 +727,9 @@ export interface State {
   openUrl: string | null;
   /** bumped to request a preview reload for a worktree (the edit/HMR decision lives in this reducer) */
   reloadReq: { id: string; n: number } | null;
+  /** pages the daemon asked this tab to render for a worktree's agent, each in a hidden frame of
+   * that worktree's preview until the tab has answered (Center) */
+  renders: readonly RenderRequest[];
   /** a file is being dragged over a place that takes a drop, and which; null over anywhere else */
   dragFiles: DropZone | null;
   /** the armed element picker's verb: ⌘E's chat, ⌘I's code */
@@ -945,6 +956,7 @@ export function initialState(opts: InitialOpts): State {
     editor: null,
     openUrl: null,
     reloadReq: null,
+    renders: [],
     dragFiles: null,
     picking: false,
     overlay: null,
@@ -1415,7 +1427,9 @@ export type Action =
   | { a: "detach"; id: string; key: string }
   | { a: "clear-attachments"; id: string }
   | { a: "hmr"; id: string }
-  | { a: "page"; id: string; url?: string; title?: string; error?: string; fresh?: boolean }
+  | { a: "page"; id: string; url?: string; title?: string }
+  /** the tab answered a render: its frame comes down */
+  | { a: "render-done"; id: string }
   /** links a preview's page showed, for an app with no route table */
   | { a: "links"; id: string; links: PageLink[] }
   | { a: "drag-files"; v: DropZone | null }
@@ -2012,12 +2026,12 @@ function reduce(s: State, action: Action): State {
     case "page":
       return withLocal(s, action.id, (l) => ({
         ...l,
-        page: {
-          url: action.url ?? l.page.url,
-          title: action.title ?? l.page.title,
-          errors: action.fresh ? [] : action.error ? [...l.page.errors.slice(-2), action.error] : l.page.errors,
-        },
+        page: { url: action.url ?? l.page.url, title: action.title ?? l.page.title },
       }));
+    case "render-done":
+      return s.renders.some((r) => r.id === action.id)
+        ? { ...s, renders: s.renders.filter((r) => r.id !== action.id) }
+        : s;
     case "links":
       return withLocal(s, action.id, (l) => {
         const links = mergeLinks(l.links ?? [], action.links);
@@ -2397,6 +2411,8 @@ function onServer(s: State, msg: StoreServerMsg): State {
       return { ...s, updateCheck: msg.check };
     case "visits":
       return { ...s, visits: { ...s.visits, [msg.repoId]: msg.pages } };
+    case "render":
+      return { ...s, renders: [...s.renders, { worktreeId: msg.worktreeId, id: msg.id, path: msg.path }] };
     case "themes":
       return { ...s, themes: msg.themes, themePrefs: msg.prefs };
     case "daylight":
@@ -2956,6 +2972,8 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
         return [...cut.slice(0, -1), { kind: "error", text: event.message, ...stamp }];
       return [...cut, { kind: "error", text: event.message, ...stamp }];
     }
+    case "page-error":
+      return [...items, { kind: "page-error", message: event.message, ...stamp }];
     case "agent-blocked":
       return [...items, { kind: "blocked", tool: event.tool, path: event.path, reason: event.reason }];
     case "grafted":

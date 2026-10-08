@@ -9,6 +9,8 @@ import { Hub } from "../../src/core/hub.ts";
 import { SelfWatch } from "../../src/core/self.ts";
 import { StateStore } from "../../src/core/state.ts";
 import { ExecService } from "../../src/exec/service.ts";
+import { PageErrorService } from "../../src/preview/errors.ts";
+import { RenderService } from "../../src/preview/render.ts";
 import { AfterLand } from "../../src/repos/afterLand.ts";
 import { RepoRegistry } from "../../src/repos/registry.ts";
 import { RuntimeRegistry } from "../../src/runtime/registry.ts";
@@ -54,6 +56,8 @@ export function world() {
   const refused: Array<[worktreeId: string, said: string]> = [];
   hub.on("messageRefused", (id, said) => refused.push([id, said]));
   const fix = new FixService({ state, hub, runtime });
+  const pageErrors = new PageErrorService({ hub, runtime, known: (id) => state.worktree(id) !== undefined });
+  const render = new RenderService({ runtime, pageErrors, waitMs: 200 });
   const worktrees = new WorktreeService({
     state,
     hub,
@@ -68,6 +72,7 @@ export function world() {
     },
     watch: (id, command, run) => exec.watch(id, command, run),
     fix,
+    pageErrors: (id) => pageErrors.ambient(id),
   });
   const turns = new TurnService({ state, hub, transcript: (id) => runtime.agentFor(id)?.transcript() ?? [] });
   const repos = new RepoRegistry({ state, hub, runtime, worktrees, ...noSelf(state, hub) });
@@ -90,6 +95,8 @@ export function world() {
     cache,
     refused,
     fix,
+    pageErrors,
+    render,
     handoff,
     ...f,
   };

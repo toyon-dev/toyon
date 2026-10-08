@@ -67,6 +67,9 @@ export interface RuntimeDeps {
   /** shared with the http layer that serves the images back; built from paths when absent */
   attachments?: AttachmentStore;
   bridgeScript: () => string;
+  /** the paragraph behind a message that says what the worktree's preview page has thrown since
+   * it last loaded, read as the message goes out; absent in tests */
+  pageErrors?: (worktreeId: string) => string | undefined;
   /** the public name a front may forward preview ports under, and the gate they check
    * (core/remote.ts), as they stand now; absent in tests, where previews answer loopback only */
   remote?: () => Remote | null;
@@ -207,6 +210,7 @@ function defaultAgent(
     worktreeId: wt.id,
     cwd: wt.path,
     preview: () => previewContext(preview()),
+    pageErrors: () => d.pageErrors?.(wt.id),
     onProcess,
     spec,
     connect: (app, spec, prepared) => spawnAcp(app, d.agents.launch(spec, prepared), wt.path, wt.id),

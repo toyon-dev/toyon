@@ -21,6 +21,7 @@ export const SYSTEM_APPEND = [
   "`@some/path` in a message means read that file or directory first; `@changes` means this worktree's uncommitted files, which `git status` lists.",
   'Toyon previews the project in a browser panel by running the commands in its settings file, .toyon/settings.json (or toyon.json at the repo root, in a repo that keeps it there), shaped like {"setup": ["bun install"], "run": {"web": "bun run dev --port $PORT"}, "check": "bun run check", "land": {"route": "merge"}}: setup runs once in every new worktree, teardown (optional) runs once when a worktree is removed, every command in run keeps running and must listen on $PORT, which toyon sets differently for each worktree, check (optional) runs after each of your turns and must pass before the work can land, and land (optional) says how the user lands work on main: route "merge" (onto main here), "push" (onto main here, then pushed) or "pr" (a pull request); method "merge", "squash" or "rebase" for how the commits arrive on main; automerge true when GitHub should merge the pull request itself; timeouts (optional) gives setup, check and commit each a ceiling as a duration like "30m" (ten minutes each when unset), for a suite that runs longer. A settings.local.json beside it (toyon.local.json at the root) holds one person\'s overrides and is never committed. Both files may carry comments and trailing commas; leave any you find.',
   "Toyon runs those commands itself in every worktree, and the user watches the result live in a preview beside this chat, so never start a dev server or open a browser of your own to check your work. Each message says where this worktree's preview answers; fetch a page from there when you want to see it.",
+  "To see whether a page renders without throwing, call the `preview` tool with its path when you have one: a browser the user has open loads it beside what they see and reports what it threw.",
   "When you scaffold a project, write its .gitignore (dependencies, build output, local env files) before installing anything, so an install never leaves thousands of untracked files for the user to wade through or commit.",
   "When you scaffold a project or change how it installs or starts, finish by updating the settings file Toyon already reads, or writing .toyon/settings.json when there is none, so the preview can run it.",
 ].join(" ");
@@ -43,7 +44,9 @@ export type Failure =
   | { kind: "conflict"; base: string; how: "rebase" | "merge"; step?: FailedRun }
   | ({ kind: "check" } & FailedRun)
   | ({ kind: "command" } & FailedRun)
-  | { kind: "preview"; procs: readonly ProcState[]; log: readonly LogLine[] };
+  | { kind: "preview"; procs: readonly ProcState[]; log: readonly LogLine[] }
+  /** the page threw after the agent's edits, in the person's browser, as the bridge worded it */
+  | { kind: "page"; errors: readonly string[] };
 
 /** the command a failure is about, when it is about one */
 export function failedRun(f: Failure): FailedRun | undefined {
@@ -55,6 +58,7 @@ export function failedRun(f: Failure): FailedRun | undefined {
     case "conflict":
       return f.step;
     case "preview":
+    case "page":
       return undefined;
   }
 }
@@ -72,6 +76,8 @@ export function fixPrompt(f: Failure): string {
       return commandFixPrompt(f.command);
     case "preview":
       return procFixPrompt(f.procs, f.log);
+    case "page":
+      return pageFixPrompt(f.errors);
   }
 }
 
@@ -93,7 +99,23 @@ export function fixWhy(f: Failure): string {
     }
     case "preview":
       return "the dev server is not reachable";
+    case "page":
+      return "the preview threw";
   }
+}
+
+/** What the agent is sent when the person presses to hand it what the page threw after its edits.
+ * The errors are in the message itself, since they are the whole of what there is to show. The
+ * cause may sit outside the turn's edits (a page that was broken before them), and the agent is
+ * told it may say so. */
+function pageFixPrompt(errors: readonly string[]): string {
+  return [
+    "After your last edits the preview threw this in the user's browser:",
+    "",
+    ...errors.map((e) => `- ${e}`),
+    "",
+    "Find the cause and fix it, inside this worktree. If your change did not cause it, say what did instead of changing anything.",
+  ].join("\n");
 }
 
 /** The paragraph that shows the agent what failed: the command and what it printed, clipped the

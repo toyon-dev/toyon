@@ -378,6 +378,12 @@ describe("toolLabel", () => {
     expect(toolLabel({ name: "constructor", input: {} }).icon).toBe("dot");
   });
 
+  test("the preview tool prints its name beside the path it rendered, under the globe", () => {
+    const call = { name: "preview", title: "preview", toolKind: "other" as const, input: { path: "/about" } };
+    expect(toolLabel(call)).toMatchObject({ name: "preview", hint: "/about", icon: "globe" });
+    expect(toolLabel({ ...call, input: {} })).toMatchObject({ name: "preview", hint: "", icon: "globe" });
+  });
+
   test("the glyph follows the command's verb where the kind only says `run`", () => {
     const call = {
       name: "Bash",

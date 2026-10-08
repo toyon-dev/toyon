@@ -16,7 +16,17 @@ import type { FileServerMsg, ServerMsg, TermServerMsg } from "./ws.ts";
  * an unknown `t` there is a zod failure the person reads as a wall of discriminator values. The
  * same goes for a new required field on an existing kind.
  */
-export const PROTOCOL_VERSION = 99;
+export const PROTOCOL_VERSION = 100;
+
+/** the most of a page's error the shell forwards: the message and where it was thrown, not a
+ * stack, which the agent reads off the source anyway */
+export const PAGE_ERROR_MAX_CHARS = 2000;
+/** the most of a page's title that travels: a visit's, or a page rendered for the agent */
+export const PAGE_TITLE_MAX_CHARS = 1000;
+/** how many errors a page rendered for the agent reports: the first ones say what broke */
+export const RENDER_ERRORS_MAX = 10;
+/** the most of a page's address that travels with such a report */
+export const PAGE_URL_MAX_CHARS = 2048;
 
 /** the largest file the editor opens or saves, in characters (a read counts bytes, which is never
  * fewer). A larger one opens read-only with nothing in it, and a save of more is refused before any

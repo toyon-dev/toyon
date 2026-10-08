@@ -412,11 +412,6 @@ describe("per-worktree records", () => {
     expect(isGreenfield(initial)).toBe(false);
     expect(run([hello()]).heard).toBe(true);
   });
-  test("page errors keep the last three and reset on a fresh load", () => {
-    const s = run([hello(wt("a")), ...["e1", "e2", "e3", "e4"].map((e): Action => ({ a: "page", id: "a", error: e }))]);
-    expect(s.local.a?.page.errors).toEqual(["e2", "e3", "e4"]);
-    expect(reducer(s, { a: "page", id: "a", url: "u", fresh: true }).local.a?.page).toEqual({ url: "u", errors: [] });
-  });
 });
 
 describe("chat folding", () => {
@@ -3354,5 +3349,35 @@ describe("a handoff", () => {
     const next = reducer(s, worktrees(...rows(), guest()));
     expect(next.activeId).toBe("a");
     expect(ids(next)).toContain("g");
+  });
+});
+
+describe("what the preview threw", () => {
+  test("the daemon's page row folds in with its place, and the page state holds only the route and title", () => {
+    const s = run([
+      hello(wt("a")),
+      server({
+        t: "agent",
+        worktreeId: "a",
+        seq: 4,
+        event: { type: "page-error", message: "boom (src/a.tsx:1)", ts: 1 },
+      }),
+    ]);
+    expect(s.local.a?.chat).toEqual([{ kind: "page-error", message: "boom (src/a.tsx:1)", seq: 4 }]);
+    const paged = reducer(s, { a: "page", id: "a", url: "http://x/about", title: "About" });
+    expect(paged.local.a?.page).toEqual({ url: "http://x/about", title: "About" });
+    expect(reducer(paged, { a: "page", id: "a", title: "About us" }).local.a?.page).toEqual({
+      url: "http://x/about",
+      title: "About us",
+    });
+  });
+});
+
+describe("a page rendered for the agent", () => {
+  test("the ask is kept until this tab answers it, and an answer for no ask changes nothing", () => {
+    const s = run([hello(wt("a")), server({ t: "render", worktreeId: "a", id: "r1", path: "/about" })]);
+    expect(s.renders).toEqual([{ worktreeId: "a", id: "r1", path: "/about" }]);
+    expect(reducer(s, { a: "render-done", id: "nope" })).toBe(s);
+    expect(reducer(s, { a: "render-done", id: "r1" }).renders).toEqual([]);
   });
 });

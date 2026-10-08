@@ -104,3 +104,44 @@ describe("offerOf", () => {
     expect(offerOf(chat, { ...rest, dismissed: new Set(["t0"]) })).not.toBeNull();
   });
 });
+
+describe("offerOf, what the preview threw", () => {
+  const threw = (seq: number, message = "boom"): ChatItem => ({ kind: "page-error", message, seq });
+  const edit: ChatItem = { kind: "tool", id: "e1", name: "Edit", input: {}, done: true, toolKind: "edit" };
+  const read: ChatItem = { kind: "tool", id: "r1", name: "Read", input: {}, done: true, toolKind: "read" };
+
+  test("the page rows since the last edit are offered as one press, keyed by the newest", () => {
+    expect(offerOf([edit, threw(4), { kind: "assistant", text: "Done." }, threw(6, "again")], rest)).toEqual({
+      verb: "fix",
+      key: "page:6",
+      page: { errors: 2 },
+    });
+    // the rows the agent's reading and figures sit among are still in reach
+    expect(offerOf([threw(2), read, { kind: "thinking", text: "hm" }], rest)).toMatchObject({ page: { errors: 1 } });
+  });
+
+  test("a write, a message or the press itself after the rows retires them; a dismissal too", () => {
+    expect(offerOf([threw(2), edit], rest)).toBeNull();
+    expect(offerOf([threw(2), { kind: "user", text: "ok" }], rest)).toBeNull();
+    expect(offerOf([threw(2), { kind: "asked", about: "page", why: "the preview threw" }], rest)).toBeNull();
+    expect(offerOf([threw(2)], { ...rest, dismissed: new Set(["page:2"]) })).toBeNull();
+    // rows before the write are about an older tree: only the ones after count
+    expect(offerOf([threw(1), edit, threw(3)], rest)).toEqual({ verb: "fix", key: "page:3", page: { errors: 1 } });
+  });
+
+  test("a stop or an error the chat ends on is offered first, even under the page rows that followed it", () => {
+    expect(offerOf([threw(2), { kind: "stopped", seq: 3 }], rest)).toMatchObject({ verb: "continue" });
+    expect(offerOf([edit, { kind: "stopped", seq: 3 }, threw(4)], rest)).toEqual({
+      verb: "continue",
+      key: "stopped:3",
+      after: "stop",
+    });
+    expect(offerOf([{ kind: "error", text: "API Error: 529", seq: 3 }, threw(4)], rest)).toMatchObject({
+      verb: "continue",
+      after: "error",
+    });
+    expect(offerOf([{ kind: "stopped", seq: 3 }, threw(4)], { ...rest, dismissed: new Set(["stopped:3"]) })).toBeNull();
+    // a failed command after the rows is its own offer
+    expect(offerOf([threw(2), failed("t1", "bun test")], rest)).toMatchObject({ verb: "fix", toolId: "t1" });
+  });
+});

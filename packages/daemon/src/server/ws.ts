@@ -129,6 +129,16 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
     }
   };
   const send = (ws: ServerWebSocket<WsData>, msg: ServerMsg) => raw(ws, JSON.stringify(msg));
+  // a page rendered for the agent goes to one tab: the one showing the worktree, whose frame of
+  // it is already up, else one with the worktree open, which can mount a frame for it. A preview
+  // socket is a page, not a shell, and mounts nothing.
+  s.render.courier = (worktreeId, msg) => {
+    const shells = [...sockets].filter((ws) => ws.data.authed && !ws.data.preview);
+    const ws = shells.find((w) => w.data.view === worktreeId) ?? shells.find((w) => w.data.subs.has(worktreeId));
+    if (!ws) return false;
+    send(ws, msg);
+    return true;
+  };
   /** every socket: worktree list, proc changes, themes, repos */
   const broadcast = (msg: ServerMsg) => {
     const json = JSON.stringify(msg);

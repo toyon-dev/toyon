@@ -95,7 +95,7 @@ describe("archiveReason", () => {
   test("once one variant landed, the attempts it beat go on their own, commits and all", () => {
     const v = (i: number, w: Partial<WorktreeInfo> = {}) =>
       task(`v${i}`, 1, { variant: { group: "g", index: i, of: 3 }, ...w });
-    const won = v(1, { landed: true, lands: [{ base: "a", tip: "b", at: 1 }], viewedAt: 9 * HOUR });
+    const won = v(1, { landed: true, lands: [{ base: "a", tip: "b", at: 1, subjects: [] }], viewedAt: 9 * HOUR });
     const rows = rail(v(2), v(3), won);
     const ahead = (id: string) => (id === "v1" ? { dirty: 0, ahead: 0 } : { dirty: 0, ahead: 3 });
     // the winner was opened a moment ago and stays; the two it beat do not wait for it

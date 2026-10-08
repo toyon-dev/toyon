@@ -1,11 +1,58 @@
 // The recap line: where the work stands, as the agent's own sentence about it. The composer opens
 // on it as its placeholder, and the rail row's tip carries it.
 
-import type { Landing, LastTurn, PrState, TurnFacts } from "@toyon/shared";
+import type { Landing, LandMark, LastTurn, PrState, TurnFacts } from "@toyon/shared";
 import { ago } from "./util.ts";
 
-/** a clause that ends the line gets its full stop, unless it brought its own */
-export const ended = (text: string) => (/[.!?]$/.test(text) ? text : `${text}.`);
+/** a clause that ends the line gets its full stop, unless it brought its own; a cut line's
+ * ellipsis is its end */
+export const ended = (text: string) => (/[.!?…]$/.test(text) ? text : `${text}.`);
+
+/** the longest line a card prints of text it did not write (a first message, what a landing
+ * carried): past it the line is cut at a word */
+export const LINE_MAX = 160;
+
+/** one line of someone else's text: whitespace folded, cut at a word past the measure */
+export function clipLine(text: string): string {
+  const line = text.replace(/\s+/g, " ").trim();
+  if (line.length <= LINE_MAX) return line;
+  const cut = line.slice(0, LINE_MAX);
+  return `${cut.slice(0, Math.max(cut.lastIndexOf(" "), 1)).trimEnd()}…`;
+}
+
+/** What one landing carried, as a clause with no stop: its subjects on one line, cut at the
+ * measure. Nothing for a landing with no subjects: the state above already says it landed. The
+ * PR it went through is not named here; `landedLine` puts it in front. */
+export function landedWhat(mark: LandMark): string | undefined {
+  return mark.subjects.length ? clipLine(mark.subjects.join("; ")) : undefined;
+}
+
+/** what one landing carried, led by the PR it went through when it did */
+export function landedLine(mark: LandMark): string | undefined {
+  const what = landedWhat(mark);
+  if (!what) return undefined;
+  return mark.pr === undefined ? what : clipLine(`PR #${mark.pr}: ${what}`);
+}
+
+/** The lines that say what a row landed, under a card's state or an archived chat's last word:
+ * one per landing, oldest to newest and the newest `max` of them, led by how many landings came
+ * before those. One landing is its line alone; several carry their age, which is what tells them
+ * apart. A landing with nothing to say is skipped. The subjects stay as they were written, like
+ * the first message above them: a capital put on "shell: fix" reads as Toyon's word, not git's. */
+export function landedLines(lands: readonly LandMark[] | undefined, max = 3): string[] {
+  const said: Array<{ at: number; line: string }> = [];
+  for (const m of lands ?? []) {
+    const line = landedLine(m);
+    if (line) said.push({ at: m.at, line });
+  }
+  if (said.length === 0) return [];
+  const shown = said.slice(-max);
+  const earlier = said.length - shown.length;
+  const lines = shown.map(({ at, line }) =>
+    said.length === 1 ? ended(line) : `${capital(when(ago(at)))}: ${ended(line)}`,
+  );
+  return earlier > 0 ? [`${earlier} earlier landing${earlier === 1 ? "" : "s"}.`, ...lines] : lines;
+}
 
 /** The worktree's PR as the placeholder's first line: what GitHub is waiting on, or that it is
  * done. Read while the PR stands between the work and main. */

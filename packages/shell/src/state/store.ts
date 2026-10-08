@@ -29,6 +29,7 @@ import type {
   InstallMethod,
   KeepAwakeMode,
   Knock,
+  LandMark,
   LogLine,
   ManagedView,
   OwnedWorktree,
@@ -137,7 +138,7 @@ export type ChatItem =
   | { kind: "grafted"; title: string; branch: string }
   /** the daemon's word on a land that merged, kept for the record; `archiveIds` are the variant
    * siblings the landed one leaves behind, offered here where the land is read */
-  | { kind: "landed"; text: string; archiveIds: string[]; ts: number }
+  | { kind: "landed"; text: string; archiveIds: string[]; mark?: LandMark; ts: number }
   /** the daemon's word on a restore from the archive: when it went, what branch it came back on,
    * and whether its uncommitted changes came with it */
   | { kind: "restored"; archivedAt: number; branch: string; uncommitted: boolean; ts: number }
@@ -2951,7 +2952,16 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
     case "grafted":
       return [...items, { kind: "grafted", title: event.title, branch: event.branch }];
     case "landed":
-      return [...items, { kind: "landed", text: event.message, archiveIds: event.archiveIds, ts: event.ts }];
+      return [
+        ...items,
+        {
+          kind: "landed",
+          text: event.message,
+          archiveIds: event.archiveIds,
+          ...(event.mark ? { mark: event.mark } : {}),
+          ts: event.ts,
+        },
+      ];
     case "handoff-proposed":
       return [
         ...items,

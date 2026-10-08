@@ -57,7 +57,9 @@ import { rankMentions } from "../overlays/quickOpen.ts";
 import {
   behindFact,
   checkTip,
+  ended,
   filesLine,
+  landedWhat,
   landFacts,
   landingLine,
   messageGap,
@@ -673,10 +675,16 @@ export function Composer({
   // sentence already there lighting up is the press taken, and a step that holds (a hook, a
   // rebase with work in it, the network) is the one worth naming
   // what is in the way, under the word: nothing when the work is ready, since the word says that
+  // under "archive", what the landing carried: the line above says where it went, so the PR is
+  // not named again here
+  const lastLand = active?.worktree.lands?.at(-1);
+  const landedUnder = lastLand && landedWhat(lastLand);
   const offeredUnder =
     (offered?.word === "land" || offered?.word === "update" || offered?.word === "check") && landing
       ? verdictLine(landing, gap)
-      : null;
+      : offered?.word === "archive" && landedUnder
+        ? ended(landedUnder)
+        : null;
   // The line as it stood at the press, held for as long as the press is out. The land moves
   // everything the line is derived from (the commit empties the tree, the verdict goes, the count
   // becomes the committed files), and a line that followed each of those re-wrote itself two or

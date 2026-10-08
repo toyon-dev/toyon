@@ -1,9 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import type { Landing, LastTurn, PrState, TurnFacts } from "@toyon/shared";
+import type { Landing, LandMark, LastTurn, PrState, TurnFacts } from "@toyon/shared";
 import {
   behindFact,
   checkTip,
+  clipLine,
   filesLine,
+  landedLine,
+  landedLines,
+  landedWhat,
   landFacts,
   landingLine,
   lastStopLine,
@@ -48,6 +52,68 @@ describe("recapLine", () => {
 
   test("no line carries a dash or an arrow", () => {
     for (const [t] of lines) expect(recapLine(t)).not.toMatch(/[\u2013\u2014\u2192]/);
+  });
+});
+
+describe("what a landing carried", () => {
+  const mark = (over: Partial<LandMark> = {}): LandMark => ({
+    base: "a",
+    tip: "b",
+    at: Date.now() - 3600_000,
+    subjects: [],
+    ...over,
+  });
+
+  test("the subjects on one line, and nothing for a landing with none", () => {
+    expect(landedWhat(mark({ subjects: ["add the thing"] }))).toBe("add the thing");
+    expect(landedWhat(mark({ subjects: ["step 1", "step 2"] }))).toBe("step 1; step 2");
+    expect(landedWhat(mark())).toBeUndefined();
+  });
+
+  test("the PR it went through leads the line, and a long line is cut at a word", () => {
+    expect(landedLine(mark({ pr: 12, subjects: ["add the thing"] }))).toBe("PR #12: add the thing");
+    expect(landedLine(mark({ pr: 12 }))).toBeUndefined();
+    const long = Array.from({ length: 8 }, (_, i) => `subject number ${i} of the branch`);
+    const line = landedLine(mark({ subjects: long }));
+    expect(line?.length).toBeLessThanOrEqual(161);
+    expect(line).toMatch(/…$/);
+  });
+
+  test("one landing is its line; several carry their age, newest three, with the rest counted", () => {
+    const one = [mark({ subjects: ["add the thing"] })];
+    expect(landedLines(one)).toEqual(["add the thing."]);
+    expect(landedLines([])).toEqual([]);
+    expect(landedLines(undefined)).toEqual([]);
+    const h = 3600_000;
+    const many = [1, 2, 3, 4, 5].map((n) => mark({ at: Date.now() - (6 - n) * h, subjects: [`step ${n}`] }));
+    expect(landedLines(many)).toEqual(["2 earlier landings.", "3h ago: step 3.", "2h ago: step 4.", "1h ago: step 5."]);
+    expect(landedLines(many.slice(0, 4))).toEqual([
+      "1 earlier landing.",
+      "4h ago: step 2.",
+      "3h ago: step 3.",
+      "2h ago: step 4.",
+    ]);
+    // a landing with nothing to say is not a line, and not counted among the earlier ones
+    expect(landedLines([mark(), ...one])).toEqual(["add the thing."]);
+    // a cut line ends on its ellipsis, with no stop after it
+    const cut = landedLines([mark({ subjects: ["x".repeat(200)] })]);
+    expect(cut[0]).toMatch(/…$/);
+  });
+
+  test("the words around the subjects carry no dash or arrow, and no line breaks", () => {
+    const many = [1, 2, 3, 4].map((n) => mark({ subjects: [`step ${n}`] }));
+    for (const line of landedLines(many)) {
+      expect(line).not.toMatch(/[\u2013\u2014\u2192\n]/);
+    }
+  });
+});
+
+describe("clipLine", () => {
+  test("folds whitespace and cuts at a word past the measure", () => {
+    expect(clipLine("  fix the\n  update race ")).toBe("fix the update race");
+    const long = Array.from({ length: 40 }, (_, i) => `word${i}`).join(" ");
+    expect(clipLine(long).length).toBeLessThanOrEqual(161);
+    expect(clipLine(long)).toMatch(/^word0 .*word\d+…$/);
   });
 });
 

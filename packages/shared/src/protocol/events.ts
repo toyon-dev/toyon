@@ -1,7 +1,7 @@
 // Agent stream events: the daemon's ACP session maps session/update notifications onto these, and
 // the transcript JSONL stores them, so the shape is the ACP one with the fields the shell renders.
 
-import type { PermissionMode } from "../model.ts";
+import type { LandMark, PermissionMode } from "../model.ts";
 
 /** the tool name on a command the person ran from the composer (`!ls`): the daemon records it on
  * the transcript as a tool call so it renders where the agent's own commands do, and the shell
@@ -324,8 +324,9 @@ export type AgentEvent =
   | { type: "grafted"; title: string; branch: string; ts: number }
   /** a land put this worktree's work on main: the daemon's word on it, kept on the transcript so
    * the row reads back after a reload. `archiveIds` are the variant siblings the land leaves
-   * behind, offered on the row for as long as they are still rows */
-  | { type: "landed"; message: string; archiveIds: string[]; ts: number }
+   * behind, offered on the row for as long as they are still rows. `mark` is the landing as the
+   * record keeps it, what landed included; absent on a row written before marks said so */
+  | { type: "landed"; message: string; archiveIds: string[]; mark?: LandMark; ts: number }
   /** a proposal to continue this work in another open project: the agent's through its handoff
    * tool, or the person's through the verb (`by`). A card until a `handoff` or `handoff-declined`
    * with the same id closes it. `message` is what the other project's agent would start from, as

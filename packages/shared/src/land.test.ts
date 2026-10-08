@@ -4,7 +4,7 @@ import { landedNow, movedPastLand, prTaken } from "./land.ts";
 // The one rule every landing path shares: a row is landed when the base has its work, read
 // from the recorded landings and the tree, never from an ahead count alone.
 
-const land = { base: "b0", tip: "t1", at: 1 };
+const land = { base: "b0", tip: "t1", at: 1, subjects: [] };
 const merged = { number: 7, url: "u", state: "merged" as const, at: 2 };
 
 describe("landedNow", () => {

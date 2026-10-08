@@ -1744,6 +1744,10 @@ describe("streams and notices", () => {
     ]);
     expect(localOf(merged, "a").chat).toEqual([{ kind: "landed", text: "a is on main", archiveIds: ["b"], ts: 0 }]);
     expect(merged.openUrl).toBeNull();
+    // the landing rides along when the event carries it, so the row can say what landed
+    const mark = { base: "x", tip: "y", at: 0, subjects: ["add the thing"] };
+    const said = run([...base, agent("a", { type: "landed", message: "m", archiveIds: [], mark, ts: 0 })]);
+    expect(localOf(said, "a").chat).toEqual([{ kind: "landed", text: "m", archiveIds: [], mark, ts: 0 }]);
     const pr = run([...base, server({ t: "shipped", worktreeId: "a", ok: true, message: "m", url: "u" })]);
     expect(localOf(pr, "a").chat).toEqual([]);
     expect(pr.openUrl).toBe("u");

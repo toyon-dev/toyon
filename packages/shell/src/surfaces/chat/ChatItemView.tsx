@@ -18,6 +18,7 @@ import { grouped, type MenuEntry, useContextMenu } from "../../ui/menu.ts";
 import { rowState } from "../../ui/rowState.ts";
 import { Spinner } from "../../ui/Spinner.tsx";
 import { treeKey } from "../../ui/treeNav.ts";
+import { ended, landedLine } from "../recap.ts";
 import { elapsed, spanWords } from "../util.ts";
 import { AskRow } from "./AskRow.tsx";
 import { answeredQuestion, answerLines, decidedPlan } from "./ask.ts";
@@ -1179,8 +1180,17 @@ function LandedRow({ item }: { item: Extract<ChatItem, { kind: "landed" }> }) {
   const dispatch = useDispatch();
   const left = useStore((s) => item.archiveIds.filter((id) => worktreeById(s, id) !== null).length);
   const ago = useAgo(item.ts);
+  // what landed, under the word: the head keeps how it landed, which on the PR route says whether
+  // main here followed, and the line under it is the commits main got
+  const what = item.mark && landedLine(item.mark);
   return (
-    <DaemonRow icon="check" word="landed" tone="aqua" at={item.ts}>
+    <DaemonRow
+      icon="check"
+      word="landed"
+      tone="aqua"
+      at={item.ts}
+      below={what ? <div className="daemon-below row-dim">{ended(what)}</div> : undefined}
+    >
       <span className="daemon-text">
         {item.text}, {ago}
       </span>

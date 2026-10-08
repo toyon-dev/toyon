@@ -3,7 +3,7 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { sh, tmpRepo } from "../../test/helpers/tmp-repo.ts";
 import { GIT } from "./exec.ts";
-import { commitFiles, fileAtCommit, logCommits } from "./log.ts";
+import { commitFiles, fileAtCommit, logCommits, rangeSubjects } from "./log.ts";
 
 const { repo, cleanup } = tmpRepo();
 afterAll(cleanup);
@@ -42,6 +42,33 @@ describe("logCommits", () => {
 
   test("the limit bounds the list", async () => {
     expect(await logCommits(repo, "main", 2)).toHaveLength(2);
+  });
+});
+
+describe("rangeSubjects", () => {
+  test("oldest first, with the full count", async () => {
+    const main = sh(repo, GIT, "rev-parse", "main");
+    expect(await rangeSubjects(repo, main, third)).toEqual(["add a and b", "edit a, drop b", "remove b"]);
+  });
+
+  test("a merge commit in the range is left out", async () => {
+    // a side branch off main merged into feature: the merge says nothing about the work
+    sh(repo, GIT, "checkout", "-q", "-b", "side", "main");
+    commit("on the side", { "s.ts": "s\n" });
+    sh(repo, GIT, "checkout", "-q", "feature");
+    sh(repo, GIT, "merge", "-q", "--no-ff", "-m", "Merge branch 'side' into feature", "side");
+    const tip = sh(repo, GIT, "rev-parse", "HEAD");
+    const main = sh(repo, GIT, "rev-parse", "main");
+    const read = await rangeSubjects(repo, main, tip);
+    // the two parents' order is git's to choose when their commits share a second; the branch's
+    // own stay oldest first, and the merge itself is not among them
+    expect(read?.sort()).toEqual(["add a and b", "edit a, drop b", "on the side", "remove b"]);
+    sh(repo, GIT, "reset", "-q", "--hard", third);
+  });
+
+  test("an empty range holds nothing; a ref git cannot read is null, not empty", async () => {
+    expect(await rangeSubjects(repo, third, third)).toEqual([]);
+    expect(await rangeSubjects(repo, "0".repeat(40), third)).toBeNull();
   });
 });
 

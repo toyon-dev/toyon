@@ -3,13 +3,14 @@ import {
   archiveParts,
   isLead,
   isOwned,
+  type LandMark,
   type ShipOp,
   type TrunkStatus,
   type WorktreeStatus,
 } from "@toyon/shared";
 import { dollars } from "../chat/usage.ts";
 import { originNote } from "../chips/baseNote.ts";
-import { ended, lastStopLine, prLine, recapLine, when } from "../recap.ts";
+import { clipLine, ended, landedLine, landedLines, lastStopLine, prLine, recapLine, when } from "../recap.ts";
 import { ago, type DotState, dotClass, isBusy, shipLabel, stateLabel } from "../util.ts";
 
 /**
@@ -91,18 +92,21 @@ export function rowQuiet(w: WorktreeStatus, op?: ShipOp | null): boolean {
 
 /**
  * The lines under the state in an owned row's card on a desk: where the work stands, so a hover
- * is enough to decide whether to switch. The recap first, since it says what the work is; on a
- * busy row the record's recap is the previous stop's, so it is marked and dated there, or under
- * "Agent working" it would read as the turn in flight. Then where the PR stands, when one is out
- * and the branch has not landed since: the composer's own line for it, which is the fact the rail
- * cannot show and the one that decides whether the row needs a hand. The branch is not among
- * them: it is the title's slug on nearly every row, and the menu has it for copying.
+ * is enough to decide whether to switch. On a landed row, what it landed comes first: the state
+ * says "Landed" and these say what, which is the question a hover over a finished row asks. Then
+ * the recap, since it says what the work is; on a busy row the record's recap is the previous
+ * stop's, so it is marked and dated there, or under "Agent working" it would read as the turn in
+ * flight. Then where the PR stands, when one is out and the branch has not landed since: the
+ * composer's own line for it, which is the fact the rail cannot show and the one that decides
+ * whether the row needs a hand. The branch is not among them: it is the title's slug on nearly
+ * every row, and the menu has it for copying.
  */
 export function cardLines(w: WorktreeStatus & { worktree: NonNullable<WorktreeStatus["worktree"]> }): string[] {
   const turn = w.worktree.lastTurn;
+  const landed = w.worktree.landed ? landedLines(w.worktree.lands) : [];
   const recap = turn ? (isBusy(w) ? lastStopLine : recapLine)(turn) : undefined;
   const pr = w.worktree.pr && !w.worktree.landed ? prLine(w.worktree.pr) : undefined;
-  return [recap, pr].filter((l): l is string => !!l);
+  return [...landed, recap, pr].filter((l): l is string => !!l);
 }
 
 /**
@@ -119,16 +123,17 @@ export function leadLines(
   trunk: TrunkStatus | null,
   defaultBranch: string,
 ): string[] {
-  let last: { title: string; at: number } | undefined;
-  const mark = (title: string, at: number | undefined) => {
-    if (at && (!last || at > last.at)) last = { title, at };
+  let last: { title: string; mark: LandMark } | undefined;
+  const newest = (title: string, lands: readonly LandMark[] | undefined) => {
+    const mark = lands?.[lands.length - 1];
+    if (mark && (!last || mark.at > last.mark.at)) last = { title, mark };
   };
-  for (const w of worktrees) {
-    const lands = w.worktree?.lands;
-    if (w.worktree && lands?.length) mark(w.worktree.title, lands[lands.length - 1]?.at);
-  }
-  for (const a of archived) mark(a.title, a.landedAt);
-  const landed = last ? `Landed ${last.title} ${when(ago(last.at))}.` : undefined;
+  for (const w of worktrees) if (w.worktree) newest(w.worktree.title, w.worktree.lands);
+  for (const a of archived) newest(a.title, a.lands);
+  // what it carried after the name and the time, since "Landed Tag links 15m ago" says which row
+  // and this says what main got from it
+  const what = last && landedLine(last.mark);
+  const landed = last ? `Landed ${last.title} ${when(ago(last.mark.at))}${what ? `: ${ended(what)}` : "."}` : undefined;
   const note = trunk ? originNote(defaultBranch, trunk) : null;
   const origin = note
     ? ended(`${note.charAt(0).toUpperCase()}${note.slice(1)}`)
@@ -138,20 +143,15 @@ export function leadLines(
   return [landed, origin].filter((l): l is string => !!l);
 }
 
-/** the longest line an archived row's first message makes: past it the line is cut at a word */
-const PROMPT_MAX = 160;
-
 /**
- * The line under an archived row's state: the first message sent there, which the record keeps so
- * a row can say what the work was. The last recap would say where the last turn left it, which is
- * not the same thing over a long session; what was asked is true of the whole of it.
+ * The lines under an archived row's state: the first message sent there, which the record keeps so
+ * a row can say what the work was, then what it landed. The last recap would say where the last
+ * turn left it, which is not the same thing over a long session; what was asked is true of the
+ * whole of it, and what landed is what came of it.
  */
 export function archivedLines(a: ArchivedWorktree): string[] {
-  const p = a.prompt?.replace(/\s+/g, " ").trim();
-  if (!p) return [];
-  if (p.length <= PROMPT_MAX) return [p];
-  const cut = p.slice(0, PROMPT_MAX);
-  return [`${cut.slice(0, Math.max(cut.lastIndexOf(" "), 1)).trimEnd()}…`];
+  const p = a.prompt ? clipLine(a.prompt) : "";
+  return [...(p ? [p] : []), ...landedLines(a.lands)];
 }
 
 /**

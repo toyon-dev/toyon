@@ -327,6 +327,10 @@ describe("an archived worktree's changes and history", () => {
       expect((await w.worktrees.land(wt.id)).result).toMatchObject({ ok: true });
       const lands = w.state.worktree(wt.id)?.lands ?? [];
       expect(lands).toMatchObject([{ tip }]);
+      // what main received: the four, or the one squash commit under the verdict's subject
+      expect(lands[0]?.subjects).toEqual(
+        method === "squash" ? ["add the feature"] : ["add f1.txt", "add f2.txt", "add f3.txt", "add f4.txt"],
+      );
       // the branch restarted from main, so the ref is what keeps the four alive
       expect(sh(w.repo, "git", "rev-parse", `refs/toyon/lands/${wt.id}/0`)).toBe(tip);
       await w.worktrees.archiveWorktree(wt.id);
@@ -371,6 +375,63 @@ describe("an archived worktree's changes and history", () => {
     await w.worktrees.archiveWorktree(wt.id);
     expect(subjects(await w.worktrees.gitLog(wt.id))).toEqual(["add a.txt"]);
     expect(await w.worktrees.gitStatus(wt.id)).toMatchObject({ files: [], committed: [{ path: "a.txt" }] });
+  });
+
+  test("the archived row carries its landings, a restore brings them back, and a land after it adds one", async () => {
+    const repoId = await registered();
+    const wt = await w.worktrees.create(repoId, "feature");
+    commitFile(wt.path, "a.txt");
+    expect((await w.worktrees.land(wt.id)).result.ok).toBe(true);
+    await w.worktrees.archiveWorktree(wt.id);
+    const [archived] = w.worktrees.archived(repoId);
+    expect(archived).toMatchObject({ landed: true, lands: [{ subjects: ["add a.txt"] }] });
+    expect(archived).not.toHaveProperty("landedAt");
+    // back and continued: the first landing stays on the record and the second goes after it
+    await w.worktrees.restore(wt.id);
+    await settle();
+    expect(w.state.worktree(wt.id)?.lands).toMatchObject([{ subjects: ["add a.txt"] }]);
+    commitFile(wt.path, "b.txt");
+    commitFile(wt.path, "c.txt");
+    expect((await w.worktrees.land(wt.id)).result.ok).toBe(true);
+    expect(w.state.worktree(wt.id)?.lands).toMatchObject([
+      { subjects: ["add a.txt"] },
+      { subjects: ["add b.txt", "add c.txt"] },
+    ]);
+    await w.worktrees.archiveWorktree(wt.id);
+    expect(w.worktrees.archived(repoId)[0]?.lands).toHaveLength(2);
+  });
+
+  test("marks from before they kept their subjects are filled from their refs at boot, live and archived", async () => {
+    const repoId = await registered();
+    const live = await w.worktrees.create(repoId, "live");
+    commitFile(live.path, "a.txt");
+    expect((await w.worktrees.land(live.id)).result.ok).toBe(true);
+    const gone = await w.worktrees.create(repoId, "gone");
+    commitFile(gone.path, "b.txt");
+    expect((await w.worktrees.land(gone.id)).result.ok).toBe(true);
+    await w.worktrees.archiveWorktree(gone.id);
+    // marks as an older daemon wrote them: the range alone
+    const strip = (m: { subjects?: string[] }) => {
+      delete m.subjects;
+    };
+    const liveMark = w.state.worktree(live.id)!.lands![0]!;
+    strip(liveMark);
+    // the summary hands out the record's own marks, so this is the record
+    const goneMark = w.worktrees.archived(repoId)[0]!.lands![0]!;
+    strip(goneMark);
+    // one whose ref is gone has nothing left to say, and is written as such rather than read again
+    const lost = { base: "0".repeat(40), tip: "1".repeat(40), at: 1 } as typeof liveMark & { subjects?: string[] };
+    w.state.worktree(live.id)!.lands!.push(lost);
+    await w.worktrees.fillLandMarks();
+    expect(liveMark).toEqual({ base: liveMark.base, tip: liveMark.tip, at: liveMark.at, subjects: ["add a.txt"] });
+    expect(goneMark.subjects).toEqual(["add b.txt"]);
+    expect(lost.subjects).toEqual([]);
+    // and written back, so the next start does not read them again
+    const onDisk = JSON.parse(readFileSync(join(w.paths.archiveDir, gone.id, "record.json"), "utf8"));
+    expect(onDisk.worktree.lands[0].subjects).toEqual(["add b.txt"]);
+    const state = JSON.parse(readFileSync(w.paths.stateFile, "utf8"));
+    expect(state.worktrees.find((x: { id: string }) => x.id === live.id).lands[1].subjects).toEqual([]);
+    w.state.worktree(live.id)!.lands!.pop();
   });
 
   test("deleting it for good lets go of what it landed", async () => {

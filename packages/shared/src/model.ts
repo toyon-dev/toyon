@@ -303,7 +303,16 @@ export interface LandMark {
   /** the pull request this landing was: what says a merged PR has been taken, whatever the tree
    * looks like since */
   pr?: number;
+  /** what landed, as the one-line subjects main received, oldest first: a merged PR's title, the
+   * squash message's subject for a squash, the branch's own commits otherwise, at most
+   * LAND_SUBJECTS_MAX of them. Empty when there is nothing to say: a landing that carried no
+   * commits of its own, or one whose range git could no longer read. */
+  subjects: string[];
 }
+
+/** how many subjects a landing keeps: enough to say what a branch of ordinary size carried; a
+ * longer one is cut where it is read */
+export const LAND_SUBJECTS_MAX = 8;
 
 export interface WorktreeInfo {
   id: string;
@@ -418,6 +427,9 @@ export interface PrState {
   number: number;
   url: string;
   state: "open" | "merged" | "closed";
+  /** its title, as GitHub has it: what a landing by PR says it was when the range it merged
+   * cannot be read back */
+  title?: string;
   /** GitHub's review decision; absent when the repo requires no review */
   review?: "approved" | "changes_requested" | "review_required";
   /** the checks, folded to one word; absent when the PR has none */
@@ -762,8 +774,9 @@ export interface ArchivedWorktree {
   dirty?: number;
   /** it had been merged into main */
   landed?: boolean;
-  /** when it last landed on main, whether or not work followed: main's row says what landed last */
-  landedAt?: number;
+  /** every landing it made, oldest first, whether or not work followed: what the row and main's
+   * say landed, and when */
+  lands?: LandMark[];
   /** what its agent's session cost, as the agent last reported it; only an agent that prices
    * itself reports one, so a chat run by one that does not has no figure */
   cost?: number;

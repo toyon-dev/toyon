@@ -388,6 +388,10 @@ const keepAwake = new KeepAwake({
   answerable: () => setting.get() !== null,
 });
 
+// landings recorded before they kept their subjects read them now, before a client can ask: a
+// one-time wait on the first boot after the upgrade, a scan that reads no git on every boot after
+await worktrees.fillLandMarks();
+
 const {
   server,
   branded,

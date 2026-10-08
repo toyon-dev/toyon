@@ -92,10 +92,23 @@ export class WorktreeArchive {
 
   /** a project's archived worktrees, newest first */
   list(repo: { id: string; path: string }): ArchivedWorktree[] {
-    return [...this.records.values()]
-      .filter((r) => r.worktree.repoId === repo.id || r.repoPath === repo.path)
+    return this.recordsOf(repo)
       .sort((a, b) => b.archivedAt - a.archivedAt)
       .map((r) => summarize(r, repo.id, this.filesOf(r.worktree.id).transcript));
+  }
+
+  /** a project's records as they are kept, for a field the daemon fills in place and writes back;
+   * `list` is what the shell is told */
+  recordsOf(repo: { id: string; path: string }): ArchiveRecord[] {
+    return [...this.records.values()].filter((r) => r.worktree.repoId === repo.id || r.repoPath === repo.path);
+  }
+
+  /** write a record held here back to disk after a field on it moved. One a restore took
+   * meanwhile is gone from here and from its directory, so there is nothing to write. */
+  save(id: string): void {
+    const rec = this.records.get(id);
+    if (!rec) return;
+    writeFileSync(this.filesOf(id).record, JSON.stringify(rec, null, 2));
   }
 
   /** where an archived worktree's chat sits, for reading it in place: the page shows the chat as
@@ -150,7 +163,7 @@ export function summarize(r: ArchiveRecord, repoId: string, transcript: string):
     ...(r.sessionId ? { sessionId: r.sessionId } : {}),
     ...(r.kept?.snapshot ? { uncommitted: true, ...(r.kept.dirty ? { dirty: r.kept.dirty } : {}) } : {}),
     ...(r.worktree.landed ? { landed: true } : {}),
-    ...(r.worktree.lands?.length ? { landedAt: r.worktree.lands[r.worktree.lands.length - 1]?.at } : {}),
+    ...(r.worktree.lands?.length ? { lands: r.worktree.lands } : {}),
     ...(r.cost !== undefined ? { cost: r.cost } : {}),
     ...(r.auto ? { auto: r.auto } : {}),
   };

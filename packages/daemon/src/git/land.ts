@@ -662,7 +662,13 @@ export async function openPr(o: OpenPr, w: LandWatch = UNWATCHED): Promise<ShipR
     ok: true,
     url,
     message: `PR #${number} opened${note}`,
-    pr: { number, url, state: "open", ...(o.automerge ? { automerge: true } : {}) },
+    pr: {
+      number,
+      url,
+      state: "open",
+      ...(o.subject ? { title: o.subject } : {}),
+      ...(o.automerge ? { automerge: true } : {}),
+    },
   };
 }
 

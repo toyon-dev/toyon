@@ -71,7 +71,7 @@ function world(answers: Array<PrState | null>, rows: Partial<WorktreeInfo>[] = [
         merged.push(id);
         const wt = state.worktree(id);
         // the landing on the record names the PR, which is what says it was taken
-        if (wt) wt.lands = [...(wt.lands ?? []), { base: "b", tip: "t", at: 1, pr: wt.pr?.number }];
+        if (wt) wt.lands = [...(wt.lands ?? []), { base: "b", tip: "t", at: 1, subjects: [], pr: wt.pr?.number }];
         return { ok: true, message: "pulled" };
       },
     },
@@ -118,7 +118,7 @@ describe("PrService", () => {
         {},
         { pr: open({ number: 13, state: "merged" }) },
         { pr: open({ number: 14 }) },
-        { pr: open({ number: 15, state: "merged" }), lands: [{ base: "b", tip: "t", at: 1, pr: 15 }] },
+        { pr: open({ number: 15, state: "merged" }), lands: [{ base: "b", tip: "t", at: 1, subjects: [], pr: 15 }] },
       ],
     );
     w.hub.emit("repoTick", "r1");

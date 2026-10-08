@@ -1,7 +1,7 @@
 // Branch history for the changes panel's history tab: the commit list, one commit's files, and
 // one file's content on either side of a commit. Read-only; nothing here writes a ref.
 
-import type { CommitEntry, GitFileStatus } from "@toyon/shared";
+import { type CommitEntry, type GitFileStatus, LAND_SUBJECTS_MAX } from "@toyon/shared";
 import { git, gitRaw } from "./exec.ts";
 import { parseNumstat } from "./status.ts";
 
@@ -28,6 +28,20 @@ export async function logCommits(worktreePath: string, defaultBr: string, limit 
 export async function logRange(cwd: string, from: string, to: string, limit = LOG_LIMIT): Promise<CommitEntry[]> {
   const r = await git(cwd, "log", `-n${limit}`, FORMAT, `${from}..${to}`);
   return r.ok && r.out ? parseLog(r.out, () => true) : [];
+}
+
+/** What a landing says it carried: the subjects in `from..to` oldest first, merge commits left out
+ * since a "Merge branch" line says nothing about the work, the first LAND_SUBJECTS_MAX of them.
+ * Null when git could not read the range (a ref gone, a repo missing), which is not a range
+ * holding nothing. */
+export async function rangeSubjects(cwd: string, from: string, to: string): Promise<string[] | null> {
+  const r = await git(cwd, "log", "--no-merges", "--reverse", "--format=%s", `${from}..${to}`);
+  if (!r.ok) return null;
+  return r.out
+    .split("\n")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .slice(0, LAND_SUBJECTS_MAX);
 }
 
 function parseLog(out: string, ahead: (sha: string) => boolean): CommitEntry[] {

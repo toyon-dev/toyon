@@ -34,10 +34,12 @@ describe("landing", () => {
     // the hub hears of it too, after the row's own word, for a worktree that handed this work off
     expect(landedIds).toEqual([wt.id]);
     // the word on it goes on the transcript, where a reload reads it back
+    // with the landing as the record keeps it, what landed included, so the row can say so
     expect(w.agents.get(wt.id)!.recorded.at(-1)).toMatchObject({
       type: "landed",
       message: "merged into main",
       archiveIds: [],
+      mark: { subjects: ["add feature"] },
     });
     expect(existsSync(join(w.repo, "feature.txt"))).toBe(true);
     expect(await parents()).toBe(2);
@@ -135,7 +137,7 @@ describe("landing", () => {
     expect(await w.worktrees.gitStatus(wt.id)).toMatchObject({ files: [], ahead: 0, behind: 0 });
     const row = w.state.worktree(wt.id)!;
     expect(row.landed).toBe(true);
-    expect(row.lands).toEqual([{ base: before, tip, at: expect.any(Number) }]);
+    expect(row.lands).toEqual([{ base: before, tip, at: expect.any(Number), subjects: ["add feature"] }]);
     expect((await git(w.repo, "rev-parse", `refs/toyon/lands/${wt.id}/0`)).out).toBe(tip);
     // a second landing, under a merge commit this time, counts only the commits after the first
     writeFileSync(join(wt.path, "more.txt"), "y\n");
@@ -425,6 +427,8 @@ describe("landing", () => {
     expect(await subjects()).toEqual(["add the feature", "init"]);
     expect((await git(w.repo, "log", "-1", "--format=%b")).out).toBe("Two steps.");
     expect((await git(wt.path, "rev-parse", "HEAD")).out).toBe((await git(w.repo, "rev-parse", "main")).out);
+    // the mark says what main received, the one squash commit, not the two steps it was made of
+    expect(w.state.worktree(wt.id)?.lands).toMatchObject([{ subjects: ["add the feature"] }]);
   });
 
   test("a rebase that conflicts is aborted and the branch is left as it was", async () => {

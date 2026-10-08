@@ -177,6 +177,22 @@ describe("the lines under a card's state", () => {
     expect(cardLines(withTurn({}, { pr, landed: true }))).toEqual(["Dropped the second handler."]);
     expect(cardLines(withTurn({}, { pr, lastTurn: undefined }))).toEqual(["PR #12 open; checks running."]);
   });
+
+  test("a landed row leads with what it landed, each landing on its line once there are several", () => {
+    const one = [{ base: "a", tip: "b", at: Date.now() - 3600_000, subjects: ["drop the second handler"] }];
+    expect(cardLines(withTurn({}, { landed: true, lands: one }))).toEqual([
+      "drop the second handler.",
+      "Dropped the second handler.",
+    ]);
+    const two = [...one, { base: "b", tip: "c", at: Date.now() - 60_000, subjects: ["add a test"] }];
+    expect(cardLines(withTurn({}, { landed: true, lands: two }))).toEqual([
+      "1h ago: drop the second handler.",
+      "1m ago: add a test.",
+      "Dropped the second handler.",
+    ]);
+    // a row that worked on after landing is not landed: its earlier landings are history, not state
+    expect(cardLines(withTurn({}, { lands: two }))).toEqual(["Dropped the second handler."]);
+  });
 });
 
 describe("the figures at a card's foot", () => {
@@ -221,14 +237,30 @@ const NOW = Date.now();
 describe("the lines under main's state", () => {
   test("what landed last, across the rows and the archive, newest wins", () => {
     const rows = [
-      owned({}, { title: "Chip bar", lands: [{ base: "a", tip: "b", at: NOW - 3 * 3600_000 }] }),
-      owned({ id: "b" }, { title: "Tag links", lands: [{ base: "a", tip: "b", at: NOW - 9e5 }] }),
+      owned({}, { title: "Chip bar", lands: [{ base: "a", tip: "b", at: NOW - 3 * 3600_000, subjects: [] }] }),
+      owned({ id: "b" }, { title: "Tag links", lands: [{ base: "a", tip: "b", at: NOW - 9e5, subjects: [] }] }),
     ];
-    expect(leadLines(rows, [arch({ landed: true, landedAt: NOW - 6e5 })], null, "main")).toEqual([
-      "Landed Update fix 10m ago.",
-    ]);
+    expect(
+      leadLines(
+        rows,
+        [arch({ landed: true, lands: [{ base: "a", tip: "b", at: NOW - 6e5, subjects: [] }] })],
+        null,
+        "main",
+      ),
+    ).toEqual(["Landed Update fix 10m ago."]);
     expect(leadLines(rows, [arch({ landed: true })], null, "main")).toEqual(["Landed Tag links 15m ago."]);
     expect(leadLines([owned()], [arch()], null, "main")).toEqual([]);
+  });
+
+  test("what the newest landing carried follows its name and time", () => {
+    const lands = [{ base: "a", tip: "b", at: NOW - 9e5, subjects: ["link the tags", "test it"] }];
+    expect(leadLines([owned({}, { title: "Tag links", lands })], [], null, "main")).toEqual([
+      "Landed Tag links 15m ago: link the tags; test it.",
+    ]);
+    const viaPr = [{ base: "a", tip: "b", at: NOW - 9e5, pr: 12, subjects: ["link the tags"] }];
+    expect(leadLines([], [arch({ landed: true, title: "Tag links", lands: viaPr })], null, "main")).toEqual([
+      "Landed Tag links 15m ago: PR #12: link the tags.",
+    ]);
   });
 
   test("where main stands against origin: the composer's note, or level with the fetch time", () => {
@@ -254,6 +286,19 @@ describe("the line under an archived row's state", () => {
     const [line] = archivedLines(arch({ prompt: long }));
     expect(line?.length).toBeLessThanOrEqual(161);
     expect(line).toMatch(/^word0 .*word\d+…$/);
+  });
+
+  test("what it landed follows the first message, and stands alone when there was none", () => {
+    const lands = [
+      { base: "a", tip: "b", at: NOW - 2 * 3600_000, subjects: ["fix the update race"] },
+      { base: "b", tip: "c", at: NOW - 3600_000, pr: 4, subjects: ["add a test"] },
+    ];
+    expect(archivedLines(arch({ prompt: "fix the update race", lands }))).toEqual([
+      "fix the update race",
+      "2h ago: fix the update race.",
+      "1h ago: PR #4: add a test.",
+    ]);
+    expect(archivedLines(arch({ lands: lands.slice(0, 1) }))).toEqual(["fix the update race."]);
   });
 });
 

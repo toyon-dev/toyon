@@ -332,8 +332,11 @@ export function Tooltips() {
       ) : (
         head
       )}
-      {anchor.detail?.map((line) => (
-        <div key={line} className="tooltip-detail">
+      {anchor.detail?.map((line, i) => (
+        // by place, not text: two landings under one state can read the same, and the list is
+        // built whole on every show
+        // biome-ignore lint/suspicious/noArrayIndexKey: see above
+        <div key={i} className="tooltip-detail">
           {line}
         </div>
       ))}

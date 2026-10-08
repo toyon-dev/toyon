@@ -139,8 +139,8 @@ describe("landing", () => {
     expect((await git(origin, "log", "--format=%s", "-n", "3")).out.split("\n")).toEqual(["add the feature", "init"]);
     expect((await git(origin, "log", "-1", "--format=%b")).out).toBe("Two steps.");
     expect((await git(wt.path, "rev-parse", "HEAD")).out).toBe((await git(origin, "rev-parse", "main")).out);
-    // the two commits it carried are kept under the landing's ref
-    expect(w.state.worktree(wt.id)?.lands).toMatchObject([{ tip }]);
+    // the two commits it carried are kept under the landing's ref; the mark says what main got
+    expect(w.state.worktree(wt.id)?.lands).toMatchObject([{ tip, subjects: ["add the feature"] }]);
     expect((await git(w.repo, "rev-parse", `refs/toyon/lands/${wt.id}/0`)).out).toBe(tip);
     // an adopted branch is squashed from a detached base and keeps its own commits
     sh(w.repo, "git", "branch", "theirs");
@@ -260,7 +260,9 @@ describe("landing", () => {
     expect(main).toBe((await git(origin, "rev-parse", "main")).out);
     expect((await git(wt.path, "rev-parse", "HEAD")).out).toBe(main);
     expect(w.state.worktree(wt.id)).toMatchObject({ landed: true });
-    expect(w.state.worktree(wt.id)?.lands).toEqual([{ base: before, tip, at: expect.any(Number) }]);
+    expect(w.state.worktree(wt.id)?.lands).toEqual([
+      { base: before, tip, at: expect.any(Number), subjects: ["add feature"] },
+    ]);
     expect((await git(origin, "branch", "--list", wt.branch)).out).toBe("");
   });
 
@@ -274,19 +276,28 @@ describe("landing", () => {
     sh(wt.path, "git", "push", "-q", "-u", "origin", wt.branch);
     const tip = (await git(wt.path, "rev-parse", "HEAD")).out;
     const before = (await git(w.repo, "rev-parse", "main")).out;
-    w.worktrees.setPr(wt.id, { number: 7, url: "https://x/pull/7", state: "open", at: 1 });
+    const pr7 = { number: 7, url: "https://x/pull/7", title: "Add the feature" };
+    w.worktrees.setPr(wt.id, { ...pr7, state: "open", at: 1 });
     squashedOnOrigin(other, origin, wt.branch);
     // GitHub's answer comes while a file on main stands in the fast-forward's way: the one the
     // squash on origin adds, started here too and never committed
     writeFileSync(join(w.repo, "feature.txt"), "started here too\n");
-    w.worktrees.setPr(wt.id, { number: 7, url: "https://x/pull/7", state: "merged", at: 2 });
+    w.worktrees.setPr(wt.id, { ...pr7, state: "merged", at: 2 });
     const r = await w.worktrees.prMerged(wt.id);
     // the merge on GitHub is the landing: the record has it and the branch restarted from main
     // here, which stayed where it was and says why; the branch on origin is untouched
     expect(r.ok).toBe(true);
     expect(r.message).toMatch(/^PR #7 merged; main here was left where it is: .*would overwrite \(feature\.txt\)/);
     expect(w.state.worktree(wt.id)).toMatchObject({ landed: true, pr: { number: 7, state: "merged" } });
-    expect(w.state.worktree(wt.id)?.lands).toEqual([{ base: before, tip, at: expect.any(Number), pr: 7 }]);
+    // what landed is the PR, by its title: GitHub landed it by its own method and under that name
+    expect(w.state.worktree(wt.id)?.lands).toEqual([
+      { base: before, tip, at: expect.any(Number), pr: 7, subjects: ["Add the feature"] },
+    ]);
+    // the poll's word on the row carries the mark too
+    expect(w.agents.get(wt.id)!.recorded.at(-1)).toMatchObject({
+      type: "landed",
+      mark: { pr: 7, subjects: ["Add the feature"] },
+    });
     expect((await git(w.repo, "rev-parse", "main")).out).toBe(before);
     // the base is origin's main, which the PR landed on: the branch restarts from there, and
     // main here standing still hides none of it from the row
@@ -362,8 +373,25 @@ describe("landing", () => {
     sh(w.repo, "git", "fetch", "-q");
     w.worktrees.setPr(wt.id, { number: 7, url: "https://x/pull/7", state: "merged", at: 2 });
     expect((await w.worktrees.prMerged(wt.id)).ok).toBe(true);
-    expect(w.state.worktree(wt.id)?.lands).toEqual([{ base: before, tip, at: expect.any(Number), pr: 7 }]);
+    // a PR with no title on the record (gh never answered) falls back to the branch's own commits
+    expect(w.state.worktree(wt.id)?.lands).toEqual([
+      { base: before, tip, at: expect.any(Number), pr: 7, subjects: ["add feature"] },
+    ]);
     expect(w.state.worktree(wt.id)).toMatchObject({ landed: true });
+  });
+
+  test("a merged PR with no commits of its own to read still records its title as what landed", async () => {
+    const repoId = await registered();
+    await withOrigin(repoId);
+    const wt = await w.worktrees.create(repoId, "feature");
+    // nothing committed here: no range against the base, and no reflog of the branch's own
+    // commits, so the record holds the tip alone and the PR's title says what it was
+    w.worktrees.setPr(wt.id, { number: 9, url: "https://x/pull/9", state: "open", title: "add the thing", at: 1 });
+    w.worktrees.setPr(wt.id, { number: 9, url: "https://x/pull/9", state: "merged", title: "add the thing", at: 2 });
+    expect((await w.worktrees.prMerged(wt.id)).ok).toBe(true);
+    const [mark] = w.state.worktree(wt.id)?.lands ?? [];
+    expect(mark).toMatchObject({ pr: 9, subjects: ["add the thing"] });
+    expect(mark?.base).toBe(mark?.tip ?? "x");
   });
 
   test("a merged PR lands a worktree with uncommitted edits without losing them", async () => {

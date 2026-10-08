@@ -43,6 +43,11 @@ describe("parsePrView", () => {
     expect(parsePrView(JSON.stringify({ ...base, state: "MERGED", mergedAt: "2026-09-13T00:00:00Z" }))).toMatchObject({
       state: "merged",
     });
+    // the title rides along when gh gives one, trimmed; a blank one is no title
+    expect(parsePrView(JSON.stringify({ ...base, title: " add the thing " }))).toMatchObject({
+      title: "add the thing",
+    });
+    expect(parsePrView(JSON.stringify({ ...base, title: "" }))).not.toHaveProperty("title");
     expect(parsePrView(JSON.stringify({ ...base, state: "CLOSED" }))).toMatchObject({ state: "closed" });
     expect(
       parsePrView(

@@ -53,7 +53,8 @@ export function parseAllowed(json: string): AllowedMethods | null {
 }
 
 /** the fields the box reads, in one call */
-export const PR_VIEW_FIELDS = "number,url,state,mergedAt,reviewDecision,statusCheckRollup,mergeable,autoMergeRequest";
+export const PR_VIEW_FIELDS =
+  "number,url,title,state,mergedAt,reviewDecision,statusCheckRollup,mergeable,autoMergeRequest";
 
 export async function viewPr(repoPath: string, number: number): Promise<PrState | null> {
   const r = await gh(["pr", "view", String(number), "--json", PR_VIEW_FIELDS], repoPath, 20_000);
@@ -88,6 +89,7 @@ export function parsePrView(json: string): Omit<PrState, "at"> | null {
     number: o.number,
     url: o.url,
     state,
+    ...(typeof o.title === "string" && o.title.trim() ? { title: o.title.trim() } : {}),
     ...(review ? { review } : {}),
     ...(checks ? { checks } : {}),
     ...(mergeable !== undefined ? { mergeable } : {}),

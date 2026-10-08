@@ -571,7 +571,7 @@ export const ToolRow = memo(
      * shine that came and went with each call would restart its sweep every time and strobe
      * rather than travel. */
     working?: boolean;
-    /** this row's call is the one executing (runningRow in group.ts), so its wait is counted
+    /** this row's call is the one executing (runningOf in the store), so its wait is counted
      * here, from this stamp: when the call reached the head of the batch, by the store's clock.
      * A floating spawn row is handed the log's last event instead (ChatLog): a subagent's calls
      * land in the log, so the seconds say how long nobody has been heard from. The row passes the
@@ -608,8 +608,9 @@ export const ToolRow = memo(
     const waits = streaming && !!queued;
     // How long the call has been executing. The shine says busy the same way whether the call is
     // running or wedged; the count climbing beside it is what tells them apart, and only the
-    // row at the head of the batch counts, from when it got there (runningRow in group.ts picks
-    // it). The store keeps the stamp, since this row is rebuilt on every switch of worktree. A
+    // row at the head of the batch counts, from when it got there (runningOf in the store picks
+    // it, and ChatLog hands the stamp to the row holding that call's id). The store keeps the
+    // stamp, since this row is rebuilt on every switch of worktree. A
     // background spawn's own call returned at once, so its row counts while it is at work instead.
     const age = useSecondsSince(streaming || working ? since : undefined);
     // A spawn row's seconds are the subagent's silence, and beside "42 calls" a bare number read
@@ -669,7 +670,10 @@ export const ToolRow = memo(
     const sock = useSock();
     // A `!` command's stop sits on its own row, since it kills the command and not the agent,
     // whose stop is the composer's corner. A landing's git steps run as the same rows, so the
-    // press then ends the landing, and the label says which it is.
+    // press then ends the landing, and the label says which it is. The row's square wears the
+    // row's own grey at rest and goes red under the pointer (chat.css): a running command floats
+    // straight over the composer, and two red squares stacked on one edge read as twins, so the
+    // square that is always red is the agent's alone.
     const op = useStore((s) => (worktreeId ? s.shipping[worktreeId]?.op : undefined));
     const stoppable = streaming && head.name === SHELL_TOOL && worktreeId ? { worktreeId, toolId: last.id } : null;
     return (
@@ -729,7 +733,6 @@ export const ToolRow = memo(
             {stoppable && (
               <IconButton
                 icon="stop"
-                tone="danger"
                 className="tool-stop"
                 label={
                   op

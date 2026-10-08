@@ -42,11 +42,16 @@ export type FloatingEntry = SpawnEntry | ToolEntry;
 
 /** A command the agent sent to the background, still running: its call returned at once and the
  * row is held open by the daemon, which tails the output in and ends the row when the command
- * ends. A `!` command whose shell left a server running carries the same mark but stays put: it
- * is the person's own row, open where they ran it. */
-export function inBackground(entry: ToolEntry): boolean {
+ * ends. A `!` command still running floats the same way: the person ran it at the foot, and a
+ * message sent to the agent meanwhile lands a reply under it, which pushes the one line with its
+ * stop and its seconds up over the words, where nobody is looking. Several run at once as a
+ * stack, each with its own stop. One whose shell has exited and left a server running carries
+ * the background mark but stays put: that can run for an hour, and a row floating for an hour is
+ * a banner, not a pin. */
+export function floats(entry: ToolEntry): boolean {
   const last = entry.tools.at(-1)!;
-  return !!last.background && !last.done && !last.parentToolId && last.name !== SHELL_TOOL;
+  if (last.done || last.parentToolId) return false;
+  return last.name === SHELL_TOOL ? !last.background : !!last.background;
 }
 
 /** kinds whose hint names the thing the call was about, where a repeat is the same call again:
@@ -215,7 +220,8 @@ export function spawnsAtWork(items: ChatItem[]): Set<string> {
  * A command running in the background floats the same way, for the same reason: its call is a
  * line the agent wrote minutes ago, and the shine on it is above everything said since, which is
  * where nobody is looking. It runs past the turn, so it floats past the turn too, and ends where
- * it was called: the agent's next words about it land under it either way. */
+ * it was called: the agent's next words about it land under it either way. A `!` command still
+ * running is the same case (floats), and settles where it was typed. */
 export function placeSpawns(
   entries: ChatEntry[],
   atWork: ReadonlySet<string>,
@@ -233,7 +239,7 @@ export function placeSpawns(
         floor = Math.max(floor, entry.end);
         keyed.push({ key: floor, entry });
       }
-    } else if ("tools" in entry && inBackground(entry)) floating.push(entry);
+    } else if ("tools" in entry && floats(entry)) floating.push(entry);
     else keyed.push({ key: entry.at, entry });
   }
   // a spawn held to the floor shares its key with the one that set it; the sort is stable and the
@@ -257,24 +263,12 @@ export function ownCallRunning(items: ChatItem[]): boolean {
   );
 }
 
-/** The row whose call is the one actually executing, or -1: the oldest own call still open. An
- * agent writes a batch of calls in one message and every row opens as its input lands, then works
- * the batch in order, so a read written behind a slow command is open for the whole wait and a
- * count on its row would say the read was slow. Nothing on the wire says when a call starts (no
- * in_progress at start; acp/map.ts), so the head of the queue is the one running. A subagent's
- * call and the spawn that waits on one are not candidates (subagentsAtWork), nor is a command
- * running in the background: the agent has moved on from it, and its row counts its own wait. */
-export function runningRow(entries: ChatEntry[]): number {
-  return entries.findIndex(
-    (e) => "tools" in e && !e.tools[0]!.parentToolId && !e.tools.at(-1)!.done && !e.tools.at(-1)!.background,
-  );
-}
-
 /** The open rows whose calls have not started: written into the batch behind a call that runs
  * alone. An agent runs a batch in order, the calls that only look (a read, a search, a fetch) side
  * by side and each call that can change something by itself, so a read written after a command is
  * open for the command's whole run without having begun, and a shine on its row would say three
- * things are happening where one is. Nothing on the wire says when a call starts (runningRow), so
+ * things are happening where one is. Nothing on the wire says when a call starts (no in_progress
+ * at start; acp/map.ts), so the head of the batch is the one running (runningOf in the store) and
  * this is read off the kinds: a row waits when a call that runs alone is open ahead of it, and one
  * that runs alone waits for every open call ahead of it. An unknown kind counts as looking: a row
  * that shines a moment early is a smaller lie than a running one that sits still. `nested` reads a

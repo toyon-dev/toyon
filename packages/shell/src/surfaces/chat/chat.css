@@ -654,10 +654,16 @@
     }
     /* the stop for a command still running, at the line's far end where the composer's corner
    holds the agent's: the one control on a row, so it sits apart from the words it would be read
-   as part of */
+   as part of. Red only under the pointer: the row floats straight over the composer while the
+   command runs, and the agent's stop is red at rest, so a red square here too made twins on one
+   edge with nothing but a tip to tell them apart. At rest it is a row's control, grey like a
+   tab's close; on a phone, with no pointer, it stays that. */
     & .tool-stop {
       flex: 0 0 auto;
       margin-left: auto;
+      :where([data-hover]) &:hover {
+        color: var(--red);
+      }
     }
     /* one call's output inside a row that holds several: the rule is what says where the next hunk
    starts, since the calls are otherwise the same edit to the same file twice over */

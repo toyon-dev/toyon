@@ -38,8 +38,8 @@ import {
   placeSpawns,
   queuedRows,
   reuseEntries,
-  runningRow,
   spawnsAtWork,
+  type ToolEntry,
 } from "./group.ts";
 import { openCard } from "./handoff.ts";
 import { ImageChip } from "./ImageChip.tsx";
@@ -363,8 +363,10 @@ export function ChatLog({
     working && last && "item" in last && (last.item.kind === "thinking" || last.item.kind === "assistant")
       ? entries.length - 1
       : -1;
-  // the newest `!` command is the one whose output is open; each one closes the one before it
-  const newestShell = entries.findLastIndex((e) => "tools" in e && e.tools[0]?.name === SHELL_TOOL);
+  // the newest `!` command is the one whose output is open; each one closes the one before it.
+  // Read over every row and not the flow alone: a running one floats, and the one before it, back
+  // in the flow, would open again as the flow's newest.
+  const newestShell = grouped.findLast((e) => "tools" in e && e.tools[0]?.name === SHELL_TOOL)?.at;
   // How long the log has been silent, in whole seconds. Between two calls nothing is in flight and
   // no row is live, and that gap is most of a turn; a mark that moves would say "busy" the same way
   // whether the agent is thinking or wedged, and this is the one signal that changes with the
@@ -398,13 +400,15 @@ export function ChatLog({
   const calling = ownCallRunning(items);
   const fanned = floating.length > 0;
   const moving = streaming >= 0 || calling || fanned;
-  // the one row whose call is executing, which is the row that counts its wait (runningRow in group.ts)
-  const countingRow = useMemo(() => runningRow(entries), [entries]);
-  // the rows written behind it that have not started, which hold still until they do
+  // the rows written behind the executing one that have not started, which hold still until they do
   const queued = useMemo(() => queuedRows(entries), [entries]);
-  // when that call reached the head of the batch, stamped by the store (the row is rebuilt on
-  // every switch of worktree, so a clock of its own would start over)
+  // The one call executing, the head of the batch, and when it got there, stamped by the store
+  // (the row is rebuilt on every switch of worktree, so a clock of its own would start over).
+  // Its row counts the wait, found by the call's id: a `!` command at the head floats, so the
+  // flow's first open row is the agent's own call behind it, which is not the one counting.
   const running = useLocalField(id, "running");
+  const sinceOf = (entry: ToolEntry) =>
+    running && entry.tools.some((t) => t.id === running.id) ? running.at : undefined;
 
   // The rows: last render's element wherever the row gets the same props (rowCache.ts), so a token
   // streaming into the foot of a long log costs the rows above it nothing. `worktreeId` is among
@@ -422,8 +426,8 @@ export function ChatLog({
             props: {
               tools: entry.tools,
               next: entry.next,
-              live: i === liveRow || i === newestShell,
-              since: i === countingRow ? running?.at : undefined,
+              live: i === liveRow || entry.at === newestShell,
+              since: sinceOf(entry),
               queued: queued.has(i),
               roots,
               worktreeId: id,
@@ -463,9 +467,12 @@ export function ChatLog({
       <div className="chat-log" ref={logRef}>
         {lead}
         {cached.rows}
-        {/* the subagents at work and the commands running in the background, under everything
-            that landed since they started: the same row, with the same key, so it keeps its fold
-            and moves rather than remounts when it settles */}
+        {/* the subagents at work and the commands still running, the agent's in the background and
+            the person's own, under everything that landed since they started: the same row, with
+            the same key, so it keeps its fold and moves rather than remounts when it settles. A
+            `!` command's row is the row it is in the flow: open while it is the newest, counting
+            its own run and not the log's silence (the agent's reply landing beside it is not its
+            motion), and on the walk. */}
         {floating.map((entry) =>
           "spawn" in entry ? (
             <ToolRow
@@ -476,6 +483,16 @@ export function ChatLog({
               since={chatAt}
               roots={roots}
               worktreeId={id}
+            />
+          ) : entry.tools[0]?.name === SHELL_TOOL ? (
+            <ToolRow
+              key={entry.at}
+              tools={entry.tools}
+              live={entry.at === newestShell}
+              since={sinceOf(entry)}
+              roots={roots}
+              worktreeId={id}
+              marked={entry.at === markAt}
             />
           ) : (
             <ToolRow key={entry.at} tools={entry.tools} since={chatAt} roots={roots} worktreeId={id} />

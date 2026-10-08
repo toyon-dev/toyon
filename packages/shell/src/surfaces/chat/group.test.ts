@@ -11,7 +11,6 @@ import {
   reuseEntries,
   runCalls,
   runningInRun,
-  runningRow,
   spawnsAtWork,
   type ToolItem,
 } from "./group.ts";
@@ -560,8 +559,23 @@ describe("placeSpawns", () => {
     expect(placed(done)).toEqual({ flow: [0, 1, 2, 3], floating: [] });
   });
 
+  /** a `!` command, as the daemon writes its row: the person's own, open while it runs */
+  const shCmd = (id: string, extra: Partial<ChatItem> = {}) =>
+    tool("execute", "", { id, name: SHELL_TOOL, input: { command: "bun test" }, done: false, ...extra });
+
+  test("a `!` command still running floats at the foot, under the reply that landed meanwhile, and settles where it was typed", () => {
+    const items = [shCmd("sh1"), { kind: "user", text: "and prod?" } as ChatItem, text("Yes, prod too.")];
+    expect(placed(items)).toEqual({ flow: [1, 2], floating: ["sh1"] });
+    // two kicked off while the agent talks float as a stack, in the order they were run
+    const two = [shCmd("sh1"), text("On it."), shCmd("sh2"), text("Still on it.")];
+    expect(placed(two)).toEqual({ flow: [1, 3], floating: ["sh1", "sh2"] });
+    // exited: back in the flow at the line it was typed on
+    const done = [shCmd("sh1", { done: true, output: "12 pass" }), ...items.slice(1)];
+    expect(placed(done)).toEqual({ flow: [0, 1, 2], floating: [] });
+  });
+
   test("a `!` command whose shell left a server running is marked the same way but stays put", () => {
-    const items = [bgCmd("sh1", { name: "shell", input: { command: "bun dev &" } }), text("Started it.")];
+    const items = [bgCmd("sh1", { name: SHELL_TOOL, input: { command: "bun dev &" } }), text("Started it.")];
     expect(placed(items)).toEqual({ flow: [0, 1], floating: [] });
   });
 
@@ -569,8 +583,6 @@ describe("placeSpawns", () => {
     const items = [bgCmd("cmd1"), text("Meanwhile:"), tool("read", "/wt/a.ts", { done: false })];
     expect(ownCallRunning([bgCmd("cmd1"), text("Meanwhile:")])).toBe(false);
     expect(ownCallRunning(items)).toBe(true);
-    // the wait counted is the read's, at its row, not the command's
-    expect(runningRow(placeSpawns(groupTools(items, ["/wt"]), spawnsAtWork(items)).flow)).toBe(1);
   });
 
   test("a spawn at work floats at the foot, under everything the main agent did since", () => {
@@ -667,42 +679,6 @@ describe("ownCallRunning", () => {
   test("a spawn whose brief is still being written is the main agent's own motion", () => {
     expect(ownCallRunning([spawn("task1", "", { done: false, input: {} })])).toBe(true);
     expect(ownCallRunning([spawn("task1", "Map the runtime", { done: false })])).toBe(false);
-  });
-});
-
-describe("runningRow", () => {
-  const sub = (id: string, extra: Partial<ChatItem> = {}) => tool("read", "/wt/a.ts", { parentToolId: id, ...extra });
-  const running = (items: ChatItem[]) => runningRow(groupTools(items, ["/wt"]));
-
-  test("no call open, no row", () => {
-    expect(running([])).toBe(-1);
-    expect(running([text("Hi"), tool("execute", "")])).toBe(-1);
-  });
-
-  test("a batch counts on its oldest open call: the reads behind a command wait for it", () => {
-    const batch = [
-      text("Hi"),
-      tool("execute", "", { name: "Bash", input: { command: "bun run check" }, done: false }),
-      tool("read", "/wt/a.png", { name: "Read", done: false }),
-      tool("read", "/wt/b.png", { name: "Read", done: false }),
-    ];
-    expect(running(batch)).toBe(1);
-    // the command lands and the first read is the one executing
-    const landed = batch.map((i, at) => (at === 1 ? { ...i, done: true } : i)) as ChatItem[];
-    expect(running(landed)).toBe(2);
-  });
-
-  test("a run of calls on one file counts while its newest call is open", () => {
-    const run = [tool("edit", "/wt/a.ts"), tool("edit", "/wt/a.ts", { done: false })];
-    expect(running(run)).toBe(0);
-  });
-
-  test("a spawn and its subagent's calls never count: their work is under the log", () => {
-    expect(running([spawn("task1", "Map the runtime", { done: false }), sub("task1", { done: false })])).toBe(-1);
-    const unflagged = tool("think", "", { id: "task2", done: false, subagent: undefined });
-    expect(running([unflagged, sub("task2", { done: false })])).toBe(-1);
-    // an orphan subagent call keeps its place in the flow but is still not the main agent's
-    expect(running([sub("gone", { done: false })])).toBe(-1);
   });
 });
 

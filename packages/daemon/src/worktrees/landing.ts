@@ -4,7 +4,10 @@
 // The check decides; the model's doubt is kept as a sentence. The verdict is about the tree, not
 // the turn: one that says the work can land stands through a new turn for as long as the tree is
 // the one it saw, so a message that only asks, or sends the agent to work somewhere else, leaves
-// the word where it was. A tree that changes under it goes stale (service.gitStatus), and the
+// the word where it was. A turn Toyon itself sent to fix a failure is the one kind that is sure
+// to move the tree, so it takes the verdict with it as it starts, before a file has moved: a
+// press on the word while the agent rebases would meet the same conflict, or tear the agent's
+// rebase down. A tree that changes under it goes stale (service.gitStatus), and the
 // same question can be asked again by hand, or the check alone re-run after a discard, which
 // narrows the work without changing what the sentence and the message say about it. The sentence
 // is the turn's recap and stays with the turn.
@@ -97,6 +100,9 @@ export class LandingService {
       this.note(id, status);
       if (status === "working") this.turnStarts(id);
     });
+    // the fix turn is sent to change the tree, so no verdict about it stands; the check after
+    // the turn decides again
+    d.hub.on("fixAsked", (id) => this.clear(id));
   }
 
   /** A new turn may be new work or none. A verdict that says the work can land stays: the

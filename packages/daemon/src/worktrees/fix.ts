@@ -127,6 +127,7 @@ export class FixService {
       asked: { kind: failure.kind, why: fixWhy(failure), ...(toolId ? { toolId } : {}) },
       ...(context ? { context: [context] } : {}),
     });
+    this.d.hub.emit("fixAsked", worktreeId);
     return true;
   }
 

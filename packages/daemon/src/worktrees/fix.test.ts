@@ -103,6 +103,15 @@ describe("FixService.report", () => {
     expect(asks()[0]?.asked).toEqual({ kind: "conflict", why: "the branch needs a rebase onto main" });
   });
 
+  test("the hub hears of each turn sent to fix something, and of nothing that was only offered", async () => {
+    const { wt } = await setup();
+    const heard: string[] = [];
+    w.hub.on("fixAsked", (id) => heard.push(id));
+    expect(w.fix.report(wt.id, { kind: "conflict", base: "main", how: "rebase" })).toBe(true);
+    expect(w.fix.report(wt.id, { kind: "command", toolId: "shell-1", command: "bun test", text: "no\n" })).toBe(false);
+    expect(heard).toEqual([wt.id]);
+  });
+
   test("the check is asked once in a row; a press is not held to that", async () => {
     const { wt, asks, heard } = await setup();
     expect(w.fix.report(wt.id, check(1))).toBe(true);

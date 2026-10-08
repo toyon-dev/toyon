@@ -353,6 +353,19 @@ describe("LandingService", () => {
     expect(w.wt()?.landing).toBeUndefined();
   });
 
+  test("a turn sent to fix a failure drops a verdict that says the work can land, before a file moves", async () => {
+    w = world({ verdict: { ready: true, subject: "add the feature" } });
+    w.dirty();
+    await w.settle();
+    expect(w.wt()?.landing?.ready).toBe(true);
+    // the landing's rebase conflicted and the agent was sent to resolve it: the tree is still the
+    // one the verdict saw, and the word would stand through the turn's start on that alone
+    w.hub.emit("fixAsked", "w1");
+    expect(w.wt()?.landing).toBeUndefined();
+    w.hub.emit("agentStatus", "w1", "working");
+    expect(w.wt()?.landing).toBeUndefined();
+  });
+
   test("a new turn keeps a verdict that says the work can land, and one that leaves the tree alone runs no check", async () => {
     const answers: LandVerdict[] = [
       {

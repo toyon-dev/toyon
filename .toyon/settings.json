@@ -1,9 +1,9 @@
 {
   "setup": ["bun install", "bun run --cwd packages/bridge build"],
   "run": {
-    "daemon": "./scripts/dev-daemon.sh",
-    "web": "TOYON_DAEMON_URL=$DAEMON_URL bun run --cwd packages/shell dev",
-    "app": "bun run build && ./scripts/dev-daemon.sh"
+    "daemon": "./scripts/dev.sh daemon",
+    "web": "./scripts/dev.sh shell",
+    "app": "bun run build && ./scripts/dev.sh daemon"
   },
   "afterLand": ["./scripts/after-land.sh"],
   "land": { "method": "rebase" },

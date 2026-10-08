@@ -1,17 +1,51 @@
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { DAEMON_DEFAULT_PORT, SHELL_DEV_PORT } from "@toyon/shared/ports";
 import react from "@vitejs/plugin-react";
-import { defineConfig } from "vite";
+import { defineConfig, type Plugin } from "vite";
 
 // Both defaults are for `bun run shell:dev` against the daemon you started by hand. Run as a
-// toyon proc (.toyon/settings.json), the supervisor hands us $PORT to listen on and the sibling daemon's
+// toyon proc (scripts/dev.sh), the supervisor hands us $PORT to listen on and the sibling daemon's
 // URL: 4141 is then the outer daemon, the one running this worktree, and talking to it would
 // make the preview a mirror of the shell framing it rather than its own instance.
 const port = Number(process.env.PORT) || SHELL_DEV_PORT;
 const daemon = process.env.TOYON_DAEMON_URL || `http://127.0.0.1:${DAEMON_DEFAULT_PORT}`;
 const target = { target: daemon, changeOrigin: true };
+// the nested daemon's state dir, set by scripts/dev.sh alone: by hand there is none, and the
+// page is reached with the token on the link
+const nestedHome = process.env.TOYON_HOME;
+
+/**
+ * Hands the nested daemon's token to the page it serves. The preview is a browser origin that has
+ * never held that token, so the shell would knock, and the one screen that could answer is the
+ * daemon's own preview: nobody. The token is read per request, because the daemon writes it after
+ * this server is up, and a cleared state dir mints a new one. It goes into storage under the key
+ * the boot script in index.html and ws.ts read, ahead of both. Serve only: a built shell is what a
+ * user gets, and its page carries nothing.
+ */
+function nestedToken(home: string): Plugin {
+  return {
+    name: "toyon-nested-token",
+    apply: "serve",
+    transformIndexHtml: {
+      order: "pre",
+      handler: async () => {
+        const token = (await readFile(join(home, "token"), "utf8").catch(() => "")).trim();
+        if (!/^[a-f0-9]+$/.test(token)) return [];
+        return [
+          {
+            tag: "script",
+            injectTo: "head-prepend",
+            children: `try { localStorage.setItem("toyon-token", ${JSON.stringify(token)}); } catch {}`,
+          },
+        ];
+      },
+    },
+  };
+}
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), ...(nestedHome ? [nestedToken(nestedHome)] : [])],
   build: {
     // A rebuild rotates every hashed chunk name, and the daemon serves this directory straight off
     // disk: clearing it first pulls the chunks out from under whatever tabs are already open, which

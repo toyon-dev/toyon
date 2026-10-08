@@ -6,7 +6,15 @@
 // command that stops to ask a question should fail on a closed stdin rather than sit forever
 // waiting for keystrokes nobody can type. Anything interactive belongs in the terminal pane.
 
-import { type AgentEvent, CHECK_TOOL, type Fixable, SHELL_TOOL, type Shipping, shipNoun } from "@toyon/shared";
+import {
+  type AgentEvent,
+  CHECK_TOOL,
+  type Fixable,
+  SHELL_TOOL,
+  type ShellInput,
+  type Shipping,
+  shipNoun,
+} from "@toyon/shared";
 import type { Subprocess } from "bun";
 import type { AgentAdapter } from "../agent/adapter.ts";
 import { formatOutput, OUTPUT_CAP } from "../agent/output.ts";
@@ -101,7 +109,8 @@ export class ExecService {
     const toolId = `${name}-${Date.now().toString(36)}-${++this.n}`;
     // a quiet run (the check again after a discard) is on the transcript only when it fails: the
     // rows are what lets "fix it" work, and a pass has nothing to fix
-    const start = { type: "tool-start", toolId, name, input: { command }, kind: "execute" } as const;
+    const input: ShellInput = { command };
+    const start = { type: "tool-start", toolId, name, input, kind: "execute" } as const;
     if (!opts.quiet) agent.note(start);
     // PWD keeps the shell on the path as spelled, the same as the terminal pane
     const cwd = wt.path;
@@ -163,7 +172,8 @@ export class ExecService {
    * The row's stop aborts `signal`, the same press that kills a `!` command. Refuses the way
    * `exec` does when there is no transcript to write to, before the command runs. A step a hook
    * refused is the one failure here marked fixable: a rejected push or a fetch with no network is
-   * not the agent's. */
+   * not the agent's. The input says the step is a landing's, so the shell keeps its clean-exit
+   * mark for commands the person typed: the landed row is what says how a step went. */
   async watch<T extends { exit: number | string | null; text: string; ceilingMs?: number; hook?: string }>(
     worktreeId: string,
     command: string,
@@ -173,7 +183,8 @@ export class ExecService {
     const toolId = `${SHELL_TOOL}-${Date.now().toString(36)}-${++this.n}`;
     const ctl = new AbortController();
     this.track(worktreeId, toolId, { stop: async () => ctl.abort() });
-    const start = { type: "tool-start", toolId, name: SHELL_TOOL, input: { command }, kind: "execute" } as const;
+    const input: ShellInput = { command, landing: true };
+    const start = { type: "tool-start", toolId, name: SHELL_TOOL, input, kind: "execute" } as const;
     let text = "";
     let truncated = false;
     let up = false;

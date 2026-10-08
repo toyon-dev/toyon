@@ -288,6 +288,7 @@ describe("landing", () => {
     const start = rows[0];
     expect(start?.type === "tool-start" && start.name === SHELL_TOOL && start.input).toEqual({
       command: 'git commit -m "add feature"',
+      landing: true,
     });
     const end = rows[1];
     expect(end?.type === "tool-end" && end.isError).toBe(true);
@@ -327,6 +328,7 @@ describe("landing", () => {
     const start = rows[0];
     expect(start?.type === "tool-start" && start.input).toEqual({
       command: expect.stringMatching(/^git push origin [0-9a-f]{40}:refs\/heads\/main$/),
+      landing: true,
     });
     const end = rows[1];
     expect(end?.type === "tool-end" && end.isError).toBe(true);

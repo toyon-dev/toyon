@@ -133,8 +133,10 @@ describe("ExecService.watch", () => {
     expect(r.shown).toBe(true);
     expect(agent.recorded.map((e) => e.type)).toEqual(["tool-start", "tool-end"]);
     const start = agent.recorded[0];
+    // the input says whose the step is: a `!` command's row carries the command alone
     expect(start?.type === "tool-start" && start.name === SHELL_TOOL && start.input).toEqual({
       command: 'git commit -m "x"',
+      landing: true,
     });
     const end = agent.recorded[1];
     expect(end?.type === "tool-end" && end.isError).toBe(true);

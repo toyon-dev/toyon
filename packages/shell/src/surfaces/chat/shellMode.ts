@@ -1,7 +1,7 @@
 // The composer's `!` mode: a draft that leads with `!` is a command for the worktree's shell rather
 // than a message for the agent. Pure, like mentions.ts, so the rules have tests.
 
-import { CHECK_TOOL, clipOutput, SHELL_TOOL } from "@toyon/shared";
+import { CHECK_TOOL, clipOutput, SHELL_TOOL, type ShellInput } from "@toyon/shared";
 import type { ChatItem } from "../../state/store.ts";
 import { parseToolOutput } from "./toolCall.ts";
 
@@ -22,12 +22,24 @@ export function commandOf(item: ChatItem): string | null {
   return typeof input?.command === "string" ? input.command : null;
 }
 
-/** the row's command ran to its end and exited clean. A failure paints the row and a running one
- * shines, but a clean exit that printed nothing (`git add -A`) left the same line a command that
- * never ran would, so the row says it. The agent's own calls stay unmarked: its reply is what says
- * how they went. */
+/** the row's command was typed, ran to its end and exited clean. A failure paints the row and a
+ * running one shines, but a clean exit that printed nothing (`git add -A`) left the same line a
+ * command that never ran would, so the row says it. The mark goes only where nothing else on the
+ * chat answers the row: the agent's own calls have its reply, a landing's git steps have the
+ * landed row, and the check after a turn has the composer's verdict. */
 export function ranClean(items: ChatItem[]): boolean {
-  return items.length > 0 && items.every((t) => commandOf(t) !== null && t.kind === "tool" && t.done && !t.isError);
+  return (
+    items.length > 0 &&
+    items.every(
+      (t) =>
+        t.kind === "tool" &&
+        t.name === SHELL_TOOL &&
+        commandOf(t) !== null &&
+        !(t.input as ShellInput).landing &&
+        t.done &&
+        !t.isError,
+    )
+  );
 }
 
 /** the commands run since the person's last message, with what they printed, for the agent to

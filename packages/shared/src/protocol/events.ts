@@ -13,6 +13,15 @@ export const SHELL_TOOL = "shell";
  * way), but toyon's to run rather than the person's, so the shell does not open it as theirs */
 export const CHECK_TOOL = "check";
 
+/** the input on a SHELL_TOOL row. `landing` marks a git step the daemon ran for a landing rather
+ * than a command the person typed: the same row, with the same stop and the same fix offer, but
+ * the landed row that follows is what says it went well, so the shell's mark for a clean exit
+ * stays on the typed ones */
+export interface ShellInput {
+  command: string;
+  landing?: true;
+}
+
 /** Claude loading the schemas of tools it had deferred. The adapter knows no kind for it, so the
  * daemon files it as a search and the row reads as one: the search glyph, the loader's name, and
  * the names or words it searched for. The shell keys on the name to keep it on the row, since the

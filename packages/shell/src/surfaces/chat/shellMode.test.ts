@@ -101,4 +101,24 @@ describe("ranClean", () => {
   test("the agent's own calls stay unmarked", () => {
     expect(ranClean([agentRun("ls")])).toBe(false);
   });
+  test("a landing's git steps and the check after a turn stay unmarked: the landed row and the verdict answer them", () => {
+    const step: ChatItem = {
+      kind: "tool",
+      id: "step",
+      name: "shell",
+      input: { command: "git fetch --quiet origin refs/heads/main", landing: true },
+      done: true,
+      toolKind: "execute",
+    };
+    expect(ranClean([step])).toBe(false);
+    const check: ChatItem = {
+      kind: "tool",
+      id: "check",
+      name: "check",
+      input: { command: "bun run check" },
+      done: true,
+      toolKind: "execute",
+    };
+    expect(ranClean([check])).toBe(false);
+  });
 });

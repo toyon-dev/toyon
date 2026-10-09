@@ -1,5 +1,5 @@
 import type { Store } from "../state/context.tsx";
-import { archivedPageOf, isChatCentred, type State, worktreeById } from "../state/store.ts";
+import { archivedPageOf, isChatCentred, rowById, type State, worktreeById } from "../state/store.ts";
 import { type Entry, type FloatStack, floats } from "../ui/floats.ts";
 
 /**
@@ -14,6 +14,14 @@ import { type Entry, type FloatStack, floats } from "../ui/floats.ts";
  * closing whatever stands above the entry it landed on. A worktree opens on its chat, so the chat
  * is what back from another tab returns to; the other tabs share one level between them, because
  * moving from one to the other is a choice of what to look at, not somewhere the person went.
+ *
+ * The list stands on an entry of its own too, over a floor: the entry the page arrived on, which
+ * is the tab's first in an installed app. Back from the list lands on the floor, and the list's
+ * entry is laid again over it, so the screen stays: there is nothing under the list, and the
+ * browser's own answer to a back with nothing under it is to leave the page for the blank it
+ * started from. Chromium marks the entries a page pushes without a tap as ones its back skips,
+ * and skips the floor with them on a back before the first tap; that one back leaves, and no
+ * entry can hold it.
  *
  * A box over the screen (a picture at full size, a menu, the settings, a picker) is one more level
  * on top of whichever screen it covers, because the phone has no Escape and the swipe is the key
@@ -32,14 +40,17 @@ import { type Entry, type FloatStack, floats } from "../ui/floats.ts";
 const KEY = "toyonDepth";
 /** marks the entry a box stands on, so forward into one is not read as forward into a screen */
 const OVER = "toyonOver";
+/** the depth of the floor: the entry under the list, which no screen stands on */
+const FLOOR = -1;
 
 /** How many screens deep the phone is, or null while that is not the phone's to say: on the desk,
  * whose back belongs to the browser, and before the daemon's first hello, when the remembered row
  * is not listed yet and the depth would read as the list for a moment. */
 export function depthOf(s: State): number | null {
   if (s.frame !== "phone" || !s.heard) return null;
-  // the same test PhoneFrame draws by: a row that went while its screen was open is the list
-  const onWorktree = s.screen !== "home" && (worktreeById(s, s.activeId) !== null || archivedPageOf(s) !== null);
+  // the same test PhoneFrame draws by: a row that went while its screen was open is the list, and
+  // a row toyon does not own has a page of its own, as an archived one has
+  const onWorktree = s.screen !== "home" && (rowById(s, s.activeId) !== null || archivedPageOf(s) !== null);
   if (!onWorktree) return 0;
   // the tab PhoneFrame draws: a preview the row has none of is its chat
   const previewed = worktreeById(s, s.activeId) !== null && !isChatCentred(s) && archivedPageOf(s) === null;
@@ -70,10 +81,12 @@ export function installPhoneHistory(
 ): () => void {
   const h = host.history;
   // the depth of the entry the browser is on. A page that opens on an entry of its own (a reload
-  // keeps the entry and its mark) knows where it stands; a fresh one marks its entry as the list,
-  // and a remembered worktree then goes on top of it, so the first swipe lands on the list
-  let at = depthIn(h.state) ?? 0;
-  if (depthIn(h.state) === null) h.replaceState({ [KEY]: 0 }, "");
+  // keeps the entry and its mark, and the floor under it) knows where it stands; a fresh one is
+  // standing on the floor, and lays the list over it the first time the phone has a depth to say,
+  // with a remembered worktree on top of that, so the first swipe lands on the list. The desk
+  // lays nothing: its back is the browser's.
+  let at = depthIn(h.state) ?? FLOOR;
+  let floored = depthIn(h.state) !== null;
 
   // the box a swipe was spent on. Its close is a render away, so until it has gone it is not
   // counted: counted, the store change that closes it would stand it on a new entry first
@@ -95,6 +108,10 @@ export function installPhoneHistory(
   const sync = () => {
     const screens = depthOf(store.getState());
     if (screens === null) return;
+    if (!floored) {
+      h.replaceState({ [KEY]: FLOOR }, "");
+      floored = true;
+    }
     const want = screens + (topBox() ? 1 : 0);
     if (want === at) return;
     if (want > at) for (let d = at + 1; d <= want; d++) h.pushState({ [KEY]: d, [OVER]: d > screens }, "");
@@ -122,10 +139,18 @@ export function installPhoneHistory(
   const onPop = (e: PopStateEvent) => {
     const ours = walks > 0;
     if (ours) walks--;
-    at = depthIn(e.state) ?? 0;
+    at = depthIn(e.state) ?? FLOOR;
     const s = store.getState();
     const screens = depthOf(s);
     if (screens === null) return;
+    if (at < 0) {
+      // back from the list lands on the floor: the list's entry is laid over it again, in place
+      // of whatever stood ahead, and the screen stays
+      h.pushState({ [KEY]: 0 }, "");
+      at = 0;
+      sync();
+      return;
+    }
     const box = topBox();
     const now = screens + (box ? 1 : 0);
     if (now === at) return;

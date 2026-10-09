@@ -139,19 +139,53 @@ describe("phone history", () => {
     const { store } = storeOf(phone());
     const t = tab();
     installPhoneHistory(store, t.host);
-    expect(t.depths()).toEqual([0]);
+    expect(t.depths()).toEqual([-1, 0]);
     store.dispatch({ a: "screen", to: "chat" });
-    expect(t.depths()).toEqual([0, 1]);
+    expect(t.depths()).toEqual([-1, 0, 1]);
     t.back();
     expect(store.getState().screen).toBe("home");
-    expect(t.index()).toBe(0);
+    expect(t.index()).toBe(1);
+  });
+
+  test("back from the list stays on the list", () => {
+    const { store } = storeOf(phone());
+    const t = tab();
+    installPhoneHistory(store, t.host);
+    expect(t.depths()).toEqual([-1, 0]);
+    t.back();
+    expect(store.getState().screen).toBe("home");
+    expect(t.depths()).toEqual([-1, 0]);
+    expect(t.index()).toBe(1);
+  });
+
+  test("a page reloaded on its chat keeps the floor under its list", () => {
+    const { store } = storeOf(phone({ screen: "chat" }));
+    const t = tab([{ toyonDepth: -1 }, { toyonDepth: 0 }, { toyonDepth: 1 }]);
+    installPhoneHistory(store, t.host);
+    expect(t.depths()).toEqual([-1, 0, 1]);
+    t.back();
+    expect(store.getState().screen).toBe("home");
+    t.back();
+    expect(store.getState().screen).toBe("home");
+    expect(t.index()).toBe(1);
+  });
+
+  test("a row toyon does not own has a screen of its own over the list", () => {
+    const found = { ...row("f"), worktree: undefined } as unknown as WorktreeStatus;
+    const { store } = storeOf(phone({ rows: [found], activeId: "f" }));
+    const t = tab();
+    installPhoneHistory(store, t.host);
+    store.dispatch({ a: "screen", to: "chat" });
+    expect(t.depths()).toEqual([-1, 0, 1]);
+    t.back();
+    expect(store.getState().screen).toBe("home");
   });
 
   test("a page that opens on a remembered worktree puts the list under it", () => {
     const { store } = storeOf(phone({ screen: "chat" }));
     const t = tab();
     installPhoneHistory(store, t.host);
-    expect(t.depths()).toEqual([0, 1]);
+    expect(t.depths()).toEqual([-1, 0, 1]);
     t.back();
     expect(store.getState().screen).toBe("home");
   });
@@ -162,7 +196,7 @@ describe("phone history", () => {
     installPhoneHistory(store, t.host);
     store.dispatch({ a: "screen", to: "chat" });
     store.dispatch({ a: "screen", to: "changes" });
-    expect(t.depths()).toEqual([0, 1, 2]);
+    expect(t.depths()).toEqual([-1, 0, 1, 2]);
     t.back();
     expect(store.getState().screen).toBe("chat");
     t.back();
@@ -176,8 +210,8 @@ describe("phone history", () => {
     store.dispatch({ a: "screen", to: "changes" });
     store.dispatch({ a: "screen", to: "preview" });
     store.dispatch({ a: "screen", to: "changes" });
-    expect(t.depths()).toEqual([0, 1, 2]);
-    expect(t.index()).toBe(2);
+    expect(t.depths()).toEqual([-1, 0, 1, 2]);
+    expect(t.index()).toBe(3);
   });
 
   test("the chat tab picked by hand walks the other tab's entry down", () => {
@@ -187,7 +221,7 @@ describe("phone history", () => {
     store.dispatch({ a: "screen", to: "changes" });
     store.dispatch({ a: "screen", to: "chat" });
     t.settle();
-    expect(t.index()).toBe(1);
+    expect(t.index()).toBe(2);
     expect(store.getState().screen).toBe("chat");
     t.back();
     expect(store.getState().screen).toBe("home");
@@ -200,7 +234,7 @@ describe("phone history", () => {
     store.dispatch({ a: "screen", to: "changes" });
     store.dispatch({ a: "screen", to: "home" });
     t.settle();
-    expect(t.index()).toBe(0);
+    expect(t.index()).toBe(1);
     expect(store.getState().screen).toBe("home");
   });
 
@@ -211,7 +245,7 @@ describe("phone history", () => {
     const t = tab();
     installPhoneHistory(store, t.host);
     store.dispatch({ a: "screen", to: "preview" });
-    expect(t.depths()).toEqual([0, 1]);
+    expect(t.depths()).toEqual([-1, 0, 1]);
   });
 
   test("back from a diff shuts it onto the tab it came from", () => {
@@ -219,7 +253,7 @@ describe("phone history", () => {
     const t = tab();
     installPhoneHistory(store, t.host);
     set({ ...store.getState(), editor: {} as State["editor"] });
-    expect(t.depths()).toEqual([0, 1, 2, 3]);
+    expect(t.depths()).toEqual([-1, 0, 1, 2, 3]);
     t.back();
     expect(store.getState().editor).toBeNull();
     expect(store.getState().screen).toBe("changes");
@@ -236,10 +270,10 @@ describe("phone history", () => {
     store.dispatch({ a: "screen", to: "chat" });
     store.dispatch({ a: "screen", to: "home" });
     t.settle();
-    expect(t.index()).toBe(1);
+    expect(t.index()).toBe(2);
     expect(store.getState().screen).toBe("home");
     store.dispatch({ a: "screen", to: "chat" });
-    expect(t.depths()).toEqual([null, 0, 1]);
+    expect(t.depths()).toEqual([null, -1, 0, 1]);
   });
 
   test("forward from the list opens the worktree it came back from", () => {
@@ -257,7 +291,7 @@ describe("phone history", () => {
     const t = tab();
     installPhoneHistory(store, t.host);
     store.dispatch({ a: "screen", to: "chat" });
-    expect(t.depths()).toEqual([0]);
+    expect(t.depths()).toEqual([null]);
   });
 
   test("back with a box open closes the box and stays on the screen", async () => {
@@ -267,14 +301,14 @@ describe("phone history", () => {
     installPhoneHistory(store, t.host, f.boxes);
     const box = f.open();
     await commit();
-    expect(t.depths()).toEqual([0, 1, 2]);
+    expect(t.depths()).toEqual([-1, 0, 1, 2]);
     t.back();
     expect(f.shut).toEqual([box]);
     expect(store.getState().screen).toBe("chat");
     f.close(box);
     await commit();
     t.settle();
-    expect(t.index()).toBe(1);
+    expect(t.index()).toBe(2);
     t.back();
     expect(store.getState().screen).toBe("home");
   });
@@ -289,7 +323,7 @@ describe("phone history", () => {
     f.close(box);
     await commit();
     t.settle();
-    expect(t.index()).toBe(1);
+    expect(t.index()).toBe(2);
     expect(f.shut).toEqual([]);
     expect(store.getState().screen).toBe("chat");
   });
@@ -302,12 +336,12 @@ describe("phone history", () => {
     const picker = f.open();
     const menu = f.open();
     await commit();
-    expect(t.depths()).toEqual([0, 1, 2]);
+    expect(t.depths()).toEqual([-1, 0, 1, 2]);
     t.back();
     expect(f.shut).toEqual([menu]);
     f.close(menu);
     await commit();
-    expect(t.index()).toBe(2);
+    expect(t.index()).toBe(3);
     t.back();
     expect(f.shut).toEqual([menu, picker]);
     expect(store.getState().screen).toBe("chat");
@@ -324,8 +358,8 @@ describe("phone history", () => {
     f.open();
     await commit();
     t.settle();
-    expect(t.depths()).toEqual([0, 1]);
-    expect(t.index()).toBe(1);
+    expect(t.depths()).toEqual([-1, 0, 1]);
+    expect(t.index()).toBe(2);
   });
 
   test("a box nothing dismisses takes no entry", async () => {
@@ -335,7 +369,7 @@ describe("phone history", () => {
     installPhoneHistory(store, t.host, f.boxes);
     f.open(false);
     await commit();
-    expect(t.depths()).toEqual([0, 1]);
+    expect(t.depths()).toEqual([-1, 0, 1]);
     t.back();
     expect(store.getState().screen).toBe("home");
   });
@@ -353,7 +387,7 @@ describe("phone history", () => {
     t.forward();
     expect(store.getState().screen).toBe("home");
     t.settle();
-    expect(t.index()).toBe(0);
+    expect(t.index()).toBe(1);
   });
 
   test("a box closing as its screen drops a level never shows the screen again", async () => {
@@ -370,6 +404,6 @@ describe("phone history", () => {
     await commit();
     t.settle();
     expect(seen).toEqual(["home"]);
-    expect(t.index()).toBe(0);
+    expect(t.index()).toBe(1);
   });
 });

@@ -41,4 +41,43 @@
     width: min(var(--view-measure-wide), 100%);
     gap: var(--view-gap-wide);
   }
+  /* A view with a box at its foot: the stack is the region, the column takes what the box leaves
+     and scrolls in it, and the box stays put at the bottom edge the way the chat's composer does
+     under its transcript. */
+  .view-stack {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    & > .view {
+      flex: 1;
+      min-height: 0;
+      height: auto;
+    }
+  }
+  /* The box at the foot: the composer's frame (base.css) run edge to edge, with what is typed in
+     it on the column's measure, so its first line starts under the title. The one ground a view
+     draws, since this is the one place on it that is written in, and the frame is what says "type
+     here" everywhere else in the shell; on the centre's ground --sunken is a shade from invisible,
+     so it takes the floor's own recess, as the chat does when it is the centre. The floor is the
+     box's before a word is in it, on both first-run views, so the box does not move between them;
+     above the floor it grows with what is typed, capped the way the chat's box is. */
+  .composer.view-foot {
+    flex: none;
+    background: var(--sunken-floor);
+    padding-inline: max(var(--view-inset), calc((100% - var(--view-measure)) / 2 + var(--view-inset)));
+    --composer-floor: var(--form-body);
+    & textarea {
+      field-sizing: content;
+      min-height: var(--form-body);
+      max-height: var(--composer-cap, 50cqh);
+    }
+    /* the chat's composer standing in the foot: the frame is the foot's, so its own goes, and
+       with it the inset that would put its first line a few pixels right of the title */
+    & > .composer {
+      flex: 1;
+      background: none;
+      border-top: none;
+      padding: 0;
+    }
+  }
 }

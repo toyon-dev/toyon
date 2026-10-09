@@ -26,7 +26,7 @@ const ARRIVAL = new Set([".field-lead", ".form-title"]);
  * FormRow's parts (`form-row`, `form-label`, `form-control`) are not on this list: a row inside a
  * form is its own thing, and its label column is a width it owns.
  */
-const PARTS = new Set([".form-title", ".form-head", ".form-body", ".form-body-lg", ".form-knobs", ".form-go"]);
+const PARTS = new Set([".form-title", ".form-head", ".form-knobs"]);
 const BOX = ["padding", "padding-top", "padding-bottom", "padding-inline", "width", "margin", "margin-top"];
 
 const GROUND = [
@@ -68,9 +68,6 @@ describe("the form parts", () => {
         if (sel === ".form-head") head = rule.decls.get("align-items") === "baseline";
         if (!PARTS.has(sel)) continue;
         for (const p of BOX) {
-          // the body is the one part that names a height of its own: it is a box to write in, and
-          // its floor is what gives the region a shape before a word is in it
-          if (p === "min-height") continue;
           if (rule.decls.has(p)) offenders.push(`${sel} sets ${p}, but the column is .view's`);
         }
       }

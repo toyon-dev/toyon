@@ -361,6 +361,10 @@ export const canCarry = (d: Draft | null | undefined): boolean => !!d?.carry && 
  * send makes that row the worktree and the words typed on it go with it */
 export const composerBoxOf = (active: OwnedWorktree | null): string | null => active?.worktree.id ?? null;
 
+/** the box on the new-project view: a project that does not exist yet has no worktree to key it by,
+ * and what is typed there moves into the lead's box the moment the project is listed (settleView) */
+export const NEW_PROJECT_BOX = "new-project";
+
 export type { PendingAttachment } from "./pending.ts";
 
 export const EMPTY_LOCAL: WorktreeLocal = Object.freeze({
@@ -435,8 +439,6 @@ export interface NewProjectState {
   phase: "editing" | "creating" | "unmaking";
   /** the project the view is waiting on: the one it made, once listed, or the one it is taking back */
   repoId: string | null;
-  /** what was typed in the first-run box before coming back here, for the next project's box */
-  prompt: string;
   /** why the daemon refused the last create, read on the view until the next edit */
   error?: string;
 }
@@ -446,7 +448,6 @@ export const newProjectState = (v: Pick<NewProjectState, "mode" | "name" | "pare
   ...v,
   phase: "editing",
   repoId: null,
-  prompt: "",
 });
 
 /** with no project anywhere, the view is what there is, and a first project goes in ~/Projects */
@@ -1415,6 +1416,9 @@ export type Action =
   /** the tab opened `openUrl` */
   | { a: "opened-url" }
   | { a: "set-draft"; id: string; text: string }
+  /** what one box holds, text and chips, carried whole into another: the new-project view's box
+   * into the project it made, and back again when the project is taken back */
+  | { a: "move-box"; from: string; to: string }
   /** someone is looking at this worktree: latch the recap of a stop they have not seen */
   /** the composer's up and down: the draft and where the walk is, in one write */
   | { a: "walk"; id: string; walk: ComposerWalk | null; text: string }
@@ -1985,6 +1989,8 @@ function reduce(s: State, action: Action): State {
           ...(notice !== undefined && action.text === "" ? { notice } : {}),
         };
       });
+    case "move-box":
+      return moveBox(s, action.from, action.to);
     case "walk":
       // a walk takes the mark from a reveal, and a walk ending leaves a reveal where it is
       return withLocal(s, action.id, (l) => ({
@@ -2296,7 +2302,7 @@ function pruneByRepo<T>(flags: Record<string, T>, repos: RepoInfo[]): Record<str
 }
 
 /** The new-project view, once the project it made has its main row: it gives way to that row's
- * first-run screen, and the description typed on the view lands in that row's box.
+ * first-run screen, and what was typed and attached on the view moves into that row's box.
  *
  * It goes from there rather than from the view, so the first message of a project made here is the
  * same message as any other first message: the composer's, with its context blocks, the worktree it
@@ -2308,9 +2314,18 @@ function settleView(s: State): State {
   if (page?.phase !== "creating" || !page.repoId) return s;
   const lead = leadOf(s, page.repoId);
   if (!lead) return s;
-  if (!page.prompt.trim()) return { ...s, newProject: null };
-  const seeded = withLocal(s, lead.id, (l) => ({ ...l, draft: page.prompt }));
-  return { ...seeded, newProject: null, autoSend: lead.id };
+  const box = localOf(s, NEW_PROJECT_BOX);
+  if (!box.draft.trim() && box.attachments.length === 0) return { ...s, newProject: null };
+  return { ...moveBox(s, NEW_PROJECT_BOX, lead.id), newProject: null, autoSend: lead.id };
+}
+
+/** one box's text and chips into another, leaving the first empty: the chips keep their uploads,
+ * which the daemon holds by id and not by box */
+function moveBox(s: State, from: string, to: string): State {
+  const l = s.local[from];
+  if (!l) return s;
+  const moved = withLocal(s, to, (t) => ({ ...t, draft: l.draft, attachments: l.attachments }));
+  return withLocal(moved, from, (f) => ({ ...f, draft: "", attachments: [] }));
 }
 
 /** an id that names a project's main checkout rather than a row: the pull's target */

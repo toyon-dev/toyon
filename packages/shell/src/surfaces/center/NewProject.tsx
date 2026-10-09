@@ -1,17 +1,14 @@
-import type { ModelChoice } from "@toyon/shared";
 import { projectNameError } from "@toyon/shared";
 import { useEffect, useRef, useState } from "react";
-import { useDispatch, useMachine, useSock, useStore } from "../../state/context.tsx";
-import type { NewProjectState } from "../../state/store.ts";
+import { useDispatch, useSock, useStore } from "../../state/context.tsx";
+import { NEW_PROJECT_BOX, type NewProjectState } from "../../state/store.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
-import { Field, TextArea } from "../../ui/Field.tsx";
+import { Field } from "../../ui/Field.tsx";
 import { useOnChange } from "../../ui/hooks.ts";
 import { tip } from "../../ui/Tooltip.tsx";
 import { View } from "../../ui/View.tsx";
-import { EffortChip, useNewWorktreeEffort } from "../chips/EffortChip.tsx";
-import { AgentModelChip, ModelChip, rememberNewWorktreeModel, useNewWorktreeModel } from "../chips/ModelChip.tsx";
+import { Composer } from "../chat/Composer.tsx";
 import { destination, expandHome, folderName, splitTypedPath } from "../overlays/projectPicker.ts";
-import { AgentAsk } from "./AgentAsk.tsx";
 
 /** how long the name sits still before the project asks whether a folder by that name is already there */
 const ASK_AFTER_MS = 150;
@@ -23,23 +20,21 @@ const EMAIL = /^[^\s@]+@[^\s@]+$/;
  * it, rather than a field stretched across the project with the folder pushed to the far edge */
 const NAME_MIN = 14;
 
-const NO_CHOICES: ModelChoice[] = [];
-
 /**
- * The new project: a title, where it goes, and the description that starts it. Written rather
- * than filled in, so no heading, labels or boxes; create makes the project and sends the
- * description as its first message.
+ * The new project: a title, where it goes, and at the foot the box its first message is written
+ * in. Written rather than filled in, so no heading, labels or boxes above the title; the box is
+ * the composer itself, so the agent, model and effort are its chips, and return makes the project
+ * and sends what was written as its first message.
  *
- * Nothing is made until create: making one takes a tenth of a second, and making it earlier would
+ * Nothing is made until return: making one takes a tenth of a second, and making it earlier would
  * leave a folder behind for every name thought better of. A folder picked in Finder decides the
  * rest: an ordinary folder is the location, an empty one becomes the project, and one that is
- * already a project is offered for opening. Git's name and email sit above the title when git has
+ * already a project is offered for opening. Git's name and email sit under the title when git has
  * none, since they are asked once ever and are not what this project is about.
  */
 export function NewProject({ project }: { project: NewProjectState }) {
   const dispatch = useDispatch();
   const sock = useSock();
-  const { storage } = useMachine();
   const repos = useStore((s) => s.repos);
   const home = useStore((s) => s.home);
   const canAskFinder = useStore((s) => s.folderDialog);
@@ -47,18 +42,14 @@ export function NewProject({ project }: { project: NewProjectState }) {
   const asking = useStore((s) => s.choosingFolder);
   const chosen = useStore((s) => s.chosenFolder);
   const paths = useStore((s) => s.paths);
-  const agents = useStore((s) => s.agents);
-  const defaultAgent = useStore((s) => s.defaultAgent);
-  const agentChosen = useStore((s) => s.agentChosen);
   const [identity, setIdentity] = useState({ name: "", email: "" });
   /** a folder picked as the location that is already a project */
   const [existing, setExisting] = useState<string | null>(null);
   /** why a folder picked to open was not opened */
   const [refusal, setRefusal] = useState<string | null>(null);
   const nameRef = useRef<HTMLInputElement>(null);
-  const describeRef = useRef<HTMLTextAreaElement>(null);
 
-  const { mode, name, parent, prompt } = project;
+  const { mode, name, parent } = project;
   const clone = mode === "clone";
   const inPlace = mode === "init";
   const editing = project.phase === "editing";
@@ -72,26 +63,19 @@ export function NewProject({ project }: { project: NewProjectState }) {
   // a clone brings its own commits, so only a create or an init needs git to know who is making it
   const askIdentity = !knowsIdentity && !clone;
   const identityOk = !askIdentity || (identity.name.trim() !== "" && EMAIL.test(identity.email.trim()));
-  // the description goes to an agent the moment the project exists, so create waits on the one
-  // question asked above it: which agent
-  const ready =
-    editing && !existing && (inPlace || (typed !== "" && !nameError && !taken)) && identityOk && agentChosen;
-
-  // the chips choose for a project that does not exist yet, so they write where a new worktree's
-  // choices are remembered; the composer of the project this makes reads the same memory back
-  const agentInfo = agents.find((a) => a.id === defaultAgent);
-  const [model, setModel] = useNewWorktreeModel(defaultAgent);
-  const [effort, setEffort] = useNewWorktreeEffort(defaultAgent);
-  const pickAgentModel = (agent: string, picked: string) => {
-    if (agent === defaultAgent) {
-      setModel(picked);
-      return;
-    }
-    // the same fast path main's composer takes: the agent picked here is the daemon's default, and
-    // the project made in a moment starts on it
-    rememberNewWorktreeModel(storage, agent, picked);
-    sock?.send({ t: "set-default-agent", agent });
-  };
+  // why return cannot make it yet, said under the box on the press
+  const why = !editing
+    ? null
+    : existing
+      ? "the folder you chose is already a project: open it, or choose another"
+      : !inPlace && !typed
+        ? "name the project first"
+        : (nameError ??
+          (taken
+            ? `${where} already has a folder called ${typed}`
+            : !identityOk
+              ? "git needs your name and email first"
+              : null));
 
   // whether a folder by that name is already there, asked once the name stops changing
   useEffect(() => {
@@ -108,10 +92,15 @@ export function NewProject({ project }: { project: NewProjectState }) {
   // a refusal is about the folder that was picked, so anything that changes what the project holds ends it
   useOnChange([mode, name, parent], () => setRefusal(null));
 
+  // the daemon's refusal of the last create, under the box that asked; the next keystroke answers it
+  useOnChange([project.error], () => {
+    if (project.error) dispatch({ a: "notice", id: NEW_PROJECT_BOX, text: project.error });
+  });
+
   const submit = () => {
-    if (!ready) return;
-    // pendingOpen is what makes this tab, and only this tab, adopt the project the daemon adds; the
-    // description rides on the project and goes from the new project's own box (see settleView)
+    if (why || !editing) return;
+    // pendingOpen is what makes this tab, and only this tab, adopt the project the daemon adds; what
+    // is in the box rides on it and goes from the new project's own box (see settleView)
     dispatch({ a: "open-repo" });
     dispatch({ a: "new-project-set", v: { phase: "creating" } });
     sock?.send({
@@ -178,19 +167,30 @@ export function NewProject({ project }: { project: NewProjectState }) {
     nameRef.current?.focus();
   });
 
-  // the refusal leads: it answers a pick that has just happened, while the rest describe a state
+  // the refusal leads: it answers a pick that has just happened, while the rest describe a state.
+  // A folder that is already a project carries the way in; the rest are words.
   const hint =
     refusal ??
     (inPlace
       ? "the empty folder you chose becomes the project"
       : existing
-        ? "the folder you chose is already a project: open it, or choose another"
+        ? null
         : taken
           ? `${where} already has a folder called ${typed}`
           : nameError);
 
   return (
-    <View anchor="line">
+    <View
+      anchor="line"
+      // the box at the foot is the composer itself, so what is chosen under it (the agent, its model,
+      // the effort) is chosen where every other first message chooses it, and what is typed and
+      // attached waits in the view's own box until the project exists
+      foot={
+        <div className="composer view-foot">
+          <Composer active={null} project={{ name: typed, why, busy: !editing, create: submit }} />
+        </div>
+      }
+    >
       {clone && <p className="new-project-url">{project.url}</p>}
 
       <div className="form-head">
@@ -216,7 +216,7 @@ export function NewProject({ project }: { project: NewProjectState }) {
             onKeyDown={(e) => {
               if (e.key !== "Enter") return;
               e.preventDefault();
-              describeRef.current?.focus();
+              dispatch({ a: "focus-chat" });
             }}
           />
         )}
@@ -237,68 +237,17 @@ export function NewProject({ project }: { project: NewProjectState }) {
       </div>
 
       {hint && <p className="hint">{hint}</p>}
-
-      <AgentAsk />
-
-      <div className="form-body">
-        <TextArea
-          ref={describeRef}
-          bare
-          font="ui"
-          value={prompt}
-          placeholder={`describe ${typed || "the app"}…`}
-          disabled={!editing}
-          onChange={(e) => dispatch({ a: "new-project-set", v: { prompt: e.target.value } })}
-          onKeyDown={(e) => {
-            if (e.key !== "Enter" || e.shiftKey) return;
-            e.preventDefault();
-            submit();
-          }}
-        />
-      </div>
-
-      <div className="hint form-knobs">
-        {agents.length > 1 ? (
-          <AgentModelChip agents={agents} agent={defaultAgent} model={model} onChange={pickAgentModel} />
-        ) : (
-          <ModelChip models={agentInfo?.models ?? NO_CHOICES} value={model} onChange={setModel} />
-        )}
-        <EffortChip efforts={agentInfo?.efforts ?? NO_CHOICES} value={effort} onChange={setEffort} />
-        {existing ? (
-          <Button variant="outline" size="lg" className="form-go" autoFocus onClick={() => openFolder(existing)}>
+      {existing && !refusal && (
+        <p className="hint">
+          the folder you chose is already a project:{" "}
+          <Button variant="inline" autoFocus onClick={() => openFolder(existing)}>
             open it
           </Button>
-        ) : (
-          <Button
-            variant="outline"
-            size="lg"
-            className="form-go"
-            busy={project.phase === "creating"}
-            disabled={!ready}
-            onClick={submit}
-            {...tip(
-              !agentChosen
-                ? "Choose an agent first"
-                : clone
-                  ? "Clone the project"
-                  : prompt.trim()
-                    ? "Make it and start on this"
-                    : "Make the project",
-              "⏎",
-            )}
-          >
-            {clone ? "clone" : "create"}
-          </Button>
-        )}
-      </div>
-      {/* the daemon's refusal of the last create, under the button that asked; the next edit answers it */}
-      {project.error && (
-        <p className="hint" role="status">
-          {project.error}
+          , or choose another
         </p>
       )}
 
-      {/* under the action rather than over the title: this is asked once ever, and it is about git
+      {/* under the title rather than in the box: this is asked once ever, and it is about git
           rather than about the project being written here */}
       {askIdentity && (
         <>

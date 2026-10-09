@@ -33,7 +33,7 @@ import { useDispatch, useMachine, useSock, useStore, useStoreInstance } from "..
 import { openSource } from "../../state/openSource.ts";
 import { isUploading } from "../../state/pending.ts";
 import { useChatCentred, useGreenfield, useLocalField, usePreviewId, useTouch } from "../../state/selectors.ts";
-import { canCarry, composerBoxOf, type Draft, trunkOf } from "../../state/store.ts";
+import { canCarry, composerBoxOf, type Draft, NEW_PROJECT_BOX, trunkOf } from "../../state/store.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { TextArea } from "../../ui/Field.tsx";
@@ -119,6 +119,19 @@ type Row =
 
 const cmdRow = (c: AgentCommand): Row => ({ kind: "cmd", c });
 
+/** The new-project view's box: a project that does not exist yet, so no worktree stands behind the
+ * box and return makes the project instead of sending. What is typed and attached waits in
+ * NEW_PROJECT_BOX and moves into the project's own box the moment it is listed. */
+export type ProjectBox = {
+  /** the name typed above the box, for its placeholder */
+  name: string;
+  /** why return cannot make it yet, said under the box on the press; null when it can */
+  why: string | null;
+  /** the create is out, and the box waits on its answer */
+  busy: boolean;
+  create: () => void;
+};
+
 /** the empty states worth telling apart: nothing matched, nothing to match yet, nowhere to ask */
 function emptyMenu(
   kind: Row["kind"] | "command" | "file",
@@ -160,6 +173,7 @@ export function Composer({
   draft,
   archived,
   found,
+  project,
   greenfield,
   placement = "dock",
 }: {
@@ -170,6 +184,8 @@ export function Composer({
   archived?: ArchivedWorktree | null;
   /** a worktree toyon does not run, whose page is on screen; `active` is null with it */
   found?: WorktreeStatus | null;
+  /** the new-project view's box, for a project not made yet; `active` is null with it */
+  project?: ProjectBox | null;
   /** rendered in the centre of an empty project: the scaffolding brief rides with the first
    * message, and the knobs that assume a preview or a second worktree stay out of the way */
   greenfield?: boolean;
@@ -185,7 +201,7 @@ export function Composer({
   const drafting = !!draft;
   const id = active?.worktree.id ?? null;
   const repoId = active?.worktree.repoId;
-  const boxId = archived ? archived.id : found ? found.id : composerBoxOf(active);
+  const boxId = project ? NEW_PROJECT_BOX : archived ? archived.id : found ? found.id : composerBoxOf(active);
   // a worktree toyon is not running: nothing that needs a session or a proc is offered
   const outside = !!archived || !!found;
   // the send has somewhere to go: an archive that kept its commits, a found worktree nobody holds
@@ -261,7 +277,7 @@ export function Composer({
   // land like any other, so main is never where an agent starts writing.
   // A provisional row's own agent may already be up (it warms on the first keystroke), and the
   // send makes that row the task: still a draft, since the choices fixed at birth are its.
-  const spawning = drafting || !!greenfield;
+  const spawning = drafting || !!greenfield || !!project;
   // A main that has never run has no agent on its record, so its first message starts a fresh chat:
   // the agent and model are chosen the way a new worktree's are, and the send stamps them.
   const fresh = !spawning && !!active && !active.worktree.agent;
@@ -425,8 +441,8 @@ export function Composer({
   const listRef = useRef<HTMLDivElement>(null);
 
   // a chat toyon is not running has no session to take a command and no listing to name a file
-  // from: no menu there
-  const trigger = boxId && !outside ? triggerAt(text, caret) : null;
+  // from: no menu there, and none on a project with no files yet
+  const trigger = boxId && !outside && !project ? triggerAt(text, caret) : null;
   // opens even with nothing to show: an empty menu that says why beats a `/` that does nothing. Not
   // over a walked-back message: a recalled `/compact` was sent, not typed, and the menu would take
   // the arrows the walk is using.
@@ -730,6 +746,8 @@ export function Composer({
         ? `held by ${found.lockReason ?? "another tool"}; Toyon takes it over once the lock goes`
         : `message agent on ${found.name}; sending takes it over first`;
     }
+    // return makes the project: the one thing this box does that no other does, said in its line
+    if (project) return `describe ${project.name || "the app"}; return makes it`;
     if (!active) return "no worktree selected";
     if (verb) return "";
     // a verdict only exists for work the PR is missing, so the check's word comes before the PR's
@@ -860,7 +878,20 @@ export function Composer({
   };
   // attachments alone are a message: a pasted error or a picked element often says it all
   const send = () => {
-    if (!boxId || blank) return;
+    if (!boxId) return;
+    // the new-project view: return makes the project, described or not, and what is in the box
+    // goes as its first message once it exists (settleView). The agent the chips show becomes the
+    // daemon's default, since this is where it was chosen.
+    if (project) {
+      if (project.busy) return;
+      if (project.why) return refuse(project.why);
+      if (uploading) return refuse(STILL_UPLOADING);
+      if (spawnAgent !== defaultAgent || !agentChosen) sock?.send({ t: "set-default-agent", agent: spawnAgent });
+      leaveBox();
+      project.create();
+      return;
+    }
+    if (blank) return;
     // into an archived chat: one frame restores the worktree and hands the message to its agent,
     // so the two cannot come apart. Nothing runs there yet, so a `!` command has nowhere to go.
     if (archived) {
@@ -941,11 +972,6 @@ export function Composer({
       refuse("a batch takes no attachments; remove them or turn batch off");
       return;
     }
-    // the empty project's page asks which agent above this box; its first message waits on that
-    if (greenfield && !agentChosen) {
-      refuse("choose an agent above first");
-      return;
-    }
     // a message names an upload by the id the daemon answers with, so it waits for that answer; the
     // words stay in the box, and enter again sends them
     if (uploading) {
@@ -976,8 +1002,9 @@ export function Composer({
       };
       // the box remembers what it last started with, the way its mode and model chips do; the
       // agent is the daemon's default rather than this browser's so a spare or an adopted worktree
-      // gets the same one. Settings has no row for it because this is where it is chosen.
-      if (spawnAgent !== defaultAgent) sock?.send({ t: "set-default-agent", agent: spawnAgent });
+      // gets the same one. Settings has no row for it because this is where it is chosen, and the
+      // first send ever is the choice, even of the agent the chip already showed.
+      if (spawnAgent !== defaultAgent || !agentChosen) sock?.send({ t: "set-default-agent", agent: spawnAgent });
       if (draft?.batch) {
         sock?.send({
           t: "batch-worktrees",
@@ -1041,7 +1068,7 @@ export function Composer({
   // time, and both reading one flag sent the first message twice.
   const autoSend = useStore((s) => s.autoSend);
   useOnChange([autoSend, id], () => {
-    if (!autoSend || autoSend !== id || !text.trim() || centred !== !!greenfield) return;
+    if (!autoSend || autoSend !== id || blank || centred !== !!greenfield) return;
     dispatch({ a: "auto-sent" });
     send();
   });
@@ -1185,7 +1212,7 @@ export function Composer({
       {/* what is on the clipboard, before it is pasted: the same shape as the question's way back,
           the word to press and then what it takes. Only in a box that takes a message, and not
           over an ask, which has the box. */}
-      {copied && boxId && !cardUp && (active || takes) && (
+      {copied && boxId && !cardUp && (active || takes || project) && (
         <ComposerOffer
           icon="copy"
           verb="attach"
@@ -1398,7 +1425,7 @@ export function Composer({
             }}
             // the ghost draws the placeholder itself when it has a line to put under it
             placeholder={subline || verb ? "" : placeholderText}
-            disabled={!active && !takes}
+            disabled={project ? project.busy : !active && !takes}
           />
           {ghost && (
             <div className="composer-ghost" aria-hidden="true">
@@ -1542,17 +1569,16 @@ export function Composer({
                 />
               )
             )}
-            {spawning ? (
-              <ModeChip value={newMode} onChange={setNewMode} onClose={refocus} />
-            ) : (
-              active && (
-                <ModeChip
-                  value={activeMode}
-                  onChange={(mode) => sock?.send({ t: "set-worktree-mode", worktreeId: active.worktree.id, mode })}
-                  onClose={refocus}
-                />
-              )
-            )}
+            {/* not before the project exists: the mode is remembered per project, and there is none yet */}
+            {spawning
+              ? !project && <ModeChip value={newMode} onChange={setNewMode} onClose={refocus} />
+              : active && (
+                  <ModeChip
+                    value={activeMode}
+                    onChange={(mode) => sock?.send({ t: "set-worktree-mode", worktreeId: active.worktree.id, mode })}
+                    onClose={refocus}
+                  />
+                )}
             {ringShown && (
               // the panel is a DOM child of this wrapper even in the top layer, so leaving it and
               // the ring together is the one mouseleave
@@ -1605,11 +1631,11 @@ export function Composer({
           <span className="spawn-tools">
             {/* the way in for a picture or a file where there is no paste or drop to bring it: a
               phone, above all. Only in a box that takes a message. */}
-            {boxId && (active || takes) && (
+            {boxId && (active || takes || project) && (
               <IconButton
                 icon="attach"
                 tone="chrome"
-                label={onScreen ? "Attach a picture" : "Attach a picture or a file"}
+                label={onScreen ? "Attach a picture" : "Attach a picture or a file, or drop one here"}
                 onClick={() => pickAttachments(store, boxId, { images: onScreen })}
               />
             )}
@@ -1617,7 +1643,7 @@ export function Composer({
               actions rather than in the app's top bar. Not on an empty project, a chat Toyon is not
               running or a phone's screen: the pane is hidden there or has no procs to show, and a
               button that flips a hidden pane is a dead button. */}
-            {!greenfield && !outside && !onScreen && (
+            {!greenfield && !outside && !onScreen && !project && (
               <IconButton
                 icon="terminal"
                 tone="chrome"
@@ -1639,7 +1665,7 @@ export function Composer({
                 )}
               />
             )}
-            {!greenfield && !chatCentred && !outside && !onScreen && (
+            {!greenfield && !chatCentred && !outside && !onScreen && !project && (
               <IconButton
                 icon="pick"
                 label="Pick an element on the page to attach"
@@ -1654,12 +1680,12 @@ export function Composer({
             {/* the send where return breaks the line: a touch window, and last in the row, under
               the thumb. A press that moved focus to the button would drop the keyboard between
               two messages, so the press keeps the caret where it is. */}
-            {touch && boxId && (active || takes) && (
+            {touch && boxId && (active || takes || project) && (
               <IconButton
                 icon="send"
                 tone="primary"
-                label="Send"
-                disabled={blank}
+                label={project ? "Create the project" : "Send"}
+                disabled={project ? project.busy : blank}
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={send}
               />

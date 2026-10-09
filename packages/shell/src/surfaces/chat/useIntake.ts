@@ -6,7 +6,7 @@ import { createFile, nextSeq } from "../../state/actions/file.ts";
 import { attachFiles, attachText, attachUpload, mentionInChat, noticeIn, roomIn, treeBox } from "../../state/attach.ts";
 import type { Store } from "../../state/context.tsx";
 import { useSock, useStoreInstance } from "../../state/context.tsx";
-import { composerBoxOf, type DropZone, worktreeById } from "../../state/store.ts";
+import { composerBoxOf, type DropZone, NEW_PROJECT_BOX, worktreeById } from "../../state/store.ts";
 import type { DaemonSocket } from "../../ws.ts";
 import { parentOf } from "../changes/fileTree.ts";
 import { cardDropBox } from "./handoff.ts";
@@ -175,6 +175,8 @@ export const STILL_UPLOADING = "still uploading what is attached; send again in 
  * behind it. Read at drop time, like the pending counts. */
 function dropBox(store: Store): string | null {
   const s = store.getState();
+  // the new-project view's box stands in for a worktree that does not exist yet
+  if (s.newProject) return NEW_PROJECT_BOX;
   const active = worktreeById(s, s.activeId);
   return cardDropBox(active ? s.local[active.worktree.id] : undefined) ?? composerBoxOf(active);
 }
@@ -314,7 +316,8 @@ export function fileDrop(store: Store, sock: DaemonSocket | null, zone: DropZone
   endFileDrag(store);
   if (refused || dropped.length === 0) return;
   if (!zone) missedFileDrop(store);
-  else if (zone.at === "chat") dropOnChat(store, dropped);
+  // the new-project view has no chat panel, so the centre is its box: every file attaches, as on the chat
+  else if (zone.at === "chat" || (zone.at === "centre" && store.getState().newProject)) dropOnChat(store, dropped);
   else if (zone.at === "centre") void dropOnCentre(store, dropped);
   else void dropOnTree(store, sock, zone, dropped);
 }
@@ -325,7 +328,7 @@ const hasFiles = (dt: DataTransfer | null) => !!dt && Array.from(dt.types).inclu
  * it sits inside the centre. In the files tab, a folder row, a file row for the folder it is in,
  * or the tree's own space for the root; a submodule's files are not this worktree's. The centre
  * takes the rest, but not the terminal or design pane stacked in it, and only with a worktree on
- * screen to lend the pane its id. */
+ * screen to lend the pane its id, or the new-project view, whose box takes the drop. */
 function zoneAt(store: Store, target: EventTarget | null): DropZone | null {
   const el = target instanceof Element ? target : target instanceof Node ? target.parentElement : null;
   if (!el) return null;
@@ -340,7 +343,8 @@ function zoneAt(store: Store, target: EventTarget | null): DropZone | null {
     return { at: "tree", worktreeId, dir: kind === "file" ? parentOf(path) : path };
   }
   if (!el.closest(".center-root") || el.closest('[data-pane="terminal"], [data-pane="design"]')) return null;
-  return store.getState().activeId ? { at: "centre" } : null;
+  const s = store.getState();
+  return s.activeId || s.newProject ? { at: "centre" } : null;
 }
 
 /** the app-wide file drag, mounted once. Every drag is intercepted, because the browser's own

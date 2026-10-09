@@ -9,10 +9,15 @@ import { cssRules, shellCss } from "./cssRules.ts";
  * three rules and nowhere else. The gap is not on the list: a part may keep the column's rhythm,
  * as the form's knobs row does.
  *
- * The column is anchored to the top and draws no ground; view.css says why for both.
+ * The column is anchored to the top and draws no ground; view.css says why for both. The one
+ * exception is the box at a view's foot, which is the composer's frame: it is written in, so it
+ * carries the ground the frame carries everywhere else, and it reads the measure so that what is
+ * typed in it starts under the title.
  */
 
-const COLUMN = new Set([".view", ".view-anchored", ".view-wide"]);
+/** the box at the foot: the fourth reader of the measure, and the one ground */
+const FOOT = ".composer.view-foot";
+const COLUMN = new Set([".view", ".view-anchored", ".view-wide", FOOT]);
 const OWNED = /var\(--view-(inset|top|anchor|measure|measure-wide)\)/;
 
 /** every way a column gets pushed down the region it sits in, which a view that grows must never be */
@@ -80,11 +85,11 @@ describe("the view column", () => {
     expect(offenders.sort()).toEqual([]);
   });
 
-  test("a view draws no ground", async () => {
+  test("a view draws no ground, apart from the box at its foot", async () => {
     const offenders: string[] = [];
     for (const rule of cssRules(await shellCss())) {
       for (const sel of rule.selectors) {
-        if (!isView(sel)) continue;
+        if (sel === FOOT || !isView(sel)) continue;
         for (const p of GROUND) {
           const v = rule.decls.get(p);
           if (v && !REMOVED.has(v)) offenders.push(`${sel} draws ${p}: ${v}`);

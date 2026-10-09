@@ -33,6 +33,7 @@ import {
   isGreenfield,
   isSubPicker,
   localOf,
+  NEW_PROJECT_BOX,
   type NewProjectState,
   newProjectState,
   type OpenFile,
@@ -2200,7 +2201,10 @@ describe("new-project view", () => {
   });
 
   test("it holds until the project it made has a main row, then gives way with what was typed", () => {
-    let s: State = { ...run(creating({ prompt: "a todo list" })), gitIdentity: false };
+    let s: State = {
+      ...run([{ a: "set-draft", id: NEW_PROJECT_BOX, text: "a todo list" }, ...creating()]),
+      gitIdentity: false,
+    };
     s = reducer(s, repos(repo("r1"), made()));
     // listed with no rows yet: the page stays rather than flash a project with nothing in it
     expect(s.activeRepoId).toBe("r2");
@@ -2211,6 +2215,7 @@ describe("new-project view", () => {
     expect(s.newProject).toBeNull();
     expect(s.activeId).toBe("m2");
     expect(localOf(s, "m2").draft).toBe("a todo list");
+    expect(localOf(s, NEW_PROJECT_BOX).draft).toBe("");
   });
 
   test("a refused create comes back to the page, and a refused take-back to the project", () => {

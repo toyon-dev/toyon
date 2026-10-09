@@ -103,8 +103,8 @@ export interface HttpOpts {
   grants: GrantCodes;
   /** the shell origins on other machines that have been let in here, whose pages may read answers */
   trusted: () => string[];
-  /** the chosen theme's grounds, for the manifest: the bar a phone draws above an installed shell
-   * and the launch screen behind it */
+  /** the chosen theme's grounds, for the manifest: what a phone paints its status bar above an
+   * installed shell, and the launch screen behind it */
   manifestColors: () => { bar: string; ground: string };
   /** what the not-running page is told on the way out: the link that starts a daemon here, when
    * the helper that answers it is in place (core/helper.ts), and the port this daemon is on */

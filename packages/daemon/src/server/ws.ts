@@ -476,8 +476,10 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
       preview: (id) => s.runtime.get(id)?.proxy?.handler ?? null,
       bootstrap: helloFrame,
       manifestColors: () => {
-        const { surface0, surface1 } = s.themes.current().colors;
-        return { bar: surface1, ground: surface0 };
+        // the phone's status bar sits on the screen's ground, not on the strip under it: painted
+        // the strip's colour, the two read as one tall band
+        const { surface0 } = s.themes.current().colors;
+        return { bar: surface0, ground: surface0 };
       },
       open: (path) => s.opens.open(path),
       restart: (now) => s.restarter.request({ now }),

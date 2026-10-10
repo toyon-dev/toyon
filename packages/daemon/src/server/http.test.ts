@@ -123,7 +123,9 @@ function pairing(over: Partial<PairingDeps>) {
     onLetIn: () => {},
     tailnet: {
       phones: async () => null,
-      machines: async () => [{ name: "work", host: "work.tail1234.ts.net", toyon: { machine: "work" } }],
+      machines: async () => [
+        { name: "work", host: "work.tail1234.ts.net", online: true, toyon: { machine: "work", answering: true } },
+      ],
       // the Toyons elsewhere: the home desk and a second daemon on this box
       isToyon: async (origin) => origin === "https://home.tail1234.ts.net" || origin === "http://localhost:4242",
     },
@@ -445,7 +447,9 @@ describe("remote switch, tailnet and handed machines", () => {
   test("/tailnet lists the machines behind the token", async () => {
     expect((await fetch(req("/tailnet", { headers: { authorization: "Bearer wrong" } }), srv()))?.status).toBe(401);
     const r = await fetch(req("/tailnet", { headers: { authorization: "Bearer secret" } }), srv());
-    expect(await r?.json()).toEqual([{ name: "work", host: "work.tail1234.ts.net", toyon: { machine: "work" } }]);
+    expect(await r?.json()).toEqual([
+      { name: "work", host: "work.tail1234.ts.net", online: true, toyon: { machine: "work", answering: true } },
+    ]);
   });
 
   test("/machines takes an https origin and its token, from this box or a shell through the front", async () => {

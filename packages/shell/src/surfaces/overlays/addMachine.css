@@ -43,6 +43,20 @@
     gap: 12px;
     min-height: var(--row-height);
   }
+  .add-machine-peer {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+  }
+  /* connected or not, as Tailscale's own machine list shows it: a dot is read, so inks and the
+     idle surface, the same two the worktree dots use for up and doing nothing */
+  .add-machine-dot.add-machine-online {
+    background: var(--green);
+  }
+  .add-machine-dot.add-machine-offline {
+    background: var(--surface2);
+  }
   .add-machine-machine {
     display: grid;
     min-width: 0;

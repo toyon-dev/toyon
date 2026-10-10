@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { machineAddress } from "@toyon/shared";
-import { ADD_MACHINE, hostOf, knockFailureLine } from "./addMachine.ts";
+import { ADD_MACHINE, hostOf, knockFailureLine, machineRank, machineState } from "./addMachine.ts";
 
 describe("the add-machine lines", () => {
   test("each failure says what to do next, naming the machine where that helps", () => {
@@ -29,6 +29,23 @@ describe("the add-machine lines", () => {
     expect(ADD_MACHINE.waiting("https://work.tail1234.ts.net", "amber fox")).toBe(
       "Toyon on work.tail1234.ts.net is asking whether to let amber fox in.",
     );
+  });
+  test("a row offers the request only for a Toyon answering now, and says why not otherwise", () => {
+    const work = {
+      name: "work",
+      host: "work.tail1234.ts.net",
+      online: true,
+      toyon: { machine: "work", answering: true },
+    };
+    const quiet = { ...work, toyon: { machine: "work", answering: false } };
+    const bare = { ...work, toyon: null };
+    const off = { ...bare, online: false };
+    expect(machineState(work, false)).toBeNull();
+    expect(machineState(work, true)).toBe("listed");
+    expect(machineState(quiet, false)).toBe("not answering right now");
+    expect(machineState(bare, false)).toBe("no Toyon");
+    expect(machineState(off, false)).toBe("offline");
+    expect([off, bare, quiet, work].map(machineRank)).toEqual([3, 2, 1, 0]);
   });
   test("hostOf keeps a port and survives something that is not an origin", () => {
     expect(hostOf("http://127.0.0.1:4242")).toBe("127.0.0.1:4242");

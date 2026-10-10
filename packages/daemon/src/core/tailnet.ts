@@ -11,7 +11,13 @@ import type { Hub } from "./hub.ts";
 interface Status {
   Peer?: Record<
     string,
-    { HostName?: string; DNSName?: string; OS?: string; TailscaleIPs?: string[] | null } | null
+    {
+      HostName?: string;
+      DNSName?: string;
+      OS?: string;
+      TailscaleIPs?: string[] | null;
+      Online?: boolean;
+    } | null
   > | null;
 }
 
@@ -24,6 +30,8 @@ export interface ListedPeer {
   host: string;
   ip: string | null;
   os: string;
+  /** connected, as the coordination server last heard; what Tailscale's own machine list shows */
+  online: boolean;
 }
 
 /** every peer in `tailscale status --json`, or null for output that is not a status */
@@ -41,7 +49,13 @@ export function tailnetPeers(json: string): ListedPeer[] | null {
     if (!p) continue;
     const host = dnsName(p.DNSName);
     const name = p.HostName || host.split(".")[0] || "a device";
-    peers.push({ name, host, ip: p.TailscaleIPs?.[0] ?? null, os: (p.OS ?? "").toLowerCase() });
+    peers.push({
+      name,
+      host,
+      ip: p.TailscaleIPs?.[0] ?? null,
+      os: (p.OS ?? "").toLowerCase(),
+      online: p.Online === true,
+    });
   }
   return peers;
 }
@@ -55,6 +69,12 @@ export type HealthProbe = (origin: string, named: boolean) => Promise<{ machine:
 
 /** two seconds: a peer that is up answers in well under one, and one that is off never will */
 const PROBE_TIMEOUT_MS = 2000;
+
+/** How long a Toyon that answered stays on the list after it stops answering. Two machines on one
+ * Wi-Fi that will not pass their packets lose each other for a minute or two at a time while
+ * Tailscale retries the direct path before settling on a relay; a machine that answered inside
+ * this window is still there, just not answering, and the row says that instead of vanishing. */
+const ANSWERED_RECENTLY_MS = 3 * 60_000;
 
 const probe: HealthProbe = async (origin, named) => {
   try {
@@ -107,6 +127,8 @@ export class Tailnet {
   private statusAt = 0;
   private status: Promise<string | null> | null = null;
   private timer: ReturnType<typeof setInterval> | null = null;
+  /** the Toyon that last answered at each host, and when: what a missed probe falls back on */
+  private answered = new Map<string, { machine: string; at: number }>();
 
   constructor(private d: TailnetDeps) {}
 
@@ -179,16 +201,28 @@ export class Tailnet {
     );
   }
 
-  /** The other machines on the tailnet (phones left out) and which of them run Toyon with a name
-   * of their own; null when Tailscale is missing or not running. Every peer is probed at once. */
+  /** The other machines on the tailnet (phones left out), whether each is connected, and the
+   * Toyon with a name of its own that answers there now or answered lately; null when Tailscale
+   * is missing or not running. Every peer is probed at once. */
   async machines(): Promise<TailnetMachine[] | null> {
     const peers = await this.peers();
     if (peers === null) return null;
     const health = this.d.health ?? probe;
+    const now = (this.d.now ?? Date.now)();
     return Promise.all(
       peers
         .filter((p) => !isPhone(p) && p.host !== "")
-        .map(async (p) => ({ name: p.name, host: p.host, toyon: await health(`https://${p.host}`, true) })),
+        .map(async (p) => {
+          const got = await health(`https://${p.host}`, true);
+          if (got) this.answered.set(p.host, { machine: got.machine, at: now });
+          const last = this.answered.get(p.host);
+          const toyon = got
+            ? { machine: got.machine, answering: true }
+            : last && now - last.at < ANSWERED_RECENTLY_MS
+              ? { machine: last.machine, answering: false }
+              : null;
+          return { name: p.name, host: p.host, online: p.online, toyon };
+        }),
     );
   }
 

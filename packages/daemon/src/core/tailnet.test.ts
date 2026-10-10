@@ -39,9 +39,9 @@ test("peers come with their MagicDNS names, lowercased and without the dot", () 
     { HostName: "nameless", OS: "windows" },
   ]);
   expect(tailnetPeers(json)).toEqual([
-    { name: "work", host: "work.tail1234.ts.net", ip: "100.1.1.3", os: "macos" },
-    { name: "kyles-iphone", host: "kyles-iphone.tail.ts.net", ip: null, os: "ios" },
-    { name: "nameless", host: "", ip: null, os: "windows" },
+    { name: "work", host: "work.tail1234.ts.net", ip: "100.1.1.3", os: "macos", online: false },
+    { name: "kyles-iphone", host: "kyles-iphone.tail.ts.net", ip: null, os: "ios", online: false },
+    { name: "nameless", host: "", ip: null, os: "windows", online: false },
   ]);
   expect(tailnetPeers("{}")).toEqual([]);
   expect(tailnetPeers("failed to connect to local tailscaled")).toBeNull();
@@ -62,11 +62,11 @@ test("a phone is on when it answers a ping, whatever the status calls it", async
   expect(await new Tailnet({ ts: null, hub: hub() }).phones()).toBeNull();
 });
 
-test("the machines are every peer that is not a phone, with the Toyon that answers at its name", async () => {
+test("the machines are every peer that is not a phone, connected or not, with the Toyon that answers at its name", async () => {
   const json = status([
-    { HostName: "work", DNSName: "Work.Tail1234.ts.net.", OS: "macOS" },
-    { HostName: "box", DNSName: "box.tail1234.ts.net.", OS: "linux" },
-    { HostName: "Pixel", DNSName: "pixel.tail1234.ts.net.", OS: "android" },
+    { HostName: "work", DNSName: "Work.Tail1234.ts.net.", OS: "macOS", Online: true },
+    { HostName: "box", DNSName: "box.tail1234.ts.net.", OS: "linux", Online: false },
+    { HostName: "Pixel", DNSName: "pixel.tail1234.ts.net.", OS: "android", Online: true },
     { HostName: "nameless", OS: "windows" },
   ]);
   const asked: string[] = [];
@@ -79,14 +79,35 @@ test("the machines are every peer that is not a phone, with the Toyon that answe
     },
   });
   expect(await tailnet.machines()).toEqual([
-    { name: "work", host: "work.tail1234.ts.net", toyon: { machine: "work" } },
-    { name: "box", host: "box.tail1234.ts.net", toyon: null },
+    { name: "work", host: "work.tail1234.ts.net", online: true, toyon: { machine: "work", answering: true } },
+    { name: "box", host: "box.tail1234.ts.net", online: false, toyon: null },
   ]);
   expect(asked).toEqual(["https://work.tail1234.ts.net named", "https://box.tail1234.ts.net named"]);
   expect(await tailnet.isToyon("https://work.tail1234.ts.net")).toBe(true);
   expect(await tailnet.isToyon("https://evil.example")).toBe(false);
   expect(asked.at(-1)).toBe("https://evil.example");
   expect(await new Tailnet({ ts: null, hub: hub() }).machines()).toBeNull();
+});
+
+test("a Toyon that answered lately stays on the list as not answering, and drops off after three minutes", async () => {
+  const json = status([{ HostName: "work", DNSName: "work.tail1234.ts.net.", OS: "macOS", Online: true }]);
+  let t = 1000;
+  let up = true;
+  const tailnet = new Tailnet({
+    ts: fake(json).ts,
+    hub: hub(),
+    now: () => t,
+    health: async () => (up ? { machine: "work" } : null),
+  });
+  const row = async () => (await tailnet.machines())?.[0]?.toyon;
+  expect(await row()).toEqual({ machine: "work", answering: true });
+  up = false;
+  t += 60_000;
+  expect(await row()).toEqual({ machine: "work", answering: false });
+  t += 3 * 60_000;
+  expect(await row()).toBeNull();
+  up = true;
+  expect(await row()).toEqual({ machine: "work", answering: true });
 });
 
 test("one status fork feeds phones, machines and readiness inside the window; readiness is announced when it changes", async () => {

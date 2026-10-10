@@ -7,7 +7,7 @@ import { Field } from "../../ui/Field.tsx";
 import { useFocusOnMount, usePolled } from "../../ui/hooks.ts";
 import { Overlay } from "../../ui/Overlay.tsx";
 import { daemonUrls, handMachine, requestAccess, tailnetMachines } from "../../ws.ts";
-import { ADD_MACHINE, knockFailureLine } from "./addMachine.ts";
+import { ADD_MACHINE, knockFailureLine, machineRank, machineState } from "./addMachine.ts";
 import "./addMachine.css";
 
 /** how often the list is read again while the card is open: a machine whose phone button was just
@@ -66,8 +66,10 @@ export function AddMachine() {
     else void submit(origin);
   };
 
-  const toyons = (tailnet ?? []).filter((m) => m.toyon !== null);
-  const others = (tailnet ?? []).filter((m) => m.toyon === null);
+  const rows = (tailnet ?? [])
+    .map((m, i) => ({ m, i }))
+    .sort((a, b) => machineRank(a.m) - machineRank(b.m) || a.i - b.i);
+  const noToyon = rows.some(({ m }) => m.online && m.toyon === null);
   const line = (() => {
     switch (step.kind) {
       case "asking":
@@ -90,17 +92,24 @@ export function AddMachine() {
       <p className={cx("add-machine-line", step.kind === "failed" && "add-machine-failed")}>{line}</p>
       {idle && tailnet && (
         <div className="add-machine-list">
-          {toyons.map((m) => {
+          {rows.map(({ m }) => {
             const origin = `https://${m.host}`;
-            const listed = machines.get(origin) !== null;
+            const state = machineState(m, machines.get(origin) !== null);
             return (
               <div key={m.host} className="add-machine-row">
-                <div className="add-machine-machine">
-                  <span className="add-machine-name">{m.toyon?.machine ?? m.name}</span>
-                  <span className="hint">{m.host}</span>
+                <div className="add-machine-peer">
+                  <span
+                    className={cx("dot add-machine-dot", m.online ? "add-machine-online" : "add-machine-offline")}
+                    role="img"
+                    aria-label={m.online ? "connected" : "offline"}
+                  />
+                  <div className="add-machine-machine">
+                    <span className="add-machine-name">{m.toyon?.machine ?? m.name}</span>
+                    <span className="hint">{m.host}</span>
+                  </div>
                 </div>
-                {listed ? (
-                  <span className="hint">{ADD_MACHINE.listed}</span>
+                {state !== null ? (
+                  <span className="hint">{state}</span>
                 ) : (
                   <Button variant="outline" size="sm" onClick={() => void submit(origin)}>
                     {ADD_MACHINE.request}
@@ -109,8 +118,8 @@ export function AddMachine() {
               </div>
             );
           })}
-          {toyons.length === 0 && <p className="add-machine-line">{ADD_MACHINE.noneOnTailnet}</p>}
-          {others.length > 0 && <p className="hint add-machine-note">{ADD_MACHINE.missing}</p>}
+          {rows.length === 0 && <p className="add-machine-line">{ADD_MACHINE.noneOnTailnet}</p>}
+          {noToyon && <p className="hint add-machine-note">{ADD_MACHINE.missing}</p>}
         </div>
       )}
       {idle && (

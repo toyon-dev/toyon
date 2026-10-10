@@ -123,11 +123,17 @@ export interface TailnetPhone {
   online: boolean;
 }
 
-/** another machine on this machine's tailnet, and whether a Toyon with a name answers there */
+/** another machine on this machine's tailnet, whether it is connected, and the Toyon there */
 export interface TailnetMachine {
   name: string;
   host: string;
-  toyon: { machine: string } | null;
+  /** connected to the tailnet, as Tailscale's coordination server last heard; the dot on the row */
+  online: boolean;
+  /** The Toyon with a name that answered there, now or a few minutes ago; null when none has. A
+   * link that drops for a minute (two machines on a Wi-Fi that will not pass their packets, while
+   * Tailscale keeps trying it before falling back to a relay) misses a probe without the machine
+   * going anywhere, so one missed probe reads as "not answering" and not as no Toyon at all. */
+  toyon: { machine: string; answering: boolean } | null;
 }
 
 const listed = (names: string[]): string =>

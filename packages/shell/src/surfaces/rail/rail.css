@@ -680,6 +680,70 @@
     right: auto;
   }
 
+  /* ---- A row slid along under a thumb (ui/slide.ts). The row itself moves, edge and all, and the
+   cell it uncovers at its end holds the rung's word on the lifted seat, centred in whatever width
+   the finger has opened so far, so the word comes out from under the row and not in from the
+   screen's edge. The wrapper stands in the list where the row did and clips nothing: the row only
+   ever moves toward its start, so its far end never leaves the wrapper's box. ---- */
+  .rail-slide {
+    position: relative;
+    /* the list's scroll stays the browser's, and a move along the row reaches the slide uncut */
+    touch-action: pan-y;
+    & > .row {
+      transform: translateX(var(--slide-x, 0px));
+    }
+    &[data-slide="settle"] > .row {
+      transition: transform 0.26s ease-out;
+    }
+  }
+  .rail-slide-verb {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    right: 0;
+    width: calc(-1 * var(--slide-x, 0px));
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--element1);
+    --text1: var(--ink0);
+    --text2: var(--ink1);
+    color: var(--text1);
+    font: var(--type-ui);
+    white-space: nowrap;
+    /* the same red the menu paints the same verb in */
+    &.danger {
+      color: var(--red);
+    }
+    [data-slide="settle"] & {
+      transition: width 0.26s ease-out;
+    }
+  }
+  /* a new word at each rung lands with a small pop, the one cue a thumb covering the row gets that
+     the rung changed; keyed by rung in the markup so the pop plays again for each */
+  .rail-slide-word {
+    flex-shrink: 0;
+    animation: rail-slide-pop 0.18s ease-out;
+  }
+  @keyframes rail-slide-pop {
+    from {
+      transform: scale(0.8);
+    }
+    to {
+      transform: scale(1);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .rail-slide[data-slide="settle"] > .row,
+    .rail-slide[data-slide="settle"] .rail-slide-verb {
+      transition: none;
+    }
+    .rail-slide-word {
+      animation: none;
+    }
+  }
+
   /* ---- Touch, on either frame. The app root says so (data-touch, from the store), and both the
    strip on a tablet and the screen on a phone read it here. ---- */
   [data-touch] .rail {

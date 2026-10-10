@@ -43,6 +43,7 @@ import "./rail.css";
 import { cx } from "../../ui/cx.ts";
 import { useOnChange } from "../../ui/hooks.ts";
 import { rowState } from "../../ui/rowState.ts";
+import { useSlide } from "../../ui/slide.ts";
 import { treeKey } from "../../ui/treeNav.ts";
 import {
   archivedFigures,
@@ -57,6 +58,7 @@ import {
   rowLine,
   rowQuiet,
 } from "./rowLine.ts";
+import { slideLadder } from "./slideLadder.ts";
 
 /** a count in its 3ch column; past three digits the exact number stops meaning anything here */
 const count = (n: number) => (n > 999 ? "1k+" : String(n));
@@ -230,6 +232,32 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
         })
       : discoveredItems(w, { clientId, frame }, deps, host);
 
+  // On a screen a row slides along under a thumb, uncovering its verbs one rung at a time
+  // (ui/slide.ts): the rung the finger is on is state, since it names a word, and the offset is
+  // written to the node. The ladder is read off the row's own menu (slideLadder), so the slide
+  // offers what the menu does; its last rung is that menu, opened under the row once it is back.
+  const [slide, setSlide] = useState<{ key: string; step: number } | null>(null);
+  const ladderOf = (w: WorktreeStatus) => (isOwned(w) ? slideLadder(rowItems(w)) : []);
+  useSlide(listRef, {
+    rowOf: (target) => {
+      if (!onScreen || graftMode) return null;
+      const el = target.closest<HTMLElement>(".rail-slide");
+      const key = el?.dataset.row;
+      const w = key ? worktrees.find((x) => x.id === key) : undefined;
+      return el && key && w ? { el, key, rungs: ladderOf(w).length } : null;
+    },
+    onSlide: setSlide,
+    onPick: (key, step) => {
+      const w = worktrees.find((x) => x.id === key);
+      const rung = w ? ladderOf(w)[step - 1] : undefined;
+      if (!w || !rung) return;
+      if (rung.id === "more") {
+        const rowEl = listRef.current?.querySelector(`[data-wt="${key}"]`);
+        if (rowEl) cm.openUnder(rowEl, () => rowItems(w), key);
+      } else if (rung.item && !rung.item.disabled) rung.item.onClick();
+    },
+  });
+
   /* the archive keeps its own count column, reserved list-wide the way the worktrees' are, and not
      drawn at all when no archived row has a number to put in it */
   const arch = archivedWindow(archived, archivedPage?.id ?? null);
@@ -350,7 +378,7 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
     // a landing op out from this row takes the dot's slot, and with it the row's word: the tip
     // and the line under the name say what the spinner is doing, not the state it covers
     const op = shipShown(w, shipping[id]?.op);
-    return (
+    const row = (
       <button
         key={id}
         type="button"
@@ -419,7 +447,7 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
           const next = worktrees[at + (down ? 1 : -1)];
           if (!next) return;
           dispatch({ a: "activate", id: next.id });
-          e.currentTarget.parentElement?.querySelector<HTMLElement>(`[data-wt="${next.id}"]`)?.focus();
+          listRef.current?.querySelector<HTMLElement>(`[data-wt="${next.id}"]`)?.focus();
         }}
         onClick={(e) => {
           // in graft mode the row you are on is the stock the others go onto, marked by its edge,
@@ -633,6 +661,27 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
           </span>
         )}
       </button>
+    );
+    if (!onScreen || !owned) return row;
+    // the row's ground while it slides: the cell it uncovers at its end, with the rung's word in
+    // it. Below the first rung the word is the first rung's, a tier down, so the hand sees what a
+    // longer drag would do; on a rung the word is live, or stays dim on a row the verb is not for.
+    // Read, not pressed: letting go is what does it (ui/slide.ts). The row menu carries the same
+    // verbs for a tap on the seat and for the keyboard.
+    const at = slide?.key === id ? slide.step : null;
+    const rung = at === null ? null : ladderOf(w)[Math.max(0, at - 1)];
+    const live = !!rung && at !== null && at > 0 && (rung.id === "more" || (!!rung.item && !rung.item.disabled));
+    return (
+      <div key={id} className="rail-slide" data-row={id}>
+        {row}
+        {rung && (
+          <span className={cx("rail-slide-verb", live && rung.danger && "danger")} aria-hidden="true">
+            <span key={at} className={cx("rail-slide-word", !live && "row-dim")}>
+              {rung.label}
+            </span>
+          </span>
+        )}
+      </div>
     );
   };
 

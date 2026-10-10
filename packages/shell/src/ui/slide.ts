@@ -103,36 +103,46 @@ export function useSlide(list: RefObject<HTMLElement | null>, handlers: SlideHan
         if (at > 0) h.current.onPick(r.key, at);
       }, SETTLE_MS);
     };
-    const onStart = (e: TouchEvent) => {
-      const t = e.touches[0];
-      // a second finger is a pinch, and it ends whatever the first had begun
-      if (e.touches.length !== 1 || !t) return drop();
+    /** the pointer a slide began with; a second finger is a pinch and ends it */
+    let pointer: number | null = null;
+    // Pointer events and not touch ones: the phone frame is also worked on from a desktop
+    // browser at a narrow width, where the gesture is a mouse's, and the preview beside the
+    // chat is one such. The list keeps the browser's vertical scroll through `touch-action:
+    // pan-y` on the row's wrapper (rail.css): a finger that moves along the row is left to the
+    // pointer events, and one that moves up or down becomes the scroll, which cancels them.
+    const onStart = (e: PointerEvent) => {
+      if (!e.isPrimary || (e.pointerType === "mouse" && e.button !== 0)) return drop();
       const r = e.target instanceof Element ? h.current.rowOf(e.target) : null;
       // a row still dropping back is not taken again: its settle would be cut, and the verb it
       // was let go on is about to run
       if (!r || r.el.dataset.slide) return;
       window.clearTimeout(timer);
       row = r;
-      from = { x: t.clientX, y: t.clientY };
+      pointer = e.pointerId;
+      from = { x: e.clientX, y: e.clientY };
     };
-    const onMove = (e: TouchEvent) => {
-      const t = e.touches[0];
+    const onMove = (e: PointerEvent) => {
       const r = row;
-      if (!r || !from || !t) return;
-      const dx = t.clientX - from.x;
-      const dy = t.clientY - from.y;
+      if (!r || !from || e.pointerId !== pointer) return;
+      const dx = e.clientX - from.x;
+      const dy = e.clientY - from.y;
       if (!dragging) {
         const axis = slideAxis({ dx, dy });
         if (axis === "other") {
           row = null;
           from = null;
+          pointer = null;
         }
         if (axis !== "slide") return;
         dragging = true;
+        // a mouse dragged off the list, or out of the window, still lets go on this row
+        try {
+          r.el.setPointerCapture(e.pointerId);
+        } catch {
+          // the pointer is already gone (a touch the browser took for the scroll), and its cancel is on its way
+        }
         h.current.onSlide({ key: r.key, step: 0 });
       }
-      // ours now: the list must not scroll under a finger that is sliding a row
-      if (e.cancelable) e.preventDefault();
       const at = slideAt(dx, r.rungs);
       put(r, at.x, "drag");
       if (at.step !== step) {
@@ -142,28 +152,31 @@ export function useSlide(list: RefObject<HTMLElement | null>, handlers: SlideHan
         if (step > 0) navigator.vibrate?.(8);
       }
     };
-    const onEnd = (e: TouchEvent) => {
+    const onEnd = (e: PointerEvent) => {
+      if (e.pointerId !== pointer) return;
       if (dragging) spentUntil = e.timeStamp + 400;
+      pointer = null;
       drop();
     };
-    // the click arrives after the touch, on the row the drag began on; swallowed before the row
-    // hears it, since a slide that also opened the row would be two answers to one gesture
+    // the click arrives after the pointer is let go, on the row the drag began on; swallowed
+    // before the row hears it, since a slide that also opened the row would be two answers to
+    // one gesture
     const onClick = (e: MouseEvent) => {
       if (e.timeStamp >= spentUntil) return;
       e.preventDefault();
       e.stopPropagation();
     };
-    el.addEventListener("touchstart", onStart, { passive: true });
-    el.addEventListener("touchmove", onMove, { passive: false });
-    el.addEventListener("touchend", onEnd);
-    el.addEventListener("touchcancel", drop);
+    el.addEventListener("pointerdown", onStart);
+    el.addEventListener("pointermove", onMove);
+    el.addEventListener("pointerup", onEnd);
+    el.addEventListener("pointercancel", onEnd);
     el.addEventListener("click", onClick, true);
     return () => {
       window.clearTimeout(timer);
-      el.removeEventListener("touchstart", onStart);
-      el.removeEventListener("touchmove", onMove);
-      el.removeEventListener("touchend", onEnd);
-      el.removeEventListener("touchcancel", drop);
+      el.removeEventListener("pointerdown", onStart);
+      el.removeEventListener("pointermove", onMove);
+      el.removeEventListener("pointerup", onEnd);
+      el.removeEventListener("pointercancel", onEnd);
       el.removeEventListener("click", onClick, true);
     };
   }, [list]);

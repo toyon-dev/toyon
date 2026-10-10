@@ -3,13 +3,15 @@ import { type RefObject, useEffect, useRef } from "react";
 /** a finger has to travel this far before the touch is a drag, and which way it went by then decides
  * whose it is */
 const SLOP = 8;
-/** one rung of the ladder: how far the row slides for each verb. A thumb's width with room, so the
- * word under it has its box and a short drag reaches one rung and not two. */
-export const STEP = 72;
+/** one rung of the ladder: how far the row slides for each verb. Enough that the longest word
+ * stands whole in the cell before its rung is reached, and short enough that a thumb reaches the
+ * first rung without thinking about it. */
+export const STEP = 88;
 /** past the last rung the row keeps coming, but slowly: the hand reads that there is nothing further */
 const GIVE = 0.25;
-/** the drop back, in the stylesheet too */
-const SETTLE_MS = 260;
+/** the drop back, in the stylesheet too; a verb that asks a question waits for it, so the row is
+ * at rest when the question comes */
+export const SETTLE_MS = 220;
 
 export type Touch1 = { dx: number; dy: number };
 
@@ -45,7 +47,8 @@ export type SlideHandlers = {
   rowOf: (target: Element) => SlideRow | null;
   /** the rung the finger is on changed; null once the row is back at rest */
   onSlide: (at: { key: string; step: number } | null) => void;
-  /** let go on a rung, after the row has dropped back */
+  /** let go on a rung, as the row starts back: what opens beside the row opens now, and what asks
+   * a question waits SETTLE_MS for the row to be at rest */
   onPick: (key: string, step: number) => void;
 };
 
@@ -96,11 +99,10 @@ export function useSlide(list: RefObject<HTMLElement | null>, handlers: SlideHan
       step = 0;
       if (!r || !was) return;
       put(r, 0, "settle");
+      if (at > 0) h.current.onPick(r.key, at);
       timer = window.setTimeout(() => {
         rest(r);
         h.current.onSlide(null);
-        // after the drop, so a question the verb asks finds the row at rest and not mid-air
-        if (at > 0) h.current.onPick(r.key, at);
       }, SETTLE_MS);
     };
     /** the pointer a slide began with; a second finger is a pinch and ends it */

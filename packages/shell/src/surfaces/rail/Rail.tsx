@@ -43,7 +43,7 @@ import "./rail.css";
 import { cx } from "../../ui/cx.ts";
 import { useOnChange } from "../../ui/hooks.ts";
 import { rowState } from "../../ui/rowState.ts";
-import { useSlide } from "../../ui/slide.ts";
+import { SETTLE_MS, useSlide } from "../../ui/slide.ts";
 import { treeKey } from "../../ui/treeNav.ts";
 import {
   archivedFigures,
@@ -252,9 +252,15 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
       const rung = w ? ladderOf(w)[step - 1] : undefined;
       if (!w || !rung) return;
       if (rung.id === "more") {
-        const rowEl = listRef.current?.querySelector(`[data-wt="${key}"]`);
-        if (rowEl) cm.openUnder(rowEl, () => rowItems(w), key);
-      } else if (rung.item && !rung.item.disabled) rung.item.onClick();
+        // under the wrapper, which stands where the row does while the row itself is still on
+        // its way back; now rather than after it, since the menu is the thing let go for
+        const at = listRef.current?.querySelector(`.rail-slide[data-row="${key}"]`);
+        if (at) cm.openUnder(at, () => rowItems(w), key);
+      } else if (rung.item && !rung.item.disabled) {
+        // a verb that asks (archive with work) would freeze the row mid-air under its question
+        const run = rung.item.onClick;
+        window.setTimeout(run, SETTLE_MS);
+      }
     },
   });
 
@@ -664,10 +670,11 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
     );
     if (!onScreen || !owned) return row;
     // the row's ground while it slides: the cell it uncovers at its end, with the rung's word in
-    // it. Below the first rung the word is the first rung's, a tier down, so the hand sees what a
-    // longer drag would do; on a rung the word is live, or stays dim on a row the verb is not for.
-    // Read, not pressed: letting go is what does it (ui/slide.ts). The row menu carries the same
-    // verbs for a tap on the seat and for the keyboard.
+    // it. Below the first rung the word is the first rung's, a tier down on the list's own ground,
+    // so the hand sees what a longer drag would do; on a rung the cell takes the rung's colour and
+    // the word is live, or stays dim on a row the verb is not for. Read, not pressed: letting go
+    // is what does it (ui/slide.ts). The row menu carries the same verbs for a tap on the seat
+    // and for the keyboard.
     const at = slide?.key === id ? slide.step : null;
     const rung = at === null ? null : ladderOf(w)[Math.max(0, at - 1)];
     const live = !!rung && at !== null && at > 0 && (rung.id === "more" || (!!rung.item && !rung.item.disabled));
@@ -675,7 +682,7 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
       <div key={id} className="rail-slide" data-row={id}>
         {row}
         {rung && (
-          <span className={cx("rail-slide-verb", live && rung.danger && "danger")} aria-hidden="true">
+          <span className="rail-slide-verb" data-rung={live ? rung.id : undefined} aria-hidden="true">
             <span key={at} className={cx("rail-slide-word", !live && "row-dim")}>
               {rung.label}
             </span>

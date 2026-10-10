@@ -22,7 +22,7 @@ import { IconButton } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { DocumentFind } from "../../ui/DocumentFind.tsx";
 import { isFind } from "../../ui/find.ts";
-import { useOnChange, useSecondsSince, useTail } from "../../ui/hooks.ts";
+import { TAIL_SLACK, useOnChange, useSecondsSince, useTail } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { Spinner } from "../../ui/Spinner.tsx";
 import { selectedText, useKeyWithin, useSelectAllWithin } from "../../ui/selectAll.ts";
@@ -123,9 +123,11 @@ type LogRow =
   | { kind: "thought"; props: ComponentProps<typeof ThoughtRow> }
   | { kind: "item"; props: ComponentProps<typeof ChatItemView> };
 
-/** how far up from the end a phone's bars fold: more than the height a composer gives the log as
- * it folds, with the tail's own slack to spare, so the fold never puts the reader on the end */
-const READ_ROOM = 240;
+/** how far up from the end a phone's bars fold, past the height the box hands the log as it folds
+ * and the tail's own slack: the fold must leave the reader off the end by a margin a finger's
+ * next tick does not cross, or the tick pins them back to the end and the box unfolds under the
+ * thumb. Counted from the box's own height because a card is three times the blank field. */
+const READ_SPARE = 90;
 
 /** the transcript for the active worktree: items, working indicator, waiting messages, jump-down pill.
  * `lead` is a line the conversation starts from: the first child of the log, so it sits on the
@@ -232,9 +234,10 @@ export function ChatLog({
   // blank composer to a line, and both stay that way until the end is back in view. By place and
   // not by the hand, unlike the pill: bars that came and went with each turn of the thumb were a
   // thing to watch, and the end is the one place the box and the name are for. The fold waits
-  // until they are READ_ROOM up, where leaving the end is enough to unfold, because the box
-  // folding hands the log its height at the foot: a reader nearer the end than that is at the end
-  // once it has, which unfolds the box, which pins them back to where they set out from.
+  // until they are the box's height and more up, where leaving the end is enough to unfold,
+  // because the box folding hands the log its height at the foot: a reader nearer the end than
+  // that is at the end once it has, which unfolds the box, which pins them back to where they set
+  // out from.
   useEffect(() => {
     const el = logRef.current;
     if (!phone || !follow.offEnd || !el) {
@@ -242,7 +245,8 @@ export function ChatLog({
       return;
     }
     const far = () => {
-      if (el.scrollHeight - el.scrollTop - el.clientHeight <= READ_ROOM) return;
+      const box = panelRef.current?.querySelector<HTMLElement>(":scope > .chat-input")?.offsetHeight ?? 0;
+      if (el.scrollHeight - el.scrollTop - el.clientHeight <= box + TAIL_SLACK + READ_SPARE) return;
       dispatch({ a: "reading", on: true });
       el.removeEventListener("scroll", far);
     };

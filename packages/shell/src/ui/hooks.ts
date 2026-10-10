@@ -193,7 +193,7 @@ export function useReveal(scroller: string) {
 }
 
 /** how close to the end still counts as reading the end, so a pixel of rounding does not let go */
-const TAIL_SLACK = 40;
+export const TAIL_SLACK = 40;
 
 /** how long after the last scroll event the scroller still counts as moving: long enough that a
  * pause between two turns of the wheel does not blink a control that follows the motion, short

@@ -1107,13 +1107,30 @@ export function Composer({
   // place: there esc parks the question, and a stop beside the ask's send read as the send's
   // opposite on one line
   const stopShown = stoppable && !cardUp;
-  // away from the end of the log on a phone the box is a line, for as long as it holds nothing and asks
-  // nothing; the stylesheet keeps it whole while the caret is in it
+  // away from the end of the log on a phone the box is a line, for as long as it holds nothing;
+  // the stylesheet keeps it whole while the caret is in it. A card folds the same way, to the line
+  // that stands for it when it is set aside, unless its own field holds the caret: the fold would
+  // take the caret with it, and the keyboard down is the log jumping under the thumb. The caret is
+  // watched here and not in the stylesheet because the fold is what hides the card.
   const reading = useStore((s) => s.reading);
-  const lean = onScreen && reading && blank && !cardUp && !parked && !copied;
+  const [typing, setTyping] = useState(false);
+  const lean = onScreen && reading && !parked && (cardUp ? !typing : blank && !copied);
+  // hiding the card dropped its focus on the body; back from the fold it takes the keys again, as
+  // it did arriving (Card), unless the hand went somewhere meanwhile
+  useOnChange([lean], () => {
+    if (lean || !cardUp) return;
+    const f = requestAnimationFrame(() => {
+      if (document.activeElement === document.body) cardRef.current?.focus();
+    });
+    return () => cancelAnimationFrame(f);
+  });
 
   return (
-    <div className={cx("composer chat-input", stopShown && "stopping", lean && "lean")}>
+    <div
+      className={cx("composer chat-input", stopShown && "stopping", lean && "lean")}
+      onFocus={(e) => setTyping(e.target instanceof HTMLTextAreaElement)}
+      onBlur={() => setTyping(false)}
+    >
       {/* the plan this worktree runs on, from the card's arrival until a newer one replaces it:
           the card and the row that reads it back scroll away while the work goes on, and this
           row does not */}
@@ -1289,6 +1306,19 @@ export function Composer({
             return <CommandRow c={r.c} query={trigger.query} />;
           }}
         />
+      )}
+      {/* the card folded while the reader is up the log: the same line as the question set aside,
+          since from up there the two are one thing, a question waiting at the end. The press is
+          the log going to its end, as it does on a send, where the card stands whole again. */}
+      {cardUp && lean && id && (
+        <ComposerOffer
+          icon="chat"
+          verb="answer"
+          tip="Back to the question"
+          onPress={() => dispatch({ a: "answered", id })}
+        >
+          {cardLine(cardUp)}
+        </ComposerOffer>
       )}
       {cardUp && id ? (
         cardUp.kind === "handoff" ? (

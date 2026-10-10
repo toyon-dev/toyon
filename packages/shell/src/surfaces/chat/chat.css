@@ -108,6 +108,15 @@
         text-overflow: ellipsis;
       }
     }
+    /* A card folds the same way, to the line that stands for it set aside (Composer renders it).
+       The card itself goes rather than shrinks: it keeps its state mounted, and nothing on it is
+       pressed from up the log, since the line's press is the log going to its end, where the card
+       stands whole. Hiding it drops the keys with it, which on a phone is no loss. Not gated on
+       focus-within like the field: the card's root holds focus while it is read, and the caret
+       in its own field is the Composer's to watch. */
+    & .chat-input.lean .card {
+      display: none;
+    }
     & .chat-input {
       background: var(--sunken-floor);
       /* the box's own 10px, and under it the gesture bar a notched phone draws over the window */

@@ -74,11 +74,14 @@ export interface PairedMachine {
 export type RemoteView = Pick<Remote, "host" | "previews">;
 
 /** What a machine is called in a shell that lists several. A tailnet name's first label is the
- * device's name on the tailnet, which is what the person called it; any other public name says
- * less about the box than its own hostname does, so the hostname's first label stands in. */
+ * device's name on the tailnet, and a Fly app's is the app's name: both are what the person called
+ * it, where the Fly machine's own hostname is an id nobody chose. Any other public name says less
+ * about the box than its own hostname does, so the hostname's first label stands in. */
 export function machineLabel(hostname: string, remote: Pick<Remote, "host"> | null): string {
   const of = (name: string) => name.split(".")[0]?.toLowerCase() ?? "";
-  if (remote && isTailnetName(remote.host)) return of(remote.host) || of(hostname);
+  if (remote && (isTailnetName(remote.host) || remote.host.endsWith(".fly.dev"))) {
+    return of(remote.host) || of(hostname);
+  }
   return of(hostname) || "toyon";
 }
 

@@ -1,8 +1,15 @@
 import { isLead, sentAt } from "@toyon/shared";
 import type { ReactNode } from "react";
-import { needsYou, unseenJump } from "../../app/unseenJump.ts";
+import { needsYouAcross, owedJumpAcross } from "../../app/unseenJump.ts";
 import { archivedHint } from "../../state/actions/archive.ts";
-import { useDispatch, useMachine, useMachineList, useMachines, useStore } from "../../state/context.tsx";
+import {
+  useDispatch,
+  useMachine,
+  useMachineList,
+  useMachines,
+  useOtherMachinesRows,
+  useStore,
+} from "../../state/context.tsx";
 import {
   useActive,
   useActiveId,
@@ -37,9 +44,11 @@ import { ago, dotClass, shipLabel, shipShown } from "../util.ts";
  * so the screen reads as the row opened. The lead is the exception, as it is on the list: its name
  * is a directory nobody chose and a send replaces, so the title says what the page is for and the
  * line says which project the worktree will be made in. The count at the strip's end (or before
- * the menu, on the list) says what needs you; the rows themselves never reorder for it, since the
- * rail's order is a send's. The menu is the palette: with no chords, every verb without a visible
- * control is reachable only through it.
+ * the menu, on the list) says what needs you, on this machine and on every other one the page
+ * lists, since a phone is opened to find out exactly that and the other machines' lists are not on
+ * screen; a tap goes there, switching machine when the row is elsewhere. The rows themselves never
+ * reorder for it, since the rail's order is a send's. The menu is the palette: with no chords,
+ * every verb without a visible control is reachable only through it.
  */
 export function PhoneBar({
   screen,
@@ -68,23 +77,30 @@ export function PhoneBar({
   const foundPage = useFoundPage();
   const visible = useVisibleWorktrees();
   const offline = useOffline();
-  const owed = needsYou(visible, activeId);
+  const elsewhere = useOtherMachinesRows();
+  const owed = needsYouAcross(visible, activeId, elsewhere);
   const lead = visible.find((w) => isLead(w.worktree));
   const home = screen === "home";
   const onLead = !home && !archivedPage && !!active && isLead(active.worktree);
   const leadOp = useStore((s) => (onLead && active ? shipShown(active, s.shipping[active.id]?.op) : null));
+  // the switcher lists the other machines' projects too, so one project here is still a choice
+  const machineCount = useMachineList().length;
+  const hereName = machines.displayName(here.origin);
   // a machine with no project open yet (just added, or speaking another protocol) is named by
   // the machine, so the list says where it is standing
   const title = home
-    ? (repo?.name ?? machines.displayName(here.origin))
+    ? (repo?.name ?? hereName)
     : onLead
       ? LEAD_LINE
       : (archivedPage?.title ?? active?.worktree.title ?? foundPage?.name ?? null);
   const tasks = visible.filter((w) => !isLead(w.worktree)).length;
+  const count = tasks === 0 ? "no worktrees yet" : `${tasks} ${tasks === 1 ? "worktree" : "worktrees"}`;
   const line = home
-    ? tasks === 0
-      ? "no worktrees yet"
-      : `${tasks} ${tasks === 1 ? "worktree" : "worktrees"}`
+    ? // with more than one machine listed, where the project is comes before how much is in it:
+      // a machine is the bigger box, and the list under the bar is this machine's alone
+      repo && machineCount > 1
+      ? `on ${hereName} · ${count}`
+      : count
     : archivedPage
       ? archivedHint(archivedPage)
       : onLead
@@ -105,8 +121,6 @@ export function PhoneBar({
             : null;
   const asks = !home && !archivedPage && !!active && dotClass(active) === "waiting";
   const switching = useStore((s) => s.overlay?.kind === "projects" && s.overlay.form === "pill");
-  // the switcher lists the other machines' projects too, so one project here is still a choice
-  const machineCount = useMachineList().length;
   const commands = useStore((s) => s.overlay?.kind === "commands");
   // the two lines: what you are looking at, and its state. In the row where there are no tabs
   // (the list, or a worktree while the socket is down), in the strip under the row where there are
@@ -142,8 +156,15 @@ export function PhoneBar({
       size="md"
       tone="primary"
       onClick={() => {
-        const to = unseenJump(visible, activeId, 1);
-        if (to) dispatch({ a: "activate", id: to.activate });
+        const to = owedJumpAcross(visible, activeId, elsewhere);
+        if (!to) return;
+        if (to.origin === null) return dispatch({ a: "activate", id: to.activate });
+        // a row on another machine: that machine's store opens the row (its own screen follows),
+        // then the page looks at that machine
+        const m = machines.get(to.origin);
+        if (!m) return;
+        m.store.dispatch({ a: "activate", id: to.activate });
+        machines.activate(to.origin);
       }}
     >
       {owed.n} {owed.tier}

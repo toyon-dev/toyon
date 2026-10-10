@@ -48,3 +48,50 @@ export function unseenJump(rows: readonly JumpRow[], activeId: string | null, di
   const first = rows[0];
   return first && first.id !== activeId ? { activate: first.id } : null;
 }
+
+/** another machine this page lists, and the rows its daemon holds */
+export type Elsewhere = { origin: string; rows: readonly JumpRow[] };
+
+/** `needsYou` over every machine the page lists: what this rail owes plus what each other machine
+ * owes, since a phone is opened to find out what needs you and cannot see the other machines'
+ * lists. The tier is the best present anywhere. */
+export function needsYouAcross(
+  rows: readonly JumpRow[],
+  activeId: string | null,
+  elsewhere: readonly Elsewhere[],
+): NeedsYou {
+  const found = [needsYou(rows, activeId), ...elsewhere.map((m) => needsYou(m.rows, null))].filter(
+    (o): o is NonNullable<NeedsYou> => o !== null,
+  );
+  if (found.length === 0) return null;
+  return {
+    n: found.reduce((n, o) => n + o.n, 0),
+    tier: found.some((o) => o.tier === "waiting") ? "waiting" : "unseen",
+  };
+}
+
+/** where the control that says `needsYouAcross` lands: the best tier present anywhere, this
+ * machine's rows first at that tier (the nearest after the row on screen, as the chord picks),
+ * then the other machines in the order they are listed, each at its first row of the tier. With
+ * nothing owed anywhere it falls back to this machine's `unseenJump`, so the control always does
+ * something. `origin` is null for a row on this machine. */
+export function owedJumpAcross(
+  rows: readonly JumpRow[],
+  activeId: string | null,
+  elsewhere: readonly Elsewhere[],
+): { origin: string | null; activate: string } | null {
+  const tiers: ((w: JumpRow) => boolean)[] = [(w) => w.agent === "waiting", (w) => !!w.unseen];
+  for (const hit of tiers) {
+    if (rows.some((w) => hit(w) && w.id !== activeId)) {
+      // owedJump's own first tier is this one, since nothing above it is present here
+      const here = owedJump(rows, activeId, 1);
+      return here && { origin: null, activate: here.activate };
+    }
+    for (const m of elsewhere) {
+      const w = m.rows.find(hit);
+      if (w) return { origin: m.origin, activate: w.id };
+    }
+  }
+  const here = unseenJump(rows, activeId, 1);
+  return here && { origin: null, activate: here.activate };
+}

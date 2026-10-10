@@ -1,5 +1,6 @@
 import { isOwned, type RepoInfo, type WorktreeStatus } from "@toyon/shared";
 import { useCallback } from "react";
+import { machineLine } from "../../app/machineLine.ts";
 import { machineItems } from "../../state/actions/machine.ts";
 import { importItems, projectItems } from "../../state/actions/project.ts";
 import {
@@ -132,8 +133,11 @@ export function ProjectPicker({ form }: { form: ProjectsOverlay["form"] }) {
       // cursor start on one row; with no open project the clamp puts it on the first
       initialIndex={(rs) => rs.findIndex((r) => r.kind === "repo" && !r.machine && r.repo.id === current)}
       // each machine's projects under its name, this machine's first; with one machine listed no
-      // head is drawn, since the rows then say what they are themselves
-      groupOf={(r) => (r.kind === "repo" && r.machine ? r.machine.name : hereName)}
+      // head is drawn, since the rows then say what they are themselves. The key is the origin,
+      // and the head drawn for it names the machine and, for another machine, what it needs of
+      // you: the one place that says so short of switching to it
+      groupOf={(r) => (r.kind === "repo" && r.machine ? r.machine.origin : here.origin)}
+      groupHead={(origin) => (origin === here.origin ? hereName : <MachineHead origin={origin} />)}
       keyOf={(r) =>
         r.kind === "repo"
           ? r.machine
@@ -284,6 +288,33 @@ function hintOf(rows: readonly WorktreeStatus[], r: RepoInfo): string | undefine
     found > 0 ? `${found} discovered` : null,
   ];
   return parts.filter(Boolean).join(" · ") || undefined;
+}
+
+/** another machine's head over its projects: its name, and what it needs of you (or why it cannot
+ * say), read off its own store. A count that owes something is the accent, as the bar's is. */
+function MachineHead({ origin }: { origin: string }) {
+  const machines = useMachines();
+  const machine = machines.get(origin) ?? machines.active();
+  const rows = useMachineStore(machine, (s) => s.rows);
+  const connected = useMachineStore(machine, (s) => s.connected);
+  const connectFailure = useMachineStore(machine, (s) => s.connectFailure);
+  const incompatible = useMachineStore(machine, (s) => s.incompatible);
+  const front = useMachineStore(machine, (s) => s.remote?.front);
+  const name = machines.displayName(origin);
+  const line = machineLine(name, {
+    rows: rows.filter(isOwned),
+    connected,
+    connectFailure,
+    incompatible,
+    suspended: front === "edge" && !connected,
+  });
+  const owed = /^\d+ /.test(line);
+  return (
+    <>
+      {name}
+      <span className={cx("picker-group-tail", owed && "picker-group-owed")}>{line}</span>
+    </>
+  );
 }
 
 /** the same counts for a project on another machine, read off that machine's store */

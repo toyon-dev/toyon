@@ -3,7 +3,7 @@
 // lets a streamed log line touch the log view and nothing else. Selectors must return stable
 // values for unchanged state: pick fields or use the EMPTY_* constants, never build a fresh object.
 
-import type { DarkNow, RepoInfo } from "@toyon/shared";
+import { type DarkNow, isOwned, type RepoInfo, type WorktreeStatus } from "@toyon/shared";
 import {
   createContext,
   Fragment,
@@ -147,6 +147,47 @@ export function useOtherMachines(): OtherMachine[] {
   }, [others, machines]);
   return useSyncExternalStore(subscribe, read);
 }
+
+/** the rows each other machine holds, read off its store for what it owes you */
+export interface OtherMachineRows {
+  origin: string;
+  rows: readonly WorktreeStatus[];
+}
+
+/** Each other machine's owned rows, for the one control on a phone that says what needs you and
+ * takes you there. A machine whose socket is down, held or speaking another protocol holds no
+ * rows here: nothing on it can be opened, so nothing on it is owed yet. One subscription over
+ * every other machine's store, settling on the same array while no list moved. */
+export function useOtherMachinesRows(): OtherMachineRows[] {
+  const here = useMachine();
+  const list = useMachineList();
+  const others = useMemo(() => list.filter((m) => m !== here), [list, here]);
+  const last = useRef<{ others: Machine[]; rows: (readonly WorktreeStatus[])[]; value: OtherMachineRows[] } | null>(
+    null,
+  );
+  const subscribe = useCallback(
+    (fn: () => void) => {
+      const offs = others.map((m) => m.store.subscribe(fn));
+      return () => {
+        for (const off of offs) off();
+      };
+    },
+    [others],
+  );
+  const read = useCallback(() => {
+    const rows = others.map((m) => {
+      const s = m.store.getState();
+      return s.connected && !s.incompatible ? s.rows : NO_ROWS;
+    });
+    const c = last.current;
+    if (c && c.others === others && sameItems(c.rows, rows)) return c.value;
+    const value = others.map((m, i) => ({ origin: m.origin, rows: (rows[i] ?? NO_ROWS).filter(isOwned) }));
+    last.current = { others, rows, value };
+    return value;
+  }, [others]);
+  return useSyncExternalStore(subscribe, read);
+}
+const NO_ROWS: readonly WorktreeStatus[] = [];
 
 /** the terminal frames of the machine on screen */
 export function useTerminalBus(): TerminalBus {

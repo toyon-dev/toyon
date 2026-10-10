@@ -79,6 +79,9 @@ describe("machineLabel", () => {
     expect(machineLabel("Kyles-MacBook.local", { host: "toyon.example.com" })).toBe("kyles-macbook");
     expect(machineLabel("studio", null)).toBe("studio");
   });
+  test("a Fly app's name stands in for its machine's hostname, which is an id", () => {
+    expect(machineLabel("g40d6qg97c", { host: "pulse-cloud.fly.dev" })).toBe("pulse-cloud");
+  });
   test("never empty: a hostname with nothing in it reads as toyon", () => {
     expect(machineLabel("", null)).toBe("toyon");
   });

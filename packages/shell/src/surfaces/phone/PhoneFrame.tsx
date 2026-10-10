@@ -18,7 +18,6 @@ import { EditorPane } from "../editor/EditorPane.tsx";
 import { Overlays } from "../overlays/Overlays.tsx";
 import { Rail } from "../rail/Rail.tsx";
 import { chord, previewUrl } from "../util.ts";
-import { MachineRows } from "./MachineRows.tsx";
 import { PhoneBar } from "./PhoneBar.tsx";
 import { PhonePreview } from "./PhonePreview.tsx";
 import "./phone.css";
@@ -149,11 +148,9 @@ export function PhoneFrame() {
               <p className="status-line">{say}</p>
             </View>
           ) : !onWorktree ? (
-            // the other machines first, then this one's worktrees: the list is the home screen
-            <div className="phone-home">
-              <MachineRows />
-              <Rail placement="screen" />
-            </div>
+            // this machine's worktrees: the list is the home screen, and the bar says which machine
+            // and which project it is, with the other machines a tap into the switcher away
+            <Rail placement="screen" />
           ) : editor ? (
             // a file opened from the changes list or from a tool row in the chat: the diff over
             // whichever tab is open; its close returns there, and a tab or the way back shuts it

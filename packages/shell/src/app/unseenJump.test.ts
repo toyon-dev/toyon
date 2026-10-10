@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { needsYou, unseenJump } from "./unseenJump.ts";
+import { needsYou, needsYouAcross, owedJumpAcross, unseenJump } from "./unseenJump.ts";
 
 /** 1 is a turn nobody has looked at, "w" an agent waiting on an answer, "r" one still running */
 const rows = (...flags: (0 | 1 | "w" | "r")[]) =>
@@ -83,5 +83,30 @@ describe("needsYou", () => {
     const r = rows(0, "r", 0);
     expect(unseenJump(r, "w1", 1)).toEqual({ activate: "w0" });
     expect(unseenJump(r, "w1", -1)).toEqual({ activate: "w0" });
+  });
+});
+
+describe("across machines", () => {
+  const mac = (...flags: (0 | 1 | "w" | "r")[]) => ({ origin: "https://mac", rows: rows(...flags) });
+  const box = (...flags: (0 | 1 | "w" | "r")[]) => ({ origin: "https://box", rows: rows(...flags) });
+  test("the count is every machine's, and the tier the best anywhere", () => {
+    expect(needsYouAcross(rows(0, 1), null, [mac("w", 0), box(1)])).toEqual({ n: 3, tier: "waiting" });
+    expect(needsYouAcross(rows(0, 0), "w0", [mac(0, 1)])).toEqual({ n: 1, tier: "unseen" });
+    expect(needsYouAcross(rows("r"), null, [mac("r"), box()])).toBeNull();
+  });
+  test("a waiting row on another machine outranks an unread turn here", () => {
+    expect(owedJumpAcross(rows(0, 1), null, [mac(0, "w")])).toEqual({ origin: "https://mac", activate: "w1" });
+  });
+  test("at one tier this machine comes first, then the others in their order", () => {
+    expect(owedJumpAcross(rows(0, "w"), null, [mac("w")])).toEqual({ origin: null, activate: "w1" });
+    expect(owedJumpAcross(rows(0, 0), null, [mac(0), box(1)])).toEqual({ origin: "https://box", activate: "w0" });
+  });
+  test("the row on screen is looked at, so the same tier elsewhere is next", () => {
+    expect(owedJumpAcross(rows("w", 0), "w0", [mac(0, "w")])).toEqual({ origin: "https://mac", activate: "w1" });
+  });
+  test("with nothing owed anywhere the fallback is this machine's: a running row, then the first", () => {
+    expect(owedJumpAcross(rows(0, "r"), "w0", [mac(0)])).toEqual({ origin: null, activate: "w1" });
+    expect(owedJumpAcross(rows(0, 0), "w1", [mac("r")])).toEqual({ origin: null, activate: "w0" });
+    expect(owedJumpAcross(rows(0), "w0", [])).toBeNull();
   });
 });

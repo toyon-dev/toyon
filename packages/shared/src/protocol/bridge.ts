@@ -74,6 +74,11 @@ export const bridgeToShellSchema = z.discriminatedUnion("type", [
   /** `title` is the document's as the navigation lands; optional, so a page still holding an older
    * bridge keeps parsing */
   z.object({ type: z.literal("navigated"), url: z.string(), title: z.string().optional() }),
+  /** a history traversal moved this frame: a swipe or `history.back()` within the page, or the
+   * page being reached by one (it loads fresh and says so). A frame's entries are the tab's, so the
+   * shell on a phone has to know when a back was spent on the frame and not on its own screens.
+   * `dir` only where the frame's Navigation API can tell; a page loaded by a traversal cannot */
+  z.object({ type: z.literal("traversed"), dir: z.enum(["back", "forward"]).optional() }),
   /** the document's title changed after the page loaded or navigated: an app names its page a tick
    * or a fetch after it gets there */
   z.object({ type: z.literal("title"), title: z.string() }),

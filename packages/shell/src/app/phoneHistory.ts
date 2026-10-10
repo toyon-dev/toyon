@@ -34,7 +34,15 @@ import { type Entry, type FloatStack, floats } from "../ui/floats.ts";
  * back here as a popstate for the depth the state already has, and does nothing.
  *
  * The preview's own navigations are entries in the same history (a frame's history is the tab's),
- * so a swipe on the preview tab walks the app back first, the way it would in its own tab.
+ * laid between the shell's: an app that pushes a route stands an entry over the screen's. A step
+ * of the tab's history moves one of the two, the shell or the frame, never both. On the preview
+ * tab a swipe walks the app back first, the way it would in its own tab. Hidden under another
+ * tab, the frame's entries would eat the swipe, so the bridge in the frame reports each traversal
+ * (PhonePreview hears it), and one that moved a hidden frame is read as the back it was. The
+ * walks this module asks for go one step at a time, and each is answered before the next: by
+ * the top's popstate when the step was the shell's, or by the frame's report when it was the
+ * frame's and the shell stands where it stood. A frame without the bridge answers nothing, and
+ * its step costs the next swipe, as it did before.
  */
 
 const KEY = "toyonDepth";
@@ -64,6 +72,31 @@ export interface HistoryHost {
   removeEventListener(type: "popstate", fn: (e: PopStateEvent) => void): void;
 }
 
+/** a history traversal that moved the preview's frame, as its bridge reported it */
+export interface FrameWalk {
+  /** which way, where the frame's Navigation API could say; null for a page the traversal loaded */
+  dir: "back" | "forward" | null;
+}
+
+export interface FrameWalks {
+  watch(fn: (walk: FrameWalk) => void): () => void;
+}
+
+/** The preview frame's traversals, told by whoever owns the frame (PhonePreview) and heard by the
+ * history installed beside the store. */
+export const frameWalks = (() => {
+  const watchers = new Set<(walk: FrameWalk) => void>();
+  return {
+    watch(fn: (walk: FrameWalk) => void): () => void {
+      watchers.add(fn);
+      return () => watchers.delete(fn);
+    },
+    tell(walk: FrameWalk) {
+      for (const fn of watchers) fn(walk);
+    },
+  };
+})();
+
 const depthIn = (entry: unknown): number | null => {
   const d = entry && typeof entry === "object" ? (entry as Record<string, unknown>)[KEY] : undefined;
   return typeof d === "number" ? d : null;
@@ -78,6 +111,7 @@ export function installPhoneHistory(
   store: Store,
   host: HistoryHost = window,
   boxes: Pick<FloatStack, "open" | "watch" | "shut"> = floats,
+  frame: FrameWalks = frameWalks,
 ): () => void {
   const h = host.history;
   // the depth of the entry the browser is on. A page that opens on an entry of its own (a reload
@@ -102,29 +136,32 @@ export function installPhoneHistory(
     return null;
   };
 
-  // walks this module asked for whose popstate has not come yet
-  let walks = 0;
+  // a step down this module asked for, not yet answered. A go is not settled when it returns, and
+  // which of the shell and the frame it moves is only known from the answer, so nothing else is
+  // laid or walked until it comes
+  let walking = false;
 
   const sync = () => {
     const screens = depthOf(store.getState());
-    if (screens === null) return;
+    if (screens === null || walking) return;
     if (!floored) {
       h.replaceState({ [KEY]: FLOOR }, "");
       floored = true;
     }
     const want = screens + (topBox() ? 1 : 0);
     if (want === at) return;
-    if (want > at) for (let d = at + 1; d <= want; d++) h.pushState({ [KEY]: d, [OVER]: d > screens }, "");
-    else {
-      h.go(want - at);
-      walks++;
+    if (want > at) {
+      for (let d = at + 1; d <= want; d++) h.pushState({ [KEY]: d, [OVER]: d > screens }, "");
+      at = want;
+    } else {
+      // one step, and `at` holds until the answer says which of the shell and the frame it moved
+      h.go(-1);
+      walking = true;
     }
-    at = want;
   };
 
   // A box opening or closing is heard mid-commit, and one commit can do both: a menu row that
-  // opens a picker, or a development build mounting everything twice. A go is not settled when it
-  // returns, so an entry pushed behind one is the entry it lands under; the count is read once,
+  // opens a picker, or a development build mounting everything twice. The count is read once,
   // after the commit.
   let queued = false;
   const syncSoon = () => {
@@ -136,9 +173,26 @@ export function installPhoneHistory(
     });
   };
 
+  /** a back the browser spent on the entry below the screen, or on a hidden frame: the box on top
+   * goes, or the screen drops to the level the step landed on */
+  const stepDown = (s: State, screens: number, landed: number) => {
+    const box = topBox();
+    if (box) {
+      // back with a box up closes that box alone; the sync that follows its going puts the entry
+      // back while another is still open
+      shutting = box;
+      boxes.shut(box);
+      return;
+    }
+    // the diff shuts onto the tab under it (a move to the tab already open does that), below
+    // another tab is the chat, and below the chat is the list
+    const to = landed === 0 ? "home" : s.editor && landed === screens - 1 ? s.screen : "chat";
+    store.dispatch({ a: "screen", to });
+  };
+
   const onPop = (e: PopStateEvent) => {
-    const ours = walks > 0;
-    if (ours) walks--;
+    const ours = walking;
+    walking = false;
     at = depthIn(e.state) ?? FLOOR;
     const s = store.getState();
     const screens = depthOf(s);
@@ -151,26 +205,16 @@ export function installPhoneHistory(
       sync();
       return;
     }
-    const box = topBox();
-    const now = screens + (box ? 1 : 0);
-    if (now === at) return;
-    if (now > at && box) {
-      // back with a box up closes that box alone; the sync that follows its going puts the entry
-      // back while another is still open
-      shutting = box;
-      boxes.shut(box);
+    if (ours) {
+      // the step was the shell's own and the store already says where it was going: whatever is
+      // still above or below is walked or laid from here
+      sync();
       return;
     }
-    if (now > at) {
-      // back: the diff shuts onto the tab under it (a move to the tab already open does that),
-      // below another tab is the chat, and below the chat is the list
-      const to = at === 0 ? "home" : s.editor && at === screens - 1 ? s.screen : "chat";
-      store.dispatch({ a: "screen", to });
-    } else if (ours && walks > 0) {
-      // the first of two walks down (a box that closed as the screen under it dropped a level)
-      // lands above where the screen is, which is what forward looks like; the second is coming
-      return;
-    } else if (!ours && now === 0 && s.activeId && !isOver(e.state)) {
+    const now = screens + (topBox() ? 1 : 0);
+    if (now === at) return;
+    if (now > at) stepDown(s, screens, at);
+    else if (now === 0 && s.activeId && !isOver(e.state)) {
       // forward from the list into the row it came back from; a tab or a diff above its chat is
       // not remembered, and neither is a box, so the sync below walks the entry for any back down
       store.dispatch({ a: "screen", to: "chat" });
@@ -178,13 +222,34 @@ export function installPhoneHistory(
     sync();
   };
 
+  const onFrame = (walk: FrameWalk) => {
+    if (walking) {
+      // the step asked for was spent on the frame: the shell stands where it stood, and the way
+      // down is still to walk
+      walking = false;
+      sync();
+      return;
+    }
+    const s = store.getState();
+    const screens = depthOf(s);
+    if (screens === null || screens === 0) return;
+    // on its own tab the app's history is the person's to walk, the way it is in a tab of its own
+    const shown = s.screen === "preview" && !s.editor && screens === 2;
+    if (shown || walk.dir === "forward") return;
+    // a swipe spent on a frame nobody is looking at: the screen it was meant for drops a level, and
+    // the sync that follows walks the shell's entry down to match
+    stepDown(s, screens, screens + (topBox() ? 1 : 0) - 1);
+  };
+
   host.addEventListener("popstate", onPop);
   const unsubscribe = store.subscribe(sync);
   const unwatch = boxes.watch(syncSoon);
+  const unwatchFrame = frame.watch(onFrame);
   sync();
   return () => {
     host.removeEventListener("popstate", onPop);
     unsubscribe();
     unwatch();
+    unwatchFrame();
   };
 }

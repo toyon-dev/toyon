@@ -3,7 +3,7 @@ import type { WorktreeStatus } from "@toyon/shared";
 import type { Store } from "../state/context.tsx";
 import { type Action, initialState, reducer, type State } from "../state/store.ts";
 import type { Entry } from "../ui/floats.ts";
-import { type HistoryHost, installPhoneHistory } from "./phoneHistory.ts";
+import { type FrameWalk, type FrameWalks, type HistoryHost, installPhoneHistory } from "./phoneHistory.ts";
 
 const row = (id: string): WorktreeStatus =>
   ({
@@ -55,23 +55,34 @@ function storeOf(initial: State) {
   return { store, set };
 }
 
+/** a step the preview's frame laid in the tab's history: the shell's entry under it is unchanged */
+const FRAME = { app: true };
+
 /** a tab's history with the browser's shape: a list and an index, pushes cut what is ahead, and a
- * go lands later (here, when `settle` runs) with a popstate carrying the entry's state */
-function tab(entries: unknown[] = [null]) {
+ * go lands later (here, when `settle` runs). A step that changes the shell's entry comes back as a
+ * popstate carrying that entry's state; one that only moves the frame comes back as the frame's
+ * report, with the direction unless the tab is `blind`, as a page the step loaded fresh is */
+function tab(entries: unknown[] = [null], { blind = false } = {}) {
   let index = entries.length - 1;
   const queued: number[] = [];
   let pop: ((e: PopStateEvent) => void) | null = null;
+  const watchers = new Set<(walk: FrameWalk) => void>();
+  /** the index of the shell's entry at a step: the nearest below that is not the frame's */
+  const shellAt = (i: number) => {
+    for (let j = i; j >= 0; j--) if (entries[j] !== FRAME) return j;
+    return -1;
+  };
   const host: HistoryHost = {
     history: {
       get state() {
-        return entries[index];
+        return entries[shellAt(index)] ?? null;
       },
       pushState(data: unknown) {
         entries.splice(index + 1, entries.length, data);
         index++;
       },
       replaceState(data: unknown) {
-        entries[index] = data;
+        entries[shellAt(index)] = data;
       },
       go(delta = 0) {
         queued.push(delta);
@@ -84,17 +95,31 @@ function tab(entries: unknown[] = [null]) {
       pop = null;
     },
   };
+  const frames: FrameWalks = {
+    watch(fn) {
+      watchers.add(fn);
+      return () => watchers.delete(fn);
+    },
+  };
   const move = (delta: number) => {
     const to = index + delta;
     if (to < 0 || to >= entries.length) return;
+    const was = shellAt(index);
     index = to;
-    pop?.({ state: entries[index] } as PopStateEvent);
+    if (shellAt(index) !== was) pop?.({ state: entries[shellAt(index)] ?? null } as PopStateEvent);
+    else for (const fn of watchers) fn({ dir: blind ? null : delta < 0 ? "back" : "forward" });
   };
   const settle = () => {
     while (queued.length) move(queued.shift() ?? 0);
   };
-  const depths = () => entries.map((e) => (e as { toyonDepth?: number } | null)?.toyonDepth ?? null);
-  return { host, back: () => move(-1), forward: () => move(1), settle, depths, index: () => index };
+  /** the app in the frame pushed a route of its own */
+  const appPush = () => {
+    entries.splice(index + 1, entries.length, FRAME);
+    index++;
+  };
+  const depths = () =>
+    entries.map((e) => (e === FRAME ? "app" : ((e as { toyonDepth?: number } | null)?.toyonDepth ?? null)));
+  return { host, frames, back: () => move(-1), forward: () => move(1), settle, appPush, depths, index: () => index };
 }
 
 /** the float stack as the history reads it: a box opens and closes, and a swipe shuts one, which
@@ -227,7 +252,7 @@ describe("phone history", () => {
     expect(store.getState().screen).toBe("home");
   });
 
-  test("the bar's back from another tab goes to the list in one walk", () => {
+  test("the bar's back from another tab goes to the list", () => {
     const { store } = storeOf(phone());
     const t = tab();
     installPhoneHistory(store, t.host);
@@ -405,5 +430,102 @@ describe("phone history", () => {
     t.settle();
     expect(seen).toEqual(["home"]);
     expect(t.index()).toBe(1);
+  });
+
+  test("a swipe spent on the hidden app's entry is read as a back", () => {
+    const { store } = storeOf(phone({ screen: "chat" }));
+    const t = tab();
+    installPhoneHistory(store, t.host, undefined, t.frames);
+    t.appPush();
+    expect(t.depths()).toEqual([-1, 0, 1, "app"]);
+    t.back();
+    expect(store.getState().screen).toBe("home");
+    t.settle();
+    expect(t.index()).toBe(1);
+  });
+
+  test("a page the swipe loaded fresh says no direction, and is a back all the same", () => {
+    const { store } = storeOf(phone({ screen: "chat" }));
+    const t = tab([null], { blind: true });
+    installPhoneHistory(store, t.host, undefined, t.frames);
+    t.appPush();
+    t.back();
+    expect(store.getState().screen).toBe("home");
+    t.settle();
+    expect(t.index()).toBe(1);
+  });
+
+  test("on the preview tab a swipe walks the app back first", () => {
+    const { store } = storeOf(phone({ screen: "preview" }));
+    const t = tab();
+    installPhoneHistory(store, t.host, undefined, t.frames);
+    t.appPush();
+    expect(t.depths()).toEqual([-1, 0, 1, 2, "app"]);
+    t.back();
+    expect(store.getState().screen).toBe("preview");
+    t.back();
+    expect(store.getState().screen).toBe("chat");
+    t.back();
+    expect(store.getState().screen).toBe("home");
+  });
+
+  test("the chat tab picked over an app that navigated walks the app's entries first", () => {
+    const { store } = storeOf(phone({ screen: "preview" }));
+    const t = tab();
+    installPhoneHistory(store, t.host, undefined, t.frames);
+    t.appPush();
+    t.appPush();
+    store.dispatch({ a: "screen", to: "chat" });
+    t.settle();
+    expect(t.index()).toBe(2);
+    expect(store.getState().screen).toBe("chat");
+    t.back();
+    expect(store.getState().screen).toBe("home");
+  });
+
+  test("forward into the hidden app's entry moves nothing", () => {
+    const { store } = storeOf(phone({ screen: "chat" }));
+    const t = tab();
+    installPhoneHistory(store, t.host, undefined, t.frames);
+    t.appPush();
+    t.back();
+    t.settle();
+    expect(store.getState().screen).toBe("home");
+    t.forward();
+    expect(store.getState().screen).toBe("chat");
+    t.forward();
+    expect(store.getState().screen).toBe("chat");
+    expect(t.index()).toBe(3);
+  });
+
+  test("a swipe spent on the app with a box up closes the box", async () => {
+    const { store } = storeOf(phone({ screen: "chat" }));
+    const t = tab();
+    const f = stack();
+    installPhoneHistory(store, t.host, f.boxes, t.frames);
+    const box = f.open();
+    await commit();
+    t.appPush();
+    t.back();
+    expect(f.shut).toEqual([box]);
+    expect(store.getState().screen).toBe("chat");
+    f.close(box);
+    await commit();
+    t.settle();
+    expect(t.index()).toBe(2);
+    expect(store.getState().screen).toBe("chat");
+  });
+
+  test("nothing is laid while a step down waits on its answer", () => {
+    const { store } = storeOf(phone({ screen: "changes" }));
+    const t = tab();
+    installPhoneHistory(store, t.host, undefined, t.frames);
+    t.appPush();
+    store.dispatch({ a: "screen", to: "chat" });
+    store.dispatch({ a: "screen", to: "changes" });
+    expect(t.depths()).toEqual([-1, 0, 1, 2, "app"]);
+    t.settle();
+    expect(t.index()).toBe(3);
+    expect(store.getState().screen).toBe("changes");
   });
 });

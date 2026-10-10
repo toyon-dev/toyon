@@ -58,6 +58,7 @@ const navigated = () => post({ type: "navigated", url: location.href, title: doc
 const origPush = history.pushState.bind(history);
 history.pushState = (...args) => {
   origPush(...args);
+  placed();
   navigated();
 };
 const origReplace = history.replaceState.bind(history);
@@ -67,6 +68,29 @@ history.replaceState = (...args) => {
 };
 window.addEventListener("popstate", navigated);
 window.addEventListener("hashchange", navigated);
+
+// This frame's entries sit in the tab's joint history, so a back on the shell's tab can be spent
+// on this frame while the shell's own screen stands still; a frame the shell has hidden looks like a
+// swipe that did nothing. Each traversal is reported so the shell can answer it. The direction is
+// the Navigation API's, which counts this frame's entries alone, and is unknown without it or to a
+// page a traversal loaded fresh. Fragment navigations fire popstate too, and read as forward here.
+const navApi = (window as { navigation?: { currentEntry: { index: number } | null } }).navigation;
+let placedAt: number | null = null;
+function placed() {
+  placedAt = navApi?.currentEntry?.index ?? null;
+}
+placed();
+window.addEventListener("popstate", () => {
+  const was = placedAt;
+  placed();
+  const dir = was === null || placedAt === null || was === placedAt ? undefined : placedAt < was ? "back" : "forward";
+  post({ type: "traversed", ...(dir ? { dir } : {}) });
+});
+const arrival = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;
+if (arrival?.type === "back_forward") post({ type: "traversed" });
+window.addEventListener("pageshow", (e) => {
+  if (e.persisted) post({ type: "traversed" });
+});
 
 // An app names its page after it navigates, a tick or a fetch later, so the title is watched rather
 // than read once. Only a real change is posted: the head also changes when scripts and styles land.

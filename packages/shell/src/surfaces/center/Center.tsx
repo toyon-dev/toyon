@@ -603,9 +603,10 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
   // a frame is on screen: nothing of toyon's own stands over the centre (the setup pane, a clone
   // being watched) and the project has something to run
   const frameShown = shownId !== null && !setupRepo && !watching && !bare && !chatCentred;
-  // the frames' box is the app's window: its size is read off it while it changes
+  // the frames' box is the app's window: its size is read off it while it changes, for the bar
   const [framesEl, setFramesEl] = useState<HTMLDivElement | null>(null);
-  const sizeReadout = useSizeReadout(framesEl, frameShown);
+  const sayPreviewSize = useCallback((text: string | null) => dispatch({ a: "preview-size", text }), [dispatch]);
+  useSizeReadout(framesEl, frameShown, sayPreviewSize);
 
   // editor pane: draggable height + full-height toggle, persisted
   const [editorH, setEditorH] = usePersisted(STORAGE.editorHeight, 0, (raw) => {
@@ -731,8 +732,6 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
               style={{ display: "none" }}
             />
           ))}
-          {/* after the frames in flow, so it paints over the one on screen with no layer of its own */}
-          {sizeReadout && <span className="center-size">{sizeReadout}</span>}
           {/* the page stands in for every pane below: it is about a project that is not one of them */}
           {newProject ? (
             <NewProject project={newProject} />

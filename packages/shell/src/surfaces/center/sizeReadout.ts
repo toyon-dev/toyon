@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 
 /**
  * The preview's size, said while it changes.
@@ -8,6 +8,10 @@ import { useEffect, useState } from "react";
  * readout answers whenever the box changes, from any cause (a dock or pane drag, a dock toggled,
  * the window resized) and goes once the size has held for a moment. Nothing is said at rest, and
  * nothing on first measure: a size that was always so is not a change.
+ *
+ * It is read in the bar's route field (TopBar.tsx), not over the frame: anywhere on the page is
+ * somewhere an app keeps its own chrome, a centred header as much as a corner, and the bar's nav
+ * cluster already sits centred over the preview, so the eye travels no further.
  */
 
 /** how long the readout stays after the size last moved */
@@ -28,13 +32,12 @@ export function isChange(prev: Size | null, next: Size): boolean {
   return Math.round(prev.w) !== Math.round(next.w) || Math.round(prev.h) !== Math.round(next.h);
 }
 
-/** The readout for `el`'s box while `on`, null otherwise and at rest. A box that comes back after
- * being hidden starts over: whatever size it returns at is its first measure, not a change. */
-export function useSizeReadout(el: HTMLElement | null, on: boolean): string | null {
-  const [text, setText] = useState<string | null>(null);
+/** Says `el`'s box through `say` while `on`, and null otherwise and at rest. A box that comes back
+ * after being hidden starts over: whatever size it returns at is its first measure, not a change. */
+export function useSizeReadout(el: HTMLElement | null, on: boolean, say: (text: string | null) => void): void {
   useEffect(() => {
     if (!el || !on) {
-      setText(null);
+      say(null);
       return;
     }
     let prev: Size | null = null;
@@ -44,9 +47,9 @@ export function useSizeReadout(el: HTMLElement | null, on: boolean): string | nu
       if (!r) return;
       const next = { w: r.width, h: r.height };
       if (isChange(prev, next)) {
-        setText(readoutText(next));
+        say(readoutText(next));
         if (timer) clearTimeout(timer);
-        timer = setTimeout(() => setText(null), READOUT_MS);
+        timer = setTimeout(() => say(null), READOUT_MS);
       }
       if (next.w > 0 && next.h > 0) prev = next;
     });
@@ -54,8 +57,7 @@ export function useSizeReadout(el: HTMLElement | null, on: boolean): string | nu
     return () => {
       ro.disconnect();
       if (timer) clearTimeout(timer);
-      setText(null);
+      say(null);
     };
-  }, [el, on]);
-  return text;
+  }, [el, on, say]);
 }

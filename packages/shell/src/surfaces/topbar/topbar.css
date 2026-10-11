@@ -21,6 +21,16 @@
     display: flex;
     flex: 1;
     min-width: 0;
+    /* the size readout below hangs off the field's end; the route list is a Float and takes no
+       notice of this */
+    position: relative;
+    /* the readout covers the field's end while it shows, so the path gives up that end to it rather
+       than running under the numbers */
+    &:has(.bar-size) .bar-path {
+      /* the readout's widest text (five digits a side) plus the field's own inset: in ch, since
+         the field and the readout share the bar's mono, so this holds at any type size */
+      padding-right: calc(13ch + 10px);
+    }
     /* The panel lies exactly on the field, which is what it is placed against and whose width it
      takes (see RoutePicker). The top corners are therefore the field's: a rounder panel leaves the
      field's tighter corner showing outside its arc. The bottom corners are the floating box's. The
@@ -37,6 +47,23 @@
     & .overlay-box .picker-list {
       max-height: min(340px, 50vh);
     }
+  }
+  /* The preview's size while it changes (center/sizeReadout.ts), read at the end of the address the
+   way a browser keeps its own marks there: in the bar, so it covers nothing of the app's, and a
+   tier under the path, since the path is what the field is about. The field's own mono, so the
+   two read as one line and the ch above measures it, with its digits in columns so the numbers
+   hold still while they tick. No pointer: a press through it still opens the route list, and a
+   drag that crosses it must not break. */
+  .bar-size {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    translate: 0 -50%;
+    pointer-events: none;
+    font: var(--type-mono);
+    font-variant-numeric: tabular-nums;
+    color: var(--text2);
+    white-space: nowrap;
   }
   /* a route row: the page's name, its path a tier quieter, then what changed. The path gives way
    before the name does, since the name is what you read first */

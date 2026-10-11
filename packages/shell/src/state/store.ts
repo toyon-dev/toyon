@@ -795,6 +795,8 @@ export interface State {
   termRun: { id: string; command: string } | null;
   /** bumped when a stream opens that needs room to be read (a login's link and its prompt) */
   termTall: number;
+  /** the preview's size while it changes, read in the bar's route field (sizeReadout.ts); null at rest */
+  previewSize: string | null;
   /** themes the daemon knows (built-ins, ~/.toyon/themes, installed editors) + the selection */
   themes: Theme[];
   themePrefs: ThemePrefs;
@@ -994,6 +996,7 @@ export function initialState(opts: InitialOpts): State {
     focusTerm: 0,
     termRun: null,
     termTall: 0,
+    previewSize: null,
     themes: builtinThemes.some((t) => t.id === cached.id) ? builtinThemes : [...builtinThemes, cached],
     themePrefs: { ...defaultThemePrefs, mode: cached.kind, [cached.kind]: cached.id },
     previewTheme: null,
@@ -1460,6 +1463,7 @@ export type Action =
   | { a: "links"; id: string; links: PageLink[] }
   | { a: "drag-files"; v: DropZone | null }
   | { a: "set-picking"; v: PickVerb | false }
+  | { a: "preview-size"; text: string | null }
   /** open an overlay (closes any other); palettes forget a pending return, sub-pickers keep it */
   | { a: "open"; overlay: Overlay }
   /** close the open overlay; with `back`, reopen the palette a sub-picker came from */
@@ -2149,6 +2153,8 @@ function reduce(s: State, action: Action): State {
       return sameZone(s.dragFiles, action.v) ? s : { ...s, dragFiles: action.v };
     case "set-picking":
       return { ...s, picking: action.v };
+    case "preview-size":
+      return s.previewSize === action.text ? s : { ...s, previewSize: action.text };
     case "open":
       // any overlay change drops the theme picker's live preview so the kept theme paints again
       return {

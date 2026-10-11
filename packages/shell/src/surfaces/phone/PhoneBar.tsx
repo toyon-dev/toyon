@@ -99,7 +99,7 @@ export function PhoneBar({
     ? // with more than one machine listed, where the project is comes before how much is in it:
       // a machine is the bigger box, and the list under the bar is this machine's alone
       repo && machineCount > 1
-      ? `on ${hereName} · ${count}`
+      ? `${hereName} · ${count}`
       : count
     : archivedPage
       ? archivedHint(archivedPage)

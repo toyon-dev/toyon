@@ -12,6 +12,7 @@ import {
   useSock,
   useStore,
 } from "../../state/context.tsx";
+import { edgeByOrigin } from "../../state/machines.ts";
 import { newProjectState, type ProjectsOverlay } from "../../state/store.ts";
 import { IconButton } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
@@ -136,7 +137,9 @@ export function ProjectPicker({ form }: { form: ProjectsOverlay["form"] }) {
       // head is drawn, since the rows then say what they are themselves. The key is the origin,
       // and the head drawn for it names the machine and, for another machine, what it needs of
       // you: the one place that says so short of switching to it
-      groupOf={(r) => (r.kind === "repo" && r.machine ? r.machine.origin : here.origin)}
+      groupOf={(r) =>
+        r.kind === "machine" ? r.machine.origin : r.kind === "repo" && r.machine ? r.machine.origin : here.origin
+      }
       groupHead={(origin) => (origin === here.origin ? hereName : <MachineHead origin={origin} />)}
       keyOf={(r) =>
         r.kind === "repo"
@@ -157,7 +160,9 @@ export function ProjectPicker({ form }: { form: ProjectsOverlay["form"] }) {
                       ? "open-folder"
                       : r.kind === "add-machine"
                         ? "add-machine"
-                        : `new:${r.parent ?? ""}/${r.name}`
+                        : r.kind === "machine"
+                          ? `machine:${r.machine.origin}`
+                          : `new:${r.parent ?? ""}/${r.name}`
       }
       rowClass={(r) =>
         cx("picker-row", (r.kind === "new" || r.kind === "disk" || r.kind === "add-machine") && "new-project-row")
@@ -177,7 +182,8 @@ export function ProjectPicker({ form }: { form: ProjectsOverlay["form"] }) {
         if (r.kind === "disk") return browse();
         if (r.kind === "add-machine") return addMachine();
 
-        if (r.kind === "pending") dispatch({ a: "watch-import", id: r.pending.id });
+        if (r.kind === "machine") machines.activate(r.machine.origin);
+        else if (r.kind === "pending") dispatch({ a: "watch-import", id: r.pending.id });
         else if (r.kind === "repo" && r.machine) goElsewhere(r.machine.origin, r.repo.id);
         else if (r.kind === "repo") dispatch({ a: "activate-repo", id: r.repo.id });
         else if (r.kind === "open") open(r.path);
@@ -190,13 +196,15 @@ export function ProjectPicker({ form }: { form: ProjectsOverlay["form"] }) {
       // a project row is a project: its setup and its forget are a right-click away, as they are
       // in the palette; a clone still running can be stopped from its row
       rowMenu={(r) =>
-        r.kind === "repo" && r.machine
+        r.kind === "machine"
           ? machineItems(machines, r.machine.origin)
-          : r.kind === "repo"
-            ? projectItems(r.repo, current, { sock, dispatch })
-            : r.kind === "pending"
-              ? importItems(r.pending, { sock, dispatch })
-              : []
+          : r.kind === "repo" && r.machine
+            ? machineItems(machines, r.machine.origin)
+            : r.kind === "repo"
+              ? projectItems(r.repo, current, { sock, dispatch })
+              : r.kind === "pending"
+                ? importItems(r.pending, { sock, dispatch })
+                : []
       }
       placeholder={repos.length > 1 ? "switch project, or type a name or path" : "type a name or a path to start"}
       keys={(active) => ({
@@ -218,7 +226,7 @@ export function ProjectPicker({ form }: { form: ProjectsOverlay["form"] }) {
                       ? "browses"
                       : active?.kind === "add-machine"
                         ? "adds one"
-                        : active?.kind === "repo" && active.machine
+                        : active?.kind === "machine" || (active?.kind === "repo" && active.machine)
                           ? "switches machine"
                           : "opens",
         back: "closes",
@@ -265,6 +273,9 @@ export function ProjectPicker({ form }: { form: ProjectsOverlay["form"] }) {
               </>
             }
           />
+        ) : r.kind === "machine" ? (
+          // the head over it says what state it is in; the row is the way there
+          <PaletteRow label={`switch to ${machines.displayName(r.machine.origin)}`} />
         ) : (
           <PaletteRow label={`create ${r.name}`} hint={r.parent ? `in ${r.parent}` : "new project"} />
         )
@@ -306,7 +317,7 @@ function MachineHead({ origin }: { origin: string }) {
     connected,
     connectFailure,
     incompatible,
-    suspended: front === "edge" && !connected,
+    suspended: (front === "edge" || edgeByOrigin(origin)) && !connected,
   });
   const owed = /^\d+ /.test(line);
   return (

@@ -79,10 +79,14 @@ export type RemoteView = Pick<Remote, "host" | "previews">;
  * about the box than its own hostname does, so the hostname's first label stands in. */
 export function machineLabel(hostname: string, remote: Pick<Remote, "host"> | null): string {
   const of = (name: string) => name.split(".")[0]?.toLowerCase() ?? "";
-  if (remote && (isTailnetName(remote.host) || remote.host.endsWith(".fly.dev"))) {
-    return of(remote.host) || of(hostname);
-  }
+  if (remote && (isTailnetName(remote.host) || isFlyName(remote.host))) return of(remote.host) || of(hostname);
   return of(hostname) || "toyon";
+}
+
+/** a Fly app's public name: the one edge front toyon deploys, so a shell listing a machine at
+ * such a name knows before hearing from it that the machine sleeps while nothing is connected */
+export function isFlyName(host: string): boolean {
+  return host.toLowerCase().endsWith(".fly.dev");
 }
 
 /** An origin a shell holding a token may be served from, or a machine a shell may list: an

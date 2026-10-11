@@ -5,9 +5,21 @@
 // open and so is held only while looked at. With one machine listed nothing here shows: the page
 // is exactly what it was before it could list more.
 
-import type { PairedMachine, RepoInfo } from "@toyon/shared";
+import { isFlyName, type PairedMachine, type RepoInfo } from "@toyon/shared";
 import type { Machine, MachineInit } from "./machine.ts";
 import type { Action } from "./store.ts";
+
+/** An edge machine, known before it has said so: its daemon's hello names the front, but a
+ * machine at a Fly name is one from its address alone, which is what lets the page leave it
+ * asleep instead of waking it for a hello it only needs while looking at it. */
+export function edgeByOrigin(origin: string): boolean {
+  try {
+    return isFlyName(new URL(origin).hostname);
+  } catch {
+    // an origin that is not a URL is nothing the page could connect to, let alone an edge
+    return false;
+  }
+}
 
 /** another machine as a list on this machine's screen names it: what it is called here and the
  * projects its daemon lists (the project picker's sections, the palette's switch rows) */
@@ -64,7 +76,7 @@ export function createMachines(init: MachinesInit): Machines {
   /** an edge machine is connected only while it is the one on screen */
   const hold = (m: Machine) => {
     if (m.serving) return;
-    const edge = m.store.getState().remote?.front === "edge";
+    const edge = m.store.getState().remote?.front === "edge" || edgeByOrigin(m.origin);
     if (edge && m !== active) m.sock.suspend();
     else m.sock.resume();
   };
@@ -116,6 +128,9 @@ export function createMachines(init: MachinesInit): Machines {
       const m = init.build({ ...paired, serving: false });
       others.push(m);
       watch(m);
+      // held from the start where the address says edge: the first connection is what would
+      // wake it, and it is not being looked at
+      if (edgeByOrigin(m.origin)) m.sock.suspend();
       notify();
       return m;
     },

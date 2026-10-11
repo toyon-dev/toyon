@@ -29,7 +29,11 @@ export type Row =
   /** the way to a project already on disk, said in words beside the way to make one */
   | { kind: "disk" }
   /** another machine's code or link, so its projects are listed here too */
-  | { kind: "add-machine" };
+  | { kind: "add-machine" }
+  /** another machine with no project to list yet (asleep, down, or not heard from), as the one
+   * row under its name, so it is still listed and still a tap away: looking at it is what wakes
+   * an edge machine's connection */
+  | { kind: "machine"; machine: OtherMachine };
 
 /** a typed path is a filesystem query rather than a name filter */
 export const looksLikePath = (q: string) => /^(~|\/|\.\.?\/)/.test(q.trim());
@@ -104,11 +108,14 @@ export function rowsFor(input: {
     const listed = [...repos, ...pending];
     // another machine's projects, after everything about this one: a switch there is a bigger
     // move than a switch here, and the machine's name over them says so
-    const elsewhere = (input.others ?? []).flatMap((machine) =>
-      machine.repos
+    const elsewhere = (input.others ?? []).flatMap((machine): Row[] => {
+      // a machine with nothing to list is still a machine: its own row keeps it in the list,
+      // found by its name the way its projects would be
+      if (machine.repos.length === 0) return byName(q, machine.name) ? [{ kind: "machine", machine }] : [];
+      return machine.repos
         .filter((r) => byName(q, r.name, r.path, machine.name))
-        .map((repo): Row => ({ kind: "repo", repo, machine })),
-    );
+        .map((repo): Row => ({ kind: "repo", repo, machine }));
+    });
     // last among this machine's rows, so they never push a project off the top of the list, and
     // ↑ from the first row reaches them
     if (!q) return [...listed, { kind: "new" }, { kind: "disk" }, { kind: "add-machine" }, ...elsewhere];

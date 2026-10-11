@@ -312,4 +312,18 @@ describe("rowsFor: other machines", () => {
       out.map((r) => (r.kind === "repo" ? `${r.repo.name}${r.machine ? `@${r.machine.name}` : ""}` : r.kind)),
     ).toEqual(["site", "site@work"]);
   });
+  test("a machine with no project to list is still listed, as its own row, found by its name", () => {
+    const asleep = { origin: "https://box.fly.dev", name: "box", repos: [] };
+    const out = rows("", { others: [work, asleep] });
+    expect(out.map((r) => (r.kind === "machine" ? `machine:${r.machine.name}` : r.kind))).toEqual([
+      "new",
+      "disk",
+      "add-machine",
+      "repo",
+      "repo",
+      "machine:box",
+    ]);
+    expect(rows("box", { others: [work, asleep] }).map((r) => r.kind)).toEqual(["create", "machine"]);
+    expect(rows("api", { others: [work, asleep] }).map((r) => r.kind)).toEqual(["create", "repo"]);
+  });
 });

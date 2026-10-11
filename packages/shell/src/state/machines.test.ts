@@ -115,6 +115,16 @@ describe("machines", () => {
     expect(log.some((l) => l.includes("box"))).toBe(false);
   });
 
+  test("a machine at a Fly name is held from the start, before any hello could say it is edge", () => {
+    const log: string[] = [];
+    const machines = createMachines({ serving: home, build: (init) => fake(init, log) });
+    const fly = { origin: "https://pulse.fly.dev", token: "f" };
+    listed(machines, [fly, work]);
+    expect(log).toEqual(["suspend pulse"]);
+    machines.activate(fly.origin);
+    expect(log.at(-1)).toBe("resume pulse");
+  });
+
   test("broadcast reaches every store", () => {
     const { machines } = setup();
     machines.broadcast({ a: "system-dark", v: true });

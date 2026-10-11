@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import type { OwnedWorktree, WorktreeInfo } from "./model.ts";
-import { railOrder } from "./railOrder.ts";
+import type { OwnedWorktree, RepoInfo, WorktreeInfo, WorktreeStatus } from "./model.ts";
+import { projectOrder, railOrder } from "./railOrder.ts";
 
 const row = (id: string, w: Partial<WorktreeInfo> = {}): OwnedWorktree => ({
   id,
@@ -87,5 +87,53 @@ describe("railOrder", () => {
 
   test("rows that tie keep the daemon's order", () => {
     expect(ids([row("b"), row("a"), row("c")])).toEqual(["b", "a", "c"]);
+  });
+});
+
+describe("projectOrder", () => {
+  const repo = (id: string): RepoInfo => ({
+    id,
+    name: id,
+    path: `/p/${id}`,
+    defaultBranch: "main",
+    config: { run: {} },
+    configFile: ".toyon/settings.json",
+    needsSetup: false,
+  });
+  const inRepo = (repoId: string, id: string, w: Partial<WorktreeInfo> = {}): OwnedWorktree => {
+    const r = row(id, { repoId, ...w });
+    return { ...r, repoId };
+  };
+  const names = (repos: RepoInfo[], rows: WorktreeStatus[]) => projectOrder(repos, rows).map((r) => r.id);
+
+  test("a project sits at its newest worktree send", () => {
+    const repos = [repo("old"), repo("busy"), repo("fresh")];
+    const rows = [
+      inRepo("old", "o1", { promptedAt: 1 }),
+      inRepo("busy", "b1", { promptedAt: 2 }),
+      inRepo("busy", "b2", { promptedAt: 9 }),
+      inRepo("fresh", "f1", { promptedAt: 5 }),
+    ];
+    expect(names(repos, rows)).toEqual(["busy", "fresh", "old"]);
+  });
+
+  test("only a send moves a project: the spare made on opening it does not count", () => {
+    const repos = [repo("worked"), repo("looked")];
+    const rows = [
+      inRepo("worked", "w1", { promptedAt: 5 }),
+      inRepo("looked", "l1", { promptedAt: 1 }),
+      inRepo("looked", "spare", { kind: "spare", createdAt: 99 }),
+    ];
+    expect(names(repos, rows)).toEqual(["worked", "looked"]);
+  });
+
+  test("a project just registered goes by its main's creation, so it starts near the top", () => {
+    const repos = [repo("old"), repo("new")];
+    const rows = [inRepo("old", "o1", { promptedAt: 3 }), inRepo("new", "main", { kind: "main", createdAt: 7 })];
+    expect(names(repos, rows)).toEqual(["new", "old"]);
+  });
+
+  test("projects with no rows loaded keep the daemon's order", () => {
+    expect(names([repo("b"), repo("a"), repo("c")], [])).toEqual(["b", "a", "c"]);
   });
 });

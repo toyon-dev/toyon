@@ -1,5 +1,5 @@
-import type { WorktreeInfo } from "./model.ts";
-import { isLead } from "./worktree-caps.ts";
+import type { RepoInfo, WorktreeInfo, WorktreeStatus } from "./model.ts";
+import { isLead, isOwned } from "./worktree-caps.ts";
 
 /** when someone last put work into a row: what they sent, else its agent's last turn for a row from
  * before sends were stamped, else when it was made */
@@ -43,4 +43,22 @@ export function railOrder<T extends { worktree: WorktreeInfo }>(rows: readonly T
       ? u.rows.sort((a, b) => (a.worktree.variant?.index ?? 0) - (b.worktree.variant?.index ?? 0))
       : u.rows,
   );
+}
+
+/** The project picker's order: the rail's rule one level up. A project sits at its newest
+ * worktree send, so the one last worked in is first and one left for weeks sinks, and only a send
+ * moves it: opening the picker to look at a project does not reorder the list for next time. The
+ * spare is left out, since it is made when a project is opened and looking is not working; main's
+ * creation stands in for a project with no send yet, which puts a project just registered near the
+ * top, where someone who just opened it expects it. Ties keep the daemon's order, so projects
+ * whose rows are not loaded (another machine still connecting) list as the daemon does. */
+export function projectOrder(repos: readonly RepoInfo[], rows: readonly WorktreeStatus[]): RepoInfo[] {
+  const at = new Map<string, number>();
+  for (const row of rows) {
+    if (!isOwned(row) || row.worktree.kind === "spare") continue;
+    const id = row.worktree.repoId;
+    at.set(id, Math.max(at.get(id) ?? 0, sentAt(row.worktree)));
+  }
+  // stable, so a tie is the daemon's order
+  return [...repos].sort((a, b) => (at.get(b.id) ?? 0) - (at.get(a.id) ?? 0));
 }

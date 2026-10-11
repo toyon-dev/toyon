@@ -1,5 +1,5 @@
-import { isOwned, type RepoInfo, type WorktreeStatus } from "@toyon/shared";
-import { useCallback } from "react";
+import { isOwned, projectOrder, type RepoInfo, type WorktreeStatus } from "@toyon/shared";
+import { useCallback, useMemo } from "react";
 import { machineLine } from "../../app/machineLine.ts";
 import { machineItems } from "../../state/actions/machine.ts";
 import { importItems, initProject, openProject, projectItems } from "../../state/actions/project.ts";
@@ -9,6 +9,7 @@ import {
   useMachineStore,
   useMachines,
   useOtherMachines,
+  useOtherMachinesRows,
   useSock,
   useStore,
 } from "../../state/context.tsx";
@@ -38,9 +39,6 @@ export function ProjectPicker({ form }: { form: ProjectsOverlay["form"] }) {
   const machines = useMachines();
   const here = useMachine();
   const hereName = machines.displayName(here.origin);
-  // the other machines' projects, each list read off that machine's store; listed under the
-  // machine's name after everything about this one
-  const others = useOtherMachines();
   const repos = useStore((s) => s.repos);
   // over the new-project view no project is the open one, so none is marked
   const current = useStore((s) => (s.newProject ? null : s.activeRepoId));
@@ -48,6 +46,20 @@ export function ProjectPicker({ form }: { form: ProjectsOverlay["form"] }) {
   const paths = useStore((s) => s.paths);
   const home = useStore((s) => s.home);
   const pending = useStore((s) => s.pending);
+  // projects in the rail's order, the one last sent to first; the daemon lists them as registered
+  const ordered = useMemo(() => projectOrder(repos, rows), [repos, rows]);
+  // the other machines' projects, each list read off that machine's store and put in the same
+  // order by that machine's rows; listed under the machine's name after everything about this one
+  const otherMachines = useOtherMachines();
+  const otherRows = useOtherMachinesRows();
+  const others = useMemo(
+    () =>
+      otherMachines.map((m) => ({
+        ...m,
+        repos: projectOrder(m.repos, otherRows.find((o) => o.origin === m.origin)?.rows ?? []),
+      })),
+    [otherMachines, otherRows],
+  );
 
   // debounced by the picker; only path-shaped queries reach the daemon
   const onQuery = useCallback(
@@ -62,7 +74,7 @@ export function ProjectPicker({ form }: { form: ProjectsOverlay["form"] }) {
     (_items: Row[], q: string) =>
       rowsFor({
         query: q,
-        repos,
+        repos: ordered,
         pending,
         // the daemon already matched these against the path; re-filtering here would only fight the
         // debounce and blank the list between keystrokes. Repos lead: they are what you came for.
@@ -72,7 +84,7 @@ export function ProjectPicker({ form }: { form: ProjectsOverlay["form"] }) {
         home,
         others,
       }),
-    [repos, paths, pending, home, others],
+    [ordered, paths, pending, home, others],
   );
 
   const hintFor = (r: RepoInfo) => hintOf(rows, r);

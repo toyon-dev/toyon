@@ -19,6 +19,7 @@ import { IconButton } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { ListPicker } from "../../ui/ListPicker.tsx";
+import type { Anchored } from "../../ui/Overlay.tsx";
 import { isBusy } from "../util.ts";
 import { PaletteRow } from "./PaletteRow.tsx";
 import { defaultParent, looksLikePath, type Row, rowsFor } from "./projectPicker.ts";
@@ -33,7 +34,15 @@ import { defaultParent, looksLikePath, type Row, rowsFor } from "./projectPicker
  * bar; `center` is the same switcher over the preview, where the eyes are when a key opened it;
  * `disk` is the centred form the folder button opens, starting in the home directory, since the
  * anchored one runs out of screen when walking the filesystem. */
-export function ProjectPicker({ form }: { form: ProjectsOverlay["form"] }) {
+export function ProjectPicker({
+  form,
+  anchored,
+}: {
+  form: ProjectsOverlay["form"];
+  /** how the pill form sits on its pill, where that differs from landing its lead on it: the
+   * phone keeps the panel off the window's edge */
+  anchored?: Anchored;
+}) {
   const dispatch = useDispatch();
   const sock = useSock();
   const machines = useMachines();
@@ -125,7 +134,7 @@ export function ProjectPicker({ form }: { form: ProjectsOverlay["form"] }) {
 
   return (
     <ListPicker<Row>
-      anchored={form === "pill"}
+      anchored={form === "pill" && (anchored ?? true)}
       initialQuery={form === "disk" ? "~/" : ""}
       // the chip says what you are switching away from, which is true of either switcher: the disk
       // form is a path browser and nothing in it is scoped to the open project

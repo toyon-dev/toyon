@@ -523,6 +523,24 @@ export function useZoomMark(ref: RefObject<HTMLElement | null>): void {
   }, [ref]);
 }
 
+/** Writes the height of the window's visible part on the element (`--visible-height`), for a
+ * stylesheet that bounds a box by what is on screen. The on-screen keyboard shrinks the visual
+ * viewport and, on iOS, nothing else: no unit follows it, so a list sized in vh keeps its foot
+ * under the keys. On the element and not through state, as the pin above: it moves while the
+ * keyboard slides. */
+export function useVisibleHeight(ref: RefObject<HTMLElement | null>): void {
+  useEffect(() => {
+    const view = window.visualViewport;
+    if (!view) return;
+    const write = () => {
+      ref.current?.style.setProperty("--visible-height", `${Math.round(view.height)}px`);
+    };
+    write();
+    view.addEventListener("resize", write);
+    return () => view.removeEventListener("resize", write);
+  }, [ref]);
+}
+
 /** Holds a full-width strip at its own size on the top edge of a pinch-zoomed window. The pinch
  * magnifies the page under a view that pans over it, and nothing in CSS follows that view, so the
  * element is told where the view is and how far it is zoomed (`--pin-x`, `--pin-y`,

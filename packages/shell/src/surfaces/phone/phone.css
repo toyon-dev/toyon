@@ -210,15 +210,31 @@
   }
   /* A control and the panel it drops, which is placed against this wrapper, so the wrapper is the
      control's box and nothing more. The panel takes the window less the bar's own inset rather than
-     the desk pill's 460px, which on a phone left a strip of the screen beside it for nothing. The
-     inset is the bar's less the strip's, so a control in the strip lands on the control under it
-     and the panel's two sides match. */
+     the desk pill's 460px, which left a strip of the screen beside it for nothing: on a phone held
+     upright a few pixels, on a wider one (a small tablet, a window narrowed to the frame) a column
+     a quarter of the screen wide. The inset is the bar's less the strip's, so a control in the
+     strip lands on the control under it and the panel's two sides match. */
   .phone-drop {
     display: flex;
     min-width: 0;
     & > .overlay-box.anchored {
-      width: min(460px, calc(100vw - 12px));
+      width: calc(100vw - 12px);
     }
+    /* The list is bounded by what is on screen, not by half the window. The on-screen keyboard
+       takes the lower half of a phone, and on iOS it shrinks only the visual viewport, which no
+       unit measures; the frame writes it (useVisibleHeight) and the rest is the box around the
+       list: the panel's inset from the window's top and the same at its foot, the field's row, the
+       list's own margin, the box's padding under it and its two borders. Without the keyboard, the
+       list takes what it needs down to the window's foot, which a scrimmed sheet may. */
+    & .picker-list {
+      max-height: calc(var(--visible-height, 100vh) - var(--row-height) - 28px);
+    }
+  }
+  /* A row's menu takes the width too: at the desk's 220px it stood as a tall sliver of thumb-height
+     rows on a screen that is nothing but width. The inset is the menu's own margin from the
+     window's edge, kept on both sides (place.ts clamps a box to its margin). */
+  .phone .menu {
+    width: calc(100vw - 8px);
   }
   /* A picker's field is a row a thumb lands in, as tall as the bar it drops out of. At the desk
      strip's height it was the one short thing between a tall button and tall rows. */

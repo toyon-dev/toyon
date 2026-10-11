@@ -4,7 +4,7 @@ import { openPreview, previewsGated } from "../../state/previewGrant.ts";
 import { useActive, useArchivedPage, useChatCentred, useFoundPage, useTouch } from "../../state/selectors.ts";
 import type { Screen } from "../../state/store.ts";
 import { IconButton } from "../../ui/Button.tsx";
-import { useZoomMark } from "../../ui/hooks.ts";
+import { useVisibleHeight, useZoomMark } from "../../ui/hooks.ts";
 import { Menus } from "../../ui/Menu.tsx";
 import { type TabItem, Tabs } from "../../ui/Tabs.tsx";
 import { Tooltips } from "../../ui/Tooltip.tsx";
@@ -38,6 +38,8 @@ const HAS_TOKEN = hasToken();
 export function PhoneFrame() {
   const rootRef = useRef<HTMLDivElement>(null);
   useZoomMark(rootRef);
+  // the palette's list is bounded by this, so it ends above the keyboard rather than under it
+  useVisibleHeight(rootRef);
   const dispatch = useDispatch();
   const screen = useStore((s) => s.screen);
   const active = useActive();

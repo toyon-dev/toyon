@@ -141,7 +141,11 @@ export function PhoneBar({
             <span className="phone-name">{title}</span>
             <Icon name="caret" className="icon-inline" />
           </Button>
-          {switching && <ProjectPicker form="pill" />}
+          {/* the panel takes the window's width (phone.css), so it keeps the bar's inset less the
+              strip's on both sides, as the menu's panel does: the chip then starts a few pixels
+              right of the name it covers, where landing it exactly pinned the panel to the
+              window's left edge with all of the slack on its right */}
+          {switching && <ProjectPicker form="pill" anchored={{ margin: 6 }} />}
         </span>
       ) : (
         <span className="phone-name">{title}</span>

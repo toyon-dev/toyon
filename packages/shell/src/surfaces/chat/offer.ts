@@ -12,8 +12,8 @@ import { commandOf } from "./shellMode.ts";
  * is remembered by: the row's own id, or the stop's place in the transcript. */
 export type Offer =
   | { verb: "fix"; key: string; toolId: string; command: string }
-  /** the preview threw after the turn's edits and nothing has been written or said since: the
-   * word sends the page rows above. `errors` is how many rows the press would send. */
+  /** the preview threw and nothing has been written or said since: the word sends the page rows
+   * above. `errors` is how many errors the press would send. */
   | { verb: "fix"; key: string; page: { errors: number } }
   /** the agent's last turn was stopped by a press, or ended on an error: the word sends it on.
    * `again`: the error is the one the last press was sent after, word for word, so the press
@@ -63,7 +63,7 @@ export function offerOf(chat: readonly ChatItem[], at: OfferStanding): Offer {
   return command === null ? null : { verb: "fix", key: last.id, toolId: last.id, command };
 }
 
-/** What the preview threw after the chat's last edits: the page rows read back from the end,
+/** What the preview threw since the chat's last edits: the page rows read back from the end,
  * past the agent's own words and the rows that read the tree, until a message (the person's or
  * Toyon's own) or a call that could have changed the tree (an edit, a command), past which the
  * rows are about an older tree. The daemon reads the transcript the same way for the press.
@@ -76,7 +76,7 @@ function pageOffer(chat: readonly ChatItem[], dismissed: ReadonlySet<string>): O
     const item = chat[i]!;
     if (item.kind === "page-error") {
       newest ??= item.seq;
-      errors++;
+      errors += item.errors.length;
     } else if (item.kind === "user" || item.kind === "asked") break;
     else if (item.kind === "tool" && isEditTool({ name: item.name, kind: item.toolKind })) break;
   }

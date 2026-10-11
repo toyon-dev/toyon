@@ -104,13 +104,13 @@ export function fixWhy(f: Failure): string {
   }
 }
 
-/** What the agent is sent when the person presses to hand it what the page threw after its edits.
- * The errors are in the message itself, since they are the whole of what there is to show. The
- * cause may sit outside the turn's edits (a page that was broken before them), and the agent is
- * told it may say so. */
+/** What the agent is sent when the person presses to hand it what the page threw. The errors are
+ * in the message itself, since they are the whole of what there is to show. The cause may sit
+ * outside the agent's edits (a page that was broken before them, a route the person opened by
+ * hand), and the agent is told it may say so. */
 function pageFixPrompt(errors: readonly string[]): string {
   return [
-    "After your last edits the preview threw this in the user's browser:",
+    "Since your last edits the preview threw this in the user's browser:",
     "",
     ...errors.map((e) => `- ${e}`),
     "",

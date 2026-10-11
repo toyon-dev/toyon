@@ -3378,10 +3378,10 @@ describe("what the preview threw", () => {
         t: "agent",
         worktreeId: "a",
         seq: 4,
-        event: { type: "page-error", message: "boom (src/a.tsx:1)", ts: 1 },
+        event: { type: "page-error", errors: ["boom (src/a.tsx:1)"], ts: 1 },
       }),
     ]);
-    expect(s.local.a?.chat).toEqual([{ kind: "page-error", message: "boom (src/a.tsx:1)", seq: 4 }]);
+    expect(s.local.a?.chat).toEqual([{ kind: "page-error", errors: ["boom (src/a.tsx:1)"], seq: 4 }]);
     const paged = reducer(s, { a: "page", id: "a", url: "http://x/about", title: "About" });
     expect(paged.local.a?.page).toEqual({ url: "http://x/about", title: "About" });
     expect(reducer(paged, { a: "page", id: "a", title: "About us" }).local.a?.page).toEqual({

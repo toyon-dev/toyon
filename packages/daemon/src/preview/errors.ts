@@ -4,14 +4,17 @@
 // here. What is held is what the page has thrown since it last loaded; a load wipes it, so a page
 // that comes back clean after a fix has nothing to say.
 //
-// An error that arrives after a turn's edits is also written onto the transcript as a row, from
-// the turn's first write until the next message, since that is the one the agent caused and the
-// person would otherwise be the first to meet: the page reloads after the turn, and the crash
-// lands on it a second or two after the turn is over. Nothing goes to the agent from here; the box
-// offers a press under the rows, and the press sends it as Toyon's own message (worktrees/fix.ts).
+// Some of it is also written onto the transcript as a row, since the person would otherwise be
+// the first to meet it. Not while a turn runs: the dev server hot-swaps every file the agent
+// writes, a half-written edit throws as a matter of course, and the agent may well fix it two
+// edits later; a row for each would fill the chat with the turn's rough drafts. So what the page
+// throws during a turn is held, and what it still throws when the turn ends goes down as one row,
+// which is the state the agent left the page in. From there, while the agent is idle, what the
+// page throws as the person clicks about it is a row each, until the next message. Nothing goes
+// to the agent from here; the box offers a press under the rows, and the press sends it as
+// Toyon's own message (worktrees/fix.ts).
 
 import type { AgentEvent } from "@toyon/shared";
-import { isEditTool } from "@toyon/shared";
 import type { Hub } from "../core/hub.ts";
 import { log } from "../core/log.ts";
 import type { RuntimeRegistry } from "../runtime/registry.ts";
@@ -27,18 +30,20 @@ export interface PageErrorDeps {
 
 /** how many of a page's errors are kept: the first ones say what broke, the rest repeat it */
 const KEPT = 5;
-/** how many rows a turn's edits may put on the transcript: a loop that throws on every tick
- * would otherwise write the chat full */
-const NOTED_MAX = 3;
+/** how many rows may go on the transcript between one message and the next: a page that throws
+ * on every click would otherwise write the chat full */
+const ROWS_MAX = 3;
 /** two tabs showing one preview forward the same throw twice; closer than this, it is one */
 const TWICE_MS = 1000;
 
 interface Held {
   recent: Array<{ message: string; ts: number }>;
-  /** the turn under way, or the one just over, wrote something: an error now is its doing */
-  writes: boolean;
-  /** what has been put on the transcript for those writes */
+  /** a turn is under way: what the page throws waits for its end */
+  running: boolean;
+  /** what has gone on the transcript since the last message, so a throw that stays is one row,
+   * however many loads it comes back on, and how many rows that is */
   noted: Set<string>;
+  rows: number;
 }
 
 export class PageErrorService {
@@ -55,27 +60,32 @@ export class PageErrorService {
   private of(worktreeId: string): Held {
     let h = this.held.get(worktreeId);
     if (!h) {
-      h = { recent: [], writes: false, noted: new Set() };
+      h = { recent: [], running: false, noted: new Set(), rows: 0 };
       this.held.set(worktreeId, h);
     }
     return h;
   }
 
-  /** The window a row is written in: open from the turn's first call that could change the tree
-   * (an edit, a command: the same reading the box and the press make of the rows), shut by the
-   * next message, the person's or Toyon's own, since from there the agent hears what the page
-   * threw anyway. */
+  /** Where the turn stands. A message, the person's or Toyon's own, starts the count of rows
+   * over: from there the agent hears what the page threw anyway. A turn that fails ends without
+   * a `turn-end`, so the error is read as the end too. */
   private heard(worktreeId: string, event: AgentEvent) {
     const h = this.of(worktreeId);
-    if (event.type === "turn-start" || event.type === "user-message" || event.type === "fix-asked") {
-      h.writes = false;
-    } else if (
-      (event.type === "tool-start" || (event.type === "tool-update" && event.kind)) &&
-      isEditTool({ name: event.name ?? "", kind: event.kind }) &&
-      !h.writes
-    ) {
-      h.writes = true;
-      h.noted = new Set();
+    switch (event.type) {
+      case "user-message":
+      case "fix-asked":
+        h.noted = new Set();
+        h.rows = 0;
+        break;
+      case "turn-start":
+        h.running = true;
+        break;
+      case "turn-end":
+      case "agent-error":
+      case "agent-auth-required":
+        h.running = false;
+        this.flush(worktreeId, h, event.ts);
+        break;
     }
   }
 
@@ -91,11 +101,18 @@ export class PageErrorService {
     if (last && last.message === message && now - last.ts < TWICE_MS) return;
     h.recent.push({ message, ts: now });
     if (h.recent.length > KEPT) h.recent.splice(0, h.recent.length - KEPT);
-    if (!h.writes || h.noted.has(message) || h.noted.size >= NOTED_MAX) return;
+    if (!h.running) this.flush(worktreeId, h, now);
+  }
+
+  /** what the page has thrown that is not on the transcript yet goes down as one row */
+  private flush(worktreeId: string, h: Held, ts: number) {
+    const fresh = [...new Set(h.recent.map((e) => e.message))].filter((m) => !h.noted.has(m));
+    if (fresh.length === 0 || h.rows >= ROWS_MAX) return;
     const agent = this.d.runtime.agentFor(worktreeId);
     if (!agent) return;
-    h.noted.add(message);
-    agent.note({ type: "page-error", message, ts: now });
+    for (const m of fresh) h.noted.add(m);
+    h.rows++;
+    agent.note({ type: "page-error", errors: fresh, ts });
   }
 
   /** the page started over, or hot-swapped what it runs: what it threw before is gone with it,

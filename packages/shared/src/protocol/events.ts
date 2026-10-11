@@ -307,10 +307,11 @@ export type AgentEvent =
   | { type: "usage"; used: number; size: number; cost?: number; ts: number }
   | { type: "session-info"; sessionId: string; model?: string; effort?: string }
   | { type: "agent-error"; message: string; ts: number }
-  /** the preview's page threw after this turn's edits: the daemon's own row, written for an
-   * error that arrives between the first write of a turn and the next message, so the chat shows
-   * what the person's browser saw and the box can offer to send it */
-  | { type: "page-error"; message: string; ts: number }
+  /** the preview's page threw, in the person's browser: the daemon's own row, written once for
+   * what the page still throws when a turn ends, and for each throw met while the agent is idle,
+   * so the chat shows what the browser saw and the box can offer to send it. `errors` is what
+   * was thrown, oldest first, never empty. */
+  | { type: "page-error"; errors: string[]; ts: number }
   /** the turn was refused for want of credentials; the shell offers the methods as buttons.
    * `rejected` distinguishes "the credential it has was refused" from "it has none" — the second
    * comes from ACP's auth_required code, the first from reading the provider's 401 */

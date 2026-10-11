@@ -39,8 +39,8 @@ export interface FixServiceDeps {
  * with nobody told.
  *
  * A person's own command is offered and never sent: many fail on purpose. A dev server that is
- * down is offered by the boot pane's own button. What the page threw after a turn's edits is
- * offered under its rows: what goes to the agent is visible, and a press is what makes it so. */
+ * down is offered by the boot pane's own button. What the page threw is offered under its rows:
+ * what goes to the agent is visible, and a press is what makes it so. */
 export const RESPONSE: Record<Failure["kind"], { does: "ask" | "offer"; once?: true }> = {
   hook: { does: "ask" },
   conflict: { does: "ask" },
@@ -81,7 +81,7 @@ export function lastStop(entries: readonly TranscriptEntry[]): Stop | null {
   return null;
 }
 
-/** What the page threw after the chat's last edits and that nobody has sent on: the page rows
+/** What the page threw since the chat's last edits and that nobody has sent on: the page rows
  * read back from the end, oldest first, until a message (the person's or Toyon's own) or a call
  * that could have changed the tree (an edit, a command), past which the rows are about an older
  * tree. Empty when the chat has moved on, so a press on a stale page sends nothing. The box reads
@@ -91,7 +91,7 @@ export function lastPageErrors(entries: readonly TranscriptEntry[]): string[] {
   for (let i = entries.length - 1; i >= 0; i--) {
     const e = entries[i]!.event;
     if (e.type === "page-error") {
-      errors.unshift(e.message);
+      errors.unshift(...e.errors);
       continue;
     }
     if (e.type === "user-message" || e.type === "fix-asked") break;
@@ -166,8 +166,8 @@ export class FixService {
     if (!this.report(worktreeId, failure, { pressed: true })) throw new UserError("nothing runs on main");
   }
 
-  /** The press under the page rows: what the preview threw after the agent's edits goes to it as
-   * Toyon's own message. The errors are read off the transcript, never taken from the client. A
+  /** The press under the page rows: what the preview threw goes to the agent as Toyon's own
+   * message. The errors are read off the transcript, never taken from the client. A
    * press on a chat that has moved on finds no rows and sends nothing, as a second press does. */
   pressPage(worktreeId: string): void {
     this.d.state.requireWorktree(worktreeId);

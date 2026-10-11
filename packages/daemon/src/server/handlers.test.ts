@@ -1125,23 +1125,24 @@ describe("handlers", () => {
     expect(agent.sent.filter((m) => m.asked)).toHaveLength(1);
   });
 
-  test("what the page threw is held by the daemon, put on the transcript after a write, and sent on a press", async () => {
+  test("what the page threw is held by the daemon, put on the transcript once the turn is over, and sent on a press", async () => {
     const { services, ctx, repo, agents } = make();
     const r = await services.repos.register(repo);
     r.needsSetup = false;
     const wt = await services.worktrees.create(r.id, "feature");
     const agent = agents.get(wt.id)!;
-    // before the turn wrote anything, the error is the page's own business: held, no row
+    // during the turn the error is held: the agent is still writing, and nothing is to fix yet
+    services.hub.emit("agent", wt.id, 0, { type: "turn-start", ts: 1 });
     await dispatch({ t: "page-error", worktreeId: wt.id, message: "boom (src/a.tsx:1)" }, ctx, services);
     expect(agent.recorded.filter((e) => e.type === "page-error")).toEqual([]);
     await expect(dispatch({ t: "fix-page", worktreeId: wt.id }, ctx, services)).rejects.toThrow(
       "nothing the preview threw to fix",
     );
-    // the page starting over forgets it; a write of the turn makes the next throw a row
+    // the page starting over forgets it; what it throws next is what the turn leaves, one row
     await dispatch({ t: "page-loaded", worktreeId: wt.id }, ctx, services);
-    services.hub.emit("agent", wt.id, 0, { type: "tool-start", toolId: "t1", name: "Edit", input: {}, kind: "edit" });
     await dispatch({ t: "page-error", worktreeId: wt.id, message: "crash on render (src/b.tsx:4)" }, ctx, services);
-    expect(agent.recorded.at(-1)).toMatchObject({ type: "page-error", message: "crash on render (src/b.tsx:4)" });
+    services.hub.emit("agent", wt.id, 0, { type: "turn-end", stopReason: "end_turn", ts: 2 });
+    expect(agent.recorded.at(-1)).toMatchObject({ type: "page-error", errors: ["crash on render (src/b.tsx:4)"] });
     await dispatch({ t: "fix-page", worktreeId: wt.id }, ctx, services);
     expect(agent.sent.at(-1)).toMatchObject({
       text: expect.stringContaining("- crash on render (src/b.tsx:4)"),

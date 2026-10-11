@@ -134,10 +134,11 @@ export type ChatItem =
   | { kind: "error"; text: string; seq?: number }
   /** the turn was stopped here, by a press: what the agent had got to is the rows above */
   | { kind: "stopped"; seq?: number }
-  /** the preview's page threw after the turn's edits, as the person's browser reported it: the
-   * daemon's row, and the box under the log offers to send it. `seq` is what a dismissal of that
-   * offer is remembered by. */
-  | { kind: "page-error"; message: string; seq?: number }
+  /** the preview's page threw, as the person's browser reported it: the daemon's row, holding
+   * what was thrown at that point (what a turn left, or one throw met while the agent was idle),
+   * and the box under the log offers to send it. `seq` is what a dismissal of that offer is
+   * remembered by. */
+  | { kind: "page-error"; errors: string[]; seq?: number }
   /** a message Toyon sent the agent itself, as the reason it was sent: what failed. `about` is
    * the kind of thing it was sent for, which is how the box knows a press went on after an error */
   | { kind: "asked"; about: Asked["kind"]; why: string; toolId?: string }
@@ -3098,7 +3099,7 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
       return [...cut, { kind: "error", text: event.message, ...stamp }];
     }
     case "page-error":
-      return [...items, { kind: "page-error", message: event.message, ...stamp }];
+      return [...items, { kind: "page-error", errors: event.errors, ...stamp }];
     case "agent-blocked":
       return [...items, { kind: "blocked", tool: event.tool, path: event.path, reason: event.reason }];
     case "grafted":

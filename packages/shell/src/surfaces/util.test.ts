@@ -5,6 +5,7 @@ import {
   commandSource,
   elapsed,
   folderList,
+  pageErrorText,
   previewUrl,
   procTrouble,
   rowLabel,
@@ -22,6 +23,20 @@ describe("folders", () => {
 
   test("folderList is every folder the paths imply, once", () => {
     expect(folderList(["src/app/keys.ts", "src/main.ts", "README.md"])).toEqual(["src", "src/app"]);
+  });
+});
+
+describe("pageErrorText", () => {
+  test("the message and where it was thrown, with the dev server's swap stamp off the source", () => {
+    expect(
+      pageErrorText({
+        message: "Uncaught ReferenceError: vanished is not defined",
+        source: "http://[::1]:5173/src/state/machine.ts?t=1791709179947",
+        line: 122,
+      }),
+    ).toBe("Uncaught ReferenceError: vanished is not defined (src/state/machine.ts:122)");
+    expect(pageErrorText({ message: "boom", source: "http://x/src/a.ts#frag" })).toBe("boom (src/a.ts:?)");
+    expect(pageErrorText({ message: "unhandled rejection: TypeError: x" })).toBe("unhandled rejection: TypeError: x");
   });
 });
 

@@ -17,17 +17,10 @@ function setup() {
   });
   const heard = (event: AgentEvent) => hub.emit("agent", "w1", 0, event);
   const rows = () =>
-    agent.recorded.filter((e) => e.type === "page-error").map((e) => (e as { message: string }).message);
-  const write: AgentEvent = { type: "tool-start", toolId: "t1", name: "Edit", input: {}, kind: "edit" };
-  const read: AgentEvent = { type: "tool-start", toolId: "t2", name: "Read", input: {}, kind: "read" };
-  const run: AgentEvent = {
-    type: "tool-start",
-    toolId: "t3",
-    name: "Bash",
-    input: { command: "sed -i" },
-    kind: "execute",
-  };
-  return { svc, hub, heard, rows, write, read, run, known, tick: (ms: number) => (now += ms) };
+    agent.recorded.filter((e) => e.type === "page-error").map((e) => (e as { errors: string[] }).errors);
+  const start: AgentEvent = { type: "turn-start", ts: 1 };
+  const end: AgentEvent = { type: "turn-end", stopReason: "end_turn", ts: 2 };
+  return { svc, hub, heard, rows, start, end, known, tick: (ms: number) => (now += ms) };
 }
 
 describe("PageErrorService", () => {
@@ -45,75 +38,95 @@ describe("PageErrorService", () => {
     expect(svc.ambient("w1")).toBeUndefined();
   });
 
-  test("an error before any write of the turn is held and not put on the transcript", () => {
-    const { svc, heard, rows, read } = setup();
-    heard({ type: "turn-start", ts: 1 });
-    heard(read);
+  test("while the agent is idle a throw is a row as it comes: the person met it by hand", () => {
+    const { svc, rows, tick } = setup();
     svc.report("w1", "boom");
-    expect(svc.recent("w1")).toEqual(["boom"]);
-    expect(rows()).toEqual([]);
+    expect(rows()).toEqual([["boom"]]);
+    tick(5000);
+    svc.report("w1", "TypeError: x is undefined");
+    expect(rows()).toEqual([["boom"], ["TypeError: x is undefined"]]);
   });
 
-  test("the turn's first write opens the window: an error after it is a row, up to the next message", () => {
-    const { svc, heard, rows, write } = setup();
-    heard({ type: "turn-start", ts: 1 });
-    heard(write);
-    svc.report("w1", "boom");
-    heard({ type: "turn-end", stopReason: "end_turn", ts: 2 });
-    // the reload after the turn, and the crash that lands on it
+  test("during a turn nothing is a row: what the page still throws at the end is one row", () => {
+    const { svc, heard, rows, start, end, tick } = setup();
+    heard(start);
+    // the dev server swaps each edit in, and the half-written ones throw
+    svc.report("w1", "draft one");
+    svc.loaded("w1");
+    tick(2000);
+    svc.report("w1", "draft two");
+    expect(rows()).toEqual([]);
+    // the last edit's swap: what the page is left throwing
+    svc.loaded("w1");
+    tick(2000);
+    svc.report("w1", "unhandled rejection: TypeError: x");
+    svc.report("w1", "Uncaught ReferenceError: y is not defined (src/a.ts:12)");
+    heard(end);
+    expect(rows()).toEqual([
+      ["unhandled rejection: TypeError: x", "Uncaught ReferenceError: y is not defined (src/a.ts:12)"],
+    ]);
+    // the crash that lands a moment after the turn, on the reload it caused
     svc.loaded("w1");
     svc.report("w1", "crash on render");
-    expect(rows()).toEqual(["boom", "crash on render"]);
-    heard({ type: "user-message", text: "hm", ts: 3 });
-    svc.report("w1", "after the message");
-    expect(rows()).toEqual(["boom", "crash on render"]);
-    expect(svc.recent("w1")).toEqual(["crash on render", "after the message"]);
+    expect(rows()).toHaveLength(2);
+    expect(rows().at(-1)).toEqual(["crash on render"]);
   });
 
-  test("Toyon's own message shuts the window the way the person's does", () => {
-    const { svc, heard, rows, write } = setup();
-    heard(write);
-    heard({ type: "fix-asked", text: "fix it", ts: 1, kind: "page", why: "the preview threw" });
-    svc.report("w1", "still broken");
+  test("a turn that leaves the page clean writes nothing", () => {
+    const { svc, heard, rows, start, end } = setup();
+    heard(start);
+    svc.report("w1", "draft");
+    svc.loaded("w1");
+    heard(end);
     expect(rows()).toEqual([]);
   });
 
-  test("the same throw twice in a second is one; the same message later in a window is one row", () => {
-    const { svc, heard, rows, write, tick } = setup();
-    heard(write);
+  test("a turn that fails ends the way one that finishes does", () => {
+    const { svc, heard, rows, start } = setup();
+    heard(start);
+    svc.report("w1", "boom");
+    heard({ type: "agent-error", message: "API Error: 529", ts: 3 });
+    expect(rows()).toEqual([["boom"]]);
+    svc.report("w1", "after");
+    expect(rows()).toEqual([["boom"], ["after"]]);
+  });
+
+  test("the same throw twice in a second is one; a throw that stays is one row until the next message", () => {
+    const { svc, heard, rows, tick } = setup();
     svc.report("w1", "boom");
     tick(500);
     svc.report("w1", "boom");
     expect(svc.recent("w1")).toEqual(["boom"]);
+    // a reload brings it back; the person has read it once already
+    svc.loaded("w1");
     tick(5000);
     svc.report("w1", "boom");
-    expect(svc.recent("w1")).toEqual(["boom", "boom"]);
-    expect(rows()).toEqual(["boom"]);
+    expect(svc.recent("w1")).toEqual(["boom"]);
+    expect(rows()).toEqual([["boom"]]);
+    // a message means the agent hears it anyway, and the next sighting is news again
+    heard({ type: "user-message", text: "hm", ts: 3 });
+    svc.loaded("w1");
+    svc.report("w1", "boom");
+    expect(rows()).toEqual([["boom"], ["boom"]]);
   });
 
-  test("a window writes three rows at most; what is held stays at five", () => {
-    const { svc, heard, rows, write, tick } = setup();
-    heard(write);
+  test("Toyon's own message starts the count over the way the person's does", () => {
+    const { svc, heard, rows } = setup();
+    svc.report("w1", "still broken");
+    heard({ type: "fix-asked", text: "fix it", ts: 1, kind: "page", why: "the preview threw" });
+    svc.loaded("w1");
+    svc.report("w1", "still broken");
+    expect(rows()).toEqual([["still broken"], ["still broken"]]);
+  });
+
+  test("three rows at most between messages; what is held stays at five", () => {
+    const { svc, rows, tick } = setup();
     for (const n of [1, 2, 3, 4, 5, 6, 7]) {
       svc.report("w1", `error ${n}`);
       tick(2000);
     }
-    expect(rows()).toEqual(["error 1", "error 2", "error 3"]);
+    expect(rows()).toEqual([["error 1"], ["error 2"], ["error 3"]]);
     expect(svc.recent("w1")).toEqual(["error 3", "error 4", "error 5", "error 6", "error 7"]);
-    // the next turn's first write opens a window of its own
-    heard({ type: "user-message", text: "again", ts: 1 });
-    heard({ type: "turn-start", ts: 2 });
-    heard(write);
-    svc.report("w1", "error 8");
-    expect(rows()).toEqual(["error 1", "error 2", "error 3", "error 8"]);
-  });
-
-  test("a command opens the window the way an edit does: it may have changed the tree", () => {
-    const { svc, heard, rows, run } = setup();
-    heard({ type: "turn-start", ts: 1 });
-    heard(run);
-    svc.report("w1", "boom");
-    expect(rows()).toEqual(["boom"]);
   });
 
   test("an unknown worktree holds nothing, and one that goes takes what it held with it", () => {
@@ -129,7 +142,6 @@ describe("PageErrorService", () => {
   test("a worktree with no agent holds the error and writes nothing", () => {
     const hub = new Hub();
     const svc = new PageErrorService({ hub, runtime: { agentFor: () => undefined }, known: () => true });
-    hub.emit("agent", "w1", 0, { type: "tool-start", toolId: "t1", name: "Write", input: {}, kind: "edit" });
     svc.report("w1", "boom");
     expect(svc.recent("w1")).toEqual(["boom"]);
   });

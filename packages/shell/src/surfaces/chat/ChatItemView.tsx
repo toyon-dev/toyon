@@ -1140,14 +1140,19 @@ export const ChatItemView = memo(function ChatItemView({
       // and the box under the log offers the way on
       return <DaemonRow icon="stop" word="stopped" tone="quiet" />;
     case "page-error":
-      // the preview's news, in the person's browser's words, under the edits it followed; the box
-      // under the log offers to send it, so the row itself carries no button
+      // the preview's news, in the person's browser's words, a line each; the box under the log
+      // offers to send it, so the row itself carries no button
       return (
         <DaemonRow
           icon="globe"
           word="preview threw"
           tone="quiet"
-          below={<code className="daemon-text">{item.message}</code>}
+          below={item.errors.map((e) => (
+            // the daemon writes each error once per row, so the text is the key
+            <code key={e} className="daemon-text">
+              {e}
+            </code>
+          ))}
         />
       );
     case "landed":

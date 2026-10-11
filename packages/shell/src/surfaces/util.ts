@@ -4,6 +4,7 @@ import {
   isLead,
   isLoopbackHost,
   isOwned,
+  PAGE_ERROR_MAX_CHARS,
   type ProcState,
   type ProcStatus,
   previewOrigin,
@@ -56,6 +57,16 @@ export function relFile(file: string, worktreePath?: string): string {
   if (worktreePath && file.startsWith(`${worktreePath}/`)) return file.slice(worktreePath.length + 1);
   const i = file.lastIndexOf("/src/");
   return i >= 0 ? file.slice(i + 1) : file;
+}
+
+/** What the page threw, as one line for the daemon: the message, and where in the source when the
+ * browser said. The source is the module's address, and a dev server stamps a hot-swapped module's
+ * address with the time of the swap, so the query and hash go: the same throw on the next swap has
+ * to read the same, or every swap of a broken file is a fresh error. */
+export function pageErrorText(d: { message: string; source?: string; line?: number }): string {
+  const source = d.source?.replace(/[?#].*$/, "");
+  const where = source ? ` (${relFile(source)}:${d.line ?? "?"})` : "";
+  return `${d.message}${where}`.slice(0, PAGE_ERROR_MAX_CHARS);
 }
 
 /** a dock's width as dragged: never under the row's floor (--dock-min in app.css, the same 170),

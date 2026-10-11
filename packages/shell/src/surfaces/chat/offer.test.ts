@@ -106,15 +106,22 @@ describe("offerOf", () => {
 });
 
 describe("offerOf, what the preview threw", () => {
-  const threw = (seq: number, message = "boom"): ChatItem => ({ kind: "page-error", message, seq });
+  const threw = (seq: number, ...errors: string[]): ChatItem => ({
+    kind: "page-error",
+    errors: errors.length > 0 ? errors : ["boom"],
+    seq,
+  });
   const edit: ChatItem = { kind: "tool", id: "e1", name: "Edit", input: {}, done: true, toolKind: "edit" };
   const read: ChatItem = { kind: "tool", id: "r1", name: "Read", input: {}, done: true, toolKind: "read" };
 
   test("the page rows since the last edit are offered as one press, keyed by the newest", () => {
-    expect(offerOf([edit, threw(4), { kind: "assistant", text: "Done." }, threw(6, "again")], rest)).toEqual({
+    // the count is of errors, not rows: a turn's row carries all it left the page throwing
+    expect(
+      offerOf([edit, threw(4, "one", "two"), { kind: "assistant", text: "Done." }, threw(6, "again")], rest),
+    ).toEqual({
       verb: "fix",
       key: "page:6",
-      page: { errors: 2 },
+      page: { errors: 3 },
     });
     // the rows the agent's reading and figures sit among are still in reach
     expect(offerOf([threw(2), read, { kind: "thinking", text: "hm" }], rest)).toMatchObject({ page: { errors: 1 } });

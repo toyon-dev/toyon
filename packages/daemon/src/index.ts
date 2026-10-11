@@ -208,7 +208,7 @@ let mcpPort = port;
 const tools = new ToolSet();
 const mcp = new ToyonMcp({ url: (id) => `http://127.0.0.1:${mcpPort}/mcp/${id}`, version: pkg.version, tools });
 // what each preview's page threw, as the shell forwards it; read behind every message, and put on
-// the transcript when a turn's edits are what it followed
+// the transcript once a turn is over, or as it comes while the agent is idle
 const pageErrors = new PageErrorService({
   hub,
   runtime: { agentFor: (id) => runtime.agentFor(id) },

@@ -2,7 +2,6 @@ import type { BridgeToShellMsg } from "@toyon/shared";
 import {
   isLead,
   isOwned,
-  PAGE_ERROR_MAX_CHARS,
   PAGE_TITLE_MAX_CHARS,
   PAGE_URL_MAX_CHARS,
   parseBridgeMsg,
@@ -102,7 +101,7 @@ import { DesignPane } from "../design/DesignPane.tsx";
 import { EditorPane } from "../editor/EditorPane.tsx";
 import { Overlays } from "../overlays/Overlays.tsx";
 import { TerminalPane } from "../terminal/TerminalPane.tsx";
-import { chord, isBusy, previewUrl, relFile } from "../util.ts";
+import { chord, isBusy, pageErrorText, previewUrl, relFile } from "../util.ts";
 import { Boot } from "./Boot.tsx";
 import { carriedFrame, shownFrame } from "./frames.ts";
 import { Greenfield } from "./Greenfield.tsx";
@@ -257,11 +256,9 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
       case "title":
         c.title = d.title;
         break;
-      case "page-error": {
-        const where = d.source ? ` (${relFile(d.source)}:${d.line ?? "?"})` : "";
-        c.errors.push(`${d.message}${where}`.slice(0, PAGE_ERROR_MAX_CHARS));
+      case "page-error":
+        c.errors.push(pageErrorText(d));
         break;
-      }
     }
   };
   useEffect(() => {
@@ -397,10 +394,9 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
             dispatch({ a: "links", id, links: d.links });
             break;
           case "page-error": {
-            // to the daemon, which holds what the page threw for the agent and writes the row
-            // when the turn's edits are what it followed; this tab keeps none of it
-            const where = d.source ? ` (${relFile(d.source)}:${d.line ?? "?"})` : "";
-            const message = `${d.message}${where}`.slice(0, PAGE_ERROR_MAX_CHARS);
+            // to the daemon, which holds what the page threw for the agent and decides when it
+            // is a row; this tab keeps none of it
+            const message = pageErrorText(d);
             if (message) sockRef.current?.send({ t: "page-error", worktreeId: id, message });
             break;
           }

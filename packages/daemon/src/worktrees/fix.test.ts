@@ -213,7 +213,7 @@ describe("FixService.goOn", () => {
   test("the figures a turn leaves behind it are read past, and so is the preview's news; anything said since is not", () => {
     const entry = (event: AgentEvent) => ({ seq: 0, event });
     expect(lastStop([entry(stopped), entry({ type: "usage", used: 1, size: 2, ts: 1 })])).toEqual({ kind: "stopped" });
-    expect(lastStop([entry(stopped), entry({ type: "page-error", message: "boom", ts: 1 })])).toEqual({
+    expect(lastStop([entry(stopped), entry({ type: "page-error", errors: ["boom"], ts: 1 })])).toEqual({
       kind: "stopped",
     });
     expect(lastStop([entry(failed), entry({ type: "session-info", sessionId: "s" })])).toMatchObject({
@@ -252,7 +252,7 @@ describe("FixService.goOn", () => {
 });
 
 describe("FixService.pressPage", () => {
-  const threw = (message: string): AgentEvent => ({ type: "page-error", message, ts: 1 });
+  const threw = (...errors: string[]): AgentEvent => ({ type: "page-error", errors, ts: 1 });
   const write: AgentEvent = { type: "tool-start", toolId: "e1", name: "Edit", input: {}, kind: "edit" };
 
   test("the page rows since the last edit go to the agent as Toyon's own message, oldest first", async () => {
@@ -266,7 +266,7 @@ describe("FixService.pressPage", () => {
     expect(asks()[0]?.asked).toEqual({ kind: "page", why: "the preview threw" });
     expect(asks()[0]?.text).toBe(
       [
-        "After your last edits the preview threw this in the user's browser:",
+        "Since your last edits the preview threw this in the user's browser:",
         "",
         "- DIG: fullWidth on a small button (src/Button.tsx:41)",
         "- unhandled rejection: TypeError: x",

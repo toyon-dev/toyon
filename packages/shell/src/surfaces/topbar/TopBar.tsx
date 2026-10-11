@@ -406,8 +406,10 @@ function UpdateOffer() {
 /** A machine that has a public name, or could (Tailscale signed in with HTTPS on), opens on a
  * phone from here, at the head of the tools: the devices card, which leads with the address.
  * Until a device has been let in it says so in words, since nothing else tells anyone the
- * machine can be opened elsewhere; after that it is the phone icon alone, a tool like the ones
- * beside it. Never on a phone, which is the thing that would scan it. */
+ * machine can be opened elsewhere; after that it is the devices glyph alone, a tool like the
+ * ones beside it, named for the card it opens, which lists other machines as well as phones.
+ * The glyph is the card's wherever a door to it is drawn. Never on a phone, which is the thing
+ * that would scan it. */
 function PhoneButton() {
   const dispatch = useDispatch();
   const shown = useStore(canOfferPhone);
@@ -417,19 +419,12 @@ function PhoneButton() {
   const toggle = () => dispatch({ a: "toggle", overlay: { kind: "devices" } });
   if (letIn) {
     return (
-      <IconButton
-        icon="phone"
-        label="Open on your phone"
-        tone="chrome"
-        on={open}
-        aria-expanded={open}
-        onClick={toggle}
-      />
+      <IconButton icon="devices" label="Your devices" tone="chrome" on={open} aria-expanded={open} onClick={toggle} />
     );
   }
   return (
     <Offer
-      icon="phone"
+      icon="devices"
       aria-expanded={open}
       onClick={toggle}
       {...tip("Open this machine on your phone, and let it in")}

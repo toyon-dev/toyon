@@ -53,6 +53,7 @@ export type IconName =
   | "send"
   | "phone"
   | "laptop"
+  | "devices"
   | "dot";
 
 const ICON_PATHS: Record<IconName, string> = {
@@ -152,6 +153,11 @@ const ICON_PATHS: Record<IconName, string> = {
   // a laptop, the other kind of device on a tailnet: a screen with rounded top corners over a
   // wider base line, which is what keeps it from reading as a window or a card at 16px
   laptop: "M3.4 3.4h9.2a1 1 0 0 1 1 1v6.2H2.4V4.4a1 1 0 0 1 1-1z M1.5 12.6h13",
+  // the devices card, from every door to it: a screen with a phone standing in front of its right
+  // edge. The screen's outline stops where the phone covers it, since two closed boxes crossing
+  // read as a window over a window at 16px; the phone keeps its foot bar so it stays a phone
+  devices:
+    "M8.8 11.2H3.2a1 1 0 0 1-1-1V4.2a1 1 0 0 1 1-1h8.8a1 1 0 0 1 1 1v1.3 M4.6 13.6h4.2 M10.6 6.9h3a.9.9 0 0 1 .9.9v5a.9.9 0 0 1-.9.9h-3a.9.9 0 0 1-.9-.9v-5a.9.9 0 0 1 .9-.9z M11.6 12.1h1",
   // a pull request: the branch glyph's left rail, and a second rail arriving from the right with
   // an arrowhead, which is the one thing that separates it from `branch` at 16px
   pr: "M4.5 5.1v5.8 M4.5 1.9a1.6 1.6 0 1 0 0 3.2 1.6 1.6 0 1 0 0-3.2z M4.5 10.9a1.6 1.6 0 1 0 0 3.2 1.6 1.6 0 1 0 0-3.2z M11.5 10.9a1.6 1.6 0 1 0 0 3.2 1.6 1.6 0 1 0 0-3.2z M11.5 10.9V6.6a2 2 0 0 0-2-2H8 M9.6 2.9 7.9 4.6l1.7 1.7",

@@ -291,7 +291,7 @@ export function ProjectPicker({
           <PaletteRow
             label={
               <>
-                <Icon name="globe" className="icon-inline" />
+                <Icon name="devices" className="icon-inline" />
                 add a machine
               </>
             }

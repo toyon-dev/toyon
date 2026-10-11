@@ -18,10 +18,8 @@
     <link rel="manifest" href="/manifest.json" />
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
     <title>Toyon</title>
-    <!-- The ground, before the first paint: the bundle that applies the theme is a module, and a
-         module runs after the browser has already painted its own white canvas. The last theme's
-         ground is read here, where it still blocks that paint; the literal is the dark theme's,
-         for a first visit. The rule names the token, so it follows every theme applied later. -->
+    <!-- The canvas: the rule names the token, so it follows every theme applied later, and the
+         literal is the dark theme's, for a first visit. -->
     <style>
       html {
         background: var(--surface0, #32302d);
@@ -29,12 +27,21 @@
       }
     </style>
     <script>
+      // The ground of the screen this tab opens on, painted here, where it still blocks the first
+      // paint: the bundle that applies the theme is a module, and a module runs after the browser
+      // has painted its own white canvas. The theme is the last one applied, from its cache, and
+      // the screen is the one this tab was reading, or on a fresh tab the phone's list, which
+      // stands on surface1 where the desk and a worktree's chat stand on surface0. The frame query
+      // is the shell's own (app/phone.ts), and the bundle lifts this ground once a screen stands
+      // (main.tsx). The literals are the dark theme's, for a first visit.
       try {
         const t = JSON.parse(localStorage.getItem("toyon-theme"));
-        if (typeof t?.colors?.surface0 === "string") {
-          document.documentElement.style.setProperty("--surface0", t.colors.surface0);
-          document.documentElement.style.colorScheme = t.kind;
-        }
+        const colors =
+          typeof t?.colors?.surface0 === "string" ? t.colors : { surface0: "#32302d", surface1: "#3d3835" };
+        const phone = matchMedia("(max-width: 640px), ((hover: none) and (max-width: 1000px))").matches;
+        const key = sessionStorage.getItem("toyon-ground") || (phone ? "surface1" : "surface0");
+        document.documentElement.style.background = colors[key] || colors.surface0;
+        if (t?.kind) document.documentElement.style.colorScheme = t.kind;
       } catch {}
     </script>
   </head>

@@ -1,5 +1,6 @@
 import type { ServerMsg } from "@toyon/shared";
 import React from "react";
+import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
 import { App } from "./app/App.tsx";
 import { LetMeIn } from "./app/LetMeIn.tsx";
@@ -109,21 +110,27 @@ function letIn(token: string) {
   window.location.reload();
 }
 const root = createRoot(document.getElementById("root")!);
-booted.then(() =>
-  root.render(
-    <React.StrictMode>
-      <ErrorBoundary>
-        {!hasToken() ? (
-          <LetMeIn origin={location.origin} machine={location.host} onToken={letIn} />
-        ) : (
-          <MachinesProvider machines={machines}>
-            <App />
-          </MachinesProvider>
-        )}
-      </ErrorBoundary>
-    </React.StrictMode>,
-  ),
-);
+booted.then(() => {
+  // rendered in one go, so the screen stands before the ground under it goes
+  flushSync(() =>
+    root.render(
+      <React.StrictMode>
+        <ErrorBoundary>
+          {!hasToken() ? (
+            <LetMeIn origin={location.origin} machine={location.host} onToken={letIn} />
+          ) : (
+            <MachinesProvider machines={machines}>
+              <App />
+            </MachinesProvider>
+          )}
+        </ErrorBoundary>
+      </React.StrictMode>,
+    ),
+  );
+  // the ground the page painted before this bundle ran (index.html) has done its job: from here
+  // the stylesheet's ground is the one
+  document.documentElement.style.removeProperty("background");
+});
 
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("/sw.js").catch(() => {});

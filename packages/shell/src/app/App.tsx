@@ -229,6 +229,15 @@ export function App() {
   useEffect(() => {
     if (phoneRow !== null) storage.session.set(STORAGE.phoneRow, phoneRow ? "1" : "0");
   }, [phoneRow, storage]);
+  // the token the screen is painted in, kept for this tab alone: the page paints it before this
+  // bundle runs (index.html), so a reload comes up in the colour of the screen it returns to. A
+  // fresh tab has none and opens the list, whose colour the page knows by itself.
+  const ground = useStore((s) => (s.frame === "phone" && s.screen === "home" ? "surface1" : "surface0"));
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(STORAGE.ground, ground);
+    } catch {}
+  }, [ground]);
   useEffect(() => {
     if (activeRepoId) storage.set(STORAGE.repo, activeRepoId);
   }, [activeRepoId, storage]);

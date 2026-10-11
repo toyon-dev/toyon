@@ -477,9 +477,10 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
       bootstrap: helloFrame,
       manifestColors: () => {
         // the phone's status bar sits on the screen's ground, not on the strip under it: painted
-        // the strip's colour, the two read as one tall band
-        const { surface0 } = s.themes.current().colors;
-        return { bar: surface0, ground: surface0 };
+        // the strip's colour, the two read as one tall band. The launch screen is the list's
+        // ground, which is the screen an installed app opens on.
+        const { surface0, surface1 } = s.themes.current().colors;
+        return { bar: surface0, ground: surface1 };
       },
       open: (path) => s.opens.open(path),
       restart: (now) => s.restarter.request({ now }),

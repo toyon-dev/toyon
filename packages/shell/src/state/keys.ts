@@ -45,6 +45,10 @@ export const STORAGE = {
   layouts: "toyon-layouts",
   /** this tab's id (sessionStorage): worktrees created here steal focus, others don't */
   client: "toyon-client",
+  /** the token the screen this tab shows is painted in (sessionStorage): "surface0" | "surface1".
+   * The boot script in index.html paints the page in it before the bundle runs, so a reload comes
+   * up in the colour of the screen it returns to */
+  ground: "toyon-ground",
   /** + repo id: the profile the composer last started a worktree with, for that repo */
   profilePrefix: "toyon-profile-",
   /** + repo id: the permission mode the composer last started a worktree with, for that repo */
@@ -76,6 +80,7 @@ export const WINDOW_KEYS: readonly Key[] = [
   STORAGE.layouts,
   STORAGE.token,
   STORAGE.client,
+  STORAGE.ground,
 ];
 
 /** What is about one machine's projects and worktrees, whose ids mean nothing on another machine:

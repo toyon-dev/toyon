@@ -104,7 +104,7 @@ export interface HttpOpts {
   /** the shell origins on other machines that have been let in here, whose pages may read answers */
   trusted: () => string[];
   /** the chosen theme's grounds, for the manifest: what a phone paints its status bar above an
-   * installed shell, and the launch screen behind it */
+   * installed shell, and the launch screen, which the list the app opens on continues */
   manifestColors: () => { bar: string; ground: string };
   /** what the not-running page is told on the way out: the link that starts a daemon here, when
    * the helper that answers it is in place (core/helper.ts), and the port this daemon is on */

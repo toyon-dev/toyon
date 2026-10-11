@@ -13,6 +13,7 @@ import {
 import { openCard } from "../surfaces/chat/handoff.ts";
 import { addToChat, attachPick } from "./attach.ts";
 import { createStore } from "./context.tsx";
+import { outBoxId, outBoxOf, readyToGo } from "./outbox.ts";
 import { isUploading, settledInputs, toInput } from "./pending.ts";
 import {
   type Action,
@@ -3384,5 +3385,199 @@ describe("a page rendered for the agent", () => {
     expect(s.renders).toEqual([{ worktreeId: "a", id: "r1", path: "/about" }]);
     expect(reducer(s, { a: "render-done", id: "nope" })).toBe(s);
     expect(reducer(s, { a: "render-done", id: "r1" }).renders).toEqual([]);
+  });
+});
+
+describe("the outbox", () => {
+  const landed = { kind: "file" as const, key: "f1", upload: "u1", name: "run.jsonl", bytes: 9, text: true };
+  const {
+    local: _thumb,
+    uploading: _flight,
+    ...settledImg
+  } = {
+    kind: "image" as const,
+    key: "i1",
+    name: "a.png",
+    mimeType: "image/png" as const,
+    upload: "u9",
+    width: 2,
+    height: 1,
+    bytes: 3,
+    local: "blob:x",
+    uploading: true,
+  };
+  const flying = { ...settledImg, upload: "", local: "blob:x", uploading: true };
+  const chat = { t: "chat" as const, worktreeId: "a", clientId: ME };
+  const outOf = (s: State) => s.outbox[0]?.id ?? "";
+  const helloWith = (drafts: Record<string, string>, attachments: Record<string, AttachmentInput[]>): Action => {
+    const h = hello(wt("a"));
+    if (h.a !== "server" || h.msg.t !== "hello") throw new Error("not a hello");
+    return server({ ...h.msg, drafts, attachments });
+  };
+
+  test("a send while a chip uploads takes the box into an outgoing box, named for this tab and the box", () => {
+    let s = run([
+      hello(wt("a")),
+      { a: "attach", id: "a", items: [landed, flying] },
+      { a: "notice", id: "a", text: "x" },
+      { a: "walk", id: "a", walk: { at: 3, from: "" }, text: "look at this" },
+    ]);
+    s = run([{ a: "hold-send", id: "a", log: "a", text: "look at this", frame: chat }], s);
+    const out = outOf(s);
+    expect(outBoxOf(out)).toEqual({ clientId: ME, source: "a" });
+    expect(s.outbox).toEqual([{ id: out, log: "a", kinds: ["file", "image"] }]);
+    expect(s.local[out]).toMatchObject({
+      draft: "look at this",
+      attachments: [landed, flying],
+      outgoing: { frame: chat, log: "a" },
+    });
+    expect(s.local.a).toMatchObject({ draft: "", attachments: [] });
+    expect(s.local.a?.mark).toBeUndefined();
+    expect(s.local.a?.notice).toBeUndefined();
+    // the daemon has not had the message: the count that says it has holds still
+    expect(s.local.a?.sent).toBeUndefined();
+    expect(reducer(s, { a: "hold-send", id: "nowhere", log: "a", text: "", frame: chat })).toBe(s);
+  });
+
+  test("the upload lands in the outgoing box, and the message goes with its placeholder and count on the log", () => {
+    let s = run([
+      hello(wt("a")),
+      { a: "attach", id: "a", items: [flying] },
+      { a: "hold-send", id: "a", log: "a", text: "see", frame: chat },
+    ]);
+    const out = outOf(s);
+    expect(readyToGo(s.outbox, s.local)).toEqual([]);
+    s = run([{ a: "attached", id: out, key: "i1", item: settledImg }], s);
+    expect(readyToGo(s.outbox, s.local)).toEqual([out]);
+    s = run([{ a: "sent-out", id: out }], s);
+    expect(s.local[out]).toBeUndefined();
+    expect(s.outbox).toEqual([]);
+    expect(s.local.a?.sending).toEqual({ message: { text: "see", attachments: [toInput(settledImg)] } });
+    expect(s.local.a?.sent).toBe(1);
+    expect(reducer(s, { a: "sent-out", id: out })).toBe(s);
+  });
+
+  test("mid-turn the message joins the turn with no bubble of its own; a restore shows the row on its way", () => {
+    let s = run([
+      hello({ ...wt("a"), agent: "working" }),
+      { a: "attach", id: "a", items: [landed] },
+      { a: "hold-send", id: "a", log: "a", text: "more", frame: chat },
+    ]);
+    s = run([{ a: "sent-out", id: outOf(s) }], s);
+    expect(s.local.a?.sending).toBeUndefined();
+    expect(s.local.a?.sent).toBe(1);
+    const restore = { t: "restore-worktree" as const, archiveId: "old", clientId: ME };
+    let r = run([
+      hello(wt("b")),
+      { a: "attach", id: "old", items: [landed] },
+      { a: "hold-send", id: "old", log: "old", text: "back", frame: restore },
+    ]);
+    r = run([{ a: "sent-out", id: outOf(r) }], r);
+    expect(r.local.old?.restoring).toBe("back");
+    expect(r.local.old?.sending).toBeUndefined();
+  });
+
+  test("a chip lost on the way puts the message back whole: words into an empty box, chips ahead, the reason under it", () => {
+    let s = run([
+      hello(wt("a")),
+      { a: "attach", id: "a", items: [landed, flying] },
+      { a: "hold-send", id: "a", log: "a", text: "see", frame: chat },
+    ]);
+    const out = outOf(s);
+    const since = { ...landed, key: "f2", upload: "u2", name: "since.txt" };
+    s = run(
+      [
+        { a: "set-draft", id: "a", text: "typed since" },
+        { a: "attach", id: "a", items: [since] },
+      ],
+      s,
+    );
+    s = run(
+      [
+        { a: "detach", id: out, key: "i1" },
+        { a: "notice", id: out, text: "a.png: too big" },
+      ],
+      s,
+    );
+    expect(s.outbox).toEqual([]);
+    expect(s.local.a?.draft).toBe("typed since");
+    expect(s.local.a?.attachments).toEqual([landed, since]);
+    expect(s.local.a?.notice).toBe("a.png: too big");
+    expect(s.local[out]).toBeUndefined();
+    // and a box left empty gets the words back
+    let e = run([
+      hello(wt("a")),
+      { a: "attach", id: "a", items: [flying] },
+      { a: "hold-send", id: "a", log: "a", text: "see", frame: chat },
+    ]);
+    e = run([{ a: "unsend", id: outOf(e) }], e);
+    expect(e.local.a?.draft).toBe("see");
+    expect(e.local.a?.attachments).toEqual([flying]);
+  });
+
+  test("dropped from its row, the message is gone and the box keeps what was written since", () => {
+    let s = run([
+      hello(wt("a")),
+      { a: "attach", id: "a", items: [flying] },
+      { a: "hold-send", id: "a", log: "a", text: "see", frame: chat },
+      { a: "set-draft", id: "a", text: "typed since" },
+    ]);
+    const out = outOf(s);
+    s = run([{ a: "drop-out", id: out }], s);
+    expect(s.outbox).toEqual([]);
+    expect(s.local.a).toMatchObject({ draft: "typed since", attachments: [] });
+    expect(s.local[out]).toBeUndefined();
+  });
+
+  test("the daemon's refusal of a message sent from an outgoing box goes back into the box it left", () => {
+    let s = run([
+      hello(wt("a")),
+      { a: "attach", id: "a", items: [landed] },
+      { a: "hold-send", id: "a", log: "a", text: "see", frame: chat },
+    ]);
+    const out = outOf(s);
+    s = run([{ a: "sent-out", id: out }], s);
+    s = run([server({ t: "unsent", boxId: out, text: "see", items: [toInput(landed)], message: "no agent" })], s);
+    expect(s.local.a?.sending).toBeUndefined();
+    expect(s.local.a?.draft).toBe("see");
+    expect(s.local.a?.attachments.map(toInput)).toEqual([toInput(landed)]);
+    expect(s.local.a?.notice).toBe("no agent");
+  });
+
+  test("another tab's outgoing box is its own: never a box here, at hello or as it changes", () => {
+    const theirs = outBoxId("tab-2", 1, "a");
+    const item = toInput(landed);
+    const s = run([helloWith({ [theirs]: "on its way", b: "mine" }, { [theirs]: [item], b: [item] })]);
+    expect(s.local[theirs]).toBeUndefined();
+    expect(s.local.b).toMatchObject({ draft: "mine" });
+    expect(s.local.b?.attachments.map(toInput)).toEqual([item]);
+    const changed = run(
+      [
+        server({ t: "draft", boxId: theirs, text: "changed", clientId: "tab-2" }),
+        server({ t: "attachments", boxId: theirs, items: [item], clientId: "tab-2" }),
+      ],
+      s,
+    );
+    expect(changed.local[theirs]).toBeUndefined();
+  });
+
+  test("a message answering a stopped question holds in the card's box and shows on the worktree's log", () => {
+    const box = "card:q1";
+    let s = run([
+      hello(wt("a")),
+      { a: "attach", id: box, items: [flying] },
+      { a: "hold-send", id: box, log: "a", text: "yes", frame: chat },
+    ]);
+    const out = outOf(s);
+    expect(outBoxOf(out)).toEqual({ clientId: ME, source: box });
+    expect(s.outbox).toEqual([{ id: out, log: "a", kinds: ["image"] }]);
+    s = run(
+      [
+        { a: "attached", id: out, key: "i1", item: settledImg },
+        { a: "sent-out", id: out },
+      ],
+      s,
+    );
+    expect(s.local.a?.sending).toEqual({ message: { text: "yes", attachments: [toInput(settledImg)] } });
   });
 });

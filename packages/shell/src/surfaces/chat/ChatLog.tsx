@@ -16,8 +16,9 @@ import { previewBus } from "../../app/previewBus.ts";
 import { takeBackQueued } from "../../state/attach.ts";
 import { useDispatch, useSock, useStore, useStoreInstance, useUrls } from "../../state/context.tsx";
 import { openSource } from "../../state/openSource.ts";
+import type { OutboxEntry } from "../../state/outbox.ts";
 import { useLocalField } from "../../state/selectors.ts";
-import { localOf } from "../../state/store.ts";
+import { localOf, type PendingAttachment } from "../../state/store.ts";
 import { IconButton } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { DocumentFind } from "../../ui/DocumentFind.tsx";
@@ -59,7 +60,9 @@ const panelRef = {
 
 /** What a queued message carries, on its row: the chips it was sent with, numbered as they will be
  * when it goes, and nothing to take off, since the message is taken back whole. An image and a
- * file are read from where they were uploaded, which the message holds until it is recorded. */
+ * file are read from where they were uploaded, which the message holds until it is recorded; one
+ * still uploading (a message waiting in the outbox) is drawn from the bytes this tab holds, and
+ * the row's tag says that it waits, so the chip does not say it again. */
 function QueuedChips({
   items,
   next,
@@ -67,7 +70,7 @@ function QueuedChips({
   dir,
   onOpen,
 }: {
-  items: readonly AttachmentInput[];
+  items: readonly (AttachmentInput | PendingAttachment)[];
   next: Readonly<Record<AttachmentKind, number>>;
   worktreeId: string;
   dir: string | null;
@@ -81,7 +84,7 @@ function QueuedChips({
           <ImageChip
             key={`image-${n}`}
             className="in-chat"
-            src={urls.upload(a.upload)}
+            src={("local" in a && a.local) || urls.upload(a.upload)}
             n={n}
             name={a.name}
             width={a.width}
@@ -94,7 +97,7 @@ function QueuedChips({
             className="in-chat"
             name={a.name}
             bytes={a.bytes}
-            href={a.text ? urls.upload(a.upload) : undefined}
+            href={a.text && a.upload ? urls.upload(a.upload) : undefined}
           />
         ) : a.kind === "paste" ? (
           <PasteChip
@@ -110,6 +113,53 @@ function QueuedChips({
           <PickChip key={`pick-${n}`} className="in-chat" pick={a} dir={dir} worktreeId={worktreeId} onOpen={onOpen} />
         ),
       )}
+    </div>
+  );
+}
+
+/** A message this tab sent that is still on its way to the daemon: an upload it names has not
+ * landed (outbox.ts). A queued row, since that is what it is, this side of the socket: the tag
+ * says what it waits on, the chip says which, and it can be taken back into the box or dropped. */
+function HeldRow({
+  entry,
+  next,
+  worktreeId,
+  dir,
+  onOpen,
+}: {
+  entry: OutboxEntry;
+  next: Readonly<Record<AttachmentKind, number>>;
+  worktreeId: string;
+  dir: string | null;
+  onOpen: (path: string, line: number) => void;
+}) {
+  const dispatch = useDispatch();
+  const text = useLocalField(entry.id, "draft");
+  const items = useLocalField(entry.id, "attachments");
+  return (
+    <div className="msg-user queued-msg">
+      <span className="queued-tag">
+        <Icon name="clock" className="icon-inline" />
+        <span className="queued-word">uploading</span>
+      </span>
+      <div className="queued-text">
+        {items.length > 0 && (
+          <QueuedChips items={items} next={next} worktreeId={worktreeId} dir={dir} onOpen={onOpen} />
+        )}
+        {text}
+      </div>
+      <span className="queued-actions">
+        <IconButton
+          icon="edit"
+          label="Edit: puts it back in the input"
+          onClick={() => dispatch({ a: "unsend", id: entry.id })}
+        />
+        <IconButton
+          icon="close"
+          label="Remove: it is not sent"
+          onClick={() => dispatch({ a: "drop-out", id: entry.id })}
+        />
+      </span>
     </div>
   );
 }
@@ -170,6 +220,22 @@ export function ChatLog({
       return mine;
     });
   }, [queue, sentNumbers]);
+  // messages this tab sent that wait for an upload to land (outbox.ts): behind the queue, since
+  // the daemon has not had them yet, and numbered on from it
+  const outbox = useStore((s) => s.outbox);
+  const held = useMemo(() => {
+    let at = queue.reduce((n, q) => numbersAfter(n, q.attachments ?? []), sentNumbers);
+    return outbox
+      .filter((entry) => entry.log === id)
+      .map((entry) => {
+        const mine = at;
+        at = numbersAfter(
+          at,
+          entry.kinds.map((kind) => ({ kind })),
+        );
+        return { entry, next: mine };
+      });
+  }, [outbox, id, queue, sentNumbers]);
   // Every send passes through the daemon's queue on its way to the agent, for as long as the
   // session takes to open or a hold on the tree lasts. The bubble drawn at the press is that same
   // message, so its queued row would say it twice and lift the log by a row until it drained.
@@ -296,6 +362,13 @@ export function ChatLog({
   const sent = useLocalField(id, "sent");
   useOnChange([sent], () => {
     if (sent) follow.jump();
+  });
+  // a message held for an upload is a send as well, at the press: the row it waits on is the anchor
+  const heldCount = held.length;
+  const heldBefore = useRef(heldCount);
+  useOnChange([heldCount], () => {
+    if (heldCount > heldBefore.current) follow.jump();
+    heldBefore.current = heldCount;
   });
   // A hit picked in the chats palette marks its row the same way. The chat may still be on its way
   // (a worktree this tab had not opened, an archived page), so the row arriving scrolls to it as
@@ -619,6 +692,17 @@ export function ChatLog({
               </div>
             ),
           )}
+        {id &&
+          held.map(({ entry, next }) => (
+            <HeldRow
+              key={entry.id}
+              entry={entry}
+              next={next}
+              worktreeId={id}
+              dir={active?.worktree.path ?? null}
+              onOpen={(path, line) => openSource(store, sock, id, path, line)}
+            />
+          ))}
         {tail}
         {/* sent from an archived page or a found worktree's: newer than the note it answers, so it
             reads under it, and it stays until the worktree's agent has the message. The page's

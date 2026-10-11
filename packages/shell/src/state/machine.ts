@@ -23,6 +23,7 @@ import { FileSync } from "./fileSync.ts";
 import { type ScopedStorage, STORAGE, storageFor } from "./keys.ts";
 import { settleLoose } from "./looseSync.ts";
 import { isOpenedMsg, openFromOutside, refusedFromOutside } from "./openOutside.ts";
+import { fillFrame, namingFirst, outBoxOf, readyToGo, uploadsNamed } from "./outbox.ts";
 import { type PendingAttachment, settledInputs } from "./pending.ts";
 import { type Frame, initialState, isLayout, type Layout } from "./store.ts";
 
@@ -155,6 +156,21 @@ function sendsSeen() {
   };
 }
 
+/** The boxes a sync told the daemon something for (`sent` holds the last word, `empty` is the word
+ * for nothing) that the store no longer has: an outgoing box taken back or dropped, whose record
+ * went with it. Another tab's outgoing box is never in the store and is that tab's to empty. */
+function vanished(store: Store, sent: ReadonlyMap<string, string>, empty: string): string[] {
+  const s = store.getState();
+  const out: string[] = [];
+  for (const [id, word] of sent) {
+    if (word === empty || s.local[id]) continue;
+    const theirs = outBoxOf(id);
+    if (theirs && theirs.clientId !== s.clientId) continue;
+    out.push(id);
+  }
+  return out;
+}
+
 /** Each composer box's text to the daemon as it changes, so another tab or device and an archive
  * keep it. A store subscription rather than an App effect: the `local` record changes on every chat
  * frame, and this compares the drafts alone. What the daemon last said a box holds counts as sent,
@@ -199,6 +215,14 @@ function syncDrafts(store: Store, sock: DaemonSocket) {
       const wait = Math.max(0, Math.min(DRAFT_QUIET_MS, since + DRAFT_MAX_WAIT_MS - Date.now()));
       waiting.set(id, { text: l.draft, timer: setTimeout(flush, wait, id), since });
     }
+    // a box gone from the store with words told for it (an outgoing box taken back or dropped) is
+    // told empty; another tab's outgoing box was never laid in here and is its own to empty
+    for (const id of vanished(store, sent, "")) {
+      clearTimeout(waiting.get(id)?.timer);
+      waiting.delete(id);
+      sent.set(id, "");
+      sock.send({ t: "set-draft", boxId: id, text: "", clientId: store.getState().clientId });
+    }
   });
   // leaving the box, or the page, is a pause long enough
   window.addEventListener("focusout", flushAll);
@@ -237,6 +261,7 @@ function syncAttachments(store: Store, sock: DaemonSocket) {
   const sent = new Map<string, string>();
   const sends = sendsSeen();
   const unsubscribe = store.subscribe(() => {
+    const frames: Array<{ id: string; items: AttachmentInput[]; before: string[] }> = [];
     for (const [id, l] of Object.entries(store.getState().local)) {
       // as for the text: the daemon took the list with the message
       if (sends.another(id, l.sent)) sent.set(id, "[]");
@@ -244,10 +269,20 @@ function syncAttachments(store: Store, sock: DaemonSocket) {
       seen.set(id, l.attachments);
       const items = settledInputs(l.attachments);
       const raw = JSON.stringify(items);
-      if ((sent.get(id) ?? "[]") === raw) continue;
+      const was = sent.get(id) ?? "[]";
+      if (was === raw) continue;
       sent.set(id, raw);
-      sock.send({ t: "set-attachments", boxId: id, items, clientId: store.getState().clientId });
+      frames.push({ id, items, before: uploadsNamed(JSON.parse(was) as AttachmentInput[]) });
     }
+    // as for the text: a box gone from the store with a list told for it is told empty
+    for (const id of vanished(store, sent, "[]")) {
+      sent.set(id, "[]");
+      frames.push({ id, items: [], before: [] });
+    }
+    // one change can move an upload between two boxes (a message leaving for an outgoing box, or
+    // coming back): the box that names it now is told first, or the daemon deletes it in between
+    for (const f of namingFirst(frames))
+      sock.send({ t: "set-attachments", boxId: f.id, items: f.items, clientId: store.getState().clientId });
   });
   return {
     /** what the daemon holds, before the store applies it: a hello is the whole set */
@@ -262,6 +297,58 @@ function syncAttachments(store: Store, sock: DaemonSocket) {
     },
     dispose: unsubscribe,
   };
+}
+
+/** Messages waiting in outgoing boxes go to the daemon as soon as they can (outbox.ts). After the
+ * syncs above, so the daemon's lists name every upload the frame does by the time it reads it.
+ * The box's exact words go ahead of the frame, as a plain send tells them, since the daemon puts
+ * a message no agent took back from its own copy of the box. */
+function flushOutbox(store: Store, sock: DaemonSocket) {
+  return store.subscribe(() => {
+    for (const id of readyToGo(store.getState().outbox, store.getState().local)) {
+      const s = store.getState();
+      const box = s.local[id];
+      // the dispatch below runs this again, and that pass may have sent the rest
+      if (!box?.outgoing) continue;
+      sock.send({ t: "set-draft", boxId: id, text: box.draft, clientId: s.clientId });
+      sock.send(fillFrame(box.outgoing.frame, id, box.draft, box.attachments));
+      store.dispatch({ a: "sent-out", id });
+    }
+  });
+}
+
+/** said under a box whose message came back at a hello */
+const RELOADED_MID_UPLOAD = "not sent: the page reloaded while an upload was on its way; attach it again and send";
+
+/** An outgoing box of this tab's that it no longer holds: the page reloaded while an upload was on
+ * its way, and the bytes went with it. The message goes back into the box it left, the way the
+ * daemon puts one back (the words only into an empty box, the chips ahead), less the chips that
+ * never landed; the daemon is told in the order that keeps every landed upload named, and the
+ * hello is read as the daemon now holds it. Answers the boxes to say it under. */
+function reclaimOutgoing(store: Store, sock: DaemonSocket, msg: Extract<ServerMsg, { t: "hello" }>): string[] {
+  const s = store.getState();
+  const boxes = new Set([...Object.keys(msg.drafts), ...Object.keys(msg.attachments)]);
+  const reclaimed: string[] = [];
+  for (const id of boxes) {
+    const out = outBoxOf(id);
+    if (out?.clientId !== s.clientId || s.local[id]?.outgoing) continue;
+    const text = msg.drafts[id] ?? "";
+    const items = msg.attachments[id] ?? [];
+    const sourceText = msg.drafts[out.source] ?? "";
+    const merged = [...items, ...(msg.attachments[out.source] ?? [])];
+    const mergedText = sourceText || text;
+    const clientId = s.clientId;
+    if (merged.length) sock.send({ t: "set-attachments", boxId: out.source, items: merged, clientId });
+    if (mergedText !== sourceText) sock.send({ t: "set-draft", boxId: out.source, text: mergedText, clientId });
+    sock.send({ t: "set-attachments", boxId: id, items: [], clientId });
+    sock.send({ t: "set-draft", boxId: id, text: "", clientId });
+    delete msg.drafts[id];
+    delete msg.attachments[id];
+    if (mergedText) msg.drafts[out.source] = mergedText;
+    if (merged.length) msg.attachments[out.source] = merged;
+    reclaimed.push(out.source);
+  }
+  return reclaimed;
 }
 
 export function createMachine(init: MachineInit, env: MachineEnv): Machine {
@@ -307,6 +394,8 @@ export function createMachine(init: MachineInit, env: MachineEnv): Machine {
   let drafts: ReturnType<typeof syncDrafts>;
   let pending: ReturnType<typeof syncAttachments>;
   let files: FileSync;
+  // the boxes a hello put a message back into, said under each once the store has the hello
+  let reclaimed: string[] = [];
 
   const sock = new DaemonSocket(
     init,
@@ -350,6 +439,7 @@ export function createMachine(init: MachineInit, env: MachineEnv): Machine {
           msg.drafts = kept(msg.drafts);
           msg.attachments = kept(msg.attachments);
         }
+        reclaimed = reclaimOutgoing(store, sock, msg);
         drafts.hello(msg.drafts);
         pending.hello(msg.attachments);
       }
@@ -379,6 +469,7 @@ export function createMachine(init: MachineInit, env: MachineEnv): Machine {
         return;
       }
       toStore(msg);
+      for (const id of reclaimed.splice(0)) store.dispatch({ a: "notice", id, text: RELOADED_MID_UPLOAD });
     },
     (v, failure) => store.dispatch({ a: "connected", v, failure }),
   );
@@ -398,6 +489,7 @@ export function createMachine(init: MachineInit, env: MachineEnv): Machine {
   // ⌘W has nothing to ask about.
   drafts = syncDrafts(store, sock);
   pending = syncAttachments(store, sock);
+  const stopOutbox = flushOutbox(store, sock);
 
   return {
     origin: init.origin,
@@ -415,14 +507,19 @@ export function createMachine(init: MachineInit, env: MachineEnv): Machine {
     boot(msg) {
       if (msg.t !== "hello" || msg.protocol !== PROTOCOL_VERSION) return;
       heard.version ??= msg.version;
+      // before the lists are read as the daemon's word: a dead outgoing box of this tab's would
+      // otherwise read as a box gone from the store, and be told empty rather than put back
+      const back = reclaimOutgoing(store, sock, msg);
       pending.hello(msg.attachments);
       store.dispatch({ a: "server", msg });
+      for (const id of back) store.dispatch({ a: "notice", id, text: RELOADED_MID_UPLOAD });
     },
     dispose() {
       sock.dispose();
       stopFiles();
       drafts.dispose();
       pending.dispose();
+      stopOutbox();
     },
   };
 }

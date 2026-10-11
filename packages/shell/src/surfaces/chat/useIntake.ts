@@ -166,10 +166,6 @@ export function pickAttachments(store: Store, boxId: string, { images = false } 
   input.click();
 }
 
-/** a send refused while a chip's upload is still on its way: the message would name an upload the
- * daemon does not have yet */
-export const STILL_UPLOADING = "still uploading what is attached; send again in a moment";
-
 /** the box a drop lands in: the one the composer on screen writes in, or the question card that
  * has the box, since a drop on the card goes with the answer and not with the message written
  * behind it. Read at drop time, like the pending counts. */

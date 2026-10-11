@@ -86,7 +86,8 @@ import { owedJump } from "../app/unseenJump.ts";
 import { stoppedAsk, stoppedBy } from "../surfaces/chat/ask.ts";
 import { dotClass } from "../surfaces/util.ts";
 import { mergeLinks } from "./links.ts";
-import { fromInputs, type PendingAttachment } from "./pending.ts";
+import { type HeldFrame, type OutboxEntry, type Outgoing, outBoxId, outBoxOf } from "./outbox.ts";
+import { fromInputs, type PendingAttachment, settledInputs } from "./pending.ts";
 
 /** `heard` is the shell's own clock when a live figure landed: the agent reports usage as soon as
  * the model accepts a request, before any of the reply, so a figure newer than the last thing in
@@ -272,6 +273,9 @@ export interface WorktreeLocal {
    * The message goes when the agent's own copy reaches the chat and the mark holds until the row
    * says busy itself, in whichever order those land; a message handed back unsent takes both. */
   sending?: { message?: QueuedMessage };
+  /** set on an outgoing box alone (outbox.ts): the message this box holds between the press and
+   * the wire, waiting for an upload it names to land */
+  outgoing?: Outgoing;
   /** how many messages this tab has sent from here: the log goes to its end on each, wherever
    * the reader had scrolled to, since the reply is what they are waiting for now */
   sent?: number;
@@ -859,6 +863,9 @@ export interface State {
   /** this worktree's composer should send what is already in its box, once: the description typed on
    * the new-project view, going as the first message from the box that now holds it */
   autoSend: string | null;
+  /** messages this tab has sent that are not with the daemon yet, oldest first: each waits in an
+   * outgoing box for an upload it names to land (outbox.ts) */
+  outbox: OutboxEntry[];
   /** the last answer to `choose-folder`, numbered so the form that asked can tell a new answer from
    * the one it already applied */
   chosenFolder: { seq: number; folder: ChosenFolder | null } | null;
@@ -1015,6 +1022,7 @@ export function initialState(opts: InitialOpts): State {
     choosingFolder: false,
     newProject: null,
     autoSend: null,
+    outbox: [],
     chosenFolder: null,
     pending: [],
     activeImportId: null,
@@ -1368,6 +1376,18 @@ export type Action =
   /** this tab sent a message from the box, which the daemon has taken: the box is empty here too,
    * and the log jumps to its end */
   | { a: "sent-box"; id: string }
+  /** this tab sent a message from box `id` while an upload in it was still on its way: the words
+   * and the chips move to an outgoing box, which the daemon is told about once the uploads land
+   * (outbox.ts). `log` is the row whose log shows it meanwhile. */
+  | { a: "hold-send"; id: string; log: string; text: string; frame: HeldFrame }
+  /** outgoing box `id` went to the daemon as a message: the box is spent, and the log it was shown
+   * on takes the sent placeholder the way a plain send does */
+  | { a: "sent-out"; id: string }
+  /** outgoing box `id` is taken back into the box the message left, words and chips, to be changed
+   * or dropped: an edit from its row, or a chip whose upload failed, said under that box */
+  | { a: "unsend"; id: string; notice?: string }
+  /** outgoing box `id` is dropped, message and all */
+  | { a: "drop-out"; id: string }
   /** this tab answered the agent's ask: the log jumps to its end the way a send does, and the
    * plain box's draft stays, since the ask took the box over without taking what was written in it */
   | { a: "answered"; id: string }
@@ -1508,6 +1528,10 @@ export type Action =
   /** the daemon speaks another protocol than this page (`v` left out, or true); false withdraws
    * it, for another machine's daemon heard again after an update there */
   | { a: "incompatible"; v?: boolean };
+
+/** outgoing boxes are numbered per page load; the id carries the tab as well, so two tabs never
+ * name the same box */
+let outSeq = 0;
 
 /** the send's placeholder is spent: the row speaks for itself, or the message came back */
 function settled(l: WorktreeLocal): WorktreeLocal {
@@ -1792,6 +1816,72 @@ function reduce(s: State, action: Action): State {
       }));
     case "answered":
       return withLocal(s, action.id, (l) => ({ ...l, sent: (l.sent ?? 0) + 1 }));
+    case "hold-send": {
+      const from = s.local[action.id];
+      if (!from) return s;
+      const id = outBoxId(s.clientId, ++outSeq, action.id);
+      const held: WorktreeLocal = {
+        ...EMPTY_LOCAL,
+        draft: action.text,
+        attachments: from.attachments,
+        outgoing: { frame: action.frame, log: action.log },
+      };
+      // the box is taken the way a send takes it, short of the count: the daemon has not had
+      // this message, so the syncs still owe it the box emptying
+      const taken = withLocal(s, action.id, ({ notice: _notice, ...l }) => ({
+        ...withoutMark(l, "walk"),
+        draft: "",
+        attachments: [],
+      }));
+      return {
+        ...taken,
+        local: { ...taken.local, [id]: held },
+        outbox: [...s.outbox, { id, log: action.log, kinds: from.attachments.map((a) => a.kind) }],
+      };
+    }
+    case "sent-out": {
+      const box = s.local[action.id];
+      const out = box?.outgoing;
+      if (!box || !out) return s;
+      // the daemon empties the box as the frame arrives, so nothing here is owed for it
+      const { [action.id]: _spent, ...local } = s.local;
+      const next: State = { ...s, local, outbox: s.outbox.filter((e) => e.id !== action.id) };
+      const text = box.draft;
+      const attachments = box.attachments.length ? settledInputs(box.attachments) : undefined;
+      const counted = (l: WorktreeLocal) => ({ ...l, sent: (l.sent ?? 0) + 1 });
+      if (out.frame.t === "restore-worktree" || out.frame.t === "adopt-worktree")
+        return withLocal(next, out.log, (l) => ({ ...counted(l), restoring: text }));
+      // an ask's answer has no bubble of its own: the card closes when the agent has it
+      if (out.frame.t === "agent-answer") return withLocal(next, out.log, counted);
+      // as at a plain send: mid-turn the log is already busy, and the message joins the turn or
+      // the queue; a worktree still being made has no turn to be in
+      const agent = rowById(s, out.log)?.agent;
+      const busy = out.frame.t === "chat" && (agent === "working" || agent === "waiting");
+      return withLocal(next, out.log, (l) =>
+        busy ? counted(l) : { ...counted(l), sending: { message: { text, attachments } } },
+      );
+    }
+    case "unsend": {
+      const box = s.local[action.id];
+      const source = outBoxOf(action.id)?.source;
+      if (!box?.outgoing || !source) return s;
+      // the record goes; the syncs tell the daemon a box gone from here is empty
+      const { [action.id]: _back, ...local } = s.local;
+      const next: State = { ...s, local, outbox: s.outbox.filter((e) => e.id !== action.id) };
+      // back the way the daemon puts a message back: the words only into an empty box, since
+      // anything typed there since is newer; the chips ahead of anything attached since
+      return withLocal(revealChat(next), source, (l) => ({
+        ...l,
+        draft: l.draft || box.draft,
+        attachments: [...box.attachments, ...l.attachments],
+        ...(action.notice ? { notice: action.notice } : {}),
+      }));
+    }
+    case "drop-out": {
+      if (!s.local[action.id]?.outgoing) return s;
+      const { [action.id]: _dropped, ...local } = s.local;
+      return { ...s, local, outbox: s.outbox.filter((e) => e.id !== action.id) };
+    }
     case "archive-worktrees": {
       const ids = action.ids.filter((id) => !s.archiving.includes(id) && worktreeById(s, id));
       if (ids.length === 0) return s;
@@ -1962,8 +2052,9 @@ function reduce(s: State, action: Action): State {
       return e && !e.loose && sameFile(e, action.file) ? { ...s, editor: { ...e, blame: action.blame } } : s;
     }
     case "notice":
-      // the answer is under the box, so the box has to be on screen
-      return withLocal(revealChat(s), action.id, (l) => ({ ...l, notice: action.text }));
+      // the answer is under the box, so the box has to be on screen; said of an outgoing box (an
+      // upload that failed, the daemon not answering), it is read under the box the message left
+      return withLocal(revealChat(s), outBoxOf(action.id)?.source ?? action.id, (l) => ({ ...l, notice: action.text }));
     case "link-refused":
       return withLocal(s, action.id, ({ refusedLink: _was, ...l }) => (action.v ? { ...l, refusedLink: action.v } : l));
     case "card-draft":
@@ -2017,12 +2108,15 @@ function reduce(s: State, action: Action): State {
         ...l,
         attachments: l.attachments.map((a) => (a.key === action.key ? action.item : a)),
       }));
-    case "detach":
-      // taking one off answers a notice about what was attached
-      return withLocal(s, action.id, ({ notice: _notice, ...l }) => ({
+    case "detach": {
+      const less = withLocal(s, action.id, ({ notice: _notice, ...l }) => ({
         ...l,
         attachments: l.attachments.filter((a) => a.key !== action.key),
       }));
+      // a chip lost from a message on its way (its upload failed) takes the message back whole,
+      // rather than sending it without: the reason follows, under the box it goes back into
+      return s.local[action.id]?.outgoing ? reducer(less, { a: "unsend", id: action.id }) : less;
+    }
     case "clear-attachments":
       return withLocal(s, action.id, ({ notice: _notice, ...l }) =>
         l.attachments.length ? { ...l, attachments: [] } : l,
@@ -2265,7 +2359,9 @@ function withDrafts(local: State["local"], drafts: Record<string, string>): Stat
   let out = local;
   for (const [id, draft] of Object.entries(drafts)) {
     const l = out[id];
-    if (l?.draft) continue;
+    // an outgoing box is the holding tab's alone: this tab's own are folded back into their boxes
+    // before the hello reaches here (machine.ts), another tab's are its to send
+    if (l?.draft || outBoxOf(id)) continue;
     if (out === local) out = { ...local };
     out[id] = { ...(l ?? EMPTY_LOCAL), draft };
   }
@@ -2278,7 +2374,7 @@ function withAttachments(local: State["local"], lists: Record<string, Attachment
   let out = local;
   for (const [id, items] of Object.entries(lists)) {
     const l = out[id];
-    if (l?.attachments.length) continue;
+    if (l?.attachments.length || outBoxOf(id)) continue;
     if (out === local) out = { ...local };
     out[id] = { ...(l ?? EMPTY_LOCAL), attachments: fromInputs(items, []) };
   }
@@ -2476,14 +2572,15 @@ function onServer(s: State, msg: StoreServerMsg): State {
       return { ...s, archived: { ...s.archived, [msg.repoId]: msg.items } };
     case "draft":
       // this tab wrote it and already has it, maybe with keystrokes since; a walk is showing a sent
-      // message in the box, which a draft written elsewhere must not replace
-      if (msg.clientId === s.clientId) return s;
+      // message in the box, which a draft written elsewhere must not replace; another tab's
+      // outgoing box is its own to send
+      if (msg.clientId === s.clientId || outBoxOf(msg.boxId)) return s;
       return withLocal(s, msg.boxId, (l) =>
         l.draft === msg.text || l.mark?.by === "walk" ? l : { ...l, draft: msg.text },
       );
     case "attachments":
       // as on a draft: this tab wrote it and already has it
-      if (msg.clientId === s.clientId) return s;
+      if (msg.clientId === s.clientId || outBoxOf(msg.boxId)) return s;
       return withLocal(s, msg.boxId, (l) => ({ ...l, attachments: fromInputs(msg.items, l.attachments) }));
     case "repos": {
       const known = new Set(s.repos.map((r) => r.id));
@@ -2842,12 +2939,17 @@ function onServer(s: State, msg: StoreServerMsg): State {
       // A message no agent took, back in the box it was sent from with the reason under it. The
       // words only into an empty box, since anything typed there since is newer; the chips ahead
       // of anything attached since. A page that was showing it as sent stops.
-      return withLocal(revealChat(s), msg.boxId, ({ restoring: _held, sending: _waited, ...l }) => ({
-        ...l,
-        draft: l.draft || msg.text,
-        attachments: [...fromInputs(msg.items, []), ...l.attachments],
-        notice: msg.message,
-      }));
+      // One sent from an outgoing box goes back into the box the message left.
+      return withLocal(
+        revealChat(s),
+        outBoxOf(msg.boxId)?.source ?? msg.boxId,
+        ({ restoring: _held, sending: _waited, ...l }) => ({
+          ...l,
+          draft: l.draft || msg.text,
+          attachments: [...fromInputs(msg.items, []), ...l.attachments],
+          notice: msg.message,
+        }),
+      );
     default: {
       // exhaustive at compile time, but a daemon one version ahead can still send a `t` this
       // build has never heard of, and returning undefined here blanks the tab on the next read

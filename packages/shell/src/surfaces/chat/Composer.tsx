@@ -31,6 +31,7 @@ import { archiveWorktrees, shipOp } from "../../state/actions/worktree.ts";
 import { takeBackQueued, toInput } from "../../state/attach.ts";
 import { useDispatch, useMachine, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
 import { openSource } from "../../state/openSource.ts";
+import { fillFrame, type HeldFrame } from "../../state/outbox.ts";
 import { isUploading } from "../../state/pending.ts";
 import { useChatCentred, useGreenfield, useLocalField, usePreviewId, useTouch } from "../../state/selectors.ts";
 import { canCarry, composerBoxOf, type Draft, NEW_PROJECT_BOX, trunkOf } from "../../state/store.ts";
@@ -87,7 +88,7 @@ import { type Step, stepWalk, type WalkKey } from "./recall.ts";
 import { shellCommandOf, shellContext } from "./shellMode.ts";
 import { UsagePanel } from "./UsagePanel.tsx";
 import { compactAdvice, compactNudge, limitLevel, limitSummary } from "./usage.ts";
-import { attachCopied, pickAttachments, STILL_UPLOADING, useComposerPaste } from "./useIntake.ts";
+import { attachCopied, pickAttachments, useComposerPaste } from "./useIntake.ts";
 
 /** a frozen empty list, so a selector returning it does not read as a change every render */
 const NO_CHOICES: ModelChoice[] = [];
@@ -876,6 +877,11 @@ export function Composer({
   const leaveBox = () => {
     if (boxId) sock?.send({ t: "set-draft", boxId, text, clientId });
   };
+  // A send while a chip's bytes are still on their way takes the box all the same: the message
+  // waits in an outgoing box, which the daemon hears about once the uploads land (outbox.ts), and
+  // the log of `log` shows it waiting. Nothing is said to the daemon here.
+  const hold = (from: string, log: string, words: string, frame: HeldFrame) =>
+    dispatch({ a: "hold-send", id: from, log, text: words, frame });
   // attachments alone are a message: a pasted error or a picked element often says it all
   const send = () => {
     if (!boxId) return;
@@ -885,7 +891,7 @@ export function Composer({
     if (project) {
       if (project.busy) return;
       if (project.why) return refuse(project.why);
-      if (uploading) return refuse(STILL_UPLOADING);
+      // an upload still on its way follows its chip to the row's box, and the send from there holds
       if (spawnAgent !== defaultAgent || !agentChosen) sock?.send({ t: "set-default-agent", agent: spawnAgent });
       leaveBox();
       project.create();
@@ -900,19 +906,10 @@ export function Composer({
         refuse("nothing runs here until it is restored");
         return;
       }
-      if (uploading) {
-        refuse(STILL_UPLOADING);
-        return;
-      }
-      const sent = attachments.length ? attachments.map(toInput) : undefined;
+      const frame: HeldFrame = { t: "restore-worktree", archiveId: archived.id, clientId };
+      if (uploading) return hold(boxId, boxId, text.trim(), frame);
       leaveBox();
-      sock?.send({
-        t: "restore-worktree",
-        archiveId: archived.id,
-        clientId,
-        message: { text: text.trim(), attachments: sent },
-        boxId,
-      });
+      sock?.send(fillFrame(frame, boxId, text.trim(), attachments));
       dispatch({ a: "restoring", id: boxId, text: text.trim() });
       dispatch({ a: "sent-box", id: boxId });
       return;
@@ -924,19 +921,10 @@ export function Composer({
         refuse("nothing runs here until Toyon takes it over; its menu on the rail opens a shell");
         return;
       }
-      if (uploading) {
-        refuse(STILL_UPLOADING);
-        return;
-      }
-      const sent = attachments.length ? attachments.map(toInput) : undefined;
+      const frame: HeldFrame = { t: "adopt-worktree", worktreeId: found.id, clientId };
+      if (uploading) return hold(boxId, boxId, text.trim(), frame);
       leaveBox();
-      sock?.send({
-        t: "adopt-worktree",
-        worktreeId: found.id,
-        clientId,
-        message: { text: text.trim(), attachments: sent },
-        boxId,
-      });
+      sock?.send(fillFrame(frame, boxId, text.trim(), attachments));
       dispatch({ a: "restoring", id: boxId, text: text.trim() });
       dispatch({ a: "sent-box", id: boxId });
       return;
@@ -972,16 +960,9 @@ export function Composer({
       refuse("a batch takes no attachments; remove them or turn batch off");
       return;
     }
-    // a message names an upload by the id the daemon answers with, so it waits for that answer; the
-    // words stay in the box, and enter again sends them
-    if (uploading) {
-      refuse(STILL_UPLOADING);
-      return;
-    }
     const prompt = typed ? typed.args : text.trim();
     const context = buildContext();
     const sent = attachments.length ? attachments.map(toInput) : undefined;
-    leaveBox();
     // a typed mode is the chip's next value too, so the box remembers it the way the chip does
     if (mode) setMode(mode);
     if (spawning) {
@@ -992,7 +973,6 @@ export function Composer({
         clientId,
         repoId: active.worktree.repoId,
         context,
-        attachments: sent,
         agent: spawnAgent,
         profile,
         mode: mode ?? newMode,
@@ -1006,6 +986,7 @@ export function Composer({
       // first send ever is the choice, even of the agent the chip already showed.
       if (spawnAgent !== defaultAgent || !agentChosen) sock?.send({ t: "set-default-agent", agent: spawnAgent });
       if (draft?.batch) {
+        leaveBox();
         sock?.send({
           t: "batch-worktrees",
           repoId: active.worktree.repoId,
@@ -1015,13 +996,20 @@ export function Composer({
           ...(newEffort ? { effort: newEffort } : {}),
           boxId,
         });
+        dispatch({ a: "sent-box", id: boxId });
       } else {
         // one frame however many attempts: the daemon makes the group, this row first
         const variants = draft && draft.variants > 1 ? { variants: draft.variants } : {};
-        sock?.send({ t: "create-worktree", ...from, ...here, ...variants, prompt, boxId });
-        // the worktree takes a moment to make and its agent a moment more to take the turn: the
-        // log shows the message and the working mark from here, so nothing waits on the daemon
-        if (boxId) dispatch({ a: "sending", id: boxId, message: { text: prompt, attachments: sent } });
+        const frame: HeldFrame = { t: "create-worktree", ...from, ...here, ...variants };
+        if (uploading) hold(boxId, boxId, prompt, frame);
+        else {
+          leaveBox();
+          sock?.send(fillFrame(frame, boxId, prompt, attachments));
+          // the worktree takes a moment to make and its agent a moment more to take the turn: the
+          // log shows the message and the working mark from here, so nothing waits on the daemon
+          dispatch({ a: "sending", id: boxId, message: { text: prompt, attachments: sent } });
+          dispatch({ a: "sent-box", id: boxId });
+        }
       }
     } else {
       // the session reads these when it opens, and the daemon handles frames in order, so they are
@@ -1030,13 +1018,18 @@ export function Composer({
         sock?.send({ t: "set-worktree-model", worktreeId: id, model: newModel });
         sock?.send({ t: "set-worktree-effort", worktreeId: id, effort: newEffort });
       }
-      sock?.send({ t: "chat", worktreeId: id, clientId, text: prompt, context, attachments: sent, boxId });
-      // the message and the status come back in two frames a beat apart, the status behind a read
-      // of every row: shown from here, the bubble and the mark arrive together and at the press.
-      // Mid-turn the log is already busy, and the message joins the turn or the queue.
-      if (!midTurn) dispatch({ a: "sending", id, message: { text: prompt, attachments: sent } });
+      const frame: HeldFrame = { t: "chat", worktreeId: id, clientId, context };
+      if (uploading) hold(boxId, id, prompt, frame);
+      else {
+        leaveBox();
+        sock?.send(fillFrame(frame, boxId, prompt, attachments));
+        // the message and the status come back in two frames a beat apart, the status behind a read
+        // of every row: shown from here, the bubble and the mark arrive together and at the press.
+        // Mid-turn the log is already busy, and the message joins the turn or the queue.
+        if (!midTurn) dispatch({ a: "sending", id, message: { text: prompt, attachments: sent } });
+        dispatch({ a: "sent-box", id: boxId });
+      }
     }
-    dispatch({ a: "sent-box", id: boxId });
     // the reply lands in the dock, so the dock comes back with the message that started it
     if (greenfield) dispatch({ a: "show-chat" });
   };
@@ -1049,13 +1042,16 @@ export function Composer({
     if (!id || revived?.ask.kind !== "question") return;
     // nothing picked and nothing typed is nothing to say: the question goes back to its line
     if (!answers.some(hasAnswer)) return dispatch({ a: "ask-revive", id });
-    if (revivedItems.some(isUploading)) return refuse(STILL_UPLOADING);
     const prompt = answerLines(revived.ask.questions, answers).join("\n");
-    const sent = revivedItems.length ? revivedItems.map(toInput) : undefined;
-    const from = sent && revivedBox ? { attachments: sent, boxId: revivedBox } : {};
-    sock?.send({ t: "chat", worktreeId: id, clientId, text: prompt, context: buildContext(), ...from });
-    if (sent && revivedBox) dispatch({ a: "clear-attachments", id: revivedBox });
-    dispatch({ a: "sending", id, message: { text: prompt, attachments: sent } });
+    const frame: HeldFrame = { t: "chat", worktreeId: id, clientId, context: buildContext() };
+    if (revivedBox && revivedItems.some(isUploading)) hold(revivedBox, id, prompt, frame);
+    else {
+      const sent = revivedItems.length ? revivedItems.map(toInput) : undefined;
+      const from = sent && revivedBox ? { attachments: sent, boxId: revivedBox } : {};
+      sock?.send({ ...frame, text: prompt, ...from });
+      if (sent && revivedBox) dispatch({ a: "clear-attachments", id: revivedBox });
+      dispatch({ a: "sending", id, message: { text: prompt, attachments: sent } });
+    }
     dispatch({ a: "answered", id });
     dispatch({ a: "ask-revive", id });
   };

@@ -9,6 +9,7 @@ import { type AskAnswer, type AskQuestion, type AttachmentKind, cardBox, numbere
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toInput } from "../../state/attach.ts";
 import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
+import type { HeldFrame } from "../../state/outbox.ts";
 import { isUploading } from "../../state/pending.ts";
 import { useLocalField } from "../../state/selectors.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
@@ -21,6 +22,7 @@ import {
   type AskItem,
   advance,
   answered,
+  answerLines,
   answerParts,
   canSubmit,
   choose,
@@ -40,7 +42,7 @@ import {
 } from "./ask.ts";
 import { Card, CardBand, CardFoot, CardHead, type Root } from "./Card.tsx";
 import { DraftChip } from "./DraftChip.tsx";
-import { pickAttachments, STILL_UPLOADING, useComposerPaste } from "./useIntake.ts";
+import { pickAttachments, useComposerPaste } from "./useIntake.ts";
 
 export function QuestionCard({
   item,
@@ -109,15 +111,15 @@ export function QuestionCard({
     // tab empties the card's box itself, since the daemon's word that it is empty carries this
     // tab's name. The notice goes under the box the card has, where the hands are.
     const carried = answers ? items : [];
-    if (carried.some(isUploading)) return dispatch({ a: "notice", id: worktreeId, text: STILL_UPLOADING });
-    sock?.send({
-      t: "agent-answer",
-      worktreeId,
-      askId: item.id,
-      ...(answers ? { answers } : {}),
-      ...(carried.length ? { attachments: carried.map(toInput), boxId: box, clientId } : {}),
-    });
-    if (carried.length) dispatch({ a: "clear-attachments", id: box });
+    const frame: HeldFrame = { t: "agent-answer", worktreeId, askId: item.id, ...(answers ? { answers } : {}) };
+    // a chip whose bytes are still on their way holds the answer in an outgoing box until the
+    // daemon has them (outbox.ts); the row under the card shows it waiting, in the answer's words
+    if (carried.some(isUploading)) {
+      dispatch({ a: "hold-send", id: box, log: worktreeId, text: answerLines(questions, answers).join("\n"), frame });
+    } else {
+      sock?.send({ ...frame, ...(carried.length ? { attachments: carried.map(toInput), boxId: box, clientId } : {}) });
+      if (carried.length) dispatch({ a: "clear-attachments", id: box });
+    }
     // the answer is the reader's message to the agent, and the turn going on is what they wait for
     // now: the log goes to its end from wherever they had scrolled to read, as it does on a send
     dispatch({ a: "answered", id: worktreeId });

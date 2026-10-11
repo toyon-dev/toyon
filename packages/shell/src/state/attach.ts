@@ -19,6 +19,7 @@ import {
 } from "@toyon/shared";
 import { type DaemonUrls, uploadAttachment } from "../ws.ts";
 import type { Store } from "./context.tsx";
+import { outBoxOf } from "./outbox.ts";
 import type { PendingAttachment } from "./pending.ts";
 import { chatChordAction, composerBoxOf, type State, worktreeById } from "./store.ts";
 
@@ -56,30 +57,36 @@ type Uploadable = Extract<PendingAttachment, { kind: "image" | "file" }>;
 export async function attachUpload(store: Store, boxId: string, chip: Uploadable, blob: Blob) {
   const { local, ...settled } = chip;
   store.dispatch({ a: "attach", id: boxId, items: [{ ...chip, upload: "", uploading: true }] });
-  const waiting = () => !!store.getState().local[boxId]?.attachments.some((a) => a.key === chip.key);
+  // The chip is followed by its key, not by the box it went into: a message sent while its bytes
+  // are on their way takes the chip with it into an outgoing box, and the new-project view's box
+  // moves whole to the row it becomes. Undefined once the chip is taken off.
+  const where = (): string | undefined =>
+    Object.entries(store.getState().local).find(([, l]) => l.attachments.some((a) => a.key === chip.key))?.[0];
   const urls = urlsByStore.get(store);
   const send = () => (urls ? uploadAttachment(urls, chip.kind, blob) : Promise.resolve(null));
   let up = await send();
   // The daemon is not answering: the chip waits and the upload is tried again until it lands or
   // the chip is taken off. Said once, under the box, since the chip itself reads as uploading.
   const waited = up === null;
-  if (waited) noticeIn(store, boxId, `${chip.name}: Toyon is not answering; it attaches once it is back`);
-  for (let wait = RETRY_FIRST_MS; up === null && waiting(); wait = Math.min(wait * 2, RETRY_MAX_MS)) {
+  if (waited) noticeIn(store, where() ?? boxId, `${chip.name}: Toyon is not answering; it attaches once it is back`);
+  for (let wait = RETRY_FIRST_MS; up === null && where() !== undefined; wait = Math.min(wait * 2, RETRY_MAX_MS)) {
     await new Promise((done) => setTimeout(done, wait));
-    if (waiting()) up = await send();
+    if (where() !== undefined) up = await send();
   }
-  if (up === null) {
+  const at = where();
+  if (up === null || at === undefined) {
     // taken off while it waited
   } else if (typeof up === "string") {
-    store.dispatch({ a: "detach", id: boxId, key: chip.key });
-    noticeIn(store, boxId, `${chip.name}: ${up}`);
+    store.dispatch({ a: "detach", id: at, key: chip.key });
+    noticeIn(store, at, `${chip.name}: ${up}`);
   } else {
     const item: Uploadable =
       settled.kind === "file" ? { ...settled, ...up } : { ...settled, upload: up.upload, bytes: up.bytes };
-    store.dispatch({ a: "attached", id: boxId, key: chip.key, item });
-    // the wait is over, and so is what was said about it, unless something else has been said since
-    const said = store.getState().local[boxId]?.notice;
-    if (waited && said?.startsWith(`${chip.name}: Toyon is not answering`)) noticeIn(store, boxId, "");
+    store.dispatch({ a: "attached", id: at, key: chip.key, item });
+    // the wait is over, and so is what was said about it, unless something else has been said
+    // since; a notice about an outgoing box is read under the box its message left
+    const said = store.getState().local[outBoxOf(at)?.source ?? at]?.notice;
+    if (waited && said?.startsWith(`${chip.name}: Toyon is not answering`)) noticeIn(store, at, "");
   }
   if (local) URL.revokeObjectURL(local);
 }

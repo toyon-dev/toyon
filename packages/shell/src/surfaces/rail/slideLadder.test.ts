@@ -14,7 +14,6 @@ describe("the ladder a row slides through", () => {
     const ladder = slideLadder(grouped([[item("changes")], [item("land")], [item("archive", "archive…")]]));
     expect(ladder.map((r) => r.id)).toEqual(["archive", "land", "more"]);
     expect(ladder[0]?.label).toBe("archive…");
-    expect(ladder[0]?.danger).toBe(true);
     expect(ladder[1]?.item?.id).toBe("land");
   });
   test("a verb the row is not offered keeps its rung, with nothing behind it", () => {

@@ -11,7 +11,7 @@ import { toInput } from "../../state/attach.ts";
 import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
 import type { HeldFrame } from "../../state/outbox.ts";
 import { isUploading } from "../../state/pending.ts";
-import { useLocalField } from "../../state/selectors.ts";
+import { useLocalField, useTouch } from "../../state/selectors.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
 import { type Choice, type ChoiceField, Choices } from "../../ui/Choices.tsx";
 import { handleChoiceKey } from "../../ui/choiceKeys.ts";
@@ -67,6 +67,7 @@ export function QuestionCard({
   const dispatch = useDispatch();
   const store = useStoreInstance();
   const clientId = useStore((s) => s.clientId);
+  const touch = useTouch();
   const { message, questions } = ask;
   // what is dropped, pasted or picked onto the card waits in the card's own box, apart from the
   // message written behind it, and goes with the answer
@@ -142,16 +143,19 @@ export function QuestionCard({
     write(openNote(draft, current, asOwn, multi), current);
     requestAnimationFrame(() => own.current?.focus());
   };
-  /** `n`: a note on the row the cursor is on. The row becomes the pick without moving on, since
-   * the note is still to be written; with nothing picked the field read as the "other" row's
-   * answer, which is not what the key says. On the "other" row the field is the answer itself. */
-  const note = () => {
+  /** a note on a row: `n` on the row the cursor is on, or a slide on a row on touch. The row
+   * becomes the pick without moving on, since the note is still to be written; with nothing
+   * picked the field read as the "other" row's answer, which is not what the key says. On the
+   * "other" row the field is the answer itself. */
+  const noteAt = (oi: number) => {
     if (!q?.note) return;
-    const option = q.options[cursor];
+    const option = q.options[oi];
+    setCursor(oi);
     if (!option || multi) return type(!option);
     write(openNote(choose(draft, current, option.value, false), current, false, false), current);
     requestAnimationFrame(() => own.current?.focus());
   };
+  const note = () => noteAt(cursor);
   const pick = (oi: number) => {
     if (isOwnRow(q, oi)) {
       setCursor(oi);
@@ -159,7 +163,8 @@ export function QuestionCard({
     }
     const option = q?.options[oi];
     if (!q || !option) return;
-    const next = choose(draft, current, option.value, multi);
+    // a note opened on another row and left blank goes with that row's pick, not with this one
+    const next = choose(dropBlankNote(draft, current), current, option.value, multi);
     if (multi) {
       setCursor(oi);
       write(next, current);
@@ -240,14 +245,16 @@ export function QuestionCard({
   /** the actions under a page: the send where a pick alone is not one (several questions, or a
    * multi-select), the note on the pick where the agent takes one and a pick is made, and the
    * skip. A field open on a lone question has no send: enter in it is the send, as enter on a
-   * row is, on every keyboard, and a button arriving under the list moved the box. Nothing lists
-   * the keys: the arrows, enter and escape are what they are everywhere, and the one key that is
-   * not says so on its row. Each page carries its own foot; it sits at the page's floor so the
-   * send is in one place whichever page is open. The agent's stop is not here: it keeps the
-   * box's corner, as it does over the plain field. */
+   * row is, on every keyboard, and a button arriving under the list moved the box. Except on
+   * touch, where the return key that sends goes away with the keyboard and the field is left
+   * with no way out; the foot is already there with the skip and the attach, so a send beside
+   * them moves nothing. Nothing lists the keys: the arrows, enter and escape are what they are
+   * everywhere, and the one key that is not says so on its row. Each page carries its own foot;
+   * it sits at the page's floor so the send is in one place whichever page is open. The agent's
+   * stop is not here: it keeps the box's corner, as it does over the plain field. */
   const foot = (qq?: AskQuestion, a?: AskAnswer) => (
     <CardFoot>
-      {(!qq || !pickSends(qq)) && (
+      {(!qq || !pickSends(qq) || (touch && a?.note !== undefined)) && (
         <Button variant="outline" size="md" disabled={!canSubmit(questions, draft)} onClick={submit}>
           send
         </Button>
@@ -323,7 +330,8 @@ export function QuestionCard({
         ),
         description: o.description,
         // a multi-select's `n` is the typed answer, not a note
-        hint: qq.note && !qq.multi ? { k: "n", label: "add a note", on: a?.note === undefined } : undefined,
+        hint:
+          qq.note && !qq.multi ? { k: "n", label: "add a note", icon: "edit", on: a?.note === undefined } : undefined,
         checked: on,
         // the pick with a note open on it holds the note's field
         field: on && !owning && a?.note !== undefined ? field("a note for the agent, sent with your pick") : undefined,
@@ -353,6 +361,7 @@ export function QuestionCard({
             // the row took focus on the press; the keys belong to the root
             root.current?.focus();
           }}
+          onHint={noteAt}
         />
         {under?.preview && <CardBand code={under.preview} still />}
         {foot(qq, a)}

@@ -680,90 +680,17 @@
     right: auto;
   }
 
-  /* ---- A row slid along under a thumb (ui/slide.ts). The row itself moves, edge and all, and the
-   cell it uncovers at its end holds the rung's word, pinned near the screen's edge while the cell
-   grows under it, so the word comes out whole from under the row and then stays put as the finger
-   goes on. Short of the first rung the cell is the list's own ground and the word a tier down; on
-   a rung the cell takes the rung's colour, a tint of the colour the word itself is painted in, the
-   way the find highlight tints its ground. The wrapper stands in the list where the row did and
-   clips nothing: the row only ever moves toward its start, so its far end never leaves the
-   wrapper's box. ---- */
-  .rail-slide {
-    position: relative;
-    /* the list's scroll stays the browser's, and a move along the row reaches the slide uncut */
-    touch-action: pan-y;
-    & > .row {
-      transform: translateX(var(--slide-x, 0px));
-    }
-    /* the press is answered by the slide itself: a row lit under the finger as it moved read as
-       two answers to one touch */
-    &[data-slide] > .row:active {
-      background: transparent;
-    }
-    &[data-slide="settle"] > .row {
-      transition: transform 0.22s ease-out;
-    }
+  /* A row's slide (base.css, .slide) wears each rung's colour: a tint of the colour the word
+     itself is painted in, the way the find highlight tints its ground. Archive in the red the menu
+     paints the same verb in, land in the colour a landed row's badge wears; "more" keeps the seat
+     tier the base rule gives it. */
+  .rail-list .slide-verb[data-rung="archive"] {
+    color: var(--red);
+    background: color-mix(in srgb, var(--red) 22%, var(--surface1));
   }
-  .rail-slide-verb {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    right: 0;
-    width: calc(-1 * var(--slide-x, 0px));
-    overflow: hidden;
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    padding-right: 16px;
-    background: transparent;
-    --text1: var(--ink0);
-    --text2: var(--ink1);
-    color: var(--text1);
-    font: var(--type-ui);
-    white-space: nowrap;
-    transition: background-color 0.12s ease-out;
-    /* the same red the menu paints the same verb in; land in the colour a landed row's badge wears */
-    &[data-rung="archive"] {
-      color: var(--red);
-      background: color-mix(in srgb, var(--red) 22%, var(--surface1));
-    }
-    &[data-rung="land"] {
-      color: var(--aqua);
-      background: color-mix(in srgb, var(--aqua) 22%, var(--surface1));
-    }
-    &[data-rung="more"] {
-      background: var(--element1);
-      --text1: var(--ink0);
-      --text2: var(--ink1);
-    }
-    [data-slide="settle"] & {
-      transition:
-        width 0.22s ease-out,
-        background-color 0.12s ease-out;
-    }
-  }
-  /* a new word at each rung lands with a small pop, the one cue a thumb covering the row gets that
-     the rung changed; keyed by rung in the markup so the pop plays again for each */
-  .rail-slide-word {
-    flex-shrink: 0;
-    animation: rail-slide-pop 0.16s ease-out;
-  }
-  @keyframes rail-slide-pop {
-    from {
-      transform: scale(0.8);
-    }
-    to {
-      transform: scale(1);
-    }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .rail-slide[data-slide="settle"] > .row,
-    .rail-slide-verb {
-      transition: none;
-    }
-    .rail-slide-word {
-      animation: none;
-    }
+  .rail-list .slide-verb[data-rung="land"] {
+    color: var(--aqua);
+    background: color-mix(in srgb, var(--aqua) 22%, var(--surface1));
   }
 
   /* ---- Touch, on either frame. The app root says so (data-touch, from the store), and both the

@@ -35,4 +35,8 @@ describe("where a finger has brought the row", () => {
   test("a drag the other way leaves the row where it is", () => {
     expect(slideAt(40, 3)).toEqual({ step: 0, x: -0 });
   });
+  test("a list with longer words names a wider rung", () => {
+    expect(slideAt(-STEP, 1, 120).step).toBe(0);
+    expect(slideAt(-120, 1, 120).step).toBe(1);
+  });
 });

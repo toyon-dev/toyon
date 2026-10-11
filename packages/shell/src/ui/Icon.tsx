@@ -48,6 +48,7 @@ export type IconName =
   | "pr"
   | "clock"
   | "archive"
+  | "land"
   | "attach"
   | "send"
   | "phone"
@@ -156,6 +157,9 @@ const ICON_PATHS: Record<IconName, string> = {
   // a storage box: a wide lid over a narrower body, with the short handle slot that keeps it from
   // reading as a plain card. Put away and kept, where `trash` is gone and `close` is a press
   archive: "M2.4 3.2h11.2v2.8H2.4z M3.4 6v6.1a.9.9 0 0 0 .9.9h7.4a.9.9 0 0 0 .9-.9V6 M6.6 8.6h2.8",
+  // a commit coming down onto main: the branch glyph's node with an arrow under it and the line it
+  // lands on. The node is what keeps it from reading as `download`
+  land: "M8 2.1a1.3 1.3 0 1 0 0 2.6 1.3 1.3 0 1 0 0-2.6z M8 4.7v5.4 M5.4 7.6 8 10.2l2.6-2.6 M3 13h10",
   // a paperclip: the one wire, turned twice
   attach:
     "M13.7 7.4 8.2 12.9a3.6 3.6 0 0 1-5.1-5.1l5.5-5.5a2.4 2.4 0 0 1 3.4 3.4l-5.5 5.5a1.2 1.2 0 0 1-1.7-1.7l5.1-5.1",

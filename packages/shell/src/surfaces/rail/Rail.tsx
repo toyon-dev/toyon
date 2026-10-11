@@ -235,13 +235,13 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
   // On a screen a row slides along under a thumb, uncovering its verbs one rung at a time
   // (ui/slide.ts): the rung the finger is on is state, since it names a word, and the offset is
   // written to the node. The ladder is read off the row's own menu (slideLadder), so the slide
-  // offers what the menu does; its last rung is that menu, opened under the row once it is back.
+  // offers what the menu does; its last rung is that menu, opened under the row as it is let go.
   const [slide, setSlide] = useState<{ key: string; step: number } | null>(null);
   const ladderOf = (w: WorktreeStatus) => (isOwned(w) ? slideLadder(rowItems(w)) : []);
   useSlide(listRef, {
     rowOf: (target) => {
       if (!onScreen || graftMode) return null;
-      const el = target.closest<HTMLElement>(".rail-slide");
+      const el = target.closest<HTMLElement>(".slide");
       const key = el?.dataset.row;
       const w = key ? worktrees.find((x) => x.id === key) : undefined;
       return el && key && w ? { el, key, rungs: ladderOf(w).length } : null;
@@ -254,7 +254,7 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
       if (rung.id === "more") {
         // under the wrapper, which stands where the row does while the row itself is still on
         // its way back; now rather than after it, since the menu is the thing let go for
-        const at = listRef.current?.querySelector(`.rail-slide[data-row="${key}"]`);
+        const at = listRef.current?.querySelector(`.slide[data-row="${key}"]`);
         if (at) cm.openUnder(at, () => rowItems(w), key);
       } else if (rung.item && !rung.item.disabled) {
         // a verb that asks (archive with work) would freeze the row mid-air under its question
@@ -679,13 +679,12 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
     const rung = at === null ? null : ladderOf(w)[Math.max(0, at - 1)];
     const live = !!rung && at !== null && at > 0 && (rung.id === "more" || (!!rung.item && !rung.item.disabled));
     return (
-      <div key={id} className="rail-slide" data-row={id}>
+      <div key={id} className="slide" data-row={id}>
         {row}
         {rung && (
-          <span className="rail-slide-verb" data-rung={live ? rung.id : undefined} aria-hidden="true">
-            <span key={at} className={cx("rail-slide-word", !live && "row-dim")}>
-              {rung.label}
-            </span>
+          <span className="slide-verb" data-rung={live ? rung.id : undefined} aria-hidden="true">
+            <span className="slide-word">{rung.label}</span>
+            <Icon name={rung.icon} />
           </span>
         )}
       </div>

@@ -97,7 +97,7 @@ export function HandoffCard({
   const rows: Choice[] = [
     {
       label: "go",
-      hint: { k: "n", label: "add context", on: !noting },
+      hint: { k: "n", label: "add context", icon: "edit", on: !noting },
       // go with a note open on it holds the note's field and is the pick
       checked: noting,
       field: noting

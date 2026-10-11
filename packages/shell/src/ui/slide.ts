@@ -4,9 +4,9 @@ import { type RefObject, useEffect, useRef } from "react";
  * whose it is */
 const SLOP = 8;
 /** one rung of the ladder: how far the row slides for each verb. Enough that the longest word
- * stands whole in the cell before its rung is reached, and short enough that a thumb reaches the
- * first rung without thinking about it. */
-export const STEP = 88;
+ * and its glyph stand whole in the cell before the rung is reached, and short enough that a thumb
+ * reaches the first rung without thinking about it; a list with longer words names its own. */
+export const STEP = 104;
 /** past the last rung the row keeps coming, but slowly: the hand reads that there is nothing further */
 const GIVE = 0.25;
 /** the drop back, in the stylesheet too; a verb that asks a question waits for it, so the row is
@@ -25,10 +25,10 @@ export function slideAxis({ dx, dy }: Touch1): "slide" | "other" | null {
 
 /** Where a finger `dx` along the row has brought it: the rung it is on, 0 before the first, and the
  * offset the row is drawn at. The row follows the finger rung for rung and gives past the last. */
-export function slideAt(dx: number, rungs: number): { step: number; x: number } {
+export function slideAt(dx: number, rungs: number, rung = STEP): { step: number; x: number } {
   const d = Math.max(0, -dx);
-  const reach = rungs * STEP;
-  const step = Math.min(rungs, Math.floor(d / STEP));
+  const reach = rungs * rung;
+  const step = Math.min(rungs, Math.floor(d / rung));
   const x = d <= reach ? d : reach + (d - reach) * GIVE;
   return { step, x: -x };
 }
@@ -40,6 +40,8 @@ export type SlideRow = {
   key: string;
   /** how many rungs the row's ladder has */
   rungs: number;
+  /** how far apart they are, for a ladder whose words need more than STEP */
+  rung?: number;
 };
 
 export type SlideHandlers = {
@@ -145,7 +147,7 @@ export function useSlide(list: RefObject<HTMLElement | null>, handlers: SlideHan
         }
         h.current.onSlide({ key: r.key, step: 0 });
       }
-      const at = slideAt(dx, r.rungs);
+      const at = slideAt(dx, r.rungs, r.rung);
       put(r, at.x, "drag");
       if (at.step !== step) {
         step = at.step;

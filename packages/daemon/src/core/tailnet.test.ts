@@ -5,7 +5,7 @@ import { Tailnet, tailnetListed } from "./tailnet.ts";
 const status = (peers: object[], self: object = {}) =>
   JSON.stringify({
     BackendState: "Running",
-    Self: { DNSName: "mac.tail1234.ts.net." },
+    Self: { DNSName: "mac.tail1234.ts.net.", OS: "macOS" },
     CurrentTailnet: { MagicDNSEnabled: true },
     CertDomains: ["mac.tail1234.ts.net"],
     ...self,
@@ -39,13 +39,14 @@ test("peers come with their MagicDNS names, lowercased and without the dot", () 
   ]);
   expect(tailnetListed(json)).toEqual({
     here: true,
+    os: "macos",
     peers: [
       { name: "work", host: "work.tail1234.ts.net", ip: "100.1.1.3", os: "macos", online: false },
       { name: "kyles-iphone", host: "kyles-iphone.tail.ts.net", ip: null, os: "ios", online: false },
       { name: "nameless", host: "", ip: null, os: "windows", online: false },
     ],
   });
-  expect(tailnetListed("{}")).toEqual({ here: true, peers: [] });
+  expect(tailnetListed("{}")).toEqual({ here: true, os: "", peers: [] });
   expect(tailnetListed(status([], { Self: { Online: false } }))).toMatchObject({ here: false });
   expect(tailnetListed("failed to connect to local tailscaled")).toBeNull();
 });
@@ -69,18 +70,20 @@ test("every peer is a device: reached when it answers a ping, whatever the statu
   });
   expect(await tailnet.view()).toEqual({
     here: true,
+    os: "macos",
     devices: [
-      { name: "idle", host: "", kind: "phone", reached: true, toyon: null },
-      { name: "gone", host: "", kind: "phone", reached: false, toyon: null },
+      { name: "idle", host: "", kind: "phone", os: "android", reached: true, toyon: null },
+      { name: "gone", host: "", kind: "phone", os: "android", reached: false, toyon: null },
       {
         name: "work",
         host: "work.tail1234.ts.net",
         kind: "machine",
+        os: "macos",
         reached: true,
         toyon: { machine: "work", answering: true },
       },
-      { name: "box", host: "box.tail1234.ts.net", kind: "machine", reached: false, toyon: null },
-      { name: "nameless", host: "", kind: "machine", reached: false, toyon: null },
+      { name: "box", host: "box.tail1234.ts.net", kind: "machine", os: "linux", reached: false, toyon: null },
+      { name: "nameless", host: "", kind: "machine", os: "windows", reached: false, toyon: null },
     ],
   });
   // phones and nameless machines are never probed: nothing of ours answers at no address
@@ -97,7 +100,7 @@ test("with this machine's own link down nothing is pinged or probed, and the ans
       { HostName: "Pixel", OS: "android", Online: true, TailscaleIPs: ["100.1.1.1"] },
       { HostName: "work", DNSName: "work.tail1234.ts.net.", OS: "macOS", Online: true, TailscaleIPs: ["100.1.1.3"] },
     ],
-    { Self: { DNSName: "mac.tail1234.ts.net.", Online: false } },
+    { Self: { DNSName: "mac.tail1234.ts.net.", OS: "macOS", Online: false } },
   );
   const pinged: string[] = [];
   const probed: string[] = [];
@@ -115,9 +118,10 @@ test("with this machine's own link down nothing is pinged or probed, and the ans
   });
   expect(await tailnet.view()).toEqual({
     here: false,
+    os: "macos",
     devices: [
-      { name: "Pixel", host: "", kind: "phone", reached: false, toyon: null },
-      { name: "work", host: "work.tail1234.ts.net", kind: "machine", reached: false, toyon: null },
+      { name: "Pixel", host: "", kind: "phone", os: "android", reached: false, toyon: null },
+      { name: "work", host: "work.tail1234.ts.net", kind: "machine", os: "macos", reached: false, toyon: null },
     ],
   });
   expect(pinged).toEqual([]);
@@ -142,6 +146,9 @@ test("a Toyon that answered lately stays on the list as not answering, and drops
   t += 3 * 60_000;
   expect(await row()).toBeNull();
   up = true;
+  // inside the minute the last view is handed back while a fresh one is made behind it; past
+  // the minute the caller waits for the probe, so this is the step that sees it answer again
+  t += 60_000;
   expect(await row()).toEqual({ machine: "work", answering: true });
 });
 
@@ -156,6 +163,7 @@ test("one status fork feeds the view and readiness inside the window; readiness 
   await tailnet.view();
   await tailnet.view();
   expect(f.statusForks).toBe(1);
+  // past the view's few seconds the last one is handed back and a fresh one is made behind it
   t += 6000;
   await tailnet.view();
   expect(f.statusForks).toBe(2);

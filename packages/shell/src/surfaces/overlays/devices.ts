@@ -37,14 +37,17 @@ export const DEVICES = {
   add: "add",
 } as const;
 
-/** What a machine's row says on its right, when it is not the request itself: listed here
- * already, a Toyon there that answered lately but not now, a machine that does not answer from
- * here, or one that does and runs no Toyon with a name. Null is the request. */
+/** What a machine's row says on its right, when it is not the request itself. Whether it
+ * answers comes first, since that is what the dot asks: a machine that does not answer from
+ * here is offline whether or not it is listed. Then a Toyon that answered lately but not now,
+ * then listed here already, then a machine that answers and runs no Toyon with a name. Null is
+ * the request. */
 export function machineState(m: TailnetDevice, listed: boolean): string | null {
+  if (!m.reached) return DEVICES.offline;
+  if (m.toyon && !m.toyon.answering) return DEVICES.notAnswering;
   if (listed) return DEVICES.listed;
-  if (m.toyon?.answering) return null;
-  if (m.toyon) return DEVICES.notAnswering;
-  return m.reached ? DEVICES.noToyon : DEVICES.offline;
+  if (m.toyon) return null;
+  return DEVICES.noToyon;
 }
 
 /** the list's order: the Toyons that answer, then those that answered lately, then the machines

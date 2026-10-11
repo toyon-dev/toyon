@@ -1,7 +1,13 @@
 import type { TailnetDevice } from "@toyon/shared";
 import type { ReactNode } from "react";
 import { cx } from "../../ui/cx.ts";
+import { Icon } from "../../ui/Icon.tsx";
 import "./tailnet.css";
+
+/** the icon for a device, from the OS as Tailscale names it: a phone, or a laptop for every
+ * other kind of machine, since what the row needs to say is "the thing in your pocket" against
+ * "the thing on a desk" */
+export const kindIcon = (os: string): "phone" | "laptop" => (os === "android" || os === "ios" ? "phone" : "laptop");
 
 /** one row of the list: a device on the tailnet, or this machine itself at the top */
 export interface TailnetRow {
@@ -9,8 +15,11 @@ export interface TailnetRow {
   name: string;
   /** after the name, for a machine with a name of its own; nothing for a phone */
   host?: string;
-  /** the dot: answered from here just now, or for this machine, connected at all */
-  reached: boolean;
+  /** the dot: answered from here just now, or for this machine, connected at all; null while
+   * the answer is still on its way */
+  reached: boolean | null;
+  /** the kind, after the dot */
+  icon: "phone" | "laptop";
   /** what the row says on its right: a word, a control, a word beside a control, or nothing */
   right?: ReactNode;
 }
@@ -25,10 +34,14 @@ export function TailnetRows({ rows }: { rows: TailnetRow[] }) {
         <div key={r.key} className="tailnet-row">
           <div className="tailnet-peer">
             <span
-              className={cx("dot tailnet-dot", r.reached ? "tailnet-reached" : "tailnet-unreached")}
+              className={cx(
+                "dot tailnet-dot",
+                r.reached === null ? "tailnet-asking" : r.reached ? "tailnet-reached" : "tailnet-unreached",
+              )}
               role="img"
-              aria-label={r.reached ? "connected" : "not connected"}
+              aria-label={r.reached === null ? "asking" : r.reached ? "connected" : "not connected"}
             />
+            <Icon name={r.icon} className="tailnet-kind" />
             <span className="tailnet-name">{r.name}</span>
             {r.host && <span className="hint tailnet-host">{r.host}</span>}
           </div>
@@ -47,5 +60,6 @@ export const deviceRow = (d: TailnetDevice, right?: ReactNode): TailnetRow => ({
   name: d.toyon?.machine ?? d.name,
   host: d.kind === "machine" && d.host ? d.host : undefined,
   reached: d.reached,
+  icon: kindIcon(d.os),
   right,
 });

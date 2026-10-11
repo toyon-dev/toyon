@@ -33,6 +33,16 @@
   .tailnet-dot.tailnet-unreached {
     background: var(--surface2);
   }
+  /* the answer is still on its way: the ink the starting dot uses, for the same reason */
+  .tailnet-dot.tailnet-asking {
+    background: var(--ink2);
+  }
+  /* the kind, drawn in the name's quieter tier so the name stays the thing read */
+  .tailnet-kind {
+    flex-shrink: 0;
+    align-self: center;
+    color: var(--text1);
+  }
   .tailnet-name {
     color: var(--text0);
     white-space: nowrap;

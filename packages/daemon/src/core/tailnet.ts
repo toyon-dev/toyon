@@ -10,7 +10,7 @@ import type { Hub } from "./hub.ts";
 import { fireAndForget } from "./log.ts";
 
 interface Status {
-  Self?: { Online?: boolean } | null;
+  Self?: { Online?: boolean; OS?: string } | null;
   /** where a sign-in that `tailscale login` started is waiting to be finished in a browser */
   AuthURL?: string;
   Peer?: Record<
@@ -45,6 +45,8 @@ export interface ListedTailnet {
    * and signed in (a network map not received for minutes), and then no peer can be reached
    * from here, which is this machine's doing and not theirs. */
   here: boolean;
+  /** this machine's own OS as Tailscale names it, lowercased; empty when the status has none */
+  os: string;
   peers: ListedPeer[];
 }
 
@@ -71,7 +73,7 @@ export function tailnetListed(json: string): ListedTailnet | null {
     });
   }
   // a status without the field is an older CLI, which says nothing about the link; connected
-  return { here: st.Self?.Online !== false, peers };
+  return { here: st.Self?.Online !== false, os: (st.Self?.OS ?? "").toLowerCase(), peers };
 }
 
 export const isPhone = (p: ListedPeer): boolean => PHONE_OS.has(p.os);
@@ -132,6 +134,14 @@ const pingArgs = (ip: string) => ["ping", "--until-direct=false", "--c", "1", "-
 /** how long one `tailscale status` answer stands in for the next ask */
 const STATUS_FRESH_MS = 5000;
 
+/** How long one view stands in for the next ask, and how old one may be and still be handed
+ * back while a fresh one is made behind it. A view waits on every ping and probe, two seconds
+ * for a device that is off, so a card that opened would otherwise sit empty for that long on
+ * every open; the card polls every few seconds, so handing back the last one and refreshing
+ * behind keeps it within a poll of the truth. Past the minute the wait is honest again. */
+const VIEW_FRESH_MS = 4000;
+const VIEW_STALE_MAX_MS = 60_000;
+
 /** how often readiness is read again on its own: signing in or turning HTTPS on is done at a
  * console and noticed within the minute */
 const READINESS_EVERY_MS = 60_000;
@@ -163,6 +173,9 @@ export class Tailnet {
   private timer: ReturnType<typeof setInterval> | null = null;
   /** the Toyon that last answered at each host, and when: what a missed probe falls back on */
   private answered = new Map<string, { machine: string; at: number }>();
+  /** the last view made, and when; and the one being made, so two asks share it */
+  private lastView: { view: TailnetView; at: number } | null = null;
+  private viewing: Promise<TailnetView | null> | null = null;
 
   constructor(private d: TailnetDeps) {}
 
@@ -264,6 +277,22 @@ export class Tailnet {
    * the ping says. With this machine's own link down nothing can answer, so nothing is asked and
    * the answer says which side is off. */
   async view(): Promise<TailnetView | null> {
+    const now = (this.d.now ?? Date.now)();
+    const last = this.lastView;
+    if (last && now - last.at < VIEW_FRESH_MS) return last.view;
+    if (this.viewing === null) {
+      this.viewing = this.makeView().finally(() => {
+        this.viewing = null;
+      });
+    }
+    if (last && now - last.at < VIEW_STALE_MAX_MS) {
+      fireAndForget("tailnet", this.viewing, "tailnet view");
+      return last.view;
+    }
+    return this.viewing;
+  }
+
+  private async makeView(): Promise<TailnetView | null> {
     const ts = this.d.ts;
     const listed = await this.listed();
     if (listed === null || ts === null) return null;
@@ -284,10 +313,12 @@ export class Tailnet {
           : last && now - last.at < ANSWERED_RECENTLY_MS
             ? { machine: last.machine, answering: false }
             : null;
-        return { name: p.name, host: p.host, kind, reached, toyon };
+        return { name: p.name, host: p.host, kind, os: p.os, reached, toyon };
       }),
     );
-    return { here: listed.here, devices };
+    const view: TailnetView = { here: listed.here, os: listed.os, devices };
+    this.lastView = { view, at: now };
+    return view;
   }
 
   /** whether a Toyon answers at `origin`: what a knock from a page elsewhere has to be, since a

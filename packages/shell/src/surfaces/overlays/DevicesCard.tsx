@@ -225,8 +225,10 @@ export function DevicesCard() {
   const here = view?.here === true;
   const self = selfState(view, tailscale, host);
   const named = host !== null;
+  // the switch shows while Tailscale here is up, and before the first answer, so a card that
+  // opens does not grow a switch a moment later
   const toggle =
-    desk && here ? (
+    desk && (here || view === undefined) ? (
       <Button
         variant="outline"
         size="sm"
@@ -290,8 +292,16 @@ export function DevicesCard() {
         {toggle ?? offer}
       </>
     );
+  // the daemon's machine is a machine whatever answers it; the dot asks until the answer lands
   const selfRows: TailnetRow[] = [
-    { key: "self", name: machine ?? "This machine", host: host ?? undefined, reached: here, right: selfRight },
+    {
+      key: "self",
+      name: machine ?? "This machine",
+      host: host ?? undefined,
+      reached: view === undefined ? null : here,
+      icon: "laptop",
+      right: selfRight,
+    },
   ];
   const rows: TailnetRow[] = view
     ? ordered(view).map((d) => {
@@ -331,14 +341,10 @@ export function DevicesCard() {
   return (
     <Overlay boxClass="devices-card" onClose={close}>
       <div className="devices-title">{DEVICES.title}</div>
-      {view !== undefined && (
-        <>
-          <TailnetRows rows={selfRows} />
-          {self.note && self.offer === null && <p className="devices-note">{self.note}</p>}
-          {refused && <p className="devices-note">{refused}</p>}
-          {desk && !named && tailscale?.state === "ready" && <p className="devices-note">{DEVICES.turnOn}</p>}
-        </>
-      )}
+      <TailnetRows rows={selfRows} />
+      {self.note && self.offer === null && <p className="devices-note">{self.note}</p>}
+      {refused && <p className="devices-note">{refused}</p>}
+      {desk && !named && tailscale?.state === "ready" && <p className="devices-note">{DEVICES.turnOn}</p>}
       {live && host !== null && <Address host={host} noPhone={noPhone} />}
       {step.kind === "waiting" && <div className="knock-word devices-word">{step.word}</div>}
       {line && <p className={cx("devices-line", step.kind === "failed" && "devices-failed")}>{line}</p>}

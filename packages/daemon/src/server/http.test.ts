@@ -124,11 +124,13 @@ function pairing(over: Partial<PairingDeps>) {
     tailnet: {
       view: async () => ({
         here: true,
+        os: "macos",
         devices: [
           {
             name: "work",
             host: "work.tail1234.ts.net",
             kind: "machine" as const,
+            os: "macos",
             reached: true,
             toyon: { machine: "work", answering: true },
           },
@@ -212,7 +214,7 @@ describe("knock", () => {
   };
 
   test("the tailnet is asked of Tailscale behind the token, whatever the name", async () => {
-    const view = { here: true, devices: [] };
+    const view = { here: true, os: "macos", devices: [] };
     const at = (host: string) =>
       withRemote(host, {
         tailnet: {
@@ -473,11 +475,13 @@ describe("remote switch, tailnet and handed machines", () => {
     const r = await fetch(req("/tailnet", { headers: { authorization: "Bearer secret" } }), srv());
     expect(await r?.json()).toEqual({
       here: true,
+      os: "macos",
       devices: [
         {
           name: "work",
           host: "work.tail1234.ts.net",
           kind: "machine",
+          os: "macos",
           reached: true,
           toyon: { machine: "work", answering: true },
         },

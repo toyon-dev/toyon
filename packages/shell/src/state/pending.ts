@@ -16,6 +16,8 @@ interface Uploading {
   /** an object URL over the bytes this tab holds, for the thumbnail until the daemon serves it */
   local?: string;
   uploading?: boolean;
+  /** how much of the bytes has gone, in whole percent; absent until the browser has said */
+  progress?: number;
 }
 
 /** an attachment waiting in a composer box: what the wire takes, a local key, and what its chip
@@ -35,7 +37,7 @@ export function toInput(a: PendingAttachment): AttachmentInput {
   switch (a.kind) {
     case "image":
     case "file": {
-      const { key: _key, local: _local, uploading: _uploading, ...input } = a;
+      const { key: _key, local: _local, uploading: _uploading, progress: _progress, ...input } = a;
       return input;
     }
     case "paste": {

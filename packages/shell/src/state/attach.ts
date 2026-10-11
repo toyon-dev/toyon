@@ -63,7 +63,20 @@ export async function attachUpload(store: Store, boxId: string, chip: Uploadable
   const where = (): string | undefined =>
     Object.entries(store.getState().local).find(([, l]) => l.attachments.some((a) => a.key === chip.key))?.[0];
   const urls = urlsByStore.get(store);
-  const send = () => (urls ? uploadAttachment(urls, chip.kind, blob) : Promise.resolve(null));
+  // the chip ticks in whole percent, told once per step rather than on every network event; a
+  // retry starts its count over, as the bytes do
+  let shown = -1;
+  const progress = (fraction: number) => {
+    const percent = Math.min(99, Math.floor(fraction * 100));
+    const at = where();
+    if (percent === shown || at === undefined) return;
+    shown = percent;
+    store.dispatch({ a: "upload-progress", id: at, key: chip.key, progress: percent });
+  };
+  const send = () => {
+    shown = -1;
+    return urls ? uploadAttachment(urls, chip.kind, blob, progress) : Promise.resolve(null);
+  };
   let up = await send();
   // The daemon is not answering: the chip waits and the upload is tried again until it lands or
   // the chip is taken off. Said once, under the box, since the chip itself reads as uploading.

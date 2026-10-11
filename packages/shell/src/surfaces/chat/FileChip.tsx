@@ -13,6 +13,7 @@ export function FileChip({
   bytes,
   href,
   uploading,
+  progress,
   onRemove,
   className = "",
 }: {
@@ -22,6 +23,8 @@ export function FileChip({
   href?: string;
   /** its bytes are still on their way to the daemon */
   uploading?: boolean;
+  /** how much of them has gone, in whole percent, once the browser has said */
+  progress?: number;
   onRemove?: () => void;
   className?: string;
 }) {
@@ -36,7 +39,14 @@ export function FileChip({
             <span className="pick-file row-dim">
               {" "}
               · {fmtBytes(bytes)}
-              {uploading && " · uploading"}
+              {progress !== undefined ? (
+                <>
+                  {" "}
+                  · <span className="pick-progress">{progress}%</span>
+                </>
+              ) : (
+                uploading && " · uploading"
+              )}
             </span>
           </span>
         </>

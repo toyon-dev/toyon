@@ -14,6 +14,7 @@ export function ImageChip({
   height,
   bytes,
   uploading,
+  progress,
   onRemove,
   className = "",
 }: {
@@ -25,6 +26,8 @@ export function ImageChip({
   bytes: number;
   /** its bytes are still on their way to the daemon */
   uploading?: boolean;
+  /** how much of them has gone, in whole percent, once the browser has said */
+  progress?: number;
   onRemove?: () => void;
   className?: string;
 }) {
@@ -39,7 +42,14 @@ export function ImageChip({
             <span className="pick-file row-dim">
               {" "}
               · {name} · {width}×{height} · {fmtBytes(bytes)}
-              {uploading && " · uploading"}
+              {progress !== undefined ? (
+                <>
+                  {" "}
+                  · <span className="pick-progress">{progress}%</span>
+                </>
+              ) : (
+                uploading && " · uploading"
+              )}
             </span>
           </span>
         </>

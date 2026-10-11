@@ -87,7 +87,7 @@ import { stoppedAsk, stoppedBy } from "../surfaces/chat/ask.ts";
 import { dotClass } from "../surfaces/util.ts";
 import { mergeLinks } from "./links.ts";
 import { type HeldFrame, type OutboxEntry, type Outgoing, outBoxId, outBoxOf } from "./outbox.ts";
-import { fromInputs, type PendingAttachment, settledInputs } from "./pending.ts";
+import { fromInputs, isUploading, type PendingAttachment, settledInputs } from "./pending.ts";
 
 /** `heard` is the shell's own clock when a live figure landed: the agent reports usage as soon as
  * the model accepts a request, before any of the reply, so a figure newer than the last thing in
@@ -1448,6 +1448,8 @@ export type Action =
   | { a: "attach"; id: string; items: PendingAttachment[] }
   /** an upload landed: the placeholder with this key becomes the attachment the daemon now holds */
   | { a: "attached"; id: string; key: string; item: PendingAttachment }
+  /** this much of an upload's bytes has gone, in whole percent */
+  | { a: "upload-progress"; id: string; key: string; progress: number }
   | { a: "detach"; id: string; key: string }
   | { a: "clear-attachments"; id: string }
   | { a: "hmr"; id: string }
@@ -2100,6 +2102,12 @@ function reduce(s: State, action: Action): State {
         // attaching is writing the message, which answers the notice the way typing does
         ...l,
         attachments: [...l.attachments, ...action.items],
+      }));
+    case "upload-progress":
+      if (!s.local[action.id]?.attachments.some((a) => a.key === action.key && isUploading(a))) return s;
+      return withLocal(s, action.id, (l) => ({
+        ...l,
+        attachments: l.attachments.map((a) => (a.key === action.key ? { ...a, progress: action.progress } : a)),
       }));
     case "attached":
       // a chip taken off while its bytes were on their way stays off

@@ -90,6 +90,7 @@ function QueuedChips({
             width={a.width}
             height={a.height}
             bytes={a.bytes}
+            progress={"progress" in a ? a.progress : undefined}
           />
         ) : a.kind === "file" ? (
           <FileChip
@@ -98,6 +99,7 @@ function QueuedChips({
             name={a.name}
             bytes={a.bytes}
             href={a.text && a.upload ? urls.upload(a.upload) : undefined}
+            progress={"progress" in a ? a.progress : undefined}
           />
         ) : a.kind === "paste" ? (
           <PasteChip

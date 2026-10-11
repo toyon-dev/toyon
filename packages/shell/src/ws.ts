@@ -113,6 +113,8 @@ export async function uploadAttachment(
   urls: DaemonUrls,
   kind: "image" | "file",
   blob: Blob,
+  /** how much of the body has gone, 0 to 1, as the browser reports it */
+  onProgress?: (fraction: number) => void,
 ): Promise<Uploaded | string | null> {
   try {
     // a folder, or a file gone since it was picked, fails here and not as a request that never arrives
@@ -120,19 +122,28 @@ export async function uploadAttachment(
   } catch {
     return "could not be read";
   }
-  try {
-    const r = await fetch(urls.uploads(kind), {
-      method: "POST",
-      headers: { ...bearer(urls), "content-type": blob.type || "application/octet-stream" },
-      body: blob,
-    });
-    // a front that could not reach the daemon (a proxy, the dev server) answers for it
-    if (r.status >= 502 && r.status <= 504) return null;
-    if (!r.ok) return (await r.text()) || "could not be attached";
-    return (await r.json()) as Uploaded;
-  } catch {
-    return null;
-  }
+  // XMLHttpRequest rather than fetch: it is the one that reports the body going out, which a
+  // picture over a phone's connection takes seconds to do
+  return new Promise((done) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", urls.uploads(kind));
+    xhr.setRequestHeader("authorization", bearer(urls).authorization);
+    xhr.setRequestHeader("content-type", blob.type || "application/octet-stream");
+    if (onProgress) xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(e.loaded / e.total);
+    xhr.onload = () => {
+      // a front that could not reach the daemon (a proxy, the dev server) answers for it
+      if (xhr.status >= 502 && xhr.status <= 504) return done(null);
+      if (xhr.status < 200 || xhr.status >= 300) return done(xhr.responseText || "could not be attached");
+      try {
+        done(JSON.parse(xhr.responseText) as Uploaded);
+      } catch {
+        done("could not be attached");
+      }
+    };
+    xhr.onerror = () => done(null);
+    xhr.onabort = () => done(null);
+    xhr.send(blob);
+  });
 }
 
 /** Ask the daemon to restart over plain HTTP, for a page whose socket stopped at a protocol mismatch.

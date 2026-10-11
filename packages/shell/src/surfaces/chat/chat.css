@@ -1293,6 +1293,11 @@
       text-overflow: ellipsis;
       white-space: nowrap;
     }
+    /* an upload's percent ticks up in the chip's line: it holds its width so the line does not
+       step when 9 becomes 10 */
+    & .pick-progress {
+      font-variant-numeric: tabular-nums;
+    }
     /* the file half of a pick opens it: a link, so the underline only arrives on hover and the row
    keeps reading as one line of text until you aim at it */
     & .pick-open {

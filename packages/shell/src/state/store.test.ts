@@ -1289,6 +1289,18 @@ describe("attachments", () => {
     const gone = run([{ a: "detach", id: "a", key: "f1" }], s);
     expect(reducer(gone, { a: "attached", id: "a", key: "f1", item: { ...file, key: "f1" } })).toBe(gone);
   });
+  test("an upload's chip ticks in percent while its bytes go, and the figure leaves with the wire and the landing", () => {
+    const flying = { ...file, key: "f1", upload: "", text: false, uploading: true };
+    let s = run([hello(wt("a")), { a: "attach", id: "a", items: [flying] }]);
+    s = run([{ a: "upload-progress", id: "a", key: "f1", progress: 37 }], s);
+    expect(s.local.a?.attachments[0]).toMatchObject({ progress: 37 });
+    expect(toInput(s.local.a?.attachments[0] ?? flying)).not.toHaveProperty("progress");
+    s = run([{ a: "attached", id: "a", key: "f1", item: { ...file, key: "f1" } }], s);
+    expect(s.local.a?.attachments[0]).not.toHaveProperty("progress");
+    // a chip that has landed, or is gone, takes no figure
+    expect(reducer(s, { a: "upload-progress", id: "a", key: "f1", progress: 50 })).toBe(s);
+    expect(reducer(s, { a: "upload-progress", id: "a", key: "nope", progress: 50 })).toBe(s);
+  });
   test("what goes to the wire leaves the key, the local thumbnail and the chip's figures behind", () => {
     expect(toInput({ ...img, local: "blob:x", uploading: false })).toEqual({
       kind: "image",

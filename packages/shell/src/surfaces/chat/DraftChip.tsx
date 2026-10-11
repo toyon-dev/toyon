@@ -22,6 +22,7 @@ export function DraftChip({ item, n, onRemove }: { item: DraftItem; n: number; o
         height={item.height}
         bytes={item.bytes}
         uploading={item.uploading}
+        progress={item.progress}
         onRemove={onRemove}
       />
     );
@@ -32,6 +33,7 @@ export function DraftChip({ item, n, onRemove }: { item: DraftItem; n: number; o
         bytes={item.bytes}
         href={item.text && item.upload ? urls.upload(item.upload) : undefined}
         uploading={item.uploading}
+        progress={item.progress}
         onRemove={onRemove}
       />
     );

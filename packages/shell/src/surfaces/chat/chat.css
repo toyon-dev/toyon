@@ -1136,9 +1136,12 @@
     }
   }
   /* the first chip's padding hangs into the gutter, so its words start where the text in the box
-   does (the same pull as .new-project-open). Named on the button, where --btn-pad-x is set. */
-  .spawn-left > .chip-picker:first-child > .btn {
-    margin-left: calc(-1 * var(--btn-pad-x));
+   does (the same pull as .new-project-open). The pull is on the wrapper, not the button: the chip's
+   panel is placed against the wrapper, and a button hanging out of it would put the panel's lead
+   8px to the right of the chip it covers. The 8px is Button's own side padding (--btn-pad-x), which
+   the wrapper cannot read since it is set on the button inside it. */
+  .spawn-left > .chip-picker:first-child {
+    margin-left: -8px;
   }
   /* .btn-icon is a grid box, so an inline wrapper would stack the two tools; keep them on one line */
   .spawn-tools {
@@ -1244,8 +1247,10 @@
   }
   /* the birth-time choices on one line: batch, then the three numbers with their word, then what
    runs it at the right end. The chips' padding hangs into the gutters at both ends, so batch starts
-   where the text in the box does and the profile ends where the knobs row's icons do; each pull is
-   named on the button, where --btn-pad-x is set. */
+   where the text in the box does and the profile ends where the knobs row's icons do. The batch
+   pull is named on the button, where --btn-pad-x is set; the profile's is on its wrapper, for the
+   reason .spawn-left gives: the panel is placed against the wrapper, and a button hanging out of it
+   lands the panel's lead 8px off the chip. */
   .draft-row {
     display: flex;
     align-items: center;
@@ -1255,8 +1260,8 @@
       margin-left: calc(-1 * var(--btn-pad-x));
     }
   }
-  .draft-runs > .chip-picker > .btn {
-    margin-right: calc(-1 * var(--btn-pad-x));
+  .draft-runs > .chip-picker {
+    margin-right: -8px;
   }
   .draft-variants {
     display: flex;

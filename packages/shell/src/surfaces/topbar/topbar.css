@@ -193,6 +193,13 @@
     & .overlay-box .picker-list {
       max-height: min(340px, 50vh);
     }
+    /* the strip is a row of the bar, so it is set at the bar's size: the chip lands on the pill and
+     reads as the pill, not as the pill grown a point, and the query beside it is the same strip.
+     The ghost has to match the field or the completion drifts off the caret. The rows under the
+     strip are the app's and keep their own size. */
+    & .overlay-box.anchored .picker-input :is(.picker-chip, .field, .picker-ghost) {
+      font: var(--type-mono-sm);
+    }
   }
   .bar-project-name {
     overflow: hidden;

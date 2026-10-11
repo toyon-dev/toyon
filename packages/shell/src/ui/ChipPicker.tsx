@@ -83,8 +83,12 @@ export function ChipPicker<T extends string>({
       {open && (
         <ListPicker<ChipOption<T>>
           // the chip sits wherever its row does, so the panel turns over or swaps ends to stay on
-          // screen; Escape ends it here, since the store does not know this one is open
-          anchored={{ flip: "both", margin: 8 }}
+          // screen. No window margin: the lead has to land on the chip, and the composer's chips
+          // sit closer to the window's foot than a margin would allow, so a margin lifted the lead
+          // off the chip by the difference. The composer's own padding is what keeps the panel's
+          // edge off the window's. Escape ends it here, since the store does not know this one is
+          // open.
+          anchored={{ flip: "both", margin: 0 }}
           onEscape={close}
           items={options}
           filter={(os, q) => {

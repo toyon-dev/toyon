@@ -10,7 +10,7 @@ import type { Hub } from "./hub.ts";
 import { fireAndForget } from "./log.ts";
 
 interface Status {
-  Self?: { Online?: boolean; OS?: string } | null;
+  Self?: { Online?: boolean } | null;
   /** where a sign-in that `tailscale login` started is waiting to be finished in a browser */
   AuthURL?: string;
   Peer?: Record<
@@ -45,8 +45,6 @@ export interface ListedTailnet {
    * and signed in (a network map not received for minutes), and then no peer can be reached
    * from here, which is this machine's doing and not theirs. */
   here: boolean;
-  /** this machine's own OS as Tailscale names it, lowercased; empty when the status has none */
-  os: string;
   peers: ListedPeer[];
 }
 
@@ -73,7 +71,7 @@ export function tailnetListed(json: string): ListedTailnet | null {
     });
   }
   // a status without the field is an older CLI, which says nothing about the link; connected
-  return { here: st.Self?.Online !== false, os: (st.Self?.OS ?? "").toLowerCase(), peers };
+  return { here: st.Self?.Online !== false, peers };
 }
 
 export const isPhone = (p: ListedPeer): boolean => PHONE_OS.has(p.os);
@@ -313,10 +311,10 @@ export class Tailnet {
           : last && now - last.at < ANSWERED_RECENTLY_MS
             ? { machine: last.machine, answering: false }
             : null;
-        return { name: p.name, host: p.host, kind, os: p.os, reached, toyon };
+        return { name: p.name, host: p.host, kind, reached, toyon };
       }),
     );
-    const view: TailnetView = { here: listed.here, os: listed.os, devices };
+    const view: TailnetView = { here: listed.here, devices };
     this.lastView = { view, at: now };
     return view;
   }

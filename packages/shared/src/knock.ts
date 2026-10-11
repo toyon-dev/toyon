@@ -123,9 +123,9 @@ export interface TailnetDevice {
   name: string;
   /** its MagicDNS name without the trailing dot; empty when the tailnet has none */
   host: string;
+  /** a phone (Android or iOS, as Tailscale names it) or any other machine: the row's icon, and
+   * which rows can be asked for access */
   kind: "phone" | "machine";
-  /** as Tailscale names it, lowercased: android, ios, macos, linux, windows; empty when it did not say */
-  os: string;
   /** Answered a ping from this machine just now: the dot on the row. The coordination server's
    * own word on a device is wrong both ways for minutes at a time, so only the ping says. */
   reached: boolean;
@@ -144,7 +144,5 @@ export interface TailnetView {
   /** whether this machine is connected to the tailnet itself, as Tailscale here says; nothing
    * is pinged or probed while it is not */
   here: boolean;
-  /** this machine's own, as Tailscale names it; the row's icon */
-  os: string;
   devices: TailnetDevice[];
 }

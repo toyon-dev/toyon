@@ -4,10 +4,10 @@ import { cx } from "../../ui/cx.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import "./tailnet.css";
 
-/** the icon for a device, from the OS as Tailscale names it: a phone, or a laptop for every
- * other kind of machine, since what the row needs to say is "the thing in your pocket" against
- * "the thing on a desk" */
-export const kindIcon = (os: string): "phone" | "laptop" => (os === "android" || os === "ios" ? "phone" : "laptop");
+/** the icon for a device, from the kind the daemon already tells apart: a phone, or a laptop
+ * for every other machine, since what the row needs to say is "the thing in your pocket"
+ * against "the thing on a desk" */
+export const kindIcon = (kind: TailnetDevice["kind"]): "phone" | "laptop" => (kind === "phone" ? "phone" : "laptop");
 
 /** one row of the list: a device on the tailnet, or this machine itself at the top */
 export interface TailnetRow {
@@ -60,6 +60,6 @@ export const deviceRow = (d: TailnetDevice, right?: ReactNode): TailnetRow => ({
   name: d.toyon?.machine ?? d.name,
   host: d.kind === "machine" && d.host ? d.host : undefined,
   reached: d.reached,
-  icon: kindIcon(d.os),
+  icon: kindIcon(d.kind),
   right,
 });

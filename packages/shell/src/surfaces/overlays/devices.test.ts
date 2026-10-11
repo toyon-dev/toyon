@@ -35,7 +35,6 @@ describe("the add-machine lines", () => {
       name: "work",
       host: "work.tail1234.ts.net",
       kind: "machine" as const,
-      os: "macos",
       reached: true,
       toyon: { machine: "work", answering: true },
     };
@@ -71,30 +70,30 @@ describe("the add-machine lines", () => {
   });
   test("readiness is read before the view: a switched-off Tailscale still lists the tailnet, and is not 'not connected'", () => {
     const off = { state: "disconnected" as const, name: null, line: "" };
-    expect(selfState({ here: false, os: "macos", devices: [] }, off, "mac.tail1234.ts.net")).toMatchObject({
+    expect(selfState({ here: false, devices: [] }, off, "mac.tail1234.ts.net")).toMatchObject({
       offer: "connect",
     });
   });
   test("a link that is down is said so; on the tailnet with nothing in the way is no word at all", () => {
     const ready = { state: "ready" as const, name: "mac.tail1234.ts.net", line: "" };
-    expect(selfState({ here: false, os: "macos", devices: [] }, ready, "mac.tail1234.ts.net")).toEqual({
+    expect(selfState({ here: false, devices: [] }, ready, "mac.tail1234.ts.net")).toEqual({
       word: "not connected",
       note: DEVICES.hereOff,
       offer: null,
     });
-    expect(selfState({ here: true, os: "macos", devices: [] }, ready, "mac.tail1234.ts.net")).toEqual({
+    expect(selfState({ here: true, devices: [] }, ready, "mac.tail1234.ts.net")).toEqual({
       word: null,
       note: null,
       offer: null,
     });
-    expect(selfState({ here: true, os: "macos", devices: [] }, ready, null)).toMatchObject({ word: null, note: null });
+    expect(selfState({ here: true, devices: [] }, ready, null)).toMatchObject({ word: null, note: null });
     // with no name, what keeps the switch from being offered
     const dns = { state: "magicdns-off" as const, name: null, line: "MagicDNS is off for this tailnet" };
-    expect(selfState({ here: true, os: "macos", devices: [] }, dns, null)).toMatchObject({
+    expect(selfState({ here: true, devices: [] }, dns, null)).toMatchObject({
       word: "MagicDNS off",
       note: dns.line,
     });
-    expect(selfState({ here: true, os: "macos", devices: [] }, dns, "mac.tail1234.ts.net")).toMatchObject({
+    expect(selfState({ here: true, devices: [] }, dns, "mac.tail1234.ts.net")).toMatchObject({
       word: null,
       note: null,
     });

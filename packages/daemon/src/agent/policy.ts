@@ -6,11 +6,13 @@
 // ExitPlanMode, Codex's plan review), is a card in every mode: approving a plan nobody read is not
 // a decision toyon can make. An agent with no OS sandbox of any kind has nothing under its commands,
 // so each one is a card even in `auto`; and toyon's own secrets are refused to every tool, reads
-// included.
+// included. Toyon's own MCP tools pass in every mode: their arguments are routes and project
+// names, not files, and the daemon checks them when the call lands.
 
 import { isAbsolute, resolve } from "node:path";
 import type { PermissionOption, RequestPermissionRequest, RequestPermissionResponse } from "@agentclientprotocol/sdk";
 import type { PermissionMode } from "@toyon/shared";
+import { toyonTool } from "./acp/map.ts";
 import { canonical, within } from "./bounds.ts";
 import type { Bounds } from "./sandbox.ts";
 
@@ -54,6 +56,12 @@ export function decide(
   // it would approve the plan and start the edits without anyone having seen it, so it is the one
   // request a person answers in every mode.
   if (kind === "switch_mode") return { kind: "prompt" };
+  // Toyon's own tools write nothing through the file tools, and their arguments are the daemon's
+  // to check when the call lands: the preview tool's `path` is a route like `/`, which the bounds
+  // below would read as the filesystem root and refuse. What handoff proposes is the person's to
+  // decide on its own card, so a permission card in front of it would be two gates for one
+  // decision. Allowed in every mode.
+  if (toyonTool(req.toolCall) !== null) return { kind: "allow" };
   // in ask, what is inside the bounds is still a person's call; the bounds are checked first so an
   // outside write is a refusal with a reason, never a card offering to allow it
   const asks = mode !== "auto";
@@ -68,9 +76,8 @@ export function decide(
         reason: "The call named no file path, so Toyon cannot tell whether it stays inside the worktree.",
       };
     }
-    // A call that names no path and is not a write: an MCP tool, Toyon's own handoff among them.
-    // It writes nothing here, and what handoff proposes is the person's to decide on its own card,
-    // so a permission card in front of it would be two gates for one decision. Allowed in every mode.
+    // a call that names no path and is not a write: another server's MCP tool. It writes nothing
+    // through the file tools, so it is allowed in every mode.
     return { kind: "allow" };
   }
   for (const raw of paths) {

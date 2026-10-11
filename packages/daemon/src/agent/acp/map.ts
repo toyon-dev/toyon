@@ -126,7 +126,7 @@ function toolSearchQuery(rawInput: unknown): string {
  * server's name has to be there, so another server's tool of the same name is left alone. The
  * bare tool name, or null for any other call. */
 const TOYON_TOOL = new RegExp(`^(?:mcp__${TOYON_MCP_SERVER}__|${TOYON_MCP_SERVER}/)([A-Za-z0-9_-]+)$`);
-function toyonTool(update: { name?: string | null; _meta?: Record<string, unknown> | null }): string | null {
+export function toyonTool(update: { name?: string | null; _meta?: Record<string, unknown> | null }): string | null {
   const meta = asRecord(asRecord(update._meta).claudeCode).toolName;
   for (const spelled of [update.name ?? "", typeof meta === "string" ? meta : ""]) {
     const m = TOYON_TOOL.exec(spelled);

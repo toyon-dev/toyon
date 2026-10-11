@@ -6,8 +6,8 @@ Toyon can run on a box you open from your phone, or on your own Fly account with
 
 Every device gets in the same way: it opens the machine's address, asks to be let in, and shows two words. Toyon's window on the machine shows the same two words with one button, and a yes there opens the shell on the device. The token never leaves the machine except through that yes.
 
-- **Your phone.** Press the phone button in the bar. With Tailscale signed in and HTTPS on, the card offers "turn on", which sets up `tailscale serve` for Toyon and takes effect at once. The card then draws the address as a QR code; scan it with the phone's camera, and let the phone in when its two words appear on the card.
-- **Another machine.** In Toyon on the other machine, "add a machine" in the app menu lists the Toyons on your tailnet. Press "request access" on this one, and let it in here. A machine not on the tailnet, such as a Fly machine, goes in the address field underneath.
+- **Your phone.** Press the phone button in the bar. With Tailscale signed in and HTTPS on, the devices card offers "turn on", which sets up `tailscale serve` for Toyon and takes effect at once. The card then draws the address as a QR code; scan it with the phone's camera, and let the phone in when its two words appear on the card. Under the code, every device on your tailnet is listed with a dot for whether it answers from here; a grey dot on this machine's own row means Tailscale here is off.
+- **Another machine.** In Toyon on the other machine, "your devices" in the app menu lists the Toyons on your tailnet. Press "request access" on this one, and let it in here. A machine not on the tailnet, such as a Fly machine, goes in the address field underneath.
 - **A box with no window open on it**, such as a server over ssh: `toyon pair` turns the name on if it is off, prints the address, and answers each device from the terminal.
 - **A Fly machine** is listed in Toyon on the laptop that deployed it. Pair your phone with it from there.
 

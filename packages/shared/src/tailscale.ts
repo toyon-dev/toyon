@@ -105,7 +105,7 @@ export function readinessOf(json: string): TailscaleReadiness {
         line: "this machine is waiting to be approved in the Tailscale admin console",
       };
     case "Stopped":
-      return { state: "signed-out", name, line: "Tailscale is disconnected; run `tailscale up`, then this again" };
+      return { state: "disconnected", name, line: "Tailscale is disconnected; run `tailscale up`, then this again" };
     default:
       return {
         state: "not-running",

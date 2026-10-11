@@ -122,12 +122,22 @@ function pairing(over: Partial<PairingDeps>) {
     knocks: new Knocks(quiet),
     onLetIn: () => {},
     tailnet: {
-      phones: async () => null,
-      machines: async () => [
-        { name: "work", host: "work.tail1234.ts.net", online: true, toyon: { machine: "work", answering: true } },
-      ],
+      view: async () => ({
+        here: true,
+        devices: [
+          {
+            name: "work",
+            host: "work.tail1234.ts.net",
+            kind: "machine" as const,
+            reached: true,
+            toyon: { machine: "work", answering: true },
+          },
+        ],
+      }),
       // the Toyons elsewhere: the home desk and a second daemon on this box
       isToyon: async (origin) => origin === "https://home.tail1234.ts.net" || origin === "http://localhost:4242",
+      up: async () => null,
+      login: async () => ({ url: "https://login.tailscale.com/a/abc" }),
     },
     remoteSwitch: {
       turnOn: async () => {
@@ -201,16 +211,21 @@ describe("knock", () => {
     return (await r!.json()) as Knock[];
   };
 
-  test("phones are asked of Tailscale only for a tailnet name, and only with the token", async () => {
-    const phones = [{ name: "Pixel", online: false }];
+  test("the tailnet is asked of Tailscale behind the token, whatever the name", async () => {
+    const view = { here: true, devices: [] };
     const at = (host: string) =>
       withRemote(host, {
-        tailnet: { phones: async () => phones, machines: async () => null, isToyon: async () => false },
+        tailnet: {
+          view: async () => view,
+          isToyon: async () => false,
+          up: async () => null,
+          login: async () => ({ why: "no" }),
+        },
       });
     const ask = (f: ReturnType<typeof createFetch>, auth = "Bearer secret") =>
-      f(req("/phones", { headers: { authorization: auth } }), srv());
-    expect(await (await ask(at("mac.tail1234.ts.net")))?.json()).toEqual(phones);
-    expect(await (await ask(at(name)))?.json()).toBeNull();
+      f(req("/tailnet", { headers: { authorization: auth } }), srv());
+    expect(await (await ask(at("mac.tail1234.ts.net")))?.json()).toEqual(view);
+    expect(await (await ask(at(name)))?.json()).toEqual(view);
     expect((await ask(at("mac.tail1234.ts.net"), "Bearer wrong"))?.status).toBe(401);
   });
 
@@ -444,12 +459,30 @@ describe("remote switch, tailnet and handed machines", () => {
     expect(body.tailscale?.state).toBe("ready");
   });
 
-  test("/tailnet lists the machines behind the token", async () => {
+  test("/tailscale brings Tailscale back behind the token: up, or the link to sign in at", async () => {
+    expect((await post("/tailscale", { up: true }, "Bearer wrong"))?.status).toBe(401);
+    expect(await (await post("/tailscale", { up: true }))?.json()).toEqual({ refused: null });
+    expect(await (await post("/tailscale", { login: true }))?.json()).toEqual({
+      url: "https://login.tailscale.com/a/abc",
+    });
+    expect((await post("/tailscale", {}))?.status).toBe(400);
+  });
+
+  test("/tailnet lists the devices behind the token", async () => {
     expect((await fetch(req("/tailnet", { headers: { authorization: "Bearer wrong" } }), srv()))?.status).toBe(401);
     const r = await fetch(req("/tailnet", { headers: { authorization: "Bearer secret" } }), srv());
-    expect(await r?.json()).toEqual([
-      { name: "work", host: "work.tail1234.ts.net", online: true, toyon: { machine: "work", answering: true } },
-    ]);
+    expect(await r?.json()).toEqual({
+      here: true,
+      devices: [
+        {
+          name: "work",
+          host: "work.tail1234.ts.net",
+          kind: "machine",
+          reached: true,
+          toyon: { machine: "work", answering: true },
+        },
+      ],
+    });
   });
 
   test("/machines takes an https origin and its token, from this box or a shell through the front", async () => {

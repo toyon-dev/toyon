@@ -20,7 +20,7 @@ describe("daemonUrls", () => {
     expect(u.restart(false)).toBe("https://work.tail1234.ts.net/restart?token=abc");
     expect(u.restart(true)).toContain("&now");
     expect(u.uploads("file")).toBe("https://work.tail1234.ts.net/uploads?kind=file");
-    expect(u.phones).toBe("https://work.tail1234.ts.net/phones");
+    expect(u.tailnet).toBe("https://work.tail1234.ts.net/tailnet");
     expect(u.knockAnswer("k1")).toBe("https://work.tail1234.ts.net/knock/k1/answer");
     expect(u.previewGrant).toBe("https://work.tail1234.ts.net/preview-grant");
   });

@@ -3,13 +3,28 @@
 // box with no Toyon window open on it (a server reached over ssh) pairs its first device from
 // here; after that the window anywhere does it.
 
-import { isTailnetName, type Knock, machineLink, type TailnetPhone, tailnetLine } from "@toyon/shared";
+import { isTailnetName, type Knock, machineLink, type TailnetView } from "@toyon/shared";
 import { daemonFetch, health } from "./daemon.ts";
 import { confirm } from "./prompt.ts";
 import { HOW_TO_OPEN, switchRemote } from "./remote.ts";
 
 /** how often the terminal asks what waits: the device itself asks every two seconds */
 const POLL_MS = 2000;
+
+/** the tailnet as the pair card lists it, a line per row: this machine first, then each device
+ * and whether it answers from here, so a phone that cannot open the address is named before
+ * the wait begins */
+export function tailnetLines(view: TailnetView | null): string[] {
+  if (view === null) return ["Your phone needs Tailscale on, signed in to the same tailnet."];
+  const lines = [`  this machine: ${view.here ? "connected" : "not connected"}`];
+  for (const d of view.devices) {
+    lines.push(`  ${d.toyon?.machine ?? d.name}: ${d.reached ? "on your tailnet" : "not answering"}`);
+  }
+  if (!view.devices.some((d) => d.kind === "phone")) {
+    lines.push("No phone has joined your tailnet. Install Tailscale on it and sign in to the same account.");
+  }
+  return lines;
+}
 
 async function waiting(): Promise<Knock[]> {
   const r = await daemonFetch("/knocks");
@@ -40,9 +55,9 @@ export async function pair(): Promise<number> {
   console.log(HOW_TO_OPEN);
   if (isTailnetName(remote.host)) {
     // a daemon that cannot say still leaves the plain line: the phone needs Tailscale on either way
-    const r = await daemonFetch("/phones");
-    const phones = r?.ok ? ((await r.json()) as TailnetPhone[] | null) : null;
-    console.log(tailnetLine(phones).text);
+    const r = await daemonFetch("/tailnet");
+    const view = r?.ok ? ((await r.json()) as TailnetView | null) : null;
+    for (const line of tailnetLines(view)) console.log(line);
   }
   console.log("waiting for a device; ctrl-c to stop");
   /** knocks already put to the person, so a slow answer is not asked for twice */

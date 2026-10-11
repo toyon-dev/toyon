@@ -1,17 +1,16 @@
 import { useStore } from "../../state/context.tsx";
 import { useActiveId, useOverlay } from "../../state/selectors.ts";
-import { AddMachine } from "./AddMachine.tsx";
 import { AgentPage } from "./AgentPage.tsx";
 import { AgentPicker } from "./AgentPicker.tsx";
 import { AppearancePicker } from "./AppearancePicker.tsx";
 import { ChatsPicker } from "./ChatsPicker.tsx";
 import { CommandPalette } from "./CommandPalette.tsx";
+import { DevicesCard } from "./DevicesCard.tsx";
 import { ElementSources } from "./ElementSources.tsx";
 import { FolderPicker } from "./FolderPicker.tsx";
 import { HandoffPicker } from "./HandoffPicker.tsx";
 import { KeepAwakePicker } from "./KeepAwakePicker.tsx";
 import { KeysHelp } from "./KeysHelp.tsx";
-import { PairCard } from "./PairCard.tsx";
 import { ProjectPicker } from "./ProjectPicker.tsx";
 import { QuickOpen } from "./QuickOpen.tsx";
 import { RefPicker } from "./RefPicker.tsx";
@@ -38,8 +37,7 @@ export function Overlays() {
         <ChatsPicker repoId={activeRepoId} scope={overlay.names ? "names" : "all"} />
       )}
       {overlay?.kind === "keys" && <KeysHelp />}
-      {overlay?.kind === "pair" && <PairCard />}
-      {overlay?.kind === "add-machine" && <AddMachine />}
+      {overlay?.kind === "devices" && <DevicesCard />}
       {overlay?.kind === "theme" && <ThemePicker slot={overlay.slot} />}
       {overlay?.kind === "appearance" && <AppearancePicker />}
       {overlay?.kind === "keep-awake" && <KeepAwakePicker />}

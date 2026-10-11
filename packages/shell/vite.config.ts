@@ -77,9 +77,9 @@ export default defineConfig({
       // a device with no token asking to be let in, and the page that answers it
       "/knock": target,
       "/knocks": target,
-      "/phones": target,
-      // the tailnet's machines for the add-machine card, and turning the name on from the pair card
+      // the devices card: the tailnet, Tailscale brought back, and the name turned on or off
       "/tailnet": target,
+      "/tailscale": target,
       "/remote": target,
     },
   },

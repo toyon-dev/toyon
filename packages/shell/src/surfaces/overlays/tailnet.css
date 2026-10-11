@@ -1,0 +1,55 @@
+/* The tailnet list the devices card draws: one row per device, one line each, a dot for reached
+   from here, the name, a machine's address after it, and whatever the card puts on the right. */
+@layer tokens, base, surfaces;
+@layer surfaces {
+  .tailnet-list {
+    width: 100%;
+    display: grid;
+    gap: 6px;
+    text-align: left;
+  }
+  .tailnet-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: var(--row-height);
+  }
+  /* one line: the dot sits on the name's line because there is no other line */
+  .tailnet-peer {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    min-width: 0;
+  }
+  /* reached from here or not: a dot is read, so inks and the idle surface, the same two the
+     worktree dots use for up and doing nothing */
+  .tailnet-dot {
+    align-self: center;
+  }
+  .tailnet-dot.tailnet-reached {
+    background: var(--green);
+  }
+  .tailnet-dot.tailnet-unreached {
+    background: var(--surface2);
+  }
+  .tailnet-name {
+    color: var(--text0);
+    white-space: nowrap;
+  }
+  /* the address gives way first, then the name; the right side never does */
+  .tailnet-host {
+    font: var(--type-ui-sm);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .tailnet-right {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    white-space: nowrap;
+  }
+}

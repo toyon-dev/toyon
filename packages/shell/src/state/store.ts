@@ -399,10 +399,9 @@ export type Overlay =
    * `names` opens it looking through their names alone: where a removed worktree is found again. */
   | { kind: "chats"; names?: true }
   | { kind: "keys" }
-  /** this machine's address for a phone, turning the name on, and the devices asking to be let in */
-  | { kind: "pair" }
-  /** another machine's address, scanned or pasted here, so this page lists it too */
-  | { kind: "add-machine" }
+  /** the devices card: this machine's address for a phone (or turning the name on), the tailnet
+   * with a request on each Toyon, an address to type, and the devices asking to be let in */
+  | { kind: "devices" }
   /** theme picker: which pref slot Enter writes */
   | { kind: "theme"; slot: "theme" | "light" | "dark" }
   | { kind: "appearance" }
@@ -1709,13 +1708,13 @@ function strayed(s: State): State {
 
 /** The devices asking to be let in, as the daemon last said. A knock not seen before is a person
  * who just did something on another device and is now looking here for the answer, so it opens
- * the pair card where nothing else is open; one already open keeps its place, and the card lists
+ * the devices card where nothing else is open; one already open keeps its place, and the card lists
  * what waits whenever it is opened. On a first connect nothing was seen before, so a device that
  * waited through the connect opens it too. */
 function withKnocks(s: State, knocks: Knock[], letIn: boolean): State {
   const fresh = knocks.some((k) => !s.knocks.some((o) => o.id === k.id));
   const next = { ...s, knocks, letIn };
-  return fresh && next.overlay === null ? reducer(next, { a: "open", overlay: { kind: "pair" } }) : next;
+  return fresh && next.overlay === null ? reducer(next, { a: "open", overlay: { kind: "devices" } }) : next;
 }
 
 /** a desk offers the phone card once this machine has a public name, or Tailscale could give it

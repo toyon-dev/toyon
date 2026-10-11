@@ -401,17 +401,17 @@ function UpdateOffer() {
 }
 
 /** A machine that has a public name, or could (Tailscale signed in with HTTPS on), opens on a
- * phone from here, at the head of the tools. Until a device has been let in it says so in words,
- * since nothing else tells anyone the machine can be opened elsewhere; after that it is the phone
- * icon alone, a tool like the ones beside it. Never on a phone, which is the thing that would
- * scan it. */
+ * phone from here, at the head of the tools: the devices card, which leads with the address.
+ * Until a device has been let in it says so in words, since nothing else tells anyone the
+ * machine can be opened elsewhere; after that it is the phone icon alone, a tool like the ones
+ * beside it. Never on a phone, which is the thing that would scan it. */
 function PhoneButton() {
   const dispatch = useDispatch();
   const shown = useStore(canOfferPhone);
   const letIn = useStore((s) => s.letIn);
-  const open = useStore((s) => s.overlay?.kind === "pair");
+  const open = useStore((s) => s.overlay?.kind === "devices");
   if (!shown) return null;
-  const toggle = () => dispatch({ a: "toggle", overlay: { kind: "pair" } });
+  const toggle = () => dispatch({ a: "toggle", overlay: { kind: "devices" } });
   if (letIn) {
     return (
       <IconButton

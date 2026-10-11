@@ -1,7 +1,7 @@
 import { unseenJump } from "../../app/unseenJump.ts";
 import { chord } from "../../surfaces/util.ts";
 import { grouped, type MenuEntry, type MenuItem } from "../../ui/menu.ts";
-import { canOfferPhone, changesTabShown, isChatCentred, routeTarget, type State, worktreeById } from "../store.ts";
+import { changesTabShown, isChatCentred, routeTarget, type State, worktreeById } from "../store.ts";
 import type { Deps } from "./deps.ts";
 
 export type AppState = Pick<
@@ -161,28 +161,14 @@ export function appItems(s: AppState, { sock, dispatch }: Deps): MenuEntry[] {
       onClick: () => sock?.send({ t: "restart-daemon" }),
     });
   }
-  // another machine's address, read here: this page lists that machine too, beside this one
+  // the devices card: the other machines to add from anywhere, and on a desk the address for a
+  // phone. A device asking to be let in opens the card by itself; the row counts them, and is
+  // the way back to it once it was closed.
   app.push({
-    id: "add-machine",
-    label: "add a machine",
-    onClick: () => dispatch({ a: "open", overlay: { kind: "add-machine" } }),
+    id: "devices",
+    label: s.knocks.length > 0 ? `let a device in (${s.knocks.length})` : "your devices",
+    onClick: () => dispatch({ a: "open", overlay: { kind: "devices" } }),
   });
-  // the devices asking to be let in; the card opens by itself when one knocks, and this is the
-  // way back to it once it was closed
-  if (s.knocks.length > 0) {
-    app.push({
-      id: "pair",
-      label: `let a device in (${s.knocks.length})`,
-      onClick: () => dispatch({ a: "open", overlay: { kind: "pair" } }),
-    });
-  } else if (canOfferPhone(s)) {
-    // the address is for another device, and the card turns the name on when it is not yet
-    app.push({
-      id: "pair",
-      label: "open on your phone",
-      onClick: () => dispatch({ a: "open", overlay: { kind: "pair" } }),
-    });
-  }
   // a project with nothing to run has the chat as its centre, so there is no chat panel to toggle,
   // and no page for zen or the design pane's outlines to work on
   const pageless = isChatCentred(s) ? new Set(["chat", "design", "zen"]) : null;

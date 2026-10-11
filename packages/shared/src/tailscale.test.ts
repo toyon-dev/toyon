@@ -58,6 +58,7 @@ describe("readiness", () => {
       line: `this machine is ${NAME} on your tailnet`,
     });
     expect(readinessOf(status({ BackendState: "NeedsLogin" }))).toMatchObject({ state: "signed-out", name: NAME });
+    expect(readinessOf(status({ BackendState: "Stopped" }))).toMatchObject({ state: "disconnected", name: NAME });
     expect(readinessOf(status({ BackendState: "NeedsMachineAuth" })).state).toBe("needs-approval");
     expect(readinessOf(status({ BackendState: "Starting" })).state).toBe("not-running");
     expect(readinessOf(status({ CurrentTailnet: { MagicDNSEnabled: false } })).state).toBe("magicdns-off");

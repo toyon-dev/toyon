@@ -1,18 +1,16 @@
 // The routes for pairing, on the daemon's listener: a device knocking and polling its knock, the
-// answers from whoever holds the token, the tailnet's phones and machines, the public name turned
+// answers from whoever holds the token, the tailnet as reached from here, the public name turned
 // on or off, and the machines handed to this daemon. Transport only: each parses, calls a service,
 // shapes the reply. The knock and its poll take no token, since they are how a device without one
 // asks; everything else sits behind the bearer.
 
 import {
   isShellOrigin,
-  isTailnetName,
   type Knock,
   type KnockState,
   type Remote,
   type RemoteView,
-  type TailnetMachine,
-  type TailnetPhone,
+  type TailnetView,
 } from "@toyon/shared";
 import { UserError } from "../core/errors.ts";
 import type { Knocks } from "../core/knocks.ts";
@@ -33,7 +31,7 @@ export interface PairingDeps {
   knocks: Knocks;
   /** a knock was just let in, from a page on `from` (null for a page this machine served) */
   onLetIn: (from: string | null) => void;
-  tailnet: Pick<Tailnet, "phones" | "machines" | "isToyon">;
+  tailnet: Pick<Tailnet, "view" | "isToyon" | "up" | "login">;
   remoteSwitch: Pick<RemoteSwitch, "turnOn" | "use" | "turnOff">;
   /** list another machine for every shell this daemon serves; a UserError says why not */
   addMachine: (origin: string, token: string) => void;
@@ -94,7 +92,7 @@ export function pairingRoutes(d: PairingDeps) {
       return json(body, headers);
     }
 
-    if (!url.pathname.match(/^\/(knocks|knock\/[A-Za-z0-9_-]+\/answer|phones|tailnet|remote|machines)$/))
+    if (!url.pathname.match(/^\/(knocks|knock\/[A-Za-z0-9_-]+\/answer|tailnet|tailscale|remote|machines)$/))
       return undefined;
     if (!d.authed(req)) return unauthorized();
 
@@ -117,18 +115,23 @@ export function pairingRoutes(d: PairingDeps) {
       return new Response(null, { status: 204 });
     }
 
-    // Whether a phone could open the address at all, for the card that shows it. A tailnet name
-    // resolves only on a connected device, and a phone that is not one never loads a page of ours.
-    if (url.pathname === "/phones" && req.method === "GET") {
-      const body: TailnetPhone[] | null = remote && isTailnetName(remote.host) ? await d.tailnet.phones() : null;
+    // The tailnet as reached from here, for both cards: the pair card lists every device under
+    // the address, since a tailnet name resolves only on a connected device and a phone that is
+    // not one never loads a page of ours; the add-machine card lists the machines that answer as
+    // a Toyon with a name.
+    if (url.pathname === "/tailnet" && req.method === "GET") {
+      const body: TailnetView | null = await d.tailnet.view();
       return json(body);
     }
 
-    // The other machines on the tailnet, for the add-machine card: which of them answer as a
-    // Toyon with a name is what the card lists, and the rest is one line about `toyon remote`.
-    if (url.pathname === "/tailnet" && req.method === "GET") {
-      const body: TailnetMachine[] | null = await d.tailnet.machines();
-      return json(body);
+    // Tailscale here brought back from the card: `up` for a Tailscale that is signed in and
+    // switched off, `login` for one that is signed out, which answers with the link to finish at.
+    // Neither touches Toyon's name; the switch for that is /remote.
+    if (url.pathname === "/tailscale" && req.method === "POST") {
+      const body = (await req.json().catch(() => ({}))) as { up?: unknown; login?: unknown };
+      if (body.up === true) return json({ refused: await d.tailnet.up() });
+      if (body.login === true) return json(await d.tailnet.login());
+      return new Response("say up or login", { status: 400 });
     }
 
     // Remote access turned on or off while running: `toyon remote`, `toyon pair` on a box, and the

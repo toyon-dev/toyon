@@ -57,7 +57,18 @@ export interface Remote {
  * in the words the person reads on the card and in the terminal. `name` is the machine's own
  * when it is known, whatever the state. */
 export interface TailscaleReadiness {
-  state: "ready" | "not-installed" | "not-running" | "signed-out" | "needs-approval" | "magicdns-off" | "https-off";
+  /** `disconnected` is signed in and switched off, which `tailscale up` undoes; `signed-out`
+   * needs a browser, which `tailscale login` offers a link for; `not-running` has no service
+   * for the CLI to reach, which only the Tailscale app or the system service fixes */
+  state:
+    | "ready"
+    | "not-installed"
+    | "not-running"
+    | "signed-out"
+    | "disconnected"
+    | "needs-approval"
+    | "magicdns-off"
+    | "https-off";
   name: string | null;
   /** the fix, or for `ready` the name as a sentence */
   line: string;

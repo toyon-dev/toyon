@@ -102,7 +102,7 @@ export function ProjectPicker({ form }: { form: ProjectsOverlay["form"] }) {
   /** the disk form: the folder button and the "open folder" row are one way in, said twice */
   const browse = () => dispatch({ a: "open", overlay: { kind: "projects", form: "disk" } });
   /** the add-machine card takes this overlay's place */
-  const addMachine = () => dispatch({ a: "open", overlay: { kind: "add-machine" } });
+  const addMachine = () => dispatch({ a: "open", overlay: { kind: "devices" } });
   /** a project on another machine: that machine comes on screen, open on the project */
   const goElsewhere = (origin: string, repoId: string) => {
     const m = machines.get(origin);

@@ -4,11 +4,15 @@
 // status` fork feeds all of it, remembered briefly, since a card polling or a reconnect storm
 // would otherwise fork the CLI once per ask. Read only: nothing here changes Tailscale.
 
-import type { TailnetMachine, TailnetPhone, TailscaleReadiness } from "@toyon/shared";
+import type { TailnetDevice, TailnetView, TailscaleReadiness } from "@toyon/shared";
 import { dnsName, findTailscale, readinessOf, type Tailscale } from "@toyon/shared/tailscale";
 import type { Hub } from "./hub.ts";
+import { fireAndForget } from "./log.ts";
 
 interface Status {
+  Self?: { Online?: boolean } | null;
+  /** where a sign-in that `tailscale login` started is waiting to be finished in a browser */
+  AuthURL?: string;
   Peer?: Record<
     string,
     {
@@ -34,8 +38,17 @@ export interface ListedPeer {
   online: boolean;
 }
 
-/** every peer in `tailscale status --json`, or null for output that is not a status */
-export function tailnetPeers(json: string): ListedPeer[] | null {
+/** the tailnet as `tailscale status --json` lists it: whether this machine is connected to it,
+ * and every peer; null for output that is not a status */
+export interface ListedTailnet {
+  /** This machine's own link, as Tailscale here says. It drops while the app is still running
+   * and signed in (a network map not received for minutes), and then no peer can be reached
+   * from here, which is this machine's doing and not theirs. */
+  here: boolean;
+  peers: ListedPeer[];
+}
+
+export function tailnetListed(json: string): ListedTailnet | null {
   let st: Status;
   try {
     st = JSON.parse(json) as Status;
@@ -57,10 +70,30 @@ export function tailnetPeers(json: string): ListedPeer[] | null {
       online: p.Online === true,
     });
   }
-  return peers;
+  // a status without the field is an older CLI, which says nothing about the link; connected
+  return { here: st.Self?.Online !== false, peers };
 }
 
 export const isPhone = (p: ListedPeer): boolean => PHONE_OS.has(p.os);
+
+/** the sign-in link a started login is waiting on, off the status; null for none or no status */
+export function loginUrl(json: string): string | null {
+  try {
+    const st = JSON.parse(json) as Status | null;
+    return typeof st?.AuthURL === "string" && st.AuthURL !== "" ? st.AuthURL : null;
+  } catch {
+    // prose from a CLI that could not reach tailscaled: no link there
+    return null;
+  }
+}
+
+/** the last line the CLI printed, which is where it puts the reason */
+const lastLine = (r: { out: string; err: string }): string =>
+  (r.err.trim() || r.out.trim()).split("\n").at(-1) ?? "tailscale failed";
+
+/** how long a started login gets to post its link to the status: it is there within a second */
+const LOGIN_URL_WAIT_MS = 4000;
+const LOGIN_URL_POLL_MS = 300;
 
 /** whether a Toyon answers at `origin`: its `/health` names the machine. `named` asks for one
  * with a public name of its own, which is what the add-machine list wants; a knock's origin may
@@ -120,6 +153,7 @@ export interface TailnetDeps {
   hub: Pick<Hub, "emit">;
   health?: HealthProbe;
   now?: () => number;
+  sleep?: (ms: number) => Promise<void>;
 }
 
 export class Tailnet {
@@ -150,9 +184,15 @@ export class Tailnet {
     return this.readinessNow;
   }
 
-  /** read readiness again now: after a remote change, and on the clock */
+  /** read readiness again now: after a remote change, after a verb, and on the clock */
   async refresh(): Promise<TailscaleReadiness> {
-    const json = await this.statusJson(true);
+    return this.noteReadiness(await this.statusJson(true));
+  }
+
+  /** readiness as one status answer says it, announced when it moved: every read of the status
+   * passes through here, so a card polling the tailnet sees Tailscale switched off within the
+   * poll and not within the minute */
+  private noteReadiness(json: string | null): TailscaleReadiness {
     const next: TailscaleReadiness =
       this.d.ts === null
         ? {
@@ -168,6 +208,36 @@ export class Tailnet {
     return next;
   }
 
+  /** `tailscale up`, for a Tailscale that is signed in and switched off. Null when it came up;
+   * otherwise the CLI's reason, which is most often that the machine was last brought up with
+   * flags it wants named again, and that is for a terminal, not for Toyon to guess at. */
+  async up(): Promise<string | null> {
+    const ts = this.d.ts;
+    if (ts === null) return "Tailscale is not installed here";
+    const r = await ts(["up"]);
+    await this.refresh();
+    return r.ok ? null : lastLine(r);
+  }
+
+  /** `tailscale login`, for a signed-out Tailscale: the link to finish signing in at. The CLI
+   * itself waits for the browser, so it runs on its own and the link is read off the status,
+   * where tailscaled posts it as soon as the login has started. */
+  async login(): Promise<{ url: string } | { why: string }> {
+    const ts = this.d.ts;
+    if (ts === null) return { why: "Tailscale is not installed here" };
+    fireAndForget("tailscale", ts(["login"]), "tailscale login");
+    const sleep = this.d.sleep ?? ((ms) => Bun.sleep(ms));
+    const now = this.d.now ?? Date.now;
+    const until = now() + LOGIN_URL_WAIT_MS;
+    for (;;) {
+      const json = await this.statusJson(true);
+      const url = json === null ? null : loginUrl(json);
+      if (url !== null) return { url };
+      if (now() >= until) return { why: "Tailscale did not offer a sign-in link; run `tailscale login` in a terminal" };
+      await sleep(LOGIN_URL_POLL_MS);
+    }
+  }
+
   /** the raw status, one fork for everything that reads it inside `STATUS_FRESH_MS`; null when
    * Tailscale is missing. `fresh` forks regardless. */
   private statusJson(fresh = false): Promise<string | null> {
@@ -181,49 +251,43 @@ export class Tailnet {
     return this.status;
   }
 
-  private async peers(): Promise<ListedPeer[] | null> {
+  private async listed(): Promise<ListedTailnet | null> {
     const json = await this.statusJson();
-    return json === null ? null : tailnetPeers(json);
+    this.noteReadiness(json);
+    return json === null ? null : tailnetListed(json);
   }
 
-  /** The phones on the tailnet and whether each answers a ping now; null when Tailscale is
-   * missing or not running. A phone's `Online` in the status is the coordination server's word
-   * and wrong both ways for minutes at a time, so only a ping says. */
-  async phones(): Promise<TailnetPhone[] | null> {
+  /** Every device on the tailnet, whether each answers a ping from here now, and for a machine
+   * with a name the Toyon that answers there now or answered lately; null when Tailscale is
+   * missing or not running. Every peer is pinged and probed at once. A device's `Online` in the
+   * status is the coordination server's word and wrong both ways for minutes at a time, so only
+   * the ping says. With this machine's own link down nothing can answer, so nothing is asked and
+   * the answer says which side is off. */
+  async view(): Promise<TailnetView | null> {
     const ts = this.d.ts;
-    const peers = await this.peers();
-    if (peers === null || ts === null) return null;
-    return Promise.all(
-      peers.filter(isPhone).map(async (p) => ({
-        name: p.name,
-        online: p.ip !== null && (await ts(pingArgs(p.ip))).ok,
-      })),
-    );
-  }
-
-  /** The other machines on the tailnet (phones left out), whether each is connected, and the
-   * Toyon with a name of its own that answers there now or answered lately; null when Tailscale
-   * is missing or not running. Every peer is probed at once. */
-  async machines(): Promise<TailnetMachine[] | null> {
-    const peers = await this.peers();
-    if (peers === null) return null;
+    const listed = await this.listed();
+    if (listed === null || ts === null) return null;
     const health = this.d.health ?? probe;
     const now = (this.d.now ?? Date.now)();
-    return Promise.all(
-      peers
-        .filter((p) => !isPhone(p) && p.host !== "")
-        .map(async (p) => {
-          const got = await health(`https://${p.host}`, true);
-          if (got) this.answered.set(p.host, { machine: got.machine, at: now });
-          const last = this.answered.get(p.host);
-          const toyon = got
-            ? { machine: got.machine, answering: true }
-            : last && now - last.at < ANSWERED_RECENTLY_MS
-              ? { machine: last.machine, answering: false }
-              : null;
-          return { name: p.name, host: p.host, online: p.online, toyon };
-        }),
+    const devices = await Promise.all(
+      listed.peers.map(async (p): Promise<TailnetDevice> => {
+        const kind = isPhone(p) ? "phone" : "machine";
+        const ask = listed.here;
+        const [reached, got] = await Promise.all([
+          ask && p.ip !== null ? ts(pingArgs(p.ip)).then((r) => r.ok) : false,
+          ask && kind === "machine" && p.host !== "" ? health(`https://${p.host}`, true) : null,
+        ]);
+        if (got) this.answered.set(p.host, { machine: got.machine, at: now });
+        const last = kind === "machine" ? this.answered.get(p.host) : undefined;
+        const toyon = got
+          ? { machine: got.machine, answering: true }
+          : last && now - last.at < ANSWERED_RECENTLY_MS
+            ? { machine: last.machine, answering: false }
+            : null;
+        return { name: p.name, host: p.host, kind, reached, toyon };
+      }),
     );
+    return { here: listed.here, devices };
   }
 
   /** whether a Toyon answers at `origin`: what a knock from a page elsewhere has to be, since a

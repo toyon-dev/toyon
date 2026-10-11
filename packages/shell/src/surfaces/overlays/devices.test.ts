@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { machineAddress } from "@toyon/shared";
-import { ADD_MACHINE, hostOf, knockFailureLine, machineRank, machineState } from "./addMachine.ts";
+import { machineAddress, type TailscaleReadiness } from "@toyon/shared";
+import { DEVICES, hostOf, knockFailureLine, machineRank, machineState, selfState } from "./devices.ts";
 
 describe("the add-machine lines", () => {
   test("each failure says what to do next, naming the machine where that helps", () => {
@@ -26,7 +26,7 @@ describe("the add-machine lines", () => {
     );
   });
   test("the waiting line names the words the other screen shows", () => {
-    expect(ADD_MACHINE.waiting("https://work.tail1234.ts.net", "amber fox")).toBe(
+    expect(DEVICES.waiting("https://work.tail1234.ts.net", "amber fox")).toBe(
       "Toyon on work.tail1234.ts.net is asking whether to let amber fox in.",
     );
   });
@@ -34,18 +34,61 @@ describe("the add-machine lines", () => {
     const work = {
       name: "work",
       host: "work.tail1234.ts.net",
-      online: true,
+      kind: "machine" as const,
+      reached: true,
       toyon: { machine: "work", answering: true },
     };
     const quiet = { ...work, toyon: { machine: "work", answering: false } };
     const bare = { ...work, toyon: null };
-    const off = { ...bare, online: false };
+    const off = { ...bare, reached: false };
     expect(machineState(work, false)).toBeNull();
     expect(machineState(work, true)).toBe("listed");
     expect(machineState(quiet, false)).toBe("not answering right now");
     expect(machineState(bare, false)).toBe("no Toyon");
     expect(machineState(off, false)).toBe("offline");
     expect([off, bare, quiet, work].map(machineRank)).toEqual([3, 2, 1, 0]);
+  });
+  test("this machine's row says which way Tailscale here is off, and offers the way back where the CLI can", () => {
+    const at = (state: TailscaleReadiness["state"]) =>
+      selfState(null, { state, name: null, line: "the daemon's line" }, "mac.tail1234.ts.net");
+    expect(at("not-running")).toEqual({
+      word: "Tailscale not running",
+      note: "Tailscale is not running on this machine, so nothing on your tailnet can reach it.",
+      offer: null,
+    });
+    expect(at("not-installed")).toMatchObject({ word: "no Tailscale", offer: null });
+    expect(at("disconnected")).toMatchObject({ word: null, offer: "connect" });
+    expect(at("signed-out")).toMatchObject({ word: null, offer: "sign-in" });
+    expect(at("signed-out").note).toContain("signed out");
+    expect(at("needs-approval")).toEqual({ word: "not approved", note: "the daemon's line", offer: null });
+    // a daemon that answered nothing, or readiness not yet read: no blame, just the fact
+    expect(at("ready").word).toBe("not asked");
+    expect(selfState(null, null, null).word).toBe("not asked");
+  });
+  test("readiness is read before the view: a switched-off Tailscale still lists the tailnet, and is not 'not connected'", () => {
+    const off = { state: "disconnected" as const, name: null, line: "" };
+    expect(selfState({ here: false, devices: [] }, off, "mac.tail1234.ts.net")).toMatchObject({ offer: "connect" });
+  });
+  test("a link that is down is said so; on the tailnet with nothing in the way is no word at all", () => {
+    const ready = { state: "ready" as const, name: "mac.tail1234.ts.net", line: "" };
+    expect(selfState({ here: false, devices: [] }, ready, "mac.tail1234.ts.net")).toEqual({
+      word: "not connected",
+      note: DEVICES.hereOff,
+      offer: null,
+    });
+    expect(selfState({ here: true, devices: [] }, ready, "mac.tail1234.ts.net")).toEqual({
+      word: null,
+      note: null,
+      offer: null,
+    });
+    expect(selfState({ here: true, devices: [] }, ready, null)).toMatchObject({ word: null, note: null });
+    // with no name, what keeps the switch from being offered
+    const dns = { state: "magicdns-off" as const, name: null, line: "MagicDNS is off for this tailnet" };
+    expect(selfState({ here: true, devices: [] }, dns, null)).toMatchObject({ word: "MagicDNS off", note: dns.line });
+    expect(selfState({ here: true, devices: [] }, dns, "mac.tail1234.ts.net")).toMatchObject({
+      word: null,
+      note: null,
+    });
   });
   test("hostOf keeps a port and survives something that is not an origin", () => {
     expect(hostOf("http://127.0.0.1:4242")).toBe("127.0.0.1:4242");

@@ -7,8 +7,7 @@ import {
   RESTART_NOW,
   type RestartWait,
   type ServerMsg,
-  type TailnetMachine,
-  type TailnetPhone,
+  type TailnetView,
   type Uploaded,
   WS_CLOSE_UNAUTHORIZED,
 } from "@toyon/shared";
@@ -66,11 +65,12 @@ export interface DaemonUrls {
   health: string;
   restart(now: boolean): string;
   uploads(kind: "image" | "file"): string;
-  phones: string;
-  /** the other machines on this machine's tailnet, for the add-machine card */
+  /** the tailnet as reached from this machine, for the pair and add-machine cards */
   tailnet: string;
   /** the public name, turned on or off */
   remote: string;
+  /** Tailscale here brought back: up, or a sign-in link */
+  tailscale: string;
   /** the daemon's list of other machines, one handed to it */
   machines: string;
   /** a knock's answer, from the page that holds this machine's token */
@@ -95,9 +95,9 @@ export function daemonUrls(origin: string, token: string): DaemonUrls {
     health: `${u.origin}/health`,
     restart: (now) => `${u.origin}/restart?${q}${now ? `&${RESTART_NOW}` : ""}`,
     uploads: (kind) => `${u.origin}/uploads?kind=${kind}`,
-    phones: `${u.origin}/phones`,
     tailnet: `${u.origin}/tailnet`,
     remote: `${u.origin}/remote`,
+    tailscale: `${u.origin}/tailscale`,
     machines: `${u.origin}/machines`,
     knockAnswer: (id) => `${u.origin}/knock/${id}/answer`,
     previewGrant: `${u.origin}/preview-grant`,
@@ -202,17 +202,46 @@ async function postJson(urls: DaemonUrls, url: string, body: unknown, away: stri
   }
 }
 
-/** the phones on the machine's tailnet, for the pair card; null when there is nothing to say */
-export const tailnetPhones = (urls: DaemonUrls) => getJson<TailnetPhone[] | null>(urls, urls.phones);
-
-/** the other machines on the tailnet and which run Toyon; null when Tailscale cannot be asked,
- * or the daemon did not answer */
-export const tailnetMachines = (urls: DaemonUrls) => getJson<TailnetMachine[] | null>(urls, urls.tailnet);
+/** the tailnet as reached from this machine: this machine's own link, every device and whether
+ * it answers, and which machines run Toyon; null when Tailscale cannot be asked, or the daemon
+ * did not answer */
+export const tailnetView = (urls: DaemonUrls) => getJson<TailnetView | null>(urls, urls.tailnet);
 
 /** Turn the public name on through Tailscale. Null when it is on, and the `remote` frame says
  * what it is; otherwise the daemon's refusal, which is what Tailscale is missing. */
 export const turnOnRemote = (urls: DaemonUrls) =>
   postJson(urls, urls.remote, { tailscale: true }, "Toyon is not answering; try again once it is back.");
+
+/** the name off again: Toyon's serve entries removed, the setting gone; null when done */
+export const turnOffRemote = (urls: DaemonUrls) =>
+  postJson(urls, urls.remote, { off: true }, "Toyon is not answering; try again once it is back.");
+
+/** a post whose answer is a body: the daemon's answer, or null when it did not answer */
+async function postFor<T>(urls: DaemonUrls, url: string, body: unknown): Promise<T | null> {
+  try {
+    const r = await fetch(url, {
+      method: "POST",
+      headers: { ...bearer(urls), "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    return r.ok ? ((await r.json()) as T) : null;
+  } catch {
+    return null;
+  }
+}
+
+const AWAY = "Toyon is not answering; try again once it is back.";
+
+/** `tailscale up` on the daemon's machine, for a Tailscale signed in and switched off; null when
+ * it came up, otherwise why not */
+export const tailscaleUp = async (urls: DaemonUrls): Promise<string | null> => {
+  const r = await postFor<{ refused: string | null }>(urls, urls.tailscale, { up: true });
+  return r === null ? AWAY : r.refused;
+};
+
+/** `tailscale login` on the daemon's machine: the link to finish signing in at, or why there is none */
+export const tailscaleLogin = async (urls: DaemonUrls): Promise<{ url: string } | { why: string }> =>
+  (await postFor<{ url: string } | { why: string }>(urls, urls.tailscale, { login: true })) ?? { why: AWAY };
 
 /** Hand a machine just let in to the daemon that served this page, which keeps the one list and
  * tells every shell it serves. Null when it took it. */

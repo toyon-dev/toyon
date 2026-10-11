@@ -75,31 +75,20 @@ describe("buildCommands", () => {
     for (const id of pageVerbs) expect(ids).not.toContain(id);
     expect(ids).toContain("terminal");
   });
-  test("a desk with a public name, or Tailscale ready, offers the phone card; a phone and a bare machine do not", () => {
-    const remote = {
-      host: "box.tailnet.ts.net",
-      previews: "https://box.tailnet.ts.net:{port}",
-      front: "local" as const,
-    };
+  test("the devices card is a row everywhere, and counts the devices asking to be let in", () => {
     const ids = (s: typeof state) => buildCommands(s, () => {}, null, wt, repo).map((c) => c.id);
-    expect(ids(state)).not.toContain("pair");
-    expect(ids({ ...state, remote, frame: "phone" })).not.toContain("pair");
-    const ready = { state: "ready" as const, name: "box.tailnet.ts.net", line: "" };
-    expect(ids({ ...state, tailscale: ready })).toContain("pair");
+    expect(ids(state)).toContain("devices");
+    expect(ids({ ...state, frame: "phone" })).toContain("devices");
     const actions: unknown[] = [];
-    const phone = buildCommands({ ...state, remote }, (a) => actions.push(a), null, wt, repo).find(
-      (c) => c.id === "pair",
-    );
-    expect(phone?.label).toBe("open on your phone");
-    phone?.run();
-    expect(actions).toEqual([{ a: "open", overlay: { kind: "pair" } }]);
-  });
-  test("a device asking to be let in is a row anywhere, counted", () => {
+    const row = buildCommands(state, (a) => actions.push(a), null, wt, repo).find((c) => c.id === "devices");
+    expect(row?.label).toBe("your devices");
+    row?.run();
+    expect(actions).toEqual([{ a: "open", overlay: { kind: "devices" } }]);
     const knocks = [{ id: "k1", word: "amber fox", from: null, since: 0 }];
-    const row = buildCommands({ ...state, knocks, frame: "phone" }, () => {}, null, wt, repo).find(
-      (c) => c.id === "pair",
+    const asked = buildCommands({ ...state, knocks, frame: "phone" }, () => {}, null, wt, repo).find(
+      (c) => c.id === "devices",
     );
-    expect(row?.label).toBe("let a device in (1)");
+    expect(asked?.label).toBe("let a device in (1)");
   });
   test("the handoff stays off the palette with one project open, and is on it with two", () => {
     const ids = (s: CommandState) => buildCommands(s, () => {}, null, wt, repo).map((c) => c.id);
@@ -162,7 +151,7 @@ describe("buildCommands", () => {
       expect(forget?.label).toBe("forget work");
       forget?.run();
       expect(calls).toEqual(["switch https://work.tail1234.ts.net r2", "forget https://work.tail1234.ts.net"]);
-      expect(cmds.map((c) => c.id)).toContain("add-machine");
+      expect(cmds.map((c) => c.id)).toContain("devices");
     });
     test("with no other machine the palette is what it was", () => {
       const ids = buildCommands(state, () => {}, null, wt, repo).map((c) => c.id);

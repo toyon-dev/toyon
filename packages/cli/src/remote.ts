@@ -53,7 +53,7 @@ async function switched(body: Parameters<typeof switchRemote>[0]): Promise<Remot
 
 /** what to print under a tailnet name: how a device gets in */
 export const HOW_TO_OPEN =
-  'open it on your phone from the phone button in Toyon, or pick this machine under "add a machine"';
+  'open it on your phone from the phone button in Toyon, or pick this machine under "your devices"';
 
 export async function remote(cmd: Extract<Command, { kind: "remote" }>): Promise<number> {
   const managed = await loadManaged();

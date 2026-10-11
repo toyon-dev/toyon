@@ -117,43 +117,30 @@ const KNOCK_SECOND = [
  * off gets the browser's "address not found" and never reaches a page of ours that could say why */
 export const isTailnetName = (host: string): boolean => host.endsWith(".ts.net");
 
-/** a phone Tailscale lists on this machine's tailnet, and whether it is connected now */
-export interface TailnetPhone {
+/** One device on this machine's tailnet, as reached from here. Both cards draw the same row:
+ * a dot for `reached`, the name, and on the add-machine card the Toyon there. */
+export interface TailnetDevice {
   name: string;
-  online: boolean;
-}
-
-/** another machine on this machine's tailnet, whether it is connected, and the Toyon there */
-export interface TailnetMachine {
-  name: string;
+  /** its MagicDNS name without the trailing dot; empty when the tailnet has none */
   host: string;
-  /** connected to the tailnet, as Tailscale's coordination server last heard; the dot on the row */
-  online: boolean;
-  /** The Toyon with a name that answered there, now or a few minutes ago; null when none has. A
-   * link that drops for a minute (two machines on a Wi-Fi that will not pass their packets, while
-   * Tailscale keeps trying it before falling back to a relay) misses a probe without the machine
-   * going anywhere, so one missed probe reads as "not answering" and not as no Toyon at all. */
+  kind: "phone" | "machine";
+  /** Answered a ping from this machine just now: the dot on the row. The coordination server's
+   * own word on a device is wrong both ways for minutes at a time, so only the ping says. */
+  reached: boolean;
+  /** For a machine, the Toyon with a name that answered there, now or a few minutes ago; null
+   * when none has, and always null for a phone. A link that drops for a minute (two machines on
+   * a Wi-Fi that will not pass their packets, while Tailscale keeps trying it before falling back
+   * to a relay) misses a probe without the machine going anywhere, so one missed probe reads as
+   * "not answering" and not as no Toyon at all. */
   toyon: { machine: string; answering: boolean } | null;
 }
 
-const listed = (names: string[]): string =>
-  names.length < 2 ? (names[0] ?? "") : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
-
-/** What to say beside the address for a tailnet name. `ok` is false when no phone could open it
- * as things stand. null phones: Tailscale here could not be asked. */
-export function tailnetLine(phones: TailnetPhone[] | null): { ok: boolean; text: string } {
-  if (phones === null) return { ok: true, text: "Your phone needs Tailscale on, signed in to the same tailnet." };
-  if (phones.length === 0) {
-    return {
-      ok: false,
-      text: "No phone has joined your tailnet. Install Tailscale on it and sign in to the same account first.",
-    };
-  }
-  const on = phones.filter((p) => p.online).map((p) => p.name);
-  if (on.length > 0) return { ok: true, text: `${listed(on)} ${on.length > 1 ? "are" : "is"} on your tailnet.` };
-  const off = phones.map((p) => p.name);
-  return {
-    ok: false,
-    text: `${listed(off)} ${off.length > 1 ? "are" : "is"} not answering on your tailnet. Check Tailscale is on there.`,
-  };
+/** The tailnet as asked from this machine. A device is reached by pinging it from here, so when
+ * this machine's own link is down every ping fails for a reason that is not the device's;
+ * `here` says which side to look at. */
+export interface TailnetView {
+  /** whether this machine is connected to the tailnet itself, as Tailscale here says; nothing
+   * is pinged or probed while it is not */
+  here: boolean;
+  devices: TailnetDevice[];
 }

@@ -1,0 +1,111 @@
+/* The devices card: this machine's address as a QR for a phone's camera beside what it is for,
+   the tailnet list (tailnet.css) with a request on each Toyon, a field to type an address, and
+   the devices asking to be let in, each with the two words it shows on its own screen. */
+@layer tokens, base, surfaces;
+@layer surfaces {
+  /* the overlay's own box (overlay.css) carries the ground, border, radius and shadow; the card
+     sets its width and stacks its parts, left-aligned like the list that is most of it */
+  .devices-card {
+    width: min(440px, 90%);
+    padding: 18px 24px 16px;
+    font: var(--type-ui);
+    color: var(--text0);
+    display: grid;
+    gap: 10px;
+    justify-items: stretch;
+  }
+  .devices-title {
+    font: var(--type-ui-lg);
+    font-weight: var(--weight-title);
+    text-align: center;
+  }
+  /* the code and, beside it, what it is for; the address is on this machine's row above */
+  .devices-address {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 16px;
+    align-items: center;
+    margin-bottom: 4px;
+  }
+  .devices-frame {
+    width: 150px;
+    aspect-ratio: 1;
+  }
+  .devices-qr {
+    display: block;
+    width: 100%;
+    height: 100%;
+    background: var(--qr-paper);
+    border-radius: var(--radius);
+    & path {
+      fill: var(--qr-ink);
+    }
+  }
+  .devices-about {
+    display: grid;
+    gap: 6px;
+    min-width: 0;
+  }
+  .devices-line {
+    margin: 0;
+    color: var(--text1);
+  }
+  .devices-failed {
+    color: var(--text0);
+  }
+  /* the lines that stand alone, with no list to align to: turning the name on, and the knocks */
+  .devices-centred {
+    text-align: center;
+  }
+  /* what Tailscale here is missing, a refusal, and the notes under the list */
+  .devices-note {
+    margin: 0;
+    font: var(--type-ui-sm);
+    color: var(--text1);
+  }
+  /* the words the person matches on the other screen: room around them while the card waits */
+  .devices-word {
+    padding: 24px 0 8px;
+    text-align: center;
+  }
+  /* the other devices, set off from this machine's row above (and the code, when it shows) */
+  .devices-others {
+    border-top: 1px solid var(--border1);
+    padding-top: 8px;
+  }
+  .devices-form {
+    display: flex;
+    gap: 8px;
+  }
+  .devices-field {
+    flex: 1;
+    min-width: 0;
+  }
+  /* one device asking: its words lead, since they are what the person checks against the other
+     screen, and the buttons sit under them where a thumb lands */
+  .devices-knock {
+    display: grid;
+    gap: 8px;
+    padding: 10px 0 4px;
+    border-top: 1px solid var(--border1);
+    text-align: center;
+  }
+  .devices-knock-done {
+    color: var(--text1);
+  }
+  .devices-knock-line {
+    display: grid;
+    gap: 2px;
+  }
+  .devices-knock-done .knock-word {
+    color: var(--text1);
+  }
+  .devices-from {
+    color: var(--text1);
+  }
+  .devices-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+  }
+}

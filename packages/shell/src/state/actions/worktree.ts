@@ -222,11 +222,19 @@ export function worktreeItems(
   // a landing op already out for this worktree keeps the others on the list but off, with the
   // reason under them, until it answers
   const busy = idle ? undefined : "waiting on the one in progress";
-  // the count on the row is read, not pressed, so the sync is offered here
-  if (canSync(w) && (w.behind ?? 0) > 0) {
+  // the count on the row is read, not pressed, so the sync is offered here. Pressed mid-turn on
+  // a dirty tree it waits for the turn to end, and until then the row offers to take it back.
+  if (w.syncQueued) {
     land.push({
       id: "sync",
-      label: `sync from main (${w.behind} behind)`,
+      label: "call off the sync from main",
+      onClick: () => sock?.send({ t: "unqueue-sync", worktreeId: id }),
+    });
+  } else if (canSync(w) && (w.behind ?? 0) > 0) {
+    const afterTurn = (w.agent === "working" || w.agent === "waiting") && (w.dirty ?? 0) > 0;
+    land.push({
+      id: "sync",
+      label: `sync from main${afterTurn ? " after the turn" : ""} (${w.behind} behind)`,
       disabled: busy,
       onClick: () => shipOp(sock, dispatch, { t: "sync-main", worktreeId: id }),
     });

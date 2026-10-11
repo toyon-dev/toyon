@@ -489,6 +489,10 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     );
   },
 
+  "unqueue-sync"(msg, _ctx, s) {
+    s.worktrees.unqueueSync(msg.worktreeId);
+  },
+
   async "pull-main"(msg, ctx, s) {
     const result = await s.worktrees.pull(msg.worktreeId);
     await notify(s, ctx, msg.worktreeId, shipped(msg.worktreeId, result.ok, result.message));

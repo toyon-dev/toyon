@@ -316,6 +316,10 @@ export class WorktreeService {
    * row's `shipping`, and what holds a chat sent meanwhile. In memory only: an op does not
    * outlive the daemon, and what git was left mid-way is git's to report on the next press. */
   private ops = new Map<string, Shipping>();
+  /** worktrees whose sync from main was pressed mid-turn on a dirty tree: it runs when the turn
+   * ends, and a press meanwhile takes it back. In memory, like the ops: a turn does not outlive
+   * the daemon either. */
+  private syncQueued = new Set<string>();
   /** every project's main checkout as it stands, and how it follows origin */
   readonly trunk: Trunk;
   private archive: WorktreeArchive;
@@ -420,6 +424,9 @@ export class WorktreeService {
         const prompt = wt?.unnamed ? firstAskOf(d.runtime.agentFor(worktreeId)?.transcript() ?? []) : undefined;
         if (wt && prompt) this.scheduleNaming(wt, prompt, wt.variant);
       }
+      // A sync that waited for the turn runs now that the tree is still; an agent stopped asking
+      // is mid-turn still, and resumes into the same tree once answered
+      if (turn.end !== "asking") this.syncAfterTurn(worktreeId);
       // A proc that crashed or never answered gets another go once the agent has had a turn: the
       // boot pane's "ask the agent to fix it" ends here, and a fix nobody restarts after is not a
       // fix. A proc that is fine, or one you stopped yourself, is left alone, and so is one whose
@@ -939,6 +946,9 @@ export class WorktreeService {
    * sweep, and a discard is not in it at all. */
   private async takeDown(wt: WorktreeInfo, archive: boolean, reason?: string): Promise<ArchivedWorktree | null> {
     this.going.add(wt.id);
+    // before the agent is stopped: its stop settles the turn, and a sync waiting on that would
+    // run in the directory on its way out
+    this.syncQueued.delete(wt.id);
     try {
       return await this.removeAndRecord(wt, archive, reason);
     } finally {
@@ -1899,6 +1909,9 @@ export class WorktreeService {
       this.ops.delete(id);
       release?.();
       this.d.hub.emit("worktreesChanged");
+      // a sync that waited for the turn and then for this op runs now, while the tree is still
+      const status = this.d.runtime.agentFor(id)?.status;
+      if (status !== "working" && status !== "waiting") this.syncAfterTurn(id);
     }
   }
 
@@ -2255,11 +2268,15 @@ export class WorktreeService {
     const repo = this.d.state.requireRepo(r.repoId);
     const own = r.wt ? hasOwnBranch(r.wt) : false;
     const carry = !!r.wt;
-    // carrying empties the tree for a moment, and a file tool writing into that gap is lost under
-    // the work put back; a clean tree has no such gap
+    // Carrying empties the tree for a moment, and a file tool writing into that gap is lost under
+    // the work put back; a clean tree has no such gap. So under a turn the press is kept and runs
+    // when the turn settles, which is what the person pressing it now wants of it anyway.
     const status = this.d.runtime.agentFor(worktreeId)?.status;
-    if (carry && (status === "working" || status === "waiting") && (await statusFiles(r.path)).length > 0)
-      throw new UserError(`${r.name}'s agent is mid-turn with uncommitted changes: sync when it is done`);
+    if (carry && (status === "working" || status === "waiting") && (await statusFiles(r.path)).length > 0) {
+      this.syncQueued.add(worktreeId);
+      this.d.hub.emit("worktreesChanged");
+      return { result: { ok: true, message: `${r.name} syncs from ${r.base} once the turn ends` }, base: r.base };
+    }
     // a found worktree has no chat for the rows to go on
     const w = r.wt ? this.landWatch(r.wt) : UNWATCHED;
     const result = await this.ship(worktreeId, "sync-main", async () => {
@@ -2278,6 +2295,40 @@ export class WorktreeService {
       return taken;
     });
     return { result: r.wt ? this.fixShip(r.wt, result, r.base) : result, base: r.base };
+  }
+
+  /** the sync waiting for the turn to end, taken back */
+  unqueueSync(worktreeId: string): void {
+    if (!this.syncQueued.delete(worktreeId)) return;
+    this.d.hub.emit("worktreesChanged");
+  }
+
+  /** The turn a queued sync waited for is over. The queue is held here, inside the status
+   * dispatch, so a message sent meanwhile waits for the sync rather than start a turn under the
+   * carry; the op's own hold takes over once the sync is out, and the count lets this one go.
+   * Nobody pressed this, so a failure is said on the chat the way a daemon's own is. */
+  private syncAfterTurn(worktreeId: string): void {
+    if (!this.syncQueued.has(worktreeId)) return;
+    // an op still out on the row (a commit or land pressed under the turn) would refuse a second:
+    // the press keeps, and the op's own end runs it
+    if (this.ops.has(worktreeId)) return;
+    this.syncQueued.delete(worktreeId);
+    const release = this.d.runtime.agentFor(worktreeId)?.hold();
+    this.d.hub.emit("worktreesChanged");
+    fireAndForget(
+      worktreeId,
+      (async () => {
+        try {
+          const { result } = await this.sync(worktreeId);
+          if (!result.ok && !result.asked) this.d.hub.emit("failed", worktreeId, result.message);
+        } catch (e) {
+          this.d.hub.emit("failed", worktreeId, e instanceof Error ? e.message : String(e));
+        } finally {
+          release?.();
+        }
+      })(),
+      "sync after the turn",
+    );
   }
 
   /** Fast-forward main to its upstream, the trunk's own way (a fetch, then the fast-forward under
@@ -2785,6 +2836,7 @@ export class WorktreeService {
           transcript: transcriptPathFor(this.d.paths.transcriptsDir, wt.id),
           sessionId: this.d.state.session(wt.id),
           shipping: this.ops.get(wt.id),
+          syncQueued: this.syncQueued.has(wt.id) || undefined,
         };
       });
   }

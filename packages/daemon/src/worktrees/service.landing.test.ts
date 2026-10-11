@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { SHELL_TOOL } from "@toyon/shared";
 import type { FakeAgent } from "../../test/helpers/fakes.ts";
 import { sh } from "../../test/helpers/tmp-repo.ts";
-import { counted, registered, setRoute, until, useWorld, w } from "../../test/helpers/world.ts";
+import { counted, registered, setRoute, settle, until, useWorld, w } from "../../test/helpers/world.ts";
 import { fixPrompt } from "../agent/prompt.ts";
 import { UserError } from "../core/errors.ts";
 import { GIT, git } from "../git/exec.ts";
@@ -740,15 +740,123 @@ describe("landing", () => {
       await noTrace(wt.path);
     });
 
-    test("a turn in flight refuses it; the same tree syncs once the agent is idle", async () => {
+    const queuedOn = (id: string) => w.worktrees.snapshot().rows.find((r) => r.id === id)?.syncQueued;
+    const status = (agent: FakeAgent, s: FakeAgent["status"]) => {
+      agent.status = s;
+      w.hub.emit("agentStatus", agent.worktreeId, s);
+    };
+
+    test("a turn in flight keeps the press: the row says so, a question out is still the turn, and the sync runs once it ends with the queue held", async () => {
       const wt = await dirtyWorktree();
       mainMoves("newer.txt", "x\n");
       const agent = w.runtime.agentFor(wt.id) as unknown as FakeAgent;
-      agent.status = "working";
-      await expect(w.worktrees.sync(wt.id)).rejects.toBeInstanceOf(UserError);
+      status(agent, "working");
+      const { result } = await w.worktrees.sync(wt.id);
+      expect(result.ok).toBe(true);
+      expect(result.message).toContain("once the turn ends");
       expect(existsSync(join(wt.path, "newer.txt"))).toBe(false);
-      agent.status = "idle";
+      expect(queuedOn(wt.id)).toBe(true);
+      // a second press while it waits changes nothing
       expect((await w.worktrees.sync(wt.id)).result.ok).toBe(true);
+      expect(queuedOn(wt.id)).toBe(true);
+      status(agent, "waiting");
+      await settle();
+      expect(existsSync(join(wt.path, "newer.txt"))).toBe(false);
+      expect(queuedOn(wt.id)).toBe(true);
+      status(agent, "working");
+      status(agent, "idle");
+      // held from inside the status dispatch, before anything sent meanwhile could start a turn
+      expect(agent.held).toBe(true);
+      expect(queuedOn(wt.id)).toBeUndefined();
+      await until(() => existsSync(join(wt.path, "newer.txt")));
+      await until(() => !agent.held);
+      expect(readFileSync(join(wt.path, "mine.txt"), "utf8")).toBe("edited\n");
+      expect(readFileSync(join(wt.path, "loose.txt"), "utf8")).toBe("loose\n");
+      expect((await w.worktrees.gitStatus(wt.id))?.behind).toBe(0);
+      await noTrace(wt.path);
+    });
+
+    test("a queued sync taken back runs nothing when the turn ends; a clean tree under a turn syncs at once", async () => {
+      const wt = await dirtyWorktree();
+      mainMoves("newer.txt", "x\n");
+      const agent = w.runtime.agentFor(wt.id) as unknown as FakeAgent;
+      status(agent, "working");
+      await w.worktrees.sync(wt.id);
+      expect(queuedOn(wt.id)).toBe(true);
+      w.worktrees.unqueueSync(wt.id);
+      expect(queuedOn(wt.id)).toBeUndefined();
+      status(agent, "idle");
+      await settle();
+      expect(existsSync(join(wt.path, "newer.txt"))).toBe(false);
+      expect(agent.held).toBe(false);
+      // nothing uncommitted means no gap for a tool to write into
+      sh(wt.path, "git", "add", "-A");
+      sh(wt.path, "git", "commit", "-qm", "all of it");
+      status(agent, "working");
+      expect((await w.worktrees.sync(wt.id)).result.ok).toBe(true);
+      expect(existsSync(join(wt.path, "newer.txt"))).toBe(true);
+      expect(queuedOn(wt.id)).toBeUndefined();
+    });
+
+    test("a queued sync that fails says so on the chat as the daemon's own, and lets the queue go", async () => {
+      const wt = await dirtyWorktree();
+      writeFileSync(join(wt.path, "README.md"), "mine, uncommitted\n");
+      mainMoves("README.md", "main's\n");
+      const failed: string[] = [];
+      w.hub.on("failed", (_id, message) => failed.push(message));
+      const agent = w.runtime.agentFor(wt.id) as unknown as FakeAgent;
+      status(agent, "working");
+      await w.worktrees.sync(wt.id);
+      status(agent, "idle");
+      await until(() => failed.length > 0);
+      expect(failed[0]).toContain("(README.md)");
+      await until(() => !agent.held);
+      expect(readFileSync(join(wt.path, "README.md"), "utf8")).toBe("mine, uncommitted\n");
+      await noTrace(wt.path);
+    });
+
+    test("a commit still running when the turn ends keeps the press, and the commit's end runs the sync", async () => {
+      const wt = await dirtyWorktree();
+      mainMoves("newer.txt", "x\n");
+      // a pre-commit hook that waits for a file: the commit is the op out until the test says so
+      const gate = `${w.repo}.gate`;
+      const hooks = join(w.repo, ".git", "hooks");
+      mkdirSync(hooks, { recursive: true });
+      writeFileSync(join(hooks, "pre-commit"), `#!/bin/sh\nwhile [ ! -f "${gate}" ]; do sleep 0.05; done\n`, {
+        mode: 0o755,
+      });
+      const agent = w.runtime.agentFor(wt.id) as unknown as FakeAgent;
+      status(agent, "working");
+      await w.worktrees.sync(wt.id);
+      const commit = w.worktrees.commit(wt.id, "mine, under the turn");
+      await until(() => w.worktrees.shippingOf(wt.id)?.op === "commit");
+      status(agent, "idle");
+      expect(queuedOn(wt.id)).toBe(true);
+      expect(existsSync(join(wt.path, "newer.txt"))).toBe(false);
+      writeFileSync(gate, "");
+      expect((await commit).ok).toBe(true);
+      await until(() => existsSync(join(wt.path, "newer.txt")));
+      await until(() => !agent.held && w.worktrees.shippingOf(wt.id) === undefined);
+      expect(queuedOn(wt.id)).toBeUndefined();
+      expect((await w.worktrees.gitStatus(wt.id))?.behind).toBe(0);
+      await noTrace(wt.path);
+    });
+
+    test("archiving a row with a sync waiting drops the press rather than run it in the directory on its way out", async () => {
+      const wt = await dirtyWorktree();
+      mainMoves("newer.txt", "x\n");
+      const failed: string[] = [];
+      w.hub.on("failed", (_id, message) => failed.push(message));
+      const agent = w.runtime.agentFor(wt.id) as unknown as FakeAgent;
+      status(agent, "working");
+      await w.worktrees.sync(wt.id);
+      expect(queuedOn(wt.id)).toBe(true);
+      // the stop of a real session settles the turn while the row is still on the record
+      agent.close = async () => status(agent, "idle");
+      await w.worktrees.archiveWorktree(wt.id);
+      await settle();
+      expect(failed).toEqual([]);
+      expect(existsSync(wt.path)).toBe(false);
     });
   });
 

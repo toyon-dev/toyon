@@ -249,9 +249,13 @@ export class AcpSession implements AgentAdapter {
   private running = false;
   private interrupted = false;
   private stopped = false;
-  /** a landing op is out on the worktree: nothing starts a turn, and nothing is steered into one,
-   * until it releases; what is sent meanwhile waits in the queue */
-  private held = false;
+  /** landing ops out on the worktree: while any is, nothing starts a turn and nothing is steered
+   * into one, and what is sent meanwhile waits in the queue. A count, since a sync that waited for
+   * the turn holds the queue from the turn's end until its own op has taken the hold over. */
+  private holds = 0;
+  private get held(): boolean {
+    return this.holds > 0;
+  }
   private conn: Conn | null = null;
   /** the spawn in flight, shared by whoever asks for the connection meanwhile */
   private connecting: Promise<Conn> | null = null;
@@ -516,13 +520,14 @@ export class AcpSession implements AgentAdapter {
   }
 
   hold(): () => void {
-    this.held = true;
+    this.holds++;
     let released = false;
     return () => {
       if (released) return;
       released = true;
-      this.held = false;
-      if (!this.running && this.queue.length > 0) fireAndForget(this.d.worktreeId, this.drain(), "agent drain");
+      this.holds--;
+      if (!this.held && !this.running && this.queue.length > 0)
+        fireAndForget(this.d.worktreeId, this.drain(), "agent drain");
     };
   }
 

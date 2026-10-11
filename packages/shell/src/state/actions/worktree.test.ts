@@ -88,13 +88,27 @@ describe("a worktree's actions", () => {
       "graft with…",
       "mark as unread",
       "|",
-      "sync from main (3 behind)",
+      // dirty under a turn: the press waits for the turn, and the row says so
+      "sync from main after the turn (3 behind)",
       "land",
       "|",
       "continue in another project…",
       "|",
       "archive…",
     ]);
+    // the sync waiting for the turn is the row's to take back
+    const sent: unknown[] = [];
+    const queued = worktreeItems(
+      owned({ agent: "working", dirty: 2, behind: 3, syncQueued: true }),
+      null,
+      { layout: { ...defaultLayout, changes: false }, shipping: {}, frame: "desk" as const, repos: [] },
+      { sock: { send: (m: unknown) => sent.push(m) } as never, dispatch: () => {} },
+      here,
+    );
+    const takeBack = queued.find((i) => isItem(i) && i.id === "sync");
+    expect(takeBack && isItem(takeBack) ? takeBack.label : null).toBe("call off the sync from main");
+    if (takeBack && isItem(takeBack)) takeBack.onClick?.();
+    expect(sent).toEqual([{ t: "unqueue-sync", worktreeId: "w1" }]);
   });
 
   test("from another device the Finder row goes, since nothing there could open", () => {

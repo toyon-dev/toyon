@@ -740,6 +740,26 @@ describe("AcpSession", () => {
     await w.session.close();
   });
 
+  test("holds nest: what was sent runs once the last of them lets go", async () => {
+    const fake = fakeAgent(say("ok"));
+    const w = world(fake);
+    const first = w.session.hold();
+    const second = w.session.hold();
+    w.session.send("one");
+    await Bun.sleep(20);
+    first();
+    // released twice is released once
+    first();
+    await Bun.sleep(20);
+    expect(fake.prompts).toHaveLength(0);
+    expect(w.session.queueItems).toEqual([{ text: "one" }]);
+    second();
+    await w.idle();
+    expect(fake.prompts).toHaveLength(1);
+    expect(w.session.queueItems).toEqual([]);
+    await w.session.close();
+  });
+
   test("a hold that begins mid-turn stops the queue after that turn, and steers nothing into it", async () => {
     let release: () => void = () => {};
     const gate = new Promise<void>((r) => {

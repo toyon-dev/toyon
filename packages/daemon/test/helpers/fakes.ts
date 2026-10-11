@@ -70,11 +70,18 @@ export class FakeAgent implements AgentAdapter {
   /** whether the queue is held now, and how many times it was */
   held = false;
   holds = 0;
+  /** the holds not yet released: the queue is held while any is */
+  private open = 0;
   hold() {
     this.held = true;
     this.holds++;
+    this.open++;
+    let released = false;
     return () => {
-      this.held = false;
+      if (released) return;
+      released = true;
+      this.open--;
+      this.held = this.open > 0;
     };
   }
   stop() {

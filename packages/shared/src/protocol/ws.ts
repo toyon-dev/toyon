@@ -683,7 +683,10 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   /** merge the sources' branches into the target worktree and remove them; a local merge, and the
    * target keeps its agent, procs and port */
   z.object({ t: z.literal("graft"), targetId: id, sourceIds: z.array(id).min(1).max(20) }),
+  /** take main into the worktree; pressed mid-turn on a dirty tree it waits for the turn to end */
   z.object({ t: z.literal("sync-main"), worktreeId: id }),
+  /** call off a sync waiting for the turn to end */
+  z.object({ t: z.literal("unqueue-sync"), worktreeId: id }),
   /** run the repo's `afterLand` now: the manual half of the notice that toyon's own bundles are
    * behind the checkout it runs from */
   z.object({ t: z.literal("run-after-land"), repoId: id }),

@@ -835,6 +835,9 @@ export interface WorktreeStatus {
   dirty?: number;
   /** chat messages waiting behind the current turn */
   queued?: number;
+  /** a sync from main pressed while the agent was mid-turn with uncommitted work: it runs once
+   * the turn ends, and a press meanwhile calls it off */
+  syncQueued?: boolean;
   /** the agent's last reported figures here: context in use of the window, and the session's
    * spend when the agent prices itself. From the transcript, so a cold worktree has them too. */
   usage?: { used: number; size: number; cost?: number };

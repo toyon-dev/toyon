@@ -91,7 +91,8 @@ export interface AgentAdapter {
   /** context (live-page state) reaches the prompt but never the visible transcript */
   send(text: string, opts?: SendOpts): void;
   /** hold the queue: a message sent meanwhile waits in it, drawn as queued, rather than start a
-   * turn while a landing op is moving the tree under the agent. The release starts what waited. */
+   * turn while a landing op is moving the tree under the agent. Holds nest; the last release
+   * starts what waited. */
   hold(): () => void;
   /** interrupt the running turn; anything queued goes next */
   stop(): void;

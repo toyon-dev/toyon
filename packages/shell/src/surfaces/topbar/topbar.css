@@ -227,6 +227,11 @@
     & .overlay-box.anchored .picker-input :is(.picker-chip, .field, .picker-ghost) {
       font: var(--type-mono-sm);
     }
+    /* said again after the shorthand above resets it, at the same specificity so it wins: the
+     chip's line is the pill's */
+    & .overlay-box.anchored .picker-input .picker-chip {
+      line-height: 1.4;
+    }
   }
   .bar-project-name {
     overflow: hidden;

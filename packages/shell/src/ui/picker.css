@@ -84,7 +84,9 @@
     }
   }
   /* what the query is scoped to, in the pill's own box so the project name does not move when the
-   panel opens over it */
+   panel opens over it: the box and the line are .btn's, because `font` resets the line to normal,
+   and a normal line in the same box seats the glyphs a fraction lower than the pill's 1.4 line
+   does, which on a 2x display reads as the name dropping a pixel when the panel opens */
   .picker-chip {
     padding: 1px 8px;
     flex: none;
@@ -96,6 +98,7 @@
     border-radius: var(--radius);
     color: var(--text0);
     font: var(--type-mono);
+    line-height: 1.4;
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;

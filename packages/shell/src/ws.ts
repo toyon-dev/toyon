@@ -333,6 +333,13 @@ const BACKOFF_MAX = 30_000;
  * whatever was worked out in the dark, or the app would be replaced by "the daemon is not running"
  * for the length of one reconnect. A real outage keeps the socket down past this and says so. */
 const SETTLE = 1500;
+/** How long a handshake may hang before the socket is given up and tried again. A machine the
+ * tailnet cannot route to drops the handshake rather than refusing it, and the browser then waits
+ * on the OS, a minute or more, before it reports a close; the line about that machine would read
+ * "connecting" for all of it, and start over each time the page was looked at. The daemon holds
+ * its asks of a peer to two seconds; a handshake gets longer, since a phone's link wakes slowly.
+ * The close is a close like any other: the backoff retries it, and the probe says why. */
+const CONNECT_DEADLINE = 5000;
 /** messages kept while disconnected; subscribe-shaped ones are deduped by worktree */
 const QUEUE_MAX = 50;
 
@@ -369,6 +376,8 @@ export class DaemonSocket {
     /** `failure` names why the socket is down once that is known, null withdraws the one named, and
      * leaving it out keeps it */
     private onStatus: (connected: boolean, failure?: ConnectFailure | null) => void,
+    /** a test shortens it; see CONNECT_DEADLINE */
+    private connectDeadline = CONNECT_DEADLINE,
   ) {
     this.urls = daemonUrls(daemon.origin, daemon.token);
     this.connect();
@@ -465,9 +474,15 @@ export class DaemonSocket {
     // connected means the daemon has spoken, not that the socket opened: a wrong token is opened
     // and then closed with a code, and flushing the queue into that would lose it
     let live = false;
+    // a handshake still open at the deadline is closed from here, which the browser reports as a
+    // close like any other (1006), so the retry and the probe below take it from there
+    const deadline = setTimeout(() => {
+      if (ws.readyState === WebSocket.CONNECTING) ws.close();
+    }, this.connectDeadline);
     ws.onmessage = (ev) => {
       if (!live) {
         live = true;
+        clearTimeout(deadline);
         this.attempt = 0;
         this.downAt = null;
         if (this.sayTimer) clearTimeout(this.sayTimer);
@@ -481,6 +496,7 @@ export class DaemonSocket {
       } catch {}
     };
     ws.onclose = (ev) => {
+      clearTimeout(deadline);
       // a socket this one replaced (a reconnect started on waking, before its close arrived) has
       // nothing left to say: the live one owns the status and the retry
       if (this.ws !== ws) return;

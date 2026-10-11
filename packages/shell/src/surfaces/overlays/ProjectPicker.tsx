@@ -2,7 +2,7 @@ import { isOwned, type RepoInfo, type WorktreeStatus } from "@toyon/shared";
 import { useCallback } from "react";
 import { machineLine } from "../../app/machineLine.ts";
 import { machineItems } from "../../state/actions/machine.ts";
-import { importItems, projectItems } from "../../state/actions/project.ts";
+import { importItems, initProject, openProject, projectItems } from "../../state/actions/project.ts";
 import {
   useDispatch,
   useMachine,
@@ -24,8 +24,9 @@ import { defaultParent, looksLikePath, type Row, rowsFor } from "./projectPicker
 
 /** ⌘O / the top-left pill: switch the shell to another registered repo, type a path to open one,
  * or make one that is not there yet. Switching only changes what is on screen; the daemon keeps
- * every project's procs running. A typed path completes against the filesystem, and a name or git
- * URL matching nothing becomes an offer to create or clone.
+ * every project's procs running. A typed path completes against the filesystem, a folder with no
+ * git in it is offered as a project to start where it is, and a name or git URL matching nothing
+ * becomes an offer to create or clone.
  *
  * Three forms, one component: `pill` drops out of the pill and takes the bar over like an address
  * bar; `center` is the same switcher over the preview, where the eyes are when a key opened it;
@@ -68,9 +69,10 @@ export function ProjectPicker({ form }: { form: ProjectsOverlay["form"] }) {
         entries: [...paths.entries].sort((a, b) => Number(b.isRepo) - Number(a.isRepo)),
         target: paths.target,
         answered: paths.query,
+        home,
         others,
       }),
-    [repos, paths, pending, others],
+    [repos, paths, pending, home, others],
   );
 
   const hintFor = (r: RepoInfo) => hintOf(rows, r);
@@ -78,16 +80,11 @@ export function ProjectPicker({ form }: { form: ProjectsOverlay["form"] }) {
   const finish = () => dispatch({ a: "close" });
   const goBack = () => dispatch({ a: "close", back: true });
 
-  const open = (path: string) => {
-    dispatch({ a: "open-repo" });
-    sock?.send({ t: "register-repo", path });
-  };
-
+  const deps = { sock, dispatch };
+  const open = (path: string) => openProject(deps, { t: "register-repo", path });
   /** a typed path already named its destination, so there is nothing left to ask about */
-  const createAt = (parent: string, name: string) => {
-    dispatch({ a: "open-repo" });
-    sock?.send({ t: "create-repo", mode: "create", parent, name });
-  };
+  const createAt = (parent: string, name: string) =>
+    openProject(deps, { t: "create-repo", mode: "create", parent, name });
 
   /** the new-project view, for the rows where something would otherwise be guessed */
   const ask = (mode: "create" | "clone", name: string, url?: string) =>
@@ -150,19 +147,21 @@ export function ProjectPicker({ form }: { form: ProjectsOverlay["form"] }) {
             ? `d:${r.entry.path}`
             : r.kind === "open"
               ? `open:${r.path}`
-              : r.kind === "pending"
-                ? `p:${r.pending.id}`
-                : r.kind === "clone"
-                  ? `clone:${r.url}`
-                  : r.kind === "new"
-                    ? "new-project"
-                    : r.kind === "disk"
-                      ? "open-folder"
-                      : r.kind === "add-machine"
-                        ? "add-machine"
-                        : r.kind === "machine"
-                          ? `machine:${r.machine.origin}`
-                          : `new:${r.parent ?? ""}/${r.name}`
+              : r.kind === "init"
+                ? `init:${r.path}`
+                : r.kind === "pending"
+                  ? `p:${r.pending.id}`
+                  : r.kind === "clone"
+                    ? `clone:${r.url}`
+                    : r.kind === "new"
+                      ? "new-project"
+                      : r.kind === "disk"
+                        ? "open-folder"
+                        : r.kind === "add-machine"
+                          ? "add-machine"
+                          : r.kind === "machine"
+                            ? `machine:${r.machine.origin}`
+                            : `new:${r.parent ?? ""}/${r.name}`
       }
       rowClass={(r) =>
         cx("picker-row", (r.kind === "new" || r.kind === "disk" || r.kind === "add-machine") && "new-project-row")
@@ -187,6 +186,7 @@ export function ProjectPicker({ form }: { form: ProjectsOverlay["form"] }) {
         else if (r.kind === "repo" && r.machine) goElsewhere(r.machine.origin, r.repo.id);
         else if (r.kind === "repo") dispatch({ a: "activate-repo", id: r.repo.id });
         else if (r.kind === "open") open(r.path);
+        else if (r.kind === "init") initProject(deps, r.path);
         else if (r.kind === "dir")
           open(r.entry.path); // only repo folders get here; narrowTo takes the rest
         else if (r.parent) createAt(r.parent, r.name);
@@ -201,9 +201,9 @@ export function ProjectPicker({ form }: { form: ProjectsOverlay["form"] }) {
           : r.kind === "repo" && r.machine
             ? machineItems(machines, r.machine.origin)
             : r.kind === "repo"
-              ? projectItems(r.repo, current, { sock, dispatch })
+              ? projectItems(r.repo, current, deps)
               : r.kind === "pending"
-                ? importItems(r.pending, { sock, dispatch })
+                ? importItems(r.pending, deps)
                 : []
       }
       placeholder={repos.length > 1 ? "switch project, or type a name or path" : "type a name or a path to start"}
@@ -244,6 +244,8 @@ export function ProjectPicker({ form }: { form: ProjectsOverlay["form"] }) {
           <PaletteRow label={r.entry.name} hint={r.entry.isRepo ? "git repo" : undefined} />
         ) : r.kind === "open" ? (
           <PaletteRow label={`open ${r.path}`} hint="register with this daemon" />
+        ) : r.kind === "init" ? (
+          <PaletteRow label={`open ${r.path}`} hint="no git yet; starts it here with the files in it" />
         ) : r.kind === "clone" ? (
           <PaletteRow label={`clone ${r.name}`} hint={hostOf(r.url)} />
         ) : r.kind === "new" ? (

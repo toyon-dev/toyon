@@ -7,7 +7,7 @@
 // A non-recursive mkdir is what enforces it. The checks below exist to produce readable copy; the
 // syscall is the guarantee, and it also closes the gap between checking and creating.
 
-import { existsSync, readdirSync, realpathSync, statSync } from "node:fs";
+import { existsSync, realpathSync, statSync } from "node:fs";
 import { appendFile, mkdir, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -15,9 +15,10 @@ import { PROJECTS_FOLDER, projectNameError } from "@toyon/shared";
 import { UserError } from "../core/errors.ts";
 import { log } from "../core/log.ts";
 import { GIT, git, NO_PROMPT, runLive } from "../git/exec.ts";
-import { expandTilde, holdsNothing } from "./browse.ts";
+import { expandTilde } from "./browse.ts";
 
-/** `init` is the one exception to the new-leaf rule: an empty folder that is already there */
+/** `init` is the one exception to the new-leaf rule: a folder that is already there and is not a
+ * project yet, empty or holding the person's files */
 export type CreateMode = "create" | "clone" | "init";
 
 export interface CreateOpts {
@@ -64,10 +65,11 @@ function firstProjectsFolder(raw: string, home: string): string | null {
   return join(realpathSync(home), PROJECTS_FOLDER);
 }
 
-/** Where a project made in place would be: an empty folder that is already there, most likely one
- * the person made in Finder for exactly this. The rule becomes one existing leaf that holds nothing.
- * Its name is the folder's own, so the new-name rules do not apply: Finder allows a space, and
- * refusing a folder someone already has over what it is called would help nobody. */
+/** Where a project made in place would be: a folder that is already there and is not a project
+ * yet, whether one the person made in Finder for exactly this or one they have been working in
+ * without git. The rule becomes one existing leaf with no `.git`. Its name is the folder's own, so
+ * the new-name rules do not apply: Finder allows a space, and refusing a folder someone already
+ * has over what it is called would help nobody. */
 export function planInPlace(opts: { parent: string; name: string }): Plan {
   const name = opts.name.trim();
   if (!name || name === "." || name === ".." || name.includes("/")) {
@@ -78,9 +80,6 @@ export function planInPlace(opts: { parent: string; name: string }): Plan {
   // canonical for the same reason the parent is: a symlinked folder is judged where it really is
   const dir = realpathSync(typed);
   if (existsSync(join(dir, ".git"))) throw new UserError(`${dir} is already a project; open it instead`);
-  if (!holdsNothing(readdirSync(dir))) {
-    throw new UserError(`${dir} is not empty; only an empty folder can become a project where it is`);
-  }
   return { parent: dirname(dir), dir, makeParent: false };
 }
 
@@ -113,7 +112,7 @@ export async function createRepoDir(opts: { parent: string; name: string }, home
   if (makeParent) await mkdir(parent);
   await mkdir(dir);
   try {
-    await initWithEmptyCommit(dir);
+    await initWithFirstCommit(dir);
   } catch (e) {
     await undoCreate(dir);
     throw e;
@@ -122,16 +121,18 @@ export async function createRepoDir(opts: { parent: string; name: string }, home
 }
 
 /**
- * Make an empty folder that is already there the project, and hand back its path. The same empty
- * commit as `createRepoDir`, for the same two reasons. What differs is the undo: the folder is the
- * person's, so a failure takes back only the .git this made, which planInPlace established was not
- * there before.
+ * Make a folder that is already there the project, and hand back its path. The first commit holds
+ * whatever the folder holds, for the reason the root commit is load-bearing above: a worktree
+ * branched from it sees only what is committed, so files left untracked on main would make every
+ * task start in an empty folder. An empty folder gets the same empty commit as `createRepoDir`.
+ * What differs is the undo: the folder is the person's, so a failure takes back only the .git this
+ * made, which planInPlace established was not there before.
  */
 export async function initRepoInPlace(opts: { parent: string; name: string }): Promise<string> {
   const { dir } = planInPlace(opts);
   await requireGitIdentity(dir);
   try {
-    await initWithEmptyCommit(dir);
+    await initWithFirstCommit(dir);
   } catch (e) {
     await undoInit(dir);
     throw e;
@@ -151,7 +152,10 @@ const LOCAL_EXCLUDES = [
   "node_modules/",
 ];
 
-async function initWithEmptyCommit(dir: string): Promise<void> {
+/** `git init` and one commit of whatever the folder holds: nothing for a folder just made, the
+ * person's files for one they were already working in. The excludes go in first, so an install
+ * that ran before any .gitignore stays out of that commit. */
+async function initWithFirstCommit(dir: string): Promise<void> {
   // no `-b`: the person's own init.defaultBranch decides, rather than "main" being imposed here
   await ok(git(dir, "init", "-q"), "git init");
   const exclude = await git(dir, "rev-parse", "--git-path", "info/exclude");
@@ -159,8 +163,9 @@ async function initWithEmptyCommit(dir: string): Promise<void> {
   const excludePath = resolve(dir, exclude.out);
   await mkdir(dirname(excludePath), { recursive: true });
   await appendFile(excludePath, `\n${LOCAL_EXCLUDES.join("\n")}\n`);
-  // gpgsign off for this commit only: a signing prompt would hang a git nobody can see, and an
-  // empty scaffolding commit is not the one worth a signature
+  await ok(git(dir, "add", "-A"), "git add");
+  // gpgsign off for this commit only: a signing prompt would hang a git nobody can see, and a
+  // commit that only marks where the project started is not the one worth a signature
   await ok(git(dir, "-c", "commit.gpgsign=false", "commit", "--allow-empty", "-qm", "initial commit"), "git commit");
 }
 

@@ -825,8 +825,9 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   }),
   /** open another repo in this daemon (the project switcher's "open folder"); `~` is expanded */
   z.object({ t: z.literal("register-repo"), path: z.string().min(1).max(4_000) }),
-  /** make a project where there was not one and open it: a new folder, a clone of a remote, or an
-   * empty folder that is already there (`init`, where `name` is that folder's own name). `parent`
+  /** make a project where there was not one and open it: a new folder, a clone of a remote, or a
+   * folder already there that is not a project yet, empty or with files in it (`init`, where `name`
+   * is that folder's own name and its files go into the first commit). `parent`
    * and `name` stay apart because the rule is structural (exactly one leaf under a parent that
    * already exists), and rebuilding it by splitting a joined string daemon side would let the row
    * promise something the daemon then refuses. `~` is expanded daemon side. */

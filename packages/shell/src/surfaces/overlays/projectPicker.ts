@@ -21,6 +21,9 @@ export type Row =
   | { kind: "dir"; entry: PathEntry }
   /** an existing repo on disk that this daemon has not registered yet */
   | { kind: "open"; path: string }
+  /** a folder on disk that is no project yet: picking it makes one there, whatever the folder
+   * holds going into the first commit, and opens it */
+  | { kind: "init"; path: string }
   /** somewhere a project could be made: one new folder under a parent that is already there */
   | { kind: "create"; name: string; parent: string | null }
   | { kind: "clone"; url: string; name: string }
@@ -91,6 +94,8 @@ export function rowsFor(input: {
   target: PathTarget | null;
   /** the query the daemon's entries and target actually describe (`paths.query`) */
   answered: string;
+  /** for telling a folder that holds registered projects apart from one that could become one */
+  home: string;
   /** the other machines this page lists, each with its projects; their rows follow this
    * machine's, grouped under the machine's name */
   others?: OtherMachine[];
@@ -141,12 +146,20 @@ export function rowsFor(input: {
   if (input.answered.trim() !== q || !input.target) return dirRows();
   const { target } = input;
 
+  if (target.exists) {
+    // The folder itself, last, with or without its trailing slash: an unregistered repo can be
+    // opened, and a folder that is no project yet can become one where it is. What is inside it
+    // leads, so enter on a plain folder still descends. Home, the top of the disk and a folder
+    // holding registered projects (~/Projects itself) are places to keep projects, not projects.
+    const here = q.replace(/\/+$/, "") || "/";
+    if (target.isRepo) return [...dirRows(), { kind: "open", path: here }];
+    if (!target.isDir) return dirRows();
+    const abs = expandHome(here, input.home);
+    const place = abs === "/" || abs === input.home || input.repos.some((r) => r.path.startsWith(`${abs}/`));
+    return place ? dirRows() : [...dirRows(), { kind: "init", path: here }];
+  }
   // a trailing slash names a folder to look inside, not a leaf to make
   if (q.endsWith("/")) return dirRows();
-  if (target.exists) {
-    // an unregistered repo can be opened; a plain folder is a step on the way and enter descends
-    return target.isRepo ? [...dirRows(), { kind: "open", path: q }] : dirRows();
-  }
   if (!target.parentExists) return []; // a typo: the empty state says to keep typing
   const { parent, name } = splitTypedPath(q);
   return projectNameError(name) ? dirRows() : [...dirRows(), { kind: "create", name, parent }];

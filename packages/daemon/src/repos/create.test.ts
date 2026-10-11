@@ -195,12 +195,32 @@ describe("initRepoInPlace", () => {
     cleanup();
   });
 
-  test("refuses a folder with anything in it, or one that is already a project, and touches neither", () => {
+  test("a folder with files in it becomes the project with those files in its first commit", async () => {
+    const { parent, cleanup } = parentDir();
+    const dir = join(parent, "work");
+    mkdirSync(join(dir, "src"), { recursive: true });
+    writeFileSync(join(dir, "src", "index.html"), "<p>hi</p>\n");
+    writeFileSync(join(dir, "notes.txt"), "keep me");
+    // an install that ran before any .gitignore stays out of the commit, as it does for a scaffold
+    mkdirSync(join(dir, "node_modules", "left-pad"), { recursive: true });
+    writeFileSync(join(dir, "node_modules", "left-pad", "index.js"), "module.exports = 1;\n");
+    expect(await initRepoInPlace({ parent, name: "work" })).toBe(dir);
+    expect((await git(dir, "rev-list", "--count", "HEAD")).out).toBe("1");
+    // a worktree branched from that commit has the files, which is the point of committing them
+    expect((await git(dir, "ls-tree", "-r", "--name-only", "HEAD")).out.split("\n").sort()).toEqual([
+      "notes.txt",
+      "src/index.html",
+    ]);
+    expect((await git(dir, "status", "--porcelain", "-uall")).out).toBe("");
+    expect(existsSync(join(dir, "node_modules", "left-pad", "index.js"))).toBe(true);
+    cleanup();
+  });
+
+  test("refuses a folder that is already a project, or is not a folder, and touches neither", () => {
     const { parent, cleanup } = parentDir();
     mkdirSync(join(parent, "work"));
     writeFileSync(join(parent, "work", "notes.txt"), "keep me");
     mkdirSync(join(parent, "done", ".git"), { recursive: true });
-    expect(() => planInPlace({ parent, name: "work" })).toThrow(/not empty/);
     expect(() => planInPlace({ parent, name: "done" })).toThrow(/already a project/);
     expect(() => planInPlace({ parent, name: "missing" })).toThrow(UserError);
     expect(() => planInPlace({ parent, name: "../work" })).toThrow(UserError);

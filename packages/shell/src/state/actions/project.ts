@@ -1,6 +1,24 @@
-import type { PendingRepo, RepoInfo } from "@toyon/shared";
+import type { ClientMsg, PendingRepo, RepoInfo } from "@toyon/shared";
+import { splitTypedPath } from "../../surfaces/overlays/projectPicker.ts";
 import { grouped, type MenuEntry, type MenuItem } from "../../ui/menu.ts";
 import type { Deps } from "./deps.ts";
+
+/** Open a project the daemon is about to add, registered or made: `open-repo` first, so this tab,
+ * and only this tab, adopts the project that arrives in answer to the message. */
+export function openProject(
+  { sock, dispatch }: Deps,
+  msg: Extract<ClientMsg, { t: "register-repo" | "create-repo" }>,
+): void {
+  dispatch({ a: "open-repo" });
+  sock?.send(msg);
+}
+
+/** A folder that is no project yet becomes one where it is and opens, its files in the first
+ * commit. The picker's row and the form's open button are the two ways to it. */
+export function initProject(deps: Deps, path: string): void {
+  const { parent, name } = splitTypedPath(path);
+  openProject(deps, { t: "create-repo", mode: "init", parent, name });
+}
 
 /** a clone still running: stop it. The same verb as the import pane's button, which is the only
  * other place it lives. */

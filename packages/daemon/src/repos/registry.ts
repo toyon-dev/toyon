@@ -182,10 +182,16 @@ export class RepoRegistry {
   /** A project nested inside a repo or worktree toyon already manages is the thing to prevent, and
    * only these records can answer that. A blanket `isGitRepo(parent)` would be wrong: a home
    * directory that is itself a dotfiles repo is an ordinary setup, and making a project under it
-   * is fine. */
+   * is fine. The other way round is refused too: an init in place of a folder that holds managed
+   * projects (`~/Projects` itself) would commit every one of them into a repo of its own. */
   private refuseIfManaged(dir: string): void {
-    const managed = [...this.d.state.repos, ...this.d.state.worktrees].some((r) => isInside(dir, r.path));
-    if (managed) throw new UserError(`${dir} is inside a project Toyon already manages`);
+    const records = [...this.d.state.repos, ...this.d.state.worktrees];
+    if (records.some((r) => isInside(dir, r.path))) {
+      throw new UserError(`${dir} is inside a project Toyon already manages`);
+    }
+    if (records.some((r) => isInside(r.path, dir))) {
+      throw new UserError(`${dir} holds projects Toyon already manages`);
+    }
   }
 
   /** clones in flight, oldest first */

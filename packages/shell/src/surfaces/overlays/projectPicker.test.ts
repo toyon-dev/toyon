@@ -38,6 +38,7 @@ function rows(query: string, over: Partial<Parameters<typeof rowsFor>[0]> = {}) 
     entries: [],
     target: target({}),
     answered: query,
+    home: HOME,
     ...over,
   });
 }
@@ -185,22 +186,48 @@ describe("rowsFor: a path", () => {
     expect(rows("~/Projects/a/b", { target: target({ parentExists: false }) })).toEqual([]);
   });
 
-  test("an existing folder is a step on the way, so enter still descends", () => {
+  test("an existing folder is a step on the way first, so enter still descends", () => {
     const out = rows("~/Projects/foo", { entries, target: target({ exists: true, isDir: true }) });
-    expect(out.map((r) => r.kind)).toEqual(["dir", "dir"]);
+    expect(out.map((r) => r.kind)).toEqual(["dir", "dir", "init"]);
   });
 
-  test("an existing repo can be opened", () => {
-    const out = rows("~/Projects/foo", {
-      entries,
-      target: target({ exists: true, isDir: true, isRepo: true }),
+  test("a folder that is no project yet can become one where it is, trailing slash or not", () => {
+    const plain = target({ exists: true, isDir: true });
+    const init = { kind: "init" as const, path: "~/Projects/bonn" };
+    // a folder of files with no subfolder: the one row is the folder itself
+    expect(rows("~/Projects/bonn", { target: plain })).toEqual([init]);
+    expect(rows("~/Projects/bonn/", { target: plain })).toEqual([init]);
+    expect(rows("/opt/bonn", { target: plain })).toEqual([{ kind: "init", path: "/opt/bonn" }]);
+  });
+
+  test("a place projects are kept in is not offered as one", () => {
+    const plain = target({ exists: true, isDir: true });
+    const repos = [repo("foo", "/Users/k/Projects/foo")];
+    expect(rows("~/Projects/", { entries, target: plain, repos }).map((r) => r.kind)).toEqual(["dir", "dir"]);
+    expect(rows("~/Projects", { entries, target: plain, repos }).map((r) => r.kind)).toEqual(["dir", "dir"]);
+    expect(rows("~", { target: plain })).toEqual([]);
+    expect(rows("~/", { target: plain })).toEqual([]);
+    expect(rows("/", { target: plain })).toEqual([]);
+    // a file is neither a step nor a project
+    expect(rows("~/Projects/notes.txt", { target: target({ exists: true }) })).toEqual([]);
+  });
+
+  test("an existing repo can be opened, trailing slash or not", () => {
+    const isRepo = target({ exists: true, isDir: true, isRepo: true });
+    expect(rows("~/Projects/foo", { entries, target: isRepo }).at(-1)).toEqual({
+      kind: "open",
+      path: "~/Projects/foo",
     });
-    expect(out.at(-1)).toEqual({ kind: "open", path: "~/Projects/foo" });
+    expect(rows("~/Projects/foo/", { entries, target: isRepo }).at(-1)).toEqual({
+      kind: "open",
+      path: "~/Projects/foo",
+    });
   });
 
   test("a trailing slash is a folder to look inside, never a leaf to make", () => {
     const out = rows("~/Projects/", { entries, target: target({ exists: true, isDir: true }) });
-    expect(out.every((r) => r.kind === "dir")).toBe(true);
+    expect(out.some((r) => r.kind === "create")).toBe(false);
+    expect(rows("~/Projects/brand-new/", { target: target({ parentExists: true }) })).toEqual([]);
   });
 
   // browse-path is debounced, so `paths` routinely describes the previous query. Without this the

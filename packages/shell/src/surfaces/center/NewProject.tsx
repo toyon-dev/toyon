@@ -1,5 +1,6 @@
 import { projectNameError } from "@toyon/shared";
 import { useEffect, useRef, useState } from "react";
+import { initProject, openProject } from "../../state/actions/project.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { NEW_PROJECT_BOX, type NewProjectState } from "../../state/store.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
@@ -27,10 +28,12 @@ const NAME_MIN = 14;
  * and sends what was written as its first message.
  *
  * Nothing is made until return: making one takes a tenth of a second, and making it earlier would
- * leave a folder behind for every name thought better of. A folder picked in Finder decides the
- * rest: an ordinary folder is the location, an empty one becomes the project, and one that is
- * already a project is offered for opening. Git's name and email sit under the title when git has
- * none, since they are asked once ever and are not what this project is about.
+ * leave a folder behind for every name thought better of. A folder picked in Finder as the
+ * location decides the rest: an ordinary folder is the location, an empty one becomes the
+ * project, and one that is already a project is offered for opening. A folder picked to open is
+ * opened as it is: a project as that project, anything else as a new one started where it is,
+ * with its files in the first commit. Git's name and email sit under the title when git has none,
+ * since they are asked once ever and are not what this project is about.
  */
 export function NewProject({ project }: { project: NewProjectState }) {
   const dispatch = useDispatch();
@@ -45,8 +48,6 @@ export function NewProject({ project }: { project: NewProjectState }) {
   const [identity, setIdentity] = useState({ name: "", email: "" });
   /** a folder picked as the location that is already a project */
   const [existing, setExisting] = useState<string | null>(null);
-  /** why a folder picked to open was not opened */
-  const [refusal, setRefusal] = useState<string | null>(null);
   const nameRef = useRef<HTMLInputElement>(null);
 
   const { mode, name, parent } = project;
@@ -89,21 +90,19 @@ export function NewProject({ project }: { project: NewProjectState }) {
     if (project.phase === "editing") nameRef.current?.focus();
   });
 
-  // a refusal is about the folder that was picked, so anything that changes what the project holds ends it
-  useOnChange([mode, name, parent], () => setRefusal(null));
-
   // the daemon's refusal of the last create, under the box that asked; the next keystroke answers it
   useOnChange([project.error], () => {
     if (project.error) dispatch({ a: "notice", id: NEW_PROJECT_BOX, text: project.error });
   });
 
+  const deps = { sock, dispatch };
+
   const submit = () => {
     if (why || !editing) return;
-    // pendingOpen is what makes this tab, and only this tab, adopt the project the daemon adds; what
-    // is in the box rides on it and goes from the new project's own box (see settleView)
-    dispatch({ a: "open-repo" });
+    // what is in the box rides on the pending open and goes from the new project's own box (see
+    // settleView)
     dispatch({ a: "new-project-set", v: { phase: "creating" } });
-    sock?.send({
+    openProject(deps, {
       t: "create-repo",
       mode,
       parent: parent.trim(),
@@ -116,16 +115,17 @@ export function NewProject({ project }: { project: NewProjectState }) {
   const openFolder = (path: string) => {
     // registering a project the daemon already has adds nothing, so nothing would switch to it
     const known = repos.find((r) => r.path === expandHome(path, home));
-    if (known) {
-      dispatch({ a: "activate-repo", id: known.id });
-      return;
-    }
-    dispatch({ a: "open-repo" });
-    sock?.send({ t: "register-repo", path });
+    if (known) dispatch({ a: "activate-repo", id: known.id });
+    else openProject(deps, { t: "register-repo", path });
+  };
+
+  /** the same folder as this form's project, for return to make once the rest is filled in */
+  const becomeProject = (path: string) => {
+    const at = splitTypedPath(path);
+    dispatch({ a: "new-project-set", v: { mode: "init", parent: at.parent, name: at.name } });
   };
 
   const choose = (purpose: "location" | "open") => {
-    setRefusal(null);
     if (canAskFinder) {
       dispatch({ a: "choosing-folder", v: purpose });
       sock?.send({ t: "choose-folder", start: parent, purpose });
@@ -147,37 +147,34 @@ export function NewProject({ project }: { project: NewProjectState }) {
       nameRef.current?.focus();
       return;
     }
-    if (asking === "open" && picked.kind === "project") {
-      openFolder(picked.path);
-      return;
-    }
-    if (asking === "open" && picked.kind === "folder") {
-      setRefusal("that folder has files but is not a project yet; choose a project, or an empty folder to start one");
+    if (asking === "open") {
+      if (picked.kind === "project") openFolder(picked.path);
+      // a folder that is no project yet becomes one where it is, opened at once when git can
+      // commit; with no identity yet the form takes it over, since that is where the name and
+      // email are asked
+      else if (askIdentity) becomeProject(picked.path);
+      else initProject(deps, picked.path);
       return;
     }
     setExisting(picked.kind === "project" ? picked.path : null);
     if (picked.kind === "project") return;
     // an empty folder becomes the project itself, except for a clone, which needs one not there yet
     if (picked.kind === "empty" && !clone) {
-      const at = splitTypedPath(picked.path);
-      dispatch({ a: "new-project-set", v: { mode: "init", parent: at.parent, name: at.name } });
+      becomeProject(picked.path);
       return;
     }
     dispatch({ a: "new-project-set", v: { mode: clone ? "clone" : "create", parent: picked.path } });
     nameRef.current?.focus();
   });
 
-  // the refusal leads: it answers a pick that has just happened, while the rest describe a state.
-  // A folder that is already a project carries the way in; the rest are words.
-  const hint =
-    refusal ??
-    (inPlace
-      ? "the empty folder you chose becomes the project"
-      : existing
-        ? null
-        : taken
-          ? `${where} already has a folder called ${typed}`
-          : nameError);
+  // a folder that is already a project carries the way in; the rest are words
+  const hint = inPlace
+    ? "the folder you chose becomes the project"
+    : existing
+      ? null
+      : taken
+        ? `${where} already has a folder called ${typed}`
+        : nameError;
 
   return (
     <View
@@ -237,7 +234,7 @@ export function NewProject({ project }: { project: NewProjectState }) {
       </div>
 
       {hint && <p className="hint">{hint}</p>}
-      {existing && !refusal && (
+      {existing && (
         <p className="hint">
           the folder you chose is already a project:{" "}
           <Button variant="inline" autoFocus onClick={() => openFolder(existing)}>

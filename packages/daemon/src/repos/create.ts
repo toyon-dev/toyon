@@ -164,9 +164,14 @@ async function initWithFirstCommit(dir: string): Promise<void> {
   await mkdir(dirname(excludePath), { recursive: true });
   await appendFile(excludePath, `\n${LOCAL_EXCLUDES.join("\n")}\n`);
   await ok(git(dir, "add", "-A"), "git add");
-  // gpgsign off for this commit only: a signing prompt would hang a git nobody can see, and a
-  // commit that only marks where the project started is not the one worth a signature
-  await ok(git(dir, "-c", "commit.gpgsign=false", "commit", "--allow-empty", "-qm", "initial commit"), "git commit");
+  // gpgsign off and hooks skipped for this commit only: a signing prompt or a hook that asks
+  // would hang a git nobody can see, and a hook that refuses (a global one judging copy or
+  // formatting) would leave the folder with no way in at all. This commit only records what was
+  // already there; what the person commits next is where their hooks have a say.
+  await ok(
+    git(dir, "-c", "commit.gpgsign=false", "commit", "--no-verify", "--allow-empty", "-qm", "initial commit"),
+    "git commit",
+  );
 }
 
 /**

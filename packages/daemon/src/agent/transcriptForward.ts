@@ -20,7 +20,7 @@ export function forwardLine(line: string): string | null {
     return null; // a torn last line: parseTranscript skips it, and so does this
   }
   const e = entry.event;
-  if (!e || e.type !== "page-error" || Array.isArray(e.errors) || typeof e.message !== "string") return null;
+  if (e?.type !== "page-error" || Array.isArray(e.errors) || typeof e.message !== "string") return null;
   // 0.12.0 wrote one throw per row as `message`; since then a row carries the list the page was
   // left throwing, as `errors`, oldest first
   const { message, ...rest } = e;

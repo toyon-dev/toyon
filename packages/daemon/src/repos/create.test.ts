@@ -216,6 +216,30 @@ describe("initRepoInPlace", () => {
     cleanup();
   });
 
+  test("a global hook that refuses the files does not refuse the project", async () => {
+    // a hooks path in the person's global config runs in a repo git just made; a hook judging the
+    // files (copy rules, formatting) must not leave the folder with no way in
+    const { parent, cleanup } = parentDir();
+    const hooks = join(parent, "hooks");
+    mkdirSync(hooks);
+    writeFileSync(join(hooks, "pre-commit"), "#!/bin/sh\necho 'refused' >&2\nexit 1\n", { mode: 0o755 });
+    const file = join(configHome, "gitconfig");
+    writeFileSync(
+      file,
+      `[user]\n\tname = t\n\temail = t@t\n[commit]\n\tgpgsign = false\n[core]\n\thooksPath = ${hooks}\n`,
+    );
+    const dir = join(parent, "work");
+    mkdirSync(dir);
+    writeFileSync(join(dir, "data.json"), '{"title":"scraped"}\n');
+    try {
+      expect(await initRepoInPlace({ parent, name: "work" })).toBe(dir);
+      expect((await git(dir, "ls-tree", "-r", "--name-only", "HEAD")).out).toBe("data.json");
+    } finally {
+      writeFileSync(file, "[user]\n\tname = t\n\temail = t@t\n[commit]\n\tgpgsign = false\n");
+      cleanup();
+    }
+  });
+
   test("refuses a folder that is already a project, or is not a folder, and touches neither", () => {
     const { parent, cleanup } = parentDir();
     mkdirSync(join(parent, "work"));

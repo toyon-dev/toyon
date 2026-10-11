@@ -27,6 +27,7 @@ import { loadAgentRegistry } from "./agent/registry.ts";
 import { prepareLaunch } from "./agent/sandbox.ts";
 import { makeAnswerRecapper, makeLander, makePlanner } from "./agent/tasks.ts";
 import { transcriptPathFor } from "./agent/transcript.ts";
+import { forwardTranscripts } from "./agent/transcriptForward.ts";
 import { UploadStore } from "./agent/uploads.ts";
 import { locateAssets, pruneAssets } from "./core/assets.ts";
 import { idleSleepAssertion, KeepAwake } from "./core/awake.ts";
@@ -104,6 +105,9 @@ if (pruned > 0) log.debug("daemon", `pruned ${pruned} assets from builds this on
 const managed = await loadManaged();
 const paths = makePaths();
 ensureDirs(paths);
+// stored rows in a shape this build no longer knows are rewritten before anything reads one: a
+// one-time pass on the first boot after the upgrade, a read of each transcript on every boot after
+forwardTranscripts(paths.transcriptsDir);
 const token = loadOrCreateToken(paths);
 const port = Number(process.env.TOYON_PORT ?? DAEMON_DEFAULT_PORT);
 

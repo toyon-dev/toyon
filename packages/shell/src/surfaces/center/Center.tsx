@@ -603,7 +603,7 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
   // a frame is on screen: nothing of toyon's own stands over the centre (the setup pane, a clone
   // being watched) and the project has something to run
   const frameShown = shownId !== null && !setupRepo && !watching && !bare && !chatCentred;
-  // the frames' box is the app's window: its size is read off it while it changes, for the bar
+  // the frames' box is the app's window: its size is read off it for the bar
   const [framesEl, setFramesEl] = useState<HTMLDivElement | null>(null);
   const sayPreviewSize = useCallback((text: string | null) => dispatch({ a: "preview-size", text }), [dispatch]);
   useSizeReadout(framesEl, frameShown, sayPreviewSize);

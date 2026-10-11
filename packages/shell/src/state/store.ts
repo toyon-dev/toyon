@@ -795,7 +795,7 @@ export interface State {
   termRun: { id: string; command: string } | null;
   /** bumped when a stream opens that needs room to be read (a login's link and its prompt) */
   termTall: number;
-  /** the preview's size while it changes, read in the bar's route field (sizeReadout.ts); null at rest */
+  /** the preview's size, read in the bar's route field (sizeReadout.ts); null while no frame is on screen */
   previewSize: string | null;
   /** themes the daemon knows (built-ins, ~/.toyon/themes, installed editors) + the selection */
   themes: Theme[];

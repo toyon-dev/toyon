@@ -24,8 +24,8 @@
     /* the size readout below hangs off the field's end; the route list is a Float and takes no
        notice of this */
     position: relative;
-    /* the readout covers the field's end while it shows, so the path gives up that end to it rather
-       than running under the numbers */
+    /* the readout covers the field's end while a frame is on screen, so the path gives up that end
+       to it rather than running under the numbers */
     &:has(.bar-size) .bar-path {
       /* the readout's widest text (five digits a side) plus the field's own inset: in ch, since
          the field and the readout share the bar's mono, so this holds at any type size */
@@ -48,9 +48,9 @@
       max-height: min(340px, 50vh);
     }
   }
-  /* The preview's size while it changes (center/sizeReadout.ts), read at the end of the address the
-   way a browser keeps its own marks there: in the bar, so it covers nothing of the app's, and a
-   tier under the path, since the path is what the field is about. The field's own mono, so the
+  /* The preview's size (center/sizeReadout.ts), read at the end of the address the way a browser
+   keeps its own marks there: in the bar, so it covers nothing of the app's and can stay at rest,
+   and a tier under the path, since the path is what the field is about. The field's own mono, so the
    two read as one line and the ch above measures it, with its digits in columns so the numbers
    hold still while they tick. No pointer: a press through it still opens the route list, and a
    drag that crosses it must not break. */

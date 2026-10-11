@@ -305,7 +305,7 @@ function RouteBar({
           {...tip("Go to a page", chord("routes"))}
         />
         {open && ready && id && repoId && <RoutePicker key={id} worktreeId={id} repoId={repoId} url={url} />}
-        {/* the preview's size while it changes, at the address's end; Center.tsx measures it */}
+        {/* the preview's size, at the address's end; Center.tsx measures it */}
         {previewSize && <span className="bar-size">{previewSize}</span>}
       </span>
       {/* ⌘I's own button: the page's inspector belongs in the page's chrome, where devtools keeps

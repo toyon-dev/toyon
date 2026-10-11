@@ -409,6 +409,9 @@ const keepAwake = new KeepAwake({
 // landings recorded before they kept their subjects read them now, before a client can ask: a
 // one-time wait on the first boot after the upgrade, a scan that reads no git on every boot after
 await worktrees.fillLandMarks();
+// projects recorded before they kept the send of what left them take it from their archives, the
+// same way, so the switcher does not list a project tidied before the upgrade last
+worktrees.fillSentStamps();
 
 const {
   server,

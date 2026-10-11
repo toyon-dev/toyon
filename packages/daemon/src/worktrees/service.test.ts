@@ -636,6 +636,37 @@ describe("rows from memory", () => {
     expect(changed).toBe(1);
     expect(w.worktrees.rows().find((r) => r.id === main.id)?.worktree?.promptedAt).toBeGreaterThanOrEqual(before);
   });
+
+  test("a row archived leaves its send on the project, so the switcher keeps the project's place", async () => {
+    const repoId = await registered();
+    const wt = await w.worktrees.create(repoId, "task");
+    const sent = wt.promptedAt!;
+    await settle();
+    // while the row stands, the switcher reads its stamp off the row: the project list is not touched
+    expect(w.state.repo(repoId)?.promptedAt).toBeUndefined();
+    let repos = 0;
+    w.hub.on("reposChanged", () => repos++);
+    await w.worktrees.archiveWorktree(wt.id);
+    expect(w.state.repo(repoId)?.promptedAt).toBe(sent);
+    expect(repos).toBe(1);
+  });
+
+  test("a project from before the stamp takes one from its archive at boot", async () => {
+    const repoId = await registered();
+    const wt = await w.worktrees.create(repoId, "task");
+    const sent = wt.promptedAt!;
+    await settle();
+    await w.worktrees.archiveWorktree(wt.id);
+    // the record as an older daemon left it: no stamp of its own, the row that carried it archived
+    const repo = w.state.repo(repoId)!;
+    delete repo.promptedAt;
+    w.worktrees.fillSentStamps();
+    expect(w.state.repo(repoId)?.promptedAt).toBe(sent);
+    // every boot after finds nothing to do and leaves the stamp alone
+    repo.promptedAt = 1;
+    w.worktrees.fillSentStamps();
+    expect(w.state.repo(repoId)?.promptedAt).toBe(1);
+  });
 });
 
 describe("redetect at turn end", () => {

@@ -169,6 +169,11 @@ export interface RepoInfo {
    * work ends up on origin. Absent on the merge route, and with no upstream, which reads as the
    * default branch (`baseOf`), so a record from before the field needs nothing. */
   base?: string;
+  /** the newest send among the rows that have left it, written as each one goes: the switcher
+   * sorts projects by their newest send and reads the open rows for it, so a project whose rows
+   * were all landed and archived would otherwise sink to the bottom the moment the work was
+   * tidied away. A record from before the field takes it from the archive at boot. */
+  promptedAt?: number;
 }
 
 /** Toyon running out of a checkout that is also one of its own projects: what landing work on

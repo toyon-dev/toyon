@@ -10,7 +10,7 @@ import type {
   ThemePrefs,
   WorktreeInfo,
 } from "@toyon/shared";
-import { isShellOrigin } from "@toyon/shared";
+import { isShellOrigin, sentAt } from "@toyon/shared";
 import { UserError } from "./errors.ts";
 import { log } from "./log.ts";
 import { ensureDirs, type Paths } from "./paths.ts";
@@ -281,8 +281,13 @@ export class StateStore {
   }
   /** drops the record and its session id; the caller has already stopped the runtime. A group
    * still on its books is one that outlived the stop: it moves to the daemon's own bucket, so the
-   * next boot still finds it with the worktree gone */
+   * next boot still finds it with the worktree gone. The row's send stays on its project: the
+   * switcher sorts projects by their newest send and reads it off the rows, so a project whose
+   * rows were all tidied away would otherwise forget it was worked in. The spare carries no send. */
   removeWorktree(id: string) {
+    const wt = this.state.worktrees.find((w) => w.id === id);
+    const repo = wt && wt.kind !== "spare" ? this.repo(wt.repoId) : undefined;
+    if (wt && repo) repo.promptedAt = Math.max(repo.promptedAt ?? 0, sentAt(wt));
     this.state.worktrees = this.state.worktrees.filter((w) => w.id !== id);
     delete this.state.sessions[id];
     if (this.state.seen) delete this.state.seen[id];

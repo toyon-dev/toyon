@@ -91,7 +91,7 @@ describe("railOrder", () => {
 });
 
 describe("projectOrder", () => {
-  const repo = (id: string): RepoInfo => ({
+  const repo = (id: string, r: Partial<RepoInfo> = {}): RepoInfo => ({
     id,
     name: id,
     path: `/p/${id}`,
@@ -99,6 +99,7 @@ describe("projectOrder", () => {
     config: { run: {} },
     configFile: ".toyon/settings.json",
     needsSetup: false,
+    ...r,
   });
   const inRepo = (repoId: string, id: string, w: Partial<WorktreeInfo> = {}): OwnedWorktree => {
     const r = row(id, { repoId, ...w });
@@ -135,5 +136,22 @@ describe("projectOrder", () => {
 
   test("projects with no rows loaded keep the daemon's order", () => {
     expect(names([repo("b"), repo("a"), repo("c")], [])).toEqual(["b", "a", "c"]);
+  });
+
+  test("a project keeps its place after every row it was worked in is archived", () => {
+    // tidied: its rows landed and archived, main untouched since the project was registered
+    const repos = [repo("tidied", { promptedAt: 9 }), repo("busy"), repo("stale", { promptedAt: 2 })];
+    const rows = [
+      inRepo("tidied", "main", { kind: "main", createdAt: 1 }),
+      inRepo("busy", "b1", { promptedAt: 5 }),
+      inRepo("stale", "s1", { promptedAt: 3 }),
+    ];
+    expect(names(repos, rows)).toEqual(["tidied", "busy", "stale"]);
+  });
+
+  test("a row's send counts before the project list has caught up with it", () => {
+    const repos = [repo("behind", { promptedAt: 2 }), repo("other", { promptedAt: 4 })];
+    const rows = [inRepo("behind", "b1", { promptedAt: 8 })];
+    expect(names(repos, rows)).toEqual(["behind", "other"]);
   });
 });

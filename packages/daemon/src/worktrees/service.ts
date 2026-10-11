@@ -39,6 +39,7 @@ import {
   type RepoInfo,
   type ShipOp,
   type Shipping,
+  sentAt,
   shipNoun,
   siblingsOf,
   type TrunkStatus,
@@ -989,7 +990,11 @@ export class WorktreeService {
       return k;
     });
     const sessionId = this.d.state.session(worktreeId);
+    const placed = repo.promptedAt;
     this.d.state.removeWorktree(worktreeId);
+    // the project took the row's send: told before the rows frame drops the row, so the switcher
+    // never shows the project sinking and climbing back
+    if (repo.promptedAt !== placed) this.d.hub.emit("reposChanged");
     releasePort(wt.proxyPort);
     let archived: ArchivedWorktree | null = null;
     // the directory they were read against is gone, and a restore starts its own
@@ -1161,6 +1166,25 @@ export class WorktreeService {
       return { head };
     });
     this.archiveChat(wt, repo, kept, sessionId);
+  }
+
+  /** Rows archived before a project kept the send of what left it put theirs on it now, from the
+   * records the archive holds, before the server opens; on every boot after, a project with an
+   * archive has its stamp and one without has nothing to take. Without it a project tidied before
+   * the upgrade would sit at the bottom of the switcher until its next send. */
+  fillSentStamps(): void {
+    let filled = 0;
+    for (const repo of this.d.state.repos) {
+      if (repo.promptedAt !== undefined) continue;
+      let at = 0;
+      for (const rec of this.archive.recordsOf(repo)) at = Math.max(at, sentAt(rec.worktree));
+      if (at === 0) continue;
+      repo.promptedAt = at;
+      filled++;
+    }
+    if (filled === 0) return;
+    this.d.state.save();
+    log.info("daemon", `placed ${filled} projects by what their archives were sent`);
   }
 
   /** Marks written before a landing kept its subjects get them from the ref that kept each range:

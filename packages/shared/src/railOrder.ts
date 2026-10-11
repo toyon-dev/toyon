@@ -48,12 +48,15 @@ export function railOrder<T extends { worktree: WorktreeInfo }>(rows: readonly T
 /** The project picker's order: the rail's rule one level up. A project sits at its newest
  * worktree send, so the one last worked in is first and one left for weeks sinks, and only a send
  * moves it: opening the picker to look at a project does not reorder the list for next time. The
- * spare is left out, since it is made when a project is opened and looking is not working; main's
- * creation stands in for a project with no send yet, which puts a project just registered near the
- * top, where someone who just opened it expects it. Ties keep the daemon's order, so projects
- * whose rows are not loaded (another machine still connecting) list as the daemon does. */
+ * project keeps the send of each row that left it, so landing and archiving every row leaves it
+ * where the work put it rather than at the bottom; the open rows carry their own. The spare is
+ * left out, since it is made when a project is opened and looking is not working; main's creation
+ * stands in for a project with no send yet, which puts a project just registered near the top,
+ * where someone who just opened it expects it. Ties keep the daemon's order, so projects whose
+ * rows are not loaded (another machine still connecting) list as the daemon does. */
 export function projectOrder(repos: readonly RepoInfo[], rows: readonly WorktreeStatus[]): RepoInfo[] {
   const at = new Map<string, number>();
+  for (const repo of repos) at.set(repo.id, repo.promptedAt ?? 0);
   for (const row of rows) {
     if (!isOwned(row) || row.worktree.kind === "spare") continue;
     const id = row.worktree.repoId;

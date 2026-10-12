@@ -190,7 +190,9 @@ export type ChatItem =
       title?: string;
       by: "agent" | "person";
       mode: PermissionMode;
-      state: "proposed" | "continued" | "declined";
+      /** `starting` is the go pressed and the worktree still being made: the card is closed and a
+       * row stands for it until the daemon says where it went or why it did not */
+      state: "proposed" | "starting" | "continued" | "declined";
       worktreeId?: string;
       reason?: string;
       ts: number;
@@ -1603,10 +1605,11 @@ function runningOf(chat: ChatItem[], was: WorktreeLocal["running"]): WorktreeLoc
  * back from a parked or a revived one; the close of the card they belong to ends them; anything
  * else leaves them be. A stop closes the ask and keeps its answers, since the question can still
  * be answered as a message. A handoff card is one of these: its note is the box's draft, and it
- * closes with the handoff or the decline that answers it. */
+ * closes with the go or the decline that answers it. */
 function askSettled(l: WorktreeLocal, ev: AgentEvent): WorktreeLocal {
   const asked = ev.type === "agent-question" || ev.type === "agent-permission" || ev.type === "handoff-proposed";
-  const closed = ev.type === "agent-ask-end" || ev.type === "handoff" || ev.type === "handoff-declined" ? ev.id : null;
+  const closed =
+    ev.type === "agent-ask-end" || ev.type === "handoff-go" || ev.type === "handoff-declined" ? ev.id : null;
   if (!asked && !closed) return l;
   const stopped = ev.type === "agent-ask-end" && stoppedBy(ev.outcome);
   const { card, cardParked, askRevived, ...rest } = l;
@@ -3135,8 +3138,16 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
           ts: event.ts,
         },
       ];
+    case "handoff-go": {
+      const idx = openHandoffIndex(items, event.id);
+      if (idx === -1) return items;
+      const next = items.slice();
+      const card = next[idx] as HandoffCard;
+      next[idx] = { ...card, state: "starting" };
+      return next;
+    }
     case "handoff": {
-      const idx = items.findLastIndex((i) => i.kind === "handoff" && i.id === event.id && i.state === "proposed");
+      const idx = openHandoffIndex(items, event.id);
       // the record of where the work went belongs on the chat whether or not the proposal was seen
       // (a torn transcript line); with no card to close it stands on its own, and says only what
       // the event does
@@ -3162,7 +3173,7 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
       return next;
     }
     case "handoff-declined": {
-      const idx = items.findLastIndex((i) => i.kind === "handoff" && i.id === event.id && i.state === "proposed");
+      const idx = openHandoffIndex(items, event.id);
       if (idx === -1) return items;
       const next = items.slice();
       const card = next[idx] as HandoffCard;
@@ -3285,6 +3296,14 @@ function cutRow(items: ChatItem[], messageId: string): number {
 
 type AskCard = Extract<ChatItem, { kind: "ask" }>;
 type HandoffCard = Extract<ChatItem, { kind: "handoff" }>;
+
+/** the handoff `id` names, where nothing has settled it yet: the card still proposed, or the row
+ * standing for a go whose worktree is still being made */
+function openHandoffIndex(items: ChatItem[], id: string): number {
+  return items.findLastIndex(
+    (i) => i.kind === "handoff" && i.id === id && (i.state === "proposed" || i.state === "starting"),
+  );
+}
 
 function allowed(card: AskCard, choiceId: string | undefined): boolean {
   if (card.ask.kind !== "permission" || !choiceId) return false;

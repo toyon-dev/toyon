@@ -1,8 +1,9 @@
-// The handoff's quiet rows in the transcript, once the card is closed: where the work went, with
-// the way there, or that it did not go and why. An open proposal has no row here: it holds the box
-// under the log, or, set aside, a line at the top of that box, and a row up here as well was the
-// card said twice and in a place that scrolls away. The landing the other project reports back is
-// a row of its own, since it comes long after.
+// The handoff's quiet rows in the transcript, once the card is closed: that the go is making the
+// worktree, where the work went once it is made, with the way there, or that it did not go and
+// why. An open proposal has no row here: it holds the box under the log, or, set aside, a line at
+// the top of that box, and a row up here as well was the card said twice and in a place that
+// scrolls away. The landing the other project reports back is a row of its own, since it comes
+// long after.
 
 import { useDispatch, useStore } from "../../state/context.tsx";
 import type { ChatItem } from "../../state/store.ts";
@@ -16,6 +17,16 @@ export function HandoffRow({ item }: { item: HandoffItem }) {
   // the row made in the other project is a press away while it is still listed
   const there = useStore((s) => worktreeById(s, item.worktreeId) !== null);
   if (item.state === "proposed") return null;
+  // the go is out and the worktree is being made, which in a large checkout takes a while: the
+  // shine is the transcript's one mark for work under way, and the row becomes the continued one
+  // in place when the daemon says where it went
+  if (item.state === "starting") {
+    return (
+      <DaemonRow icon="spawn" word="continuing" tone="accent" at={item.ts}>
+        <span className="daemon-text live-text">in {item.repo.name}, starting the worktree</span>
+      </DaemonRow>
+    );
+  }
   if (item.state === "declined") {
     return (
       <DaemonRow

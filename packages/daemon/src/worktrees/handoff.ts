@@ -2,9 +2,9 @@
 // worktree proposes it through Toyon's own tool (or the person does, through the verb), a card on
 // that chat asks the person, and Go starts a worktree in the other project seeded with the
 // message. The card's whole state lives on the origin's transcript: a proposal is open from its
-// `handoff-proposed` until a `handoff` or `handoff-declined` with the same id, so it survives a
-// daemon restart and a second tab, and the answer is resolved from the transcript rather than from
-// a table here.
+// `handoff-proposed` until a `handoff-go`, `handoff` or `handoff-declined` with the same id, so it
+// survives a daemon restart and a second tab, and the answer is resolved from the transcript
+// rather than from a table here.
 
 import { randomUUID } from "node:crypto";
 import type { AgentEvent, RepoInfo, WorktreeInfo } from "@toyon/shared";
@@ -49,7 +49,8 @@ function openProposals(entries: readonly TranscriptEntry[]): Proposed[] {
   const open = new Map<string, Proposed>();
   for (const { event } of entries) {
     if (event.type === "handoff-proposed") open.set(event.id, event);
-    else if (event.type === "handoff" || event.type === "handoff-declined") open.delete(event.id);
+    else if (event.type === "handoff-go" || event.type === "handoff" || event.type === "handoff-declined")
+      open.delete(event.id);
   }
   return [...open.values()];
 }
@@ -66,9 +67,6 @@ function proposedThisTurn(entries: readonly TranscriptEntry[]): number {
 }
 
 export class HandoffService implements ToolProvider {
-  /** proposals whose Go is making the worktree now: a second press meanwhile is a no-op */
-  private settling = new Set<string>();
-
   constructor(private d: HandoffDeps) {
     d.hub.on("landed", (worktreeId) => this.landed(worktreeId));
   }
@@ -188,10 +186,11 @@ export class HandoffService implements ToolProvider {
     return { text: "Proposed to the person as a card; they decide. Finish your turn." };
   }
 
-  /** The person's answer on the card. Go makes the worktree in the other project and records
-   * where the work went; Not now closes the card. A card already closed is the other tab's doing
-   * and not an error; a Go already under way is left to finish. Whatever stops a Go closes the
-   * card as failed on every tab, and the pressing tab reads why. */
+  /** The person's answer on the card. Go closes the card at once, then makes the worktree in the
+   * other project and records where the work went; Not now closes the card. A card already closed
+   * is the other tab's doing and not an error, and a second Go behind the first lands on a closed
+   * card too, since the go is on the transcript before anything slow starts. Whatever stops a Go
+   * closes it as failed on every tab, and the pressing tab reads why. */
   async answer(worktreeId: string, id: string, go: boolean, note?: string): Promise<void> {
     const wt = this.d.state.worktree(worktreeId);
     if (!wt) throw new UserError("that chat is gone");
@@ -204,12 +203,11 @@ export class HandoffService implements ToolProvider {
     if (!openProposals(entries).some((p) => p.id === id)) {
       return log.debug(worktreeId, `answer for a handoff that already closed (${id})`);
     }
-    if (this.settling.has(id)) return;
     if (!go) {
       agent.note({ type: "handoff-declined", id, ts: Date.now() });
       return;
     }
-    this.settling.add(id);
+    agent.note({ type: "handoff-go", id, ts: Date.now() });
     try {
       const repo = this.d.state.repo(proposed.repo.id);
       if (!repo) throw new UserError(`${proposed.repo.name} is no longer open in Toyon`);
@@ -235,8 +233,6 @@ export class HandoffService implements ToolProvider {
       const reason = e instanceof Error ? e.message : String(e);
       agent.note({ type: "handoff-declined", id, outcome: "failed", reason, ts: Date.now() });
       throw e;
-    } finally {
-      this.settling.delete(id);
     }
   }
 

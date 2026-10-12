@@ -209,14 +209,22 @@ describe("answer", () => {
     ).toBe(true);
     expect(first).toContain(`handed off from the worktree at ${a.path} of the project repo, on its branch ${a.branch}`);
     expect(first).toContain("written by that worktree's agent");
-    expect(agentOf(a.id).recorded.at(-1)).toMatchObject({
-      type: "handoff",
-      id,
-      worktreeId: b.id,
-      repoId: acp.id,
-      repoName: "claude-agent-acp",
-      title: "Fix the form",
-    });
+    // the go closes the card before the worktree is made, and the handoff says where it went
+    expect(agentOf(a.id).recorded.slice(-2)).toMatchObject([
+      { type: "handoff-go", id },
+      {
+        type: "handoff",
+        id,
+        worktreeId: b.id,
+        repoId: acp.id,
+        repoName: "claude-agent-acp",
+        title: "Fix the form",
+      },
+    ]);
+    // a second Go behind the first lands on the closed card: nothing more is made
+    await w.handoff.answer(a.id, id, true);
+    expect(recorded(a.id, "handoff-go")).toHaveLength(1);
+    expect(w.state.worktrees.filter((x) => x.repoId === acp.id && x.kind === "worktree")).toHaveLength(1);
     // the other project's rows, where the person opens it, show it as a plain row
     expect((await w.worktrees.rows()).some((r) => r.id === b.id)).toBe(true);
   });
@@ -247,12 +255,15 @@ describe("answer", () => {
     // the other project is forgotten between the card and the press
     await w.repos.forget(acp.id);
     await expect(w.handoff.answer(a.id, id, true)).rejects.toThrow("acp is no longer open in Toyon");
-    expect(agentOf(a.id).recorded.at(-1)).toMatchObject({
-      type: "handoff-declined",
-      id,
-      outcome: "failed",
-      reason: "acp is no longer open in Toyon",
-    });
+    expect(agentOf(a.id).recorded.slice(-2)).toMatchObject([
+      { type: "handoff-go", id },
+      {
+        type: "handoff-declined",
+        id,
+        outcome: "failed",
+        reason: "acp is no longer open in Toyon",
+      },
+    ]);
   });
 
   test("an answer after a restart resolves from the transcript on disk", async () => {

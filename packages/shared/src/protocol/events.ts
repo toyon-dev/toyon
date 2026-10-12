@@ -337,8 +337,8 @@ export type AgentEvent =
    * record keeps it, what landed included; absent on a row written before marks said so */
   | { type: "landed"; message: string; archiveIds: string[]; mark?: LandMark; ts: number }
   /** a proposal to continue this work in another open project: the agent's through its handoff
-   * tool, or the person's through the verb (`by`). A card until a `handoff` or `handoff-declined`
-   * with the same id closes it. `message` is what the other project's agent would start from, as
+   * tool, or the person's through the verb (`by`). A card until a `handoff-go`, a `handoff` or a
+   * `handoff-declined` with the same id closes it. `message` is what the other project's agent would start from, as
    * written; `title` the name its row would take; `mode` the permission mode it would start in,
    * which is this worktree's. The card shows the project's `path` beside its name, since two open
    * projects can share a name. */
@@ -352,10 +352,15 @@ export type AgentEvent =
       mode: PermissionMode;
       ts: number;
     }
-  /** the person said go: `worktreeId` is the row made in the other project */
+  /** the person said go, and the daemon is making the worktree: the card closes here, on every
+   * tab, since making a worktree in a large checkout takes as long as its checkout does, and a
+   * card that holds its rows that long reads as a press that did nothing. A `handoff` or a
+   * `handoff-declined` with the same id says what became of it. */
+  | { type: "handoff-go"; id: string; ts: number }
+  /** the worktree is made: `worktreeId` is the row in the other project */
   | { type: "handoff"; id: string; worktreeId: string; repoId: string; repoName: string; title: string; ts: number }
   /** the card closed with no worktree made: a press, or `outcome` says what else, with `reason`
-   * in the daemon's words */
+   * in the daemon's words. After a `handoff-go` it is the go that failed. */
   | { type: "handoff-declined"; id: string; outcome?: "failed"; reason?: string; ts: number }
   /** a worktree this one handed off to has landed there; `url` is its pull request when the
    * landing was one. Kept on the transcript so the row reads back after a reload, and read by the

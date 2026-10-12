@@ -3023,6 +3023,9 @@ describe("AcpSession handoff", () => {
     expect(w.session.status).toBe("idle");
     w.session.note(proposed("h2"));
     expect(w.session.status).toBe("waiting");
+    // the go is the answer: the worktree being made after it is nobody's wait here
+    w.session.note({ type: "handoff-go", id: "h2", ts: 3 });
+    expect(w.session.status).toBe("idle");
     w.session.note({
       type: "handoff",
       id: "h2",
@@ -3030,7 +3033,7 @@ describe("AcpSession handoff", () => {
       repoId: "r2",
       repoName: "other",
       title: "Fix it",
-      ts: 3,
+      ts: 4,
     });
     expect(w.session.status).toBe("idle");
     await w.session.close();
@@ -3067,6 +3070,27 @@ describe("AcpSession handoff", () => {
     expect(settled.session.status).toBe("idle");
     expect(settled.statuses).toEqual([]);
     await settled.session.close();
+  });
+
+  test("a go the daemon died under closes as failed on construction, once", async () => {
+    const fake = fakeAgent(say("ok"));
+    const first = world(fake);
+    first.session.note(proposed("h1"));
+    first.session.note({ type: "handoff-go", id: "h1", ts: 2 });
+    await first.session.close();
+    const again = world(fake, claudeSpec, 60_000, first.id);
+    expect(again.session.status).toBe("idle");
+    expect(again.types().at(-1)).toBe("handoff-declined");
+    expect(again.session.transcript().at(-1)?.event).toMatchObject({
+      type: "handoff-declined",
+      id: "h1",
+      outcome: "failed",
+      reason: "Toyon stopped while the worktree was being made",
+    });
+    await again.session.close();
+    const third = world(fake, claudeSpec, 60_000, first.id);
+    expect(third.types()).not.toContain("handoff-declined");
+    await third.session.close();
   });
 
   test("a landing elsewhere since the last message rides on the next prompt's ambient block once", async () => {

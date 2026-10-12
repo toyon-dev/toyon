@@ -45,8 +45,8 @@ export function HandoffCard({
     dispatch({ a: "card-draft", id: worktreeId, card: { id: item.id, draft: next, current: 0 } });
   const field = useRef<HTMLTextAreaElement>(null);
   const [cursor, setCursor] = useState(GO);
-  // Go went out and the daemon is making the worktree: the handoff event closes the card, or a
-  // decline with the reason does, so this only holds the rows until one of them lands
+  // Go went out: the daemon's go event closes the card a round trip later, or a decline with the
+  // reason does, so this only holds the rows against a second press in between
   const [starting, setStarting] = useState(false);
   const html = useMemo(() => renderMarkdown(item.message), [item.message]);
 

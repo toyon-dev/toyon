@@ -220,6 +220,7 @@ describe("openAskOf", () => {
     };
     expect(openAskOf(log(h))).toBe("Continue in claude-agent-acp?");
     expect(openAskOf(log(h, { type: "handoff-declined", id: "h", ts: 2 }))).toBeUndefined();
+    expect(openAskOf(log(h, { type: "handoff-go", id: "h", ts: 2 }))).toBeUndefined();
     const went: AgentEvent = {
       type: "handoff",
       id: "h",

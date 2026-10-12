@@ -3220,10 +3220,25 @@ describe("a handoff", () => {
       },
     ]);
     expect(openCard(s.local.a?.chat ?? [])?.id).toBe("h1");
-    const after = reducer(s, agent("a", went));
+    // the go closes the card at once: the worktree is still being made, and the row stands for it
+    const going = reducer(s, agent("a", { type: "handoff-go", id: "h1", ts: 2 }));
+    expect(going.local.a?.chat).toHaveLength(1);
+    expect(going.local.a?.chat[0]).toMatchObject({ state: "starting" });
+    expect(openCard(going.local.a?.chat ?? [])).toBeNull();
+    const after = reducer(going, agent("a", went));
     expect(after.local.a?.chat).toHaveLength(1);
     expect(after.local.a?.chat[0]).toMatchObject({ state: "continued", worktreeId: "g", title: "Bump the pin" });
     expect(openCard(after.local.a?.chat ?? [])).toBeNull();
+    // a go that could not make the worktree closes the row with the reason
+    const failed = reducer(
+      going,
+      agent("a", { type: "handoff-declined", id: "h1", outcome: "failed", reason: "no agent", ts: 3 }),
+    );
+    expect(failed.local.a?.chat[0]).toMatchObject({ state: "declined", reason: "no agent" });
+    // a go with no card to close changes nothing
+    expect(reducer(after, agent("a", { type: "handoff-go", id: "h1", ts: 4 })).local.a?.chat).toEqual(
+      after.local.a?.chat,
+    );
   });
 
   test("a decline closes it too, with the daemon's reason when the worktree could not be made", () => {
@@ -3288,7 +3303,7 @@ describe("a handoff", () => {
     s = reducer(s, { a: "card-draft", id: "a", card });
     s = reducer(s, { a: "card-park", id: "a", cardId: "h1" });
     expect(s.local.a).toMatchObject({ card, cardParked: "h1" });
-    const closed = reducer(s, agent("a", went));
+    const closed = reducer(s, agent("a", { type: "handoff-go", id: "h1", ts: 2 }));
     expect(closed.local.a?.card).toBeUndefined();
     expect(closed.local.a?.cardParked).toBeUndefined();
     const declined = reducer(s, agent("a", { type: "handoff-declined", id: "h1", ts: 2 }));

@@ -327,15 +327,32 @@ export class AcpSession implements AgentAdapter {
       this.emit({ type: "tool-end", toolId, output: output.join("\n"), isError: true });
     }
     // a handoff card is answered through the daemon, not the agent's process, so one the daemon
-    // died under is still open: the row reads waiting from it again
-    for (const { event } of this.log.entries) this.trackHandoff(event);
+    // died under is still open: the row reads waiting from it again. A go the daemon died under
+    // is another matter: the worktree it was making is not coming, so the row that stood for it
+    // closes as failed rather than read "continuing" for good.
+    const going = new Set<string>();
+    for (const { event } of this.log.entries) {
+      this.trackHandoff(event);
+      if (event.type === "handoff-go") going.add(event.id);
+      else if (event.type === "handoff" || event.type === "handoff-declined") going.delete(event.id);
+    }
+    for (const id of going) {
+      this.emit({
+        type: "handoff-declined",
+        id,
+        outcome: "failed",
+        reason: "Toyon stopped while the worktree was being made",
+        ts: Date.now(),
+      });
+    }
     if (this.openHandoffs.size > 0) this.syncStatus();
   }
 
   /** the open handoff cards follow their events; true when the set changed */
   private trackHandoff(event: AgentEvent): boolean {
     if (event.type === "handoff-proposed") return this.openHandoffs.add(event.id).size > 0;
-    if (event.type === "handoff" || event.type === "handoff-declined") return this.openHandoffs.delete(event.id);
+    if (event.type === "handoff-go" || event.type === "handoff" || event.type === "handoff-declined")
+      return this.openHandoffs.delete(event.id);
     return false;
   }
 

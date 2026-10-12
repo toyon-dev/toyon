@@ -147,7 +147,7 @@ export function openAskOf(entries: readonly TranscriptEntry[]): string | undefin
     else if (e.type === "agent-permission") open.set(e.id, e.title);
     else if (e.type === "agent-ask-end") open.delete(e.id);
     else if (e.type === "handoff-proposed") open.set(e.id, `Continue in ${e.repo.name}?`);
-    else if (e.type === "handoff" || e.type === "handoff-declined") open.delete(e.id);
+    else if (e.type === "handoff-go" || e.type === "handoff" || e.type === "handoff-declined") open.delete(e.id);
   }
   const last = [...open.values()].at(-1)?.trim();
   return last ? clip(last) : undefined;

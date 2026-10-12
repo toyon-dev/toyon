@@ -98,9 +98,12 @@
       & .composer-subline {
         display: none;
       }
-      /* the height as well as the floor: a textarea left to itself is two rows tall */
-      & .composer-field textarea {
+      /* the region's floor, and the textarea's height as well: a textarea left to itself is two
+         rows tall, and its own height keeps it from stretching to them */
+      & .composer-field {
         min-height: 1lh;
+      }
+      & .composer-field textarea {
         height: 1lh;
       }
       & .composer-ghost {
@@ -981,7 +984,7 @@
   .composer-offer-close {
     margin-left: auto;
   }
-  /* the frame is base's (.composer); the floor is the field's, in lines of its own line height,
+  /* the frame is base's (.composer); the floor is the field's region, in lines of the prose face,
      so the box grows with what is attached above it (four image chips stand in it on their own)
      and the text never gives way. Above the floor the field is as tall as what is typed, so a
      message is read whole while it is written instead of scrolled inside a fixed box, up to half
@@ -989,11 +992,17 @@
      screen above it. The share is the panel's own height (its root is the size container), not
      the window's, which a dock beside the preview is not. The two bounds are the placement's to
      name: the phone's screen sets both in lines. A browser without field-sizing keeps the floor
-     and scrolls, as before. */
-  .chat-input .composer-field textarea {
-    field-sizing: content;
+     and scrolls, as before.
+     The bounds sit on the region and not on the textarea, which is stretched to it: `lh` is the
+     element's own line, and the textarea's changes face under a `!`, to a mono with no stated
+     leading, so a floor written on it shrank the box by a quarter as the mode was entered. The
+     region keeps the prose face whatever is typed. */
+  .chat-input .composer-field {
     min-height: var(--composer-floor, 5lh);
     max-height: var(--composer-cap, 50cqh);
+  }
+  .chat-input .composer-field textarea {
+    field-sizing: content;
   }
   /* the argument hint sits left of the key hints, where the eye lands after picking */
   /* the paste chip borrows the image chip's link row; its own line is the counts */

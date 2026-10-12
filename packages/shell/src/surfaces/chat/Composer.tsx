@@ -1242,9 +1242,12 @@ export function Composer({
         </ComposerOffer>
       )}
       {/* the chips are the draft's, like the text: an ask card takes the box whole, its answer
-          carries no attachment, and chips left in view over it read as part of the answer */}
+          carries no attachment, and chips left in view over it read as part of the answer. Nor in
+          `!` mode: a command takes no attachment either (send leaves them for the next message),
+          and chips over a command read as going with it. They are back once the `!` goes. */}
       {boxId &&
         !cardUp &&
+        shellCmd === null &&
         numbered(attachments, numbersAfter(nextNumbers(sentBefore), queued)).map(([item, n]) => {
           const detach = () => dispatch({ a: "detach", id: boxId, key: item.key });
           if (item.kind !== "pick") return <DraftChip key={item.key} item={item} n={n} onRemove={detach} />;

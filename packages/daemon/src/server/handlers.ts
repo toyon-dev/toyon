@@ -785,11 +785,14 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
       const followUp = msg.attachments?.length ? { attachments: msg.attachments } : undefined;
       s.runtime.agentFor(msg.worktreeId)?.answer(msg.askId, { kind: "answers", answers: msg.answers }, followUp);
     });
+    // an answer is the person's message to the agent, so its row moves up the rail like a send's
+    s.worktrees.markPrompted(msg.worktreeId);
   },
 
   "agent-decide"(msg, _ctx, s) {
     requireRun(s, msg.worktreeId);
     s.runtime.agentFor(msg.worktreeId)?.answer(msg.askId, { kind: "choice", choiceId: msg.choiceId });
+    s.worktrees.markPrompted(msg.worktreeId);
   },
 
   // the card's events are the word on it, on every tab; only a refusal comes back here, as the

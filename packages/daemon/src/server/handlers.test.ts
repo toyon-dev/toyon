@@ -1379,9 +1379,14 @@ describe("handlers", () => {
     await opened(main.id, ctx, services);
     const agent = agents.get(main.id)!;
     const answers = [{ selected: ["a"], note: "but only for now" }];
+    const before = Date.now();
     await dispatch({ t: "agent-answer", worktreeId: main.id, askId: "k1", answers }, ctx, services);
+    // an answer moves the row up the rail the way a send does
+    expect(services.state.worktree(main.id)?.promptedAt).toBeGreaterThanOrEqual(before);
     await dispatch({ t: "agent-answer", worktreeId: main.id, askId: "k2" }, ctx, services);
+    const decided = Date.now();
     await dispatch({ t: "agent-decide", worktreeId: main.id, askId: "k3", choiceId: "cancel" }, ctx, services);
+    expect(services.state.worktree(main.id)?.promptedAt).toBeGreaterThanOrEqual(decided);
     expect(agent.answered).toEqual([
       ["k1", { kind: "answers", answers }, undefined],
       // no answers is the skip button, and the daemon must be able to tell it from an empty pick

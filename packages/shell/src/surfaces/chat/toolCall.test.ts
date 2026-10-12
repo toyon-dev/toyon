@@ -243,6 +243,24 @@ describe("toolLabel", () => {
     expect(toolLabel({ ...call, title: "Bash", input: {} })).toMatchObject({ name: "Bash", hint: "" });
   });
 
+  test("a web search prints its query as typed, not the adapter's quoted title", () => {
+    const search = {
+      name: "WebSearch",
+      title: 'Search ""Oxfordstraße 20-22" Bonn"',
+      toolKind: "fetch" as const,
+      input: { query: '"Oxfordstraße 20-22" Bonn', mode: "standard" },
+    };
+    expect(toolLabel(search)).toMatchObject({ name: "", icon: "globe", hint: '"Oxfordstraße 20-22" Bonn' });
+    // a ToolSearch's query is the loader's syntax; the title is the daemon's reading of it
+    const loader = {
+      name: "ToolSearch",
+      title: "WebSearch, WebFetch",
+      toolKind: "search" as const,
+      input: { query: "select:WebSearch,WebFetch" },
+    };
+    expect(toolLabel(loader)).toMatchObject({ name: "ToolSearch", hint: "WebSearch, WebFetch" });
+  });
+
   test("the name stays where the glyph does not say the tool", () => {
     // a call with no kind is a dot, and a ToolSearch's words alone would read as a search of the code
     const old = { name: "Bash", input: { command: "ls -la" } };

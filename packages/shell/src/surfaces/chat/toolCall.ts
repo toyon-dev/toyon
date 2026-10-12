@@ -260,7 +260,11 @@ export function guardianHint(output: string): string {
 
 export function toolLabel(call: ToolCall, roots: string[] = []): ToolRowText {
   const command = unwrapShell(field(call, "command"));
-  const v = filePathOf(call) || command || field(call, "path") || field(call, "pattern");
+  // a web search's title wraps the query in quotes of its own, and a query that is a phrase search
+  // already carries a pair, so the row prints the query as the agent typed it. A ToolSearch's query
+  // is a loader's syntax (`select:A,B`) that the daemon has already reshaped into the title.
+  const query = call.name === TOOL_SEARCH ? "" : field(call, "query");
+  const v = filePathOf(call) || command || field(call, "path") || field(call, "pattern") || query;
   const raw = v || skillForm(call) || (call.title && call.title !== call.name ? call.title : "");
   // Claude's Bash tool sends a sentence of its own ("Build the project"); it beats the command as
   // the row's label, and the command still shows inside

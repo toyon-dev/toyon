@@ -261,11 +261,17 @@ export async function behindUpstream(worktreePath: string): Promise<number | nul
   return r.ok ? Number(r.out) || 0 : null;
 }
 
-/** the commits here that the upstream copy of the branch lacks: what an open PR is missing.
- * Null when the branch has no upstream, which one toyon pushed always has. */
-export async function aheadUpstream(worktreePath: string): Promise<number | null> {
+/** the commits here that origin's copy of the branch lacks: what an open PR is missing. The
+ * upstream answers first; a branch toyon pushed always has one. A branch pushed by hand without
+ * -u has none, and its PR still stands on origin/<branch>, so that ref answers next: read as
+ * null, the count stood in for zero and the box said the PR had everything. Null when neither
+ * names a ref. */
+export async function aheadUpstream(worktreePath: string, branch?: string): Promise<number | null> {
   const r = await git(worktreePath, "rev-list", "--count", "@{upstream}..HEAD");
-  return r.ok ? Number(r.out) || 0 : null;
+  if (r.ok) return Number(r.out) || 0;
+  if (!branch) return null;
+  const o = await git(worktreePath, "rev-list", "--count", `origin/${branch}..HEAD`);
+  return o.ok ? Number(o.out) || 0 : null;
 }
 
 export async function aheadBehind(worktreePath: string, defaultBr: string): Promise<{ ahead: number; behind: number }> {

@@ -1974,7 +1974,7 @@ export class WorktreeService {
         // work since the PR opened goes to the PR, never under it: a merge now would take the
         // PR as GitHub has it and strand what is here
         const dirty = (await statusFiles(wt.path)).length > 0;
-        const missing = dirty || ((await aheadUpstream(wt.path)) ?? 0) > 0;
+        const missing = dirty || ((await aheadUpstream(wt.path, wt.branch)) ?? 0) > 0;
         if (!missing) return { result: await mergePr(wt.path, wt.pr.number, policy.merge, w) };
         const committed = await this.commitIfDirty(wt, message);
         if (committed && !committed.ok) return { result: committed };
@@ -2555,8 +2555,9 @@ export class WorktreeService {
    * row with a PR open is asked, since the count means nothing before the branch is on origin
    * and the box reads it only to offer the push. */
   private async unpushed(id: string, path: string): Promise<number | undefined> {
-    if (this.d.state.worktree(id)?.pr?.state !== "open") return undefined;
-    return (await aheadUpstream(path)) ?? undefined;
+    const wt = this.d.state.worktree(id);
+    if (wt?.pr?.state !== "open") return undefined;
+    return (await aheadUpstream(path, wt.branch)) ?? undefined;
   }
 
   /** a worktree's dirty files and commits ahead of main, from git now rather than the rail's cached

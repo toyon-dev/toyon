@@ -1,9 +1,16 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { existsSync, statSync, utimesSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { sh, tmpRepo } from "../../test/helpers/tmp-repo.ts";
 import { GIT } from "./exec.ts";
-import { changedRanges, foldDropped, parsePorcelain, statusFiles, statusFilesWithCounts } from "./status.ts";
+import {
+  aheadUpstream,
+  changedRanges,
+  foldDropped,
+  parsePorcelain,
+  statusFiles,
+  statusFilesWithCounts,
+} from "./status.ts";
 
 describe("statusFiles", () => {
   const { repo, cleanup } = tmpRepo();
@@ -103,5 +110,33 @@ describe("statusFilesWithCounts", () => {
     const many = await statusFilesWithCounts(repo);
     expect(many).toHaveLength(502);
     expect(many.every((f) => f.add === undefined && f.del === undefined)).toBe(true);
+  });
+});
+
+describe("aheadUpstream", () => {
+  const { repo, cleanup } = tmpRepo();
+  afterAll(cleanup);
+  const origin = join(dirname(repo), "origin.git");
+  sh(repo, GIT, "init", "-q", "--bare", "-b", "main", origin);
+  sh(repo, GIT, "remote", "add", "origin", origin);
+  sh(repo, GIT, "push", "-q", "-u", "origin", "main");
+
+  test("a branch pushed by hand without -u is counted against origin's copy of it", async () => {
+    sh(repo, GIT, "checkout", "-q", "-b", "feat");
+    sh(repo, GIT, "commit", "-q", "--allow-empty", "-m", "one");
+    sh(repo, GIT, "push", "-q", "origin", "feat");
+    sh(repo, GIT, "commit", "-q", "--allow-empty", "-m", "two");
+    // no upstream and no branch named: nothing to count against
+    expect(await aheadUpstream(repo)).toBeNull();
+    expect(await aheadUpstream(repo, "feat")).toBe(1);
+    // a branch origin never had has no copy to count against either
+    expect(await aheadUpstream(repo, "nowhere")).toBeNull();
+  });
+
+  test("the upstream answers first once the branch has one", async () => {
+    sh(repo, GIT, "push", "-q", "-u", "origin", "feat");
+    expect(await aheadUpstream(repo, "feat")).toBe(0);
+    sh(repo, GIT, "commit", "-q", "--allow-empty", "-m", "three");
+    expect(await aheadUpstream(repo)).toBe(1);
   });
 });

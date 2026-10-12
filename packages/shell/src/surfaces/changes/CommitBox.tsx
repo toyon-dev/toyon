@@ -143,13 +143,14 @@ export function CommitBox({
   const behindLine = canSync(active) ? behindNote(base, behind) : null;
   // a dirty tree syncs where toyon runs the worktree: the daemon carries the uncommitted work
   // across. Under a turn, whose writes would land in the moment the tree is empty, the press
-  // waits for the turn to end, and the same control takes it back until then.
+  // waits for the turn to end. Until then the sync is a run that has started, and it reads as
+  // one: the shining line where the button stood, not a button pressed in. The row's menu
+  // takes it back.
   const midTurn = active.agent === "working" || active.agent === "waiting";
   const syncHeld = dirty && !owned ? "commit or discard the changes here first" : undefined;
   const syncQueued = !!active.syncQueued;
-  const syncTip = syncQueued
-    ? "Runs once the turn ends, the uncommitted changes kept. Press again to call it off"
-    : dirty && midTurn
+  const syncTip =
+    dirty && midTurn
       ? `Merge ${base} into this worktree once the turn ends, uncommitted changes kept`
       : `Merge ${base} into this worktree${dirty ? ", uncommitted changes kept" : ""}`;
   const canMerge = prOpen && !prMissing && prCanMerge(pr);
@@ -335,19 +336,21 @@ export function CommitBox({
               <span>{behindLine}</span>
               {op === "sync-main" ? (
                 <span className="live-text">{heldStep ? `sync: ${heldStep}` : "sync"}</span>
+              ) : syncQueued ? (
+                <span
+                  className="live-text"
+                  data-tip="Runs once the turn ends, the uncommitted changes kept. The row's menu calls it off"
+                >
+                  syncing after next turn
+                </span>
               ) : (
                 <Button
                   variant="outline"
-                  on={syncQueued}
                   disabled={!!op || !!syncHeld}
                   data-tip={syncHeld ?? syncTip}
-                  onClick={() =>
-                    syncQueued
-                      ? sock?.send({ t: "unqueue-sync", worktreeId: id })
-                      : shipOp(sock, dispatch, { t: "sync-main", worktreeId: id })
-                  }
+                  onClick={() => shipOp(sock, dispatch, { t: "sync-main", worktreeId: id })}
                 >
-                  {syncQueued ? "sync after the turn" : "sync"}
+                  sync
                 </Button>
               )}
             </div>

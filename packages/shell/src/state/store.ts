@@ -262,12 +262,12 @@ export interface WorktreeLocal {
   /** the listing key (actions/file.ts) the files were last asked for; the same key asks nothing */
   filesFor?: string;
   queue: QueuedMessage[];
-  /** a message sent from an archived page or a found worktree's, shown as sent while the worktree
-   * becomes toyon's to run: gone when its own message reaches the chat, when the daemon hands it
-   * back unsent, or, for a found one, with the row it was sent from. Empty for the page's own
-   * restore press, which has no words to wait for: it goes with the row's first chat frame, or
-   * with the daemon's refusal */
-  restoring?: string;
+  /** a message sent from an archived page or a found worktree's, chips included, shown as sent
+   * while the worktree becomes toyon's to run: gone when its own message reaches the chat, when
+   * the daemon hands it back unsent, or, for a found one, with the row it was sent from. Empty
+   * words for the page's own restore press, which has nothing to wait for: it goes with the row's
+   * first chat frame, or with the daemon's refusal */
+  restoring?: QueuedMessage;
   /** a message sent to an agent that is not mid-turn, until the daemon's word catches up: the log
    * shows the bubble and the working mark from the press, so the wait reads as the turn it becomes
    * (and on the lead row, whose worktree is still being made, the draft's choices step aside).
@@ -1374,7 +1374,7 @@ export type Action =
   /** archive-worktree frames went out for these: hide the rows now, move the selection off them */
   | { a: "archive-worktrees"; ids: string[] }
   /** a message went from an archived page with the restore it asks for: show it as sent meanwhile */
-  | { a: "restoring"; id: string; text: string }
+  | { a: "restoring"; id: string; message: QueuedMessage }
   | { a: "sending"; id: string; message: QueuedMessage }
   /** this tab sent a message from the box, which the daemon has taken: the box is empty here too,
    * and the log jumps to its end */
@@ -1809,7 +1809,7 @@ function reduce(s: State, action: Action): State {
     case "close-archived":
       return s.archivedPage ? closeArchivedPage(s) : s;
     case "restoring":
-      return withLocal(s, action.id, (l) => ({ ...l, restoring: action.text }));
+      return withLocal(s, action.id, (l) => ({ ...l, restoring: action.message }));
     case "sending":
       return withLocal(s, action.id, (l) => ({ ...l, sending: { message: action.message } }));
     case "sent-box":
@@ -1856,7 +1856,7 @@ function reduce(s: State, action: Action): State {
       const attachments = box.attachments.length ? settledInputs(box.attachments) : undefined;
       const counted = (l: WorktreeLocal) => ({ ...l, sent: (l.sent ?? 0) + 1 });
       if (out.frame.t === "restore-worktree" || out.frame.t === "adopt-worktree")
-        return withLocal(next, out.log, (l) => ({ ...counted(l), restoring: text }));
+        return withLocal(next, out.log, (l) => ({ ...counted(l), restoring: { text, attachments } }));
       // an ask's answer has no bubble of its own: the card closes when the agent has it
       if (out.frame.t === "agent-answer") return withLocal(next, out.log, counted);
       // as at a plain send: mid-turn the log is already busy, and the message joins the turn or
@@ -2793,7 +2793,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
         running: runningOf(chat, l.running),
         log: msg.log ?? l.log,
         ...(usage ? { usage } : {}),
-        ...(restoring !== undefined && !heard(restoring) ? { restoring } : {}),
+        ...(restoring !== undefined && !heard(restoring.text) ? { restoring } : {}),
       }));
     }
     case "git-status": {

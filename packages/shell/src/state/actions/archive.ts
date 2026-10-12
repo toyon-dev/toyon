@@ -33,7 +33,7 @@ export function archivedHint(a: ArchivedWorktree): string {
  * daemon is slow has nothing to land on. */
 export function restoreArchived({ sock, dispatch }: Deps, archiveId: string, clientId: string) {
   sock?.send({ t: "restore-worktree", archiveId, clientId });
-  dispatch({ a: "restoring", id: archiveId, text: "" });
+  dispatch({ a: "restoring", id: archiveId, message: { text: "" } });
 }
 
 /** an archived worktree: bring it back, or let it go. Deleting is the one verb here that cannot be

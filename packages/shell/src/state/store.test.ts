@@ -1413,26 +1413,29 @@ describe("drafts", () => {
     expect(s.local.a).toBeUndefined();
   });
   test("a message sent from an archived page shows as sent until the restored agent has it", () => {
-    let s = run([hello(wt("b")), { a: "restoring", id: "a", text: "one more thing" }]);
-    expect(s.local.a?.restoring).toBe("one more thing");
+    let s = run([hello(wt("b")), { a: "restoring", id: "a", message: { text: "one more thing" } }]);
+    expect(s.local.a?.restoring).toEqual({ text: "one more thing" });
     s = run([agent("a", { type: "user-message", text: "one more thing", ts: 0 })], s);
     expect(s.local.a?.restoring).toBeUndefined();
     expect(s.local.a?.chat.at(-1)).toMatchObject({ kind: "user", text: "one more thing" });
     // a socket that came back mid-restore hears the message in the backfill instead
-    s = run([{ a: "restoring", id: "a", text: "and another" }], s);
+    s = run([{ a: "restoring", id: "a", message: { text: "and another" } }], s);
     const said = { type: "user-message" as const, text: "and another", ts: 1 };
     s = run([server({ t: "backfill", worktreeId: "a", events: [{ seq: 0, event: said }] })], s);
     expect(s.local.a?.restoring).toBeUndefined();
   });
   test("the page's own restore press shows the row on its way, until its chat arrives or the daemon refuses", () => {
     // no words to wait for: the row's first frame, here the daemon's word on the restore, ends it
-    let s = run([hello(wt("b")), { a: "restoring", id: "a", text: "" }]);
-    expect(s.local.a?.restoring).toBe("");
+    let s = run([hello(wt("b")), { a: "restoring", id: "a", message: { text: "" } }]);
+    expect(s.local.a?.restoring).toEqual({ text: "" });
     const back = { type: "restored" as const, archivedAt: 0, branch: "toyon/a", uncommitted: false, ts: 1 };
     s = run([server({ t: "backfill", worktreeId: "a", events: [{ seq: 0, event: back }] })], s);
     expect(s.local.a?.restoring).toBeUndefined();
     // refused: the offer comes back on the page, which is still showing
-    s = run([{ a: "restoring", id: "a", text: "" }, server({ t: "error", message: "gone", worktreeId: "a" })], s);
+    s = run(
+      [{ a: "restoring", id: "a", message: { text: "" } }, server({ t: "error", message: "gone", worktreeId: "a" })],
+      s,
+    );
     expect(s.local.a?.restoring).toBeUndefined();
   });
   test("a send from the lead row shows as sent and working until the row says so itself", () => {
@@ -1523,7 +1526,11 @@ describe("drafts", () => {
     expect(s.local.a?.notice).toBe("refused");
   });
   test("a restore handed back unsent stops showing as sent and is back in the page's box", () => {
-    let s = run([hello(wt("b")), { a: "restoring", id: "a", text: "one more thing" }, { a: "sent-box", id: "a" }]);
+    let s = run([
+      hello(wt("b")),
+      { a: "restoring", id: "a", message: { text: "one more thing" } },
+      { a: "sent-box", id: "a" },
+    ]);
     const message = "that archived worktree is gone";
     s = run([server({ t: "unsent", boxId: "a", text: "one more thing", items: [], message })], s);
     expect(s.local.a?.restoring).toBeUndefined();
@@ -3485,7 +3492,8 @@ describe("the outbox", () => {
       { a: "hold-send", id: "old", log: "old", text: "back", frame: restore },
     ]);
     r = run([{ a: "sent-out", id: outOf(r) }], r);
-    expect(r.local.old?.restoring).toBe("back");
+    // the chips go on the row with the words, the way a plain send's do
+    expect(r.local.old?.restoring).toEqual({ text: "back", attachments: [toInput(landed)] });
     expect(r.local.old?.sending).toBeUndefined();
   });
 

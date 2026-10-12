@@ -6,6 +6,7 @@ import type {
   ModelChoice,
   OwnedWorktree,
   PermissionMode,
+  QueuedMessage,
   WorktreeStatus,
 } from "@toyon/shared";
 import {
@@ -898,6 +899,11 @@ export function Composer({
       return;
     }
     if (blank) return;
+    // the message as the row shows it on its way: the words and the chips the frame carries
+    const taken = (): QueuedMessage => ({
+      text: text.trim(),
+      attachments: attachments.length ? attachments.map(toInput) : undefined,
+    });
     // into an archived chat: one frame restores the worktree and hands the message to its agent,
     // so the two cannot come apart. Nothing runs there yet, so a `!` command has nowhere to go.
     if (archived) {
@@ -910,7 +916,7 @@ export function Composer({
       if (uploading) return hold(boxId, boxId, text.trim(), frame);
       leaveBox();
       sock?.send(fillFrame(frame, boxId, text.trim(), attachments));
-      dispatch({ a: "restoring", id: boxId, text: text.trim() });
+      dispatch({ a: "restoring", id: boxId, message: taken() });
       dispatch({ a: "sent-box", id: boxId });
       return;
     }
@@ -925,7 +931,7 @@ export function Composer({
       if (uploading) return hold(boxId, boxId, text.trim(), frame);
       leaveBox();
       sock?.send(fillFrame(frame, boxId, text.trim(), attachments));
-      dispatch({ a: "restoring", id: boxId, text: text.trim() });
+      dispatch({ a: "restoring", id: boxId, message: taken() });
       dispatch({ a: "sent-box", id: boxId });
       return;
     }

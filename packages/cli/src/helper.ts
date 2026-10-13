@@ -2,11 +2,11 @@
 // system handed it. A link on the scheme means the daemon up and nothing opened: the page that
 // opened the link reloads itself once the daemon answers. Anything else is a file or folder from
 // Finder's Open With, as a file URL from Launch Services or a plain path from a drop; each goes to
-// the daemon's open route and one app window shows them.
+// the daemon's open route and one window shows them.
 
 import { fileURLToPath } from "node:url";
 import { APP_SCHEME } from "@toyon/shared";
-import { showAppWindow } from "./app.ts";
+import { openShell } from "./app.ts";
 import { ensureDaemon, post } from "./daemon.ts";
 
 export type HelperPlan = { kind: "start" } | { kind: "open"; paths: string[] };
@@ -39,6 +39,6 @@ export async function helper(args: string[]): Promise<number> {
     const res = await post("/open", daemon.token, { path });
     if (!res.ok) console.error(`could not open ${path}: ${await res.text()}`);
   }
-  showAppWindow(daemon);
+  openShell(daemon);
   return 0;
 }

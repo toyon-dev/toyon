@@ -6,7 +6,7 @@
 import { existsSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import pkg from "../package.json" with { type: "json" };
-import { showAppWindow } from "./app.ts";
+import { openShell } from "./app.ts";
 import { type Command, HELP, parseArgs } from "./args.ts";
 import { behind, ensureDaemon, health, post } from "./daemon.ts";
 import { deploy } from "./deploy/fly.ts";
@@ -14,7 +14,6 @@ import { doctor } from "./doctor.ts";
 import { helper } from "./helper.ts";
 import { restartCmd } from "./layout.ts";
 import { logs } from "./logs.ts";
-import { openUrl } from "./openUrl.ts";
 import { pair } from "./pair.ts";
 import { remote } from "./remote.ts";
 import { restart } from "./restart.ts";
@@ -64,15 +63,11 @@ async function open(cmd: Extract<Command, { kind: "open" }>): Promise<number> {
     const res = await post("/register", daemon.token, { path: target });
     if (!res.ok) {
       console.error(`could not open ${target}: ${await res.text()}`);
-      if (explicit || !cmd.app) return 1;
+      return 1;
     }
   }
 
-  if (cmd.app) showAppWindow(daemon);
-  else {
-    console.log(`toyon: ${daemon.url}`);
-    openUrl(daemon.url);
-  }
+  openShell(daemon);
   return 0;
 }
 

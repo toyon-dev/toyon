@@ -48,7 +48,7 @@ npm i -g toyon
 toyon ~/projects/app
 ```
 
-`toyon .` opens the folder you are in and `toyon --help` lists the rest. A global install keeps itself updated; `TOYON_UPDATES=off` stops it. Run outside a project, Toyon opens with none: describe a new one in a sentence, or give the project picker a git URL to clone.
+`toyon .` opens the folder you are in and `toyon --help` lists the rest. The install button in the top bar makes Toyon an app of its own in Chrome, Arc, Brave or Edge, with a Dock icon and no browser bar; from then on `toyon .` opens that. A global install keeps itself updated; `TOYON_UPDATES=off` stops it. Run outside a project, Toyon opens with none: describe a new one in a sentence, or give the project picker a git URL to clone.
 
 You need:
 

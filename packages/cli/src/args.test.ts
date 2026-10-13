@@ -6,15 +6,15 @@ import { parseArgs } from "./args.ts";
 
 describe("parseArgs", () => {
   test("nothing opens the current directory", () => {
-    expect(parseArgs([])).toEqual({ kind: "open", path: null, app: false });
+    expect(parseArgs([])).toEqual({ kind: "open", path: null });
   });
   test("a positional is the path to open", () => {
     expect(parseArgs(["~/projects/app"])).toMatchObject({ kind: "open", path: "~/projects/app" });
     expect(parseArgs(["."])).toMatchObject({ kind: "open", path: "." });
   });
-  test("the app-window flags ride along with a path or without", () => {
-    expect(parseArgs(["--app"])).toMatchObject({ kind: "open", path: null, app: true });
-    expect(parseArgs([".", "--pwa"])).toMatchObject({ kind: "open", path: ".", app: true });
+  test("the installed app is found on its own, so the old window flags are unknown options", () => {
+    expect(parseArgs(["--app"])).toMatchObject({ kind: "error" });
+    expect(parseArgs([".", "--pwa"])).toMatchObject({ kind: "error" });
   });
   test("start takes nothing; helper takes whatever the system handed it", () => {
     expect(parseArgs(["start"])).toEqual({ kind: "start" });

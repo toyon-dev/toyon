@@ -4,7 +4,7 @@
 import { isRemoteHost } from "@toyon/shared";
 
 export type Command =
-  | { kind: "open"; path: string | null; app: boolean }
+  | { kind: "open"; path: string | null }
   /** the daemon up and nothing opened */
   | { kind: "start" }
   /** what the hidden helper bundle runs with whatever the system handed it: a toyon: link, file
@@ -107,14 +107,12 @@ export function parseArgs(argv: string[]): Command {
   }
 
   let path: string | null = null;
-  let app = false;
   for (const a of argv) {
-    if (a === "--app" || a === "--pwa") app = true;
-    else if (a.startsWith("-")) return { kind: "error", message: `unknown option ${a}` };
-    else if (path !== null) return { kind: "error", message: "Toyon opens one path at a time" };
-    else path = a;
+    if (a.startsWith("-")) return { kind: "error", message: `unknown option ${a}` };
+    if (path !== null) return { kind: "error", message: "Toyon opens one path at a time" };
+    path = a;
   }
-  return { kind: "open", path, app };
+  return { kind: "open", path };
 }
 
 function parseLogs(rest: string[]): Command {
@@ -204,9 +202,6 @@ usage
                           print the link to that machine again
   toyon deploy fly destroy <name> [--yes]
                           delete that app and its volume
-
-options for toyon [path]
-  --app                   open a Chromium app window (the installed Toyon app when there is one)
 
 environment
   TOYON_HOME              where state lives (default ~/.toyon)

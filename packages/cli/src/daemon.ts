@@ -164,7 +164,11 @@ export function post(route: string, token: string, body: unknown): Promise<Respo
   });
 }
 
+/** the shell's two origins: the portless branded host, and the port the daemon always binds. An
+ * installed app carries whichever one it was installed from. */
+export const shellOrigins = ["http://toyon.localhost", `http://toyon.localhost:${port}`] as const;
+
 /** the shell's address: the portless branded host when the daemon bound it, else the port */
 export function shellUrl(token: string, branded: boolean): string {
-  return branded ? `http://toyon.localhost/#token=${token}` : `http://toyon.localhost:${port}/#token=${token}`;
+  return `${branded ? shellOrigins[0] : shellOrigins[1]}/#token=${token}`;
 }

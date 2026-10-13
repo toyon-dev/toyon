@@ -6,6 +6,7 @@ import { join } from "node:path";
 import type { ProcState } from "@toyon/shared";
 import { reclaimGroup } from "./kill.ts";
 import { reachableHost } from "./listeners.ts";
+import { allocatePort, releasePort } from "./ports.ts";
 import { execForm, WorktreeProcs } from "./supervisor.ts";
 
 function alive(pid: number): boolean {
@@ -177,16 +178,23 @@ describe("WorktreeProcs port diagnosis", () => {
     const procs = new WorktreeProcs(process.cwd(), (p) => states.push({ ...p }), noop, noop, noop, {
       pollAttempts: 2,
     });
-    // a vite-shaped server: prints its own URL and binds a port that is not $PORT
-    const other = 40000 + Math.floor(Math.random() * 20000);
+    // a vite-shaped server: prints its own URL and binds a port that is not $PORT. The port is
+    // one the OS says is free, not a random one: the test shards run many servers at once, and a
+    // dev daemon's preview sits in the same range, so a pick that collides binds nothing and the
+    // proc crashes instead of answering
+    const other = await allocatePort();
     const script = `echo "Local: http://localhost:${other}/"; exec bun -e 'Bun.serve({port:${other},hostname:"127.0.0.1",fetch(){return new Response("x")}}); await new Promise(()=>{})'`;
-    const st = await procs.start("web", script);
-    expect(await until(() => states.some((s) => s.status === "running"), 10000)).toBe(true);
-    const running = states.find((s) => s.status === "running")!;
-    expect(running.boundPort).toBe(other);
-    expect(running.port).toBe(st.port);
-    expect(running.detail).toContain("--port $PORT");
-    await procs.stopAll();
+    try {
+      const st = await procs.start("web", script);
+      expect(await until(() => states.some((s) => s.status === "running"), 10000)).toBe(true);
+      const running = states.find((s) => s.status === "running")!;
+      expect(running.boundPort).toBe(other);
+      expect(running.port).toBe(st.port);
+      expect(running.detail).toContain("--port $PORT");
+      await procs.stopAll();
+    } finally {
+      releasePort(other);
+    }
   }, 15_000);
 });
 

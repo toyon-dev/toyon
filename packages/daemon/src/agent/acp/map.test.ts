@@ -113,6 +113,31 @@ describe("mapUpdate", () => {
     ]);
   });
 
+  test("a later update's content replaces the earlier content rather than adding to it", () => {
+    // the Claude adapter sends an Edit's diff twice: the hunk built from the input, then the
+    // real patch with context once the hook has run; the card shows the last one alone
+    const events = run([
+      { sessionUpdate: "tool_call", toolCallId: "e", title: "Edit /a", kind: "edit", status: "pending" },
+      {
+        sessionUpdate: "tool_call_update",
+        toolCallId: "e",
+        content: [{ type: "diff", path: "/a", oldText: "x", newText: "y" }],
+      },
+      {
+        sessionUpdate: "tool_call_update",
+        toolCallId: "e",
+        status: "completed",
+        content: [{ type: "diff", path: "/a", oldText: "w\nx\nz", newText: "w\ny\nz" }],
+      },
+    ]);
+    expect(events.at(-1)).toEqual({
+      type: "tool-end",
+      toolId: "e",
+      output: "```diff\n@@ -1,3 +1,3 @@\n w\n-x\n+y\n z\n```",
+      isError: false,
+    });
+  });
+
   test("a one-shot completed tool_call, a failed one, and an update before its call", () => {
     expect(
       run([

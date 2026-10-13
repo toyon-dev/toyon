@@ -370,7 +370,10 @@ export function mapUpdate(
       if (Object.keys(refined).length > 0 && !memo.ended && out.length === 0) {
         out.push({ type: "tool-update", toolId: update.toolCallId, ...refined });
       }
-      if (update.content) memo.content = [...memo.content, ...update.content];
+      // an update's content is the whole collection, not an addition to it: the Claude adapter
+      // sends an Edit's diff twice, first built from the input and then the real patch from the
+      // PostToolUse hook, and keeping both prints the same hunk twice on the card
+      if (update.content) memo.content = update.content;
       if (update.rawOutput !== undefined) memo.rawOutput = update.rawOutput;
       if ((update.status === "completed" || update.status === "failed") && !memo.ended) {
         out.push(endOf(update.toolCallId, memo, update.status, sink, background));

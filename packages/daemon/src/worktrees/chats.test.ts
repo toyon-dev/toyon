@@ -150,13 +150,21 @@ describe("ChatSearch", () => {
 
   test("the project's worktrees and archived chats, main and other projects left out, where it was said last first", async () => {
     const { search } = make();
-    const { hits, truncated } = await search.search("r", "Footer");
+    const { hits, truncated, asks } = await search.search("r", "Footer");
     expect(hits.map((h) => [h.worktreeId, h.archived])).toEqual([
       ["z", true],
       ["b", false],
       ["a", false],
     ]);
     expect(truncated).toBe(false);
+    expect(asks).toEqual({ z: "the footer again", b: "the footer, cold", a: "fix the footer" });
+  });
+
+  test("a chat's first message comes with its hits, and only a chat with a hit says one", async () => {
+    const { search } = make();
+    const { hits, asks } = await search.search("r", "cold");
+    expect(hits.map((h) => h.worktreeId)).toEqual(["b"]);
+    expect(asks).toEqual({ b: "the footer, cold" });
   });
 
   test("a chat's file is read again only when it changes, and a short query reads nothing", async () => {
@@ -168,7 +176,7 @@ describe("ChatSearch", () => {
     files.get("/t/b.jsonl")!.mtimeMs = 2;
     await search.search("r", "footer");
     expect(reads()).toBe(3);
-    expect(await search.search("r", "f")).toEqual({ hits: [], truncated: false });
+    expect(await search.search("r", "f")).toEqual({ hits: [], truncated: false, asks: {} });
     expect(reads()).toBe(3);
   });
 });

@@ -173,6 +173,23 @@
   .picker-group-owed {
     color: var(--accent);
   }
+  /* a line under a head, in the head's voice: what the group is about when its key is not enough
+     (what a chat was asked for, under its name). It wraps under the name as a second flex line,
+     cut at the edge, and the head grows by it rather than keeping the one-row height. */
+  .picker-group:has(.picker-group-line) {
+    height: auto;
+    min-height: var(--row-height-sm);
+    flex-wrap: wrap;
+    /* the air a one-line head gets from centring in its row */
+    padding-block: 4px;
+  }
+  .picker-group-line {
+    flex-basis: 100%;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
   /* selection, one idiom everywhere: a 2px bar down the leading edge and a seat that stays neutral.
    The accent never colours the content, so a marked row, an open panel's button and a picked value
    all say the same thing and none of them borrows the shape of an error. */

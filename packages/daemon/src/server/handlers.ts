@@ -909,8 +909,8 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
   },
 
   async "search-chats"(msg, ctx, s) {
-    const { hits, truncated } = await s.chats.search(msg.repoId, msg.query);
-    ctx.reply({ t: "chat-hits", repoId: msg.repoId, query: msg.query, hits, truncated });
+    const { hits, truncated, asks } = await s.chats.search(msg.repoId, msg.query);
+    ctx.reply({ t: "chat-hits", repoId: msg.repoId, query: msg.query, hits, truncated, asks });
   },
 
   async "open-ref"(msg, _ctx, s) {

@@ -7,6 +7,7 @@ import { Button } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { markHits } from "../../ui/highlight.tsx";
 import { ListPicker } from "../../ui/ListPicker.tsx";
+import { clipLine } from "../recap.ts";
 import { ago } from "../util.ts";
 import { archivedRow, type ChatScope, type ChatsRow, chatRows, liveRow, tooShort } from "./chats.ts";
 import { PaletteRow } from "./PaletteRow.tsx";
@@ -75,24 +76,32 @@ export function ChatsPicker({ repoId, scope: opened }: { repoId: string; scope: 
       rowTitle={(r) => (r.kind === "hit" ? r.hit.text : (r.archived?.prompt ?? r.name))}
       // the daemon answers chat by chat, so a chat's hits already sit together; the head says
       // the chat's name once and the rows under it say only who and when. Drawn over a lone chat
-      // too, or sixteen hits from one chat would name it nowhere.
+      // too, or sixteen hits from one chat would name it nowhere. Under the name, what the chat
+      // was asked for: the name is a few words that four chats on one topic can share, and the
+      // hits say what matched, not which chat this is. The first message is true of the whole
+      // chat, as on the rail's archived row.
       groupOf={(r) => (r.kind === "hit" ? `h:${r.hit.worktreeId}` : r.archived ? "archived" : "open")}
       groupHead={(group, n) => {
         if (!group.startsWith("h:")) return `${group} · ${n}`;
-        const w = byId.get(group.slice(2));
+        const id = group.slice(2);
+        const w = byId.get(id);
+        const ask = results?.asks[id];
         // one span: the head is a flex box, and bare text beside the archived mark would lose the
         // space between them
         return (
-          <span>
-            {w?.name ?? "a worktree"}
-            {w?.archived && (
-              <>
-                {" "}
-                <span className="row-dim">archived</span>
-              </>
-            )}
-            {` · ${n}`}
-          </span>
+          <>
+            <span>
+              {w?.name ?? "a worktree"}
+              {w?.archived && (
+                <>
+                  {" "}
+                  <span className="row-dim">archived</span>
+                </>
+              )}
+              {` · ${n}`}
+            </span>
+            {ask && <span className="picker-group-line">{clipLine(ask)}</span>}
+          </>
         );
       }}
       headAlone

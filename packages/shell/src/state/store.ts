@@ -699,7 +699,7 @@ export interface State {
    * from the one the person is waiting on. Repo-scoped, since a ref is not a worktree's. */
   refs: Record<string, { query: string; refs: RefHit[] }>;
   /** the chats palette's last answer for each project; `query` tells a stale one from a fresh one */
-  chats: Record<string, { query: string; hits: ChatHit[]; truncated: boolean }>;
+  chats: Record<string, { query: string; hits: ChatHit[]; truncated: boolean; asks: Record<string, string> }>;
   /** per repo: its archived worktrees, newest first; absent until the rail or the chats palette asks */
   archived: Record<string, ArchivedWorktree[]>;
   /** the archived worktree whose page the centre shows, by archive id. Like the draft it is a tab
@@ -2583,7 +2583,10 @@ function onServer(s: State, msg: StoreServerMsg): State {
     case "chat-hits":
       return {
         ...s,
-        chats: { ...s.chats, [msg.repoId]: { query: msg.query, hits: msg.hits, truncated: msg.truncated } },
+        chats: {
+          ...s.chats,
+          [msg.repoId]: { query: msg.query, hits: msg.hits, truncated: msg.truncated, asks: msg.asks },
+        },
       };
     case "archived":
       return { ...s, archived: { ...s.archived, [msg.repoId]: msg.items } };

@@ -282,8 +282,10 @@ export type ServerMsg =
   /** the ref palette's rows for a query; `query` is echoed so a stale reply is told from a fresh one */
   | { t: "refs"; repoId: string; query: string; refs: RefHit[] }
   /** the chats palette's hits for a query, grouped by worktree with the newest first; `query` is
-   * echoed so a stale reply is told from a fresh one */
-  | { t: "chat-hits"; repoId: string; query: string; hits: ChatHit[]; truncated: boolean }
+   * echoed so a stale reply is told from a fresh one. `asks` is the first message sent in each
+   * chat with a hit, by worktree id, so the head over its hits can say what the chat was about:
+   * a title is a few words, and sixteen hits under "Followup sweep" say nothing of which sweep */
+  | { t: "chat-hits"; repoId: string; query: string; hits: ChatHit[]; truncated: boolean; asks: Record<string, string> }
   /** a project's archived worktrees, newest first: the reply to list-archived, and pushed to every
    * tab when one is archived, restored or deleted */
   | { t: "archived"; repoId: string; items: ArchivedWorktree[] }

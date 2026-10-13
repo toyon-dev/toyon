@@ -18,6 +18,9 @@ const MIN_QUERY = 2;
 /** how much of a message a hit shows, and how much of that sits before the match */
 const SNIPPET = 160;
 const BEFORE = 50;
+/** how much of a chat's first message travels with its hits: a line's worth, as the archive keeps
+ * it for the rail's row, where the shell cuts it to its own measure */
+const ASK = 500;
 
 /** one thing said in a chat, as the search reads it: whitespace collapsed, and a lower-cased copy
  * to match against, so a query finds a phrase that wrapped onto the next line */
@@ -126,6 +129,13 @@ export function searchRows(
   return { hits, more: false };
 }
 
+/** what a chat was asked for: the first thing the person sent there, which is true of the whole
+ * chat where the last turn's recap is only where it stopped. Undefined for a chat that has only
+ * the model's words, which a chat opened by a handoff can be. */
+export function firstAsk(rows: SaidRow[]): string | undefined {
+  return rows.find((r) => r.role === "user")?.text.slice(0, ASK);
+}
+
 /** each term where it first appears in `lower`, or null when one is absent. A phrase is a plain
  * substring too: the row's whitespace is already one space each, as the term's is. */
 function termRanges(lower: string, terms: string[]): Array<[number, number]> | null {
@@ -145,10 +155,13 @@ export class ChatSearch {
 
   constructor(private d: ChatSearchDeps) {}
 
-  async search(repoId: string, query: string): Promise<{ hits: ChatHit[]; truncated: boolean }> {
+  async search(
+    repoId: string,
+    query: string,
+  ): Promise<{ hits: ChatHit[]; truncated: boolean; asks: Record<string, string> }> {
     this.d.state.requireRepo(repoId);
     const terms = needleTerms(query);
-    if (terms.length === 0) return { hits: [], truncated: false };
+    if (terms.length === 0) return { hits: [], truncated: false, asks: {} };
     // main has no chat of its own and a spare has not started one, so the chats are the worktrees
     const chats = [
       ...this.d.state.worktrees
@@ -160,7 +173,11 @@ export class ChatSearch {
     const found = await Promise.all(
       chats.map(async (c) => {
         const rows = await this.rowsOf(c.id, c.archived, c.path, read);
-        return searchRows(rows, terms, { worktreeId: c.id, archived: c.archived });
+        return {
+          id: c.id,
+          ...searchRows(rows, terms, { worktreeId: c.id, archived: c.archived }),
+          ask: firstAsk(rows),
+        };
       }),
     );
     // a chat no longer listed (restored, deleted, its worktree gone) is not read again
@@ -170,7 +187,12 @@ export class ChatSearch {
       .filter((f) => f.hits.length > 0)
       .sort((a, b) => b.hits[0]!.ts - a.hits[0]!.ts)
       .flatMap((f) => f.hits);
-    return { hits: all.slice(0, CHAT_HITS_MAX), truncated: all.length > CHAT_HITS_MAX || found.some((f) => f.more) };
+    const hits = all.slice(0, CHAT_HITS_MAX);
+    // the ask of each chat with a hit still in after the cut; its rows were read for the hits anyway
+    const kept = new Set(hits.map((h) => h.worktreeId));
+    const asks: Record<string, string> = {};
+    for (const f of found) if (f.ask && kept.has(f.id)) asks[f.id] = f.ask;
+    return { hits, truncated: all.length > CHAT_HITS_MAX || found.some((f) => f.more), asks };
   }
 
   private async rowsOf(id: string, archived: boolean, path: string, read: Set<string>): Promise<SaidRow[]> {

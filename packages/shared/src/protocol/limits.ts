@@ -16,7 +16,7 @@ import type { FileServerMsg, ServerMsg, TermServerMsg } from "./ws.ts";
  * an unknown `t` there is a zod failure the person reads as a wall of discriminator values. The
  * same goes for a new required field on an existing kind.
  */
-export const PROTOCOL_VERSION = 106;
+export const PROTOCOL_VERSION = 107;
 
 /** the most of a page's error the shell forwards: the message and where it was thrown, not a
  * stack, which the agent reads off the source anyway */

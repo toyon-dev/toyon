@@ -1040,7 +1040,7 @@ describe("handlers", () => {
     await dispatch({ t: "search-chats", repoId: r.id, query: "footer" }, ctx, services);
     const reply = replies.at(-1);
     if (reply?.t !== "chat-hits") throw new Error("expected a chat-hits reply");
-    expect(reply).toMatchObject({ query: "footer", truncated: false });
+    expect(reply).toMatchObject({ query: "footer", truncated: false, asks: { [wt.id]: "Tidy the footer links" } });
     expect(reply.hits).toEqual([
       {
         worktreeId: wt.id,

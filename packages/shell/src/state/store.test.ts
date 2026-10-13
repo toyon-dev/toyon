@@ -1617,7 +1617,7 @@ describe("drafts", () => {
     expect(s.local.z?.mark).toEqual({ by: "reveal", seq: 0, n: 1 });
   });
   test("the chats palette's answer is kept for its project and goes with the project", () => {
-    const answer = { query: "footer", hits: [], truncated: false };
+    const answer = { query: "footer", hits: [], truncated: false, asks: {} };
     let s = run([helloIn([repo("r")], wt("a")), server({ t: "chat-hits", repoId: "r", ...answer })]);
     expect(s.chats.r).toEqual(answer);
     s = run([hello(wt("a"))], s);

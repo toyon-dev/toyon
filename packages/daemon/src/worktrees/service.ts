@@ -495,7 +495,7 @@ export class WorktreeService {
       // (the agent stays, and gets the prompt now rather than after the restart)
       if (profile !== undefined && profile !== resolveRun(repo, claimed).profile) {
         claimed.profile = profile;
-        this.restartProcs(claimed, repo);
+        this.restartProcs(claimed);
       }
       const carried = await this.carryMain(repo, claimed, !!opts.carry);
       this.d.state.save();
@@ -832,10 +832,13 @@ export class WorktreeService {
   }
 
   /** procs and proxy come back under the worktree's current profile; the agent is untouched */
-  private restartProcs(wt: WorktreeInfo, repo: RepoInfo) {
+  /** a wake rather than a start, so a profile set while setup still runs (a claimed spare's, or
+   * the seconds after a cold create) starts nothing on a tree with no deps: the start at the end
+   * of setup reads the record, and so the profile */
+  private restartProcs(wt: WorktreeInfo) {
     fireAndForget(
       wt.id,
-      this.d.runtime.stopProcs(wt.id).then(() => this.d.runtime.start(wt, repo)),
+      this.d.runtime.stopProcs(wt.id).then(() => this.d.runtime.wake(wt.id)),
       "profile restart",
     );
   }
@@ -849,7 +852,7 @@ export class WorktreeService {
     wt.profile = profile;
     this.d.state.save();
     this.d.hub.emit("worktreesChanged");
-    this.restartProcs(wt, repo);
+    this.restartProcs(wt);
   }
 
   /** what the agent may do here without asking. Nothing restarts: the session reads the record

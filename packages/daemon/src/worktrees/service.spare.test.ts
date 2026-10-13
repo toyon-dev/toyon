@@ -148,6 +148,45 @@ describe("spare pool", () => {
     await until(() => w.worktrees.spare.current(repoId)?.ready === true);
   });
 
+  test("a look at a spare being made starts nothing on it, before and after a claim; its warm-up does", async () => {
+    const repoId = await registered();
+    await w.worktrees.spare.ensure(repoId);
+    w.runtime.awaitPreview = async () => null;
+    // the deps and setup step, held: the directory is there and nothing in it is
+    const real = w.worktrees.setupAndStart.bind(w.worktrees);
+    const held: string[] = [];
+    const releases: (() => void)[] = [];
+    w.worktrees.setupAndStart = async (wt, repo, depsSource, opts) => {
+      held.push(wt.id);
+      await new Promise<void>((r) => releases.push(r));
+      return real(wt, repo, depsSource, opts);
+    };
+    await w.worktrees.create(repoId, "first");
+    const next = w.state.worktrees.find((x) => x.kind === "spare")!;
+    await until(() => held.includes(next.id));
+    expect(next.phase).toBe("warming");
+    // the plus row is on screen: a tab landing on it is the wake every other row starts from
+    expect(w.runtime.previewStanding(next.id)).toEqual({ status: "setup" });
+    w.repos.touch(next.id);
+    await settle();
+    expect(w.runtime.get(next.id)?.procs ?? null).toBeNull();
+    // claimed as it is: the task's row, looked at, is still a tree with no deps
+    const wt = await w.worktrees.create(repoId, "typed at once", { worktreeId: next.id });
+    expect(wt.id).toBe(next.id);
+    expect(wt.phase).toBeUndefined();
+    w.repos.touch(wt.id);
+    await settle();
+    expect(w.runtime.get(wt.id)?.procs ?? null).toBeNull();
+    expect(w.runtime.previewStanding(wt.id)).toEqual({ status: "setup" });
+    for (const r of releases.splice(0)) r();
+    await until(() => !!w.runtime.get(wt.id)?.procs);
+    // the one reserved by the second claim finishes the same way, whenever it reaches the step
+    await until(() => {
+      for (const r of releases.splice(0)) r();
+      return w.worktrees.spare.current(repoId)?.ready === true;
+    });
+  });
+
   test("a spare warmed under one agent is restarted for a task that asks for another", async () => {
     const repoId = await registered();
     await w.worktrees.spare.ensure(repoId);

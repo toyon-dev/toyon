@@ -750,6 +750,18 @@ describe("RuntimeRegistry sleep and wake", () => {
     await registry.wake("nope");
   });
 
+  test("wake leaves a spare still being made alone; one that is ready comes up like any row", async () => {
+    const { registry, procs, state } = make({ worktrees: [{ ...spare, phase: "reserved" }] });
+    await registry.wake(spare.id);
+    expect(registry.get(spare.id)?.procs ?? null).toBeNull();
+    state.requireWorktree(spare.id).phase = "warming";
+    await registry.wake(spare.id);
+    expect(procs.size).toBe(0);
+    state.requireWorktree(spare.id).phase = "ready";
+    await registry.wake(spare.id);
+    expect(procs.get(spare.id)?.started.length).toBe(2);
+  });
+
   test("a restart asked of an asleep proc's tab wakes the whole set", async () => {
     const { registry, procs } = make();
     await registry.start(wt, repo);

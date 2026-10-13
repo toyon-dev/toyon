@@ -163,6 +163,12 @@ export class SparePool {
       await withRepoLock(repo.path, () => gitOrThrow(repo.path, "worktree", "add", "--detach", wt.path, baseOf(repo)));
     })();
     const done = (async () => {
+      // marked for the runtime for the whole of it, not only the setup step: a tab lands on the
+      // row while the add waits on the repo lock, or on the task a claim made of it while its
+      // reset is still under way, and a wake then would start procs on no directory or on a tree
+      // with no deps, and spend their restarts before setup is through. The start at the end of
+      // setup is this warm-up's own.
+      this.d.runtime.markSetup(wt.id, true);
       try {
         await added;
         if (after) {
@@ -194,6 +200,7 @@ export class SparePool {
       } catch (e) {
         await this.rollBack(wt, e);
       } finally {
+        this.d.runtime.markSetup(wt.id, false);
         if (this.inflight.get(repoId)?.added === added) this.inflight.delete(repoId);
       }
     })();

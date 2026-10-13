@@ -486,6 +486,9 @@ export class RuntimeRegistry {
       return;
     }
     if (this.settingUp.has(id)) return;
+    // a spare comes up at the end of its own warm-up, never from a look at it: the plus is on
+    // screen the whole time, and before the warm-up marks it there is no directory to run in
+    if (wt.kind === "spare" && wt.phase !== undefined && wt.phase !== "ready") return;
     const repo = this.deps.state.repos.find((r) => r.id === wt.repoId);
     if (repo) await this.start(wt, repo);
   }

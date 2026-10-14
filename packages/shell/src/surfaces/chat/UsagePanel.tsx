@@ -2,12 +2,13 @@ import type { AgentLimits, AuthStatus } from "@toyon/shared";
 import type { CSSProperties } from "react";
 import type { UsageFigures } from "../../state/store.ts";
 import { Float } from "../../ui/Float.tsx";
-import type { Placement } from "../../ui/place.ts";
+import { tipPlacement } from "../../ui/Tooltip.tsx";
 import { spanWords } from "../util.ts";
 import { accountLine, dollars, limitRows, tokens } from "./usage.ts";
 
-/** above the ring at the foot of the box, turning over only when the window is too short */
-const PLACEMENT: Placement = { side: "top", align: "start", offset: 6, flip: "both", margin: 8 };
+/** where a tooltip above the ring would stand: centred on it, turning over only when the window is
+ * too short. The panel is the ring's tooltip, so it takes a tooltip's place. */
+const PLACEMENT = tipPlacement("top");
 
 /** a reading older than this says so: the windows are the account's, read off replies, and a new
  * worktree may be looking at figures another worktree heard a while ago */

@@ -156,6 +156,11 @@
   .chat-log {
     flex: 1;
     overflow-y: auto;
+    /* the box under the log changes height (a card taking it, then the field back), and a short
+       transcript tips in and out of overflow with it. Under classic scrollbars the bar arriving
+       took its width from the column and every bubble jumped sideways; the gutter is held whether
+       or not the log overflows. An overlay scrollbar takes no width, so this costs it nothing. */
+    scrollbar-gutter: stable;
     padding: 12px;
     display: flex;
     flex-direction: column;

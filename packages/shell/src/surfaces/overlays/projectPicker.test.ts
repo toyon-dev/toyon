@@ -132,6 +132,19 @@ describe("rowsFor: a name", () => {
     expect(rows("", { repos }).map((r) => r.kind)).toEqual(["repo", "repo", "new", "disk", "add-machine"]);
   });
 
+  test("the open project leads the standing list, so down from it is always the next project", () => {
+    // in send order the open one can sit second (the other was sent to more recently), which put
+    // the cursor on row two and sent ↓ to "new project" instead of the other project
+    const repos = [repo("server", "/Users/k/Projects/server"), repo("pulse", "/Users/k/Projects/pulse")];
+    const names = (current: string | null) =>
+      rows("", { repos, current }).flatMap((r) => (r.kind === "repo" ? [r.repo.id] : []));
+    expect(names("pulse")).toEqual(["pulse", "server"]);
+    expect(names("server")).toEqual(["server", "pulse"]);
+    expect(names(null)).toEqual(["server", "pulse"]);
+    // a typed name ranks by the match, since typing puts the cursor on the first row anyway
+    expect(rows("serv", { repos, current: "pulse" }).map((r) => r.kind)).toEqual(["repo", "create"]);
+  });
+
   test("the standing rows are only for an empty query: a typed name has its own create row", () => {
     expect(rows("brand-new").some((r) => r.kind === "new" || r.kind === "disk")).toBe(false);
   });

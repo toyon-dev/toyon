@@ -96,6 +96,8 @@ export function rowsFor(input: {
   answered: string;
   /** for telling a folder that holds registered projects apart from one that could become one */
   home: string;
+  /** the open project, which leads the standing list whatever its last send was */
+  current?: string | null;
   /** the other machines this page lists, each with its projects; their rows follow this
    * machine's, grouped under the machine's name */
   others?: OtherMachine[];
@@ -123,7 +125,14 @@ export function rowsFor(input: {
     });
     // last among this machine's rows, so they never push a project off the top of the list, and
     // ↑ from the first row reaches them
-    if (!q) return [...listed, { kind: "new" }, { kind: "disk" }, { kind: "add-machine" }, ...elsewhere];
+    if (!q) {
+      // The open project leads, wherever its last send put it: the cursor opens on it, so ↓ from
+      // there is always the next most recent project and never a row after the projects. The
+      // order by send holds for the rest, so switching between two is ↓ enter whichever is open.
+      const open = repos.find((r) => r.kind === "repo" && r.repo.id === input.current);
+      const led = open ? [open, ...repos.filter((r) => r !== open)] : repos;
+      return [...led, ...pending, { kind: "new" }, { kind: "disk" }, { kind: "add-machine" }, ...elsewhere];
+    }
     // a URL is not a name and not a path: it is the third thing someone pastes in here
     const url = gitUrl(q);
     if (url) return listed.length > 0 ? listed : [{ kind: "clone", url: url.url, name: url.name }];

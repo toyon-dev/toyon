@@ -92,8 +92,9 @@ export function ProjectPicker({
         answered: paths.query,
         home,
         others,
+        current,
       }),
-    [ordered, paths, pending, home, others],
+    [ordered, paths, pending, home, others, current],
   );
 
   const hintFor = (r: RepoInfo) => hintOf(rows, r);
@@ -149,7 +150,8 @@ export function ProjectPicker({
       items={[]}
       filter={filter}
       // opens on the open project, as every picker opens on its current choice, so the edge and the
-      // cursor start on one row; with no open project the clamp puts it on the first
+      // cursor start on one row: the first, since the standing list leads with it; with no open
+      // project the clamp puts it on the first
       initialIndex={(rs) => rs.findIndex((r) => r.kind === "repo" && !r.machine && r.repo.id === current)}
       // each machine's projects under its name, this machine's first; with one machine listed no
       // head is drawn, since the rows then say what they are themselves. The key is the origin,

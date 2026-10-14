@@ -231,7 +231,7 @@ describe("landingLine", () => {
   });
 
   test("the check word's tip says why it is offered again", () => {
-    expect(checkTip(undefined, true)).toBe("Run the repo's check here, then write the recap and the commit message.");
+    expect(checkTip(undefined, true)).toBe("Run the repo's check here and write the recap and the commit message.");
     expect(checkTip(undefined, false)).toBe("Write the recap and the commit message.");
     expect(checkTip(landing({ stale: true }), true)).toBe(
       "The work changed since this was written. Run the check again and refresh the message.",

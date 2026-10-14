@@ -230,19 +230,26 @@ describe("LandingService", () => {
     expect(passed).toEqual(["w1"]);
   });
 
-  test("a failed check is the verdict: not ready, the tail kept, and no question asked", async () => {
-    w = world({ check: "bun run check", exit: 1, output: "src/App.tsx(3,1): error TS2322\n2 errors\n" });
+  test("a failed check is the verdict: not ready, the tail kept, and the message still on the row", async () => {
+    w = world({
+      check: "bun run check",
+      exit: 1,
+      output: "src/App.tsx(3,1): error TS2322\n2 errors\n",
+      verdict: { ready: true, subject: "add the feature" },
+    });
     const passed: string[] = [];
     w.hub.on("checkPassed", (id) => passed.push(id));
     w.dirty();
     await w.settle();
     expect(w.checks).toEqual(["bun run check"]);
-    expect(w.judged).toEqual([]);
+    // asked beside the check, not after it: the message is for the commit that fixes this
+    expect(w.judged.length).toBe(1);
     expect(passed).toEqual([]);
     expect(w.wt()?.landing).toMatchObject({
       check: "fail",
       ready: false,
       checkTail: "src/App.tsx(3,1): error TS2322\n2 errors",
+      subject: "add the feature",
     });
     // handed on once the verdict is on the row, for the turn that fixes it
     // with the row and what the check printed, which is what the agent is shown
@@ -283,6 +290,55 @@ describe("LandingService", () => {
     expect(w.wt()?.landing?.why).toBeUndefined();
     expect(w.wt()?.landing?.fingerprint).toBe(await treeFingerprint(w.wtPath));
     expect(w.wt()?.lastTurn?.recap?.text).toBe("Adding the feature; it is in.");
+  });
+
+  test("the message and the sentence are on the row while the check still runs, and the word waits on the check", async () => {
+    w = world({
+      check: "bun run check",
+      slow: true,
+      verdict: { ready: true, recap: "Feature in.", subject: "add the feature", body: "One file." },
+    });
+    w.dirty();
+    await w.settle("done", 100, false);
+    await until(() => !!w?.wt()?.landing?.subject);
+    // the check is still out: the message is on the pending record, and no word yet
+    expect(w.wt()?.landing).toMatchObject({
+      at: 100,
+      check: "pending",
+      ready: false,
+      subject: "add the feature",
+      body: "One file.",
+    });
+    expect(w.wt()?.lastTurn?.recap?.text).toBe("Feature in.");
+    expect(w.wt()?.runs?.find((r) => r.kind === "check")?.status).toBe("running");
+    w.end("w1");
+    await w.settled();
+    expect(w.wt()?.landing).toMatchObject({
+      at: 100,
+      check: "pass",
+      ready: true,
+      subject: "add the feature",
+      body: "One file.",
+    });
+    expect(w.judged.length).toBe(1);
+  });
+
+  test("a message that arrives while the check is out is dropped once a new turn started", async () => {
+    let answer: (v: LandVerdict | null) => void = () => {};
+    const slow = new Promise<LandVerdict | null>((r) => {
+      answer = r;
+    });
+    w = world({ check: "bun run check", slow: true, judge: () => slow });
+    w.dirty();
+    await w.settle("done", 100, false);
+    await until(() => w?.started.length === 1);
+    w.hub.emit("agentStatus", "w1", "working");
+    expect(w.wt()?.landing).toBeUndefined();
+    answer({ ready: true, subject: "add the feature" });
+    w.end("w1");
+    await Bun.sleep(50);
+    expect(w.wt()?.landing).toBeUndefined();
+    expect(w.wt()?.lastTurn?.recap).toBeUndefined();
   });
 
   test("the question reads the turns since the branch's last commit, with the next commit's files named as the message's own", async () => {
@@ -355,7 +411,7 @@ describe("LandingService", () => {
     w = world({ check: "bun run check", exit: "timeout", output: "tests 3/9\n", timeouts: { check: "30m" } });
     w.dirty();
     await w.settle();
-    expect(w.judged).toEqual([]);
+    expect(w.judged.length).toBe(1);
     expect(w.wt()?.landing).toMatchObject({ check: "fail", checkTail: "gave up after 30 minutes\ntests 3/9" });
     // the run stays on the row as terminated, with the same reason, until the next check
     expect(w.wt()?.runs).toEqual([

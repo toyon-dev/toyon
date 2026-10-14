@@ -1,5 +1,5 @@
 // Whether a worktree is ready to land, decided after every finished turn: the repo's check runs
-// in the worktree with its output on the transcript, and when it passes the agent's quick model is
+// in the worktree with its output on the transcript, and beside it the agent's quick model is
 // asked for a commit message, whether the work reads as done, and one sentence on where it stands.
 // The check decides; the model's doubt is kept as a sentence. The verdict is about the tree, not
 // the turn: one that says the work can land stands through a new turn for as long as the tree is
@@ -319,18 +319,22 @@ export class LandingService {
     const started = Date.now();
     // the box says the check is running rather than going back to its plain placeholder: the gap
     // between the agent's last word and the verdict is where a person is reading
-    this.d.worktrees.setLanding(worktreeId, { at: opts.at, check: "pending", ready: false, fingerprint: "", ...kept });
+    const pending: Landing = { at: opts.at, check: "pending", ready: false, fingerprint: "", ...kept };
+    this.d.worktrees.setLanding(worktreeId, pending);
     // still the run being judged: a newer run, or a new turn since, means this answer is stale,
     // and a daemon on its way down means the answer is not one
     const live = () =>
       !this.stopping && this.judging.get(worktreeId) === opts.at && !!this.d.state.worktree(worktreeId);
 
-    let check: Landing["check"] = "none";
-    let checkTail: string | undefined;
-    let waited = 0;
-    let ran: ExecResult | undefined;
+    // The check and the question go out together: neither reads the other's answer, and a message
+    // that waited on the check was missing for as long as the suite ran, and for good when it hung.
+    // The check still decides the word; the message is on the row as soon as it is written, so a
+    // commit can take it while the check is out, and it stays on a failed check for the commit
+    // that fixes it. A run that goes stale under either answer writes nothing more.
     const command = repo.config.check?.trim();
-    if (command) {
+    let checkDone = false;
+    const checked = async (): Promise<Checked | undefined> => {
+      if (!command) return { check: "none" };
       const ceiling = timeoutFor(repo.config, "check");
       // a check from an earlier run of the verdict is still going: its answer is moot now
       this.d.runs.drop(worktreeId, "check");
@@ -341,9 +345,12 @@ export class LandingService {
       // queued behind the repo's other checks until a slot frees; one dropped meanwhile (a new
       // turn, a newer run) never spawns, and one admitted for a run that has since gone stale
       // gives its slot straight back
-      if (!(await run.admitted)) return;
-      if (!live()) return run.finish(null);
-      waited = Date.now() - started;
+      if (!(await run.admitted)) return undefined;
+      if (!live()) {
+        run.finish(null);
+        return undefined;
+      }
+      const waited = Date.now() - started;
       let r: ExecResult;
       try {
         r = await this.d.check(worktreeId, command, { quiet: opts.quiet, timeoutMs: ceiling, onSpawn: run.spawned });
@@ -352,33 +359,50 @@ export class LandingService {
         throw e;
       }
       run.finish(r.exit);
-      if (!live()) return;
-      ran = r;
-      check = r.exit === 0 ? "pass" : "fail";
+      if (!live()) return undefined;
+      const check = r.exit === 0 ? "pass" : "fail";
+      let checkTail: string | undefined;
       if (r.exit === "timeout") {
         // the first line of the tail is what the placeholder says, so the ceiling goes first
         checkTail = [`gave up after ${describeDuration(ceiling)}`, tail(r.text)].filter(Boolean).join("\n");
       } else if (check === "fail") checkTail = tail(r.text) || `exit ${r.exit}`;
       // still live, so no turn has started since: the tree that passed is the tree as it stands
       else this.d.hub.emit("checkPassed", worktreeId);
-    }
-
-    let verdict: LandVerdict | null = null;
-    let unanswered = false;
-    if (opts.ask && check !== "fail" && this.d.judge) {
+      return { check, ran: r, waited, ...(checkTail ? { checkTail } : {}) };
+    };
+    const asked = async (): Promise<Asked | undefined> => {
+      if (!opts.ask || !this.d.judge) return { verdict: null, unanswered: false };
       const prompt = landPrompt({ ...(await this.landInput(wt, repo)), ...(opts.note ? { note: opts.note } : {}) });
+      let verdict: LandVerdict | null = null;
+      let unanswered = false;
       try {
         verdict = await this.d.judge(wt, prompt);
       } catch (e) {
-        if (!live()) return;
+        if (!live()) return undefined;
         // the question was never put (the agent died, or would not open a session), which is not
         // the model declining: no message is made up, and the verdict says one is still owed, so
         // the box offers to ask again rather than a land word with no message behind it
         log.warn(worktreeId, "landing verdict unanswered", e);
         unanswered = true;
       }
-      if (!live()) return;
-    }
+      if (!live()) return undefined;
+      // the check is still out: the message and the sentence go on the row now, under the
+      // pending mark, rather than waiting on it
+      if (!checkDone && verdict) {
+        this.recapTurn(worktreeId, verdict);
+        this.d.worktrees.setLanding(worktreeId, { ...pending, ...messageOf(verdict) });
+      }
+      return { verdict, unanswered };
+    };
+    const [checkResult, askResult] = await Promise.all([
+      checked().finally(() => {
+        checkDone = true;
+      }),
+      asked(),
+    ]);
+    if (!checkResult || !askResult || !live()) return;
+    const { check, checkTail, ran, waited = 0 } = checkResult;
+    const { verdict, unanswered } = askResult;
 
     const landing: Landing = {
       at: opts.at,
@@ -387,9 +411,7 @@ export class LandingService {
       // the facts decide: the model's doubt rides beside the word as `why`, never in front of it
       ready: check !== "fail",
       ...kept,
-      ...(verdict && !verdict.ready && verdict.why ? { why: verdict.why } : {}),
-      ...(verdict?.subject ? { subject: verdict.subject } : {}),
-      ...(verdict?.body ? { body: verdict.body } : {}),
+      ...(verdict ? messageOf(verdict) : {}),
       ...(unanswered ? { unanswered: true as const } : {}),
       fingerprint: await treeFingerprint(wt.path),
     };
@@ -400,8 +422,7 @@ export class LandingService {
     if (!live()) return;
     this.judging.delete(worktreeId);
     // the sentence goes on the turn it describes; setLanding saves and broadcasts the record with it
-    const record = this.d.state.worktree(worktreeId)?.lastTurn;
-    if (record && verdict?.recap) record.recap = { at: Date.now(), text: verdict.recap };
+    if (verdict) this.recapTurn(worktreeId, verdict);
     // how long the word took to appear: the check and the side question are the two costs here,
     // and a wait for a slot behind the repo's other checks is named so a slow verdict has a reason
     log.info(
@@ -417,6 +438,12 @@ export class LandingService {
       this.d.hub.emit("checkFailed", worktreeId, { toolId: ran.toolId, command, text: ran.text });
   }
 
+  /** the sentence goes on the turn it describes, when the answer carried one */
+  private recapTurn(worktreeId: string, verdict: LandVerdict) {
+    const record = this.d.state.worktree(worktreeId)?.lastTurn;
+    if (record && verdict.recap) record.recap = { at: Date.now(), text: verdict.recap };
+  }
+
   /** whether the work touches a migration while the tree names a shared database or stack and
    * the settings give no worktree its own */
   private async sharedMigration(wt: WorktreeInfo, repo: RepoInfo): Promise<string | undefined> {
@@ -425,6 +452,30 @@ export class LandingService {
     if (!files.some((f) => migrationMatch(f.path))) return undefined;
     return "this changes migrations, and the worktrees share the database";
   }
+}
+
+/** how the check ended, for the record: `none` with no command to run */
+interface Checked {
+  check: Landing["check"];
+  checkTail?: string;
+  ran?: ExecResult;
+  /** how long the run stood in the repo's line for a slot before its check started */
+  waited?: number;
+}
+
+/** what the question came back with: no verdict and not unanswered when nothing was asked */
+interface Asked {
+  verdict: LandVerdict | null;
+  unanswered: boolean;
+}
+
+/** what the answer puts on the record: the message, and the doubt when the work did not read as done */
+function messageOf(verdict: LandVerdict): Pick<Landing, "why" | "subject" | "body"> {
+  return {
+    ...(!verdict.ready && verdict.why ? { why: verdict.why } : {}),
+    ...(verdict.subject ? { subject: verdict.subject } : {}),
+    ...(verdict.body ? { body: verdict.body } : {}),
+  };
 }
 
 function tail(text: string): string {

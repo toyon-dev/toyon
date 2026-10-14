@@ -113,7 +113,7 @@ export function checkTip(l: Landing | undefined, hasCheck: boolean, gap: Message
     return `The work changed since this was written. ${hasCheck ? "Run the check again and refresh" : "Refresh"} the message.`;
   if (gap === "unanswered")
     return `The model did not answer with a message. ${hasCheck ? "Run the check again and ask" : "Ask"} for it again.`;
-  return `${hasCheck ? "Run the repo's check here, then write" : "Write"} the recap and the commit message.`;
+  return `${hasCheck ? "Run the repo's check here and write" : "Write"} the recap and the commit message.`;
 }
 
 /** The line for a message nobody here can write: which agent cannot, when known, and the field

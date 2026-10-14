@@ -1029,10 +1029,26 @@
     overflow-clip-margin: 3px;
     pointer-events: none;
   }
-  /* the ghost wears whatever face the field does, or it drifts off the caret in `!` mode */
+  /* The region's own line, as a length: `1lh` written where it is used is that element's line,
+     and a mono textarea's is the font's default, so the property is registered to make the
+     region's value absolute before its children inherit it. */
+  @property --composer-line {
+    syntax: "<length>";
+    inherits: true;
+    initial-value: 0px;
+  }
   .composer-field {
+    --composer-line: 1lh;
+    /* the ghost wears whatever face the field does, or it drifts off the caret in `!` mode */
     &.shell .composer-ghost {
       font: var(--type-mono);
+    }
+    /* Both keep the region's prose line under the mono, declared after the shorthand that resets
+       it: the mono token states no leading, so left to itself the first line's box shrank from
+       the prose line to the glyph, and the placeholder, the caret and what was typed all rose as
+       the `!` went in and dropped as it came out. */
+    &.shell :is(textarea, .composer-ghost) {
+      line-height: var(--composer-line);
     }
     /* a message walked back to is not the person's until they touch it: a tier quieter, so the
      change to full colour is what says the arrows have gone back to moving the caret */

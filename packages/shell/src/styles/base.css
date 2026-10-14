@@ -137,6 +137,12 @@
     text-align: left;
     color: var(--text1);
     position: relative;
+    /* a row's focus ring sits inside its band: a row fills its column, so a ring drawn outside
+       it rides on whatever edge the column has (a bubble's corner, a list's border) and on the
+       row beneath. A word's ring stays outside, where there is air around it. */
+    &:focus-visible {
+      outline-offset: -2px;
+    }
   }
   .row-sm {
     min-height: var(--row-height-sm);
@@ -699,6 +705,9 @@
     }
     & a {
       color: var(--blue);
+      /* a link is a word, and its focus ring takes the corner a button's has; the word itself
+         draws no box for the radius to touch */
+      border-radius: var(--radius);
     }
     /* A file is a place inside Toyon, not a trip out to the web, so it never takes the link blue,
        whether it sits in this worktree or anywhere else the daemon can open it. It is set in the

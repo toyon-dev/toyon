@@ -1053,6 +1053,8 @@
     text-underline-offset: 2px;
     overflow-wrap: anywhere;
     cursor: pointer;
+    /* a word's focus ring has a button's corner; nothing else here is shaped by it */
+    border-radius: var(--radius);
   }
   :where([data-hover]) .chat-mention:hover {
     color: var(--text0);
@@ -1323,6 +1325,8 @@
       text-decoration: underline;
       text-decoration-color: transparent;
       text-underline-offset: 2px;
+      /* a word's focus ring has a button's corner */
+      border-radius: var(--radius);
     }
     :where([data-hover]) & .pick-open:hover {
       text-decoration-color: currentColor;
@@ -1348,6 +1352,11 @@
       &:has(+ button) {
         margin-inline-end: 0;
         padding-inline-end: 0;
+      }
+      /* the control is the row's band, so its ring sits inside the band the way a row's does,
+         clear of the bubble's edge the chip bleeds to */
+      &:focus-visible {
+        outline-offset: -2px;
       }
     }
   }

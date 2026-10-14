@@ -425,6 +425,11 @@ export function Composer({
   useOnChange([id], closeUsage);
   const menu = useMenu();
   const usageMenuOpen = menu?.owner === "composer" && menu.key === "usage";
+  // the menu opens on the ring's own click and leaves focus there, so Enter on a focused ring would
+  // stand the menu over the figures; a pointer's press closed them through the float stack already
+  useOnChange([usageMenuOpen], () => {
+    if (usageMenuOpen) closeUsage();
+  });
   const compactItems = () => [
     {
       id: "compact",
@@ -1638,6 +1643,14 @@ export function Composer({
                   window.clearTimeout(usageTimer.current);
                   setUsageHover(false);
                 }}
+                // the ring is silent to the shared tooltip, so the panel answers the keyboard the
+                // way that one does: at once on a focus the keyboard gave, gone on blur
+                onFocus={(e) => {
+                  if (usageMenuOpen || !e.target.matches(":focus-visible")) return;
+                  window.clearTimeout(usageTimer.current);
+                  setUsageHover(true);
+                }}
+                onBlur={closeUsage}
               >
                 <IconButton
                   icon={

@@ -20,7 +20,7 @@ const LAND_ASK = [
   "Line 2: blank",
   "Line 3: Recap: one sentence under 20 words for the user coming back to this task, saying what the task is and then what just happened or what to do next. Skip root-cause narrative, fix internals and secondary to-dos.",
   "Line 4: blank",
-  "Line 5: a commit subject under 60 characters, lowercase, imperative, in the style of the recent subjects when given",
+  "Line 5: a commit subject under 60 characters, lowercase, imperative, naming what the diff summary says the message is for, in the style of the recent subjects when given",
   "Line 6: blank",
   "Then: a short body, 1 to 4 plain sentences on what changed and why. No markdown, no bullets, no dashes as punctuation.",
 ].join("\n");
@@ -28,9 +28,16 @@ const LAND_ASK = [
 export interface LandInput {
   title: string;
   firstAsk?: string | undefined;
+  /** the turns since the branch's last commit or landing, the ones whose work the message names */
   turns: readonly TurnSlice[];
-  /** `git diff --stat` of everything that would be committed, plus the untracked files */
+  /** the branch committed or landed work before these turns, so the title and the first request
+   * describe work the message is not for. The same signal that cut the turns, so the two agree. */
+  earlier?: boolean | undefined;
+  /** `git diff --stat` of what the next commit will contain, plus the untracked files */
   diffStat: string;
+  /** `git diff --stat` of what the branch committed already: context the message does not
+   * describe, unless nothing is uncommitted and the message is for the branch as one */
+  committedStat?: string | undefined;
   /** the newest subjects on the branch, so the message reads like the repo's own */
   recentSubjects: string[];
   /** what the person typed after the check verb: a fact for the message that the diff does not
@@ -41,20 +48,52 @@ export interface LandInput {
 const LAND_TURNS = 4;
 const LAND_CHARS = 5_000;
 
+/** The message names the next commit, so the prompt says which part of the tree that is. A
+ * branch with commits of its own already is the case that goes wrong without it: the task's
+ * title, its first request and the earlier commits all describe work that is committed, and a
+ * quick model handed all of it writes the subject for the larger, older part. */
 export function landPrompt(i: LandInput): string {
-  const head = [LAND_ASK, "", `Task: ${clip(i.title, 200)}`];
-  if (i.firstAsk) head.push(`First request: ${clip(i.firstAsk, 300)}`);
+  const own = i.diffStat.trim();
+  const committed = i.committedStat?.trim() ?? "";
+  const head = [LAND_ASK, ""];
+  // the title and the first request are background only when the message is for a part of the
+  // work: with nothing uncommitted it is for the branch as one, and they describe that
+  if (own && i.earlier) {
+    head.push(
+      `Task, as the worktree is titled; background, since the branch committed or landed work before: ${clip(i.title, 200)}`,
+    );
+    if (i.firstAsk) head.push(`First request here, which the earlier work may have answered: ${clip(i.firstAsk, 300)}`);
+  } else {
+    head.push(`Task: ${clip(i.title, 200)}`);
+    if (i.firstAsk) head.push(`First request: ${clip(i.firstAsk, 300)}`);
+  }
   if (i.recentSubjects.length)
     head.push(`Recent commit subjects:\n${i.recentSubjects.map((s) => `  ${s}`).join("\n")}`);
   // the note outranks the transcript for the message: it is the one thing the person asked the
   // message to say, so it is named as such rather than left among the turns
   if (i.note?.trim())
     head.push(`Note from the user for the commit message, to be reflected in its wording: ${clip(i.note.trim(), 500)}`);
-  const diff = `Diff summary:\n${i.diffStat.trim() || "(none)"}`;
+  const diff = diffBlock(own, committed);
   let blocks = turnBlocks(i.turns);
   const size = () => [...head, "", ...blocks, "", diff].join("\n\n").length;
   while (blocks.length > 1 && size() > LAND_CHARS) blocks = blocks.slice(1);
   return [head.join("\n"), blocks.join("\n\n"), diff].join("\n\n");
+}
+
+/** git's summary of the tree, labelled by what the message is for: the uncommitted part first
+ * and named as the commit's, the committed part after it as context, or the committed part alone
+ * when it is all there is and the message is for the branch as one */
+function diffBlock(own: string, committed: string): string {
+  if (!own && !committed) return "Diff summary:\n(none)";
+  const parts: string[] = [];
+  if (own) parts.push(`What this commit will contain, which is all the message describes:\n${own}`);
+  if (committed)
+    parts.push(
+      own
+        ? `Already committed on this branch, context only, not what the message describes:\n${committed}`
+        : `Nothing is uncommitted; the message is for the branch's commits as one:\n${committed}`,
+    );
+  return parts.join("\n\n");
 }
 
 /** the newest turns, oldest first, with the last reply marked as the one that counts: a turn the

@@ -85,10 +85,50 @@ describe("landPrompt", () => {
       recentSubjects: ["shell: three comments that outlived what they described"],
     });
     expect(p).toContain("Task: dark mode");
+    expect(p).toContain("First request: make a dark mode");
     expect(p).toContain("Recent commit subjects:\n  shell: three comments");
     expect(p).toContain("User asked: fix the flash");
-    expect(p).toContain("Diff summary:\nsrc/App.tsx | 12 ++++");
+    expect(p).toContain("What this commit will contain, which is all the message describes:\nsrc/App.tsx | 12 ++++");
+    expect(p).not.toContain("Already committed");
     expect(p.indexOf("make a dark mode")).toBeLessThan(p.indexOf("fix the flash"));
+  });
+
+  test("on a branch with commits already, the next commit's files come first as the message's own and the rest is context", () => {
+    const input = {
+      title: "dark mode",
+      firstAsk: "make a dark mode",
+      turns: [turn(["now the toggle"], "The toggle is in.")],
+      recentSubjects: [],
+    };
+    const p = landPrompt({
+      ...input,
+      earlier: true,
+      diffStat: "Uncommitted:\n src/Toggle.tsx | 20 ++++",
+      committedStat: " src/App.tsx | 12 ++++",
+    });
+    expect(p).toContain(
+      "What this commit will contain, which is all the message describes:\nUncommitted:\n src/Toggle.tsx",
+    );
+    expect(p).toContain("Already committed on this branch, context only, not what the message describes:\nsrc/App.tsx");
+    expect(p.indexOf("What this commit will contain")).toBeLessThan(p.indexOf("Already committed"));
+    // the title and the first request describe work the branch has committed, and say so
+    expect(p).toContain(
+      "Task, as the worktree is titled; background, since the branch committed or landed work before: dark mode",
+    );
+    expect(p).toContain("First request here, which the earlier work may have answered: make a dark mode");
+    // after a landing the branch has no commits of its own, and the framing is the same
+    const landed = landPrompt({ ...input, earlier: true, diffStat: "New files:\ntoggle.txt" });
+    expect(landed).toContain("background, since the branch committed or landed work before: dark mode");
+    expect(landed).not.toContain("Already committed");
+    // nothing uncommitted: the message is for the branch as one, so the title and the first
+    // request are what it is about, not background
+    const whole = landPrompt({ ...input, earlier: true, diffStat: "", committedStat: " src/App.tsx | 12 ++++" });
+    expect(whole).toContain("Nothing is uncommitted; the message is for the branch's commits as one:\nsrc/App.tsx");
+    expect(whole).not.toContain("What this commit will contain");
+    expect(whole).toContain("Task: dark mode");
+    expect(whole).toContain("First request: make a dark mode");
+    expect(whole).not.toContain("background");
+    expect(landPrompt({ ...input, diffStat: "" })).toContain("Diff summary:\n(none)");
   });
 
   test("a note from the person is named as the message's own, and left out when blank", () => {

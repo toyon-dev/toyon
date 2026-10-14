@@ -3,7 +3,81 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { sh, tmpRepo } from "../../test/helpers/tmp-repo.ts";
 import { GIT, git } from "./exec.ts";
-import { fastForwardFetched, landingCommit, landLocally, overwritten, pushBranch } from "./land.ts";
+import {
+  fastForwardFetched,
+  landingCommit,
+  landLocally,
+  overwritten,
+  pushBranch,
+  splitMessage,
+  squashMessage,
+} from "./land.ts";
+
+describe("squashMessage", () => {
+  let t: ReturnType<typeof tmpRepo>;
+  let wt: string;
+  const commit = (name: string, message: string) => {
+    writeFileSync(join(wt, name), `${name}\n`);
+    sh(wt, GIT, "add", "-A");
+    sh(wt, GIT, "commit", "-q", "-m", message);
+  };
+  beforeEach(() => {
+    t = tmpRepo();
+    wt = join(dirname(t.repo), "wt");
+    sh(t.repo, GIT, "worktree", "add", "-q", "-b", "feat", wt);
+  });
+  afterEach(() => t.cleanup());
+
+  test("one commit lands under its own message, whatever was suggested, unless the person typed one", async () => {
+    commit("a.txt", "add the feature\n\nOne file.");
+    expect(await squashMessage(wt, "main", "something else")).toBe("add the feature\n\nOne file.");
+    expect(await squashMessage(wt, "main", "add it properly\n\nTheirs.", true)).toBe("add it properly\n\nTheirs.");
+  });
+
+  test("an earlier commit sharing the newest one's subject is still listed", async () => {
+    commit("a.txt", "fix tests");
+    commit("b.txt", "add the toggle");
+    commit("c.txt", "fix tests");
+    expect(await squashMessage(wt, "main", "fix tests")).toBe(
+      "fix tests\n\nSquashed with the branch's earlier commits:\nfix tests\nadd the toggle",
+    );
+  });
+
+  test("the suggestion names the newest commit's work, so the earlier subjects go under it", async () => {
+    commit("a.txt", "add the feature");
+    commit("b.txt", "wire the feature up");
+    commit("c.txt", "add the toggle");
+    expect(await squashMessage(wt, "main", "add the toggle\n\nOne file, behind a flag.")).toBe(
+      "add the toggle\n\nOne file, behind a flag.\n\nSquashed with the branch's earlier commits:\nadd the feature\nwire the feature up",
+    );
+    expect(await squashMessage(wt, "main", "add the toggle")).toBe(
+      "add the toggle\n\nSquashed with the branch's earlier commits:\nadd the feature\nwire the feature up",
+    );
+    // nothing suggested: the newest subject stands in for it, the same shape under it
+    expect(await squashMessage(wt, "main")).toBe(
+      "add the toggle\n\nSquashed with the branch's earlier commits:\nadd the feature\nwire the feature up",
+    );
+  });
+
+  test("a merge taken in on the way is left out, so the message keeps a hook's shape", async () => {
+    commit("a.txt", "add the feature");
+    sh(t.repo, GIT, "commit", "-q", "--allow-empty", "-m", "main moves on");
+    sh(wt, GIT, "merge", "-q", "--no-edit", "main");
+    expect(await squashMessage(wt, "main")).toBe("add the feature");
+    commit("b.txt", "add the toggle");
+    expect(await squashMessage(wt, "main", "add the toggle")).toBe(
+      "add the toggle\n\nSquashed with the branch's earlier commits:\nadd the feature",
+    );
+  });
+
+  test("splitMessage is the first line and the rest", () => {
+    expect(splitMessage("add the toggle\n\nOne file.\nTwo.")).toEqual({
+      subject: "add the toggle",
+      body: "One file.\nTwo.",
+    });
+    expect(splitMessage("add the toggle")).toEqual({ subject: "add the toggle" });
+  });
+});
 
 describe("overwritten", () => {
   test("names the files under git's two headers, and nothing from any other refusal", () => {

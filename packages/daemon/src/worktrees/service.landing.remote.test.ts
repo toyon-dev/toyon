@@ -137,7 +137,9 @@ describe("landing", () => {
     expect(result.ok).toBe(true);
     expect(result.message).toBe("squashed onto main and pushed; main here pulled it");
     expect((await git(origin, "log", "--format=%s", "-n", "3")).out.split("\n")).toEqual(["add the feature", "init"]);
-    expect((await git(origin, "log", "-1", "--format=%b")).out).toBe("Two steps.");
+    expect((await git(origin, "log", "-1", "--format=%b")).out).toBe(
+      "Two steps.\n\nSquashed with the branch's earlier commits:\nstep 1\nstep 2",
+    );
     expect((await git(wt.path, "rev-parse", "HEAD")).out).toBe((await git(origin, "rev-parse", "main")).out);
     // the two commits it carried are kept under the landing's ref; the mark says what main got
     expect(w.state.worktree(wt.id)?.lands).toMatchObject([{ tip, subjects: ["add the feature"] }]);

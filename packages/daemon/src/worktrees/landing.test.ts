@@ -48,6 +48,11 @@ function answered(ask: string, reply: string): TranscriptEntry[] {
   return events.map((event, seq) => ({ seq, event }));
 }
 
+/** the event at a time of the test's choosing, for a window measured against a real commit */
+function withTs(event: AgentEvent, ts: number): AgentEvent {
+  return "ts" in event ? { ...event, ts } : event;
+}
+
 function world(opts: Opts = {}) {
   const t = tmpRepo();
   const wtPath = join(t.repo, "..", "wt");
@@ -278,6 +283,61 @@ describe("LandingService", () => {
     expect(w.wt()?.landing?.why).toBeUndefined();
     expect(w.wt()?.landing?.fingerprint).toBe(await treeFingerprint(w.wtPath));
     expect(w.wt()?.lastTurn?.recap?.text).toBe("Adding the feature; it is in.");
+  });
+
+  test("the question reads the turns since the branch's last commit, with the next commit's files named as the message's own", async () => {
+    // the first turn's work is committed by hand; the second turn's is what the next commit holds
+    const now = Date.now();
+    const transcript = [
+      ...answered("make the feature", "The feature is in.").map(({ event }) => withTs(event, now - 60_000)),
+      ...answered("now the toggle", "The toggle is in.").map(({ event }) => withTs(event, now + 60_000)),
+    ].map((event, seq) => ({ seq, event }));
+    w = world({ verdict: { ready: true, subject: "add the toggle" }, transcript });
+    writeFileSync(join(w.wtPath, "feature.txt"), "feature\n");
+    sh(w.wtPath, GIT, "add", "-A");
+    sh(w.wtPath, GIT, "commit", "-q", "-m", "add the feature");
+    writeFileSync(join(w.wtPath, "toggle.txt"), "toggle\n");
+    await w.settle();
+    const p = w.judged[0] ?? "";
+    expect(p).toContain("What this commit will contain, which is all the message describes:\nNew files:\ntoggle.txt");
+    expect(p).toContain("Already committed on this branch, context only, not what the message describes:\nfeature.txt");
+    expect(p.indexOf("New files")).toBeLessThan(p.indexOf("Already committed"));
+    expect(p).toContain("User asked: now the toggle");
+    expect(p).not.toContain("User asked: make the feature");
+    // the first request stays, as background the branch has answered
+    expect(p).toContain("First request here, which the earlier work may have answered: make the feature");
+  });
+
+  test("after a landing, the question reads the turns since it; the last turn is always read", async () => {
+    const now = Date.now();
+    const transcript = [
+      ...answered("make the feature", "The feature is in.").map(({ event }) => withTs(event, now - 60_000)),
+      ...answered("now the toggle", "The toggle is in.").map(({ event }) => withTs(event, now + 60_000)),
+    ].map((event, seq) => ({ seq, event }));
+    w = world({ verdict: { ready: true, subject: "add the toggle" }, transcript });
+    // the record's mark, which a landing by hand writes as much as a press does; the branch
+    // restarted from main, so it has no commits of its own to date the window by
+    w.wt()!.lands = [{ base: "b", tip: "t", at: now - 30_000, subjects: ["add the feature"] }];
+    w.dirty();
+    await w.settle();
+    expect(w.judged[0]).toContain("User asked: now the toggle");
+    expect(w.judged[0]).not.toContain("User asked: make the feature");
+    expect(w.judged[0]).toContain("background, since the branch committed or landed work before: feature");
+    // a commit older than the only turn still leaves that turn in the question
+    w.cleanup();
+    w = world({
+      verdict: { ready: true, subject: "add the toggle" },
+      transcript: answered("make the feature", "The feature is in.").map(({ event }, seq) => ({
+        seq,
+        event: withTs(event, now - 60_000),
+      })),
+    });
+    writeFileSync(join(w.wtPath, "feature.txt"), "feature\n");
+    sh(w.wtPath, GIT, "add", "-A");
+    sh(w.wtPath, GIT, "commit", "-q", "-m", "add the feature");
+    writeFileSync(join(w.wtPath, "toggle.txt"), "toggle\n");
+    await w.settle();
+    expect(w.judged[0]).toContain("User asked: make the feature");
   });
 
   test("the check runs under the settings' ceiling and stands on the row while it does", async () => {

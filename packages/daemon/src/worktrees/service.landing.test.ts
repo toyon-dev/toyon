@@ -425,7 +425,9 @@ describe("landing", () => {
     expect(result.ok).toBe(true);
     expect(await parents()).toBe(1);
     expect(await subjects()).toEqual(["add the feature", "init"]);
-    expect((await git(w.repo, "log", "-1", "--format=%b")).out).toBe("Two steps.");
+    expect((await git(w.repo, "log", "-1", "--format=%b")).out).toBe(
+      "Two steps.\n\nSquashed with the branch's earlier commits:\nstep 1\nstep 2",
+    );
     expect((await git(wt.path, "rev-parse", "HEAD")).out).toBe((await git(w.repo, "rev-parse", "main")).out);
     // the mark says what main received, the one squash commit, not the two steps it was made of
     expect(w.state.worktree(wt.id)?.lands).toMatchObject([{ subjects: ["add the feature"] }]);

@@ -91,6 +91,7 @@ import {
   requireLinear,
   type ShipResult,
   STEP_TIMEOUT_MS,
+  splitMessage,
   squashMessage,
   stepRun,
   takeMainIn,
@@ -1954,11 +1955,17 @@ export class WorktreeService {
     const policy = landPolicy(repo.config);
     const own = hasOwnBranch(wt);
     const w = this.landWatch(wt);
-    const suggested = wt.landing?.subject
-      ? wt.landing.body
-        ? `${wt.landing.subject}\n\n${wt.landing.body}`
-        : wt.landing.subject
-      : undefined;
+    // what the newest commit's work is called: the message typed for it, else the verdict's.
+    // Where the whole branch is named at once (a squash, a PR), squashMessage puts the branch's
+    // earlier subjects under it.
+    const typed = message?.trim();
+    const suggested =
+      typed ||
+      (wt.landing?.subject
+        ? wt.landing.body
+          ? `${wt.landing.subject}\n\n${wt.landing.body}`
+          : wt.landing.subject
+        : undefined);
 
     const base = baseOf(repo);
     if (policy.land === "pr") {
@@ -2006,14 +2013,19 @@ export class WorktreeService {
         const result = { ...r, message: r.ok ? `${on}; ${r.message}` : `${on}, but ${r.message}` };
         return r.ok ? { result, archiveIds: this.siblingIds(wt), mark: noted } : { result };
       }
+      // the branch's earlier subjects go under the title only where GitHub will squash them away;
+      // a PR merged by rebase or merge keeps its commits, and the message is the newest work's
+      const named = !suggested
+        ? undefined
+        : splitMessage(policy.merge === "squash" ? await squashMessage(wt.path, base, suggested, !!typed) : suggested);
       const result = await openPr(
         {
           worktreePath: wt.path,
           branch: wt.branch,
           defaultBr: repo.defaultBranch,
           base,
-          subject: wt.landing?.subject,
-          body: wt.landing?.body,
+          subject: named?.subject,
+          body: named?.body,
           automerge: policy.automerge,
           method: policy.merge,
         },
@@ -2042,7 +2054,7 @@ export class WorktreeService {
       if (!taken.ok) return taken;
       // read before the landing moves main and the branch restarts from it
       const mark = await landingMark(wt.path, base);
-      const squash = method === "squash" ? await squashMessage(wt.path, base, suggested) : "";
+      const squash = method === "squash" ? await squashMessage(wt.path, base, suggested, !!message?.trim()) : "";
       const landed = await landLocally(wt.path, wt.branch, repo.path, repo.defaultBranch, method, squash, w);
       if (!landed.ok) return landed;
       mergedHere = true;
@@ -2114,7 +2126,7 @@ export class WorktreeService {
         sha = (await commitOf(wt.path, base)) ?? "";
         break;
       }
-      squash = method === "squash" ? await squashMessage(wt.path, base, suggested) : "";
+      squash = method === "squash" ? await squashMessage(wt.path, base, suggested, !!message?.trim()) : "";
       const built = await landingCommit(wt.path, wt.branch, base, method, squash, own, w);
       await this.headMoved(wt.id);
       if (!built.ok || !built.sha) return { result: built };
@@ -2185,7 +2197,7 @@ export class WorktreeService {
     opts: { pr?: PrState | undefined; squash?: string | undefined },
   ): Promise<string[]> {
     if (opts.pr?.title) return [opts.pr.title];
-    const subject = opts.squash?.split("\n")[0]?.trim();
+    const subject = opts.squash ? splitMessage(opts.squash).subject : "";
     if (subject) return [subject];
     const read = await rangeSubjects(repo.path, mark.base, mark.tip);
     // the ref was pinned in this repo a moment ago, so a read that fails is news worth a line

@@ -400,17 +400,46 @@ export async function landLocally(
   return { ok: true, message: `merged ${branch} into ${defaultBr}` };
 }
 
-/** the one commit's own message when the branch holds one, else what the caller suggests, else
- * the subjects as a list: what a squash lands under */
-export async function squashMessage(worktreePath: string, defaultBr: string, suggested?: string): Promise<string> {
+/** What a squash lands under, and a PR opens with: the one commit's own message when the branch
+ * holds one; else the suggestion, or the newest commit's subject, over the branch's earlier
+ * subjects, since either names the newest work alone and the squash carries every commit. A
+ * message the person typed (`typed`) is theirs for the whole squash and outranks the one commit's
+ * own. One shape whatever the inputs (a subject, a blank line, a body), since a commit-msg hook
+ * reads it. */
+export async function squashMessage(
+  worktreePath: string,
+  defaultBr: string,
+  suggested?: string,
+  typed = false,
+): Promise<string> {
   const n = await git(worktreePath, "rev-list", "--count", `${defaultBr}..HEAD`);
   if (n.out === "1") {
+    if (typed && suggested) return suggested;
     const one = await git(worktreePath, "log", "-1", "--format=%B");
     if (one.ok && one.out.trim()) return one.out.trim();
   }
-  if (suggested) return suggested;
-  const subjects = await git(worktreePath, "log", "--format=%s", `${defaultBr}..HEAD`);
-  return subjects.out.trim() || "land";
+  // oldest first, as the squash's story reads; a merge taken in on the way is not work it carries
+  const log = await git(worktreePath, "log", "--reverse", "--no-merges", "--format=%s", `${defaultBr}..HEAD`);
+  const subjects = log.out.split("\n").filter(Boolean);
+  const [first = "", ...rest] = (suggested ?? subjects.at(-1) ?? "land").split("\n");
+  const subject = first.trim();
+  // the newest commit is the suggestion's own, so its subject is not listed under it twice; an
+  // older commit that happens to share the subject is still work the squash carries
+  const others = subjects.at(-1) === subject ? subjects.slice(0, -1) : subjects;
+  const body = [
+    rest.join("\n").trim(),
+    others.length ? `Squashed with the branch's earlier commits:\n${others.join("\n")}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+  return body ? `${subject}\n\n${body}` : subject;
+}
+
+/** a message as a PR takes it: its first line the title, the rest the body */
+export function splitMessage(text: string): { subject: string; body?: string } {
+  const [first = "", ...rest] = text.split("\n");
+  const body = rest.join("\n").trim();
+  return { subject: first.trim(), ...(body ? { body } : {}) };
 }
 
 /** what a fast-forward onto the last fetch found: `moved` when main took commits, and why it was

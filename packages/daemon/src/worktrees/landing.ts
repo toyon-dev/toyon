@@ -24,7 +24,7 @@ import {
   timeoutFor,
   type WorktreeInfo,
 } from "@toyon/shared";
-import { answerPrompt, type LandVerdict, landPrompt } from "../agent/landing.ts";
+import { answerPrompt, type LandInput, type LandVerdict, landPrompt } from "../agent/landing.ts";
 import { firstAskOf, turnsSince } from "../agent/recap.ts";
 import type { TranscriptEntry } from "../agent/transcript.ts";
 import { UserError } from "../core/errors.ts";
@@ -56,8 +56,10 @@ export interface LandingServiceDeps {
 
 /** how much of a failed check the placeholder gets: its last lines, where the verdict usually is */
 const TAIL_CHARS = 400;
-/** how much of the diff summary the question carries */
+/** how much of the next commit's diff summary the question carries */
 const DIFF_CHARS = 2_000;
+/** how much of the branch's committed summary rides along as context */
+const CONTEXT_CHARS = 800;
 /** how many of one repo's checks run at once. Four checks on one machine take longer than four
  * in a row, and every verdict is late instead of one; two keeps a second row moving while the
  * first is checked. Per repo, since a check's cost is the repo's, and the person waiting is
@@ -179,14 +181,7 @@ export class LandingService {
     const repo = this.d.state.requireRepo(wt.repoId);
     this.judging.set(worktreeId, turn.at);
     const started = Date.now();
-    const entries = this.d.transcript(worktreeId);
-    const prompt = landPrompt({
-      title: wt.title,
-      firstAsk: firstAskOf(entries),
-      turns: turnsSince(entries, 0),
-      diffStat: await diffSummary(wt.path, baseOf(repo)),
-      recentSubjects: await recentSubjects(wt.path, baseOf(repo)),
-    });
+    const prompt = landPrompt(await this.landInput(wt, repo));
     let verdict: LandVerdict | null = null;
     try {
       verdict = await this.d.judge(wt, prompt);
@@ -274,6 +269,31 @@ export class LandingService {
     fireAndForget(worktreeId, this.run(wt, { at: Date.now(), ask: false, quiet: true }), "landing recheck");
   }
 
+  /** What the question is asked with. The message is for the next commit, so the turns it reads
+   * are the ones since the branch's last commit, or its last landing, after which the branch
+   * restarted from main: the earlier turns describe work that is committed, and a model shown
+   * them writes the subject for that work instead. The landing is read off the record's marks,
+   * which every landing writes, the one git did by hand included. */
+  private async landInput(wt: WorktreeInfo, repo: RepoInfo): Promise<LandInput> {
+    const base = baseOf(repo);
+    const entries = this.d.transcript(wt.id);
+    const [diff, subjects, committedAt] = await Promise.all([
+      diffSummary(wt.id, wt.path, base),
+      recentSubjects(wt.path, base),
+      lastOwnCommitAt(wt.id, wt.path, base),
+    ]);
+    const since = Math.max(committedAt, wt.lands?.at(-1)?.at ?? 0);
+    return {
+      title: wt.title,
+      firstAsk: firstAskOf(entries),
+      turns: turnsSince(entries, since),
+      earlier: since > 0,
+      diffStat: diff.own,
+      committedStat: diff.committed,
+      recentSubjects: subjects,
+    };
+  }
+
   private async hasWork(wt: WorktreeInfo): Promise<boolean> {
     const repo = this.d.state.requireRepo(wt.repoId);
     const files = await statusFiles(wt.path);
@@ -346,15 +366,7 @@ export class LandingService {
     let verdict: LandVerdict | null = null;
     let unanswered = false;
     if (opts.ask && check !== "fail" && this.d.judge) {
-      const entries = this.d.transcript(worktreeId);
-      const prompt = landPrompt({
-        title: wt.title,
-        firstAsk: firstAskOf(entries),
-        turns: turnsSince(entries, 0),
-        diffStat: await diffSummary(wt.path, baseOf(repo)),
-        recentSubjects: await recentSubjects(wt.path, baseOf(repo)),
-        ...(opts.note ? { note: opts.note } : {}),
-      });
+      const prompt = landPrompt({ ...(await this.landInput(wt, repo)), ...(opts.note ? { note: opts.note } : {}) });
       try {
         verdict = await this.d.judge(wt, prompt);
       } catch (e) {
@@ -420,22 +432,39 @@ function tail(text: string): string {
   return t.length > TAIL_CHARS ? t.slice(-TAIL_CHARS) : t;
 }
 
-/** what would be committed and what already was, as git's own summary: the committed part
- * against the merge base, the uncommitted part against HEAD, and the files git does not track yet */
-async function diffSummary(path: string, defaultBr: string): Promise<string> {
+/** what the next commit would contain and what the branch committed already, as git's own
+ * summaries: the uncommitted part against HEAD with the files git does not track yet, and the
+ * committed part against the merge base. Two texts, since the prompt labels them differently. */
+async function diffSummary(id: string, path: string, defaultBr: string): Promise<{ own: string; committed: string }> {
   const [base, dirty, untracked] = await Promise.all([
     git(path, "merge-base", "HEAD", defaultBr),
     git(path, "diff", "HEAD", "--stat"),
     git(path, "ls-files", "--others", "--exclude-standard"),
   ]);
+  // a base git cannot place (not fetched yet, an unrelated history) leaves the branch's commits
+  // out of the question, which then reads as the model's mistake: said here instead
+  if (!base.ok) log.warn(id, `landing question: no merge base with ${defaultBr}: ${base.err.trim()}`);
   const committed = base.ok && base.out ? await git(path, "diff", "--stat", base.out, "HEAD") : null;
-  const parts = [
-    committed?.out ? `Committed on the branch:\n${committed.out}` : "",
-    dirty.out ? `Uncommitted:\n${dirty.out}` : "",
-    untracked.out ? `New files:\n${untracked.out}` : "",
-  ].filter(Boolean);
-  const text = parts.join("\n\n");
-  return text.length > DIFF_CHARS ? `${text.slice(0, DIFF_CHARS)}\n...` : text;
+  const own = [dirty.out ? `Uncommitted:\n${dirty.out}` : "", untracked.out ? `New files:\n${untracked.out}` : ""]
+    .filter(Boolean)
+    .join("\n\n");
+  return { own: cap(own, DIFF_CHARS), committed: cap(committed?.out ?? "", CONTEXT_CHARS) };
+}
+
+function cap(text: string, max: number): string {
+  return text.length > max ? `${text.slice(0, max)}\n...` : text;
+}
+
+/** When the branch last took a commit of its own, in ms, or zero with none: the author time of
+ * the newest non-merge commit over the base. Author time, since taking main in rebases the
+ * branch and that rewrites the committer time; non-merge, since a merge sync on an adopted branch
+ * makes a merge commit dated now. Zero with no commits of its own, so the turns since a landing
+ * come from the transcript's landed mark instead. */
+async function lastOwnCommitAt(id: string, path: string, defaultBr: string): Promise<number> {
+  const r = await git(path, "log", "-1", "--no-merges", "--format=%at", `${defaultBr}..HEAD`);
+  if (!r.ok) log.warn(id, `landing question: could not read the branch's commits over ${defaultBr}: ${r.err.trim()}`);
+  const seconds = Number(r.out.trim());
+  return r.ok && Number.isFinite(seconds) ? seconds * 1000 : 0;
 }
 
 async function recentSubjects(path: string, defaultBr: string): Promise<string[]> {

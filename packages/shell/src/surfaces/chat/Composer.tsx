@@ -1504,7 +1504,16 @@ export function Composer({
                       className="composer-verb"
                       disabled={!!verb.ships && !!op}
                       {...tip(verb.tip, undefined, { placement: "top" })}
-                      onClick={verb.run}
+                      // The word leaves with its press: the land's line replaces it as prose, and
+                      // archive takes the row. Focus left on it would fall to the body, so the
+                      // caret goes back to the box the word was reached from, where the next
+                      // message is written. Not on touch, where the caret raises the keyboard
+                      // over the line being read. Called with nothing: a run that takes a note
+                      // must not read the click as one.
+                      onClick={() => {
+                        verb.run();
+                        if (!touch) composerRef.current?.focus();
+                      }}
                       // the step after the word: the changes panel is where a commit message is
                       // edited (Enter breaks its lines there), so tab goes there with the message
                       onKeyDown={(e) => {

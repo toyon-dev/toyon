@@ -2608,7 +2608,9 @@ describe("AcpSession permission modes", () => {
     await w.session.close();
   });
 
-  test("a mode the agent changed on its own is remembered, so the next turn corrects it", async () => {
+  test("a plan mode the agent entered on its own becomes the worktree's, so the chip says so and the next turn keeps it", async () => {
+    let mode: "auto" | "ask" | "plan" = "auto";
+    const setModes: string[] = [];
     const fake = fakeAgent(
       async (p, client) => {
         if (fake.prompts.length === 1) {
@@ -2622,15 +2624,51 @@ describe("AcpSession permission modes", () => {
       { withModes: true, currentMode: "agent" },
     );
     const w = world(fake, codexSpec, 60_000, undefined, {
-      mode: () => "auto",
+      mode: () => mode,
+      setMode: (m) => {
+        setModes.push(m);
+        mode = m;
+      },
     });
     w.session.send("one");
     await w.idle();
-    // already in agent mode: nothing to set
+    // already in agent mode: nothing to set; then the agent moved itself and the record followed
     expect(fake.modes).toEqual([]);
+    expect(setModes).toEqual(["plan"]);
     w.session.send("two");
     await w.idle();
-    expect(fake.modes).toEqual(["agent"]);
+    expect(fake.modes).toEqual([]);
+    await w.session.close();
+  });
+
+  test("a write mode the agent entered on its own is remembered but not taken, so the next turn corrects it", async () => {
+    const setModes: string[] = [];
+    const fake = fakeAgent(
+      async (p, client) => {
+        if (fake.prompts.length === 1) {
+          await client.notify(acp.methods.client.session.update, {
+            sessionId: p.sessionId,
+            update: { sessionUpdate: "current_mode_update", currentModeId: "agent" },
+          });
+        }
+        return { stopReason: "end_turn" };
+      },
+      { withModes: true, currentMode: "read-only" },
+    );
+    const w = world(fake, codexSpec, 60_000, undefined, {
+      mode: () => "plan",
+      setMode: (m) => {
+        setModes.push(m);
+      },
+    });
+    w.session.send("one");
+    await w.idle();
+    // already read-only: nothing to set; the agent's write mode says nothing about auto or ask
+    expect(fake.modes).toEqual([]);
+    expect(setModes).toEqual([]);
+    w.session.send("two");
+    await w.idle();
+    expect(fake.modes).toEqual(["read-only"]);
     await w.session.close();
   });
 

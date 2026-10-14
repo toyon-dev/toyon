@@ -1178,10 +1178,16 @@ export class AcpSession implements AgentAdapter {
       const limits = parseRateLimit(params.update._meta, Date.now());
       if (limits) this.d.onLimits?.(this.conn.spec.id, limits);
     }
-    // the agent left plan mode on its own (an approved ExitPlanMode does): remember, so the next
-    // turn's applyMode compares against what it is in, not what we last asked for
+    // the agent changed mode on its own: remember, so the next turn's applyMode compares against
+    // what it is in, not what we last asked for. Into its plan mode (Claude's EnterPlanMode tool
+    // does this), the record follows: the chip and the rail say plan while it holds, and the next
+    // turn keeps it there rather than pushing the write mode back. Out of plan mode (an approved
+    // ExitPlanMode) the record was set by the approval; any other write mode is left alone, since
+    // the agent's id cannot say whether it means auto or ask.
     if (params.update.sessionUpdate === "current_mode_update") {
       live.modeId = params.update.currentModeId;
+      const planId = agentModeFor(live.conn.spec, "plan", live.modeIds ?? undefined);
+      if (planId && live.modeId === planId && this.mode() !== "plan") this.d.setMode?.("plan");
       return;
     }
     // the agent changed its own model or effort (a slash command can): the record is told, since

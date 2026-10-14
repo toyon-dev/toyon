@@ -19,6 +19,10 @@ export interface Assets {
   /** the installed package's package.json, one directory above the entry, which an install
    * replaces under the running daemon; null in the source tree */
   packageJson: string | null;
+  /** the release notes: shipped beside the bundles in the package, the tracked file at the root of
+   * a checkout. By layout and never by install method, since a cloud image and a nested daemon
+   * report no install while running the packaged layout. */
+  changelog: string;
 }
 
 /** `here` is the directory of the running entry: packages/daemon/src in the tree, dist/ in the package */
@@ -31,6 +35,7 @@ export function locateAssets(here: string, env: NodeJS.ProcessEnv = process.env)
     cliEntry: packaged ? join(here, "cli.js") : join(here, "../../cli/src/cli.ts"),
     sourceRoot: packaged ? null : resolve(here, "../../.."),
     packageJson: packaged ? join(here, "..", "package.json") : null,
+    changelog: packaged ? join(here, "CHANGELOG.md") : resolve(here, "../../../CHANGELOG.md"),
   };
 }
 

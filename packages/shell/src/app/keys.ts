@@ -293,7 +293,8 @@ export function useChords() {
           if (id) previewBus.post(id, { type: "pick-cancel" });
           dispatch({ a: "set-picking", v: false });
         }
-        // an archived worktree's page: back to the row it is over
+        // the release notes, or an archived worktree's page: back to the row it is over
+        else if (s.notesPage) dispatch({ a: "close-release-notes" });
         else if (s.archivedPage) dispatch({ a: "close-archived" });
         // an import pane: stop watching it. Escape deliberately does NOT abort the clone, which
         // keeps running and stays in the switcher: it is a key people hit reflexively, and losing

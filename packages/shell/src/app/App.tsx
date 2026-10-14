@@ -40,6 +40,8 @@ export function App() {
   const daylight = useStore((s) => s.daylight);
   const daylightUntil = useStore((s) => s.daylight?.until ?? 0);
   const archivedPage = useArchivedPage();
+  const notesPage = useStore((s) => s.notesPage);
+  const version = useStore((s) => s.version);
   const railOpen = useStore((s) => s.railOpen);
   const chatSide = useStore((s) => s.chatSide);
   const layouts = useStore((s) => s.layouts);
@@ -131,7 +133,7 @@ export function App() {
     for (const id of gone) sock.send({ t: "unsubscribe", worktreeId: id });
   }, [rows, connected, sock]);
 
-  const pageName = archivedPage?.title ?? activeRow?.name ?? null;
+  const pageName = notesPage ? "Release notes" : (archivedPage?.title ?? activeRow?.name ?? null);
   useEffect(() => {
     document.title = pageName ? `${pageName} · Toyon` : "Toyon";
   }, [pageName]);
@@ -223,6 +225,12 @@ export function App() {
   useEffect(() => {
     if (activeId) storage.set(STORAGE.active, activeId);
   }, [activeId, storage]);
+  // the version this page ran, for the page after the next update to say what changed. Once per
+  // load in practice: a later hello naming another version reloads the serving machine's page
+  // (machine.ts), and the reload reads this back as `ranBefore`.
+  useEffect(() => {
+    if (version) storage.set(STORAGE.version, version);
+  }, [version, storage]);
   // kept for this tab alone, so a reload comes back to the row it was reading and a fresh launch
   // opens the list. The desk moves `screen` without drawing it, so only the phone writes.
   const phoneRow = useStore((s) => (s.frame === "phone" ? s.screen !== "home" : null));

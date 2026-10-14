@@ -11,7 +11,7 @@ bun run shell:dev       # shell UI dev server with HMR
 bun run check           # typecheck, lint, tests, bridge size gate
 ```
 
-`check` is the bar for every commit, and CI runs it on every pull request. `bun run pack` assembles the npm package under `packages/cli/dist`, which is what `npm publish` ships.
+`check` is the bar for every commit, and CI runs it on every pull request. `bun run pack` assembles the npm package under `packages/cli/dist`, which is what `npm publish` ships. A release's notes are a section at the top of `CHANGELOG.md`, written before `bun run version`, which refuses without one; the package carries the file and Toyon shows it after it updates itself.
 
 ## How it fits together
 

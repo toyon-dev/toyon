@@ -81,6 +81,8 @@ export default defineConfig({
       "/tailnet": target,
       "/tailscale": target,
       "/remote": target,
+      // the release notes, for the view after an update
+      "/changelog": target,
     },
   },
 });

@@ -159,6 +159,10 @@ function VersionRow() {
   const repos = useStore((s) => s.repos);
   const updates = useStore((s) => s.managed.updates);
   const check = useStore((s) => s.updateCheck);
+  // the phone mounts no view of toyon's own, and the new-project view stands for every pane, so
+  // there the notes row is a link out
+  const frame = useStore((s) => s.frame);
+  const newProject = useStore((s) => s.newProject !== null);
   const row = versionRow(version, install, update, self, repos, rebuilt, registry, check);
   // a restart onto what is already installed, or a checkout's rebuild, is not an update: only the
   // presses that would ask the registry or install are the policy's to take away
@@ -190,6 +194,8 @@ function VersionRow() {
       row.act === "check" && !row.busy
         ? { run: act, ...(managed ? { off: "managed by your organization" } : {}) }
         : null,
+      // the reducer closes this card with the press
+      frame === "phone" || newProject ? undefined : () => dispatch({ a: "open-release-notes" }),
     );
   return (
     // on the row, not the chip: a disabled button answers no pointer event, a right-click included

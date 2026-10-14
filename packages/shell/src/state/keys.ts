@@ -57,6 +57,9 @@ export const STORAGE = {
   modelPrefix: "toyon-model-",
   /** + agent id: the effort level the composer last started a worktree with, for that agent */
   effortPrefix: "toyon-effort-",
+  /** the daemon's version this browser last ran, per machine, so the first page after an update
+   * can say what changed */
+  version: "toyon-version",
 } as const;
 
 type Key = (typeof STORAGE)[keyof typeof STORAGE];
@@ -100,6 +103,7 @@ export const MACHINE_KEYS: readonly Key[] = [
   STORAGE.modelPrefix,
   STORAGE.effortPrefix,
   STORAGE.phoneRow,
+  STORAGE.version,
 ];
 
 /** the four keys that are prefixes, each completed by a repo or agent id */

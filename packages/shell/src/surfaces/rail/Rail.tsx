@@ -119,8 +119,10 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
     e.preventDefault();
     if (treeKey([{ depth: 0, open }], 0, e.key)) dispatch({ a });
   };
-  // an archived worktree's page is up: its row is the marked one, over the active row underneath
+  // an archived worktree's page is up: its row is the marked one, over the active row underneath;
+  // the release notes mark none, since the pane beside the rail shows no worktree
   const archivedPage = useArchivedPage();
+  const notesPage = useStore((s) => s.notesPage);
   const clientId = useStore((s) => s.clientId);
   const frame = useStore((s) => s.frame);
   const activeRepoId = useStore((s) => s.activeRepoId);
@@ -415,7 +417,7 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
         // A screen marks none: the mark says which worktree the pane beside the rail is showing, and
         // the home screen is reached by leaving that worktree, with nothing beside it.
         data-state={rowState({
-          current: !onScreen && id === activeId && !archivedPage,
+          current: !onScreen && id === activeId && !archivedPage && !notesPage,
           checked: sel.includes(id),
         })}
         // one tip per row, on the row: the dot's state in words with the dot restated beside it,

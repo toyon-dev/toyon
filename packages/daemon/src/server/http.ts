@@ -111,6 +111,9 @@ export interface HttpOpts {
   offline: () => { start: string | null; port: number };
   /** Toyon's own tools for a worktree's agent, over MCP (agent/mcp.ts); the bearer check is its own */
   mcp: (req: Request, worktreeId: string) => Promise<Response>;
+  /** the release notes shipped with this Toyon, read off disk each time so an install under the
+   * running daemon is what the page gets; null when this copy carries none */
+  changelog: () => Promise<string | null>;
 }
 
 /** a year, and never revalidate: for a name that cannot mean different bytes later */
@@ -254,6 +257,22 @@ export function createFetch(opts: HttpOpts) {
       if (req.method === "GET") return Response.json(opts.restartWait(), { headers: { "cache-control": NO_STORE } });
       const refused = await opts.restart(url.searchParams.has(RESTART_NOW));
       return refused ? new Response(refused, { status: 409 }) : new Response(null, { status: 202 });
+    }
+
+    // the release notes, for the view the shell shows after Toyon updated itself. Public text,
+    // but behind the token like every other route the shell reads on purpose; markdown by type, so
+    // a page can tell it from the shell's index.html, which an older daemon answers any path with
+    if (url.pathname === "/changelog" && req.method === "GET") {
+      if (!authed(req)) return unauthorized();
+      const text = await opts.changelog();
+      if (text === null) return new Response("this copy of Toyon carries no release notes", { status: 404 });
+      return new Response(text, {
+        headers: {
+          "content-type": "text/markdown; charset=utf-8",
+          "cache-control": NO_STORE,
+          "x-content-type-options": "nosniff",
+        },
+      });
     }
 
     // pairing: knocks and their answers, the tailnet, the name itself, and the machines handed over

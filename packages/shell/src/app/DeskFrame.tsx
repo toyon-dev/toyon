@@ -47,9 +47,10 @@ export function DeskFrame() {
   // the card in the centre lists the chats itself.
   // The chat dock is hidden on an archived worktree's page too, whose chat is the page itself; the
   // changes dock stays, showing that worktree's work rather than the row's underneath. A found
-  // worktree's page is the same: its chat is the centre.
+  // worktree's page is the same: its chat is the centre. The release notes cover the centre too.
   const archivedPage = useArchivedPage();
-  const paged = !!useFoundPage() || !!archivedPage;
+  const notesPage = useStore((s) => s.notesPage);
+  const paged = !!useFoundPage() || !!archivedPage || notesPage;
   const changesOpen = useStore((s) => s.layout.changes) && !bare;
   const chatOpen = useStore((s) => s.layout.chat) && !bare && !chatCentred && !paged;
   const chatSide = useStore((s) => s.chatSide);

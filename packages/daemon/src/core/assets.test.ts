@@ -22,6 +22,8 @@ describe("locateAssets", () => {
       expect(a.sourceRoot).toBeNull();
       // what an install replaces, so the daemon can tell it is no longer what is installed
       expect(a.packageJson).toBe(join(here, "..", "package.json"));
+      // the notes the pack copied in beside the bundles
+      expect(a.changelog).toBe(join(here, "CHANGELOG.md"));
     } finally {
       rmSync(here, { recursive: true, force: true });
     }
@@ -32,6 +34,8 @@ describe("locateAssets", () => {
     expect(a.bridgeJs).toBe("/src/packages/bridge/dist/bridge.js");
     expect(a.sourceRoot).toBe("/src");
     expect(a.packageJson).toBeNull();
+    // the tracked file at the root of the checkout
+    expect(a.changelog).toBe("/src/CHANGELOG.md");
   });
   test("the environment wins over both", () => {
     const a = locateAssets("/x", { TOYON_SHELL_DIST: "/elsewhere/shell", TOYON_BRIDGE_JS: "/elsewhere/b.js" });
@@ -43,6 +47,7 @@ describe("locateAssets", () => {
       cliEntry: "/cli/src/cli.ts",
       sourceRoot: "/",
       packageJson: null,
+      changelog: "/CHANGELOG.md",
     });
   });
 });

@@ -361,6 +361,10 @@ export function createMachine(init: MachineInit, env: MachineEnv): Machine {
       storedActive: storage.get(STORAGE.active),
       storedPhoneRow: storage.session.get(STORAGE.phoneRow) === "1",
       storedRepo: storage.get(STORAGE.repo),
+      // read once, before anything writes it: the serving machine hears two hellos per load (the
+      // bootstrap one, then the socket's), and a comparison made live would see the second equal
+      // to what the first had just stored
+      storedVersion: storage.get(STORAGE.version),
       // how the window is laid out is the window's, whichever machine it shows
       storedRailOpen: read(STORAGE.rail) === "1",
       storedChatSide: read(STORAGE.chatSide) === "right" ? "right" : "left",

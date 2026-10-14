@@ -44,6 +44,7 @@ import {
   routeTarget,
   type State,
   type StoreServerMsg,
+  whatsNew,
 } from "./store.ts";
 
 // The reducer's rules the UI depends on and nothing else documents: which worktree becomes active,
@@ -2620,6 +2621,15 @@ describe("an archived worktree's page", () => {
     expect(run([archived("r", "x", "y")], s).archivedPage).toBe("x");
   });
 
+  test("the release notes give way to it, and it to them", () => {
+    const s = run([{ a: "open-release-notes" }, { a: "open-archived", id: "x" }], listed());
+    expect([s.notesPage, s.archivedPage]).toEqual([false, "x"]);
+    const back = run([{ a: "open-release-notes" }], s);
+    expect(back.notesPage).toBe(true);
+    // the archived page is still underneath, for Escape to come back to
+    expect(back.archivedPage).toBe("x");
+  });
+
   test("what it left opens the changes panel, on its own record", () => {
     const committed = [{ path: "a.ts", xy: "M " }];
     const s = run(
@@ -2703,6 +2713,57 @@ describe("an archived worktree's page", () => {
     // taken off again, the box is empty and the next frame lets it go
     const emptied = run([{ a: "detach", id: "x", key: "img1" }, worktrees(wt("main", "main"), wt("a"))], left);
     expect(emptied.local.x).toBeUndefined();
+  });
+});
+
+describe("release notes", () => {
+  /** a page loaded over `stored`, the version the browser last ran, hearing `version` now */
+  const loaded = (stored: string | null, version = "0.14.0") => {
+    const h = helloIn([repo("r")], wt("main", "main"), wt("a")) as { a: "server"; msg: { t: "hello" } };
+    return run(
+      [{ a: "server", msg: { ...h.msg, version } } as Action, { a: "activate", id: "a" }],
+      initialState({ clientId: ME, storedVersion: stored }),
+    );
+  };
+
+  test("offered once the version has moved past the one this browser last ran", () => {
+    expect(whatsNew(loaded("0.11.0"))).toBe("0.14.0");
+    expect(loaded("0.11.0").ranBefore).toBe("0.11.0");
+  });
+  test("not on a first run, nor on the same or a newer version, nor before hello", () => {
+    expect(whatsNew(loaded(null))).toBeNull();
+    expect(whatsNew(loaded("0.14.0"))).toBeNull();
+    expect(whatsNew(loaded("0.15.0"))).toBeNull();
+    expect(whatsNew(initialState({ clientId: ME, storedVersion: "0.11.0" }))).toBeNull();
+  });
+  test("the press opens the page over the row, closes the card, and is the one offer", () => {
+    const s = run([{ a: "open", overlay: { kind: "keys" } }, { a: "open-release-notes" }], loaded("0.11.0"));
+    expect([s.notesPage, s.overlay, s.activeId]).toEqual([true, null, "a"]);
+    expect(whatsNew(s)).toBeNull();
+    // the page covers the preview, so nothing steers or picks from it
+    expect(previewIdOf(s)).toBeNull();
+    expect(routeTarget(s)).toBeNull();
+    const closed = run([{ a: "close-release-notes" }], s);
+    expect(closed.notesPage).toBe(false);
+    expect(whatsNew(closed)).toBeNull();
+    expect(previewIdOf(closed)).toBe("a");
+  });
+  test("choosing a row, starting a project or a row this tab made closes it; a frame that keeps the selection keeps it", () => {
+    const s = run([{ a: "open-release-notes" }], loaded("0.11.0"));
+    expect(run([{ a: "activate", id: "main" }], s).notesPage).toBe(false);
+    expect(run([{ a: "open-draft" }], s).notesPage).toBe(false);
+    expect(
+      run([{ a: "new-project", v: newProjectState({ mode: "create", name: "x", parent: "~/p" }) }], s).notesPage,
+    ).toBe(false);
+    expect(run([worktrees(wt("main", "main"), wt("a"))], s).notesPage).toBe(true);
+    expect(run([worktrees(wt("main", "main"), wt("a"), wt("b", "worktree", ME))], s).notesPage).toBe(false);
+  });
+  test("the new-project view is not dropped for the chip", () => {
+    const page = newProjectState({ mode: "create", name: "x", parent: "~/p" });
+    const s = run([{ a: "new-project", v: page }, { a: "open-release-notes" }], loaded("0.11.0"));
+    expect(s.notesPage).toBe(false);
+    expect(s.newProject).toEqual(page);
+    expect(whatsNew(s)).toBe("0.14.0");
   });
 });
 

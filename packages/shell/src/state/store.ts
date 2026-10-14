@@ -75,6 +75,7 @@ import {
   isOwned,
   isProvisional,
   MANAGED_NONE,
+  newer,
   PROJECTS_FOLDER,
   railOrder,
   renderedAs,
@@ -865,6 +866,13 @@ export interface State {
   install: InstallMethod;
   /** hello's `registry`: where updates come from, named on the version row; null where nothing updates */
   registry: string | null;
+  /** the version this browser last ran on this machine, read once at page load (machine.ts) and
+   * never moved by a hello: the page that follows an update compares the two. Null on a first run. */
+  ranBefore: string | null;
+  /** the release notes stand in the centre, over the row underneath, like an archived page */
+  notesPage: boolean;
+  /** the what's-new chip was pressed on this page, so it is not offered again until the next load */
+  notesSeen: boolean;
   /** the Finder dialog is up, and which of the new-project view's controls asked for it: where the
    * project goes, or a folder to open. Escape is the dialog's while it is up. */
   choosingFolder: false | "location" | "open";
@@ -915,6 +923,8 @@ export interface InitialOpts {
   storedPhoneRow?: boolean;
   /** project selected before the last reload, restored on hello */
   storedRepo?: string | null;
+  /** the daemon's version the last page on this machine ran, for the what's-new chip */
+  storedVersion?: string | null;
   /** the worktree panel was left open, so it starts open rather than peeking */
   storedRailOpen?: boolean;
   /** the side the chat dock was left on */
@@ -1030,6 +1040,9 @@ export function initialState(opts: InitialOpts): State {
     version: "",
     install: "none",
     registry: null,
+    ranBefore: opts.storedVersion ?? null,
+    notesPage: false,
+    notesSeen: false,
     choosingFolder: false,
     newProject: null,
     autoSend: null,
@@ -1174,8 +1187,9 @@ export function trunkOf(s: Pick<State, "trunks">, repoId: string | null | undefi
  * this one. */
 export function previewIdOf(s: State): string | null {
   if (isChatCentred(s)) return null;
-  // an archived worktree's page covers the preview: what is on screen has no page to pick from
-  if (s.archivedPage) return null;
+  // an archived worktree's page, or the release notes, covers the preview: what is on screen has
+  // no page to pick from
+  if (s.archivedPage || s.notesPage) return null;
   return s.activeId;
 }
 
@@ -1187,7 +1201,7 @@ export function previewUp(wt: OwnedWorktree): boolean {
 /** where the address bar, ⌘U and ⌘P's `/` send a path: the active worktree's preview, while it is up.
  * A fresh object each call, so a selector reads one field of it and never the whole. */
 export function routeTarget(s: State): { worktreeId: string; repoId: string } | null {
-  if (s.archivedPage) return null;
+  if (s.archivedPage || s.notesPage) return null;
   const wt = worktreeById(s, s.activeId);
   return wt && previewUp(wt) ? { worktreeId: wt.worktree.id, repoId: wt.repoId } : null;
 }
@@ -1299,9 +1313,10 @@ function activate(s: State, id: string | null): State {
   const was = leaving ? s.local[leaving] : undefined;
   const settled = was && was.mark?.by === "reveal" ? withoutMark(was, "reveal") : null;
   const local = leaving && settled ? { ...s.local, [leaving]: settled } : s.local;
-  // choosing a row is leaving an archived worktree's page: a snapshot that only re-asserts the
-  // selection puts it back itself (see the worktrees frame). The draft follows main (withLauncher).
-  return { ...s, activeId: id, activeRepoId, lastActive, editor: null, archivedPage: null, local };
+  // choosing a row is leaving an archived worktree's page, or the release notes: a snapshot that
+  // only re-asserts the selection puts them back itself (see the worktrees frame). The draft
+  // follows main (withLauncher).
+  return { ...s, activeId: id, activeRepoId, lastActive, editor: null, archivedPage: null, notesPage: false, local };
 }
 
 /** the archived worktree whose page is up, if its project is the one on screen and it is still listed */
@@ -1329,6 +1344,14 @@ export function foundPageOf(s: Pick<State, "rows" | "activeId" | "archivedPage">
   if (s.archivedPage) return null;
   const row = rowById(s, s.activeId);
   return row && !isOwned(row) ? row : null;
+}
+
+/** The version to offer the release notes for: the one running, when this browser last ran an
+ * older one on this machine and the chip has not been pressed on this page. Null on a first run,
+ * which has nothing to be newer than, and before hello, when `version` is not one. */
+export function whatsNew(s: Pick<State, "version" | "ranBefore" | "notesSeen">): string | null {
+  if (s.notesSeen || s.ranBefore === null || !newer(s.version, s.ranBefore)) return null;
+  return s.version;
 }
 
 export function archivedPageOf(s: Pick<State, "archivedPage" | "activeRepoId" | "archived">): ArchivedWorktree | null {
@@ -1377,6 +1400,9 @@ export type Action =
   /** show an archived worktree's page in the centre: what was kept, and the restore button */
   | { a: "open-archived"; id: string }
   | { a: "close-archived" }
+  /** show the release notes in the centre: the what's-new chip, or the version row's menu */
+  | { a: "open-release-notes" }
+  | { a: "close-release-notes" }
   /** switch the shell to another registered repo */
   | { a: "activate-repo"; id: string }
   /** archive-worktree frames went out for these: hide the rows now, move the selection off them */
@@ -1813,10 +1839,19 @@ function reduce(s: State, action: Action): State {
       if (!s.activeRepoId || !s.archived[s.activeRepoId]?.some((a) => a.id === action.id)) return s;
       // a page over the row underneath: the file open there belongs to what was on screen, and is
       // not what the page is about (the draft follows the lead and goes by itself, see withLauncher)
-      return { ...s, archivedPage: action.id, editor: null, screen: "chat" };
+      return { ...s, archivedPage: action.id, notesPage: false, editor: null, screen: "chat" };
     }
     case "close-archived":
       return s.archivedPage ? closeArchivedPage(s) : s;
+    case "open-release-notes": {
+      // the new-project view stands for every pane, and its draft is not dropped for a chip
+      if (s.newProject) return s;
+      // the press is the one offer: seen is for the page, not for the version. The card that
+      // offered it closes with it, and a file open under it belongs to what was on screen.
+      return { ...s, notesPage: true, notesSeen: true, overlay: null, paletteReturn: null, editor: null };
+    }
+    case "close-release-notes":
+      return s.notesPage ? { ...s, notesPage: false } : s;
     case "restoring":
       return withLocal(s, action.id, (l) => ({ ...l, restoring: action.message }));
     case "sending":
@@ -1955,6 +1990,7 @@ function reduce(s: State, action: Action): State {
         paletteReturn: null,
         previewTheme: null,
         editor: null,
+        notesPage: false,
       };
     case "new-project-set": {
       if (!s.newProject) return s;
@@ -2697,8 +2733,10 @@ function onServer(s: State, msg: StoreServerMsg): State {
         // person; the stray rule lands it inside the rail's project instead
         ...(activeId === s.activeId ? { activeRepoId: s.activeRepoId } : {}),
         // the archived page stays up through a frame for the same reason; a worktree this tab just
-        // made is the one it restored, and that row is what to look at now
+        // made is the one it restored, and that row is what to look at now. The release notes
+        // stay up for the same reason, and a row this tab made is what to look at over them too.
         archivedPage: fresh ? null : s.archivedPage,
+        notesPage: fresh ? false : s.notesPage,
       });
     }
     case "proc": {

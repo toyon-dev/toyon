@@ -76,6 +76,8 @@ export interface DaemonUrls {
   /** a knock's answer, from the page that holds this machine's token */
   knockAnswer(id: string): string;
   previewGrant: string;
+  /** the release notes shipped with that daemon's Toyon */
+  changelog: string;
 }
 
 export function daemonUrls(origin: string, token: string): DaemonUrls {
@@ -101,6 +103,7 @@ export function daemonUrls(origin: string, token: string): DaemonUrls {
     machines: `${u.origin}/machines`,
     knockAnswer: (id) => `${u.origin}/knock/${id}/answer`,
     previewGrant: `${u.origin}/preview-grant`,
+    changelog: `${u.origin}/changelog`,
   };
 }
 
@@ -174,6 +177,19 @@ export async function restartWaiting(urls: DaemonUrls): Promise<{ waiting: strin
     return { waiting, asking: Array.isArray(asking) ? asking : [] };
   } catch {
     // down between the old daemon and the new one, or not JSON; the caller asks again
+    return null;
+  }
+}
+
+/** The release notes a daemon ships, as markdown; null when it did not answer, refused, or is from
+ * before it served any. A daemon that old answers every unknown path with the shell's index.html
+ * and a 200, so the type is what tells the notes from a page. */
+export async function releaseNotes(urls: DaemonUrls): Promise<string | null> {
+  try {
+    const r = await fetch(urls.changelog, { headers: bearer(urls) });
+    if (!r.ok || !r.headers.get("content-type")?.startsWith("text/markdown")) return null;
+    return await r.text();
+  } catch {
     return null;
   }
 }

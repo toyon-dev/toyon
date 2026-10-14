@@ -42,6 +42,7 @@ import { bridgeThemeMsg } from "../../theme.ts";
 import { cx } from "../../ui/cx.ts";
 import { useDragResize, usePersisted } from "../../ui/hooks.ts";
 import { hasToken } from "../../ws.ts";
+import { ReleaseNotes } from "./ReleaseNotes.tsx";
 
 /** read once at load (the token arrives in the URL fragment); calling it during render would write storage */
 const HAS_TOKEN = hasToken();
@@ -163,6 +164,8 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
   // on the new-project view before it
   const greenfield = useGreenfield();
   const newProject = useNewProject();
+  // the release notes take the centre over every view but the new-project one
+  const notesPage = useStore((s) => s.notesPage);
   const bare = useBare();
   const termOpen = useStore((s) => s.layout.term) && !bare;
   // The terminal pane is keyed by worktree, so choosing another row remounts it. Its terminal takes
@@ -601,8 +604,8 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
     shownRef.current = shownId;
   });
   // a frame is on screen: nothing of toyon's own stands over the centre (the setup pane, a clone
-  // being watched) and the project has something to run
-  const frameShown = shownId !== null && !setupRepo && !watching && !bare && !chatCentred;
+  // being watched, the release notes) and the project has something to run
+  const frameShown = shownId !== null && !setupRepo && !watching && !notesPage && !bare && !chatCentred;
   // the frames' box is the app's window: its size is read off it for the bar
   const [framesEl, setFramesEl] = useState<HTMLDivElement | null>(null);
   const sayPreviewSize = useCallback((text: string | null) => dispatch({ a: "preview-size", text }), [dispatch]);
@@ -679,12 +682,18 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
   return (
     <div className="center-root" ref={rootRef}>
       {/* a full-height pane takes the preview's place; in zen the panes are hidden (app.css), so
-          the preview comes back for the window rather than leaving the column blank */}
+          the preview comes back for the window rather than leaving the column blank. A page of
+          toyon's own over the centre hides the panes instead (below), so the area stays. */}
       <div
         className={cx("center-area", dropOver && "drop-over")}
         style={{
           display:
-            !(zen && !chatCentred) && ((editor && editorFull) || (designOpen && designFull)) ? "none" : undefined,
+            !(zen && !chatCentred) &&
+            !archivedPage &&
+            !notesPage &&
+            ((editor && editorFull) || (designOpen && designFull))
+              ? "none"
+              : undefined,
         }}
       >
         <div className="frames-wrap" ref={setFramesEl}>
@@ -732,9 +741,12 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
               style={{ display: "none" }}
             />
           ))}
-          {/* the page stands in for every pane below: it is about a project that is not one of them */}
+          {/* the page stands in for every pane below: it is about a project that is not one of them;
+              the release notes stand for everything but it, over whatever row is underneath */}
           {newProject ? (
             <NewProject project={newProject} />
+          ) : notesPage ? (
+            <ReleaseNotes />
           ) : (
             <>
               {watching && <Import key={watching.id} pending={watching} />}
@@ -799,7 +811,7 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
       {/* the panes remount per worktree, and they are siblings in one children array: a key both
           share is a duplicate key to React, which then paints a second copy of one on an update
           (the design pane, on the first pointer move of its resize) that no close removes */}
-      {designOpen && activeId && !archivedPage && (
+      {designOpen && activeId && !archivedPage && !notesPage && (
         <DesignPane
           key={`design:${activeId}`}
           worktreeId={activeId}
@@ -809,7 +821,7 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
           onDragStart={startDesignDrag}
         />
       )}
-      {termOpen && activeId && !archivedPage && (
+      {termOpen && activeId && !archivedPage && !notesPage && (
         <TerminalPane
           key={`term:${activeId}`}
           worktreeId={activeId}

@@ -1,5 +1,6 @@
 import { type ComponentProps, type ReactNode, useEffect, useRef, useState } from "react";
 import { previewBus, togglePick } from "../../app/previewBus.ts";
+import { notesOfferText } from "../../app/releaseNotes.ts";
 import { selfNotice } from "../../app/selfNotice.ts";
 import { updateNotice } from "../../app/updateNotice.ts";
 import { previewItems } from "../../state/actions/preview.ts";
@@ -14,7 +15,7 @@ import {
   useLocalField,
   usePreviewId,
 } from "../../state/selectors.ts";
-import { canOfferPhone, previewUp } from "../../state/store.ts";
+import { canOfferPhone, previewUp, whatsNew } from "../../state/store.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { useEdges, useEdgesOf, useOnChange, usePinToView, useWindowWidth } from "../../ui/hooks.ts";
@@ -61,9 +62,10 @@ export function TopBar({ center }: { center: HTMLDivElement | null }) {
   const keysOpen = useStore((s) => s.overlay?.kind === "keys");
   const installEvt = useInstallPrompt();
   const id = active?.worktree.id ?? null;
-  // an archived worktree's page covers the preview, so the route cluster has no page to steer
-  const archivedPage = useStore((s) => s.archivedPage !== null);
-  const ready = !!active && previewUp(active) && !archivedPage;
+  // an archived worktree's page, or the release notes, covers the preview, so the route cluster
+  // has no page to steer
+  const paged = useStore((s) => s.archivedPage !== null || s.notesPage);
+  const ready = !!active && previewUp(active) && !paged;
   // each panel's toggle sits at its panel's end of the bar, so the two trade places with the chat's
   // side; everything else in the bar stays where it is, zen at the far right included. The lead and
   // the tools keep their places, so the cluster between them measures the same either way.
@@ -109,6 +111,7 @@ export function TopBar({ center }: { center: HTMLDivElement | null }) {
         )}
         <SelfOffer />
         <UpdateOffer />
+        <NotesOffer />
       </span>
       {!chatCentred && (
         <RouteBar worktreeId={id} repoId={active?.repoId ?? null} ready={ready} left={nav.left} width={nav.width} />
@@ -399,6 +402,25 @@ function UpdateOffer() {
       {...tip(notice.text)}
     >
       {notice.word}
+    </Offer>
+  );
+}
+
+/** The first page after Toyon updated itself: what changed, offered once. Toyon updates without a
+ * word and the tabs reload by themselves, so this is the one sign a release happened. A press
+ * opens the notes and takes the chip with it, and the next page load drops it either way; nothing
+ * waits on it, so it is an offer and never a notice, and it has no dismiss of its own. */
+function NotesOffer() {
+  const dispatch = useDispatch();
+  const to = useStore(whatsNew);
+  const from = useStore((s) => s.ranBefore);
+  // the new-project view stands for every pane, and the press would be refused there
+  const newProject = useStore((s) => s.newProject !== null);
+  if (!to || !from || newProject) return null;
+  const { word, text } = notesOfferText(from, to);
+  return (
+    <Offer icon="book" onClick={() => dispatch({ a: "open-release-notes" })} {...tip(text)}>
+      {word}
     </Offer>
   );
 }

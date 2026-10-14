@@ -74,6 +74,8 @@ export interface ServerOpts {
   port: number;
   token: string;
   shellDist: string;
+  /** the release notes file (core/assets.ts), served to the shell as what's new */
+  changelog: string;
   version: string;
   services: Services;
   /** where a shell authenticated from, passed on to the bridge script (see BridgeScript) */
@@ -488,6 +490,11 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
       grants: opts.grants,
       trusted: () => s.state.trustedOrigins,
       mcp: (req, id) => s.mcp.fetch(req, id),
+      // a package built without the file is the only way this fails, and the route answers 404 for it
+      changelog: () =>
+        Bun.file(opts.changelog)
+          .text()
+          .catch(() => null),
     }),
     websocket: {
       // idleTimeout and sendPings stay at Bun's defaults (120 s, on): they are what close a tab that

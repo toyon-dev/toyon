@@ -12,6 +12,14 @@ if (!version || !/^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/.test(version)) {
   process.exit(2);
 }
 const root = resolve(import.meta.dir, "..");
+// the notes are part of the release commit: the package serves them to the shell as what's new,
+// so a tag without a section for its version would ship a changelog that stops one release short
+if (!readFileSync(join(root, "CHANGELOG.md"), "utf8").includes(`\n## ${version} (`)) {
+  console.error(
+    `CHANGELOG.md has no section for ${version}; write the release notes first (a "## ${version} (YYYY-MM-DD)" heading at the top)`,
+  );
+  process.exit(2);
+}
 for (const pkg of ["bridge", "cli", "daemon", "shared", "shell"]) {
   const file = join(root, "packages", pkg, "package.json");
   const json = JSON.parse(readFileSync(file, "utf8"));

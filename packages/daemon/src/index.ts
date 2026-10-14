@@ -94,6 +94,7 @@ const {
   cliEntry: CLI_ENTRY,
   sourceRoot: SOURCE_ROOT,
   packageJson: PACKAGE_JSON,
+  changelog: CHANGELOG,
 } = locateAssets(here);
 // the shell keeps every build's chunks so a tab open across a rebuild can still load its own; the
 // ones no tab can still be holding go here, once, where no build is part-way through writing
@@ -421,6 +422,7 @@ const {
   port,
   token,
   shellDist: SHELL_DIST,
+  changelog: CHANGELOG,
   version: pkg.version,
   noteShellOrigin: (origin) => bridge.learnShellOrigin(origin),
   startLink: () => helper?.startLink() ?? null,

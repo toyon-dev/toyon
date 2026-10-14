@@ -50,8 +50,18 @@ if (hasStub) cpSync(stub, join(out, "helper-stub"));
 // npm reads the package page from a README beside package.json, and a LICENSE there too; the
 // real ones live at the repo root, so the pack carries copies in (gitignored, refreshed every run)
 for (const f of ["README.md", "LICENSE"]) cpSync(join(root, f), join(pkgs, "cli", f));
+// the release notes the daemon serves to the shell (core/assets.ts finds them beside the bundles);
+// under dist/ rather than beside package.json, since dist/ alone is what reaches the machine image
+cpSync(join(root, "CHANGELOG.md"), join(out, "CHANGELOG.md"));
 
-for (const f of ["daemon.js", "cli.js", "bridge.js", "shell/index.html", ...(hasStub ? ["helper-stub"] : [])]) {
+for (const f of [
+  "daemon.js",
+  "cli.js",
+  "bridge.js",
+  "shell/index.html",
+  "CHANGELOG.md",
+  ...(hasStub ? ["helper-stub"] : []),
+]) {
   const p = join(out, f);
   if (!existsSync(p)) throw new Error(`missing after pack: ${f}`);
   console.log(`${f.padEnd(18)} ${(statSync(p).size / 1024).toFixed(0).padStart(6)} KB`);

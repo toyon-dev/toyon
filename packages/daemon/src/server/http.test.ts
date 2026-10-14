@@ -50,6 +50,7 @@ let restartsAsked = 0;
 /** whether the last restart asked was one that does not wait */
 let restartNow = false;
 let restartWaiting: string[] | null = null;
+let changelogText: string | null = "# Changelog\n\n## 0.2.0 (2026-01-02)\n\n### New\n- a thing\n";
 const opts: HttpOpts = {
   token: "secret",
   shellDist: "/nonexistent",
@@ -98,6 +99,7 @@ const opts: HttpOpts = {
     mcpHits.push(worktreeId);
     return new Response("mcp", { status: 200 });
   },
+  changelog: async () => changelogText,
 };
 /** the worktree ids the MCP route handed on */
 const mcpHits: string[] = [];
@@ -1024,6 +1026,33 @@ describe("/restart", () => {
   });
 });
 
+describe("/changelog", () => {
+  const get = (headers: Record<string, string> = {}) => fetch(req("/changelog", { headers }), srv());
+
+  test("no bearer is 401", async () => {
+    expect((await get())?.status).toBe(401);
+    expect((await get({ authorization: "Bearer wrong" }))?.status).toBe(401);
+  });
+
+  test("the notes come back as markdown, never cached", async () => {
+    const r = await get({ authorization: "Bearer secret" });
+    expect(r?.status).toBe(200);
+    expect(await r?.text()).toBe(changelogText as string);
+    expect(r?.headers.get("content-type")).toStartWith("text/markdown");
+    expect(r?.headers.get("cache-control")).toBe("no-store");
+  });
+
+  test("a copy without the file is a 404, not an empty page", async () => {
+    const had = changelogText;
+    changelogText = null;
+    try {
+      expect((await get({ authorization: "Bearer secret" }))?.status).toBe(404);
+    } finally {
+      changelogText = had;
+    }
+  });
+});
+
 describe("static shell", () => {
   const dist = mkdtempSync(join(tmpdir(), "toyon-dist-"));
   afterAll(() => rmSync(dist, { recursive: true, force: true }));
@@ -1064,6 +1093,7 @@ describe("static shell", () => {
     grants: new GrantCodes(),
     trusted: () => [],
     mcp: opts.mcp,
+    changelog: opts.changelog,
   });
 
   test("the manifest carries the chosen theme's colours, whatever the file on disk says", async () => {

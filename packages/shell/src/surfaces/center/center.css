@@ -163,4 +163,16 @@
       color: var(--red);
     }
   }
+
+  /* ---- release notes ---- */
+  /* a release reads as a release: .md keeps every heading on the body line, which is right for
+     prose in a chat and wrong for a document of a dozen sections read for themselves */
+  .notes-md h2 {
+    font: var(--type-ui-lg);
+    font-weight: var(--weight-title);
+    margin: 28px 0 8px;
+  }
+  .notes-md h2:first-child {
+    margin-top: 8px;
+  }
 }

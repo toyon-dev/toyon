@@ -90,12 +90,14 @@ function Markdown({
   // a link the daemon could not open is answered at the link: its underline turns, and the reason
   // takes the tip. The markup is the row's and is swapped whole on every render, so the mark is
   // put back after each swap (keyed on the html, which the body never reads); the tip it replaces
-  // is kept on the element to be put back too.
+  // is kept on the element to be put back too. A backticked path asked for from its menu is
+  // answered the same way, found by the path it names, which is the href its ask went out with.
   useOnChange([html, refused], () => {
     const el = body.current;
     if (!el) return;
-    for (const a of el.querySelectorAll<HTMLAnchorElement>("a.file-link")) {
-      const hit = refused !== undefined && a.getAttribute("href") === refused.href;
+    for (const a of el.querySelectorAll<HTMLElement>("a.file-link, code[data-path]")) {
+      const asked = a.getAttribute("href") ?? a.dataset.path;
+      const hit = refused !== undefined && asked === refused.href;
       a.classList.toggle("file-link-refused", hit);
       if (hit) {
         a.dataset.tipWas ??= a.dataset.tip ?? "";
@@ -105,8 +107,14 @@ function Markdown({
         // mouseover brings it up again, now with the answer
         a.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
       } else if (a.dataset.tipWas !== undefined) {
-        a.dataset.tip = a.dataset.tipWas;
-        a.dataset.tipPlacement = "follow";
+        // a code span had no tip of its own, and gets none back
+        if (a.dataset.tipWas) {
+          a.dataset.tip = a.dataset.tipWas;
+          a.dataset.tipPlacement = "follow";
+        } else {
+          delete a.dataset.tip;
+          delete a.dataset.tipPlacement;
+        }
         delete a.dataset.tipWas;
       }
     }
@@ -946,7 +954,7 @@ export const ChatItemView = memo(function ChatItemView({
           className="msg-user row-edge"
           data-state={rowState({ cursor: marked })}
           {...cm.contextMenu((_from, target) =>
-            messageItems(item, worktreeId ?? null, deps, { link: chatLink(target, root), dir: dirOf() }),
+            messageItems(item, worktreeId ?? null, deps, { link: chatLink(target, root) }),
           )}
           onClick={(e) => openMention(e, root, worktreeId, deps)}
         >
@@ -998,7 +1006,7 @@ export const ChatItemView = memo(function ChatItemView({
       return (
         <Markdown
           text={item.text}
-          menu={(link, code) => messageItems(item, worktreeId ?? null, deps, { link, code, dir: dirOf() })}
+          menu={(link, code) => messageItems(item, worktreeId ?? null, deps, { link, code })}
           marked={marked}
           worktreeId={worktreeId}
           fileRoot={fileRoot()}
@@ -1035,7 +1043,6 @@ export const ChatItemView = memo(function ChatItemView({
                 messageItems({ kind: "assistant", text: said.message }, worktreeId ?? null, deps, {
                   link,
                   code,
-                  dir: dirOf(),
                 })
               }
               worktreeId={worktreeId}
@@ -1081,7 +1088,6 @@ export const ChatItemView = memo(function ChatItemView({
                   messageItems({ kind: "assistant", text: plan.text }, worktreeId ?? null, deps, {
                     link,
                     code,
-                    dir: dirOf(),
                   })
                 }
                 worktreeId={worktreeId}

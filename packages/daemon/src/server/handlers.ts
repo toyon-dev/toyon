@@ -56,7 +56,7 @@ export interface Services {
   turns: TurnService;
   files: FileService;
   /** files opened from outside the shell: the grants on files in no worktree, and their saves */
-  opens: Pick<OpenService, "open" | "file" | "viewable" | "write" | "takePending" | "delivered">;
+  opens: Pick<OpenService, "open" | "file" | "where" | "viewable" | "write" | "takePending" | "delivered">;
   /** the worktree's own design system, scanned from its source */
   design: DesignService;
   /** the route bar's list: which preview pages each repo is used on */
@@ -616,6 +616,12 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
 
   reveal(msg, _ctx, s) {
     s.files.reveal(msg.worktreeId, msg.path);
+  },
+
+  // a link in the chat to a file outside this worktree: shown in Finder where it sits, on the
+  // daemon's screen, which is the person's since the shell offers the reveal on loopback alone
+  async "reveal-path"(msg, _ctx, s) {
+    s.files.revealPath(await s.opens.where(msg.path));
   },
 
   async "discard-files"(msg, _ctx, s) {

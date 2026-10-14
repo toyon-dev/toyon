@@ -721,6 +721,12 @@
       text-decoration-color: var(--red);
       text-decoration-style: wavy;
     }
+    /* a backticked path asked for from its menu and refused: the span has no underline of its
+       own, so the refusal draws the same line under it */
+    & code.file-link-refused {
+      text-decoration: underline wavy var(--red);
+      text-underline-offset: 2px;
+    }
     /* a link whose url is still arriving: the label holds the link's place and shines like any
        other thing the agent is mid-way through, and takes the blue and the underline only once
        there is somewhere to go */

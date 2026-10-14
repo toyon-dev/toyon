@@ -96,6 +96,13 @@ export class OpenService {
     return this.openFile(raw, path, st);
   }
 
+  /** where a path a shell names sits on this disk, for a Finder reveal: a file or a folder, as
+   * long as it exists. Nothing is read, so no grant is made and Toyon's own folders are not
+   * refused; the person's own machine is showing them where a file is. */
+  async where(raw: string): Promise<string> {
+    return (await this.locate(raw)).path;
+  }
+
   private async locate(raw: string): Promise<{ path: string; st: Stats }> {
     const path = canonical(resolve(expandTilde(raw)));
     const st = await stat(path).catch((e: NodeJS.ErrnoException) => {

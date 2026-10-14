@@ -225,3 +225,18 @@ describe("an open waiting for a shell", () => {
     expect(opens.takePending()).toEqual([]);
   });
 });
+
+describe("where a path sits, for a Finder reveal", () => {
+  test("a file or a folder anywhere that exists, with nothing granted; a missing one is refused in words", async () => {
+    const { t, opens, outside, root } = setup();
+    const file = outside("notes/a.md", "a");
+    expect(await opens.where(file)).toBe(realpathSync(file));
+    expect(await opens.where(join(root, "notes"))).toBe(realpathSync(join(root, "notes")));
+    // under the daemon's home too: a reveal reads nothing, so there is nothing to keep from it
+    const home = join(t.paths.home, "state.json");
+    writeFileSync(home, "{}");
+    expect(await opens.where(home)).toBe(realpathSync(home));
+    expect(opens.takePending()).toEqual([]);
+    await expect(opens.where(join(root, "gone.md"))).rejects.toBeInstanceOf(UserError);
+  });
+});

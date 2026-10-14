@@ -759,6 +759,9 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
    * last thing in its chat: the press on the offer the box makes after a stop or an error */
   z.object({ t: z.literal("continue"), worktreeId: id }),
   z.object({ t: z.literal("reveal"), worktreeId: id, path: relPath.optional() }),
+  /** reveal in Finder a path outside this worktree, by its absolute path on the daemon's disk, as
+   * `open-by-path` names one; a path that is not there is an error frame */
+  z.object({ t: z.literal("reveal-path"), path: relPath }),
   z.object({ t: z.literal("stop-agent"), worktreeId: id }),
   /** the person is looking at this worktree right now: clears the rail's unseen ring */
   z.object({ t: z.literal("seen"), worktreeId: id }),

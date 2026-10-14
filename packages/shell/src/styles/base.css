@@ -44,6 +44,16 @@
     background: var(--element1);
     color: var(--ink0);
   }
+  /* where the keyboard is, in the accent: the ring the browser draws for that is its own blue,
+     a different one in each browser, and the only colour in the shell that is not the theme's.
+     Said once and at no specificity, so it is the floor for every control and never a contest:
+     a field moves its border a tier instead, and a list or pane that holds focus for its cursor
+     row says outline: none, and each of those wins by being more than nothing. The width and
+     the offset are what a clip past a control's edge has to leave room for (the composer ghost). */
+  :where(:focus-visible) {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
 
   /* Scrollbars are the platform's; color-scheme: dark on :root is what makes them dark. Do not style
    ::-webkit-scrollbar to theme them: matching any of those pseudo-elements swaps the platform

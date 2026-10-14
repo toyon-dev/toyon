@@ -1022,7 +1022,11 @@
     font: var(--type-ui);
     color: var(--text2);
     white-space: pre-wrap;
-    overflow: hidden;
+    /* clipped, since the folded box ends its line in an ellipsis, but with room past the edge:
+       the verb leading the line sits on the ghost's own corner, and a focus ring drawn outside
+       its box lost its top and left to a clip at the edge. The margin is the ring and its offset. */
+    overflow: clip;
+    overflow-clip-margin: 3px;
     pointer-events: none;
   }
   /* the ghost wears whatever face the field does, or it drifts off the caret in `!` mode */

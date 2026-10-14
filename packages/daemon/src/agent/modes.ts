@@ -24,3 +24,18 @@ export function agentModeFor(spec: AgentSpec, mode: PermissionMode, available?: 
 export function modeAfterPlan(optionName: string): PermissionMode {
   return /manual/i.test(optionName) ? "ask" : "auto";
 }
+
+/** Claude's own plan dialog leads with the auto option, but claude-agent-acp sorts every
+ * permission list by kind (allow once, then allow always, then reject), a rule meant for edit and
+ * command cards, which puts "manually approve edits" above both auto options on a plan card. The
+ * ids are the adapter's own: the plain elevated yes first, manual second, the clear-context yes
+ * third, no last. Options with ids from any other agent rank alike and keep the order they came in. */
+export function orderPlanOptions<T extends { optionId: string }>(options: readonly T[]): T[] {
+  const rank = (id: string) => {
+    if (id === "exit-plan-default") return 1;
+    if (id.startsWith("exit-plan-clear-")) return 2;
+    if (id.startsWith("exit-plan-")) return 0;
+    return 3;
+  };
+  return [...options].sort((a, b) => rank(a.optionId) - rank(b.optionId));
+}

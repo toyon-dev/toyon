@@ -30,7 +30,7 @@ import { fireAndForget, log } from "../../core/log.ts";
 import type { AuthObservation } from "../accounts.ts";
 import type { AgentAdapter, AskOpts, AskReply, AuthOutcome, FollowUp, SendOpts } from "../adapter.ts";
 import type { AttachmentStore, Stored } from "../attachments.ts";
-import { agentModeFor, modeAfterPlan } from "../modes.ts";
+import { agentModeFor, modeAfterPlan, orderPlanOptions } from "../modes.ts";
 import { markOrigins } from "../origins.ts";
 import { formatOutput } from "../output.ts";
 import { decide, decideUnattended, pickOption } from "../policy.ts";
@@ -1290,10 +1290,11 @@ export class AcpSession implements AgentAdapter {
     // the document is written before the card goes out, so the card names a file that is already
     // there to open; a worktree that would not take it leaves the plan on the card
     const planPath = plan ? ((await this.d.onPlan?.(detail)) ?? null) : null;
-    // a plan's options are all one-time answers. An edit's or a command's include the agent's
-    // "always allow", which would write a rule into its settings and take every later request of
-    // that shape away from this policy; the card offers only what keeps the mode meaning something
-    const offered = plan ? params.options : params.options.filter((o) => o.kind !== "allow_always");
+    // a plan's options are all one-time answers, led by the auto yes as Claude's own dialog leads.
+    // An edit's or a command's include the agent's "always allow", which would write a rule into
+    // its settings and take every later request of that shape away from this policy; the card
+    // offers only what keeps the mode meaning something
+    const offered = plan ? orderPlanOptions(params.options) : params.options.filter((o) => o.kind !== "allow_always");
     const choices: AskChoice[] = offered.map((o) => ({ id: o.optionId, name: o.name, kind: o.kind }));
     return this.openAsk<acp.RequestPermissionResponse>(
       (id) => ({

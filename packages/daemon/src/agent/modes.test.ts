@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { agentModeFor, modeAfterPlan } from "./modes.ts";
+import { agentModeFor, modeAfterPlan, orderPlanOptions } from "./modes.ts";
 import type { AgentSpec } from "./registry.ts";
 
 const base: AgentSpec = {
@@ -38,5 +38,29 @@ describe("modeAfterPlan", () => {
     expect(modeAfterPlan("Yes, manually approve edits")).toBe("ask");
     expect(modeAfterPlan("Yes, and auto-accept edits")).toBe("auto");
     expect(modeAfterPlan("Yes")).toBe("auto");
+  });
+});
+
+describe("orderPlanOptions", () => {
+  test("the adapter's sorted plan card comes back with auto first and clear-context third", () => {
+    const sent = ["exit-plan-default", "exit-plan-clear-auto", "exit-plan-auto", "reject"];
+    expect(orderPlanOptions(sent.map((optionId) => ({ optionId }))).map((o) => o.optionId)).toEqual([
+      "exit-plan-auto",
+      "exit-plan-default",
+      "exit-plan-clear-auto",
+      "reject",
+    ]);
+  });
+  test("the fallback elevated options rank like auto", () => {
+    const sent = ["exit-plan-default", "exit-plan-accept-edits", "reject"];
+    expect(orderPlanOptions(sent.map((optionId) => ({ optionId }))).map((o) => o.optionId)).toEqual([
+      "exit-plan-accept-edits",
+      "exit-plan-default",
+      "reject",
+    ]);
+  });
+  test("another agent's ids keep the order they came in", () => {
+    const sent = [{ optionId: "yes" }, { optionId: "no" }];
+    expect(orderPlanOptions(sent)).toEqual(sent);
   });
 });

@@ -29,12 +29,13 @@ export function modifierHeld(e: Mods, mod: WalkModifier): boolean {
  * switcher; the switcher is for a hand that is still holding, or that presses again to walk on. */
 export const PEEK_HOLD_MS = 200;
 
-type Timers = {
+/** a clock a test can stand in for: the rail's holds (this peek, the drag's spring) are timed */
+export type Timers = {
   set: (fn: () => void, ms: number) => unknown;
   clear: (handle: unknown) => void;
 };
 
-const realTimers: Timers = {
+export const realTimers: Timers = {
   set: (fn, ms) => setTimeout(fn, ms),
   clear: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>),
 };

@@ -318,7 +318,8 @@ export function fileDrop(store: Store, sock: DaemonSocket | null, zone: DropZone
   else void dropOnTree(store, sock, zone, dropped);
 }
 
-const hasFiles = (dt: DataTransfer | null) => !!dt && Array.from(dt.types).includes("Files");
+/** the drag carries files from outside the page: the OS, or another window */
+export const hasFiles = (dt: DataTransfer | null) => !!dt && Array.from(dt.types).includes("Files");
 
 /** The place under the pointer that takes a file, if any. The chat panel is asked first: centred,
  * it sits inside the centre. In the files tab, a folder row, a file row for the folder it is in,

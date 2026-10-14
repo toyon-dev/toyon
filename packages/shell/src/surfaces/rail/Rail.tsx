@@ -9,7 +9,7 @@ import {
   sentAt,
   type WorktreeStatus,
 } from "@toyon/shared";
-import { type CSSProperties, useEffect, useRef, useState } from "react";
+import { type CSSProperties, useEffect, useMemo, useRef, useState } from "react";
 import { archivedItems, archivedState } from "../../state/actions/archive.ts";
 import {
   archiveWorktrees,
@@ -37,6 +37,7 @@ import { Icon } from "../../ui/Icon.tsx";
 import { useContextMenu, useMenu } from "../../ui/menu.ts";
 import { Spinner } from "../../ui/Spinner.tsx";
 import { type TipPlacement, tip } from "../../ui/Tooltip.tsx";
+import { hasFiles } from "../chat/useIntake.ts";
 import { hhmm } from "../chips/baseNote.ts";
 import { ago, chord, dotClass, procTrouble, rowLabel, shipLabel, shipShown, stateLabel } from "../util.ts";
 import "./rail.css";
@@ -59,6 +60,7 @@ import {
   rowQuiet,
 } from "./rowLine.ts";
 import { slideLadder } from "./slideLadder.ts";
+import { createSpringLoad } from "./springLoad.ts";
 
 /** a count in its 3ch column; past three digits the exact number stops meaning anything here */
 const count = (n: number) => (n > 999 ? "1k+" : String(n));
@@ -161,6 +163,15 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
     window.addEventListener("pointermove", onMove);
     return () => window.removeEventListener("pointermove", onMove);
   }, [quiet]);
+  // A file dragged over the strip holds the same peek, and a row it rests on comes up under it
+  // (springLoad.ts): the browser delivers no keys during a drag, so this is the one way to reach
+  // another worktree's chat with a file in hand. Not through the store's peek: that one goes
+  // quiet under a resting pointer, and a rail that answers no pointer gets no dragover either.
+  // The drag lands on a row the way a click does, graft aside, and offers no caret: the drop is
+  // what the hand is doing.
+  const [dragHold, setDragHold] = useState(false);
+  const spring = useMemo(() => createSpringLoad(setDragHold), []);
+  useEffect(() => () => spring.end(), [spring]);
   // ⌘⇧K hands the keyboard to the row marked current so ↑↓ walk on from there; only a bump seen
   // after mount counts
   const focusReq = useStore((s) => s.focusRail);
@@ -704,7 +715,7 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
         // it draws one, so the sections and main's dot are the open drawer's here too
         onScreen && "rail-screen",
         // the peek is the strip's alone; a screen has no edge to unfurl from
-        !onScreen && (graftMode || menu?.owner === "rail" || railPeek) && "hold",
+        !onScreen && (graftMode || menu?.owner === "rail" || railPeek || dragHold) && "hold",
         quiet && "quiet",
         // a screen is pinned as well as being a screen: the peek's panel lifts over the docks
         // beside it, and on a screen that lift would put the list over the palette and every
@@ -723,6 +734,19 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
             }
           : undefined
       }
+      // a file in flight over the rail (springLoad.ts). Only a file: a files-tab row carries a
+      // path of the worktree it was dragged from, which means nothing in another one. The drop
+      // itself is the window's (useFileDrop), and the rail takes none: it goes on to the chat.
+      onDragOver={(e) => {
+        if (!hasFiles(e.dataTransfer)) return;
+        const id = e.target instanceof Element ? e.target.closest<HTMLElement>("[data-wt]")?.dataset.wt : undefined;
+        const w = id ? [...worktrees, ...discovered].find((x) => x.id === id) : undefined;
+        if (!w || graftMode || w.id === activeId) return spring.over(null);
+        const onLead = !onScreen && isOwned(w) && isLead(w.worktree);
+        spring.over({ id: w.id, land: () => dispatch(onLead ? { a: "open-draft" } : { a: "activate", id: w.id }) });
+      }}
+      onDragLeave={spring.leave}
+      onDrop={spring.end}
     >
       {/* the dots carry the socket's state, and every row's tip names it; the panel's own tip covers
           the ground between and under the rows, where the tooltip walks up to the nearest one */}

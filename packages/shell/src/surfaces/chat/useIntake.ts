@@ -1,4 +1,4 @@
-import { FILE_MAX_CHARS, isLongPaste, limitMessage } from "@toyon/shared";
+import { FILE_MAX_CHARS, isLead, isLongPaste, limitMessage } from "@toyon/shared";
 import { useEffect, useRef } from "react";
 import { type Copied, clipboardOfferDone, clipboardPasted } from "../../app/clipboardOffer.ts";
 import { readCopiedSource } from "../../app/copiedSource.ts";
@@ -177,10 +177,10 @@ function dropBox(store: Store): string | null {
   return cardDropBox(active ? s.local[active.worktree.id] : undefined) ?? composerBoxOf(active);
 }
 
-/** a drop on the chat panel: pictures as images, everything else as files, and a folder refused
- * by name, since the browser hands over no bytes for one */
-function dropOnChat(store: Store, dropped: Dropped[]) {
-  const boxId = dropBox(store);
+/** a drop on the chat panel, or on a rail row for that worktree's box: pictures as images,
+ * everything else as files, and a folder refused by name, since the browser hands over no bytes
+ * for one */
+function dropOnChat(store: Store, dropped: Dropped[], boxId = dropBox(store)) {
   attachAny(
     store,
     boxId,
@@ -315,7 +315,18 @@ export function fileDrop(store: Store, sock: DaemonSocket | null, zone: DropZone
   // the new-project view has no chat panel, so the centre is its box: every file attaches, as on the chat
   else if (zone.at === "chat" || (zone.at === "centre" && store.getState().newProject)) dropOnChat(store, dropped);
   else if (zone.at === "centre") void dropOnCentre(store, dropped);
+  else if (zone.at === "rail") dropOnRail(store, zone, dropped);
   else void dropOnTree(store, sock, zone, dropped);
+}
+
+/** A drop on a worktree row: the row comes up, the way its click brings it (the lead opens the
+ * draft), and the files attach in its box, so a file meant for another worktree's chat gets there
+ * in one move. No caret: the drop is the whole gesture. */
+function dropOnRail(store: Store, zone: Extract<DropZone, { at: "rail" }>, dropped: Dropped[]) {
+  const w = worktreeById(store.getState(), zone.worktreeId);
+  if (!w) return;
+  store.dispatch(isLead(w.worktree) ? { a: "open-draft" } : { a: "activate", id: w.worktree.id });
+  dropOnChat(store, dropped, composerBoxOf(w));
 }
 
 /** the drag carries files from outside the page: the OS, or another window */
@@ -330,6 +341,10 @@ function zoneAt(store: Store, target: EventTarget | null): DropZone | null {
   const el = target instanceof Element ? target : target instanceof Node ? target.parentElement : null;
   if (!el) return null;
   if (chatPanel.el?.contains(el)) return dropBox(store) ? { at: "chat" } : null;
+  // a worktree row on the rail, for the box of the worktree it names; a found or archived row
+  // has no box, and the ground between rows is nowhere
+  const railRow = el.closest<HTMLElement>(".rail [data-wt]")?.dataset.wt;
+  if (railRow) return worktreeById(store.getState(), railRow) ? { at: "rail", worktreeId: railRow } : null;
   const tree = el.closest<HTMLElement>(".tree");
   const worktreeId = tree?.dataset.worktree;
   if (tree && worktreeId) {

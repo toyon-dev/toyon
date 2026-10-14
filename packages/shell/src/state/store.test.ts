@@ -1854,6 +1854,9 @@ describe("where a file drag is", () => {
     const c = reducer(s, over({ at: "centre" }));
     expect(reducer(c, over({ at: "centre" }))).toBe(c);
     expect(reducer(c, over(null)).dragFiles).toBeNull();
+    const r = reducer(c, over({ at: "rail", worktreeId: "a" }));
+    expect(reducer(r, over({ at: "rail", worktreeId: "a" }))).toBe(r);
+    expect(reducer(r, over({ at: "rail", worktreeId: "b" })).dragFiles).toEqual({ at: "rail", worktreeId: "b" });
   });
 });
 

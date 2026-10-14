@@ -2,8 +2,9 @@ import { realTimers, type Timers } from "../../app/railPeek.ts";
 
 /** How long a drag rests on a row before the row's worktree comes up under it. A drag crossing the
  * strip on its way to the chat is over any one row for far less; a hand that has stopped on a dot
- * is waiting for it. Finder's spring-loaded folders open on about the same wait. */
-export const SPRING_HOLD_MS = 500;
+ * is waiting for it, and the row lit as a drop target under it (useFileDrop) says the rest is on
+ * its way. Shorter than Finder's spring-loaded folders: the switch here is cheap to undo. */
+export const SPRING_HOLD_MS = 350;
 
 /** How long the panel outlives the last sign of the drag over it. A dragleave for a move between
  * two rows is followed by the next row's dragover in the same iteration of the browser's drag

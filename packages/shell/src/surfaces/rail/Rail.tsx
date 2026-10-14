@@ -172,6 +172,9 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
   const [dragHold, setDragHold] = useState(false);
   const spring = useMemo(() => createSpringLoad(setDragHold), []);
   useEffect(() => () => spring.end(), [spring]);
+  // the row the drag is over lights as the drop target it is (base, .drop-over) the moment the
+  // drag reaches it, ahead of the spring: a drop there attaches in that worktree's box (useFileDrop)
+  const dropWt = useStore((s) => (s.dragFiles?.at === "rail" ? s.dragFiles.worktreeId : null));
   // ⌘⇧K hands the keyboard to the row marked current so ↑↓ walk on from there; only a bump seen
   // after mount counts
   const focusReq = useStore((s) => s.focusRail);
@@ -406,6 +409,7 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
           // happening step down a rung so the ones that matter stand out (rowQuiet)
           onScreen && rowQuiet(w, op) && "row-quiet",
           menuOpen && "menu-open",
+          dropWt === id && "drop-over",
         )}
         // an archived worktree's page marks its own row, and the row underneath does not read as picked.
         // A screen marks none: the mark says which worktree the pane beside the rail is showing, and
@@ -736,7 +740,8 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
       }
       // a file in flight over the rail (springLoad.ts). Only a file: a files-tab row carries a
       // path of the worktree it was dragged from, which means nothing in another one. The drop
-      // itself is the window's (useFileDrop), and the rail takes none: it goes on to the chat.
+      // itself is the window's (useFileDrop): on a row it attaches there, elsewhere it goes on
+      // to the chat the spring brought up.
       onDragOver={(e) => {
         if (!hasFiles(e.dataTransfer)) return;
         const id = e.target instanceof Element ? e.target.closest<HTMLElement>("[data-wt]")?.dataset.wt : undefined;

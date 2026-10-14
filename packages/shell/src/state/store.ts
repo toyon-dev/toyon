@@ -596,15 +596,21 @@ export interface OpenLoose {
 }
 
 /** where a file drag is, while it is over a place that takes a drop: the chat panel attaches, the
- * centre opens, a folder in the files tab (`dir`; the tree's own space is the root) takes the file */
-export type DropZone = { at: "chat" } | { at: "centre" } | { at: "tree"; worktreeId: string; dir: string };
+ * centre opens, a folder in the files tab (`dir`; the tree's own space is the root) takes the file,
+ * a worktree row on the rail attaches to that worktree's chat */
+export type DropZone =
+  | { at: "chat" }
+  | { at: "centre" }
+  | { at: "tree"; worktreeId: string; dir: string }
+  | { at: "rail"; worktreeId: string };
 
 const sameZone = (a: DropZone | null, b: DropZone | null) =>
   a === b ||
   (!!a &&
     !!b &&
     a.at === b.at &&
-    (a.at !== "tree" || b.at !== "tree" || (a.worktreeId === b.worktreeId && a.dir === b.dir)));
+    (a.at !== "tree" || b.at !== "tree" || (a.worktreeId === b.worktreeId && a.dir === b.dir)) &&
+    (a.at !== "rail" || b.at !== "rail" || a.worktreeId === b.worktreeId));
 
 export const sameFile = (a: FileRef, b: FileRef) =>
   a.worktreeId === b.worktreeId && a.path === b.path && a.ref === b.ref && a.since === b.since;

@@ -331,9 +331,7 @@ export interface WorktreeInfo {
    * with the title without ever being it. */
   branch: string;
   kind: WorktreeKind;
-  /** a spare's progress toward warm; absent on every other kind. A claim keeps it until the tree is
-   * on its branch, since the row is the task from the claim and what is still being made of it is
-   * the same either way */
+  /** a spare's progress toward warm; absent on every other kind, and gone the moment it is claimed */
   phase?: SparePhase;
   /** the lockfile a ready spare's deps were copied under, so a main that moved re-runs setup only
    * when the deps changed; spare only, like `phase` */

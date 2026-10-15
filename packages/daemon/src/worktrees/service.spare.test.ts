@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { writeFileSync } from "node:fs";
+import { existsSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { fakeFactories } from "../../test/helpers/fakes.ts";
 import { sh, tmpRepo } from "../../test/helpers/tmp-repo.ts";
@@ -263,7 +263,7 @@ describe("spare pool", () => {
     expect(spare.unnamed).toBe(true);
     expect([spare.createdBy, spare.mode, spare.agent]).toEqual(["tab1", "plan", "claude"]);
     expect(spare.promptedAt).toBe(spare.createdAt);
-    expect(spare.phase).toBe("ready");
+    expect(spare.phase).toBeUndefined();
     expect((await git(spare.path, "branch", "--show-current")).out).toBe("");
     // the message is queued and the queue held: no turn runs on a detached head
     await until(() => agent.sent.length === 1);
@@ -299,7 +299,7 @@ describe("spare pool", () => {
     expect((await git(next.path, "branch", "--show-current")).out).toBe(next.branch);
   });
 
-  test("a switch that fails puts the spare back, keeps one spare for the repo, and hands the message back", async () => {
+  test("a branch write that fails puts the spare back, keeps one spare for the repo, and hands the message back", async () => {
     const repoId = await registered();
     await w.worktrees.spare.ensure(repoId);
     const spare = w.state.worktrees.find((x) => x.kind === "spare")!;
@@ -321,13 +321,20 @@ describe("spare pool", () => {
     expect(wt.kind).toBe("worktree");
   });
 
-  test("a daemon that went down inside a claim boots the row without its phase", async () => {
+  test("a spare's checkout stands on its row as a setup stage, and is written outside the repo lock", async () => {
     const repoId = await registered();
-    const wt = await w.worktrees.create(repoId, "task");
-    // the record as a crash between the frame and the switch would have left it
-    wt.phase = "warming";
-    w.worktrees.spare.adopt(repoId);
-    expect(wt.phase).toBeUndefined();
+    const stages: string[] = [];
+    w.hub.on("worktreesChanged", () => {
+      for (const wt of w.state.worktrees) {
+        const stage = wt.runs?.find((r) => r.kind === "setup")?.stage;
+        if (stage && stages.at(-1) !== stage) stages.push(stage);
+      }
+    });
+    await w.worktrees.spare.ensure(repoId);
+    const spare = w.state.worktrees.find((x) => x.kind === "spare")!;
+    expect(stages[0]).toBe("checking out");
+    expect(spare.runs).toBeUndefined();
+    expect(existsSync(join(spare.path, "README.md"))).toBe(true);
   });
 
   test("a claimed spare is born on a branch named for its directory, and a rename moves only the branch", async () => {

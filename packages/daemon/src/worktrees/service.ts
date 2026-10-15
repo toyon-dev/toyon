@@ -124,7 +124,7 @@ import { discoverIn, type FoundWorktree } from "./discover.ts";
 import type { FixService } from "./fix.ts";
 import { type FillJob, fillLandMarks, unfilled } from "./landSubjects.ts";
 import { branchSlug, cleanTitle, freeSlot, shortId, titleFrom, variantLens } from "./naming.ts";
-import { SparePool } from "./spare.ts";
+import { type ClaimStamps, SparePool } from "./spare.ts";
 import { mainOf, Trunk } from "./trunk.ts";
 import { isUnseen } from "./turns.ts";
 
@@ -377,6 +377,7 @@ export class WorktreeService {
       hub: d.hub,
       runtime: d.runtime,
       paths: d.paths,
+      runs: this.runs,
       setupAndStart: (wt, repo) => this.setupAndStart(wt, repo),
       teardown: (wt, repo) => this.teardown(wt, repo),
       discard: async (id) => {
@@ -484,7 +485,9 @@ export class WorktreeService {
     // profile; another one means its procs restart once the tree is on its branch.
     const spare = this.d.state.worktrees.find((w) => w.repoId === repoId && w.kind === "spare");
     const restart = !!spare && profile !== undefined && profile !== resolveRun(repo, spare).profile;
-    const claimed = await this.spare.claim(repoId, title, opts.worktreeId, {
+    let carriedIn: Carried | undefined;
+    let release: (() => void) | undefined;
+    const stamps: ClaimStamps = {
       createdBy: opts.createdBy,
       // the spare's agent has no process yet; it reads the stamps on its first prompt
       agent,
@@ -495,28 +498,27 @@ export class WorktreeService {
       from: opts.from,
       profile,
       // the claim stamped the prompt's words as a name still to be found; a given name is final
-      unnamed: given ? undefined : true,
+      unnamed: given ? undefined : (true as const),
+    };
+    const claimed = await this.spare.claim(repoId, title, opts.worktreeId, stamps, async (wt) => {
+      // the tree is there and the branch is not yet: main's changes come in, and the message
+      // goes on a held queue, so the turn starts on the branch rather than commit to a detached
+      // head. The spare's agent may be up already, warmed on the first keystroke under the
+      // record's agent of the time; a task that asked for another gets that one.
+      const rt = this.d.runtime.ensureAgent(wt);
+      release = rt.agent.hold();
+      if (rt.agent.runningAgent !== null && rt.agent.runningAgent !== agent) await rt.agent.restart();
+      carriedIn = await this.carryMain(repo, wt, !!opts.carry);
+      rt.agent.send(agentPrompt, { context: withCarry(context(wt.id), carriedIn), attachments });
     });
     if (claimed) {
       const { wt } = claimed;
-      // the spare's agent may be up already, warmed on the first keystroke under the record's
-      // agent of the time; a task that asked for another gets that one, spawned by the send
       const rt = this.d.runtime.ensureAgent(wt);
-      // the message waits in the queue until the tree is on its branch: a turn on a detached head
-      // would commit to nothing. It is queued once the tree is there to carry main's changes into,
-      // which is before the branch, so what reads the row meanwhile sends behind it.
-      const release = rt.agent.hold();
-      const first = (async () => {
-        if (rt.agent.runningAgent !== null && rt.agent.runningAgent !== agent) await rt.agent.restart();
-        await claimed.tree;
-        const carried = await this.carryMain(repo, wt, !!opts.carry);
-        rt.agent.send(agentPrompt, { context: withCarry(context(wt.id), carried), attachments });
-        return carried;
-      })();
-      // a chat into the row meanwhile waits on this and never on its outcome
+      // a chat into the row meanwhile waits for the branch, behind the first message queued
+      // ahead of it; it never waits on the claim's outcome, which is not its to refuse
       this.firstPrompt.set(
         wt.id,
-        first.then(
+        claimed.settled.then(
           () => undefined,
           () => undefined,
         ),
@@ -524,23 +526,20 @@ export class WorktreeService {
       // the frame that moves the row on every screen, now that a message sent into it on sight
       // has an agent to queue on and a first message to wait behind
       this.d.hub.emit("worktreesChanged");
-      let carried: Carried;
       try {
-        carried = await first;
         await claimed.settled;
       } catch (e) {
-        // the row is a spare again before the message goes back to the box it was typed in
-        await claimed.settled.catch(() => {});
-        if (rt.agent.queueLength > 0) rt.agent.unqueue(0);
-        release();
+        // the row is a spare again by now: the message leaves the queue and goes back to the box
+        if (carriedIn && rt.agent.queueLength > 0) rt.agent.unqueue(0);
+        release?.();
         throw e instanceof UserError ? e : new UserError(e instanceof Error ? e.message : String(e));
       } finally {
         this.firstPrompt.delete(wt.id);
       }
-      release();
+      release?.();
       if (restart) this.restartProcs(wt);
       this.nameOrAsk(wt, task, given, variant);
-      if (carried.unmoved) throw new UserError(carried.unmoved, { delivered: true });
+      if (carriedIn?.unmoved) throw new UserError(carriedIn.unmoved, { delivered: true });
       return wt;
     }
 

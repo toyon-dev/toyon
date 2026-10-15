@@ -23,8 +23,9 @@ import type { Paths } from "../core/paths.ts";
 import type { StateStore } from "../core/state.ts";
 import { commitOf } from "../git/archive.ts";
 import { git, gitOrThrow, lockfileHash } from "../git/exec.ts";
-import { withRepoLock } from "../git/lock.ts";
+import { withLock, withRepoLock } from "../git/lock.ts";
 import { filesBetween } from "../git/status.ts";
+import type { RunService } from "../runs/service.ts";
 import { STAGGER_MS } from "../runtime/idle.ts";
 import { allocateProxyPort, releasePort } from "../runtime/ports.ts";
 import { type RuntimeRegistry, worktreeEnv } from "../runtime/registry.ts";
@@ -45,6 +46,8 @@ export interface SparePoolDeps {
   hub: Hub;
   runtime: RuntimeRegistry;
   paths: Paths;
+  /** the setup stages a row shows while it is made; the checkout is the first of them */
+  runs: Pick<RunService, "begin">;
   /** clone deps, run setup, start the runtime (WorktreeService owns it) */
   setupAndStart: (wt: WorktreeInfo, repo: RepoInfo) => Promise<void>;
   /** the repo's teardown commands, before setup runs again on a spare main has moved under */
@@ -91,9 +94,6 @@ export class SparePool {
    * only, so boot stays cheap. Stale extras are removed. `warm` is what brings the one kept up to
    * date, from whatever phase it was left in. */
   adopt(repoId: string) {
-    // a claim the daemon went down inside of: the task's record still says what was being made
-    // of the spare it was, and the daemon that reads it now makes nothing of it
-    for (const w of this.d.state.worktrees) if (w.repoId === repoId && w.kind !== "spare" && w.phase) delete w.phase;
     const persisted = this.d.state.worktrees.filter((w) => w.repoId === repoId && w.kind === "spare");
     // keep at most one; stale extras are removed
     for (const extra of persisted.slice(1)) fireAndForget(extra.id, this.d.discard(extra.id), "stale spare removal");
@@ -163,7 +163,24 @@ export class SparePool {
     let cut = () => {};
     const added = (async () => {
       if (existsSync(wt.path)) return;
-      await withRepoLock(repo.path, () => gitOrThrow(repo.path, "worktree", "add", "--detach", wt.path, baseOf(repo)));
+      // the repo lock covers what is shared, the worktree list and the refs; the files are this
+      // worktree's alone and are written outside it, so a land or a branch write never waits on
+      // a checkout of a large tree. Checkouts of one repo still take turns, on a key of their
+      // own: two 30k-file writes at once contend for the disk and both come later. The write
+      // stands on the row as a setup stage, the one line a reserved row has to show, and the one
+      // a claim of it keeps showing.
+      const run = this.d.runs.begin(wt.id, "setup", {
+        timeoutMs: timeoutFor(repo.config, "setup"),
+        stage: "checking out",
+      });
+      try {
+        await withRepoLock(repo.path, () =>
+          gitOrThrow(repo.path, "worktree", "add", "--detach", "--no-checkout", wt.path, baseOf(repo)),
+        );
+        await withLock(`checkout:${repo.path}`, () => gitOrThrow(wt.path, "reset", "--hard"));
+      } finally {
+        run.finish(0);
+      }
     })();
     const done = (async () => {
       // marked for the runtime for the whole of it, not only the setup step: a tab lands on the
@@ -286,16 +303,17 @@ export class SparePool {
    *
    * The record moves before git does. The row is the task, with its title and the stamps the
    * send carried, and the next spare is reserved beside it, when this returns, for a frame that
-   * waited on neither the repo lock, where a land or a checkout of a large tree holds the branch
-   * switch for seconds, nor a checkout still being made. `settled` is the git side: the branch
-   * `toyon/<its directory>`, on the tree once it is there. Until it resolves the caller holds the
-   * agent, since a commit on a detached head would be lost; if it rejects the row is a spare again
-   * and the message goes back to the person with git's words. */
+   * waited on neither the repo lock nor a checkout still being made. `settled` is the git side:
+   * `prepare` runs once the tree is there and still, for what the caller puts in it before the
+   * branch (main's changes, the first message on a held queue); then the branch
+   * `toyon/<its directory>` is written. If it rejects the row is a spare again and the message
+   * goes back to the person with git's words. */
   async claim(
     repoId: string,
     title: string,
     worktreeId: string | undefined,
     stamps: ClaimStamps,
+    prepare: (wt: WorktreeInfo) => Promise<void>,
   ): Promise<Claimed | null> {
     const wt = this.spareOf(repoId);
     if (!wt) return null;
@@ -307,10 +325,10 @@ export class SparePool {
     const running = this.inflight.get(repoId);
     const was: Spared = { title: wt.title, branch: wt.branch, phase: wt.phase, lockfile: wt.lockfile };
     wt.kind = "worktree";
+    delete wt.phase;
     delete wt.lockfile;
     wt.branch = `toyon/${basename(wt.path)}`;
-    // the title is the prompt's first words until the task is named; `phase` stays until the
-    // tree is on its branch, so the row keeps saying what is still being made of it
+    // the title is the prompt's first words until the task is named
     wt.title = title;
     wt.createdAt = Date.now();
     wt.promptedAt = wt.createdAt;
@@ -319,22 +337,23 @@ export class SparePool {
     // the caller's to send, once the row has what a message sent into it on sight needs.
     const next = repo.needsSetup ? null : await this.record(repoId, repo);
     this.d.state.save();
-    const tree = (async () => {
-      // the directory has to be there to branch; the add is the first thing a warm-up does, and
-      // the wait for the previous task's preview is not the person's to sit through
-      await running?.added;
-      running?.cut();
-      if (!existsSync(wt.path)) throw new Error("the worktree's directory is gone");
-      // a refresh in flight serializes in front of the agent's first action
-      await this.refreshing.get(repoId);
-    })();
+    if (next) fireAndForget(repoId, this.warmUp(next, repo, { after: wt.id }), "spare reserve");
     const settled = (async () => {
       try {
-        await tree;
-        await withRepoLock(repo.path, () => gitOrThrow(wt.path, "switch", "-c", wt.branch));
-        delete wt.phase;
-        this.d.state.save();
-        this.d.hub.emit("worktreesChanged");
+        // the directory has to be there to branch; the add is the first thing a warm-up does, and
+        // the wait for the previous task's preview is not the person's to sit through
+        await running?.added;
+        running?.cut();
+        if (!existsSync(wt.path)) throw new Error("the worktree's directory is gone");
+        // a refresh in flight serializes in front of the agent's first action
+        await this.refreshing.get(repoId);
+        await prepare(wt);
+        // the branch is two ref writes, since the tree already holds the commit it starts from:
+        // a switch would walk the index of a large tree for nothing, under the lock
+        await withRepoLock(repo.path, async () => {
+          await gitOrThrow(wt.path, "branch", wt.branch);
+          await gitOrThrow(wt.path, "symbolic-ref", "HEAD", `refs/heads/${wt.branch}`);
+        });
         // a spare that rested with its repo comes up for the task it now is; one still warming
         // gets its start at the end of its own finish rather than from a wake onto a tree with no
         // deps yet
@@ -344,23 +363,13 @@ export class SparePool {
         throw e;
       }
     })();
-    // the next row's checkout takes the repo lock behind this row's switch, which `settled` has
-    // queued by the time the tree is there: ahead of it, a checkout of a large tree would hold the
-    // branch, and the agent waiting on it, for seconds
-    if (next) {
-      const after = tree.then(
-        () => this.warmUp(next, repo, { after: wt.id }),
-        () => this.warmUp(next, repo, { after: wt.id }),
-      );
-      fireAndForget(repoId, after, "spare reserve");
-    }
-    return { wt, tree, settled };
+    return { wt, settled };
   }
 
   /** The git side of a claim failed: the row is the spare it was. A directory that never came (the
    * add failed) is rolled back the way a spare's own warm-up rolls back, and the next spare, well
-   * on its way, stands in for it. A switch that failed leaves the tree intact on its detached
-   * head, which is what a spare is, so it stays and the next one goes. */
+   * on its way, stands in for it. A branch write that failed leaves the tree intact on its
+   * detached head, which is what a spare is, so it stays and the next one goes. */
   private async unclaim(wt: WorktreeInfo, was: Spared, stamps: ClaimStamps, next: WorktreeInfo | null, e: unknown) {
     wt.kind = "spare";
     wt.title = was.title;
@@ -384,13 +393,10 @@ export type ClaimStamps = Partial<
   Pick<WorktreeInfo, "createdBy" | "agent" | "mode" | "model" | "effort" | "variant" | "from" | "profile" | "unnamed">
 >;
 
-/** a claimed spare: the row, already the task, and the git side of it in two steps */
+/** a claimed spare: the row, already the task, and the git side of it */
 export interface Claimed {
   wt: WorktreeInfo;
-  /** the directory is there and nothing of the pool's is moving it: what may be put in it */
-  tree: Promise<void>;
-  /** the branch exists on the tree; rejects with git's words after the row is a spare again. A
-   * caller that gave up on `tree` still waits on this, so the row is back before it answers */
+  /** the branch exists on the tree; rejects with git's words after the row is a spare again */
   settled: Promise<void>;
 }
 

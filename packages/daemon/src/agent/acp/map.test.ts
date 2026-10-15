@@ -828,22 +828,24 @@ describe("tool searches", () => {
     content: [],
   });
 
-  test("the row is a search named for the loader, saying the tools it asked for once they arrive", () => {
+  test("the row is a plain-dot sentence saying the tools it loaded once they arrive, never the loader's name", () => {
     const memos: ToolMemos = new Map();
     expect(run([start, input("select:WebSearch,WebFetch")], memos)).toEqual([
-      { type: "tool-start", toolId: "t1", name: "ToolSearch", input: {}, kind: "search", title: "ToolSearch" },
+      { type: "tool-start", toolId: "t1", name: "ToolSearch", input: {}, kind: "other", title: "loading a tool" },
       {
         type: "tool-update",
         toolId: "t1",
-        title: "WebSearch, WebFetch",
+        title: "loaded WebSearch, WebFetch",
         input: { query: "select:WebSearch,WebFetch", max_results: 2 },
       },
     ]);
     expect(memos.get("t1")?.writing).toBe(false);
   });
 
-  test("a keyword query reads as typed", () => {
-    expect(run([start, input("  notebook jupyter ")]).at(-1)).toMatchObject({ title: "notebook jupyter" });
+  test("a keyword query reads as what was looked for, as typed", () => {
+    expect(run([start, input("  notebook jupyter ")]).at(-1)).toMatchObject({
+      title: "looked for a tool: notebook jupyter",
+    });
   });
 
   test("until the query is in, the call is being written, so a cut-off one is ended", () => {

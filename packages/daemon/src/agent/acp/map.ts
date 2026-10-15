@@ -107,18 +107,24 @@ function isToolSearch(update: { name?: string | null; _meta?: Record<string, unk
   return update.name === TOOL_SEARCH || asRecord(asRecord(update._meta).claudeCode).toolName === TOOL_SEARCH;
 }
 
-/** what a ToolSearch asked for: the names behind `select:`, spaced, else its keywords as typed.
- * "" until the input is in, where the row says it is being written. */
-function toolSearchQuery(rawInput: unknown): string {
+/** a ToolSearch's row before its query is in: the call is still being written */
+const TOOL_SEARCH_OPENING = "loading a tool";
+
+/** what a ToolSearch did, as the sentence its row reads: the names behind `select:` were loaded,
+ * spaced, else its keywords were looked for, as typed. The loader's own name never prints: beside
+ * the tools it fetched it was a second internal name, and under a search glyph the words alone
+ * read as a search of the code. "" until the input is in. */
+function toolSearchTitle(rawInput: unknown): string {
   const query = asRecord(rawInput).query;
   if (typeof query !== "string") return "";
   const names = /^select:(.*)$/.exec(query.trim());
-  if (!names) return query.trim();
-  return (names[1] ?? "")
+  if (!names) return `looked for a tool: ${query.trim()}`;
+  const loaded = (names[1] ?? "")
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean)
     .join(", ");
+  return loaded ? `loaded ${loaded}` : "";
 }
 
 /** One of Toyon's own tools, under whatever name the adapter gives an MCP tool: Claude's
@@ -162,8 +168,9 @@ function heading(update: {
   const name = typeof update.name === "string" ? update.name : "";
   const host = asRecord(update.rawInput).host;
   if (isNetworkAsk(update) && typeof host === "string") return { name: "", title: host, kind: "fetch" };
+  // no kind of its own: it is preparation, not a search of anything, so it wears the plain dot
   if (isToolSearch(update)) {
-    return { name: TOOL_SEARCH, title: toolSearchQuery(update.rawInput) || TOOL_SEARCH, kind: "search" };
+    return { name: TOOL_SEARCH, title: toolSearchTitle(update.rawInput) || TOOL_SEARCH_OPENING, kind: "other" };
   }
   // folded to the bare name the shell keys on, whatever prefix the adapter put on it
   const own = toyonTool(update);
@@ -336,12 +343,12 @@ export function mapUpdate(
         });
       }
       const refined: ToolRefine = { ...memo.held };
-      // a ToolSearch's title is its query, which the update carries in the input and never in its
-      // title: that only ever repeats the loader's name. A handoff's is the project it names,
-      // read the same way once the input is in.
+      // a ToolSearch's title is read off its query, which the update carries in the input and never
+      // in its title: that only ever repeats the loader's name. A handoff's is the project it
+      // names, read the same way once the input is in.
       const title =
         memo.name === TOOL_SEARCH
-          ? toolSearchQuery(update.rawInput)
+          ? toolSearchTitle(update.rawInput)
           : memo.name === HANDOFF_TOOL
             ? update.rawInput !== undefined
               ? toyonTitle(HANDOFF_TOOL, update.rawInput, update.title)

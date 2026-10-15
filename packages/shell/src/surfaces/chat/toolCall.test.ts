@@ -251,22 +251,24 @@ describe("toolLabel", () => {
       input: { query: '"Oxfordstraße 20-22" Bonn', mode: "standard" },
     };
     expect(toolLabel(search)).toMatchObject({ name: "", icon: "globe", hint: '"Oxfordstraße 20-22" Bonn' });
-    // a ToolSearch's query is the loader's syntax; the title is the daemon's reading of it
+    // a ToolSearch's query is the loader's syntax; the title is the daemon's sentence for it, and
+    // the loader's name never prints beside it
     const loader = {
       name: "ToolSearch",
-      title: "WebSearch, WebFetch",
-      toolKind: "search" as const,
+      title: "loaded WebSearch, WebFetch",
+      toolKind: "other" as const,
       input: { query: "select:WebSearch,WebFetch" },
     };
-    expect(toolLabel(loader)).toMatchObject({ name: "ToolSearch", hint: "WebSearch, WebFetch" });
+    expect(toolLabel(loader)).toMatchObject({ name: "", icon: "dot", hint: "loaded WebSearch, WebFetch" });
   });
 
   test("the name stays where the glyph does not say the tool", () => {
-    // a call with no kind is a dot, and a ToolSearch's words alone would read as a search of the code
+    // a call with no kind is a dot
     const old = { name: "Bash", input: { command: "ls -la" } };
     expect(toolLabel(old)).toMatchObject({ name: "Bash", icon: "folder", hint: "ls -la" });
-    const search = { name: "ToolSearch", title: "WebSearch, WebFetch", toolKind: "search" as const, input: {} };
-    expect(toolLabel(search)).toMatchObject({ name: "ToolSearch", icon: "search", hint: "WebSearch, WebFetch" });
+    // except a ToolSearch, whose title already says what it did
+    const search = { name: "ToolSearch", title: "loading a tool", toolKind: "other" as const, input: {} };
+    expect(toolLabel(search)).toMatchObject({ name: "", icon: "dot", hint: "loading a tool" });
   });
 
   test("falls back to the title when there is no usable input", () => {

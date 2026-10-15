@@ -5,7 +5,7 @@
 //   migrations and codegen change the app without an edit tool.
 // EDIT_TOOLS — the fallback for events without a kind: the Claude tool names, Bash included.
 
-import { ASK_TOOL, type ToolKind } from "./protocol/events.ts";
+import { ASK_TOOL, TOOL_SEARCH, type ToolKind } from "./protocol/events.ts";
 
 export const EDIT_KINDS: ReadonlySet<ToolKind> = new Set<ToolKind>(["edit", "delete", "move", "execute"]);
 export const EDIT_TOOLS: ReadonlySet<string> = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit", "Bash"]);
@@ -35,13 +35,14 @@ export function isWrittenKind(kind: string | undefined): kind is WrittenKind {
   return (WRITTEN_KINDS as readonly string[]).includes(kind ?? "");
 }
 
-/** The agent is still writing this call: it takes an input and none has arrived. The one call
- * outside WRITTEN_KINDS that is written is an ask (ASK_TOOL), which the adapter sends with no kind
- * of its own and whose question is the longest input an agent types. The daemon reads this to end
- * a call a message steered into the turn cut off (acp/map.ts `abandoned`), and the shell to drop
- * the row such a call leaves (chat/group.ts `cutOff`) and to say what is being written. */
+/** The agent is still writing this call: it takes an input and none has arrived. Two calls
+ * outside WRITTEN_KINDS are written, both sent by the adapter with no kind of their own: an ask
+ * (ASK_TOOL), whose question is the longest input an agent types, and a ToolSearch, whose query
+ * lands only after the call opens. The daemon reads this to end a call a message steered into the
+ * turn cut off (acp/map.ts `abandoned`), and the shell to drop the row such a call leaves
+ * (chat/group.ts `cutOff`) and to say what is being written. */
 export function writingCall(call: { name: string; kind?: string }, input: unknown): boolean {
-  return (isWrittenKind(call.kind) || call.name === ASK_TOOL) && emptyInput(input);
+  return (isWrittenKind(call.kind) || call.name === ASK_TOOL || call.name === TOOL_SEARCH) && emptyInput(input);
 }
 
 /** no input yet: nothing, or the empty list of locations a call with no raw input starts as */

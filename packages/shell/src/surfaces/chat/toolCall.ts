@@ -277,21 +277,19 @@ export function toolLabel(call: ToolCall, roots: string[] = []): ToolRowText {
   // The name is the tool's programmatic one ("Bash", "WebFetch"). Under a glyph that says the kind,
   // beside a detail that says which, it is the glyph again as a word, and on a running row a
   // second word for the shine to cross. So it prints where the glyph says nothing (a call with no
-  // kind of its own) and for a ToolSearch, whose words alone would read as a search of the code.
-  // Toyon's own rows (a `!` command, the check after a turn) carry a name for the log to find
-  // them by, not a word to print: the glyph and the command already say what ran.
+  // kind of its own). Toyon's own rows (a `!` command, the check after a turn) carry a name for
+  // the log to find them by, not a word to print: the glyph and the command already say what ran.
+  // A ToolSearch's title is the daemon's sentence for what it loaded ("loaded WebSearch"), and
+  // the loader's name before it was a second internal name on a row that is only preparation.
   // A call with no kind whose name picks its glyph (an ask, a skill, a monitor) is said by that
   // glyph the same way: "Skill" before "/code-review" is the glyph again as a word.
   const ask = call.name === ASK_TOOL;
-  const glyphSays = (kind !== "other" || NAME_ICON.has(call.name)) && call.name !== TOOL_SEARCH;
+  const glyphSays = kind !== "other" || NAME_ICON.has(call.name);
+  const titleSays = call.name === call.title || call.name === SHELL_TOOL || call.name === CHECK_TOOL;
   // The preview tool's name is its word: beside a path alone the row would read as a visit, and
   // the globe is the glyph the preview's own rows wear, so it says nothing about who asked.
   const own =
-    detail &&
-    (glyphSays || call.name === call.title || call.name === SHELL_TOOL || call.name === CHECK_TOOL) &&
-    call.name !== PREVIEW_TOOL
-      ? ""
-      : call.name;
+    detail && (glyphSays || titleSays || call.name === TOOL_SEARCH) && call.name !== PREVIEW_TOOL ? "" : call.name;
   // the glyph already says the kind, so the row prints a word only where one adds to it: the tool's
   // own name, or the kind itself on a row with no detail to stand on
   const name = own && own.toLowerCase() !== label ? own : detail ? "" : label;

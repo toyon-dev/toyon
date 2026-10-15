@@ -110,9 +110,11 @@ export const bridgeToShellSchema = z.discriminatedUnion("type", [
     withSource: z.number(),
     ranges: z.array(range).nullable(),
   }),
-  /** a file drag is over the preview: the shell's window sees no dragover while the pointer is
-   * inside a frame, and would otherwise still believe the drag is wherever it saw it last */
-  z.object({ type: z.literal("drag-files") }),
+  /** a file drag is over the preview (`over`), or just left it: the shell's window sees no
+   * dragover or dragleave while the pointer is inside a frame, and would otherwise still believe
+   * the drag is wherever it saw it last. Defaulted so a page still holding an older bridge, which
+   * only ever said it was over, keeps lighting the centre. */
+  z.object({ type: z.literal("drag-files"), over: z.boolean().default(true) }),
   /** a file dropped on the preview that the page itself did not take. The bridge swallowed it:
    * left alone the frame navigates to the file and the running app is gone. The files ride along
    * by structured clone, so the shell opens them as a drop on the centre */

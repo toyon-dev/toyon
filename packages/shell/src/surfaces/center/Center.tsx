@@ -97,7 +97,7 @@ function routeUrl(path: string, base: string): string | null {
 import { previewsGated, useGrantedUrls } from "../../state/previewGrant.ts";
 import { View } from "../../ui/View.tsx";
 import { ChatPanel } from "../chat/ChatPanel.tsx";
-import { fileDrop, noteFileDrag, plainDrop } from "../chat/useIntake.ts";
+import { fadeFileDrag, fileDrop, noteFileDrag, plainDrop } from "../chat/useIntake.ts";
 import { DesignPane } from "../design/DesignPane.tsx";
 import { EditorPane } from "../editor/EditorPane.tsx";
 import { Overlays } from "../overlays/Overlays.tsx";
@@ -424,9 +424,11 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
             dispatch({ a: "set-picking", v: false });
             break;
           case "drag-files":
-            // the pointer is inside a preview, which is the centre; the shell's own window sees
-            // no dragover in here to tell it that
-            noteFileDrag(store, store.getState().activeId ? { at: "centre" } : null);
+            // the pointer is inside a preview, which is the centre, or just left it for another
+            // app or the shell; the shell's own window sees no dragover or dragleave in here to
+            // tell it either
+            if (d.over) noteFileDrag(store, store.getState().activeId ? { at: "centre" } : null);
+            else fadeFileDrag(store);
             break;
           case "drop-files":
             // a file drop the page didn't take: the bridge swallowed it so the frame wouldn't

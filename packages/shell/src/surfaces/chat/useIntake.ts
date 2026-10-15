@@ -42,9 +42,10 @@ export function noteFileDrag(store: Store, zone: DropZone | null) {
   wait(store, DRAG_IDLE_MS);
 }
 
-/** the pointer left an element. Either it landed on another one, and a dragover is about to say
- * so, or the drag is over: dropped outside, escaped, or gone from the window. */
-function fadeFileDrag(store: Store) {
+/** the pointer left an element, in this window or a preview's. Either it landed on another one,
+ * and a dragover is about to say so, or the drag is over: dropped outside, escaped, or gone from
+ * the window. */
+export function fadeFileDrag(store: Store) {
   if (drag) wait(store, DRAG_GONE_MS);
 }
 

@@ -184,7 +184,13 @@ window.addEventListener("dragover", (e) => {
   // dragover while the pointer is in here, so this is the only place that can
   if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
   // each dragover is also what tells the shell where the drag is (it coalesces them; nothing re-renders)
-  post({ type: "drag-files" });
+  post({ type: "drag-files", over: true });
+});
+// The shell's window sees no dragleave for this frame either. A drag carried straight out of it
+// to another app would leave the centre lit until the shell's idle backstop gave up on it, so the
+// frame says when the pointer left; a leave between elements in here is followed by a dragover.
+window.addEventListener("dragleave", (e) => {
+  if (fileDrag(e)) post({ type: "drag-files", over: false });
 });
 window.addEventListener("drop", (e) => {
   if (!fileDrag(e)) return;

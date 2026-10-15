@@ -278,6 +278,18 @@ describe("prLine", () => {
     expect(prLine(pr({ state: "closed" }))).toBe("PR #12 was closed without merging.");
   });
 
+  test("the branch running on the team's host is said after what GitHub waits on", () => {
+    const preview = "https://pr-12.d1.amplifyapp.com";
+    expect(prLine(pr({ preview, checks: "pending" }))).toBe("PR #12 open; checks running; preview up.");
+    expect(prLine(pr({ preview, review: "approved", checks: "pass" }))).toBe(
+      "PR #12 approved, checks pass; preview up.",
+    );
+    expect(prLine(pr({ preview }))).toBe("PR #12 open and ready to merge; preview up.");
+    expect(prLine(pr({ preview, automerge: true }))).toBe(
+      "PR #12 open; GitHub merges it when checks pass; preview up.",
+    );
+  });
+
   test("the merge word shows only when nothing on GitHub stands in the way", () => {
     expect(prCanMerge(pr({}))).toBe(true);
     expect(prCanMerge(pr({ review: "approved", checks: "pass" }))).toBe(true);

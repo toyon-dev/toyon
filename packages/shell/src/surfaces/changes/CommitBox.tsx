@@ -317,6 +317,20 @@ export function CommitBox({
               view <Icon name="external" className="icon-inline" />
             </Button>
           )}
+          {/* the branch running a second time, on the team's own host: the link GitHub holds for
+              the PR, there once the host has built it and gone with the PR */}
+          {pr?.preview && (
+            <Button
+              data-tip={`Open the branch on ${new URL(pr.preview).hostname}`}
+              onClick={() => window.open(pr.preview, "_blank")}
+              {...cm.contextMenu(() => [
+                { id: "open-preview", label: "open the preview", onClick: () => window.open(pr.preview, "_blank") },
+                { id: "copy-preview", label: "copy link", onClick: () => copyText(pr.preview ?? "") },
+              ])}
+            >
+              preview <Icon name="external" className="icon-inline" />
+            </Button>
+          )}
         </span>
       </div>
       {/* how far this trails main and the sync, said the way the composer says it: land stays the

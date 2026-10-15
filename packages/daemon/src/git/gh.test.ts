@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { parseAllowed, parsePrView, pickMethod, prNumberOf } from "./gh.ts";
+import { parseAllowed, parseDeployments, parsePrView, pickMethod, prNumberOf } from "./gh.ts";
 
 describe("parsePrView", () => {
   test("folds GitHub's words into the box's: open, waiting on review, checks running", () => {
@@ -60,6 +60,61 @@ describe("parsePrView", () => {
     ).toMatchObject({ checks: "fail", mergeable: false });
   });
 
+  test("a passed status the host named a preview is the branch's preview; a log on GitHub is not", () => {
+    const base = { number: 7, url: "https://github.com/o/r/pull/7", state: "OPEN" };
+    const amplify = {
+      __typename: "StatusContext",
+      context: "AWS Amplify Console Web Preview",
+      state: "SUCCESS",
+      targetUrl: "https://pr-7.d1234abcd.amplifyapp.com",
+    };
+    expect(parsePrView(JSON.stringify({ ...base, statusCheckRollup: [amplify] }))).toMatchObject({
+      checks: "pass",
+      preview: "https://pr-7.d1234abcd.amplifyapp.com",
+    });
+    // still building: no link yet
+    expect(
+      parsePrView(JSON.stringify({ ...base, statusCheckRollup: [{ ...amplify, state: "PENDING" }] })),
+    ).not.toHaveProperty("preview");
+    // a check run named for a preview whose link is its own workflow log
+    expect(
+      parsePrView(
+        JSON.stringify({
+          ...base,
+          statusCheckRollup: [
+            {
+              __typename: "CheckRun",
+              name: "Deploy preview",
+              status: "COMPLETED",
+              conclusion: "SUCCESS",
+              detailsUrl: "https://github.com/o/r/actions/runs/1",
+            },
+            {
+              __typename: "CheckRun",
+              name: "netlify/site/deploy-preview",
+              status: "COMPLETED",
+              conclusion: "SUCCESS",
+              detailsUrl: "https://deploy-preview-7--site.netlify.app",
+            },
+          ],
+        }),
+      ),
+    ).toMatchObject({ preview: "https://deploy-preview-7--site.netlify.app" });
+    // a status not named a preview is a check, whatever it links to
+    expect(
+      parsePrView(
+        JSON.stringify({
+          ...base,
+          statusCheckRollup: [{ context: "ci/circleci", state: "SUCCESS", targetUrl: "https://circleci.com/x" }],
+        }),
+      ),
+    ).not.toHaveProperty("preview");
+    // a merged PR's preview is gone with it
+    expect(parsePrView(JSON.stringify({ ...base, state: "MERGED", statusCheckRollup: [amplify] }))).not.toHaveProperty(
+      "preview",
+    );
+  });
+
   test("no review required and no checks leave those words out; bad JSON is no PR", () => {
     const pr = parsePrView(
       JSON.stringify({ number: 1, url: "u", state: "OPEN", reviewDecision: "", statusCheckRollup: [] }),
@@ -67,6 +122,26 @@ describe("parsePrView", () => {
     expect(pr).toEqual({ number: 1, url: "u", state: "open" });
     expect(parsePrView("not json")).toBeNull();
     expect(parsePrView(JSON.stringify({ state: "OPEN" }))).toBeNull();
+  });
+});
+
+describe("parseDeployments", () => {
+  const answer = (nodes: unknown[]) => JSON.stringify({ data: { repository: { object: { deployments: { nodes } } } } });
+
+  test("the newest deployment that is up and has a URL; none when nothing is", () => {
+    expect(
+      parseDeployments(
+        answer([
+          { environment: "Preview", latestStatus: { state: "SUCCESS", environmentUrl: "https://old.vercel.app" } },
+          { environment: "Preview", latestStatus: { state: "SUCCESS", environmentUrl: "https://new.vercel.app" } },
+          { environment: "Preview", latestStatus: { state: "IN_PROGRESS", environmentUrl: null } },
+        ]),
+      ),
+    ).toBe("https://new.vercel.app");
+    expect(parseDeployments(answer([{ environment: "Preview", latestStatus: null }]))).toBeNull();
+    expect(parseDeployments(answer([]))).toBeNull();
+    expect(parseDeployments(JSON.stringify({ data: { repository: { object: null } } }))).toBeNull();
+    expect(parseDeployments("nope")).toBeNull();
   });
 });
 

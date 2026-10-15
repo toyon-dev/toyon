@@ -54,13 +54,81 @@ export function parseAllowed(json: string): AllowedMethods | null {
 
 /** the fields the box reads, in one call */
 export const PR_VIEW_FIELDS =
-  "number,url,title,state,mergedAt,reviewDecision,statusCheckRollup,mergeable,autoMergeRequest";
+  "number,url,title,state,mergedAt,reviewDecision,statusCheckRollup,mergeable,autoMergeRequest,headRefOid";
 
 export async function viewPr(repoPath: string, number: number): Promise<PrState | null> {
   const r = await gh(["pr", "view", String(number), "--json", PR_VIEW_FIELDS], repoPath, 20_000);
   if (!r.ok || !r.out) return null;
   const parsed = parsePrView(r.out);
-  return parsed ? { ...parsed, at: Date.now() } : null;
+  if (!parsed) return null;
+  // a host that registers a deployment instead of a status is asked for separately, and only
+  // while the PR is open: a merged or closed PR's preview is torn down with it
+  if (parsed.state === "open" && !parsed.preview) {
+    const head = headOf(r.out);
+    const preview = head ? await viewDeploymentPreview(repoPath, head) : null;
+    if (preview) parsed.preview = preview;
+  }
+  return { ...parsed, at: Date.now() };
+}
+
+function headOf(json: string): string | null {
+  try {
+    const o = JSON.parse(json) as Record<string, unknown>;
+    return typeof o.headRefOid === "string" && o.headRefOid ? o.headRefOid : null;
+  } catch {
+    return null;
+  }
+}
+
+/** the newest few deployments GitHub holds on one commit, with where each one is reachable */
+const DEPLOYMENTS_QUERY = `query($owner: String!, $name: String!, $oid: GitObjectID!) {
+  repository(owner: $owner, name: $name) {
+    object(oid: $oid) { ... on Commit {
+      deployments(last: 10) { nodes { environment latestStatus { state environmentUrl } } }
+    } }
+  }
+}`;
+
+/** the URL of a deployment of the commit that is up, as the hosts that register one (Vercel,
+ * Netlify, Cloudflare Pages, Render) record it; null when none, or when gh cannot say */
+async function viewDeploymentPreview(repoPath: string, head: string): Promise<string | null> {
+  // owner and name are gh's own placeholders, filled from the repo the cwd is in
+  const r = await gh(
+    [
+      "api",
+      "graphql",
+      "-F",
+      "owner={owner}",
+      "-F",
+      "name={repo}",
+      "-f",
+      `oid=${head}`,
+      "-f",
+      `query=${DEPLOYMENTS_QUERY}`,
+    ],
+    repoPath,
+    20_000,
+  );
+  if (!r.ok || !r.out) return null;
+  return parseDeployments(r.out);
+}
+
+/** the newest deployment that is up and has somewhere to open, out of gh's GraphQL answer */
+export function parseDeployments(json: string): string | null {
+  let nodes: unknown;
+  try {
+    const o = JSON.parse(json) as { data?: { repository?: { object?: { deployments?: { nodes?: unknown } } } } };
+    nodes = o.data?.repository?.object?.deployments?.nodes;
+  } catch {
+    return null;
+  }
+  if (!Array.isArray(nodes)) return null;
+  // GitHub lists them oldest first
+  for (const d of [...(nodes as Record<string, unknown>[])].reverse()) {
+    const st = d?.latestStatus as Record<string, unknown> | null | undefined;
+    if (st?.state === "SUCCESS" && isPreviewUrl(st.environmentUrl)) return st.environmentUrl;
+  }
+  return null;
 }
 
 /** gh's JSON for one PR, folded to what the box says. Kept defensive: a field gh renames is a
@@ -85,6 +153,7 @@ export function parsePrView(json: string): Omit<PrState, "at"> | null {
   const checks = foldChecks(o.statusCheckRollup);
   const mergeable = o.mergeable === "MERGEABLE" ? true : o.mergeable === "CONFLICTING" ? false : undefined;
   const automerge = o.autoMergeRequest !== null && o.autoMergeRequest !== undefined;
+  const preview = state === "open" ? previewOf(o.statusCheckRollup) : undefined;
   return {
     number: o.number,
     url: o.url,
@@ -94,7 +163,37 @@ export function parsePrView(json: string): Omit<PrState, "at"> | null {
     ...(checks ? { checks } : {}),
     ...(mergeable !== undefined ? { mergeable } : {}),
     ...(automerge ? { automerge } : {}),
+    ...(preview ? { preview } : {}),
   };
+}
+
+/** the link of a status or check the host named a preview, once it has passed. Amplify's
+ * "AWS Amplify Console Web Preview" and Netlify's "deploy-preview" both put the branch's URL
+ * there; a CI job named for a preview points its link at its own log on github.com, which is not
+ * one. The first that fits wins. */
+function previewOf(rollup: unknown): string | undefined {
+  if (!Array.isArray(rollup)) return undefined;
+  for (const c of rollup as Record<string, unknown>[]) {
+    const name = String(c.context ?? c.name ?? "");
+    if (!/preview/i.test(name)) continue;
+    const word = String(c.conclusion ?? c.state ?? "").toUpperCase();
+    if (word !== "SUCCESS") continue;
+    const url = c.targetUrl ?? c.detailsUrl;
+    if (isPreviewUrl(url)) return url;
+  }
+  return undefined;
+}
+
+/** a link that opens the branch running somewhere, as against a log or a run on GitHub */
+function isPreviewUrl(url: unknown): url is string {
+  if (typeof url !== "string") return false;
+  let host: string;
+  try {
+    host = new URL(url).hostname;
+  } catch {
+    return false;
+  }
+  return host !== "github.com" && !host.endsWith(".github.com");
 }
 
 /** GitHub's rollup mixes status contexts (`state`) and check runs (`status` + `conclusion`): one

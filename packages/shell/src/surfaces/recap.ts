@@ -60,17 +60,19 @@ export function prLine(pr: PrState): string {
   const n = `PR #${pr.number}`;
   if (pr.state === "merged") return `${n} merged.`;
   if (pr.state === "closed") return `${n} was closed without merging.`;
+  // the branch running on the team's host is a fact beside what GitHub waits on, said last
+  const up = pr.preview ? "; preview up." : ".";
   if (pr.automerge) {
     const on = pr.review === "review_required" ? "it is approved and checks pass" : "checks pass";
-    return `${n} open; GitHub merges it when ${on}.`;
+    return `${n} open; GitHub merges it when ${on}${up}`;
   }
-  if (pr.mergeable === false) return `${n} open; it conflicts with main.`;
-  if (pr.review === "changes_requested") return `${n} open; changes requested.`;
-  if (pr.checks === "fail") return `${n} open; checks failed.`;
-  if (pr.checks === "pending") return `${n} open; checks running.`;
-  if (pr.review === "review_required") return `${n} open; waiting on review.`;
-  if (pr.review === "approved") return `${n} approved${pr.checks === "pass" ? ", checks pass" : ""}.`;
-  return `${n} open and ready to merge.`;
+  if (pr.mergeable === false) return `${n} open; it conflicts with main${up}`;
+  if (pr.review === "changes_requested") return `${n} open; changes requested${up}`;
+  if (pr.checks === "fail") return `${n} open; checks failed${up}`;
+  if (pr.checks === "pending") return `${n} open; checks running${up}`;
+  if (pr.review === "review_required") return `${n} open; waiting on review${up}`;
+  if (pr.review === "approved") return `${n} approved${pr.checks === "pass" ? ", checks pass" : ""}${up}`;
+  return `${n} open and ready to merge${up}`;
 }
 
 /** GitHub would take the merge now: nothing waiting, nothing failed, nothing conflicting */

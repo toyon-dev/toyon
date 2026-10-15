@@ -443,6 +443,10 @@ export interface PrState {
   mergeable?: boolean;
   /** auto-merge is on: GitHub merges it once its rules allow */
   automerge?: boolean;
+  /** the branch running on the team's own host, as GitHub records it: the link of a status the
+   * host named a preview, else the environment of a deployment on the head commit. Absent until
+   * the host has built it, and for a repo whose host records nothing. */
+  preview?: string;
   /** when GitHub was last asked */
   at: number;
 }

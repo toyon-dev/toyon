@@ -1,21 +1,21 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { notesLead } from "../../app/releaseNotes.ts";
-import { useDispatch, useStore, useUrls } from "../../state/context.tsx";
-import { Button } from "../../ui/Button.tsx";
+import { useStore, useUrls } from "../../state/context.tsx";
+import { Document } from "../../ui/Document.tsx";
 import { View } from "../../ui/View.tsx";
 import { releaseNotes } from "../../ws.ts";
-import { renderMarkdown } from "../chat/markdown.ts";
+import { useMarkdown } from "../chat/markdown.ts";
 
 /** The release notes, in the centre: every release this Toyon knows of, newest first, read off
  * the daemon rather than fetched from anywhere else, so they are there behind a company mirror
- * and in the installed app without a browser window opening. A view of Toyon's own, the machine's
- * parts: a line saying which version this browser last ran, since that is where the reading
- * starts, then the document. Escape and the button close it; so does choosing a row. */
+ * and in the installed app without a browser window opening. The changelog is a document read
+ * for itself, so it reads the way a markdown file does in the editor pane: the file whole, from
+ * its own title, with the outline down the left. Nothing of the shell's sits over it; Escape and
+ * choosing a row leave it, as they leave a removed worktree's page. While the daemon is asked, or
+ * when it has none, a view says so in the machine's voice. */
 export function ReleaseNotes() {
   const urls = useUrls();
-  const dispatch = useDispatch();
   const version = useStore((s) => s.version);
-  const ranBefore = useStore((s) => s.ranBefore);
   // undefined while the daemon is asked, null when nothing could be read
   const [text, setText] = useState<string | null | undefined>(undefined);
   useEffect(() => {
@@ -27,30 +27,17 @@ export function ReleaseNotes() {
       live = false;
     };
   }, [urls]);
-  // from the first release heading: the file's own title and intro line repeat the lead above
-  const html = useMemo(() => (text ? renderMarkdown(text.slice(Math.max(0, text.search(/^## /m)))) : ""), [text]);
-  const state = text === undefined ? "reading" : text === null ? "missing" : "ready";
+  const html = useMarkdown(text ?? "");
+  if (!text) {
+    return (
+      <View wide>
+        <p className="status-line">{notesLead(version, text === undefined ? "reading" : "missing")}</p>
+      </View>
+    );
+  }
   return (
-    <View wide>
-      <p className="status-line">{notesLead(ranBefore, version, state)}</p>
-      <div className="status-actions">
-        <Button variant="outline" size="lg" onClick={() => dispatch({ a: "close-release-notes" })}>
-          close
-        </Button>
-      </div>
-      {html && (
-        // biome-ignore lint/a11y/useKeyWithClickEvents: the links inside are the controls; the root only routes their clicks
-        <div
-          className="md notes-md"
-          onClick={(e) => {
-            // a relative link in the notes must not navigate the shell; http links open a tab
-            const link = (e.target as Element).closest("a");
-            if (link && link.target !== "_blank") e.preventDefault();
-          }}
-          // biome-ignore lint/security/noDangerouslySetInnerHtml: html is DOMPurify-sanitized markdown output
-          dangerouslySetInnerHTML={{ __html: html }}
-        />
-      )}
-    </View>
+    <div className="notes-page">
+      <Document html={html} />
+    </div>
   );
 }

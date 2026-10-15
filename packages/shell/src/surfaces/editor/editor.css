@@ -80,10 +80,6 @@
     inset: 0;
     outline: none;
   }
-  /* a markdown file read rendered: the document scrolls inside the body, the pane's head stays put */
-  .editor-preview {
-    overflow-y: auto;
-  }
   /* an html file read rendered: the page fills the body and scrolls itself. A frame's canvas is
    see-through, so a page that paints no ground would sit on the pane's dark one with the browser's
    black default text; the paper under it is what a tab would give the same page */
@@ -93,78 +89,6 @@
     height: 100%;
     border: 0;
     background: var(--page-paper);
-  }
-  /* the document's outline: a strip of ticks down the left of the body, outside the scroll box so it
-   holds still, centred on the body's height the way a page's margin notes are. It sits inside the
-   document's own side padding, so it covers no text at any width. The padding is hit area: a 2px
-   tick is nothing to point at. */
-  .editor-outline {
-    position: absolute;
-    left: 8px;
-    top: 50%;
-    translate: 0 -50%;
-    max-height: calc(100% - 24px);
-    overflow: hidden;
-    padding: 8px 6px;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    cursor: pointer;
-  }
-  /* a tick is as wide as its heading is high in the document: the title's is the long one */
-  .editor-outline-tick {
-    display: block;
-    flex: none;
-    height: 2px;
-    border-radius: var(--radius-pill);
-    background: var(--text2);
-    width: 6px;
-    &[data-level="1"] {
-      width: 18px;
-    }
-    &[data-level="2"] {
-      width: 13px;
-    }
-    &[data-level="3"] {
-      width: 9px;
-    }
-    /* the section being read, marked on the strip itself */
-    &[data-state~="current"] {
-      background: var(--text0);
-    }
-  }
-  /* the titles in the strip's place: the menu's box, laid over the strip so it hides the ticks and
-   the pointer that opened it is already inside. A contents page carries no ticks of its own; the
-   indent alone says the level, the way a paper's does */
-  .editor-outline-list {
-    width: max-content;
-    max-width: 320px;
-    max-height: calc(100vh - 16px);
-    overflow: hidden auto;
-    padding: 4px 0;
-    background: var(--surface1);
-    border: 1px solid var(--border1);
-    border-radius: var(--radius-md);
-    box-shadow: var(--elevation-float);
-    display: flex;
-    flex-direction: column;
-    & .editor-outline-row {
-      min-height: var(--row-height-sm);
-      font: var(--type-ui);
-      /* the document's title is the one row read first; weight says so, not an indent under it */
-      &[data-level="1"] {
-        font-weight: var(--weight-title);
-      }
-    }
-    /* a section steps in under the heading above it, one step per open ancestor: the title opens
-     none, so an h2 stands at the margin with or without an h1 over it */
-    & .editor-outline-label {
-      padding-left: calc(var(--outline-depth, 0) * 16px);
-      min-width: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
   }
   /* an image file, drawn whole: never larger than the body, never scaled past its own size. The
      whole body is the control, pressed for the window's size, and it is the box the picture is

@@ -1,20 +1,16 @@
-import { newer } from "@toyon/shared";
-
 /** The what's-new chip in the bar: the word on it and its tip, for the first page after Toyon
- * updated itself from `from` to `to`. */
+ * updated itself from `from` to `to`. "Here" rather than "this browser": the same page runs in a
+ * browser tab and in the installed app, and the version remembered is this one's either way. */
 export function notesOfferText(from: string, to: string): { word: string; text: string } {
   return {
     word: `what's new in ${to}`,
-    text: `Toyon updated from ${from} to ${to} since this browser last opened it. Press to read what changed`,
+    text: `Toyon updated from ${from} to ${to} since you last opened it here. Press to read what changed`,
   };
 }
 
-/** what the release notes view says over the notes: where they are from, and where to look */
-export function notesLead(ranBefore: string | null, version: string, notes: "reading" | "missing" | "ready"): string {
+/** what the release notes view says while the document is not there to read: the daemon is still
+ * being asked, or it has none. Once the notes are read the document speaks for itself. */
+export function notesLead(version: string, notes: "reading" | "missing"): string {
   if (notes === "reading") return "Reading the release notes";
-  if (notes === "missing") return "No release notes could be read from this Toyon.";
-  if (ranBefore !== null && newer(version, ranBefore)) {
-    return `Toyon ${version} is running. This browser last opened ${ranBefore}; everything since is at the top.`;
-  }
-  return `Toyon ${version} is running. Every release, newest first.`;
+  return `No release notes could be read from Toyon ${version}.`;
 }

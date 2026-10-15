@@ -3,6 +3,7 @@ import {
   type AgentEvent,
   type AttachmentInput,
   MANAGED_NONE,
+  type OwnedWorktree,
   PROTOCOL_VERSION,
   type RepoInfo,
   type ShipOp,
@@ -39,6 +40,7 @@ import {
   newProjectState,
   type OpenFile,
   type OpenLoose,
+  owedElsewhere,
   previewIdOf,
   reducer,
   routeTarget,
@@ -3475,6 +3477,76 @@ describe("a handoff", () => {
     // stored on the guest's own rail, it comes back there
     const own = run([both(guest())], initialState({ clientId: ME, storedActive: "g", storedRepo: "r2" }));
     expect(own.activeRepoId).toBe("r2");
+  });
+
+  // r2's row `b` needs someone: its agent stopped on a question, or a turn finished there and
+  // nobody looked. It is listed on r1's rail while it does, the way a guest is, and no longer
+  const waiting = (): WorktreeStatus => ({ ...wt("b", "worktree", undefined, "r2"), agent: "waiting" });
+  const unseen = (): WorktreeStatus => ({ ...wt("b", "worktree", undefined, "r2"), unseen: true });
+  const withB = (b: WorktreeStatus) => [
+    wt("m1", "main", undefined, "r1"),
+    wt("a", "worktree", undefined, "r1"),
+    wt("m2", "main", undefined, "r2"),
+    b,
+  ];
+
+  test("a row owed from another project is on this rail while it is owed", () => {
+    expect(ids(run([helloIn([repo("r1"), repo("r2")], ...withB(waiting()))]))).toContain("b");
+    expect(ids(run([helloIn([repo("r1"), repo("r2")], ...withB(unseen()))]))).toContain("b");
+    expect(owedElsewhere(waiting() as OwnedWorktree, "r1")).toBe(true);
+    // a row still working owes nothing; an idle one that has been looked at is nobody's business here
+    const working: WorktreeStatus = { ...wt("b", "worktree", undefined, "r2"), agent: "working" };
+    expect(ids(run([helloIn([repo("r1"), repo("r2")], ...withB(working))]))).not.toContain("b");
+    expect(ids(run([both()]))).not.toContain("b");
+    // on its own rail it is a plain row, owed to no one
+    expect(owedElsewhere(waiting() as OwnedWorktree, "r2")).toBe(false);
+    // answered while nobody here was reading it, it leaves at once
+    let s = run([helloIn([repo("r1"), repo("r2")], ...withB(waiting()))]);
+    s = reducer(s, worktrees(...withB(wt("b", "worktree", undefined, "r2"))));
+    expect(ids(s)).not.toContain("b");
+    expect(s.lent).toBeNull();
+  });
+
+  test("choosing an owed row lends it to this rail until the next choice", () => {
+    let s = run([helloIn([repo("r1"), repo("r2")], ...withB(waiting())), { a: "activate", id: "b" }]);
+    expect(s.activeId).toBe("b");
+    expect(s.activeRepoId).toBe("r1");
+    expect(s.lent).toBe("b");
+    // the look answers it: the row stays listed and selected rather than leaving under the reader
+    s = reducer(s, worktrees(...withB(wt("b", "worktree", undefined, "r2"))));
+    expect(s.activeId).toBe("b");
+    expect(s.activeRepoId).toBe("r1");
+    expect(ids(s)).toContain("b");
+    // the next choice ends the loan, and the row is gone from this rail
+    s = reducer(s, { a: "activate", id: "a" });
+    expect(s.lent).toBeNull();
+    expect(ids(s)).not.toContain("b");
+    // its own project still lists it, and switching there starts with no loan
+    s = reducer(s, { a: "activate-repo", id: "r2" });
+    expect(ids(s)).toContain("b");
+    expect(s.lent).toBeNull();
+  });
+
+  test("a guest that is also owed is one row, and its origin going still takes it", () => {
+    const owedGuest = { ...guest(), agent: "waiting" as const };
+    let s = run([both(owedGuest)]);
+    expect(ids(s).filter((id) => id === "g")).toHaveLength(1);
+    // the guest rule, not the loan, is what lists it: choosing it takes out no loan
+    s = reducer(s, { a: "activate", id: "g" });
+    expect(s.lent).toBeNull();
+    expect(s.activeRepoId).toBe("r1");
+  });
+
+  test("a reload on an owed row read from this rail comes back here, with the loan", () => {
+    const from = initialState({ clientId: ME, storedActive: "b", storedRepo: "r1" });
+    const s = run([helloIn([repo("r1"), repo("r2")], ...withB(waiting()))], from);
+    expect(s.activeId).toBe("b");
+    expect(s.activeRepoId).toBe("r1");
+    expect(s.lent).toBe("b");
+    // answered while the tab was away, it is its own project's again and the reload lands there
+    const answered = run([helloIn([repo("r1"), repo("r2")], ...withB(wt("b", "worktree", undefined, "r2")))], from);
+    expect(answered.activeRepoId).toBe("r2");
+    expect(answered.lent).toBeNull();
   });
 
   test("a handoff-made row never steals focus: no tab asked for it", () => {

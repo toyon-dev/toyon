@@ -56,6 +56,7 @@ import {
   guestLine,
   leadLines,
   OFFLINE_LINE,
+  owedLine,
   rowLine,
   rowQuiet,
 } from "./rowLine.ts";
@@ -197,6 +198,9 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
   /** the row a guest of this rail started from, when `w` is one: another project's worktree a
    * handoff made from here, listed on this rail while its origin is */
   const originOf = (w: OwnedWorktree) => (activeRepoId ? guestOf(w, activeRepoId, rows) : null);
+  /** the row's project when it is not this rail's: a guest's, or that of a row owed from elsewhere
+   * (waiting on you, or finished and unseen), listed here while it is */
+  const otherRepoOf = (w: OwnedWorktree) => (activeRepoId && w.repoId !== activeRepoId ? repoOf(w) : null);
   const cm = useContextMenu("rail");
   // the one menu, read here for two things: the peek stays open while the menu is the rail's, and
   // the row it is about stays lifted while the pointer is over the menu rather than the row
@@ -216,8 +220,8 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
   const [sel, setSel] = useState<string[]>([]);
 
   const toggleSel = (w: OwnedWorktree) => {
-    // a guest is another project's: the daemon refuses a graft across projects
-    if (!canGraft(w.worktree) || originOf(w)) return;
+    // a guest or an owed row is another project's: the daemon refuses a graft across projects
+    if (!canGraft(w.worktree) || otherRepoOf(w)) return;
     setGraftMode(true);
     setSel((s) => (s.includes(w.worktree.id) ? s.filter((x) => x !== w.worktree.id) : [...s, w.worktree.id]));
   };
@@ -243,7 +247,7 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
     isOwned(w)
       ? worktreeItems(w, repoOf(w), { layout, shipping, frame, repos }, deps, {
           // no graft line on a guest: nothing on this rail is of its project
-          ...(originOf(w) ? {} : { graft: graftWith }),
+          ...(otherRepoOf(w) ? {} : { graft: graftWith }),
           hostname: host,
         })
       : discoveredItems(w, { clientId, frame }, deps, host);
@@ -393,10 +397,11 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
     const slid = !!counts.ahead && !counts.dirty;
     const id = w.id;
     const menuOpen = menu?.owner === "rail" && menu.key === id;
-    // a guest of this rail: the row it started from, and the project it belongs to
+    // another project's row on this rail: the project it belongs to, and for a guest the row it
+    // started from
     const origin = owned ? originOf(owned) : null;
-    const guestRepo = origin && owned ? repoOf(owned) : null;
-    const showCheck = owned && !origin && graftMode && canGraft(owned.worktree) && id !== activeId;
+    const otherRepo = owned ? otherRepoOf(owned) : null;
+    const showCheck = owned && !otherRepo && graftMode && canGraft(owned.worktree) && id !== activeId;
     // a landing op out from this row takes the dot's slot, and with it the row's word: the tip
     // and the line under the name say what the spinner is doing, not the state it covers
     const op = shipShown(w, shipping[id]?.op);
@@ -434,12 +439,15 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
               placement: tipSide,
               card: true,
               aside: cardFigures(w),
-              // main has no turn to recap: its lines say whether it is fresh. A guest's first line
-              // says whose it is and where it came from, since the row's mark says only the project
+              // main has no turn to recap: its lines say whether it is fresh. Another project's
+              // first line says whose it is and why it is here, since the row's mark says only
+              // the project
               detail: isLead(owned.worktree)
                 ? leadLines(worktrees, archived, trunk, base)
                 : [
-                    ...(origin && guestRepo ? [guestLine(guestRepo.name, origin.worktree.title)] : []),
+                    ...(otherRepo
+                      ? [origin ? guestLine(otherRepo.name, origin.worktree.title) : owedLine(otherRepo.name)]
+                      : []),
                     ...cardLines(owned),
                   ],
               dot: offline ? undefined : op ? "spinner" : dotClass(w),
@@ -476,7 +484,7 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
           // in graft mode the row you are on is the stock the others go onto, marked by its edge,
           // and has nothing to check; every other graftable row is a source to check or uncheck.
           // A shift-click on it opens the mode with nothing checked yet.
-          if (owned && !origin && (graftMode || e.shiftKey)) {
+          if (owned && !otherRepo && (graftMode || e.shiftKey)) {
             if (id === activeId) setGraftMode(true);
             else toggleSel(owned);
           }
@@ -583,9 +591,9 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
             <span className="act">pick</span>
           </span>
         )}
-        {/* a guest's project, in the dim tier before the counts: the one place the row says it is
-            not this project's. No glyph; the name is the mark. */}
-        {guestRepo && <span className="rail-guest row-dim">{guestRepo.name}</span>}
+        {/* another project's name, in the dim tier before the counts: the one place the row says it
+            is not this project's. No glyph; the name is the mark. */}
+        {otherRepo && <span className="rail-guest row-dim">{otherRepo.name}</span>}
         {/* Ordered by how often a column is filled, rarest nearest the name: a leading empty column
             is not drawn and the name runs into its space, so the count few rows have is the one that
             costs the least. Ahead and dirty in colour, side by side: they are the two you act on.
@@ -771,7 +779,7 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
                 // the checked ones are merged into it and removed. Never a guest: it is another
                 // project's, and the daemon refuses a graft across projects
                 const target = worktrees.find(
-                  (w) => w.worktree.id === activeId && canGraft(w.worktree) && !originOf(w),
+                  (w) => w.worktree.id === activeId && canGraft(w.worktree) && !otherRepoOf(w),
                 );
                 const sources = sel.filter((id) => id !== target?.worktree.id);
                 const names = sources

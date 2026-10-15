@@ -666,6 +666,10 @@ export interface State {
    * positionally, the palette numbers its "switch to" rows from it, and the project pill counts
    * tasks as `length - 1`. A found row entering it would move all three silently. */
   visible: OwnedWorktree[];
+  /** the row of another project lent to this rail while it is read: listed because it was owed
+   * (waiting on you, or finished and unseen), and chosen, which is what clears the debt. The loan
+   * holds until the next choice, so the row does not leave the rail under the person reading it. */
+  lent: string | null;
   /** removes this tab has sent and the daemon has not yet confirmed. The row leaves the screen
    * on the click rather than when the daemon's next worktrees frame lands, which sits behind
    * killing the procs and the agent. `worktrees` stays the daemon's list: the snapshot that no
@@ -960,6 +964,7 @@ export function initialState(opts: InitialOpts): State {
     rows: [],
     activeRepoId: null,
     visible: [],
+    lent: null,
     archiving: [],
     shipping: {},
     visibleDiscovered: [],
@@ -1218,9 +1223,25 @@ export function guestOf(w: OwnedWorktree, repoId: string, rows: readonly Worktre
   return origin && isOwned(origin) && origin.repoId === repoId ? origin : null;
 }
 
-/** a row this rail lists: one of its own project's, or a guest whose origin is still among `rows` */
-function onRail(w: OwnedWorktree, repoId: string, rows: readonly WorktreeStatus[]): boolean {
-  return w.repoId === repoId || guestOf(w, repoId, rows) !== null;
+/** another project's row that needs you: its agent has stopped on a question, or a turn finished
+ * there and nobody has looked. Listed on every rail while it is, the way a guest is, because an
+ * agent blocked in a project that is not on screen is otherwise invisible until the switcher is
+ * opened. A row still working owes nothing and stays on its own rail. */
+export function owedElsewhere(w: OwnedWorktree, repoId: string): boolean {
+  return w.repoId !== repoId && (w.agent === "waiting" || !!w.unseen);
+}
+
+/** a row this rail lists: one of its own project's, a guest whose origin is still among `rows`,
+ * one owed from elsewhere, or the one lent to this rail while it is read (`State.lent`) */
+function onRail(w: OwnedWorktree, repoId: string, rows: readonly WorktreeStatus[], lent: string | null): boolean {
+  return w.repoId === repoId || guestOf(w, repoId, rows) !== null || owedElsewhere(w, repoId) || w.id === lent;
+}
+
+/** the row `id` would be lent to `repoId`'s rail: on it only because it is owed, so that looking at
+ * it (which clears the debt) does not take it off the rail under the person reading it */
+function lentTo(row: WorktreeStatus | null, repoId: string | null, rows: readonly WorktreeStatus[]): string | null {
+  if (!row || !repoId || !isOwned(row) || row.repoId === repoId || guestOf(row, repoId, rows)) return null;
+  return owedElsewhere(row, repoId) ? row.id : null;
 }
 
 /** the rows minus the ones whose remove is in flight: gone from the person's point of view */
@@ -1233,9 +1254,14 @@ function liveRows(rows: WorktreeStatus[], archiving: string[]): WorktreeStatus[]
  * person's point of view, and so is a guest whose origin's is: the guest rule reads the rows that
  * are left. Sorted here and never in `rows`: the preview frames are keyed children in `rows`
  * order, and a frame moved in the DOM reloads. */
-function visibleOf(rows: WorktreeStatus[], repoId: string | null, archiving: string[]): OwnedWorktree[] {
+function visibleOf(
+  rows: WorktreeStatus[],
+  repoId: string | null,
+  archiving: string[],
+  lent: string | null,
+): OwnedWorktree[] {
   const shown = liveRows(rows, archiving).filter(isOwned);
-  return railOrder(repoId ? shown.filter((w) => onRail(w, repoId, shown)) : shown);
+  return railOrder(repoId ? shown.filter((w) => onRail(w, repoId, shown, lent)) : shown);
 }
 
 /** the same narrowing for the rows toyon did not create */
@@ -1301,7 +1327,11 @@ const sameShipping = (a: ShipEntry | undefined, b: ShipEntry | undefined) =>
  * from, and a click on the row it came from is the way back. */
 function activate(s: State, id: string | null): State {
   const row = rowById(s, id);
-  const stays = !!row && isOwned(row) && !!s.activeRepoId && onRail(row, s.activeRepoId, s.rows);
+  const stays = !!row && isOwned(row) && !!s.activeRepoId && onRail(row, s.activeRepoId, s.rows, s.lent);
+  // a row owed from elsewhere is lent to this rail from the moment it is chosen: the look clears
+  // what listed it, and the loan keeps it listed until the next choice. A row chosen for any other
+  // reason ends the loan, and a loan is never written when the rail itself changes (stays false)
+  const lent = stays && s.lent !== id ? lentTo(row, s.activeRepoId, s.rows) : stays ? s.lent : null;
   // a found worktree can be selected too: it has a shell and a pane of its own, just nothing
   // toyon runs. It is deliberately not written to lastActive, which is the landing spot for a
   // project and should be somewhere that still exists next time. A guest is remembered as its own
@@ -1317,7 +1347,17 @@ function activate(s: State, id: string | null): State {
   // choosing a row is leaving an archived worktree's page, or the release notes: a snapshot that
   // only re-asserts the selection puts them back itself (see the worktrees frame). The draft
   // follows main (withLauncher).
-  return { ...s, activeId: id, activeRepoId, lastActive, editor: null, archivedPage: null, notesPage: false, local };
+  return {
+    ...s,
+    activeId: id,
+    activeRepoId,
+    lent,
+    lastActive,
+    editor: null,
+    archivedPage: null,
+    notesPage: false,
+    local,
+  };
 }
 
 /** the archived worktree whose page is up, if its project is the one on screen and it is still listed */
@@ -1745,7 +1785,7 @@ function strayed(s: State): State {
   const rail = s.activeRepoId;
   if (!rail) return s;
   const active = worktreeById(s, s.activeId);
-  if (!active || active.repoId === rail || onRail(active, rail, liveRows(s.rows, s.archiving))) return s;
+  if (!active || active.repoId === rail || onRail(active, rail, liveRows(s.rows, s.archiving), s.lent)) return s;
   return activate(s, landingIn(s, rail));
 }
 
@@ -1784,12 +1824,17 @@ export function reducer(s: State, action: Action): State {
   else if (next.frame === "desk" && next.activeRepoId && !guessed(action) && next.layout !== s.layout) {
     next = { ...next, layouts: { ...next.layouts, [next.activeRepoId]: next.layout } };
   }
-  if (next.rows === s.rows && next.activeRepoId === s.activeRepoId && next.archiving === s.archiving) {
+  if (
+    next.rows === s.rows &&
+    next.activeRepoId === s.activeRepoId &&
+    next.archiving === s.archiving &&
+    next.lent === s.lent
+  ) {
     return next;
   }
   return {
     ...next,
-    visible: visibleOf(next.rows, next.activeRepoId, next.archiving),
+    visible: visibleOf(next.rows, next.activeRepoId, next.archiving, next.lent),
     visibleDiscovered: visibleDiscoveredOf(next.rows, next.activeRepoId),
   };
 }
@@ -1982,7 +2027,8 @@ function reduce(s: State, action: Action): State {
       const id = landingIn(left, action.id);
       // an explicit switch beats a pending one: a clone can take minutes, and its repo arriving
       // afterwards must not yank the person out of whatever they moved to in the meantime
-      return { ...activate(left, id), carryTo: null, activeRepoId: action.id, pendingOpen: false };
+      // a loan is a rail's: the next rail starts with none
+      return { ...activate(left, id), carryTo: null, activeRepoId: action.id, lent: null, pendingOpen: false };
     }
     case "open-repo":
       return { ...s, pendingOpen: true };
@@ -2510,13 +2556,16 @@ function onServer(s: State, msg: StoreServerMsg): State {
       const wt = msg.rows.find((w) => w.id === activeId);
       // the rail the row was read from, when the row is on it: a reload on a guest comes back to
       // the rail it was chosen from, not to the guest's own project
-      const onStored = !!repoId && !!wt && isOwned(wt) && onRail(wt, repoId, msg.rows);
+      const onStored = !!repoId && !!wt && isOwned(wt) && onRail(wt, repoId, msg.rows, s.lent);
       const next: State = {
         ...s,
         heard: true,
         repos: msg.repos,
         rows: msg.rows,
         activeId,
+        // a reconnect keeps the loan; a reload on a row owed to this rail takes one out, since the
+        // look about to happen clears what lists it
+        lent: onStored ? (s.lent === activeId ? s.lent : lentTo(wt ?? null, repoId, msg.rows)) : null,
         activeRepoId: onStored ? repoId : (wt?.repoId ?? repoId ?? msg.repos[0]?.id ?? null),
         trunks: msg.trunks,
         archiving: s.archiving.length ? [] : s.archiving,

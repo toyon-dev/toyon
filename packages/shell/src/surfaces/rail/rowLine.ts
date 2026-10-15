@@ -43,6 +43,10 @@ export const LEAD_LINE = "new worktree";
  * handed the work off to it, since the mark on the row says only the project */
 export const guestLine = (repoName: string, originTitle: string) => `in ${repoName}, started from ${originTitle}`;
 
+/** the first line of a row owed from another project: whose it is, and that it is listed here
+ * only while it needs you, so its leaving is not a surprise */
+export const owedLine = (repoName: string) => `in ${repoName}, here while it needs you`;
+
 /** the dots that mean something is happening, or has broken, right now */
 const IN_FLIGHT: ReadonlySet<DotState> = new Set(["waiting", "working", "starting", "failed", "crashed"]);
 

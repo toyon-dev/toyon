@@ -1,4 +1,5 @@
-import { type ComponentProps, type ReactNode, useEffect, useRef, useState } from "react";
+import { type ComponentProps, type ReactNode, useRef } from "react";
+import { useInstallPrompt } from "../../app/installOffer.ts";
 import { previewBus, togglePick } from "../../app/previewBus.ts";
 import { notesOfferText } from "../../app/releaseNotes.ts";
 import { selfNotice } from "../../app/selfNotice.ts";
@@ -23,7 +24,7 @@ import { Icon, type IconName } from "../../ui/Icon.tsx";
 import { grouped, useContextMenu } from "../../ui/menu.ts";
 import { tip } from "../../ui/Tooltip.tsx";
 import { ProjectPicker } from "../overlays/ProjectPicker.tsx";
-import { chord, isInstalledApp } from "../util.ts";
+import { chord } from "../util.ts";
 import "./topbar.css";
 import { Field } from "../../ui/Field.tsx";
 import { navCluster } from "./navCluster.ts";
@@ -454,24 +455,4 @@ function PhoneButton() {
       open on phone
     </Offer>
   );
-}
-
-/** the browser's install prompt, when we're not already running as an app */
-function useInstallPrompt() {
-  const [evt, setEvt] = useState<{ prompt: () => Promise<unknown> } | null>(null);
-  useEffect(() => {
-    if (isInstalledApp()) return;
-    const onPrompt = (e: Event) => {
-      e.preventDefault();
-      setEvt(e as unknown as { prompt: () => Promise<unknown> });
-    };
-    const onInstalled = () => setEvt(null);
-    window.addEventListener("beforeinstallprompt", onPrompt);
-    window.addEventListener("appinstalled", onInstalled);
-    return () => {
-      window.removeEventListener("beforeinstallprompt", onPrompt);
-      window.removeEventListener("appinstalled", onInstalled);
-    };
-  }, []);
-  return evt;
 }

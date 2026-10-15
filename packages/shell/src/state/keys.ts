@@ -41,6 +41,8 @@ export const STORAGE = {
   chatSide: "toyon-chat-side",
   /** "1" while the composer offers what is on the clipboard */
   clipboardOffer: "toyon-clipboard-offer",
+  /** "1" once the composer's one-time offer to install Toyon as an app was pressed or turned down */
+  installOffered: "toyon-install-offered",
   /** every project's layout, keyed by repo id: {"<repo>":{changes,changesTab,chat,term,design}} */
   layouts: "toyon-layouts",
   /** this tab's id (sessionStorage): worktrees created here steal focus, others don't */
@@ -80,6 +82,7 @@ export const WINDOW_KEYS: readonly Key[] = [
   STORAGE.railWidth,
   STORAGE.chatSide,
   STORAGE.clipboardOffer,
+  STORAGE.installOffered,
   STORAGE.layouts,
   STORAGE.token,
   STORAGE.client,

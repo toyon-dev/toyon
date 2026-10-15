@@ -22,6 +22,13 @@ export function commandOf(item: ChatItem): string | null {
   return typeof input?.command === "string" ? input.command : null;
 }
 
+/** the command a row ran because the person typed it into the box; null for the ones toyon ran
+ * itself, the check after a turn and a landing's git steps, which sit on the same kind of row */
+export function typedCommandOf(item: ChatItem): string | null {
+  if (item.kind !== "tool" || item.name !== SHELL_TOOL || (item.input as ShellInput | null)?.landing) return null;
+  return commandOf(item);
+}
+
 /** the row's command was typed, ran to its end and exited clean. A failure paints the row and a
  * running one shines, but a clean exit that printed nothing (`git add -A`) left the same line a
  * command that never ran would, so the row says it. The mark goes only where nothing else on the
@@ -29,16 +36,7 @@ export function commandOf(item: ChatItem): string | null {
  * landed row, and the check after a turn has the composer's verdict. */
 export function ranClean(items: ChatItem[]): boolean {
   return (
-    items.length > 0 &&
-    items.every(
-      (t) =>
-        t.kind === "tool" &&
-        t.name === SHELL_TOOL &&
-        commandOf(t) !== null &&
-        !(t.input as ShellInput).landing &&
-        t.done &&
-        !t.isError,
-    )
+    items.length > 0 && items.every((t) => t.kind === "tool" && typedCommandOf(t) !== null && t.done && !t.isError)
   );
 }
 

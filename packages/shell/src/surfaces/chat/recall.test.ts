@@ -20,8 +20,33 @@ const agentRun = (command: string): ChatItem => ({
   done: true,
   toolKind: "execute",
 });
+const check = (command: string): ChatItem => ({
+  kind: "tool",
+  id: `c:${command}`,
+  name: "check",
+  input: { command },
+  done: true,
+  toolKind: "execute",
+});
+const landingStep = (command: string): ChatItem => ({
+  kind: "tool",
+  id: `l:${command}`,
+  name: "shell",
+  input: { command, landing: true },
+  done: true,
+  toolKind: "execute",
+});
 
 describe("sentHistory", () => {
+  test("what toyon ran itself is not in it: the check after a turn, a landing's git steps", () => {
+    const chat = [user("fix it"), run("ls"), check("bun run check"), landingStep("git fetch --quiet origin main")];
+    expect(sentHistory(chat, false)).toEqual([
+      { text: "!ls", at: 1 },
+      { text: "fix it", at: 0 },
+    ]);
+    expect(sentHistory(chat, true)).toEqual([{ text: "!ls", at: 1 }]);
+  });
+
   test("messages and commands in one list, newest first, each once, with where each sits", () => {
     const chat = [user("fix the header"), reply("done"), run("ls"), agentRun("pwd"), user("now the footer"), run("ls")];
     expect(sentHistory(chat, false)).toEqual([

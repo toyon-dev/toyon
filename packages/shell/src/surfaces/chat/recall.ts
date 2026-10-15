@@ -3,7 +3,7 @@
 // so the rules have tests; Composer.tsx hands the keys here and ChatLog.tsx marks the row.
 
 import type { ChatItem, ComposerWalk } from "../../state/store.ts";
-import { commandOf } from "./shellMode.ts";
+import { typedCommandOf } from "./shellMode.ts";
 
 /** one thing sent from the box, written the way the box would hold it again, and its index in the chat */
 export type Sent = { text: string; at: number };
@@ -15,13 +15,15 @@ export type Step = { walk: ComposerWalk | null; text: string };
 export const isBlank = (text: string) => text === "" || text === "!";
 
 /** what the walk steps through, newest first, each text once. From a bare `!` only the commands:
- * the sigil already said which kind of thing is wanted. */
+ * the sigil already said which kind of thing is wanted. Only what was typed: the check toyon ran
+ * after a turn and a landing's git steps sit on the same rows, but nobody sent them from here, and
+ * a walk that put the repo's check in the box would offer to run it by hand. */
 export function sentHistory(chat: ChatItem[], commandsOnly: boolean): Sent[] {
   const seen = new Set<string>();
   const out: Sent[] = [];
   for (let at = chat.length - 1; at >= 0; at--) {
     const item = chat[at]!;
-    const command = commandOf(item);
+    const command = typedCommandOf(item);
     const text = command !== null ? `!${command}` : item.kind === "user" && !commandsOnly ? item.text : null;
     if (text === null || !text.trim() || seen.has(text)) continue;
     seen.add(text);

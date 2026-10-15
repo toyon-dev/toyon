@@ -24,6 +24,9 @@ A row from another project that is waiting on you now shows on the rail in front
 - A tool search row reads as a sentence: "loading a tool", then "loaded WebSearch, WebFetch" or "looked for a tool: notebook jupyter".
 - The usage panel on the compact ring opens on keyboard focus as well as on hover, sits centred above the ring like a tooltip, and drops when the ring's menu opens.
 - The offer to install Toyon as an app shows in the composer as well as the top bar.
+- The land button says what it will do, merge, push or open PR, by the project's land route, instead of a plain land.
+- The composer's up-arrow history offers only commands you typed; the check Toyon runs after a turn and a landing's git steps stay out of it.
+- After a run of clean edits, the row keeps its shimmer until the next call lands, instead of flashing a working mark between edits to the same file.
 
 ### Fixed
 - When the agent enters plan mode on its own, the chip and the rail follow it; they stayed on auto.
@@ -34,6 +37,8 @@ A row from another project that is waiting on you now shows on the rail in front
 - The transcript no longer shifts sideways as a card comes and goes; the space for its scrollbar is held either way.
 - A tip from a chip no longer shows over a view expanded from it.
 - In `!` mode the first line of the composer keeps its height, so the placeholder, caret and text no longer sit a few pixels up.
+- A `!` command typed while a sync runs stays in the box, with a line under the field saying the sync is running, instead of clearing and being refused with nothing to recall.
+- A file drag carried from the preview straight to another app no longer leaves the drop highlight on until it times out.
 
 ## 0.14.0 (2026-10-14)
 

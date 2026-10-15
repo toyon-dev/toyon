@@ -615,6 +615,30 @@ describe("handlers", () => {
     expect(agents.get(wt.id)?.sent.at(-1)).toMatchObject({ text: "and the header" });
   });
 
+  test("a restore git refuses after listing the row hands the message back unsent, into the page's box", async () => {
+    const { services, ctx, replies, repo } = make();
+    const r = await services.repos.register(repo);
+    r.needsSetup = false;
+    const wt = await services.worktrees.create(r.id, "tidy the footer");
+    writeFileSync(join(wt.path, "done.txt"), "x\n");
+    sh(wt.path, "git", "add", "done.txt");
+    sh(wt.path, "git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "done");
+    await dispatch({ t: "archive-worktree", worktreeId: wt.id }, ctx, services);
+    await dispatch({ t: "set-draft", boxId: wt.id, text: "and the header", clientId: "tab1" }, ctx, services);
+    sh(repo, "git", "update-ref", "-d", `refs/toyon/archive/${wt.id}`);
+    replies.length = 0;
+    await dispatch(
+      { t: "restore-worktree", archiveId: wt.id, clientId: "tab1", message: { text: "and the header" }, boxId: wt.id },
+      ctx,
+      services,
+    );
+    expect(services.state.worktree(wt.id)).toBeUndefined();
+    expect(services.worktrees.hasArchived(wt.id)).toBe(true);
+    expect(services.drafts.text(wt.id)).toBe("and the header");
+    expect(lastOf(replies, "unsent")).toMatchObject({ boxId: wt.id, text: "and the header" });
+    expect(lastOf(replies, "error")).toBeUndefined();
+  });
+
   test("a chat for a worktree archived under the box restores it and hands the message on", async () => {
     const { services, ctx, repo, agents } = make();
     const r = await services.repos.register(repo);

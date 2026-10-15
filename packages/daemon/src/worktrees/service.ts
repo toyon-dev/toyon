@@ -111,12 +111,20 @@ import {
 import { dropTurnRefs, markTurn, type TurnChanges, turnChanges } from "../git/turn.ts";
 import { listWorktrees } from "../git/worktrees.ts";
 import { isInside } from "../repos/create.ts";
-import { RunService } from "../runs/service.ts";
+import { type RunHandle, RunService } from "../runs/service.ts";
 import { allocateProxyPort, releasePort } from "../runtime/ports.ts";
 import { resolveRun } from "../runtime/profile.ts";
-import { DEFAULT_AGENT_ID, type RuntimeRegistry, worktreeEnv } from "../runtime/registry.ts";
+import { DEFAULT_AGENT_ID, type Runtime, type RuntimeRegistry, worktreeEnv } from "../runtime/registry.ts";
 import { runSetup } from "../runtime/setup.ts";
-import { type ArchiveRecord, type ChatFiles, firstPrompt, lastUsage, summarize, WorktreeArchive } from "./archive.ts";
+import {
+  type ArchiveRecord,
+  type ChatFiles,
+  firstPrompt,
+  lastUsage,
+  move,
+  summarize,
+  WorktreeArchive,
+} from "./archive.ts";
 import { ArchivedGit } from "./archivedGit.ts";
 import type { ArtifactCache } from "./cache.ts";
 import { COUNTS_FLOOR_MS, Counts, type RowCounts } from "./counts.ts";
@@ -305,6 +313,10 @@ export type ShipOutcome = ShipResult & { asked?: true };
  * writes no mark, and the last entry would then be an earlier landing's. */
 type Landed = { result: ShipResult; archiveIds?: string[]; mark?: LandMark | undefined };
 
+/** the refusal for a found worktree another tool holds, with git's reason when it gave one */
+const heldBy = (found: Pick<FoundWorktree, "name" | "lockReason">) =>
+  `${found.name} is held by another tool${found.lockReason ? `: ${found.lockReason}` : ""}`;
+
 /** the row's command as a person would have typed it: a plain word as is, anything else quoted.
  * A commit message shows its subject; the row is a record of what ran, not a line to paste. */
 const commandLine = (args: string[]) =>
@@ -337,6 +349,9 @@ export class WorktreeService {
    * file still in it as deleted: 15k of them on a 20k-file tree. Reads answer from the last counts
    * while an id is in here, and the row goes a moment later anyway. */
   private going = new Set<string>();
+  /** rows listed ahead of their checkout: a restore puts the row and its chat on screen at the
+   * press and checks the tree out behind them, so for a moment git has no directory to read */
+  private arriving = new Set<string>();
   /** a claimed row's first message on its way to the agent's queue: a chat sent into the row
    * meanwhile goes behind it (settles either way, since the chat is not the claim's to refuse) */
   private firstPrompt = new Map<string, Promise<void>>();
@@ -364,7 +379,7 @@ export class WorktreeService {
     this.archive = new WorktreeArchive(d.paths.archiveDir);
     this.counts = new Counts({
       read: (id) => this.readCounts(id),
-      going: (id) => this.going.has(id),
+      going: (id) => this.going.has(id) || this.arriving.has(id),
     });
     this.trunk = new Trunk({
       state: d.state,
@@ -770,8 +785,15 @@ export class WorktreeService {
    * Re-derived rather than read from the cache because the frame the person clicked can be
    * seconds old, and a lock is the only thing standing between us and another agent's working
    * directory: it must still be on the list the daemon would push. */
-  private async requireDiscovered(repoId: string, repoPath: string, target: string): Promise<FoundWorktree> {
-    const rows = await discoverIn(repoId, repoPath, this.d.state.worktrees);
+  private async requireDiscovered(
+    repoId: string,
+    repoPath: string,
+    target: string,
+    except?: string,
+  ): Promise<FoundWorktree> {
+    // a record listed ahead of this check holds the path it is checking, and must not hide it
+    const known = this.d.state.worktrees.filter((w) => w.id !== except);
+    const rows = await discoverIn(repoId, repoPath, known);
     const found = rows.find((r) => canonical(r.path) === target);
     if (!found) throw new UserError("that worktree is gone, or Toyon already has it");
     return found;
@@ -783,7 +805,14 @@ export class WorktreeService {
    * it, parked: a dev server in a directory the person made is theirs to ask for (see
    * `startPreview`). It deliberately does not run the settings' setup commands (see
    * `setupAndStart`). Take-over is not a task, so the agent comes up on the first message like it
-   * does anywhere else; a `message` typed into the found row's chat is that message. */
+   * does anywhere else; a `message` typed into the found row's chat is that message.
+   *
+   * The record is listed first, from the list as last pushed, and git's own list is read under
+   * the lock behind it, the way a restore lists its row ahead of the checkout: the message reads
+   * as sent and the row takes the found one's place at the press, and the wait for the lock,
+   * seconds behind a landing, is read through on the live page. A directory that went, or was
+   * locked by another tool, since the list was pushed is found out under the lock and the record
+   * goes again, with the message handed back. */
   async adopt(worktreeId: string, createdBy?: string, message?: RestoreMessage): Promise<WorktreeInfo> {
     const r = this.readable(worktreeId);
     if (!r) throw new UserError("that worktree is gone");
@@ -791,44 +820,57 @@ export class WorktreeService {
     const repoId = r.repoId;
     const repo = this.d.state.requireRepo(repoId);
     const target = canonical(r.path);
-    // the whole verify-then-record step holds the lock: outside it this races `worktree remove`
-    // and leaves a record pointing at a directory that is already gone
-    const wt = await withRepoLock(repo.path, async () => {
-      const found = await this.requireDiscovered(repoId, repo.path, target);
-      if (found.locked) {
-        throw new UserError(`${found.name} is held by another tool${found.lockReason ? `: ${found.lockReason}` : ""}`);
-      }
-      // land, ship, merge and rename all address a branch; a detached worktree has none to name
-      if (!found.branch) throw new UserError(`${found.name} is detached: check out a branch in it first`);
-      // procs and a dep clone inside the main checkout would land in its working tree, where the
-      // agent's file tools and git status would both start seeing them
-      const enclosing = [...this.d.state.repos, ...this.d.state.worktrees].find((r) =>
-        isInside(target, canonical(r.path)),
-      );
-      if (enclosing) throw new UserError(`${found.name} sits inside ${enclosing.path}, which Toyon already manages`);
-      const rec: WorktreeInfo = {
-        id: shortId(),
-        repoId,
-        path: found.path,
-        branch: found.branch,
-        kind: "worktree",
-        proxyPort: await allocateProxyPort(),
-        title: found.name,
-        createdAt: Date.now(),
-        agent: this.d.agents.require(this.d.state.defaultAgent ?? DEFAULT_AGENT_ID).id,
-        parked: true,
-        ...(message ? { promptedAt: Date.now() } : {}),
-        ...(createdBy ? { createdBy } : {}),
-      };
-      return rec;
-    });
+    // what the pushed list already says is refused before anything is listed
+    const pushed = this.discoveredById(worktreeId);
+    if (pushed?.locked) throw new UserError(heldBy(pushed));
+    // land, ship, merge and rename all address a branch; a detached worktree has none to name
+    if (!r.branch) throw new UserError(`${r.name} is detached: check out a branch in it first`);
+    // procs and a dep clone inside the main checkout would land in its working tree, where the
+    // agent's file tools and git status would both start seeing them
+    const enclosing = [...this.d.state.repos, ...this.d.state.worktrees].find((w) =>
+      isInside(target, canonical(w.path)),
+    );
+    if (enclosing) throw new UserError(`${r.name} sits inside ${enclosing.path}, which Toyon already manages`);
+    const wt: WorktreeInfo = {
+      id: shortId(),
+      repoId,
+      path: r.path,
+      branch: r.branch,
+      kind: "worktree",
+      proxyPort: await allocateProxyPort(),
+      title: r.name,
+      createdAt: Date.now(),
+      agent: this.d.agents.require(this.d.state.defaultAgent ?? DEFAULT_AGENT_ID).id,
+      parked: true,
+      ...(message ? { promptedAt: Date.now() } : {}),
+      ...(createdBy ? { createdBy } : {}),
+    };
+    const { rt, release } = this.listAhead(wt, message);
+    // the found row leaves the list as the record takes its path
     this.invalidateDiscovered();
+    this.d.hub.emit("worktreesChanged");
+    try {
+      // under the lock, so this cannot race a `worktree remove` and keep a record pointing at a
+      // directory that is already gone
+      await withRepoLock(repo.path, async () => {
+        const found = await this.requireDiscovered(repoId, repo.path, target, wt.id);
+        if (found.locked) throw new UserError(heldBy(found));
+        if (!found.branch) throw new UserError(`${found.name} is detached: check out a branch in it first`);
+        // the branch as git has it now, should it have moved since the list was pushed
+        wt.branch = found.branch;
+      });
+    } catch (e) {
+      await this.unlist(wt, !!message);
+      this.invalidateDiscovered();
+      this.d.hub.emit("worktreesChanged");
+      throw e;
+    }
+    this.d.state.save();
     // slow, and nothing above depends on it: outside the lock, like create()'s own setup
-    this.launch(wt, repo, repo.path, { setupCommands: false });
+    fireAndForget(wt.id, this.setupAndStart(wt, repo, repo.path, { setupCommands: false }), "setup + start");
     // the word on the take-over opens the transcript, the way a restore's picks one up
-    const { agent } = this.d.runtime.ensureAgent(wt);
-    agent.note({ type: "adopted", branch: wt.branch, ts: Date.now() });
-    if (message) agent.send(message.text, { attachments: message.attachments });
+    rt.agent.note({ type: "adopted", branch: wt.branch, ts: Date.now() });
+    release();
     return wt;
   }
 
@@ -1331,9 +1373,8 @@ export class WorktreeService {
    * uncommitted work over that, unstaged, and its chat. The agent resumes its own session when the
    * directory is the same one, since that is what the session is keyed by. A `message` was typed
    * into the archived chat: it goes to the agent the way a new worktree's first one does. One
-   * restore per id at a time, and an id that is a row already is that row: the page stays on
-   * screen until the row is listed, so a second press, or a message sent meanwhile, is asked of
-   * the worktree the first press brings back. */
+   * restore per id at a time, and an id that is a row already is that row: a second press, or a
+   * message sent meanwhile, is asked of the worktree the first press brings back. */
   async restore(archiveId: string, createdBy?: string, message?: RestoreMessage): Promise<WorktreeInfo> {
     const running = this.restoring.get(archiveId);
     const live = running ? await running : this.d.state.worktree(archiveId);
@@ -1347,6 +1388,12 @@ export class WorktreeService {
     return done;
   }
 
+  /** The row and its chat first, the checkout behind them, the way a first send claims a spare
+   * before its branch exists: the message reads as sent and the row sits on the rail from the
+   * press, and the wait for the repo lock, seconds behind a landing, is read through on the live
+   * page. The agent holds the message on its queue until the tree it runs in is there. A
+   * checkout git refuses takes it all back: the row goes, the chat returns to the archive, and the
+   * message goes back to the box it came from. */
   private async bringBack(archiveId: string, createdBy?: string, message?: RestoreMessage): Promise<WorktreeInfo> {
     const rec = this.archive.get(archiveId);
     if (!rec) throw new UserError("that archived worktree is gone");
@@ -1361,40 +1408,13 @@ export class WorktreeService {
     // its old directory when that is free, else a fresh slot's: the record keeps its id either way,
     // since its chat, session and archive ref are keyed by it
     const path = existsSync(old.path) ? join(dirname(old.path), freeSlot(dirname(old.path)).dir) : old.path;
-    const branch = await withRepoLock(repo.path, async () => {
-      if (!(await commitOf(repo.path, archiveRef(old.id)))) {
-        throw new UserError(`${old.title}'s kept commits are gone from git`);
-      }
-      let name = old.branch;
-      let create = true;
-      const tip = await commitOf(repo.path, `refs/heads/${name}`);
-      if (tip && hasOwnBranch(old)) {
-        // toyon deleted its own branch on archive, so a branch by that name now is someone else's
-        name = `${name}-${shortId().slice(0, 3)}`;
-      } else if (tip) {
-        // the person's branch was never deleted and is checked out as it stands; uncommitted work
-        // from an older commit would quietly undo whatever landed on it since
-        if (tip !== kept.head && kept.snapshot) {
-          throw new UserError(`${name} has moved since ${old.title} was archived: check it out in git instead`);
-        }
-        create = false;
-      }
-      try {
-        await checkOutKept(repo.path, path, kept, { name, create });
-      } catch (e) {
-        // half a restore is a stray worktree git lists and toyon does not; the archive still has it
-        await git(repo.path, "worktree", "remove", "--force", path);
-        if (create) await git(repo.path, "branch", "-D", name);
-        throw e;
-      }
-      return name;
-    });
     const { variant: _variant, ...rest } = old;
     const wt: WorktreeInfo = {
       ...rest,
       repoId: repo.id,
       path,
-      branch,
+      // the name it had; one taken since is found out under the lock, and the record follows
+      branch: old.branch,
       proxyPort: await allocateProxyPort(),
       // bringing it back is going back to work in it, so it sits with what you last sent to
       promptedAt: Date.now(),
@@ -1402,19 +1422,47 @@ export class WorktreeService {
       parked: true,
       ...(createdBy ? { createdBy } : {}),
     };
+    // the chat moves out of the archive now, since the live page reads it from where a running
+    // worktree keeps it; the plans wait beside the archive until there is a tree to land in
+    const chat: ChatFiles = { ...this.chatFiles(old.id), plans: this.plansScratch(old.id) };
     try {
-      this.archive.take(old.id, { ...this.chatFiles(old.id), plans: join(path, PLANS_DIR) });
+      this.archive.take(old.id, chat);
     } catch (e) {
+      // before anything is listed, so a refusal leaves the archive as it was
       log.warn(old.id, "could not move its chat back out of the archive", e);
+      throw new UserError(`could not move ${old.title}'s chat back out of the archive`);
     }
     if (rec.sessionId && path === old.path) this.d.state.setSession(wt.id, rec.sessionId);
+    this.arriving.add(wt.id);
+    const { rt, release } = this.listAhead(wt, message);
+    // on the row as a setup stage, like the cache restore and the deps copy that follow it: the
+    // wait is the person's to read through, with the row saying what it is on
+    const run = this.runs.begin(wt.id, "setup", {
+      timeoutMs: timeoutFor(repo.config, "setup"),
+      stage: "checking out the branch",
+    });
+    this.d.hub.emit("worktreesChanged");
+    this.d.hub.emit("archiveChanged", repo.id);
+    let branch: string;
+    try {
+      branch = await withRepoLock(repo.path, () => this.checkOutArchived(repo, old, kept, path));
+    } catch (e) {
+      await this.takeBack(wt, rec, chat, run, !!message);
+      throw e;
+    }
+    run.finish(0);
+    this.arriving.delete(wt.id);
+    wt.branch = branch;
+    move(chat.plans, join(path, PLANS_DIR));
     const dropped = await git(repo.path, "update-ref", "-d", archiveRef(old.id));
     if (!dropped.ok) log.warn(old.id, `could not drop its archive ref: ${dropped.err}`);
     this.counts.stale(wt.id);
-    this.launch(wt, repo, repo.path);
-    // the word on the restore goes on the transcript first, the way a land's does: the chat picks
-    // up from where the archive cut it, and the row is what says how long the gap was
-    this.d.runtime.ensureAgent(wt).agent.note({
+    this.d.state.save();
+    this.d.hub.emit("worktreesChanged");
+    fireAndForget(wt.id, this.setupAndStart(wt, repo, repo.path), "setup + start");
+    // the word on the restore goes on the transcript ahead of the message, the way a land's does:
+    // the chat picks up from where the archive cut it, and the row is what says how long the gap was
+    rt.agent.note({
       type: "restored",
       archivedAt: rec.archivedAt,
       branch,
@@ -1422,9 +1470,76 @@ export class WorktreeService {
       ts: Date.now(),
     });
     // setup and procs warm in the background; the agent takes the message now, as on create
-    if (message) this.d.runtime.ensureAgent(wt).agent.send(message.text, { attachments: message.attachments });
-    this.d.hub.emit("archiveChanged", repo.id);
+    release();
+    // the tree is there to read: the changes panel on its page fills in
+    this.d.hub.emit("filesChanged", wt.id);
     return wt;
+  }
+
+  /** The kept state checked out at `path`, under the lock: the branch it had, or a fresh name when
+   * someone took that name since. Hands back the branch's name. A checkout git cannot finish is
+   * taken down again here, since half a restore is a stray worktree git lists and toyon does not. */
+  private async checkOutArchived(repo: RepoInfo, old: WorktreeInfo, kept: KeptState, path: string): Promise<string> {
+    if (!(await commitOf(repo.path, archiveRef(old.id)))) {
+      throw new UserError(`${old.title}'s kept commits are gone from git`);
+    }
+    let name = old.branch;
+    let create = true;
+    const tip = await commitOf(repo.path, `refs/heads/${name}`);
+    if (tip && hasOwnBranch(old)) {
+      // toyon deleted its own branch on archive, so a branch by that name now is someone else's
+      name = `${name}-${shortId().slice(0, 3)}`;
+    } else if (tip) {
+      // the person's branch was never deleted and is checked out as it stands; uncommitted work
+      // from an older commit would quietly undo whatever landed on it since
+      if (tip !== kept.head && kept.snapshot) {
+        throw new UserError(`${name} has moved since ${old.title} was archived: check it out in git instead`);
+      }
+      create = false;
+    }
+    try {
+      await checkOutKept(repo.path, path, kept, { name, create });
+    } catch (e) {
+      await git(repo.path, "worktree", "remove", "--force", path);
+      if (create) await git(repo.path, "branch", "-D", name);
+      throw e;
+    }
+    return name;
+  }
+
+  /** A record on the list before git has had its say, its agent holding the first message: what a
+   * restore and a take-over share, with `unlist` as the way back. Setup is marked from here so a
+   * wake meanwhile (the preview asked for from the row) starts nothing in a tree that is not there
+   * yet, or has no deps yet; setup's own mark takes over when it runs. The caller sends the frame. */
+  private listAhead(wt: WorktreeInfo, message?: RestoreMessage): { rt: Runtime; release: () => void } {
+    this.d.runtime.markSetup(wt.id, true);
+    this.d.state.addWorktree(wt);
+    const rt = this.d.runtime.ensureAgent(wt);
+    const release = rt.agent.hold();
+    if (message) rt.agent.send(message.text, { attachments: message.attachments });
+    return { rt, release };
+  }
+
+  /** A restore git refused, after the row was listed: back to how it stood before the press, with
+   * the chat returned to the archive. */
+  private async takeBack(wt: WorktreeInfo, rec: ArchiveRecord, chat: ChatFiles, run: RunHandle, queued: boolean) {
+    run.finish(0);
+    await this.unlist(wt, queued);
+    this.arriving.delete(wt.id);
+    this.archive.put(rec, chat);
+    this.d.hub.emit("worktreesChanged");
+    this.d.hub.emit("archiveChanged", wt.repoId);
+  }
+
+  /** A row listed ahead of git, which git then refused: the record goes. The message leaves the
+   * queue first, so the handler can put it back in its box. A refused press is not a send, so the
+   * project's place in the switcher does not move with it. The caller sends the frame. */
+  private async unlist(wt: WorktreeInfo, queued: boolean) {
+    const agent = this.d.runtime.agentFor(wt.id);
+    if (queued && agent && agent.queueLength > 0) agent.unqueue(0);
+    await this.d.runtime.stop(wt.id);
+    this.d.state.removeWorktree(wt.id, { refused: true });
+    releasePort(wt.proxyPort);
   }
 
   /** Delete an archived worktree for good: its record, chat and attachments, and the ref that kept
@@ -2671,8 +2786,9 @@ export class WorktreeService {
   /** the working-tree state the changes panel shows (subscribe, edits, ref ticks). Also the one
    * place the `landed` badge is cleared: new work after a merge means it is no longer landed. */
   async gitStatus(worktreeId: string): Promise<GitInfo | null> {
-    // its directory is being deleted; no frame at all beats one that says every file went with it
-    if (this.going.has(worktreeId)) return null;
+    // its directory is being deleted, or is not there yet; no frame at all beats one that says
+    // every file went with it
+    if (this.going.has(worktreeId) || this.arriving.has(worktreeId)) return null;
     const r = this.readable(worktreeId);
     if (!r) return this.archivedStatus(worktreeId);
     try {
@@ -2733,7 +2849,7 @@ export class WorktreeService {
       // task worktree of an empty repo is not the greenfield surface, so only main keeps it
       if (r.wt && isMain) this.setEmpty(r.wt, files.length === 0 ? await treeEmpty(r.path) : false);
       // the removal started while the reads were in flight
-      if (this.going.has(worktreeId)) return null;
+      if (this.going.has(worktreeId) || this.arriving.has(worktreeId)) return null;
       this.noteCounts(worktreeId, isMain, files.length, counts);
       return { files, committed, ...(turn ? { turn } : {}), head: head.ok ? head.out : undefined, ...counts };
     } catch (e) {

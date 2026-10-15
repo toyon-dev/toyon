@@ -267,12 +267,6 @@ export interface WorktreeLocal {
   /** the listing key (actions/file.ts) the files were last asked for; the same key asks nothing */
   filesFor?: string;
   queue: QueuedMessage[];
-  /** a message sent from an archived page or a found worktree's, chips included, shown as sent
-   * while the worktree becomes toyon's to run: gone when its own message reaches the chat, when
-   * the daemon hands it back unsent, or, for a found one, with the row it was sent from. Empty
-   * words for the page's own restore press, which has nothing to wait for: it goes with the row's
-   * first chat frame, or with the daemon's refusal */
-  restoring?: QueuedMessage;
   /** a message sent to an agent that is not mid-turn, until the daemon's word catches up: the log
    * shows the bubble and the working mark from the press, so the wait reads as the turn it becomes
    * (and on the lead row, whose worktree is still being made, the draft's choices step aside).
@@ -1168,6 +1162,14 @@ export function chatChordAction(s: State): Action {
     : { a: "focus-chat" };
 }
 
+/** an archived worktree's page, over the row underneath: the file open there belongs to what was
+ * on screen, and is not what the page is about (the draft follows the lead and goes by itself, see
+ * withLauncher). Nothing for an id the active project's archive does not list. */
+function openArchivedPage(s: State, id: string): State {
+  if (!s.activeRepoId || !s.archived[s.activeRepoId]?.some((a) => a.id === id)) return s;
+  return { ...s, archivedPage: id, notesPage: false, editor: null, screen: "chat" };
+}
+
 /** the chat is about to be written in, so its dock opens; a chat in the centre has no dock to open,
  * and writing one into the layout would leave the project's remembered panels holding it */
 function revealChat(s: State): State {
@@ -1457,7 +1459,6 @@ export type Action =
   /** archive-worktree frames went out for these: hide the rows now, move the selection off them */
   | { a: "archive-worktrees"; ids: string[] }
   /** a message went from an archived page with the restore it asks for: show it as sent meanwhile */
-  | { a: "restoring"; id: string; message: QueuedMessage }
   | { a: "sending"; id: string; message: QueuedMessage }
   /** this tab sent a message from the box, which the daemon has taken: the box is empty here too,
    * and the log jumps to its end */
@@ -1627,13 +1628,6 @@ function settled(l: WorktreeLocal): WorktreeLocal {
   if (!l.sending) return l;
   const { sending: _spent, ...rest } = l;
   return rest;
-}
-
-/** A refused restore ends the one its page shows under way, and the offer comes back. Only the
- * page's own press: a message's refusal comes as `unsent`, with the box it goes back into. */
-function notRestoring(s: State, id?: string): State {
-  if (!id || s.local[id]?.restoring === undefined) return s;
-  return withLocal(s, id, ({ restoring: _refused, ...l }) => l);
 }
 
 /** A refusal ends the wait it answers: the row it names, or every row when it names none. */
@@ -1892,12 +1886,8 @@ function reduce(s: State, action: Action): State {
       return s.draft ? { ...s, draft: { ...s.draft, agent: action.id } } : s;
     case "draft-profile":
       return s.draft ? { ...s, draft: { ...s.draft, profile: action.profile } } : s;
-    case "open-archived": {
-      if (!s.activeRepoId || !s.archived[s.activeRepoId]?.some((a) => a.id === action.id)) return s;
-      // a page over the row underneath: the file open there belongs to what was on screen, and is
-      // not what the page is about (the draft follows the lead and goes by itself, see withLauncher)
-      return { ...s, archivedPage: action.id, notesPage: false, editor: null, screen: "chat" };
-    }
+    case "open-archived":
+      return openArchivedPage(s, action.id);
     case "close-archived":
       return s.archivedPage ? closeArchivedPage(s) : s;
     case "open-release-notes": {
@@ -1909,8 +1899,6 @@ function reduce(s: State, action: Action): State {
     }
     case "close-release-notes":
       return s.notesPage ? { ...s, notesPage: false } : s;
-    case "restoring":
-      return withLocal(s, action.id, (l) => ({ ...l, restoring: action.message }));
     case "sending":
       return withLocal(s, action.id, (l) => ({ ...l, sending: { message: action.message, at: Date.now() } }));
     case "sent-box":
@@ -1956,8 +1944,13 @@ function reduce(s: State, action: Action): State {
       const text = box.draft;
       const attachments = box.attachments.length ? settledInputs(box.attachments) : undefined;
       const counted = (l: WorktreeLocal) => ({ ...l, sent: (l.sent ?? 0) + 1 });
+      // a restore or a take-over lists its row at once, so the message is a plain send into a row
+      // with no turn; a take-over's goes with the selection to the row the daemon lists for it
       if (out.frame.t === "restore-worktree" || out.frame.t === "adopt-worktree")
-        return withLocal(next, out.log, (l) => ({ ...counted(l), restoring: { text, attachments } }));
+        return withLocal(next, out.log, (l) => ({
+          ...counted(l),
+          sending: { message: { text, attachments }, at: Date.now() },
+        }));
       // an ask's answer has no bubble of its own: the card closes when the agent has it
       if (out.frame.t === "agent-answer") return withLocal(next, out.log, counted);
       // as at a plain send: mid-turn the log is already busy, and the message joins the turn or
@@ -2773,11 +2766,17 @@ function onServer(s: State, msg: StoreServerMsg): State {
             trunks: msg.trunks,
             archiving: archiving.length === s.archiving.length ? s.archiving : archiving,
             shipping: shippingFrom(s.shipping, msg.rows, msg.trunks),
-            local: withSending(
-              landedClean(pruneLocal(s.local, msg.rows, s.archivedPage), s.rows, msg.rows),
+            // the bubble moves before the prune: a found row taken over leaves the list as the
+            // record takes its place, and the send it carried goes with the selection
+            local: pruneLocal(
+              withSending(
+                landedClean(s.local, s.rows, msg.rows),
+                msg.rows,
+                s.activeId,
+                activeId === fresh?.id ? fresh.id : undefined,
+              ),
               msg.rows,
-              s.activeId,
-              activeId === fresh?.id ? fresh.id : undefined,
+              s.archivedPage,
             ),
             treeOpen: pruneByRow(s.treeOpen, msg.rows),
           },
@@ -2830,13 +2829,12 @@ function onServer(s: State, msg: StoreServerMsg): State {
         const model = ev.type === "session-info" && ev.model ? ev.model : l.model;
         const effort = ev.type === "session-info" && ev.effort ? ev.effort : l.effort;
         const usage = ev.type === "usage" ? { ...figuresOf(ev), heard: Date.now() } : l.usage;
-        // a message an archived page sent is in the chat now, as the agent has it
-        const { restoring: _sent, ...heard } = l;
-        // and so are the words of one shown ahead of the daemon; its mark holds until the row is
-        // busy, or until the turn is over before a status frame ever said so
+        // the words of a message shown ahead of the daemon are in the chat now, as the agent has
+        // it; its mark holds until the row is busy, or until the turn is over before a status
+        // frame ever said so
         const row = s.rows.find((w) => w.id === id);
         const busy = row?.agent === "working" || row?.agent === "waiting";
-        const said = !heard.sending ? heard : busy ? settled(heard) : { ...heard, sending: { at: heard.sending.at } };
+        const said = !l.sending ? l : busy ? settled(l) : { ...l, sending: { at: l.sending.at } };
         const over = ev.type === "turn-end" || ev.type === "agent-error";
         const base = askSettled(ev.type === "user-message" ? said : over ? settled(l) : l, ev);
         return {
@@ -2891,12 +2889,11 @@ function onServer(s: State, msg: StoreServerMsg): State {
         chat = applyEvent(chat, event, seq);
         if (event.type === "usage") usage = figuresOf(event);
       }
-      // a message an archived page sent stays shown until the transcript has it: a socket back
-      // mid-restore hears it here rather than live. A bare restore press waits for no words, so
-      // the row's first frame ends it.
+      // a message shown as sent stays shown until the transcript has it: a socket back mid-send
+      // (a restore's checkout, say) hears it here rather than live
       const heard = (text: string) =>
-        !text || msg.events.some(({ event }) => event.type === "user-message" && event.text === text);
-      return withLocal(s, msg.worktreeId, ({ restoring, sending, ...l }) => ({
+        msg.events.some(({ event }) => event.type === "user-message" && event.text === text);
+      return withLocal(s, msg.worktreeId, ({ sending, ...l }) => ({
         ...l,
         ...(sending && !(sending.message && heard(sending.message.text)) ? { sending } : {}),
         chat,
@@ -2904,7 +2901,6 @@ function onServer(s: State, msg: StoreServerMsg): State {
         running: runningOf(chat, l.running),
         log: msg.log ?? l.log,
         ...(usage ? { usage } : {}),
-        ...(restoring !== undefined && !heard(restoring.text) ? { restoring } : {}),
       }));
     }
     case "git-status": {
@@ -3037,7 +3033,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
       const page = s.newProject;
       const refused = page?.phase === "creating" && !page.repoId;
       const next = {
-        ...notSending(notRestoring(s, id), id),
+        ...notSending(s, id),
         archiving: id
           ? s.archiving.includes(id)
             ? s.archiving.filter((w) => w !== id)
@@ -3060,21 +3056,22 @@ function onServer(s: State, msg: StoreServerMsg): State {
       if (refused) return next;
       return id ? answerFor(next, id, msg.message) : noticeOnScreen(next, msg.message);
     }
-    case "unsent":
+    case "unsent": {
       // A message no agent took, back in the box it was sent from with the reason under it. The
       // words only into an empty box, since anything typed there since is newer; the chips ahead
       // of anything attached since. A page that was showing it as sent stops.
-      // One sent from an outgoing box goes back into the box the message left.
-      return withLocal(
-        revealChat(s),
-        outBoxOf(msg.boxId)?.source ?? msg.boxId,
-        ({ restoring: _held, sending: _waited, ...l }) => ({
-          ...l,
-          draft: l.draft || msg.text,
-          attachments: [...fromInputs(msg.items, []), ...l.attachments],
-          notice: msg.message,
-        }),
-      );
+      // One sent from an outgoing box goes back into the box the message left. A restore git
+      // refused after its row was listed is back in the archive by now, and its box is that page's:
+      // the page comes up again, so the words and the reason are where the press was.
+      const box = outBoxOf(msg.boxId)?.source ?? msg.boxId;
+      const archived = !rowById(s, box) && !!s.activeRepoId && s.archived[s.activeRepoId]?.some((a) => a.id === box);
+      return withLocal(revealChat(archived ? openArchivedPage(s, box) : s), box, ({ sending: _waited, ...l }) => ({
+        ...l,
+        draft: l.draft || msg.text,
+        attachments: [...fromInputs(msg.items, []), ...l.attachments],
+        notice: msg.message,
+      }));
+    }
     default: {
       // exhaustive at compile time, but a daemon one version ahead can still send a `t` this
       // build has never heard of, and returning undefined here blanks the tab on the next read

@@ -202,7 +202,8 @@ export function firstPrompt(transcript: string): string | undefined {
   return undefined;
 }
 
-function move(from: string, to: string) {
+/** a file or folder to where it is kept next, over whatever was there; nothing when there is none */
+export function move(from: string, to: string) {
   if (!existsSync(from)) return;
   // a restored worktree has no .toyon/ yet for its plans to land in
   mkdirSync(dirname(to), { recursive: true });

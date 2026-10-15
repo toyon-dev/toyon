@@ -2,11 +2,22 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { sh } from "../../test/helpers/tmp-repo.ts";
-import { adoptDir, foreignWorktree, noSelf, registered, settle, until, useWorld, w } from "../../test/helpers/world.ts";
+import {
+  adoptDir,
+  foreignWorktree,
+  foundId,
+  noSelf,
+  registered,
+  settle,
+  until,
+  useWorld,
+  w,
+} from "../../test/helpers/world.ts";
 import { transcriptPathFor } from "../agent/transcript.ts";
 import { UserError } from "../core/errors.ts";
 import { FileService } from "../files/service.ts";
 import { GIT, git } from "../git/exec.ts";
+import { withRepoLock } from "../git/lock.ts";
 import { RepoRegistry } from "../repos/registry.ts";
 import { WorktreeService } from "./service.ts";
 
@@ -294,6 +305,76 @@ describe("create / remove", () => {
     await w.worktrees.archiveWorktree(wt.id);
     expect(existsSync(wt.path)).toBe(false);
     expect(sh(w.repo, "git", "branch", "--list", "their-branch")).toBe("their-branch");
+  });
+
+  test("a take-over lists its record at the press, the message held, and reads git's list behind the lock", async () => {
+    const repoId = await registered();
+    await settle();
+    const dir = foreignWorktree("theirs", "their-branch");
+    const id = await foundId(dir);
+    // a landing holds the lock (keyed by the checkout as registered): the check waits, the row does not
+    let free = () => {};
+    const landing = withRepoLock(
+      w.state.repo(repoId)!.path,
+      () =>
+        new Promise<void>((r) => {
+          free = r;
+        }),
+    );
+    const adopting = w.worktrees.adopt(id, "tab-1", { text: "mine now" });
+    try {
+      await settle();
+      // a found row is named for its branch, and the record keeps that name
+      const row = w.state.worktrees.find((x) => x.branch === "their-branch");
+      expect(row).toMatchObject({ title: "their-branch", createdBy: "tab-1", parked: true });
+      // the found row is gone from the list as the record takes its path
+      expect((await w.worktrees.discovered()).some((f) => f.id === id)).toBe(false);
+      const agent = w.agents.get(row!.id)!;
+      expect(agent.held).toBe(true);
+      expect(agent.sent.map((m) => m.text)).toEqual(["mine now"]);
+      expect(agent.recorded).toEqual([]);
+      free();
+      await landing;
+      const wt = await adopting;
+      await settle();
+      expect(wt).toBe(row!);
+      expect(agent.held).toBe(false);
+      expect(agent.recorded.at(-1)).toMatchObject({ type: "adopted", branch: "their-branch" });
+    } finally {
+      free();
+      await adopting.catch(() => {});
+    }
+  });
+
+  test("a take-over git refuses once it looks takes the record back, and the found row returns", async () => {
+    const repoId = await registered();
+    await settle();
+    const dir = foreignWorktree("theirs", "their-branch");
+    const id = await foundId(dir);
+    const placed = w.state.repo(repoId)?.promptedAt;
+    let free = () => {};
+    const landing = withRepoLock(
+      w.state.repo(repoId)!.path,
+      () =>
+        new Promise<void>((r) => {
+          free = r;
+        }),
+    );
+    const adopting = w.worktrees.adopt(id, "tab-1", { text: "mine now" });
+    await settle();
+    const row = w.state.worktrees.find((x) => x.branch === "their-branch");
+    expect(row).toBeDefined();
+    // another tool takes it while the record is listed: found out under the lock
+    sh(w.repo, "git", "worktree", "lock", "--reason", "busy", dir);
+    free();
+    await landing;
+    await expect(adopting).rejects.toThrow("held by another tool: busy");
+    await settle();
+    expect(w.state.worktree(row!.id)).toBeUndefined();
+    expect(w.runtime.get(row!.id)).toBeUndefined();
+    expect((await w.worktrees.discovered()).find((f) => f.id === id)).toMatchObject({ locked: true });
+    // a refused take-over is not a send: the project keeps its place in the switcher
+    expect(w.state.repo(repoId)?.promptedAt).toBe(placed);
   });
 
   test("main cannot be removed", async () => {

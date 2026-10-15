@@ -954,6 +954,8 @@ export function Composer({
     });
     // into an archived chat: one frame restores the worktree and hands the message to its agent,
     // so the two cannot come apart. Nothing runs there yet, so a `!` command has nowhere to go.
+    // The daemon lists the row at once and checks its tree out behind it, so the message reads
+    // as a plain send: the bubble is up from the press, under the same id the row comes back with.
     if (archived) {
       if (!archived.restorable) return;
       if (shellCmd !== null) {
@@ -964,11 +966,13 @@ export function Composer({
       if (uploading) return hold(boxId, boxId, text.trim(), frame);
       leaveBox();
       sock?.send(fillFrame(frame, boxId, text.trim(), attachments));
-      dispatch({ a: "restoring", id: boxId, message: taken() });
+      dispatch({ a: "sending", id: boxId, message: taken() });
       dispatch({ a: "sent-box", id: boxId });
       return;
     }
-    // into a found worktree's chat: the same one frame, taking it over and handing on the message
+    // into a found worktree's chat: the same one frame, taking it over and handing on the message.
+    // The daemon lists the record at once under an id of its own, and the bubble goes with the
+    // selection to that row when the frame lists it (withSending).
     if (found) {
       if (found.locked) return;
       if (shellCmd !== null) {
@@ -979,7 +983,7 @@ export function Composer({
       if (uploading) return hold(boxId, boxId, text.trim(), frame);
       leaveBox();
       sock?.send(fillFrame(frame, boxId, text.trim(), attachments));
-      dispatch({ a: "restoring", id: boxId, message: taken() });
+      dispatch({ a: "sending", id: boxId, message: taken() });
       dispatch({ a: "sent-box", id: boxId });
       return;
     }

@@ -283,10 +283,11 @@ export class StateStore {
    * still on its books is one that outlived the stop: it moves to the daemon's own bucket, so the
    * next boot still finds it with the worktree gone. The row's send stays on its project: the
    * switcher sorts projects by their newest send and reads it off the rows, so a project whose
-   * rows were all tidied away would otherwise forget it was worked in. The spare carries no send. */
-  removeWorktree(id: string) {
+   * rows were all tidied away would otherwise forget it was worked in. The spare carries no send,
+   * and nor does a row `refused`: one listed ahead of git and taken back when git said no. */
+  removeWorktree(id: string, opts: { refused?: boolean } = {}) {
     const wt = this.state.worktrees.find((w) => w.id === id);
-    const repo = wt && wt.kind !== "spare" ? this.repo(wt.repoId) : undefined;
+    const repo = wt && wt.kind !== "spare" && !opts.refused ? this.repo(wt.repoId) : undefined;
     if (wt && repo) repo.promptedAt = Math.max(repo.promptedAt ?? 0, sentAt(wt));
     this.state.worktrees = this.state.worktrees.filter((w) => w.id !== id);
     delete this.state.sessions[id];

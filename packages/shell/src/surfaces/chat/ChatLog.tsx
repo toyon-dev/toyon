@@ -202,7 +202,6 @@ export function ChatLog({
   const id = active?.worktree.id ?? archived?.id ?? found?.id ?? null;
   const items = useLocalField(id, "chat");
   const queue = useLocalField(id, "queue");
-  const restoring = useLocalField(id, "restoring");
   const sending = useLocalField(id, "sending");
   // each queued message's chips count on from the sent ones and from the messages queued ahead of it
   const sentNumbers = useMemo(
@@ -718,30 +717,6 @@ export function ChatLog({
             />
           ))}
         {tail}
-        {/* sent from an archived page or a found worktree's: newer than the note it answers, so it
-            reads under it, and it stays until the worktree's agent has the message. The page's
-            own restore press has no words: the tag alone says the row is on its way */}
-        {id && restoring !== undefined && (
-          <div className="msg-user queued-msg">
-            <span className="queued-tag">
-              <Icon name="clock" className="icon-inline" />
-              <span className="queued-word">{found ? "taking over" : "restoring"}</span>
-            </span>
-            {(restoring.text || restoring.attachments) && (
-              <div className="queued-text">
-                {restoring.attachments && (
-                  <QueuedChips
-                    items={restoring.attachments}
-                    next={sentNumbers}
-                    worktreeId={id}
-                    onOpen={(path, line) => openSource(store, sock, id, path, line)}
-                  />
-                )}
-                {restoring.text}
-              </div>
-            )}
-          </div>
-        )}
       </div>
       {find && (
         <DocumentFind

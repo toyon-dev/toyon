@@ -8,6 +8,7 @@ import { transcriptPathFor } from "../agent/transcript.ts";
 import { UserError } from "../core/errors.ts";
 import { archiveRef, keepState } from "../git/archive.ts";
 import { git } from "../git/exec.ts";
+import { withRepoLock } from "../git/lock.ts";
 
 // What git keeps of a worktree once it is gone: the archive ref, its changes and history, and a graft back onto a new one.
 
@@ -165,6 +166,79 @@ describe("archive", () => {
     expect(again).toBe(first);
     expect(w.state.worktrees.filter((x) => x.id === wt.id)).toHaveLength(1);
     expect(w.agents.get(wt.id)?.sent.map((m) => m.text)).toEqual(["and the header", "once more"]);
+  });
+
+  test("the row and its chat are listed at the press, the message held, and the checkout follows behind the lock", async () => {
+    const repoId = await registered();
+    const { wt } = await workedOn(repoId);
+    await w.worktrees.archiveWorktree(wt.id);
+    // a landing holds the repo lock (keyed by the checkout as registered): the restore's checkout
+    // waits behind it, the person does not
+    let free = () => {};
+    const landing = withRepoLock(
+      w.state.repo(repoId)!.path,
+      () =>
+        new Promise<void>((r) => {
+          free = r;
+        }),
+    );
+    const restoring = w.worktrees.restore(wt.id, "tab-1", { text: "and the header" });
+    try {
+      await settle();
+      const row = w.state.worktree(wt.id);
+      expect(row).toMatchObject({ createdBy: "tab-1", parked: true, branch: wt.branch });
+      expect(row?.runs).toMatchObject([{ kind: "setup", status: "running", stage: "checking out the branch" }]);
+      expect(existsSync(wt.path)).toBe(false);
+      expect(w.worktrees.archived(repoId)).toEqual([]);
+      // the chat reads from where a live worktree keeps it, and the agent has the message but holds it
+      expect(readFileSync(transcriptPathFor(w.paths.transcriptsDir, wt.id), "utf8")).toBe(userLine("tidy the footer"));
+      const agent = w.agents.get(wt.id)!;
+      expect(agent.held).toBe(true);
+      expect(agent.sent.map((m) => m.text)).toEqual(["and the header"]);
+      expect(agent.recorded).toEqual([]);
+      // nothing to read in its directory yet: no status rather than a failed one, and no procs
+      expect(await w.worktrees.gitStatus(wt.id)).toBeNull();
+      await w.runtime.wake(wt.id);
+      expect(w.runtime.get(wt.id)?.procs).toBeNull();
+      free();
+      await landing;
+      const back = await restoring;
+      await settle();
+      expect(back).toBe(row!);
+      expect(existsSync(back.path)).toBe(true);
+      expect(agent.held).toBe(false);
+      // the word on the restore went on ahead of the message
+      expect(agent.recorded.at(-1)).toMatchObject({ type: "restored", branch: wt.branch, uncommitted: true });
+      expect(readFileSync(join(back.path, "wip.txt"), "utf8")).toBe("untracked\n");
+      expect(await w.worktrees.gitStatus(wt.id)).not.toBeNull();
+    } finally {
+      // a failure above must not leave the restore waiting on the lock into the next test's world
+      free();
+      await restoring.catch(() => {});
+    }
+  });
+
+  test("a checkout git refuses takes the row back: the chat to the archive, nothing of the press left", async () => {
+    const repoId = await registered();
+    const { wt } = await workedOn(repoId);
+    await w.worktrees.archiveWorktree(wt.id);
+    const placed = w.state.repo(repoId)?.promptedAt;
+    // the kept commits are gone from git: found out under the lock, after the row was listed
+    sh(w.repo, "git", "update-ref", "-d", ref(wt.id));
+    await expect(w.worktrees.restore(wt.id, "tab-1", { text: "and the header" })).rejects.toThrow(
+      "kept commits are gone from git",
+    );
+    await settle();
+    expect(w.state.worktree(wt.id)).toBeUndefined();
+    expect(w.runtime.get(wt.id)).toBeUndefined();
+    expect(existsSync(wt.path)).toBe(false);
+    expect(w.worktrees.archived(repoId)).toMatchObject([{ id: wt.id, restorable: true }]);
+    expect(w.worktrees.archivedTranscript(wt.id)).toEqual([
+      { seq: 0, event: { type: "user-message", text: "tidy the footer", ts: 1 } },
+    ]);
+    expect(existsSync(join(w.paths.archiveDir, wt.id, "record.json"))).toBe(true);
+    // a refused restore is not a send: the project keeps its place in the switcher
+    expect(w.state.repo(repoId)?.promptedAt).toBe(placed);
   });
 
   test("the plans a worktree was shown go with its chat, read on its page, and come back on restore", async () => {

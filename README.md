@@ -64,7 +64,7 @@ Each agent signs in from the chat. Claude Code and Codex install on first start;
 | Coming from | What stays | What changes |
 |---|---|---|
 | Claude Code or Codex in a terminal | The same agent under your login, with your permission rules, hooks, slash commands and MCP servers | Each chat gets its own copy of the project with the app running, and nothing lands until you press |
-| Cursor, Zed or VS Code | Your editor and your checkout; any file opens back in your editor | The running app is the centre of every chat, wired to its source |
+| Cursor, Zed or VS Code | Your editor and your checkout; every change lands on disk where your editor already is | The running app is the centre of every chat, wired to its source |
 | Lovable, v0 or Bolt | The loop: a chat and the page it changes, and pointing at an element to talk about it | Your own project on your machine, with your database, Docker and private packages; each chat is a branch in your repository |
 | Conductor or Superset | Many agents at once, each on its own copy | Built around the app instead of the agents; MIT, no account, no telemetry, lands on your machine without GitHub |
 

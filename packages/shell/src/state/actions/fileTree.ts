@@ -4,7 +4,7 @@ import { askAgent, mentionInChat, mentionOf, treeBox } from "../attach.ts";
 import type { Store } from "../context.tsx";
 import { readingView, rowById, type State } from "../store.ts";
 import { copyText, type Deps } from "./deps.ts";
-import { daemonHost, editorItems, revealItems } from "./editor.ts";
+import { daemonHost, revealItems } from "./editor.ts";
 import { openFile } from "./file.ts";
 
 /** Why the tree may not make a file here, or undefined when it may. Main is the launcher: a file
@@ -32,8 +32,7 @@ function newFileItem(store: Store, worktreeId: string, dir: string, newFile: (di
  * file breaks nothing and what goes in it is typed in the editor pane. Renaming and deleting are
  * the agent's, because a rename breaks imports and a moved page changes its URL, and the agent
  * fixes both where a file operation would not; so those entries leave a sentence in the box and
- * send nothing. Editor rows stay off this menu, since the file's own view carries them once it is
- * open. `newIn` is the folder a new file made from this row goes in: the row itself for a folder,
+ * send nothing. `newIn` is the folder a new file made from this row goes in: the row itself for a folder,
  * the folder holding it for a file. */
 export function treeItems(
   row: { worktreeId: string; dir: string; path: string; folder: boolean; newIn: string },
@@ -80,7 +79,7 @@ export function treeItems(
   return grouped([chat, where, shape]);
 }
 
-/** the tree's empty space: a file at the root, then the worktree itself, in an editor or in Finder */
+/** the tree's empty space: a file at the root, then the worktree itself in Finder */
 export function treeSpaceItems(
   wt: { worktreeId: string; dir: string },
   store: Store,
@@ -89,6 +88,6 @@ export function treeSpaceItems(
 ): MenuEntry[] {
   return grouped([
     [newFileItem(store, wt.worktreeId, "", newFile)],
-    editorItems(wt.dir, () => deps.sock?.send({ t: "reveal", worktreeId: wt.worktreeId }), daemonHost(deps.sock)),
+    revealItems(() => deps.sock?.send({ t: "reveal", worktreeId: wt.worktreeId }), daemonHost(deps.sock)),
   ]);
 }

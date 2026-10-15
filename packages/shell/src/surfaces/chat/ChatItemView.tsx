@@ -701,7 +701,7 @@ export const ToolRow = memo(
         label={run && count ? `${what}, ${count}` : tools.length > 1 ? `${what}, ${tools.length} calls` : what}
         menu={(fold) => {
           const w = worktreeById(store.getState(), worktreeId);
-          const wt = w ? { id: w.worktree.id, dir: w.worktree.path } : null;
+          const wt = w ? { id: w.worktree.id } : null;
           return toolRowItems(tools, roots ?? [], wt, { sock, dispatch: store.dispatch }, fold);
         }}
         summary={
@@ -936,11 +936,6 @@ export const ChatItemView = memo(function ChatItemView({
   const urls = useUrls();
   const cm = useContextMenu("chat");
   const deps = { sock, dispatch: store.dispatch };
-  // the worktree's directory, for a path a row names without its root
-  const dirOf = () => {
-    const w = worktreeById(store.getState(), worktreeId);
-    return w ? w.worktree.path : null;
-  };
   // the agent runs at the worktree's real path even when the UI gives it a title-shaped symlink
   const fileRoot = () => worktreeById(store.getState(), worktreeId)?.worktree.path;
   switch (item.kind) {
@@ -987,7 +982,6 @@ export const ChatItemView = memo(function ChatItemView({
                   <PickChip
                     key={`${a.kind}-${a.n}`}
                     pick={a}
-                    dir={dirOf()}
                     className="in-chat"
                     tipText="Hover to highlight on the page"
                     onHover={(entering) => onPickHover?.(a, entering)}
@@ -1111,7 +1105,7 @@ export const ChatItemView = memo(function ChatItemView({
           word="blocked"
           tone="red"
           below={<div className="daemon-below row-dim">{item.reason}</div>}
-          {...cm.contextMenu(() => pathItems(item.path, dirOf(), undefined, daemonHost(deps.sock)))}
+          {...cm.contextMenu(() => pathItems(item.path, undefined, daemonHost(deps.sock)))}
         >
           <span className="tool-name">{item.tool}</span>
           {item.path && <span className="tool-hint">{item.path}</span>}

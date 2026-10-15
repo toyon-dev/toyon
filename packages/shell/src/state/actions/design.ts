@@ -1,6 +1,6 @@
 import { grouped, type MenuEntry } from "../../ui/menu.ts";
 import { copyText, type Deps } from "./deps.ts";
-import { daemonHost, editorItems } from "./editor.ts";
+import { daemonHost, revealItems } from "./editor.ts";
 
 /** a token or a face in the design pane: nothing to open, since a value has no line to go to,
  * but the name and the value are both things to paste */
@@ -16,9 +16,9 @@ export function designLiteralItems(value: string): MenuEntry[] {
   return [{ id: "copy-value", label: "copy value", detail: value, onClick: () => copyText(value) }];
 }
 
-/** a row of the design pane's inventory: the file it came from, opened here or elsewhere */
+/** a row of the design pane's inventory: the file it came from, opened here or shown in Finder */
 export function designRowItems(
-  wt: { id: string; dir: string },
+  wt: { id: string },
   path: string | undefined,
   { sock }: Deps,
   onOpen: () => void,
@@ -26,7 +26,7 @@ export function designRowItems(
   if (!path) return [];
   return grouped([
     [{ id: "source", label: "open source", onClick: onOpen }],
-    editorItems(`${wt.dir}/${path}`, () => sock?.send({ t: "reveal", worktreeId: wt.id, path }), daemonHost(sock)),
+    revealItems(() => sock?.send({ t: "reveal", worktreeId: wt.id, path }), daemonHost(sock)),
     [{ id: "copy-path", label: "copy path", onClick: () => copyText(path) }],
   ]);
 }

@@ -20,7 +20,6 @@ import { languageOf, paintCode } from "./syntax.ts";
  * somewhere to go: a pick keeps pointing at its source long after the message it rode in on. */
 export function PickChip({
   pick,
-  dir,
   worktreeId,
   tipText,
   onHover,
@@ -29,8 +28,6 @@ export function PickChip({
   className = "",
 }: {
   pick: PickMeta;
-  /** the worktree the paths are read in, for the menu's editors, which want a file on disk */
-  dir: string | null;
   /** the worktree whose copy of the source the hover reads */
   worktreeId?: string | null;
   tipText?: string;
@@ -59,7 +56,7 @@ export function PickChip({
       label
     );
   const cm = useContextMenu("chat");
-  // the host the file is on: the daemon's, for the editor rows a path offers
+  // the host the file is on: the daemon's, for the Finder reveal a path offers
   const { host } = useUrls();
   const chip = useRef<HTMLDivElement | null>(null);
   // a remove unmounts the chip under the pointer, so no mouseleave follows: the hover ends here or
@@ -77,7 +74,7 @@ export function PickChip({
       data-tip={tipText}
       onMouseEnter={() => onHover?.(true)}
       onMouseLeave={() => onHover?.(false)}
-      {...cm.contextMenu(() => pickItems(pick, { dir, remove, host }))}
+      {...cm.contextMenu(() => pickItems(pick, { remove, host }))}
     >
       <span className="pick-target">
         <Icon name="pick" className="icon-inline" /> {pickLabel(pick)}

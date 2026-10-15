@@ -1111,7 +1111,6 @@ export function Composer({
   const sentBefore = spawning ? [] : chat.map((c) => (c.kind === "user" ? c.attachments : undefined));
   // a queued message takes its numbers ahead of what is written here
   const queued = spawning ? [] : queue.flatMap((q) => q.attachments ?? []);
-  const dir = active ? active.worktree.path : null;
   const plan = active?.worktree.plan;
   // the stop stands in for the field's esc, so it goes with the field when an ask card takes its
   // place: there esc parks the question, and a stop beside the ask's send read as the send's
@@ -1150,7 +1149,6 @@ export function Composer({
           {...cm.contextMenu(() =>
             pathItems(
               plan,
-              dir,
               () => sock?.send({ t: "reveal", worktreeId: active.worktree.id, path: plan }),
               daemonHost(sock),
             ),
@@ -1290,7 +1288,6 @@ export function Composer({
             <PickChip
               key={item.key}
               pick={item}
-              dir={dir}
               tipText={item.html}
               onHover={(entering) =>
                 frameId &&

@@ -854,9 +854,7 @@ function Row({
         onClick={onOpen}
         disabled={!path}
         {...cm.contextMenu(() =>
-          active
-            ? designRowItems({ id: active.worktree.id, dir: active.worktree.path }, path, { sock, dispatch }, onOpen)
-            : [],
+          active ? designRowItems({ id: active.worktree.id }, path, { sock, dispatch }, onOpen) : [],
         )}
       >
         <span className="design-count row-dim">{count}</span>

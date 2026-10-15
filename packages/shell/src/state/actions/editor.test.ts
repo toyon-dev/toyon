@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { editorItems, openedOnDaemonMachine } from "./editor.ts";
+import { openedOnDaemonMachine, revealItems } from "./editor.ts";
 
-// An editor link names a path on the daemon's disk and opens wherever the browser is, so it only
-// means something when the page is open on the daemon's own machine.
+// A Finder reveal opens on the daemon's screen, so it only means something when the page is open
+// on the daemon's own machine.
 
-describe("editor links", () => {
+describe("Finder reveal", () => {
   test("a loopback page is on the daemon's machine; a public name or a tailnet name is not", () => {
     for (const here of ["127.0.0.1", "localhost", "[::1]", "toyon.localhost", "w3.toyon.localhost"]) {
       expect(openedOnDaemonMachine(here)).toBe(true);
@@ -14,12 +14,15 @@ describe("editor links", () => {
     }
   });
 
-  test("on the daemon's machine every editor and the Finder reveal are offered", () => {
-    const ids = editorItems("/w/src/a.ts", () => {}, "toyon.localhost").map((i) => i.id);
-    expect(ids).toEqual(["open:zed", "open:vscode", "open:cursor", "reveal"]);
+  test("on the daemon's machine the reveal is the one row, and no editor is offered", () => {
+    expect(revealItems(() => {}, "toyon.localhost").map((i) => i.id)).toEqual(["reveal"]);
   });
 
   test("from another device nothing is offered, since nothing there could open", () => {
-    expect(editorItems("/w/src/a.ts", () => {}, "toyon.example.com")).toEqual([]);
+    expect(revealItems(() => {}, "toyon.example.com")).toEqual([]);
+  });
+
+  test("a path with no place to reveal offers nothing", () => {
+    expect(revealItems(undefined, "toyon.localhost")).toEqual([]);
   });
 });

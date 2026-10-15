@@ -2,7 +2,7 @@ import type { PickMeta } from "@toyon/shared";
 import { grouped, type MenuEntry, type MenuItem } from "../../ui/menu.ts";
 import { openByPath } from "../openOutside.ts";
 import { copyImage, copyText, copyTextFrom, type Deps, openOutItem } from "./deps.ts";
-import { daemonHost, editorItems, revealItems } from "./editor.ts";
+import { daemonHost, revealItems } from "./editor.ts";
 import { openFile, openFolder } from "./file.ts";
 
 /** what a chip can do besides what it is: opened at full size when the menu is on the chip and
@@ -64,9 +64,8 @@ export function linkOpener(link: ChatLink, worktreeId: string | null | undefined
 }
 
 /** a link to a file: the open the press makes, where it sits in Finder, then the path as text.
- * The row is already the way into the editor pane, so no editor is offered here: the one open
- * ends in the pane, whose own menu names the editors. A file of this worktree is revealed through
- * its row; any other path is revealed by where it is on the daemon's disk. */
+ * A file of this worktree is revealed through its row; any other path is revealed by where it is
+ * on the daemon's disk. */
 function fileLinkGroups(link: Exclude<ChatLink, { kind: "out" }>, worktreeId: string | null, deps: Deps): MenuItem[][] {
   const open = linkOpener(link, worktreeId, deps);
   const { sock } = deps;
@@ -124,32 +123,24 @@ export function messageItems(
   return grouped([codeItems(at.code), ...lead, copy, again]);
 }
 
-/** a path a row names, as the groups every such row shares: the editors that can open it, and the
- * Finder reveal when the caller can ask the daemon for one, then the path as text. A relative path
- * is read in `dir`, since the editors want a file on disk, and the path copied is the one the row
- * shows. `host` is the daemon's the file is on (editor.ts). */
-function pathGroups(path: string, dir: string | null, onReveal: (() => void) | undefined, host: string): MenuItem[][] {
-  const abs = path.startsWith("/") ? path : dir ? `${dir}/${path}` : null;
-  const open: MenuItem[] = abs ? editorItems(abs, onReveal, host) : [];
-  return [open, [{ id: "copy-path", label: "copy path", onClick: () => copyText(path) }]];
+/** a path a row names, as the groups every such row shares: the Finder reveal when the caller can
+ * ask the daemon for one, then the path as text, which is the one the row shows. `host` is the
+ * daemon's the file is on (editor.ts). */
+function pathGroups(path: string, onReveal: (() => void) | undefined, host: string): MenuItem[][] {
+  return [revealItems(onReveal, host), [{ id: "copy-path", label: "copy path", onClick: () => copyText(path) }]];
 }
 
 /** a row that is about a path and nothing else: a blocked call naming the file it wanted, or the
  * plan a worktree runs on, which is a file of the worktree and so can be shown in Finder */
-export function pathItems(
-  path: string,
-  dir: string | null,
-  onReveal: (() => void) | undefined,
-  host: string,
-): MenuEntry[] {
-  return grouped(pathGroups(path, dir, onReveal, host));
+export function pathItems(path: string, onReveal: (() => void) | undefined, host: string): MenuEntry[] {
+  return grouped(pathGroups(path, onReveal, host));
 }
 
 /** a picked element: the file it was rendered from, which is the call site when the pick found
  * one, as any path a row names; and off the message */
-export function pickItems(pick: PickMeta, ui: { dir?: string | null; remove?: () => void; host: string }): MenuEntry[] {
+export function pickItems(pick: PickMeta, ui: { remove?: () => void; host: string }): MenuEntry[] {
   const file = pick.callFile ?? pick.file;
-  const path: MenuItem[][] = file ? pathGroups(file, ui.dir ?? null, undefined, ui.host) : [];
+  const path: MenuItem[][] = file ? pathGroups(file, undefined, ui.host) : [];
   const remove: MenuItem[] = ui.remove ? [{ id: "remove", label: "remove", onClick: ui.remove }] : [];
   return grouped([...path, remove]);
 }

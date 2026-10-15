@@ -67,13 +67,11 @@ function QueuedChips({
   items,
   next,
   worktreeId,
-  dir,
   onOpen,
 }: {
   items: readonly (AttachmentInput | PendingAttachment)[];
   next: Readonly<Record<AttachmentKind, number>>;
   worktreeId: string;
-  dir: string | null;
   onOpen: (path: string, line: number) => void;
 }) {
   const urls = useUrls();
@@ -112,7 +110,7 @@ function QueuedChips({
             text={a.text}
           />
         ) : (
-          <PickChip key={`pick-${n}`} className="in-chat" pick={a} dir={dir} worktreeId={worktreeId} onOpen={onOpen} />
+          <PickChip key={`pick-${n}`} className="in-chat" pick={a} worktreeId={worktreeId} onOpen={onOpen} />
         ),
       )}
     </div>
@@ -126,13 +124,11 @@ function HeldRow({
   entry,
   next,
   worktreeId,
-  dir,
   onOpen,
 }: {
   entry: OutboxEntry;
   next: Readonly<Record<AttachmentKind, number>>;
   worktreeId: string;
-  dir: string | null;
   onOpen: (path: string, line: number) => void;
 }) {
   const dispatch = useDispatch();
@@ -145,9 +141,7 @@ function HeldRow({
         <span className="queued-word">uploading</span>
       </span>
       <div className="queued-text">
-        {items.length > 0 && (
-          <QueuedChips items={items} next={next} worktreeId={worktreeId} dir={dir} onOpen={onOpen} />
-        )}
+        {items.length > 0 && <QueuedChips items={items} next={next} worktreeId={worktreeId} onOpen={onOpen} />}
         {text}
       </div>
       <span className="queued-actions">
@@ -591,7 +585,6 @@ export function ChatLog({
                 items={sending.message.attachments}
                 next={sentNumbers}
                 worktreeId={id}
-                dir={active?.worktree.path ?? null}
                 onOpen={(path, line) => openSource(store, sock, id, path, line)}
               />
             )}
@@ -673,7 +666,6 @@ export function ChatLog({
                       items={message.attachments}
                       next={queuedNumbers[i] ?? sentNumbers}
                       worktreeId={id}
-                      dir={active?.worktree.path ?? null}
                       onOpen={(path, line) => openSource(store, sock, id, path, line)}
                     />
                   )}
@@ -701,7 +693,6 @@ export function ChatLog({
               entry={entry}
               next={next}
               worktreeId={id}
-              dir={active?.worktree.path ?? null}
               onOpen={(path, line) => openSource(store, sock, id, path, line)}
             />
           ))}
@@ -722,7 +713,6 @@ export function ChatLog({
                     items={restoring.attachments}
                     next={sentNumbers}
                     worktreeId={id}
-                    dir={found?.path ?? null}
                     onOpen={(path, line) => openSource(store, sock, id, path, line)}
                   />
                 )}

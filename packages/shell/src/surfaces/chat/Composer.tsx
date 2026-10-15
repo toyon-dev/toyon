@@ -20,6 +20,7 @@ import {
   nextNumbers,
   numbered,
   numbersAfter,
+  shipNoun,
 } from "@toyon/shared";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { clipboardOfferDone, useCopied } from "../../app/clipboardOffer.ts";
@@ -975,6 +976,14 @@ export function Composer({
     }
     if (!active || !id) return;
     if (shellCmd !== null) {
+      // A command has no queue to wait in while a landing op rewrites the tree, so the daemon
+      // refuses it; refused here instead, before the box clears, the words stay typed and Enter
+      // sends them again once the op is done. The daemon's own refusal stays for the race where
+      // the op starts between this press and the frame landing.
+      if (shellCmd && op && !drafting) {
+        refuse(`${shipNoun(op)} is running here; run the command once it is done`);
+        return;
+      }
       // a command runs where it was typed: in the worktree's own transcript, or for a draft, which
       // has none, in the lead's terminal. Attachments are for the agent and stay for the next message.
       if (shellCmd && drafting) dispatch({ a: "term-run", id, command: shellCmd });

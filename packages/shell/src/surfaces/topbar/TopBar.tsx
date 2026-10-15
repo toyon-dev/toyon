@@ -27,6 +27,7 @@ import { ProjectPicker } from "../overlays/ProjectPicker.tsx";
 import { chord } from "../util.ts";
 import "./topbar.css";
 import { Field } from "../../ui/Field.tsx";
+import { useFloatUp } from "../../ui/Float.tsx";
 import { navCluster } from "./navCluster.ts";
 import { RoutePicker } from "./RoutePicker.tsx";
 
@@ -40,6 +41,9 @@ export function TopBar({ center }: { center: HTMLDivElement | null }) {
   const centre = useEdgesOf(center);
   const barRef = useRef<HTMLDivElement>(null);
   usePinToView(barRef);
+  // a float is up that a press would close: the installed app's bar gives up being the window's
+  // drag region for as long as it is, so a press on the bar's blank strip reaches the page
+  const floatUp = useFloatUp();
   const [leadRef, lead] = useEdges<HTMLSpanElement>();
   const [toolsRef, tools] = useEdges<HTMLSpanElement>();
   const nav = navCluster({ winW, centre, leadRight: lead.right, toolsLeft: tools.left });
@@ -93,7 +97,7 @@ export function TopBar({ center }: { center: HTMLDivElement | null }) {
     />
   );
   return (
-    <div className="top-bar" ref={barRef}>
+    <div className="top-bar" ref={barRef} data-float-up={floatUp || undefined}>
       {zen && <span className="bar-zen-title">{active?.worktree.title ?? "Toyon"}</span>}
       {/* the lead: what stands at the bar's start in flow, measured so the cluster clears it */}
       <span className="bar-lead" ref={leadRef}>

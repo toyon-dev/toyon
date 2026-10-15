@@ -148,6 +148,14 @@
       -webkit-app-region: no-drag;
       app-region: no-drag;
     }
+    /* A press on the drag region goes to the OS and never reaches the page, so with a list or a
+     menu up there was nothing a press on the bar's blank strip could close. While one is up the
+     bar is not a drag region (TopBar reads the float stack): the press lands, the float closes,
+     and the bar drags again as soon as nothing is up. */
+    .top-bar[data-float-up] {
+      -webkit-app-region: no-drag;
+      app-region: no-drag;
+    }
     /* zen keeps a bare title strip here: the top bar *is* the window's title bar (drag region,
      traffic lights, ⌄ ⋮ overlay), so dropping it would leave the preview under the controls
      and the window undraggable. The worktree name centred, and the zen toggle alone at its usual

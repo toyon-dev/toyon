@@ -6,6 +6,7 @@ import {
   useImperativeHandle,
   useLayoutEffect,
   useRef,
+  useSyncExternalStore,
 } from "react";
 import { cx } from "./cx.ts";
 import "./float.css";
@@ -59,6 +60,14 @@ type Props = Omit<HTMLAttributes<HTMLDivElement>, "style"> & {
   boxRef?: MutableRefObject<HTMLDivElement | null>;
   handle?: Ref<FloatHandle>;
 };
+
+/** whether a float a press can close is up: what the installed app's title bar reads to stop
+ * being a drag region, so a press on its blank strip reaches the page and closes the float
+ * instead of being handed to the OS to move the window */
+const anyDismissable = () => floats.open().some((e) => !!e.dismiss);
+export function useFloatUp(): boolean {
+  return useSyncExternalStore(floats.watch, anyDismissable, () => false);
+}
 
 /** older engines without the top layer still get a placed box, one rung of the old ladder short */
 const CAN_POPOVER = typeof HTMLElement !== "undefined" && "showPopover" in HTMLElement.prototype;

@@ -2,6 +2,39 @@
 
 What changed in each release of Toyon, newest first.
 
+## 0.15.0 (2026-10-15)
+
+A row from another project that is waiting on you now shows on the rail in front of you, files dropped on the rail land in a worktree's composer, and a tool row that touched a file grows an eye that opens it.
+
+### New
+- A row from another project joins the rail while its agent is waiting on you, or while a turn there finished unseen. It stays while you read it, so answering or clearing it does not pull it away. Before, a blocked agent in another project stayed out of sight until you opened the switcher.
+- Dragging files from your desktop over the rail unfurls it and lights the row under the pointer, and a short rest on a row switches to it. Dropping puts the files in that worktree's composer; a drop on the lead row opens a new draft with them.
+- A tool row that reads or writes a file carries an eye button that opens it: the diff for an edit, otherwise the file, with markdown rendered first. It appears once the tool call has returned, so it never points at a file that does not exist yet.
+- The changes tab shows a preview button when a pull request has a deploy preview, read from its status checks (Amplify, Netlify) or from its newest successful deployment (Vercel, Cloudflare Pages, Render). The PR line in the composer and on the rail card ends with "preview up". A merged or closed PR carries none.
+- After Toyon updates itself, a chip in the top bar opens what changed, in the centre, as these notes.
+
+### Changed
+- Keyboard focus shows as a rounded ring in the accent colour on every control, row and link, kept inside the row's band so it never crosses a bubble edge or the next row.
+- The commit subject, body and recap are written while the check still runs, so the commit box fills in sooner, and a failed check keeps the message on the row.
+- A first message on the warm row where new work is typed starts the row at once and the git work follows: the row says checking out and then copying dependencies, and the chat log says it is waiting for the agent when the start takes a while. Lands and branch writes no longer wait on a checkout, so a large project does not hold them up. If the start fails, the message returns to the box unsent.
+- Open menus no longer offer Zed, VS Code or Cursor. A file outside the worktree gets an open row that reads it in the editor pane, every menu keeps reveal in Finder, and reveal works on any path, including a backticked absolute path in the chat. The editor pane's "open in" dropdown is now a reveal button.
+- The editor pane hides the diff toggle when a file reads the same on both sides, not only when it is new to the branch. Typing into such a file brings the toggle back once the autosave reaches disk.
+- An agent whose adapter is missing or still downloading says so in settings, the picker and the composer. A failed download is retried with a growing wait, and an adapter that arrives by another route clears the failure.
+- Plan approval offers auto first, matching Claude Code's own dialog.
+- A tool search row reads as a sentence: "loading a tool", then "loaded WebSearch, WebFetch" or "looked for a tool: notebook jupyter".
+- The usage panel on the compact ring opens on keyboard focus as well as on hover, sits centred above the ring like a tooltip, and drops when the ring's menu opens.
+- The offer to install Toyon as an app shows in the composer as well as the top bar.
+
+### Fixed
+- When the agent enters plan mode on its own, the chip and the rail follow it; they stayed on auto.
+- The generated commit text sometimes described the previous landing instead of the files being committed. It now covers the work since the last landing, including one made by hand in a terminal, and squash and PR text list the branch's earlier subjects under a line saying they were squashed in.
+- A question card left open across a restart stays open and can still be answered, instead of being settled as cancelled.
+- Pressing a verb word in the empty composer (land, update, merge, check, archive) returns focus to the composer instead of dropping it on the page, and check no longer picks up a stray note from the press.
+- The standing project list in the picker leads with the open project, so down reaches the other project instead of "new project".
+- The transcript no longer shifts sideways as a card comes and goes; the space for its scrollbar is held either way.
+- A tip from a chip no longer shows over a view expanded from it.
+- In `!` mode the first line of the composer keeps its height, so the placeholder, caret and text no longer sit a few pixels up.
+
 ## 0.14.0 (2026-10-14)
 
 Once Toyon is installed as an app from the top bar, `toyon .` opens it there, and the chats palette says what each chat was about.

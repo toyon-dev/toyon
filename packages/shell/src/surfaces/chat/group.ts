@@ -93,6 +93,27 @@ function follows(item: ToolItem, last: ChatEntry | undefined, roots: string[]): 
   );
 }
 
+/** The row that shines while the agent decides its next move, or -1. Between an edit returning
+ * and the next call opening nothing is in flight, and the next call is another edit of the same
+ * file about half the time (599 of 1248 calls after an edit, over every transcript on this
+ * machine as of 2026-10-15; a read is followed by the same file one time in ten, a fetch by the
+ * same host never). The row already shines for a call of its own whose path is not in (`next`),
+ * so holding the shine through the gap before it is the same claim a beat earlier, and it spares
+ * the foot of the log a mark that appears and vanishes between every two edits. Only the newest
+ * row of the flow, only a run of edits that returned clean, and only with nothing after it: a
+ * thought, a reply or a call of another kind landing takes the shine with it. The log hands it
+ * back to the mark once the silence is long (QUIET_AFTER), where the mark's word says whose wait
+ * it is and a shine on a file would not. */
+export function heldRow(entries: ChatEntry[], roots: string[]): number {
+  const i = entries.length - 1;
+  const last = entries[i];
+  if (!last || !("tools" in last) || last.next) return -1;
+  const head = last.tools[0]!;
+  const end = last.tools.at(-1)!;
+  if (head.toolKind !== "edit" || head.parentToolId || !end.done || end.isError) return -1;
+  return groupKey(head, roots) ? i : -1;
+}
+
 /** the calls that started a subagent: any the adapter flagged as one, and any a later call names
  * as its parent. The second is for a transcript written before the flag was kept, whose children
  * would otherwise have no row to fold under. */

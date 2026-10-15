@@ -33,6 +33,7 @@ import { FileChip } from "./FileChip.tsx";
 import {
   type ChatEntry,
   groupTools,
+  heldRow,
   indexOfSeq,
   openRow,
   ownCallRunning,
@@ -477,6 +478,11 @@ export function ChatLog({
   const calling = ownCallRunning(items);
   const fanned = floating.length > 0;
   const moving = streaming >= 0 || calling || fanned;
+  // The gap between an edit returning and the next call: the edit row keeps its shine for the
+  // call that most likely comes next (heldRow in group.ts), and the mark under the log stays
+  // away, so a short gap moves nothing at the foot. A silence past the threshold is news, and
+  // the mark's word (thinking, waiting for the model) says whose it is, so the row lets go then.
+  const holding = working && !moving && quiet < QUIET_AFTER ? heldRow(entries, roots) : -1;
   // the rows written behind the executing one that have not started, which hold still until they do
   const queued = useMemo(() => queuedRows(entries), [entries]);
   // The one call executing, the head of the batch, and when it got there, stamped by the store
@@ -504,6 +510,7 @@ export function ChatLog({
               tools: entry.tools,
               next: entry.next,
               live: i === liveRow || entry.at === newestShell,
+              held: i === holding,
               since: sinceOf(entry),
               queued: queued.has(i),
               roots,
@@ -603,6 +610,7 @@ export function ChatLog({
               !(active.agent === "waiting" && askInBox) &&
               !calling &&
               !fanned &&
+              holding < 0 &&
               !(moving && quiet < QUIET_AFTER))) && (
             <div className="working-row">
               {/* waiting is not activity: it is blocked on you, and the rail keeps that dot steady

@@ -561,6 +561,7 @@ export const ToolRow = memo(
     next,
     live,
     working,
+    held,
     since,
     queued,
     roots,
@@ -581,6 +582,10 @@ export const ToolRow = memo(
      * shine that came and went with each call would restart its sweep every time and strobe
      * rather than travel. */
     working?: boolean;
+    /** the agent is deciding its next move and this run of edits is where it most likely lands
+     * (heldRow in group.ts): the row shines through the gap, as it does for a call of its own
+     * whose path has not arrived, so no mark comes and goes at the foot between two edits */
+    held?: boolean;
     /** this row's call is the one executing (runningOf in the store), so its wait is counted
      * here, from this stamp: when the call reached the head of the batch, by the store's clock.
      * A floating spawn row is handed the log's last event instead (ChatLog): a subagent's calls
@@ -609,7 +614,7 @@ export const ToolRow = memo(
     const background = streaming && !!last.background;
     // the row is alive while its own last call runs, and while the agent writes the run's next
     // call: that one has no row until its path is in, and this row's shine is what says it is coming
-    const alive = streaming || !!next;
+    const alive = streaming || !!next || !!held;
     // A spawn row shines while its subagent works. A spawn run in the background returns at once,
     // so its own call says nothing about the subagent; the log says when it is at work.
     // A call queued behind another is open and not running, and its row says so by not moving: the
@@ -814,6 +819,7 @@ export const ToolRow = memo(
   (a, b) =>
     a.live === b.live &&
     a.working === b.working &&
+    a.held === b.held &&
     a.since === b.since &&
     a.queued === b.queued &&
     a.next === b.next &&

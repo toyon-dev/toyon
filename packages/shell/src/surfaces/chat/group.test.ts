@@ -4,6 +4,7 @@ import type { ChatItem } from "../../state/store.ts";
 import {
   type ChatEntry,
   groupTools,
+  heldRow,
   openRow,
   ownCallRunning,
   placeSpawns,
@@ -756,5 +757,37 @@ describe("runningInRun", () => {
       sub("task1", "/wt/a.ts", { done: false }),
     ];
     expect(runOf(items)).toBe(0);
+  });
+});
+
+describe("heldRow", () => {
+  const roots = ["/wt"];
+  const held = (items: ChatItem[]) => heldRow(groupTools(items, roots), roots);
+
+  test("a run of edits that returned is the row the agent most likely adds to next", () => {
+    expect(held([text("Now the sidebar:"), tool("edit", "/wt/a.ts"), tool("edit", "/wt/a.ts")])).toBe(1);
+    expect(held([tool("edit", "/wt/a.ts")])).toBe(0);
+  });
+
+  test("only the newest row: anything after the run takes the shine with it", () => {
+    expect(held([tool("edit", "/wt/a.ts"), text("Done.")])).toBe(-1);
+    expect(held([tool("edit", "/wt/a.ts"), thought("The caller next.")])).toBe(-1);
+    expect(held([tool("edit", "/wt/a.ts"), tool("read", "/wt/b.ts", { name: "Read" })])).toBe(-1);
+  });
+
+  test("not a read, a command or a failed edit: the next call is anything after those", () => {
+    expect(held([tool("read", "/wt/a.ts", { name: "Read" })])).toBe(-1);
+    expect(held([tool("execute", "", { name: "Bash", input: { command: "ls" } })])).toBe(-1);
+    expect(held([tool("edit", "/wt/a.ts", { isError: true })])).toBe(-1);
+  });
+
+  test("a run still open, or already shining for its next call, is not held: it is live on its own", () => {
+    expect(held([tool("edit", "/wt/a.ts"), tool("edit", "/wt/a.ts", { done: false })])).toBe(-1);
+    const writing = tool("edit", "", { input: {}, done: false, title: "Preparing file…" });
+    expect(held([tool("edit", "/wt/a.ts"), writing])).toBe(-1);
+  });
+
+  test("a subagent's edits are not the main agent's next move", () => {
+    expect(held([spawn("task1", "Fix it"), tool("edit", "/wt/a.ts", { parentToolId: "task1" })])).toBe(-1);
   });
 });

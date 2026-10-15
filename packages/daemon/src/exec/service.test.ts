@@ -99,7 +99,7 @@ function toolIdOf(agent: FakeAgent, at = 0): string {
 describe("ExecService.run", () => {
   test("a command typed while a landing op is out is refused before it runs", () => {
     const { exec, agent, holds } = world(undefined, () => ({ op: "land", step: "rebasing onto main" }));
-    expect(() => exec.run("w1", "echo hi")).toThrow("a land is running here; run the command once it is done");
+    expect(() => exec.run("w1", "echo hi")).toThrow("a merge is running here; run the command once it is done");
     expect(agent.recorded).toEqual([]);
     expect(holds).toEqual([]);
   });

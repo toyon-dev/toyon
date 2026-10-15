@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { landedNow, movedPastLand, prTaken } from "./land.ts";
+import { landCommand, landedNow, landWord, movedPastLand, prTaken, shipNoun } from "./land.ts";
 
 // The one rule every landing path shares: a row is landed when the base has its work, read
 // from the recorded landings and the tree, never from an ahead count alone.
@@ -41,6 +41,21 @@ describe("movedPastLand", () => {
     expect(movedPastLand({ lands: [land] }, { clean: false, head: "t1", ahead: 3 })).toBe(false);
     expect(movedPastLand({ lands: [land] }, { clean: true, head: "b1", ahead: 0 })).toBe(false);
     expect(movedPastLand({}, { clean: true, head: "t2", ahead: 1 })).toBe(false);
+  });
+});
+
+describe("the word on the press", () => {
+  test("the local routes merge, whatever the method; the PR route opens a PR", () => {
+    expect(landWord({ land: "merge" })).toBe("merge");
+    expect(landWord({ land: "push" })).toBe("merge");
+    expect(landWord({ land: "pr" })).toBe("open PR");
+    expect(landCommand({ land: "push" })).toBe("merge");
+    expect(landCommand({ land: "pr" })).toBe("pr");
+  });
+  test("a land op is named by its route's word in a refusal", () => {
+    expect(shipNoun("land", { land: "merge" })).toBe("a merge");
+    expect(shipNoun("land", { land: "pr" })).toBe("a PR");
+    expect(shipNoun("commit", { land: "pr" })).toBe("a commit");
   });
 });
 

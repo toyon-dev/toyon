@@ -51,7 +51,7 @@ export function landedLines(lands: readonly LandMark[] | undefined, max = 3): st
   const lines = shown.map(({ at, line }) =>
     said.length === 1 ? ended(line) : `${capital(when(ago(at)))}: ${ended(line)}`,
   );
-  return earlier > 0 ? [`${earlier} earlier landing${earlier === 1 ? "" : "s"}.`, ...lines] : lines;
+  return earlier > 0 ? [`${earlier} earlier merge${earlier === 1 ? "" : "s"}.`, ...lines] : lines;
 }
 
 /** The worktree's PR as the placeholder's first line: what GitHub is waiting on, or that it is
@@ -162,13 +162,13 @@ function factsOf(l: Landing, count: number): string {
 const clause = (text: string) =>
   /^[A-Z][a-z]+(\s|$)/.test(text) ? `${text.charAt(0).toLowerCase()}${text.slice(1)}` : text;
 
-/** How far the branch trails main, for the land verb's tooltip: the count is decided at the
- * press, since land takes main in before anything else, so it is said there and not on a row of
- * its own under the box, which would leave as the land ran and move the verb from under the
- * cursor. Empty when the branch is level. */
+/** How far the branch trails main, for the landing word's tooltip: the count is decided at the
+ * press, since the press takes main in before anything else, so it is said there and not on a
+ * row of its own under the box, which would leave as the op ran and move the word from under
+ * the cursor. Empty when the branch is level. */
 export function behindFact(defaultBranch: string, behind: number | undefined): string {
   const n = behind ?? 0;
-  return n > 0 ? `${n} behind ${defaultBranch}; land takes it in first.` : "";
+  return n > 0 ? `${n} behind ${defaultBranch}, taken in first.` : "";
 }
 
 /** What is here to check, when no sentence and no message says it: the count alone */

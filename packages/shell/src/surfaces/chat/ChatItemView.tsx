@@ -1,4 +1,4 @@
-import { LOGIN_STREAM, type PickMeta, SHELL_TOOL, type ShipOp, type ToolImage } from "@toyon/shared";
+import { type LandRoute, LOGIN_STREAM, type PickMeta, SHELL_TOOL, type ShipOp, type ToolImage } from "@toyon/shared";
 import { Fragment, memo, type ReactNode, useMemo, useRef, useState } from "react";
 import { copyText } from "../../state/actions/deps.ts";
 import { daemonHost } from "../../state/actions/editor.ts";
@@ -7,7 +7,7 @@ import { type ChatLink, codeItems, imageItems, messageItems, pathItems } from ".
 import { archiveWorktrees } from "../../state/actions/worktree.ts";
 import { useDispatch, useSock, useStore, useStoreInstance, useUrls } from "../../state/context.tsx";
 import { openSource } from "../../state/openSource.ts";
-import { type ChatItem, worktreeById } from "../../state/store.ts";
+import { type ChatItem, landRouteOf, worktreeById } from "../../state/store.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { Field } from "../../ui/Field.tsx";
@@ -543,13 +543,14 @@ export const ThoughtRow = memo(function ThoughtRow({
  * whether a wait is long. */
 export const QUIET_AFTER = 6;
 
-/** the landing op a shell row's stop would end, as its label names it */
-const SHIP_THE: Record<ShipOp, string> = {
-  land: "the land",
-  commit: "the commit",
-  "sync-main": "the sync",
-  "pull-main": "the pull",
-};
+/** the landing op a shell row's stop would end, as its label names it; the land op is named by
+ * the route, the way its word was */
+const shipThe = (op: ShipOp, route: LandRoute): string =>
+  op === "land"
+    ? route === "pr"
+      ? "the PR"
+      : "the merge"
+    : { commit: "the commit", "sync-main": "the sync", "pull-main": "the pull" }[op];
 
 /** a call in the transcript, or a run of calls that did the same thing to the same file, or the
  * call that started a subagent with that subagent's rows folded under it */
@@ -684,6 +685,8 @@ export const ToolRow = memo(
     // straight over the composer, and two red squares stacked on one edge read as twins, so the
     // square that is always red is the agent's alone.
     const op = useStore((s) => (worktreeId ? s.shipping[worktreeId]?.op : undefined));
+    // the row's route, which names a land op in the stop's label
+    const route = useStore((s) => landRouteOf(s, worktreeById(s, worktreeId)?.repoId));
     const stoppable = streaming && head.name === SHELL_TOOL && worktreeId ? { worktreeId, toolId: last.id } : null;
     // the file the row names, opened in the pane: the first thing its menu offers, as a control on
     // the line. Not until the call has returned: a write's file is not on disk before that, and a
@@ -754,7 +757,7 @@ export const ToolRow = memo(
                 className="tool-stop"
                 label={
                   op
-                    ? `Stop ${SHIP_THE[op]}: this step is killed, and what it printed so far stays`
+                    ? `Stop ${shipThe(op, route)}: this step is killed, and what it printed so far stays`
                     : background
                       ? "Kill what the command left running; what it printed so far stays"
                       : "Kill the command and everything it started; what it printed so far stays"

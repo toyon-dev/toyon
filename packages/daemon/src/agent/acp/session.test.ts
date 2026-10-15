@@ -3164,7 +3164,7 @@ describe("AcpSession handoff", () => {
     expect(texts[0]).toEqual(["one"]);
     expect(texts[1]).toEqual([
       "two",
-      `[Attached by Toyon:\nThe work this worktree handed off to other, "Fix the adapter", has landed there (https://x/pull/7); anything here that waited on it, such as a pinned version or a hand-patched copy, can take the real change now.]`,
+      `[Attached by Toyon:\nThe work this worktree handed off to other, "Fix the adapter", has merged there (https://x/pull/7); anything here that waited on it, such as a pinned version or a hand-patched copy, can take the real change now.]`,
     ]);
     expect(texts[2]).toEqual(["three"]);
     await w.session.close();

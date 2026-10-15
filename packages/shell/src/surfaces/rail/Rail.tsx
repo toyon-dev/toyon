@@ -5,6 +5,7 @@ import {
   canGraft,
   isLead,
   isOwned,
+  landWord,
   type OwnedWorktree,
   sentAt,
   type WorktreeStatus,
@@ -31,7 +32,7 @@ import {
   useVisibleDiscovered,
   useVisibleWorktrees,
 } from "../../state/selectors.ts";
-import { asksSetup, guestOf, trunkOf } from "../../state/store.ts";
+import { asksSetup, guestOf, landRouteOf, trunkOf } from "../../state/store.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
 import { Icon } from "../../ui/Icon.tsx";
 import { useContextMenu, useMenu } from "../../ui/menu.ts";
@@ -195,6 +196,8 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
   const shipping = useStore((s) => s.shipping);
   const rows = useStore((s) => s.rows);
   const repoOf = (w: OwnedWorktree) => repos.find((r) => r.id === w.repoId) ?? null;
+  /** the row's landing route: the word on its rung, and the name of a land op in flight */
+  const routeOf = (w: WorktreeStatus) => landRouteOf({ repos }, w.repoId);
   /** the row a guest of this rail started from, when `w` is one: another project's worktree a
    * handoff made from here, listed on this rail while its origin is */
   const originOf = (w: OwnedWorktree) => (activeRepoId ? guestOf(w, activeRepoId, rows) : null);
@@ -257,7 +260,7 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
   // written to the node. The ladder is read off the row's own menu (slideLadder), so the slide
   // offers what the menu does; its last rung is that menu, opened under the row as it is let go.
   const [slide, setSlide] = useState<{ key: string; step: number } | null>(null);
-  const ladderOf = (w: WorktreeStatus) => (isOwned(w) ? slideLadder(rowItems(w)) : []);
+  const ladderOf = (w: WorktreeStatus) => (isOwned(w) ? slideLadder(rowItems(w), landWord({ land: routeOf(w) })) : []);
   useSlide(listRef, {
     rowOf: (target) => {
       if (!onScreen || graftMode) return null;
@@ -435,23 +438,27 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
         // in the fault colour, a green "Running" over an orange dot: the tip names the fault
         // instead, with no dot, since there is no live state for one to restate.
         {...(owned
-          ? tip(offline ? OFFLINE_LINE : op ? shipLabel(op) : stateLabel(w, asksSetup(repoOf(owned))), undefined, {
-              placement: tipSide,
-              card: true,
-              aside: cardFigures(w),
-              // main has no turn to recap: its lines say whether it is fresh. Another project's
-              // first line says whose it is and why it is here, since the row's mark says only
-              // the project
-              detail: isLead(owned.worktree)
-                ? leadLines(worktrees, archived, trunk, base)
-                : [
-                    ...(otherRepo
-                      ? [origin ? guestLine(otherRepo.name, origin.worktree.title) : owedLine(otherRepo.name)]
-                      : []),
-                    ...cardLines(owned),
-                  ],
-              dot: offline ? undefined : op ? "spinner" : dotClass(w),
-            })
+          ? tip(
+              offline ? OFFLINE_LINE : op ? shipLabel(op, routeOf(w)) : stateLabel(w, asksSetup(repoOf(owned))),
+              undefined,
+              {
+                placement: tipSide,
+                card: true,
+                aside: cardFigures(w),
+                // main has no turn to recap: its lines say whether it is fresh. Another project's
+                // first line says whose it is and why it is here, since the row's mark says only
+                // the project
+                detail: isLead(owned.worktree)
+                  ? leadLines(worktrees, archived, trunk, base)
+                  : [
+                      ...(otherRepo
+                        ? [origin ? guestLine(otherRepo.name, origin.worktree.title) : owedLine(otherRepo.name)]
+                        : []),
+                      ...cardLines(owned),
+                    ],
+                dot: offline ? undefined : op ? "spinner" : dotClass(w),
+              },
+            )
           : tip(
               offline ? OFFLINE_LINE : w.locked ? `Held by ${w.lockReason ?? "another tool"}` : FOUND_LINE,
               undefined,
@@ -688,6 +695,7 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
               needsSetup: asksSetup(owned ? repoOf(owned) : null),
               path: wtDirLabel(w),
               op,
+              route: routeOf(w),
             })}
           </span>
         )}

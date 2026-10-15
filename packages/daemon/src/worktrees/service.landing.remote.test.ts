@@ -81,7 +81,7 @@ describe("landing", () => {
     writeFileSync(join(wt.path, "third.txt"), "z\n");
     const twice = await w.worktrees.land(wt.id, "add a third");
     expect(twice.result.ok).toBe(false);
-    expect(twice.result.message).toContain("land again");
+    expect(twice.result.message).toContain("press again");
     expect((await git(wt.path, "status", "--porcelain")).out).toBe("");
     expect((await git(wt.path, "branch", "--show-current")).out).toBe(wt.branch);
     always();

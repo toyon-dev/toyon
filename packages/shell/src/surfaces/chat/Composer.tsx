@@ -16,7 +16,9 @@ import {
   DEFAULT_PERMISSION_MODE,
   describeLand,
   isProvisional,
+  landCommand,
   landPolicy,
+  landWord,
   nextNumbers,
   numbered,
   numbersAfter,
@@ -84,7 +86,7 @@ import { cardLine, openCard, parseHandoffArgs } from "./handoff.ts";
 import { MentionText, openMention } from "./Mentions.tsx";
 import { filterCommands, insertAt, triggerAt } from "./mentions.ts";
 import { dismissOffer, offerOf, useDismissedOffers } from "./offer.ts";
-import { browseCommands, isMode, mergeCommands, ownCommandOf, ownCommands } from "./ownCommands.ts";
+import { browseCommands, isMode, mergeCommands, ownCommandOf, ownCommands, type SeatName } from "./ownCommands.ts";
 import { PermissionCard } from "./PermissionCard.tsx";
 import { PickChip } from "./PickChip.tsx";
 import { QuestionCard } from "./QuestionCard.tsx";
@@ -405,9 +407,15 @@ export function Composer({
   // one thing left is to close the row
   const prClosed = active?.worktree.pr?.state === "closed";
   const policy = landPolicy(repo?.config ?? {});
+  // the route's word for the landing press (merge, or open PR), and its `/` name
+  const routeWord = landWord(policy);
+  const routeName = landCommand(policy);
   // toyon's own `/` rows, ahead of the agent's: the modes and the seat's verbs, typed by name
   // (ownCommands.ts has the rules)
-  const ownRows = useMemo(() => ownCommands(describeLand(landPolicy(repo?.config ?? {}), repo?.defaultBranch)), [repo]);
+  const ownRows = useMemo(() => {
+    const p = landPolicy(repo?.config ?? {});
+    return ownCommands(landCommand(p), describeLand(p, repo?.defaultBranch));
+  }, [repo]);
   const compact = () => id && sock?.send({ t: "chat", worktreeId: id, text: "/compact" });
   const compactOff = spawning
     ? "nothing to compact until the first reply"
@@ -614,10 +622,10 @@ export function Composer({
   // what the land would be missing for the commit it makes first, if anything
   const gap = messageGap(verdict, dirty, quick);
   // work with no verdict, one the tree moved under, or one whose question went unanswered with a
-  // commit to write: the check is the next step, and the word for it sits where `land` will once
-  // it passes. A check running or failed keeps its own line. Not while a press is out on the row:
-  // the land clears the verdict as its work reaches main, and a check of what just landed is not
-  // the next step.
+  // commit to write: the check is the next step, and the word for it sits where the route's word
+  // will once it passes. A check running or failed keeps its own line. Not while a press is out
+  // on the row: the land clears the verdict as its work reaches main, and a check of what just
+  // merged is not the next step.
   const checkable =
     atRest &&
     !op &&
@@ -629,9 +637,9 @@ export function Composer({
     (!verdict || !!verdict.stale || gap === "unanswered");
   const archiveTip =
     "Archive this worktree when you are done here; the rail's archived section brings it back with its chat.";
-  // the ship word and where it sends the work: onto main by the repo's route, or up to the open
-  // PR when the branch on origin is behind what is here
-  const shipWord = prMissing ? "update" : "land";
+  // the ship word and where it sends the work: onto main by the repo's route, under the route's
+  // own word, or up to the open PR when the branch on origin is behind what is here
+  const shipWord = prMissing ? "update" : routeWord;
   // what the branch is measured against and takes in: main here, or origin's main where the
   // route lands there
   const base = repo ? baseOf(repo) : "main";
@@ -656,7 +664,7 @@ export function Composer({
           line:
             active?.worktree.pr?.state === "merged"
               ? prLine(active.worktree.pr)
-              : `landed on ${repo?.defaultBranch ?? "main"}.`,
+              : `merged into ${repo?.defaultBranch ?? "main"}.`,
           tip: archiveTip,
           run: () => archiveWorktrees(sock, dispatch, [id]),
         }
@@ -716,7 +724,7 @@ export function Composer({
   const lastLand = active?.worktree.lands?.at(-1);
   const landedUnder = lastLand && landedWhat(lastLand);
   const offeredUnder =
-    (offered?.word === "land" || offered?.word === "update" || offered?.word === "check") && landing
+    (offered?.word === routeWord || offered?.word === "update" || offered?.word === "check") && landing
       ? verdictLine(landing, gap)
       : offered?.word === "archive" && landedUnder
         ? ended(landedUnder)
@@ -850,7 +858,7 @@ export function Composer({
   const refuse = (text: string) => boxId && dispatch({ a: "notice", id: boxId, text });
   // the seat's verb by name. The seat only offers it from an empty box, so this reads the facts
   // under it rather than the seat, and says why when there is nothing for the word to do.
-  const runSeat = (name: "check" | "land" | "archive" | "handoff", args = "") => {
+  const runSeat = (name: SeatName, args = "") => {
     if (!active || !id) return;
     if (name === "handoff") {
       // the other project's agent starts from this chat, and a worktree not yet made has none
@@ -869,7 +877,7 @@ export function Composer({
     }
     if (name === "archive") {
       if (hasLanded || prClosed) archiveWorktrees(sock, dispatch, [id]);
-      else refuse("archive is for a landed worktree; this one has not landed");
+      else refuse("archive is for a merged worktree; this one's work is not on main yet");
       return;
     }
     if (name === "check") {
@@ -880,8 +888,9 @@ export function Composer({
       return;
     }
     const stuck = verdict ? landingLine(verdict, dirty, quick, agentInfo?.name) : null;
-    if (spawning || !canLand(active.worktree)) refuse("nothing to land from here");
-    else if (hasLanded) refuse(`already landed on ${repo?.defaultBranch ?? "main"}`);
+    if (spawning || !canLand(active.worktree)) {
+      refuse(routeName === "pr" ? "no PR to open from here" : "nothing to merge from here");
+    } else if (hasLanded) refuse(`already merged into ${repo?.defaultBranch ?? "main"}`);
     else if (stuck) refuse(stuck);
     else if (midTurn && (!verdict || verdict.stale)) refuse("wait for the turn to end");
     else if (verdict?.stale) refuse("the work changed since this was checked; check again first");
@@ -992,7 +1001,7 @@ export function Composer({
       return;
     }
     if (typed && !mode) {
-      runSeat(typed.name as "check" | "land" | "archive" | "handoff", typed.args);
+      runSeat(typed.name as SeatName, typed.args);
       setText("");
       return;
     }

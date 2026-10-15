@@ -113,12 +113,12 @@ describe("landPrompt", () => {
     expect(p.indexOf("What this commit will contain")).toBeLessThan(p.indexOf("Already committed"));
     // the title and the first request describe work the branch has committed, and say so
     expect(p).toContain(
-      "Task, as the worktree is titled; background, since the branch committed or landed work before: dark mode",
+      "Task, as the worktree is titled; background, since the branch committed or merged work before: dark mode",
     );
     expect(p).toContain("First request here, which the earlier work may have answered: make a dark mode");
     // after a landing the branch has no commits of its own, and the framing is the same
     const landed = landPrompt({ ...input, earlier: true, diffStat: "New files:\ntoggle.txt" });
-    expect(landed).toContain("background, since the branch committed or landed work before: dark mode");
+    expect(landed).toContain("background, since the branch committed or merged work before: dark mode");
     expect(landed).not.toContain("Already committed");
     // nothing uncommitted: the message is for the branch as one, so the title and the first
     // request are what it is about, not background

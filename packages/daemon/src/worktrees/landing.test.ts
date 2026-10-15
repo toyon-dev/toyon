@@ -378,7 +378,7 @@ describe("LandingService", () => {
     await w.settle();
     expect(w.judged[0]).toContain("User asked: now the toggle");
     expect(w.judged[0]).not.toContain("User asked: make the feature");
-    expect(w.judged[0]).toContain("background, since the branch committed or landed work before: feature");
+    expect(w.judged[0]).toContain("background, since the branch committed or merged work before: feature");
     // a commit older than the only turn still leaves that turn in the question
     w.cleanup();
     w = world({

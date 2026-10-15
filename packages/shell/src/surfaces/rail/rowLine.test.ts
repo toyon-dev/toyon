@@ -121,7 +121,7 @@ describe("the line under a row's name", () => {
   test("a git op in the dot's slot is the line, on the lead too, over the state and the recap", () => {
     const turn = { ...done, recap: { at: 2, text: "Dropped the second handler" } };
     expect(rowLine(owned({ procs: [{ name: "web", status: "running" } as never] }), ctx({ op: "land" }))).toBe(
-      "Landing",
+      "Merging",
     );
     expect(rowLine(owned({}, { lastTurn: turn }), ctx({ op: "commit", at: "4m" }))).toBe("Committing");
     expect(rowLine(owned({}, { kind: "main" }), ctx({ op: "pull-main" }))).toBe("Pulling");
@@ -247,19 +247,19 @@ describe("the lines under main's state", () => {
         null,
         "main",
       ),
-    ).toEqual(["Landed Update fix 10m ago."]);
-    expect(leadLines(rows, [arch({ landed: true })], null, "main")).toEqual(["Landed Tag links 15m ago."]);
+    ).toEqual(["Merged Update fix 10m ago."]);
+    expect(leadLines(rows, [arch({ landed: true })], null, "main")).toEqual(["Merged Tag links 15m ago."]);
     expect(leadLines([owned()], [arch()], null, "main")).toEqual([]);
   });
 
   test("what the newest landing carried follows its name and time", () => {
     const lands = [{ base: "a", tip: "b", at: NOW - 9e5, subjects: ["link the tags", "test it"] }];
     expect(leadLines([owned({}, { title: "Tag links", lands })], [], null, "main")).toEqual([
-      "Landed Tag links 15m ago: link the tags; test it.",
+      "Merged Tag links 15m ago: link the tags; test it.",
     ]);
     const viaPr = [{ base: "a", tip: "b", at: NOW - 9e5, pr: 12, subjects: ["link the tags"] }];
     expect(leadLines([], [arch({ landed: true, title: "Tag links", lands: viaPr })], null, "main")).toEqual([
-      "Landed Tag links 15m ago: PR #12: link the tags.",
+      "Merged Tag links 15m ago: PR #12: link the tags.",
     ]);
   });
 

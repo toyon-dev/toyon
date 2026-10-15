@@ -136,8 +136,10 @@ describe("stateLabel", () => {
     expect(shipShown(status("working"), "commit")).toBe("commit");
     expect(shipShown(status("waiting"), "land")).toBeNull();
     expect(shipShown(status("idle"), undefined)).toBeNull();
-    expect(shipLabel("land")).toBe("Landing");
-    expect(shipLabel("sync-main")).toBe("Syncing with main");
+    expect(shipLabel("land", "merge")).toBe("Merging");
+    expect(shipLabel("land", "push")).toBe("Merging");
+    expect(shipLabel("land", "pr")).toBe("Opening a PR");
+    expect(shipLabel("sync-main", "merge")).toBe("Syncing with main");
   });
 });
 

@@ -10,6 +10,7 @@ import {
   isMain,
   isProvisional,
   landPolicy,
+  landWord,
   type OwnedWorktree,
   type RepoInfo,
   type ShipOp,
@@ -25,7 +26,7 @@ import { revealItems } from "./editor.ts";
 
 type Dispatch = (a: Action) => void;
 
-/** the land row's second line: the repo's route, so the one verb says what it does here */
+/** the land row's second line: the repo's route in full, under the word the route gives it */
 const landDetail = (repo: RepoInfo | null) =>
   describeLand(landPolicy(repo?.config ?? {}), repo?.defaultBranch).toLowerCase();
 
@@ -240,10 +241,11 @@ export function worktreeItems(
     });
   }
   if (canLand(w.worktree)) {
-    // the repo's route, whatever the settings say it is: there is one way work lands here
+    // the repo's route, whatever the settings say it is: there is one way work reaches main
+    // here, and the row's word is that route's (merge, or open PR)
     land.push({
       id: "land",
-      label: "land",
+      label: landWord(landPolicy(repo?.config ?? {})),
       detail: landDetail(repo),
       disabled: busy,
       onClick: () => shipOp(sock, dispatch, { t: "land", worktreeId: id }),

@@ -301,7 +301,7 @@ export async function requireLinear(worktreePath: string, base: string): Promise
   return {
     ok: false,
     conflict: "rebase",
-    message: `the branch holds a merge commit, which landing by rebase would put on ${base}: ask the agent to rebase onto ${base} first`,
+    message: `the branch holds a merge commit, which merging by rebase would put on ${base}: ask the agent to rebase onto ${base} first`,
   };
 }
 
@@ -371,7 +371,7 @@ export async function landLocally(
     const ff = await w.git(repoPath, ["merge", "--ff-only", branch]);
     if (!ff.ok) {
       const files = overwritten(ff.text);
-      if (files.length) return { ok: false, message: inTheWay(defaultBr, "landing", files) };
+      if (files.length) return { ok: false, message: inTheWay(defaultBr, "merge", files) };
       return { ok: false, message: `${branch} is not a fast-forward of ${defaultBr}: take ${defaultBr} in first` };
     }
     return { ok: true, message: `${defaultBr} moved onto ${branch}` };
@@ -394,7 +394,7 @@ export async function landLocally(
   const m = await w.git(repoPath, ["merge", "--no-ff", "--no-edit", branch]);
   if (!m.ok) {
     const files = overwritten(m.text);
-    if (files.length) return { ok: false, message: inTheWay(defaultBr, "landing", files) };
+    if (files.length) return { ok: false, message: inTheWay(defaultBr, "merge", files) };
     return mergeFailure(repoPath, m, `merge conflicts with ${defaultBr}: take ${defaultBr} in first`);
   }
   return { ok: true, message: `merged ${branch} into ${defaultBr}` };
@@ -488,7 +488,7 @@ export async function landingCommit(
   w: LandWatch = UNWATCHED,
 ): Promise<ShipResult & { sha?: string }> {
   const head = await git(worktreePath, "rev-parse", "HEAD");
-  if (!head.ok) return { ok: false, message: `no HEAD to land: ${head.err.slice(0, 200)}` };
+  if (!head.ok) return { ok: false, message: `no HEAD to merge: ${head.err.slice(0, 200)}` };
   if (method === "rebase") return { ok: true, sha: head.out, message: `${branch} as it is` };
   if (method === "squash" && own) {
     w.step(`squashing onto ${base}`);
@@ -557,7 +557,7 @@ export async function pushLanding(
   if (p.ok) return { ok: true, message: `pushed ${defaultBr} to ${tracked.remote}` };
   const moved = /\[rejected\]|fetch first|non-fast-forward|cannot lock ref/.test(p.err);
   return moved
-    ? { ok: false, moved: true, message: `${defaultBr} on ${tracked.remote} moved while landing` }
+    ? { ok: false, moved: true, message: `${defaultBr} on ${tracked.remote} moved while merging` }
     : stepRefused("push failed", p, 300);
 }
 
@@ -656,7 +656,7 @@ export async function openPr(o: OpenPr, w: LandWatch = UNWATCHED): Promise<ShipR
   const { ahead } = await aheadBehind(o.worktreePath, base);
   if (ahead === 0) return { ok: false, message: `nothing to ship: no commits ahead of ${base}` };
   const remote = await git(o.worktreePath, "remote", "get-url", "origin");
-  if (!remote.ok) return { ok: false, message: "no 'origin' remote: add one, or land by merging here" };
+  if (!remote.ok) return { ok: false, message: "no 'origin' remote: add one, or set the route to merge here" };
 
   const push = await pushBranch(o.worktreePath, o.branch, w);
   if (!push.ok) return push;

@@ -60,7 +60,7 @@ describe("a worktree's actions", () => {
       "rename…",
       "mark as unread",
       "|",
-      "land",
+      "merge",
       "|",
       "continue in another project…",
       "|",
@@ -90,7 +90,7 @@ describe("a worktree's actions", () => {
       "|",
       // dirty under a turn: the press waits for the turn, and the row says so
       "sync from main after the turn (3 behind)",
-      "land",
+      "merge",
       "|",
       "continue in another project…",
       "|",
@@ -143,7 +143,7 @@ describe("a worktree's actions", () => {
       "rename…",
       "mark as unread",
       "|",
-      "land",
+      "merge",
       "|",
       "continue in another project…",
       "|",
@@ -191,7 +191,7 @@ describe("a worktree's actions", () => {
       here,
     );
     const off = items.filter(isItem).filter((i) => i.disabled !== undefined);
-    expect(off.map((i) => i.label)).toEqual(["sync from main (3 behind)", "land"]);
+    expect(off.map((i) => i.label)).toEqual(["sync from main (3 behind)", "merge"]);
     expect(off[0]?.disabled).toBe("waiting on the one in progress");
   });
 

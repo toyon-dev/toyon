@@ -249,7 +249,7 @@ export class LandingService {
    * the model with the question, so the message can say what the diff alone does not. */
   async judge(worktreeId: string, note?: string): Promise<void> {
     const wt = this.d.state.requireWorktree(worktreeId);
-    if (!canLand(wt)) throw new UserError("nothing to land from here");
+    if (!canLand(wt)) throw new UserError("nothing to check from here");
     if (this.busy.has(worktreeId)) throw new UserError("wait for the turn to end");
     if (!(await this.hasWork(wt))) throw new UserError("nothing to check: no changes here");
     const trimmed = note?.trim();

@@ -357,7 +357,7 @@ describe("landing", () => {
     sh(w.repo, "git", "commit", "-q", "--allow-empty", "-m", "main moved");
     const landing = w.worktrees.land(wt.id, "add feature");
     // one op per row: a second press meanwhile is refused, whichever tab it came from
-    await expect(w.worktrees.commit(wt.id, "again")).rejects.toThrow("a land is already running here");
+    await expect(w.worktrees.commit(wt.id, "again")).rejects.toThrow("a merge is already running here");
     expect((await landing).result.ok).toBe(true);
     expect(seen).toEqual([
       { step: undefined, held: true },

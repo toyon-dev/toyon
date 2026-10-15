@@ -4,6 +4,7 @@ import {
   isLead,
   isOwned,
   type LandMark,
+  type LandRoute,
   type ShipOp,
   type TrunkStatus,
   type WorktreeStatus,
@@ -62,13 +63,16 @@ export interface RowContext {
   at?: string;
   /** the git op the row's dot slot is showing as a spinner (`shipShown`), if one is out */
   op?: ShipOp | null;
+  /** the repo's route, which names a land op in flight (merging, or opening a PR). A found row
+   * has no repo of ours and runs no land op, so the line never needs it there. */
+  route?: LandRoute;
 }
 
 export function rowLine(w: WorktreeStatus, ctx: RowContext): string {
   if (ctx.offline) return OFFLINE_LINE;
   if (!isOwned(w)) return w.locked ? `Held by ${w.lockReason ?? "another tool"}` : ctx.path;
   // the spinner in the dot's slot is the line's subject; the lead too, since a pull runs there
-  if (ctx.op) return shipLabel(ctx.op);
+  if (ctx.op) return shipLabel(ctx.op, ctx.route ?? "merge");
   if (isLead(w.worktree)) return LEAD_LINE;
   const state = stateLabel(w, ctx.needsSetup);
   const turn = w.worktree.lastTurn;
@@ -134,10 +138,10 @@ export function leadLines(
   };
   for (const w of worktrees) if (w.worktree) newest(w.worktree.title, w.worktree.lands);
   for (const a of archived) newest(a.title, a.lands);
-  // what it carried after the name and the time, since "Landed Tag links 15m ago" says which row
+  // what it carried after the name and the time, since "Merged Tag links 15m ago" says which row
   // and this says what main got from it
   const what = last && landedLine(last.mark);
-  const landed = last ? `Landed ${last.title} ${when(ago(last.mark.at))}${what ? `: ${ended(what)}` : "."}` : undefined;
+  const landed = last ? `Merged ${last.title} ${when(ago(last.mark.at))}${what ? `: ${ended(what)}` : "."}` : undefined;
   const note = trunk ? originNote(defaultBranch, trunk) : null;
   const origin = note
     ? ended(`${note.charAt(0).toUpperCase()}${note.slice(1)}`)

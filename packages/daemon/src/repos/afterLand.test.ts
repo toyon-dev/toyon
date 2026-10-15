@@ -143,7 +143,7 @@ describe("afterLand", () => {
     const { repo, main } = await registered(["echo boom; false", "echo never >> ran.txt"]);
     w.afterLand.run(repo.id);
     await settled(repo.id);
-    expect(w.failed).toEqual([{ worktreeId: main.id, message: "After landing, echo boom; false stopped: boom" }]);
+    expect(w.failed).toEqual([{ worktreeId: main.id, message: "After the merge, echo boom; false stopped: boom" }]);
     expect(existsSync(join(w.repo, "ran.txt"))).toBe(false);
   });
 
@@ -152,7 +152,7 @@ describe("afterLand", () => {
     const { repo, main } = await registered(["exit 4"]);
     w.afterLand.run(repo.id);
     await settled(repo.id);
-    expect(w.failed).toEqual([{ worktreeId: main.id, message: "After landing, exit 4 exited 4" }]);
+    expect(w.failed).toEqual([{ worktreeId: main.id, message: "After the merge, exit 4 exited 4" }]);
   });
 
   test("the checkout toyon runs from reports on the self notice instead", async () => {

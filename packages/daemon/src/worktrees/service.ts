@@ -1916,7 +1916,7 @@ export class WorktreeService {
     if (status !== "working" && status !== "waiting") return null;
     const l = wt.landing;
     if (!l || l.fingerprint === (await treeFingerprint(wt.path))) return null;
-    return { ok: false, message: "the agent has changed files since the check: land once its turn ends" };
+    return { ok: false, message: "the agent has changed files since the check: press again once its turn ends" };
   }
 
   /** the word on a land that put the work on main, on the transcript the way a graft's marker is:
@@ -1956,13 +1956,22 @@ export class WorktreeService {
     return this.ops.get(id);
   }
 
+  /** the op out on a row, as a refusal names it: the land op under the route's word, since that
+   * is the word that was pressed. A trunk or a found row has a repo too, or none, which reads as
+   * the default route. */
+  private shipNounOf(id: string, op: ShipOp): string {
+    const wt = this.d.state.worktree(id);
+    const repo = wt ? this.d.state.repo(wt.repoId) : undefined;
+    return shipNoun(op, landPolicy(repo?.config ?? {}));
+  }
+
   /** Run a landing op as the one out on the row: on every frame while it runs, with the agent's
    * queue held so a chat sent meanwhile waits rather than run under a rebase, and a second press
    * refused. The refusal is by id, so a found row and a trunk count too; a row with no agent (a
    * found worktree, main) has nothing to hold. */
   private async ship<T>(id: string, op: ShipOp, run: () => Promise<T>): Promise<T> {
     const out = this.ops.get(id);
-    if (out) throw new UserError(`${shipNoun(out.op)} is already running here`);
+    if (out) throw new UserError(`${this.shipNounOf(id, out.op)} is already running here`);
     // held before the frame says so: a send that reads the frame must find the queue held
     const release = this.d.runtime.agentFor(id)?.hold();
     this.ops.set(id, { op });
@@ -2142,7 +2151,7 @@ export class WorktreeService {
     // kept under the landing's ref. One read stands for a second attempt, whose branch is by then
     // the first attempt's landing commit.
     const read = await landingMark(wt.path, base);
-    if (!read) return { result: { ok: false, message: `nothing to land: no commits ahead of ${base}` } };
+    if (!read) return { result: { ok: false, message: `nothing to merge: no commits ahead of ${base}` } };
     let sha = "";
     // the rebase dropped every commit: origin's main holds this work already, pushed by a hand
     // toyon did not see. Nothing to build or push; the row lands on the record as it stands.
@@ -2171,7 +2180,7 @@ export class WorktreeService {
       if (pushed.ok) break;
       if (!pushed.moved) return { result: pushed };
       if (attempt > 0) {
-        return { result: { ok: false, message: `${base} moved twice while this landed; land again` } };
+        return { result: { ok: false, message: `${base} moved twice while this merged; press again` } };
       }
     }
     // origin's main is the pushed commit now, and the remote-tracking ref should say so from the
@@ -2283,10 +2292,10 @@ export class WorktreeService {
    * the merged PR itself. */
   async prMerged(worktreeId: string): Promise<ShipResult> {
     const out = this.ops.get(worktreeId);
-    if (out) return { ok: false, message: `${shipNoun(out.op)} is already running here` };
+    if (out) return { ok: false, message: `${this.shipNounOf(worktreeId, out.op)} is already running here` };
     // landed once: a second poll, or one that raced the first, records nothing more
     const wt = this.d.state.worktree(worktreeId);
-    if (wt && prTaken(wt)) return { ok: true, message: `PR #${wt.pr?.number} merged; landed already` };
+    if (wt && prTaken(wt)) return { ok: true, message: `PR #${wt.pr?.number} merged already` };
     const { mark, ...result } = await this.ship(worktreeId, "land", () => this.prMergedOp(worktreeId));
     if (result.ok && wt) this.noteLanded(wt, result.message, this.siblingIds(wt), mark);
     return result;

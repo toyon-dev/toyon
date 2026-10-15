@@ -83,6 +83,22 @@
       padding-block: 5px;
     }
   }
+  /* The strip as a field of the page (ListPicker's `field`), with the list floating under it: it
+   wears the field's own box, since the input inside it is bare, and shows the focus a field would.
+   The input fills it, as the box's own input would. The list under it is a float, out of the
+   strip's flow, and takes none of this. */
+  .picker-field {
+    background: var(--sunken);
+    border: 1px solid var(--border0);
+    border-radius: var(--radius);
+    &:focus-within {
+      border-color: var(--border1);
+    }
+    & input {
+      width: 100%;
+      min-width: 0;
+    }
+  }
   /* what the query is scoped to, in the pill's own box so the project name does not move when the
    panel opens over it: the box and the line are .btn's, because `font` resets the line to normal,
    and a normal line in the same box seats the glyphs a fraction lower than the pill's 1.4 line

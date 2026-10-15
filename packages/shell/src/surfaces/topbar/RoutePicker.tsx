@@ -9,8 +9,10 @@ import { wantsLinks } from "../../state/links.ts";
 import { useLocalField } from "../../state/selectors.ts";
 import { worktreeById } from "../../state/store.ts";
 import { useOnChange } from "../../ui/hooks.ts";
-import { ListPicker } from "../../ui/ListPicker.tsx";
+import { type FieldMode, ListPicker } from "../../ui/ListPicker.tsx";
 import { type MenuEntry, SEP, tidy } from "../../ui/menu.ts";
+import { tip } from "../../ui/Tooltip.tsx";
+import { chord } from "../util.ts";
 import { completionOf, fillTemplate, type PageModel, pageModel, pathOf, type Row, rowsFor } from "./routePicker.ts";
 
 /** module constants, so a repo with no visits yet answers the selector with the same array */
@@ -88,18 +90,23 @@ export function pageMenu(
   ]);
 }
 
-/** The route bar's list: what a person expects to see when they click the address. It opens in the
- * field's own box holding the address, selected, with nothing highlighted, so typing replaces the
- * address and enter on the untouched list reloads the page as a browser's would. The pages arrive
- * with the worktree's git status, so the rows are there on the first frame. */
+/** The route bar's field and its list: one address field, always there, showing the page's path,
+ * and a list of pages hanging under it while the caret is in the field. A click in the field at
+ * rest selects the address so typing replaces it, a drag selects what was dragged, and the chord
+ * does what the click does. Nothing is highlighted until something is typed, so enter on the
+ * untouched address reloads the page as a browser's would. The pages arrive with the worktree's
+ * git status, so the rows are there on the first frame. */
 export function RoutePicker({
   worktreeId,
   repoId,
   url,
+  open,
 }: {
   worktreeId: string;
   repoId: string;
   url: string | undefined;
+  /** the list is up (overlay `routes`) */
+  open: boolean;
 }) {
   const dispatch = useDispatch();
   const sock = useSock();
@@ -117,10 +124,21 @@ export function RoutePicker({
   // the address as it opened, or an empty field, has chosen nothing yet
   const untouched = useCallback((q: string) => q === current || q.trim() === "", [current]);
   const close = () => dispatch({ a: "close" });
+  const field = useMemo<FieldMode>(
+    () => ({
+      open,
+      onOpen: () => dispatch({ a: "open", overlay: { kind: "routes" } }),
+      id: "routes",
+      className: "bar-path",
+      attrs: tip("Go to a page", chord("routes")),
+    }),
+    [open, dispatch],
+  );
   return (
     <ListPicker<Row>
-      // the panel is the field's own box: it takes its width and lies exactly on it
-      anchored={{ matchWidth: 0 }}
+      // the list hangs under the field at its width, its top border on the field's bottom one
+      anchored={{ matchWidth: 0, cover: false, offset: -1 }}
+      field={field}
       items={NO_ROWS}
       filter={filter}
       initialQuery={current}

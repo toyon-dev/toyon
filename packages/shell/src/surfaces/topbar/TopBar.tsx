@@ -29,7 +29,6 @@ import "./topbar.css";
 import { Field } from "../../ui/Field.tsx";
 import { navCluster } from "./navCluster.ts";
 import { RoutePicker } from "./RoutePicker.tsx";
-import { pathOf } from "./routePicker.ts";
 
 /** the top bar: dock toggles, the route centered over the preview, tools (proc health badges the
  * composer's terminal button; a dead socket colours the worktree rail) */
@@ -223,8 +222,8 @@ function ProjectPill() {
 }
 
 /** Safari-style: back/forward/reload + the preview's route, anchored to the middle of the centre.
- * The address is the route list's trigger rather than an editor: pressing it opens the list over
- * it, holding the address, and a path is typed there. */
+ * The address is a field like a browser's: the caret in it brings the list of pages up under it,
+ * and a path is typed over the address. */
 function RouteBar({
   worktreeId: id,
   repoId,
@@ -239,13 +238,9 @@ function RouteBar({
   width: number;
 }) {
   const url = useLocalField(id, "page").url;
-  const path = pathOf(url);
   const dispatch = useDispatch();
   const open = useStore((s) => s.overlay?.kind === "routes");
   const previewSize = useStore((s) => s.previewSize);
-  const openList = () => {
-    if (ready && id && repoId && !open) dispatch({ a: "open", overlay: { kind: "routes" } });
-  };
   // the list belongs to one worktree's preview: switching worktrees, or the preview going down,
   // closes it rather than leaving it over an address it no longer describes
   useOnChange([id, ready], () => {
@@ -290,25 +285,13 @@ function RouteBar({
         {...pageMenu}
       />
       <span className="bar-route">
-        <Field
-          className="bar-path"
-          value={ready ? path : ""}
-          readOnly
-          disabled={!ready}
-          placeholder={ready ? "/" : ""}
-          // a press places no caret here (the list's own field takes focus) and the click opens the
-          // list. Not on mousedown: the panel mounting inside that event would register its
-          // outside-press dismissal while the same press is still bubbling, and close at once.
-          // A right-click keeps the browser's menu, which can still copy the address.
-          onMouseDown={(e) => {
-            if (e.button === 0) e.preventDefault();
-          }}
-          onClick={openList}
-          onFocus={openList}
-          spellCheck={false}
-          {...tip("Go to a page", chord("routes"))}
-        />
-        {open && ready && id && repoId && <RoutePicker key={id} worktreeId={id} repoId={repoId} url={url} />}
+        {/* the address field, which is the route list's own strip; before the preview is up there
+            is no address and nowhere to go, so an empty field holds the box */}
+        {ready && id && repoId ? (
+          <RoutePicker key={id} worktreeId={id} repoId={repoId} url={url} open={open} />
+        ) : (
+          <Field className="bar-path" value="" readOnly disabled />
+        )}
         {/* the preview's size, at the address's end; Center.tsx measures it */}
         {previewSize && <span className="bar-size">{previewSize}</span>}
       </span>

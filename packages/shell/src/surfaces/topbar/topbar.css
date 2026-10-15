@@ -3,20 +3,28 @@
 @layer tokens, base, surfaces;
 
 @layer surfaces {
+  /* The address field: the route list's own strip (a `field` ListPicker, see RoutePicker), or an
+   empty Field holding its box before the preview is up. Chrome, so quieter at rest than a form
+   field, and the bar's own inset. The strip is a div around a bare input, so its states are
+   :focus-within, and the input takes the strip's colour rather than a field's own. */
   .bar-path {
     flex: 1;
     min-width: 0;
     color: var(--text1);
     padding: 3px 10px;
-    &:focus {
+    &:focus,
+    &:focus-within {
       color: var(--text0);
     }
+    & .field {
+      color: inherit;
+    }
   }
-  /* The address field is the route list's trigger, and the list opens in the field's own box, the
-   way an address bar expands in place. The strip takes the field's padding, so the panel's border
-   lands on the field's and the typed path on the address: nothing moves when it opens. Any wider
-   and it would cover the edges of the nav buttons, which sit 4px either side. The rows share the
-   strip's inset, so the list reads down from the address in one column. */
+  /* The list hangs under the field, the way a browser's suggestions do: at the field's width, its
+   top border on the field's bottom border (RoutePicker places it 1px back over the field), and
+   the corners square where the two meet, so the field and the list read as one box with a line
+   across it. Any wider and it would cover the edges of the nav buttons, which sit 4px either
+   side. The rows share the strip's inset, so the list reads down from the address in one column. */
   .bar-route {
     display: flex;
     flex: 1;
@@ -31,21 +39,20 @@
          the field and the readout share the bar's mono, so this holds at any type size */
       padding-right: calc(13ch + 10px);
     }
-    /* The panel lies exactly on the field, which is what it is placed against and whose width it
-     takes (see RoutePicker). The top corners are therefore the field's: a rounder panel leaves the
-     field's tighter corner showing outside its arc. The bottom corners are the floating box's. The
-     strip sits inside the panel's border, so its curve is the field's less that 1px. */
+    & .bar-path[data-open] {
+      border-bottom-left-radius: 0;
+      border-bottom-right-radius: 0;
+    }
     & .overlay-box.anchored {
-      border-radius: var(--radius) var(--radius) var(--radius-lg) var(--radius-lg);
+      border-radius: 0 0 var(--radius-lg) var(--radius-lg);
       --picker-inset: 10px;
     }
-    & .overlay-box.anchored .picker-input {
-      padding: 3px 10px;
-      border-radius: calc(var(--radius) - 1px) calc(var(--radius) - 1px) 0 0;
-    }
-    /* the project panel's budget: hanging off the bar, half the viewport would bury the preview */
+    /* the project panel's budget: hanging off the bar, half the viewport would bury the preview.
+       No air above the rows beyond the box's own: the field's border is already the line between
+       the address and the list. */
     & .overlay-box .picker-list {
       max-height: min(340px, 50vh);
+      margin-top: 0;
     }
   }
   /* The preview's size (center/sizeReadout.ts), read at the end of the address the way a browser

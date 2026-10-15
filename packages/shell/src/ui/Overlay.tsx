@@ -8,9 +8,11 @@ import type { Flip } from "./place.ts";
 
 /** How an anchored box sits on the control it belongs to, where that differs from the default: it
  * opens over the control, growing down from its top edge, and lines up on its left. `matchWidth`
- * takes the control's width (the route list is the address field's own box), and `flip` lets it
- * turn over or swap ends when the window has no room that way. */
-export type Anchored = { flip?: Flip; margin?: number; matchWidth?: number };
+ * takes the control's width (the route list is the address field's own box), `flip` lets it
+ * turn over or swap ends when the window has no room that way, and `cover` false hangs it under
+ * the control instead, `offset` past the control's edge (negative pulls it back over the edge,
+ * for a box whose border lands on the control's). */
+export type Anchored = { flip?: Flip; margin?: number; matchWidth?: number; cover?: boolean; offset?: number };
 
 type Props = {
   /** absent = the box can't be dismissed (first-run config must be confirmed) */

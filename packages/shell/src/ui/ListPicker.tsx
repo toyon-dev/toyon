@@ -1,8 +1,8 @@
-import { Fragment, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, type HTMLAttributes, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { useTouch } from "../state/selectors.ts";
 import { cx } from "./cx.ts";
 import { Field } from "./Field.tsx";
-import { useFocusOnMount } from "./hooks.ts";
+import { useFocusOnMount, useOnChange } from "./hooks.ts";
 import { KeyHints } from "./KeyHints.tsx";
 import { type Completion, type Ghost, useListNav } from "./listNav.ts";
 import { type MenuEntry, menuStore, useContextMenu } from "./menu.ts";
@@ -14,6 +14,27 @@ export { step } from "./listNav.ts";
 
 /** the verb for each key the picker binds, as the person at the shell would say it */
 type KeyVerbs = { nav?: string; side?: string; complete?: string; tab?: string; pick?: string; back?: string };
+
+/** A picker whose strip is a field of the page, with the list floating under it: an address bar,
+ * which is a field first and a list second. The strip stays mounted where the picker is rendered
+ * and is the one input there is; only the list opens and closes. */
+export type FieldMode = {
+  /** the list is up */
+  open: boolean;
+  /** the field asks for its list: the caret arrives, a key is typed, ↓ is pressed */
+  onOpen: () => void;
+  /** the list's id, which the field names (`aria-controls`) so a press in it keeps the list up */
+  id: string;
+  /** how the strip sits in its parent, and what it says of itself (a tooltip) */
+  className?: string;
+  attrs?: HTMLAttributes<HTMLDivElement>;
+};
+
+/** collapse a field's selection to its end, so nothing is left selected in it */
+function letGo(el: HTMLInputElement) {
+  const end = el.value.length;
+  el.setSelectionRange(end, end);
+}
 
 /** the ghost's text with its placeholder ranges drawn as placeholders */
 function ghostText({ text, params }: Ghost): ReactNode {
@@ -37,7 +58,8 @@ function ghostText({ text, params }: Ghost): ReactNode {
  * The one list-picker: overlay + filter input + rows, ↑↓ wrap, enter picks, ←→ optional, hover
  * highlights, active row reported so a parent can live-preview. Every palette-shaped overlay
  * builds on this rather than carrying its own copy of the keyboard machinery. Async sources
- * (search) pass `onQuery` and feed results back through `items`.
+ * (search) pass `onQuery` and feed results back through `items`. A `field` picker is the other
+ * shape: the strip is a field of the page and only the list floats, under it.
  */
 export function ListPicker<T>({
   items,
@@ -71,6 +93,7 @@ export function ListPicker<T>({
   groupOf,
   groupHead,
   headAlone = false,
+  field,
 }: {
   items: T[];
   /** narrow the list for a query (empty query → everything) */
@@ -142,14 +165,22 @@ export function ListPicker<T>({
   /** draw the head over a lone group too: for rows that say nothing of where they belong (a chat's
    * hits carry no chat name), the head is the only thing that does */
   headAlone?: boolean;
+  /** the strip as a field of the page and the list as a float under it, rather than one box that
+   * mounts and goes. Closed, the field shows `initialQuery` and follows it; the draft starts from
+   * it when the list opens and goes back to it when the list closes, as an address bar's text
+   * returns to the page's address. The field is a plain input: a click in it at rest selects the
+   * whole address, the way a browser's does, so typing replaces it, and a drag selects what was
+   * dragged. `selectOnMount` is then what a chord does, opening the list with the caret elsewhere. */
+  field?: FieldMode;
 }) {
   const cm = useContextMenu("picker");
   const [q, setQ] = useState(initialQuery);
   const results = useMemo(() => filter(items, q), [items, q, filter]);
   const listRef = useRef<HTMLDivElement>(null);
-  // the field takes the caret on open, except on touch, where that is the keyboard over the list
+  // the field takes the caret on open, except on touch, where that is the keyboard over the list.
+  // A field of the page is not taken on mount: it is there before anything is asked of it.
   const touch = useTouch();
-  const inputRef = useFocusOnMount<HTMLInputElement>(selectOnMount, !touch);
+  const inputRef = useFocusOnMount<HTMLInputElement>(selectOnMount, !touch && !field);
   useEffect(() => {
     if (!onQuery) return;
     const h = setTimeout(() => onQuery(q), 150);
@@ -171,6 +202,33 @@ export function ListPicker<T>({
     onIdlePick,
   });
   const { index: clamped, ghost } = nav;
+  const open = field ? field.open : true;
+  // a field of the page: closed, it shows the address and follows it, and the draft and the
+  // highlight go back to the start whenever the list closes (a pick, Escape, a press elsewhere)
+  useOnChange([open, initialQuery], () => {
+    if (!field || open) return;
+    setQ(initialQuery);
+    nav.setIndex(idleWhen?.(initialQuery) ? -1 : 0);
+  });
+  // the list opened by something other than the field (a chord): the caret goes to the field, and
+  // the address under it is selected so typing replaces it. Opened by the field itself, the caret
+  // is already there with whatever the press selected, which is left alone. On the next frame too,
+  // as on mount: a chord may arrive while the preview iframe holds focus.
+  useOnChange([open], () => {
+    if (!field || !open || touch) return;
+    const take = () => {
+      const el = inputRef.current;
+      if (!el || document.activeElement === el) return;
+      el.focus();
+      if (selectOnMount) el.select();
+    };
+    take();
+    const f = requestAnimationFrame(take);
+    return () => cancelAnimationFrame(f);
+  });
+  // whether the press that is running landed in a field at rest: a click there selects the whole
+  // address, as a browser's does; one in a field already holding the caret only moves it
+  const pressedAtRest = useRef(false);
   const verbs = typeof keys === "function" ? keys(nav.active, q) : keys;
   const hints: Array<[string, string]> = [];
   if (verbs?.nav) hints.push(["↑↓", verbs.nav]);
@@ -181,15 +239,20 @@ export function ListPicker<T>({
   if (verbs?.tab && onTab) hints.push(["tab", verbs.tab]);
   if (verbs?.pick) hints.push(["enter", verbs.pick]);
   if (verbs?.back) hints.push(["esc", verbs.back]);
-  const inputEl = (
+  // the strip, holding the float under a field of the page: placed against the strip and following
+  // it, and reached by the strip's own rules
+  const strip = (float?: ReactNode) => (
     <div
-      className="picker-input"
+      {...field?.attrs}
+      className={cx("picker-input", field && "picker-field", field?.className)}
+      data-open={field?.open || undefined}
       // the strip is drawn as the field, so a press on its padding belongs in the field; otherwise it
       // lands on a div and focus leaves for the body, where the next keystroke goes nowhere. A
       // button in the strip changes what the field searches, so its press keeps the caret too: the
-      // click still fires, and the arrows and the next letter go on working.
+      // click still fires, and the arrows and the next letter go on working. A press in the list
+      // floating under a field is the list's own.
       onMouseDown={(e) => {
-        if ((e.target as HTMLElement).closest("input")) return;
+        if ((e.target as HTMLElement).closest("input, .float")) return;
         e.preventDefault();
         inputRef.current?.focus();
       }}
@@ -201,13 +264,61 @@ export function ListPicker<T>({
           bare
           ref={inputRef}
           value={q}
+          // a query is an identifier (a path, a file, a command), never a word to check
+          spellCheck={false}
+          aria-controls={field?.id}
+          aria-expanded={field ? field.open : undefined}
+          onFocus={() => {
+            if (field && !field.open) field.onOpen();
+          }}
+          onBlur={(e) => {
+            // the caret left for a control of the page (tab, a click on a button beside the field):
+            // the list goes with it. Left for nothing (the window, the preview) or for a float, the
+            // stack decides, as it does for every float.
+            const to = e.relatedTarget;
+            if (field?.open && to instanceof Element && !to.closest(".float")) onBack();
+          }}
+          onMouseDown={(e) => {
+            const atRest = document.activeElement !== e.currentTarget;
+            pressedAtRest.current = atRest;
+            // the page's selection stays in the field after Tab takes the caret away (the field's
+            // own selection API does not reach it then), and a press landing inside it would drag
+            // that text instead of placing the caret: the page lets go of it before the press lands
+            if (field && atRest) {
+              const s = document.getSelection();
+              if (s && (!s.isCollapsed || s.toString() !== "")) s.removeAllRanges();
+            }
+          }}
+          // after the click, not in it: a press on a field at rest places its caret as the press
+          // ends, and in the browser that is after the click has been handed out. A caret still
+          // collapsed then says the press was a click and not a drag.
+          onClick={(e) => {
+            if (!field || !pressedAtRest.current) return;
+            pressedAtRest.current = false;
+            const el = e.currentTarget;
+            setTimeout(() => {
+              if (document.activeElement === el && el.selectionStart === el.selectionEnd) el.select();
+            }, 0);
+          }}
           onChange={(e) => {
             setQ(e.target.value);
             // typing resets the highlight to the first row, or to none when the query is back to one
             // that chooses nothing; the mount keeps initialIndex
             nav.setIndex(idleWhen?.(e.target.value) ? -1 : 0);
+            if (field && !field.open) field.onOpen();
           }}
           onKeyDown={(e) => {
+            if (field && !field.open) {
+              // a field with its list away: ↓↑ ask for it back, Escape gives up the caret. The
+              // selection is let go first: a blur from script leaves the page's selection in the
+              // field, and the blur handler's own attempt comes too late to move it.
+              if (e.key === "ArrowDown" || e.key === "ArrowUp") field.onOpen();
+              else if (e.key === "Escape") {
+                letGo(e.currentTarget);
+                e.currentTarget.blur();
+                return;
+              }
+            }
             // the menu key, with the caret in the input: the highlighted row's menu, under that row
             if (rowMenu && nav.active && (e.key === "ContextMenu" || (e.key === "F10" && e.shiftKey))) {
               const row = listRef.current?.querySelector('[data-state~="cursor"]');
@@ -237,12 +348,22 @@ export function ListPicker<T>({
         )}
       </div>
       {trailing}
+      {float}
     </div>
   );
   const counts = new Map<string, number>();
   if (groupOf) for (const t of results) counts.set(groupOf(t), (counts.get(groupOf(t)) ?? 0) + 1);
   const listEl = (
-    <div className="picker-list" ref={listRef}>
+    <div
+      className="picker-list"
+      ref={listRef}
+      // under a field of the page, a press on a row keeps the caret in the field: the row's click
+      // still fires, and the field never blurs for it. A press on the list's own scrollbar is on
+      // the list element itself and is left to the browser.
+      onMouseDown={(e) => {
+        if (field && e.target !== e.currentTarget) e.preventDefault();
+      }}
+    >
       {results.map((t, i) => {
         const group = groupOf?.(t);
         const head =
@@ -278,6 +399,16 @@ export function ListPicker<T>({
     </div>
   );
   const keysEl = hints.length > 0 && <KeyHints hints={hints} />;
+  if (field) {
+    return strip(
+      field.open && (
+        <Overlay onClose={onBack} onEscape={onEscape} boxClass="picker" anchored={anchored} id={field.id}>
+          {listEl}
+          {keysEl}
+        </Overlay>
+      ),
+    );
+  }
   return (
     <Overlay
       onClose={onBack}
@@ -288,7 +419,7 @@ export function ListPicker<T>({
       // lead, a trailing control lands there instead, so a close opens under the finger that opened it
       coverBy={lead ? ".picker-input > *:first-child" : trailing ? ".picker-input > *:last-child" : undefined}
     >
-      {inputEl}
+      {strip()}
       {listEl}
       {keysEl}
     </Overlay>

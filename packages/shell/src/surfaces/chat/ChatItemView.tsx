@@ -57,7 +57,7 @@ import {
   toolBlocks,
   toolLabel,
 } from "./toolCall.ts";
-import { toolRowItems } from "./toolRowItems.ts";
+import { toolRowItems, toolRowOpen } from "./toolRowItems.ts";
 import { codeAt, useCodeCopy } from "./useCodeCopy.tsx";
 
 function Markdown({
@@ -685,6 +685,14 @@ export const ToolRow = memo(
     // square that is always red is the agent's alone.
     const op = useStore((s) => (worktreeId ? s.shipping[worktreeId]?.op : undefined));
     const stoppable = streaming && head.name === SHELL_TOOL && worktreeId ? { worktreeId, toolId: last.id } : null;
+    // the file the row names, opened in the pane: the first thing its menu offers, as a control on
+    // the line. Not while the call is still being written, when the path is a prefix of one.
+    const where = writing
+      ? null
+      : (() => {
+          const w = worktreeById(store.getState(), worktreeId);
+          return toolRowOpen(tools, roots ?? [], w ? { id: w.worktree.id } : null, { sock, dispatch: store.dispatch });
+        })();
     return (
       <Fold
         className={cx(
@@ -755,6 +763,19 @@ export const ToolRow = memo(
                   e.preventDefault();
                   e.stopPropagation();
                   sock?.send({ t: "exec-stop", ...stoppable });
+                }}
+              />
+            )}
+            {where && (
+              <IconButton
+                icon={where.icon}
+                className="tool-open"
+                label={where.tip}
+                onClick={(e) => {
+                  // the press is the button's, not the summary's: a click on the line folds the row
+                  e.preventDefault();
+                  e.stopPropagation();
+                  where.open();
                 }}
               />
             )}

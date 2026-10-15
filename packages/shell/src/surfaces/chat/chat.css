@@ -682,6 +682,23 @@
         color: var(--red);
       }
     }
+    /* the file the row names, opened in the pane, in the stop's seat at the line's far end. Under
+   a pointer it shows while the line is under it or held open: half the rows of a turn name a
+   file, and a glyph at rest on each was a column running down the log. It keeps its box while
+   hidden so the line does not reflow as the pointer arrives. On a phone, with no hover to find it
+   with, it stays. */
+    & .tool-open {
+      flex: 0 0 auto;
+      margin-left: auto;
+      :where([data-hover]) & {
+        visibility: hidden;
+      }
+      :where([data-hover]) summary:hover &,
+      :where([data-hover]) .tool-row[open] > summary &,
+      &:focus-visible {
+        visibility: visible;
+      }
+    }
     /* one call's output inside a row that holds several: the rule is what says where the next hunk
    starts, since the calls are otherwise the same edit to the same file twice over */
     & .tool-part + .tool-part {

@@ -49,8 +49,16 @@ const HAS_TOKEN = hasToken();
 /** How long a preview frame stays mounted after its worktree stops being the one shown. Kept a
  * while so switching back is instant; not for good, because a hidden page that polls its API is
  * still knocking on the proxy, and a knock is what keeps a worktree from sleeping. Remounting
- * costs a flash, not a boot: the server is up. */
+ * costs a flash, not a boot: the server is up, and the frame opens on the page it was on. */
 const HIDDEN_FRAME_MS = 2 * 60_000;
+
+/** a preview frame the centre has up: its worktree, and the route it was opened at. The route is
+ * fixed at mount: a frame's src is set from it, and setting a src navigates, so following the
+ * page live would reload the app on every route it moved to */
+interface MountedFrame {
+  id: string;
+  path: string;
+}
 
 /** navigate a frame to its own src again: setting the attribute navigates even when the value is
  * unchanged, which is the one reload that reaches a document with no bridge in it */
@@ -104,7 +112,7 @@ import { Overlays } from "../overlays/Overlays.tsx";
 import { TerminalPane } from "../terminal/TerminalPane.tsx";
 import { chord, isBusy, pageErrorText, previewUrl, relFile } from "../util.ts";
 import { Boot } from "./Boot.tsx";
-import { carriedFrame, shownFrame } from "./frames.ts";
+import { carriedFrame, mountPath, shownFrame } from "./frames.ts";
 import { Greenfield } from "./Greenfield.tsx";
 import { Import } from "./Import.tsx";
 import { NewProject } from "./NewProject.tsx";
@@ -213,7 +221,8 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
   // project it belongs to cannot show one yet
   const watching = useStore((s) => s.pending.find((p) => p.id === s.activeImportId) ?? null);
 
-  const [mounted, setMounted] = useState<string[]>([]);
+  const [mounted, setMounted] = useState<readonly MountedFrame[]>([]);
+  const mountedIds = useMemo(() => mounted.map((f) => f.id), [mounted]);
   // Pages the daemon asked this tab to render for a worktree's agent: each a hidden frame beside
   // the preview's own, keyed apart from it, whose bridge reports go to its collector and nowhere
   // else (no visit, no page state, no theme). The collector waits out a moment after the frame's
@@ -501,9 +510,14 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
   // a draft shows its base's own preview, which is the active row's
   const previewId = usePreviewId();
   const previewReady = previewId !== null && previewId === activeId && activeReady;
+  // the frame opens on the page the store remembers for its worktree (the one it was on when its
+  // last frame came down), read here and not in render: the route is the mount's, not the page's
   useEffect(() => {
-    if (previewId && previewReady && !mounted.includes(previewId)) setMounted((m) => [...m, previewId]);
-  }, [previewId, previewReady, mounted]);
+    if (previewId && previewReady && !mountedIds.includes(previewId)) {
+      const path = mountPath(store.getState().local[previewId]?.page.url);
+      setMounted((m) => [...m, { id: previewId, path }]);
+    }
+  }, [previewId, previewReady, mountedIds, store]);
   // a sleeping worktree's frame comes down: its page would keep asking the proxy for things, and
   // a request is what wakes a worktree. It mounts again through the ready path when looked at.
   const asleepKey = rows
@@ -512,35 +526,43 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
     .join(" ");
   useEffect(() => {
     const asleep = new Set(asleepKey.split(" ").filter(Boolean));
-    if (mounted.some((id) => asleep.has(id))) setMounted((m) => m.filter((id) => !asleep.has(id)));
-  }, [asleepKey, mounted]);
+    if (mountedIds.some((id) => asleep.has(id))) setMounted((m) => m.filter((f) => !asleep.has(f.id)));
+  }, [asleepKey, mountedIds]);
   // a frame that has been hidden a while comes down; the timers start over on every switch, so
-  // "a while" counts from the last time the set of hidden frames changed
+  // "a while" counts from the last time the set of hidden frames changed (a frame sent back to
+  // its page keeps its clock: the set is the same)
+  const mountedKey = mountedIds.join(" ");
   useEffect(() => {
-    const timers = mounted
-      .filter((id) => id !== previewId)
-      .map((id) => setTimeout(() => setMounted((m) => m.filter((x) => x !== id)), HIDDEN_FRAME_MS));
+    const timers = mountedKey
+      .split(" ")
+      .filter((id) => id && id !== previewId)
+      .map((id) => setTimeout(() => setMounted((m) => m.filter((f) => f.id !== id)), HIDDEN_FRAME_MS));
     return () => {
       for (const t of timers) clearTimeout(t);
     };
-  }, [mounted, previewId]);
+  }, [mountedKey, previewId]);
   // a frame that came down is blank when it goes back up, so it has to say `loaded` again. Kept
   // here rather than in the iframe's ref callback, which React runs on every render: a write there
   // is a render of its own, and two of them are a loop.
   useEffect(() => {
-    setLoadedFrames((l) => (l.every((id) => mounted.includes(id)) ? l : l.filter((id) => mounted.includes(id))));
-  }, [mounted]);
+    setLoadedFrames((l) => (l.every((id) => mountedIds.includes(id)) ? l : l.filter((id) => mountedIds.includes(id))));
+  }, [mountedIds]);
   const frames = useMemo(
     () =>
-      rows
-        .filter(isOwned)
-        .filter((w) => mounted.includes(w.id))
-        .map((w) => ({
-          id: w.worktree.id,
-          port: w.worktree.proxyPort,
-          title: w.worktree.title,
-          url: previewUrl(w.worktree.id, w.worktree.proxyPort, remote, host),
-        })),
+      rows.filter(isOwned).flatMap((w) => {
+        const m = mounted.find((f) => f.id === w.id);
+        if (!m) return [];
+        const base = previewUrl(w.worktree.id, w.worktree.proxyPort, remote, host);
+        // a remembered route that would leave the preview's origin opens the root instead
+        return [
+          {
+            id: w.worktree.id,
+            port: w.worktree.proxyPort,
+            title: w.worktree.title,
+            url: routeUrl(m.path, base) ?? base,
+          },
+        ];
+      }),
     [rows, mounted, remote, host],
   );
   // the frames rendering for the agent: the worktree's preview at the path asked for
@@ -558,7 +580,18 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
   const gated = previewsGated(machine, remote);
   const wanted = useMemo(() => [...frames, ...renderFrames], [frames, renderFrames]);
   const granted = useGrantedUrls(machine, wanted, gated);
-  reopen.current = (id) => (gated ? granted.renew(id) : renavigate(frameRefs.current.get(id)));
+  // A dead frame comes back on the page it died on, which the store still holds (the error page
+  // in the frame had no bridge to overwrite it): a route the mount's is not moves the mount, and
+  // the src that follows from it navigates. The same route has to be set again as it is.
+  reopen.current = (id) => {
+    const path = mountPath(store.getState().local[id]?.page.url);
+    if (mounted.some((f) => f.id === id && f.path !== path)) {
+      setMounted((m) => m.map((f) => (f.id === id ? { ...f, path } : f)));
+      return;
+    }
+    if (gated) granted.renew(id);
+    else renavigate(frameRefs.current.get(id));
+  };
   // a dead frame's server coming back (a proc turning `running` after a restart) is its cue to
   // try again; a frame with a page on it is left alone, its app already reloads on its own
   const runningKey = frames
@@ -599,7 +632,7 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
     return () => clearTimeout(t);
   }, [carry]);
   const painted = previewId !== null && loadedFrames.includes(previewId);
-  const shownId = shownFrame({ previewId, painted, ready: previewReady, carry, mounted });
+  const shownId = shownFrame({ previewId, painted, ready: previewReady, carry, mounted: mountedIds });
   const carried = shownId !== null && shownId !== previewId;
   // the frame the next switch carries, read in the effect that follows the render that showed it
   useEffect(() => {

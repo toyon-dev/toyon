@@ -9,9 +9,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { mintPreviewGrant } from "../ws.ts";
 import type { Machine } from "./machine.ts";
 
-/** `url` with a grant code in its query */
-export const withGrant = (url: string, code: string) =>
-  `${url}${url.includes("?") ? "&" : "?"}${PREVIEW_GRANT_PARAM}=${encodeURIComponent(code)}`;
+/** `url` with a grant code in its query. Spliced, not rebuilt through `URL`, so the app's own
+ * query reaches it byte for byte; the code goes before the hash, where the server can see it,
+ * since a frame opening on a hash router's route carries one */
+export const withGrant = (url: string, code: string) => {
+  const at = url.indexOf("#");
+  const [page, hash] = at === -1 ? [url, ""] : [url.slice(0, at), url.slice(at)];
+  return `${page}${page.includes("?") ? "&" : "?"}${PREVIEW_GRANT_PARAM}=${encodeURIComponent(code)}${hash}`;
+};
 
 /** whether a machine's previews take a code from this page: another machine's, reached by its
  * public name. Read where the machine's `remote` is already selected from its store. */

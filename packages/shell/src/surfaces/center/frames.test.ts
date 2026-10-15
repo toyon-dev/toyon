@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { carriedFrame, shownFrame } from "./frames.ts";
+import { carriedFrame, mountPath, shownFrame } from "./frames.ts";
 
 // the rows these cases stand on: two worktrees of one project, and one of another
 const REPO: Record<string, string> = { main: "r", task: "r", elsewhere: "other" };
@@ -51,5 +51,19 @@ describe("the frame on screen", () => {
 
   test("nothing where there is no preview at all, whatever was carried", () => {
     expect(shownFrame({ ...on, previewId: null, painted: true })).toBeNull();
+  });
+});
+
+describe("the route a frame opens at", () => {
+  test("the page the worktree was last on, with its query and hash, and without its origin", () => {
+    expect(mountPath("http://127.0.0.1:52922/settings")).toBe("/settings");
+    expect(mountPath("http://127.0.0.1:52922/items?page=2#top")).toBe("/items?page=2#top");
+    expect(mountPath("https://w1.toyon.example:4100/#/settings")).toBe("/#/settings");
+  });
+
+  test("the root when nothing was remembered or what was does not parse", () => {
+    expect(mountPath(undefined)).toBe("/");
+    expect(mountPath("")).toBe("/");
+    expect(mountPath("not a url")).toBe("/");
   });
 });

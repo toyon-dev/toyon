@@ -25,6 +25,22 @@ export function carriedFrame(o: {
   return o.repoOf(leaving) === o.repoOf(arriving) ? leaving : null;
 }
 
+/** The route a frame opens at: the page its worktree was last on, as the store remembers it, or
+ * the root with nothing remembered. A frame comes down while hidden a while, asleep, or dead under
+ * a proxy restart, and the store's page outlives it, so the one that goes back up returns to that
+ * page rather than the app's front door. The path, query and hash are kept (a hash router's route
+ * is its hash); the origin is dropped, since the address is composed against the preview's own
+ * base and a page remembered under another host or port is still the same route. */
+export function mountPath(pageUrl: string | undefined): string {
+  if (!pageUrl) return "/";
+  try {
+    const u = new URL(pageUrl);
+    return `${u.pathname}${u.search}${u.hash}`;
+  } catch {
+    return "/";
+  }
+}
+
 /** what is painted: the selected worktree's frame once it has drawn a page, else the frame being
  * carried while it is still mounted (it comes down on its own timer), else nothing */
 export function shownFrame(o: {

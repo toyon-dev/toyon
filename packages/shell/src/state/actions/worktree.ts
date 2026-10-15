@@ -26,7 +26,7 @@ import { revealItems } from "./editor.ts";
 
 type Dispatch = (a: Action) => void;
 
-/** the land row's second line: the repo's route in full, under the word the route gives it */
+/** the land row's second line: the repo's route, so the one verb says what it does here */
 const landDetail = (repo: RepoInfo | null) =>
   describeLand(landPolicy(repo?.config ?? {}), repo?.defaultBranch).toLowerCase();
 
@@ -241,11 +241,11 @@ export function worktreeItems(
     });
   }
   if (canLand(w.worktree)) {
-    // the repo's route, whatever the settings say it is: there is one way work reaches main
-    // here, and the row's word is that route's (merge, or open PR)
+    // the repo's route, whatever the settings say it is: there is one way work lands here. The
+    // word is land, except for opening the PR, which is the one press that lands nothing yet.
     land.push({
       id: "land",
-      label: landWord(landPolicy(repo?.config ?? {})),
+      label: landWord(landPolicy(repo?.config ?? {}), w.worktree),
       detail: landDetail(repo),
       disabled: busy,
       onClick: () => shipOp(sock, dispatch, { t: "land", worktreeId: id }),

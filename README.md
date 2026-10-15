@@ -6,7 +6,7 @@ Each copy runs on your own machine, and the next one is pre-warmed. Works with C
 
 [How it works](#how-it-works) · [Install](#install) · [Under the hood](#under-the-hood) · [Trust](#trust) · [Uninstall](#uninstall)
 
-![Toyon with four chats on a plant shop, each changing its own copy. The desk opens a code, a phone signs in with it and starts a copy of its own, both screens follow that chat, and both end on the last copy with its Wildflowers filter pressed, ready to merge](https://raw.githubusercontent.com/toyon-dev/toyon/main/docs/images/toyon.gif)
+![Toyon with four chats on a plant shop, each changing its own copy. The desk opens a code, a phone signs in with it and starts a copy of its own, both screens follow that chat, and both end on the last copy with its Wildflowers filter pressed, ready to land](https://raw.githubusercontent.com/toyon-dev/toyon/main/docs/images/toyon.gif)
 
 ## Why
 
@@ -20,7 +20,7 @@ In Toyon you point at a button in the page and ask for it to be bigger, watch it
 - You judge the work by using the app first, then read the change.
 - Watch and steer while it works, or leave and come back to it later.
 - Kick off more work or check in remotely from your phone.
-- Nothing is kept until you press merge.
+- Nothing is kept until you press land.
 
 Each copy is a branch and a git worktree with your dependencies and `.env` files; one spare per project is kept warm.
 
@@ -28,7 +28,7 @@ Point at anything on the page to talk about it or open the line that draws it, a
 
 One Toyon holds every project you open, and the list of chats shows which one needs you.
 
-When your check passes, one press merges into main on your machine by default, or pushes, or opens a pull request. The word on it says which.
+When your check passes, land merges into main on your machine by default, or pushes, or opens a pull request.
 
 Built for web apps. A project without a page still works; the chat takes the middle instead of the preview.
 
@@ -63,14 +63,14 @@ Each agent signs in from the chat. Claude Code and Codex install on first start;
 
 | Coming from | What stays | What changes |
 |---|---|---|
-| Claude Code or Codex in a terminal | The same agent under your login, with your permission rules, hooks, slash commands and MCP servers | Each chat gets its own copy of the project with the app running, and nothing reaches main until you press |
+| Claude Code or Codex in a terminal | The same agent under your login, with your permission rules, hooks, slash commands and MCP servers | Each chat gets its own copy of the project with the app running, and nothing lands until you press |
 | Cursor, Zed or VS Code | Your editor and your checkout; every change lands on disk where your editor already is | The running app is the centre of every chat, wired to its source |
 | Lovable, v0 or Bolt | The loop: a chat and the page it changes, and pointing at an element to talk about it | Your own project on your machine, with your database, Docker and private packages; each chat is a branch in your repository |
-| Conductor or Superset | Many agents at once, each on its own copy | Built around the app instead of the agents; MIT, no account, no telemetry, merges on your machine without GitHub |
+| Conductor or Superset | Many agents at once, each on its own copy | Built around the app instead of the agents; MIT, no account, no telemetry, lands on your machine without GitHub |
 
 ## Under the hood
 
-The contract for anything Toyon runs: *stay in the foreground, listen on `$PORT`, reload yourself however you like.* A `.toyon/settings.json` in the project names the setup commands, the commands to `run`, an optional `check` and how work reaches main. The first open guesses one from `package.json`, asks you to confirm it, and writes it into the project; other stacks start from an empty guess the agent can fill in. If a server comes up on some other port anyway, the preview follows it there and says which flag to add.
+The contract for anything Toyon runs: *stay in the foreground, listen on `$PORT`, reload yourself however you like.* A `.toyon/settings.json` in the project names the setup commands, the commands to `run`, an optional `check` and how work lands. The first open guesses one from `package.json`, asks you to confirm it, and writes it into the project; other stacks start from an empty guess the agent can fill in. If a server comes up on some other port anyway, the preview follows it there and says which flag to add.
 
 A project with a page and an API behind it:
 
@@ -93,7 +93,7 @@ Copies start when you open them, and stop their servers when nobody has looked a
 ## What it does not do
 
 - It is not an editor. You can browse the files, read and edit a diff and run a terminal, but there is no multi-file editing, no debugger, no extensions, no inline completion.
-- Nothing is pushed except by your press: merge, on the push route, or open PR. The agent is told not to push or delete branches.
+- Only land pushes, when you press it. The agent is told not to push or delete branches.
 - It works on git repositories, and the product uses git's words for what it does. A new project starts one for you.
 - It does not keep copies apart from services they share. Each copy runs your setup and your commands on its own, so a database or a compose stack they all point at is shared, migrations included. `TOYON_WORKTREE` in every command's environment lets a project give each copy its own (`app_$TOYON_WORKTREE` as the database name); [docs/settings.md](https://github.com/toyon-dev/toyon/blob/main/docs/settings.md#keeping-copies-apart) has the recipes.
 - It does not carry a login between copies. Each preview has its own cookies, so a new chat's app starts signed out, and an OAuth provider cannot redirect into a preview at all.

@@ -30,7 +30,6 @@ import type {
   KeepAwakeMode,
   Knock,
   LandMark,
-  LandRoute,
   LogLine,
   ManagedView,
   OwnedWorktree,
@@ -75,7 +74,6 @@ import {
   isMain,
   isOwned,
   isProvisional,
-  landPolicy,
   MANAGED_NONE,
   newer,
   PROJECTS_FOLDER,
@@ -1178,12 +1176,6 @@ function revealChat(s: State): State {
 
 export function repoById(s: Pick<State, "repos">, id: string | null | undefined): RepoInfo | null {
   return (id && s.repos.find((r) => r.id === id)) || null;
-}
-
-/** a repo's landing route, the one fact a surface needs to word the press and the op in flight
- * (merge, or open PR); an unknown repo reads as the default route */
-export function landRouteOf(s: Pick<State, "repos">, repoId: string | null | undefined): LandRoute {
-  return landPolicy(repoById(s, repoId)?.config ?? {}).land;
 }
 
 /** a repo's lead row, where new work is typed: its provisional row, else its main */

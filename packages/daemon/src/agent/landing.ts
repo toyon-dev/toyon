@@ -60,7 +60,7 @@ export function landPrompt(i: LandInput): string {
   // work: with nothing uncommitted it is for the branch as one, and they describe that
   if (own && i.earlier) {
     head.push(
-      `Task, as the worktree is titled; background, since the branch committed or merged work before: ${clip(i.title, 200)}`,
+      `Task, as the worktree is titled; background, since the branch committed or landed work before: ${clip(i.title, 200)}`,
     );
     if (i.firstAsk) head.push(`First request here, which the earlier work may have answered: ${clip(i.firstAsk, 300)}`);
   } else {

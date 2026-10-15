@@ -6,15 +6,8 @@
 
 import { type AgentCommand, PERMISSION_MODES, type PermissionMode } from "@toyon/shared";
 
-/** the names toyon answers itself: a mode, the seat's verb (the route's word for landing, one of
- * `merge` and `pr`), or the handoff to another project */
-export type OwnName = PermissionMode | "check" | "merge" | "pr" | "archive" | "handoff";
-
-/** the `/` name for the landing press, as the route gives it */
-export type LandName = "merge" | "pr";
-
-/** the names the composer runs itself, the modes aside, which go to the chip */
-export type SeatName = Exclude<OwnName, PermissionMode>;
+/** the names toyon answers itself: a mode, the seat's verb, or the handoff to another project */
+export type OwnName = PermissionMode | "check" | "land" | "archive" | "handoff";
 
 /** a draft that leads with one of toyon's own commands: the name, and whatever followed it */
 export type OwnInvocation = { name: OwnName; args: string };
@@ -22,9 +15,8 @@ export type OwnInvocation = { name: OwnName; args: string };
 export const isMode = (name: string): name is PermissionMode => PERMISSION_MODES.some((m) => m.id === name);
 
 /** the rows: each mode with its chip's line and a description as its argument, then the seat's
- * verbs, the landing press under the route's name (`landCommand`) and described the way the
- * repo's settings have it (`describeLand`) */
-export function ownCommands(landName: LandName, landLine: string): AgentCommand[] {
+ * verbs, land described the way the repo's settings have it (`describeLand`) */
+export function ownCommands(landLine: string): AgentCommand[] {
   return [
     ...PERMISSION_MODES.map((m) => ({ name: m.id, description: m.description, hint: "[<description>]" })),
     {
@@ -32,8 +24,8 @@ export function ownCommands(landName: LandName, landLine: string): AgentCommand[
       description: "run the repo's check here and write the recap and the commit message",
       hint: "[<note for the commit message>]",
     },
-    { name: landName, description: landLine },
-    { name: "archive", description: "archive this worktree once its work is on main" },
+    { name: "land", description: landLine },
+    { name: "archive", description: "archive this worktree once its work has landed" },
     {
       name: "handoff",
       description: "continue this work in another project; Toyon starts a worktree there with your message",

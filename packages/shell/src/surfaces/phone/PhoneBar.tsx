@@ -20,7 +20,7 @@ import {
   useOffline,
   useVisibleWorktrees,
 } from "../../state/selectors.ts";
-import { asksSetup, landRouteOf } from "../../state/store.ts";
+import { asksSetup } from "../../state/store.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { Icon } from "../../ui/Icon.tsx";
@@ -107,7 +107,7 @@ export function PhoneBar({
         ? offline
           ? OFFLINE_LINE
           : leadOp
-            ? shipLabel(leadOp, landRouteOf({ repos }, repo?.id))
+            ? shipLabel(leadOp)
             : (repo?.name ?? null)
         : active
           ? rowLine(active, {

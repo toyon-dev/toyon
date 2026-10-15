@@ -86,9 +86,9 @@ describe("what a landing carried", () => {
     expect(landedLines(undefined)).toEqual([]);
     const h = 3600_000;
     const many = [1, 2, 3, 4, 5].map((n) => mark({ at: Date.now() - (6 - n) * h, subjects: [`step ${n}`] }));
-    expect(landedLines(many)).toEqual(["2 earlier merges.", "3h ago: step 3.", "2h ago: step 4.", "1h ago: step 5."]);
+    expect(landedLines(many)).toEqual(["2 earlier landings.", "3h ago: step 3.", "2h ago: step 4.", "1h ago: step 5."]);
     expect(landedLines(many.slice(0, 4))).toEqual([
-      "1 earlier merge.",
+      "1 earlier landing.",
       "4h ago: step 2.",
       "3h ago: step 3.",
       "2h ago: step 4.",
@@ -170,7 +170,7 @@ describe("landingLine", () => {
   });
 
   test("the behind count is a fact for the verb, and nothing when the branch is level", () => {
-    expect(behindFact("main", 4)).toBe("4 behind main, taken in first.");
+    expect(behindFact("main", 4)).toBe("4 behind main; land takes it in first.");
     expect(behindFact("main", 0)).toBe("");
     expect(behindFact("main", undefined)).toBe("");
   });

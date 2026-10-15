@@ -13,17 +13,15 @@ export type Rung = {
 };
 
 /** The ladder every row slides through, in one fixed order so the hand learns it: archive first,
- * the one that is undone from the archived section, then the route's word (merge, or open PR),
- * then the whole menu. Read off the row's own menu, so the slide offers exactly what the menu
- * does and nothing twice; `landWord` is the route's word for a row whose menu does not offer it,
- * so the rung still teaches the word. */
-export function slideLadder(items: MenuEntry[], landWord: string): Rung[] {
+ * the one that is undone from the archived section, then land, then the whole menu. Read off the
+ * row's own menu, so the slide offers exactly what the menu does and nothing twice. */
+export function slideLadder(items: MenuEntry[]): Rung[] {
   const find = (id: string) => items.filter(isItem).find((i) => i.id === id) ?? null;
   const archive = find("archive");
   const land = find("land");
   return [
     { id: "archive", label: archive?.label ?? "archive", icon: "archive", item: archive },
-    { id: "land", label: land?.label ?? landWord, icon: "land", item: land },
+    { id: "land", label: land?.label ?? "land", icon: "land", item: land },
     { id: "more", label: "more", icon: "more", item: null },
   ];
 }

@@ -2,20 +2,14 @@ import { describe, expect, test } from "bun:test";
 import { PERMISSION_MODES } from "@toyon/shared";
 import { browseCommands, commandTiers, mergeCommands, ownCommandOf, ownCommands } from "./ownCommands.ts";
 
-const own = ownCommands("merge", "Commit and merge into main here");
+const own = ownCommands("Commit and merge into main here");
 const planLine = PERMISSION_MODES.find((m) => m.id === "plan")?.description;
 
 describe("ownCommands", () => {
   test("one row per mode with the chip's line, then the seat's verbs", () => {
-    expect(own.map((c) => c.name)).toEqual(["auto", "ask", "plan", "check", "merge", "archive", "handoff"]);
+    expect(own.map((c) => c.name)).toEqual(["auto", "ask", "plan", "check", "land", "archive", "handoff"]);
     for (const m of PERMISSION_MODES) expect(own.find((c) => c.name === m.id)?.description).toBe(m.description);
-    expect(own.find((c) => c.name === "merge")?.description).toBe("Commit and merge into main here");
-  });
-  test("the landing row is named by the route: pr where the route opens one", () => {
-    const pr = ownCommands("pr", "Commit, push the branch and open a PR");
-    expect(pr.map((c) => c.name)).toEqual(["auto", "ask", "plan", "check", "pr", "archive", "handoff"]);
-    expect(ownCommandOf("/pr", pr)).toEqual({ name: "pr", args: "" });
-    expect(ownCommandOf("/merge", pr)).toBeNull();
+    expect(own.find((c) => c.name === "land")?.description).toBe("Commit and merge into main here");
   });
 
   test("a mode takes a description, so the inserted ghost has something to say", () => {
@@ -33,7 +27,7 @@ describe("ownCommands", () => {
 
   test("check takes a note for the commit message; land and archive take nothing", () => {
     expect(own.find((c) => c.name === "check")?.hint).toBe("[<note for the commit message>]");
-    expect(own.find((c) => c.name === "merge")?.hint).toBeUndefined();
+    expect(own.find((c) => c.name === "land")?.hint).toBeUndefined();
     expect(ownCommandOf("/check relates to the sync ticket", own)).toEqual({
       name: "check",
       args: "relates to the sync ticket",
@@ -62,13 +56,13 @@ describe("mergeCommands", () => {
   test("the person's own rows lead toyon's, in the agent's order, and a name toyon owns stays toyon's", () => {
     const list = [
       { name: "standup", description: "standup (user)", origin: "user" as const },
-      { name: "merge", description: "a skill named like the verb", origin: "project" as const },
+      { name: "land", description: "a skill named like the verb", origin: "project" as const },
       ...agent,
       { name: "aws", description: "debug the envs", origin: "project" as const },
     ];
     const names = mergeCommands(own, list).map((c) => c.name);
     expect(names).toEqual(["standup", "aws", ...own.map((c) => c.name), "compact"]);
-    expect(mergeCommands(own, list).find((c) => c.name === "merge")?.origin).toBeUndefined();
+    expect(mergeCommands(own, list).find((c) => c.name === "land")?.origin).toBeUndefined();
     const tiers = commandTiers(own, list);
     expect(tiers.yours.map((c) => c.name)).toEqual(["standup", "aws"]);
     expect(tiers.rest.map((c) => c.name)).toEqual(["compact"]);
@@ -100,7 +94,7 @@ describe("ownCommandOf", () => {
     expect(ownCommandOf("/plan", own)).toEqual({ name: "plan", args: "" });
     expect(ownCommandOf("/plan ", own)).toEqual({ name: "plan", args: "" });
     expect(ownCommandOf("/plan  fix the footer\n", own)).toEqual({ name: "plan", args: "fix the footer" });
-    expect(ownCommandOf("/merge", own)).toEqual({ name: "merge", args: "" });
+    expect(ownCommandOf("/land", own)).toEqual({ name: "land", args: "" });
   });
 
   test("a message, a shell command and an agent's command are not toyon's", () => {

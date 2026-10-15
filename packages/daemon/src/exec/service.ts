@@ -10,7 +10,6 @@ import {
   type AgentEvent,
   CHECK_TOOL,
   type Fixable,
-  landPolicy,
   SHELL_TOOL,
   type ShellInput,
   type Shipping,
@@ -91,12 +90,7 @@ export class ExecService {
    * has no queue, and the line under the box says when to send it again. */
   run(worktreeId: string, command: string): void {
     const op = this.deps.shipping?.(worktreeId);
-    if (op) {
-      // the land op under the route's word, the one that was pressed
-      const wt = this.deps.state.worktree(worktreeId);
-      const policy = landPolicy((wt && this.deps.state.repo(wt.repoId)?.config) ?? {});
-      throw new UserError(`${shipNoun(op.op, policy)} is running here; run the command once it is done`);
-    }
+    if (op) throw new UserError(`${shipNoun(op.op)} is running here; run the command once it is done`);
     fireAndForget(worktreeId, this.exec(worktreeId, command), `exec ${command}`);
   }
 

@@ -40,6 +40,21 @@ const other = { id: "r2", name: "acp", path: "/acp", defaultBranch: "main", conf
 const labels = (items: MenuEntry[]) => items.map((i) => (isItem(i) ? i.label : "|"));
 
 describe("a worktree's actions", () => {
+  test("on the PR route the land row says open PR until a PR exists, then land", () => {
+    const prRepo = {
+      id: "r",
+      name: "r",
+      path: "/r",
+      defaultBranch: "main",
+      config: { run: {}, land: { route: "pr" } },
+    } as never;
+    const state = { layout: defaultLayout, shipping: {}, frame: "desk" as const, repos: [] };
+    const word = (items: MenuEntry[]) => items.filter(isItem).find((i) => i.id === "land")?.label;
+    expect(word(worktreeItems(owned(), prRepo, state, deps, here))).toBe("open PR");
+    const opened = owned({ worktree: { ...info, pr: { number: 7, url: "u", state: "open", at: 1 } } });
+    expect(word(worktreeItems(opened, prRepo, state, deps, here))).toBe("land");
+    expect(word(worktreeItems(owned(), null, state, deps, here))).toBe("land");
+  });
   test("read the same in the menu and the palette: one list, grouped, gated by state", () => {
     const quiet = worktreeItems(
       owned(),
@@ -60,7 +75,7 @@ describe("a worktree's actions", () => {
       "rename…",
       "mark as unread",
       "|",
-      "merge",
+      "land",
       "|",
       "continue in another project…",
       "|",
@@ -90,7 +105,7 @@ describe("a worktree's actions", () => {
       "|",
       // dirty under a turn: the press waits for the turn, and the row says so
       "sync from main after the turn (3 behind)",
-      "merge",
+      "land",
       "|",
       "continue in another project…",
       "|",
@@ -143,7 +158,7 @@ describe("a worktree's actions", () => {
       "rename…",
       "mark as unread",
       "|",
-      "merge",
+      "land",
       "|",
       "continue in another project…",
       "|",
@@ -191,7 +206,7 @@ describe("a worktree's actions", () => {
       here,
     );
     const off = items.filter(isItem).filter((i) => i.disabled !== undefined);
-    expect(off.map((i) => i.label)).toEqual(["sync from main (3 behind)", "merge"]);
+    expect(off.map((i) => i.label)).toEqual(["sync from main (3 behind)", "land"]);
     expect(off[0]?.disabled).toBe("waiting on the one in progress");
   });
 

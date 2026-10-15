@@ -5,7 +5,7 @@ import {
   isOwned,
   canLand as landable,
   landPolicy,
-  landWord,
+  landWord as landWordOf,
   type WorktreeStatus,
 } from "@toyon/shared";
 import { useRef, useState } from "react";
@@ -139,9 +139,9 @@ export function CommitBox({
     active.agent !== "waiting";
   const repo = useStore((s) => s.repos.find((r) => r.id === active.repoId) ?? null);
   const policy = landPolicy(repo?.config ?? {});
-  // the route's word on the button (merge, or open PR), and the route in full as its tip
-  const routeWord = landWord(policy);
   const landTip = describeLand(policy, repo?.defaultBranch);
+  // the button's word: land, or open PR for the one press that lands nothing yet
+  const routeWord = landWordOf(policy, owned ?? {});
   // what the counts here are against: main here, or origin's main where the route lands there
   const base = repo ? baseOf(repo) : "main";
   const behindLine = canSync(active) ? behindNote(base, behind) : null;
@@ -160,21 +160,27 @@ export function CommitBox({
   const canMerge = prOpen && !prMissing && prCanMerge(pr);
   // the word a land runs under here: the one the row offered, since what the row can do does not
   // change while the op runs. Pull is the composer's word for the same op on a merged PR.
-  const opWord = canLand
+  const landWord = canLand
     ? routeWord
     : canUpdate
       ? "update"
       : canMerge
-        ? "merge"
+        ? "land"
         : pr?.state === "merged"
           ? "pull"
-          : routeWord;
+          : "land";
   // the op's line, standing where its button was: the word lit is the press taken, and the step
   // follows it once held, the way the composer's line reads. A commit's step is its own word's,
   // so there the step stands alone. Prose and not a busy button: the band already says busy, and
   // a spinner beside a shining word was two marks for one wait.
   const pressed =
-    op === "commit" ? (heldStep ?? "commit") : op === "land" ? (heldStep ? `${opWord}: ${heldStep}` : opWord) : null;
+    op === "commit"
+      ? (heldStep ?? "commit")
+      : op === "land"
+        ? heldStep
+          ? `${landWord}: ${heldStep}`
+          : landWord
+        : null;
   const running = pressed;
   // The run behind the word, under the rule where a line has the box's whole width: its stage,
   // its time against the ceiling and its status ("pre-commit hook · 4m 13s of 30m"), with the
@@ -226,7 +232,7 @@ export function CommitBox({
               (gap === "unanswered"
                 ? "no message yet: the model did not answer. Check again, or write one here"
                 : gap === "unasked"
-                  ? `no message yet: write one here to commit or ${routeWord}`
+                  ? "no message yet: write one here to commit or land"
                   : "commit message…")
             }
           />
@@ -243,7 +249,7 @@ export function CommitBox({
           )}
           {owned?.landed && (
             <span className="badge-landed" data-tip={`Merged into ${base}`}>
-              <Icon name="check" className="icon-inline" /> merged
+              <Icon name="check" className="icon-inline" /> landed
             </span>
           )}
         </span>
@@ -297,7 +303,7 @@ export function CommitBox({
                   data-tip="Merge the PR now, by the method the repo allows"
                   onClick={land}
                 >
-                  merge
+                  land
                 </Button>
               )}
             </>

@@ -97,8 +97,7 @@ export class AfterLand {
       // row's log, which is where someone who wants the whole run goes
       const why = last.trim();
       failure = why === "" ? `${command} (exit ${code})` : why;
-      notice =
-        why === "" ? `After the merge, ${command} exited ${code}` : `After the merge, ${command} stopped: ${why}`;
+      notice = why === "" ? `After landing, ${command} exited ${code}` : `After landing, ${command} stopped: ${why}`;
       this.tellMain(repo, `afterLand stopped: ${command} exited ${code}`);
       log.warn(repo.id, `afterLand stopped: ${command} exited ${code}`);
       break;

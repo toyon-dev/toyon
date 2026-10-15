@@ -84,9 +84,9 @@ describe("handoff prompts", () => {
 
   test("the landed sentence names the project and the title, with the PR when the landing was one", () => {
     expect(handoffLandedContext("Fix the form", "acp", "https://x/pull/7")).toBe(
-      'The work this worktree handed off to acp, "Fix the form", has merged there (https://x/pull/7); anything here that waited on it, such as a pinned version or a hand-patched copy, can take the real change now.',
+      'The work this worktree handed off to acp, "Fix the form", has landed there (https://x/pull/7); anything here that waited on it, such as a pinned version or a hand-patched copy, can take the real change now.',
     );
-    expect(handoffLandedContext("Fix the form", "acp")).toContain('"Fix the form", has merged there; anything');
+    expect(handoffLandedContext("Fix the form", "acp")).toContain('"Fix the form", has landed there; anything');
   });
 });
 

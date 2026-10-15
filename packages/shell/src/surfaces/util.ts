@@ -4,7 +4,6 @@ import {
   isLead,
   isLoopbackHost,
   isOwned,
-  type LandRoute,
   PAGE_ERROR_MAX_CHARS,
   type ProcState,
   type ProcStatus,
@@ -118,7 +117,7 @@ const DOT_LABEL: Record<DotState, string> = {
   waiting: "Waiting for you",
   working: "Agent working",
   failed: "Agent failed",
-  landed: "Merged",
+  landed: "Landed",
   crashed: "Crashed",
   running: "Running",
   starting: "Starting",
@@ -157,16 +156,15 @@ export function shipShown(w: WorktreeStatus, op: ShipOp | undefined): ShipOp | n
   return op && dotClass(w) !== "waiting" ? op : null;
 }
 
-/** the op in words, the verb its own button showed in the present tense; the land op's word is
- * the route's, so the route says which */
-const SHIP_LABEL: Record<Exclude<ShipOp, "land">, string> = {
+/** the op in words, the verb its own button showed in the present tense */
+const SHIP_LABEL: Record<ShipOp, string> = {
+  land: "Landing",
   commit: "Committing",
   "sync-main": "Syncing with main",
   "pull-main": "Pulling",
 };
 
-export function shipLabel(op: ShipOp, route: LandRoute): string {
-  if (op === "land") return route === "pr" ? "Opening a PR" : "Merging";
+export function shipLabel(op: ShipOp): string {
   return SHIP_LABEL[op];
 }
 

@@ -140,7 +140,7 @@ describe("landLocally on a main with uncommitted files", () => {
       const r = await landLocally(wt, "feat", t.repo, "main", method, "");
       expect(r.ok).toBe(false);
       expect(r.message).toBe(
-        "main has uncommitted files the merge would overwrite (README.md): commit or stash them there first",
+        "main has uncommitted files the landing would overwrite (README.md): commit or stash them there first",
       );
       expect((await git(t.repo, "rev-parse", "main")).out).toBe(before);
       expect(readFileSync(join(t.repo, "README.md"), "utf8")).toBe("edited on main\n");

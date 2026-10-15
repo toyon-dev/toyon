@@ -107,23 +107,16 @@ export function prTaken(wt: Landed): boolean {
   return !!wt.pr && (wt.lands ?? []).some((l) => l.pr === wt.pr?.number);
 }
 
-/** The word on the press, by the route: what the work does to main on the local routes (every
- * method ends in a git merge there, and GitHub calls squash and rebase merges too), or the PR
- * that proposes it. A real git word, where "land" taught nothing outside toyon. */
-export function landWord(policy: Pick<LandPolicy, "land">): "merge" | "open PR" {
-  return policy.land === "pr" ? "open PR" : "merge";
+/** a landing op as a sentence names it: "a land is already running here" */
+export function shipNoun(op: ShipOp): string {
+  return { land: "a land", commit: "a commit", "sync-main": "a sync", "pull-main": "a pull" }[op];
 }
 
-/** the same word as the `/` menu types it: one token, no space */
-export function landCommand(policy: Pick<LandPolicy, "land">): "merge" | "pr" {
-  return policy.land === "pr" ? "pr" : "merge";
-}
-
-/** a landing op as a sentence names it: "a merge is already running here". The route names the
- * land op, since its word is the route's. */
-export function shipNoun(op: ShipOp, policy: Pick<LandPolicy, "land">): string {
-  const land = policy.land === "pr" ? "a PR" : "a merge";
-  return { land, commit: "a commit", "sync-main": "a sync", "pull-main": "a pull" }[op];
+/** The word on the press that puts work on main: "land", on every route, so one word means one
+ * thing. The one press that does not is opening the PR on the PR route, before a PR exists (or
+ * after the last one closed), so that press says so; once the PR is open, landing it is landing. */
+export function landWord(policy: Pick<LandPolicy, "land">, wt: Pick<WorktreeInfo, "pr">): "land" | "open PR" {
+  return policy.land === "pr" && (!wt.pr || wt.pr.state === "closed") ? "open PR" : "land";
 }
 
 /** what the one land verb does here, for its tooltip and its menu row */

@@ -16,7 +16,6 @@ import {
   DEFAULT_PERMISSION_MODE,
   describeLand,
   isProvisional,
-  landCommand,
   landPolicy,
   landWord,
   nextNumbers,
@@ -86,7 +85,7 @@ import { cardLine, openCard, parseHandoffArgs } from "./handoff.ts";
 import { MentionText, openMention } from "./Mentions.tsx";
 import { filterCommands, insertAt, triggerAt } from "./mentions.ts";
 import { dismissOffer, offerOf, useDismissedOffers } from "./offer.ts";
-import { browseCommands, isMode, mergeCommands, ownCommandOf, ownCommands, type SeatName } from "./ownCommands.ts";
+import { browseCommands, isMode, mergeCommands, ownCommandOf, ownCommands } from "./ownCommands.ts";
 import { PermissionCard } from "./PermissionCard.tsx";
 import { PickChip } from "./PickChip.tsx";
 import { QuestionCard } from "./QuestionCard.tsx";
@@ -109,6 +108,10 @@ const USAGE_HOVER_MS = 150;
 /** the next step on the work, as the word leading the empty box's line */
 type Verb = {
   word: string;
+  /** what the press is, apart from its word: the land press by the route (`ship`), the landing
+   * of an open PR, the check, the archive, or a view of the PR. Read where a verb's kind decides
+   * what sits under it, since two kinds share the word land. */
+  kind: "ship" | "merge" | "check" | "archive" | "view";
   /** what the line says after the word */
   line: string;
   tip: string;
@@ -407,15 +410,9 @@ export function Composer({
   // one thing left is to close the row
   const prClosed = active?.worktree.pr?.state === "closed";
   const policy = landPolicy(repo?.config ?? {});
-  // the route's word for the landing press (merge, or open PR), and its `/` name
-  const routeWord = landWord(policy);
-  const routeName = landCommand(policy);
   // toyon's own `/` rows, ahead of the agent's: the modes and the seat's verbs, typed by name
   // (ownCommands.ts has the rules)
-  const ownRows = useMemo(() => {
-    const p = landPolicy(repo?.config ?? {});
-    return ownCommands(landCommand(p), describeLand(p, repo?.defaultBranch));
-  }, [repo]);
+  const ownRows = useMemo(() => ownCommands(describeLand(landPolicy(repo?.config ?? {}), repo?.defaultBranch)), [repo]);
   const compact = () => id && sock?.send({ t: "chat", worktreeId: id, text: "/compact" });
   const compactOff = spawning
     ? "nothing to compact until the first reply"
@@ -622,10 +619,10 @@ export function Composer({
   // what the land would be missing for the commit it makes first, if anything
   const gap = messageGap(verdict, dirty, quick);
   // work with no verdict, one the tree moved under, or one whose question went unanswered with a
-  // commit to write: the check is the next step, and the word for it sits where the route's word
-  // will once it passes. A check running or failed keeps its own line. Not while a press is out
-  // on the row: the land clears the verdict as its work reaches main, and a check of what just
-  // merged is not the next step.
+  // commit to write: the check is the next step, and the word for it sits where `land` will once
+  // it passes. A check running or failed keeps its own line. Not while a press is out on the row:
+  // the land clears the verdict as its work reaches main, and a check of what just landed is not
+  // the next step.
   const checkable =
     atRest &&
     !op &&
@@ -637,9 +634,10 @@ export function Composer({
     (!verdict || !!verdict.stale || gap === "unanswered");
   const archiveTip =
     "Archive this worktree when you are done here; the rail's archived section brings it back with its chat.";
-  // the ship word and where it sends the work: onto main by the repo's route, under the route's
-  // own word, or up to the open PR when the branch on origin is behind what is here
-  const shipWord = prMissing ? "update" : routeWord;
+  // the ship word and where it sends the work: onto main by the repo's route, or up to the open
+  // PR when the branch on origin is behind what is here. Opening the PR is the one press that
+  // lands nothing yet, so it says so instead of land.
+  const shipWord = prMissing ? "update" : landWord(policy, active?.worktree ?? {});
   // what the branch is measured against and takes in: main here, or origin's main where the
   // route lands there
   const base = repo ? baseOf(repo) : "main";
@@ -659,19 +657,23 @@ export function Composer({
     : landed
       ? {
           word: "archive",
+          kind: "archive",
           // a PR GitHub merged is named as the landing: it happened there, not by a press here,
           // and main here following it is the trunk's own business
           line:
             active?.worktree.pr?.state === "merged"
               ? prLine(active.worktree.pr)
-              : `merged into ${repo?.defaultBranch ?? "main"}.`,
+              : `landed on ${repo?.defaultBranch ?? "main"}.`,
           tip: archiveTip,
           run: () => archiveWorktrees(sock, dispatch, [id]),
         }
       : pr?.state === "open" && !prMissing
         ? prCanMerge(pr)
           ? {
-              word: "merge",
+              // landing the PR is landing: the same word as on the local routes, and the tip
+              // says it is the PR being merged
+              word: "land",
+              kind: "merge",
               line: verbLine(said ?? prLine(pr)),
               tip: `${prLine(pr)} Merge the PR now, by the method the repo allows.`,
               run: land,
@@ -679,6 +681,7 @@ export function Composer({
             }
           : {
               word: "view",
+              kind: "view",
               line: verbLine(said ?? prLine(pr)),
               tip: `${prLine(pr)} Open the PR on GitHub.`,
               run: () => window.open(pr.url, "_blank"),
@@ -686,6 +689,7 @@ export function Composer({
         : pr?.state === "closed"
           ? {
               word: "archive",
+              kind: "archive",
               line: prLine(pr),
               tip: `${prLine(pr)} ${archiveTip}`,
               run: () => archiveWorktrees(sock, dispatch, [id]),
@@ -693,6 +697,7 @@ export function Composer({
           : checkable
             ? {
                 word: "check",
+                kind: "check",
                 line: verdict?.subject ?? verbLine(said ?? filesLine(landCount)),
                 tip: checkTip(verdict, hasCheck, gap),
                 run: judge,
@@ -700,6 +705,7 @@ export function Composer({
             : landing?.ready && !landingLine(landing, dirty, quick, agentInfo?.name)
               ? {
                   word: shipWord,
+                  kind: "ship",
                   line: landing.subject ?? verbLine(said ?? (landFacts(landing, landCount) || "ready")),
                   tip: [
                     landFacts(landing, landCount),
@@ -724,7 +730,7 @@ export function Composer({
   const lastLand = active?.worktree.lands?.at(-1);
   const landedUnder = lastLand && landedWhat(lastLand);
   const offeredUnder =
-    (offered?.word === routeWord || offered?.word === "update" || offered?.word === "check") && landing
+    (offered?.kind === "ship" || offered?.kind === "check") && landing
       ? verdictLine(landing, gap)
       : offered?.word === "archive" && landedUnder
         ? ended(landedUnder)
@@ -858,7 +864,7 @@ export function Composer({
   const refuse = (text: string) => boxId && dispatch({ a: "notice", id: boxId, text });
   // the seat's verb by name. The seat only offers it from an empty box, so this reads the facts
   // under it rather than the seat, and says why when there is nothing for the word to do.
-  const runSeat = (name: SeatName, args = "") => {
+  const runSeat = (name: "check" | "land" | "archive" | "handoff", args = "") => {
     if (!active || !id) return;
     if (name === "handoff") {
       // the other project's agent starts from this chat, and a worktree not yet made has none
@@ -877,7 +883,7 @@ export function Composer({
     }
     if (name === "archive") {
       if (hasLanded || prClosed) archiveWorktrees(sock, dispatch, [id]);
-      else refuse("archive is for a merged worktree; this one's work is not on main yet");
+      else refuse("archive is for a landed worktree; this one has not landed");
       return;
     }
     if (name === "check") {
@@ -888,9 +894,8 @@ export function Composer({
       return;
     }
     const stuck = verdict ? landingLine(verdict, dirty, quick, agentInfo?.name) : null;
-    if (spawning || !canLand(active.worktree)) {
-      refuse(routeName === "pr" ? "no PR to open from here" : "nothing to merge from here");
-    } else if (hasLanded) refuse(`already merged into ${repo?.defaultBranch ?? "main"}`);
+    if (spawning || !canLand(active.worktree)) refuse("nothing to land from here");
+    else if (hasLanded) refuse(`already landed on ${repo?.defaultBranch ?? "main"}`);
     else if (stuck) refuse(stuck);
     else if (midTurn && (!verdict || verdict.stale)) refuse("wait for the turn to end");
     else if (verdict?.stale) refuse("the work changed since this was checked; check again first");
@@ -994,7 +999,7 @@ export function Composer({
       // sends them again once the op is done. The daemon's own refusal stays for the race where
       // the op starts between this press and the frame landing.
       if (shellCmd && op && !drafting) {
-        refuse(`${shipNoun(op, policy)} is running here; run the command once it is done`);
+        refuse(`${shipNoun(op)} is running here; run the command once it is done`);
         return;
       }
       // a command runs where it was typed: in the worktree's own transcript, or for a draft, which
@@ -1005,7 +1010,7 @@ export function Composer({
       return;
     }
     if (typed && !mode) {
-      runSeat(typed.name as SeatName, typed.args);
+      runSeat(typed.name as "check" | "land" | "archive" | "handoff", typed.args);
       setText("");
       return;
     }

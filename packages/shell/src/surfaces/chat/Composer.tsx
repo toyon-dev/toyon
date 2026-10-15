@@ -990,7 +990,7 @@ export function Composer({
       // sends them again once the op is done. The daemon's own refusal stays for the race where
       // the op starts between this press and the frame landing.
       if (shellCmd && op && !drafting) {
-        refuse(`${shipNoun(op)} is running here; run the command once it is done`);
+        refuse(`${shipNoun(op, policy)} is running here; run the command once it is done`);
         return;
       }
       // a command runs where it was typed: in the worktree's own transcript, or for a draft, which

@@ -8,7 +8,7 @@ import {
 } from "@toyon/shared";
 import { useEffect } from "react";
 import { CHECK_SETTLE_MS, versionRow } from "../../app/versionRow.ts";
-import { agentItems } from "../../state/actions/agent.ts";
+import { agentItems, notReady } from "../../state/actions/agent.ts";
 import { projectItems } from "../../state/actions/project.ts";
 import { appearanceLabel, keepAwakeLabel } from "../../state/actions/settings.ts";
 import { versionItems } from "../../state/actions/version.ts";
@@ -235,7 +235,7 @@ export function authLabel(a: AgentInfo): string {
 }
 
 export function authTip(a: AgentInfo): string {
-  if (!a.available) return a.reason ?? "not installed";
+  if (!a.available) return notReady(a);
   if (!a.auth) return "installed; it names the account it runs on the first time it runs";
   const who = [a.auth.detail, a.auth.account?.email, a.auth.account?.organization].filter(Boolean).join(" · ");
   return who || a.auth.label;

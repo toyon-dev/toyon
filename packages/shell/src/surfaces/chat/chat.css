@@ -961,6 +961,15 @@
   .composer-notice {
     overflow-wrap: anywhere;
   }
+  /* the agent note's two verbs (fetch it again, or run on the one that is ready) sit together at
+     the note's end, where its one button would */
+  .composer-note-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+    flex-shrink: 0;
+  }
   /* the plan this worktree runs on, at the top of the box in the shape of the branch row on the
    commit box: an icon and the path in mono. The path is the press that reads it, an inline word
    in the row's own face, so the row carries the face and the colour and no verb sits beside it.

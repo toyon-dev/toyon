@@ -71,7 +71,7 @@ describe("agentLines", () => {
         ok: false,
         label: "agents",
         detail:
-          "claude runs 0.75.1, not the pinned 0.84.0: install failed: blocked by minimum-release-age. `toyon restart` tries again",
+          "claude runs 0.75.1, not the pinned 0.84.0: install failed: blocked by minimum-release-age. The agent's install button in Settings or `toyon restart` tries again",
       },
     ]);
   });

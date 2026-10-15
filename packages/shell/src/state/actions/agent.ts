@@ -14,13 +14,25 @@ export function agentItems(a: AgentInfo, { sock }: Deps): MenuItem[] {
       onClick: () => sock?.send({ t: "agent-logout", agent: a.id }),
     });
   }
-  if (!a.available && !a.installing) {
+  const verb = installVerb(a);
+  if (verb) {
     items.push({
       id: "install",
-      // an agent fetched on demand was never installed; any other is missing because an install failed
-      label: a.onDemand && a.reason === "not installed" ? "install" : "install again",
+      label: verb,
       onClick: () => sock?.send({ t: "install-agent", agent: a.id }),
     });
   }
   return items;
 }
+
+/** the word that fetches an agent's adapter, the same on every surface that offers it: the first
+ * fetch for one never tried, another after a failure, and nothing where the daemon says no
+ * install would help or one is already on its way */
+export function installVerb(a: AgentInfo): "install" | "install again" | null {
+  if (!a.install) return null;
+  return a.install === "missing" ? "install" : "install again";
+}
+
+/** why an agent cannot run, as every surface words it: the daemon's reason, and one default where
+ * it gave none */
+export const notReady = (a: AgentInfo): string => a.reason ?? "not installed";

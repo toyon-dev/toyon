@@ -1,4 +1,5 @@
 import { type AgentInfo, agentDefault, defaultStandsFor, type ModelChoice } from "@toyon/shared";
+import { notReady } from "../../state/actions/agent.ts";
 import type { ChipOption } from "../../ui/ChipPicker.tsx";
 
 /** the empty id: the agent's own default, which is what a worktree runs until a value is named */
@@ -155,9 +156,7 @@ export function agentModelRows(
         {
           id: agentModelKey(a.id, DEFAULT_OPTION),
           label: short,
-          description: !a.available
-            ? (a.reason ?? "not installed")
-            : "its own default model; the rest are listed once it has run",
+          description: !a.available ? notReady(a) : "its own default model; the rest are listed once it has run",
           disabled: !a.available,
         },
       ];

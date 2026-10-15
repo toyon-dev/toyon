@@ -74,6 +74,7 @@ import {
 } from "../recap.ts";
 import { runLine, runOf, runTicking, useLastingRun } from "../runs.ts";
 import { chord, commandSource, folderList, pickLabel, procTrouble } from "../util.ts";
+import { agentReadiness } from "./agentReady.ts";
 import { answerLines, answered as hasAnswer, stoppedAsk } from "./ask.ts";
 import { ComposerOffer } from "./ComposerOffer.tsx";
 import { DraftChip } from "./DraftChip.tsx";
@@ -308,9 +309,17 @@ export function Composer({
       return;
     }
     rememberNewWorktreeModel(storage, agent, model);
+    pickAgent(agent);
+  };
+  // the agent alone: the model the chip then shows is the one remembered for that agent
+  const pickAgent = (agent: string) => {
     if (drafting) dispatch({ a: "draft-agent", id: agent });
     else sock?.send({ t: "set-default-agent", agent });
   };
+  // the agent cannot take the message: its download, or why the last one failed, said above the
+  // knobs before the send rather than as the daemon's refusal after it
+  const readiness = agentReadiness(agentInfo, agents, choosing);
+  const otherAgent = readiness?.other;
   const currentModel = useLocalField(id, "model");
   const currentEffort = useLocalField(id, "effort");
   // how full this agent's context is: the stream's last word, else the row's (a cold worktree)
@@ -894,6 +903,12 @@ export function Composer({
   // attachments alone are a message: a pasted error or a picked element often says it all
   const send = () => {
     if (!boxId) return;
+    // one of toyon's own commands: the chip's or the seat's action, run from here rather than sent.
+    // A description after a mode goes on as the message, in that mode; a bare one only sets it,
+    // and what is attached stays for the next message the way it does for `!`. What follows
+    // `check` is a note for the commit message; the other verbs take nothing.
+    const typed = ownCommandOf(text, ownRows);
+    const mode = typed && isMode(typed.name) ? typed.name : undefined;
     // the new-project view: return makes the project, described or not, and what is in the box
     // goes as its first message once it exists (settleView). The agent the chips show becomes the
     // daemon's default, since this is where it was chosen.
@@ -907,6 +922,21 @@ export function Composer({
       return;
     }
     if (blank) return;
+    // Only a message for the agent waits on the agent: a `!` command runs in the terminal and a
+    // seat verb is git's, whatever the adapter's state. The daemon would refuse the message the
+    // same way; the line above the knobs already says why, so the answer under the field is
+    // short, except where no install would help, and the words stay put.
+    const forAgent = shellCmd === null && (!typed || (!!mode && !!typed.args));
+    if (readiness && agentInfo && forAgent) {
+      refuse(
+        readiness.kind === "installing"
+          ? `${agentInfo.name} is still installing`
+          : readiness.retry
+            ? `nothing runs here until ${agentInfo.name} is installed`
+            : readiness.text,
+      );
+      return;
+    }
     // the message as the row shows it on its way: the words and the chips the frame carries
     const taken = (): QueuedMessage => ({
       text: text.trim(),
@@ -952,12 +982,6 @@ export function Composer({
       setText("");
       return;
     }
-    // one of toyon's own commands: the chip's or the seat's action, run from here rather than sent.
-    // A description after a mode goes on as the message, in that mode; a bare one only sets it,
-    // and what is attached stays for the next message the way it does for `!`. What follows
-    // `check` is a note for the commit message; the other verbs take nothing.
-    const typed = ownCommandOf(text, ownRows);
-    const mode = typed && isMode(typed.name) ? typed.name : undefined;
     if (typed && !mode) {
       runSeat(typed.name as "check" | "land" | "archive" | "handoff", typed.args);
       setText("");
@@ -1780,25 +1804,52 @@ export function Composer({
           on the verb's tooltip, and a row that left as the land ran moved the verb from under the
           cursor before archive took its place. The sync itself stays in the changes tab's foot and
           the rail menu. */}
-      {origin && trunk && (
+      {(readiness || (origin && trunk)) && (
         <div className="composer-notes">
-          <div className="hint composer-note">
-            <span>{origin}</span>
-            {/* a diverged main is a terminal's job: no button promises what a fast-forward cannot do.
-                A dirty main keeps the button: the pull goes through past files it does not touch,
-                and names the one in its way when it refuses */}
-            {canPull(trunk) && (
-              <Button
-                variant="outline"
-                busy={trunkOp === "pull-main"}
-                disabled={!!trunkOp}
-                data-tip="Fast-forward main to origin"
-                onClick={() => shipOp(sock, dispatch, { t: "pull-main", worktreeId: trunk.id })}
-              >
-                pull
-              </Button>
-            )}
-          </div>
+          {/* the agent that cannot take the message, and the way out: the adapter fetched again,
+              or, while the agent is still being chosen, one that is ready */}
+          {readiness && agentInfo && (
+            <div className="hint composer-note" role="status">
+              <span>{readiness.text}</span>
+              {(readiness.retry || otherAgent) && (
+                <span className="composer-note-actions">
+                  {readiness.retry && (
+                    <Button variant="outline" onClick={() => sock?.send({ t: "install-agent", agent: agentInfo.id })}>
+                      {readiness.retry}
+                    </Button>
+                  )}
+                  {otherAgent && (
+                    <Button
+                      variant="outline"
+                      data-tip={`${otherAgent.name} is installed and takes this message instead`}
+                      onClick={() => pickAgent(otherAgent.id)}
+                    >
+                      use {otherAgent.name}
+                    </Button>
+                  )}
+                </span>
+              )}
+            </div>
+          )}
+          {origin && trunk && (
+            <div className="hint composer-note">
+              <span>{origin}</span>
+              {/* a diverged main is a terminal's job: no button promises what a fast-forward cannot do.
+                  A dirty main keeps the button: the pull goes through past files it does not touch,
+                  and names the one in its way when it refuses */}
+              {canPull(trunk) && (
+                <Button
+                  variant="outline"
+                  busy={trunkOp === "pull-main"}
+                  disabled={!!trunkOp}
+                  data-tip="Fast-forward main to origin"
+                  onClick={() => shipOp(sock, dispatch, { t: "pull-main", worktreeId: trunk.id })}
+                >
+                  pull
+                </Button>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>

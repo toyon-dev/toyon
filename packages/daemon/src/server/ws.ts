@@ -513,6 +513,9 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
         sockets.add(ws);
         link(ws);
         send(ws, await helloFrame());
+        // an adapter whose install failed at boot gets another try now: the network may have
+        // come back since, and the shell is where someone would otherwise find it still failed
+        fireAndForget("agents", s.agents.retryFailed(), "agent install retry");
         // what was opened from outside while no shell was up: the Dock icon's file, arriving
         // before the window it also opened
         for (const o of s.opens.takePending()) send(ws, openedFrame(o));

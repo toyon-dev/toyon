@@ -8,6 +8,7 @@ import {
   type AgentSpec,
   BUILTIN_AGENTS,
   type Installer,
+  installErrorLine,
   managedSpecs,
   parseAgentsFile,
 } from "./registry.ts";
@@ -138,10 +139,14 @@ describe("agent registry", () => {
       id: "codex",
       available: false,
       reason: "install failed: registry unreachable",
+      install: { failed: "registry unreachable" },
     });
+    // one never tried is missing, and offers the first fetch rather than another
+    expect(reg.infos()[0]).toMatchObject({ id: "claude", available: false, install: "missing" });
     fail.clear();
     await reg.install("codex");
     expect(reg.infos()[1]).toMatchObject({ id: "codex", available: true });
+    expect(reg.infos()[1]).not.toHaveProperty("install");
   });
 
   test("a failed upgrade keeps the older adapter launchable, and adapters() says which version runs and why", async () => {
@@ -277,6 +282,143 @@ describe("agent registry", () => {
     expect(
       new AgentRegistry(managedSpecs(BUILTIN_AGENTS, { agents: null, customAgents: false }), tmp()).defaultId("gemini"),
     ).toBe("claude");
+  });
+
+  test("the default does not move with install state: a failed claude is still the default, and the composer says why", async () => {
+    const reg = new AgentRegistry(
+      BUILTIN_AGENTS,
+      tmp(),
+      fakeInstaller(new Set(["@agentclientprotocol/claude-agent-acp"])).installer,
+    );
+    await reg.installMissing();
+    expect(reg.infos()[0]).toMatchObject({ id: "claude", available: false });
+    expect(reg.defaultId(undefined)).toBe("claude");
+  });
+
+  test("an install that throws is a recorded failure, and the retry loop reaches the agents after it", async () => {
+    let now = 1_000_000;
+    const { installer, calls } = fakeInstaller(new Set(["@agentclientprotocol/codex-acp"]));
+    const throwing: Installer = (dir, pkg, version) => {
+      if (pkg.includes("claude")) throw new Error("EACCES: permission denied");
+      return installer(dir, pkg, version);
+    };
+    const reg = new AgentRegistry(BUILTIN_AGENTS, tmp(), throwing, undefined, undefined, () => now);
+    await reg.installMissing();
+    expect(reg.infos()[0]).toMatchObject({
+      id: "claude",
+      reason: "install failed: EACCES: permission denied",
+      install: { failed: "EACCES: permission denied" },
+    });
+    now += 31_000;
+    await reg.retryFailed();
+    // claude threw again, and codex was still tried after it
+    expect(calls.filter((c) => c.includes("codex"))).toHaveLength(2);
+  });
+
+  test("a sandbox that cannot start is the reason, on disk or not, and no fetch is offered for it", async () => {
+    const reg = new AgentRegistry(BUILTIN_AGENTS, tmp(), fakeInstaller().installer, undefined, {
+      problem: () => "its sandbox needs bubblewrap",
+    });
+    expect(reg.infos()[0]).toMatchObject({ id: "claude", available: false, reason: "its sandbox needs bubblewrap" });
+    expect(reg.infos()[0]).not.toHaveProperty("install");
+    await reg.installMissing();
+    expect(reg.infos()[0]).toMatchObject({ id: "claude", available: false, reason: "its sandbox needs bubblewrap" });
+  });
+
+  test("a shell arriving retries a failed install once the failure is old enough, and only the failed ones", async () => {
+    let now = 1_000_000;
+    const fail = new Set(["@agentclientprotocol/claude-agent-acp"]);
+    const { installer, calls } = fakeInstaller(fail);
+    const reg = new AgentRegistry(BUILTIN_AGENTS, tmp(), installer, undefined, undefined, () => now);
+    await reg.installMissing();
+    expect(calls).toEqual(["@agentclientprotocol/claude-agent-acp@0.84.0", "@agentclientprotocol/codex-acp@2.0.1"]);
+    // a tab reloaded right after: too soon to download again
+    await reg.retryFailed();
+    expect(calls).toHaveLength(2);
+    now += 31_000;
+    await reg.retryFailed();
+    expect(calls).toEqual([...calls.slice(0, 2), "@agentclientprotocol/claude-agent-acp@0.84.0"]);
+    // failed again, so the window starts over, and doubles: a failure that will not change is
+    // not downloaded on every reconnect
+    await reg.retryFailed();
+    expect(calls).toHaveLength(3);
+    // the install button is not an automatic try: pressing it while still offline does not push
+    // the next one out
+    await reg.install("claude");
+    await reg.install("claude");
+    expect(calls).toHaveLength(5);
+    fail.clear();
+    now += 31_000;
+    await reg.retryFailed();
+    expect(calls).toHaveLength(5);
+    now += 30_000;
+    await reg.retryFailed();
+    expect(calls).toHaveLength(6);
+    expect(reg.infos()[0]).toMatchObject({ id: "claude", available: true });
+    // landed: nothing left to try
+    now += 31_000;
+    await reg.retryFailed();
+    expect(calls).toHaveLength(6);
+  });
+
+  test("a retry waits while a download is already running, so two installs never share the line", async () => {
+    let now = 1_000_000;
+    const { installer, calls } = fakeInstaller(new Set(["@agentclientprotocol/claude-agent-acp"]));
+    let release: () => void = () => {};
+    const slow: Installer = async (dir, pkg, version) => {
+      // codex downloads until the test lets it finish
+      if (pkg.includes("codex")) await new Promise<void>((r) => (release = r));
+      return installer(dir, pkg, version);
+    };
+    const reg = new AgentRegistry(BUILTIN_AGENTS, tmp(), slow, undefined, undefined, () => now);
+    const boot = reg.installMissing();
+    await Bun.sleep(0);
+    // claude failed; codex is mid-download
+    expect(calls).toHaveLength(1);
+    expect(reg.infos()[1]).toMatchObject({ id: "codex", installing: true });
+    now += 31_000;
+    await reg.retryFailed();
+    expect(calls).toHaveLength(1);
+    release();
+    await boot;
+    expect(calls).toHaveLength(2);
+    await reg.retryFailed();
+    expect(calls).toHaveLength(3);
+  });
+
+  test("an adapter that landed by another route clears the failure remembered for it", async () => {
+    const dir = tmp();
+    const fail = new Set(["@agentclientprotocol/claude-agent-acp"]);
+    const { installer } = fakeInstaller(fail);
+    const reg = new AgentRegistry(BUILTIN_AGENTS, dir, installer);
+    await reg.installMissing();
+    expect(reg.adapters()[0]).toMatchObject({ id: "claude", error: "install failed: registry unreachable" });
+    // the files arrive without this registry's install having put them there
+    fail.clear();
+    await installer(join(dir, "claude"), "@agentclientprotocol/claude-agent-acp", "0.84.0");
+    await reg.install("claude");
+    expect(reg.adapters()[0]).toEqual({ id: "claude", installed: "0.84.0", pinned: "0.84.0" });
+  });
+
+  test("bun's output becomes its first error line, with the way out for a certificate it will not trust", () => {
+    expect(
+      installErrorLine(
+        "Resolving dependencies\nResolved, downloaded and extracted [1]\nerror: GET https://registry.npmjs.org/x - 404\nerror: x@1.0.0 failed to resolve\n",
+      ),
+    ).toBe("GET https://registry.npmjs.org/x - 404");
+    expect(
+      installErrorLine(
+        "error: UNKNOWN_CERTIFICATE_VERIFICATION_ERROR downloading package manifest x\nerror: x@1 failed to resolve",
+      ),
+    ).toBe(
+      "UNKNOWN_CERTIFICATE_VERIFICATION_ERROR downloading package manifest x. A certificate bun does not trust, usually a proxy's: set NODE_EXTRA_CA_CERTS to its file and restart Toyon",
+    );
+    // an expired or mismatched certificate is the registry's, and no CA file would help
+    expect(installErrorLine("error: CERT_HAS_EXPIRED downloading package manifest x")).toBe(
+      "CERT_HAS_EXPIRED downloading package manifest x",
+    );
+    expect(installErrorLine("something odd\n")).toBe("something odd");
+    expect(installErrorLine("")).toBe("no output");
   });
 
   test("an agent in toyon's sandbox launches inside it; its own command line stays unwrapped for a login", () => {

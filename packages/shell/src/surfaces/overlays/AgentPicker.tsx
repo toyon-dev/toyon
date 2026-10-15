@@ -1,4 +1,4 @@
-import { agentItems } from "../../state/actions/agent.ts";
+import { agentItems, notReady } from "../../state/actions/agent.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { ListPicker } from "../../ui/ListPicker.tsx";
 import { byName } from "./commands.ts";
@@ -36,7 +36,7 @@ export function AgentPicker() {
         <PaletteRow
           label={a.name}
           current={a.id === current}
-          hint={!a.available ? (a.reason ?? "not installed") : a.sandboxed ? undefined : "unsandboxed"}
+          hint={!a.available ? notReady(a) : a.sandboxed ? undefined : "unsandboxed"}
         />
       )}
     />

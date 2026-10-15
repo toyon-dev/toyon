@@ -182,10 +182,54 @@ export interface AdapterVersion {
 /** installs `pkg@version` into `dir`(a package.json is already there); tests fake it */
 export type Installer = (dir: string, pkg: string, version: string) => Promise<{ ok: boolean; err: string }>;
 
+/** What a failed `bun install` printed, as one line a person can act on: bun's first `error:` line
+ * (the cause; the ones after it only say the package then failed to resolve), or the last line
+ * when it named none. A certificate bun cannot chain to a root it trusts is nearly always a
+ * proxy's, and bun reads NODE_EXTRA_CA_CERTS for it, so those codes say so; an expired or
+ * mismatched one is the registry's problem and no CA file helps. */
+export function installErrorLine(stderr: string): string {
+  const lines = stderr
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+  const first = lines
+    .find((l) => l.startsWith("error:"))
+    ?.slice("error:".length)
+    .trim();
+  const line = first || lines.at(-1) || "no output";
+  if (UNTRUSTED_CA.test(line))
+    return `${line}. A certificate bun does not trust, usually a proxy's: set NODE_EXTRA_CA_CERTS to its file and restart Toyon`;
+  return line;
+}
+
+const UNTRUSTED_CA =
+  /UNKNOWN_CERTIFICATE_VERIFICATION_ERROR|SELF_SIGNED_CERT|UNABLE_TO_GET_ISSUER_CERT|UNABLE_TO_VERIFY_LEAF_SIGNATURE/;
+
 const bunInstall: Installer = async (dir) => {
-  const r = await run(process.execPath, ["install", "--no-progress", "--no-summary"], dir);
-  return { ok: r.ok, err: r.err.split("\n").slice(-3).join(" ") };
+  // plain output: a daemon launched from a shell that forces colour would wrap bun's `error:`
+  // in escapes, and the line is read, not shown
+  const r = await run(process.execPath, ["install", "--no-progress", "--no-summary"], dir, {
+    NO_COLOR: "1",
+    FORCE_COLOR: "0",
+  });
+  // stderr is read only when bun failed: a clean exit may still have warned, and that is not
+  // why an adapter with no bin cannot run
+  return { ok: r.ok, err: r.ok ? "" : installErrorLine(r.err) };
 };
+
+/** How long a failed install is left alone before a shell's arrival tries it again: half a minute
+ * after the first failure, doubling with each one in a row up to an hour. A tab reloaded in a loop
+ * must not download in one, and a failure that will not change (an air-gapped machine, a registry
+ * that refuses the version) must not be fetched on every reconnect for ever; the install button
+ * stays for the person who knows it has changed. */
+const RETRY_AFTER_MS = 30_000;
+const RETRY_CAP_MS = 60 * 60_000;
+/** the wait after `retries` automatic tries have failed in a row; a press of the install button
+ * is not one of them, so pressing it while offline does not push the next automatic try out */
+const retryWindow = (retries: number) => Math.min(RETRY_AFTER_MS * 2 ** retries, RETRY_CAP_MS);
+
+/** the reason an agent whose fetch failed cannot run, as the picker, doctor and log all say it */
+const failedReason = (why: string) => `install failed: ${why}`;
 
 /** TOYON_ACP_RUNTIME=node runs the adapters under node instead of bun (the escape hatch if an
  * adapter trips over a bun incompatibility; the cloud image has no node, so bun is the default) */
@@ -202,6 +246,10 @@ export class AgentRegistry {
   private specs = new Map<string, AgentSpec>();
   private installing = new Map<string, Promise<void>>();
   private installErrors = new Map<string, string>();
+  /** when each remembered failure happened and how many automatic retries have failed since, so
+   * a retry does not follow every reconnect and a failure that will not change is not downloaded
+   * for ever */
+  private failures = new Map<string, { at: number; retries: number }>();
   /** the shell wants to know when availability changes (install started, landed, failed) */
   onChange: (() => void) | null = null;
 
@@ -213,6 +261,8 @@ export class AgentRegistry {
     private host: HostTraits = hostTraits(),
     /** why agent sandboxes cannot start here; the daemon passes the live Linux check */
     private sandbox: SandboxCheck = { problem: () => null },
+    /** the clock the retry window is measured on; tests move it */
+    private now: () => number = Date.now,
   ) {
     for (const s of specs) this.specs.set(s.id, s);
   }
@@ -223,7 +273,9 @@ export class AgentRegistry {
 
   /** the agent a worktree gets when nobody named one: the persisted choice while it is still
    * here, else Claude, else whatever the policy left first. A default that the policy took away
-   * would otherwise be a ghost the shell shows and nothing can run. */
+   * would otherwise be a ghost the shell shows and nothing can run. Whether it can run right now
+   * is not weighed here: the composer says why it is not ready and offers the agent that is,
+   * rather than the default moving under the person. */
   defaultId(persisted: string | undefined): string {
     if (persisted !== undefined && this.specs.has(persisted)) return persisted;
     if (this.specs.has(DEFAULT_AGENT_ID)) return DEFAULT_AGENT_ID;
@@ -278,19 +330,29 @@ export class AgentRegistry {
   /** null when launchable, else the reason it is not: not installed, or a sandbox it needs cannot
    * start on this machine */
   unavailable(spec: AgentSpec): string | null {
-    return this.notInstalled(spec) ?? (spec.confinement === "none" ? null : this.sandbox.problem());
+    return this.status(spec).reason;
   }
 
-  private notInstalled(spec: AgentSpec): string | null {
-    if (spec.run.kind !== "command") {
-      if (!this.packageName(spec)) return `no build for ${this.host.platform} ${this.host.arch}`;
-      if (this.installed(spec)) return null;
-      if (this.installing.has(spec.id)) return "installing";
-      return this.installErrors.get(spec.id) ?? (spec.onDemand ? "not installed" : "not installed yet");
+  /** One look at the disk answers both of what the shell reads: why the agent cannot run, and
+   * whether a fetch is the way out. A sandbox that cannot start is the reason whether or not the
+   * adapter is on disk, since it would still stand after the download, and then no fetch is
+   * offered. */
+  private status(spec: AgentSpec): { reason: string | null; install?: AgentInfo["install"] } {
+    const boxed = spec.confinement === "none" ? null : this.sandbox.problem();
+    if (spec.run.kind === "command") {
+      const cmd = spec.run.command;
+      const found = isAbsolute(cmd) ? existsSync(cmd) : Bun.which(cmd);
+      return { reason: found ? boxed : `${cmd} not found on PATH` };
     }
-    const cmd = spec.run.command;
-    if (isAbsolute(cmd) ? existsSync(cmd) : Bun.which(cmd)) return null;
-    return `${cmd} not found on PATH`;
+    if (!this.packageName(spec)) return { reason: `no build for ${this.host.platform} ${this.host.arch}` };
+    if (this.installed(spec)) return { reason: boxed };
+    // the download is the state every surface names while it runs; the sandbox takes over once it lands
+    if (this.installing.has(spec.id)) return { reason: "installing" };
+    const failed = this.installErrors.get(spec.id);
+    const missing = failed !== undefined ? failedReason(failed) : spec.onDemand ? "not installed" : "not installed yet";
+    // what the fetch printed is still worth reading beside the sandbox: both may need fixing
+    if (boxed) return { reason: failed !== undefined ? `${missing}; ${boxed}` : boxed };
+    return { reason: missing, install: failed !== undefined ? { failed } : "missing" };
   }
 
   /** the adapter's own command line, unconfined: what a terminal login types */
@@ -324,24 +386,35 @@ export class AgentRegistry {
     if (spec.run.kind === "command" || !pkg) return Promise.resolve();
     const running = this.installing.get(id);
     if (running) return running;
-    if (this.installed(spec) && this.installedVersion(spec) === spec.run.version) return Promise.resolve();
+    if (this.installed(spec) && this.installedVersion(spec) === spec.run.version) {
+      // landed by another route (a script, another daemon on the same directory): a failure
+      // remembered from before would otherwise be reported, and retried, for ever
+      this.installErrors.delete(id);
+      this.failures.delete(id);
+      return Promise.resolve();
+    }
     const { version } = spec.run;
     const dir = join(this.dir, id);
     const p = (async () => {
-      mkdirSync(dir, { recursive: true });
-      writeFileSync(
-        join(dir, "package.json"),
-        `${JSON.stringify({ name: `toyon-agent-${id}`, private: true, dependencies: { [pkg]: version } }, null, 2)}\n`,
-      );
-      log.info("agents", `installing ${pkg}@${version} for ${id}`);
-      const r = await this.installer(dir, pkg, version);
-      if (r.ok && this.installed(spec)) {
-        this.installErrors.delete(id);
-        log.info("agents", `${id} ready`);
-      } else {
-        const why = `install failed: ${r.err || "no bin after install"}`;
-        this.installErrors.set(id, why);
-        log.warn("agents", `${id}: ${why}`);
+      try {
+        mkdirSync(dir, { recursive: true });
+        writeFileSync(
+          join(dir, "package.json"),
+          `${JSON.stringify({ name: `toyon-agent-${id}`, private: true, dependencies: { [pkg]: version } }, null, 2)}\n`,
+        );
+        log.info("agents", `installing ${pkg}@${version} for ${id}`);
+        const r = await this.installer(dir, pkg, version);
+        if (r.ok && this.installed(spec)) {
+          this.installErrors.delete(id);
+          this.failures.delete(id);
+          log.info("agents", `${id} ready`);
+          return;
+        }
+        this.fail(id, r.err || "no bin after install");
+      } catch (e) {
+        // a directory that cannot be written is a failure the shell shows like any other, and
+        // the promise settles, so a retry loop over several agents reaches the next one
+        this.fail(id, e instanceof Error ? e.message : String(e));
       }
     })().finally(() => {
       this.installing.delete(id);
@@ -350,6 +423,12 @@ export class AgentRegistry {
     this.installing.set(id, p);
     this.onChange?.();
     return p;
+  }
+
+  private fail(id: string, why: string): void {
+    this.installErrors.set(id, why);
+    this.failures.set(id, { at: this.now(), retries: this.failures.get(id)?.retries ?? 0 });
+    log.warn("agents", `${id}: ${failedReason(why)}`);
   }
 
   private installedVersion(spec: AgentSpec): string | null {
@@ -374,6 +453,21 @@ export class AgentRegistry {
     }
   }
 
+  /** a shell arriving: every adapter whose last install failed is fetched again, once the failure
+   * is old enough. One fetched on demand failed because someone asked for it, so it is tried the
+   * same. The install at boot is the only other try, so without this a network that came back (a
+   * VPN joined after launch) left the agent failed until a restart. */
+  async retryFailed(): Promise<void> {
+    // not beside the boot's own downloads: two bun installs would share the line, and the first
+    // prompt waits on both
+    if (this.installing.size > 0) return;
+    for (const [id, entry] of this.failures) {
+      if (this.now() - entry.at < retryWindow(entry.retries)) continue;
+      entry.retries += 1;
+      await this.install(id);
+    }
+  }
+
   /** each npm adapter's version on disk beside the one this toyon pins, for `toyon doctor`. An
    * upgrade that fails leaves the older adapter launchable, so nothing in `infos()` shows it. An
    * agent fetched on demand is listed once someone has asked for it. */
@@ -382,16 +476,21 @@ export class AgentRegistry {
     for (const spec of this.list()) {
       if (spec.run.kind === "command" || !this.packageName(spec)) continue;
       const installed = this.installed(spec) ? this.installedVersion(spec) : null;
-      const error = this.installErrors.get(spec.id);
-      if (spec.onDemand && installed === null && !error) continue;
-      out.push({ id: spec.id, installed, pinned: spec.run.version, ...(error ? { error } : {}) });
+      const failed = this.installErrors.get(spec.id);
+      if (spec.onDemand && installed === null && failed === undefined) continue;
+      out.push({
+        id: spec.id,
+        installed,
+        pinned: spec.run.version,
+        ...(failed !== undefined ? { error: failedReason(failed) } : {}),
+      });
     }
     return out;
   }
 
   infos(): AgentInfo[] {
     return this.list().map((spec) => {
-      const reason = this.unavailable(spec);
+      const { reason, install } = this.status(spec);
       return {
         id: spec.id,
         name: spec.name,
@@ -399,6 +498,7 @@ export class AgentRegistry {
         available: !reason,
         ...(reason ? { reason } : {}),
         ...(this.installing.has(spec.id) ? { installing: true } : {}),
+        ...(install !== undefined ? { install } : {}),
         ...(spec.onDemand ? { onDemand: true } : {}),
         sandboxed: spec.confinement !== "none",
       };

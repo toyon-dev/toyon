@@ -478,11 +478,16 @@
       background: var(--element0);
       --text1: var(--ink0);
       --text2: var(--ink1);
+      --tool-open-fill: var(--element0);
     }
+    /* the open button's fill is named here, beside the seat it must match: declared in its own
+     rule it followed the open rule on a row both open and hovered while the seat followed this
+     one, and the button showed as a pill a tier off its line */
     &[open] > summary {
       background: var(--element1);
       --text1: var(--ink0);
       --text2: var(--ink1);
+      --tool-open-fill: var(--element1);
     }
     /* the hint is the exception, and it is deliberate: it goes up two rungs rather than one, because
    what the call actually did is the thing you opened the row to read. */
@@ -713,20 +718,24 @@
         position: absolute;
         inset: 0 0 0 -16px;
         border-radius: 0 var(--radius) var(--radius) 0;
-        background: linear-gradient(to right, transparent, var(--tool-open-fill) 16px);
+        /* the seat's fill (the summary rules above name it), or the hover seat on a line that
+         takes none: a leaf's line stays unfilled, and the button still needs a ground */
+        background: linear-gradient(to right, transparent, var(--tool-open-fill, var(--element0)) 16px);
       }
       & > svg {
         position: relative;
       }
     }
+    /* the eye at the size of the row's own glyphs: the button's 16px glyph beside a 13px pencil
+     read as a bigger icon, not a brighter one */
+    & .tool-open > svg {
+      width: 13px;
+      height: 13px;
+    }
     :where([data-hover]) & summary:hover .tool-open,
+    :where([data-hover]) &[open] > summary .tool-open,
     & .tool-open:focus-visible {
       visibility: visible;
-      --tool-open-fill: var(--element0);
-    }
-    :where([data-hover]) &[open] > summary .tool-open {
-      visibility: visible;
-      --tool-open-fill: var(--element1);
     }
     /* one call's output inside a row that holds several: the rule is what says where the next hunk
    starts, since the calls are otherwise the same edit to the same file twice over */

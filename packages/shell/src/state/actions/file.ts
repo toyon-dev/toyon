@@ -34,9 +34,10 @@ export function listFiles(worktreeId: string, s: Pick<State, "local">, { sock, d
 
 const VIEWS: EditorView[] = ["diff", "file", "preview"];
 
-/** the views a file has: markdown and html can be read rendered, and a file new to the branch has no diff */
-export const viewsOf = (path: string, added: boolean): EditorView[] =>
-  VIEWS.filter((v) => !(v === "preview" && !renderedAs(path)) && !(v === "diff" && added));
+/** the views a file has: markdown and html can be read rendered, and a file with nothing to diff
+ * (new to the branch, or the same on both sides) is not offered one */
+export const viewsOf = (path: string, noDiff: boolean): EditorView[] =>
+  VIEWS.filter((v) => !(v === "preview" && !renderedAs(path)) && !(v === "diff" && noDiff));
 
 let lastSeq = 0;
 /** pairs a request with its answer; one counter for the page, so no two opens share a number */
@@ -98,8 +99,9 @@ export function openFolder({ dispatch }: Deps, target: { worktreeId: string; pat
 /** a file in the changes panel: show it in the editor pane as its diff or as the file, open it
  * somewhere else, copy where it is, and for an uncommitted one, throw it away. `showing` is the view the pane already
  * has this file in, which the menu swaps rather than reads again; `ref` is the commit a history row
- * stands for; `since` is the commit a last turn row reads the working file against; `added` says the file has nothing on the other side, so no diff to offer; `kept` says
- * only git holds it, so there is nothing on disk to reveal; `select` starts the
+ * stands for; `since` is the commit a last turn row reads the working file against; `noDiff` says
+ * the file has nothing to diff (new to the branch, or unchanged), so that view is not offered;
+ * `kept` says only git holds it, so there is nothing on disk to reveal; `select` starts the
  * changes list's pick from this row, for a touch or the keyboard, which have no shift-click. */
 export function fileItems(
   wt: { id: string; dir: string },
@@ -109,7 +111,7 @@ export function fileItems(
     ref,
     since,
     showing,
-    added = false,
+    noDiff = false,
     kept = false,
     select,
   }: {
@@ -117,14 +119,14 @@ export function fileItems(
     ref?: string;
     since?: string;
     showing?: EditorView;
-    added?: boolean;
+    noDiff?: boolean;
     kept?: boolean;
     select?: (path: string) => void;
   },
   deps: Deps,
 ): MenuEntry[] {
   const { sock, dispatch } = deps;
-  const views: MenuItem[] = viewsOf(path, added)
+  const views: MenuItem[] = viewsOf(path, noDiff)
     .filter((v) => v !== showing)
     .map((v) => ({
       id: `view:${v}`,

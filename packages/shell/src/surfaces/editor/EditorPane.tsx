@@ -118,9 +118,11 @@ export function EditorPane({
   const disk = editor.disk;
   // until the first read decides, the toggles offer what they would from a diff
   const view = editor.view ?? "diff";
-  // a file with nothing on the other side has no diff to switch to; a loose file has no other side
-  const added = disk?.before === "";
-  const others = viewsOf(path, added).filter((v) => v !== view && !(loose && v === "diff"));
+  // a file with nothing on the other side, or the same on both, has no diff to switch to; the
+  // disk is read again after every save, so an edit brings the view back. A loose file has no
+  // other side at all.
+  const noDiff = !!disk && (disk.before === "" || disk.before === disk.after);
+  const others = viewsOf(path, noDiff).filter((v) => v !== view && !(loose && v === "diff"));
   // a file the browser draws is drawn from the working tree, or from its grant when it was opened
   // from outside; one only in git (a commit's copy, an archived page) or dropped in from the
   // browser has no bytes the daemon can serve
@@ -148,7 +150,7 @@ export function EditorPane({
           ? fileItems(
               { id: worktreeId, dir: wtPath },
               path,
-              { discard: !history && !kept, kept, ref, showing: editor.view ?? undefined, added },
+              { discard: !history && !kept, kept, ref, showing: editor.view ?? undefined, noDiff },
               { sock, dispatch },
             )
           : []

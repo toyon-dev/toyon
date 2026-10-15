@@ -197,9 +197,15 @@ export function Tooltips() {
         placement,
       });
     };
+    /** The tipped element under the pointer. A float stays in the DOM where React rendered it,
+     * inside the control that opened it, so the walk up from a pointer over the float would reach
+     * that control's tip: an image opened at the window's size said "Open full size" wherever the
+     * pointer stood over it. The walk stops at the float; what the float holds carries its own. */
     const target = (e: Event) => {
       const t = e.target;
-      return t instanceof Element ? (t.closest("[data-tip]") as HTMLElement | null) : null;
+      if (!(t instanceof Element)) return null;
+      const el = t.closest("[data-tip], .float") as HTMLElement | null;
+      return el?.dataset.tip !== undefined ? el : null;
     };
 
     const onOver = (e: MouseEvent) => {

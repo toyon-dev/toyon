@@ -28,6 +28,7 @@ import { Icon } from "../../ui/Icon.tsx";
 import { Spinner } from "../../ui/Spinner.tsx";
 import { selectedText, useKeyWithin, useSelectAllWithin } from "../../ui/selectAll.ts";
 import { elapsed, isBusy, pickLabel } from "../util.ts";
+import { AttachmentSet } from "./AttachmentSet.tsx";
 import { ChatItemView, QUIET_AFTER, ThoughtRow, ToolRow } from "./ChatItemView.tsx";
 import { FileChip } from "./FileChip.tsx";
 import {
@@ -77,44 +78,46 @@ function QueuedChips({
 }) {
   const urls = useUrls();
   return (
-    <div className="msg-attachments">
-      {numbered(items, next).map(([a, n]) =>
-        a.kind === "image" ? (
-          <ImageChip
-            key={`image-${n}`}
-            className="in-chat"
-            src={("local" in a && a.local) || urls.upload(a.upload)}
-            n={n}
-            name={a.name}
-            width={a.width}
-            height={a.height}
-            bytes={a.bytes}
-            progress={"progress" in a ? a.progress : undefined}
-          />
-        ) : a.kind === "file" ? (
-          <FileChip
-            key={`file-${n}`}
-            className="in-chat"
-            name={a.name}
-            bytes={a.bytes}
-            href={a.text && a.upload ? urls.upload(a.upload) : undefined}
-            progress={"progress" in a ? a.progress : undefined}
-          />
-        ) : a.kind === "paste" ? (
-          <PasteChip
-            key={`paste-${n}`}
-            className="in-chat"
-            n={n}
-            name={a.name}
-            source={a.source}
-            {...pasteSummary(a.text)}
-            text={a.text}
-          />
-        ) : (
-          <PickChip key={`pick-${n}`} className="in-chat" pick={a} worktreeId={worktreeId} onOpen={onOpen} />
-        ),
-      )}
-    </div>
+    <AttachmentSet>
+      <div className="msg-attachments">
+        {numbered(items, next).map(([a, n]) =>
+          a.kind === "image" ? (
+            <ImageChip
+              key={`image-${n}`}
+              className="in-chat"
+              src={("local" in a && a.local) || urls.upload(a.upload)}
+              n={n}
+              name={a.name}
+              width={a.width}
+              height={a.height}
+              bytes={a.bytes}
+              progress={"progress" in a ? a.progress : undefined}
+            />
+          ) : a.kind === "file" ? (
+            <FileChip
+              key={`file-${n}`}
+              className="in-chat"
+              name={a.name}
+              bytes={a.bytes}
+              href={a.text && a.upload ? urls.upload(a.upload) : undefined}
+              progress={"progress" in a ? a.progress : undefined}
+            />
+          ) : a.kind === "paste" ? (
+            <PasteChip
+              key={`paste-${n}`}
+              className="in-chat"
+              n={n}
+              name={a.name}
+              source={a.source}
+              {...pasteSummary(a.text)}
+              text={a.text}
+            />
+          ) : (
+            <PickChip key={`pick-${n}`} className="in-chat" pick={a} worktreeId={worktreeId} onOpen={onOpen} />
+          ),
+        )}
+      </div>
+    </AttachmentSet>
   );
 }
 

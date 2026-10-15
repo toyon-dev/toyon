@@ -45,10 +45,27 @@
         }
       }
     }
-    & .btn-icon {
+    /* the close button's corner, and beside it where this stands in the list it was opened from.
+       On its own ground: the scrim shows what is under it, and in the window's corner that is the
+       bar's own buttons, which a count read straight over them turned to one glyph on another.
+       The count takes the control's resting tier, as the button beside it does. */
+    & .attach-head {
       position: absolute;
       top: 12px;
       right: 12px;
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      padding: 2px;
+      border-radius: var(--radius-md);
+      background: var(--surface1);
+    }
+    & .attach-count {
+      font: var(--type-ui-sm);
+      font-variant-numeric: tabular-nums;
+      color: var(--ink2);
+      padding-inline: 8px 6px;
+      user-select: none;
     }
   }
 }

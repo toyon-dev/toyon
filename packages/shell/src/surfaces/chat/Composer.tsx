@@ -76,6 +76,7 @@ import {
 } from "../recap.ts";
 import { runLine, runOf, runTicking, useLastingRun } from "../runs.ts";
 import { chord, commandSource, folderList, pickLabel, procTrouble } from "../util.ts";
+import { AttachmentSet } from "./AttachmentSet.tsx";
 import { agentReadiness } from "./agentReady.ts";
 import { answerLines, answered as hasAnswer, stoppedAsk } from "./ask.ts";
 import { ComposerOffer } from "./ComposerOffer.tsx";
@@ -1329,32 +1330,33 @@ export function Composer({
           carries no attachment, and chips left in view over it read as part of the answer. Nor in
           `!` mode: a command takes no attachment either (send leaves them for the next message),
           and chips over a command read as going with it. They are back once the `!` goes. */}
-      {boxId &&
-        !cardUp &&
-        shellCmd === null &&
-        numbered(attachments, numbersAfter(nextNumbers(sentBefore), queued)).map(([item, n]) => {
-          const detach = () => dispatch({ a: "detach", id: boxId, key: item.key });
-          if (item.kind !== "pick") return <DraftChip key={item.key} item={item} n={n} onRemove={detach} />;
-          return (
-            <PickChip
-              key={item.key}
-              pick={item}
-              tipText={item.html}
-              onHover={(entering) =>
-                frameId &&
-                previewBus.post(
-                  frameId,
-                  entering
-                    ? { type: "highlight-selector", selector: item.selector, label: pickLabel(item) }
-                    : { type: "highlight-clear" },
-                )
-              }
-              worktreeId={id}
-              onOpen={(path, line) => id && openSource(store, sock, id, path, line)}
-              onRemove={detach}
-            />
-          );
-        })}
+      {boxId && !cardUp && shellCmd === null && (
+        <AttachmentSet>
+          {numbered(attachments, numbersAfter(nextNumbers(sentBefore), queued)).map(([item, n]) => {
+            const detach = () => dispatch({ a: "detach", id: boxId, key: item.key });
+            if (item.kind !== "pick") return <DraftChip key={item.key} item={item} n={n} onRemove={detach} />;
+            return (
+              <PickChip
+                key={item.key}
+                pick={item}
+                tipText={item.html}
+                onHover={(entering) =>
+                  frameId &&
+                  previewBus.post(
+                    frameId,
+                    entering
+                      ? { type: "highlight-selector", selector: item.selector, label: pickLabel(item) }
+                      : { type: "highlight-clear" },
+                  )
+                }
+                worktreeId={id}
+                onOpen={(path, line) => id && openSource(store, sock, id, path, line)}
+                onRemove={detach}
+              />
+            );
+          })}
+        </AttachmentSet>
+      )}
       {menuOpen && trigger && (
         <InlinePicker
           results={rows}

@@ -18,6 +18,7 @@ import { handleChoiceKey } from "../../ui/choiceKeys.ts";
 import { cx } from "../../ui/cx.ts";
 import { Kbd } from "../../ui/Kbd.tsx";
 import { Tabs } from "../../ui/Tabs.tsx";
+import { AttachmentSet } from "./AttachmentSet.tsx";
 import {
   type AskItem,
   advance,
@@ -287,14 +288,16 @@ export function QuestionCard({
    * answer, so it stands where the answer is made. Only on the page that is open, since the pages
    * off screen are in the DOM for their height alone. */
   const chips = items.length > 0 && (
-    <div className="card-chips">
-      {numbered(items, numbers).map(([a, n]) => {
-        const detach = () => dispatch({ a: "detach", id: box, key: a.key });
-        // an element pick is the composer's: nothing brings one to a card
-        if (a.kind === "pick") return null;
-        return <DraftChip key={a.key} item={a} n={n} onRemove={detach} />;
-      })}
-    </div>
+    <AttachmentSet>
+      <div className="card-chips">
+        {numbered(items, numbers).map(([a, n]) => {
+          const detach = () => dispatch({ a: "detach", id: box, key: a.key });
+          // an element pick is the composer's: nothing brings one to a card
+          if (a.kind === "pick") return null;
+          return <DraftChip key={a.key} item={a} n={n} onRemove={detach} />;
+        })}
+      </div>
+    </AttachmentSet>
   );
 
   /** one question's page: its text, its options, the "other" row, the typed answer's field once

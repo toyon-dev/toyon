@@ -83,13 +83,13 @@ export function toolRowItems(
       ...revealItems(() => sock?.send({ t: "reveal", worktreeId: wt.id, path: rel }), daemonHost(sock)),
     );
   } else if (rel.startsWith("/")) {
-    open.push(...opens, ...revealItems(() => sock?.send({ t: "reveal-path", path: rel }), daemonHost(sock)), {
-      id: "copy-path",
-      label: "copy path",
-      onClick: () => copyText(rel),
-    });
+    open.push(...opens, ...revealItems(() => sock?.send({ t: "reveal-path", path: rel }), daemonHost(sock)));
   }
   const copies: MenuItem[] = [];
+  // the path as the call named it, which is where the file is on disk: what a file's own menu
+  // copies, offered on every row that names one and not only on a file outside the worktree
+  const named = callPath(head);
+  if (rel && named) copies.push({ id: "copy-path", label: "copy path", onClick: () => copyText(named) });
   const command = toolLabel(head, roots).command;
   // the row's line is cut at the edge and has no other copy; a description that is the command
   // itself is the command's item

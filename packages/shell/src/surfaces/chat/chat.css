@@ -702,17 +702,31 @@
       right: var(--row-inset);
       top: 50%;
       translate: 0 -50%;
+      /* the path fades out under the button rather than stopping at its edge: a hard edge across
+       the middle of a character read as the line being broken, and the fade says the path goes
+       on under the glyph. The fade and the fill behind the glyph are one shape, two characters
+       wider than the button on its left and rounded only on its right, since a square fade
+       meeting a rounded box left two notches at the join. The glyph is positioned so it paints
+       over the shape, which a positioned pseudo-element would otherwise cover. */
+      &::before {
+        content: "";
+        position: absolute;
+        inset: 0 0 0 -16px;
+        border-radius: 0 var(--radius) var(--radius) 0;
+        background: linear-gradient(to right, transparent, var(--tool-open-fill) 16px);
+      }
+      & > svg {
+        position: relative;
+      }
     }
     :where([data-hover]) & summary:hover .tool-open,
     & .tool-open:focus-visible {
       visibility: visible;
-      background: var(--element0);
-      box-shadow: -4px 0 0 var(--element0);
+      --tool-open-fill: var(--element0);
     }
     :where([data-hover]) &[open] > summary .tool-open {
       visibility: visible;
-      background: var(--element1);
-      box-shadow: -4px 0 0 var(--element1);
+      --tool-open-fill: var(--element1);
     }
     /* one call's output inside a row that holds several: the rule is what says where the next hunk
    starts, since the calls are otherwise the same edit to the same file twice over */

@@ -165,6 +165,27 @@ describe("create / remove", () => {
     expect((await w.worktrees.gitStatus(second.id))?.files).toEqual([]);
   });
 
+  test("the deps copy stands on the row as a setup stage, so a claimed row says what it is on", async () => {
+    const repoId = await registered();
+    w.state.requireRepo(repoId).config = { run: { web: "true" }, setup: ["true"] };
+    writeFileSync(join(w.repo, ".gitignore"), "node_modules/\n");
+    sh(w.repo, GIT, "add", ".gitignore");
+    sh(w.repo, GIT, "commit", "-qm", "ignore deps");
+    mkdirSync(join(w.repo, "node_modules", "dep"), { recursive: true });
+    writeFileSync(join(w.repo, "node_modules", "dep", "index.js"), "module.exports = 1;\n");
+    const stages: string[] = [];
+    w.hub.on("worktreesChanged", () => {
+      for (const wt of w.state.worktrees) {
+        const stage = wt.runs?.find((r) => r.kind === "setup")?.stage;
+        if (stage && stages.at(-1) !== stage) stages.push(stage);
+      }
+    });
+    const wt = await w.worktrees.create(repoId, "task");
+    await until(() => existsSync(join(wt.path, "node_modules", "dep", "index.js")));
+    await until(() => !w.state.worktree(wt.id)?.runs);
+    expect(stages).toEqual(["copying dependencies", "true"]);
+  });
+
   test("a second setup rewrites the mirrored block rather than stacking another", async () => {
     const repoId = await registered();
     writeFileSync(join(w.repo, ".gitignore"), "node_modules/\n");

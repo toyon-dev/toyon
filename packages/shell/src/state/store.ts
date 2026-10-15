@@ -275,8 +275,9 @@ export interface WorktreeLocal {
    * shows the bubble and the working mark from the press, so the wait reads as the turn it becomes
    * (and on the lead row, whose worktree is still being made, the draft's choices step aside).
    * The message goes when the agent's own copy reaches the chat and the mark holds until the row
-   * says busy itself, in whichever order those land; a message handed back unsent takes both. */
-  sending?: { message?: QueuedMessage };
+   * says busy itself, in whichever order those land; a message handed back unsent takes both.
+   * `at` is the press, for the count the mark shows once the daemon's word is slow in coming. */
+  sending?: { message?: QueuedMessage; at: number };
   /** set on an outgoing box alone (outbox.ts): the message this box holds between the press and
    * the wire, waiting for an upload it names to land */
   outgoing?: Outgoing;
@@ -1606,7 +1607,7 @@ function withSending(local: State["local"], rows: WorktreeStatus[], from: string
   if (held && from && made && made !== from) {
     const there = out[made] ?? EMPTY_LOCAL;
     // the agent's copy may already be in the new row's chat, and then only the mark is owed
-    const sending = there.chat.some((i) => i.kind === "user") ? {} : held;
+    const sending = there.chat.some((i) => i.kind === "user") ? { at: held.at } : held;
     out = { ...out, [from]: settled(out[from]!), [made]: { ...there, sending } };
   }
   for (const w of rows) {
@@ -1858,7 +1859,7 @@ function reduce(s: State, action: Action): State {
     case "restoring":
       return withLocal(s, action.id, (l) => ({ ...l, restoring: action.message }));
     case "sending":
-      return withLocal(s, action.id, (l) => ({ ...l, sending: { message: action.message } }));
+      return withLocal(s, action.id, (l) => ({ ...l, sending: { message: action.message, at: Date.now() } }));
     case "sent-box":
       // a walk that ended in a send is over, and the message answers whatever was said under the box
       return withLocal(s, action.id, ({ notice: _notice, ...l }) => ({
@@ -1911,7 +1912,7 @@ function reduce(s: State, action: Action): State {
       const agent = rowById(s, out.log)?.agent;
       const busy = out.frame.t === "chat" && (agent === "working" || agent === "waiting");
       return withLocal(next, out.log, (l) =>
-        busy ? counted(l) : { ...counted(l), sending: { message: { text, attachments } } },
+        busy ? counted(l) : { ...counted(l), sending: { message: { text, attachments }, at: Date.now() } },
       );
     }
     case "unsend": {
@@ -2778,7 +2779,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
         // busy, or until the turn is over before a status frame ever said so
         const row = s.rows.find((w) => w.id === id);
         const busy = row?.agent === "working" || row?.agent === "waiting";
-        const said = !heard.sending ? heard : busy ? settled(heard) : { ...heard, sending: {} };
+        const said = !heard.sending ? heard : busy ? settled(heard) : { ...heard, sending: { at: heard.sending.at } };
         const over = ev.type === "turn-end" || ev.type === "agent-error";
         const base = askSettled(ev.type === "user-message" ? said : over ? settled(l) : l, ev);
         return {

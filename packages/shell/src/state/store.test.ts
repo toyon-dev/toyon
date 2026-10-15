@@ -1473,10 +1473,10 @@ describe("drafts", () => {
       hello(wt("main", "main"), wt("sp", "spare")),
       { a: "sending", id: "sp", message: { text: "fix it" } },
     ]);
-    expect(s.local.sp?.sending).toEqual({ message: { text: "fix it" } });
+    expect(s.local.sp?.sending).toEqual({ message: { text: "fix it" }, at: expect.any(Number) });
     // the agent's copy takes the words; the mark holds until a status frame says busy
     s = run([agent("sp", { type: "user-message", text: "fix it", ts: 0 })], s);
-    expect(s.local.sp?.sending).toEqual({});
+    expect(s.local.sp?.sending).toEqual({ at: expect.any(Number) });
     s = run([worktrees(wt("main", "main"), { ...wt("sp", "worktree", ME), agent: "working" })], s);
     expect(s.local.sp?.sending).toBeUndefined();
     // the status outrunning the message leaves the words up, and the message then takes it all
@@ -1485,7 +1485,7 @@ describe("drafts", () => {
       s,
     );
     s = run([worktrees(wt("main", "main"), { ...wt("sp", "worktree", ME), agent: "working" })], s);
-    expect(s.local.sp?.sending).toEqual({ message: { text: "more" } });
+    expect(s.local.sp?.sending).toEqual({ message: { text: "more" }, at: expect.any(Number) });
     s = run([agent("sp", { type: "user-message", text: "more", ts: 2 })], s);
     expect(s.local.sp?.sending).toBeUndefined();
     // a turn over before any status frame ends it too, and so does a message handed back
@@ -1506,7 +1506,7 @@ describe("drafts", () => {
     s = run([worktrees(wt("main", "main"), wt("new", "worktree", ME))], s);
     expect(s.activeId).toBe("new");
     expect(s.local.main?.sending).toBeUndefined();
-    expect(s.local.new?.sending).toEqual({ message: { text: "fix it" } });
+    expect(s.local.new?.sending).toEqual({ message: { text: "fix it" }, at: expect.any(Number) });
   });
   test("a send empties the box here, ends a walk, and counts, so the log goes to its end on every one", () => {
     const chip = { kind: "file" as const, key: "f1", upload: "u1", name: "run.jsonl", bytes: 9, text: true };
@@ -3579,7 +3579,10 @@ describe("the outbox", () => {
     s = run([{ a: "sent-out", id: out }], s);
     expect(s.local[out]).toBeUndefined();
     expect(s.outbox).toEqual([]);
-    expect(s.local.a?.sending).toEqual({ message: { text: "see", attachments: [toInput(settledImg)] } });
+    expect(s.local.a?.sending).toEqual({
+      message: { text: "see", attachments: [toInput(settledImg)] },
+      at: expect.any(Number),
+    });
     expect(s.local.a?.sent).toBe(1);
     expect(reducer(s, { a: "sent-out", id: out })).toBe(s);
   });
@@ -3706,6 +3709,9 @@ describe("the outbox", () => {
       ],
       s,
     );
-    expect(s.local.a?.sending).toEqual({ message: { text: "yes", attachments: [toInput(settledImg)] } });
+    expect(s.local.a?.sending).toEqual({
+      message: { text: "yes", attachments: [toInput(settledImg)] },
+      at: expect.any(Number),
+    });
   });
 });

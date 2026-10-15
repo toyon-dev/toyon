@@ -337,6 +337,9 @@ export class WorktreeService {
    * file still in it as deleted: 15k of them on a 20k-file tree. Reads answer from the last counts
    * while an id is in here, and the row goes a moment later anyway. */
   private going = new Set<string>();
+  /** a claimed row's first message on its way to the agent's queue: a chat sent into the row
+   * meanwhile goes behind it (settles either way, since the chat is not the claim's to refuse) */
+  private firstPrompt = new Map<string, Promise<void>>();
   /** every row's badge numbers, read behind the frames rather than in them */
   readonly counts: Counts;
   /** the HEAD each clean, level worktree was last asked about a hand landing at: one reflog read per move */
@@ -477,38 +480,68 @@ export class WorktreeService {
       variant && variant.of >= 2 ? [prompt, variantLens(variant.index)].filter(Boolean).join("\n\n") : prompt;
 
     // fast path: claim the pre-warmed spare. Its runtime — agent included — already exists, so the
-    // task's first message goes to the spare's agent.
-    const claimed = await this.spare.claim(repoId, title, opts.worktreeId);
-    if (claimed) {
-      if (variant) claimed.variant = variant;
-      if (opts.createdBy) claimed.createdBy = opts.createdBy;
-      // the claim stamped the prompt's words as a name still to be found; a given name is final
-      if (given) delete claimed.unnamed;
-      if (opts.from) claimed.from = opts.from;
-      // made from a prompt, which is a send
-      claimed.promptedAt = claimed.createdAt;
+    // task's first message goes to the spare's agent. The spare was warmed under the default
+    // profile; another one means its procs restart once the tree is on its branch.
+    const spare = this.d.state.worktrees.find((w) => w.repoId === repoId && w.kind === "spare");
+    const restart = !!spare && profile !== undefined && profile !== resolveRun(repo, spare).profile;
+    const claimed = await this.spare.claim(repoId, title, opts.worktreeId, {
+      createdBy: opts.createdBy,
       // the spare's agent has no process yet; it reads the stamps on its first prompt
-      claimed.agent = agent;
-      if (opts.mode) claimed.mode = opts.mode;
-      if (opts.model) claimed.model = opts.model;
-      if (opts.effort) claimed.effort = opts.effort;
-      // the spare was warmed under the default profile; another one means its procs restart
-      // (the agent stays, and gets the prompt now rather than after the restart)
-      if (profile !== undefined && profile !== resolveRun(repo, claimed).profile) {
-        claimed.profile = profile;
-        this.restartProcs(claimed);
-      }
-      const carried = await this.carryMain(repo, claimed, !!opts.carry);
-      this.d.state.save();
-      this.d.hub.emit("worktreesChanged");
+      agent,
+      mode: opts.mode,
+      model: opts.model,
+      effort: opts.effort,
+      variant,
+      from: opts.from,
+      profile,
+      // the claim stamped the prompt's words as a name still to be found; a given name is final
+      unnamed: given ? undefined : true,
+    });
+    if (claimed) {
+      const { wt } = claimed;
       // the spare's agent may be up already, warmed on the first keystroke under the record's
       // agent of the time; a task that asked for another gets that one, spawned by the send
-      const rt = this.d.runtime.ensureAgent(claimed);
-      if (rt.agent.runningAgent !== null && rt.agent.runningAgent !== agent) await rt.agent.restart();
-      rt.agent.send(agentPrompt, { context: withCarry(context(claimed.id), carried), attachments });
-      this.nameOrAsk(claimed, task, given, variant);
+      const rt = this.d.runtime.ensureAgent(wt);
+      // the message waits in the queue until the tree is on its branch: a turn on a detached head
+      // would commit to nothing. It is queued once the tree is there to carry main's changes into,
+      // which is before the branch, so what reads the row meanwhile sends behind it.
+      const release = rt.agent.hold();
+      const first = (async () => {
+        if (rt.agent.runningAgent !== null && rt.agent.runningAgent !== agent) await rt.agent.restart();
+        await claimed.tree;
+        const carried = await this.carryMain(repo, wt, !!opts.carry);
+        rt.agent.send(agentPrompt, { context: withCarry(context(wt.id), carried), attachments });
+        return carried;
+      })();
+      // a chat into the row meanwhile waits on this and never on its outcome
+      this.firstPrompt.set(
+        wt.id,
+        first.then(
+          () => undefined,
+          () => undefined,
+        ),
+      );
+      // the frame that moves the row on every screen, now that a message sent into it on sight
+      // has an agent to queue on and a first message to wait behind
+      this.d.hub.emit("worktreesChanged");
+      let carried: Carried;
+      try {
+        carried = await first;
+        await claimed.settled;
+      } catch (e) {
+        // the row is a spare again before the message goes back to the box it was typed in
+        await claimed.settled.catch(() => {});
+        if (rt.agent.queueLength > 0) rt.agent.unqueue(0);
+        release();
+        throw e instanceof UserError ? e : new UserError(e instanceof Error ? e.message : String(e));
+      } finally {
+        this.firstPrompt.delete(wt.id);
+      }
+      release();
+      if (restart) this.restartProcs(wt);
+      this.nameOrAsk(wt, task, given, variant);
       if (carried.unmoved) throw new UserError(carried.unmoved, { delivered: true });
-      return claimed;
+      return wt;
     }
 
     // A checkout that git stops treating as one (`core.bare` set in the config its worktrees share)
@@ -1590,7 +1623,11 @@ export class WorktreeService {
     const srcNm = join(depsSource, "node_modules");
     const dstNm = join(wt.path, "node_modules");
     if (existsSync(srcNm) && !existsSync(dstNm)) {
+      // on the row as a stage like the cache restore: a copy of a large tree is seconds the
+      // person reads the row through, and a row claimed meanwhile has no phase left to say so
+      const run = this.runs.begin(wt.id, "setup", { timeoutMs: ceiling, stage: "copying dependencies" });
       const r = await cloneTree(srcNm, dstNm);
+      run.finish(0);
       if (r.ok) this.d.hub.emit("log", wt.id, "setup", `deps via ${r.how} in ${r.ms}ms`);
       else log.warn(wt.id, "could not copy node_modules from the base checkout", r.error);
     }
@@ -2756,6 +2793,9 @@ export class WorktreeService {
     // the shell starts new work from the plus, never here; a client that names main by hand is
     // refused the same way, so no agent turn ever runs in the main checkout
     if (wt.kind === "main") throw new UserError("nothing runs on main: the plus starts a worktree for it");
+    // typed into a row whose first message is still on its way to the queue: this one goes behind
+    // it, in the order they were sent
+    await this.firstPrompt.get(worktreeId);
     const agent = this.d.runtime.agentFor(worktreeId);
     if (!agent) throw new UserError("worktree still starting; try again in a moment");
     agent.send(msg.text, { context: msg.context, attachments: msg.attachments });

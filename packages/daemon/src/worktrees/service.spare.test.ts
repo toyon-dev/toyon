@@ -8,6 +8,7 @@ import { UserError } from "../core/errors.ts";
 import { Hub } from "../core/hub.ts";
 import { StateStore } from "../core/state.ts";
 import { git } from "../git/exec.ts";
+import { withRepoLock } from "../git/lock.ts";
 import { RepoRegistry } from "../repos/registry.ts";
 import { RuntimeRegistry } from "../runtime/registry.ts";
 import { FixService } from "./fix.ts";
@@ -231,6 +232,102 @@ describe("spare pool", () => {
     const b = w.worktrees.spare.ensure(repoId);
     await Promise.all([a, b]);
     expect(w.state.worktrees.filter((x) => x.kind === "spare")).toHaveLength(1);
+  });
+
+  /** the repo lock taken until `free` is called: what a land, or a checkout of a large tree,
+   * does. Keyed on the path the registry holds, which is the one the service locks on */
+  const lockRepo = (repoId: string) => {
+    let free = () => {};
+    const held = withRepoLock(
+      w.state.requireRepo(repoId).path,
+      () =>
+        new Promise<void>((r) => {
+          free = r;
+        }),
+    );
+    return { free: () => free(), held };
+  };
+
+  test("a claim lists the task and the next spare before the branch exists, and holds the agent until it does", async () => {
+    const repoId = await registered();
+    await w.worktrees.spare.ensure(repoId);
+    const spare = w.state.worktrees.find((x) => x.kind === "spare")!;
+    const agent = w.agents.get(spare.id)!;
+    const lock = lockRepo(repoId);
+    const creating = w.worktrees.create(repoId, "typed under a lock", { createdBy: "tab1", mode: "plan" });
+    // the row is the task in the frame that goes out from the send, with everything the send
+    // stamped on it, and the plus beside it; git has not heard of either yet
+    await until(() => w.state.worktrees.some((x) => x.kind === "spare" && x.id !== spare.id));
+    expect(spare.kind).toBe("worktree");
+    expect(spare.title).toBe("Typed under a");
+    expect(spare.unnamed).toBe(true);
+    expect([spare.createdBy, spare.mode, spare.agent]).toEqual(["tab1", "plan", "claude"]);
+    expect(spare.promptedAt).toBe(spare.createdAt);
+    expect(spare.phase).toBe("ready");
+    expect((await git(spare.path, "branch", "--show-current")).out).toBe("");
+    // the message is queued and the queue held: no turn runs on a detached head
+    await until(() => agent.sent.length === 1);
+    expect(agent.held).toBe(true);
+    lock.free();
+    const wt = await creating;
+    expect(wt).toBe(spare);
+    expect((await git(wt.path, "branch", "--show-current")).out).toBe(wt.branch);
+    expect(wt.phase).toBeUndefined();
+    expect(agent.held).toBe(false);
+  });
+
+  test("a chat sent into a row being claimed goes behind its first message", async () => {
+    const repoId = await registered();
+    await w.worktrees.spare.ensure(repoId);
+    const lock = lockRepo(repoId);
+    // the first send reserves the next row, whose checkout waits on the lock with everything else
+    const first = w.worktrees.create(repoId, "first");
+    await until(() => w.state.worktrees.some((x) => x.kind === "spare" && x.phase === "reserved"));
+    const next = w.state.worktrees.find((x) => x.kind === "spare")!;
+    const second = w.worktrees.create(repoId, "second", { worktreeId: next.id });
+    // the frame a tab sends into the row on goes out once the row has an agent to queue on
+    await until(() => !!w.agents.get(next.id));
+    expect(next.kind).toBe("worktree");
+    // typed into the row while its directory is still to come: its first message is not queued
+    // yet, and this one must not get ahead of it
+    const chat = w.worktrees.send(next.id, { text: "also this" });
+    await settle();
+    expect(w.agents.get(next.id)?.sent ?? []).toEqual([]);
+    lock.free();
+    await Promise.all([first, second, chat]);
+    expect(w.agents.get(next.id)!.sent.map((m) => m.text)).toEqual(["second", "also this"]);
+    expect((await git(next.path, "branch", "--show-current")).out).toBe(next.branch);
+  });
+
+  test("a switch that fails puts the spare back, keeps one spare for the repo, and hands the message back", async () => {
+    const repoId = await registered();
+    await w.worktrees.spare.ensure(repoId);
+    const spare = w.state.worktrees.find((x) => x.kind === "spare")!;
+    const dir = basename(spare.path);
+    // the branch the claim would make, already there
+    sh(w.repo, "git", "branch", `toyon/${dir}`);
+    await expect(w.worktrees.create(repoId, "doomed")).rejects.toThrow(UserError);
+    expect(spare.kind).toBe("spare");
+    expect(spare.title).toBe(dir);
+    expect(spare.phase).toBe("ready");
+    expect(spare.unnamed).toBeUndefined();
+    expect(spare.promptedAt).toBeUndefined();
+    expect(w.state.worktrees.filter((x) => x.kind === "spare")).toEqual([spare]);
+    expect(w.agents.get(spare.id)?.held ?? false).toBe(false);
+    // the pool is whole: the next send takes the same row, on a branch that is free
+    sh(w.repo, "git", "branch", "-D", `toyon/${dir}`);
+    const wt = await w.worktrees.create(repoId, "second try");
+    expect(wt.id).toBe(spare.id);
+    expect(wt.kind).toBe("worktree");
+  });
+
+  test("a daemon that went down inside a claim boots the row without its phase", async () => {
+    const repoId = await registered();
+    const wt = await w.worktrees.create(repoId, "task");
+    // the record as a crash between the frame and the switch would have left it
+    wt.phase = "warming";
+    w.worktrees.spare.adopt(repoId);
+    expect(wt.phase).toBeUndefined();
   });
 
   test("a claimed spare is born on a branch named for its directory, and a rename moves only the branch", async () => {

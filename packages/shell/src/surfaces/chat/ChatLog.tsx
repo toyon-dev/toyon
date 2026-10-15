@@ -460,6 +460,10 @@ export function ChatLog({
   const usage = useLocalField(id, "usage");
   const heardAt = usage?.heard !== undefined && chatAt !== undefined && usage.heard > chatAt ? usage.heard : undefined;
   const heard = useSecondsSince(busy ? heardAt : undefined);
+  // the press, while no status frame has said the row is busy: the daemon is still making the
+  // worktree the message starts (a checkout, a branch under the repo lock) or the agent its
+  // process, and a mark that spun alone for that long read as the send having gone nowhere
+  const sentSecs = useSecondsSince(sending && !busy ? sending.at : undefined);
   // What in the log already says busy where the reader is looking: the shimmer on a running call
   // of the main agent's own (ownCallRunning in group.ts says which calls count), a thought or
   // reply still arriving, or a spawn row floating at the foot. The word under the log shows only
@@ -618,30 +622,39 @@ export function ChatLog({
                     read a hundred times a session. A word stays only where it adds a fact the
                     mark cannot: who is working, or where the wait is. */}
                   <Spinner variant="squares" />
-                  {heardAt !== undefined
-                    ? // gated on its own count, not the whole silence: a short think after a long
-                      // queue would otherwise flash a word for a wait that has just begun
-                      heard >= QUIET_AFTER && (
+                  {!busy && sending
+                    ? sentSecs >= QUIET_AFTER && (
                         <>
-                          {/* with no call open and nothing streaming, a silence this long after the
+                          {/* nothing has taken the message yet: not the model, not the agent's
+                            process; the wait is toyon's own, and the word says where it is */}
+                          <span className="working-word">waiting for the agent</span>
+                          <span className="working-num">{elapsed(sentSecs)}</span>
+                        </>
+                      )
+                    : heardAt !== undefined
+                      ? // gated on its own count, not the whole silence: a short think after a long
+                        // queue would otherwise flash a word for a wait that has just begun
+                        heard >= QUIET_AFTER && (
+                          <>
+                            {/* with no call open and nothing streaming, a silence this long after the
                             model took the request is the model holding the turn: its thinking is
                             summarized, and the summary lands only once the thought is done, so a
                             long think is a hole in the log. Naming it says where the wait is. Under
                             the threshold a healthy turn would flick the number on and off with
                             every result; past it, the silence is the news */}
-                          <span className="working-word">thinking</span>
-                          <span className="working-num">{elapsed(heard)}</span>
-                        </>
-                      )
-                    : quiet >= QUIET_AFTER && (
-                        <>
-                          {/* the model has not taken the request yet: the wait is the provider's
-                            queue, not the agent's, and the word says so before it can read as the
-                            model working hard */}
-                          <span className="working-word">waiting for the model</span>
-                          <span className="working-num">{elapsed(quiet)}</span>
-                        </>
-                      )}
+                            <span className="working-word">thinking</span>
+                            <span className="working-num">{elapsed(heard)}</span>
+                          </>
+                        )
+                      : quiet >= QUIET_AFTER && (
+                          <>
+                            {/* the model has not taken the request yet: the wait is the provider's
+                              queue, not the agent's, and the word says so before it can read as the
+                              model working hard */}
+                            <span className="working-word">waiting for the model</span>
+                            <span className="working-num">{elapsed(quiet)}</span>
+                          </>
+                        )}
                 </span>
               )}
             </div>

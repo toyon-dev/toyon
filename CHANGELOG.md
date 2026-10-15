@@ -24,7 +24,9 @@ A row from another project that is waiting on you now shows on the rail in front
 - A tool search row reads as a sentence: "loading a tool", then "loaded WebSearch, WebFetch" or "looked for a tool: notebook jupyter".
 - The usage panel on the compact ring opens on keyboard focus as well as on hover, sits centred above the ring like a tooltip, and drops when the ring's menu opens.
 - The offer to install Toyon as an app shows in the composer as well as the top bar.
-- The land button says what it will do, merge, push or open PR, by the project's land route, instead of a plain land.
+- On the PR route the button reads open PR until a pull request exists. Once one is open, land merges it and update sends it new commits.
+- Restoring an archived worktree puts its row back on the rail at once and does the git work behind it; a refused restore takes the row away again.
+- The route bar above the preview is a real field: a click and drag selects text, and its list of routes hangs under it at the field's width.
 - The composer's up-arrow history offers only commands you typed; the check Toyon runs after a turn and a landing's git steps stay out of it.
 - After a run of clean edits, the row keeps its shimmer until the next call lands, instead of flashing a working mark between edits to the same file.
 

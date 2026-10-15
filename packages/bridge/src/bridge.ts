@@ -210,16 +210,29 @@ function fiberOf(el: Element): Fiber | null {
 // ---- overlay (picker highlight + file highlight) ----
 
 let overlay: HTMLDivElement | null = null;
+const CAN_POPOVER = typeof HTMLElement !== "undefined" && "showPopover" in HTMLElement.prototype;
+// A page's own menu or dialog sits in the browser's top layer, above any z-index, so a box drawn
+// around one of its rows would be hidden under it. The overlay sits in the top layer too, and
+// every paint starts from a cleared (hidden) overlay and shows it again, which puts it after a
+// float the page opened since: the one shown last is on top.
 function ensureOverlay(): HTMLDivElement {
-  if (overlay?.isConnected) return overlay;
-  overlay = document.createElement("div");
-  overlay.style.cssText = "position:fixed;inset:0;pointer-events:none;z-index:2147483647;";
-  document.documentElement.appendChild(overlay);
+  if (!overlay?.isConnected) {
+    overlay = document.createElement("div");
+    // the UA sheet gives a popover a border, padding, a centred fit-content box and a canvas
+    // background: all of it off, so this is the bare viewport-sized layer it was as a plain div
+    overlay.style.cssText =
+      "position:fixed;inset:0;width:auto;height:auto;max-width:none;max-height:none;margin:0;padding:0;border:0;background:transparent;overflow:visible;pointer-events:none;z-index:2147483647;";
+    if (CAN_POPOVER) overlay.popover = "manual";
+    document.documentElement.appendChild(overlay);
+  }
+  if (CAN_POPOVER && !overlay.matches(":popover-open")) overlay.showPopover();
   return overlay;
 }
 
 function clearOverlay() {
-  if (overlay) overlay.innerHTML = "";
+  if (!overlay) return;
+  overlay.innerHTML = "";
+  if (CAN_POPOVER && overlay.matches(":popover-open")) overlay.hidePopover();
 }
 
 const CHIP_H = 20;

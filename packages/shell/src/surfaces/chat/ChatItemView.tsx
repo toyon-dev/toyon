@@ -686,8 +686,9 @@ export const ToolRow = memo(
     const op = useStore((s) => (worktreeId ? s.shipping[worktreeId]?.op : undefined));
     const stoppable = streaming && head.name === SHELL_TOOL && worktreeId ? { worktreeId, toolId: last.id } : null;
     // the file the row names, opened in the pane: the first thing its menu offers, as a control on
-    // the line. Not while the call is still being written, when the path is a prefix of one.
-    const where = writing
+    // the line. Not until the call has returned: a write's file is not on disk before that, and a
+    // press on it answered "does not exist" for a file the row was plainly making.
+    const where = streaming
       ? null
       : (() => {
           const w = worktreeById(store.getState(), worktreeId);
@@ -768,7 +769,7 @@ export const ToolRow = memo(
             )}
             {where && (
               <IconButton
-                icon={where.icon}
+                icon="eye"
                 className="tool-open"
                 label={where.tip}
                 onClick={(e) => {

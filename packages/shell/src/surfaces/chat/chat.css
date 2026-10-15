@@ -682,22 +682,37 @@
         color: var(--red);
       }
     }
-    /* the file the row names, opened in the pane, in the stop's seat at the line's far end. Under
-   a pointer it shows while the line is under it or held open: half the rows of a turn name a
-   file, and a glyph at rest on each was a column running down the log. It keeps its box while
-   hidden so the line does not reflow as the pointer arrives. On a phone, with no hover to find it
-   with, it stays. */
+    /* the file the row names, opened in the pane, at the line's far end. Under a pointer it shows
+   while the line is under it or held open: half the rows of a turn name a file, and a glyph at
+   rest on each was a column running down the log. It floats over the line's end rather than
+   taking a slot in it, so the path keeps its full width and is cut where it was; the seat's fill
+   under it, with a sliver more to its left, is what covers the characters it sits on. On a phone,
+   with no hover to find it with, it stays, and sits in the line as the stop does: there is no
+   fill at rest to cover the text with. */
+    & summary {
+      position: relative;
+    }
     & .tool-open {
       flex: 0 0 auto;
       margin-left: auto;
-      :where([data-hover]) & {
-        visibility: hidden;
-      }
-      :where([data-hover]) summary:hover &,
-      :where([data-hover]) .tool-row[open] > summary &,
-      &:focus-visible {
-        visibility: visible;
-      }
+    }
+    :where([data-hover]) & .tool-open {
+      visibility: hidden;
+      position: absolute;
+      right: var(--row-inset);
+      top: 50%;
+      translate: 0 -50%;
+    }
+    :where([data-hover]) & summary:hover .tool-open,
+    & .tool-open:focus-visible {
+      visibility: visible;
+      background: var(--element0);
+      box-shadow: -4px 0 0 var(--element0);
+    }
+    :where([data-hover]) &[open] > summary .tool-open {
+      visibility: visible;
+      background: var(--element1);
+      box-shadow: -4px 0 0 var(--element1);
     }
     /* one call's output inside a row that holds several: the rule is what says where the next hunk
    starts, since the calls are otherwise the same edit to the same file twice over */

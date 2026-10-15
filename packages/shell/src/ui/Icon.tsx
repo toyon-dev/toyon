@@ -34,6 +34,7 @@ export type IconName =
   | "diff"
   | "folder"
   | "book"
+  | "eye"
   | "trash"
   | "move"
   | "search"
@@ -114,6 +115,9 @@ const ICON_PATHS: Record<IconName, string> = {
   // turned corner is what every "new file" button draws, and a page with a lens on it says grep,
   // which is the magnifier's job
   book: "M8 4.6c-1.2-1-2.7-1.4-4.4-1.3v7.6c1.7-.1 3.2.3 4.4 1.3 1.2-1 2.7-1.4 4.4-1.3V3.3c-1.7-.1-3.2.3-4.4 1.3z M8 4.6v8.6",
+  // an eye: see this file. An almond of two arcs with a ring for the pupil, drawn wide and short
+  // so it is not a lens (search) or a ring (pick); the pupil keeps clear of the lids at 16px
+  eye: "M2 8c1.6-2.9 3.6-4.3 6-4.3s4.4 1.4 6 4.3c-1.6 2.9-3.6 4.3-6 4.3S3.6 10.9 2 8z M8 6.1a1.9 1.9 0 1 0 0 3.8 1.9 1.9 0 1 0 0-3.8z",
   trash:
     "M3.6 4.6h8.8 M6.4 4.6V3.2a.7.7 0 0 1 .7-.7h1.8a.7.7 0 0 1 .7.7v1.4 M5 4.6l.55 8.1a.9.9 0 0 0 .9.84h3.1a.9.9 0 0 0 .9-.84L11 4.6",
   // one arrow across the box: a file leaving one path for another

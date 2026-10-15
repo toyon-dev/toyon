@@ -34,6 +34,11 @@ const NOT_A_SEAT = [
   ".rail-disc-item .rail-more:hover",
   ".rail-item.menu-open .rail-more",
   ".rail-disc-item.menu-open .rail-more",
+  // the open button floating over a tool row's line paints the seat it covers, so the characters
+  // under it do not show through; its ladder is the hovered row's by inheritance
+  ".tool-row summary:hover .tool-open",
+  ".tool-row .tool-open:focus-visible",
+  ".tool-row[open] > summary .tool-open",
 ];
 
 /** Seats whose element also carries .row, so base.css lifts them and they say nothing themselves.

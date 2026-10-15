@@ -2,60 +2,57 @@ import { copyText, type Deps } from "../../state/actions/deps.ts";
 import { daemonHost, revealItems } from "../../state/actions/editor.ts";
 import { openFile } from "../../state/actions/file.ts";
 import { openByPath } from "../../state/openOutside.ts";
-import { readingView } from "../../state/store.ts";
-import type { IconName } from "../../ui/Icon.tsx";
+import { type EditorView, readingView } from "../../state/store.ts";
 import { grouped, type MenuEntry, type MenuItem } from "../../ui/menu.ts";
 import type { ToolItem } from "./group.ts";
 import { callDescription, callPath, relPath, toolLabel } from "./toolCall.ts";
 
-/** the one place a tool row's file opens: the editor pane, as the diff for an edit and as the
- * file's reading (rendered, for markdown and html) for anything else. The row's menu lists it
- * first and the row's button is the same press, so the two never disagree on what opens. */
+/** one reading of a tool row's file in the editor pane: its diff, the file, or the file rendered
+ * (markdown and html). */
 export interface ToolRowOpen {
   /** the menu's word for it */
   label: string;
   /** the button's sentence */
   tip: string;
-  icon: IconName;
   open: () => void;
 }
 
-/** where the file a tool row names would open, or null for a row that named none or a worktree
- * that is gone. A file outside the worktree (a mock under /tmp) is asked for by its place on the
- * daemon's disk, which decides the reading. */
-export function toolRowOpen(
-  tools: ToolItem[],
-  roots: string[],
-  wt: { id: string } | null,
-  deps: Deps,
-): ToolRowOpen | null {
+const TIPS: Record<EditorView, string> = {
+  diff: "Open this file's diff in the editor pane",
+  file: "Open this file in the editor pane",
+  preview: "Read this file rendered in the editor pane",
+};
+
+/** the readings the file a tool row names has, the one the row's button opens first: rendered
+ * for a file that renders (a markdown mock is written to be read, not diffed), else the diff for
+ * an edit, else the file (a read or a search has nothing to diff). The menu lists them all in
+ * this order, as a file's menu does everywhere else in the shell, so the button is always the
+ * menu's first item. Empty for a row that named no file or a worktree that is gone. A file
+ * outside the worktree (a mock under /tmp) is asked for by its place on the daemon's disk, which
+ * decides the reading, so it has one entry. */
+export function toolRowOpens(tools: ToolItem[], roots: string[], wt: { id: string } | null, deps: Deps): ToolRowOpen[] {
   const head = tools[0];
-  if (!head || !wt) return null;
+  if (!head || !wt) return [];
   const rel = relPath(callPath(head), roots);
-  if (!rel) return null;
+  if (!rel) return [];
   if (rel.startsWith("/")) {
-    return {
-      label: "open",
-      tip: "Open this file in the editor pane",
-      icon: "file",
-      open: () => openByPath(deps, wt.id, { href: rel, path: rel }),
-    };
+    return [{ label: "open", tip: TIPS.file, open: () => openByPath(deps, wt.id, { href: rel, path: rel }) }];
   }
-  // a read or a search has nothing to diff, so the pane is the file for those, rendered where
-  // the file is one that renders
-  const view = head.toolKind === "edit" ? "diff" : readingView(rel);
-  return {
+  const views: EditorView[] = [
+    ...(readingView(rel) === "preview" ? (["preview"] as const) : []),
+    ...(head.toolKind === "edit" ? (["diff"] as const) : []),
+    "file",
+  ];
+  return views.map((view) => ({
     label: `open ${view}`,
-    tip:
-      view === "diff"
-        ? "Open this file's diff in the editor pane"
-        : view === "preview"
-          ? "Read this file rendered in the editor pane"
-          : "Open this file in the editor pane",
-    icon: view === "diff" ? "diff" : "file",
+    tip: TIPS[view],
     open: () => openFile(deps, { worktreeId: wt.id, path: rel, view }),
-  };
+  }));
 }
+
+/** the reading the row's button opens */
+export const toolRowOpen = (...args: Parameters<typeof toolRowOpens>): ToolRowOpen | null =>
+  toolRowOpens(...args)[0] ?? null;
 
 /** what a tool row in the transcript offers: the file it named, in the editor pane and in Finder;
  * what it said it was doing, what it ran and what came back, as text; and the fold. The pane and
@@ -75,18 +72,22 @@ export function toolRowItems(
   if (!head) return [];
   const open: MenuItem[] = [];
   const rel = relPath(callPath(head), roots);
-  const where = toolRowOpen(tools, roots, wt, deps);
+  const opens = toolRowOpens(tools, roots, wt, deps).map((o) => ({
+    id: o.label.replace(" ", "-"),
+    label: o.label,
+    onClick: o.open,
+  }));
   if (rel && !rel.startsWith("/") && wt) {
     open.push(
-      ...(where ? [{ id: "open-diff", label: where.label, onClick: where.open }] : []),
+      ...opens,
       ...revealItems(() => sock?.send({ t: "reveal", worktreeId: wt.id, path: rel }), daemonHost(sock)),
     );
   } else if (rel.startsWith("/")) {
-    open.push(
-      ...(where ? [{ id: "open", label: where.label, onClick: where.open }] : []),
-      ...revealItems(() => sock?.send({ t: "reveal-path", path: rel }), daemonHost(sock)),
-      { id: "copy-path", label: "copy path", onClick: () => copyText(rel) },
-    );
+    open.push(...opens, ...revealItems(() => sock?.send({ t: "reveal-path", path: rel }), daemonHost(sock)), {
+      id: "copy-path",
+      label: "copy path",
+      onClick: () => copyText(rel),
+    });
   }
   const copies: MenuItem[] = [];
   const command = toolLabel(head, roots).command;

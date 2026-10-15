@@ -31,24 +31,12 @@ export class TurnService {
   private stoppedByHand = new Set<string>();
 
   constructor(private d: TurnServiceDeps) {
-    this.boot();
+    // A record of `asking` survives a restart as it is: the card the daemon closed on its way out
+    // comes back open in the shell, and the answer reaches the resumed agent as a message, so
+    // the question is still the thing the row is waiting on.
     // Subscribed ahead of the ws layer's listener on the same event, which broadcasts the rows:
     // services are built before the server, so the frame this status sends carries the record.
     d.hub.on("agentStatus", (worktreeId, status) => this.onStatus(worktreeId, status));
-  }
-
-  /** A restart loses every open card: a question nobody can answer any more reads as a stop. */
-  private boot() {
-    let changed = false;
-    for (const wt of this.d.state.worktrees) {
-      const turn = wt.lastTurn;
-      if (turn?.end !== "asking") continue;
-      const { ask: _expired, ...facts } = turn.facts;
-      turn.end = "stopped";
-      turn.facts = facts;
-      changed = true;
-    }
-    if (changed) this.d.state.save();
   }
 
   private onStatus(worktreeId: string, status: AgentStatus) {

@@ -2172,6 +2172,18 @@ describe("AcpSession ask cards", () => {
     await w.session.close();
   });
 
+  test("closing the session under a card expires it, so the shell knows nobody stopped it", async () => {
+    const fake = fakeAgent(asks());
+    const w = world(fake);
+    w.session.send("go");
+    await waitFor(() => !!openAsk(w.events));
+    // a restart closes every session this way; Esc would have cancelled the card before it
+    await w.session.close();
+    const ends = w.events.filter((e) => e.type === "agent-ask-end");
+    expect(ends).toHaveLength(1);
+    expect(ends[0]).toMatchObject({ outcome: "expired" });
+  });
+
   test("answering an ask that already closed is a no-op, not a throw", async () => {
     const fake = fakeAgent(asks());
     const w = world(fake);

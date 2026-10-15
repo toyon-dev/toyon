@@ -752,7 +752,7 @@ describe("chat folding", () => {
   });
 
   test("a card the daemon lost comes back closed, and a stray end event changes nothing", () => {
-    // the daemon's own restart sweep writes the expired end, so backfill replays the pair
+    // the daemon writes the expired end on its way out, so backfill replays the pair
     let s = run([
       hello(wt("a")),
       agent("a", { type: "agent-question", id: "k1", message: "Which?", questions, ts: 0 }),
@@ -766,6 +766,35 @@ describe("chat folding", () => {
     // and the card only closes once
     s = reducer(s, agent("a", { type: "agent-ask-end", id: "k1", outcome: "answered", ts: 3 }));
     expect(s.local.a?.chat[0]).toMatchObject({ outcome: "expired" });
+  });
+
+  test("a card a restart closed comes back open in the box; one a stop closed waits folded", () => {
+    const question = (id: string) => agent("a", { type: "agent-question", id, message: "Which?", questions, ts: 0 });
+    // nobody pressed anything: the question is still owed, so the box shows it again
+    let s = run([
+      hello(wt("a")),
+      question("k1"),
+      agent("a", { type: "agent-ask-end", id: "k1", outcome: "expired", ts: 1 }),
+    ]);
+    expect(s.local.a?.askRevived).toBe("k1");
+    // escape on the revived card sets it aside, as it does on a card revived by hand
+    s = reducer(s, { a: "ask-revive", id: "a" });
+    expect(s.local.a?.askRevived).toBeUndefined();
+    // the stop was the person's own press, so the folded line is what they expect back
+    s = run([
+      hello(wt("a")),
+      question("k2"),
+      agent("a", { type: "agent-ask-end", id: "k2", outcome: "cancelled", ts: 1 }),
+    ]);
+    expect(s.local.a?.askRevived).toBeUndefined();
+    // a new question takes the box over from the revived one
+    s = run([
+      hello(wt("a")),
+      question("k3"),
+      agent("a", { type: "agent-ask-end", id: "k3", outcome: "expired", ts: 1 }),
+      question("k4"),
+    ]);
+    expect(s.local.a?.askRevived).toBeUndefined();
   });
 
   test("the box's answers and a parked ask live per worktree, and end with the ask", () => {

@@ -649,6 +649,10 @@ export class AcpSession implements AgentAdapter {
     this.queue = [];
     this.steered = [];
     this.queueChanged();
+    // a card still open here was not stopped by anyone: the daemon is going (a restart, mostly)
+    // and the agent's process with it. Esc settles its card as cancelled before any restart
+    // begins, so by now the two tell apart, and the shell reopens this one after the reload.
+    this.cancelAsks("expired");
     this.stop();
     await this.dropConn("closing");
     await this.log.flush();
@@ -1416,9 +1420,11 @@ export class AcpSession implements AgentAdapter {
     this.post(text, { attachments: followUp.attachments });
   }
 
-  /** every open card goes away with the turn or the process it belonged to */
-  private cancelAsks() {
-    for (const ask of [...this.asks.values()]) ask.settle("cancelled");
+  /** every open card goes away with the turn or the process it belonged to. A card nobody stopped
+   * ends as `expired` instead: the shell reads a cancelled card as a stop someone meant and keeps
+   * it folded, and an expired one as a question still owed, so it brings it back open. */
+  private cancelAsks(outcome: AskOutcome = "cancelled") {
+    for (const ask of [...this.asks.values()]) ask.settle(outcome);
   }
 
   /** a card is opened inside a running turn, so the turn's own status would say "working" while

@@ -172,14 +172,13 @@ describe("TurnService", () => {
     expect(w.wt("a").unread).toBeUndefined();
   });
 
-  test("after a restart a question nobody can answer is a stop, and a finished turn keeps its record", () => {
+  test("after a restart every record stands: the question comes back open, and a finished turn keeps its recap", () => {
     const facts = { turns: 1, edits: 2, toolErrors: 0 };
     const w = world(
       record("a", { lastTurn: { at: 5, end: "asking", facts: { ...facts, ask: "Which port?" } } }),
       record("b", { lastTurn: { at: 5, end: "done", facts, recap: { at: 6, text: "Header added." } }, seenAt: 9 }),
     );
-    expect(w.wt("a").lastTurn).toMatchObject({ end: "stopped" });
-    expect(w.wt("a").lastTurn?.facts.ask).toBeUndefined();
+    expect(w.wt("a").lastTurn).toMatchObject({ end: "asking", facts: { ask: "Which port?" } });
     expect(w.wt("b").lastTurn?.recap?.text).toBe("Header added.");
   });
 });

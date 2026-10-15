@@ -1636,20 +1636,23 @@ function runningOf(chat: ChatItem[], was: WorktreeLocal["running"]): WorktreeLoc
 /** The box's answers and the parked ask belong to one card. A new card starts over and takes the box
  * back from a parked or a revived one; the close of the card they belong to ends them; anything
  * else leaves them be. A stop closes the ask and keeps its answers, since the question can still
- * be answered as a message. A handoff card is one of these: its note is the box's draft, and it
- * closes with the go or the decline that answers it. */
+ * be answered as a message. A card that expired was closed by a restart and not by a press, so it
+ * comes back revived, open in the box, the way the person left it; a cancelled one was stopped
+ * on purpose and waits folded. A handoff card is one of these: its note is the box's draft, and
+ * it closes with the go or the decline that answers it. */
 function askSettled(l: WorktreeLocal, ev: AgentEvent): WorktreeLocal {
   const asked = ev.type === "agent-question" || ev.type === "agent-permission" || ev.type === "handoff-proposed";
   const closed =
     ev.type === "agent-ask-end" || ev.type === "handoff-go" || ev.type === "handoff-declined" ? ev.id : null;
   if (!asked && !closed) return l;
   const stopped = ev.type === "agent-ask-end" && stoppedBy(ev.outcome);
+  const expired = ev.type === "agent-ask-end" && ev.outcome === "expired" ? ev.id : null;
   const { card, cardParked, askRevived, ...rest } = l;
   return {
     ...rest,
     ...(card && !asked && (card.id !== closed || stopped) ? { card } : {}),
     ...(cardParked && !asked && cardParked !== closed ? { cardParked } : {}),
-    ...(askRevived && !asked ? { askRevived } : {}),
+    ...(expired ? { askRevived: expired } : askRevived && !asked ? { askRevived } : {}),
   };
 }
 

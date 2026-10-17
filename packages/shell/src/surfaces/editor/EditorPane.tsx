@@ -22,6 +22,7 @@ import { ErrorBoundary } from "../../ui/ErrorBoundary.tsx";
 import { useSettled } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { Pane } from "../../ui/Pane.tsx";
+import { CopyPathButton } from "./CopyPathButton.tsx";
 import { FileViewer } from "./FileViewer.tsx";
 import { HtmlPreview } from "./HtmlPreview.tsx";
 import { MarkdownPreview } from "./MarkdownPreview.tsx";
@@ -190,6 +191,9 @@ export function EditorPane({
               <Icon name="zen" className="icon-inline" /> full size
             </Button>
           )}
+          {/* the path in sight, in the order the header's menu has it: copy where it is, then open
+              it there. A loose file has no place in a worktree, so no path to copy */}
+          {wtPath && !loose && <CopyPathButton path={`${wtPath}/${path}`} />}
           {/* a loose file is the daemon's or the browser's and has no row to reveal it through;
               an archived worktree's file is only in git, so there is nothing on disk to show */}
           {!kept && !loose && <RevealButton onReveal={() => sock?.send({ t: "reveal", worktreeId, path })} />}

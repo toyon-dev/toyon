@@ -297,8 +297,8 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
             dispatch({ a: "links", id, links: d.links });
             break;
           case "page-error": {
-            // to the daemon, which holds what the page threw for the agent and decides when it
-            // is a row; this tab keeps none of it
+            // to the daemon, which holds what the page threw and says it behind the agent's next
+            // message; this tab keeps none of it
             const message = pageErrorText(d);
             if (message) sockRef.current?.send({ t: "page-error", worktreeId: id, message });
             break;

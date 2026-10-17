@@ -94,8 +94,9 @@ export function pageMenu(
  * and a list of pages hanging under it while the caret is in the field. A click in the field at
  * rest selects the address so typing replaces it, a drag selects what was dragged, and the chord
  * does what the click does. Nothing is highlighted until something is typed, so enter on the
- * untouched address reloads the page as a browser's would. The pages arrive with the worktree's
- * git status, so the rows are there on the first frame. */
+ * untouched address reloads the page as a browser's would, and enter on a cleared field goes to
+ * the root, as a browser's goes to the origin. The pages arrive with the worktree's git status,
+ * so the rows are there on the first frame. */
 export function RoutePicker({
   worktreeId,
   repoId,
@@ -144,8 +145,9 @@ export function RoutePicker({
       initialQuery={current}
       selectOnMount
       idleWhen={untouched}
-      onIdlePick={() => {
-        previewBus.post(worktreeId, { type: "reload" });
+      onIdlePick={(q) => {
+        if (q.trim() === "") previewBus.post(worktreeId, { type: "navigate", path: "/" });
+        else previewBus.post(worktreeId, { type: "reload" });
         close();
       }}
       keyOf={(r) => `${r.kind}:${r.path}`}
@@ -160,9 +162,9 @@ export function RoutePicker({
       onBack={close}
       rowMenu={(r) => pageMenu(r, { worktreeId, repoId, dir }, { sock, dispatch })}
       placeholder="type a path"
-      keys={(active) => ({
+      keys={(active, q) => ({
         complete: "completes the path",
-        pick: active ? goVerb(active) : "reloads",
+        pick: active ? goVerb(active) : q.trim() === "" ? "goes to the root" : "reloads",
         back: "closes",
       })}
       empty="no pages yet; type a path"

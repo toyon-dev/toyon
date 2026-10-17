@@ -55,7 +55,6 @@ import { OpenService } from "./files/open.ts";
 import { FileService } from "./files/service.ts";
 import { viewPr } from "./git/gh.ts";
 import { PageErrorService } from "./preview/errors.ts";
-import { RenderService } from "./preview/render.ts";
 import { AfterLand } from "./repos/afterLand.ts";
 import { RepoRegistry } from "./repos/registry.ts";
 import { RouteService } from "./routes/service.ts";
@@ -106,8 +105,8 @@ const managed = await loadManaged();
 const paths = makePaths();
 ensureDirs(paths);
 // stored rows in a shape this build no longer knows are rewritten before anything reads one: a
-// one-time pass on the first boot after the upgrade, a read of each transcript on every boot after
-forwardTranscripts(paths.transcriptsDir);
+// one-time pass on the first boot after the upgrade, which the stamp spares every boot after
+forwardTranscripts([paths.transcriptsDir, paths.archiveDir], join(paths.home, "transcripts-forwarded"));
 const token = loadOrCreateToken(paths);
 const port = Number(process.env.TOYON_PORT ?? DAEMON_DEFAULT_PORT);
 
@@ -206,13 +205,8 @@ let mcpPort = port;
 // when an agent calls
 const tools = new ToolSet();
 const mcp = new ToyonMcp({ url: (id) => `http://127.0.0.1:${mcpPort}/mcp/${id}`, version: pkg.version, tools });
-// what each preview's page threw, as the shell forwards it; read behind every message, and put on
-// the transcript once a turn is over, or as it comes while the agent is idle
-const pageErrors = new PageErrorService({
-  hub,
-  runtime: { agentFor: (id) => runtime.agentFor(id) },
-  known: (id) => state.worktree(id) !== undefined,
-});
+// what each preview's page threw, as the shell forwards it; read behind every message
+const pageErrors = new PageErrorService({ hub, known: (id) => state.worktree(id) !== undefined });
 const runtime: RuntimeRegistry = new RuntimeRegistry({
   hub,
   state,
@@ -272,9 +266,6 @@ const handoff = new HandoffService({
   create: (repoId, prompt, opts) => worktrees.create(repoId, prompt, opts),
 });
 tools.add(handoff);
-// a page rendered for the agent in a tab's hidden frame; the socket layer hands it the courier
-const render = new RenderService({ runtime, pageErrors });
-tools.add(render);
 // before the server: its agentStatus listener has to run ahead of the one that broadcasts the rows
 const turns = new TurnService({
   state,
@@ -463,7 +454,6 @@ const {
     landing,
     fix,
     pageErrors,
-    render,
     handoff,
     mcp,
     themes,

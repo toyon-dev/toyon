@@ -57,10 +57,9 @@ export function decide(
   // request a person answers in every mode.
   if (kind === "switch_mode") return { kind: "prompt" };
   // Toyon's own tools write nothing through the file tools, and their arguments are the daemon's
-  // to check when the call lands: the preview tool's `path` is a route like `/`, which the bounds
-  // below would read as the filesystem root and refuse. What handoff proposes is the person's to
-  // decide on its own card, so a permission card in front of it would be two gates for one
-  // decision. Allowed in every mode.
+  // to check when the call lands. What handoff proposes is the person's to decide on its own
+  // card, so a permission card in front of it would be two gates for one decision. Allowed in
+  // every mode.
   if (toyonTool(req.toolCall) !== null) return { kind: "allow" };
   // in ask, what is inside the bounds is still a person's call; the bounds are checked first so an
   // outside write is a refusal with a reason, never a card offering to allow it

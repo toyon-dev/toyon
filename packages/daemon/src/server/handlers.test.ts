@@ -28,7 +28,6 @@ import { OpenService } from "../files/open.ts";
 import { FileService } from "../files/service.ts";
 import { GIT } from "../git/exec.ts";
 import { PageErrorService } from "../preview/errors.ts";
-import { RenderService } from "../preview/render.ts";
 import { AfterLand } from "../repos/afterLand.ts";
 import { RepoRegistry } from "../repos/registry.ts";
 import { type RouteFs, RouteService } from "../routes/service.ts";
@@ -116,8 +115,7 @@ function make() {
     saveDelayMs: 0,
   });
   const fix = new FixService({ state, hub, runtime });
-  const pageErrors = new PageErrorService({ hub, runtime, known: (id) => state.worktree(id) !== undefined });
-  const render = new RenderService({ runtime, pageErrors, waitMs: 200 });
+  const pageErrors = new PageErrorService({ hub, known: (id) => state.worktree(id) !== undefined });
   const worktrees = new WorktreeService({
     state,
     hub,
@@ -248,7 +246,6 @@ function make() {
     landing,
     fix,
     pageErrors,
-    render,
     handoff,
     mcp,
     themes,
@@ -1171,47 +1168,19 @@ describe("handlers", () => {
     expect(agent.sent.filter((m) => m.asked)).toHaveLength(1);
   });
 
-  test("what the page threw is held by the daemon, put on the transcript once the turn is over, and sent on a press", async () => {
+  test("what the page threw is held by the daemon for the next message, and a page starting over forgets it", async () => {
     const { services, ctx, repo, agents } = make();
     const r = await services.repos.register(repo);
     r.needsSetup = false;
     const wt = await services.worktrees.create(r.id, "feature");
     const agent = agents.get(wt.id)!;
-    // during the turn the error is held: the agent is still writing, and nothing is to fix yet
-    services.hub.emit("agent", wt.id, 0, { type: "turn-start", ts: 1 });
+    const held = services.pageErrors as PageErrorService;
     await dispatch({ t: "page-error", worktreeId: wt.id, message: "boom (src/a.tsx:1)" }, ctx, services);
-    expect(agent.recorded.filter((e) => e.type === "page-error")).toEqual([]);
-    await expect(dispatch({ t: "fix-page", worktreeId: wt.id }, ctx, services)).rejects.toThrow(
-      "nothing the preview threw to fix",
-    );
-    // the page starting over forgets it; what it throws next is what the turn leaves, one row
+    expect(held.recent(wt.id)).toEqual(["boom (src/a.tsx:1)"]);
+    // nothing goes on the chat for it: the agent hears it behind the next message
+    expect(agent.recorded.map((e) => e.type)).not.toContain("page-error");
     await dispatch({ t: "page-loaded", worktreeId: wt.id }, ctx, services);
-    await dispatch({ t: "page-error", worktreeId: wt.id, message: "crash on render (src/b.tsx:4)" }, ctx, services);
-    services.hub.emit("agent", wt.id, 0, { type: "turn-end", stopReason: "end_turn", ts: 2 });
-    expect(agent.recorded.at(-1)).toMatchObject({ type: "page-error", errors: ["crash on render (src/b.tsx:4)"] });
-    await dispatch({ t: "fix-page", worktreeId: wt.id }, ctx, services);
-    expect(agent.sent.at(-1)).toMatchObject({
-      text: expect.stringContaining("- crash on render (src/b.tsx:4)"),
-      asked: { kind: "page", why: "the preview threw" },
-    });
-  });
-
-  test("rendered answers the render the tab was asked for, and nothing else", async () => {
-    const { services, ctx, repo } = make();
-    const r = await services.repos.register(repo);
-    r.needsSetup = false;
-    const wt = await services.worktrees.create(r.id, "feature");
-    const render = services.render as RenderService;
-    const asked: Array<{ worktreeId: string; id: string; path: string }> = [];
-    render.courier = (worktreeId, msg) => {
-      asked.push({ worktreeId, id: msg.id, path: msg.path });
-      return true;
-    };
-    // the fake procs never run a preview: the tool refuses before any tab is asked
-    expect(await render.call(wt.id, { path: "/about" })).toMatchObject({ isError: true });
-    expect(asked).toEqual([]);
-    // an answer for no render out is dropped, not an error
-    await dispatch({ t: "rendered", worktreeId: wt.id, id: "nope", ok: true, errors: [] }, ctx, services);
+    expect(held.recent(wt.id)).toEqual([]);
   });
 
   test("continue sends the agent on after a stop, and only when the chat ends on one", async () => {

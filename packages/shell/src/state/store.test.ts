@@ -3594,36 +3594,6 @@ describe("a handoff", () => {
   });
 });
 
-describe("what the preview threw", () => {
-  test("the daemon's page row folds in with its place, and the page state holds only the route and title", () => {
-    const s = run([
-      hello(wt("a")),
-      server({
-        t: "agent",
-        worktreeId: "a",
-        seq: 4,
-        event: { type: "page-error", errors: ["boom (src/a.tsx:1)"], ts: 1 },
-      }),
-    ]);
-    expect(s.local.a?.chat).toEqual([{ kind: "page-error", errors: ["boom (src/a.tsx:1)"], seq: 4 }]);
-    const paged = reducer(s, { a: "page", id: "a", url: "http://x/about", title: "About" });
-    expect(paged.local.a?.page).toEqual({ url: "http://x/about", title: "About" });
-    expect(reducer(paged, { a: "page", id: "a", title: "About us" }).local.a?.page).toEqual({
-      url: "http://x/about",
-      title: "About us",
-    });
-  });
-});
-
-describe("a page rendered for the agent", () => {
-  test("the ask is kept until this tab answers it, and an answer for no ask changes nothing", () => {
-    const s = run([hello(wt("a")), server({ t: "render", worktreeId: "a", id: "r1", path: "/about" })]);
-    expect(s.renders).toEqual([{ worktreeId: "a", id: "r1", path: "/about" }]);
-    expect(reducer(s, { a: "render-done", id: "nope" })).toBe(s);
-    expect(reducer(s, { a: "render-done", id: "r1" }).renders).toEqual([]);
-  });
-});
-
 describe("the outbox", () => {
   const landed = { kind: "file" as const, key: "f1", upload: "u1", name: "run.jsonl", bytes: 9, text: true };
   const {

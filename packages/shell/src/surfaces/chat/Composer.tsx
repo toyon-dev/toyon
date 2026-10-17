@@ -1275,19 +1275,6 @@ export function Composer({
           what failed in <code>{offer.command}</code>
         </ComposerOffer>
       )}
-      {/* the preview threw after the turn's edits, and the rows above say what: the same word,
-          and the press sends those rows. The daemon reads them off the transcript. */}
-      {offer?.verb === "fix" && "page" in offer && id && (
-        <ComposerOffer
-          icon="run"
-          verb={offer.verb}
-          tip="Send the agent what the preview threw and ask for a fix"
-          onPress={() => sock?.send({ t: "fix-page", worktreeId: id })}
-          onDismiss={() => dismissOffer(offer.key)}
-        >
-          what the preview threw
-        </ComposerOffer>
-      )}
       {/* the turn was stopped, or died on an error, and nothing has been said since: the way on
           is a press, where the alternative is typing "continue" into the box. The word sends a
           message of Toyon's own, so the log shows why it went and not a bubble nobody typed. */}

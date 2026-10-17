@@ -10,7 +10,6 @@ import { SelfWatch } from "../../src/core/self.ts";
 import { StateStore } from "../../src/core/state.ts";
 import { ExecService } from "../../src/exec/service.ts";
 import { PageErrorService } from "../../src/preview/errors.ts";
-import { RenderService } from "../../src/preview/render.ts";
 import { AfterLand } from "../../src/repos/afterLand.ts";
 import { RepoRegistry } from "../../src/repos/registry.ts";
 import { RuntimeRegistry } from "../../src/runtime/registry.ts";
@@ -56,8 +55,7 @@ export function world() {
   const refused: Array<[worktreeId: string, said: string]> = [];
   hub.on("messageRefused", (id, said) => refused.push([id, said]));
   const fix = new FixService({ state, hub, runtime });
-  const pageErrors = new PageErrorService({ hub, runtime, known: (id) => state.worktree(id) !== undefined });
-  const render = new RenderService({ runtime, pageErrors, waitMs: 200 });
+  const pageErrors = new PageErrorService({ hub, known: (id) => state.worktree(id) !== undefined });
   const worktrees = new WorktreeService({
     state,
     hub,
@@ -96,7 +94,6 @@ export function world() {
     refused,
     fix,
     pageErrors,
-    render,
     handoff,
     ...f,
   };

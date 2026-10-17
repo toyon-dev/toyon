@@ -97,9 +97,6 @@ import { fromInputs, isUploading, type PendingAttachment, settledInputs } from "
  * can sit on different machines. */
 export type UsageFigures = { used: number; size: number; cost?: number; heard?: number };
 
-/** a page the daemon asked this tab to render for a worktree's agent: the ask's id, answered under it */
-export type RenderRequest = { worktreeId: string; id: string; path: string };
-
 export type ChatItem =
   /** `seq` on the rows a chat search can land on: the transcript entry the row starts at */
   | { kind: "user"; text: string; attachments?: AttachmentRef[]; seq?: number }
@@ -135,11 +132,6 @@ export type ChatItem =
   | { kind: "error"; text: string; seq?: number }
   /** the turn was stopped here, by a press: what the agent had got to is the rows above */
   | { kind: "stopped"; seq?: number }
-  /** the preview's page threw, as the person's browser reported it: the daemon's row, holding
-   * what was thrown at that point (what a turn left, or one throw met while the agent was idle),
-   * and the box under the log offers to send it. `seq` is what a dismissal of that offer is
-   * remembered by. */
-  | { kind: "page-error"; errors: string[]; seq?: number }
   /** a message Toyon sent the agent itself, as the reason it was sent: what failed. `about` is
    * the kind of thing it was sent for, which is how the box knows a press went on after an error */
   | { kind: "asked"; about: Asked["kind"]; why: string; toolId?: string }
@@ -740,9 +732,6 @@ export interface State {
   openUrl: string | null;
   /** bumped to request a preview reload for a worktree (the edit/HMR decision lives in this reducer) */
   reloadReq: { id: string; n: number } | null;
-  /** pages the daemon asked this tab to render for a worktree's agent, each in a hidden frame of
-   * that worktree's preview until the tab has answered (Center) */
-  renders: readonly RenderRequest[];
   /** a file is being dragged over a place that takes a drop, and which; null over anywhere else */
   dragFiles: DropZone | null;
   /** the armed element picker's verb: ⌘E's chat, ⌘I's code */
@@ -984,7 +973,6 @@ export function initialState(opts: InitialOpts): State {
     editor: null,
     openUrl: null,
     reloadReq: null,
-    renders: [],
     dragFiles: null,
     picking: false,
     overlay: null,
@@ -1544,8 +1532,6 @@ export type Action =
   | { a: "clear-attachments"; id: string }
   | { a: "hmr"; id: string }
   | { a: "page"; id: string; url?: string; title?: string }
-  /** the tab answered a render: its frame comes down */
-  | { a: "render-done"; id: string }
   /** links a preview's page showed, for an app with no route table */
   | { a: "links"; id: string; links: PageLink[] }
   | { a: "drag-files"; v: DropZone | null }
@@ -2238,10 +2224,6 @@ function reduce(s: State, action: Action): State {
         ...l,
         page: { url: action.url ?? l.page.url, title: action.title ?? l.page.title },
       }));
-    case "render-done":
-      return s.renders.some((r) => r.id === action.id)
-        ? { ...s, renders: s.renders.filter((r) => r.id !== action.id) }
-        : s;
     case "links":
       return withLocal(s, action.id, (l) => {
         const links = mergeLinks(l.links ?? [], action.links);
@@ -2637,8 +2619,6 @@ function onServer(s: State, msg: StoreServerMsg): State {
       return { ...s, updateCheck: msg.check };
     case "visits":
       return { ...s, visits: { ...s.visits, [msg.repoId]: msg.pages } };
-    case "render":
-      return { ...s, renders: [...s.renders, { worktreeId: msg.worktreeId, id: msg.id, path: msg.path }] };
     case "themes":
       return { ...s, themes: msg.themes, themePrefs: msg.prefs };
     case "daylight":
@@ -3213,8 +3193,6 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
         return [...cut.slice(0, -1), { kind: "error", text: event.message, ...stamp }];
       return [...cut, { kind: "error", text: event.message, ...stamp }];
     }
-    case "page-error":
-      return [...items, { kind: "page-error", errors: event.errors, ...stamp }];
     case "agent-blocked":
       return [...items, { kind: "blocked", tool: event.tool, path: event.path, reason: event.reason }];
     case "grafted":

@@ -1,12 +1,4 @@
-import type { BridgeToShellMsg } from "@toyon/shared";
-import {
-  isLead,
-  isOwned,
-  PAGE_TITLE_MAX_CHARS,
-  PAGE_URL_MAX_CHARS,
-  parseBridgeMsg,
-  RENDER_ERRORS_MAX,
-} from "@toyon/shared";
+import { isLead, isOwned, parseBridgeMsg } from "@toyon/shared";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { previewBus } from "../../app/previewBus.ts";
 import { nextSeq } from "../../state/actions/file.ts";
@@ -69,27 +61,6 @@ function renavigate(el: HTMLIFrameElement | undefined) {
  * still blank. Long enough for a server that is already up to answer, short enough that one which
  * never will gives way to the boot pane that says what its procs are doing. */
 const CARRY_MS = 8_000;
-
-/** the frame key of a page rendering for the agent: apart from the worktree ids the preview
- * frames are keyed by, so the two never share a map entry */
-const RENDER_KEY = "render:";
-/** how long such a page has to say `loaded` before the tab answers that it did not */
-const RENDER_LOAD_MS = 6_000;
-/** the moment after load the tab waits out for what a first render throws */
-const RENDER_SETTLE_MS = 1_500;
-
-/** what one such frame has reported so far, and the timer that ends its wait */
-interface Collector {
-  worktreeId: string;
-  errors: string[];
-  url?: string;
-  title?: string;
-  timer?: ReturnType<typeof setTimeout>;
-}
-
-/** what a render frame's collector hears: the page's bridge, and the frame's own load event,
- * which comes once the page's scripts have run, where the bridge's `loaded` comes as they start */
-type Heard = BridgeToShellMsg | { type: "frame-load" };
 
 /** the address a route of a preview opens at, or null for a route that leaves the preview's
  * origin (`//host`, `/\host`): the daemon refuses those, and this is the second lock */
@@ -223,81 +194,6 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
 
   const [mounted, setMounted] = useState<readonly MountedFrame[]>([]);
   const mountedIds = useMemo(() => mounted.map((f) => f.id), [mounted]);
-  // Pages the daemon asked this tab to render for a worktree's agent: each a hidden frame beside
-  // the preview's own, keyed apart from it, whose bridge reports go to its collector and nowhere
-  // else (no visit, no page state, no theme). The collector waits out a moment after the frame's
-  // load, once the page's scripts have run, for the errors a first render throws, answers, and
-  // the frame comes down.
-  const renders = useStore((s) => s.renders);
-  const collectors = useRef(new Map<string, Collector>());
-  const answer = useCallback(
-    (id: string, c: Collector, body: { ok: boolean; reason?: string }) => {
-      clearTimeout(c.timer);
-      collectors.current.delete(id);
-      sockRef.current?.send({
-        t: "rendered",
-        worktreeId: c.worktreeId,
-        id,
-        errors: c.errors.slice(0, RENDER_ERRORS_MAX),
-        ...(c.url ? { url: c.url.slice(0, PAGE_URL_MAX_CHARS) } : {}),
-        ...(c.title ? { title: c.title.slice(0, PAGE_TITLE_MAX_CHARS) } : {}),
-        ...body,
-      });
-      dispatch({ a: "render-done", id });
-    },
-    [dispatch],
-  );
-  const collect = useRef((_id: string, _d: Heard) => {});
-  collect.current = (id, d) => {
-    const c = collectors.current.get(id);
-    if (!c) return;
-    switch (d.type) {
-      case "frame-load":
-        // a page that loads again (a redirect) starts the wait over
-        clearTimeout(c.timer);
-        c.timer = setTimeout(() => answer(id, c, { ok: true }), RENDER_SETTLE_MS);
-        break;
-      case "loaded":
-        c.url = d.url;
-        c.title = d.title;
-        break;
-      case "navigated":
-        c.url = d.url;
-        if (d.title !== undefined) c.title = d.title;
-        break;
-      case "title":
-        c.title = d.title;
-        break;
-      case "page-error":
-        c.errors.push(pageErrorText(d));
-        break;
-    }
-  };
-  useEffect(() => {
-    for (const r of renders) {
-      if (collectors.current.has(r.id)) continue;
-      const c: Collector = { worktreeId: r.worktreeId, errors: [] };
-      collectors.current.set(r.id, c);
-      // a worktree this tab has no preview for cannot be rendered here, nor can a route that is
-      // not the preview's; the daemon hears so at once
-      const w = rows.find((x) => x.id === r.worktreeId);
-      if (!w || !isOwned(w)) {
-        answer(r.id, c, { ok: false, reason: "this tab has no preview for that worktree" });
-        continue;
-      }
-      if (!routeUrl(r.path, previewUrl(w.worktree.id, w.worktree.proxyPort, remote, host))) {
-        answer(r.id, c, { ok: false, reason: "not a route of the preview" });
-        continue;
-      }
-      c.timer = setTimeout(() => answer(r.id, c, { ok: false, reason: "the page did not load" }), RENDER_LOAD_MS);
-    }
-  }, [renders, rows, remote, host, answer]);
-  useEffect(
-    () => () => {
-      for (const c of collectors.current.values()) clearTimeout(c.timer);
-    },
-    [],
-  );
   const frameRefs = useRef(new Map<string, HTMLIFrameElement>());
   // each preview's origin: the only target we post to and the only sender we accept for that frame
   const originRefs = useRef(new Map<string, string>());
@@ -355,11 +251,6 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
         if (e.origin !== originRefs.current.get(id)) return;
         const d = parseBridgeMsg(e.data);
         if (!d) return;
-        // a frame rendering for the agent reports to its collector alone
-        if (id.startsWith(RENDER_KEY)) {
-          collect.current(id.slice(RENDER_KEY.length), d);
-          return;
-        }
         switch (d.type) {
           case "key":
             // bridge chord forwarding: replay as a real keydown so the app's handler sees it, and
@@ -565,21 +456,9 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
       }),
     [rows, mounted, remote, host],
   );
-  // the frames rendering for the agent: the worktree's preview at the path asked for
-  const renderFrames = useMemo(
-    () =>
-      renders.flatMap((r) => {
-        const w = rows.find((x) => x.id === r.worktreeId);
-        if (!w || !isOwned(w)) return [];
-        const url = routeUrl(r.path, previewUrl(w.worktree.id, w.worktree.proxyPort, remote, host));
-        return url ? [{ id: `${RENDER_KEY}${r.id}`, path: r.path, url }] : [];
-      }),
-    [renders, rows, remote, host],
-  );
   // each frame's address: as built here, or carrying a one-time code for another machine
   const gated = previewsGated(machine, remote);
-  const wanted = useMemo(() => [...frames, ...renderFrames], [frames, renderFrames]);
-  const granted = useGrantedUrls(machine, wanted, gated);
+  const granted = useGrantedUrls(machine, frames, gated);
   // A dead frame comes back on the page it died on, which the store still holds (the error page
   // in the frame had no bridge to overwrite it): a route the mount's is not moves the mount, and
   // the src that follows from it navigates. The same route has to be set again as it is.
@@ -755,25 +634,6 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
               src={granted.urlOf(f.id) ?? undefined}
               title={f.title}
               style={{ display: frameShown && f.id === shownId ? "block" : "none" }}
-            />
-          ))}
-          {/* never shown: the agent's, until its collector has answered */}
-          {renderFrames.map((f) => (
-            <iframe
-              key={f.id}
-              ref={(el) => {
-                if (el) {
-                  frameRefs.current.set(f.id, el);
-                  originRefs.current.set(f.id, new URL(f.url).origin);
-                } else {
-                  frameRefs.current.delete(f.id);
-                  originRefs.current.delete(f.id);
-                }
-              }}
-              onLoad={() => collect.current(f.id.slice(RENDER_KEY.length), { type: "frame-load" })}
-              src={granted.urlOf(f.id) ?? undefined}
-              title={`checking ${f.path}`}
-              style={{ display: "none" }}
             />
           ))}
           {/* the page stands in for every pane below: it is about a project that is not one of them;

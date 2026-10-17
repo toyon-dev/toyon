@@ -895,16 +895,10 @@ export class AcpSession implements AgentAdapter {
   }
 
   /** what the shell attached when the message was sent, then where the preview stands now that
-   * it is going out and what its page has thrown (unless the message is the one sent about that,
-   * which lists it itself), then what landed elsewhere since the last message, wrapped as one
-   * block */
+   * it is going out and what its page has thrown, then what landed elsewhere since the last
+   * message, wrapped as one block */
   private contextFor(item: QueueItem): string | undefined {
-    return ambientBlock([
-      ...(item.context ?? []),
-      this.d.preview?.(),
-      item.asked === "page" ? undefined : this.d.pageErrors?.(),
-      ...this.landedSince(),
-    ]);
+    return ambientBlock([...(item.context ?? []), this.d.preview?.(), this.d.pageErrors?.(), ...this.landedSince()]);
   }
 
   /** One sentence per worktree this one handed work to that has landed since the message before

@@ -166,25 +166,21 @@ describe("policy.decide, Toyon's own tool", () => {
     }
   });
 
-  test("the preview tool's `path` is a route, not a file: `/` is not the filesystem root", () => {
-    for (const name of ["mcp__toyon__preview", "toyon/preview"]) {
-      const call = req({ kind: "other", name, rawInput: { path: "/" } });
-      for (const mode of ["auto", "ask", "plan"] as const) {
-        expect(decide(call, bounds, wt, mode).kind).toBe("allow");
-      }
-    }
+  test("the tool is known under every spelling an adapter gives it", () => {
+    const input = { project: "b", message: "m" };
+    expect(decide(req({ kind: "other", name: "toyon/handoff", rawInput: input }), bounds, wt).kind).toBe("allow");
     // the bare name with the server in the meta, as some adapters spell it
     const meta = req({
       kind: "other",
-      name: "preview",
-      rawInput: { path: "/about" },
-      _meta: { claudeCode: { toolName: "mcp__toyon__preview" } },
+      name: "handoff",
+      rawInput: input,
+      _meta: { claudeCode: { toolName: "mcp__toyon__handoff" } },
     });
     expect(decide(meta, bounds, wt).kind).toBe("allow");
   });
 
   test("another server's tool with a `path` is still held to the bounds", () => {
-    const call = req({ kind: "other", name: "mcp__other__preview", rawInput: { path: "/" } });
+    const call = req({ kind: "other", name: "mcp__other__handoff", rawInput: { path: "/" } });
     expect(decide(call, bounds, wt).kind).toBe("reject");
   });
 });

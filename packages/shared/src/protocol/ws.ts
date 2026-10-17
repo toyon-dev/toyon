@@ -49,9 +49,7 @@ import {
   IMAGE_MIME_TYPES,
   PAGE_ERROR_MAX_CHARS,
   PAGE_TITLE_MAX_CHARS,
-  PAGE_URL_MAX_CHARS,
   PASTE_MAX_CHARS,
-  RENDER_ERRORS_MAX,
   UPLOAD_MAX_BYTES,
   VARIANTS_MAX,
 } from "./limits.ts";
@@ -276,9 +274,6 @@ export type ServerMsg =
   /** where a picked element with no recorded source may be written, best first; `sure` when the first
    * is clearly it. `seq` is the find-element's, so a file opened since is not taken over. */
   | { t: "element-sources"; worktreeId: string; seq: number; hits: SearchHit[]; sure: boolean }
-  /** the worktree's agent asked to see a page render: this tab loads `path` in a hidden frame of
-   * that worktree's preview and answers with `rendered` under the same `id`. Sent to one tab. */
-  | { t: "render"; worktreeId: string; id: string; path: string }
   /** the ref palette's rows for a query; `query` is echoed so a stale reply is told from a fresh one */
   | { t: "refs"; repoId: string; query: string; refs: RefHit[] }
   /** the chats palette's hits for a query, grouped by worktree with the newest first; `query` is
@@ -797,22 +792,6 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   z.object({ t: z.literal("page-error"), worktreeId: id, message: z.string().min(1).max(PAGE_ERROR_MAX_CHARS) }),
   /** the preview's page started over, or hot-swapped what it runs: what it threw before is gone */
   z.object({ t: z.literal("page-loaded"), worktreeId: id }),
-  /** send the worktree's agent the turn that fixes what the preview threw after its edits: the
-   * press on the offer the box makes under those rows. The errors are read off the transcript. */
-  z.object({ t: z.literal("fix-page"), worktreeId: id }),
-  /** what a `render` found: the page loaded (`ok`) and these are the errors it threw in the
-   * moment after, with where it landed and what it was titled; or it did not, and `reason` says
-   * why in the tab's words */
-  z.object({
-    t: z.literal("rendered"),
-    worktreeId: id,
-    id: z.string().min(1).max(64),
-    ok: z.boolean(),
-    reason: z.string().max(200).optional(),
-    url: z.string().max(PAGE_URL_MAX_CHARS).optional(),
-    title: pageTitle.optional(),
-    errors: z.array(z.string().max(PAGE_ERROR_MAX_CHARS)).max(RENDER_ERRORS_MAX),
-  }),
   z.object({ t: z.literal("pick-variant"), worktreeId: id }),
   /** take a waiting message out of the queue; with `edit`, back into the worktree's box, words and chips */
   z.object({

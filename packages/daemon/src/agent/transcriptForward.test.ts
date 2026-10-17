@@ -1,76 +1,69 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { forwardLine, forwardText, forwardTranscripts } from "./transcriptForward.ts";
+import { FORWARD_STEP, forwardLine, forwardText, forwardTranscripts } from "./transcriptForward.ts";
 
-/** one row as 0.12.0 wrote it: a single throw under `message` */
-const OLD =
-  '{"seq":349,"event":{"type":"page-error","message":"Uncaught ReferenceError: refusal is not defined (src/a.tsx:129)","ts":1791711605866}}';
-const NEW = '{"seq":350,"event":{"type":"page-error","errors":["boom (src/b.tsx:4)"],"ts":2}}';
-const OTHER = '{"seq":351,"event":{"type":"user-message","text":"page-error is a word here","ts":3}}';
+/** the row 0.12.0 to 0.15.0 wrote for what the preview threw */
+const ROW = '{"seq":350,"event":{"type":"page-error","errors":["boom (src/b.tsx:4)"],"ts":2}}';
+/** the message its press sent */
+const PRESS =
+  '{"seq":351,"event":{"type":"fix-asked","text":"Since your last edits the preview threw this","ts":3,"kind":"page","why":"the preview threw"}}';
+/** the same message as it reads now: an ask of the one kind a press still makes */
+const PRESSED =
+  '{"seq":351,"event":{"type":"fix-asked","text":"Since your last edits the preview threw this","ts":3,"kind":"command","why":"the preview threw"}}';
+const OTHER = '{"seq":352,"event":{"type":"user-message","text":"page-error is a word here","ts":4}}';
+const ASK = '{"seq":353,"event":{"type":"fix-asked","text":"fix it","ts":5,"kind":"check","why":"the check failed"}}';
 
 describe("forwardLine", () => {
-  test("a 0.12.0 row becomes the list shape, keeping its seq and ts and dropping message", () => {
-    const next = forwardLine(OLD);
-    expect(next).not.toBeNull();
-    expect(JSON.parse(next as string)).toEqual({
-      seq: 349,
-      event: {
-        type: "page-error",
-        errors: ["Uncaught ReferenceError: refusal is not defined (src/a.tsx:129)"],
-        ts: 1791711605866,
-      },
-    });
-  });
-
-  test("a current row, another type naming the word, and a torn line are left alone", () => {
-    expect(forwardLine(NEW)).toBeNull();
+  test("the page row goes, its press keeps its words under a kind that still exists, the rest stay", () => {
+    expect(forwardLine(ROW)).toEqual({ drop: true });
+    expect(forwardLine(PRESS)).toEqual({ line: PRESSED });
     expect(forwardLine(OTHER)).toBeNull();
-    expect(forwardLine(OLD.slice(0, 40))).toBeNull();
+    expect(forwardLine(ASK)).toBeNull();
+    expect(forwardLine(ROW.slice(0, 40))).toBeNull();
     expect(forwardLine("")).toBeNull();
   });
 });
 
 describe("forwardText", () => {
-  test("rewrites only the old rows, counts them, and keeps the trailing newline", () => {
-    const { text, changed } = forwardText(`${OTHER}\n${OLD}\n${NEW}\n${OLD}\n`);
+  test("moves only the old rows, counts them, and keeps the trailing newline", () => {
+    const { text, changed } = forwardText(`${OTHER}\n${ROW}\n${ASK}\n${PRESS}\n`);
     expect(changed).toBe(2);
-    const lines = text.split("\n");
-    expect(lines).toHaveLength(5);
-    expect(lines[0]).toBe(OTHER);
-    expect(lines[2]).toBe(NEW);
-    expect(lines[4]).toBe("");
-    expect(JSON.parse(lines[1] as string).event.errors).toHaveLength(1);
-    expect(JSON.parse(lines[3] as string).event.message).toBeUndefined();
+    expect(text).toBe(`${OTHER}\n${ASK}\n${PRESSED}\n`);
   });
 
   test("a text with nothing to move comes back as the same string", () => {
-    const text = `${OTHER}\n${NEW}\n`;
+    const text = `${OTHER}\n${ASK}\n`;
     expect(forwardText(text)).toEqual({ text, changed: 0 });
   });
 });
 
 describe("forwardTranscripts", () => {
-  test("rewrites the files that need it in place and leaves the rest untouched", () => {
+  test("rewrites the live files and the archives that need it in place, once, and leaves the rest untouched", () => {
     const dir = mkdtempSync(join(tmpdir(), "toyon-forward-"));
     try {
-      writeFileSync(join(dir, "a.jsonl"), `${OTHER}\n${OLD}\n`);
-      writeFileSync(join(dir, "b.jsonl"), `${NEW}\n`);
-      writeFileSync(join(dir, "notes.txt"), `${OLD}\n`);
-      forwardTranscripts(dir);
-      const a = readFileSync(join(dir, "a.jsonl"), "utf8").split("\n");
-      expect(a[0]).toBe(OTHER);
-      expect(JSON.parse(a[1] as string).event).toEqual({
-        type: "page-error",
-        errors: ["Uncaught ReferenceError: refusal is not defined (src/a.tsx:129)"],
-        ts: 1791711605866,
-      });
-      expect(readFileSync(join(dir, "b.jsonl"), "utf8")).toBe(`${NEW}\n`);
-      expect(readFileSync(join(dir, "notes.txt"), "utf8")).toBe(`${OLD}\n`);
-      // a second boot finds nothing to move
-      forwardTranscripts(dir);
-      expect(readFileSync(join(dir, "a.jsonl"), "utf8")).toBe(`${a[0]}\n${a[1]}\n`);
+      const live = join(dir, "transcripts");
+      const archive = join(dir, "archive");
+      const stamp = join(dir, "stamp");
+      mkdirSync(live);
+      mkdirSync(archive);
+      writeFileSync(join(live, "a.jsonl"), `${OTHER}\n${ROW}\n`);
+      writeFileSync(join(live, "b.jsonl"), `${ASK}\n`);
+      writeFileSync(join(live, "notes.txt"), `${ROW}\n`);
+      mkdirSync(join(archive, "arch1"));
+      writeFileSync(join(archive, "arch1", "transcript.jsonl"), `${PRESS}\n${OTHER}\n`);
+      mkdirSync(join(archive, "plain"));
+      forwardTranscripts([live, archive], stamp);
+      expect(readFileSync(join(live, "a.jsonl"), "utf8")).toBe(`${OTHER}\n`);
+      expect(readFileSync(join(live, "b.jsonl"), "utf8")).toBe(`${ASK}\n`);
+      expect(readFileSync(join(live, "notes.txt"), "utf8")).toBe(`${ROW}\n`);
+      expect(readFileSync(join(archive, "arch1", "transcript.jsonl"), "utf8")).toBe(`${PRESSED}\n${OTHER}\n`);
+      expect(readFileSync(stamp, "utf8")).toBe(FORWARD_STEP);
+      // the next boot is stamped: the files are not read, so a row written since is not touched
+      writeFileSync(join(live, "c.jsonl"), `${ROW}\n`);
+      forwardTranscripts([live, archive], stamp);
+      expect(readFileSync(join(live, "c.jsonl"), "utf8")).toBe(`${ROW}\n`);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

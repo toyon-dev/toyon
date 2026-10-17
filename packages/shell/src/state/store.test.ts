@@ -3731,6 +3731,28 @@ describe("the outbox", () => {
     });
   });
 
+  test("behind a landing op's hold or a queue, the message has no placeholder: its queued row keeps the send order", () => {
+    // a landing op out on the row holds the agent's queue, from the press on
+    let s = run([
+      hello(wt("a")),
+      { a: "shipping", id: "a", op: "commit" },
+      { a: "attach", id: "a", items: [landed] },
+      { a: "hold-send", id: "a", log: "a", text: "first", frame: chat },
+    ]);
+    s = run([{ a: "sent-out", id: outOf(s) }], s);
+    expect(s.local.a?.sending).toBeUndefined();
+    expect(s.local.a?.sent).toBe(1);
+    // messages waiting already, the agent idle: the queue is held, and this one goes behind them
+    let q = run([
+      hello({ ...wt("b"), queued: 1 }),
+      { a: "attach", id: "b", items: [landed] },
+      { a: "hold-send", id: "b", log: "b", text: "second", frame: chat },
+    ]);
+    q = run([{ a: "sent-out", id: outOf(q) }], q);
+    expect(q.local.b?.sending).toBeUndefined();
+    expect(q.local.b?.sent).toBe(1);
+  });
+
   test("a chip lost on the way puts the message back whole: words into an empty box, chips ahead, the reason under it", () => {
     let s = run([
       hello(wt("a")),

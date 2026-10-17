@@ -38,7 +38,7 @@ import { openSource } from "../../state/openSource.ts";
 import { fillFrame, type HeldFrame } from "../../state/outbox.ts";
 import { isUploading } from "../../state/pending.ts";
 import { useChatCentred, useGreenfield, useLocalField, usePreviewId, useTouch } from "../../state/selectors.ts";
-import { canCarry, composerBoxOf, type Draft, NEW_PROJECT_BOX, trunkOf } from "../../state/store.ts";
+import { canCarry, composerBoxOf, type Draft, NEW_PROJECT_BOX, sendWaits, trunkOf } from "../../state/store.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { TextArea } from "../../ui/Field.tsx";
@@ -369,6 +369,9 @@ export function Composer({
   // when it has one and is not mid-turn
   const canCompact = commands.some((c) => c.name === "compact");
   const midTurn = active?.agent === "working" || active?.agent === "waiting";
+  // a send goes behind the turn, a landing op's hold or the messages queued already: the log
+  // draws it in its place from the daemon's frame, not from a placeholder at the press
+  const waits = useStore((s) => sendWaits(s, id));
   // the turn this box can stop, the same one its esc stops
   const stoppable = midTurn && !!id && !drafting;
   // where the work stands: the last stop, read while the box is empty and the agent is not on it.
@@ -1091,8 +1094,8 @@ export function Composer({
         sock?.send(fillFrame(frame, boxId, prompt, attachments));
         // the message and the status come back in two frames a beat apart, the status behind a read
         // of every row: shown from here, the bubble and the mark arrive together and at the press.
-        // Mid-turn the log is already busy, and the message joins the turn or the queue.
-        if (!midTurn) dispatch({ a: "sending", id, message: { text: prompt, attachments: sent } });
+        // Behind a turn or a held queue the log is already busy, and the message joins it there.
+        if (!waits) dispatch({ a: "sending", id, message: { text: prompt, attachments: sent } });
         dispatch({ a: "sent-box", id: boxId });
       }
     }

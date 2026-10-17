@@ -1085,6 +1085,17 @@ export function rowById(s: Pick<State, "rows">, id: string | null | undefined): 
   return (id && s.rows.find((w) => w.id === id)) || null;
 }
 
+/** A message sent into this row now goes behind something, so the log draws it where the daemon
+ * puts it rather than from a placeholder at the press: the agent has the turn, a landing op
+ * holds the queue (the press's own mark counts, ahead of the frame that says so), or messages
+ * wait in it already. The placeholder is one slot drawn above the queued rows, so under a hold
+ * each send would take it from the one before and put the newest message first. */
+export function sendWaits(s: Pick<State, "rows" | "shipping">, id: string | null | undefined): boolean {
+  const row = rowById(s, id);
+  if (!row) return false;
+  return row.agent === "working" || row.agent === "waiting" || !!s.shipping[row.id] || (row.queued ?? 0) > 0;
+}
+
 /** a row toyon owns, by id: what the chat, the composer and landing read */
 export function worktreeById(s: Pick<State, "rows">, id: string | null | undefined): OwnedWorktree | null {
   const row = rowById(s, id);
@@ -1945,12 +1956,11 @@ function reduce(s: State, action: Action): State {
         }));
       // an ask's answer has no bubble of its own: the card closes when the agent has it
       if (out.frame.t === "agent-answer") return withLocal(next, out.log, counted);
-      // as at a plain send: mid-turn the log is already busy, and the message joins the turn or
-      // the queue; a worktree still being made has no turn to be in
-      const agent = rowById(s, out.log)?.agent;
-      const busy = out.frame.t === "chat" && (agent === "working" || agent === "waiting");
+      // as at a plain send: the message joins the turn or the queue, and the log draws it from
+      // there; a worktree still being made has no turn to be in
+      const waits = out.frame.t === "chat" && sendWaits(s, out.log);
       return withLocal(next, out.log, (l) =>
-        busy ? counted(l) : { ...counted(l), sending: { message: { text, attachments }, at: Date.now() } },
+        waits ? counted(l) : { ...counted(l), sending: { message: { text, attachments }, at: Date.now() } },
       );
     }
     case "unsend": {

@@ -110,6 +110,11 @@
         white-space: nowrap;
         text-overflow: ellipsis;
       }
+      /* the pressable clause at the line's end wraps like a word in a sentence elsewhere; on the
+         one line it has to stay on it, or its second word drops under the clip */
+      & .composer-verb-tail {
+        white-space: nowrap;
+      }
     }
     /* A card folds the same way, to the line that stands for it set aside (Composer renders it).
        The card itself goes rather than shrinks: it keeps its state mounted, and nothing on it is
@@ -1210,9 +1215,11 @@
   .composer.stopping .composer-field :is(textarea, .composer-ghost) {
     padding-right: 24px;
   }
-  /* the verb leading the placeholder's line: the ghost lets presses through to the textarea under
-   it, and the word is the one part of the ghost that takes them */
-  .composer-verb {
+  /* the verb leading the placeholder's line, and the clause at its end that opens the branch on
+   the team's host: the ghost lets presses through to the textarea under it, and these two are
+   the parts of the ghost that take them */
+  .composer-verb,
+  .composer-verb-tail {
     pointer-events: auto;
   }
   /* what follows the word sits a tier under it, so the join between them is the step in colour and

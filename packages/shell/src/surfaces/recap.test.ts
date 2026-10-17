@@ -11,9 +11,11 @@ import {
   landFacts,
   landingLine,
   lastStopLine,
+  lineParts,
   messageGap,
   prCanMerge,
   prLine,
+  prLinks,
   recapLine,
   verbLine,
   verdictLine,
@@ -288,6 +290,45 @@ describe("prLine", () => {
     expect(prLine(pr({ preview, automerge: true }))).toBe(
       "PR #12 open; GitHub merges it when checks pass; preview up.",
     );
+  });
+
+  test("the checks while they run or failed, and the preview, are the line's pressable clauses", () => {
+    const preview = "https://pr-12.d1.amplifyapp.com";
+    const url = "https://github.com/o/r/pull/12";
+    expect(prLinks(pr({ url, preview, checks: "pending" })).map((l) => [l.text, l.url])).toEqual([
+      ["checks running", `${url}/checks`],
+      ["preview up", preview],
+    ]);
+    expect(prLinks(pr({ url, checks: "fail" })).map((l) => [l.text, l.url])).toEqual([
+      ["checks failed", `${url}/checks`],
+    ]);
+    expect(prLinks(pr({ checks: "pass", review: "approved" }))).toEqual([]);
+    expect(prLinks(pr({ preview, state: "merged" }))).toEqual([]);
+    expect(prLinks(pr({ preview })).map((l) => l.tip)).toEqual(["Open the branch on pr-12.d1.amplifyapp.com"]);
+  });
+
+  test("the line is cut at its clauses, whole and in order, and keeps its joins and stop", () => {
+    const preview = "https://pr-12.d1.amplifyapp.com";
+    // a link as its words in brackets, text as itself
+    const cut = (p: PrState, links = prLinks(p)) =>
+      lineParts(prLine(p), links).map((part) => (typeof part === "string" ? part : `[${part.text}]`));
+    expect(cut(pr({ preview, checks: "pending" }))).toEqual([
+      "PR #12 open; ",
+      "[checks running]",
+      "; ",
+      "[preview up]",
+      ".",
+    ]);
+    expect(cut(pr({ checks: "fail" }))).toEqual(["PR #12 open; ", "[checks failed]", "."]);
+    // automerge says nothing of running checks, so that link finds no clause and is dropped
+    expect(cut(pr({ preview, checks: "pending", automerge: true }))).toEqual([
+      "PR #12 open; GitHub merges it when checks pass; ",
+      "[preview up]",
+      ".",
+    ]);
+    expect(lineParts("Wired the login form to the preview up top.", prLinks(pr({ preview })))).toEqual([
+      "Wired the login form to the preview up top.",
+    ]);
   });
 
   test("the merge word shows only when nothing on GitHub stands in the way", () => {

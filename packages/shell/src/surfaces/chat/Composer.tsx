@@ -27,6 +27,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { clipboardOfferDone, useCopied } from "../../app/clipboardOffer.ts";
 import { installOfferDone, installOfferDue, useInstallOffered, useInstallPrompt } from "../../app/installOffer.ts";
 import { previewBus, togglePick } from "../../app/previewBus.ts";
+import { copyText } from "../../state/actions/deps.ts";
 import { daemonHost } from "../../state/actions/editor.ts";
 import { listFiles, openFile } from "../../state/actions/file.ts";
 import { pathItems } from "../../state/actions/message.ts";
@@ -64,12 +65,15 @@ import {
   checkTip,
   ended,
   filesLine,
+  type LineLink,
   landedWhat,
   landFacts,
   landingLine,
+  lineParts,
   messageGap,
   prCanMerge,
   prLine,
+  prLinks,
   recapLine,
   verbLine,
   verdictLine,
@@ -116,6 +120,10 @@ type Verb = {
   /** what the line says after the word */
   line: string;
   tip: string;
+  /** clauses of the line that are a way somewhere: the PR line's checks while they run or failed,
+   * and "preview up" while the branch runs on the team's host. The word stays the one next step;
+   * these are facts in the sentence that can be followed. */
+  links?: LineLink[];
   run: () => void;
   /** a press that goes out as a land op, so it wears the op's busy and disabled states */
   ships?: boolean;
@@ -656,6 +664,9 @@ export function Composer({
   // After the word, what the work is: the commit subject when the verdict wrote one, since it is
   // the one line that names the change and it settles once the change stops moving, where the
   // recap is a new sentence every turn. The recap stands in until a subject exists.
+  // the PR line's clauses that open somewhere, where the line is the PR's: the recap standing in
+  // for it says none of them, and they are then in the word's tip alone
+  const prLinked = pr && !said ? { links: prLinks(pr) } : {};
   const offered: Verb | null = !id
     ? null
     : landed
@@ -680,6 +691,7 @@ export function Composer({
               kind: "merge",
               line: verbLine(said ?? prLine(pr)),
               tip: `${prLine(pr)} Merge the PR now, by the method the repo allows.`,
+              ...prLinked,
               run: land,
               ships: true,
             }
@@ -688,6 +700,7 @@ export function Composer({
               kind: "view",
               line: verbLine(said ?? prLine(pr)),
               tip: `${prLine(pr)} Open the PR on GitHub.`,
+              ...prLinked,
               run: () => window.open(pr.url, "_blank"),
             }
         : pr?.state === "closed"
@@ -749,6 +762,8 @@ export function Composer({
   if (op !== "land") pressed.current = id && offered?.ships ? { id, verb: offered, under: offeredUnder } : null;
   const kept = op === "land" && blank && pressed.current?.id === id ? pressed.current : null;
   const verb = kept ? kept.verb : offered;
+  // the line cut at its pressable clauses, when it has any
+  const parts = verb?.links?.length ? lineParts(verb.line, verb.links) : null;
   const landingNow = !!verb?.ships && op === "land";
   const heldStep = useHeld(step, STEP_HOLD_MS);
   // the run behind the line, when one is going: the land's commit while the press is out, else
@@ -1610,7 +1625,35 @@ export function Composer({
                     {/* a space, not a colon: the line is a commit subject more often than not, and a
                         subject leads with its own `scope:`, so a colon after the word made two in a
                         row and the eye could not tell which was the verb's */}{" "}
-                    <span className="composer-verb-line">{verb.line}</span>
+                    <span className="composer-verb-line">
+                      {parts
+                        ? parts.map((part) =>
+                            typeof part === "string" ? (
+                              part
+                            ) : (
+                              // a clause stays in the sentence's own face and tier: the word before
+                              // the line is the one bright thing on it, and a second lit word would
+                              // read as a second step
+                              <Button
+                                key={part.text}
+                                variant="inline"
+                                className="composer-verb-tail"
+                                {...tip(part.tip, undefined, { placement: "top" })}
+                                onClick={() => {
+                                  window.open(part.url, "_blank");
+                                  if (!touch) composerRef.current?.focus();
+                                }}
+                                {...cm.contextMenu(() => [
+                                  { id: "open-link", label: part.open, onClick: () => window.open(part.url, "_blank") },
+                                  { id: "copy-link", label: "copy link", onClick: () => copyText(part.url) },
+                                ])}
+                              >
+                                {part.text} <Icon name="external" className="icon-inline" />
+                              </Button>
+                            ),
+                          )
+                        : verb.line}
+                    </span>
                   </>
                 ) : (
                   placeholderText

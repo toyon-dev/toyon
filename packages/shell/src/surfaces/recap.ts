@@ -54,6 +54,59 @@ export function landedLines(lands: readonly LandMark[] | undefined, max = 3): st
   return earlier > 0 ? [`${earlier} earlier landing${earlier === 1 ? "" : "s"}.`, ...lines] : lines;
 }
 
+/** the PR line's clauses that are a way somewhere, as the line says them */
+export const CHECKS_RUNNING = "checks running";
+export const CHECKS_FAILED = "checks failed";
+export const PREVIEW_UP = "preview up";
+
+/** a clause of the line that opens somewhere: its words, the place, the tip on it, and the
+ * context menu's word for opening it */
+export type LineLink = { text: string; url: string; tip: string; open: string };
+
+/** The PR line's clauses the composer makes pressable, in the line's order: the checks while
+ * they run or once they failed, since that is where the person goes next, and the branch on the
+ * team's host. The number stays text: the word before the line is the way to the PR itself. */
+export function prLinks(pr: PrState): LineLink[] {
+  if (pr.state !== "open") return [];
+  const links: LineLink[] = [];
+  if (pr.checks === "pending" || pr.checks === "fail") {
+    links.push({
+      text: pr.checks === "fail" ? CHECKS_FAILED : CHECKS_RUNNING,
+      url: `${pr.url}/checks`,
+      tip: "Open the checks on GitHub",
+      open: "open the checks",
+    });
+  }
+  if (pr.preview) {
+    links.push({
+      text: PREVIEW_UP,
+      url: pr.preview,
+      tip: `Open the branch on ${new URL(pr.preview).hostname}`,
+      open: "open the preview",
+    });
+  }
+  return links;
+}
+
+/** The line cut at its pressable clauses: text and links in reading order, for the composer to
+ * draw. A clause counts only whole, between the line's own joins and before its stop, so a line
+ * that happens to use the words mid-sentence is left alone, and a link whose clause the line
+ * does not say (checks pending under automerge, which the line does not mention) is dropped. */
+export function lineParts(line: string, links: LineLink[]): (string | LineLink)[] {
+  const parts: (string | LineLink)[] = [];
+  let rest = line;
+  for (const link of links) {
+    const m = new RegExp(`(^|; |, )${link.text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?=;|\\.|$)`).exec(rest);
+    if (!m) continue;
+    const at = m.index + (m[1] ?? "").length;
+    if (at > 0) parts.push(rest.slice(0, at));
+    parts.push(link);
+    rest = rest.slice(at + link.text.length);
+  }
+  if (rest) parts.push(rest);
+  return parts;
+}
+
 /** The worktree's PR as the placeholder's first line: what GitHub is waiting on, or that it is
  * done. Read while the PR stands between the work and main. */
 export function prLine(pr: PrState): string {
@@ -61,7 +114,7 @@ export function prLine(pr: PrState): string {
   if (pr.state === "merged") return `${n} merged.`;
   if (pr.state === "closed") return `${n} was closed without merging.`;
   // the branch running on the team's host is a fact beside what GitHub waits on, said last
-  const up = pr.preview ? "; preview up." : ".";
+  const up = pr.preview ? `; ${PREVIEW_UP}.` : ".";
   if (pr.automerge) {
     const on = pr.review === "review_required" ? "it is approved and checks pass" : "checks pass";
     return `${n} open; GitHub merges it when ${on}${up}`;

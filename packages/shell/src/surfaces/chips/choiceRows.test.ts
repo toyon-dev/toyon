@@ -220,6 +220,19 @@ describe("agentModelRows", () => {
       },
     ]);
   });
+  test("an agent whose check failed says why under its name, and is still a choice", () => {
+    const agents = [
+      agent({ id: "claude", models: claudeModels }),
+      agent({ id: "codex", name: "Codex", checkFailed: "Codex is not logged in" }),
+    ];
+    const { rows } = agentModelRows(agents, "claude", "");
+    expect(rows.at(-1)).toEqual({
+      id: "codex ",
+      label: "Codex",
+      description: "Codex is not logged in",
+      disabled: false,
+    });
+  });
   test("the chosen agent with no list shows its one row whatever model was remembered", () => {
     const agents = [agent({ id: "claude", models: claudeModels }), agent({ id: "codex" })];
     expect(agentModelRows(agents, "codex", "gpt-b").shown).toBe("codex ");

@@ -27,7 +27,6 @@ import type {
 import { DEFAULT_PERMISSION_MODE, nextNumbers } from "@toyon/shared";
 import { UserError } from "../../core/errors.ts";
 import { fireAndForget, log } from "../../core/log.ts";
-import type { AuthObservation } from "../accounts.ts";
 import type { AgentAdapter, AskOpts, AskReply, AuthOutcome, FollowUp, SendOpts } from "../adapter.ts";
 import type { AttachmentStore, Stored } from "../attachments.ts";
 import { agentModeFor, modeAfterPlan, orderPlanOptions } from "../modes.ts";
@@ -40,7 +39,13 @@ import { type Bounds, type Prepared, prepareLaunch } from "../sandbox.ts";
 import { Transcript, type TranscriptEntry, transcriptPathFor } from "../transcript.ts";
 import { uploadIds } from "../uploads.ts";
 import { askOnce } from "./ask.ts";
-import { AUTH_STATUS_UPDATE_METHOD, parseAuthStatus, supportsLogout } from "./authstatus.ts";
+import {
+  AUTH_STATUS_UPDATE_METHOD,
+  type AuthObservation,
+  isAuthRequired,
+  parseAuthStatus,
+  supportsLogout,
+} from "./authstatus.ts";
 import { BackgroundTasks } from "./background.ts";
 import { parseForm, toContent } from "./elicit.ts";
 import { endOfAsk, mapCommands, mapStopReason, mapUpdate, preempted, release, type ToolMemos } from "./map.ts";
@@ -1516,10 +1521,6 @@ export class AcpSession implements AgentAdapter {
     await conn.link.kill();
     this.noteProcess(conn.link, false);
   }
-}
-
-function isAuthRequired(e: unknown): boolean {
-  return e instanceof acp.RequestError && e.code === -32000;
 }
 
 /** whether the agent takes an HTTP MCP server at session start. The SDK types the flag as an

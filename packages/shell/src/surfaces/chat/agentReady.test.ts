@@ -16,6 +16,28 @@ describe("agentReadiness", () => {
     expect(agentReadiness(undefined, [], true)).toBeNull();
   });
 
+  test("an installed agent found short of a login says so, blocks nothing, and is quiet once it has models and no failure", () => {
+    const short = agent("claude", { checkFailed: "Claude is not logged in" });
+    expect(agentReadiness(short, [short], true)).toEqual({
+      kind: "unready",
+      text: "Claude is not logged in",
+      retry: null,
+    });
+    expect(agentReadiness(short, [short, agent("codex")], false)).toEqual({
+      kind: "unready",
+      text: "Claude is not logged in",
+      retry: null,
+    });
+    const out = agent("claude", { models: [{ id: "a", name: "a" }], auth: { kind: "none", label: "Not logged in" } });
+    expect(agentReadiness(out, [out], true)).toEqual({
+      kind: "unready",
+      text: "Claude Code is not logged in",
+      retry: null,
+    });
+    const fine = agent("claude", { models: [{ id: "a", name: "a" }], auth: { kind: "account", label: "Claude Max" } });
+    expect(agentReadiness(fine, [fine], true)).toBeNull();
+  });
+
   test("names the download while it runs, and the agent that is ready meanwhile", () => {
     const claude = agent("claude", { available: false, reason: "installing", installing: true });
     const codex = agent("codex");

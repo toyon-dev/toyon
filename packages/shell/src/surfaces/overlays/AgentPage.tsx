@@ -6,6 +6,7 @@ import { useActiveWorktreeRepo } from "../../state/selectors.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
 import { useContextMenu } from "../../ui/menu.ts";
 import { Overlay } from "../../ui/Overlay.tsx";
+import { useAgentCheck } from "../chat/useAgentCheck.ts";
 import { authLabel, authTip } from "./KeysHelp.tsx";
 
 /** One agent, as settings sees it: the card the agent's chip opens, in the settings card's own
@@ -24,6 +25,8 @@ export function AgentPage({ agentId }: { agentId: string }) {
   useEffect(() => {
     sock?.send({ t: "agent-config", agent: agentId, ...(repo ? { repoId: repo.id } : {}) });
   }, [sock, agentId, repo]);
+  // the row that says who it is signed in as: looked at again while this page is up, if that answer was not positive
+  useAgentCheck(sock, agentId, agent ?? undefined);
   if (!agent) return null;
 
   const actions = agentItems(agent, { sock, dispatch });

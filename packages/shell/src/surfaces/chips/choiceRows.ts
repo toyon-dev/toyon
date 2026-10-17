@@ -138,7 +138,7 @@ export function splitAgentModel(key: string): { agent: string; model: string } {
  * the agent that runs it. Each model's row starts with its agent's short name ("Claude Fable 5.1")
  * and the chip keeps only the model ("Fable"). An agent that is not installed is one dimmed row with
  * the reason, and one that has never listed its models (not logged in yet) is one row for its own
- * default, so every agent can still be chosen. With a single agent there is nothing to tell apart
+ * default, so every agent can still be chosen. One whose check failed says why under its name. With a single agent there is nothing to tell apart
  * and no row takes the agent's name. */
 export function agentModelRows(
   agents: AgentInfo[],
@@ -156,7 +156,9 @@ export function agentModelRows(
         {
           id: agentModelKey(a.id, DEFAULT_OPTION),
           label: short,
-          description: !a.available ? notReady(a) : "its own default model; the rest are listed once it has run",
+          description: !a.available
+            ? notReady(a)
+            : (a.checkFailed ?? "its own default model; the rest are listed once it has run"),
           disabled: !a.available,
         },
       ];

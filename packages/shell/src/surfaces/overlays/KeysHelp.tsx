@@ -230,12 +230,16 @@ function ManagedHint() {
 /** what the agent last reported about its own credentials; the row says nothing it was not told */
 export function authLabel(a: AgentInfo): string {
   if (!a.available) return a.installing ? "installing" : "not installed";
-  if (!a.auth) return "ready";
+  // an agent that reported no identity is "ready" on the registry's word alone, unless the daemon's
+  // last look at it failed, which the tooltip then explains
+  if (!a.auth) return a.checkFailed ? "not ready" : "ready";
   return a.auth.kind === "none" ? "not logged in" : a.auth.label;
 }
 
 export function authTip(a: AgentInfo): string {
   if (!a.available) return notReady(a);
+  // what the daemon's last look found it short of, in the agent's own words
+  if (a.checkFailed) return a.checkFailed;
   if (!a.auth) return "installed; it names the account it runs on the first time it runs";
   const who = [a.auth.detail, a.auth.account?.email, a.auth.account?.organization].filter(Boolean).join(" · ");
   return who || a.auth.label;

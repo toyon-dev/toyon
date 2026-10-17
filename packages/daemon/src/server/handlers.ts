@@ -5,10 +5,10 @@
 import { randomBytes } from "node:crypto";
 import type { AttachmentInput, ClientMsg, FileBlame, ServerMsg, WorktreeInfo } from "@toyon/shared";
 import { isLead, pickTheme, SHELL_STREAM } from "@toyon/shared";
-import type { AgentAccounts } from "../agent/accounts.ts";
 import type { AttachmentStore } from "../agent/attachments.ts";
 import { agentConfigFiles, describeAgentConfig } from "../agent/config.ts";
 import type { ToyonMcp } from "../agent/mcp.ts";
+import type { AgentReadiness } from "../agent/readiness.ts";
 import type { AgentRegistry } from "../agent/registry.ts";
 import { coalesce } from "../agent/transcript.ts";
 import { GONE, uploadIds } from "../agent/uploads.ts";
@@ -96,8 +96,8 @@ export interface Services {
   mcp: Pick<ToyonMcp, "fetch">;
   themes: ThemeStore;
   agents: AgentRegistry;
-  /** per-agent login state, and the one write on it (sign out) */
-  accounts: AgentAccounts;
+  /** what each agent reported about itself (login, models), the check that reads it, and the one write (sign out) */
+  readiness: AgentReadiness;
   /** images attached to chat messages; the http layer serves them back to the shell */
   attachments: AttachmentStore;
   /** whether the checkout this daemon runs from has moved on without it */
@@ -839,8 +839,13 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
   },
 
   async "agent-logout"(msg, _ctx, s) {
-    await s.accounts.logout(msg.agent);
+    await s.readiness.logout(msg.agent);
     s.hub.emit("agentsChanged");
+  },
+
+  "agent-check"(msg, _ctx, s) {
+    // the service decides whether a look is due and says so on the agents broadcast itself
+    fireAndForget("agents", s.readiness.check(msg.agent), "agent check");
   },
 
   "set-default-agent"(msg, _ctx, s) {

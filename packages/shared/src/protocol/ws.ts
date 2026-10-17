@@ -928,6 +928,8 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   z.object({ t: z.literal("handoff-ask"), worktreeId: id, repoId: id, text: prompt.optional() }),
   /** drop this agent's stored credential (ACP logout), whatever worktree it was logged in from */
   z.object({ t: z.literal("agent-logout"), agent: id }),
+  /** a surface showing this agent is not ready came on screen: look again, if the daemon agrees it is worth it */
+  z.object({ t: z.literal("agent-check"), agent: id }),
   /** settings: the files this agent reads and the MCP servers it will load, for the repo when given */
   z.object({ t: z.literal("agent-config"), agent: id, repoId: id.optional() }),
   /** reveal one of those files in Finder; `file` is the id the agent-config reply named */

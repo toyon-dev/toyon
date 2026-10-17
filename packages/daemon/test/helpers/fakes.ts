@@ -7,8 +7,8 @@ import type {
   QueuedMessage,
   WorktreeInfo,
 } from "@toyon/shared";
-import { AgentAccounts, type AgentAccountsDeps } from "../../src/agent/accounts.ts";
 import type { AgentAdapter, AskOpts, AskReply, FollowUp, SendOpts } from "../../src/agent/adapter.ts";
+import { AgentReadiness, type AgentReadinessDeps } from "../../src/agent/readiness.ts";
 import { AgentRegistry, type AgentSpec } from "../../src/agent/registry.ts";
 import type { ForwardOpts, ProcForwarder } from "../../src/runtime/forward.ts";
 import type { PreviewHandler, WorktreeProxy } from "../../src/runtime/proxy.ts";
@@ -322,15 +322,20 @@ export function fakeAgents(dir: string): AgentRegistry {
 }
 
 /** Nothing to connect to by default: a test that reads the cache needs no adapter, and one that
- * signs an agent out passes an in-process connect of its own. */
-export function fakeAccounts(agents: AgentRegistry, connect?: AgentAccountsDeps["connect"]): AgentAccounts {
-  return new AgentAccounts({
+ * signs an agent out or looks at one passes an in-process connect of its own. */
+export function fakeReadiness(agents: AgentRegistry, connect?: AgentReadinessDeps["connect"]): AgentReadiness {
+  return new AgentReadiness({
+    infos: () => agents.infos(),
     require: (id) => agents.require(id),
     connect:
       connect ??
       (() => {
-        throw new Error("fakeAccounts: no adapter to connect to");
+        throw new Error("fakeReadiness: no adapter to connect to");
       }),
+    cwd: "/nowhere",
+    options: () => [],
+    learned: () => {},
+    quick: () => false,
   });
 }
 

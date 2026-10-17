@@ -8,7 +8,7 @@
 //
 // Interim extension: when the upstream RFD lands these move from `_meta` to first-class fields.
 
-import type * as acp from "@agentclientprotocol/sdk";
+import * as acp from "@agentclientprotocol/sdk";
 import type { AuthStatus } from "@toyon/shared";
 
 export const AUTH_STATUS_UPDATE_METHOD = "_auth/status_update";
@@ -44,4 +44,17 @@ export function parseAuthStatus(params: unknown): AuthStatus | null {
     ...(str(status.detail) ? { detail: str(status.detail)! } : {}),
     ...(Object.keys(fields).length ? { account: fields } : {}),
   };
+}
+
+/** what a connection learned about its agent's credentials */
+export interface AuthObservation {
+  canLogout?: boolean;
+  /** null means "the agent told us nothing", which is not the same as logged out */
+  status?: AuthStatus | null;
+}
+
+/** ACP's auth_required code: the agent has no credential to run on. A credential the provider
+ * rejected has no code of its own and arrives as the failed turn's text. */
+export function isAuthRequired(e: unknown): boolean {
+  return e instanceof acp.RequestError && e.code === -32000;
 }

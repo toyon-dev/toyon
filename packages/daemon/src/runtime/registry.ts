@@ -3,7 +3,6 @@
 
 import type { LogLine, ManagedPolicy, ProcState, Remote, RepoInfo, WorktreeInfo, WorktreeKind } from "@toyon/shared";
 import { addressedByPort, DEFAULT_PERMISSION_MODE, LOGIN_STREAM, PREVIEW_PORTS, SHELL_STREAM } from "@toyon/shared";
-import type { AgentAccounts } from "../agent/accounts.ts";
 import { OPTION_FIELDS } from "../agent/acp/options.ts";
 import { AcpSession } from "../agent/acp/session.ts";
 import { spawnAcp } from "../agent/acp/transport.ts";
@@ -13,6 +12,7 @@ import type { ToyonMcp } from "../agent/mcp.ts";
 import { commandFolders, readCommandOrigins } from "../agent/origins.ts";
 import { planEdited, writePlanDoc } from "../agent/planDoc.ts";
 import { type PreviewStanding, previewContext } from "../agent/prompt.ts";
+import type { AgentReadiness } from "../agent/readiness.ts";
 import type { AgentRegistry } from "../agent/registry.ts";
 import { UploadStore } from "../agent/uploads.ts";
 import { cloud } from "../core/cloud.ts";
@@ -63,7 +63,7 @@ export interface RuntimeDeps {
   /** what the managed policy lets an agent session offer; everything when absent (tests) */
   managed?: Pick<ManagedPolicy, "planSignIn">;
   /** told what each agent session learns about its agent's credentials; absent in tests */
-  accounts?: AgentAccounts;
+  readiness?: AgentReadiness;
   /** shared with the http layer that serves the images back; built from paths when absent */
   attachments?: AttachmentStore;
   bridgeScript: () => string;
@@ -223,8 +223,8 @@ function defaultAgent(
     onEvent: (event, seq) => d.hub.emit("agent", wt.id, seq, event),
     onStatus: (status) => d.hub.emit("agentStatus", wt.id, status),
     beforeTurn: async () => d.turnStarting?.(wt.id),
-    onAuth: (agentId, o) => d.accounts?.observe(agentId, o),
-    onLimits: (agentId, limits) => d.accounts?.observeLimits(agentId, limits),
+    onAuth: (agentId, o) => d.readiness?.observe(agentId, o),
+    onLimits: (agentId, limits) => d.readiness?.observeLimits(agentId, limits),
     // read at call time, for the same reason as `spec`
     seedCommands: () => d.state.cachedCommands(d.state.requireWorktree(wt.id).agent ?? "", wt.repoId),
     onCommandsLearned: (commands) =>

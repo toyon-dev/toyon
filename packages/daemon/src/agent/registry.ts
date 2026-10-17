@@ -160,7 +160,7 @@ export const BUILTIN_AGENTS: AgentSpec[] = [
     systemPrompt: "prompt-prefix",
     modes: { plan: "plan", build: "build" },
     quickModel: opencodeQuickModel,
-    loginHint: "OpenCode has no provider logged in; run `opencode auth login` in the terminal",
+    loginHint: "OpenCode has no provider logged in; run opencode auth login in the terminal",
   },
 ];
 
@@ -501,6 +501,7 @@ export class AgentRegistry {
         ...(install !== undefined ? { install } : {}),
         ...(spec.onDemand ? { onDemand: true } : {}),
         sandboxed: spec.confinement !== "none",
+        loginHint: spec.loginHint,
       };
     });
   }

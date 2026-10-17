@@ -17,15 +17,14 @@ import {
 import { loadManaged } from "@toyon/shared/managed-load";
 import { findTailscale, tailscaleCli } from "@toyon/shared/tailscale";
 import pkg from "../package.json" with { type: "json" };
-import { AgentAccounts } from "./agent/accounts.ts";
 import { spawnAcp } from "./agent/acp/transport.ts";
 import { AttachmentStore } from "./agent/attachments.ts";
 import { LinuxSandbox } from "./agent/linuxSandbox.ts";
 import { ToolSet, ToyonMcp } from "./agent/mcp.ts";
-import { OptionProbe } from "./agent/probe.ts";
+import { AgentReadiness } from "./agent/readiness.ts";
 import { loadAgentRegistry } from "./agent/registry.ts";
 import { prepareLaunch } from "./agent/sandbox.ts";
-import { makeAnswerRecapper, makeLander, makePlanner } from "./agent/tasks.ts";
+import { lacksQuickModel, makeAnswerRecapper, makeLander, makePlanner } from "./agent/tasks.ts";
 import { transcriptPathFor } from "./agent/transcript.ts";
 import { forwardTranscripts } from "./agent/transcriptForward.ts";
 import { UploadStore } from "./agent/uploads.ts";
@@ -167,10 +166,10 @@ await linuxSandbox.refresh();
 const agents = loadAgentRegistry(paths.agentsFile, paths.agentsDir, linuxSandbox, managed.policy);
 // a default the policy took away is nobody's choice any more: the first-run screens ask again
 if (state.defaultAgent !== undefined && !agents.get(state.defaultAgent)) state.clearDefaultAgent();
-// A new worktree's picker lists every agent's models, and an agent nobody has run yet has listed
-// none: once it is installed, a throwaway session reads them. It runs in the daemon's scratch
-// directory, prepared like any other launch, so an agent in toyon's sandbox is confined there too.
-const probe = new OptionProbe({
+// What each agent reported about itself (its login, its models), read by running it with no
+// worktree behind it: in the daemon's scratch directory, prepared like any other launch, so an
+// agent in toyon's sandbox is confined there too. A sign-out spawns it the same way.
+const readiness = new AgentReadiness({
   infos: () => agents.infos(),
   require: (id) => agents.require(id),
   connect: async (app, spec) =>
@@ -178,31 +177,26 @@ const probe = new OptionProbe({
       app,
       agents.launch(spec, await prepareLaunch(paths.scratchDir, spec)),
       paths.scratchDir,
-      `probe:${spec.id}`,
+      `check:${spec.id}`,
     ),
   cwd: paths.scratchDir,
-  known: (id) => state.cachedOptions(id, "model").length > 0,
+  options: (id, category) => state.cachedOptions(id, category),
   learned: (id, category, choices) => {
     if (state.setCachedOptions(id, category, choices)) hub.emit("agentsChanged");
   },
+  // whether the side questions can be put to it, so the shell says once, on its page, that the
+  // commit message is the person's to write, instead of every turn under the box
+  quick: (id) => {
+    const spec = agents.get(id);
+    return !!spec && !lacksQuickModel(spec, state);
+  },
 });
+readiness.onChange = () => hub.emit("agentsChanged");
 agents.onChange = () => {
   hub.emit("agentsChanged");
-  fireAndForget("agents", probe.missing(), "read agent models");
+  // an agent that just landed has listed nothing yet: a throwaway session reads its models
+  fireAndForget("agents", readiness.checkMissing(), "read agent models");
 };
-// a sign-out spawns the adapter on its own, with no session and no worktree: in the scratch
-// directory, the same as a probe
-const accounts = new AgentAccounts({
-  require: (id) => agents.require(id),
-  connect: async (app, spec) =>
-    spawnAcp(
-      app,
-      agents.launch(spec, await prepareLaunch(paths.scratchDir, spec)),
-      paths.scratchDir,
-      `auth:${spec.id}`,
-    ),
-});
-accounts.onChange = () => hub.emit("agentsChanged");
 const uploads = new UploadStore(paths.uploadsDir);
 const attachments = new AttachmentStore(paths.attachmentsDir, uploads);
 // Toyon's own tools for the agents, at the daemon's bound port once it is listening: the literal
@@ -225,7 +219,7 @@ const runtime: RuntimeRegistry = new RuntimeRegistry({
   paths,
   agents,
   managed: managed.policy,
-  accounts,
+  readiness,
   attachments,
   bridgeScript: () => bridge.get(),
   pageErrors: (id) => pageErrors.ambient(id),
@@ -474,7 +468,7 @@ const {
     mcp,
     themes,
     agents,
-    accounts,
+    readiness,
     attachments,
     self,
     afterLand,
@@ -529,10 +523,10 @@ landing.boot();
 fireAndForget("cache", cache.sweep(), "cache sweep");
 // the adapters are fetched on first boot (and after a version bump), not shipped: the default
 // agent first, so the first prompt waits on one download at most. One already on disk installs
-// without a change event, so the probe is asked here as well.
+// without a change event, so the check is asked here as well.
 fireAndForget(
   "agents",
-  agents.installMissing().then(() => probe.missing()),
+  agents.installMissing().then(() => readiness.checkMissing()),
   "agent adapter install",
 );
 

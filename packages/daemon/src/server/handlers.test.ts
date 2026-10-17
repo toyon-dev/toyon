@@ -11,7 +11,7 @@ import {
   SHELL_STREAM,
   streamKey,
 } from "@toyon/shared";
-import { fakeAccounts, fakeAgents, fakeFactories } from "../../test/helpers/fakes.ts";
+import { fakeAgents, fakeFactories, fakeReadiness } from "../../test/helpers/fakes.ts";
 import { sh, tmpRepo } from "../../test/helpers/tmp-repo.ts";
 import { AttachmentStore } from "../agent/attachments.ts";
 import { transcriptPathFor } from "../agent/transcript.ts";
@@ -95,7 +95,7 @@ function make() {
   const hub = new Hub();
   const f = fakeFactories();
   const agents = fakeAgents(t.paths.agentsDir);
-  const accounts = fakeAccounts(agents);
+  const readiness = fakeReadiness(agents);
   const uploads = new UploadStore(t.paths.uploadsDir);
   const attachments = new AttachmentStore(t.paths.attachmentsDir, uploads);
   const runtime = new RuntimeRegistry({
@@ -103,7 +103,7 @@ function make() {
     state,
     paths: t.paths,
     agents,
-    accounts,
+    readiness,
     attachments,
     bridgeScript: () => "",
     ...f.factories,
@@ -253,7 +253,7 @@ function make() {
     mcp,
     themes,
     agents,
-    accounts,
+    readiness,
     attachments,
     self,
     afterLand,
@@ -1519,9 +1519,18 @@ describe("handlers", () => {
 
   test("agent-logout: an unknown agent reaches the person as a toast", async () => {
     const { services, ctx } = make();
-    // signing out is AgentAccounts' own test; what belongs here is that the message routes to it
+    // signing out is AgentReadiness' own test; what belongs here is that the message routes to it
     // and that its refusals surface instead of being swallowed
     await expect(dispatch({ t: "agent-logout", agent: "nope" }, ctx, services)).rejects.toBeInstanceOf(UserError);
+  });
+
+  test("agent-check: the look runs in the background and its outcome lands on the agent's row", async () => {
+    const { services, ctx } = make();
+    await dispatch({ t: "agent-check", agent: "claude" }, ctx, services);
+    // the fake has nothing to connect to, which is a failure the row carries and never a throw
+    for (let i = 0; i < 20 && !services.readiness.describe()[0]?.checkFailed; i++) await Bun.sleep(5);
+    expect(services.readiness.describe()[0]?.checkFailed).toBe("fakeReadiness: no adapter to connect to");
+    await dispatch({ t: "agent-check", agent: "nope" }, ctx, services);
   });
 
   test("batch-worktrees plans with the injected planner and creates one worktree per task", async () => {

@@ -98,6 +98,7 @@ import { type Step, stepWalk, type WalkKey } from "./recall.ts";
 import { shellCommandOf, shellContext } from "./shellMode.ts";
 import { UsagePanel } from "./UsagePanel.tsx";
 import { compactAdvice, compactNudge, limitLevel, limitSummary } from "./usage.ts";
+import { useAgentCheck } from "./useAgentCheck.ts";
 import { attachCopied, pickAttachments, useComposerPaste } from "./useIntake.ts";
 
 /** a frozen empty list, so a selector returning it does not read as a change every render */
@@ -307,6 +308,8 @@ export function Composer({
   const spawnAgent = draft?.agent ?? defaultAgent;
   // the chips list what the agent in question advertised: the one being chosen, or this one's
   const agentInfo = useStore((s) => s.agents.find((a) => a.id === (choosing ? spawnAgent : active?.worktree.agent)));
+  // and asked about again while this composer rests on it, if its last answer was not positive
+  useAgentCheck(sock, id ?? (spawning ? "new" : null), agentInfo);
   // whether the side questions can be put to it: with no quick model the commit message is the
   // person's to write, and the line says which agent that is
   const quick = !!agentInfo?.quick;
@@ -961,7 +964,7 @@ export function Composer({
     // same way; the line above the knobs already says why, so the answer under the field is
     // short, except where no install would help, and the words stay put.
     const forAgent = shellCmd === null && (!typed || (!!mode && !!typed.args));
-    if (readiness && agentInfo && forAgent) {
+    if (readiness && readiness.kind !== "unready" && agentInfo && forAgent) {
       refuse(
         readiness.kind === "installing"
           ? `${agentInfo.name} is still installing`

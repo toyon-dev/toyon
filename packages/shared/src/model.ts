@@ -663,6 +663,8 @@ export interface AgentInfo {
   onDemand?: boolean;
   /** runs shell commands under an OS sandbox confined to the worktree */
   sandboxed: boolean;
+  /** what to read when it has no credential, in its own words ("Claude is not logged in") */
+  loginHint?: string;
   /** it has a quick model for the side questions (a name, a recap, the commit message); without
    * one those go unasked, and the commit message is the person's to write */
   quick?: true;
@@ -676,6 +678,10 @@ export interface AgentInfo {
   models?: ModelChoice[];
   /** the effort levels it advertised the last time a session opened on a model that has them */
   efforts?: ModelChoice[];
+  /** why its last check failed, in words a person can act on: its login hint when it refused for
+   * want of a credential, the process's own first line otherwise. Absent once a check succeeds or a
+   * session sees it logged in, and before any check has run. */
+  checkFailed?: string;
 }
 
 /** what settings shows about an agent's own setup: the files it reads and the MCP servers it will

@@ -21,6 +21,7 @@ import {
   nextNumbers,
   numbered,
   numbersAfter,
+  prStanding,
   shipNoun,
 } from "@toyon/shared";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -413,17 +414,20 @@ export function Composer({
   // the box's own frame ahead of the daemon's next read
   const hasLanded = !!active?.worktree.landed && dirty === 0;
   const landed = atRest && hasLanded;
-  const pr = atRest && !landed ? active.worktree.pr : undefined;
+  // the PR still standing between the work and main; a merged one left behind by new work is
+  // history and the box reads as a fresh row, from the same frame the landed mark is withheld
+  const shown = active ? prStanding({ ...active.worktree, landed: hasLanded }) : undefined;
+  const pr = atRest && !landed ? shown : undefined;
   // work since the PR opened, uncommitted or committed here only: what the PR is missing, and
   // what a merge now would leave behind. It goes through the check and then up to the PR, so the
   // PR's own rungs (merge, view) wait until the branch on origin has all of it.
   // Read off the row and not the rung above, which is only there at rest: the word for it is
   // offered mid-turn too, while the verdict holds.
-  const prOpen = !hasLanded && active?.worktree.pr?.state === "open" ? active.worktree.pr : undefined;
+  const prOpen = !hasLanded && shown?.state === "open" ? shown : undefined;
   const prMissing = !!prOpen && (dirty > 0 || unpushed > 0);
   // a PR closed without merging is the end of the branch too: its work is not on main, and the
   // one thing left is to close the row
-  const prClosed = active?.worktree.pr?.state === "closed";
+  const prClosed = shown?.state === "closed";
   const policy = landPolicy(repo?.config ?? {});
   // toyon's own `/` rows, ahead of the agent's: the modes and the seat's verbs, typed by name
   // (ownCommands.ts has the rules)
@@ -678,10 +682,7 @@ export function Composer({
           kind: "archive",
           // a PR GitHub merged is named as the landing: it happened there, not by a press here,
           // and main here following it is the trunk's own business
-          line:
-            active?.worktree.pr?.state === "merged"
-              ? prLine(active.worktree.pr)
-              : `landed on ${repo?.defaultBranch ?? "main"}.`,
+          line: shown?.state === "merged" ? prLine(shown) : `landed on ${repo?.defaultBranch ?? "main"}.`,
           tip: archiveTip,
           run: () => archiveWorktrees(sock, dispatch, [id]),
         }

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { landedNow, landWord, movedPastLand, prTaken } from "./land.ts";
+import { landedNow, landWord, movedPastLand, prStanding, prTaken } from "./land.ts";
 
 // The one rule every landing path shares: a row is landed when the base has its work, read
 // from the recorded landings and the tree, never from an ahead count alone.
@@ -53,6 +53,27 @@ describe("landWord", () => {
     expect(landWord({ land: "pr" }, { pr: { ...merged, state: "closed" } })).toBe("open pr");
     expect(landWord({ land: "pr" }, { pr: open })).toBe("land");
     expect(landWord({ land: "pr" }, { pr: merged })).toBe("land");
+  });
+
+  test("a merged PR left behind by new work is history: the next press opens a new one", () => {
+    const taken = { pr: merged, lands: [{ ...land, pr: 7 }] };
+    expect(landWord({ land: "pr" }, { ...taken, landed: true })).toBe("land");
+    expect(landWord({ land: "pr" }, taken)).toBe("open pr");
+    expect(landWord({ land: "merge" }, taken)).toBe("land");
+  });
+});
+
+describe("prStanding", () => {
+  test("the PR shows until a landing has taken it and the row has gone on", () => {
+    const open = { ...merged, state: "open" as const };
+    expect(prStanding({ pr: open })).toBe(open);
+    // merged, and no landing has taken it yet: the next press is what lands it
+    expect(prStanding({ pr: merged, lands: [land] })).toBe(merged);
+    // taken and landed: the row's proof of where the work went
+    expect(prStanding({ pr: merged, lands: [{ ...land, pr: 7 }], landed: true })).toBe(merged);
+    // taken, and an edit or a commit since: history
+    expect(prStanding({ pr: merged, lands: [{ ...land, pr: 7 }] })).toBeUndefined();
+    expect(prStanding({})).toBeUndefined();
   });
 });
 

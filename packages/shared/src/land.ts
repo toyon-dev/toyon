@@ -2,7 +2,7 @@
 // commits arrive). Both live under `land` in the repo's settings, since a team picks one route and
 // never alternates; the defaults live here so the daemon and the setup pane never restate them.
 
-import type { RepoInfo, ShipOp, ToyonConfig, WorktreeInfo } from "./model.ts";
+import type { PrState, RepoInfo, ShipOp, ToyonConfig, WorktreeInfo } from "./model.ts";
 
 /** where a landed worktree's work ends up */
 export type LandRoute = "merge" | "push" | "pr";
@@ -112,11 +112,24 @@ export function shipNoun(op: ShipOp): string {
   return { land: "a land", commit: "a commit", "sync-main": "a sync", "pull-main": "a pull" }[op];
 }
 
+type Standing = Landed & Pick<WorktreeInfo, "landed">;
+
+/** The PR the row still shows and acts on. A merged PR a landing has taken stays on the record
+ * until a commit moves past it, so an edit undone brings the landed row back with its link; but
+ * while the row is not landed, new work has begun over it and the PR is history: the foot offers
+ * no view of it, the rail says nothing about it, and the next press opens a new one. A merged PR
+ * no landing has taken yet still stands, since the next press is what lands it. */
+export function prStanding(wt: Standing): PrState | undefined {
+  return prTaken(wt) && !wt.landed ? undefined : wt.pr;
+}
+
 /** The word on the press that puts work on main: "land", on every route, so one word means one
  * thing. The one press that does not is opening the PR on the PR route, before a PR exists (or
- * after the last one closed), so that press says so; once the PR is open, landing it is landing. */
-export function landWord(policy: Pick<LandPolicy, "land">, wt: Pick<WorktreeInfo, "pr">): "land" | "open pr" {
-  return policy.land === "pr" && (!wt.pr || wt.pr.state === "closed") ? "open pr" : "land";
+ * after the last one closed or was landed and left behind), so that press says so; once the PR
+ * is open, landing it is landing. */
+export function landWord(policy: Pick<LandPolicy, "land">, wt: Standing): "land" | "open pr" {
+  const pr = prStanding(wt);
+  return policy.land === "pr" && (!pr || pr.state === "closed") ? "open pr" : "land";
 }
 
 /** what the one land verb does here, for its tooltip and its menu row */

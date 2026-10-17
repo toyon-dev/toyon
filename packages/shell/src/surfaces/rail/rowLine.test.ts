@@ -178,6 +178,20 @@ describe("the lines under a card's state", () => {
     expect(cardLines(withTurn({}, { pr, lastTurn: undefined }))).toEqual(["PR #12 open; checks running."]);
   });
 
+  test("a merged PR is said until its landing is on the record, then only as the landed row's", () => {
+    const merged = { ...pr, state: "merged" as const };
+    const mark = { base: "a", tip: "b", at: Date.now() - 60_000, subjects: ["drop the second handler"], pr: 12 };
+    // merged, not yet landed here: the fact the row is waiting on
+    expect(cardLines(withTurn({}, { pr: merged }))).toEqual(["Dropped the second handler.", "PR #12 merged."]);
+    // landed: the landing's own line says it, naming the PR
+    expect(cardLines(withTurn({}, { pr: merged, lands: [mark], landed: true }))).toEqual([
+      "PR #12: drop the second handler.",
+      "Dropped the second handler.",
+    ]);
+    // new work over it: the PR is history and the row says nothing about it
+    expect(cardLines(withTurn({}, { pr: merged, lands: [mark] }))).toEqual(["Dropped the second handler."]);
+  });
+
   test("a landed row leads with what it landed, each landing on its line once there are several", () => {
     const one = [{ base: "a", tip: "b", at: Date.now() - 3600_000, subjects: ["drop the second handler"] }];
     expect(cardLines(withTurn({}, { landed: true, lands: one }))).toEqual([

@@ -4,6 +4,7 @@ import {
   isLead,
   isOwned,
   type LandMark,
+  prStanding,
   type ShipOp,
   type TrunkStatus,
   type WorktreeStatus,
@@ -109,7 +110,9 @@ export function cardLines(w: WorktreeStatus & { worktree: NonNullable<WorktreeSt
   const turn = w.worktree.lastTurn;
   const landed = w.worktree.landed ? landedLines(w.worktree.lands) : [];
   const recap = turn ? (isBusy(w) ? lastStopLine : recapLine)(turn) : undefined;
-  const pr = w.worktree.pr && !w.worktree.landed ? prLine(w.worktree.pr) : undefined;
+  // a merged PR left behind by new work is history, and the row says nothing about it
+  const standing = prStanding(w.worktree);
+  const pr = standing && !w.worktree.landed ? prLine(standing) : undefined;
   return [...landed, recap, pr].filter((l): l is string => !!l);
 }
 

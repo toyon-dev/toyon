@@ -6,6 +6,7 @@ import {
   canLand as landable,
   landPolicy,
   landWord as landWordOf,
+  prStanding,
   type WorktreeStatus,
 } from "@toyon/shared";
 import { useRef, useState } from "react";
@@ -121,7 +122,11 @@ export function CommitBox({
   // a commit needs a message; a land can take the suggested one. A failed check holds land back,
   // the way it holds the composer's word back, until the check passes again.
   const checkFailed = owned?.landing?.check === "fail";
-  const pr = owned?.pr;
+  // the PR the row still shows: a merged one left behind by new work is history, and the foot
+  // reads as a fresh row with it gone. Landed is read with the live dirty count, as the composer
+  // reads it, so an edit in the box's own frame drops the PR at once and not on the daemon's
+  // next read.
+  const pr = owned ? prStanding({ ...owned, landed: !!owned.landed && !dirty }) : undefined;
   const prOpen = pr?.state === "open";
   // work since the PR opened: the same press sends it up to the PR, and merge waits until the
   // branch on origin has all of it, since merging now would leave it behind

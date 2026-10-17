@@ -2373,7 +2373,11 @@ export class WorktreeService {
     if (!hasOwnBranch(wt)) return;
     const r = await git(wt.path, "reset", "--keep", base);
     if (!r.ok) log.warn(wt.id, `could not restart ${wt.branch} from ${base}: ${r.err}`);
-    await this.headMoved(wt.id);
+    // the counts for the moved head, said in the settle's frame with the landed mark: a frame of
+    // its own here carried the landing on the record without the mark, which a row reads as new
+    // work over a landed PR
+    this.counts.stale(wt.id);
+    await this.counts.refresh([wt.id]);
   }
 
   /** the base fetched before a land or a sync measures against it (fetchBase), with the fetch on

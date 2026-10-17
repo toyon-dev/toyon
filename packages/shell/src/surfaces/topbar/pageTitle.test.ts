@@ -36,6 +36,11 @@ describe("names from paths", () => {
     expect(humanize("/caf%C3%A9")).toBe("Café");
   });
 
+  test("the query names nothing, and a hash route after it still does", () => {
+    expect(humanize("/workstreams/920?graph=1&")).toBe("Workstreams");
+    expect(humanize("/a?b=1#/settings")).toBe("Settings");
+  });
+
   test("the root, or a path of nothing but ids, is Home", () => {
     expect(humanize("/")).toBe("Home");
     expect(humanize("/42")).toBe("Home");

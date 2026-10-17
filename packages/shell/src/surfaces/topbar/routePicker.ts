@@ -29,7 +29,9 @@ export const TYPED_MAX = 50;
 const PER_TEMPLATE = 3;
 
 export type Row =
-  | { kind: "go"; path: string; title: string }
+  /** the path as typed; named only when it fills a template in, since a name guessed from the
+   * path would say the path twice */
+  | { kind: "go"; path: string; title?: string }
   | {
       kind: "page";
       path: string;
@@ -345,7 +347,7 @@ function typedRows(m: PageModel, query: string, here: string | null): Row[] {
     if (rows.length >= TYPED_MAX) break;
   }
   if (rows.some((r) => r.score === 100)) return rows.map(strip);
-  const go: Row = { kind: "go", path: goPath, title: humanize(filled?.path ?? goPath) };
+  const go: Row = { kind: "go", path: goPath, ...(filled ? { title: humanize(filled.path) } : {}) };
   // a page still completing the segment being typed keeps the highlight, so tab's ghost stays on it;
   // a whole typed path is a place of its own and leads, however many pages sit under it
   const top = rows[0];

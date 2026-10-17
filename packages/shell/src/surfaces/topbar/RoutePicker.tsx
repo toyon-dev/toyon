@@ -51,17 +51,24 @@ function RoutePath({ row }: { row: Row }) {
   return <span className="bar-route-path row-dim">{parts}</span>;
 }
 
-/** a route row: the page's name, its path a tier quieter, then what changed since you last had it open */
+/** a route row: the page's name, its path a tier quieter, then what changed since you last had it
+ * open. The typed path is a row of its own: the path is the label, and the page it names, when a
+ * template says, sits where the path would */
 export function RouteRow({ row }: { row: Row }) {
+  if (row.kind === "go") {
+    return (
+      <>
+        <span className="picker-label">{row.path}</span>
+        {row.title ? <span className="bar-route-path row-dim">{row.title}</span> : null}
+        <span className="picker-hint row-dim">as typed</span>
+      </>
+    );
+  }
   return (
     <>
       <span className="picker-label">{row.title}</span>
       <RoutePath row={row} />
-      {row.kind === "go" ? (
-        <span className="picker-hint row-dim">as typed</span>
-      ) : row.badge ? (
-        <span className={row.badge === "new" ? "badge-new" : "badge-changed"}>{row.badge}</span>
-      ) : null}
+      {row.badge ? <span className={row.badge === "new" ? "badge-new" : "badge-changed"}>{row.badge}</span> : null}
     </>
   );
 }

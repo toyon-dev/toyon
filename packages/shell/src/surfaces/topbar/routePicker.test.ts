@@ -141,6 +141,13 @@ describe("typing", () => {
     expect(typed("users/7", [entry("/users/42")], app)).toEqual(["go /users/7"]);
   });
 
+  test("the typed row is named only by a template it fills in; alone, its path says enough", () => {
+    const m = pageModel([], { routes: app, unseen: {} });
+    const go = (q: string) => rowsFor(m, { query: q, current: "/", here: "/" }).find((r) => r.kind === "go");
+    expect(go("users/7")).toEqual({ kind: "go", path: "/users/7", title: "Users" });
+    expect(go("xyz?graph=1&")).toEqual({ kind: "go", path: "/xyz?graph=1&" });
+  });
+
   test("typing toward a template lists the ids you visited, then the template", () => {
     expect(typed("us", [entry("/users/42"), entry("/users/43")], app)).toEqual([
       "Users /users/42",

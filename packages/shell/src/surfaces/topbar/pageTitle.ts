@@ -41,7 +41,11 @@ export function pageTitles(pages: Array<{ path: string; title?: string }>): Map<
 
 /** a name made from a path: its last segment that is a word, not an id or a parameter; the root is Home */
 export function humanize(path: string): string {
-  const segs = path.split(/[/#]/).filter(Boolean);
+  // the query names no page; the hash after it can, for a hash router
+  const segs = path
+    .replace(/\?[^#]*/, "")
+    .split(/[/#]/)
+    .filter(Boolean);
   for (let i = segs.length - 1; i >= 0; i--) {
     let seg = segs[i]!;
     try {

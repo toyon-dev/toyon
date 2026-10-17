@@ -115,8 +115,8 @@ export function shipNoun(op: ShipOp): string {
 /** The word on the press that puts work on main: "land", on every route, so one word means one
  * thing. The one press that does not is opening the PR on the PR route, before a PR exists (or
  * after the last one closed), so that press says so; once the PR is open, landing it is landing. */
-export function landWord(policy: Pick<LandPolicy, "land">, wt: Pick<WorktreeInfo, "pr">): "land" | "open PR" {
-  return policy.land === "pr" && (!wt.pr || wt.pr.state === "closed") ? "open PR" : "land";
+export function landWord(policy: Pick<LandPolicy, "land">, wt: Pick<WorktreeInfo, "pr">): "land" | "open pr" {
+  return policy.land === "pr" && (!wt.pr || wt.pr.state === "closed") ? "open pr" : "land";
 }
 
 /** what the one land verb does here, for its tooltip and its menu row */

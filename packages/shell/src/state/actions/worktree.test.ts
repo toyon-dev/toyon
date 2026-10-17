@@ -40,7 +40,7 @@ const other = { id: "r2", name: "acp", path: "/acp", defaultBranch: "main", conf
 const labels = (items: MenuEntry[]) => items.map((i) => (isItem(i) ? i.label : "|"));
 
 describe("a worktree's actions", () => {
-  test("on the PR route the land row says open PR until a PR exists, then land", () => {
+  test("on the PR route the land row says open pr until a PR exists, then land", () => {
     const prRepo = {
       id: "r",
       name: "r",
@@ -50,7 +50,7 @@ describe("a worktree's actions", () => {
     } as never;
     const state = { layout: defaultLayout, shipping: {}, frame: "desk" as const, repos: [] };
     const word = (items: MenuEntry[]) => items.filter(isItem).find((i) => i.id === "land")?.label;
-    expect(word(worktreeItems(owned(), prRepo, state, deps, here))).toBe("open PR");
+    expect(word(worktreeItems(owned(), prRepo, state, deps, here))).toBe("open pr");
     const opened = owned({ worktree: { ...info, pr: { number: 7, url: "u", state: "open", at: 1 } } });
     expect(word(worktreeItems(opened, prRepo, state, deps, here))).toBe("land");
     expect(word(worktreeItems(owned(), null, state, deps, here))).toBe("land");

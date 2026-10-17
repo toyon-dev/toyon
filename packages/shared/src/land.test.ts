@@ -45,12 +45,12 @@ describe("movedPastLand", () => {
 });
 
 describe("landWord", () => {
-  test("land on every route; open PR only for the press that opens one", () => {
+  test("land on every route; open pr only for the press that opens one", () => {
     const open = { ...merged, state: "open" as const };
     expect(landWord({ land: "merge" }, {})).toBe("land");
     expect(landWord({ land: "push" }, {})).toBe("land");
-    expect(landWord({ land: "pr" }, {})).toBe("open PR");
-    expect(landWord({ land: "pr" }, { pr: { ...merged, state: "closed" } })).toBe("open PR");
+    expect(landWord({ land: "pr" }, {})).toBe("open pr");
+    expect(landWord({ land: "pr" }, { pr: { ...merged, state: "closed" } })).toBe("open pr");
     expect(landWord({ land: "pr" }, { pr: open })).toBe("land");
     expect(landWord({ land: "pr" }, { pr: merged })).toBe("land");
   });

@@ -225,6 +225,7 @@ function ToolOut({ blocks, path, worktreeId }: { blocks: PaintedBlock[]; path: s
  * agent took under /tmp is here whatever became of the original. */
 function ToolPicture({ image, worktreeId }: { image: ToolImage; worktreeId: string }) {
   const src = useUrls().attachment(worktreeId, image.file);
+  const kept = { worktreeId, file: image.file, sock: useSock() };
   const [full, setFull] = useState(false);
   const cm = useContextMenu("chat");
   return (
@@ -235,12 +236,12 @@ function ToolPicture({ image, worktreeId }: { image: ToolImage; worktreeId: stri
         data-tip="Open full size"
         data-tip-placement="follow"
         onClick={() => setFull(true)}
-        {...cm.contextMenu(() => imageItems(src, { open: () => setFull(true) }))}
+        {...cm.contextMenu(() => imageItems(src, { open: () => setFull(true) }, kept))}
       >
         <img src={src} alt={image.file} />
       </button>
       {full && (
-        <FullAttachment owner="chat" onClose={() => setFull(false)} menu={() => imageItems(src)}>
+        <FullAttachment owner="chat" onClose={() => setFull(false)} menu={() => imageItems(src, {}, kept)}>
           <img src={src} alt={image.file} />
         </FullAttachment>
       )}
@@ -987,7 +988,12 @@ export const ChatItemView = memo(function ChatItemView({
               <div className="msg-attachments">
                 {item.attachments.map((a) =>
                   a.kind === "image" ? (
-                    <SentImageChip key={`${a.kind}-${a.n}`} img={a} src={urls.attachment(worktreeId, a.file)} />
+                    <SentImageChip
+                      key={`${a.kind}-${a.n}`}
+                      img={a}
+                      worktreeId={worktreeId}
+                      src={urls.attachment(worktreeId, a.file)}
+                    />
                   ) : a.kind === "file" ? (
                     <FileChip
                       key={`${a.kind}-${a.n}`}
@@ -995,6 +1001,7 @@ export const ChatItemView = memo(function ChatItemView({
                       name={a.name}
                       bytes={a.bytes}
                       href={a.text ? urls.attachment(worktreeId, a.file) : undefined}
+                      kept={{ worktreeId, file: a.file }}
                     />
                   ) : a.kind === "paste" ? (
                     <PasteChip

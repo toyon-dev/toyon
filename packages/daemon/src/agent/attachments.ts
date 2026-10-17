@@ -217,13 +217,7 @@ export class AttachmentStore {
       const { n: _n, ...pick } = ref;
       return pick;
     }
-    let path: string | null = null;
-    for (const at of [this.fileFor(worktreeId, ref.file), archived?.(ref.file) ?? null]) {
-      if (at && (await Bun.file(at).exists())) {
-        path = at;
-        break;
-      }
-    }
+    const path = await this.locate(worktreeId, ref.file, archived);
     if (!path) return null;
     if (ref.kind === "paste") {
       const { name, source } = ref;
@@ -238,6 +232,15 @@ export class AttachmentStore {
     const upload = await this.uploads.adopt(path, mimeType);
     const { name, bytes, width, height } = ref;
     return { kind: "image", upload, name, mimeType, bytes, width, height };
+  }
+
+  /** Where a stored attachment is on disk right now: in this store, or where `archived` says an
+   * archived chat's copy went. Null when the name is not one of ours or neither copy is there. */
+  async locate(worktreeId: string, file: string, archived?: (file: string) => string | null): Promise<string | null> {
+    for (const at of [this.fileFor(worktreeId, file), archived?.(file) ?? null]) {
+      if (at && (await Bun.file(at).exists())) return at;
+    }
+    return null;
   }
 
   /** run `fill` on the file's path once its directory exists; answers the path */

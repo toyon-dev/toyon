@@ -53,8 +53,10 @@ export interface DaemonUrls {
   token: string;
   /** the socket, token in the query */
   ws: string;
-  /** an image attached to a chat message */
+  /** an image or a file attached to a chat message */
   attachment(worktreeId: string, file: string): string;
+  /** where the daemon keeps that attachment, as a path in plain text */
+  attachmentWhere(worktreeId: string, file: string): string;
   /** an image or a file that is attached and not sent yet, by its upload id */
   upload(id: string): string;
   /** a file in a worktree for the editor pane's viewer; `version` names the bytes the pane last
@@ -90,6 +92,7 @@ export function daemonUrls(origin: string, token: string): DaemonUrls {
     token,
     ws: `${u.protocol === "https:" ? "wss" : "ws"}://${u.host}/ws?${q}`,
     attachment: (worktreeId, file) => `${u.origin}/attachments/${worktreeId}/${file}?${q}`,
+    attachmentWhere: (worktreeId, file) => `${u.origin}/attachments/${worktreeId}/${file}?${q}&where`,
     upload: (id) => `${u.origin}/uploads/${id}?${q}`,
     worktreeFile: (worktreeId, path, version) =>
       `${u.origin}/files/${worktreeId}/${path.split("/").map(encodeURIComponent).join("/")}?${q}${v(version)}`,

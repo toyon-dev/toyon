@@ -1,5 +1,6 @@
 import { fmtBytes } from "@toyon/shared";
-import { pasteItems } from "../../state/actions/message.ts";
+import { fileItems } from "../../state/actions/message.ts";
+import { useSock } from "../../state/context.tsx";
 import { cx } from "../../ui/cx.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { AttachmentChip } from "./AttachmentChip.tsx";
@@ -12,6 +13,7 @@ export function FileChip({
   name,
   bytes,
   href,
+  kept,
   uploading,
   progress,
   onRemove,
@@ -21,6 +23,8 @@ export function FileChip({
   bytes: number;
   /** where its text is served from: set only for a file that reads as text and has landed */
   href?: string;
+  /** the daemon's copy, once the message has gone: what the menu reveals and names */
+  kept?: { worktreeId: string; file: string };
   /** its bytes are still on their way to the daemon */
   uploading?: boolean;
   /** how much of them has gone, in whole percent, once the browser has said */
@@ -28,6 +32,7 @@ export function FileChip({
   onRemove?: () => void;
   className?: string;
 }) {
+  const sock = useSock();
   return (
     <AttachmentChip
       className={cx("file-chip", className)}
@@ -55,7 +60,7 @@ export function FileChip({
       peek={href ? <PastePeek href={href} /> : undefined}
       // read as what its name says it is: a markdown file rendered, a log or a script as its text
       full={href ? <FullPaste href={href} path={name} /> : undefined}
-      menu={(ui) => pasteItems({ href }, ui)}
+      menu={(ui) => fileItems({ href }, ui, kept && { ...kept, sock })}
       removeLabel="Remove attachment"
       onRemove={onRemove}
     />

@@ -962,6 +962,28 @@ describe("handlers", () => {
     );
   });
 
+  test("reveal-attachment shows the daemon's copy of what a sent message carried, and refuses one that is gone", async () => {
+    const { services, ctx, repo } = make();
+    const store = services.attachments;
+    const r = await services.repos.register(repo);
+    r.needsSetup = false;
+    const task = await services.worktrees.create(r.id, "a task");
+    const up = await store.uploads.put("file", "text/csv", [Buffer.from("a,b\n1,2\n")]);
+    const stored = await store.put(task.id, 1, { kind: "file", name: "foo.csv", ...up });
+    if (stored.kind !== "file") throw new Error("not a file");
+    // Finder is not opened in a test: only that the right path reaches the reveal
+    const revealed: string[] = [];
+    services.files.revealPath = (path) => {
+      revealed.push(path);
+    };
+    await dispatch({ t: "reveal-attachment", worktreeId: task.id, file: stored.ref.file }, ctx, services);
+    expect(revealed).toEqual([stored.path]);
+    await expect(
+      dispatch({ t: "reveal-attachment", worktreeId: task.id, file: "2-gone.csv" }, ctx, services),
+    ).rejects.toThrow("no longer on this machine");
+    expect(revealed).toHaveLength(1);
+  });
+
   test("a first keystroke on the plus warms its agent once; an empty box, a task's box and a spare still warming do not", async () => {
     const { services, ctx, repo, agents } = make();
     const r = await services.repos.register(repo);

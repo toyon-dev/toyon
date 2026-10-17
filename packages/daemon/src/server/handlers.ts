@@ -624,6 +624,16 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     s.files.revealPath(await s.opens.where(msg.path));
   },
 
+  // a chip on a sent message: the daemon's copy of what was attached, which is the file the agent
+  // read, shown where it sits; an archived chat's copy moved out of the store with it
+  async "reveal-attachment"(msg, _ctx, s) {
+    const path = await s.attachments.locate(msg.worktreeId, msg.file, (file) =>
+      s.worktrees.archivedAttachment(msg.worktreeId, file),
+    );
+    if (!path) throw new UserError("that attachment is no longer on this machine");
+    s.files.revealPath(path);
+  },
+
   async "discard-files"(msg, _ctx, s) {
     // one at a time: each takes its file's lock, and a refusal on one (its changes are already
     // gone) stops the run there, with the files before it discarded and the status saying so

@@ -17,8 +17,13 @@ export function daemonHost(sock: Pick<DaemonSocket, "urls"> | null | undefined):
 }
 
 /** the Finder reveal, for anything that is on disk: a file opens in Toyon's own pane, so the one
- * way out offered is to where it sits. None when the page was opened from another device. */
-export function revealItems(onReveal: (() => void) | undefined, hostname: string): MenuItem[] {
+ * way out offered is to where it sits. None when the page was opened from another device. The
+ * label names the file when what Finder lands on is not the one the person has in mind. */
+export function revealItems(
+  onReveal: (() => void) | undefined,
+  hostname: string,
+  label = "reveal in Finder",
+): MenuItem[] {
   if (!onReveal || !openedOnDaemonMachine(hostname)) return [];
-  return [{ id: "reveal", label: "reveal in Finder", onClick: onReveal }];
+  return [{ id: "reveal", label, onClick: onReveal }];
 }

@@ -894,6 +894,15 @@ describe("/attachments", () => {
     expect(Buffer.from(await r!.arrayBuffer()).toString("base64")).toBe(png);
     rmSync(archiveDir, { recursive: true, force: true });
   });
+  test("where answers the path of the copy and not its bytes, for a chip's copy path", async () => {
+    const r = await fetch(req("/attachments/wt1/1.png?token=secret&where"), srv());
+    expect(r?.status).toBe(200);
+    expect(r?.headers.get("content-type")).toBe("text/plain; charset=utf-8");
+    expect(r?.headers.get("cache-control")).toBe("no-store");
+    expect(await r?.text()).toBe(join(attachmentsDir, "wt1", "1.png"));
+    expect((await fetch(req("/attachments/wt1/9.png?token=secret&where"), srv()))?.status).toBe(404);
+    expect((await fetch(req("/attachments/wt1/1.png?where"), srv()))?.status).toBe(401);
+  });
   test("no token is 401; a missing or malformed path is 404", async () => {
     expect((await fetch(req("/attachments/wt1/1.png"), srv()))?.status).toBe(401);
     expect((await fetch(req("/attachments/wt1/9.png?token=secret"), srv()))?.status).toBe(404);

@@ -9,27 +9,54 @@ import { openFile, openFolder } from "./file.ts";
  * not already inside that view, and taken off a message that has not gone yet */
 export type ChipUi = { open?: () => void; remove?: () => void };
 
-const chipTail = ({ open, remove }: ChipUi): MenuItem[][] => [
-  open ? [{ id: "open", label: "open full size", onClick: open }] : [],
-  remove ? [{ id: "remove", label: "remove", onClick: remove }] : [],
-];
+/** the daemon's copy of an attachment a sent message carries, by the worktree and stored name the
+ * chat fetches it by. It is the file the agent read, and the one file of the attachment this
+ * machine has: the drag that attached it gave the bytes and never the path they came from. */
+export type Kept = { worktreeId: string; file: string; sock: Deps["sock"] };
+
+/** the ways to act on the chip, after what it holds: the open and the Finder reveal together, as
+ * on a file link, since both are ways to the file; the path as text; then off the message. The
+ * reveal says it lands on the copy: the person dragged a file from somewhere else, and Finder
+ * opening on a numbered twin under Toyon's home would otherwise read as the wrong file. */
+function chipTail({ open, remove }: ChipUi, kept?: Kept): MenuItem[][] {
+  const sock = kept?.sock;
+  const reveal =
+    kept && sock
+      ? () => sock.send({ t: "reveal-attachment", worktreeId: kept.worktreeId, file: kept.file })
+      : undefined;
+  const where = kept && sock ? sock.urls.attachmentWhere(kept.worktreeId, kept.file) : undefined;
+  return [
+    [
+      ...(open ? [{ id: "open", label: "open full size", onClick: open }] : []),
+      ...revealItems(reveal, daemonHost(sock), "reveal the copy"),
+    ],
+    where ? [{ id: "copy-path", label: "copy path", onClick: () => copyTextFrom(where) }] : [],
+    remove ? [{ id: "remove", label: "remove", onClick: remove }] : [],
+  ];
+}
 
 /** an attached image: the picture itself onto the clipboard, from the chip or from the full view */
-export function imageItems(src: string, ui: ChipUi = {}): MenuEntry[] {
-  return grouped([[{ id: "copy-image", label: "copy image", onClick: () => copyImage(src) }], ...chipTail(ui)]);
+export function imageItems(src: string, ui: ChipUi = {}, kept?: Kept): MenuEntry[] {
+  return grouped([[{ id: "copy-image", label: "copy image", onClick: () => copyImage(src) }], ...chipTail(ui, kept)]);
+}
+
+/** text the daemon serves back or the composer still holds, onto the clipboard; nothing without either */
+function copyTextItems({ text, href }: { text?: string; href?: string }): MenuItem[] {
+  if (text !== undefined) return [{ id: "copy-text", label: "copy text", onClick: () => copyText(text) }];
+  if (href) return [{ id: "copy-text", label: "copy text", onClick: () => copyTextFrom(href) }];
+  return [];
 }
 
 /** an attached paste: its whole text, which the composer still holds and the daemon serves back
  * for one that has been sent. A chip with neither offers nothing to copy. */
 export function pasteItems(paste: { text?: string; href?: string }, ui: ChipUi = {}): MenuEntry[] {
-  const { text, href } = paste;
-  const copy: MenuItem[] =
-    text !== undefined
-      ? [{ id: "copy-text", label: "copy text", onClick: () => copyText(text) }]
-      : href
-        ? [{ id: "copy-text", label: "copy text", onClick: () => copyTextFrom(href) }]
-        : [];
-  return grouped([copy, ...chipTail(ui)]);
+  return grouped([copyTextItems(paste), ...chipTail(ui)]);
+}
+
+/** an attached file: its text when it reads as text, then the chip's own ways, which for a sent
+ * one reach the daemon's copy */
+export function fileItems(file: { href?: string }, ui: ChipUi = {}, kept?: Kept): MenuEntry[] {
+  return grouped([copyTextItems(file), ...chipTail(ui, kept)]);
 }
 
 /** the link a message was right-clicked on: a page out on the web, a file in this worktree, a file

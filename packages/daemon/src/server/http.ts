@@ -367,6 +367,13 @@ export function createFetch(opts: HttpOpts) {
       if (worktreeId && file) await opts.attachments.whenWritten(worktreeId, file);
       const path = places.find((p): p is string => !!p && existsSync(p));
       if (!path) return new Response("not found", { status: 404 });
+      // `where` asks for the path and not the bytes: a chip's copy path, which the browser puts
+      // on the clipboard, needs the daemon's word on where its copy is
+      if (url.searchParams.has("where")) {
+        return new Response(path, {
+          headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" },
+        });
+      }
       return new Response(Bun.file(path), {
         headers: { "cache-control": IMMUTABLE, ...attachedHeaders(drawnType(file ?? "")) },
       });

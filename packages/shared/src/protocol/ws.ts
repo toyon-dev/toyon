@@ -762,6 +762,9 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   /** reveal in Finder a path outside this worktree, by its absolute path on the daemon's disk, as
    * `open-by-path` names one; a path that is not there is an error frame */
   z.object({ t: z.literal("reveal-path"), path: relPath }),
+  /** reveal in Finder the daemon's copy of an attachment a sent message carries, by the worktree
+   * and stored name the chat fetches it by; one that is gone is an error frame */
+  z.object({ t: z.literal("reveal-attachment"), worktreeId: id, file: z.string().min(1).max(120) }),
   z.object({ t: z.literal("stop-agent"), worktreeId: id }),
   /** the person is looking at this worktree right now: clears the rail's unseen ring */
   z.object({ t: z.literal("seen"), worktreeId: id }),

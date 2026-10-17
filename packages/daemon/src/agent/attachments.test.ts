@@ -150,6 +150,9 @@ describe("AttachmentStore", () => {
     const moved = join(dir, "moved-notes.md");
     renameSync(join(dir, "wt-arch", "1-notes.md"), moved);
     expect(await store.reattach("wt-arch", stored.ref)).toBeNull();
+    // a reveal asks the same question of the same two places
+    expect(await store.locate("wt-arch", "1-notes.md")).toBeNull();
+    expect(await store.locate("wt-arch", "1-notes.md", (f) => (f === "1-notes.md" ? moved : null))).toBe(moved);
     const again = await store.reattach("wt-arch", stored.ref, (f) => (f === "1-notes.md" ? moved : null));
     expect(again).toMatchObject({ kind: "file", name: "notes.md", bytes: 8, text: true });
     expect(await Bun.file(uploads.path(again?.kind === "file" ? again.upload : "")!).text()).toBe("# notes\n");

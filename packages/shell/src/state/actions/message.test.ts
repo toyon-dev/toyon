@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { isItem } from "../../ui/menu.ts";
 import type { Deps } from "./deps.ts";
-import { imageItems, messageItems, pasteItems } from "./message.ts";
+import { fileItems, imageItems, messageItems, pasteItems } from "./message.ts";
 
 // A chip's menu is about the chip: what it holds goes onto the clipboard first, then the ways
 // to act on the chip itself, which depend on where it stands. A message's menu is about the
@@ -106,5 +106,46 @@ describe("attachment chip menus", () => {
     expect(ids(pasteItems({ text: "a\nb" }, { remove: () => {} }))).toEqual(["copy-text", "remove"]);
     expect(ids(pasteItems({ href: "/attachments/w/p1.txt" }, { open: () => {} }))).toEqual(["copy-text", "open"]);
     expect(ids(pasteItems({}))).toEqual([]);
+  });
+
+  // a sent chip reaches the daemon's copy through the socket, which also says whose disk it is on
+  const keptOn = (host: string, sent: unknown[]) => ({
+    worktreeId: "w",
+    file: "1-foo.csv",
+    sock: {
+      send: (m: unknown) => sent.push(m),
+      urls: { host, attachmentWhere: (id: string, file: string) => `/attachments/${id}/${file}?where` },
+    } as unknown as Deps["sock"],
+  });
+  const press = (items: ReturnType<typeof fileItems>, id: string) =>
+    items
+      .filter(isItem)
+      .find((i) => i.id === id)
+      ?.onClick();
+
+  test("a sent file or image is also about the daemon's copy: Finder beside the open, then its path", () => {
+    const sent: unknown[] = [];
+    const kept = keptOn("127.0.0.1", sent);
+    const items = fileItems({ href: "/attachments/w/1-foo.csv" }, { open: () => {} }, kept);
+    expect(ids(items)).toEqual(["copy-text", "open", "reveal", "copy-path"]);
+    // the label says it is the copy: the dragged file is wherever it was, and Finder cannot reach it
+    expect(items.filter(isItem).find((i) => i.id === "reveal")?.label).toBe("reveal the copy");
+    press(items, "reveal");
+    expect(sent).toEqual([{ t: "reveal-attachment", worktreeId: "w", file: "1-foo.csv" }]);
+    // a file that does not read as text still has a place on disk
+    expect(ids(fileItems({}, {}, kept))).toEqual(["reveal", "copy-path"]);
+    expect(ids(imageItems("/attachments/w/1.png", {}, { ...kept, file: "1.png" }))).toEqual([
+      "copy-image",
+      "reveal",
+      "copy-path",
+    ]);
+  });
+
+  test("from another device the path stays and Finder goes; a chip not sent yet has neither", () => {
+    expect(ids(fileItems({ href: "/attachments/w/1-foo.csv" }, {}, keptOn("toyon.example.com", [])))).toEqual([
+      "copy-text",
+      "copy-path",
+    ]);
+    expect(ids(fileItems({ href: "/uploads/u1" }, { remove: () => {} }))).toEqual(["copy-text", "remove"]);
   });
 });

@@ -2,6 +2,33 @@
 
 What changed in each release of Toyon, newest first.
 
+## 0.16.0 (2026-10-18)
+
+Streamed replies are written to the transcript a few characters at a time instead of a line at a time, the plan card follows the file Claude Code keeps itself, and the checks and preview in the PR line are links.
+
+### New
+- In the composer's PR line, "checks running", "checks failed" and "preview up" are links: checks open the pull request's checks tab and the preview opens the branch on its host. A right-click offers to open or copy the link. Under automerge the line says "when checks pass" while checks run and carries no link.
+- A sent attachment's menu can reveal the copy Toyon kept in Finder, or copy its path, in archived chats too.
+- The editor header has a copy button beside reveal that puts the file's full path on the clipboard. It is hidden for a loose file dropped in from outside the worktree.
+- In the full view of an attachment, the left and right arrow keys step to the previous or next attachment of the same message, with a position count beside the close button. Closing returns focus to the chip you ended on.
+
+### Changed
+- Text streamed by the agent is written to the transcript a few characters a frame instead of a line at a time, so a pinned transcript scrolls smoothly rather than jumping a line per repaint. A reply the agent hands over whole, as after a tool call, still shows at once.
+- The plan card reads the plan file Claude Code keeps itself, in a folder in the worktree that git ignores, so a plan rejected and revised no longer shows a stale copy. An agent that keeps no file still gets Toyon's numbered copy. The plan row in the composer is named by the plan's first heading and follows rewrites; the file name stays in its tooltip and menu.
+- An agent that looked unavailable is checked again whenever the composer or its settings page shows it, or when the window regains focus, so signing in or finishing an install clears the warning without a restart. Before, it was checked once at boot.
+- Once a landing has merged a pull request, the row drops the PR as soon as new work starts over it; undoing that work brings it back with its link.
+- The preview threw row and its fix press are gone. What the page threw still rides behind your next message, so the agent sees it there.
+- The release notes open in the same document view as the editor's markdown preview, with the same type, a jump list of headings, find and select-all.
+
+### Fixed
+- In the installed app, a press on the top bar's blank strip closes an open address list or menu, instead of only dragging the window.
+- A preview that reopened after its worktree slept, or after the proxy restarted, came back at the root. It now returns to the page it was on, with its query and hash.
+- The element picker's outline draws above the page's own popovers and menus, which could hide it.
+- In the address field above the preview, enter on a cleared field goes to the root instead of reloading the page, and the key hint says so while the field is empty.
+- The typed row in the address list no longer repeats its path as a guessed name, and a path ending in a query no longer gets a garbled page name.
+- A second message sent while a landing's commit was still running took the sending slot from the first, so the two drew out of order. The placeholder now holds its place behind queued messages.
+- Text in the composer, the question card and the commit box sits exactly in line with the transcript, so an answer no longer jumps sideways by a couple of pixels as it goes through.
+
 ## 0.15.0 (2026-10-15)
 
 A row from another project that is waiting on you now shows on the rail in front of you, files dropped on the rail land in a worktree's composer, and a tool row that touched a file grows an eye that opens it.

@@ -7,6 +7,7 @@ import { closePendingLink, PENDING_LINK } from "./linkTail.ts";
 import { dunder } from "./markdownDunder.ts";
 import { assetPath, codePath, outsidePath, worktreeLink } from "./markdownPaths.ts";
 import { table } from "./markdownTable.ts";
+import { cutAt, nextPace, type Pace, shownAt } from "./pace.ts";
 import { languageOf, paintCode } from "./syntax.ts";
 
 // a fenced block the agent wrote in a message is the same code as a fenced block under a tool call,
@@ -47,7 +48,8 @@ export interface MarkdownOptions {
   base?: MarkdownBase;
   /** the absolute checkout root: links beneath it open in Toyon's editor */
   fileRoot?: string;
-  /** the text is still arriving: a link cut off at its end is held in place rather than shown raw */
+  /** the text is still arriving: it is shown at a reading pace, a few characters a frame (pace.ts),
+   * and a link cut off at its end is held in place rather than shown raw */
   streaming?: boolean;
 }
 
@@ -105,9 +107,37 @@ export function renderMarkdown(text: string, options?: MarkdownOptions): string 
   }
 }
 
-/** parsing a long text on every change is O(n²) while it streams in, or while it is typed into
- * the editor beside its preview; re-render at most once a reading tick (the cadence streamed text
- * reaches the store at, coalesce.ts) and settle at once when the text stops changing */
+/** the text as far as it is shown: while it streams, it grows a few characters a frame between
+ * the deliveries that reach the store once a tick (pace.ts); otherwise it is the text. The text
+ * on screen when pacing begins stays, and the whole text shows the moment streaming ends. */
+function usePaced(text: string, streaming: boolean): string {
+  const [shown, setShown] = useState(text);
+  const pace = useRef<Pace | null>(null);
+  useEffect(() => {
+    if (!streaming) {
+      pace.current = null;
+      return;
+    }
+    pace.current = nextPace(pace.current, text.length, performance.now());
+    let frame = 0;
+    const tick = () => {
+      const p = pace.current;
+      if (!p) return;
+      const n = shownAt(p, performance.now());
+      setShown(cutAt(text, n));
+      if (n < p.to) frame = requestAnimationFrame(tick);
+    };
+    tick();
+    return () => cancelAnimationFrame(frame);
+  }, [text, streaming]);
+  return streaming ? shown : text;
+}
+
+/** parsing a long text on every change is O(n²) while it is typed into the editor beside its
+ * preview; re-render at most once a reading tick (the cadence streamed text reaches the store at,
+ * coalesce.ts) and settle at once when the text stops changing. Text that streams in is paced
+ * instead, and renders as each frame's few characters are shown: a parse costs well under a
+ * millisecond for a page of text, and the pace is the cadence. */
 export function useMarkdown(text: string, options?: MarkdownOptions): string {
   const [html, setHtml] = useState(() => renderMarkdown(text, options));
   const lastAt = useRef(0);
@@ -116,7 +146,8 @@ export function useMarkdown(text: string, options?: MarkdownOptions): string {
   const version = options?.base?.version;
   const urls = options?.base?.urls;
   const fileRoot = options?.fileRoot;
-  const streaming = options?.streaming;
+  const streaming = !!options?.streaming;
+  const shown = usePaced(text, streaming);
   useEffect(() => {
     const base =
       worktreeId !== undefined && dir !== undefined && urls !== undefined
@@ -124,16 +155,16 @@ export function useMarkdown(text: string, options?: MarkdownOptions): string {
         : undefined;
     const at = base || fileRoot || streaming ? { base, fileRoot, streaming } : undefined;
     const since = performance.now() - lastAt.current;
-    if (since >= STREAM_TICK_MS) {
+    if (streaming || since >= STREAM_TICK_MS) {
       lastAt.current = performance.now();
-      setHtml(renderMarkdown(text, at));
+      setHtml(renderMarkdown(shown, at));
       return;
     }
     const t = setTimeout(() => {
       lastAt.current = performance.now();
-      setHtml(renderMarkdown(text, at));
+      setHtml(renderMarkdown(shown, at));
     }, STREAM_TICK_MS - since);
     return () => clearTimeout(t);
-  }, [text, worktreeId, dir, version, urls, fileRoot, streaming]);
+  }, [shown, worktreeId, dir, version, urls, fileRoot, streaming]);
   return html;
 }

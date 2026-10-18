@@ -459,7 +459,7 @@ export const ThoughtRow = memo(function ThoughtRow({
   const earlier = steps.slice(0, -1);
   const html = useMarkdown(
     steps.length ? earlier.join("\n\n") : normalizeThoughtMarkdown(item.text),
-    fileRoot ? { fileRoot } : undefined,
+    fileRoot || streaming ? { fileRoot, streaming } : undefined,
   );
   const sock = useSock();
   const dispatch = useDispatch();

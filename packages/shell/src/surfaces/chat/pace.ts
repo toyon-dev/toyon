@@ -5,19 +5,14 @@ import { STREAM_TICK_MS } from "../../state/coalesce.ts";
  *
  * Text reaches the store once a tick (coalesce.ts), and a tick's worth is about a line, so a row
  * that repaints on each delivery grows by a line at a time and reads as jumping. Each delivery is
- * instead spread over a span: the gap since the one before, so steady streaming reads as a steady
- * run of words and a slow model reads as a slow one, or longer when what is waiting to be shown
- * would otherwise go by faster than writing. A reply that arrives whole (the newest models hand
- * over everything after a tool call in one burst, and the turn ends right behind it) is written
- * out at the writing rate, up to a ceiling past which it is a wipe: the text is there to be read,
- * and holding it back longer than that is withholding it.
+ * instead spread over the time the next one is expected to take: the gap since the one before,
+ * held between one tick and a few. Steady streaming then reads as a steady run of words, a slow
+ * model reads as a slow one, and a burst after a pause (a reply after a tool call) is a quick wipe
+ * rather than a wall, with nothing held back for longer than a few ticks.
  */
 
-/** the fastest text is written out: about the rate the quicker models stream at */
-export const PACE_CHARS_PER_S = 600;
-
-/** the longest any backlog is spread over, whatever its size */
-export const PACE_SPAN_MAX_MS = 4000;
+/** the longest a delivery is spread over: past this, pacing is text withheld, not text read */
+export const PACE_SPAN_MAX_MS = 4 * STREAM_TICK_MS;
 
 /** one delivery of streamed text, spread from `at` over `span` ms */
 export interface Pace {
@@ -35,9 +30,7 @@ export interface Pace {
 export function nextPace(prev: Pace | null, length: number, now: number): Pace {
   if (!prev) return { from: length, to: length, at: now, span: STREAM_TICK_MS };
   const from = Math.min(shownAt(prev, now), length);
-  const byGap = now - prev.at;
-  const byAmount = ((length - from) * 1000) / PACE_CHARS_PER_S;
-  const span = Math.min(Math.max(byGap, byAmount, STREAM_TICK_MS), PACE_SPAN_MAX_MS);
+  const span = Math.min(Math.max(now - prev.at, STREAM_TICK_MS), PACE_SPAN_MAX_MS);
   return { from, to: length, at: now, span };
 }
 

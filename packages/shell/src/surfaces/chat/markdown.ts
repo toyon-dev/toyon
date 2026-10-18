@@ -109,13 +109,15 @@ export function renderMarkdown(text: string, options?: MarkdownOptions): string 
 
 /** the text as far as it is shown: while it streams, it grows a few characters a frame between
  * the deliveries that reach the store once a tick (pace.ts); otherwise it is the text. The text
- * on screen when pacing begins stays. Streaming ending does not cut the writing short: a reply
- * that arrives whole has its turn end right behind it, and it is still written out. */
-function usePaced(text: string, streaming: boolean): { shown: string; paced: boolean } {
+ * on screen when pacing begins stays, and the whole text shows the moment streaming ends. */
+function usePaced(text: string, streaming: boolean): string {
   const [shown, setShown] = useState(text);
   const pace = useRef<Pace | null>(null);
   useEffect(() => {
-    if (!streaming && !pace.current) return;
+    if (!streaming) {
+      pace.current = null;
+      return;
+    }
     pace.current = nextPace(pace.current, text.length, performance.now());
     let frame = 0;
     const tick = () => {
@@ -124,13 +126,11 @@ function usePaced(text: string, streaming: boolean): { shown: string; paced: boo
       const n = shownAt(p, performance.now());
       setShown(cutAt(text, n));
       if (n < p.to) frame = requestAnimationFrame(tick);
-      else if (!streaming) pace.current = null;
     };
     tick();
     return () => cancelAnimationFrame(frame);
   }, [text, streaming]);
-  const paced = streaming || pace.current !== null;
-  return { shown: paced ? shown : text, paced };
+  return streaming ? shown : text;
 }
 
 /** parsing a long text on every change is O(n²) while it is typed into the editor beside its
@@ -146,8 +146,8 @@ export function useMarkdown(text: string, options?: MarkdownOptions): string {
   const version = options?.base?.version;
   const urls = options?.base?.urls;
   const fileRoot = options?.fileRoot;
-  // the text still being written out is streaming to the reader, whatever the turn is doing
-  const { shown, paced: streaming } = usePaced(text, !!options?.streaming);
+  const streaming = !!options?.streaming;
+  const shown = usePaced(text, streaming);
   useEffect(() => {
     const base =
       worktreeId !== undefined && dir !== undefined && urls !== undefined

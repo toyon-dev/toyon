@@ -576,7 +576,10 @@
      read as a disabled box rather than somewhere to type */
     background: var(--sunken);
     border-top: 1px solid var(--border0);
-    padding: 10px;
+    /* the side padding is the row inset, the column every list sits on: what is typed, the chips
+       and a card's question stand where the transcript's prose and the file rows above them do,
+       so a sentence moving from the box to the log holds its place */
+    padding: 10px var(--row-inset);
     /* the offset parent for the @ and slash menu */
     position: relative;
     /* the box is the panel's (Field's `bare`); this is only how the textarea fills it */

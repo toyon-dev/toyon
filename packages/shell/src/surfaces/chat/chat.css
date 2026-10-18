@@ -1320,7 +1320,7 @@
      that row opens over itself */
     overflow: visible;
     /* the box's own side padding, so the intro's text edge is the box's */
-    padding: 12px 10px;
+    padding: 12px var(--row-inset);
     display: flex;
     flex-direction: column;
     gap: 6px;
@@ -1394,11 +1394,11 @@
    still takes the last chip; the mark that said so was read as a selection.
 
    Bled out of the box's padding and inset back by the same distance, so the words start where
-   the text in the box does: the composer pads 10px, and so does the bubble a sent one sits in. */
+   the text in the box does. The distance is the row inset the chip inherits: the composer pads
+   by it, and the bubble a sent one sits in names its own. */
   .pick-chip {
     width: auto;
-    margin-inline: -10px;
-    --row-inset: 10px;
+    margin-inline: calc(-1 * var(--row-inset));
     & .pick-target {
       flex: 1;
       overflow: hidden;
@@ -1587,6 +1587,8 @@
     display: flex;
     flex-direction: column;
     margin-bottom: 4px;
+    /* the bubble's side padding, which the chips bleed out of and inset back by */
+    --row-inset: 10px;
     /* a message that is attachments alone: nothing follows, so nothing to keep a gap from */
     &:last-child {
       margin-bottom: 0;
@@ -1616,10 +1618,13 @@
     min-height: 0;
     outline: none;
     /* the options are a picker's rows, so the strip is the box they bleed out of: --picker-bleed
-     undoes its padding for the row bands, --picker-inset puts it back inside the
-     row, so the labels stay in the column the question above them starts in */
-    --picker-bleed: -10px;
-    --picker-inset: 10px;
+     undoes its side padding for the row bands, --picker-inset puts it back inside the row, so
+     the labels stay in the column the question above them starts in. That padding is the row
+     inset (base's .composer), the log's own gutter: the question is a sentence the agent wrote,
+     and answered it reads back in the transcript in the same column, so it holds still as the
+     card gives way to the bubble */
+    --picker-inset: var(--row-inset);
+    --picker-bleed: calc(-1 * var(--picker-inset));
   }
   /* the questions as a tab strip heading the box, full bleed:
    the recess is the strip's floor, and the open tab is the strip's own ground showing through, so

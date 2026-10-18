@@ -17,7 +17,7 @@
 // number that ticks is a plan that moved, not a count of how many times the card was drawn.
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { basename, join, relative, sep } from "node:path";
+import { basename, isAbsolute, join, relative, sep } from "node:path";
 import { log } from "../core/log.ts";
 import { excludeFromGit } from "../git/exclude.ts";
 import { canonical, within } from "./bounds.ts";
@@ -42,9 +42,15 @@ export function isPlanPath(rel: string): boolean {
  */
 export function ownPlanPath(cwd: string, file: string): string | null {
   const dir = canonical(join(cwd, PLANS_DIR));
-  const abs = canonical(file);
+  const abs = canonical(isAbsolute(file) ? file : join(cwd, file));
   if (!within(abs, dir) || relative(dir, abs).includes(sep)) return null;
   return PLAN_NAME.test(basename(abs)) ? join(PLANS_DIR, basename(abs)) : null;
+}
+
+/** Keep the plans folder out of the diff, before the first file lands in it. The folder rather
+ * than `.toyon/`, because `settings.json` beside it is a file a team may well commit. */
+export async function excludePlans(cwd: string): Promise<void> {
+  await excludeFromGit(cwd, `${PLANS_DIR}/`);
 }
 
 /** the highest number in the folder, 0 for none; a deleted plan's number is never given again */
@@ -74,9 +80,6 @@ function sameAsLast(cwd: string, rel: string, markdown: string): boolean {
  * file when it already holds this plan. Returns the relative path for the card to point at, or
  * null if the worktree would not take it, in which case the card falls back to showing the
  * markdown itself.
- *
- * Excluded as the folder rather than `.toyon/`, because `settings.json` beside it is a file a team
- * may well commit.
  */
 export async function writePlanDoc(cwd: string, markdown: string): Promise<string | null> {
   const dir = join(cwd, PLANS_DIR);
@@ -93,7 +96,7 @@ export async function writePlanDoc(cwd: string, markdown: string): Promise<strin
     log.warn(cwd, `could not write ${rel}; the plan stays on the card`, e);
     return null;
   }
-  await excludeFromGit(cwd, `${PLANS_DIR}/`);
+  await excludePlans(cwd);
   return rel;
 }
 

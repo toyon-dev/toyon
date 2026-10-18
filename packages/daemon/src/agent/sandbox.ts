@@ -19,7 +19,7 @@ import { excludeFromGit } from "../git/exclude.ts";
 import { git } from "../git/exec.ts";
 import { canonical, within } from "./bounds.ts";
 import { claudeDenyRules } from "./commands.ts";
-import { PLANS_DIR } from "./planDoc.ts";
+import { excludePlans, PLANS_DIR } from "./planDoc.ts";
 import type { AgentSpec } from "./registry.ts";
 
 export interface Bounds {
@@ -149,6 +149,6 @@ export async function writeClaudeLocalSettings(cwd: string, b: Bounds): Promise<
   // lands before any card, and would show in the changes until then
   if (existsSync(join(cwd, ".git"))) {
     await excludeFromGit(cwd, SETTINGS_REL);
-    await excludeFromGit(cwd, `${PLANS_DIR}/`);
+    await excludePlans(cwd);
   }
 }

@@ -1014,10 +1014,11 @@
     flex-shrink: 0;
   }
   /* the plan this worktree runs on, at the top of the box in the shape of the branch row on the
-   commit box: an icon and the path in mono. The path is the press that reads it, an inline word
-   in the row's own face, so the row carries the face and the colour and no verb sits beside it.
-   It stays through approval, since it is while the work runs from the plan that the card and its
-   row have scrolled away. */
+   commit box: an icon and the plan's own title, in the prose face the offer row under it keeps,
+   since the file is named by the agent and its heading is what a person knows the plan by. The
+   title is the press that reads it, an inline word in the row's own face, so the row carries the
+   face and the colour and no verb sits beside it. It stays through approval, since it is while the
+   work runs from the plan that the card and its row have scrolled away. */
   .composer-plan {
     display: flex;
     align-items: center;
@@ -1025,7 +1026,6 @@
     min-width: 0;
     margin-bottom: 6px;
     color: var(--text1);
-    font: var(--type-mono-sm);
     & .composer-plan-path {
       min-width: 0;
       overflow: hidden;

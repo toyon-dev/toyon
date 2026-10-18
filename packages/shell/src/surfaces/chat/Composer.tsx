@@ -35,7 +35,7 @@ import { pathItems } from "../../state/actions/message.ts";
 import { terminalItems } from "../../state/actions/proc.ts";
 import { archiveWorktrees, shipOp } from "../../state/actions/worktree.ts";
 import { takeBackQueued, toInput } from "../../state/attach.ts";
-import { useDispatch, useMachine, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
+import { useDispatch, useFileSync, useMachine, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
 import { openSource } from "../../state/openSource.ts";
 import { fillFrame, type HeldFrame } from "../../state/outbox.ts";
 import { isUploading } from "../../state/pending.ts";
@@ -94,6 +94,7 @@ import { dismissOffer, offerOf, useDismissedOffers } from "./offer.ts";
 import { browseCommands, isMode, mergeCommands, ownCommandOf, ownCommands } from "./ownCommands.ts";
 import { PermissionCard } from "./PermissionCard.tsx";
 import { PickChip } from "./PickChip.tsx";
+import { planName, planTitle } from "./planTitle.ts";
 import { QuestionCard } from "./QuestionCard.tsx";
 import { type Step, stepWalk, type WalkKey } from "./recall.ts";
 import { shellCommandOf, shellContext } from "./shellMode.ts";
@@ -172,6 +173,29 @@ function emptyMenu(
 
 /** what picking a row puts in the draft. A file is a reference, never its contents: the agent
  * reads it with its own tools, at the range it wants and with line numbers attached. */
+/** What the plan row calls the plan: the file's first heading, read from the disk the way a chip's
+ * look reads it, and read again on the signal the open pane follows (the worktree's git status,
+ * pushed after every edit of the agent's), so the title moves with the file the agent keeps
+ * editing. The file's name until the read lands, and when the plan opens with no heading. A title
+ * belongs to the file it was read from, so a new plan never wears the old one's. */
+function usePlanTitle(worktreeId: string | undefined, plan: string | undefined): string {
+  const files = useFileSync();
+  const git = useLocalField(worktreeId, "git");
+  const [named, setNamed] = useState<{ plan: string; title: string | null } | null>(null);
+  useOnChange([files, worktreeId, plan, git], () => {
+    if (!files || !worktreeId || !plan) return;
+    let live = true;
+    files.look(worktreeId, plan).then((text) => {
+      if (live) setNamed({ plan, title: text ? planTitle(text) : null });
+    });
+    return () => {
+      live = false;
+    };
+  });
+  const title = named && named.plan === plan ? named.title : null;
+  return title ?? (plan ? planName(plan) : "");
+}
+
 function insertionFor(r: Row): string {
   if (r.kind === "cmd") return `/${r.c.name} `; // verbatim: the adapter re-expands mcp: names
   if (r.kind === "folder") return `@${r.path}/ `;
@@ -1186,6 +1210,7 @@ export function Composer({
   // a queued message takes its numbers ahead of what is written here
   const queued = spawning ? [] : queue.flatMap((q) => q.attachments ?? []);
   const plan = active?.worktree.plan;
+  const planLabel = usePlanTitle(active?.worktree.id, plan);
   // the stop stands in for the field's esc, so it goes with the field when an ask card takes its
   // place: there esc parks the question, and a stop beside the ask's send read as the send's
   // opposite on one line
@@ -1232,12 +1257,12 @@ export function Composer({
           <Button
             variant="inline"
             className="composer-plan-path"
-            data-tip="Read the plan in the editor pane"
+            data-tip={plan}
             onClick={() =>
               openFile({ sock, dispatch }, { worktreeId: active.worktree.id, path: plan, view: "preview" })
             }
           >
-            {plan}
+            {planLabel}
           </Button>
         </div>
       )}

@@ -19,6 +19,7 @@ import { excludeFromGit } from "../git/exclude.ts";
 import { git } from "../git/exec.ts";
 import { canonical, within } from "./bounds.ts";
 import { claudeDenyRules } from "./commands.ts";
+import { PLANS_DIR } from "./planDoc.ts";
 import type { AgentSpec } from "./registry.ts";
 
 export interface Bounds {
@@ -90,8 +91,12 @@ export const SETTINGS_REL = join(".claude", "settings.local.json");
 export function claudeLocalSettings(b: Bounds): {
   sandbox: unknown;
   permissions: { defaultMode: string; deny: string[] };
+  plansDirectory: string;
 } {
   return {
+    // Claude's plan file in the worktree, where the pane reads it and the archive carries it, and
+    // not under its home, where the card's copy and the file it keeps editing come apart
+    plansDirectory: PLANS_DIR,
     sandbox: {
       enabled: true,
       failIfUnavailable: true,
@@ -130,10 +135,20 @@ export async function writeClaudeLocalSettings(cwd: string, b: Bounds): Promise<
   // the user's own deny list stays, ours is added to it; a rewrite never duplicates a rule
   const theirs = Array.isArray(perms.deny) ? (perms.deny as unknown[]).filter((r) => typeof r === "string") : [];
   const deny = uniq([...(theirs as string[]), ...ours.permissions.deny]);
-  const next = { ...existing, sandbox: ours.sandbox, permissions: { ...perms, ...ours.permissions, deny } };
+  const next = {
+    ...existing,
+    sandbox: ours.sandbox,
+    permissions: { ...perms, ...ours.permissions, deny },
+    plansDirectory: ours.plansDirectory,
+  };
   const tmp = `${file}.tmp`;
   writeFileSync(tmp, `${JSON.stringify(next, null, 2)}\n`);
   renameSync(tmp, file);
-  // the scratch directory an agent runs in with no worktree is no repository: nothing to exclude from
-  if (existsSync(join(cwd, ".git"))) await excludeFromGit(cwd, SETTINGS_REL);
+  // the scratch directory an agent runs in with no worktree is no repository: nothing to exclude
+  // from. The plans folder is excluded here, before the agent writes into it: its first plan file
+  // lands before any card, and would show in the changes until then
+  if (existsSync(join(cwd, ".git"))) {
+    await excludeFromGit(cwd, SETTINGS_REL);
+    await excludeFromGit(cwd, `${PLANS_DIR}/`);
+  }
 }

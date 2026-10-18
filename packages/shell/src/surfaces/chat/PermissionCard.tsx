@@ -29,8 +29,8 @@ export function PermissionCard({
   const active = useStore((s) => s.activeId);
   const [cursor, setCursor] = useState(0);
   const plan = ask.plan;
-  // a plan is a file toyon wrote to the worktree, read in the pane as the document it is; only an
-  // ask with no file behind it still carries its markdown
+  // a plan is a file in the worktree, the agent's own or one toyon wrote for it, read in the pane
+  // as the document it is; only an ask with no file behind it still carries its markdown
   const html = useMemo(() => (ask.detail && !plan ? renderMarkdown(ask.detail) : ""), [ask.detail, plan]);
   const readPlan = () => {
     // the caret stays on the ask, which is what the agent is blocked on

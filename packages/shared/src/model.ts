@@ -415,9 +415,10 @@ export interface WorktreeInfo {
   /** its agent showed a plan here, approved or not: a plan is worth keeping, so the row never
    * archives itself. Stamped when the card is shown, since a transcript cannot tell one apart. */
   planned?: boolean;
-  /** the latest plan its agent wrote, relative to the worktree: the composer keeps a way to it
-   * from the moment the card shows until the next plan replaces it, since the card and the row
-   * that reads it back scroll away while the work goes on. Unset for a plan no file could be
+  /** the latest plan its agent showed, relative to the worktree, and the file the agent goes on
+   * editing when it keeps one: the composer keeps a way to it from the moment the card shows until
+   * the next plan replaces it, since the card and the row that reads it back scroll away while the
+   * work goes on. Unset for a plan no file could be
    * written for. */
   plan?: string;
   /** main only: nothing tracked and nothing untracked, which is what a project made from the

@@ -1,11 +1,20 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import {
+  appendFileSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as acp from "@agentclientprotocol/sdk";
 import type { AgentCommand, AgentEvent, AgentLimits, AgentStatus, AuthStatus } from "@toyon/shared";
 import { AttachmentStore } from "../attachments.ts";
-import { PLANS_DIR, planEdited, writePlanDoc } from "../planDoc.ts";
+import { ownPlanPath, PLANS_DIR, planEdited, writePlanDoc } from "../planDoc.ts";
 import { SYSTEM_APPEND } from "../prompt.ts";
 import type { AgentSpec } from "../registry.ts";
 import type { Bounds } from "../sandbox.ts";
@@ -2315,6 +2324,71 @@ describe("AcpSession ask cards", () => {
     expect(readFileSync(join(wt, card.plan!), "utf8")).toBe("# the plan\n\nstep one\n");
     // the markdown rides along too: a shell whose worktree could not take the file still shows it
     expect(card.detail).toBe("# the plan\n\nstep one");
+    w.session.answer(card.id, { kind: "choice", choiceId: "cancel" });
+    await w.idle();
+    await w.session.close();
+  });
+
+  test("an agent that keeps its plan file in the worktree has the card name that file, and nothing is copied", async () => {
+    // Claude writes its plan file before the card and names it beside the plan in the request;
+    // the same file is what it goes on editing after a no
+    const own = join(wt, PLANS_DIR, "bagels-in-bonn-quiet-owl.md");
+    mkdirSync(join(wt, PLANS_DIR), { recursive: true });
+    writeFileSync(own, "# bagels\n\nboil them\n");
+    const before = readdirSync(join(wt, PLANS_DIR));
+    const fake = fakeAgent(async (p, client) => {
+      await client.request(acp.methods.client.session.requestPermission, {
+        sessionId: p.sessionId,
+        toolCall: {
+          toolCallId: "t1",
+          title: "Approve Plan",
+          kind: "switch_mode",
+          content: [{ type: "content", content: { type: "text", text: "# bagels\n\nboil them" } }],
+          rawInput: { plan: "# bagels\n\nboil them", planFilePath: own },
+        },
+        options: [
+          { optionId: "exit_plan_default", name: "Yes, manually approve edits", kind: "allow_once" },
+          { optionId: "cancel", name: "No, keep planning", kind: "reject_once" },
+        ],
+      });
+      return { stopReason: "end_turn" };
+    });
+    const w = world(fake, claudeSpec, 60_000, undefined, {
+      onPlan: async (md, file) => (file ? ownPlanPath(wt, file) : null) ?? writePlanDoc(wt, md),
+    });
+    w.session.send("plan it");
+    await waitFor(() => !!openAsk(w.events));
+    const card = w.events.at(-1) as Extract<AgentEvent, { type: "agent-permission" }>;
+    expect(card.plan).toBe(`${PLANS_DIR}/bagels-in-bonn-quiet-owl.md`);
+    expect(readdirSync(join(wt, PLANS_DIR))).toEqual(before);
+    w.session.answer(card.id, { kind: "choice", choiceId: "cancel" });
+    await w.idle();
+    await w.session.close();
+  });
+
+  test("a plan file the agent keeps outside the worktree gets a copy here, as a plan sent without one does", async () => {
+    const fake = fakeAgent(async (p, client) => {
+      await client.request(acp.methods.client.session.requestPermission, {
+        sessionId: p.sessionId,
+        toolCall: {
+          toolCallId: "t1",
+          title: "Approve Plan",
+          kind: "switch_mode",
+          content: [{ type: "content", content: { type: "text", text: "# elsewhere" } }],
+          rawInput: { plan: "# elsewhere", planFilePath: join(home, ".claude", "plans", "elsewhere-quiet-owl.md") },
+        },
+        options: [{ optionId: "cancel", name: "No, keep planning", kind: "reject_once" }],
+      });
+      return { stopReason: "end_turn" };
+    });
+    const w = world(fake, claudeSpec, 60_000, undefined, {
+      onPlan: async (md, file) => (file ? ownPlanPath(wt, file) : null) ?? writePlanDoc(wt, md),
+    });
+    w.session.send("plan it");
+    await waitFor(() => !!openAsk(w.events));
+    const card = w.events.at(-1) as Extract<AgentEvent, { type: "agent-permission" }>;
+    expect(card.plan).toMatch(/^\.toyon\/plans\/\d+\.md$/);
+    expect(readFileSync(join(wt, card.plan!), "utf8")).toBe("# elsewhere\n");
     w.session.answer(card.id, { kind: "choice", choiceId: "cancel" });
     await w.idle();
     await w.session.close();

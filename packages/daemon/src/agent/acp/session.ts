@@ -109,9 +109,11 @@ export interface AcpSessionDeps {
   mode?: () => PermissionMode;
   /** a plan approval decided the mode for the work that follows */
   setMode?: (mode: PermissionMode) => void;
-  /** A plan card is about to be shown, whatever becomes of it. Takes the plan's markdown and
-   * answers with the worktree-relative file it was written to, or null if it was not written. */
-  onPlan?: (markdown: string) => Promise<string | null>;
+  /** A plan card is about to be shown, whatever becomes of it. Takes the plan's markdown and the
+   * file the agent says it planned in, when it keeps one, and answers with the worktree-relative
+   * file the card should name: the agent's own, or the one the plan was written to, or null if
+   * there is none. */
+  onPlan?: (markdown: string, ownFile?: string) => Promise<string | null>;
   /** whether the plan file the card named says something other than what the agent proposed */
   planEdited?: (path: string, proposed: string) => Promise<boolean>;
   /** the value the worktree asks for in this category (its model, its effort level); undefined
@@ -1290,9 +1292,11 @@ export class AcpSession implements AgentAdapter {
     const plan = params.toolCall.kind === "switch_mode";
     const parts = permissionParts(params);
     const detail = parts.detail ?? "";
-    // the document is written before the card goes out, so the card names a file that is already
-    // there to open; a worktree that would not take it leaves the plan on the card
-    const planPath = plan ? ((await this.d.onPlan?.(detail)) ?? null) : null;
+    // the card names a file that is already there to open: the agent's own plan file (Claude
+    // reports it beside the plan, and goes on editing it after a no), else one written before the
+    // card goes out; a worktree that would not take it leaves the plan on the card
+    const ownFile = plan ? stringField(params.toolCall.rawInput, "planFilePath") : undefined;
+    const planPath = plan ? ((await this.d.onPlan?.(detail, ownFile)) ?? null) : null;
     // a plan's options are all one-time answers, led by the auto yes as Claude's own dialog leads.
     // An edit's or a command's include the agent's "always allow", which would write a rule into
     // its settings and take every later request of that shape away from this policy; the card

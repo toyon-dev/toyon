@@ -1,28 +1,50 @@
 // The plan as a file. An approval card lives in a transcript that is capped and an ACP session that
 // is reaped minutes after it goes idle, so a plan that exists only as a tool-call payload is not
-// something a person can come back to, edit, or hand to another worktree. Toyon writes it to the
-// worktree instead, where the editor pane reads it rendered like any other markdown and the agent
-// can read it back with its own tools.
+// something a person can come back to, edit, or hand to another worktree. The file lives in the
+// worktree, where the editor pane reads it rendered like any other markdown and the agent can read
+// it back with its own tools.
 //
-// One file per revision, never overwritten: a rejected plan comes back revised as a new card, and
-// the person may have edited the first in the pane, so each card names a file of its own and the
-// folder is what the archive carries beside the chat. An agent answering a question in plan mode
-// re-submits its plan unchanged, though, and that card names the file already there: a number
-// that ticks is a plan that moved, not a count of how many times the card was drawn.
+// Whose file it is depends on the agent. Claude keeps a plan file of its own through the whole of
+// plan mode: it writes it before the card, edits it between a rejected card and the next, and reads
+// it back when the work starts. Two files, one Toyon copied at the card and one the agent went on
+// editing, is a person reading a plan that is no longer the plan, so the agent's file is the plan
+// file where there is one. Toyon tells Claude to keep it under .toyon/plans (sandbox.ts, through
+// the `plansDirectory` setting), the card names it, and an edit made in the pane lands in the file
+// the agent works from. Only an agent that sends its plan as a payload and keeps no file (Codex,
+// OpenCode) has Toyon write one for it: one file per revision, never overwritten, since each card
+// is a new proposal and the person may have edited the last. An agent answering a question in
+// plan mode re-submits its plan unchanged, though, and that card names the file already there: a
+// number that ticks is a plan that moved, not a count of how many times the card was drawn.
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join, relative, sep } from "node:path";
 import { log } from "../core/log.ts";
 import { excludeFromGit } from "../git/exclude.ts";
+import { canonical, within } from "./bounds.ts";
 
 /** where a worktree keeps the plans it was shown, relative to its root */
 export const PLANS_DIR = join(".toyon", "plans");
 
-const PLAN_NAME = /^(\d+)\.md$/;
+/** a plan file's name: Toyon's numbered ones and the slugs Claude makes up, never a dot-led name or
+ * a path */
+const PLAN_NAME = /^[A-Za-z0-9][\w.-]*\.md$/;
 
 /** a plan's worktree-relative path, and nothing else: the archive reads a path a client sent */
 export function isPlanPath(rel: string): boolean {
   return rel.startsWith(`${PLANS_DIR}/`) && PLAN_NAME.test(rel.slice(PLANS_DIR.length + 1));
+}
+
+/**
+ * The agent's own plan file as the card should name it: worktree-relative, when the file the agent
+ * says it planned in sits in this worktree's plans folder. Null for a file elsewhere (an agent
+ * whose settings put its plans under its home), which the card then gets a copy of instead. Both
+ * sides are canonicalised, since the agent reports the path as the OS resolved it.
+ */
+export function ownPlanPath(cwd: string, file: string): string | null {
+  const dir = canonical(join(cwd, PLANS_DIR));
+  const abs = canonical(file);
+  if (!within(abs, dir) || relative(dir, abs).includes(sep)) return null;
+  return PLAN_NAME.test(basename(abs)) ? join(PLANS_DIR, basename(abs)) : null;
 }
 
 /** the highest number in the folder, 0 for none; a deleted plan's number is never given again */
@@ -30,7 +52,7 @@ function lastNumber(dir: string): number {
   if (!existsSync(dir)) return 0;
   let max = 0;
   for (const name of readdirSync(dir)) {
-    const n = Number(PLAN_NAME.exec(name)?.[1]);
+    const n = Number(/^(\d+)\.md$/.exec(name)?.[1]);
     if (n > max) max = n;
   }
   return max;

@@ -6,6 +6,7 @@ import { sh, tmpRepo } from "../../test/helpers/tmp-repo.ts";
 import { GIT } from "../git/exec.ts";
 import { canonical, within } from "./bounds.ts";
 import { claudeDenyRules } from "./commands.ts";
+import { PLANS_DIR } from "./planDoc.ts";
 import type { AgentSpec } from "./registry.ts";
 import {
   type Bounds,
@@ -94,6 +95,8 @@ describe("sandbox", () => {
     expect(first.sandbox.filesystem.allowWrite).toEqual(b.allowWrite);
     expect(first.sandbox.filesystem.denyRead).toEqual(b.denyRead);
     expect(first.permissions.defaultMode).toBe("default");
+    // Claude's plan file goes in the worktree, where the pane and the archive find it
+    expect(first.plansDirectory).toBe(PLANS_DIR);
     // the user's own keys survive a rewrite; ours are replaced
     writeFileSync(
       file,
@@ -109,6 +112,11 @@ describe("sandbox", () => {
     expect(sh(wt, GIT, "status", "--porcelain")).toBe("");
     const exclude = readFileSync(join(repo, ".git", "info", "exclude"), "utf8");
     expect(exclude.split("\n").filter((l) => l === SETTINGS_REL)).toHaveLength(1);
+    // the plans folder is excluded ahead of the agent's first plan file, which lands before any card
+    expect(exclude.split("\n").filter((l) => l === `${PLANS_DIR}/`)).toHaveLength(1);
+    mkdirSync(join(wt, PLANS_DIR), { recursive: true });
+    writeFileSync(join(wt, PLANS_DIR, "first-plan-quiet-owl.md"), "# plan\n");
+    expect(sh(wt, GIT, "status", "--porcelain")).toBe("");
   });
 
   test("the user's own deny rules survive and ours are never written twice", async () => {

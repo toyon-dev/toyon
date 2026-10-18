@@ -10,7 +10,7 @@ import type { AgentAdapter, LoginRun } from "../agent/adapter.ts";
 import { AttachmentStore } from "../agent/attachments.ts";
 import type { ToyonMcp } from "../agent/mcp.ts";
 import { commandFolders, readCommandOrigins } from "../agent/origins.ts";
-import { planEdited, writePlanDoc } from "../agent/planDoc.ts";
+import { ownPlanPath, planEdited, writePlanDoc } from "../agent/planDoc.ts";
 import { type PreviewStanding, previewContext } from "../agent/prompt.ts";
 import type { AgentReadiness } from "../agent/readiness.ts";
 import type { AgentRegistry } from "../agent/registry.ts";
@@ -238,14 +238,17 @@ function defaultAgent(
     setMode: (mode) => {
       if (d.state.setMode(wt.id, mode)) d.hub.emit("worktreesChanged");
     },
-    onPlan: async (markdown) => {
+    onPlan: async (markdown, ownFile) => {
       const w = d.state.worktree(wt.id);
       if (w && !w.planned) {
         w.planned = true;
         d.state.save();
       }
-      // an agent that sent no prose has nothing to write; its card is the whole plan
-      const path = markdown.trim() ? await writePlanDoc(wt.path, markdown) : null;
+      // the agent's own file when it kept one in the worktree; else a copy is written for an agent
+      // that sent its plan as a payload, and an agent that sent no prose has nothing to write,
+      // its card is the whole plan
+      const own = ownFile ? ownPlanPath(wt.path, ownFile) : null;
+      const path = own ?? (markdown.trim() ? await writePlanDoc(wt.path, markdown) : null);
       // the record names the file so the composer can point at it after the card is gone; the
       // record is read fresh, since the card's await may span a change to it
       const fresh = path ? d.state.worktree(wt.id) : undefined;

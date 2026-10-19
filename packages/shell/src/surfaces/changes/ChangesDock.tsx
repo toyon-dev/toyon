@@ -818,7 +818,11 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
                 )}
               </Fragment>
             ))}
-          {showHist && commits === undefined && <div className="empty">reading history…</div>}
+          {showHist && commits === undefined && (
+            <div className="empty">
+              <span className="live-text">reading history</span>
+            </div>
+          )}
           {showHist && commits?.length === 0 && files.length === 0 && <div className="empty">no commits yet</div>}
         </div>
       )}

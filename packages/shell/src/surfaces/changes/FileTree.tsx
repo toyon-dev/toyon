@@ -328,7 +328,9 @@ export function FileTree({
       })}
     >
       {files === undefined ? (
-        <div className="empty">listing files…</div>
+        <div className="empty">
+          <span className="live-text">listing files</span>
+        </div>
       ) : rows.length === 0 && !making ? (
         <div className="empty">no files</div>
       ) : (

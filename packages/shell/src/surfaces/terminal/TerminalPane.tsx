@@ -115,7 +115,13 @@ export function TerminalPane({
           />
         )}
         <ErrorBoundary pane>
-          <Suspense fallback={<div className="empty">loading terminal…</div>}>
+          <Suspense
+            fallback={
+              <div className="empty">
+                <span className="live-text">loading terminal</span>
+              </div>
+            }
+          >
             <XTerm
               key={`${stream}:${gen}`}
               worktreeId={worktreeId}

@@ -102,7 +102,9 @@ export function DesignPane({
           <Classes index={index} outline={live.outline} clear={live.clear} onOpen={live.open} />
         </div>
       ) : (
-        <div className="empty">reading the design system…</div>
+        <div className="empty">
+          <span className="live-text">reading the design system</span>
+        </div>
       )}
     </Pane>
   );

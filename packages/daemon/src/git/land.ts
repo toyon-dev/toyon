@@ -679,7 +679,7 @@ export async function openPr(o: OpenPr, w: LandWatch = UNWATCHED): Promise<ShipR
   } else return { ok: false, message: `gh pr create failed: ${created.err.slice(0, 300)}` };
 
   const number = url ? prNumberOf(url) : null;
-  if (!url || number === null) return { ok: true, message: `pushed ${o.branch}; PR opened but its URL was not read` };
+  if (!url || number === null) return { ok: true, message: `pushed ${o.branch}; PR created but its URL was not read` };
 
   let note = "";
   if (o.automerge) {

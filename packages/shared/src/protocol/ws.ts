@@ -672,7 +672,7 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   /** the files one commit touched, on expanding it in the history tab */
   z.object({ t: z.literal("git-commit"), worktreeId: id, sha }),
   /** the one press: commit if dirty (with `message`, else the suggested one), take main in, then
-   * the repo's route: merge here, merge and push, or push and open a PR. On a worktree whose PR
+   * the repo's route: merge here, merge and push, or push and create a PR. On a worktree whose PR
    * is open it pushes the work the PR lacks, or merges the PR once there is none. Stops at the
    * first step that fails. */
   z.object({ t: z.literal("land"), worktreeId: id, message: z.string().max(5_000).optional() }),

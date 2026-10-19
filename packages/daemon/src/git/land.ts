@@ -646,7 +646,7 @@ async function goneFromOrigin(worktreePath: string, branch: string): Promise<boo
   return !r.ok && r.exit === 2;
 }
 
-/** Push the branch and open a PR through gh, or hand back the compare URL where gh is not
+/** Push the branch and create a PR through gh, or hand back the compare URL where gh is not
  * around. A branch already on origin from an earlier push is force-pushed with lease, since it
  * was rebased since; a PR that already exists is found rather than made twice. */
 export async function openPr(o: OpenPr, w: LandWatch = UNWATCHED): Promise<ShipResult> {
@@ -661,7 +661,7 @@ export async function openPr(o: OpenPr, w: LandWatch = UNWATCHED): Promise<ShipR
   const push = await pushBranch(o.worktreePath, o.branch, w);
   if (!push.ok) return push;
 
-  w.step("opening the PR");
+  w.step("creating the PR");
   const titled = o.subject ? ["--title", o.subject, "--body", o.body ?? ""] : ["--fill"];
   const created = await gh(["pr", "create", "--head", o.branch, "--base", o.defaultBr, ...titled], o.worktreePath);
   let url: string | null = null;

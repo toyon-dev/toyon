@@ -242,7 +242,7 @@ export function worktreeItems(
   }
   if (canLand(w.worktree)) {
     // the repo's route, whatever the settings say it is: there is one way work lands here. The
-    // word is land, except for opening the PR, which is the one press that lands nothing yet.
+    // word is land, except for creating the PR, which is the one press that lands nothing yet.
     land.push({
       id: "land",
       label: landWord(landPolicy(repo?.config ?? {}), w.worktree),

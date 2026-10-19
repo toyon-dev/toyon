@@ -145,7 +145,7 @@ export function CommitBox({
   const repo = useStore((s) => s.repos.find((r) => r.id === active.repoId) ?? null);
   const policy = landPolicy(repo?.config ?? {});
   const landTip = describeLand(policy, repo?.defaultBranch);
-  // the button's word: land, or open PR for the one press that lands nothing yet
+  // the button's word: land, or create PR for the one press that lands nothing yet
   const routeWord = landWordOf(policy, owned ?? {});
   // what the counts here are against: main here, or origin's main where the route lands there
   const base = repo ? baseOf(repo) : "main";

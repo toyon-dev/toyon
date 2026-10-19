@@ -678,7 +678,7 @@ export function Composer({
   const archiveTip =
     "Archive this worktree when you are done here; the rail's archived section brings it back with its chat.";
   // the ship word and where it sends the work: onto main by the repo's route, or up to the open
-  // PR when the branch on origin is behind what is here. Opening the PR is the one press that
+  // PR when the branch on origin is behind what is here. Creating the PR is the one press that
   // lands nothing yet, so it says so instead of land.
   const shipWord = prMissing ? "update" : landWord(policy, active?.worktree ?? {});
   // what the branch is measured against and takes in: main here, or origin's main where the

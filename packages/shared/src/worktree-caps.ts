@@ -41,7 +41,7 @@ export function canRename(wt: Wt): boolean {
   return wt.kind === "worktree" && hasOwnBranch(wt);
 }
 
-/** merge into main, or push and open a PR. A worktree opened to review a PR is landed upstream,
+/** merge into main, or push and create a PR. A worktree opened to review a PR is landed upstream,
  * not here, and offering it would push a pr/<n> branch nobody asked for. */
 export function canLand(wt: Wt): boolean {
   return wt.kind === "worktree" && wt.from?.kind !== "pr";

@@ -28,7 +28,7 @@ Point at anything on the page to talk about it or open the line that draws it, a
 
 One Toyon holds every project you open, and the list of chats shows which one needs you.
 
-When your check passes, land merges into main on your machine by default, or pushes, or opens a pull request.
+When your check passes, land merges into main on your machine by default, or pushes, or creates a pull request.
 
 Built for web apps. A project without a page still works; the chat takes the middle instead of the preview.
 

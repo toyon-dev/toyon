@@ -45,20 +45,20 @@ describe("movedPastLand", () => {
 });
 
 describe("landWord", () => {
-  test("land on every route; open pr only for the press that opens one", () => {
+  test("land on every route; create pr only for the press that creates one", () => {
     const open = { ...merged, state: "open" as const };
     expect(landWord({ land: "merge" }, {})).toBe("land");
     expect(landWord({ land: "push" }, {})).toBe("land");
-    expect(landWord({ land: "pr" }, {})).toBe("open pr");
-    expect(landWord({ land: "pr" }, { pr: { ...merged, state: "closed" } })).toBe("open pr");
+    expect(landWord({ land: "pr" }, {})).toBe("create pr");
+    expect(landWord({ land: "pr" }, { pr: { ...merged, state: "closed" } })).toBe("create pr");
     expect(landWord({ land: "pr" }, { pr: open })).toBe("land");
     expect(landWord({ land: "pr" }, { pr: merged })).toBe("land");
   });
 
-  test("a merged PR left behind by new work is history: the next press opens a new one", () => {
+  test("a merged PR left behind by new work is history: the next press creates a new one", () => {
     const taken = { pr: merged, lands: [{ ...land, pr: 7 }] };
     expect(landWord({ land: "pr" }, { ...taken, landed: true })).toBe("land");
-    expect(landWord({ land: "pr" }, taken)).toBe("open pr");
+    expect(landWord({ land: "pr" }, taken)).toBe("create pr");
     expect(landWord({ land: "merge" }, taken)).toBe("land");
   });
 });

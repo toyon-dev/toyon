@@ -124,12 +124,12 @@ export function prStanding(wt: Standing): PrState | undefined {
 }
 
 /** The word on the press that puts work on main: "land", on every route, so one word means one
- * thing. The one press that does not is opening the PR on the PR route, before a PR exists (or
+ * thing. The one press that does not is creating the PR on the PR route, before a PR exists (or
  * after the last one closed or was landed and left behind), so that press says so; once the PR
- * is open, landing it is landing. */
-export function landWord(policy: Pick<LandPolicy, "land">, wt: Standing): "land" | "open pr" {
+ * exists, landing it is landing. "create", not "open": open reads as opening the PR's page. */
+export function landWord(policy: Pick<LandPolicy, "land">, wt: Standing): "land" | "create pr" {
   const pr = prStanding(wt);
-  return policy.land === "pr" && (!pr || pr.state === "closed") ? "open pr" : "land";
+  return policy.land === "pr" && (!pr || pr.state === "closed") ? "create pr" : "land";
 }
 
 /** what the one land verb does here, for its tooltip and its menu row */
@@ -145,7 +145,7 @@ export function describeLand(policy: LandPolicy, defaultBranch = "main"): string
       return `Commit, ${how} ${defaultBranch} on origin and push it`;
     case "pr":
       return policy.automerge
-        ? "Commit, push the branch and open a PR that GitHub merges when its rules allow"
-        : "Commit, push the branch and open a PR";
+        ? "Commit, push the branch and create a PR that GitHub merges when its rules allow"
+        : "Commit, push the branch and create a PR";
   }
 }

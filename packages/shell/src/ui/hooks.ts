@@ -504,6 +504,35 @@ export function passPinch(e: { ctrlKey: boolean; stopPropagation: () => void }):
   if (e.ctrlKey) e.stopPropagation();
 }
 
+/** Whether a wheel event a widget let through is one the box around it keeps. A widget that
+ * scrolls itself in script leaves a wheel event it has no room for to the window, so a pinch-zoomed
+ * window pans. At rest the window has nowhere to scroll, and a sideways event reaching it is the
+ * browser's swipe back: on a Mac, Chrome arms the swipe when the first wheel event of a gesture is
+ * neither scrolled nor cancelled, whichever axis that event leans to, and a gesture that starts at
+ * the end of a long line is a read of it and not a wish to leave the page. So at rest the box keeps
+ * every event the widget left, as the widget itself would by default. A pinch is a wheel with ctrl
+ * held and is nobody's to cancel. */
+export function keepsWheel(e: { ctrlKey: boolean; defaultPrevented: boolean }, scale: number): boolean {
+  if (e.defaultPrevented || e.ctrlKey) return false;
+  // a hair over 1 is rounding at the end of a pinch back out, not a zoom
+  return scale < 1.01;
+}
+
+/** Cancels, on the element, the wheel events `keepsWheel` says to keep. A listener of its own rather
+ * than a React handler: React registers wheel as passive, and a passive listener cannot cancel. In
+ * the bubble phase, so the widget inside has already taken what it could. */
+export function useKeepWheel(ref: RefObject<HTMLElement | null>): void {
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (keepsWheel(e, window.visualViewport?.scale ?? 1)) e.preventDefault();
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [ref]);
+}
+
 /** Marks an element `data-zoomed` while the window is pinch-zoomed, for a stylesheet that locks
  * the pinch at rest: a lock that held while zoomed would leave no way back out. */
 export function useZoomMark(ref: RefObject<HTMLElement | null>): void {

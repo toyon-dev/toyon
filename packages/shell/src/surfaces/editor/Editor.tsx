@@ -17,7 +17,7 @@ import { selectedLines } from "../../app/copiedSource.ts";
 import type { EditorSync, SyncBuffer } from "../../state/fileSync.ts";
 import type { EditorBlame, EditorDisk, EditorView, FileRef } from "../../state/store.ts";
 import { Float } from "../../ui/Float.tsx";
-import { passPinch, useOnChange } from "../../ui/hooks.ts";
+import { passPinch, useKeepWheel, useOnChange } from "../../ui/hooks.ts";
 import type { Placement, Rect } from "../../ui/place.ts";
 import { blameCommit, blameLine } from "./blameLine.ts";
 import { diffFit, FOLD_MIN, type Hunk, type Pane } from "./diffFit.ts";
@@ -99,6 +99,10 @@ monaco.editor.addKeybindingRules(
   ).map(([command, keybinding]) => ({ keybinding, command: `-${command}` })),
 );
 
+// one object for every `scrollbar` the options name: Monaco takes the option whole at create, so
+// a second `scrollbar` spread over the first would drop what the first said
+const SCROLLBAR = { alwaysConsumeMouseWheel: false };
+
 function editorOptions(readOnly: boolean, numbers: boolean, wrap: boolean) {
   return {
     readOnly,
@@ -111,8 +115,10 @@ function editorOptions(readOnly: boolean, numbers: boolean, wrap: boolean) {
     scrollBeyondLastLine: false,
     minimap: { enabled: false },
     // a scroll the editor has no room left for goes on to the window, which pans when it is
-    // pinch-zoomed; by default Monaco cancels every wheel event over it
-    scrollbar: { alwaysConsumeMouseWheel: false },
+    // pinch-zoomed; by default Monaco cancels every wheel event over it. At rest the box around
+    // the editor keeps what Monaco left (useKeepWheel): a sideways one reaching the window would
+    // be the browser's swipe back
+    scrollbar: SCROLLBAR,
     ...shellType(),
     lineHeight: 1.5,
     // monaco stacks a glyph margin (a full line-height wide), a folding column and the diff
@@ -134,7 +140,7 @@ function editorOptions(readOnly: boolean, numbers: boolean, wrap: boolean) {
  * slider for the same scroll, 14px further into the code; the bar takes no width then. */
 const overviewStrip = (on: boolean) => ({
   renderOverviewRuler: on,
-  scrollbar: { verticalScrollbarSize: on ? 0 : 14 },
+  scrollbar: { ...SCROLLBAR, verticalScrollbarSize: on ? 0 : 14 },
 });
 
 /** Monaco colours the lines an editor shows on a 50ms timer after it shows them, so a model made
@@ -299,6 +305,7 @@ export default function Editor({
   onNew?: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  useKeepWheel(ref);
   // setTheme is global: every editor follows, including ones created before the change
   useEffect(() => {
     monaco.editor.defineTheme(THEME, toMonacoTheme(theme));

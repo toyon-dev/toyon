@@ -31,7 +31,8 @@
      and forward, and a swipe over the preview walks that page's history the way it would in a
      tab of its own. The gesture is the viewport's, so it answers a swipe over the chat as well,
      the way any page holding a frame does, and what runs off the end of a code block or the tabs
-     strip reaches it the same way. (scroll.test.ts) */
+     strip reaches it the same way. The editor alone keeps a scroll that runs off the end of its
+     lines (useKeepWheel in ui/hooks.ts). (scroll.test.ts) */
   html:not([data-framed]) {
     overscroll-behavior-y: none;
   }

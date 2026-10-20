@@ -12,11 +12,12 @@ export const ended = (text: string) => (/[.!?…]$/.test(text) ? text : `${text}
  * carried): past it the line is cut at a word */
 export const LINE_MAX = 160;
 
-/** one line of someone else's text: whitespace folded, cut at a word past the measure */
-export function clipLine(text: string): string {
+/** one line of someone else's text: whitespace folded, cut at a word past the measure; a place
+ * that shows two lines passes twice the measure */
+export function clipLine(text: string, max = LINE_MAX): string {
   const line = text.replace(/\s+/g, " ").trim();
-  if (line.length <= LINE_MAX) return line;
-  const cut = line.slice(0, LINE_MAX);
+  if (line.length <= max) return line;
+  const cut = line.slice(0, max);
   return `${cut.slice(0, Math.max(cut.lastIndexOf(" "), 1)).trimEnd()}…`;
 }
 

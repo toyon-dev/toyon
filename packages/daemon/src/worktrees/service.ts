@@ -377,7 +377,10 @@ export class WorktreeService {
     this.tree = new TreeState({
       hub: d.hub,
       readable: (id) => this.readable(id),
-      going: (id) => this.going.has(id) || this.arriving.has(id),
+      // on its way out, or its directory on its way in: a restore's checkout, or the pool's for a
+      // reserved row and the task a claim made of it (the closure is read per call, so the pool
+      // being built after the owner does not matter)
+      going: (id) => this.going.has(id) || this.arriving.has(id) || this.spare.checkingOut(id),
       interested: (id) => d.interested?.(id) ?? false,
       shown: (id) => d.shown?.(id) ?? false,
       live: (id) => d.runtime.busy(id),

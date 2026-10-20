@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { existsSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { fakeFactories } from "../../test/helpers/fakes.ts";
@@ -6,6 +6,7 @@ import { sh, tmpRepo } from "../../test/helpers/tmp-repo.ts";
 import { counted, noSelf, registered, settle, until, useWorld, w } from "../../test/helpers/world.ts";
 import { UserError } from "../core/errors.ts";
 import { Hub } from "../core/hub.ts";
+import { log } from "../core/log.ts";
 import { StateStore } from "../core/state.ts";
 import { git } from "../git/exec.ts";
 import { withRepoLock } from "../git/lock.ts";
@@ -274,6 +275,33 @@ describe("spare pool", () => {
     expect((await git(wt.path, "branch", "--show-current")).out).toBe(wt.branch);
     expect(wt.phase).toBeUndefined();
     expect(agent.held).toBe(false);
+  });
+
+  test("a row whose checkout is still to come is not read for its tree until it is there", async () => {
+    const repoId = await registered();
+    await w.worktrees.spare.ensure(repoId);
+    const warned = spyOn(log, "warn");
+    const lock = lockRepo(repoId);
+    // the first send reserves the next row, whose checkout waits on the lock with everything else
+    const first = w.worktrees.create(repoId, "first");
+    await until(() => w.state.worktrees.some((x) => x.kind === "spare" && x.phase === "reserved"));
+    const next = w.state.worktrees.find((x) => x.kind === "spare")!;
+    expect(existsSync(next.path)).toBe(false);
+    // a frame names the reserved row with the rest: nothing spawns git in a path not there yet
+    w.worktrees.snapshot();
+    await w.worktrees.tree.settled();
+    expect(w.worktrees.tree.get(next.id)).toBeUndefined();
+    expect(warned.mock.calls.filter(([id]) => id === next.id)).toEqual([]);
+    lock.free();
+    await first;
+    await until(() => existsSync(join(next.path, ".git")));
+    await until(() => !w.worktrees.spare.checkingOut(next.id));
+    // with the checkout landed the row reads like any other
+    w.worktrees.snapshot();
+    await w.worktrees.tree.settled();
+    expect(w.worktrees.tree.get(next.id)).toBeDefined();
+    expect(warned.mock.calls.filter(([id]) => id === next.id)).toEqual([]);
+    warned.mockRestore();
   });
 
   test("a chat sent into a row being claimed goes behind its first message", async () => {

@@ -64,8 +64,17 @@ export interface SparePoolDeps {
 export class SparePool {
   private inflight = new Map<string, Inflight>();
   private refreshing = new Map<string, Promise<void>>();
+  /** rows whose directory is still being written: a reserved spare's, or the task a claim made of
+   * one while its checkout waited. The record is listed from the moment it is reserved, so anything
+   * that reads a row's tree off its directory has to ask before spawning git in a path not there. */
+  private writing = new Set<string>();
 
   constructor(private d: SparePoolDeps) {}
+
+  /** the row's checkout has not landed yet: nothing in its directory is there to read */
+  checkingOut(id: string): boolean {
+    return this.writing.has(id);
+  }
 
   /** the repo's spare record, whatever its phase */
   private spareOf(repoId: string): WorktreeInfo | undefined {
@@ -173,12 +182,14 @@ export class SparePool {
         timeoutMs: timeoutFor(repo.config, "setup"),
         stage: "checking out",
       });
+      this.writing.add(wt.id);
       try {
         await withRepoLock(repo.path, () =>
           gitOrThrow(repo.path, "worktree", "add", "--detach", "--no-checkout", wt.path, baseOf(repo)),
         );
         await withLock(`checkout:${repo.path}`, () => gitOrThrow(wt.path, "reset", "--hard"));
       } finally {
+        this.writing.delete(wt.id);
         run.finish(0);
       }
     })();

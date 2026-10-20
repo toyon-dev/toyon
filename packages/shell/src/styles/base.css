@@ -774,12 +774,21 @@
     & img {
       max-width: 100%;
     }
+    /* A cell keeps its words whole (td code below), so a table of paths can be wider than the
+       column, and a table is the one block here that cannot wrap its way down to fit. It scrolls
+       in a box of its own then (markdownTable.ts wraps every table), the way a tool's output does,
+       rather than setting the transcript's scroll width: nothing in the log is a reason to scroll
+       the whole log sideways. The box carries the table's margin so it reads as the block. */
+    & .md-table {
+      overflow-x: auto;
+      margin: 0 0 8px;
+    }
     /* one rule around the table and one between cells: separate borders so the outer corners can
        round, with each cell drawing only its right and bottom edge so no two rules stack */
     & table {
       border-collapse: separate;
       border-spacing: 0;
-      margin: 0 0 8px;
+      margin: 0;
       border-top: 1px solid var(--border0);
       border-left: 1px solid var(--border0);
       border-radius: var(--radius-lg);
@@ -830,7 +839,7 @@
     & ol,
     & pre,
     & blockquote,
-    & table {
+    & .md-table {
       margin-bottom: 12px;
     }
     & p:last-child {

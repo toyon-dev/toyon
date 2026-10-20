@@ -20,6 +20,14 @@ describe("a markdown table", () => {
     expect(html).toContain("<td>68</td>");
   });
 
+  test("sits in a scroller of its own, with or without a head", () => {
+    for (const src of ["| what | count |\n|---|---|\n| landed | 68 |\n", "| | |\n|---|---|\n| landed | 68 |\n"]) {
+      const html = md.parse(src, { async: false });
+      expect(html).toMatch(/^<div class="md-table"><table>/);
+      expect(html).toMatch(/<\/table>\n<\/div>\n$/);
+    }
+  });
+
   test("with one named header cell keeps the head", () => {
     const html = md.parse("| | count |\n|---|---|\n| landed | 68 |\n", { async: false });
     expect(html).toContain("<th>count</th>");

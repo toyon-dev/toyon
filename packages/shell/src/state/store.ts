@@ -1965,24 +1965,26 @@ function reduce(s: State, action: Action): State {
       if (!s.activeId || !ids.includes(s.activeId)) return hidden;
       // the selection leaves with the row. A row waiting on an answer comes first, since its agent
       // is stuck until someone replies. Then, archiving being tidying up, the next row that is done
-      // too: landed, its agent at rest, the nearest below where the archived row sat and then round
-      // from the top. Then the rest of what the rail owes the person: the nearest row unseen or
-      // working, looked for the same way. With none, the closest row whose app is up, the one below
-      // on a tie: a task that is open and can be carried on. With none of those either, the lead,
-      // whose box starts the next worktree.
+      // too: landed, its agent at rest. Then the rest of what the rail owes the person: the nearest
+      // row unseen or working. With none, the closest row whose app is up: a task that is open and
+      // can be carried on. With none of those either, the lead, whose box starts the next worktree.
+      // Within a tier, the nearest above where the archived row sat, then round from the bottom,
+      // and the one above on a tie: the rail is ordered by last send, so above is the work touched
+      // more recently, and below is what has been left to sit, which is the last place to land
+      // after tidying up.
       const from = s.visible.filter((w) => w.id === s.activeId || !hidden.archiving.includes(w.id));
       const at = from.findIndex((w) => w.id === s.activeId);
       const isDone = (w: OwnedWorktree) =>
         w.id !== s.activeId && canArchive(w.worktree) && !!w.worktree.landed && w.agent === "idle";
-      const below = (hit: (w: OwnedWorktree) => boolean) =>
-        (from.find((w, i) => i > at && hit(w)) ?? from.find(hit))?.id;
-      const waiting = below((w) => w.id !== s.activeId && w.agent === "waiting");
-      const done = below(isDone);
-      const owed = owedJump(from, s.activeId, 1)?.activate;
+      const above = (hit: (w: OwnedWorktree) => boolean) =>
+        (from.findLast((w, i) => i < at && hit(w)) ?? from.findLast(hit))?.id;
+      const waiting = above((w) => w.id !== s.activeId && w.agent === "waiting");
+      const done = above(isDone);
+      const owed = owedJump(from, s.activeId, -1)?.activate;
       const up = from
         .map((w, i) => ({ id: w.id, i, far: Math.abs(i - at), up: !isLead(w.worktree) && dotClass(w) === "running" }))
         .filter((w) => w.up && w.far > 0)
-        .sort((a, b) => a.far - b.far || b.i - a.i)[0]?.id;
+        .sort((a, b) => a.far - b.far || a.i - b.i)[0]?.id;
       const next = activate(hidden, waiting ?? done ?? owed ?? up ?? landingIn(hidden, s.activeRepoId));
       // the phone shows one worktree at a time, so a jump there is a screen the person never asked
       // for: the row goes and the list is what is left, where they pick the next one themselves

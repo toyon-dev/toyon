@@ -3046,9 +3046,11 @@ describe("archiving a worktree", () => {
     // a row waiting on an answer beats a nearer one that only finished or is still working
     expect(after({ a: { agent: "waiting" }, c: { unseen: true }, d: { agent: "working" } })).toBe("a");
     expect(after({ a: { agent: "working" }, d: { unseen: true } })).toBe("d");
-    // within a tier, the nearest below where the row sat, then round from the top
-    expect(after({ a: { agent: "working" }, c: { agent: "working" }, d: { agent: "working" } })).toBe("c");
-    expect(after({ a: { agent: "working" } })).toBe("a");
+    // within a tier, the nearest above where the row sat (the rail is newest first, so the work
+    // touched more recently), then round from the bottom
+    expect(after({ a: { agent: "working" }, c: { agent: "working" }, d: { agent: "working" } })).toBe("a");
+    expect(after({ c: { agent: "working" }, d: { agent: "working" } })).toBe("d");
+    expect(after({ d: { agent: "working" } })).toBe("d");
     // a row going in the same press is not somewhere to land
     expect(after({ c: { agent: "waiting" }, d: { agent: "working" } }, ["b", "c"])).toBe("d");
   });
@@ -3064,8 +3066,9 @@ describe("archiving a worktree", () => {
     // a row waiting on an answer still wins; one unseen or working does not
     expect(after({ ...wt("a"), agent: "waiting" }, wt("b"), wt("c"), landed("d"))).toBe("a");
     expect(after({ ...wt("a"), unseen: true }, wt("b"), { ...wt("c"), agent: "working" }, landed("d"))).toBe("d");
-    // the nearest below where the row sat, then round from the top
-    expect(after(landed("a"), wt("b"), landed("c"))).toBe("c");
+    // the nearest above where the row sat, then round from the bottom
+    expect(after(landed("a"), wt("b"), landed("c"))).toBe("a");
+    expect(after(wt("a"), wt("b"), landed("c"), landed("d"))).toBe("d");
     expect(after(landed("a"), wt("b"), wt("c"))).toBe("a");
     // a landed row whose agent is at work again is not done
     expect(after(wt("a"), wt("b"), landed("c", { agent: "working" }), landed("d"))).toBe("d");
@@ -3083,8 +3086,8 @@ describe("archiving a worktree", () => {
       ]).activeId;
     expect(after({ a: up, d: up })).toBe("d");
     expect(after({ b: up, e: up })).toBe("b");
-    // the one below on a tie
-    expect(after({ b: up, d: up })).toBe("d");
+    // the one above on a tie
+    expect(after({ b: up, d: up })).toBe("b");
     // main's app being up is not a task to carry on: the lead is where the next one starts
     expect(after({ main: up })).toBe("main");
     // anything owed still comes first, however far

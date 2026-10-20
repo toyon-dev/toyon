@@ -475,6 +475,13 @@
     & summary::-webkit-details-marker {
       display: none;
     }
+    /* the keyboard's ring sits inside the line, as it does on a base row: the summary runs edge
+       to edge of the log, so a ring drawn outside it is clipped by the log's scroll box on both
+       sides and painted over by the open body below, leaving one accent line across the top of
+       the row that read as a state of the row's own. */
+    & > summary:focus-visible {
+      outline-offset: -2px;
+    }
     /* a fill under the pointer, and the picked one held while the row is open, since the header is
    the control you are still holding. The seat lifts the ladder a rung and every child rides it:
    the icon, the name and the shine all name the skip tier, and on element1 the colour itself

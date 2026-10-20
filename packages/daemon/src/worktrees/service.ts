@@ -77,7 +77,7 @@ import {
   landRef,
 } from "../git/archive.ts";
 import { excludeBlock } from "../git/exclude.ts";
-import { GIT, git, gitOrThrow, isGitRepo, NO_PROMPT, run } from "../git/exec.ts";
+import { GIT, git, gitOrThrow, isGitRepo, NO_PROMPT, RUN_CEILING_MS, run } from "../git/exec.ts";
 import {
   commitWorktree,
   fetchBase,
@@ -2082,9 +2082,19 @@ export class WorktreeService {
     const release = this.d.runtime.agentFor(id)?.hold();
     this.ops.set(id, { op });
     this.d.hub.emit("worktreesChanged");
+    // an op out longer than a git call may run is waiting on the repo lock, the fetch lock or a
+    // turn, and the row shows only the shining word: the log names the wait every ceiling
+    const started = Date.now();
+    const watchdog = setInterval(() => {
+      const step = this.ops.get(id)?.step;
+      const at = step ? ` at "${step}"` : "";
+      log.warn(id, `${shipNoun(op)} still running after ${describeDuration(Date.now() - started)}${at}`);
+    }, RUN_CEILING_MS);
+    watchdog.unref?.();
     try {
       return await run();
     } finally {
+      clearInterval(watchdog);
       this.ops.delete(id);
       release?.();
       this.d.hub.emit("worktreesChanged");
@@ -2401,12 +2411,22 @@ export class WorktreeService {
    * row the way a press is, and it is left to the press when one is out, since that press lands
    * the merged PR itself. */
   async prMerged(worktreeId: string): Promise<ShipResult> {
-    const out = this.ops.get(worktreeId);
-    if (out) return { ok: false, message: `${shipNoun(out.op)} is already running here` };
-    // landed once: a second poll, or one that raced the first, records nothing more
     const wt = this.d.state.worktree(worktreeId);
-    if (wt && prTaken(wt)) return { ok: true, message: `PR #${wt.pr?.number} merged; landed already` };
+    const pr = wt?.pr ? `PR #${wt.pr.number}` : "the PR";
+    const out = this.ops.get(worktreeId);
+    // said each time the poll comes round: nobody pressed this, so the log is the one place a
+    // landing that waits on an op that never ends can be seen
+    if (out) {
+      const message = `${shipNoun(out.op)} is already running here`;
+      log.info(worktreeId, `${pr} merged on GitHub; ${message}, landing waits`);
+      return { ok: false, message };
+    }
+    // landed once: a second poll, or one that raced the first, records nothing more
+    if (wt && prTaken(wt)) return { ok: true, message: `${pr} merged; landed already` };
+    log.info(worktreeId, `${pr} merged on GitHub; landing it`);
     const { mark, ...result } = await this.ship(worktreeId, "land", () => this.prMergedOp(worktreeId));
+    if (result.ok) log.info(worktreeId, `landed: ${result.message}`);
+    else log.warn(worktreeId, `landing failed: ${result.message}`);
     if (result.ok && wt) this.noteLanded(wt, result.message, this.siblingIds(wt), mark);
     return result;
   }

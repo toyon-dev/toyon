@@ -13,7 +13,7 @@ import {
   type RepoInfo,
   type TrunkStatus,
 } from "@toyon/shared";
-import { GIT, git, NO_PROMPT, run, runWatched, type Watched } from "./exec.ts";
+import { GIT, git, NO_PROMPT, RUN_CEILING_MS, run, runWatched, type Watched } from "./exec.ts";
 import { gh, ghMethod, prNumberOf } from "./gh.ts";
 import { aheadBehind, behindUpstream, statusFiles } from "./status.ts";
 
@@ -34,11 +34,11 @@ export interface ShipResult {
   pr?: Omit<PrState, "at">;
 }
 
-/** no step of a landing runs longer than this: a hook that waits on something nobody can answer
- * would otherwise hold the press, and the repo lock with it, forever. A commit runs under the
- * settings' own ceiling instead (`timeouts.commit`), since its pre-commit hook is where a suite
- * that takes twenty minutes legitimately runs. */
-export const STEP_TIMEOUT_MS = 10 * 60_000;
+/** no step of a landing runs longer than this, the ceiling every plain git call has: a hook that
+ * waits on something nobody can answer would otherwise hold the press, and the repo lock with it,
+ * forever. A commit runs under the settings' own ceiling instead (`timeouts.commit`), since its
+ * pre-commit hook is where a suite that takes twenty minutes legitimately runs. */
+export const STEP_TIMEOUT_MS = RUN_CEILING_MS;
 
 /** how one step is run beyond the command: its ceiling, and what the wait on it may report */
 export interface StepOpts {

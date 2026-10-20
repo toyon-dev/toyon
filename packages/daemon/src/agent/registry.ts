@@ -208,10 +208,14 @@ const UNTRUSTED_CA =
 const bunInstall: Installer = async (dir) => {
   // plain output: a daemon launched from a shell that forces colour would wrap bun's `error:`
   // in escapes, and the line is read, not shown
-  const r = await run(process.execPath, ["install", "--no-progress", "--no-summary"], dir, {
-    NO_COLOR: "1",
-    FORCE_COLOR: "0",
-  });
+  // its own ceiling: an adapter pulls a whole SDK, which on a slow link outlasts a git call's
+  const r = await run(
+    process.execPath,
+    ["install", "--no-progress", "--no-summary"],
+    dir,
+    { NO_COLOR: "1", FORCE_COLOR: "0" },
+    { timeoutMs: 30 * 60_000 },
+  );
   // stderr is read only when bun failed: a clean exit may still have warned, and that is not
   // why an adapter with no bin cannot run
   return { ok: r.ok, err: r.ok ? "" : installErrorLine(r.err) };

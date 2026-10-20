@@ -122,17 +122,21 @@ export function CommitBox({
   // a commit needs a message; a land can take the suggested one. A failed check holds land back,
   // the way it holds the composer's word back, until the check passes again.
   const checkFailed = owned?.landing?.check === "fail";
+  // the daemon's rule decides landed; the live dirty count only withholds it while an edit is in
+  // the box's own frame ahead of the daemon's next read, as the composer reads it
+  const hasLanded = !!owned?.landed && !dirty;
   // the PR the row still shows: a merged one left behind by new work is history, and the foot
-  // reads as a fresh row with it gone. Landed is read with the live dirty count, as the composer
-  // reads it, so an edit in the box's own frame drops the PR at once and not on the daemon's
-  // next read.
-  const pr = owned ? prStanding({ ...owned, landed: !!owned.landed && !dirty }) : undefined;
+  // reads as a fresh row with it gone
+  const pr = owned ? prStanding({ ...owned, landed: hasLanded }) : undefined;
   const prOpen = pr?.state === "open";
   // work since the PR opened: the same press sends it up to the PR, and merge waits until the
   // branch on origin has all of it, since merging now would leave it behind
   const prMissing = prOpen && (dirty || unpushed > 0);
   const held = checking || stale || !!gap;
-  const canLand = !!owned && landable(owned) && (dirty || ahead > 0) && !checkFailed && !prOpen && !held;
+  // a landed row has nothing to land, whatever it counts as ahead: after a squash on GitHub the
+  // branch keeps its own commits until it restarts from the base, and the press would offer to
+  // land them again beside the landed badge
+  const canLand = !!owned && landable(owned) && !hasLanded && (dirty || ahead > 0) && !checkFailed && !prOpen && !held;
   const canUpdate = !!owned && prMissing && !checkFailed && !held;
   // the check in the land word's place, while the agent is not mid-turn (the daemon refuses it then)
   const canCheck =

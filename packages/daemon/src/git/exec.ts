@@ -5,7 +5,8 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Readable } from "node:stream";
-import { fireAndForget } from "../core/log.ts";
+import { describeDuration } from "@toyon/shared";
+import { fireAndForget, log } from "../core/log.ts";
 import { lastGit } from "../core/metrics.ts";
 import { killGroup } from "../runtime/kill.ts";
 
@@ -90,16 +91,28 @@ export interface GitResult {
   exit: number | string | null;
 }
 
+/** No plain command runs longer than this. A git call that never returns (a pipe a
+ * descriptor-starved daemon left open, a hook waiting on nobody) would otherwise hold its caller
+ * for good, and through a landing op the repo lock with it, with nothing in the log to say so: a
+ * poll's landing stood as the shining word on two rows for a day. A command with a longer run of
+ * its own (an install) names its ceiling. */
+export const RUN_CEILING_MS = 10 * 60_000;
+
 /** run a command to completion without blocking the event loop (a proxy request or agent stream
  * keeps flowing while git works). A spawn failure (cwd gone, binary missing) is a result, not a throw.
- * `env` is merged over the daemon's own, for the few commands that must be told not to ask. */
+ * `env` is merged over the daemon's own, for the few commands that must be told not to ask. A
+ * command still running at the ceiling is killed and comes back with `exit: "timeout"`, said in
+ * the log, since its caller has no way to tell a hang from a slow repo. */
 export async function run(
   cmd: string,
   args: string[],
   cwd: string,
   env?: Record<string, string>,
+  opts: { timeoutMs?: number } = {},
 ): Promise<GitResult & { rawOut: string }> {
   const started = Date.now();
+  const ceiling = opts.timeoutMs ?? RUN_CEILING_MS;
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     // env is always passed explicitly rather than left to Bun's default: that default is a snapshot
     // taken at startup, so a variable set later in the process lifetime would not reach git
@@ -110,17 +123,32 @@ export async function run(
       stdin: "ignore",
       env: { ...process.env, ...SPAWN_ENV, ...env },
     });
-    const [rawOut, err, status] = await Promise.all([
-      new Response(p.stdout).text(),
-      new Response(p.stderr).text(),
-      p.exited,
-    ]);
-    const exit = p.signalCode ?? status;
-    return { ok: status === 0, out: rawOut.trim(), rawOut, err: err.trim(), exit };
+    const done = (async () => {
+      const [rawOut, err, status] = await Promise.all([
+        new Response(p.stdout).text(),
+        new Response(p.stderr).text(),
+        p.exited,
+      ]);
+      const exit = p.signalCode ?? status;
+      return { ok: status === 0, out: rawOut.trim(), rawOut, err: err.trim(), exit };
+    })();
+    // resolved on the kill and not on the pipes closing: a hook child of the killed git may hold
+    // them open until it is done on its own, and the caller has waited long enough
+    const gaveUp = new Promise<GitResult & { rawOut: string }>((resolve) => {
+      timer = setTimeout(() => {
+        const what = `${cmd === GIT ? "git" : cmd} ${args.slice(0, 3).join(" ")}`;
+        const msg = `gave up after ${describeDuration(ceiling)}`;
+        log.warn("git", `${what} ${msg} in ${cwd}`);
+        p.kill("SIGKILL");
+        resolve({ ok: false, out: "", rawOut: "", err: msg, exit: "timeout" });
+      }, ceiling);
+    });
+    return await Promise.race([done, gaveUp]);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     return { ok: false, out: "", rawOut: "", err: msg, exit: msg };
   } finally {
+    if (timer) clearTimeout(timer);
     if (cmd === GIT) {
       lastGit.cmd = `git ${args.slice(0, 3).join(" ")}`;
       lastGit.ms = Date.now() - started;

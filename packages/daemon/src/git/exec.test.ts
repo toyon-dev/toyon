@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { sh, tmpRepo } from "../../test/helpers/tmp-repo.ts";
-import { GIT, runRows, runWatched } from "./exec.ts";
+import { GIT, run, runRows, runWatched } from "./exec.ts";
 
 describe("runRows", () => {
   test("hands rows over as they arrive and kills the command when the reader has enough", async () => {
@@ -99,4 +99,20 @@ describe("runWatched", () => {
     expect(Date.now() - started).toBeLessThan(10_000);
     expect(sh(t.repo, GIT, "log", "--format=%s")).toBe("init");
   }, 15_000);
+});
+
+describe("run", () => {
+  test("gives up at its ceiling and says so, instead of holding its caller for good", async () => {
+    const started = Date.now();
+    const r = await run("sleep", ["30"], "/", undefined, { timeoutMs: 200 });
+    expect(r.ok).toBe(false);
+    expect(r.exit).toBe("timeout");
+    expect(r.err).toContain("gave up after");
+    expect(Date.now() - started).toBeLessThan(5_000);
+  });
+
+  test("a command inside the ceiling comes back as before", async () => {
+    const r = await run("echo", ["hi"], "/", undefined, { timeoutMs: 5_000 });
+    expect(r).toMatchObject({ ok: true, out: "hi", exit: 0 });
+  });
 });

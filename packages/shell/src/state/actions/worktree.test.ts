@@ -55,6 +55,16 @@ describe("a worktree's actions", () => {
     expect(word(worktreeItems(opened, prRepo, state, deps, here))).toBe("land");
     expect(word(worktreeItems(owned(), null, state, deps, here))).toBe("land");
   });
+  test("a landed row offers no land, however far ahead a squash on GitHub left it counting", () => {
+    const state = { layout: defaultLayout, shipping: {}, frame: "desk" as const, repos: [] };
+    const word = (items: MenuEntry[]) => items.filter(isItem).find((i) => i.id === "land")?.label;
+    const landed = owned({ ahead: 1, worktree: { ...info, landed: true } });
+    expect(word(worktreeItems(landed, null, state, deps, here))).toBeUndefined();
+    // an edit since: the row is not landed until it is discarded, and the press is back
+    expect(
+      word(worktreeItems(owned({ ahead: 1, dirty: 1, worktree: { ...info, landed: true } }), null, state, deps, here)),
+    ).toBe("land");
+  });
   test("read the same in the menu and the palette: one list, grouped, gated by state", () => {
     const quiet = worktreeItems(
       owned(),

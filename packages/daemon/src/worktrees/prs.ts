@@ -5,7 +5,7 @@
 
 import { type PrState, prTaken } from "@toyon/shared";
 import type { Hub } from "../core/hub.ts";
-import { fireAndForget, log } from "../core/log.ts";
+import { fireAndForget } from "../core/log.ts";
 import type { StateStore } from "../core/state.ts";
 import type { WorktreeService } from "./service.ts";
 
@@ -69,10 +69,8 @@ export class PrService {
       const now = this.d.state.worktree(worktreeId);
       if (!fresh || !now || now.pr?.number !== pr.number) return fresh;
       this.d.worktrees.setPr(worktreeId, fresh);
-      if (fresh.state === "merged" && !prTaken(now)) {
-        const r = await this.d.worktrees.prMerged(worktreeId);
-        if (!r.ok) log.info(worktreeId, `PR #${pr.number} merged; main here did not follow: ${r.message}`);
-      }
+      // the landing says how it went in the log itself
+      if (fresh.state === "merged" && !prTaken(now)) await this.d.worktrees.prMerged(worktreeId);
       return fresh;
     } finally {
       this.reading.delete(worktreeId);

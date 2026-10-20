@@ -240,7 +240,8 @@ export function worktreeItems(
       onClick: () => shipOp(sock, dispatch, { t: "sync-main", worktreeId: id }),
     });
   }
-  if (canLand(w.worktree)) {
+  // a landed row has nothing to land, however far ahead a squash on GitHub leaves it counting
+  if (canLand(w.worktree) && !(w.worktree.landed && w.dirty === 0)) {
     // the repo's route, whatever the settings say it is: there is one way work lands here. The
     // word is land, except for creating the PR, which is the one press that lands nothing yet.
     land.push({

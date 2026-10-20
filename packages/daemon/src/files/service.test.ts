@@ -34,7 +34,7 @@ function setup() {
 describe("parseGrepRow", () => {
   test("reads path, line and text off a -z row, and refuses anything else", () => {
     const row = ["a:b.ts", "12", "  const x = 1;  "].join("\0");
-    expect(parseGrepRow(row)).toEqual({ path: "a:b.ts", line: 12, text: "const x = 1;" });
+    expect(parseGrepRow(row)).toEqual({ path: "a:b.ts", line: 12, text: "  const x = 1;  " });
     expect(parseGrepRow("no separators")).toBeNull();
     expect(parseGrepRow(["path", "notanumber", "text"].join("\0"))).toBeNull();
   });
@@ -121,8 +121,55 @@ describe("FileService.search", () => {
     expect((await b)?.hits).toHaveLength(1);
   });
 
+  test("a hit's text is trimmed and cut for the row", async () => {
+    const s = setup();
+    s.write("a.ts", `    ${"needle ".repeat(60)}\n`);
+    s.commit();
+    const page = await s.files.search("w1", "needle", {});
+    expect(page?.hits[0]?.text.startsWith("needle")).toBe(true);
+    expect(page?.hits[0]?.text).toHaveLength(200);
+  });
+
   test("a query under two characters answers an empty page without running git", async () => {
     const s = setup();
     expect(await s.files.search("w1", " n ", {})).toEqual({ hits: [], truncated: false });
+  });
+});
+
+describe("FileService.findElement", () => {
+  test("opens the file that writes the element, its path verbatim, over files that only name it", async () => {
+    const s = setup();
+    s.write("src/ä.tsx", `export const Save = () => (\n  <button className="save">Save recipe</button>\n);\n`);
+    s.write("src/app.css", ".save { color: red; }\n");
+    s.write("docs/notes.md", "press Save recipe to keep it\n");
+    s.commit();
+    const r = await s.files.findElement("w1", {
+      tag: "button",
+      id: "",
+      classes: ["save"],
+      text: "Save recipe",
+      attrs: [],
+    });
+    expect(r.sure).toBe(true);
+    expect(r.hits[0]?.path).toBe("src/ä.tsx");
+    expect(r.hits[0]?.line).toBe(2);
+  });
+
+  test("a class that matches everywhere does not drown the file that writes the element", async () => {
+    const s = setup();
+    // the flood sits after the file in path order; git is stopped at the rows the ranking reads,
+    // so what comes after the stop is never piped, and what comes before is ranked as before
+    s.write("src/a.tsx", `<button className="row">Keep this</button>\n`);
+    for (let i = 0; i < 30; i++) s.write(`src/f${i}.tsx`, `<div className="row">\n`.repeat(300));
+    s.commit();
+    const r = await s.files.findElement("w1", {
+      tag: "button",
+      id: "",
+      classes: ["row"],
+      text: "Keep this",
+      attrs: [],
+    });
+    expect(r.sure).toBe(true);
+    expect(r.hits[0]?.path).toBe("src/a.tsx");
   });
 });

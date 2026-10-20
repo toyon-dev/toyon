@@ -42,7 +42,8 @@ export interface SearchPage {
   truncated: boolean;
 }
 
-/** a `git grep -n -z` row: path, NUL, line number, NUL, the line */
+/** a `git grep -n -z` row: path, NUL, line number, NUL, the line as written (the element ranking
+ * reads it whole; the palette cuts it to show) */
 export function parseGrepRow(row: string): SearchHit | null {
   const a = row.indexOf("\0");
   if (a < 0) return null;
@@ -50,14 +51,7 @@ export function parseGrepRow(row: string): SearchHit | null {
   if (b < 0) return null;
   const line = Number(row.slice(a + 1, b));
   if (!Number.isInteger(line) || line < 1) return null;
-  return {
-    path: row.slice(0, a),
-    line,
-    text: row
-      .slice(b + 1)
-      .trim()
-      .slice(0, HIT_TEXT_MAX),
-  };
+  return { path: row.slice(0, a), line, text: row.slice(b + 1) };
 }
 
 /** rows an element search reads before ranking; its traits are rare by the time they count */
@@ -326,7 +320,7 @@ export class FileService {
               truncated = true;
               return false;
             }
-            hits.push(hit);
+            hits.push({ ...hit, text: hit.text.trim().slice(0, HIT_TEXT_MAX) });
           },
         },
       );
@@ -350,11 +344,15 @@ export class FileService {
     const { path: cwd } = this.require(worktreeId);
     const needles = needlesOf(element);
     if (!needles.length) return { hits: [], sure: false };
-    const r = await run(
+    const rows: SearchHit[] = [];
+    // a common class name matches tens of thousands of lines on a large repo; git is stopped
+    // once the rows the ranking reads are in, rather than every match drained first
+    await runRows(
       GIT,
       [
         "grep",
         "-n",
+        "-z",
         "-I",
         "-F",
         "--untracked",
@@ -365,14 +363,14 @@ export class FileService {
         ...NOT_WHERE_WRITTEN,
       ],
       cwd,
+      {
+        onRow: (row) => {
+          const hit = parseGrepRow(row);
+          if (hit) rows.push(hit);
+          return rows.length < FIND_ROWS_MAX;
+        },
+      },
     );
-    const rows: SearchHit[] = [];
-    for (const row of r.rawOut.split("\n")) {
-      const m = /^(.+?):(\d+):(.*)$/.exec(row);
-      if (!m) continue;
-      rows.push({ path: m[1]!, line: Number(m[2]), text: m[3]! });
-      if (rows.length >= FIND_ROWS_MAX) break;
-    }
     return rankElementSources(element, rows);
   }
 

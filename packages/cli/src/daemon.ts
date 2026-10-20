@@ -28,6 +28,8 @@ export interface Health {
   /** whether Tailscale on that machine could hold a name, and what is missing if not */
   tailscale?: TailscaleReadiness;
   lag?: { last: number; max: number; maxCause: string | null; over: number };
+  /** the soft open-file limit the daemon runs under; absent until read */
+  fdLimit?: number;
   worktrees?: { total: number; running: number };
   /** updates turned off for the machine and by whom, the registry they come from, or one the
    * daemon could not get toyon from */

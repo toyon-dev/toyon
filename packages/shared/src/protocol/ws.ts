@@ -22,6 +22,7 @@ import type {
   DesignIndex,
   FileBlame,
   GitFileStatus,
+  GitInfo,
   InstallMethod,
   KeepAwakeMode,
   LogLine,
@@ -183,22 +184,9 @@ export type ServerMsg =
   | { t: "agent"; worktreeId: string; seq: number; event: AgentEvent }
   /** on subscribe: the transcript so far and the dev servers' recent output */
   | { t: "backfill"; worktreeId: string; events: Array<{ seq: number; event: AgentEvent }>; log?: LogLine[] }
-  | {
-      t: "git-status";
-      worktreeId: string;
-      files: GitFileStatus[];
-      committed?: GitFileStatus[];
-      /** what the last turn that wrote anything changed: its files with their own counts, and the
-       * commit holding the tree it started from, which a `read-file` names as its `since`. Absent
-       * when that is the whole of `files`, or cannot be told apart from work taken in from main. */
-      turn?: { base: string; files: GitFileStatus[] };
-      ahead?: number;
-      behind?: number;
-      /** commits origin's copy of the branch lacks, counted only while a PR is open */
-      unpushed?: number;
-      /** HEAD's sha: the history tab re-reads its log when this moves (the agent committed) */
-      head?: string;
-    }
+  /** one worktree's git state (GitInfo): the core within a moment of an edit, and for a subscriber
+   * the extras behind it; nothing goes out for a state that reads the same as the last */
+  | ({ t: "git-status"; worktreeId: string } & GitInfo)
   /** the worktree's branch history, newest first (ahead-of-main commits are flagged, not sorted) */
   | { t: "git-log"; worktreeId: string; commits: CommitEntry[] }
   /** the files one commit touched; the reply to picking a commit in the history list */

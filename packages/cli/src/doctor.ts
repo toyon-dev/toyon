@@ -2,7 +2,7 @@
 // the terminal and named. Exit 1 when any line fails, so it can gate a bug report.
 
 import { existsSync, statSync } from "node:fs";
-import { describeManaged, type ManagedResolved, WS_CLOSE_UNAUTHORIZED } from "@toyon/shared";
+import { describeManaged, FD_LIMIT_LOW, fdLimitLine, type ManagedResolved, WS_CLOSE_UNAUTHORIZED } from "@toyon/shared";
 import { previousLog } from "@toyon/shared/logfile";
 import { loadManaged } from "@toyon/shared/managed-load";
 import pkg from "../package.json" with { type: "json" };
@@ -143,6 +143,9 @@ export async function doctor(): Promise<number> {
           (h.lag ? `, event loop worst ${h.lag.max}ms${h.lag.maxCause ? ` (${h.lag.maxCause})` : ""}` : ""),
       ),
     );
+    // every git child holds three pipes; a daemon with a few dozen worktrees runs out under a low
+    // limit, and from then on nothing spawns
+    if (h.fdLimit !== undefined && h.fdLimit < FD_LIMIT_LOW) lines.push(line(false, "limits", fdLimitLine(h.fdLimit)));
     if (h.remote) {
       lines.push(
         line(

@@ -10,7 +10,6 @@ import {
   parseClientMsg,
   type Remote,
   type ServerMsg,
-  SHELL_STREAM,
   streamKey,
   ThemeImportError,
   UPLOAD_MAX_BYTES,
@@ -22,7 +21,7 @@ import { UserError } from "../core/errors.ts";
 import type { GrantCodes } from "../core/grants.ts";
 import type { Knocks } from "../core/knocks.ts";
 import { fireAndForget, log } from "../core/log.ts";
-import { lag, type SocketStats } from "../core/metrics.ts";
+import { gitSpawns, lag, lagHist, limits, type SocketStats, syncHot, treeReads } from "../core/metrics.ts";
 import type { Origins } from "../core/origins.ts";
 import { grantCookie, previewGrant, sameSecret } from "../core/remote.ts";
 import type { RemoteSwitch } from "../core/remoteSwitch.ts";
@@ -200,6 +199,11 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
   };
   const metrics = () => ({
     lag,
+    lagHist,
+    gitSpawns,
+    treeReads,
+    syncHot,
+    fdLimit: limits.fdLimit || undefined,
     // what the daemon is running, for `toyon doctor`: worktrees start when opened, not at boot
     worktrees: {
       total: s.state.worktrees.filter((w) => w.kind !== "spare").length,
@@ -251,27 +255,22 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
   s.hub.on("termExit", (worktreeId, stream, exitCode) =>
     sendTerm(worktreeId, stream, { t: "term-exit", worktreeId, stream, exitCode }),
   );
-  // keep the changes list live while the agent edits — coalesced: a turn with ten tool calls in a
-  // second runs git status once, not ten times
-  const gitStatusTimers = new Map<string, ReturnType<typeof setTimeout>>();
-  const refreshGitStatus = (worktreeId: string) => {
-    clearTimeout(gitStatusTimers.get(worktreeId));
-    gitStatusTimers.set(
-      worktreeId,
-      setTimeout(() => {
-        gitStatusTimers.delete(worktreeId);
-        // the same producer as subscribe/edits, so ahead/behind/committed are never blanked
-        fireAndForget(worktreeId, pushGitStatus(worktreeId), "git status after agent edit");
-      }, 150),
-    );
-  };
-  s.hub.on("agent", (worktreeId, seq, event) => {
-    sendTo(worktreeId, { t: "agent", worktreeId, seq, event });
-    if (event.type === "tool-end" || event.type === "turn-end") refreshGitStatus(worktreeId);
+  // a worktree's tree-state record moved (worktrees/treeState.ts, which hears the agent's edits,
+  // the editor's saves, the shell going quiet, the turn settling and main moving, and reads once
+  // per real change): whoever is subscribed gets the frame, read off the record
+  s.hub.on("treeChanged", (worktreeId) => {
+    const frame = s.worktrees.tree.frame(worktreeId);
+    if (!frame) return;
+    sendTo(worktreeId, { t: "git-status", worktreeId, ...frame });
+    // the pages ride behind the panel's tier, sent only when they moved: a core frame carries
+    // nothing the route list reads that the last one did not
+    if (frame.extras)
+      fireAndForget(
+        worktreeId,
+        s.routes.pages(worktreeId, frame).then((p) => sendPages(worktreeId, p)),
+        "pages after git status",
+      );
   });
-  // a save or a discard in one tab: the writer's changes list and every other tab's follow from the
-  // same push, and an editor open on the file re-reads it from there
-  s.hub.on("filesChanged", refreshGitStatus);
   // a file opened from outside: every shell up now is told, and the open is done with; with none
   // up it waits for the next socket (below), since the launcher opens the window after the file
   s.hub.on("opened", (o) => {
@@ -281,23 +280,6 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
   });
   // a refused open names no worktree, so the shell says it under the composer on screen
   s.hub.on("openRefused", (message) => broadcast({ t: "error", message }));
-  // A shell in toyon's terminal writes files and commits with nothing else noticing, so once its
-  // output has gone quiet the worktree is recounted: the rail's badges and, when it is open, its
-  // changes list. Quiet rather than per chunk, since a build prints thousands of them.
-  const shellQuiet = new Map<string, ReturnType<typeof setTimeout>>();
-  s.hub.on("termData", (worktreeId, stream) => {
-    if (stream !== SHELL_STREAM) return;
-    clearTimeout(shellQuiet.get(worktreeId));
-    shellQuiet.set(
-      worktreeId,
-      setTimeout(() => {
-        shellQuiet.delete(worktreeId);
-        s.worktrees.invalidateCounts(worktreeId);
-        worktreesChanged();
-        fireAndForget(worktreeId, pushGitStatus(worktreeId), "git status after the shell went quiet");
-      }, 1500),
-    );
-  });
   // a worktree's pages ride behind its git status: the same pushes, sent only when they moved, so the
   // route list is current before anyone opens it
   const sentPages = new Map<string, string>();
@@ -307,28 +289,13 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
     sentPages.set(worktreeId, json);
     sendTo(worktreeId, { t: "routes", worktreeId, ...pages });
   };
-  const pushGitStatus = async (worktreeId: string) => {
-    if (![...sockets].some((ws) => ws.data.subs.has(worktreeId))) return;
-    const info = await s.worktrees.gitStatus(worktreeId);
-    if (!info) return;
-    sendTo(worktreeId, { t: "git-status", worktreeId, ...info });
-    sendPages(worktreeId, await s.routes.pages(worktreeId, info));
-  };
   s.hub.on("pagesChanged", (worktreeId) => {
     const pages = s.routes.cached(worktreeId);
     if (pages) sendPages(worktreeId, pages);
   });
-  s.hub.on("repoTick", (repoId) => {
-    // main moved: refresh badges + git status for every subscribed worktree of the repo,
-    // discovered ones included, since their behind count moved with it
-    worktreesChanged();
-    const subscribed = new Set<string>();
-    for (const ws of sockets) for (const id of ws.data.subs) subscribed.add(id);
-    for (const id of subscribed) {
-      if (s.worktrees.readable(id)?.repoId !== repoId) continue;
-      fireAndForget(id, pushGitStatus(id), "git status on ref tick");
-    }
-  });
+  // main moved: the badges of every row of the repo read again (the owner marks them; the frame's
+  // snapshot reads the ones someone looks at now and the rest a few at a time)
+  s.hub.on("repoTick", () => worktreesChanged());
   const themesChanged = () => {
     const cur = s.themes.current();
     setWaitingColors({ bg: cur.colors.surface0, fg: cur.colors.text1 });
@@ -498,7 +465,10 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
         if (ws.data.preview) ws.data.preview.handler.close(ws.data.preview.data);
         // a tab that went away without a word (a closed lid) closes here once the socket's own
         // idle timeout and pings give it up, and whatever it was showing is released with it
-        else s.idle.drop(ws.data);
+        else {
+          s.idle.drop(ws.data);
+          s.interest.drop(ws.data);
+        }
         s.files.stopSearch(ws.data);
         sockets.delete(ws);
         unlink(ws);
@@ -528,10 +498,11 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
           subscribe: (id: string) => {
             if (ws.data.subs.has(id)) return false;
             ws.data.subs.add(id);
+            s.interest.subscribe(ws.data, id);
             return true;
           },
           unsubscribe: (id: string) => {
-            ws.data.subs.delete(id);
+            if (ws.data.subs.delete(id)) s.interest.unsubscribe(ws.data, id);
             if (ws.data.view === id) {
               ws.data.view = null;
               s.idle.view(ws.data, null);

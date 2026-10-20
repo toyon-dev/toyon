@@ -20,6 +20,7 @@ import {
   DEFAULT_MERGE_METHOD,
   describeDuration,
   type GitFileStatus,
+  type GitInfo,
   hasOwnBranch,
   isLead,
   isMain,
@@ -99,16 +100,8 @@ import {
 } from "../git/land.ts";
 import { withFetchLock, withRepoLock } from "../git/lock.ts";
 import { logCommits, rangeSubjects, commitFiles as readCommitFiles } from "../git/log.ts";
-import {
-  aheadBehind,
-  aheadUpstream,
-  committedFiles,
-  statusFiles,
-  statusFilesWithCounts,
-  treeEmpty,
-  treeFingerprint,
-} from "../git/status.ts";
-import { dropTurnRefs, markTurn, type TurnChanges, turnChanges } from "../git/turn.ts";
+import { aheadBehind, aheadUpstream, statusFiles, treeEmpty, treeFingerprint } from "../git/status.ts";
+import { dropTurnRefs, markTurn } from "../git/turn.ts";
 import { listWorktrees } from "../git/worktrees.ts";
 import { isInside } from "../repos/create.ts";
 import { type RunHandle, RunService } from "../runs/service.ts";
@@ -127,14 +120,17 @@ import {
 } from "./archive.ts";
 import { ArchivedGit } from "./archivedGit.ts";
 import type { ArtifactCache } from "./cache.ts";
-import { COUNTS_FLOOR_MS, Counts, type RowCounts } from "./counts.ts";
 import { discoverIn, type FoundWorktree } from "./discover.ts";
 import type { FixService } from "./fix.ts";
 import { type FillJob, fillLandMarks, unfilled } from "./landSubjects.ts";
 import { branchSlug, cleanTitle, freeSlot, shortId, titleFrom, variantLens } from "./naming.ts";
 import { type ClaimStamps, SparePool } from "./spare.ts";
+import { type TreeCore, TreeState } from "./treeState.ts";
 import { mainOf, Trunk } from "./trunk.ts";
 import { isUnseen } from "./turns.ts";
+
+/** how often git's own list of a repo's worktrees is read when nothing has marked it stale */
+const LIST_FLOOR_MS = 10_000;
 
 /** Gitignored local config a worktree needs and git will never bring over. Absent secrets fail
  * deep inside app code rather than as missing config (an empty AUTH_SECRET reads as a zero-length
@@ -192,20 +188,6 @@ export interface ReadableWorktree {
   base: string;
   /** absent for a discovered worktree: there is nothing to mutate and nothing that owns it */
   wt?: WorktreeInfo;
-}
-
-/** what `git status` + ahead/behind say about one worktree */
-export interface GitInfo {
-  files: GitFileStatus[];
-  committed?: GitFileStatus[];
-  /** what the last turn changed, when that is narrower than `files` */
-  turn?: TurnChanges;
-  ahead?: number;
-  behind?: number;
-  /** commits origin's copy of the branch lacks, counted only while a PR is open */
-  unpushed?: number;
-  /** HEAD's sha, so the history tab knows when its log went stale */
-  head?: string;
 }
 
 /** what was typed into the chat of a worktree toyon is not running (an archived one, a found
@@ -286,6 +268,11 @@ export interface WorktreeServiceDeps {
   /** the bytes a verdict was written about, as one string (git/status.ts treeFingerprint by
    * default; tests inject one they can hold) */
   fingerprint?: (path: string) => Promise<string>;
+  /** a shell is subscribed to the worktree (server/interest.ts): the tree-state owner reads the
+   * panel's tier for it and sends it frames */
+  interested?: (id: string) => boolean;
+  /** a tab shows the row (runtime/idle.ts): its tree is read ahead of rows nobody looks at */
+  shown?: (id: string) => boolean;
   /** what earlier worktrees built to pass the check, cloned in ahead of the install */
   cache?: Pick<ArtifactCache, "restore">;
   /** a git step a landing runs, watched onto the worktree's transcript as the rows a `!` command
@@ -359,7 +346,8 @@ export class WorktreeService {
    * meanwhile goes behind it (settles either way, since the chat is not the claim's to refuse) */
   private firstPrompt = new Map<string, Promise<void>>();
   /** every row's badge numbers, read behind the frames rather than in them */
-  readonly counts: Counts;
+  /** the one reader of every row's git state: the rail's numbers and the panel's list come from it */
+  readonly tree: TreeState;
   /** the HEAD each clean, level worktree was last asked about a hand landing at: one reflog read per move */
   private handChecked = new Map<string, string>();
   /** worktrees a name is being asked for: a turn that ends while the birth ask is still out does
@@ -380,15 +368,23 @@ export class WorktreeService {
   constructor(private d: WorktreeServiceDeps) {
     this.runs = d.runs ?? new RunService({ state: d.state, hub: d.hub });
     this.archive = new WorktreeArchive(d.paths.archiveDir);
-    this.counts = new Counts({
-      read: (id) => this.readCounts(id),
-      going: (id) => this.going.has(id) || this.arriving.has(id),
-    });
     this.trunk = new Trunk({
       state: d.state,
       hub: d.hub,
-      counts: (main) => this.counts.get(main.id),
-      invalidateCounts: () => this.counts.stale(),
+      counts: (main) => this.tree.counts(main.id),
+      invalidateCounts: (mainId) => this.tree.invalidate(mainId),
+    });
+    this.tree = new TreeState({
+      hub: d.hub,
+      readable: (id) => this.readable(id),
+      going: (id) => this.going.has(id) || this.arriving.has(id),
+      interested: (id) => d.interested?.(id) ?? false,
+      shown: (id) => d.shown?.(id) ?? false,
+      live: (id) => d.runtime.busy(id),
+      trunkBehind: (mainId, path) => this.trunk.behind(mainId, path),
+      prOpen: (id) => d.state.worktree(id)?.pr?.state === "open",
+      afterCore: (r, core) => this.afterCore(r, core),
+      rowsOf: (repoId) => this.rowsOf(repoId),
     });
     this.spare = new SparePool({
       state: d.state,
@@ -437,8 +433,6 @@ export class WorktreeService {
     // turnSettled is emitted from inside the agentStatus dispatch, ahead of the ws layer's listener
     // on that event, so what is dropped here is gone before the status frame goes out
     d.hub.on("turnSettled", (worktreeId, turn) => {
-      // what the turn wrote is the count the rail should show now, not whenever its cache runs out
-      this.counts.stale(worktreeId);
       // The name asked for at birth can come back empty: the ask went out on an agent that could
       // not reach its API, or the answer was not a name. The turn that just finished ran on a live
       // agent, so a row still on its placeholder is asked again, from the words the task started
@@ -644,15 +638,12 @@ export class WorktreeService {
     // left behind, so only a number for the agent: the rail's count of main, at most a few seconds
     // old, rather than a status of the whole checkout between enter and the message showing
     if (!move) {
-      const count = this.counts.get(this.mainOf(repo.id)?.id ?? "")?.dirty ?? 0;
+      const count = this.tree.counts(this.mainOf(repo.id)?.id ?? "")?.dirty ?? 0;
       return { branch: main, moved: false, count };
     }
     let count = 0;
-    // what main is left holding, where that is known: clean, or everything it had
-    let left: number | undefined;
     const unmoved = await withRepoLock(repo.path, async (): Promise<string | undefined> => {
       count = (await statusFiles(repo.path)).length;
-      left = count;
       if (count === 0) return undefined;
       const before = await git(repo.path, "rev-parse", "-q", "--verify", "refs/stash");
       const pushed = await git(repo.path, "stash", "push", "--include-untracked", "-m", `toyon: into ${wt.title}`);
@@ -661,8 +652,6 @@ export class WorktreeService {
       const sha = after.out.trim();
       // nothing was taken after all (ignored files only), so nothing needs putting anywhere
       if (!after.ok || (before.ok && before.out.trim() === sha)) return undefined;
-      // taken: main is clean unless the pop below puts it all back, or fails to
-      left = 0;
       // stash drop and pop take stash@{n}, never a sha, and a stash pushed outside toyon in the
       // meantime would move ours down the list
       const entry = async () => {
@@ -694,8 +683,6 @@ export class WorktreeService {
       }
       const ref = await entry();
       const back = ref ? await git(repo.path, "stash", "pop", ref) : null;
-      // a pop that failed leaves main somewhere between the stash and the tree: not a number
-      left = back?.ok ? count : undefined;
       return back?.ok
         ? `the changes on ${main} did not apply in ${wt.title}, so they stayed on ${main}`
         : `the changes on ${main} did not apply in ${wt.title}; they are kept in git stash as "toyon: into ${wt.title}"`;
@@ -704,8 +691,7 @@ export class WorktreeService {
     // has it read again; the rest of main's numbers follow
     const mainWt = this.mainOf(repo.id);
     if (mainWt) {
-      if (left !== undefined) this.counts.put(mainWt.id, { ...this.counts.get(mainWt.id), dirty: left });
-      this.counts.stale(mainWt.id);
+      await this.tree.refresh(mainWt.id);
     }
     return { branch: main, moved: count > 0 && !unmoved, count, unmoved };
   }
@@ -1073,6 +1059,7 @@ export class WorktreeService {
     const sessionId = this.d.state.session(worktreeId);
     const placed = repo.promptedAt;
     this.d.state.removeWorktree(worktreeId);
+    this.tree.forget(worktreeId);
     // the project took the row's send: told before the rows frame drops the row, so the switcher
     // never shows the project sinking and climbing back
     if (repo.promptedAt !== placed) this.d.hub.emit("reposChanged");
@@ -1235,6 +1222,7 @@ export class WorktreeService {
     const repo = this.d.state.repo(wt.repoId);
     const sessionId = this.d.state.session(wt.id);
     this.d.state.removeWorktree(wt.id);
+    this.tree.forget(wt.id);
     if (!repo || wt.kind !== "worktree") {
       this.deleteChat(wt.id);
       return;
@@ -1344,13 +1332,14 @@ export class WorktreeService {
     return new ArchivedGit(repo.path, rec.kept, rec.worktree.lands ?? [], baseOf(repo));
   }
 
-  /** what an archived worktree left, for the changes panel on its page; nothing is on disk, so
-   * nothing is counted */
-  private async archivedStatus(archiveId: string): Promise<GitInfo | null> {
+  /** what an archived worktree left, for the changes panel on its page: nothing is on disk and
+   * nothing moves, so it is one state, carried whole and never versioned */
+  async archivedStatus(archiveId: string): Promise<GitInfo | null> {
     const kept = this.archivedGit(archiveId);
     if (!kept) return null;
     try {
-      return await kept.status();
+      const { files, committed, head } = await kept.status();
+      return { version: 0, files, head, extras: { committed } };
     } catch (e) {
       log.warn(archiveId, "reading its kept changes failed", e);
       return null;
@@ -1459,7 +1448,7 @@ export class WorktreeService {
     move(chat.plans, join(path, PLANS_DIR));
     const dropped = await git(repo.path, "update-ref", "-d", archiveRef(old.id));
     if (!dropped.ok) log.warn(old.id, `could not drop its archive ref: ${dropped.err}`);
-    this.counts.stale(wt.id);
+    this.tree.invalidate(wt.id);
     this.d.state.save();
     this.d.hub.emit("worktreesChanged");
     fireAndForget(wt.id, this.setupAndStart(wt, repo, repo.path), "setup + start");
@@ -1542,6 +1531,7 @@ export class WorktreeService {
     if (queued && agent && agent.queueLength > 0) agent.unqueue(0);
     await this.d.runtime.stop(wt.id);
     this.d.state.removeWorktree(wt.id, { refused: true });
+    this.tree.forget(wt.id);
     releasePort(wt.proxyPort);
   }
 
@@ -2156,9 +2146,12 @@ export class WorktreeService {
         if (!missing) return { result: await mergePr(wt.path, wt.pr.number, policy.merge, w) };
         const committed = await this.commitIfDirty(wt, message);
         if (committed && !committed.ok) return { result: committed };
+        // marked before each move: a read out across it answers for the tree before, and is dropped
+        this.tree.invalidate(wt.id);
         const taken = await takeMainIn(wt.path, base, own, w);
         if (!taken.ok) return { result: taken };
         await this.headMoved(wt.id);
+        this.tree.invalidate(wt.id);
         const pushed = await pushBranch(wt.path, wt.branch, w);
         if (!pushed.ok) return { result: pushed };
         await this.headMoved(wt.id);
@@ -2170,6 +2163,7 @@ export class WorktreeService {
       if (committed && !committed.ok) return { result: committed };
       // read before the rebase: what the branch carried, in case the rebase finds it all on origin
       const mark = await landingMark(wt.path, base);
+      this.tree.invalidate(wt.id);
       const taken = await takeMainIn(wt.path, base, own, w);
       if (!taken.ok) return { result: taken };
       await this.headMoved(wt.id);
@@ -2286,6 +2280,8 @@ export class WorktreeService {
     for (let attempt = 0; ; attempt++) {
       const fetched = await this.fetchBase(wt, repo, w);
       if (!fetched.ok) return { result: fetched };
+      // marked before each move: a read out across it answers for the tree before, and is dropped
+      this.tree.invalidate(wt.id);
       const taken = await takeMainIn(wt.path, base, own, w);
       if (!taken.ok) return { result: taken };
       await this.headMoved(wt.id);
@@ -2295,6 +2291,7 @@ export class WorktreeService {
         break;
       }
       squash = method === "squash" ? await squashMessage(wt.path, base, suggested, !!message?.trim()) : "";
+      this.tree.invalidate(wt.id);
       const built = await landingCommit(wt.path, wt.branch, base, method, squash, own, w);
       await this.headMoved(wt.id);
       if (!built.ok || !built.sha) return { result: built };
@@ -2388,13 +2385,14 @@ export class WorktreeService {
    * branch where it was and the row not landed until the edit is committed or discarded. */
   private async restartFromMain(wt: WorktreeInfo, base: string) {
     if (!hasOwnBranch(wt)) return;
+    // marked before the move: a read out across it answers for the tree before, and is dropped
+    this.tree.invalidate(wt.id);
     const r = await git(wt.path, "reset", "--keep", base);
     if (!r.ok) log.warn(wt.id, `could not restart ${wt.branch} from ${base}: ${r.err}`);
     // the counts for the moved head, said in the settle's frame with the landed mark: a frame of
     // its own here carried the landing on the record without the mark, which a row reads as new
     // work over a landed PR
-    this.counts.stale(wt.id);
-    await this.counts.refresh([wt.id]);
+    await this.tree.refresh(wt.id);
   }
 
   /** the base fetched before a land or a sync measures against it (fetchBase), with the fetch on
@@ -2507,6 +2505,8 @@ export class WorktreeService {
         const fetched = await this.fetchBase(r.wt, repo, w);
         if (!fetched.ok) return fetched;
       }
+      // marked before the move: a read out across it answers for the tree before, and is dropped
+      this.tree.invalidate(worktreeId);
       const taken = await withRepoLock(repo.path, () => takeMainIn(r.path, r.base, own, w, carry));
       if (taken.ok) {
         await this.headMoved(worktreeId);
@@ -2614,15 +2614,19 @@ export class WorktreeService {
   /** the row's HEAD moved under an op: its numbers are read again before the frame that says so,
    * so the rail never shows the count the person just acted on */
   private async headMoved(worktreeId: string) {
-    this.counts.stale(worktreeId);
-    await this.counts.refresh([worktreeId]);
+    await this.tree.refresh(worktreeId);
     this.d.hub.emit("worktreesChanged");
   }
 
-  /** main moved under every row: all of them read again now, for the frame of the op that moved it */
+  /** main moved under every row, for the frame of the op that moved it: all of them read again
+   * now, a few at a time under the owner's slots, until none is left */
   private async recountAll() {
-    this.counts.stale();
-    await this.counts.refresh(this.countedIds());
+    this.tree.invalidateAll();
+    for (;;) {
+      const reading = this.tree.refreshStale(this.countedIds());
+      if (!reading) return;
+      await reading;
+    }
   }
 
   // ---- queries ----
@@ -2630,14 +2634,15 @@ export class WorktreeService {
   /** badge counts are stale: every row's when the default branch moved, one worktree's when only
    * its own files did. The numbers stand until the next frame has them read again. */
   invalidateCounts(worktreeId?: string) {
-    this.counts.stale(worktreeId);
+    if (worktreeId) this.tree.invalidate(worktreeId);
+    else this.tree.invalidateAll();
   }
 
   /** Files may have changed where toyon could not see them (another app, while the window was
    * behind it): the same refresh as the default branch moving, every row recounted and every open
    * changes list re-read. */
   recount(repoId: string) {
-    this.counts.stale();
+    this.tree.invalidateAll();
     this.d.hub.emit("repoTick", repoId);
     // the rows count against origin's main, so the window coming back is when to ask origin
     // again; the trunk fetches once a minute at most
@@ -2685,13 +2690,13 @@ export class WorktreeService {
     );
   }
 
-  /** On the same floor as the counts: a frame goes out on every proc event, and a dev-server log
+  /** A frame goes out on every proc event, and a dev-server log
    * line should not shell out to git. The watcher marks the list stale when a worktree actually
    * appears or goes, so the floor bounds how often we ask when nothing has happened, not how long
    * a real change stays invisible. */
   private listDue(repoId: string): boolean {
     const cached = this.discoverCache.get(repoId);
-    return !cached || Date.now() - cached.at >= COUNTS_FLOOR_MS;
+    return !cached || Date.now() - cached.at >= LIST_FLOOR_MS;
   }
 
   /** git's list for each repo named, one listing per repo at a time; true when any list moved */
@@ -2732,37 +2737,14 @@ export class WorktreeService {
     return any;
   }
 
-  /** the badge numbers for one row, a worktree of toyon's or one it found, against the base. Main
-   * is not counted against the base: the trunk counts it against its upstream, and a detached
-   * worktree has no branch to count either. Null for a row that is gone. */
-  private async readCounts(id: string): Promise<RowCounts | null> {
-    const wt = this.d.state.worktree(id);
-    const found = wt ? null : this.discoveredById(id);
-    const row = wt ?? found;
-    const repo = row && this.d.state.repo(row.repoId);
-    if (!row || !repo) return null;
-    const countable = wt ? !isMain(wt) : !!found?.branch;
-    const ab = countable ? await aheadBehind(row.path, baseOf(repo)) : await this.trunk.behind(id, row.path);
-    const dirty = (await statusFiles(row.path)).length;
-    const unpushed = await this.unpushed(id, row.path);
-    return { ...ab, ...(unpushed === undefined ? {} : { unpushed }), dirty };
-  }
-
-  /** what an open PR is missing: the commits here that origin's copy of the branch lacks. Only a
-   * row with a PR open is asked, since the count means nothing before the branch is on origin
-   * and the box reads it only to offer the push. */
-  private async unpushed(id: string, path: string): Promise<number | undefined> {
-    const wt = this.d.state.worktree(id);
-    if (wt?.pr?.state !== "open") return undefined;
-    return (await aheadUpstream(path, wt.branch)) ?? undefined;
-  }
-
   /** a worktree's dirty files and commits ahead of main, from git now rather than the rail's cached
    * counts: what an archive of its own accord is decided on. Empty when git cannot say. */
   async freshCounts(worktreeId: string): Promise<{ ahead?: number; dirty?: number }> {
     // a tree being removed has no numbers to decide on: the last ones are the work that is leaving
     if (this.going.has(worktreeId)) return {};
-    return (await this.counts.read(worktreeId)) ?? {};
+    const rec = await this.tree.refresh(worktreeId);
+    if (!rec || rec.failedAt !== undefined) return {};
+    return { ...(rec.core.ahead === undefined ? {} : { ahead: rec.core.ahead }), dirty: rec.core.files.length };
   }
 
   /** Resolve an id for reading: a worktree toyon runs, the spare included (it is the row new work
@@ -2805,99 +2787,84 @@ export class WorktreeService {
     if (wt && !this.going.has(worktreeId)) await markTurn(wt.path, wt.id);
   }
 
-  /** the working-tree state the changes panel shows (subscribe, edits, ref ticks). Also the one
-   * place the `landed` badge is cleared: new work after a merge means it is no longer landed. */
-  async gitStatus(worktreeId: string): Promise<GitInfo | null> {
-    // its directory is being deleted, or is not there yet; no frame at all beats one that says
-    // every file went with it
-    if (this.going.has(worktreeId) || this.arriving.has(worktreeId)) return null;
-    const r = this.readable(worktreeId);
-    if (!r) return this.archivedStatus(worktreeId);
-    try {
-      // only main is its own baseline; every other worktree, discovered ones included, has a
-      // branch worth counting against the base
-      const isMain = r.wt?.kind === "main";
-      const [files, ab, unpushed, head, current] = await Promise.all([
-        statusFilesWithCounts(r.path),
-        isMain ? Promise.resolve({}) : aheadBehind(r.path, r.base),
-        this.unpushed(worktreeId, r.path),
-        git(r.path, "rev-parse", "HEAD"),
-        git(r.path, "branch", "--show-current"),
-      ]);
-      if (r.wt && current.ok) await this.followBranch(r.wt, current.out);
-      const counts = { ...ab, ...(unpushed === undefined ? {} : { unpushed }) };
-      const ahead = (counts as { ahead?: number }).ahead ?? 0;
-      const committed = !isMain && ahead > 0 ? await committedFiles(r.path, r.base) : undefined;
-      // only a worktree toyon runs has turns, and a clean tree has nothing for one to have changed
-      const turn = r.wt && files.length > 0 ? await turnChanges(r.path, r.wt.id, r.base, !isMain, files) : null;
-      // a landing git did without toyon: the branch is clean and level with the base and has
-      // commits of its own since its last landing. Asked once per HEAD, and before the landed
-      // mark is read, since a second hand landing over a first leaves the row landed by the rule
-      // while its range is still unrecorded; the land press and a PR merge mark their own.
-      if (
-        r.wt &&
-        !isMain &&
-        hasOwnBranch(r.wt) &&
-        files.length === 0 &&
-        ahead === 0 &&
-        head.ok &&
-        this.handChecked.get(r.wt.id) !== head.out
-      ) {
-        this.handChecked.set(r.wt.id, head.out);
-        const mark = await handLanding(r.path, r.wt.branch, r.base, r.wt.lands?.at(-1)?.tip);
-        if (mark) {
-          await this.landedByHand(r.wt, mark);
-          return this.gitStatus(worktreeId);
-        }
+  /** The record side effects of a tree read the owner accepted (worktrees/treeState.ts): the
+   * branch the checkout is on, a landing git did without toyon, the PR and landed marks (the one
+   * place the `landed` badge is cleared: new work after a merge means it is no longer landed),
+   * the verdict's fingerprint, main's empty flag. True when they moved the tree, so the owner
+   * reads it once more before anything is published. */
+  private async afterCore(r: ReadableWorktree, core: TreeCore): Promise<boolean> {
+    const wt = r.wt;
+    if (!wt) return false;
+    // an op out on the row (a land, a sync) reads the tree between its own git steps, with the
+    // checkout mid-way through them: a temporary branch is not the row's, and the marks are the
+    // op's own to set when it settles
+    if (this.ops.has(wt.id)) return false;
+    const isMain = wt.kind === "main";
+    if (core.branch) await this.followBranch(wt, core.branch);
+    const { files, head } = core;
+    const ahead = core.ahead ?? 0;
+    // a landing git did without toyon: the branch is clean and level with the base and has
+    // commits of its own since its last landing. Asked once per HEAD, and before the landed
+    // mark is read, since a second hand landing over a first leaves the row landed by the rule
+    // while its range is still unrecorded; the land press and a PR merge mark their own.
+    if (
+      !isMain &&
+      hasOwnBranch(wt) &&
+      files.length === 0 &&
+      ahead === 0 &&
+      head &&
+      this.handChecked.get(wt.id) !== head
+    ) {
+      this.handChecked.set(wt.id, head);
+      const mark = await handLanding(r.path, wt.branch, r.base, wt.lands?.at(-1)?.tip);
+      if (mark) {
+        await this.landedByHand(wt, mark);
+        return true;
       }
-      if (r.wt && !isMain && head.ok) {
-        const facts = { clean: files.length === 0, head: head.out, ahead };
-        // committed work past a merged PR is a new PR later; the old one is history. An edit
-        // alone is not: it may be discarded, and the PR was taken either way.
-        if (prTaken(r.wt) && movedPastLand(r.wt, facts)) this.setPr(r.wt.id, undefined);
-        await this.refreshLanded(r.wt, facts);
-      }
-      // a verdict describes one tree: an edit since (by hand, by another tool) marks it stale, so
-      // the composer keeps the sentence and the message but withholds the word until the check
-      // runs again. A tree that comes back to what the verdict saw (an edit undone) clears the mark.
-      const landing = r.wt?.landing;
-      if (landing && landing.check !== "pending") {
-        const moved = landing.fingerprint !== (await this.fingerprint(r.path));
-        // the verdict moved or went while the tree was being read: the next poll judges the new one
-        if (r.wt?.landing === landing && moved !== !!landing.stale) {
-          const { stale: _was, ...rest } = landing;
-          this.setLanding(r.wt.id, moved ? { ...rest, stale: true } : rest);
-        }
-      }
-      // the empty-tree fact lives on main's record, so the rows frame carries it without git: a
-      // task worktree of an empty repo is not the greenfield surface, so only main keeps it
-      if (r.wt && isMain) this.setEmpty(r.wt, files.length === 0 ? await treeEmpty(r.path) : false);
-      // the removal started while the reads were in flight
-      if (this.going.has(worktreeId) || this.arriving.has(worktreeId)) return null;
-      this.noteCounts(worktreeId, isMain, files.length, counts);
-      return { files, committed, ...(turn ? { turn } : {}), head: head.ok ? head.out : undefined, ...counts };
-    } catch (e) {
-      log.warn(worktreeId, "git status failed", e);
-      return null;
     }
+    if (!isMain && head) {
+      const facts = { clean: files.length === 0, head, ahead };
+      // committed work past a merged PR is a new PR later; the old one is history. An edit
+      // alone is not: it may be discarded, and the PR was taken either way.
+      if (prTaken(wt) && movedPastLand(wt, facts)) this.setPr(wt.id, undefined);
+      await this.refreshLanded(wt, facts);
+    }
+    // a verdict describes one tree: an edit since (by hand, by another tool) marks it stale, so
+    // the composer keeps the sentence and the message but withholds the word until the check
+    // runs again. A tree that comes back to what the verdict saw (an edit undone) clears the mark.
+    const landing = wt.landing;
+    if (landing && landing.check !== "pending") {
+      const moved = landing.fingerprint !== (await this.fingerprint(r.path));
+      // the verdict moved or went while the tree was being read: the next poll judges the new one
+      if (wt.landing === landing && moved !== !!landing.stale) {
+        const { stale: _was, ...rest } = landing;
+        this.setLanding(wt.id, moved ? { ...rest, stale: true } : rest);
+      }
+    }
+    // the empty-tree fact lives on main's record, so the rows frame carries it without git: a
+    // task worktree of an empty repo is not the greenfield surface, so only main keeps it
+    if (isMain) this.setEmpty(wt, files.length === 0 ? await treeEmpty(r.path) : false);
+    return false;
   }
 
-  /** A status read is a fresher count than the rows' cache, so the row takes it: an agent's edits
-   * reach the rail's badge with the changes list beside it, not at the end of the turn. A frame goes
-   * out only when a number moved. Main's ahead and behind are counted against origin by the rows, so
-   * it lends only its dirty count, and only once the rows have counted it the long way. */
-  private noteCounts(
-    id: string,
-    main: boolean,
-    dirty: number,
-    ab: { ahead?: number; behind?: number; unpushed?: number },
-  ) {
-    const prev = this.counts.get(id);
-    if (main && !prev) return;
-    const ahead = main ? prev?.ahead : ab.ahead;
-    const behind = main ? prev?.behind : ab.behind;
-    const unpushed = main ? prev?.unpushed : ab.unpushed;
-    if (this.counts.put(id, { ahead, behind, unpushed, dirty })) this.d.hub.emit("worktreesChanged");
+  /** the worktree's whole git state read now, the panel's tier included whether or not anyone is
+   * subscribed: for a decision, or a test, that needs it as it stands. The frames the panel gets
+   * come from the owner's own reads (treeState.ts); this sends none, only the rail's. */
+  async gitStatus(worktreeId: string): Promise<GitInfo | null> {
+    if (!this.readable(worktreeId)) return this.archivedStatus(worktreeId);
+    const { frame, moved } = await this.tree.full(worktreeId);
+    // a fresher count than the rows carry: the row takes it now, not at the next frame
+    if (moved) this.d.hub.emit("worktreesChanged");
+    return frame;
+  }
+
+  /** every id a move of the repo's main concerns: its rows, the worktrees found in it, its trunk */
+  private rowsOf(repoId: string): string[] {
+    const ids = this.d.state.worktrees.filter((wt) => wt.repoId === repoId && this.isRow(wt)).map((wt) => wt.id);
+    for (const f of this.foundCached()) if (f.repoId === repoId) ids.push(f.id);
+    const main = this.mainOf(repoId);
+    if (main && !ids.includes(main.id)) ids.push(main.id);
+    return ids;
   }
 
   /** the history tab's commit list. Unlike gitStatus this is asked for, not pushed: the panel
@@ -2970,10 +2937,10 @@ export class WorktreeService {
   snapshot(): { rows: WorktreeStatus[]; trunks: Record<string, TrunkStatus> } {
     const rows = [...this.ownedRows(), ...this.foundRows()];
     const trunks = this.trunksNow();
-    const reading = this.counts.refresh(idsOf(rows, trunks));
+    const reading = this.tree.refreshStale(idsOf(rows, trunks));
     if (reading) {
       this.behind(
-        "counts",
+        "tree",
         reading.then((moved) => {
           if (moved) this.d.hub.emit("worktreesChanged");
         }),
@@ -3010,11 +2977,18 @@ export class WorktreeService {
    * decision, or a test, that needs them as they stand. True when there was something to wait on. */
   async settled(): Promise<boolean> {
     let waited = false;
-    while (this.pending.size) {
-      waited = true;
-      await Promise.all(this.pending);
+    for (;;) {
+      if (this.pending.size) {
+        waited = true;
+        await Promise.all(this.pending);
+        continue;
+      }
+      if (await this.tree.settled()) {
+        waited = true;
+        continue;
+      }
+      return waited;
     }
-    return waited;
   }
 
   private mainOf(repoId: string): WorktreeInfo | undefined {
@@ -3042,7 +3016,7 @@ export class WorktreeService {
       .filter((wt) => this.isRow(wt))
       .map((wt) => {
         const rt = this.d.runtime.get(wt.id);
-        const { ahead, behind, unpushed, dirty } = this.counts.get(wt.id) ?? {};
+        const { ahead, behind, unpushed, dirty } = this.tree.counts(wt.id) ?? {};
         return {
           id: wt.id,
           repoId: wt.repoId,
@@ -3071,7 +3045,7 @@ export class WorktreeService {
 
   private foundRows(): WorktreeStatus[] {
     return this.foundNow().map((f) => {
-      const { ahead, behind, dirty } = this.counts.get(f.id) ?? {};
+      const { ahead, behind, dirty } = this.tree.counts(f.id) ?? {};
       return {
         ...f,
         procs: [],

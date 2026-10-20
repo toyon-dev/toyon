@@ -17,8 +17,9 @@ export interface TrunkDeps {
   hub: Hub;
   /** main's badge numbers as last read; WorktreeService owns the cache and reads behind the frames */
   counts: (main: WorktreeInfo) => { behind?: number; dirty?: number } | undefined;
-  /** every row's count is against main, so a main that moved makes all of them stale */
-  invalidateCounts: () => void;
+  /** main's own numbers are in doubt (a fetch landed, main moved): its record is read again. The
+   * other rows' counts against main move with its ref, which the watcher reports as a repoTick. */
+  invalidateCounts: (mainId: string) => void;
 }
 
 /** how often main's upstream is fetched while its row is being counted */
@@ -60,7 +61,7 @@ export class Trunk {
           const main = this.d.state.worktree(mainId);
           if (main) this.noteFetch(main.repoId, r);
           if (!r.ok) return;
-          this.d.invalidateCounts();
+          this.d.invalidateCounts(mainId);
           this.d.hub.emit("worktreesChanged");
           if ((await behindUpstream(path)) ?? 0) await this.follow(mainId);
         }),
@@ -86,7 +87,7 @@ export class Trunk {
     const f = await withFetchLock(repo.path, () => run(GIT, ["fetch", "--quiet"], repo.path, NO_PROMPT));
     this.noteFetch(repo.id, f);
     if (!f.ok) return;
-    this.d.invalidateCounts();
+    this.d.invalidateCounts(main.id);
     await this.follow(main.id);
   }
 
@@ -121,7 +122,7 @@ export class Trunk {
     const f = await withFetchLock(repo.path, () => w.git(repo.path, ["fetch", "--quiet"]));
     this.noteFetch(repo.id, f);
     if (!f.ok) return { ok: false, message: refused("fetch failed", f) };
-    this.d.invalidateCounts();
+    this.d.invalidateCounts(main.id);
     return this.follow(main.id);
   }
 
@@ -145,8 +146,9 @@ export class Trunk {
     if (ff.stale) this.stale.set(repo.id, ff.stale);
     else this.stale.delete(repo.id);
     if (ff.moved) {
-      // every row's count is against the moved main now; the watcher resets the spare
-      this.d.invalidateCounts();
+      // main's own numbers moved; every other row's count against it moves on the watcher's
+      // repoTick, and the watcher resets the spare
+      this.d.invalidateCounts(mainId);
       this.d.hub.emit("worktreesChanged");
     } else if (was !== ff.stale) this.d.hub.emit("worktreesChanged");
     return ff;

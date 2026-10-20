@@ -148,17 +148,21 @@ async function numstat(worktreePath: string, ...range: string[]): Promise<Map<st
   return r.ok ? parseNumstat(r.out) : new Map<string, LineCounts>();
 }
 
-/** Line count of an untracked file (all insertions). Undefined for binaries and directories. */
-async function untrackedLines(worktreePath: string, file: string): Promise<LineCounts> {
+/** Line count of an untracked file (all insertions). Undefined for binaries and directories, and
+ * for a file the call's byte budget cannot take: the bytes are read in full to count them, and
+ * a push that read a gigabyte of build output held the event loop while it scanned. */
+async function untrackedLines(worktreePath: string, file: string, budget: { left: number }): Promise<LineCounts> {
   try {
     const f = Bun.file(join(worktreePath, file));
     // a dumped database or a video is not something to count lines in
-    if (f.size > 2_000_000) return {};
+    if (f.size > 2_000_000 || f.size > budget.left) return {};
+    budget.left -= f.size;
     const buf = new Uint8Array(await f.arrayBuffer());
     if (buf.subarray(0, 8000).includes(0)) return {};
     if (buf.length === 0) return { add: 0, del: 0 };
+    // indexOf runs the scan in native code: a byte-at-a-time loop cost 23 ms per 2 MB
     let n = 0;
-    for (const b of buf) if (b === 10) n++;
+    for (let i = buf.indexOf(10); i !== -1; i = buf.indexOf(10, i + 1)) n++;
     if (buf[buf.length - 1] !== 10) n++;
     return { add: n, del: 0 };
   } catch {
@@ -172,24 +176,54 @@ async function untrackedLines(worktreePath: string, file: string): Promise<LineC
  * thousands of reads on every status push. */
 const MAX_UNTRACKED_COUNTED = 500;
 
+/** how many bytes of untracked files one count may read in all: five hundred files under the
+ * size cap could still be a gigabyte, and the loop has to stay answerable while they are read */
+export const UNTRACKED_BYTES_MAX = 16 * 1024 * 1024;
+
+/** the uncommitted files as path and status, and the paths folded against HEAD (readStatus), for
+ * a reader that counts their lines later or not at all */
+export function statusEntries(worktreePath: string): Promise<{ files: GitFileStatus[]; folded: Set<string> }> {
+  return readStatus(worktreePath, []);
+}
+
+/** The +/- counts for a status already read, by path. A folded path carries its counts on the
+ * entry already; the tracked ones come from one numstat against HEAD; the untracked are read
+ * from disk one at a time, so a hundred of them do not open at once, within the byte budget. */
+export async function countEntries(
+  worktreePath: string,
+  files: GitFileStatus[],
+  folded: Set<string>,
+  bytesMax = UNTRACKED_BYTES_MAX,
+): Promise<Map<string, LineCounts>> {
+  const out = new Map<string, LineCounts>();
+  if (files.length === 0) return out;
+  const tracked = files.some((f) => f.xy !== "??" && !folded.has(f.path));
+  const counts = tracked ? await numstat(worktreePath, "HEAD") : new Map<string, LineCounts>();
+  const untracked = files.filter((f) => f.xy === "??");
+  const countUntracked = untracked.length <= MAX_UNTRACKED_COUNTED;
+  const budget = { left: bytesMax };
+  for (const f of files) {
+    if (folded.has(f.path)) {
+      if (f.add !== undefined || f.del !== undefined) out.set(f.path, { add: f.add, del: f.del });
+      continue;
+    }
+    if (f.xy !== "??") {
+      const c = counts.get(f.path);
+      if (c) out.set(f.path, c);
+      continue;
+    }
+    if (!countUntracked) continue;
+    const c = await untrackedLines(worktreePath, f.path, budget);
+    if (c.add !== undefined) out.set(f.path, c);
+  }
+  return out;
+}
+
 /** Uncommitted files with +/- line counts vs HEAD (staged and unstaged combined). */
 export async function statusFilesWithCounts(worktreePath: string): Promise<GitFileStatus[]> {
-  const { files, folded } = await readStatus(worktreePath, []);
-  if (files.length === 0) return files;
-  const counts = files.some((f) => f.xy !== "??") ? await numstat(worktreePath, "HEAD") : new Map<string, LineCounts>();
-  const countUntracked = files.filter((f) => f.xy === "??").length <= MAX_UNTRACKED_COUNTED;
-  return Promise.all(
-    files.map(async (f) => ({
-      ...f,
-      ...(folded.has(f.path)
-        ? {}
-        : f.xy === "??"
-          ? countUntracked
-            ? await untrackedLines(worktreePath, f.path)
-            : {}
-          : (counts.get(f.path) ?? {})),
-    })),
-  );
+  const { files, folded } = await statusEntries(worktreePath);
+  const counts = await countEntries(worktreePath, files, folded);
+  return files.map((f) => ({ ...f, ...(counts.get(f.path) ?? {}) }));
 }
 
 /** Files changed between merge-base with main and HEAD (committed, not yet landed). */

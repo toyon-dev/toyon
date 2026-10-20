@@ -45,12 +45,15 @@ import type { PrService } from "../worktrees/prs.ts";
 import type { RefSearch } from "../worktrees/refs.ts";
 import type { WorktreeService } from "../worktrees/service.ts";
 import type { TurnService } from "../worktrees/turns.ts";
+import type { Interest } from "./interest.ts";
 
 export interface Services {
   state: StateStore;
   hub: Hub;
   repos: RepoRegistry;
   worktrees: WorktreeService;
+  /** who is subscribed to which worktree (interest.ts), filled in by the socket layer */
+  interest: Interest;
   /** how each worktree's agent last stopped, and whether anyone has looked since */
   turns: TurnService;
   files: FileService;
@@ -144,11 +147,19 @@ const shipped = (worktreeId: string, ok: boolean, message: string, extra: Partia
 
 const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
+/** the worktree's git state for the caller alone: the record, read first when there is none, and
+ * for a subscriber a moment's wait for the panel's tier so the first paint is one frame */
 const gitStatus = async (s: Services, ctx: HandlerCtx, worktreeId: string) => {
-  const info = await s.worktrees.gitStatus(worktreeId);
+  const info = s.worktrees.readable(worktreeId)
+    ? await s.worktrees.tree.current(worktreeId, FIRST_FRAME_WAIT_MS)
+    : await s.worktrees.archivedStatus(worktreeId);
   if (info) ctx.reply({ t: "git-status", worktreeId, ...info });
   return info;
 };
+
+/** how long a subscriber's first frame waits for the line counts and the committed list before
+ * going out as the core alone, with the rest to follow */
+const FIRST_FRAME_WAIT_MS = 250;
 
 /** what a subscriber is sent after its backfill: the changes list, then the pages the worktree's
  * files define with their badges, so the route list is ready before anyone opens it */

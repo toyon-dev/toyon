@@ -209,8 +209,15 @@ export class FileSync {
         t.reread = true;
         this.next(t);
       }
-    } else if (e && pe && pe.seq === e.seq && localOf(was, e.worktreeId).git !== localOf(now, e.worktreeId).git) {
-      // the worktree's files moved: an agent's edit, or a save or a discard in any tab
+    } else if (
+      e &&
+      pe &&
+      pe.seq === e.seq &&
+      localOf(was, e.worktreeId).git?.version !== localOf(now, e.worktreeId).git?.version
+    ) {
+      // the worktree's tree moved to a new state: an agent's edit, or a save or a discard in any
+      // tab. The state's number, not the record: the panel's tier landing over the same state
+      // changes no file on disk.
       this.refresh(keyOf(e));
     }
   }

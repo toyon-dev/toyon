@@ -365,8 +365,8 @@ export function Composer({
   // the folders the files tab shows, so `@src/app/` names one the tree has
   const folders = useMemo(() => folderList(files ?? NO_PATHS), [files]);
   const git = useLocalField(id, "git");
-  // this worktree's uncommitted files: the live status when the row is subscribed, else the
-  // rail's ten-second count
+  // this worktree's uncommitted files: the status when the row is subscribed, else the row's
+  // count, from the same record
   const dirty = git?.files.length ?? active?.dirty ?? 0;
   // commits the PR on origin does not have yet; counted only while one is open
   const unpushed = git?.unpushed ?? active?.unpushed ?? 0;
@@ -410,7 +410,7 @@ export function Composer({
   // a verdict keeps its subject past a commit made outside toyon, so the subject alone is not it
   const messageEditable = dirty > 0 && !!landing?.subject;
   // what would land: the uncommitted files, or the committed ones when the tree is clean
-  const landCount = dirty || (git?.committed?.length ?? 0);
+  const landCount = dirty || (git?.extras?.committed.length ?? 0);
   // the verb's states, in order: landed and nothing since (the box offers the one thing left,
   // closing the worktree; the conversation stays until then, so a follow-up is a message like any
   // other), then a PR standing between the work and main, then a verdict on work to land

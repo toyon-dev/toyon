@@ -2,7 +2,7 @@ import { join } from "node:path";
 import {
   cleanTitle,
   compileRoute,
-  type GitFileStatus,
+  type GitInfo,
   type PageEntry,
   type RouteInfo,
   routeKey,
@@ -66,8 +66,21 @@ const bunFs: RouteFs = {
   },
 };
 
-/** the changed files a worktree's git status carries */
-export type WorktreeGit = { files: GitFileStatus[]; committed?: GitFileStatus[] };
+/** a worktree's git state as the pages read it: the frame the tree-state owner holds, or for a
+ * caller with only a status in hand, its files */
+export type WorktreeGit = Pick<GitInfo, "files" | "head" | "extras"> & { version?: number };
+
+/** What a scan answers for: one tree state, by the version its frame carries, so the pages are
+ * read once per state and never twice for the same one (the subscribe reply and the push behind
+ * it). A bare status with no version keys on HEAD and the entries that could move a route. */
+function scanKey(git: WorktreeGit): string {
+  if (git.version !== undefined) return `v${git.version}`;
+  const entries = git.files
+    .filter((f) => isManifest(f.path) || CODE_FILE.test(f.path))
+    .map((f) => `${f.xy}${f.path}`)
+    .sort();
+  return `${git.head ?? ""}\n${entries.join("\n")}`;
+}
 
 export interface RouteDeps {
   state: StateStore;
@@ -96,6 +109,8 @@ interface Scan {
   code: Map<string, Cached<string | null>>;
   git: WorktreeGit | null;
   pages: WorktreePages | null;
+  /** what the routes were last scanned for (scanKey); the same again is not scanned twice */
+  key: string | null;
 }
 
 /** what the shell's list would show: order and titles. A score that moved and reordered nothing is
@@ -177,7 +192,11 @@ export class RouteService {
     const wt = this.d.readable(worktreeId);
     if (!wt) return { routes: [], unseen: {} };
     const scan = this.scanFor(worktreeId, wt.path);
-    await this.routesOf(scan);
+    const key = scanKey(git);
+    if (!scan.routes || scan.key !== key) {
+      scan.key = key;
+      await this.routesOf(scan);
+    }
     scan.git = git;
     await this.refreshUnseen(worktreeId, scan);
     return scan.pages ?? { routes: [], unseen: {} };
@@ -231,7 +250,7 @@ export class RouteService {
   /** work out the badges again; true when they moved */
   private async refreshUnseen(worktreeId: string, scan: Scan): Promise<boolean> {
     if (!scan.routes) return false;
-    const changed = scan.git ? [...scan.git.files, ...(scan.git.committed ?? [])] : [];
+    const changed = scan.git ? [...scan.git.files, ...(scan.git.extras?.committed ?? [])] : [];
     const seen = this.d.state.seenOf(worktreeId);
     const candidates = badgeCandidates(scan.routes, changed, seen?.here).slice(0, MAX_HASHED);
     const hashes: Record<string, string> = {};
@@ -260,6 +279,7 @@ export class RouteService {
       code: new Map(),
       git: null,
       pages: null,
+      key: null,
     };
     scan.root = root;
     this.scans.delete(worktreeId);

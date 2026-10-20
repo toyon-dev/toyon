@@ -411,7 +411,7 @@ describe("an archived worktree's changes and history", () => {
       const log = await w.worktrees.gitLog(wt.id);
       expect(subjects(log)).toEqual(["add f4.txt", "add f3.txt", "add f2.txt", "add f1.txt"]);
       expect(log.map((c) => c.landedAt)).toEqual(Array(4).fill(lands[0]?.at));
-      expect(await w.worktrees.gitStatus(wt.id)).toMatchObject({ files: [], committed: [] });
+      expect(await w.worktrees.gitStatus(wt.id)).toMatchObject({ files: [], extras: { committed: [] } });
       expect(await w.worktrees.commitFiles(wt.id, log[0]!.sha)).toMatchObject([{ path: "f4.txt" }]);
     });
   }
@@ -433,7 +433,7 @@ describe("an archived worktree's changes and history", () => {
     expect(log.map((c) => c.landedAt)).toEqual([undefined, second?.at, second?.at, first?.at]);
     expect(await w.worktrees.gitStatus(wt.id)).toMatchObject({
       files: [{ path: "wip.txt" }],
-      committed: [{ path: "d.txt" }],
+      extras: { committed: [{ path: "d.txt" }] },
     });
     // the changes list's diff: what never landed against where it forked, uncommitted work included
     expect(await w.worktrees.archivedFile(wt.id, "wip.txt")).toEqual({ before: "", after: "wip\n" });
@@ -448,7 +448,7 @@ describe("an archived worktree's changes and history", () => {
     sh(w.repo, "git", "commit", "--allow-empty", "-qm", "main moves on");
     await w.worktrees.archiveWorktree(wt.id);
     expect(subjects(await w.worktrees.gitLog(wt.id))).toEqual(["add a.txt"]);
-    expect(await w.worktrees.gitStatus(wt.id)).toMatchObject({ files: [], committed: [{ path: "a.txt" }] });
+    expect(await w.worktrees.gitStatus(wt.id)).toMatchObject({ files: [], extras: { committed: [{ path: "a.txt" }] } });
   });
 
   test("the archived row carries its landings, a restore brings them back, and a land after it adds one", async () => {

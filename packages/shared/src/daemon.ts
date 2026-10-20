@@ -17,6 +17,13 @@ export const LSREGISTER =
   "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister";
 
 /** file names under TOYON_HOME; the CLI reads them, the daemon writes them */
+/** under this many open-file descriptors a daemon with a few dozen worktrees runs out: every git
+ * child holds three pipes, and from then on nothing spawns. The daemon says so at boot and doctor
+ * repeats it, in these words. */
+export const FD_LIMIT_LOW = 4096;
+export const fdLimitLine = (n: number): string =>
+  `open-file limit is ${n}; raise it with ulimit -n 8192 before toyon starts`;
+
 export const DAEMON_FILES = {
   token: "token",
   /** the hidden macOS helper bundle the daemon writes (core/helper.ts); `toyon uninstall`

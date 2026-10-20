@@ -84,6 +84,9 @@ export interface HubEvents {
   attachmentsChanged: (boxId: string, items: AttachmentInput[], clientId?: string) => void;
   /** the editor saved or discarded a file: every tab's changes list, and any editor open on it, re-reads */
   filesChanged: (worktreeId: string) => void;
+  /** the worktree's tree-state record moved to a new version (worktrees/treeState.ts): whoever is
+   * subscribed gets the frame, read off the record */
+  treeChanged: (worktreeId: string) => void;
   /** a file was opened from outside the shell (the Dock icon, `toyon <file>`): a shell should show it */
   opened: (opened: OpenedFile) => void;
   /** a path from outside was refused, in the words the person should read: the Dock icon has no

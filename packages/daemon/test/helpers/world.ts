@@ -14,6 +14,7 @@ import { PageErrorService } from "../../src/preview/errors.ts";
 import { AfterLand } from "../../src/repos/afterLand.ts";
 import { RepoRegistry } from "../../src/repos/registry.ts";
 import { RuntimeRegistry } from "../../src/runtime/registry.ts";
+import { Interest } from "../../src/server/interest.ts";
 import { ArtifactCache } from "../../src/worktrees/cache.ts";
 import { FixService } from "../../src/worktrees/fix.ts";
 import { HandoffService } from "../../src/worktrees/handoff.ts";
@@ -60,7 +61,10 @@ export function world() {
   hub.on("messageRefused", (id, said) => refused.push([id, said]));
   const fix = new FixService({ state, hub, runtime });
   const pageErrors = new PageErrorService({ hub, known: (id) => state.worktree(id) !== undefined });
+  // who is subscribed, as the socket layer would say: a test subscribes a key to read the panel's tier
+  const interest = new Interest();
   const worktrees = new WorktreeService({
+    interested: (id) => interest.isSubscribed(id),
     state,
     hub,
     runtime,
@@ -91,6 +95,7 @@ export function world() {
   });
   return {
     ...t,
+    interest,
     state,
     hub,
     runtime,

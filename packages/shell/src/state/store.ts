@@ -26,6 +26,7 @@ import type {
   FileServerMsg,
   Fixable,
   GitFileStatus,
+  GitInfo,
   InstallMethod,
   KeepAwakeMode,
   Knock,
@@ -192,20 +193,6 @@ export type ChatItem =
     }
   /** the daemon's word that a worktree this one handed off to landed in its project */
   | { kind: "handoff-landed"; worktreeId: string; repoName: string; title: string; url?: string; ts: number };
-
-export interface GitInfo {
-  files: GitFileStatus[];
-  committed?: GitFileStatus[];
-  /** what the last turn changed and the commit holding the tree it started from; absent when
-   * that is the whole of `files` */
-  turn?: { base: string; files: GitFileStatus[] };
-  ahead?: number;
-  behind?: number;
-  /** commits origin's copy of the branch lacks, counted only while a PR is open */
-  unpushed?: number;
-  /** HEAD's sha; the history tab re-reads its log when this moves */
-  head?: string;
-}
 
 /** what the box holds against one ask (surfaces/chat/ask.ts): one answer per question, and the
  * question on screen */
@@ -1840,6 +1827,7 @@ function reduce(s: State, action: Action): State {
         ...s,
         connected: action.v,
         connectFailure: action.v ? null : action.failure === undefined ? s.connectFailure : action.failure,
+        local: action.v ? s.local : forgetListings(s.local),
       };
     case "activate": {
       // the phone goes with the selection: choosing a row is choosing to read it, and the chat is
@@ -2442,7 +2430,82 @@ function landedClean(local: State["local"], before: WorktreeStatus[], rows: Work
     const l = out[w.id];
     if (!l?.git || l.git.files.length === 0) continue;
     if (out === local) out = { ...local };
-    out[w.id] = { ...l, git: { ...l.git, files: [] } };
+    // the land moved HEAD, so the committed list and the turn went with the files; the version
+    // stands, so the daemon's next frame lands and one from before the land is dropped
+    const { extras: _landed, ...git } = l.git;
+    out[w.id] = { ...l, git: { ...git, files: [] } };
+  }
+  return out;
+}
+
+/** The frame over what was held. A core frame carries no counts, so each file keeps the counts
+ * the last extras gave it while its status letter stands (an edit that changed the count comes
+ * as its own frame); a file new to the list, or with a new letter, waits for the next extras. The
+ * committed list and the turn are HEAD's: they stand while it does and go when it moves, and a
+ * turn means nothing over a clean tree. */
+function mergeGit(held: GitInfo | undefined, msg: GitInfo): GitInfo {
+  const { version, files, ahead, behind, unpushed, head } = msg;
+  const core: GitInfo = {
+    version,
+    files,
+    ...(ahead === undefined ? {} : { ahead }),
+    ...(behind === undefined ? {} : { behind }),
+    ...(unpushed === undefined ? {} : { unpushed }),
+    ...(head === undefined ? {} : { head }),
+  };
+  if (msg.extras) return { ...core, extras: msg.extras };
+  const before = new Map(held?.files.map((f) => [f.path, f]));
+  const carried = files.map((f) => {
+    const was = before.get(f.path);
+    return was && was.xy === f.xy && was.add !== undefined ? { ...f, add: was.add, del: was.del } : f;
+  });
+  const kept = held?.extras && held.head === head ? held.extras : undefined;
+  const extras = kept && files.length === 0 && kept.turn ? { committed: kept.committed } : kept;
+  return { ...core, files: carried, ...(extras ? { extras } : {}) };
+}
+
+/** The ranges still good after a frame: none once HEAD moves (every range is against it); on a
+ * new tree state, those of the files it lists or the last one listed go, since any of them may
+ * have been edited (a status letter and even a count can read the same after an edit); the
+ * panel's tier landing over the same state changes no file and keeps them all. */
+function rangesKept(
+  held: GitInfo | undefined,
+  git: GitInfo,
+  ranges: WorktreeLocal["changedRanges"],
+): WorktreeLocal["changedRanges"] {
+  if (!held || held.head !== git.head) return {};
+  if (held.version === git.version) return ranges;
+  const listed = new Set([...held.files, ...git.files].map((f) => f.path));
+  let out = ranges;
+  for (const path of Object.keys(ranges)) {
+    if (!listed.has(path)) continue;
+    if (out === ranges) out = { ...ranges };
+    delete out[path];
+  }
+  return out;
+}
+
+/** A new socket may be a new daemon, whose state numbers start over: what is held stays on
+ * screen, and its number steps aside so the first frame lands whatever it says. */
+function forgetVersions(local: State["local"]): State["local"] {
+  let out = local;
+  for (const [id, l] of Object.entries(local)) {
+    if (!l.git || l.git.version === 0) continue;
+    if (out === local) out = { ...local };
+    out[id] = { ...l, git: { ...l.git, version: 0 } };
+  }
+  return out;
+}
+
+/** The socket went: a listing asked for and never answered is asked again on the next one. The
+ * key is set when the ask goes out, so a reply lost with the socket would otherwise never be. */
+function forgetListings(local: State["local"]): State["local"] {
+  let out = local;
+  for (const [id, l] of Object.entries(local)) {
+    if (l.filesFor === undefined) continue;
+    if (out === local) out = { ...local };
+    const { filesFor: _asked, ...rest } = l;
+    out[id] = rest;
   }
   return out;
 }
@@ -2555,7 +2618,9 @@ function onServer(s: State, msg: StoreServerMsg): State {
         trunks: msg.trunks,
         archiving: s.archiving.length ? [] : s.archiving,
         shipping: shippingFrom({}, msg.rows, msg.trunks),
-        local: pruneLocal(withAttachments(withDrafts(s.local, msg.drafts), msg.attachments), msg.rows, s.archivedPage),
+        local: forgetVersions(
+          pruneLocal(withAttachments(withDrafts(s.local, msg.drafts), msg.attachments), msg.rows, s.archivedPage),
+        ),
         lastActive: pruneLastActive(s.lastActive, msg.rows),
         treeOpen: pruneByRow(s.treeOpen, msg.rows),
         discoveredOpen: pruneByRepo(s.discoveredOpen, msg.repos),
@@ -2886,13 +2951,20 @@ function onServer(s: State, msg: StoreServerMsg): State {
       }));
     }
     case "git-status": {
+      const held = s.local[msg.worktreeId]?.git;
+      // the two tiers go out on their own clocks: a frame from a state this tab has moved past is
+      // dropped, and the same state again with nothing new (a re-subscribe) changes nothing. An
+      // archived worktree's one state is unversioned (0) and always lands.
+      if (msg.version > 0 && held && msg.version < held.version) return s;
+      if (msg.version > 0 && held && msg.version === held.version && !msg.extras) return s;
       // the panel is a place you go, not a fixture: it starts closed and opens itself once, the
       // first time the worktree on screen has something to show. An empty status does not spend
       // the one shot; the moment is the first diff, not the first answer.
       let changes = s.layout.changes;
       let changesAuto = s.changesAuto;
+      const committed = msg.extras?.committed.length ?? 0;
       if (s.changesAuto && msg.worktreeId === s.activeId && !changes) {
-        if (msg.files.length > 0 || (msg.committed?.length ?? 0) > 0) {
+        if (msg.files.length > 0 || committed > 0) {
           changes = true;
           changesAuto = false;
         }
@@ -2900,21 +2972,11 @@ function onServer(s: State, msg: StoreServerMsg): State {
       // an archived worktree's page opens it when that worktree left work, or landed some: that
       // work is what the page is about
       const page = msg.worktreeId === s.archivedPage ? archivedPageOf(s) : null;
-      if (page && (msg.files.length > 0 || (msg.committed?.length ?? 0) > 0 || page.landed)) changes = true;
-      // ranges go stale whenever the worktree's git state moves
-      const next = withLocal(s, msg.worktreeId, (l) => ({
-        ...l,
-        git: {
-          files: msg.files,
-          committed: msg.committed,
-          turn: msg.turn,
-          ahead: msg.ahead,
-          behind: msg.behind,
-          unpushed: msg.unpushed,
-          head: msg.head,
-        },
-        changedRanges: {},
-      }));
+      if (page && (msg.files.length > 0 || committed > 0 || page.landed)) changes = true;
+      const next = withLocal(s, msg.worktreeId, (l) => {
+        const git = mergeGit(l.git, msg);
+        return { ...l, git, changedRanges: rangesKept(l.git, git, l.changedRanges) };
+      });
       return { ...withLayout(next, { changes }), changesAuto };
     }
     case "changed-ranges": {

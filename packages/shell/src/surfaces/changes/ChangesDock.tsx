@@ -89,7 +89,7 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
   // each list reads the change first and its tests after: the order every index below is in, so
   // the arrows, the pick and the titles agree with what is drawn
   const statusFiles = gitInfo?.files ?? NO_FILES;
-  const statusCommitted = gitInfo?.committed ?? NO_FILES;
+  const statusCommitted = gitInfo?.extras?.committed ?? NO_FILES;
   const { files, source: fileSource } = useMemo(() => testsLast(statusFiles), [statusFiles]);
   // a folded committed section leaves the list altogether, so the cursor, the row ids and the
   // menus count only what is drawn; the heading stays for as long as the branch holds anything
@@ -103,7 +103,7 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
   // own, shut until asked for, since the list above already holds these files. Its rows carry the
   // turn's own counts and open the file against the tree the turn started from. Shut, it leaves
   // the list as a folded committed section does.
-  const turn = gitInfo?.turn;
+  const turn = gitInfo?.extras?.turn;
   const turnBase = turn?.base;
   const turnOpen = useTurnOpen();
   const { files: turned, source: turnedSource } = useMemo(
@@ -142,8 +142,9 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
     const count = `${files.length} uncommitted ${files.length === 1 ? "file" : "files"}`;
     return lines ? `${count}, ${lines}` : count;
   }, [files]);
-  // nothing uncommitted and nothing committed on top of the base, once git has said so
-  const unchanged = !!gitInfo && clean && !hasCommitted;
+  // nothing uncommitted and nothing ahead of the base, as a frame at this head said: the count is
+  // in every frame, where the committed list rides behind
+  const unchanged = !!gitInfo && clean && (gitInfo.ahead ?? 0) === 0;
 
   const tab = useStore(changesTabShown);
   // an archived page has no strip: the worktree's whole life is one list, what it left uncommitted
@@ -691,7 +692,9 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
             <>
               {/* the tab already says changes; the title is only needed to tell this section from
                 the committed one under it, or on an archived page from the history */}
-              {(hasCommitted || archived) && <div className="section-title section-row">uncommitted</div>}
+              {(hasCommitted || (gitInfo?.ahead ?? 0) > 0 || archived) && (
+                <div className="section-title section-row">uncommitted</div>
+              )}
               {files.map((f, i) => (
                 // the status is in the key with the path: a path the daemon lists twice must still
                 // be two keys, since React strands the elements behind a shared one and they stay
@@ -860,8 +863,8 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
       {activeRow && !archived && (
         <CommitBox
           active={activeRow}
-          ahead={gitInfo?.ahead ?? 0}
-          behind={gitInfo?.behind ?? 0}
+          ahead={gitInfo?.ahead ?? activeRow.ahead ?? 0}
+          behind={gitInfo?.behind ?? activeRow.behind ?? 0}
           unpushed={gitInfo?.unpushed ?? activeRow.unpushed ?? 0}
           dirty={!clean}
         />

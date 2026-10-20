@@ -7,7 +7,7 @@ import { join } from "node:path";
 import type { Readable } from "node:stream";
 import { describeDuration } from "@toyon/shared";
 import { fireAndForget, log } from "../core/log.ts";
-import { lastGit } from "../core/metrics.ts";
+import { lastGit, noteSpawn } from "../core/metrics.ts";
 import { killGroup } from "../runtime/kill.ts";
 
 /** the files that pin what an install produces, in every ecosystem toyon has met */
@@ -113,6 +113,7 @@ export async function run(
   const started = Date.now();
   const ceiling = opts.timeoutMs ?? RUN_CEILING_MS;
   let timer: ReturnType<typeof setTimeout> | undefined;
+  if (cmd === GIT) noteSpawn(args);
   try {
     // env is always passed explicitly rather than left to Bun's default: that default is a snapshot
     // taken at startup, so a variable set later in the process lifetime would not reach git

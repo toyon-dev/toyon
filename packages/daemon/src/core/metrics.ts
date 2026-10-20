@@ -29,6 +29,34 @@ export const SLEEP_MS = 30_000;
 /** the most recent git invocation and how long it took — set by git/exec.ts */
 export const lastGit = { cmd: "", ms: 0, at: 0 };
 
+/** every git process since boot, by its first two words (`status --porcelain`): the number a
+ * fan-out shows up in, where the lag sampler only names whichever call finished in a late tick */
+export const gitSpawns: Record<string, number> = {};
+
+export function noteSpawn(args: string[]): void {
+  const key = args.slice(0, 2).join(" ");
+  gitSpawns[key] = (gitSpawns[key] ?? 0) + 1;
+}
+
+/** what the tree-state owner did since boot: core reads, extras reads, reads whose answer was
+ * thrown away because the tree moved under them, and reads git could not answer */
+export const treeReads = { core: 0, extras: 0, superseded: 0, failed: 0 };
+
+/** the worst run of named synchronous work, in ms: the attribution the lag sampler cannot make,
+ * since it only sees that a tick was late */
+export const syncHot: Record<string, number> = {};
+
+export function noteSync(name: string, ms: number): void {
+  if (ms > (syncHot[name] ?? 0)) syncHot[name] = ms;
+}
+
+/** the soft open-file limit the daemon runs under, read at boot; 0 until read or unreadable.
+ * Every git child holds three pipes, and a daemon over its limit fails to spawn at all. */
+export const limits = { fdLimit: 0 };
+
+/** late ticks by how late, since boot: the shape of the lag, where `over` is only its count */
+export const lagHist = { over50: 0, over100: 0, over250: 0, over1000: 0 };
+
 export const lag: LagSample = { last: 0, max: 0, maxCause: null, over: 0 };
 
 /** one minute's late ticks, as the log says them */
@@ -104,6 +132,10 @@ export function startLagSampler(): () => void {
       lag.maxCause = git ? `${git.cmd} (${git.ms}ms)` : null;
     }
     if (late > WARN_MS) lag.over++;
+    if (late > 50) lagHist.over50++;
+    if (late > 100) lagHist.over100++;
+    if (late > 250) lagHist.over250++;
+    if (late > 1000) lagHist.over1000++;
   }, TICK_MS);
   return () => clearInterval(t);
 }

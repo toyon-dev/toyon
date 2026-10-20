@@ -2,6 +2,7 @@
 // No logic lives here; if a line here starts making decisions it belongs in a service.
 
 import { rmSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -9,6 +10,8 @@ import {
   DAEMON_DEFAULT_PORT,
   DAEMON_FILES,
   describeManaged,
+  FD_LIMIT_LOW,
+  fdLimitLine,
   installCommand,
   installMethod,
   previewsLine,
@@ -38,7 +41,7 @@ import { Hub } from "./core/hub.ts";
 import { IdleExit, stopAfterFrom } from "./core/idleExit.ts";
 import { Knocks } from "./core/knocks.ts";
 import { fireAndForget, log } from "./core/log.ts";
-import { startLagSampler } from "./core/metrics.ts";
+import { limits, startLagSampler } from "./core/metrics.ts";
 import { Origins } from "./core/origins.ts";
 import { ensureDirs, makePaths } from "./core/paths.ts";
 import { loadRemote, type PreviewGate, previewGrant, RemoteSetting } from "./core/remote.ts";
@@ -53,6 +56,7 @@ import { DraftStore } from "./drafts/store.ts";
 import { ExecService } from "./exec/service.ts";
 import { OpenService } from "./files/open.ts";
 import { FileService } from "./files/service.ts";
+import { run } from "./git/exec.ts";
 import { viewPr } from "./git/gh.ts";
 import { PageErrorService } from "./preview/errors.ts";
 import { AfterLand } from "./repos/afterLand.ts";
@@ -62,6 +66,7 @@ import { RunService } from "./runs/service.ts";
 import { BridgeScript } from "./runtime/bridge-script.ts";
 import { IdlePolicy } from "./runtime/idle.ts";
 import { RuntimeRegistry } from "./runtime/registry.ts";
+import { Interest } from "./server/interest.ts";
 import { startServer } from "./server/ws.ts";
 import { ThemeStore } from "./themes/store.ts";
 import { latestVersion, npmRegistry, runInstall } from "./update/infra.ts";
@@ -247,6 +252,9 @@ const exec = new ExecService({ state, runtime, shipping: (id): Shipping | undefi
 // checkPassed and restores from inside the service's setup
 const cache = new ArtifactCache({ paths, state, hub });
 const fix = new FixService({ state, hub, runtime });
+// who is subscribed to which worktree, kept where the tree-state owner can ask; the socket layer
+// fills it in
+const interest = new Interest();
 const worktrees = new WorktreeService({
   state,
   hub,
@@ -259,7 +267,14 @@ const worktrees = new WorktreeService({
   runs,
   fix,
   pageErrors: (id) => pageErrors.ambient(id),
+  interested: (id) => interest.isSubscribed(id),
+  // idle is built below; the closure is read per call, so the order does not matter
+  shown: (id) => idle.isShown(id),
 });
+// a subscriber arriving is when a worktree's panel tier and its watcher start; the last leaving
+// is when the watcher stops
+interest.onFirst((id) => worktrees.tree.watch(id));
+interest.onLast((id) => worktrees.tree.unwatch(id));
 // a worktree whose changes touch a proc it reaches on main takes that proc over
 new BackendShare({ state, hub, runtime, own: (id, names) => worktrees.ownProcs(id, names) });
 // work continued in another open project; it makes worktrees through the service's own create
@@ -440,6 +455,7 @@ const {
     hub,
     repos,
     worktrees,
+    interest,
     turns,
     files,
     opens,
@@ -496,6 +512,20 @@ fireAndForget("remote", tailnet.start(), "ask Tailscale");
 writeFileSync(paths.pidFile, `${process.pid}\n`);
 
 const stopLagSampler = startLagSampler();
+
+// the open-file limit, once: Bun exposes no getrlimit, and the shell that started this daemon
+// is the one whose limit it inherited. A low one is said here and by doctor, since the daemon
+// cannot raise it for itself.
+fireAndForget(
+  "daemon",
+  run("sh", ["-c", "ulimit -n"], homedir()).then((r) => {
+    const n = Number.parseInt(r.out, 10);
+    if (!r.ok || !Number.isFinite(n)) return;
+    limits.fdLimit = n;
+    if (n < FD_LIMIT_LOW) log.warn("daemon", fdLimitLine(n));
+  }),
+  "open-file limit",
+);
 
 // before anything spawns: what the last daemon left running goes first, so the memory and the
 // ports it held are free for the first wake
@@ -578,6 +608,7 @@ async function shutdown(signal: string, opts: { respawn?: boolean } = {}) {
   repos.stopWatchers();
   prs.stop();
   sweep.stop();
+  worktrees.tree.stop();
   stopLagSampler();
   stopServer();
   // the visits still waiting on their coalesced write; a clean stop should not lose them

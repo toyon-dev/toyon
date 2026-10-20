@@ -1,13 +1,15 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { existsSync, statSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { sh, tmpRepo } from "../../test/helpers/tmp-repo.ts";
 import { GIT } from "./exec.ts";
 import {
   aheadUpstream,
   changedRanges,
+  countEntries,
   foldDropped,
   parsePorcelain,
+  statusEntries,
   statusFiles,
   statusFilesWithCounts,
 } from "./status.ts";
@@ -110,6 +112,43 @@ describe("statusFilesWithCounts", () => {
     const many = await statusFilesWithCounts(repo);
     expect(many).toHaveLength(502);
     expect(many.every((f) => f.add === undefined && f.del === undefined)).toBe(true);
+  });
+});
+
+describe("countEntries", () => {
+  const { repo, cleanup } = tmpRepo();
+  afterAll(cleanup);
+
+  test("counts what the status lists: a tracked edit, an untracked file, a folded path", async () => {
+    writeFileSync(join(repo, "README.md"), "hello\nworld\n");
+    writeFileSync(join(repo, "new.txt"), "a\nb");
+    writeFileSync(join(repo, "empty.txt"), "");
+    writeFileSync(join(repo, "blob.bin"), Buffer.from([1, 0, 2, 3]));
+    const { files, folded } = await statusEntries(repo);
+    expect(folded.size).toBe(0);
+    const counts = await countEntries(repo, files, folded);
+    expect(counts.get("README.md")).toEqual({ add: 1, del: 0 });
+    // the last line counts without a newline to end it, as git counts it
+    expect(counts.get("new.txt")).toEqual({ add: 2, del: 0 });
+    expect(counts.get("empty.txt")).toEqual({ add: 0, del: 0 });
+    // a binary has no lines to count
+    expect(counts.has("blob.bin")).toBe(false);
+  });
+
+  test("stops reading untracked files at the byte budget, one file at a time", async () => {
+    // the status lists paths in order, and the budget is spent in that order
+    rmSync(join(repo, "blob.bin"));
+    rmSync(join(repo, "new.txt"));
+    writeFileSync(join(repo, "a.txt"), "a\n");
+    writeFileSync(join(repo, "b.txt"), `${"x".repeat(64)}\n`);
+    const { files, folded } = await statusEntries(repo);
+    // 4 bytes: "a\n" fits, the 65-byte file does not, and the empty file costs nothing
+    const counts = await countEntries(repo, files, folded, 4);
+    expect(counts.get("a.txt")).toEqual({ add: 1, del: 0 });
+    expect(counts.has("b.txt")).toBe(false);
+    expect(counts.get("empty.txt")).toEqual({ add: 0, del: 0 });
+    // the tracked edit is counted by git, not from the budget
+    expect(counts.get("README.md")).toEqual({ add: 1, del: 0 });
   });
 });
 

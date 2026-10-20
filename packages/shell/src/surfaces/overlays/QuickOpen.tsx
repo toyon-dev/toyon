@@ -31,8 +31,10 @@ export function QuickOpen({ worktreeId }: { worktreeId: string }) {
   const dispatch = useDispatch();
   const sock = useSock();
   const store = useStoreInstance();
-  // the list in hand is shown at once; a fresh one is asked for if the files can have moved
-  useOnChange([worktreeId, sock], () => listFiles(worktreeId, store.getState(), { sock, dispatch }));
+  const connected = useStore((s) => s.connected);
+  // the list in hand is shown at once; a fresh one is asked for if the files can have moved, and
+  // again on a socket that came back, for a listing lost with the last
+  useOnChange([worktreeId, connected, sock], () => listFiles(worktreeId, store.getState(), { sock, dispatch }));
   const local = useLocal(worktreeId);
   const paths = local.files ?? EMPTY_PATHS;
   const status = local.git?.files ?? EMPTY_STATUS;

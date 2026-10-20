@@ -40,7 +40,7 @@ describe("listFiles", () => {
     const at = (l: Partial<WorktreeLocal>) => ({ local: { w1: { ...EMPTY_LOCAL, ...l } } });
     return { sent, actions, deps, at };
   };
-  const git = (head: string, files: GitFileStatus[] = []) => ({ files, head });
+  const git = (head: string, files: GitFileStatus[] = []) => ({ version: 1, files, head });
 
   test("asks once per key: the request is remembered on the record, and the same key asks nothing", () => {
     const { sent, actions, deps, at } = make();

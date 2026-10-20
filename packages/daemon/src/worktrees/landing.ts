@@ -37,11 +37,14 @@ import { aheadBehind, committedFiles, statusFiles, treeFingerprint } from "../gi
 import type { RunService } from "../runs/service.ts";
 import { migrationMatch } from "./backend.ts";
 import type { WorktreeService } from "./service.ts";
+import type { TreeState } from "./treeState.ts";
 
 export interface LandingServiceDeps {
   state: StateStore;
   hub: Hub;
-  worktrees: Pick<WorktreeService, "setLanding">;
+  /** `tree` is the one reader of the row's git state (treeState.ts); without it (tests) the
+   * work question asks git itself */
+  worktrees: Pick<WorktreeService, "setLanding"> & { tree?: Pick<TreeState, "refresh"> };
   /** the wait on the check, as the row carries it: how long, what it printed last, whether it was killed */
   runs: Pick<RunService, "begin" | "drop">;
   transcript: (worktreeId: string) => readonly TranscriptEntry[];
@@ -295,6 +298,8 @@ export class LandingService {
   }
 
   private async hasWork(wt: WorktreeInfo): Promise<boolean> {
+    const rec = await this.d.worktrees.tree?.refresh(wt.id);
+    if (rec && rec.failedAt === undefined) return rec.core.files.length > 0 || (rec.core.ahead ?? 0) > 0;
     const repo = this.d.state.requireRepo(wt.repoId);
     const files = await statusFiles(wt.path);
     if (files.length > 0) return true;

@@ -742,7 +742,7 @@ export interface TrunkStatus {
   id: string;
   /** commits behind the upstream as of the last fetch; absent with no upstream */
   behind?: number;
-  /** uncommitted files in the checkout */
+  /** uncommitted files in the checkout, from main's tree-state record; 0 until the first read */
   dirty: number;
   /** nothing tracked and nothing untracked: a project made from the picker before anything landed */
   empty: boolean;
@@ -843,16 +843,18 @@ export interface WorktreeStatus {
   agent: AgentStatus;
   /** the agent's terminal login is running here, or failed and still shows why: the login tab */
   login: boolean;
-  /** commits ahead/behind the default branch (cached, ~10s freshness); absent on a detached
-   * worktree, which has nothing to count against. On main, `behind` counts against its upstream
-   * as of the last fetch (the daemon fetches now and then while main is on screen), and `ahead`
-   * is absent: what main trails is origin, and what it leads is nobody's business here. */
+  /** commits ahead/behind the default branch, from the worktree's tree-state record, the same
+   * one its git-status frames carry, so the rail and the changes panel agree; absent until the
+   * first read, and on a detached worktree, which has nothing to count against. On main, `behind`
+   * counts against its upstream as of the last fetch (the daemon fetches now and then while main
+   * is on screen), and `ahead` is absent: what main trails is origin, and what it leads is
+   * nobody's business here. */
   ahead?: number;
   behind?: number;
   /** commits here that the branch on origin does not have, counted only while a PR is open: the
    * work the PR is missing, which `update` pushes. Absent otherwise. */
   unpushed?: number;
-  /** uncommitted file count (cached, ~10s freshness) */
+  /** uncommitted file count, from the same tree-state record; absent until the first read */
   dirty?: number;
   /** chat messages waiting behind the current turn */
   queued?: number;
@@ -924,9 +926,46 @@ export interface GitFileStatus {
   path: string;
   /** two-char porcelain XY code, e.g. "M ", " M", "A ", "??" */
   xy: string;
-  /** lines added / deleted; absent for binary files and untracked directories */
+  /** lines added / deleted; absent for binary files and untracked directories, and in a core
+   * git-status frame, where counts have not been read yet */
   add?: number;
   del?: number;
+}
+
+/** what the last turn changed and the commit holding the tree it started from: the before side
+ * of each file's diff, which a `read-file` names as its `since` */
+export interface TurnChanges {
+  base: string;
+  files: GitFileStatus[];
+}
+
+/** the slower tier of a worktree's git state, what costs a diff per file: read only for a
+ * subscriber, behind the core frame */
+export interface GitExtras {
+  /** files committed on this branch over its base; empty when `ahead` is 0 */
+  committed: GitFileStatus[];
+  /** the last turn's own files when narrower than `files`; absent on a clean tree, on main, and
+   * when the turn cannot be told apart from work taken in from the base */
+  turn?: TurnChanges;
+}
+
+/** One worktree's git state as the daemon's tree-state owner holds it and as a `git-status`
+ * frame carries it. `version` counts the worktree's states for the daemon's life, from 1: a
+ * frame carries the number of the state it was read from, the two tiers go out on their own
+ * clocks, and a shell drops a frame below the number it holds. The core (`files` as path and
+ * status, the counts, `head`) is in every frame; `extras` rides when the frame carries that tier,
+ * and then `files` carry their line counts too. */
+export interface GitInfo {
+  version: number;
+  files: GitFileStatus[];
+  /** commits ahead of / behind the base; absent on main, which has nothing to count against */
+  ahead?: number;
+  behind?: number;
+  /** commits origin's copy of the branch lacks, counted only while a PR is open */
+  unpushed?: number;
+  /** HEAD's sha; the history tab re-reads its log when this moves */
+  head?: string;
+  extras?: GitExtras;
 }
 
 /** one commit in the history list: enough to draw a row, not to diff it */

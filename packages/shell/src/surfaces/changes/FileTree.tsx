@@ -71,11 +71,16 @@ export function FileTree({
   const ignored = useLocalField(worktreeId, "ignored");
   const git = useLocalField(worktreeId, "git");
   const status = git?.files ?? NO_STATUS;
+  const version = git?.version;
+  const connected = useStore((s) => s.connected);
 
-  // Listed when the tab opens, and again on each status, which listFiles turns into a request
-  // only when the set of files can have changed: git-status arrives after every tool call, and an
-  // edit to a file that exists changes nothing here.
-  useOnChange([worktreeId, git, sock], () => listFiles(worktreeId, store.getState(), { sock, dispatch }));
+  // Listed when the tab opens, and again on each new tree state, which listFiles turns into a
+  // request only when the set of files can have changed: a state arrives after every tool call,
+  // and an edit to a file that exists changes nothing here. The socket coming back asks again
+  // for a listing lost with it.
+  useOnChange([worktreeId, version, connected, sock], () =>
+    listFiles(worktreeId, store.getState(), { sock, dispatch }),
+  );
 
   // the folder a file from outside is held over, to light its row (the root lights the tree)
   const dropDir = useStore((s) =>

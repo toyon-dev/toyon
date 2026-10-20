@@ -1,5 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { type ClientMsg, type FileServerMsg, MANAGED_NONE, PROTOCOL_VERSION, type ServerMsg } from "@toyon/shared";
+import {
+  type ClientMsg,
+  type FileServerMsg,
+  type GitInfo,
+  MANAGED_NONE,
+  PROTOCOL_VERSION,
+  type ServerMsg,
+} from "@toyon/shared";
 import { openFile } from "./actions/file.ts";
 import { createStore } from "./context.tsx";
 import { decide, FileSync } from "./fileSync.ts";
@@ -120,6 +127,7 @@ function harness() {
     managed: MANAGED_NONE,
   });
   store.dispatch({ a: "connected", v: true });
+  let version = 0;
   const last = <T extends ClientMsg["t"]>(t: T) => sent.findLast((m): m is Extract<ClientMsg, { t: T }> => m.t === t);
   return {
     store,
@@ -156,8 +164,10 @@ function harness() {
       if (!q) throw new Error("no write was sent");
       sync.receive({ t: "file-written", worktreeId: q.worktreeId, path: q.path, seq: q.seq, ...answer });
     },
-    /** a git-status push: the worktree's files moved */
-    tick: () => server({ t: "git-status", worktreeId: "a", files: [] }),
+    /** a git-status push: the worktree's tree is in a new state */
+    tick: () => server({ t: "git-status", worktreeId: "a", version: ++version, files: [] }),
+    /** a git-status frame as given: a tier or a version the test chooses */
+    frame: (over: Partial<GitInfo>) => server({ t: "git-status", worktreeId: "a", version, files: [], ...over }),
     attach: (path: string, text: string) => {
       const b = buffer(text);
       sync.bind({ worktreeId: "a", path }).attach(b);
@@ -222,6 +232,24 @@ describe("the open file and the disk", () => {
     // the timer went with the save: the pause ending sends nothing more
     h.timers.pass();
     expect(h.count("write-file")).toBe(1);
+  });
+
+  test("the panel's tier over the same state reads nothing, nor does a frame from a state already read", () => {
+    const h = harness();
+    h.open("x.ts");
+    h.read({ after: "a" });
+    expect(h.count("read-file")).toBe(1);
+    h.tick();
+    expect(h.count("read-file")).toBe(2);
+    h.read({ after: "a" });
+    h.tick();
+    expect(h.count("read-file")).toBe(3);
+    h.read({ after: "a" });
+    h.frame({ extras: { committed: [] } });
+    expect(h.count("read-file")).toBe(3);
+    // a state this tab moved past; an archived page's unversioned frame (0) is not this case
+    h.frame({ version: 1 });
+    expect(h.count("read-file")).toBe(3);
   });
 
   test("a read asked for while a save is out waits for the save's answer", () => {

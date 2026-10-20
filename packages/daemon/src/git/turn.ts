@@ -7,7 +7,7 @@
 
 import { copyFileSync, existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import type { GitFileStatus } from "@toyon/shared";
+import type { GitFileStatus, TurnChanges } from "@toyon/shared";
 import { GIT, git, run } from "./exec.ts";
 import { filesBetween } from "./status.ts";
 
@@ -15,12 +15,6 @@ import { filesBetween } from "./status.ts";
 const turnRef = (worktreeId: string, which: "at" | "before") => `refs/toyon/turns/${worktreeId}/${which}`;
 
 const SNAPSHOT_SUBJECT = "toyon: tree at a send";
-
-export interface TurnChanges {
-  /** the commit holding the tree the turn started from: the before side of each file's diff */
-  base: string;
-  files: GitFileStatus[];
-}
 
 /** one tree read at a time per worktree: two `add`s on one index race for its lock, and the loser
  * would report a tree that is not there */

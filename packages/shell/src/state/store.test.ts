@@ -341,7 +341,7 @@ describe("per-worktree records", () => {
       hello(wt("a"), wt("b")),
       server({ t: "changed-ranges", worktreeId: "a", path: "x.ts", ranges: [[1, 2]], lineOffset: 3 }),
       server({ t: "changed-ranges", worktreeId: "b", path: "y.ts", ranges: [[5, 5]], lineOffset: 0 }),
-      server({ t: "git-status", worktreeId: "a", files: [] }),
+      server({ t: "git-status", worktreeId: "a", version: 1, files: [] }),
     ]);
     expect(s.local.a?.changedRanges).toEqual({});
     expect(s.local.b?.changedRanges["y.ts"]).toEqual({ ranges: [[5, 5]], offset: 0 });
@@ -1705,11 +1705,134 @@ describe("drafts", () => {
 });
 
 describe("git status", () => {
+  test("a frame below the version held is dropped, and the same version again lands only with the extras", () => {
+    const s = run([
+      hello(wt("a")),
+      server({ t: "git-status", worktreeId: "a", version: 3, files: [{ xy: " M", path: "x" }] }),
+    ]);
+    const old = reducer(s, server({ t: "git-status", worktreeId: "a", version: 2, files: [] }));
+    expect(old.local.a?.git?.files).toHaveLength(1);
+    const same = reducer(s, server({ t: "git-status", worktreeId: "a", version: 3, files: [] }));
+    expect(same.local.a?.git).toBe(s.local.a?.git);
+    const full = { xy: " M", path: "x", add: 2, del: 1 };
+    const extras = reducer(
+      s,
+      server({ t: "git-status", worktreeId: "a", version: 3, files: [full], extras: { committed: [] } }),
+    );
+    expect(extras.local.a?.git?.files).toEqual([full]);
+    expect(extras.local.a?.git?.extras).toEqual({ committed: [] });
+  });
+  test("a core frame keeps a file's counts while its letter stands, and the extras while HEAD does", () => {
+    const committed = [{ xy: "M ", path: "c" }];
+    const full = server({
+      t: "git-status",
+      worktreeId: "a",
+      version: 2,
+      head: "h1",
+      files: [
+        { xy: " M", path: "x", add: 2, del: 1 },
+        { xy: "??", path: "y", add: 5, del: 0 },
+      ],
+      extras: { committed, turn: { base: "b", files: [] } },
+    });
+    const s = run([hello(wt("a")), full]);
+    const core = reducer(
+      s,
+      server({
+        t: "git-status",
+        worktreeId: "a",
+        version: 3,
+        head: "h1",
+        files: [
+          { xy: " M", path: "x" },
+          { xy: "A ", path: "y" },
+          { xy: " M", path: "z" },
+        ],
+      }),
+    );
+    expect(core.local.a?.git?.files).toEqual([
+      { xy: " M", path: "x", add: 2, del: 1 },
+      { xy: "A ", path: "y" },
+      { xy: " M", path: "z" },
+    ]);
+    expect(core.local.a?.git?.extras).toEqual({ committed, turn: { base: "b", files: [] } });
+    // HEAD moved: the committed list and the turn went with it
+    const moved = reducer(
+      s,
+      server({ t: "git-status", worktreeId: "a", version: 3, head: "h2", files: [{ xy: " M", path: "x" }] }),
+    );
+    expect(moved.local.a?.git?.extras).toBeUndefined();
+    // a clean tree has no turn to show
+    const clean = reducer(s, server({ t: "git-status", worktreeId: "a", version: 3, head: "h1", files: [] }));
+    expect(clean.local.a?.git?.extras).toEqual({ committed });
+  });
+  test("changed ranges survive the extras over the same state, go for listed files on a new one, and all go with HEAD", () => {
+    const s = run([
+      hello(wt("a")),
+      server({
+        t: "git-status",
+        worktreeId: "a",
+        version: 1,
+        head: "h1",
+        files: [
+          { xy: " M", path: "x.ts", add: 1, del: 0 },
+          { xy: " M", path: "y.ts", add: 1, del: 0 },
+        ],
+        extras: { committed: [{ xy: "M ", path: "z.ts" }] },
+      }),
+      server({ t: "changed-ranges", worktreeId: "a", path: "x.ts", ranges: [[1, 2]], lineOffset: 0 }),
+      server({ t: "changed-ranges", worktreeId: "a", path: "y.ts", ranges: [[3, 3]], lineOffset: 0 }),
+      server({ t: "changed-ranges", worktreeId: "a", path: "z.ts", ranges: [[7, 9]], lineOffset: 0 }),
+    ]);
+    // a core frame for a new state: x.ts is still listed and y.ts was, so either may have moved;
+    // z.ts is committed work nothing in the tree touched
+    const core = reducer(
+      s,
+      server({ t: "git-status", worktreeId: "a", version: 2, head: "h1", files: [{ xy: " M", path: "x.ts" }] }),
+    );
+    expect(Object.keys(core.local.a?.changedRanges ?? {})).toEqual(["z.ts"]);
+    const again = reducer(
+      core,
+      server({ t: "changed-ranges", worktreeId: "a", path: "x.ts", ranges: [[1, 1]], lineOffset: 0 }),
+    );
+    const extras = reducer(
+      again,
+      server({
+        t: "git-status",
+        worktreeId: "a",
+        version: 2,
+        head: "h1",
+        files: [{ xy: " M", path: "x.ts", add: 1, del: 0 }],
+        extras: { committed: [] },
+      }),
+    );
+    expect(Object.keys(extras.local.a?.changedRanges ?? {})).toEqual(["z.ts", "x.ts"]);
+    const head = reducer(extras, server({ t: "git-status", worktreeId: "a", version: 3, head: "h2", files: [] }));
+    expect(head.local.a?.changedRanges).toEqual({});
+  });
+  test("a new socket may be a new daemon: hello lets the first frame land, and the drop asks the listing again", () => {
+    const s = run([
+      hello(wt("a")),
+      server({ t: "git-status", worktreeId: "a", version: 9, files: [{ xy: " M", path: "x" }] }),
+      { a: "files-asked", worktreeId: "a", key: "k" },
+    ]);
+    expect(s.local.a?.filesFor).toBe("k");
+    const down = reducer(s, { a: "connected", v: false });
+    expect(down.local.a?.filesFor).toBeUndefined();
+    expect(down.local.a?.git?.files).toHaveLength(1);
+    const back = reducer(down, hello(wt("a")));
+    expect(back.local.a?.git?.version).toBe(0);
+    const first = reducer(back, server({ t: "git-status", worktreeId: "a", version: 1, files: [] }));
+    expect(first.local.a?.git?.files).toEqual([]);
+  });
   test("the changes panel starts closed and opens itself once, at the first diff", () => {
-    const clean = run([hello(wt("main", "main")), server({ t: "git-status", worktreeId: "main", files: [] })]);
+    const clean = run([
+      hello(wt("main", "main")),
+      server({ t: "git-status", worktreeId: "main", version: 2, files: [] }),
+    ]);
     // an empty status does not spend the one shot
     expect([clean.layout.changes, clean.changesAuto]).toEqual([false, true]);
-    const dirty = server({ t: "git-status", worktreeId: "main", files: [{ xy: " M", path: "a" }] });
+    const dirty = server({ t: "git-status", worktreeId: "main", version: 3, files: [{ xy: " M", path: "a" }] });
     const opened = reducer(clean, dirty);
     expect([opened.layout.changes, opened.changesAuto]).toEqual([true, false]);
     // closed by hand, it stays closed however dirty the worktree gets
@@ -1719,25 +1842,31 @@ describe("git status", () => {
   test("a status for another worktree does not open the panel", () => {
     const s = run([
       hello(wt("main", "main"), wt("w1", "worktree")),
-      server({ t: "git-status", worktreeId: "w1", files: [{ xy: " M", path: "a" }] }),
+      server({ t: "git-status", worktreeId: "w1", version: 4, files: [{ xy: " M", path: "a" }] }),
     ]);
     expect(s.layout.changes).toBe(false);
   });
   test("a row the daemon marks landed drops the files its land committed; an edit after dirties it again", () => {
-    const dirty = server({ t: "git-status", worktreeId: "a", files: [{ xy: " M", path: "x" }] });
+    const dirtyMsg = { t: "git-status" as const, worktreeId: "a", version: 5, files: [{ xy: " M", path: "x" }] };
+    const dirty = server(dirtyMsg);
     const s = run([hello(wt("main", "main"), wt("a")), dirty]);
     expect(s.local.a?.git?.files).toHaveLength(1);
     const row = wt("a");
     const landed: WorktreeStatus = { ...row, worktree: row.worktree && { ...row.worktree, landed: true } };
     const on = reducer(s, worktrees(wt("main", "main"), landed));
     expect(on.local.a?.git?.files).toEqual([]);
-    // the mark already on: a status after it is newer than it and stands
-    const edited = reducer(on, dirty);
+    // a frame from before the land, the state the mark retired, is dropped; one after it stands
+    const stale = reducer(on, dirty);
+    expect(stale.local.a?.git?.files).toEqual([]);
+    const edited = reducer(on, server({ ...dirtyMsg, version: 99 }));
     expect(edited.local.a?.git?.files).toHaveLength(1);
     expect(reducer(edited, worktrees(wt("main", "main"), landed)).local.a?.git?.files).toHaveLength(1);
   });
   test("focus-changes opens a shut panel and asks for the keyboard every time", () => {
-    const shut = run([hello(wt("main", "main")), server({ t: "git-status", worktreeId: "main", files: [] })]);
+    const shut = run([
+      hello(wt("main", "main")),
+      server({ t: "git-status", worktreeId: "main", version: 6, files: [] }),
+    ]);
     expect(shut.layout.changes).toBe(false);
     const once = reducer(shut, { a: "focus-changes" });
     expect(once.layout.changes).toBe(true);
@@ -2419,7 +2548,7 @@ describe("panel layout", () => {
   });
 
   test("the first-diff auto-open is not learned as the project's layout", () => {
-    const s = run([two(), server({ t: "git-status", worktreeId: "m1", files: [{ xy: " M", path: "a" }] })]);
+    const s = run([two(), server({ t: "git-status", worktreeId: "m1", version: 7, files: [{ xy: " M", path: "a" }] })]);
     expect(s.layout.changes).toBe(true);
     // it opened for this session only: a reload on a clean worktree starts closed again
     expect(s.layouts.r1?.changes).toBe(false);
@@ -2431,7 +2560,10 @@ describe("panel layout", () => {
       storedRepo: "r1",
       storedLayouts: { r1: { changes: false, changesTab: "changes", chat: true, term: false, design: false } },
     });
-    const s = run([two(), server({ t: "git-status", worktreeId: "m1", files: [{ xy: " M", path: "a" }] })], from);
+    const s = run(
+      [two(), server({ t: "git-status", worktreeId: "m1", version: 8, files: [{ xy: " M", path: "a" }] })],
+      from,
+    );
     expect(s.layout.changes).toBe(false);
   });
 });
@@ -2500,7 +2632,7 @@ describe("discovered worktrees", () => {
       helloR(wt("main", "main")),
       withFound(found("/w/stray")),
       { a: "activate", id: "disc-/w/stray" },
-      server({ t: "git-status", worktreeId: "disc-/w/stray", files: [], ahead: 0, behind: 2 }),
+      server({ t: "git-status", worktreeId: "disc-/w/stray", version: 9, files: [], ahead: 0, behind: 2 }),
       withFound(found("/w/stray")),
     ]);
     expect(localOf(s, "disc-/w/stray").git?.behind).toBe(2);
@@ -2517,7 +2649,10 @@ describe("discovered worktrees", () => {
     const booted = run([helloR(wt("main", "main")), withFound(found("/w/stray"))]);
     const from = { ...booted, layout: { ...booted.layout, changes: true }, changesAuto: true };
     const s = run(
-      [{ a: "activate", id: "disc-/w/stray" }, server({ t: "git-status", worktreeId: "disc-/w/stray", files: [] })],
+      [
+        { a: "activate", id: "disc-/w/stray" },
+        server({ t: "git-status", worktreeId: "disc-/w/stray", version: 10, files: [] }),
+      ],
       from,
     );
     expect(localOf(s, "disc-/w/stray").git?.files).toEqual([]);
@@ -2701,14 +2836,17 @@ describe("an archived worktree's page", () => {
   test("what it left opens the changes panel, on its own record", () => {
     const committed = [{ path: "a.ts", xy: "M " }];
     const s = run(
-      [{ a: "open-archived", id: "x" }, server({ t: "git-status", worktreeId: "x", files: [], committed })],
+      [
+        { a: "open-archived", id: "x" },
+        server({ t: "git-status", worktreeId: "x", version: 11, files: [], extras: { committed } }),
+      ],
       listed(),
     );
     expect(s.layout.changes).toBe(true);
-    expect(localOf(s, "x").git?.committed).toEqual(committed);
+    expect(localOf(s, "x").git?.extras?.committed).toEqual(committed);
     // nothing kept and nothing landed: the panel is left as it was
     const empty = run(
-      [{ a: "open-archived", id: "x" }, server({ t: "git-status", worktreeId: "x", files: [] })],
+      [{ a: "open-archived", id: "x" }, server({ t: "git-status", worktreeId: "x", version: 12, files: [] })],
       listed(),
     );
     expect(empty.layout.changes).toBe(false);

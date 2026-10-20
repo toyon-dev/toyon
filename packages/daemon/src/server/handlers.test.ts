@@ -43,6 +43,7 @@ import { WorktreeService } from "../worktrees/service.ts";
 import { ArchiveSweep } from "../worktrees/sweep.ts";
 import { TurnService } from "../worktrees/turns.ts";
 import { dispatch, type HandlerCtx, handlers, type Services } from "./handlers.ts";
+import { Interest } from "./interest.ts";
 
 let cleanup = () => {};
 
@@ -116,7 +117,9 @@ function make() {
   });
   const fix = new FixService({ state, hub, runtime });
   const pageErrors = new PageErrorService({ hub, known: (id) => state.worktree(id) !== undefined });
+  const interest = new Interest();
   const worktrees = new WorktreeService({
+    interested: (id) => interest.isSubscribed(id),
     state,
     hub,
     runtime,
@@ -228,6 +231,7 @@ function make() {
     hub,
     repos,
     worktrees,
+    interest,
     turns,
     files,
     opens,
@@ -273,9 +277,13 @@ function make() {
     subscribe: (id) => {
       if (subs.has(id)) return false;
       subs.add(id);
+      services.interest.subscribe(ctx, id);
       return true;
     },
-    unsubscribe: (id) => subs.delete(id),
+    unsubscribe: (id) => {
+      if (subs.delete(id)) services.interest.unsubscribe(ctx, id);
+      return true;
+    },
     view: (id) => {
       views.push(id);
       idle.view(ctx, id);
@@ -498,7 +506,12 @@ describe("handlers", () => {
     await routes.pages(main.id, { files: [] });
     expect(manifestReads()).toBe(1);
     await Bun.write(`${main.path}/package.json`, JSON.stringify({ dependencies: { next: "15.10.0" } }));
-    expect((await routes.pages(main.id, { files: [] })).routes.map((x) => x.path)).toEqual(["/"]);
+    // the edit shows in the status the pages are asked for, which is what sets a scan off again
+    const edited = { files: [{ xy: " M", path: "package.json" }] };
+    expect((await routes.pages(main.id, edited)).routes.map((x) => x.path)).toEqual(["/"]);
+    expect(manifestReads()).toBe(2);
+    // the same status again: nothing to scan for
+    await routes.pages(main.id, edited);
     expect(manifestReads()).toBe(2);
   });
 
@@ -537,6 +550,30 @@ describe("handlers", () => {
       "src/pages/About.tsx": "new",
       "src/pages/User.tsx": "new",
     });
+  });
+
+  test("an edit reaches a subscriber as a new tree state, and the same tree again sends nothing", async () => {
+    const { services, ctx, replies, repo } = make();
+    const r = await services.repos.register(repo);
+    const main = services.state.worktrees.find((x) => x.repoId === r.id)!;
+    await dispatch({ t: "subscribe", worktreeId: main.id }, ctx, services);
+    const first = replies.find((m) => m.t === "git-status");
+    if (first?.t !== "git-status") throw new Error("expected a git-status");
+    const frames: number[] = [];
+    services.hub.on("treeChanged", (id) => {
+      const f = services.worktrees.tree.frame(id);
+      if (f) frames.push(f.version);
+    });
+    await Bun.write(`${main.path}/note.txt`, "hello\n");
+    services.hub.emit("filesChanged", main.id);
+    await services.worktrees.settled();
+    expect(frames.length).toBeGreaterThan(0);
+    expect(frames[0]).toBeGreaterThan(first.version);
+    expect(services.worktrees.tree.frame(main.id)?.files).toMatchObject([{ path: "note.txt", xy: "??" }]);
+    const before = frames.length;
+    services.hub.emit("filesChanged", main.id);
+    await services.worktrees.settled();
+    expect(frames.length).toBe(before);
   });
 
   test("subscribe registers the socket and replies backfill + queue + commands + git-status to the caller only", async () => {
@@ -603,7 +640,12 @@ describe("handlers", () => {
     expect(replies.map((m) => m.t)).toEqual(["backfill", "queue", "agent-commands", "git-status"]);
     expect(replies[0]).toMatchObject({ t: "backfill", events: [{ seq: 0, event: said }], log: [] });
     // what it left in git, for the changes panel on its page, and a file of it read from there
-    expect(replies[3]).toMatchObject({ t: "git-status", files: [], committed: [{ path: "done.txt" }] });
+    expect(replies[3]).toMatchObject({
+      t: "git-status",
+      version: 0,
+      files: [],
+      extras: { committed: [{ path: "done.txt" }] },
+    });
     expect([...subs]).toEqual([wt.id]);
     replies.length = 0;
     await dispatch({ t: "read-file", worktreeId: wt.id, path: "done.txt", seq: 1 }, ctx, services);

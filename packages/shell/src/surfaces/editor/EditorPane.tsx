@@ -110,9 +110,10 @@ export function EditorPane({
     [files, worktreeId, path, ref, since, loose, dispatch, sock],
   );
   const cached = useStore((s) => localOf(s, worktreeId).changedRanges[path]);
-  // warm the line-offset/ranges cache so line-hover highlights align; a git-status wipes the
-  // cache, so `cached` is a dependency and the request re-fires. Ranges are measured against the
-  // working tree, so for a commit they would light up lines the page never rendered.
+  // warm the line-offset/ranges cache so line-hover highlights align; a tree state that moves
+  // HEAD or this file's own entry drops the cache, so `cached` is a dependency and the request
+  // re-fires. Ranges are measured against the working tree, so for a commit they would light up
+  // lines the page never rendered.
   useEffect(() => {
     if (!cached && !history && !kept && !loose) sock?.send({ t: "changed-ranges", worktreeId, path });
   }, [worktreeId, path, cached, history, kept, loose, sock]);

@@ -45,10 +45,35 @@ const CACHE_DIRS = [".bun", ".npm", ".cache", ".yarn", ".pnpm-store", "Library/C
   resolve(homedir(), d),
 );
 
-/** Where agents decide their own permissions, sandbox and hooks. Every agent is refused all of them,
- * not only its own: one agent rewriting another's would loosen that one the next time it starts in
- * the same worktree. */
-const AGENT_SETTINGS = [".claude", ".codex", ".opencode", "opencode.json", "opencode.jsonc"];
+/** What an agent would loosen itself with: the settings that carry its permissions and sandbox, the
+ * hooks and plugin code those settings run, and the agent definitions that can set their own
+ * permission mode. Every agent is refused all of them, not only its own: one agent rewriting
+ * another's would loosen that one the next time it starts in the same worktree. The rest of each
+ * agent's directory (skills, commands, prompts and the scripts they ship with) is instructions, the
+ * same class as CLAUDE.md, and stays an ordinary edit. Named file by file rather than as the whole
+ * directory because Claude's sandbox cannot carve a writable path out of a denied one. */
+const AGENT_SETTINGS = [
+  ".claude/settings.json",
+  ".claude/settings.local.json",
+  ".claude/hooks",
+  ".claude/agents",
+  // Codex reads a trusted project's config, hooks and command rules from .codex
+  ".codex/config.toml",
+  ".codex/hooks.json",
+  ".codex/hooks",
+  ".codex/rules",
+  // OpenCode's config lives at the root or inside .opencode; plugins, tools and agents in either spelling
+  "opencode.json",
+  "opencode.jsonc",
+  ".opencode/opencode.json",
+  ".opencode/opencode.jsonc",
+  ".opencode/plugin",
+  ".opencode/plugins",
+  ".opencode/tool",
+  ".opencode/tools",
+  ".opencode/agent",
+  ".opencode/agents",
+];
 
 function uniq<T>(xs: T[]): T[] {
   return [...new Set(xs)];

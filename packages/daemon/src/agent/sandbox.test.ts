@@ -36,7 +36,29 @@ describe("sandbox", () => {
     expect(b.gitDir).toBe(canonical(join(repo, ".git")));
     expect(b.allowWrite).toContain(b.gitDir!);
     expect(b.allowWrite.some((p) => within("/tmp/x", p))).toBe(true);
-    for (const s of [".claude", ".codex", ".opencode", "opencode.json"]) expect(b.denyWrite).toContain(join(b.root, s));
+    for (const s of [
+      ".claude/settings.json",
+      ".claude/settings.local.json",
+      ".claude/hooks",
+      ".claude/agents",
+      ".codex/config.toml",
+      ".codex/hooks.json",
+      "opencode.json",
+      ".opencode/opencode.json",
+      ".opencode/plugins",
+      ".opencode/tools",
+    ]) {
+      expect(b.denyWrite).toContain(join(b.root, s));
+    }
+  });
+
+  test("an agent's skills, commands and prompts are not settings: nothing denies the directory itself", async () => {
+    const { wt } = linkedWorktree();
+    const b = await worktreeBounds(wt);
+    for (const dir of [".claude", ".codex", ".opencode"]) expect(b.denyWrite).not.toContain(join(b.root, dir));
+    for (const s of [".claude/skills/aws/SKILL.md", ".codex/skills/aws/scripts/export.py", ".opencode/commands/x.md"]) {
+      expect(b.denyWrite.some((d) => within(join(b.root, s), d))).toBe(false);
+    }
   });
 
   test("the per-user temp directory is writable; toyon's secrets can be neither read nor written", async () => {

@@ -19,7 +19,7 @@ const bounds: Bounds = {
   // a scratch dir stands in for /tmp: on Linux tmpdir() is /tmp itself, so allowing /tmp would allow
   // the "outside" these tests need refused
   allowWrite: [wt, join(root, "scratch")],
-  denyWrite: [join(wt, ".claude"), secret],
+  denyWrite: [join(wt, ".claude/settings.json"), join(wt, ".claude/hooks"), secret],
   denyRead: [secret],
   gitDir: null,
 };
@@ -87,14 +87,22 @@ describe("policy.decide", () => {
     expect(v.kind).toBe("reject");
   });
 
-  test(".claude/ is denied even though it is inside", () => {
+  test("an agent's settings and hooks are denied even though they are inside; its skills are an ordinary edit", () => {
     const v = decide(
       req({ kind: "edit", name: "Write", locations: [{ path: join(wt, ".claude/settings.json") }] }),
       bounds,
       wt,
     );
     expect(v.kind).toBe("reject");
-    if (v.kind === "reject") expect(v.reason).toContain("managed by Toyon");
+    if (v.kind === "reject") expect(v.reason).toContain("never the agent's");
+    const hook = req({ kind: "edit", name: "Write", rawInput: { file_path: join(wt, ".claude/hooks/pre.sh") } });
+    expect(decide(hook, bounds, wt).kind).toBe("reject");
+    const skill = req({
+      kind: "edit",
+      name: "Edit",
+      rawInput: { file_path: join(wt, ".claude/skills/aws/export.py") },
+    });
+    expect(decide(skill, bounds, wt).kind).toBe("allow");
   });
 
   test("execute / read / search with no paths are allowed; an edit with no path is not", () => {

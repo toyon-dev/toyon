@@ -94,7 +94,7 @@ export function decide(
         kind: "reject",
         tool,
         path: raw,
-        reason: "Agent settings are managed by Toyon, not written by the agent.",
+        reason: "Agent settings, hooks and plugin code are yours to change, never the agent's.",
       };
     }
     // reads are open everywhere but the secrets, as they are in the OS sandbox, and a command's paths

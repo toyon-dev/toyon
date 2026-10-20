@@ -60,6 +60,7 @@ import {
 } from "./toolCall.ts";
 import { toolRowItems, toolRowOpen } from "./toolRowItems.ts";
 import { codeAt, useCodeCopy } from "./useCodeCopy.tsx";
+import { usePlanTitle } from "./usePlanTitle.ts";
 
 function Markdown({
   text,
@@ -1100,18 +1101,7 @@ export const ChatItemView = memo(function ChatItemView({
       return (
         <>
           {file ? (
-            <DaemonRow icon="file" word="plan" tone="quiet">
-              <span className="daemon-text">
-                <Button
-                  variant="inline"
-                  tone="strong"
-                  mono
-                  onClick={() => worktreeId && openFile(deps, { worktreeId, path: file, view: "preview" })}
-                >
-                  {file}
-                </Button>
-              </span>
-            </DaemonRow>
+            <PlanRow file={file} worktreeId={worktreeId} />
           ) : (
             plan.text && (
               <Markdown
@@ -1194,6 +1184,41 @@ export const ChatItemView = memo(function ChatItemView({
       );
   }
 });
+
+/** the plan the person decided, read back as the document: the row goes by the plan's own title,
+ * as the composer's row over the box does, since the file is the agent's and named by it; the path
+ * is in the tip and the menu, where the composer's row keeps it, and the press opens the file. */
+function PlanRow({ file, worktreeId }: { file: string; worktreeId?: string | null }) {
+  const sock = useSock();
+  const dispatch = useDispatch();
+  const cm = useContextMenu("chat");
+  const title = usePlanTitle(worktreeId ?? undefined, file);
+  return (
+    <DaemonRow
+      icon="file"
+      word="plan"
+      tone="quiet"
+      {...cm.contextMenu(() =>
+        pathItems(
+          file,
+          worktreeId ? () => sock?.send({ t: "reveal", worktreeId, path: file }) : undefined,
+          daemonHost(sock),
+        ),
+      )}
+    >
+      <span className="daemon-text">
+        <Button
+          variant="inline"
+          tone="strong"
+          data-tip={file}
+          onClick={() => worktreeId && openFile({ sock, dispatch }, { worktreeId, path: file, view: "preview" })}
+        >
+          {title}
+        </Button>
+      </span>
+    </DaemonRow>
+  );
+}
 
 /** the gap in the chat, said in the daemon's own row: how long it sat in the archive and what came
  * back, so what reads before and after it is one conversation with a pause. When it came back is

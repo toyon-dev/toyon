@@ -247,6 +247,11 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
   s.hub.on("log", (worktreeId, proc, line, retract) =>
     sendTo(worktreeId, retract ? { t: "log", worktreeId, proc, line, retract } : { t: "log", worktreeId, proc, line }),
   );
+  // the agent's stream itself: every event the transcript records, as it is recorded, to the tabs
+  // reading that worktree. The tree-state owner hears the same events for its own reads; this is
+  // the only path by which they reach a shell live, so a backfill on subscribe is all a tab would
+  // ever see without it
+  s.hub.on("agent", (worktreeId, seq, event) => sendTo(worktreeId, { t: "agent", worktreeId, seq, event }));
   s.hub.on("queue", (worktreeId, items) => sendTo(worktreeId, { t: "queue", worktreeId, items }));
   s.hub.on("agentCommands", (worktreeId, commands) =>
     sendTo(worktreeId, { t: "agent-commands", worktreeId, commands }),

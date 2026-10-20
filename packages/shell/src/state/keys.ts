@@ -30,6 +30,8 @@ export const STORAGE = {
   chatWidth: "toyon-chat-w",
   editorHeight: "toyon-dh",
   editorFull: "toyon-dfull",
+  /** "1" while the editor folds long lines at the pane's edge instead of scrolling sideways */
+  editorWrap: "toyon-dwrap",
   designHeight: "toyon-dsh",
   designFull: "toyon-dsfull",
   termHeight: "toyon-th",
@@ -75,6 +77,7 @@ export const WINDOW_KEYS: readonly Key[] = [
   STORAGE.chatWidth,
   STORAGE.editorHeight,
   STORAGE.editorFull,
+  STORAGE.editorWrap,
   STORAGE.designHeight,
   STORAGE.designFull,
   STORAGE.termHeight,

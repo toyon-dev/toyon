@@ -6,6 +6,7 @@ import { fileItems, viewsOf } from "../../state/actions/file.ts";
 import { addToChat } from "../../state/attach.ts";
 import { useDispatch, useFileSync, useSock, useStore, useStoreInstance, useUrls } from "../../state/context.tsx";
 import type { FileSync } from "../../state/fileSync.ts";
+import { STORAGE } from "../../state/keys.ts";
 import { browserEnv, looseSync, NO_SYNC } from "../../state/looseSync.ts";
 import { useTheme } from "../../state/selectors.ts";
 import {
@@ -19,7 +20,7 @@ import {
 import { Button } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { ErrorBoundary } from "../../ui/ErrorBoundary.tsx";
-import { useSettled } from "../../ui/hooks.ts";
+import { usePersisted, useSettled } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { Pane } from "../../ui/Pane.tsx";
 import { CopyPathButton } from "./CopyPathButton.tsx";
@@ -132,6 +133,11 @@ export function EditorPane({
   // a picture at the window's size: the header's button and the picture itself both open it, so
   // the pane holds the switch and the viewer draws the float
   const [fullSize, setFullSize] = useState(false);
+  // whether long lines fold at the pane's edge: a choice about this window's panes, not one file,
+  // so it is kept with the pane's height and not the file
+  const [wrap, setWrap] = usePersisted(STORAGE.editorWrap, false, (raw) => (raw === null ? undefined : raw === "1"));
+  // the toggle is for text in Monaco: a picture, a rendered preview and a file not shown have no lines to fold
+  const wrappable = !!disk && !viewer && !disk.binary && !disk.tooLarge && view !== "preview";
   // a line the page reported is only placed once its offset is known
   const line = editor.line && !editor.line.fiber ? editor.line.n : undefined;
   return (
@@ -189,6 +195,23 @@ export function EditorPane({
               data-tip="Full size: see the picture over the window"
             >
               <Icon name="zen" className="icon-inline" /> full size
+            </Button>
+          )}
+          {/* names the state it switches to, as the views and the full toggle do */}
+          {wrappable && (
+            <Button
+              variant="outline"
+              tone="quiet"
+              mono
+              className="deep-link"
+              onClick={() => setWrap(!wrap)}
+              data-tip={
+                wrap
+                  ? "Unwrap lines: one line per row, scroll sideways for the rest"
+                  : "Wrap lines: fold a long line at the pane's edge"
+              }
+            >
+              <Icon name="wrap" className="icon-inline" /> {wrap ? "unwrap" : "wrap"}
             </Button>
           )}
           {/* the path in sight, in the order the header's menu has it: copy where it is, then open
@@ -255,6 +278,7 @@ export function EditorPane({
                 focus={editor.focus}
                 readOnly={history || !disk.writable || onScreen}
                 numbers={!onScreen}
+                wrap={wrap}
                 theme={theme}
                 sync={sync}
                 // the editor knows the lines; whose file they are, and at which commit, is the

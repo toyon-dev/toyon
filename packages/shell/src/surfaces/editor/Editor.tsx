@@ -99,9 +99,10 @@ monaco.editor.addKeybindingRules(
   ).map(([command, keybinding]) => ({ keybinding, command: `-${command}` })),
 );
 
-function editorOptions(readOnly: boolean, numbers: boolean) {
+function editorOptions(readOnly: boolean, numbers: boolean, wrap: boolean) {
   return {
     readOnly,
+    wordWrap: wrap ? ("on" as const) : ("off" as const),
     // the diff numbers both sides, two columns that take a fifth of a phone's width before any
     // code; the +/- strip still says which lines changed
     lineNumbers: numbers ? ("on" as const) : ("off" as const),
@@ -219,6 +220,8 @@ function noteRect(root: HTMLElement): Rect | null {
 /** the editor put over the models for one view */
 interface Instance {
   code: monaco.editor.IStandaloneCodeEditor;
+  /** the editor that was created: the diff editor over `code` in the diff view, `code` itself otherwise */
+  editor: monaco.editor.IStandaloneCodeEditor | monaco.editor.IStandaloneDiffEditor;
   /** draw the blame after the caret's line, or take it away, from what is known now */
   paint(): void;
   dispose(): void;
@@ -260,6 +263,7 @@ export default function Editor({
   focus,
   readOnly,
   numbers,
+  wrap,
   theme,
   sync,
   onLineHover,
@@ -282,6 +286,8 @@ export default function Editor({
   readOnly: boolean;
   /** whether the gutter numbers its lines */
   numbers: boolean;
+  /** whether a long line folds at the pane's edge, or runs on and the pane scrolls sideways */
+  wrap: boolean;
   theme: Theme;
   sync: EditorSync;
   onLineHover?: (line: number | null) => void;
@@ -310,6 +316,8 @@ export default function Editor({
   syncRef.current = sync;
   const readOnlyRef = useRef(readOnly);
   readOnlyRef.current = readOnly;
+  const wrapRef = useRef(wrap);
+  wrapRef.current = wrap;
   const lineRef = useRef(line);
   lineRef.current = line;
   const blameRef = useRef(blame);
@@ -433,7 +441,7 @@ export default function Editor({
     if (!el || !m) return;
     const restored = m.place;
     const unchanged = m.original.getValue() === m.modified.getValue();
-    const options = editorOptions(readOnlyRef.current, numbers);
+    const options = editorOptions(readOnlyRef.current, numbers, wrapRef.current);
     let diffEditor: monaco.editor.IStandaloneDiffEditor | null = null;
     let code: monaco.editor.IStandaloneCodeEditor;
     if (view === "file") {
@@ -644,6 +652,9 @@ export default function Editor({
 
     const mine: Instance = {
       code,
+      // the diff editor hands an option on to both its sides; set on the modified side alone, the
+      // deleted lines drawn from the other side would keep their width
+      editor: diffEditor ?? code,
       paint,
       dispose: () => {
         clearTimeout(safety);
@@ -675,6 +686,10 @@ export default function Editor({
 
   useOnChange([readOnly], () => {
     instance.current?.code.updateOptions({ readOnly });
+  });
+
+  useOnChange([wrap], () => {
+    instance.current?.editor.updateOptions({ wordWrap: wrap ? "on" : "off" });
   });
 
   // a jump is made once per open: the same line on a later render is not another request to go there

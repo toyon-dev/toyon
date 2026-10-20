@@ -26,6 +26,11 @@ const LOCAL_LAYERS: Record<string, { root: string; why: string }> = {
     why: "the spawn row's edge over its children's hover fills",
   },
   ".pane-resize": { root: ".pane", why: "the drag strip over the pane's own head" },
+  ".composer-field > textarea": { root: ".composer-field", why: "the caret over the ghosts' prose" },
+  ".composer-verb": { root: ".composer-field", why: "the word in the empty box's line, pressed over the textarea" },
+  ".composer-verb-tail": { root: ".composer-field", why: "the clause at the line's end, pressed over the textarea" },
+  ".composer-marks .chat-mention": { root: ".composer-field", why: "a reference's mark, pressed over the textarea" },
+  ".composer-stop": { root: ".composer-field", why: "the stop in the field's corner, over the textarea's box" },
 };
 
 const cssFiles = () => [...new Glob("**/*.css").scanSync({ cwd: SRC })].sort();

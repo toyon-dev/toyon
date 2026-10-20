@@ -1581,7 +1581,7 @@ export function Composer({
               refuses, the way any remove does. Not aria-hidden while it holds the word, which is a
               control. */}
           {(subline || verb) && (
-            <div className="composer-ghost" aria-hidden={verb ? undefined : "true"}>
+            <div className="composer-ghost composer-standing" aria-hidden={verb ? undefined : "true"}>
               <span className={cx("composer-placeholder", landingNow && "live-text")}>
                 {landingText ? (
                   // the word's own press is out, so the line is prose and not a control: "land:
@@ -1669,8 +1669,8 @@ export function Composer({
               plan line are stacked above, and each of those keeps its whole row. The field stays
               put where a row under the log scrolls off as soon as the log is read back. The glyph
               alone: the corner says what it is, and a word made it the loudest thing in the box
-              while a steer was being typed. Last in the field, so it paints over the ghosts with
-              no rung of its own. Not under an ask: the card takes the field's place, and there
+              while a steer was being typed. On the field's top rung, over the textarea's box and
+              the ghosts. Not under an ask: the card takes the field's place, and there
               esc parks the question rather than stopping the turn. */}
           {stopShown && (
             <IconButton

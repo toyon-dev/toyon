@@ -1089,7 +1089,12 @@
   }
   /* What a just-inserted command still expects, drawn after the caret rather than listed in the
    menu: it is only useful once the command is chosen, and in the row it competed with the
-   descriptions. The metrics have to match the bare field exactly or the ghost drifts off the caret. */
+   descriptions. The metrics have to match the bare field exactly or the ghost drifts off the caret.
+   A ghost is a later sibling of the textarea, so left alone it paints over the caret, and the
+   first glyph after the caret cut it the way a native placeholder never does: the browser paints
+   the caret over its own placeholder. So the field isolates, the textarea takes the first rung,
+   and only the parts of a ghost that are pressed stand above it (the verb, its tail, a mention's
+   mark), since a control under the textarea could not take the press. */
   .composer-ghost {
     position: absolute;
     inset: 0;
@@ -1113,6 +1118,7 @@
   }
   .composer-field {
     --composer-line: 1lh;
+    isolation: isolate;
     /* the ghost wears whatever face the field does, or it drifts off the caret in `!` mode */
     &.shell .composer-ghost {
       font: var(--type-mono);
@@ -1129,6 +1135,19 @@
     &.recalled .field {
       color: var(--text1);
     }
+  }
+  /* the caret over the ghosts' prose, as it is over a native placeholder */
+  .composer-field > textarea {
+    position: relative;
+    z-index: 1;
+  }
+  /* The empty box's own line, drawn in place of the placeholder while there is a word to press or
+     a line to put under it. It starts a caret's width in: the word leading it is a control, so it
+     stands above the caret, and at the column both start on the caret ran through the word's first
+     stroke. Only this ghost moves; nothing is typed while it shows, so there is nothing for it to
+     drift off. */
+  .composer-standing {
+    padding-left: 2px;
   }
   /* A `@` reference in the person's own words wears what a file link in the agent's prose wears:
      the mono face a path has everywhere else in the shell, the scan tier, and an underline saying
@@ -1163,6 +1182,8 @@
       color: transparent;
       overflow-wrap: inherit;
       pointer-events: auto;
+      position: relative;
+      z-index: 2;
       text-decoration-color: color-mix(in srgb, var(--text1) 55%, transparent);
     }
     :where([data-hover]) & .chat-mention:hover {
@@ -1206,11 +1227,12 @@
    beside it and the row's ground ran under it. Absolute in the field, so it comes and goes with
    the turn without moving the knobs row's buttons, and the chips and plan line above keep their
    whole rows. The field and its ghost pad together, since the ghost's wrap has to match the
-   field's or it drifts off the caret. */
+   field's or it drifts off the caret. On the top rung, since the textarea's box runs under it. */
   .composer-stop {
     position: absolute;
     top: 0;
     right: 0;
+    z-index: 2;
   }
   .composer.stopping .composer-field :is(textarea, .composer-ghost) {
     padding-right: 24px;
@@ -1221,6 +1243,8 @@
   .composer-verb,
   .composer-verb-tail {
     pointer-events: auto;
+    position: relative;
+    z-index: 2;
   }
   /* what follows the word sits a tier under it, so the join between them is the step in colour and
    not a colon (the subject after it carries a colon of its own). One tier, not two: the word is on

@@ -195,6 +195,92 @@ export async function runLive(
   }
 }
 
+/**
+ * Like `run`, for a command whose output is rows and whose reader may have seen enough: a grep
+ * over a large tree, where the first page of hits is the answer and every match after it is
+ * work nobody reads. Each `\n`-terminated row goes to `onRow` as it arrives, and the command is
+ * killed the moment `onRow` returns false or `signal` aborts, so the cost is the page and not the
+ * tree. `run` buffers the whole pipe first, which on a repo of tens of thousands of files is tens
+ * of megabytes per keystroke.
+ *
+ * A row longer than `rowMax` is handed over cut at that length and the rest of it is dropped
+ * unread, so a minified bundle's one line never sits in memory whole.
+ */
+export async function runRows(
+  cmd: string,
+  args: string[],
+  cwd: string,
+  opts: { onRow: (row: string) => boolean | undefined; rowMax?: number; signal?: AbortSignal },
+): Promise<GitResult & { stopped: boolean }> {
+  const started = Date.now();
+  const rowMax = opts.rowMax ?? 8192;
+  let stopped = false;
+  try {
+    const p = Bun.spawn([cmd, ...args], {
+      cwd,
+      stdout: "pipe",
+      stderr: "pipe",
+      stdin: "ignore",
+      env: { ...process.env, ...SPAWN_ENV },
+    });
+    const reader = (p.stdout as ReadableStream<Uint8Array>).getReader();
+    const stop = () => {
+      stopped = true;
+      p.kill();
+      // the reader is mid-read on a pipe the child no longer writes; cancelling it is what ends
+      // the loop below, and a cancel on a reader already released is nothing to report
+      reader.cancel().catch(() => {});
+    };
+    if (opts.signal?.aborted) stop();
+    else opts.signal?.addEventListener("abort", stop, { once: true });
+    const pump = async () => {
+      const dec = new TextDecoder();
+      let buf = "";
+      // the tail of a row already cut at rowMax: dropped up to its newline
+      let skipping = false;
+      while (!stopped) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        while (!stopped) {
+          const nl = buf.indexOf("\n");
+          if (nl < 0) {
+            if (skipping) buf = "";
+            else if (buf.length > rowMax) {
+              const keep = buf.slice(0, rowMax);
+              buf = "";
+              skipping = true;
+              if (opts.onRow(keep) === false) stop();
+            }
+            break;
+          }
+          const row = buf.slice(0, nl);
+          buf = buf.slice(nl + 1);
+          if (skipping) {
+            skipping = false;
+            continue;
+          }
+          if (row && opts.onRow(row.length > rowMax ? row.slice(0, rowMax) : row) === false) stop();
+        }
+      }
+      if (!stopped && buf && !skipping) opts.onRow(buf);
+    };
+    const [, err, status] = await Promise.all([pump(), new Response(p.stderr).text(), p.exited]);
+    opts.signal?.removeEventListener("abort", stop);
+    const exit = p.signalCode ?? status;
+    return { ok: status === 0 || stopped, out: "", err: err.trim(), exit, stopped };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { ok: false, out: "", err: msg, exit: msg, stopped };
+  } finally {
+    if (cmd === GIT) {
+      lastGit.cmd = `git ${args.slice(0, 3).join(" ")}`;
+      lastGit.ms = Date.now() - started;
+      lastGit.at = Date.now();
+    }
+  }
+}
+
 /** what a watched command left: the two pipes apart, as `run` gives them, and together in
  * arrival order, which is as close to what a terminal showed as two pipes allow. A command
  * killed at its ceiling (`exit: "timeout"`) carries the ceiling, so the message can say it, and one

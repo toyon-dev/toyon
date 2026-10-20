@@ -1,5 +1,5 @@
 import type { SearchHit } from "@toyon/shared";
-import { useCallback } from "react";
+import { useCallback, useEffect } from "react";
 import { fileItems, openFile } from "../../state/actions/file.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { useLocal } from "../../state/selectors.ts";
@@ -31,6 +31,9 @@ export function SearchPalette({ worktreeId }: { worktreeId: string }) {
     [sock, worktreeId],
   );
   const isStale = (q: string) => !results || results.query.trim() !== q.trim();
+  // the palette closing mid-search: the daemon would finish scanning the repo for a page nobody
+  // sees. On a socket swap the stop goes to the old socket, which is also right.
+  useEffect(() => () => sock?.send({ t: "search-stop" }), [sock]);
   return (
     <ListPicker
       items={results?.hits ?? NONE}
@@ -60,7 +63,7 @@ export function SearchPalette({ worktreeId }: { worktreeId: string }) {
       }
       footer={(q, rows) =>
         results?.truncated && !isStale(q) && rows.length > 0 ? (
-          <div className="empty">showing the first {rows.length}; narrow the search</div>
+          <div className="empty">not every match is shown; narrow the search</div>
         ) : null
       }
       row={(h) => (

@@ -499,6 +499,7 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
         // a tab that went away without a word (a closed lid) closes here once the socket's own
         // idle timeout and pings give it up, and whatever it was showing is released with it
         else s.idle.drop(ws.data);
+        s.files.stopSearch(ws.data);
         sockets.delete(ws);
         unlink(ws);
       },
@@ -548,6 +549,7 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
             ws.data.terms.delete(key);
             ws.data.dropped.delete(key);
           },
+          socket: ws.data,
         };
         try {
           await dispatch(parsed.msg, ctx, s);

@@ -123,6 +123,9 @@ export interface HandlerCtx {
   /** this socket has that stream's tab open: it gets its term-data / term-exit */
   watchTerminal(worktreeId: string, stream: string): void;
   unwatchTerminal(worktreeId: string, stream: string): void;
+  /** the socket itself, as an identity: what runs on a socket's behalf and stops with its next
+   * ask or its close (a search) is held under it. A ctx is built per message, so it is not one. */
+  socket: object;
 }
 
 type Handler<K extends ClientMsg["t"]> = (
@@ -547,8 +550,13 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
   },
 
   async search(msg, ctx, s) {
-    const { hits, truncated } = await s.files.search(msg.worktreeId, msg.query);
-    ctx.reply({ t: "search-results", worktreeId: msg.worktreeId, query: msg.query, hits, truncated });
+    // a search the next query stopped has no page to answer with; the shell keeps the one it
+    // shows until the newer query's page arrives
+    const page = await s.files.search(msg.worktreeId, msg.query, ctx.socket);
+    if (page) ctx.reply({ t: "search-results", worktreeId: msg.worktreeId, query: msg.query, ...page });
+  },
+  "search-stop"(_msg, ctx, s) {
+    s.files.stopSearch(ctx.socket);
   },
 
   async "find-element"(msg, ctx, s) {

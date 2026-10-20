@@ -729,7 +729,11 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   /** open the `/` menu on a worktree whose agent has not run yet: start it so it says what
    * commands it has. Answered by an `agent-commands` push, or by nothing if it will not start. */
   z.object({ t: z.literal("list-commands"), worktreeId: id }),
+  /** answered by one `search-results`, unless a later `search` or a `search-stop` from the same
+   * socket stops it first; then by nothing */
   z.object({ t: z.literal("search"), worktreeId: id, query: z.string().max(500) }),
+  /** the search palette closed: whatever search still runs for this socket is work nobody reads */
+  z.object({ t: z.literal("search-stop") }),
   /** a ⌘I pick on a page that recorded no file: find the element in the source by what it shows.
    * Answered by one `element-sources`. */
   z.object({ t: z.literal("find-element"), worktreeId: id, seq, element: elementTraitsSchema }),

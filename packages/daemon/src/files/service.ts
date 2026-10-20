@@ -16,7 +16,7 @@ import {
 import { UserError } from "../core/errors.ts";
 import type { StateStore } from "../core/state.ts";
 import { blameFile } from "../git/blame.ts";
-import { GIT, git, run } from "../git/exec.ts";
+import { GIT, git, run, runRows } from "../git/exec.ts";
 import { fileLockKey, withLock } from "../git/lock.ts";
 import { fileAtCommit } from "../git/log.ts";
 import { changedRanges, fileAt, fileBefore, statusFiles } from "../git/status.ts";
@@ -28,7 +28,38 @@ import { type ElementSources, needlesOf, rankElementSources } from "./elementSou
 import { type Listing, parseListing } from "./listing.ts";
 import { viteLineOffset } from "./vite-offset.ts";
 
-const SEARCH_MAX = 300;
+/** the page a search answers with; git is stopped once it is full */
+export const SEARCH_MAX = 300;
+/** the most of the page one file gets: hits come in path order, and a lockfile at the root
+ * matching every line would otherwise be the whole page */
+export const SEARCH_PER_FILE = 20;
+/** the most of a hit's line the row shows */
+const HIT_TEXT_MAX = 200;
+
+export interface SearchPage {
+  hits: SearchHit[];
+  /** the page is not every match: it filled, or a file gave more than its share */
+  truncated: boolean;
+}
+
+/** a `git grep -n -z` row: path, NUL, line number, NUL, the line */
+export function parseGrepRow(row: string): SearchHit | null {
+  const a = row.indexOf("\0");
+  if (a < 0) return null;
+  const b = row.indexOf("\0", a + 1);
+  if (b < 0) return null;
+  const line = Number(row.slice(a + 1, b));
+  if (!Number.isInteger(line) || line < 1) return null;
+  return {
+    path: row.slice(0, a),
+    line,
+    text: row
+      .slice(b + 1)
+      .trim()
+      .slice(0, HIT_TEXT_MAX),
+  };
+}
+
 /** rows an element search reads before ranking; its traits are rare by the time they count */
 const FIND_ROWS_MAX = 5000;
 /** files that carry an element's names without writing the element */
@@ -127,6 +158,9 @@ export class FileService {
      * for worktrees toyon only knows about, which have no record in the state store. */
     private readable: (id: string) => ReadableWorktree | null,
   ) {}
+
+  /** the one search running per socket; the query typed next replaces it */
+  private searches = new Map<object, AbortController>();
 
   /** the reads all want the same two things; a spare or an unknown id is a refusal the person reads, not a crash */
   private require(worktreeId: string): ReadableWorktree {
@@ -234,29 +268,79 @@ export class FileService {
     return parseListing(staged.out, untracked.out, deleted.out, ignored.out);
   }
 
-  /** fixed-string, case-insensitive git grep over tracked + untracked (not ignored) files */
-  async search(worktreeId: string, query: string): Promise<{ hits: SearchHit[]; truncated: boolean }> {
+  /**
+   * Fixed-string, case-insensitive git grep over tracked and untracked (not ignored) files: the
+   * first page of hits, a few from each file so a lockfile cannot fill it. Git is stopped the
+   * moment the page is full, so a search costs the page and not the tree; a person types a query
+   * a few characters at a time, and every one of those used to scan the whole repo.
+   *
+   * `asker` is the socket the query came from. Its next query stops this one, as does
+   * `stopSearch`, and a search stopped that way answers null: its page was never the answer.
+   */
+  async search(worktreeId: string, query: string, asker: object): Promise<SearchPage | null> {
     const { path: cwd } = this.require(worktreeId);
     const q = query.trim();
+    if (q.length < 2) return { hits: [], truncated: false };
+    this.searches.get(asker)?.abort();
+    const ctl = new AbortController();
+    this.searches.set(asker, ctl);
     const hits: SearchHit[] = [];
     let truncated = false;
-    if (q.length < 2) return { hits, truncated };
-    const r = await run(
-      GIT,
-      ["grep", "-n", "-I", "-i", "-F", "--untracked", "--no-color", `--max-count=${SEARCH_MAX}`, "-e", q, "--"],
-      cwd,
-    );
-    for (const row of r.rawOut.split("\n")) {
-      if (!row) continue;
-      const m = /^(.+?):(\d+):(.*)$/.exec(row);
-      if (!m) continue;
-      if (hits.length >= SEARCH_MAX) {
-        truncated = true;
-        break;
-      }
-      hits.push({ path: m[1]!, line: Number(m[2]), text: m[3]!.trim().slice(0, 200) });
+    // git prints a file's rows together, so a file's count is the run since the path changed
+    let inFile = "";
+    let inFileRows = 0;
+    try {
+      await runRows(
+        GIT,
+        // -z: paths verbatim, where the default quotes a non-ASCII name as octal escapes that
+        // name no file. One row past the per-file cap, so a file at the cap is known to have more.
+        [
+          "grep",
+          "-n",
+          "-z",
+          "-I",
+          "-i",
+          "-F",
+          "--untracked",
+          "--no-color",
+          `--max-count=${SEARCH_PER_FILE + 1}`,
+          "-e",
+          q,
+          "--",
+        ],
+        cwd,
+        {
+          signal: ctl.signal,
+          onRow: (row) => {
+            const hit = parseGrepRow(row);
+            if (!hit) return;
+            if (hit.path !== inFile) {
+              inFile = hit.path;
+              inFileRows = 0;
+            }
+            if (++inFileRows > SEARCH_PER_FILE) {
+              truncated = true;
+              return;
+            }
+            if (hits.length >= SEARCH_MAX) {
+              truncated = true;
+              return false;
+            }
+            hits.push(hit);
+          },
+        },
+      );
+    } finally {
+      if (this.searches.get(asker) === ctl) this.searches.delete(asker);
     }
-    return { hits, truncated };
+    return ctl.signal.aborted ? null : { hits, truncated };
+  }
+
+  /** the search still running for this socket, if any, is not wanted: the palette closed, or the
+   * socket did */
+  stopSearch(asker: object): void {
+    this.searches.get(asker)?.abort();
+    this.searches.delete(asker);
   }
 
   /** Where an element no framework recorded is written: a grep for the traits it shows, ranked by

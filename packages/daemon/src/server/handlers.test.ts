@@ -282,6 +282,7 @@ function make() {
     },
     watchTerminal: (id, stream) => terms.add(streamKey(id, stream)),
     unwatchTerminal: (id, stream) => terms.delete(streamKey(id, stream)),
+    socket: {},
   };
   return {
     ...t,

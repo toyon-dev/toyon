@@ -2,7 +2,55 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { sh, tmpRepo } from "../../test/helpers/tmp-repo.ts";
-import { GIT, runWatched } from "./exec.ts";
+import { GIT, runRows, runWatched } from "./exec.ts";
+
+describe("runRows", () => {
+  test("hands rows over as they arrive and kills the command when the reader has enough", async () => {
+    const rows: string[] = [];
+    // a writer that never ends on its own: only the kill ends it
+    const r = await runRows("sh", ["-c", "i=0; while :; do i=$((i+1)); echo row$i; done"], "/", {
+      onRow: (row) => {
+        rows.push(row);
+        return rows.length < 3;
+      },
+    });
+    expect(rows).toEqual(["row1", "row2", "row3"]);
+    expect(r.stopped).toBe(true);
+    expect(r.ok).toBe(true);
+  });
+
+  test("a row past rowMax is handed over cut and its tail dropped; the next row is whole", async () => {
+    const rows: string[] = [];
+    const r = await runRows("sh", ["-c", "printf 'a%.0s' $(seq 1 5000); echo; echo tail"], "/", {
+      rowMax: 100,
+      onRow: (row) => {
+        rows.push(row);
+        return true;
+      },
+    });
+    expect(rows.map((x) => x.length)).toEqual([100, 4]);
+    expect(rows[1]).toBe("tail");
+    expect(r.stopped).toBe(false);
+    expect(r.ok).toBe(true);
+  });
+
+  test("an abort kills the command, and the result says it was stopped", async () => {
+    const ctl = new AbortController();
+    const rows: string[] = [];
+    // exec, so the kill lands on the sleeper and not on a shell whose child keeps the pipes open
+    const p = runRows("sh", ["-c", "echo one; exec sleep 5"], "/", {
+      signal: ctl.signal,
+      onRow: (row) => {
+        rows.push(row);
+        ctl.abort();
+        return true;
+      },
+    });
+    const r = await p;
+    expect(rows).toEqual(["one"]);
+    expect(r.stopped).toBe(true);
+  });
+});
 
 describe("runWatched", () => {
   let t: ReturnType<typeof tmpRepo>;

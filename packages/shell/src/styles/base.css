@@ -783,6 +783,29 @@
     & .md-table {
       overflow-x: auto;
       margin: 0 0 8px;
+      /* The edge the table runs past fades out, the way a path fades under the tool row's open
+         button: a hard edge across the middle of a character read as the line being broken, and
+         the fade says the table goes on. Each fade is there only while there is more that way,
+         driven by the scroll position itself: the right one shrinks away over the last 24px of
+         travel and the left one grows over the first, so at an end the closing rule is the end.
+         A table that fits never scrolls, its timeline is inactive, and both fades stay at zero.
+         A browser without scroll timelines gets the plain clip. */
+      --md-table-fade-l: 0px;
+      --md-table-fade-r: 0px;
+      mask-image: linear-gradient(
+        to right,
+        transparent,
+        #000 var(--md-table-fade-l),
+        #000 calc(100% - var(--md-table-fade-r)),
+        transparent
+      );
+      animation:
+        md-table-fade-l linear both,
+        md-table-fade-r linear both;
+      animation-timeline: scroll(self x);
+      animation-range:
+        0 24px,
+        calc(100% - 24px) 100%;
     }
     /* one rule around the table and one between cells: separate borders so the outer corners can
        round, with each cell drawing only its right and bottom edge so no two rules stack */
@@ -825,6 +848,33 @@
     }
     & table > :last-child > tr:last-child > :last-child {
       border-bottom-right-radius: var(--radius-lg);
+    }
+  }
+  /* registered so the fades interpolate as lengths rather than snapping between strings */
+  @property --md-table-fade-l {
+    syntax: "<length>";
+    inherits: false;
+    initial-value: 0px;
+  }
+  @property --md-table-fade-r {
+    syntax: "<length>";
+    inherits: false;
+    initial-value: 0px;
+  }
+  @keyframes md-table-fade-l {
+    from {
+      --md-table-fade-l: 0px;
+    }
+    to {
+      --md-table-fade-l: 24px;
+    }
+  }
+  @keyframes md-table-fade-r {
+    from {
+      --md-table-fade-r: 24px;
+    }
+    to {
+      --md-table-fade-r: 0px;
     }
   }
   .md-preview {

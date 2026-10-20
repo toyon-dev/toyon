@@ -4,6 +4,7 @@ import { openPreview, previewsGated } from "../../state/previewGrant.ts";
 import { useActive, useArchivedPage, useChatCentred, useFoundPage, useTouch } from "../../state/selectors.ts";
 import type { Screen } from "../../state/store.ts";
 import { IconButton } from "../../ui/Button.tsx";
+import { cx } from "../../ui/cx.ts";
 import { useVisibleHeight, useZoomMark } from "../../ui/hooks.ts";
 import { Menus } from "../../ui/Menu.tsx";
 import { type TabItem, Tabs } from "../../ui/Tabs.tsx";
@@ -147,7 +148,7 @@ export function PhoneFrame() {
             <UpdatedCard foreign={machines.displayName(machine.origin)} />
           ) : say !== null ? (
             <View wide>
-              <p className="status-line">{say}</p>
+              <p className={cx("status-line", say.live && "live-text")}>{say.text}</p>
             </View>
           ) : !onWorktree ? (
             // this machine's worktrees: the list is the home screen, and the bar says which machine

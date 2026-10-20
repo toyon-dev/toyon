@@ -13,9 +13,16 @@ import type { ConnectFailure } from "@toyon/shared";
  * arriving can be: building, or empty and waiting to be told what to build.
  */
 
+/** a sentence, and whether it stands for something under way. A wait wears the live mark where it
+ * is drawn, so the words carry it and nothing stands beside them; a sentence about what is wrong
+ * does not move, since nothing is going to change it on its own. */
+export type Said = { text: string; live: boolean };
+
+const said = (text: string, live = false): Said => ({ text, live });
+
 /** what to say while the socket is down, by what ws.ts worked out about why */
 const CONNECT: Record<ConnectFailure | "probing", string> = {
-  probing: "connecting to daemon…",
+  probing: "connecting to daemon",
   down: "the daemon is not running.\nrun `toyon` in your repo to start it; `toyon doctor` says what it can see",
   blocked:
     "the daemon is up, but this page's websocket never connected.\na proxy, VPN or browser extension is the usual cause; `toyon doctor` checks from the terminal",
@@ -24,7 +31,7 @@ const CONNECT: Record<ConnectFailure | "probing", string> = {
 
 /** the same, for a machine other than the one that served the page: what to do is to be done there */
 const FOREIGN: Record<ConnectFailure | "probing", (machine: string) => string> = {
-  probing: (m) => `connecting to ${m}…`,
+  probing: (m) => `connecting to ${m}`,
   down: (m) => `Toyon on ${m} is not answering.\nis Tailscale on here, and is Toyon running there?`,
   blocked: (m) =>
     `Toyon on ${m} is up, but this page's websocket to it never connected.\na proxy, VPN or browser extension is the usual cause`,
@@ -63,27 +70,31 @@ export type Connection = Pick<
 
 /** the sentence while the socket is down or nothing is open, or null once there is a project to
  * talk about. The socket wins over everything, because nothing further is known. */
-export function connectionText(w: Connection): string | null {
+export function connectionText(w: Connection): Said | null {
   if (!w.connected && (!w.heard || w.connectFailure)) {
-    if (w.machine) return FOREIGN[w.connectFailure ?? "probing"](w.machine);
-    return w.hasToken ? (CONNECT[w.connectFailure ?? "probing"] ?? CONNECT.probing) : NO_TOKEN;
+    // still trying, with no failure named yet: the one connection line that is a wait
+    const probing = w.connectFailure === null;
+    if (w.machine) return said(FOREIGN[w.connectFailure ?? "probing"](w.machine), probing);
+    return w.hasToken ? said(CONNECT[w.connectFailure ?? "probing"], probing) : said(NO_TOKEN);
   }
   // before hello there is nothing to say: the rows are about to arrive and a sentence would flash
   if (w.title === null) {
-    return w.heard
-      ? `nothing open yet.\npress ${w.projectChord} to open a project, or type a name there to start a new one`
-      : "";
+    return said(
+      w.heard
+        ? `nothing open yet.\npress ${w.projectChord} to open a project, or type a name there to start a new one`
+        : "",
+    );
   }
   return null;
 }
 
 /** the sentence, or null when a view of its own (boot, no preview) should stand here instead */
-export function waitingText(w: Waiting): string | null {
+export function waitingText(w: Waiting): Said | null {
   const connection = connectionText(w);
   if (connection !== null) return connection;
-  if (w.needsSetup && w.busy) return `building in ${w.title}; the preview appears once it starts`;
-  if (w.needsSetup && w.treeEmpty) return `${w.title} is empty so far; say what to build`;
+  if (w.needsSetup && w.busy) return said(`building in ${w.title}; the preview appears once it starts`, true);
+  if (w.needsSetup && w.treeEmpty) return said(`${w.title} is empty so far; say what to build`);
   // boot would say its dev servers are starting, and none will until the worktree brings the code
-  if (w.treeEmpty && w.landsFrom) return `nothing runs on main until ${w.landsFrom} lands`;
+  if (w.treeEmpty && w.landsFrom) return said(`nothing runs on main until ${w.landsFrom} lands`);
   return null;
 }

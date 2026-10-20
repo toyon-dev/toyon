@@ -31,7 +31,13 @@ export function ReleaseNotes() {
   if (!text) {
     return (
       <View wide>
-        <p className="status-line">{notesLead(version, text === undefined ? "reading" : "missing")}</p>
+        <p className="status-line">
+          {text === undefined ? (
+            <span className="live-text">{notesLead(version, "reading")}</span>
+          ) : (
+            notesLead(version, "missing")
+          )}
+        </p>
       </View>
     );
   }

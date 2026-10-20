@@ -72,7 +72,7 @@ export function AgentPage({ agentId }: { agentId: string }) {
         <div className="section-title keys-h">MCP servers it will load</div>
         {config === null ? (
           <div className="keys-setting">
-            <span className="keys-d">reading…</span>
+            <span className="keys-d live-text">reading</span>
           </div>
         ) : config.servers.length === 0 ? (
           <div className="keys-setting">

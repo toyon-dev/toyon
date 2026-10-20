@@ -262,7 +262,10 @@ export function ProjectPicker({
         ) : r.kind === "repo" ? (
           <PaletteRow label={r.repo.name} current={r.repo.id === current} hint={hintFor(r.repo)} />
         ) : r.kind === "pending" ? (
-          <PaletteRow label={r.pending.name} hint={r.pending.error ? "import failed" : "importing…"} />
+          <PaletteRow
+            label={r.pending.name}
+            hint={r.pending.error ? "import failed" : <span className="live-text">importing</span>}
+          />
         ) : r.kind === "dir" ? (
           <PaletteRow label={r.entry.name} hint={r.entry.isRepo ? "git repo" : undefined} />
         ) : r.kind === "open" ? (

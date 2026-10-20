@@ -49,7 +49,15 @@ export function SearchPalette({ worktreeId }: { worktreeId: string }) {
       rowMenu={(h) => (dir ? fileItems({ id: worktreeId, dir }, h.path, {}, { sock, dispatch }) : [])}
       placeholder="search in files…"
       keys={{ pick: "opens the file", back: "closes" }}
-      empty={(q) => (q.trim().length < MIN ? "type at least two characters" : isStale(q) ? "searching…" : "no matches")}
+      empty={(q) =>
+        q.trim().length < MIN ? (
+          "type at least two characters"
+        ) : isStale(q) ? (
+          <span className="live-text">searching</span>
+        ) : (
+          "no matches"
+        )
+      }
       footer={(q, rows) =>
         results?.truncated && !isStale(q) && rows.length > 0 ? (
           <div className="empty">showing the first {rows.length}; narrow the search</div>

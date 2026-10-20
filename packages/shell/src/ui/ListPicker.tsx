@@ -131,8 +131,9 @@ export function ListPicker<T>({
   idleWhen?: (q: string) => boolean;
   /** enter while no row is highlighted */
   onIdlePick?: (q: string) => void;
-  /** shown when there are no rows; a function sees the query */
-  empty?: string | ((q: string) => string);
+  /** shown when there are no rows; a function sees the query. A wait for the source ("searching",
+   * "looking") wears `.live-text`, so the words carry the mark and nothing stands beside them. */
+  empty?: ReactNode | ((q: string) => ReactNode);
   /** below the rows (result counts, hints) */
   footer?: (q: string, results: T[]) => ReactNode;
   /** what this picker's keys do, as the verb for each one. The picker owns the keyboard, so it

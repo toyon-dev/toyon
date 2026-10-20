@@ -682,7 +682,7 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
                 !incompatible &&
                 (say !== null ? (
                   <View wide>
-                    <p className="status-line">{say}</p>
+                    <p className={cx("status-line", say.live && "live-text")}>{say.text}</p>
                   </View>
                 ) : chatCentred ? (
                   // nothing runs, so no server is ever ready: this slot is always the chat's

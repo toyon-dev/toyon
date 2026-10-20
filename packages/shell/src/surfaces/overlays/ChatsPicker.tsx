@@ -125,15 +125,19 @@ export function ChatsPicker({ repoId, scope: opened }: { repoId: string; scope: 
         back: "closes",
       })}
       empty={(q) =>
-        !q.trim()
-          ? archived
-            ? "no chats yet"
-            : "looking…"
-          : !searching(q)
-            ? "no chat is named that"
-            : isStale(q)
-              ? "searching…"
-              : "no chat says that"
+        !q.trim() ? (
+          archived ? (
+            "no chats yet"
+          ) : (
+            <span className="live-text">looking</span>
+          )
+        ) : !searching(q) ? (
+          "no chat is named that"
+        ) : isStale(q) ? (
+          <span className="live-text">searching</span>
+        ) : (
+          "no chat says that"
+        )
       }
       footer={(q, rows) => {
         const hits = rows.filter((r) => r.kind === "hit").length;

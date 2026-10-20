@@ -70,7 +70,13 @@ export function RefPicker({ repoId }: { repoId: string }) {
         back: "closes",
       })}
       empty={(q) =>
-        isStale(q) ? "looking…" : q.trim() ? "no branch or PR matches" : "no unmerged branches or open PRs"
+        isStale(q) ? (
+          <span className="live-text">looking</span>
+        ) : q.trim() ? (
+          "no branch or PR matches"
+        ) : (
+          "no unmerged branches or open PRs"
+        )
       }
       row={(h) => (
         <PaletteRow

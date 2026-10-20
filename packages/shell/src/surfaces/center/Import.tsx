@@ -40,7 +40,7 @@ export function Import({ pending }: { pending: PendingRepo }) {
 
       <div className="status-tail" ref={tail}>
         {pending.lines.length === 0 && !failed ? (
-          <span className="import-idle">starting git…</span>
+          <span className="live-text">starting git</span>
         ) : (
           pending.lines.map((line, i) => (
             // git's progress lines have no id of their own, and the list is append-only and capped

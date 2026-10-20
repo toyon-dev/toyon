@@ -9,9 +9,9 @@ import { RUN_STATUS_TIP, runLine, runOf, runStopTip, runTicking } from "../runs.
 /** the line before any proc exists. A spare says how far along it is, since the plus is looked at
  * while it is made and "starting dev servers" would be a lie for a row still copying deps. */
 function startingText(phase: SparePhase | undefined): string {
-  if (phase === "reserved") return "checking out a fresh worktree…";
-  if (phase === "warming") return "copying dependencies and running setup…";
-  return "starting dev servers…";
+  if (phase === "reserved") return "checking out a fresh worktree";
+  if (phase === "warming") return "copying dependencies and running setup";
+  return "starting dev servers";
 }
 
 /** the line on a worktree back from the archive or taken over, whose procs wait to be asked for */
@@ -56,7 +56,7 @@ export function Boot({ worktree, log }: { worktree: OwnedWorktree; log: LogLine[
           ) : parked ? (
             PARKED_TEXT
           ) : (
-            startingText(worktree.worktree.phase)
+            <span className="live-text">{startingText(worktree.worktree.phase)}</span>
           )}
         </div>
       ) : (

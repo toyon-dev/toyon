@@ -127,7 +127,6 @@
     align-items: center;
     flex-wrap: wrap;
   }
-  .import-idle,
   .import-error {
     color: var(--text2);
   }

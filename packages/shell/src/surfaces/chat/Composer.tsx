@@ -166,9 +166,13 @@ function emptyMenu(
   // to ask, and the menu says so rather than showing another agent's commands.
   if (kind === "command") {
     if (!source) return "no session has run this agent yet, so it has offered no commands";
-    return commandCount === 0 ? "starting the agent to see what it offers…" : "no matching command";
+    return commandCount === 0 ? (
+      <span className="live-text">starting the agent to see what it offers</span>
+    ) : (
+      "no matching command"
+    );
   }
-  return files ? "no matches" : "listing files…";
+  return files ? "no matches" : <span className="live-text">listing files</span>;
 }
 
 /** what picking a row puts in the draft. A file is a reference, never its contents: the agent

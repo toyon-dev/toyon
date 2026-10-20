@@ -501,7 +501,14 @@ export function ChatLog({
   // cache is written during render because it is this render's own output: an element is a pure
   // function of its props, so a render React threw away leaves nothing in it that the next one
   // could not have made itself.
+  //
+  // A fresh element is not a fresh instance: React keeps the component under the same key, with
+  // its state. A row's markup is state that follows its text an effect later, throttled to a
+  // stream tick (useMarkdown), so a row handed another transcript's item under the same number
+  // paints the words it had for a frame to a tick. The key names the worktree too, and a switch
+  // mounts the rows anew with the right words on their first paint.
   const fileRoot = active?.worktree.path;
+  const keyOf = (at: number) => `${id ?? ""}:${at}`;
   const rowOf = (entry: ChatEntry, i: number): LogRow =>
     "spawn" in entry
       ? { kind: "tool", props: { tools: [entry.spawn], run: entry.run, roots, worktreeId: id } }
@@ -539,11 +546,11 @@ export function ChatLog({
   const rowCache = useRef<RowCache<LogRow>>(new Map());
   const cached = cachedRows(rowCache.current, entries, rowOf, (entry, row) =>
     row.kind === "tool" ? (
-      <ToolRow key={entry.at} {...row.props} />
+      <ToolRow key={keyOf(entry.at)} {...row.props} />
     ) : row.kind === "thought" ? (
-      <ThoughtRow key={entry.at} {...row.props} />
+      <ThoughtRow key={keyOf(entry.at)} {...row.props} />
     ) : (
-      <ChatItemView key={entry.at} {...row.props} />
+      <ChatItemView key={keyOf(entry.at)} {...row.props} />
     ),
   );
   rowCache.current = cached.cache;
@@ -562,7 +569,7 @@ export function ChatLog({
         {floating.map((entry) =>
           "spawn" in entry ? (
             <ToolRow
-              key={entry.at}
+              key={keyOf(entry.at)}
               tools={[entry.spawn]}
               run={entry.run}
               working
@@ -572,7 +579,7 @@ export function ChatLog({
             />
           ) : entry.tools[0]?.name === SHELL_TOOL ? (
             <ToolRow
-              key={entry.at}
+              key={keyOf(entry.at)}
               tools={entry.tools}
               live={entry.at === newestShell}
               since={sinceOf(entry)}
@@ -581,7 +588,7 @@ export function ChatLog({
               marked={entry.at === markAt}
             />
           ) : (
-            <ToolRow key={entry.at} tools={entry.tools} since={chatAt} roots={roots} worktreeId={id} />
+            <ToolRow key={keyOf(entry.at)} tools={entry.tools} since={chatAt} roots={roots} worktreeId={id} />
           ),
         )}
         {/* the row is status alone: the stop is the composer's, in the field's corner, which stays

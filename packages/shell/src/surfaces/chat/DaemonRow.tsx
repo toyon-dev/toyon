@@ -34,7 +34,9 @@ type Props = Omit<HTMLAttributes<HTMLDivElement>, "className"> & {
   tone: DaemonTone;
   /** when the news happened, for a row that is news of the worktree and says its age with
    * `useAgo`: the tip gives the clock time the age rounds off. A row inside a turn (a refused
-   * call) takes none, since nothing else in a turn is timed. */
+   * call) takes none, since nothing else in a turn is timed. The tip is the word's, not the
+   * row's: the row spans the log, so a tip on it came up on every pass of the pointer from the
+   * transcript to the composer and, trailing the pointer, lay over the next message. */
   at?: number;
   /** a second line under the head, in the dimmer tier: the reason a call was refused */
   below?: ReactNode;
@@ -46,11 +48,11 @@ type Props = Omit<HTMLAttributes<HTMLDivElement>, "className"> & {
  * the open band's edge and its glyph on the tool rows' glyph column, and the word beside the glyph
  * is not the odd row out in a scrolled-back turn. */
 export function DaemonRow({ icon, word, tone, at, below, children, ...rest }: Props) {
-  const tip = at !== undefined ? { "data-tip": `${word} ${AT.format(at)}`, "data-tip-placement": "follow" } : null;
+  const tip = at !== undefined ? { "data-tip": `${word} ${AT.format(at)}`, "data-tip-placement": "top" } : null;
   return (
-    <div {...tip} {...rest} className="daemon-row row-edge" data-tone={tone}>
+    <div {...rest} className="daemon-row row-edge" data-tone={tone}>
       <div className="daemon-head">
-        <span className="daemon-tag">
+        <span {...tip} className="daemon-tag">
           <Icon name={icon} className="icon-inline" />
           {word}
         </span>

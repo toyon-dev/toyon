@@ -20,6 +20,11 @@
   .chats-said {
     flex: none;
   }
+  /* the chat's name leads its group: it is what a scan down the list looks for, so it takes the
+     top tier while the ask under it stays on the head's */
+  .chats-name {
+    color: var(--text0);
+  }
   /* the row you are on lifts the line to the reading tier, as a files hit does */
   .chats-hit[data-state~="cursor"] .chats-text {
     color: var(--text0);

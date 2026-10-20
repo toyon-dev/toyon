@@ -47,6 +47,13 @@ export function ChatsPicker({ repoId, scope: opened }: { repoId: string; scope: 
     (): ChatsRow[] => [...chats, ...(results?.hits ?? []).map((hit) => ({ kind: "hit" as const, hit }))],
     [chats, results],
   );
+  // when each chat last said something that matched: the head's time, which its rows then need
+  // not repeat
+  const newest = useMemo(() => {
+    const at = new Map<string, number>();
+    for (const h of results?.hits ?? []) at.set(h.worktreeId, Math.max(at.get(h.worktreeId) ?? 0, h.ts));
+    return at;
+  }, [results]);
   const filter = useCallback((rows: ChatsRow[], q: string) => chatRows(rows, q, scope), [scope]);
   // keyed on the scope as well, so turning the messages back on asks for what is already typed
   const onQuery = useCallback(
@@ -75,8 +82,11 @@ export function ChatsPicker({ repoId, scope: opened }: { repoId: string; scope: 
       }
       rowTitle={(r) => (r.kind === "hit" ? r.hit.text : (r.archived?.prompt ?? r.name))}
       // the daemon answers chat by chat, so a chat's hits already sit together; the head says
-      // the chat's name once and the rows under it say only who and when. Drawn over a lone chat
-      // too, or sixteen hits from one chat would name it nowhere. Under the name, what the chat
+      // the chat's name once and the rows under it say only who said it. Drawn over a lone chat
+      // too, or sixteen hits from one chat would name it nowhere. No count: the hits sit right
+      // under the head, so the number says what the eye sees. The time is the newest hit's, at
+      // the name's far end where the rail keeps a row's time; a chat's hits nearly always share
+      // an age, so the rows carry one only when theirs differs. Under the name, what the chat
       // was asked for: the name is a few words that four chats on one topic can share, and the
       // hits say what matched, not which chat this is. The first message is true of the whole
       // chat, as on the rail's archived row, and gets two lines here: the head is the only thing
@@ -87,11 +97,12 @@ export function ChatsPicker({ repoId, scope: opened }: { repoId: string; scope: 
         const id = group.slice(2);
         const w = byId.get(id);
         const ask = results?.asks[id];
+        const at = newest.get(id) ?? 0;
         // one span: the head is a flex box, and bare text beside the archived mark would lose the
         // space between them
         return (
           <>
-            <span>
+            <span className="chats-name">
               {w?.name ?? "a worktree"}
               {w?.archived && (
                 <>
@@ -99,8 +110,8 @@ export function ChatsPicker({ repoId, scope: opened }: { repoId: string; scope: 
                   <span className="row-dim">archived</span>
                 </>
               )}
-              {` · ${n}`}
             </span>
+            {at > 0 && <span className="picker-group-tail">{ago(at)}</span>}
             {ask && <span className="picker-group-line">{clipLine(ask, LINE_MAX * 2)}</span>}
           </>
         );
@@ -153,7 +164,7 @@ export function ChatsPicker({ repoId, scope: opened }: { repoId: string; scope: 
             <span className="chats-text">{markHits(r.hit.text, charsOf(r.hit.match), 0)}</span>
             <span className="chats-said row-dim">
               {r.hit.role === "user" ? "you" : "the agent"}
-              {r.hit.ts > 0 ? ` · ${ago(r.hit.ts)}` : ""}
+              {r.hit.ts > 0 && ago(r.hit.ts) !== ago(newest.get(r.hit.worktreeId) ?? 0) ? ` · ${ago(r.hit.ts)}` : ""}
             </span>
           </>
         )

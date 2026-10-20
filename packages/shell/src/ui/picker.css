@@ -200,6 +200,13 @@
     /* the air a one-line head gets from centring in its row */
     padding-block: 4px;
     color: var(--text1);
+    /* a hairline where one group ends: air alone is the cue otherwise, and the gap above a head
+       is about the gap between a group's own rows, so three groups read as one list */
+    &:not(:first-child) {
+      border-top: 1px solid var(--border0);
+      margin-top: 6px;
+      padding-top: 10px;
+    }
   }
   /* two lines, then an ellipsis: one line of a long ask stops before the part that says what
      it was for, and past two it is the chat's job */

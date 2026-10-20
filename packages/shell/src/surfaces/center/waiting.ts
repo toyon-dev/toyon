@@ -38,8 +38,7 @@ const FOREIGN: Record<ConnectFailure | "probing", (machine: string) => string> =
   unauthorized: (m) => `this page's token for ${m} is not the one running there.\nforget ${m} here and pair it again`,
 };
 
-const NO_TOKEN =
-  "no access token for this address.\nrun `toyon` in your repo, or open the full URL\n(with #token=…) printed in ~/.toyon/daemon.log";
+const NO_TOKEN = "no access token for this address.\nrun `toyon` or `toyon open` in your repo to get a signed-in page";
 
 export type Waiting = {
   connected: boolean;

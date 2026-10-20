@@ -3,6 +3,7 @@
 
 import { existsSync, statSync } from "node:fs";
 import { describeManaged, type ManagedResolved, WS_CLOSE_UNAUTHORIZED } from "@toyon/shared";
+import { previousLog } from "@toyon/shared/logfile";
 import { loadManaged } from "@toyon/shared/managed-load";
 import pkg from "../package.json" with { type: "json" };
 import { alive, base, type Health, health, home, logFile, port, readPid, readToken, tokenFile } from "./daemon.ts";
@@ -223,8 +224,10 @@ export async function doctor(): Promise<number> {
   }
 
   if (existsSync(logFile)) {
-    const kb = Math.round(statSync(logFile).size / 1024);
-    lines.push(line(true, "log", `${logFile} (${kb} KB)`));
+    const kb = (p: string) => Math.round(statSync(p).size / 1024);
+    const before = previousLog(logFile);
+    const kept = existsSync(before) ? `, and ${kb(before)} KB kept from before` : "";
+    lines.push(line(true, "log", `${logFile} (${kb(logFile)} KB${kept})`));
   }
 
   const width = Math.max(...lines.map((l) => l.label.length));

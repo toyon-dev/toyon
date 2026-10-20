@@ -84,6 +84,10 @@ import { TurnService } from "./worktrees/turns.ts";
 process.on("unhandledRejection", (e) => log.error("daemon", "unhandled rejection", e));
 process.on("uncaughtException", (e) => log.error("daemon", "uncaught exception", e));
 
+// the first line of every run, so a stretch of the log reads as one build: the file spans
+// installs, and a stack frame's line number means nothing without the version it came from
+log.info("daemon", `toyon ${pkg.version} on bun ${Bun.version}, pid ${process.pid}, ${process.argv[1]}`);
+
 const here = dirname(fileURLToPath(import.meta.url));
 const {
   shellDist: SHELL_DIST,
@@ -530,15 +534,18 @@ if (repoArg) {
   }
 }
 
-// One line to act on: the link, or behind an edge the name. The fallback address, what the token
-// grants and whether this run stops on its own are `toyon doctor`'s to say; a public name is
-// opened by its bare address and never with the token, so no second link is printed.
+// One line to act on: the address, or behind an edge the name. The fallback address, what the
+// token grants and whether this run stops on its own are `toyon doctor`'s to say. The token itself
+// is never printed: this goes to a log file that gets attached to bug reports, and the CLI that
+// started this daemon prints the signed-in link to the terminal on its own.
 {
   const r = setting.get();
   if (r?.front === "edge") {
     console.log(`Toyon daemon on https://${r.host}/, ${previewsLine(r)}; token read from ${paths.tokenFile}`);
   } else {
-    console.log(`Toyon daemon on http://toyon.localhost${branded ? "" : `:${port}`}/#token=${token}`);
+    console.log(
+      `Toyon daemon on http://toyon.localhost${branded ? "" : `:${port}`}/; token read from ${paths.tokenFile}`,
+    );
     if (r) console.log(`         remote: https://${r.host}/, ${previewsLine(r)}`);
   }
 }

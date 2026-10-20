@@ -2,10 +2,11 @@
 // answers, what its token is, and how to start one. Read from the environment once, here.
 
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, openSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { DAEMON_DEFAULT_PORT, DAEMON_FILES, newer, type RemoteView, type TailscaleReadiness } from "@toyon/shared";
+import { openLog } from "@toyon/shared/logfile";
 import pkg from "../package.json" with { type: "json" };
 import { daemonEntry, restartCmd } from "./layout.ts";
 
@@ -103,7 +104,7 @@ export async function startDaemon(): Promise<boolean> {
   // the daemon makes its home on boot, but its log is opened here first: on a machine's very
   // first `npx toyon` nothing has made the directory yet
   mkdirSync(home, { recursive: true });
-  const logFd = openSync(logFile, "a");
+  const logFd = openLog(logFile);
   // the bun running this CLI, not whatever `bun` is on PATH: under npx that is the bundled one
   const child = spawn(process.execPath, ["run", daemonEntry], {
     detached: true,

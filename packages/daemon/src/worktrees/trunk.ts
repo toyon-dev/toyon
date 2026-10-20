@@ -59,10 +59,7 @@ export class Trunk {
         withFetchLock(path, () => run(GIT, ["fetch", "--quiet"], path, NO_PROMPT)).then(async (r) => {
           const main = this.d.state.worktree(mainId);
           if (main) this.noteFetch(main.repoId, r);
-          if (!r.ok) {
-            log.warn("fetch", `could not fetch ${path}: ${r.err.slice(0, 200)}`);
-            return;
-          }
+          if (!r.ok) return;
           this.d.invalidateCounts();
           this.d.hub.emit("worktreesChanged");
           if ((await behindUpstream(path)) ?? 0) await this.follow(mainId);
@@ -88,10 +85,7 @@ export class Trunk {
     this.lastFetch.set(repo.path, Date.now());
     const f = await withFetchLock(repo.path, () => run(GIT, ["fetch", "--quiet"], repo.path, NO_PROMPT));
     this.noteFetch(repo.id, f);
-    if (!f.ok) {
-      log.warn("fetch", `could not fetch ${repo.path}: ${f.err.slice(0, 200)}`);
-      return;
-    }
+    if (!f.ok) return;
     this.d.invalidateCounts();
     await this.follow(main.id);
   }
@@ -99,13 +93,18 @@ export class Trunk {
   /** A fetch ran, in here or on a row's behalf (fetchBase before a land or a sync): the time
    * origin last answered, or git's first line about why it did not, ride on the trunk from here.
    * A frame goes out when the fact changes, since the rows' "as of" and the composer's note
-   * both read it. */
+   * both read it. The log hears of an outage once, and once when origin answers again: offline,
+   * a repo is fetched every few minutes for as long as someone looks at it. */
   noteFetch(repoId: string, r: { ok: boolean; err: string }): void {
     const was = this.fetches.get(repoId) ?? {};
     const next: { at?: number; failed?: string } = r.ok
       ? { at: Date.now() }
       : { ...(was.at ? { at: was.at } : {}), failed: r.err.split("\n").find((l) => l.trim()) ?? "fetch failed" };
     this.fetches.set(repoId, next);
+    const path = this.d.state.repo(repoId)?.path ?? repoId;
+    if (next.failed !== undefined && next.failed !== was.failed)
+      log.warn("fetch", `could not fetch ${path}: ${next.failed}`);
+    if (r.ok && was.failed !== undefined) log.info("fetch", `origin answers again for ${path}`);
     if (was.failed !== next.failed || was.at !== next.at) this.d.hub.emit("worktreesChanged");
   }
 

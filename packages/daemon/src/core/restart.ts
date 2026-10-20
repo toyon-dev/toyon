@@ -7,8 +7,8 @@
 // It has to be: the old process is on its way out, and a child of it would go down with it.
 
 import { spawn } from "node:child_process";
-import { openSync } from "node:fs";
 import { homedir } from "node:os";
+import { openLog } from "@toyon/shared/logfile";
 import { run } from "../git/exec.ts";
 import { log } from "./log.ts";
 
@@ -46,7 +46,7 @@ export async function replacementRuns(): Promise<{ ok: true } | { ok: false; rea
  * the port is free is a daemon that is simply gone. Nothing here waits for it to come up; the
  * shell reconnects on its own and says so when it cannot. */
 export function respawn(logFile: string): void {
-  const logFd = openSync(logFile, "a");
+  const logFd = openLog(logFile);
   // the bun running this daemon, and the arguments it was given: the entry is argv[1] in the
   // source tree and in the npm package alike, so the replacement starts exactly as this one did
   const child = spawn(process.execPath, process.argv.slice(1), {

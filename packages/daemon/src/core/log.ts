@@ -14,14 +14,36 @@ function envLevel(): LogLevel {
 
 let threshold = LEVELS[envLevel()];
 
-function fmtExtra(extra: unknown): string {
+/** the errors that are the daemon's own doing: for these the stack names the line, which the
+ * message cannot. A refusal, a git failure or a closed connection says all it has in its message,
+ * and its frames were a seventh of a month's log without naming anything the message did not. */
+const BUGS = [TypeError, RangeError, ReferenceError, SyntaxError];
+
+function fmtError(level: LogLevel, e: Error): string {
+  const line = `${e.name}: ${e.message}`;
+  const whole = level === "error" || threshold <= LEVELS.debug || BUGS.some((c) => e instanceof c);
+  return whole ? (e.stack ?? line) : line;
+}
+
+function fmtExtra(level: LogLevel, extra: unknown): string {
   if (extra === undefined) return "";
-  if (extra instanceof Error) return ` ${extra.stack ?? extra.message}`;
+  if (extra instanceof Error) return ` ${fmtError(level, extra)}`;
   try {
     return ` ${JSON.stringify(extra)}`;
   } catch {
     return ` ${String(extra)}`;
   }
+}
+
+/** one line as the log writes it, without the newline */
+export function formatLine(
+  level: LogLevel,
+  tag: string,
+  message: string,
+  extra?: unknown,
+  iso = new Date().toISOString(),
+): string {
+  return `${iso.slice(11, 19)} ${level.padEnd(5)} [${tag}] ${message}${fmtExtra(level, extra)}`;
 }
 
 /** the day the last line was written on; the file spans restarts and days, and a reader working
@@ -36,7 +58,7 @@ function write(level: LogLevel, tag: string, message: string, extra?: unknown) {
     lastDay = day;
     process.stderr.write(`-------- ${day} --------\n`);
   }
-  process.stderr.write(`${iso.slice(11, 19)} ${level.padEnd(5)} [${tag}] ${message}${fmtExtra(extra)}\n`);
+  process.stderr.write(`${formatLine(level, tag, message, extra, iso)}\n`);
 }
 
 export const log = {

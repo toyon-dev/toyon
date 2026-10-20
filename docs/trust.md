@@ -4,7 +4,7 @@ What Toyon lets an agent reach, and where the boundary is thinner than it looks.
 
 ## The daemon
 
-The daemon listens on loopback only, refuses any other peer and any non-loopback `Host`, and every shell and CLI request carries a per-machine token from `~/.toyon/token`. Nothing is exposed to your network. Turning on remote access does not change where it listens: a front on the same machine admits one name, over https only, and on a Fly machine the platform's proxy is that front. A preview reached through the name also needs a cookie the toyon page is given, which the dev server behind it never sees. The routes are in [remote.md](remote.md).
+The daemon listens on loopback only, refuses any other peer and any non-loopback `Host`, and every shell and CLI request carries a per-machine token from `~/.toyon/token`. Nothing is exposed to your network. Turning on remote access does not change where it listens: a front on the same machine admits one name, over https only, and on a Fly machine the platform's proxy is that front. A preview reached through the name also needs a cookie the toyon page is given, which the dev server behind it never sees. The routes are in [remote.md](remote.md). The daemon's own log, `~/.toyon/daemon.log`, is readable by your user only and never carries the token; past about 10 MB it is moved aside at the next start, and one earlier generation is kept beside it.
 
 ## The sandbox
 

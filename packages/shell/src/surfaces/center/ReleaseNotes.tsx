@@ -27,7 +27,7 @@ export function ReleaseNotes() {
       live = false;
     };
   }, [urls]);
-  const html = useMarkdown(text ?? "");
+  const html = useMarkdown(text ?? "", { keepHtml: true });
   if (!text) {
     return (
       <View wide>

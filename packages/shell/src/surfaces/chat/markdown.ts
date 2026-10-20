@@ -5,6 +5,7 @@ import { STREAM_TICK_MS } from "../../state/coalesce.ts";
 import type { DaemonUrls } from "../../ws.ts";
 import { closePendingLink, PENDING_LINK } from "./linkTail.ts";
 import { dunder } from "./markdownDunder.ts";
+import { escapeHtml, htmlAsText } from "./markdownHtml.ts";
 import { assetPath, codePath, outsidePath, worktreeLink } from "./markdownPaths.ts";
 import { table } from "./markdownTable.ts";
 import { cutAt, nextPace, type Pace, shownAt } from "./pace.ts";
@@ -28,11 +29,13 @@ marked.use({
         .join("\n");
       return `<pre><code>${body}</code></pre>\n`;
     },
+    // a tag in prose is text (markdownHtml.ts); a document a person wrote keeps its HTML
+    html(token) {
+      return rendering?.keepHtml ? false : htmlAsText(token);
+    },
     table,
   },
 });
-
-const escapeHtml = (s: string) => s.replace(/[&<>]/g, (ch) => (ch === "&" ? "&amp;" : ch === "<" ? "&lt;" : "&gt;"));
 
 /** where a file's relative images are read from: the folder it sits in, in the worktree it is in */
 export interface MarkdownBase {
@@ -48,6 +51,9 @@ export interface MarkdownOptions {
   base?: MarkdownBase;
   /** the absolute checkout root: links beneath it open in Toyon's editor */
   fileRoot?: string;
+  /** the text is a document written as markdown, whose raw HTML is part of it and is kept; a
+   * reply, the default, draws a tag as the text it is */
+  keepHtml?: boolean;
   /** the text is still arriving: it is shown at a reading pace, a few characters a frame (pace.ts),
    * and a link cut off at its end is held in place rather than shown raw */
   streaming?: boolean;
@@ -146,6 +152,7 @@ export function useMarkdown(text: string, options?: MarkdownOptions): string {
   const version = options?.base?.version;
   const urls = options?.base?.urls;
   const fileRoot = options?.fileRoot;
+  const keepHtml = !!options?.keepHtml;
   const streaming = !!options?.streaming;
   const shown = usePaced(text, streaming);
   useEffect(() => {
@@ -153,7 +160,7 @@ export function useMarkdown(text: string, options?: MarkdownOptions): string {
       worktreeId !== undefined && dir !== undefined && urls !== undefined
         ? { worktreeId, dir, version: version ?? null, urls }
         : undefined;
-    const at = base || fileRoot || streaming ? { base, fileRoot, streaming } : undefined;
+    const at = base || fileRoot || keepHtml || streaming ? { base, fileRoot, keepHtml, streaming } : undefined;
     const since = performance.now() - lastAt.current;
     if (streaming || since >= STREAM_TICK_MS) {
       lastAt.current = performance.now();
@@ -165,6 +172,6 @@ export function useMarkdown(text: string, options?: MarkdownOptions): string {
       setHtml(renderMarkdown(shown, at));
     }, STREAM_TICK_MS - since);
     return () => clearTimeout(t);
-  }, [shown, worktreeId, dir, version, urls, fileRoot, streaming]);
+  }, [shown, worktreeId, dir, version, urls, fileRoot, keepHtml, streaming]);
   return html;
 }

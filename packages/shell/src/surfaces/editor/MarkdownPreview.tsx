@@ -30,7 +30,10 @@ export function MarkdownPreview({
   const urls = useUrls();
   const dispatch = useDispatch();
   const dir = dirOf(path);
-  const html = useMarkdown(text, version === undefined ? undefined : { base: { worktreeId, dir, version, urls } });
+  const html = useMarkdown(text, {
+    keepHtml: true,
+    base: version === undefined ? undefined : { worktreeId, dir, version, urls },
+  });
   const onLink = (href: string) => {
     const target = assetPath(dir, href);
     if (target) openFile({ sock, dispatch }, { worktreeId, path: target, view: readingView(target) });

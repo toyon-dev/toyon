@@ -9,6 +9,7 @@ import { Hub } from "../../src/core/hub.ts";
 import { SelfWatch } from "../../src/core/self.ts";
 import { StateStore } from "../../src/core/state.ts";
 import { ExecService } from "../../src/exec/service.ts";
+import { treeFingerprint } from "../../src/git/status.ts";
 import { PageErrorService } from "../../src/preview/errors.ts";
 import { AfterLand } from "../../src/repos/afterLand.ts";
 import { RepoRegistry } from "../../src/repos/registry.ts";
@@ -49,6 +50,9 @@ export function world() {
   // the namer's answer and how many times it was asked; `gate` holds an answer back, for a birth
   // ask still out when a turn ends
   const naming = { reply: null as string | null, calls: 0, gate: Promise.resolve() };
+  // the tree's fingerprint as git reads it, held at `gate` so a test can move the record while a
+  // status read is between its git calls; `entered` says the read is inside
+  const fingerprinting = { entered: 0, gate: Promise.resolve() };
   // the version commands answered without a shell, so the key is the lockfiles and the platform
   const cache = new ArtifactCache({ paths: t.paths, state, hub, tool: async () => "1.0" });
   /** the landing messages a hook refused, each with what the hook said */
@@ -67,6 +71,11 @@ export function world() {
       naming.calls++;
       await naming.gate;
       return naming.reply;
+    },
+    fingerprint: async (path) => {
+      fingerprinting.entered++;
+      await fingerprinting.gate;
+      return treeFingerprint(path);
     },
     watch: (id, command, run) => exec.watch(id, command, run),
     fix,
@@ -90,6 +99,7 @@ export function world() {
     repos,
     registry: agents,
     naming,
+    fingerprinting,
     cache,
     refused,
     fix,

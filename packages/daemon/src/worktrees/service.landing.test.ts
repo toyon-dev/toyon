@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { SHELL_TOOL } from "@toyon/shared";
@@ -900,5 +900,47 @@ describe("landing", () => {
     expect((await w.worktrees.commit(wt.id, "add feature")).ok).toBe(true);
     expect(frames).toBe(1);
     expect((await row()).ahead).toBe(1);
+  });
+});
+
+describe("a verdict cleared mid-read", () => {
+  test("a status read whose verdict goes while the tree is fingerprinted keeps its answer and does not throw", async () => {
+    const repoId = await registered();
+    const wt = await w.worktrees.create(repoId, "feature");
+    writeFileSync(join(wt.path, "feature.txt"), "x\n");
+    const row = w.state.worktree(wt.id)!;
+    row.landing = {
+      at: 1,
+      check: "pass",
+      ready: true,
+      why: "",
+      subject: "add feature",
+      body: "",
+      fingerprint: await treeFingerprint(wt.path),
+    };
+    let release = () => {};
+    w.fingerprinting.gate = new Promise<void>((r) => {
+      release = r;
+    });
+    const entered = w.fingerprinting.entered;
+    const written: string[] = [];
+    const stderr = spyOn(process.stderr, "write").mockImplementation((chunk: unknown) => {
+      written.push(String(chunk));
+      return true;
+    });
+    try {
+      const read = w.worktrees.gitStatus(wt.id);
+      await until(() => w.fingerprinting.entered > entered);
+      // a settle takes the verdict off the record while the read is between its git calls
+      w.worktrees.setLanding(wt.id, undefined);
+      release();
+      const info = await read;
+      expect(info).not.toBeNull();
+      expect(info?.files.map((f) => f.path)).toEqual(["feature.txt"]);
+      expect(w.state.worktree(wt.id)?.landing).toBeUndefined();
+      expect(written.filter((l) => l.includes("git status failed"))).toEqual([]);
+    } finally {
+      stderr.mockRestore();
+    }
   });
 });

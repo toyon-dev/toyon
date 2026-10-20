@@ -226,3 +226,20 @@ test("login starts the CLI without waiting on it and answers with the link the s
   const late = new Tailnet({ ts, hub: hub(), now: () => t, sleep: tick });
   expect(await late.login()).toMatchObject({ why: expect.stringContaining("tailscale login") });
 });
+
+test("a status fork that fails is read as not running, and the next one that answers brings ready back", async () => {
+  const h = hub();
+  let fail = true;
+  const good = fake(status([]));
+  const ts = async (args: string[]): Promise<Ran> => {
+    if (fail) throw new Error("EBADF: bad file descriptor, posix_spawn '/opt/homebrew/bin/tailscale'");
+    return good.ts(args);
+  };
+  const tailnet = new Tailnet({ ts, hub: h });
+  expect((await tailnet.refresh()).state).toBe("not-running");
+  expect(h.events).toEqual(["tailscaleChanged"]);
+  // the failed fork is not held as the answer for the window: a view asked now forks again
+  fail = false;
+  expect((await tailnet.refresh()).state).toBe("ready");
+  expect(h.events).toEqual(["tailscaleChanged", "tailscaleChanged"]);
+});

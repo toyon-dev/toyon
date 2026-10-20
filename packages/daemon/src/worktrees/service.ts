@@ -283,6 +283,9 @@ export interface WorktreeServiceDeps {
   drafts?: Pick<DraftStore, "drop" | "move">;
   /** task → short kebab-case name (the worktree's own agent by default; tests inject a stub) */
   namer?: (prompt: string, wt: WorktreeInfo) => Promise<string | null>;
+  /** the bytes a verdict was written about, as one string (git/status.ts treeFingerprint by
+   * default; tests inject one they can hold) */
+  fingerprint?: (path: string) => Promise<string>;
   /** what earlier worktrees built to pass the check, cloned in ahead of the install */
   cache?: Pick<ArtifactCache, "restore">;
   /** a git step a landing runs, watched onto the worktree's transcript as the rows a `!` command
@@ -1839,6 +1842,10 @@ export class WorktreeService {
 
   /** the landing verdict for a worktree, or none: written after a turn, marked stale by a tree
    * that no longer matches it, and dropped by a new turn unless it says the work can land */
+  private fingerprint(path: string): Promise<string> {
+    return (this.d.fingerprint ?? treeFingerprint)(path);
+  }
+
   setLanding(worktreeId: string, landing: Landing | undefined) {
     const wt = this.d.state.worktree(worktreeId);
     if (!wt || (wt.landing === undefined && landing === undefined)) return;
@@ -1940,7 +1947,7 @@ export class WorktreeService {
     const message = opts.dropMessage
       ? {}
       : { ...(subject ? { subject } : {}), ...(body ? { body } : {}), ...(unanswered ? { unanswered } : {}) };
-    this.setLanding(wt.id, { ...kept, ...message, fingerprint: await treeFingerprint(wt.path) });
+    this.setLanding(wt.id, { ...kept, ...message, fingerprint: await this.fingerprint(wt.path) });
   }
 
   /** The row lands the way the press lands it, for a landing git did without toyon (handLanding):
@@ -2030,7 +2037,7 @@ export class WorktreeService {
     const status = this.d.runtime.agentFor(wt.id)?.status;
     if (status !== "working" && status !== "waiting") return null;
     const l = wt.landing;
-    if (!l || l.fingerprint === (await treeFingerprint(wt.path))) return null;
+    if (!l || l.fingerprint === (await this.fingerprint(wt.path))) return null;
     return { ok: false, message: "the agent has changed files since the check: land once its turn ends" };
   }
 
@@ -2853,10 +2860,12 @@ export class WorktreeService {
       // a verdict describes one tree: an edit since (by hand, by another tool) marks it stale, so
       // the composer keeps the sentence and the message but withholds the word until the check
       // runs again. A tree that comes back to what the verdict saw (an edit undone) clears the mark.
-      if (r.wt?.landing && r.wt.landing.check !== "pending") {
-        const moved = r.wt.landing.fingerprint !== (await treeFingerprint(r.path));
-        if (moved !== !!r.wt.landing.stale) {
-          const { stale: _was, ...rest } = r.wt.landing;
+      const landing = r.wt?.landing;
+      if (landing && landing.check !== "pending") {
+        const moved = landing.fingerprint !== (await this.fingerprint(r.path));
+        // the verdict moved or went while the tree was being read: the next poll judges the new one
+        if (r.wt?.landing === landing && moved !== !!landing.stale) {
+          const { stale: _was, ...rest } = landing;
           this.setLanding(r.wt.id, moved ? { ...rest, stale: true } : rest);
         }
       }

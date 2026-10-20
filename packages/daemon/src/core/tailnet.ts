@@ -7,7 +7,7 @@
 import type { TailnetDevice, TailnetView, TailscaleReadiness } from "@toyon/shared";
 import { dnsName, findTailscale, readinessOf, type Tailscale } from "@toyon/shared/tailscale";
 import type { Hub } from "./hub.ts";
-import { fireAndForget } from "./log.ts";
+import { fireAndForget, log } from "./log.ts";
 
 interface Status {
   Self?: { Online?: boolean } | null;
@@ -181,7 +181,10 @@ export class Tailnet {
    * first hello carries it, later ones are the hub's `tailscaleChanged` */
   async start(): Promise<void> {
     await this.refresh();
-    this.timer = setInterval(() => void this.refresh(), READINESS_EVERY_MS);
+    this.timer = setInterval(
+      () => fireAndForget("tailscale", this.refresh(), "tailscale readiness"),
+      READINESS_EVERY_MS,
+    );
     this.timer.unref?.();
   }
 
@@ -257,7 +260,15 @@ export class Tailnet {
     const now = (this.d.now ?? Date.now)();
     if (this.status === null || fresh || now - this.statusAt > STATUS_FRESH_MS) {
       this.statusAt = now;
-      this.status = ts(["status", "--json"]).then((r) => (r.ok ? r.out : r.out || r.err));
+      // a fork that fails (a descriptor-starved daemon, a binary gone mid-run) is a reading too:
+      // not running, for this minute; the next read asks again
+      this.status = ts(["status", "--json"]).then(
+        (r) => (r.ok ? r.out : r.out || r.err),
+        (e) => {
+          log.warn("tailscale", "could not run tailscale status", e);
+          return "";
+        },
+      );
     }
     return this.status;
   }

@@ -20,7 +20,8 @@ The composer's @ menu reaches the other worktrees of the project, the editor pan
 - A plain git command inside a landing or sync has a ten-minute ceiling. Before, one hung process could hold the project's lock and silently queue every later land or sync; now it is killed and the row says so.
 - The daemon's log rotates at 10 MB, is readable only by you, opens each run with a line naming the version, and no longer prints the signed-in link with its token. Refusals, git failures and closed connections take one line each instead of a stack trace.
 - Agent settings, hooks and plugin code are denied to the agent file by file instead of by folder, so its skills, commands and prompts are ordinary edits again. The refusal row names what it guards.
-- Archiving a row moves you to the nearest row above it before looking below, so old worktrees parked at the bottom of the rail are not pulled into view. A row waiting on an answer still wins.
+- Archiving the row you are on moves you to the nearest row above it that is waiting, done, unseen, working or has its app up, and only looks below when none qualifies, so old worktrees parked at the bottom of the rail are not pulled into view.
+- While a commit or land runs, the commit box shows the step's line where the message was and keeps its height, so the foot does not jump. The typed message is held and clears only once the tree is clean, so a refused hook gives the words back to edit.
 - Waiting lines in the files tree, history, design pane, terminal, boot and import views and the pickers show as live text instead of a spinner beside the words.
 - The archived row's menu item reads delete instead of delete for good; the confirm dialog still spells out what goes with it.
 

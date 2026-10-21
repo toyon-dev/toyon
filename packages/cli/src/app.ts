@@ -9,7 +9,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { type Daemon, home, shellOrigins } from "./daemon.ts";
+import { type Daemon, home, shellLine, shellOrigins } from "./daemon.ts";
 import { openUrl } from "./openUrl.ts";
 
 /** a Chromium that can install the app: the name `open` knows it by, its profile root under
@@ -72,7 +72,7 @@ function findPwaId(browser: Chromium): string | null {
 
 /** the shell: in the installed Toyon app where a Chromium has one, in the default browser otherwise */
 export function openShell(daemon: Daemon): void {
-  console.log(`toyon: ${daemon.url}`);
+  console.log(shellLine(daemon.url));
   const found = process.platform === "darwin" ? launchInstalledApp() : { kind: "none" as const };
   if (found.kind === "launched") return;
   openUrl(daemon.url);

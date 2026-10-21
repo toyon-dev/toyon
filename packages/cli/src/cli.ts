@@ -8,7 +8,7 @@ import { join, resolve } from "node:path";
 import pkg from "../package.json" with { type: "json" };
 import { openShell } from "./app.ts";
 import { type Command, HELP, parseArgs } from "./args.ts";
-import { behind, ensureDaemon, health, post } from "./daemon.ts";
+import { behind, ensureDaemon, health, post, shellLine } from "./daemon.ts";
 import { deploy } from "./deploy/fly.ts";
 import { doctor } from "./doctor.ts";
 import { helper } from "./helper.ts";
@@ -75,7 +75,7 @@ async function open(cmd: Extract<Command, { kind: "open" }>): Promise<number> {
 async function start(): Promise<number> {
   const daemon = await ensureDaemon();
   if (!daemon) return 1;
-  console.log(`toyon: ${daemon.url}`);
+  console.log(shellLine(daemon.url));
   return 0;
 }
 

@@ -175,3 +175,10 @@ export const shellOrigins = ["http://toyon.localhost", `http://toyon.localhost:$
 export function shellUrl(token: string, branded: boolean): string {
   return `${branded ? shellOrigins[0] : shellOrigins[1]}/#token=${token}`;
 }
+
+/** The line that says where the shell is. A person at a terminal gets the signed-in link, to paste
+ * into a browser; stdout that is a file gets the bare address and where the token is read from,
+ * since the Dock helper's launcher log is such a file and a token in a log outlives the link. */
+export function shellLine(url: string, tty = process.stdout.isTTY === true): string {
+  return tty ? `toyon: ${url}` : `toyon: ${url.replace(/#token=.*$/, "")}; token read from ${tokenFile}`;
+}

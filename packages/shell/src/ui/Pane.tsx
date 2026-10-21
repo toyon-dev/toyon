@@ -70,7 +70,14 @@ export function Pane({
       <Icon name={full ? "split" : "full"} className="icon-inline" /> {full ? "split" : "full"}
     </Button>
   );
-  const close = <IconButton icon="close" label="Close" hint={closeHint} onClick={onClose} />;
+  // the pane's own controls sit together at the end: both are about the pane's shape, and a gap
+  // keeps them apart from what the pane's content put in the head
+  const shape = (
+    <span className="pane-shape">
+      {fullToggle}
+      <IconButton icon="close" label="Close" hint={closeHint} onClick={onClose} />
+    </span>
+  );
   return (
     // Focusable but out of the tab order: a click on the pane's own ground (the design pane is
     // mostly that) otherwise drops focus on the body, and Escape could not tell which pane was meant
@@ -88,8 +95,7 @@ export function Pane({
             end={
               <>
                 {actions}
-                {fullToggle}
-                {close}
+                {shape}
               </>
             }
           />
@@ -97,8 +103,7 @@ export function Pane({
           <>
             <span className="pane-title">{title}</span>
             {actions}
-            {fullToggle}
-            {close}
+            {shape}
           </>
         )}
       </div>

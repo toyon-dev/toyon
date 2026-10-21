@@ -47,6 +47,37 @@
       padding-left: 24px;
     }
   }
+  /* the head's title: the file's name, then its directory a tier down, as the changes panel's row
+   has them. The name never shrinks: the directory gives way until nothing of it is left, and only
+   a name wider than the whole title is cut, at its edge. A shrink weight on the directory is not
+   enough, since flex still takes a sliver from the name when the row is short by a pixel, and an
+   ellipsis fires on any overflow at all. */
+  .editor-title {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    min-width: 0;
+  }
+  .editor-name {
+    flex-shrink: 0;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .editor-dir {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  /* the views are alternatives to one another, so they sit closer than the head's gap keeps the
+   wrap toggle and the pane's own controls from them */
+  .editor-views {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
   /* the commit the note names, over it while the pointer rests there, is the tooltip's card
    (Editor.tsx); only the sha is its own, in the mono at the card's size */
   .editor-blame-sha {

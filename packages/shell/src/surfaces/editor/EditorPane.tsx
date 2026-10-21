@@ -23,11 +23,10 @@ import { ErrorBoundary } from "../../ui/ErrorBoundary.tsx";
 import { usePersisted, useSettled } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { Pane } from "../../ui/Pane.tsx";
-import { CopyPathButton } from "./CopyPathButton.tsx";
+import { splitPath } from "../util.ts";
 import { FileViewer } from "./FileViewer.tsx";
 import { HtmlPreview } from "./HtmlPreview.tsx";
 import { MarkdownPreview } from "./MarkdownPreview.tsx";
-import { RevealButton } from "./RevealButton.tsx";
 import "./editor.css";
 
 // the grammars come in with the editor, and a file is only shown once they can colour it
@@ -51,6 +50,22 @@ function Loading({ what }: { what: string }) {
 const NO_DRAG = () => {};
 
 const VIEW_ICONS = { diff: "diff", file: "text", preview: "book" } as const;
+
+/** the file's name first and its directory after, as the row in the changes panel has it: the name
+ * is what the head is there to say, so it never shrinks, and the directory gives way when the
+ * head is narrow. `note` qualifies the name (a commit's copy, last turn's) and stays with it. */
+function EditorTitle({ path, note }: { path: string; note?: string }) {
+  const { name, dir } = splitPath(path);
+  return (
+    <span className="editor-title" data-tip={dir ? path : undefined}>
+      <span className="editor-name">
+        {name}
+        {note}
+      </span>
+      {dir && <span className="editor-dir row-dim">{dir}</span>}
+    </span>
+  );
+}
 
 function viewTip(to: EditorView, from: EditorView): string {
   if (to === "diff") return "Diff view: show what changed";
@@ -149,7 +164,7 @@ export function EditorPane({
       height={full || onScreen ? undefined : height}
       resizable={!full && !onScreen}
       onDragStart={onDragStart ?? NO_DRAG}
-      title={history ? `${path} at ${ref?.slice(0, 7)}` : since ? `${path}, last turn` : path}
+      title={<EditorTitle path={path} note={history ? ` at ${ref?.slice(0, 7)}` : since ? ", last turn" : undefined} />}
       // the header names the file, so it answers with the file's actions, the same list its row in
       // the changes panel has; a commit's copy is read-only, so no discard. A loose file has no
       // row and no place in the worktree, so nothing to offer
@@ -167,23 +182,30 @@ export function EditorPane({
       full={full}
       // a screen is already the column, so it has no split to go back to
       onToggleFull={onScreen ? undefined : onToggleFull}
+      // the head holds what is about the text in sight: which view, and whether lines fold. What is
+      // about where the file sits (copy its path, reveal it) is the header's right-click menu, the
+      // same list the file's row in the changes panel has
       actions={
         <>
-          {/* each names the view it switches to, as the full toggle beside them does */}
-          {!viewer &&
-            others.map((v) => (
-              <Button
-                key={v}
-                variant="outline"
-                tone="quiet"
-                mono
-                className="deep-link"
-                onClick={() => dispatch({ a: "editor-view", v })}
-                data-tip={viewTip(v, view)}
-              >
-                <Icon name={VIEW_ICONS[v]} className="icon-inline" /> {v}
-              </Button>
-            ))}
+          {/* each names the view it switches to, as the full toggle beside them does; a cluster,
+              since they are alternatives to one another and the wrap toggle beside them is not */}
+          {!viewer && others.length > 0 && (
+            <span className="editor-views">
+              {others.map((v) => (
+                <Button
+                  key={v}
+                  variant="outline"
+                  tone="quiet"
+                  mono
+                  className="deep-link"
+                  onClick={() => dispatch({ a: "editor-view", v })}
+                  data-tip={viewTip(v, view)}
+                >
+                  <Icon name={VIEW_ICONS[v]} className="icon-inline" /> {v}
+                </Button>
+              ))}
+            </span>
+          )}
           {/* a picture sits where a text file's views do: the pane is a strip of the window, and a
               screenshot is read at its own size */}
           {viewer === "image" && (
@@ -215,12 +237,6 @@ export function EditorPane({
               <Icon name="wrap" className="icon-inline" /> {wrap ? "unwrap" : "wrap"}
             </Button>
           )}
-          {/* the path in sight, in the order the header's menu has it: copy where it is, then open
-              it there. A loose file has no place in a worktree, so no path to copy */}
-          {wtPath && !loose && <CopyPathButton path={`${wtPath}/${path}`} />}
-          {/* a loose file is the daemon's or the browser's and has no row to reveal it through;
-              an archived worktree's file is only in git, so there is nothing on disk to show */}
-          {!kept && !loose && <RevealButton onReveal={() => sock?.send({ t: "reveal", worktreeId, path })} />}
         </>
       }
     >

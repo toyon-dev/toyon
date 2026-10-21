@@ -27,6 +27,15 @@
       min-height: var(--row-height-sm);
       align-items: center;
     }
+    /* the pane's own controls, the full toggle and the close, are one cluster: both are about the
+       pane's shape, so they sit closer to each other than to what the content put in the head,
+       and a wider gap in front marks where the content's controls end */
+    & .pane-shape {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-left: 8px;
+    }
     /* a strip is the whole head: it brings its own inset and its own gap */
     & .pane-head-tabs {
       padding: 0;

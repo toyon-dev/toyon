@@ -1,8 +1,10 @@
-// Up and down in a blank composer walk back through what was sent from it: messages and `!`
-// commands in one list, newest first, the way a shell keeps one history. Pure, like shellMode.ts,
-// so the rules have tests; Composer.tsx hands the keys here and ChatLog.tsx marks the row.
+// Up and down in a blank composer walk back through what was sent from it: messages, `!`
+// commands and what was typed on a card in one list, newest first, the way a shell keeps one
+// history. Pure, like shellMode.ts, so the rules have tests; Composer.tsx hands the keys here and
+// ChatLog.tsx marks the row.
 
 import type { ChatItem, ComposerWalk } from "../../state/store.ts";
+import { typedAnswer } from "./ask.ts";
 import { typedCommandOf } from "./shellMode.ts";
 
 /** one thing sent from the box, written the way the box would hold it again, and its index in the chat */
@@ -17,14 +19,24 @@ export const isBlank = (text: string) => text === "" || text === "!";
 /** what the walk steps through, newest first, each text once. From a bare `!` only the commands:
  * the sigil already said which kind of thing is wanted. Only what was typed: the check toyon ran
  * after a turn and a landing's git steps sit on the same rows, but nobody sent them from here, and
- * a walk that put the repo's check in the box would offer to run it by hand. */
+ * a walk that put the repo's check in the box would offer to run it by hand. A card answered with
+ * a note is in it by the note alone, since the pick was a press. */
 export function sentHistory(chat: ChatItem[], commandsOnly: boolean): Sent[] {
   const seen = new Set<string>();
   const out: Sent[] = [];
   for (let at = chat.length - 1; at >= 0; at--) {
     const item = chat[at]!;
     const command = typedCommandOf(item);
-    const text = command !== null ? `!${command}` : item.kind === "user" && !commandsOnly ? item.text : null;
+    const text =
+      command !== null
+        ? `!${command}`
+        : commandsOnly
+          ? null
+          : item.kind === "user"
+            ? item.text
+            : item.kind === "ask"
+              ? typedAnswer(item)
+              : null;
     if (text === null || !text.trim() || seen.has(text)) continue;
     seen.add(text);
     out.push({ text, at });

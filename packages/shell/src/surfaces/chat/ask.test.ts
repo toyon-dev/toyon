@@ -26,6 +26,7 @@ import {
   setNote,
   stoppedAsk,
   stripRecommended,
+  typedAnswer,
   walk,
 } from "./ask.ts";
 
@@ -280,6 +281,33 @@ describe("answeredQuestion", () => {
         choiceId: "y",
       }),
     ).toBeNull();
+  });
+});
+
+describe("typedAnswer", () => {
+  const ask = { kind: "question" as const, message: "Which?", questions: two };
+  const item = (answers?: { selected: string[]; note?: string }[], outcome: "answered" | "skipped" = "answered") =>
+    ({ kind: "ask", id: "k", ask, outcome, answers }) as const;
+
+  test("is the notes typed, one a line, never a pick or a skip", () => {
+    expect(typedAnswer(item([{ selected: ["jwt"], note: " why not cookies? " }, { selected: [] }]))).toBe(
+      "why not cookies?",
+    );
+    expect(
+      typedAnswer(
+        item([
+          { selected: [], note: "neither" },
+          { selected: ["sqlite"], note: "small" },
+        ]),
+      ),
+    ).toBe("neither\nsmall");
+    expect(typedAnswer(item([{ selected: ["jwt"] }, { selected: ["sqlite"], note: "  " }]))).toBeNull();
+    expect(typedAnswer(item(undefined))).toBeNull();
+  });
+
+  test("an ask closed without an answer has nothing typed to read back", () => {
+    expect(typedAnswer(item([{ selected: [], note: "neither" }], "skipped"))).toBeNull();
+    expect(typedAnswer({ kind: "ask", id: "k", ask })).toBeNull();
   });
 });
 

@@ -1066,7 +1066,8 @@ export const ChatItemView = memo(function ChatItemView({
       if (said) {
         const answer = answerLines(said.questions, said.answers).join("\n");
         // the bubble offers copy alone: a pick re-sent as prose is not the choice, so it takes no
-        // "edit in composer" and no place in the walk
+        // "edit in composer". The walk lands on it only when a note was typed (recall.ts), with
+        // the note alone in the box, and the mark sits on the bubble as on a message's.
         const bubble = { kind: "assistant" as const, text: answer };
         return (
           <>
@@ -1081,7 +1082,11 @@ export const ChatItemView = memo(function ChatItemView({
               worktreeId={worktreeId}
               fileRoot={fileRoot()}
             />
-            <div className="msg-user" {...cm.contextMenu(() => messageItems(bubble, worktreeId ?? null, deps))}>
+            <div
+              className="msg-user row-edge"
+              data-state={rowState({ cursor: marked })}
+              {...cm.contextMenu(() => messageItems(bubble, worktreeId ?? null, deps))}
+            >
               {answer}
             </div>
           </>

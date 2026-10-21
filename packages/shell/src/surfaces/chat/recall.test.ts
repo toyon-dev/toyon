@@ -37,7 +37,34 @@ const landingStep = (command: string): ChatItem => ({
   toolKind: "execute",
 });
 
+const asked = (answers?: { selected: string[]; note?: string }[], outcome: "answered" | "skipped" = "answered") =>
+  ({
+    kind: "ask",
+    id: "k",
+    ask: {
+      kind: "question",
+      message: "Which?",
+      questions: [{ id: "auth", text: "auth", options: [{ value: "jwt", label: "JWT" }] }],
+    },
+    outcome,
+    answers,
+  }) as const satisfies ChatItem;
+
 describe("sentHistory", () => {
+  test("a card answered with a note is in it by the note alone; a pick or a skip is not", () => {
+    const chat = [
+      user("fix it"),
+      asked([{ selected: ["jwt"], note: "and say why" }]),
+      asked([{ selected: ["jwt"] }]),
+      asked([{ selected: [], note: "never mind" }], "skipped"),
+    ];
+    expect(sentHistory(chat, false)).toEqual([
+      { text: "and say why", at: 1 },
+      { text: "fix it", at: 0 },
+    ]);
+    expect(sentHistory(chat, true)).toEqual([]);
+  });
+
   test("what toyon ran itself is not in it: the check after a turn, a landing's git steps", () => {
     const chat = [user("fix it"), run("ls"), check("bun run check"), landingStep("git fetch --quiet origin main")];
     expect(sentHistory(chat, false)).toEqual([

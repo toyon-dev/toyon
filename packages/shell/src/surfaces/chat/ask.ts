@@ -147,6 +147,16 @@ export function answeredQuestion(
   return { message: item.ask.message, questions: item.ask.questions, answers: item.answers };
 }
 
+/** What the person typed on an answered ask, one note a line, or null when they only pressed.
+ * This is the part of an answer that is theirs the way a message is, and so the part the
+ * composer's walk back through what was sent lands on; a pick is a label the agent wrote, and
+ * read back into the box it would offer to send a label as prose. */
+export function typedAnswer(item: AskItem): string | null {
+  if (item.outcome !== "answered") return null;
+  const notes = (item.answers ?? []).map((a) => a.note?.trim() ?? "").filter(Boolean);
+  return notes.length > 0 ? notes.join("\n") : null;
+}
+
 /** The plan the person decided, which the transcript shows as a message pair as well: the plan
  * was the agent's turn, as the file toyon wrote (`file`) or the markdown the card showed when no
  * file could be (`text`), and the option picked was the person's reply, the one that also set how

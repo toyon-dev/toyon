@@ -634,8 +634,11 @@
     gap: 8px;
     /* the count ticks with the status; `font` on the hint resets the variant */
     font-variant-numeric: tabular-nums;
+    /* the live line stands where the button was once it is pressed or queued, so it ends the row
+       the same way; beside the count it read as one sentence, "6 behind main syncing" */
     & > .btn,
-    & > .btn-icon {
+    & > .btn-icon,
+    & > .live-text {
       margin-left: auto;
     }
   }

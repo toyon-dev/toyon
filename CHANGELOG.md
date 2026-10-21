@@ -2,6 +2,39 @@
 
 What changed in each release of Toyon, newest first.
 
+## 0.17.0 (2026-10-21)
+
+The composer's @ menu reaches the other worktrees of the project, the editor pane can wrap long lines, and a git command that hangs no longer holds up every later landing.
+
+### New
+- The composer's @ menu lists the project's other worktrees. A bare @ offers the three you sent to most recently, each with its status dot, title and the time since the last send, and typing part of a title searches them all. The pick puts the worktree's name in the message so the agent can read that chat.
+- The editor pane has a wrap button that folds long lines at the pane's edge or goes back to sideways scrolling. The choice holds for the window and applies to the diff view too.
+- Up and down walk the archived and discovered rows of the rail as they already walked your own. Stepping onto an archived row opens its page and keeps the focus on the row.
+- `toyon <file>` with a window already open shows the file there and brings the window forward instead of opening a second one, and the project picker takes a file as well as a folder.
+
+### Changed
+- On the PR route the button reads create PR until a pull request exists, since open read as opening its page.
+- The plan row in the transcript shows the plan's first heading, as the row above the composer does, and keeps the path in its tooltip and menu.
+- The chats palette leads each group with the chat's name and the age of its newest hit, and shows the chat's ask beneath it on up to two lines.
+- Project search stops at a page of results so a lockfile cannot fill it, and a new query or a closed palette cancels the running one. The footer says when not every match is shown. The symbol lookup on cmd+I stops reading once it has enough rows, so a common name no longer drains the whole project.
+- A plain git command inside a landing or sync has a ten-minute ceiling. Before, one hung process could hold the project's lock and silently queue every later land or sync; now it is killed and the row says so.
+- The daemon's log rotates at 10 MB, is readable only by you, opens each run with a line naming the version, and no longer prints the signed-in link with its token. Refusals, git failures and closed connections take one line each instead of a stack trace.
+- Agent settings, hooks and plugin code are denied to the agent file by file instead of by folder, so its skills, commands and prompts are ordinary edits again. The refusal row names what it guards.
+- Archiving a row moves you to the nearest row above it before looking below, so old worktrees parked at the bottom of the rail are not pulled into view. A row waiting on an answer still wins.
+- Waiting lines in the files tree, history, design pane, terminal, boot and import views and the pickers show as live text instead of a spinner beside the words.
+- The archived row's menu item reads delete instead of delete for good; the confirm dialog still spells out what goes with it.
+
+### Fixed
+- A reply containing a raw HTML tag such as `<title>` or `<script>` drew nothing after the tag; the tags now show as text.
+- A table wider than the chat column scrolls inside itself, with a fade at the edge that has more behind it, instead of pushing the whole transcript sideways.
+- Switching worktrees quickly could paint the previous chat's text in the new one for a moment.
+- The caret in an empty composer was drawn behind the ghost text; it shows over it now.
+- Sideways scrolling in the editor that ran off a line's end no longer triggers the browser's back or forward swipe.
+- Clicking a tool row left a lone accent line across the top of the transcript on the next keypress; the focus ring now draws whole inside the row.
+- The time tip on a daemon row followed the pointer across the next message; it sits above the word it belongs to.
+- The Dock helper wrote the signed-in link, token included, to its launcher log. The link is printed only to a terminal now; a file gets the bare address and the token file's path.
+- A landing mark could stay on a row after its record had moved on, and a failed Tailscale status check raised an unhandled error instead of reading as not running.
+
 ## 0.16.0 (2026-10-18)
 
 Streamed replies are written to the transcript a few characters at a time instead of a line at a time, the plan card follows the file Claude Code keeps itself, and the checks and preview in the PR line are links.

@@ -666,6 +666,18 @@ describe("chat folding", () => {
     expect(s.local.a?.chat.map((i) => i.kind === "auth" && i.done)).toEqual([true, true]);
   });
 
+  test("an auth request closes the calls the refused turn left open", () => {
+    const methods = [{ id: "claude-ai-login", name: "Claude Subscription", kind: "terminal" as const }];
+    const s = run([
+      hello(wt("a")),
+      agent("a", { type: "tool-start", toolId: "t1", name: "Bash", input: { command: "grep x" } }),
+      agent("a", { type: "tool-start", toolId: "t2", name: "Bash", input: { command: "grep y" } }),
+      agent("a", { type: "agent-auth-required", agent: "claude", agentName: "Claude Code", methods, ts: 0 }),
+    ]);
+    // no turn-end follows the refusal, so the card is what closes them: neither row shines on
+    expect(s.local.a?.chat.map((i) => i.kind === "tool" && i.done)).toEqual([true, true, false]);
+  });
+
   test("a lapsed AWS session carries its provider and the refresh command already set", () => {
     const methods = [{ id: "aws-login", name: "log in to AWS", kind: "terminal" as const }];
     const s = run([

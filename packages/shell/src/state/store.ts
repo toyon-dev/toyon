@@ -3362,8 +3362,11 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
     case "adopted":
       return [...items, { kind: "adopted", branch: event.branch, ts: event.ts }];
     case "agent-auth-required":
+      // a credential refused mid-turn ends the turn without a turn-end, the way an error does
+      // (the daemon keeps the process for the login instead), so a call that was executing when
+      // the provider said no would otherwise shine for good, and the one behind it read queued
       return [
-        ...items,
+        ...closeOpenCalls(items),
         {
           kind: "auth",
           agent: event.agent,

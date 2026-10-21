@@ -97,6 +97,7 @@ import { PickChip } from "./PickChip.tsx";
 import { QuestionCard } from "./QuestionCard.tsx";
 import { type Step, stepWalk, type WalkKey } from "./recall.ts";
 import { shellCommandOf, shellContext } from "./shellMode.ts";
+import { matchesSibling, siblingWorktrees } from "./siblings.ts";
 import { UsagePanel } from "./UsagePanel.tsx";
 import { compactAdvice, compactNudge, limitLevel, limitSummary } from "./usage.ts";
 import { useAgentCheck } from "./useAgentCheck.ts";
@@ -137,7 +138,12 @@ type Row =
   | { kind: "file"; path: string; status?: GitFileStatus }
   | { kind: "folder"; path: string }
   | { kind: "changes"; n: number }
+  | { kind: "worktree"; id: string; title: string; branch: string }
   | { kind: "cmd"; c: AgentCommand };
+
+/** how many of the project's other worktrees a bare `@` offers above the files, newest first;
+ * a letter searches them all (siblings.ts `matchesSibling`) */
+const WORKTREES_UNASKED = 3;
 
 const cmdRow = (c: AgentCommand): Row => ({ kind: "cmd", c });
 
@@ -180,6 +186,9 @@ function emptyMenu(
 function insertionFor(r: Row): string {
   if (r.kind === "cmd") return `/${r.c.name} `; // verbatim: the adapter re-expands mcp: names
   if (r.kind === "folder") return `@${r.path}/ `;
+  // a worktree goes in by its branch, which has no spaces in it where a title has; the mark over
+  // the field says which row it is
+  if (r.kind === "worktree") return `@${r.branch} `;
   return r.kind === "changes" ? "@changes " : `@${r.path} `;
 }
 
@@ -364,6 +373,9 @@ export function Composer({
   const files = useLocalField(id, "files");
   // the folders the files tab shows, so `@src/app/` names one the tree has
   const folders = useMemo(() => folderList(files ?? NO_PATHS), [files]);
+  // the project's other rows with a chat, so `@` can point the agent at what another worktree did
+  const railRows = useStore((s) => s.rows);
+  const siblings = useMemo(() => siblingWorktrees(railRows, repoId, id), [railRows, repoId, id]);
   const git = useLocalField(id, "git");
   // this worktree's uncommitted files: the status when the row is subscribed, else the row's
   // count, from the same record
@@ -491,7 +503,8 @@ export function Composer({
 
   // a chat toyon is not running has no session to take a command and no listing to name a file
   // from: no menu there, and none on a project with no files yet
-  const trigger = boxId && !outside && !project ? triggerAt(text, caret) : null;
+  const trigger =
+    boxId && !outside && !project ? triggerAt(text, caret, (q) => siblings.some((w) => matchesSibling(q, w))) : null;
   // opens even with nothing to show: an empty menu that says why beats a `/` that does nothing. Not
   // over a walked-back message: a recalled `/compact` was sent, not typed, and the menu would take
   // the arrows the walk is using.
@@ -510,9 +523,15 @@ export function Composer({
     // "review @changes" is the common ask and should not need one chip per file
     const changed = git?.files.length ?? 0;
     if (changed > 0 && "changes".startsWith(triggerQuery.toLowerCase())) out.push({ kind: "changes", n: changed });
+    // The other worktrees above the files, under a head of their own: a bare `@` shows the newest
+    // few, where the files it would show are the alphabet's first; a letter finds any. Letters
+    // that name a file and no worktree leave the list the files', as before.
+    const q = triggerQuery.trim();
+    const named = q ? siblings.filter((w) => matchesSibling(q, w)) : siblings.slice(0, WORKTREES_UNASKED);
+    out.push(...named.map((w): Row => ({ kind: "worktree", id: w.id, title: w.title, branch: w.branch })));
     out.push(...rankMentions(files ?? [], folders, git?.files ?? [], triggerQuery, 8));
     return out;
-  }, [triggerKind, triggerQuery, files, folders, git, commands, ownRows]);
+  }, [triggerKind, triggerQuery, files, folders, git, commands, ownRows, siblings]);
   // the agent's rows a bare `/` leaves out, said on the menu's key strip so they are not lost
   const more =
     triggerKind === "command" && triggerQuery !== undefined && !triggerQuery.trim()
@@ -586,7 +605,14 @@ export function Composer({
 
   const nav = useListNav<Row>({
     results: rows,
-    keyOf: (r) => (r.kind === "cmd" ? `c:${r.c.name}` : r.kind === "changes" ? "changes" : `f:${r.path}`),
+    keyOf: (r) =>
+      r.kind === "cmd"
+        ? `c:${r.c.name}`
+        : r.kind === "changes"
+          ? "changes"
+          : r.kind === "worktree"
+            ? `w:${r.id}`
+            : `f:${r.path}`,
     q: trigger?.query ?? "",
     listRef,
     tabPicks: true,
@@ -1380,14 +1406,16 @@ export function Composer({
               ? `c:${r.c.name}`
               : r.kind === "changes"
                 ? "changes"
-                : r.kind === "folder"
-                  ? `d:${r.path}`
-                  : `f:${r.path}`
+                : r.kind === "worktree"
+                  ? `w:${r.id}`
+                  : r.kind === "folder"
+                    ? `d:${r.path}`
+                    : `f:${r.path}`
           }
           rowClass={(r) =>
             r.kind === "file" || r.kind === "folder"
               ? "qo-file"
-              : r.kind === "changes"
+              : r.kind === "changes" || r.kind === "worktree"
                 ? "picker-row"
                 : "picker-row picker-cmd"
           }
@@ -1395,6 +1423,7 @@ export function Composer({
           listRef={listRef}
           empty={emptyMenu(trigger.kind, files, commands.length, source !== null)}
           note={more > 0 ? `type to find ${more} more` : undefined}
+          groupOf={(r) => (r.kind === "worktree" ? "worktrees" : r.kind === "cmd" ? "commands" : "files")}
           row={(r) => {
             // the letter column only while the live status has a letter to put in it
             const gutter = (git?.files.length ?? 0) > 0;
@@ -1402,6 +1431,7 @@ export function Composer({
             if (r.kind === "folder") return fileRow(r.path, undefined, trigger.query, { folder: true, gutter });
             if (r.kind === "changes")
               return <PaletteRow label="@changes" hint={`${r.n} uncommitted ${r.n === 1 ? "file" : "files"}`} />;
+            if (r.kind === "worktree") return <PaletteRow label={r.title} hint={`@${r.branch}`} />;
             return <CommandRow c={r.c} query={trigger.query} />;
           }}
         />

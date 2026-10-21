@@ -36,6 +36,19 @@ describe("triggerAt: @ mentions", () => {
   test("the caret before the sigil is not inside anything", () => {
     expect(triggerAt("@src", 0)).toBeNull();
   });
+
+  test("a space stays inside the mention while the words still name a worktree", () => {
+    const names = (q: string) => "message flash bug".startsWith(q.toLowerCase().trimEnd());
+    expect(triggerAt("@message flash", 14, names)).toEqual({ kind: "file", query: "message flash", from: 0, to: 14 });
+    // the space just typed holds the menu for the next word
+    expect(triggerAt("@message ", 9, names)?.query).toBe("message ");
+    // words that name nothing close it, as a path's space does
+    expect(triggerAt("@message fla x", 14, names)).toBeNull();
+    expect(triggerAt("@src ok", 7, names)).toBeNull();
+    expect(triggerAt("@message flash", 14)).toBeNull();
+    // the caret mid-word: the span runs to the end of that word
+    expect(triggerAt("@message flash bug", 12, names)).toEqual({ kind: "file", query: "message fla", from: 0, to: 14 });
+  });
 });
 
 describe("triggerAt: slash commands", () => {
@@ -161,5 +174,27 @@ describe("mentionSpans: the references in a sent message", () => {
   test("one index per list, so every row shares the folder walk", () => {
     const files = ["a/b.ts"];
     expect(mentionIndex(files)).toBe(mentionIndex(files));
+  });
+
+  test("another worktree of the project resolves by its branch, with the sentence's punctuation left out", () => {
+    const worktrees = new Map([["toyon/flash-bug", { id: "w1", title: "Message flash bug" }]]);
+    const withRows = mentionIndex(["README.md"], worktrees);
+    expect(mentionSpans("do what @toyon/flash-bug did, here.", withRows)).toEqual([
+      { kind: "text", text: "do what " },
+      { kind: "worktree", text: "@toyon/flash-bug", id: "w1", title: "Message flash bug" },
+      { kind: "text", text: " did, here." },
+    ]);
+    // no file list yet: the worktrees still resolve
+    expect(mentionSpans("@toyon/flash-bug", mentionIndex(undefined, worktrees))).toEqual([
+      { kind: "worktree", text: "@toyon/flash-bug", id: "w1", title: "Message flash bug" },
+    ]);
+    expect(mentionSpans("@toyon/other", withRows)).toEqual([{ kind: "text", text: "@toyon/other" }]);
+  });
+
+  test("a file of the branch's name is the file", () => {
+    const worktrees = new Map([["README.md", { id: "w1", title: "Readme" }]]);
+    expect(mentionSpans("@README.md", mentionIndex(["README.md"], worktrees))).toEqual([
+      { kind: "file", text: "@README.md", path: "README.md" },
+    ]);
   });
 });

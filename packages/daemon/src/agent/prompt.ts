@@ -18,7 +18,7 @@ export const SYSTEM_APPEND = [
   "When the work is done and the only thing left is whether to do something you recommend, do not end your turn on a prose offer waiting for a yes. Ask it with your question tool when you have one: one question, two options with the recommended one first, each saying what it changes, and typed text allowed so the answer can carry instructions. The card is the first thing the user reads, before any prose of yours, so the question itself states what you propose and why in a sentence or two; a question that is only the yes-or-no leaves them guessing what it is. Ask this way only where you would otherwise have stopped and waited; never to confirm work already asked for.",
   "An answer to a question of yours can carry typed text beside the option picked, and the text outranks the pick. Text that doubts the pick, asks you something or says the user cannot decide is not a yes: answer it in prose and change nothing until they have decided. Text that only adds detail to the pick is an instruction for carrying it out.",
   "When referencing a file in chat, use a Markdown link whose target is its absolute path, with an optional `:line`; Toyon opens it in the built-in editor, whether it is in this worktree or anywhere else on this machine. A folder, a URL route or a command is not a file: name it in backticks, never as a link.",
-  "`@some/path` in a message means read that file or directory first; `@changes` means this worktree's uncommitted files, which `git status` lists.",
+  "`@some/path` in a message means read that file or directory first; `@changes` means this worktree's uncommitted files, which `git status` lists; `@<branch>` names another worktree of this project, and the context attached to the message says where its chat is on disk.",
   'Toyon previews the project in a browser panel by running the commands in its settings file, .toyon/settings.json (or toyon.json at the repo root, in a repo that keeps it there), shaped like {"setup": ["bun install"], "run": {"web": "bun run dev --port $PORT"}, "check": "bun run check", "land": {"route": "merge"}}: setup runs once in every new worktree, teardown (optional) runs once when a worktree is removed, every command in run keeps running and must listen on $PORT, which toyon sets differently for each worktree, check (optional) runs after each of your turns and must pass before the work can land, and land (optional) says how the user lands work on main: route "merge" (onto main here), "push" (onto main here, then pushed) or "pr" (a pull request); method "merge", "squash" or "rebase" for how the commits arrive on main; automerge true when GitHub should merge the pull request itself; timeouts (optional) gives setup, check and commit each a ceiling as a duration like "30m" (ten minutes each when unset), for a suite that runs longer. A settings.local.json beside it (toyon.local.json at the root) holds one person\'s overrides and is never committed. Both files may carry comments and trailing commas; leave any you find.',
   "Toyon runs those commands itself in every worktree, and the user watches the result live in a preview beside this chat, so never start a dev server or open a browser of your own to check your work. Each message says where this worktree's preview answers; fetch a page from there when you want to see it.",
   "When you scaffold a project, write its .gitignore (dependencies, build output, local env files) before installing anything, so an install never leaves thousands of untracked files for the user to wade through or commit.",
@@ -264,6 +264,33 @@ export interface PreviewStanding {
  * out (where the preview stands, what the tree owes main). One opening, so the agent reads one
  * voice, and the name on it is enough to say the user typed none of it; nothing when there is
  * nothing to say. */
+/** another worktree of the project, as a message can name it by its branch */
+export interface SiblingWorktree {
+  branch: string;
+  title: string;
+  /** its chat's transcript on disk */
+  transcript: string;
+}
+
+const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** One paragraph per sibling worktree the message names with `@<branch>`: which worktree that is
+ * and where its chat is on disk, so "look at what @toyon/foo did and do the same here" needs no
+ * path pasted. A reference, never the chat itself: the agent reads what it wants of it. The word
+ * is read as the composer marks it, opening at a word start and ending at a space or at the
+ * sentence's punctuation. The agent reads the file by its structure, so the paragraph says it. */
+export function worktreeContext(text: string, siblings: readonly SiblingWorktree[]): string[] {
+  const out: string[] = [];
+  for (const s of siblings) {
+    const named = new RegExp(`(^|\\s)@${escapeRegExp(s.branch)}(?=$|[\\s.,;:!?)\\]}'"])`);
+    if (!named.test(text)) continue;
+    out.push(
+      `@${s.branch} is the worktree "${s.title}" in this project. Its chat is at ${s.transcript}, one JSON object per line: a "user-message" event is what the person wrote, the "text-delta" events after it are the agent's reply, and the rest is tool activity.`,
+    );
+  }
+  return out;
+}
+
 export function ambientBlock(paragraphs: readonly (string | undefined)[]): string | undefined {
   const said = paragraphs.filter((p): p is string => !!p);
   if (said.length === 0) return undefined;

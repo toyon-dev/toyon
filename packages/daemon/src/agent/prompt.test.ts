@@ -12,6 +12,7 @@ import {
   previewContext,
   procFixPrompt,
   SYSTEM_APPEND,
+  worktreeContext,
 } from "./prompt.ts";
 
 const ref = {
@@ -126,6 +127,35 @@ describe("SYSTEM_APPEND", () => {
     // recommended option picked with "I can't decide" beside it reads as a yes unless told otherwise
     expect(SYSTEM_APPEND).toContain("the text outranks the pick");
     expect(SYSTEM_APPEND).toContain("change nothing until they have decided");
+  });
+});
+
+describe("worktreeContext", () => {
+  const rows = [
+    { branch: "toyon/flash-bug", title: "Message flash bug", transcript: "/t/w1.jsonl" },
+    { branch: "toyon/flash", title: "Flash", transcript: "/t/w2.jsonl" },
+  ];
+
+  test("a branch named at a word start gets its paragraph: which worktree, and where its chat is", () => {
+    const [p, ...rest] = worktreeContext("do what @toyon/flash-bug did here", rows);
+    expect(rest).toEqual([]);
+    expect(p).toContain('@toyon/flash-bug is the worktree "Message flash bug" in this project.');
+    expect(p).toContain("Its chat is at /t/w1.jsonl, one JSON object per line");
+    expect(p).toContain('"user-message"');
+    expect(p).toContain('"text-delta"');
+  });
+
+  test("the sentence's punctuation after the branch is not part of it, and a longer branch is not the shorter one", () => {
+    expect(worktreeContext("see @toyon/flash.", rows).map((p) => p.split(" ")[0])).toEqual(["@toyon/flash"]);
+    expect(worktreeContext("(@toyon/flash-bug)", rows)).toEqual([]);
+    expect(worktreeContext("@toyon/flash-bug", rows).map((p) => p.split(" ")[0])).toEqual(["@toyon/flash-bug"]);
+  });
+
+  test("a sigil mid-word, an unknown branch, or no sigil at all says nothing", () => {
+    expect(worktreeContext("me@toyon/flash", rows)).toEqual([]);
+    expect(worktreeContext("@toyon/gone", rows)).toEqual([]);
+    expect(worktreeContext("toyon/flash", rows)).toEqual([]);
+    expect(worktreeContext("@toyon/flash", [])).toEqual([]);
   });
 });
 

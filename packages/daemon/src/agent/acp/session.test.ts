@@ -666,6 +666,23 @@ describe("AcpSession", () => {
     await w.session.close();
   });
 
+  test("the worktrees a message names ride in the block after its own context and before the preview", async () => {
+    const fake = fakeAgent(say("ok"));
+    const w = world(fake, claudeSpec, 60_000, undefined, {
+      preview: () => "preview",
+      mentioned: (text) => (text.includes("@toyon/other") ? ["@toyon/other is the worktree ..."] : []),
+    });
+    w.session.send("do what @toyon/other did", { context: ["ctx"] });
+    await w.idle();
+    w.session.send("and this");
+    await w.idle();
+    expect(fake.prompts.map((p) => p.prompt.map((b) => (b as { text: string }).text))).toEqual([
+      ["do what @toyon/other did", "[Attached by Toyon:\nctx\n\n@toyon/other is the worktree ...\n\npreview]"],
+      ["and this", "[Attached by Toyon:\npreview]"],
+    ]);
+    await w.session.close();
+  });
+
   test("queued prompts run in order on one process; the queue is visible in between", async () => {
     let release: () => void = () => {};
     const gate = new Promise<void>((r) => {

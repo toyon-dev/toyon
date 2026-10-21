@@ -133,6 +133,9 @@ export interface AcpSessionDeps {
   /** what the preview's page has thrown since it last loaded, as a paragraph after every message,
    * read as each goes out: what the person's browser met is what the agent should hear */
   pageErrors?: () => string | undefined;
+  /** the project's other worktrees the message names by branch, a paragraph each saying where
+   * its chat is; read as the message goes out, so a row made since the session opened counts */
+  mentioned?: (text: string) => string[];
   /** the adapter's process group came up (`true`, right after the spawn and before initialize,
    * so a daemon dying mid-start still has it on record) or went (`false`), for the ledger */
   onProcess?: (pgid: number, up: boolean) => void;
@@ -900,7 +903,13 @@ export class AcpSession implements AgentAdapter {
    * it is going out and what its page has thrown, then what landed elsewhere since the last
    * message, wrapped as one block */
   private contextFor(item: QueueItem): string | undefined {
-    return ambientBlock([...(item.context ?? []), this.d.preview?.(), this.d.pageErrors?.(), ...this.landedSince()]);
+    return ambientBlock([
+      ...(item.context ?? []),
+      ...(this.d.mentioned?.(item.text) ?? []),
+      this.d.preview?.(),
+      this.d.pageErrors?.(),
+      ...this.landedSince(),
+    ]);
   }
 
   /** One sentence per worktree this one handed work to that has landed since the message before

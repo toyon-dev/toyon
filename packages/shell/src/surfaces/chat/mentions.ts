@@ -17,7 +17,10 @@ export interface Trigger {
 /** paths type straight through; a space ends the mention, since no path we list contains one */
 const IN_MENTION = /^[^\s]*$/;
 
-export function triggerAt(text: string, caret: number): Trigger | null {
+/** `continues` says whether a query with spaces in it still names something, which only a
+ * worktree title can: the menu stays open past a space while it does, so a title is typed as it
+ * reads, and closes at the space where the words stop naming one, as they do for a path. */
+export function triggerAt(text: string, caret: number, continues?: (query: string) => boolean): Trigger | null {
   // a `!` draft is a command for the shell (shellMode.ts): no menu, since an `@path` picked into
   // one would hand the shell a literal `@`, and a slash in a command is a path
   if (text.startsWith("!")) return null;
@@ -36,7 +39,9 @@ export function triggerAt(text: string, caret: number): Trigger | null {
   // an address or a decorator is not a mention: the sigil has to open a word
   if (at > 0 && !/\s/.test(text[at - 1] ?? "")) return null;
   const query = text.slice(at + 1, caret);
-  if (!IN_MENTION.test(query)) return null;
+  // a space in the query is allowed only while the words still name a worktree; a trailing
+  // space is the title's next word about to be typed, and holds too
+  if (!IN_MENTION.test(query) && !continues?.(query)) return null;
   let to = caret;
   while (to < text.length && !/\s/.test(text[to] ?? "")) to++;
   return { kind: "file", query, from: at, to };
@@ -48,30 +53,43 @@ export function triggerAt(text: string, caret: number): Trigger | null {
 export interface MentionIndex {
   files: ReadonlySet<string>;
   folders: ReadonlySet<string>;
+  /** the project's other open worktrees by branch: what `@toyon/foo` names when no file does */
+  worktrees: ReadonlyMap<string, WorktreeMention>;
 }
 
-const NO_INDEX: MentionIndex = { files: new Set(), folders: new Set() };
+/** a worktree a message can name: its row, and the title the mark says */
+export interface WorktreeMention {
+  id: string;
+  title: string;
+}
+
+const NO_WORKTREES: ReadonlyMap<string, WorktreeMention> = new Map();
+const NO_INDEX: MentionIndex = { files: new Set(), folders: new Set(), worktrees: NO_WORKTREES };
 
 // one index per file list: every bubble of a transcript reads the same list, and the folder walk
 // over a large checkout is not a thing to redo per row
 const indexes = new WeakMap<readonly string[], MentionIndex>();
 
-/** the index for a file list; without one, only `@changes` resolves */
-export function mentionIndex(files: readonly string[] | undefined): MentionIndex {
-  if (!files) return NO_INDEX;
+/** the index for a file list; without one, only `@changes` and the worktrees resolve */
+export function mentionIndex(
+  files: readonly string[] | undefined,
+  worktrees: ReadonlyMap<string, WorktreeMention> = NO_WORKTREES,
+): MentionIndex {
+  if (!files) return worktrees === NO_WORKTREES ? NO_INDEX : { ...NO_INDEX, worktrees };
   let index = indexes.get(files);
   if (!index) {
-    index = { files: new Set(files), folders: new Set(folderList(files)) };
+    index = { files: new Set(files), folders: new Set(folderList(files)), worktrees: NO_WORKTREES };
     indexes.set(files, index);
   }
-  return index;
+  return worktrees === NO_WORKTREES ? index : { ...index, worktrees };
 }
 
 export type MentionSpan =
   | { kind: "text"; text: string }
   | { kind: "file"; text: string; path: string }
   | { kind: "folder"; text: string; path: string }
-  | { kind: "changes"; text: string };
+  | { kind: "changes"; text: string }
+  | { kind: "worktree"; text: string; id: string; title: string };
 
 /** the sigil opens a word, as it must for the menu (`triggerAt`), and the word runs to the next space */
 const MENTION = /(^|\s)(@\S+)/g;
@@ -83,12 +101,16 @@ function resolve(word: string, index: MentionIndex): MentionSpan | null {
   if (index.files.has(word)) return { kind: "file", text: `@${word}`, path: word };
   const folder = word.replace(/\/+$/, "");
   if (folder && index.folders.has(folder)) return { kind: "folder", text: `@${word}`, path: folder };
+  // a file wins over a branch of the same name: the path is what the agent reads first
+  const wt = index.worktrees.get(word);
+  if (wt) return { kind: "worktree", text: `@${word}`, id: wt.id, title: wt.title };
   return null;
 }
 
-/** a message split at every `@` reference that names something in the worktree: a file or folder
- * the index holds, or the uncommitted set. Anything else stays prose, an address included, so the
- * mark says the agent has somewhere to look rather than that a sigil was typed. */
+/** a message split at every `@` reference that names something in the project: a file or folder
+ * the index holds, the uncommitted set, or another worktree by its branch. Anything else stays
+ * prose, an address included, so the mark says the agent has somewhere to look rather than that
+ * a sigil was typed. */
 export function mentionSpans(text: string, index: MentionIndex): MentionSpan[] {
   const out: MentionSpan[] = [];
   let last = 0;

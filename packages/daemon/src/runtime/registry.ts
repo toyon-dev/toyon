@@ -11,9 +11,10 @@ import { AttachmentStore } from "../agent/attachments.ts";
 import type { ToyonMcp } from "../agent/mcp.ts";
 import { commandFolders, readCommandOrigins } from "../agent/origins.ts";
 import { ownPlanPath, planEdited, writePlanDoc } from "../agent/planDoc.ts";
-import { type PreviewStanding, previewContext } from "../agent/prompt.ts";
+import { type PreviewStanding, previewContext, worktreeContext } from "../agent/prompt.ts";
 import type { AgentReadiness } from "../agent/readiness.ts";
 import type { AgentRegistry } from "../agent/registry.ts";
+import { transcriptPathFor } from "../agent/transcript.ts";
 import { UploadStore } from "../agent/uploads.ts";
 import { cloud } from "../core/cloud.ts";
 import { UserError } from "../core/errors.ts";
@@ -211,6 +212,19 @@ function defaultAgent(
     cwd: wt.path,
     preview: () => previewContext(preview()),
     pageErrors: () => d.pageErrors?.(wt.id),
+    // the project's other open worktrees, read as the message goes out: a row made since the
+    // session opened is one the message can name
+    mentioned: (text) =>
+      worktreeContext(
+        text,
+        d.state.worktrees
+          .filter((w) => w.repoId === wt.repoId && w.id !== wt.id && w.kind === "worktree")
+          .map((w) => ({
+            branch: w.branch,
+            title: w.title,
+            transcript: transcriptPathFor(d.paths.transcriptsDir, w.id),
+          })),
+      ),
     onProcess,
     spec,
     connect: (app, spec, prepared) => spawnAcp(app, d.agents.launch(spec, prepared), wt.path, wt.id),

@@ -1,4 +1,4 @@
-import type { ReactNode, RefObject } from "react";
+import { Fragment, type ReactNode, type RefObject } from "react";
 import { cx } from "./cx.ts";
 import { Float } from "./Float.tsx";
 import { KeyHints } from "./KeyHints.tsx";
@@ -39,6 +39,8 @@ export function InlinePicker<T>({
   listRef,
   empty,
   note,
+  groupOf,
+  groupHead,
 }: {
   results: T[];
   keyOf: (t: T) => string;
@@ -49,25 +51,40 @@ export function InlinePicker<T>({
   empty: ReactNode;
   /** a quiet word at the end of the key strip: what the list is leaving out, and how to reach it */
   note?: ReactNode;
+  /** the group a row belongs to, for a list of more than one kind of thing, as the palette's. A
+   * head is drawn where the group changes, so the host keeps each group's rows together; with
+   * one group in the list there is nothing to tell apart and no head. */
+  groupOf?: (t: T) => string;
+  groupHead?: (group: string) => ReactNode;
 }) {
+  const groups = new Set(groupOf ? results.map(groupOf) : []);
   return (
     <Float className="inline-picker" anchor="parent" placement={INLINE}>
       <div className="picker-list" ref={listRef}>
-        {results.map((t, i) => (
-          <button
-            key={keyOf(t)}
-            className={cx("picker-item", rowClass?.(t))}
-            data-state={rowState({ cursor: i === nav.index })}
-            // mousemove, not mouseenter: rows scrolling under a stationary pointer must not steal
-            // the highlight
-            onMouseMove={() => i !== nav.index && nav.setIndex(i)}
-            // the caret has to survive the click: a blur would close this before onClick runs
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={() => nav.pick(t)}
-          >
-            {row(t, i === nav.index)}
-          </button>
-        ))}
+        {results.map((t, i) => {
+          const group = groupOf?.(t);
+          const head =
+            group !== undefined && groups.size > 1 && (i === 0 || groupOf?.(results[i - 1] as T) !== group) ? (
+              <div className="picker-group">{groupHead?.(group) ?? group}</div>
+            ) : null;
+          return (
+            <Fragment key={keyOf(t)}>
+              {head}
+              <button
+                className={cx("picker-item", rowClass?.(t))}
+                data-state={rowState({ cursor: i === nav.index })}
+                // mousemove, not mouseenter: rows scrolling under a stationary pointer must not
+                // steal the highlight
+                onMouseMove={() => i !== nav.index && nav.setIndex(i)}
+                // the caret has to survive the click: a blur would close this before onClick runs
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => nav.pick(t)}
+              >
+                {row(t, i === nav.index)}
+              </button>
+            </Fragment>
+          );
+        })}
         {results.length === 0 && <div className="empty">{empty}</div>}
       </div>
       <KeyHints

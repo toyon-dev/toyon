@@ -32,6 +32,36 @@ describe("parseRateLimit", () => {
     });
   });
 
+  test("the per-model week rides along for an account whose replies carry one", () => {
+    expect(
+      parseRateLimit(
+        {
+          "_claude/rateLimit": {
+            status: "rejected",
+            rateLimitType: "seven_day_overage_included",
+            utilization: 1,
+            resetsAt: 1_700_400_000,
+            unifiedWindows: {
+              five_hour: { utilization: 0.13, resetsAt: 1_700_010_000 },
+              seven_day: { utilization: 0.02, resetsAt: 1_700_400_000 },
+              seven_day_overage_included: { utilization: 1, resetsAt: 1_700_400_000 },
+            },
+          },
+        },
+        NOW,
+      ),
+    ).toEqual({
+      status: "rejected",
+      binding: "seven_day_overage_included",
+      windows: {
+        five_hour: { used: 0.13, resetsAt: 1_700_010_000_000 },
+        seven_day: { used: 0.02, resetsAt: 1_700_400_000_000 },
+        seven_day_overage_included: { used: 1, resetsAt: 1_700_400_000_000 },
+      },
+      at: NOW,
+    });
+  });
+
   test("an SDK with no per-window figures still fills in the window its status is about", () => {
     expect(
       parseRateLimit(

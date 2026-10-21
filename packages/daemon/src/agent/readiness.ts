@@ -6,7 +6,7 @@
 // shows up here without a restart. Live sessions report what they learn into the same place.
 
 import * as acp from "@agentclientprotocol/sdk";
-import type { AgentInfo, AgentLimits, AuthStatus, ModelChoice } from "@toyon/shared";
+import type { AgentInfo, AgentLimits, AuthStatus, LimitWindow, ModelChoice } from "@toyon/shared";
 import { UserError } from "../core/errors.ts";
 import { log } from "../core/log.ts";
 import {
@@ -288,13 +288,9 @@ function firstLine(e: unknown): string {
 
 function sameLimits(a: AgentLimits | undefined, b: AgentLimits | undefined): boolean {
   if (!a || !b) return a === b;
-  const win = (x: AgentLimits["windows"]["five_hour"]) => (x ? `${x.used}@${x.resetsAt}` : "");
-  return (
-    a.status === b.status &&
-    a.binding === b.binding &&
-    win(a.windows.five_hour) === win(b.windows.five_hour) &&
-    win(a.windows.seven_day) === win(b.windows.seven_day)
-  );
+  const win = (x: LimitWindow | undefined) => (x ? `${x.used}@${x.resetsAt}` : "");
+  const keys: Array<keyof AgentLimits["windows"]> = ["five_hour", "seven_day", "seven_day_overage_included"];
+  return a.status === b.status && a.binding === b.binding && keys.every((k) => win(a.windows[k]) === win(b.windows[k]));
 }
 
 function same(a: AuthStatus | undefined, b: AuthStatus | undefined): boolean {

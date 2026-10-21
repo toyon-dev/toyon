@@ -648,6 +648,10 @@ export interface AgentLimits {
   windows: {
     five_hour?: LimitWindow;
     seven_day?: LimitWindow;
+    /** the week of the one model billed to its own bucket (Fable, on the plans that offer it):
+     * the server carries it on every reply for an account that has it, and not at all for one
+     * that does not, so its presence alone says whether there is such a model to spend */
+    seven_day_overage_included?: LimitWindow;
   };
   /** when the agent said so, in ms: the figures stand still between replies */
   at: number;

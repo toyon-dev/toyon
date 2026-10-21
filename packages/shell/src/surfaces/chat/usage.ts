@@ -44,10 +44,21 @@ export function compactNudge(fraction: number): string | undefined {
 // ---- the plan's windows, the account's rather than this worktree's ----
 
 type WindowKey = keyof AgentLimits["windows"];
-const WINDOW_KEYS: WindowKey[] = ["five_hour", "seven_day"];
+/** in the order Claude Code's own usage screen lists them: the per-model week is Fable's, which
+ * is the one model billed to a bucket of its own, and the window comes only to an account that
+ * has it */
+const WINDOW_KEYS: WindowKey[] = ["five_hour", "seven_day", "seven_day_overage_included"];
 /** the window in a phrase ("43% of the 5-hour window") and at the head of its panel row */
-const WINDOW_PHRASE: Record<WindowKey, string> = { five_hour: "the 5-hour window", seven_day: "the week" };
-const WINDOW_NAME: Record<WindowKey, string> = { five_hour: "5-hour", seven_day: "this week" };
+const WINDOW_PHRASE: Record<WindowKey, string> = {
+  five_hour: "the 5-hour window",
+  seven_day: "the week",
+  seven_day_overage_included: "the Fable week",
+};
+const WINDOW_NAME: Record<WindowKey, string> = {
+  five_hour: "5-hour",
+  seven_day: "this week",
+  seven_day_overage_included: "Fable week",
+};
 
 /** a window still running: one past its reset has emptied, and nothing has read it since */
 function running(limits: AgentLimits, now: number): Array<{ key: WindowKey; used: number; resetsAt: number }> {

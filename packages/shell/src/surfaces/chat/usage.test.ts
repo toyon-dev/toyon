@@ -100,6 +100,26 @@ describe("limitRows", () => {
     ]);
   });
 
+  test("the per-model week is a third row, draws the ring when it is the fullest, and takes the warning", () => {
+    const fable: AgentLimits = {
+      status: "rejected",
+      binding: "seven_day_overage_included",
+      windows: {
+        five_hour: { used: 0.13, resetsAt: NOW + HOUR },
+        seven_day: { used: 0.02, resetsAt: NOW + 5 * 24 * HOUR },
+        seven_day_overage_included: { used: 1, resetsAt: NOW + 5 * 24 * HOUR },
+      },
+      at: NOW,
+    };
+    expect(limitLevel(fable, NOW)).toBe(1);
+    expect(limitSummary(fable, NOW)).toBe("13% of the 5-hour window, 2% of the week, 100% of the Fable week");
+    expect(limitRows(fable, NOW, clock)).toEqual([
+      { key: "five_hour", name: "5-hour", used: 0.13, sub: "resets t+1h" },
+      { key: "seven_day", name: "this week", used: 0.02, sub: "resets t+120h" },
+      { key: "seven_day_overage_included", name: "Fable week", used: 1, sub: "resets t+120h, out until then" },
+    ]);
+  });
+
   test("the agent's warning lands on the window it is about", () => {
     expect(limitRows({ ...both, status: "allowed_warning" }, NOW, clock)[0]?.sub).toBe("resets t+1h, nearly out");
     expect(limitRows({ ...both, status: "rejected" }, NOW, clock).map((r) => r.sub)).toEqual([

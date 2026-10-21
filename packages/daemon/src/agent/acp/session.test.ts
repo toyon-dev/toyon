@@ -1003,6 +1003,100 @@ describe("AcpSession", () => {
     await w.session.close();
   });
 
+  // the agent is mid-message when the steer and the stop land; after the cancel it sends one more
+  // chunk, under the message it was writing (its tail trailing in) or under a new one (an answer)
+  const trailingAfterStop = (messageId: string) => {
+    const chunk = (client: acp.AgentContext, sessionId: string, text: string, id: string) =>
+      client.notify(acp.methods.client.session.update, {
+        sessionId,
+        update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text }, messageId: id },
+      });
+    const fake = fakeAgent(
+      async (p, client) => {
+        if ((p.prompt[0] as { text: string }).text !== "go") return say("done")(p, client);
+        await chunk(client, p.sessionId, "before", "m1");
+        while (fake.cancels === 0) await Bun.sleep(5);
+        await chunk(client, p.sessionId, " more", messageId);
+        await Bun.sleep(20);
+        return { stopReason: "cancelled" };
+      },
+      { steering: true },
+    );
+    return fake;
+  };
+
+  test("the cut-off message's own words trailing in after a stop keep the handed-back copy for the next turn", async () => {
+    const trailing = trailingAfterStop("m1");
+    const w = world(trailing);
+    w.session.send("go");
+    await Bun.sleep(30);
+    w.session.send("also");
+    await Bun.sleep(30);
+    expect(trailing.steers).toHaveLength(1);
+    w.session.stop();
+    await w.idle();
+    expect(promptTexts(trailing)).toEqual(["go", "also"]);
+    await w.session.close();
+  });
+
+  test("words under a new message after a stop are the answer, and the handed-back copy is dropped", async () => {
+    const answering = trailingAfterStop("m2");
+    const w = world(answering);
+    w.session.send("go");
+    await Bun.sleep(30);
+    w.session.send("also");
+    await Bun.sleep(30);
+    w.session.stop();
+    await w.idle();
+    expect(promptTexts(answering)).toEqual(["go"]);
+    expect(w.session.status).toBe("idle");
+    await w.session.close();
+  });
+
+  test("a copy one stop handed back is not dropped by the next turn's stop", async () => {
+    // "a" and "b" are steered and handed back together; "a" runs next while "b" still waits. A
+    // stop on "a" with its answer trailing in may take only what was steered into "a"'s turn.
+    const chunk = (client: acp.AgentContext, sessionId: string, text: string, id: string) =>
+      client.notify(acp.methods.client.session.update, {
+        sessionId,
+        update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text }, messageId: id },
+      });
+    const fake = fakeAgent(
+      async (p, client) => {
+        const text = (p.prompt[0] as { text: string }).text;
+        if (text === "go") {
+          await chunk(client, p.sessionId, "before", "m1");
+          while (fake.cancels === 0) await Bun.sleep(5);
+          return { stopReason: "cancelled" };
+        }
+        if (text === "a") {
+          await chunk(client, p.sessionId, "on a", "m2");
+          while (fake.cancels < 2) await Bun.sleep(5);
+          await chunk(client, p.sessionId, "late", "m3");
+          await Bun.sleep(20);
+          return { stopReason: "cancelled" };
+        }
+        return say("done")(p, client);
+      },
+      { steering: true },
+    );
+    const w = world(fake);
+    w.session.send("go");
+    await Bun.sleep(30);
+    w.session.send("a");
+    await Bun.sleep(30);
+    w.session.send("b");
+    await Bun.sleep(30);
+    expect(fake.steers).toHaveLength(2);
+    w.session.stop();
+    for (let i = 0; i < 100 && fake.prompts.length < 2; i++) await Bun.sleep(5);
+    await Bun.sleep(30);
+    w.session.stop();
+    await w.idle();
+    expect(promptTexts(fake)).toEqual(["go", "a", "b"]);
+    await w.session.close();
+  });
+
   test("a stop before the prompt has gone out keeps it from going, and the queue still runs", async () => {
     const stopping = untilCancelled();
     const w = world(stopping);
@@ -1108,6 +1202,40 @@ describe("AcpSession", () => {
     expect(answers).toEqual(["allow-once", "reject"]);
     const blocked = w.events.find((e) => e.type === "agent-blocked");
     expect(blocked).toMatchObject({ tool: "Edit", path: "/etc/passwd" });
+  test("a steered message the agent answers after the stop, before the turn ends, is not sent again", async () => {
+    // the cancel does not take at once (a command still running holds the interrupt off) and the
+    // agent picks the steered message up meanwhile: its words, under a message of their own,
+    // answer the bubble already there
+    const lagging = fakeAgent(
+      async (p, client) => {
+        if ((p.prompt[0] as { text: string }).text !== "go") return say("done")(p, client);
+        while (lagging.cancels === 0) await Bun.sleep(5);
+        await client.notify(acp.methods.client.session.update, {
+          sessionId: p.sessionId,
+          update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "on it" }, messageId: "m2" },
+        });
+        await Bun.sleep(20);
+        return { stopReason: "cancelled" };
+      },
+      { steering: true },
+    );
+    const w = world(lagging);
+    w.session.send("go");
+    await Bun.sleep(30);
+    w.session.send("also");
+    await Bun.sleep(30);
+    expect(lagging.steers).toHaveLength(1);
+    w.session.stop();
+    // handed back at the press, and taken back out once the agent's words arrive
+    expect(w.session.queueLength).toBe(1);
+    await w.idle();
+    expect(promptTexts(lagging)).toEqual(["go"]);
+    expect(w.types().filter((t) => t === "user-message")).toHaveLength(2);
+    expect(w.events.filter((e) => e.type === "turn-end")).toMatchObject([{ stopReason: "interrupted" }]);
+    expect(w.session.status).toBe("idle");
+    await w.session.close();
+  });
+
     await w.session.close();
   });
 

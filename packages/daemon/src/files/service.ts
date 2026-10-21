@@ -16,7 +16,7 @@ import {
 import { UserError } from "../core/errors.ts";
 import type { StateStore } from "../core/state.ts";
 import { blameFile } from "../git/blame.ts";
-import { GIT, git, run, runRows } from "../git/exec.ts";
+import { GIT, git, runRows } from "../git/exec.ts";
 import { fileLockKey, withLock } from "../git/lock.ts";
 import { fileAtCommit } from "../git/log.ts";
 import { changedRanges, fileAt, fileBefore, statusFiles } from "../git/status.ts";

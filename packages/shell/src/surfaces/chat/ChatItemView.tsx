@@ -856,22 +856,27 @@ function AuthCard({ item }: { item: Extract<ChatItem, { kind: "auth" }> }) {
     started.current = false;
   });
   if (!id) return null;
+  // a card of the daemon's own methods has a lead; the agent's advertised logins are equals
+  const lead = item.provider === "aws";
   const go = (methodId: string, apiKey?: string) => {
     sock?.send({ t: "agent-auth", worktreeId: id, methodId, ...(apiKey ? { apiKey } : {}) });
   };
   const keyMethod = item.methods.find((m) => m.id === keyFor);
   return (
     <div className={`auth-card ${item.done ? "done" : ""}`}>
-      <div className="auth-title">
+      {/* the provider's own words say nothing the title does not, so they wait under it */}
+      <div className="auth-title" data-tip={item.done ? undefined : item.detail}>
         {item.done
           ? `${item.agentName} is logged in`
-          : item.rejected
-            ? `${item.agentName}'s credentials were refused`
-            : `${item.agentName} is not logged in`}
+          : item.provider === "aws"
+            ? `${item.agentName}'s AWS session expired`
+            : item.rejected
+              ? `${item.agentName}'s credentials were refused`
+              : `${item.agentName} is not logged in`}
       </div>
       {!item.done && (
         <div className="auth-methods">
-          {item.methods.map((m) =>
+          {item.methods.map((m, i) =>
             m.needsKey ? (
               <Button
                 key={m.id}
@@ -886,7 +891,9 @@ function AuthCard({ item }: { item: Extract<ChatItem, { kind: "auth" }> }) {
               <Button
                 key={m.id}
                 variant="outline"
-                data-tip={m.kind === "terminal" ? "opens in the terminal pane" : m.description}
+                // the daemon's own methods lead with the one it is offering: the first is the press
+                tone={lead && i === 0 ? "primary" : undefined}
+                data-tip={m.kind === "terminal" && !m.description ? "opens in the terminal pane" : m.description}
                 onClick={() => {
                   go(m.id);
                   if (m.kind === "terminal") started.current = true;
@@ -897,7 +904,8 @@ function AuthCard({ item }: { item: Extract<ChatItem, { kind: "auth" }> }) {
             ),
           )}
           <Button
-            variant="outline"
+            variant={lead ? "ghost" : "outline"}
+            tone={lead ? "quiet" : undefined}
             data-tip="after logging in elsewhere (the terminal, another window)"
             onClick={() => sock?.send({ t: "agent-retry", worktreeId: id })}
           >
@@ -907,8 +915,14 @@ function AuthCard({ item }: { item: Extract<ChatItem, { kind: "auth" }> }) {
       )}
       {!item.done && loginRunning && (
         <div className="hint auth-hint">
-          paste the code into the login tab below and press Enter; it stays hidden as you paste. Your message sends once
-          you are in.
+          {item.provider === "aws"
+            ? "the login tab below opens the browser to sign in. Your message sends once you are in."
+            : "paste the code into the login tab below and press Enter; it stays hidden as you paste. Your message sends once you are in."}
+        </div>
+      )}
+      {!item.done && item.refresh && (
+        <div className="hint auth-hint">
+          your Claude settings refresh it with <code>{item.refresh}</code>, which got no session this time
         </div>
       )}
       {!item.done && item.withheld && (

@@ -316,6 +316,16 @@ export type AgentEvent =
       /** a method the agent offered is not in the list: the managed policy turned the plan sign-in
        * off, and the card says so rather than leaving a person to wonder where the button went */
       withheld?: boolean;
+      /** the credential that lapsed is the agent's AWS session (Claude on Bedrock), so the methods
+       * are the daemon's own, an `aws sso login` and the setting that makes the next one the
+       * agent's job, not the agent's advertised logins */
+      provider?: "aws";
+      /** the provider's own words for the lapse, read off the failed turn; on the card rather than
+       * an error row of their own, since the card's title already says what happened */
+      detail?: string;
+      /** the refresh command the agent's settings already carry: the agent ran it and still had
+       * no session, so the card names it instead of offering to set it */
+      refresh?: string;
       ts: number;
     }
   | { type: "agent-auth-ok"; ts: number }

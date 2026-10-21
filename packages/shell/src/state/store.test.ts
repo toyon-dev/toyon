@@ -666,6 +666,37 @@ describe("chat folding", () => {
     expect(s.local.a?.chat.map((i) => i.kind === "auth" && i.done)).toEqual([true, true]);
   });
 
+  test("a lapsed AWS session carries its provider and the refresh command already set", () => {
+    const methods = [{ id: "aws-login", name: "log in to AWS", kind: "terminal" as const }];
+    const s = run([
+      hello(wt("a")),
+      agent("a", {
+        type: "agent-auth-required",
+        agent: "claude",
+        agentName: "Claude",
+        methods,
+        rejected: true,
+        provider: "aws",
+        detail: "Token is expired.",
+        refresh: "aws sso login --profile claude",
+        ts: 0,
+      }),
+    ]);
+    expect(s.local.a?.chat).toEqual([
+      {
+        kind: "auth",
+        agent: "claude",
+        agentName: "Claude",
+        methods,
+        rejected: true,
+        provider: "aws",
+        detail: "Token is expired.",
+        refresh: "aws sso login --profile claude",
+        done: false,
+      },
+    ]);
+  });
+
   const questions = [{ id: "question_0", text: "", options: [{ value: "a", label: "A" }] }];
 
   test("a question replaces the tool row it came from, and closes when the answer lands", () => {

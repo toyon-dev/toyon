@@ -156,6 +156,12 @@ export type ChatItem =
       rejected?: boolean;
       /** a method was left out by the managed policy, so the card says where the button went */
       withheld?: boolean;
+      /** the lapsed credential is an AWS session: the card's words are about AWS, not the agent */
+      provider?: "aws";
+      /** the provider's own words, shown under the title in place of an error row */
+      detail?: string;
+      /** the agent's settings already name a refresh command, which did not get a session */
+      refresh?: string;
       done: boolean;
     }
   /** the agent asked something and is blocked until this is answered; `outcome` is what closed it,
@@ -2867,13 +2873,11 @@ function onServer(s: State, msg: StoreServerMsg): State {
       let next = withLocal(s, id, (l) => {
         const chat = applyEvent(l.chat, ev, msg.seq);
         // a call marked as running on in the background has returned to the agent, and a turn's end
-        // or failure closes what it left open: the head moves on those too
+        // or failure closes what it left open: the head moves on those too. A turn refused for
+        // want of a credential is over the same way, with or without an error row before the card
+        const ended = ev.type === "turn-end" || ev.type === "agent-error" || ev.type === "agent-auth-required";
         const moved =
-          ev.type === "tool-start" ||
-          ev.type === "tool-end" ||
-          ev.type === "turn-end" ||
-          ev.type === "agent-error" ||
-          (ev.type === "tool-update" && ev.background);
+          ev.type === "tool-start" || ev.type === "tool-end" || ended || (ev.type === "tool-update" && ev.background);
         const running = moved ? runningOf(chat, l.running) : l.running;
         let turn = l.turn;
         if (ev.type === "turn-start") turn = { edits: false, hmr: false };
@@ -2888,8 +2892,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
         const row = s.rows.find((w) => w.id === id);
         const busy = row?.agent === "working" || row?.agent === "waiting";
         const said = !l.sending ? l : busy ? settled(l) : { ...l, sending: { at: l.sending.at } };
-        const over = ev.type === "turn-end" || ev.type === "agent-error";
-        const base = askSettled(ev.type === "user-message" ? said : over ? settled(l) : l, ev);
+        const base = askSettled(ev.type === "user-message" ? said : ended ? settled(l) : l, ev);
         return {
           // a message sent moves the conversation on from the hit a search landed on
           ...(ev.type === "user-message" ? withoutMark(base, "reveal") : base),
@@ -3368,6 +3371,9 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
           methods: event.methods,
           ...(event.rejected ? { rejected: true } : {}),
           ...(event.withheld ? { withheld: true } : {}),
+          ...(event.provider ? { provider: event.provider } : {}),
+          ...(event.detail ? { detail: event.detail } : {}),
+          ...(event.refresh ? { refresh: event.refresh } : {}),
           done: false,
         },
       ];

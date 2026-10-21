@@ -29,6 +29,16 @@ import { UserError } from "../../core/errors.ts";
 import { fireAndForget, log } from "../../core/log.ts";
 import type { AgentAdapter, AskOpts, AskReply, AuthOutcome, FollowUp, SendOpts } from "../adapter.ts";
 import type { AttachmentStore, Stored } from "../attachments.ts";
+import {
+  AWS_EXPIRED_RE,
+  AWS_LOGIN_METHOD,
+  AWS_REFRESH_METHOD,
+  type AwsAuth,
+  awsLoginCommand,
+  awsMethods,
+  readAwsAuth,
+  setAwsAuthRefresh,
+} from "../awsAuth.ts";
 import { agentModeFor, modeAfterPlan, orderPlanOptions } from "../modes.ts";
 import { markOrigins } from "../origins.ts";
 import { formatOutput } from "../output.ts";
@@ -46,7 +56,7 @@ import {
   parseAuthStatus,
   supportsLogout,
 } from "./authstatus.ts";
-import { BackgroundTasks } from "./background.ts";
+import { BackgroundTasks, claudeConfigDir } from "./background.ts";
 import { parseForm, toContent } from "./elicit.ts";
 import { endOfAsk, mapCommands, mapStopReason, mapUpdate, preempted, release, type ToolMemos } from "./map.ts";
 import { currentValues, type LiveOptions, type OptionCategory, readModeOption, readOptions } from "./options.ts";
@@ -695,18 +705,29 @@ export class AcpSession implements AgentAdapter {
       // over: the row keeps reading waiting from it, not idle
       this.setStatus(this.openHandoffs.size > 0 ? "waiting" : "idle");
     } catch (e) {
-      if (this.conn && (isAuthRequired(e) || this.rejectedCredential(e))) {
+      // an AWS session that lapsed under Claude on Bedrock: the agent's own logins would not help,
+      // so the card gets the daemon's. Read before the generic phrasing, which it can also match
+      const aws = this.conn && AWS_EXPIRED_RE.test(this.describe(e)) ? this.awsAuth() : null;
+      if (this.conn && (aws || isAuthRequired(e) || this.rejectedCredential(e))) {
         const rejected = !isAuthRequired(e);
         // a refused credential is a plain turn failure, so the provider's own words go out first:
-        // without them "not logged in" would contradict an agent that thinks it is
-        if (rejected) this.emit({ type: "agent-error", message: this.describe(e), ts: Date.now() });
+        // without them "not logged in" would contradict an agent that thinks it is. The AWS card
+        // contradicts nothing, so its words ride the card instead of a row above it
+        if (rejected && !aws) this.emit({ type: "agent-error", message: this.describe(e), ts: Date.now() });
         // the process stays: a login runs over the same connection, then the message goes again
         this.refused = item;
         this.emit({
           type: "agent-auth-required",
           agent: this.conn.spec.id,
           agentName: this.conn.spec.name,
-          ...this.offeredMethods(this.conn),
+          ...(aws
+            ? {
+                methods: awsMethods(aws, this.conn.spec.id === "claude"),
+                provider: "aws" as const,
+                detail: this.describe(e),
+                ...(aws.refresh ? { refresh: aws.refresh } : {}),
+              }
+            : this.offeredMethods(this.conn)),
           ...(rejected ? { rejected: true } : {}),
           ts: Date.now(),
         });
@@ -760,6 +781,7 @@ export class AcpSession implements AgentAdapter {
 
   async authenticate(methodId: string, apiKey?: string): Promise<AuthOutcome> {
     const conn = await this.ensureConn("login");
+    if (methodId === AWS_LOGIN_METHOD || methodId === AWS_REFRESH_METHOD) return this.authenticateAws(methodId);
     const method = conn.authMethods.find((m) => m.id === methodId);
     if (!method) throw new UserError(`${conn.spec.name} offers no login method "${methodId}"`);
     if (this.planWithheld(conn, methodId)) {
@@ -793,6 +815,31 @@ export class AcpSession implements AgentAdapter {
     }
     this.loggedIn();
     return { kind: "done" };
+  }
+
+  /** the daemon's own logins for a lapsed AWS session: `aws sso login` as the login tab, or the
+   * setting that has Claude Code run it itself from now on */
+  private async authenticateAws(methodId: string): Promise<AuthOutcome> {
+    const command = awsLoginCommand(this.awsAuth().profile);
+    if (methodId === AWS_LOGIN_METHOD) {
+      // through the login shell, so `aws` is found where the terminal pane finds it
+      return { kind: "terminal", run: { command: process.env.SHELL || "sh", args: ["-lc", command], env: {} } };
+    }
+    const file = setAwsAuthRefresh(this.claudeConfigDir(), command);
+    log.info(this.d.worktreeId, `awsAuthRefresh set to "${command}" in ${file}`);
+    // the setting is read at start: the process that failed goes, and the message sent again
+    // spawns one that refreshes the session itself before it retries the request
+    await this.dropConn("settings changed");
+    this.loggedIn();
+    return { kind: "done" };
+  }
+
+  private awsAuth(): AwsAuth {
+    return readAwsAuth(this.claudeConfigDir(), this.d.cwd);
+  }
+
+  private claudeConfigDir(): string {
+    return this.d.claudeConfigDir ?? claudeConfigDir();
   }
 
   loggedIn() {

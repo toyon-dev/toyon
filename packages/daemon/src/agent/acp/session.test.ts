@@ -1514,6 +1514,84 @@ describe("AcpSession", () => {
     await w.session.close();
   });
 
+  test("a lapsed AWS session gets the daemon's logins, not the agent's, and a setting that keeps it", async () => {
+    const configDir = join(home, `claude-${Math.random().toString(36).slice(2, 8)}`);
+    mkdirSync(configDir, { recursive: true });
+    writeFileSync(join(configDir, "settings.json"), JSON.stringify({ env: { AWS_PROFILE: "claude" }, model: "opus" }));
+    let failures = 1;
+    const fake = fakeAgent(async (p, client) => {
+      if (failures-- > 0)
+        throw new acp.RequestError(
+          -32603,
+          "Internal error: API Error: Could not load AWS credentials · Token is expired. To refresh this SSO session run 'aws sso login' with the corresponding profile.",
+        );
+      return say("ok")(p, client);
+    });
+    const w = world(fake, claudeSpec, 60_000, undefined, { claudeConfigDir: configDir });
+    w.session.send("a");
+    await w.idle();
+    expect(w.session.status).toBe("error");
+    // the provider's words ride the card, not a row of their own
+    expect(w.types()).not.toContain("agent-error");
+    expect(w.events.at(-1)).toMatchObject({
+      type: "agent-auth-required",
+      rejected: true,
+      provider: "aws",
+      detail: expect.stringMatching(/^API Error: Could not load AWS credentials/),
+      methods: [
+        { id: "aws-refresh", kind: "agent" },
+        { id: "aws-login", kind: "terminal" },
+      ],
+    });
+    expect(w.events.at(-1)).not.toHaveProperty("refresh");
+    // the login is the shell's: `aws` is found where the terminal pane finds it
+    expect(await w.session.authenticate("aws-login")).toMatchObject({
+      kind: "terminal",
+      run: { args: ["-lc", "aws sso login --profile claude"] },
+    });
+    expect(w.types()).not.toContain("agent-auth-ok");
+    // the setting goes into the user settings file, the process that failed goes with it, and the
+    // message is sent again on a fresh one that has the setting
+    expect(await w.session.authenticate("aws-refresh")).toEqual({ kind: "done" });
+    expect(JSON.parse(readFileSync(join(configDir, "settings.json"), "utf8"))).toEqual({
+      awsAuthRefresh: "aws sso login --profile claude",
+      env: { AWS_PROFILE: "claude" },
+      model: "opus",
+    });
+    expect(w.links[0]!.killed).toBe(true);
+    await w.idle();
+    expect(w.types()).toContain("agent-auth-ok");
+    expect(w.session.status).toBe("idle");
+    expect(w.links).toHaveLength(2);
+    expect(w.types().filter((ty) => ty === "user-message")).toHaveLength(1);
+    await w.session.close();
+  });
+
+  test("with a refresh command already set, the card names it and offers the login alone", async () => {
+    const configDir = join(home, `claude-${Math.random().toString(36).slice(2, 8)}`);
+    mkdirSync(configDir, { recursive: true });
+    writeFileSync(
+      join(configDir, "settings.json"),
+      JSON.stringify({ awsAuthRefresh: "aws sso login --profile claude" }),
+    );
+    const fake = fakeAgent(async () => {
+      throw new acp.RequestError(
+        -32603,
+        "awsAuthRefresh failed. Check the command in your settings and try running it in a separate terminal.",
+      );
+    });
+    const w = world(fake, claudeSpec, 60_000, undefined, { claudeConfigDir: configDir });
+    w.session.send("a");
+    await w.idle();
+    expect(w.events.at(-1)).toMatchObject({
+      type: "agent-auth-required",
+      provider: "aws",
+      refresh: "aws sso login --profile claude",
+      methods: [{ id: "aws-login" }],
+    });
+    await w.session.close();
+  });
+
   test("a failure that only mentions permission is not read as a credential problem", async () => {
     const fake = fakeAgent(async () => {
       throw new acp.RequestError(-32603, "403 Forbidden: your organization must enable this model");

@@ -29,7 +29,7 @@ describe("an archived worktree's actions", () => {
       "copy transcript path",
       "copy session id",
       "|",
-      "delete for good…",
+      "delete…",
     ]);
     expect(labels(archivedItems(archived(), desk, deps))).not.toContain("copy session id");
   });
@@ -41,7 +41,7 @@ describe("an archived worktree's actions", () => {
       "|",
       "copy branch name",
       "|",
-      "delete for good…",
+      "delete…",
     ]);
   });
 });

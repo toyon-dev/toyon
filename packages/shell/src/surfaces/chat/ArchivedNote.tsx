@@ -24,7 +24,7 @@ export function ArchivedNote({ item }: { item: ArchivedWorktree }) {
   const cost = item.cost !== undefined ? `; the session cost ${dollars(item.cost)}` : "";
   const note = item.restorable
     ? `Toyon kept ${kept}${cost}. A message sent below restores it first.`
-    : `Its commits were not kept, so there is nothing to restore${cost}; its row's menu on the rail can delete it for good.`;
+    : `Its commits were not kept, so there is nothing to restore${cost}; its row's menu on the rail can delete it.`;
   const ago = useAgo(item.archivedAt);
   // what it landed, ahead of what was kept: the landed rows above say it too, but far up a long
   // chat, and this is the last word on it

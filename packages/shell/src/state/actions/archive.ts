@@ -63,12 +63,12 @@ export function archivedItems(
   const gone: MenuItem[] = [
     {
       id: "delete",
-      label: "delete for good…",
+      label: "delete…",
       danger: true,
       onClick: () => {
         if (
           window.confirm(
-            `Delete "${a.title}" for good?\n\nIts chat, attachments and kept commits are deleted, and it can no longer be restored.`,
+            `Delete "${a.title}"?\n\nIts chat, attachments and kept commits go with it, and it cannot be restored.`,
           )
         )
           sock?.send({ t: "delete-archived", archiveId: a.id });

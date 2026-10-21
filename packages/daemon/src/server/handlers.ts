@@ -822,7 +822,9 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
 
   "agent-decide"(msg, _ctx, s) {
     requireRun(s, msg.worktreeId);
-    s.runtime.agentFor(msg.worktreeId)?.answer(msg.askId, { kind: "choice", choiceId: msg.choiceId });
+    s.runtime
+      .agentFor(msg.worktreeId)
+      ?.answer(msg.askId, { kind: "choice", choiceId: msg.choiceId, ...(msg.note ? { note: msg.note } : {}) });
     s.worktrees.markPrompted(msg.worktreeId);
   },
 

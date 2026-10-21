@@ -1473,6 +1473,11 @@ export class AcpSession implements AgentAdapter {
     if (!ask) return log.debug(this.d.worktreeId, `answer for an ask that already closed (${askId})`);
     const skipped = reply.kind === "answers" && !reply.answers;
     ask.settle(skipped ? "skipped" : "answered", reply);
+    // words typed beside a pick: a permission answer is an option id and nothing else, so they
+    // go in as the person's own message right behind the tool result the pick became, the way an
+    // edited plan is sent to its file. The turn is still running, so they steer into it.
+    const note = reply.kind === "choice" ? reply.note?.trim() : undefined;
+    if (note) this.post(note);
     if (skipped || !followUp?.attachments.length) return;
     const headers = ask.headers ?? [];
     const text = headers.length === 1 ? `with my answer to "${headers[0]}"` : "with my answers";

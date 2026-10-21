@@ -2587,6 +2587,61 @@ describe("AcpSession ask cards", () => {
     await w.session.close();
   });
 
+  /** a plan review whose first turn ends once the card is answered, and whose later turns end
+   * at once: what the person types beside the pick arrives as one of those */
+  const planReview = (toolCallId: string) => {
+    let turns = 0;
+    return fakeAgent(async (p, client) => {
+      if (++turns > 1) return { stopReason: "end_turn" };
+      await client.request(acp.methods.client.session.requestPermission, {
+        sessionId: p.sessionId,
+        toolCall: {
+          toolCallId,
+          title: "Approve Plan",
+          kind: "switch_mode",
+          content: [{ type: "content", content: { type: "text", text: "# the plan\n\nthree steps" } }],
+        },
+        options: [
+          { optionId: "exit_plan_default", name: "Yes, manually approve edits", kind: "allow_once" },
+          { optionId: "cancel", name: "No, keep planning", kind: "reject_once" },
+        ],
+      });
+      return { stopReason: "end_turn" };
+    });
+  };
+
+  test("words typed beside the no follow it to the agent as the person's own message", async () => {
+    const fake = planReview("t4");
+    const w = world(fake, claudeSpec, 60_000, undefined, {
+      onPlan: (md) => writePlanDoc(wt, md),
+      planEdited: async (path, proposed) => planEdited(wt, path, proposed),
+    });
+    w.session.send("plan it");
+    await waitFor(() => !!openAsk(w.events));
+    const card = w.events.at(-1) as Extract<AgentEvent, { type: "agent-permission" }>;
+    w.session.answer(card.id, { kind: "choice", choiceId: "cancel", note: "  also cover the parked case  " });
+    await waitFor(() => fake.prompts.length > 1);
+    expect((fake.prompts.at(-1)!.prompt[0] as { text: string }).text).toBe("also cover the parked case");
+    const end = w.events.find((e) => e.type === "agent-ask-end" && e.id === card.id);
+    expect(end).toMatchObject({ outcome: "answered", choiceId: "cancel" });
+    await w.session.close();
+  });
+
+  test("a yes with nothing but spaces beside it says nothing further", async () => {
+    const fake = planReview("t5");
+    const w = world(fake, claudeSpec, 60_000, undefined, {
+      onPlan: (md) => writePlanDoc(wt, md),
+      planEdited: async (path, proposed) => planEdited(wt, path, proposed),
+    });
+    w.session.send("plan it");
+    await waitFor(() => !!openAsk(w.events));
+    const card = w.events.at(-1) as Extract<AgentEvent, { type: "agent-permission" }>;
+    w.session.answer(card.id, { kind: "choice", choiceId: "exit_plan_default", note: "   " });
+    await w.idle();
+    expect(fake.prompts).toHaveLength(1);
+    await w.session.close();
+  });
+
   test("Codex sends its plan as rawInput rather than content, and the card still has it", async () => {
     const fake = fakeAgent(async (p, client) => {
       const outcome = await client.request(acp.methods.client.session.requestPermission, {

@@ -887,8 +887,16 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
     attachments,
     boxId,
   }),
-  /** click one of the options on a permission card */
-  z.object({ t: z.literal("agent-decide"), worktreeId: id, askId: z.string().max(64), choiceId: z.string().max(200) }),
+  /** click one of the options on a permission card. The agent's request takes the option alone,
+   * so `note`, the words typed beside the pick, follows it into the turn as a message of the
+   * person's own */
+  z.object({
+    t: z.literal("agent-decide"),
+    worktreeId: id,
+    askId: z.string().max(64),
+    choiceId: z.string().max(200),
+    note: z.string().max(10_000).optional(),
+  }),
   /** answer a handoff card: go makes the worktree in the other project, with `note` added to the
    * message the agent wrote; not go closes the card */
   z.object({

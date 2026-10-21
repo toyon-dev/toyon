@@ -26,8 +26,10 @@ export type AuthOutcome =
   | { kind: "done" };
 
 /** how a person answered an ask card. `answers` absent means they skipped the questions, which
- * the agent is told about rather than being cut off mid-turn. */
-export type AskReply = { kind: "answers"; answers?: AskAnswer[] } | { kind: "choice"; choiceId: string };
+ * the agent is told about rather than being cut off mid-turn. A choice's `note` is what was typed
+ * beside the pick; the request it answers takes the option alone, so the note goes to the agent
+ * as a message behind it. */
+export type AskReply = { kind: "answers"; answers?: AskAnswer[] } | { kind: "choice"; choiceId: string; note?: string };
 
 /** what was attached to the card an answer closes. An elicitation's answer carries only words,
  * so the pictures follow it into the turn as a message of the person's own, right behind it. */

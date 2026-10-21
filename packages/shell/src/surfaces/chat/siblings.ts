@@ -46,9 +46,16 @@ export function siblingWorktrees(
 const plain = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
 
 /** whether a `@` query names the worktree: by its title, its branch, its id (which names its
- * transcript) or its directory, each read without punctuation or spaces */
+ * transcript) or its directory, each read without punctuation or spaces. A query ending in a
+ * space is the title's next word about to be typed, which only a name with more left can take:
+ * `@stop ` still names "Stop ignored", but `@toyon/stop-ignored ` names it whole, so the space
+ * after it is the sentence going on and the menu has nothing left to offer. */
 export function matchesSibling(query: string, w: Pick<Sibling, "title" | "branch" | "id" | "dir">): boolean {
   const q = plain(query);
   if (!q) return true;
-  return [w.title, w.branch, w.id, w.dir].some((name) => plain(name).includes(q));
+  const more = /\s$/.test(query);
+  return [w.title, w.branch, w.id, w.dir].some((name) => {
+    const n = plain(name);
+    return n.includes(q) && (!more || !n.endsWith(q));
+  });
 }

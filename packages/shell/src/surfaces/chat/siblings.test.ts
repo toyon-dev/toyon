@@ -68,4 +68,16 @@ describe("matchesSibling", () => {
     expect(matchesSibling("-", w)).toBe(true);
     expect(matchesSibling("readme", w)).toBe(false);
   });
+
+  test("a trailing space holds only while a name has more to come", () => {
+    // the title's next word is about to be typed
+    expect(matchesSibling("message ", w)).toBe(true);
+    expect(matchesSibling("message flash ", w)).toBe(true);
+    // the name is typed whole: the space after it is the sentence going on
+    expect(matchesSibling("toyon/message-flash-bug ", w)).toBe(false);
+    expect(matchesSibling("message flash bug ", w)).toBe(false);
+    expect(matchesSibling("wt-108c ", w)).toBe(false);
+    // without the space the whole name still names it, so the row is offered to pick
+    expect(matchesSibling("toyon/message-flash-bug", w)).toBe(true);
+  });
 });

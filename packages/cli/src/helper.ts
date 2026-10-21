@@ -6,7 +6,7 @@
 
 import { fileURLToPath } from "node:url";
 import { APP_SCHEME } from "@toyon/shared";
-import { openShell } from "./app.ts";
+import { focusShell, openShell } from "./app.ts";
 import { ensureDaemon, post } from "./daemon.ts";
 
 export type HelperPlan = { kind: "start" } | { kind: "open"; paths: string[] };
@@ -35,10 +35,14 @@ export async function helper(args: string[]): Promise<number> {
   const daemon = await ensureDaemon();
   if (!daemon) return 1;
   if (plan.kind === "start") return 0;
+  // a shell up already took every file: it comes forward instead of a second window opening
+  let shown = true;
   for (const path of plan.paths) {
     const res = await post("/open", daemon.token, { path });
     if (!res.ok) console.error(`could not open ${path}: ${await res.text()}`);
+    else if (!((await res.json()) as { delivered: boolean }).delivered) shown = false;
   }
-  openShell(daemon);
+  if (shown) focusShell();
+  else openShell(daemon);
   return 0;
 }

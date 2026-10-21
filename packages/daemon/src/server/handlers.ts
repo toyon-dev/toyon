@@ -754,6 +754,14 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     ctx.reply({ t: "folder-chosen", folder: path ? await describeFolder(path) : null });
   },
 
+  // the project picker's file button: the file picked in Finder is opened as a link in the chat
+  // opens one, to the socket that asked. A cancel is answered with nothing, since the picker that
+  // asked has closed; a refusal is thrown, so it reads as a toast there.
+  async "choose-file"(msg, ctx, s) {
+    const path = await s.folderDialog.choose(msg.start, "file");
+    if (path) ctx.reply(openedFrame(await s.opens.file(path)));
+  },
+
   "cancel-folder"(_msg, _ctx, s) {
     // the choose waiting on the dialog answers null, which is what tells the form it is over
     s.folderDialog.cancel();

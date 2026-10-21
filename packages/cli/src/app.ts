@@ -84,6 +84,54 @@ export function openShell(daemon: Daemon): void {
   console.log(`tip: ${where}install Toyon as an app from the top bar; toyon then opens in its own window`);
 }
 
+/** A shell up already took what was opened: bring it forward and open nothing new. The installed
+ * app comes forward through its own bundle, the one its Dock icon is, which activates the window
+ * it has rather than starting another; a tab in a browser has no handle to take it by, so there
+ * the terminal's line is all there is. */
+export function focusShell(): void {
+  if (process.platform !== "darwin") return;
+  const bundle = installedAppBundle();
+  if (!bundle) return;
+  const child = spawn("open", [bundle], { stdio: "ignore" });
+  child.on("error", () => {}); // the file is already on screen; the window staying back is no loss
+  child.unref();
+}
+
+/** the installed Toyon app's bundle on disk: Chromium writes one per installed app into the
+ * person's Applications folder (under "<Browser> Apps.localized") and keeps a copy beside the
+ * app's data; its plist names the app id. The first Chromium that has the app wins, as it does
+ * for launching. */
+export function installedAppBundle(): string | null {
+  const apps = join(homedir(), "Applications");
+  const shelves = existsSync(apps)
+    ? readdirSync(apps, { withFileTypes: true })
+        .filter((d) => d.isDirectory() && d.name.endsWith(".localized"))
+        .map((d) => join(apps, d.name))
+    : [];
+  for (const app of CHROMIUMS) {
+    const id = findPwaId(app);
+    if (!id) continue;
+    const kept = profilesOf(app).map((p) => join(p, "Web Applications", `_crx_${id}`));
+    const hit = [...shelves, ...kept].flatMap(bundlesIn).find((b) => {
+      try {
+        return readFileSync(join(b, "Contents", "Info.plist"), "latin1").includes(id);
+      } catch {
+        // a bundle with no readable plist is not ours
+        return false;
+      }
+    });
+    if (hit) return hit;
+  }
+  return null;
+}
+
+function bundlesIn(dir: string): string[] {
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir)
+    .filter((n) => n.endsWith(".app"))
+    .map((n) => join(dir, n));
+}
+
 /** launched: an installed app is opening; uninstalled: a Chromium (the first found) is here but
  * holds no app; none: no Chromium */
 function launchInstalledApp(): { kind: "launched" } | { kind: "uninstalled"; browser: string } | { kind: "none" } {

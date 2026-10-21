@@ -21,11 +21,13 @@ const repo = (name: string, path: string): RepoInfo => ({
   configFile: ".toyon/settings.json",
   needsSetup: false,
 });
-const dir = (name: string, path: string, isRepo = false): PathEntry => ({ name, path, isRepo });
+const dir = (name: string, path: string, isRepo = false): PathEntry => ({ name, path, isRepo, isFile: false });
+const file = (name: string, path: string): PathEntry => ({ name, path, isRepo: false, isFile: true });
 const target = (t: Partial<PathTarget>): PathTarget => ({
   exists: false,
   isDir: false,
   isRepo: false,
+  isFile: false,
   parentExists: true,
   ...t,
 });
@@ -221,8 +223,21 @@ describe("rowsFor: a path", () => {
     expect(rows("~", { target: plain })).toEqual([]);
     expect(rows("~/", { target: plain })).toEqual([]);
     expect(rows("/", { target: plain })).toEqual([]);
-    // a file is neither a step nor a project
-    expect(rows("~/Projects/notes.txt", { target: target({ exists: true }) })).toEqual([]);
+    // a file is neither a step nor a project: its own row, listed as an entry, is all there is
+    expect(rows("~/Projects/notes.txt", { target: target({ exists: true, isFile: true }) })).toEqual([]);
+  });
+
+  test("a file in the listing is a row that opens it, where the daemon put it", () => {
+    const notes = file("notes.txt", "~/Projects/notes.txt");
+    // a folder that holds projects, so the listing is all there is
+    const repos = [repo("foo", "/Users/k/Projects/foo")];
+    const plain = target({ exists: true, isDir: true });
+    const out = rows("~/Projects/", { entries: [...entries, notes], target: plain, repos });
+    expect(out).toEqual([...entries.map((entry) => ({ kind: "dir" as const, entry })), { kind: "file", entry: notes }]);
+    // typed out in full, the file is the one entry its name matches, and nothing is made of it
+    expect(rows("~/Projects/notes.txt", { entries: [notes], target: target({ exists: true, isFile: true }) })).toEqual([
+      { kind: "file", entry: notes },
+    ]);
   });
 
   test("an existing repo can be opened, trailing slash or not", () => {
@@ -288,8 +303,12 @@ describe("folderRows", () => {
     expect(kinds(out)).toEqual(["here", "up", "work", "toys"]);
   });
 
-  test("a project is not a place to put one", () => {
-    const entries = [dir("toyon", "~/Projects/toyon", true), dir("work", "~/Projects/work")];
+  test("a project is not a place to put one, and nor is a file", () => {
+    const entries = [
+      dir("toyon", "~/Projects/toyon", true),
+      dir("work", "~/Projects/work"),
+      file("a.md", "~/Projects/a.md"),
+    ];
     expect(kinds(folders("~/Projects/", { entries }))).toEqual(["here", "up", "work"]);
     expect(folders("~/Projects/toyon/", { target: target({ exists: true, isDir: true, isRepo: true }) })[0]?.kind).toBe(
       "up",

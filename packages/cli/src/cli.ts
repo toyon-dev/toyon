@@ -6,7 +6,7 @@
 import { existsSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import pkg from "../package.json" with { type: "json" };
-import { openShell } from "./app.ts";
+import { focusShell, openShell } from "./app.ts";
 import { type Command, HELP, parseArgs } from "./args.ts";
 import { behind, ensureDaemon, health, post, shellLine } from "./daemon.ts";
 import { deploy } from "./deploy/fly.ts";
@@ -48,8 +48,9 @@ async function open(cmd: Extract<Command, { kind: "open" }>): Promise<number> {
   const daemon = await ensureDaemon();
   if (!daemon) return 1;
 
-  // a file is opened in the shell: in its worktree when it sits in one, on its own otherwise. The
-  // daemon holds it for the window this goes on to open.
+  // a file is opened in the shell: in its worktree when it sits in one, on its own otherwise. A
+  // shell up already shows it and is brought forward; with none, the daemon holds the file for the
+  // window this goes on to open.
   const file = explicit && existsSync(target) && statSync(target).isFile();
   if (file) {
     const res = await post("/open", daemon.token, { path: target });
@@ -57,7 +58,12 @@ async function open(cmd: Extract<Command, { kind: "open" }>): Promise<number> {
       console.error(`could not open ${target}: ${await res.text()}`);
       return 1;
     }
-    const opened = (await res.json()) as { kind: string };
+    const opened = (await res.json()) as { kind: string; delivered: boolean };
+    if (opened.delivered) {
+      console.log(`toyon: ${target} is open in Toyon`);
+      focusShell();
+      return 0;
+    }
     console.log(opened.kind === "file" ? `toyon: opening ${target} in its project` : `toyon: opening ${target}`);
   } else if (register) {
     const res = await post("/register", daemon.token, { path: target });

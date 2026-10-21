@@ -37,6 +37,12 @@ export type Opened =
 /** what a shell is told to show; a repo opening is the repos frame, as a register always was */
 export type OpenedFile = Exclude<Opened, { kind: "repo" }>;
 
+/** the answer to an open from outside: what the path became, and whether a shell connected now
+ * is showing it already. The launcher that asked opens a window only when none is, rather than
+ * putting a second one beside the one that just took the file. A repo is never `delivered`: the
+ * window it registers into is still the one the launcher opens. */
+export type OpenReply = Opened & { delivered: boolean };
+
 /** How long an open waits for a shell. The Dock icon boots the daemon and the window together, and
  * the window's socket comes up seconds after the file arrives; a file nobody came for in this long
  * was not meant for the window that opens next week. */
@@ -65,7 +71,7 @@ export class OpenService {
     return this.d.now?.() ?? Date.now();
   }
 
-  async open(raw: string): Promise<Opened> {
+  async open(raw: string): Promise<OpenReply> {
     try {
       return await this.decide(raw);
     } catch (e) {
@@ -75,16 +81,19 @@ export class OpenService {
     }
   }
 
-  private async decide(raw: string): Promise<Opened> {
+  private async decide(raw: string): Promise<OpenReply> {
     const { path, st } = await this.locate(raw);
     if (st.isDirectory()) {
       if (!(await isGitRepo(path))) throw new UserError(`${raw} is not a git repository: open one, or a file`);
-      return { kind: "repo", repoId: (await this.d.register(path)).id };
+      return { kind: "repo", repoId: (await this.d.register(path)).id, delivered: false };
     }
     const opened = await this.openFile(raw, path, st);
-    this.pending.push({ opened, at: this.now() });
+    const entry = { opened, at: this.now() };
+    this.pending.push(entry);
+    // the socket server answers the emit in the same tick: with a shell up it broadcasts the file
+    // and calls `delivered`, which empties the queue, so the entry still queued means no shell saw it
     this.d.hub.emit("opened", opened);
-    return opened;
+    return { ...opened, delivered: !this.pending.includes(entry) };
   }
 
   /** A file a shell asked for by path, from a link in its chat: answered to that shell alone, so

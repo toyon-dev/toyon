@@ -1,16 +1,18 @@
-// The OS folder dialog, behind the new-project page's folder controls. It opens on the machine the
-// daemon runs on, which is the machine the person is at only for a local macOS daemon; hello's
-// `folderDialog` tells the shell whether this is one.
+// The OS folder dialog, behind the new-project page's folder controls, and the OS file dialog
+// behind the project picker's file button. Either opens on the machine the daemon runs on, which is
+// the machine the person is at only for a local macOS daemon; hello's `folderDialog` tells the
+// shell whether this is one.
 
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import type { Subprocess } from "bun";
 import { UserError } from "./errors.ts";
 
-/** the dialog's own line, by what the page asked it for */
+/** the dialog's own line, by what the page asked it for, and whether it picks a file or a folder */
 const PROMPTS = {
-  location: "Choose where the new project goes",
-  open: "Choose a project folder to open",
+  location: { prompt: "Choose where the new project goes", pick: "folder" },
+  open: { prompt: "Choose a project folder to open", pick: "folder" },
+  file: { prompt: "Choose a file to open", pick: "file" },
 } as const;
 
 export type FolderPurpose = keyof typeof PROMPTS;
@@ -19,15 +21,15 @@ export type FolderPurpose = keyof typeof PROMPTS;
 // quote in a folder name is data and not script. osascript is a background process: without
 // `activate` its dialog opens in front but without the keyboard, and an Escape meant for the dialog
 // reaches the browser behind it instead.
-const SCRIPT = [
+const script = (pick: "folder" | "file") => [
   "on run argv",
   "activate",
-  "POSIX path of (choose folder with prompt (item 1 of argv) default location (POSIX file (item 2 of argv)))",
+  `POSIX path of (choose ${pick} with prompt (item 1 of argv) default location (POSIX file (item 2 of argv)))`,
   "end run",
 ];
 
 export interface FolderDialog {
-  /** the folder picked, or null when cancelled */
+  /** the folder (or, for `file`, the file) picked, or null when cancelled */
   choose(start: string, purpose: FolderPurpose): Promise<string | null>;
   /** close the dialog if one is up; the `choose` waiting on it answers null */
   cancel(): void;
@@ -45,7 +47,8 @@ export function folderDialog(): FolderDialog {
     // a start folder that is not there makes AppleScript refuse the whole dialog
     const from = typed.startsWith("/") && existsSync(typed) ? typed : homedir();
     cancelled = false;
-    const p = Bun.spawn(["osascript", ...SCRIPT.flatMap((line) => ["-e", line]), PROMPTS[purpose], from], {
+    const { prompt, pick } = PROMPTS[purpose];
+    const p = Bun.spawn(["osascript", ...script(pick).flatMap((line) => ["-e", line]), prompt, from], {
       stdout: "pipe",
       stderr: "pipe",
       stdin: "ignore",
@@ -66,7 +69,9 @@ export function folderDialog(): FolderDialog {
   return {
     choose(start, purpose) {
       if (process.platform !== "darwin") {
-        return Promise.reject(new UserError("choosing a folder in Finder is only available on macOS"));
+        return Promise.reject(
+          new UserError(`choosing a ${PROMPTS[purpose].pick} in Finder is only available on macOS`),
+        );
       }
       if (!open) {
         open = ask(start, purpose).finally(() => {

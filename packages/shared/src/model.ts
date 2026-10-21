@@ -230,13 +230,15 @@ export interface UpdateCheck {
   latest: string | null;
 }
 
-/** one directory offered by the project picker's path completion */
+/** one entry offered by the project picker's path completion: a folder, or a file to open */
 export interface PathEntry {
   /** absolute path, tilde-collapsed for display and for typing back in */
   path: string;
   name: string;
   /** a git repo, so it can be opened as a project; otherwise a folder to descend into */
   isRepo: boolean;
+  /** a regular file: picking it opens the file, in its project or on its own */
+  isFile: boolean;
 }
 
 /** what the picker's typed path *is*, as opposed to what is inside it. Without this the picker
@@ -247,6 +249,8 @@ export interface PathTarget {
   exists: boolean;
   isDir: boolean;
   isRepo: boolean;
+  /** a regular file, which is opened rather than made into anything */
+  isFile: boolean;
   /** its parent exists, which is what decides whether one new folder may be made here */
   parentExists: boolean;
 }

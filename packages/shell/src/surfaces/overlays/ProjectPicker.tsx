@@ -1,5 +1,5 @@
 import { isOwned, projectOrder, type RepoInfo, type WorktreeStatus } from "@toyon/shared";
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useRef } from "react";
 import { machineLine } from "../../app/machineLine.ts";
 import { machineItems } from "../../state/actions/machine.ts";
 import { importItems, initProject, openProject, projectItems } from "../../state/actions/project.ts";
@@ -14,6 +14,7 @@ import {
   useStore,
 } from "../../state/context.tsx";
 import { edgeByOrigin } from "../../state/machines.ts";
+import { openTypedPath } from "../../state/openOutside.ts";
 import { newProjectState, type ProjectsOverlay } from "../../state/store.ts";
 import { IconButton } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
@@ -24,11 +25,11 @@ import { isBusy } from "../util.ts";
 import { PaletteRow } from "./PaletteRow.tsx";
 import { defaultParent, looksLikePath, type Row, rowsFor } from "./projectPicker.ts";
 
-/** ⌘O / the top-left pill: switch the shell to another registered repo, type a path to open one,
- * or make one that is not there yet. Switching only changes what is on screen; the daemon keeps
- * every project's procs running. A typed path completes against the filesystem, a folder with no
- * git in it is offered as a project to start where it is, and a name or git URL matching nothing
- * becomes an offer to create or clone.
+/** ⌘O / the top-left pill: switch the shell to another registered repo, type a path to open one
+ * (or a file), or make one that is not there yet. Switching only changes what is on screen; the
+ * daemon keeps every project's procs running. A typed path completes against the filesystem, a
+ * folder with no git in it is offered as a project to start where it is, a file opens in the
+ * editor, and a name or git URL matching nothing becomes an offer to create or clone.
  *
  * Three forms, one component: `pill` drops out of the pill and takes the bar over like an address
  * bar; `center` is the same switcher over the preview, where the eyes are when a key opened it;
@@ -55,6 +56,10 @@ export function ProjectPicker({
   const paths = useStore((s) => s.paths);
   const home = useStore((s) => s.home);
   const pending = useStore((s) => s.pending);
+  // the daemon can put a Finder dialog where the person is: a local macOS daemon
+  const canAskFinder = useStore((s) => s.folderDialog);
+  // what is typed, for the Finder dialog to open in the folder being walked
+  const typed = useRef("");
   // projects in the rail's order, the one last sent to first; the daemon lists them as registered
   const ordered = useMemo(() => projectOrder(repos, rows), [repos, rows]);
   // the other machines' projects, each list read off that machine's store and put in the same
@@ -73,6 +78,7 @@ export function ProjectPicker({
   // debounced by the picker; only path-shaped queries reach the daemon
   const onQuery = useCallback(
     (q: string) => {
+      typed.current = q;
       if (looksLikePath(q)) sock?.send({ t: "browse-path", path: q });
     },
     [sock],
@@ -123,6 +129,15 @@ export function ProjectPicker({
 
   /** the disk form: the folder button and the "open folder" row are one way in, said twice */
   const browse = () => dispatch({ a: "open", overlay: { kind: "projects", form: "disk" } });
+  /** a file picked in Finder opens as a typed one does; the dialog starts in the folder being
+   * walked, and the picker goes, since the dialog is where the choosing happens now */
+  const chooseFile = () => {
+    const q = typed.current.trim();
+    const cut = q.lastIndexOf("/");
+    const start = looksLikePath(q) && cut >= 0 ? q.slice(0, cut) || "/" : "~";
+    sock?.send({ t: "choose-file", start });
+    finish();
+  };
   /** the add-machine card takes this overlay's place */
   const addMachine = () => dispatch({ a: "open", overlay: { kind: "devices" } });
   /** a project on another machine: that machine comes on screen, open on the project */
@@ -145,7 +160,13 @@ export function ProjectPicker({
         )
       }
       trailing={
-        form === "disk" ? undefined : <IconButton icon="folder" label="Find a project on disk" onClick={browse} />
+        form === "disk" ? (
+          canAskFinder ? (
+            <IconButton icon="file" label="Open a file from Finder" onClick={chooseFile} />
+          ) : undefined
+        ) : (
+          <IconButton icon="folder" label="Find a project or file on disk" onClick={browse} />
+        )
       }
       items={[]}
       filter={filter}
@@ -168,30 +189,41 @@ export function ProjectPicker({
             : r.repo.id
           : r.kind === "dir"
             ? `d:${r.entry.path}`
-            : r.kind === "open"
-              ? `open:${r.path}`
-              : r.kind === "init"
-                ? `init:${r.path}`
-                : r.kind === "pending"
-                  ? `p:${r.pending.id}`
-                  : r.kind === "clone"
-                    ? `clone:${r.url}`
-                    : r.kind === "new"
-                      ? "new-project"
-                      : r.kind === "disk"
-                        ? "open-folder"
-                        : r.kind === "add-machine"
-                          ? "add-machine"
-                          : r.kind === "machine"
-                            ? `machine:${r.machine.origin}`
-                            : `new:${r.parent ?? ""}/${r.name}`
+            : r.kind === "file"
+              ? `f:${r.entry.path}`
+              : r.kind === "open"
+                ? `open:${r.path}`
+                : r.kind === "init"
+                  ? `init:${r.path}`
+                  : r.kind === "pending"
+                    ? `p:${r.pending.id}`
+                    : r.kind === "clone"
+                      ? `clone:${r.url}`
+                      : r.kind === "new"
+                        ? "new-project"
+                        : r.kind === "disk"
+                          ? "open-folder"
+                          : r.kind === "add-machine"
+                            ? "add-machine"
+                            : r.kind === "machine"
+                              ? `machine:${r.machine.origin}`
+                              : `new:${r.parent ?? ""}/${r.name}`
       }
       rowClass={(r) =>
         cx("picker-row", (r.kind === "new" || r.kind === "disk" || r.kind === "add-machine") && "new-project-row")
       }
       onQuery={onQuery}
-      // a folder completes to itself with a trailing slash, so tab keeps walking down the tree
-      completionOf={(r) => (r.kind === "dir" ? (r.entry.isRepo ? r.entry.path : `${r.entry.path}/`) : null)}
+      // a folder completes to itself with a trailing slash, so tab keeps walking down the tree; a
+      // file is the end of the path
+      completionOf={(r) =>
+        r.kind === "dir"
+          ? r.entry.isRepo
+            ? r.entry.path
+            : `${r.entry.path}/`
+          : r.kind === "file"
+            ? r.entry.path
+            : null
+      }
       // a plain folder is a step on the way, not a project: descend and keep the picker up
       narrowTo={(r) => (r.kind === "dir" && !r.entry.isRepo ? `${r.entry.path}/` : null)}
       onPick={(r) => {
@@ -209,6 +241,7 @@ export function ProjectPicker({
         else if (r.kind === "repo" && r.machine) goElsewhere(r.machine.origin, r.repo.id);
         else if (r.kind === "repo") dispatch({ a: "activate-repo", id: r.repo.id });
         else if (r.kind === "open") open(r.path);
+        else if (r.kind === "file") openTypedPath(sock, r.entry.path);
         else if (r.kind === "init") initProject(deps, r.path);
         else if (r.kind === "dir")
           open(r.entry.path); // only repo folders get here; narrowTo takes the rest
@@ -268,6 +301,8 @@ export function ProjectPicker({
           />
         ) : r.kind === "dir" ? (
           <PaletteRow label={r.entry.name} hint={r.entry.isRepo ? "git repo" : undefined} />
+        ) : r.kind === "file" ? (
+          <PaletteRow label={r.entry.name} hint="file" />
         ) : r.kind === "open" ? (
           <PaletteRow label={`open ${r.path}`} hint="register with this daemon" />
         ) : r.kind === "init" ? (
@@ -288,7 +323,7 @@ export function ProjectPicker({
             label={
               <>
                 <Icon name="folder" className="icon-inline" />
-                open folder
+                open folder or file
               </>
             }
           />

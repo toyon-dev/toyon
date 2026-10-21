@@ -30,7 +30,7 @@ import {
   previewGrant,
   sameSecret,
 } from "../core/remote.ts";
-import type { Opened } from "../files/open.ts";
+import type { OpenReply } from "../files/open.ts";
 import type { RepoRegistry } from "../repos/registry.ts";
 import type { PreviewData, PreviewHandler } from "../runtime/proxy.ts";
 import { preflight, withCors } from "./cors.ts";
@@ -93,7 +93,7 @@ export interface HttpOpts {
   bootstrap: () => Promise<unknown>;
   /** a path from outside the shell (the Dock icon, `toyon <path>`): a repo registers, a file
    * opens in its worktree or is granted; a `UserError` is the person's to read */
-  open: (path: string) => Promise<Opened>;
+  open: (path: string) => Promise<OpenReply>;
   /** ask for a restart; answers a refusal, or null having restarted or queued behind a reply.
    * `now` does not queue. */
   restart: (now: boolean) => Promise<string | null>;
@@ -303,9 +303,9 @@ export function createFetch(opts: HttpOpts) {
       }
     }
 
-    // CLI and the Dock icon: open a path, whatever it is. A shell connected now is told at once; one
-    // that connects within the next while is told then, since the launcher opens the window after
-    // this returns.
+    // CLI and the Dock icon: open a path, whatever it is. A shell connected now is told at once, and
+    // the reply says so, so the launcher opens no second window; with none, one that connects
+    // within the next while is told then, since the launcher opens the window after this returns.
     if (url.pathname === "/open" && req.method === "POST") {
       if (!authed(req)) return unauthorized();
       const body = (await req.json().catch(() => ({}))) as { path?: string };

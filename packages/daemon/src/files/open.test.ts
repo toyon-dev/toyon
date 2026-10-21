@@ -53,13 +53,25 @@ function setup() {
     writeFileSync(p, content);
     return p;
   };
-  return { t, state, opens, registered, found, emitted, refusals, root, outside, tick: (ms: number) => (now += ms) };
+  return {
+    t,
+    state,
+    hub,
+    opens,
+    registered,
+    found,
+    emitted,
+    refusals,
+    root,
+    outside,
+    tick: (ms: number) => (now += ms),
+  };
 }
 
 describe("what a path opens as", () => {
   test("a git repo registers, and is not held for a shell", async () => {
     const { t, opens, registered, emitted } = setup();
-    expect(await opens.open(t.repo)).toEqual({ kind: "repo", repoId: "r1" });
+    expect(await opens.open(t.repo)).toEqual({ kind: "repo", repoId: "r1", delivered: false });
     // registered by its real path: a temp dir on macOS is reached through a symlink
     expect(registered).toEqual([realpathSync(t.repo)]);
     expect(emitted).toEqual([]);
@@ -83,11 +95,13 @@ describe("what a path opens as", () => {
       kind: "file",
       worktreeId: "wmain",
       path: "README.md",
+      delivered: false,
     });
     expect(await opens.open(join(t.repo, "src", "a.ts"))).toEqual({
       kind: "file",
       worktreeId: "wmain",
       path: "src/a.ts",
+      delivered: false,
     });
     expect(emitted.map((o) => o.kind)).toEqual(["file", "file"]);
   });
@@ -95,7 +109,11 @@ describe("what a path opens as", () => {
   test("a symlink into a worktree is the worktree's file; a tilde is the home", async () => {
     const { t, opens, root } = setup();
     symlinkSync(join(t.repo, "README.md"), join(root, "link.md"));
-    expect(await opens.open(join(root, "link.md"))).toEqual({ kind: "file", worktreeId: "wmain", path: "README.md" });
+    expect(await opens.open(join(root, "link.md"))).toMatchObject({
+      kind: "file",
+      worktreeId: "wmain",
+      path: "README.md",
+    });
   });
 
   test("a found worktree counts, and the deepest root wins", async () => {
@@ -103,7 +121,7 @@ describe("what a path opens as", () => {
     const nested = join(t.repo, "nested");
     sh(t.repo, GIT, "worktree", "add", "-q", nested, "-b", "nested");
     found.push({ id: "disc-1", path: nested });
-    expect(await opens.open(join(nested, "README.md"))).toEqual({
+    expect(await opens.open(join(nested, "README.md"))).toMatchObject({
       kind: "file",
       worktreeId: "disc-1",
       path: "README.md",
@@ -111,7 +129,7 @@ describe("what a path opens as", () => {
     const other = join(root, "other");
     sh(t.repo, GIT, "worktree", "add", "-q", other, "-b", "other");
     found.push({ id: "disc-2", path: other });
-    expect(await opens.open(join(other, "README.md"))).toEqual({
+    expect(await opens.open(join(other, "README.md"))).toMatchObject({
       kind: "file",
       worktreeId: "disc-2",
       path: "README.md",
@@ -149,7 +167,7 @@ describe("what a path opens as", () => {
     });
     expect(o.version).not.toBeNull();
     expect(o.id).toHaveLength(10);
-    expect(emitted).toEqual([o]);
+    expect(emitted.map((e) => (e.kind === "loose" ? e.id : e.kind))).toEqual([o.id]);
   });
 
   test("a binary is granted empty and marked; a picture is served by its grant, anything else is not", async () => {
@@ -218,10 +236,15 @@ describe("an open waiting for a shell", () => {
     expect(opens.takePending()).toEqual([]);
   });
 
-  test("a shell told at once leaves nothing waiting", async () => {
-    const { opens, outside } = setup();
-    await opens.open(outside("a.md", "a"));
+  test("a shell told at once leaves nothing waiting, and the reply says the shell has it", async () => {
+    const { opens, outside, hub } = setup();
+    // with no shell up the launcher is told so, and goes on to open the window the file waits for
+    expect((await opens.open(outside("a.md", "a"))).delivered).toBe(false);
     opens.delivered();
+    expect(opens.takePending()).toEqual([]);
+    // the socket server answers the emit in the same tick when a shell is connected
+    hub.on("opened", () => opens.delivered());
+    expect((await opens.open(outside("b.md", "b"))).delivered).toBe(true);
     expect(opens.takePending()).toEqual([]);
   });
 });

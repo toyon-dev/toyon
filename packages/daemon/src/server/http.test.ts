@@ -82,6 +82,7 @@ const opts: HttpOpts = {
       binary: false,
       tooLarge: false,
       version: "v1",
+      delivered: path === "/shown.md",
     };
   },
   restart: async (now) => {
@@ -818,7 +819,7 @@ describe("/open", () => {
     expect(boom?.status).toBe(500);
     expect(await boom?.text()).not.toContain("disk");
   });
-  test("success says what the path became", async () => {
+  test("success says what the path became, and whether a shell is showing it already", async () => {
     const r = await fetch(post({ path: "/notes.md" }), srv());
     expect(await r?.json()).toEqual({
       kind: "loose",
@@ -829,7 +830,12 @@ describe("/open", () => {
       binary: false,
       tooLarge: false,
       version: "v1",
+      delivered: false,
     });
+    // the launcher reads this to leave the window that took the file alone
+    const shown = await fetch(post({ path: "/shown.md" }), srv());
+    const body = (await shown?.json()) as { delivered: boolean } | undefined;
+    expect(body?.delivered).toBe(true);
   });
 });
 

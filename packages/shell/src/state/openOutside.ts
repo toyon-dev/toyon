@@ -16,9 +16,10 @@ export const isOpenedMsg = (m: ServerMsg): m is OpenedMsg => m.t === "open-path"
 type Dispatch = (a: Parameters<Store["dispatch"]>[0]) => void;
 
 /** the opens this shell asked for by path, by the seq each went out with. A refusal comes back by
- * seq and is read at the link that asked; an open comes back as the frame the Dock's opens use,
- * with no seq, so an entry outlives its success and the map is kept to the last few. */
-const asked = new Map<number, { worktreeId: string; href: string }>();
+ * seq and is read at the link that asked, or as a toast for a path typed into the project picker,
+ * which has closed by then; an open comes back as the frame the Dock's opens use, with no seq, so
+ * an entry outlives its success and the map is kept to the last few. */
+const asked = new Map<number, { worktreeId: string; href: string } | null>();
 const ASKED_KEPT = 16;
 
 /** a link in the chat to a file outside this worktree: ask the daemon to open it by its absolute
@@ -28,23 +29,36 @@ export function openByPath(
   worktreeId: string,
   link: { href: string; path: string },
 ) {
-  const seq = nextSeq();
-  asked.set(seq, { worktreeId, href: link.href });
-  for (const k of asked.keys()) {
-    if (asked.size <= ASKED_KEPT) break;
-    asked.delete(k);
-  }
+  const seq = remember({ worktreeId, href: link.href });
   // a new press answers the last refusal, whichever link it was on
   dispatch({ a: "link-refused", id: worktreeId, v: null });
   sock?.send({ t: "open-by-path", path: link.path, seq });
 }
 
-/** the daemon could not open what a link asked for: said at that link */
+/** a path typed or picked in the project picker: the same open, with no link for a refusal to
+ * stand at, so it is said as a toast */
+export function openTypedPath(sock: DaemonSocket | null, path: string) {
+  sock?.send({ t: "open-by-path", path, seq: remember(null) });
+}
+
+function remember(at: { worktreeId: string; href: string } | null): number {
+  const seq = nextSeq();
+  asked.set(seq, at);
+  for (const k of asked.keys()) {
+    if (asked.size <= ASKED_KEPT) break;
+    asked.delete(k);
+  }
+  return seq;
+}
+
+/** the daemon could not open what a link asked for: said at that link, or as a toast for a path
+ * that had no link */
 export function refusedFromOutside(store: Store, msg: Extract<ServerMsg, { t: "open-refused" }>) {
+  if (!asked.has(msg.seq)) return;
   const ask = asked.get(msg.seq);
-  if (!ask) return;
   asked.delete(msg.seq);
-  store.dispatch({ a: "link-refused", id: ask.worktreeId, v: { href: ask.href, message: msg.message } });
+  if (ask) store.dispatch({ a: "link-refused", id: ask.worktreeId, v: { href: ask.href, message: msg.message } });
+  else store.dispatch({ a: "server", msg: { t: "error", message: msg.message } });
 }
 
 export function openFromOutside(store: Store, sock: DaemonSocket | null, msg: OpenedMsg) {

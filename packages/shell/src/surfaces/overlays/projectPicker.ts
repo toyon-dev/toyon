@@ -19,6 +19,9 @@ export type Row =
   /** a clone still running: pickable, so it can be watched or stopped */
   | { kind: "pending"; pending: PendingRepo }
   | { kind: "dir"; entry: PathEntry }
+  /** a file on disk: picking it opens the file, in its project when it sits in one, on its own
+   * otherwise. The one thing here that is not a project and not a way to one. */
+  | { kind: "file"; entry: PathEntry }
   /** an existing repo on disk that this daemon has not registered yet */
   | { kind: "open"; path: string }
   /** a folder on disk that is no project yet: picking it makes one there, whatever the folder
@@ -103,7 +106,7 @@ export function rowsFor(input: {
   others?: OtherMachine[];
 }): Row[] {
   const q = input.query.trim();
-  const dirRows = (): Row[] => input.entries.map((entry): Row => ({ kind: "dir", entry }));
+  const dirRows = (): Row[] => input.entries.map((entry): Row => ({ kind: entry.isFile ? "file" : "dir", entry }));
 
   if (!looksLikePath(q)) {
     const repos = input.repos.filter((r) => byName(q, r.name, r.path)).map((repo): Row => ({ kind: "repo", repo }));
@@ -162,6 +165,8 @@ export function rowsFor(input: {
     // holding registered projects (~/Projects itself) are places to keep projects, not projects.
     const here = q.replace(/\/+$/, "") || "/";
     if (target.isRepo) return [...dirRows(), { kind: "open", path: here }];
+    // a typed file is among the entries, listed under its own name as the prefix, so its row is
+    // already there; a socket or the like is nothing to offer
     if (!target.isDir) return dirRows();
     const abs = expandHome(here, input.home);
     const place = abs === "/" || abs === input.home || input.repos.some((r) => r.path.startsWith(`${abs}/`));
@@ -224,8 +229,9 @@ export function folderRows(input: {
   const usable = !seen || (prefix ? seen.parentExists : seen.exists && seen.isDir && !seen.isRepo);
 
   const dirs = input.entries.filter((e) => {
-    // a project is not a place to put one: a repo made inside another's checkout shows up in its changes
-    if (e.isRepo) return false;
+    // a project is not a place to put one: a repo made inside another's checkout shows up in its
+    // changes; a file is not a place at all
+    if (e.isRepo || e.isFile) return false;
     // the answer can still be for the folder just left, and a stale row is one a click lands on
     const abs = expandHome(e.path, input.home);
     return (abs.slice(0, abs.lastIndexOf("/")) || "/") === inHere && e.name.toLowerCase().startsWith(prefix);

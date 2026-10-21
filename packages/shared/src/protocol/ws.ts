@@ -837,7 +837,7 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   z.object({ t: z.literal("unmake-repo"), repoId: id }),
   /** stop a clone that is still running and forget it; the half-made folder goes with it */
   z.object({ t: z.literal("cancel-import"), id }),
-  /** what directories could complete this partial path (project picker autocomplete) */
+  /** what folders and files could complete this partial path (project picker autocomplete) */
   z.object({ t: z.literal("browse-path"), path: z.string().max(4_000) }),
   /** open the OS folder dialog at `start`, for where a new project goes or for a project folder to
    * open (the new-project page's two folder controls, which the dialog's prompt names); answered with
@@ -847,7 +847,12 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
     start: z.string().max(4_000),
     purpose: z.enum(["location", "open"]),
   }),
-  /** close the dialog `choose-folder` opened: Escape in the shell while it is up, or the form closing */
+  /** open the OS file dialog at `start`, from the project picker's disk form. The file picked is
+   * opened as `open-by-path` opens one: answered by one `open-path` or `open-loose` to this socket,
+   * nothing on cancel, and an error frame when the file is refused */
+  z.object({ t: z.literal("choose-file"), start: z.string().max(4_000) }),
+  /** close the dialog `choose-folder` or `choose-file` opened: Escape in the shell while it is up,
+   * or the form closing */
   z.object({ t: z.literal("cancel-folder") }),
   /** drop a repo from the daemon; refused while it still has task worktrees */
   z.object({ t: z.literal("forget-repo"), repoId: id }),

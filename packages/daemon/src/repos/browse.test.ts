@@ -34,17 +34,21 @@ describe("describeFolder", () => {
 });
 
 describe("browsePath", () => {
-  test("a prefix narrows to matching directories and skips files", async () => {
+  test("a prefix narrows to matching folders and files", async () => {
     const { root, cleanup } = tree();
     const names = (await browsePath(join(root, "cook"))).entries.map((e) => e.name);
     expect(names).toEqual(["cookbook", "cookbook-old"]);
+    // a file is listed as one, so the picker opens it rather than descending into it
+    expect((await browsePath(join(root, "loo"))).entries).toEqual([
+      { path: join(root, "loose.txt"), name: "loose.txt", isRepo: false, isFile: true },
+    ]);
     cleanup();
   });
 
-  test("a trailing slash lists the directory, repos first, and hides dotfiles", async () => {
+  test("a trailing slash lists the directory, repos first and files last, and hides dotfiles", async () => {
     const { root, cleanup } = tree();
     const { entries } = await browsePath(`${root}/`);
-    expect(entries.map((e) => e.name)).toEqual(["cookbook", "cookbook-old", "cabinet", "notes"]);
+    expect(entries.map((e) => e.name)).toEqual(["cookbook", "cookbook-old", "cabinet", "notes", "loose.txt"]);
     // .git as a file counts too, so a linked worktree is openable
     expect(entries.filter((e) => e.isRepo).map((e) => e.name)).toEqual(["cookbook", "cookbook-old"]);
     cleanup();
@@ -76,7 +80,13 @@ describe("browsePath", () => {
     const { root, cleanup } = tree();
     const missingLeaf = await browsePath(join(root, "brand-new"));
     expect(missingLeaf.entries).toEqual([]);
-    expect(missingLeaf.target).toEqual({ exists: false, isDir: false, isRepo: false, parentExists: true });
+    expect(missingLeaf.target).toEqual({
+      exists: false,
+      isDir: false,
+      isRepo: false,
+      isFile: false,
+      parentExists: true,
+    });
 
     const missingParent = await browsePath(join(root, "typo", "brand-new"));
     expect(missingParent.target.parentExists).toBe(false);
@@ -89,13 +99,21 @@ describe("browsePath", () => {
       exists: true,
       isDir: true,
       isRepo: true,
+      isFile: false,
       parentExists: true,
     });
     expect((await browsePath(join(root, "notes"))).target).toEqual({
       exists: true,
       isDir: true,
       isRepo: false,
+      isFile: false,
       parentExists: true,
+    });
+    // a file is a thing to open, which the picker tells apart from a folder it could make a project of
+    expect((await browsePath(join(root, "loose.txt"))).target).toMatchObject({
+      exists: true,
+      isDir: false,
+      isFile: true,
     });
     // a trailing slash names the folder itself, so the target describes that, not its parent
     expect((await browsePath(`${join(root, "notes")}/`)).target.isDir).toBe(true);

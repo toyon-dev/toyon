@@ -211,7 +211,22 @@ describe("FixService.goOn", () => {
 
   test("the figures a turn leaves behind it are read past; anything said since is not", () => {
     const entry = (event: AgentEvent) => ({ seq: 0, event });
+    const ended = (stopReason: string): AgentEvent => ({ type: "turn-end", stopReason, ts: 1 });
+    const card: AgentEvent = { type: "agent-auth-required", agent: "claude", agentName: "Claude", methods: [], ts: 1 };
     expect(lastStop([entry(stopped), entry({ type: "usage", used: 1, size: 2, ts: 1 })])).toEqual({ kind: "stopped" });
+    // a failed turn's own end is read past to the row that says why; a refused one's to the card
+    expect(
+      lastStop([entry(failed), entry(ended("failed")), entry({ type: "usage", used: 1, size: 2, ts: 1 })]),
+    ).toMatchObject({
+      kind: "failed",
+      error: "API Error: 529 overloaded\n  at fetch",
+    });
+    expect(lastStop([entry(card), entry(ended("auth"))])).toBeNull();
+    // a turn lost with its daemon offers nothing on its own: the row before its end decides
+    expect(
+      lastStop([entry({ type: "tool-start", toolId: "t", name: "Bash", input: {} }), entry(ended("lost"))]),
+    ).toBeNull();
+    expect(lastStop([entry(failed), entry(ended("lost"))])).toMatchObject({ kind: "failed" });
     expect(lastStop([entry(failed), entry({ type: "session-info", sessionId: "s" })])).toMatchObject({
       kind: "failed",
     });

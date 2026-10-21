@@ -97,7 +97,26 @@ describe("turnsSince", () => {
     expect(t).toMatchObject({ edits: 2, toolErrors: 1 });
   });
 
-  test("a failed turn has no turn-end: it runs until the next one starts", () => {
+  test("a failed turn ends at its own turn-end, which names the failure after the row that says it", () => {
+    const turns = turnsSince(
+      log(
+        user("one", 1),
+        start(2),
+        { type: "agent-error", message: "boom", ts: 3 },
+        end(4, "failed"),
+        user("two", 10),
+        start(11),
+        end(12),
+      ),
+      0,
+    );
+    expect(turns.map((t) => [t.asks, t.error, t.stop])).toEqual([
+      [["one"], "boom", "failed"],
+      [["two"], undefined, "end_turn"],
+    ]);
+  });
+
+  test("a failed turn written before every exit wrote an end runs until the next one starts", () => {
     const turns = turnsSince(
       log(
         user("one", 1),
@@ -153,6 +172,9 @@ describe("factsOf", () => {
     const asking = turnsSince(log(user("a", 1), start(2)), 0);
     expect(factsOf(asking, "asking", "Which port?").ask).toBe("Which port?");
     expect(factsOf(asking, "done", "Which port?").ask).toBeUndefined();
+    // the daemon's own ends say how the turn was ended, not that the agent finished oddly
+    const refused = turnsSince(log(user("a", 1), start(2), end(3, "auth")), 0);
+    expect(factsOf(refused, "done")).not.toHaveProperty("cut");
   });
 
   test("a stop right after a plan was sent back is the send-back, and only then", () => {

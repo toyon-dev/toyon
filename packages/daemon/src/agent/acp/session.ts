@@ -46,7 +46,7 @@ import { decide, decideUnattended, pickOption } from "../policy.ts";
 import { ambientBlock, buildPrompt, handoffLandedContext, SYSTEM_APPEND } from "../prompt.ts";
 import type { AgentSpec } from "../registry.ts";
 import { type Bounds, type Prepared, prepareLaunch } from "../sandbox.ts";
-import { Transcript, type TranscriptEntry, transcriptPathFor } from "../transcript.ts";
+import { sealOpenTurn, Transcript, type TranscriptEntry, transcriptPathFor } from "../transcript.ts";
 import { uploadIds } from "../uploads.ts";
 import { askOnce } from "./ask.ts";
 import {
@@ -282,6 +282,9 @@ export class AcpSession implements AgentAdapter {
   /** the message refused for want of credentials; sent again after a login */
   private refused: QueueItem | null = null;
   private running = false;
+  /** a turn-start has gone out and its turn-end has not: the bracket every exit from a turn
+   * closes, whichever way the turn went */
+  private turnOpen = false;
   private interrupted = false;
   /** a stop was pressed and the prompt it was for has not come back: what the rows show as the
    * press having landed, since the status stays busy until the agent has in fact stopped */
@@ -341,6 +344,9 @@ export class AcpSession implements AgentAdapter {
     this.seq = nextNumbers(
       this.log.entries.map(({ event }) => (event.type === "user-message" ? event.attachments : undefined)),
     );
+    // a turn the daemon died under has no end: read what it is owed before the rows below are
+    // added (they would read as the turn doing more), and write it after them, as its last event
+    const seal = sealOpenTurn(this.log.entries);
     // a card the daemon died under: the adapter process went with it, so nothing is listening for
     // an answer. Close it here rather than let the next backfill draw a live-looking question that
     // can never be answered. Idempotent, since these end events close the set on the next boot.
@@ -382,6 +388,10 @@ export class AcpSession implements AgentAdapter {
         reason: "Toyon stopped while the worktree was being made",
         ts: Date.now(),
       });
+    }
+    if (seal) {
+      log.info(d.worktreeId, `sealed a turn left open: ${seal.stopReason}`);
+      this.emit(seal);
     }
     if (this.openHandoffs.size > 0) this.syncStatus();
   }
@@ -736,7 +746,11 @@ export class AcpSession implements AgentAdapter {
           await this.runTurn(item);
         } catch (e) {
           if (!this.interrupted) throw e;
-          this.emit({ type: "turn-end", stopReason: "interrupted", ts: Date.now() });
+          // the cancel's own error ends the turn; a failure before the turn began (the attachment
+          // copy) under a pending stop is not the stop's doing, and the message would otherwise
+          // vanish without a word
+          if (this.turnOpen) this.endTurn("interrupted");
+          else this.emit({ type: "agent-error", message: this.describe(e), ts: Date.now() });
         }
         // the stop was for that turn: what was queued behind it, or sent while its cancel settled,
         // goes next without the status dropping to idle in between
@@ -775,9 +789,13 @@ export class AcpSession implements AgentAdapter {
           ...(rejected ? { rejected: true } : {}),
           ts: Date.now(),
         });
+        // the turn's own end, after the card and before the status: the stop record is read off
+        // the transcript on the status edge, and the card is what this turn is waiting on
+        this.endTurn("auth");
         this.setStatus("error");
       } else {
         this.emit({ type: "agent-error", message: this.describe(e), ts: Date.now() });
+        this.endTurn("failed");
         this.setStatus("error");
         // whatever state the adapter is in, the next prompt starts from a fresh process
         fireAndForget(this.d.worktreeId, this.dropConn("error"), "drop agent after error");
@@ -787,9 +805,22 @@ export class AcpSession implements AgentAdapter {
       this.steered = [];
       for (const q of this.queue) q.handedBack = false;
       this.running = false;
+      this.turnOpen = false;
       this.setStopping(false);
       this.maybeArmReaper();
     }
+  }
+
+  /** The turn's last event, once: nothing when no turn-start is open (a failure before the turn
+   * began has no bracket to close). A stop pressed for this turn has landed with it, whichever
+   * way it ended, so the press's mark falls here too. A plain emit otherwise: the drain loop goes
+   * straight on to the next queued turn, so the status is not touched, and the reaper is armed
+   * once the loop is done. */
+  private endTurn(stopReason: string) {
+    if (!this.turnOpen) return;
+    this.turnOpen = false;
+    this.emit({ type: "turn-end", stopReason, ts: Date.now() });
+    this.setStopping(false);
   }
 
   /** A side question. Null is the agent's answer when it has none to give (no quick model, a
@@ -971,6 +1002,7 @@ export class AcpSession implements AgentAdapter {
       log.warn(this.d.worktreeId, "before-turn hook failed", e);
     }
     this.emit({ type: "turn-start", ts: Date.now() });
+    this.turnOpen = true;
     const live = await this.ensureLive("a turn");
     await this.applyMode(live);
     await this.applyOption(live, "model");
@@ -979,7 +1011,7 @@ export class AcpSession implements AgentAdapter {
     // prompt must not go out at all: esc straight after a send would otherwise do nothing. Nothing
     // runs between this check and the request being written, so a later stop's cancel follows it.
     if (this.interrupted) {
-      this.emit({ type: "turn-end", stopReason: "interrupted", ts: Date.now() });
+      this.endTurn("interrupted");
       return;
     }
     const carried = this.carried(live, item.recorded.attachments);
@@ -989,7 +1021,7 @@ export class AcpSession implements AgentAdapter {
       sessionId: live.sessionId,
       prompt: buildPrompt(item.text, this.contextFor(item), prefix, carried),
     });
-    this.emit({ type: "turn-end", stopReason: mapStopReason(res.stopReason), ts: Date.now() });
+    this.endTurn(mapStopReason(res.stopReason));
   }
 
   /** what the shell attached when the message was sent, then where the preview stands now that

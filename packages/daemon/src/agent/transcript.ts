@@ -43,6 +43,30 @@ export function coalesce(entries: TranscriptEntry[]): TranscriptEntry[] {
   return out;
 }
 
+/** events that are not the agent's own doing, read past when asking what a turn said last: the
+ * figures it left, and a message queued behind it that no turn has picked up yet */
+const NOT_THE_TURNS = new Set<AgentEvent["type"]>(["usage", "session-info", "user-message", "fix-asked"]);
+
+/** The turn-end a transcript is owed when its last turn has none: the daemon died under it. The
+ * reason reads off the last thing the agent did: the auth card, the error row, or anything else,
+ * which means the daemon went away mid-work (`lost`, its own word, since `interrupted` is a
+ * person's press and draws a stop under the turn). Anything the agent did after an error row
+ * means the row was not how the turn ended. The stamp is the turn's newest: it ended no later
+ * than its last event. Null when the last turn is closed, or there is none. */
+export function sealOpenTurn(entries: readonly TranscriptEntry[]): Extract<AgentEvent, { type: "turn-end" }> | null {
+  let reason: string | null = null;
+  let ts = 0;
+  for (let i = entries.length - 1; i >= 0; i--) {
+    const e = entries[i]!.event;
+    if ("ts" in e && typeof e.ts === "number") ts = Math.max(ts, e.ts);
+    if (e.type === "turn-end") return null;
+    if (e.type === "turn-start") return { type: "turn-end", stopReason: reason ?? "lost", ts };
+    if (NOT_THE_TURNS.has(e.type)) continue;
+    reason ??= e.type === "agent-auth-required" ? "auth" : e.type === "agent-error" ? "failed" : "lost";
+  }
+  return null;
+}
+
 /** a transcript file's text as entries. A crash mid-append leaves a partial last line, and one bad
  * line must not make the whole worktree unbootable, so a line that does not parse is counted and
  * skipped. */

@@ -297,6 +297,11 @@ export type AgentEvent =
       detached?: boolean;
       fixable?: Fixable;
     }
+  /** The turn's last event, always: one per turn-start. `stopReason` is the agent's (ACP's
+   * end_turn, max_tokens, refusal, ...) or the daemon's: `interrupted` for a stop, `failed` when
+   * the turn ended in an error (the agent-error row before it says what), `auth` when it was
+   * refused for want of a credential (the card before it says which), `lost` when the daemon
+   * went away under the turn (written when the transcript is next opened). */
   | { type: "turn-end"; stopReason: string; ts: number }
   /** the agent's running figures after a reply: context tokens in use of the window's size, and
    * the session's spend so far when the agent prices itself (Claude does; a rate-limit notice

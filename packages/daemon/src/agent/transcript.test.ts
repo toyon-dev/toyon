@@ -2,7 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { coalesce, Transcript, transcriptPathFor } from "./transcript.ts";
+import type { AgentEvent } from "@toyon/shared";
+import { coalesce, sealOpenTurn, Transcript, type TranscriptEntry, transcriptPathFor } from "./transcript.ts";
 
 function withDir(fn: (dir: string) => Promise<void> | void) {
   const dir = mkdtempSync(join(tmpdir(), "toyon-transcript-"));
@@ -110,4 +111,40 @@ describe("Transcript", () => {
       expect(JSON.parse(lines[0]!).seq).toBe(0);
       expect(JSON.parse(lines.at(-1)!).seq).toBe(after.seq);
     }));
+});
+
+describe("sealOpenTurn", () => {
+  const log = (...events: AgentEvent[]): TranscriptEntry[] => events.map((event, seq) => ({ seq, event }));
+  const start: AgentEvent = { type: "turn-start", ts: 2 };
+  const call: AgentEvent = { type: "tool-start", toolId: "t1", name: "Bash", input: {} };
+  const error: AgentEvent = { type: "agent-error", message: "API Error: ENOTFOUND", ts: 3 };
+  const card: AgentEvent = { type: "agent-auth-required", agent: "claude", agentName: "Claude", methods: [], ts: 3 };
+  const usage: AgentEvent = { type: "usage", used: 1, size: 2, ts: 4 };
+
+  test("a turn that ended on an error row, or on a card, is sealed with that as the reason", () => {
+    expect(sealOpenTurn(log(start, call, error, usage))).toEqual({ type: "turn-end", stopReason: "failed", ts: 4 });
+    expect(sealOpenTurn(log(start, call, card))).toEqual({ type: "turn-end", stopReason: "auth", ts: 3 });
+  });
+
+  test("a turn cut with no last word, or one that went on after an error row, was lost with its daemon", () => {
+    expect(sealOpenTurn(log(start, call))).toEqual({ type: "turn-end", stopReason: "lost", ts: 2 });
+    expect(sealOpenTurn(log(start, error, call))).toEqual({ type: "turn-end", stopReason: "lost", ts: 3 });
+  });
+
+  test("a message queued behind the failure, by a person or a fix press, is not the turn's last word", () => {
+    const press: AgentEvent = { type: "fix-asked", text: "fix it", ts: 5, kind: "command", why: "the command failed" };
+    const sent: AgentEvent = { type: "user-message", text: "try again", ts: 6 };
+    expect(sealOpenTurn(log(start, call, error, press, sent))).toEqual({
+      type: "turn-end",
+      stopReason: "failed",
+      ts: 6,
+    });
+  });
+
+  test("a closed last turn, and no turn at all, are owed nothing", () => {
+    const end: AgentEvent = { type: "turn-end", stopReason: "end_turn", ts: 5 };
+    expect(sealOpenTurn(log(start, call, error, end, usage))).toBeNull();
+    expect(sealOpenTurn(log({ type: "user-message", text: "hi", ts: 1 }))).toBeNull();
+    expect(sealOpenTurn([])).toBeNull();
+  });
 });

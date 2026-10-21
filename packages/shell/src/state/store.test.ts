@@ -666,16 +666,18 @@ describe("chat folding", () => {
     expect(s.local.a?.chat.map((i) => i.kind === "auth" && i.done)).toEqual([true, true]);
   });
 
-  test("an auth request closes the calls the refused turn left open", () => {
+  test("the turn-end after an auth card closes what the refused turn left open", () => {
     const methods = [{ id: "claude-ai-login", name: "Claude Subscription", kind: "terminal" as const }];
     const s = run([
       hello(wt("a")),
       agent("a", { type: "tool-start", toolId: "t1", name: "Bash", input: { command: "grep x" } }),
       agent("a", { type: "tool-start", toolId: "t2", name: "Bash", input: { command: "grep y" } }),
       agent("a", { type: "agent-auth-required", agent: "claude", agentName: "Claude Code", methods, ts: 0 }),
+      agent("a", { type: "turn-end", stopReason: "auth", ts: 0 }),
     ]);
-    // no turn-end follows the refusal, so the card is what closes them: neither row shines on
+    // the card itself closes nothing: the turn's own end does, and neither row shines on
     expect(s.local.a?.chat.map((i) => i.kind === "tool" && i.done)).toEqual([true, true, false]);
+    expect(s.local.a?.running).toBeUndefined();
   });
 
   test("a lapsed AWS session carries its provider and the refresh command already set", () => {
@@ -1009,9 +1011,16 @@ describe("chat folding", () => {
     expect(s.local.a?.chat.at(-1)).toEqual({ kind: "stopped", seq: 0 });
     const finished = run([hello(wt("a")), agent("a", { type: "turn-end", stopReason: "end_turn", ts: 0 })]);
     expect(finished.local.a?.chat).toEqual([]);
+    // a turn lost with its daemon was nobody's press: its rows close and no stop is drawn
+    const lost = run([
+      hello(wt("a")),
+      agent("a", { type: "tool-start", toolId: "t1", name: "Bash", input: {} }),
+      agent("a", { type: "turn-end", stopReason: "lost", ts: 0 }),
+    ]);
+    expect(lost.local.a?.chat).toEqual([{ kind: "tool", id: "t1", name: "Bash", input: {}, done: true }]);
   });
 
-  test("an agent error closes the calls it cut off: a failed turn sends no turn-end", () => {
+  test("a failed turn's own end closes the calls the failure cut", () => {
     const s = run([
       hello(wt("a")),
       agent("a", { type: "turn-start", ts: 0 }),
@@ -1027,6 +1036,7 @@ describe("chat folding", () => {
       }),
       agent("a", { type: "tool-update", toolId: "t3", background: true }),
       agent("a", { type: "agent-error", message: "API Error: Can't reach the API server (ENOTFOUND)", ts: 0 }),
+      agent("a", { type: "turn-end", stopReason: "failed", ts: 0 }),
     ]);
     const tools = s.local.a!.chat.filter((i) => i.kind === "tool");
     expect(tools.map((t) => t.done)).toEqual([true, true, false]);
@@ -1037,6 +1047,19 @@ describe("chat folding", () => {
       seq: 0,
     });
     expect(s.local.a?.running).toBeUndefined();
+  });
+
+  test("an error row mid-turn closes nothing: the agent that took the text and not the image goes on", () => {
+    const s = run([
+      hello(wt("a")),
+      agent("a", { type: "turn-start", ts: 0 }),
+      agent("a", { type: "tool-start", toolId: "t1", name: "Bash", input: {} }),
+      agent("a", { type: "agent-error", message: "Codex does not accept images; the message went without it", ts: 0 }),
+      agent("a", { type: "text-delta", text: "looking" }),
+    ]);
+    const tools = s.local.a!.chat.filter((i) => i.kind === "tool");
+    expect(tools.map((t) => t.done)).toEqual([false]);
+    expect(s.local.a?.running?.id).toBe("t1");
   });
 });
 

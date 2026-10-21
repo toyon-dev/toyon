@@ -1531,8 +1531,10 @@ describe("AcpSession", () => {
     w.session.send("a");
     await w.idle();
     expect(w.session.status).toBe("error");
-    const card = w.events.at(-1) as Extract<AgentEvent, { type: "agent-auth-required" }>;
+    // the card, then the turn's own end: the bracket closes on a refusal like on any other exit
+    const card = w.events.at(-2) as Extract<AgentEvent, { type: "agent-auth-required" }>;
     expect(card.type).toBe("agent-auth-required");
+    expect(w.events.at(-1)).toMatchObject({ type: "turn-end", stopReason: "auth" });
     expect(card.agentName).toBe("Claude");
     expect(card.methods).toEqual([
       { id: "api-key", name: "API Key", kind: "agent", needsKey: true },
@@ -1571,7 +1573,7 @@ describe("AcpSession", () => {
     const w = world(fake, spec, 60_000, undefined, { planSignIn: () => false });
     w.session.send("a");
     await w.idle();
-    const card = w.events.at(-1) as Extract<AgentEvent, { type: "agent-auth-required" }>;
+    const card = w.events.at(-2) as Extract<AgentEvent, { type: "agent-auth-required" }>;
     expect(card.type).toBe("agent-auth-required");
     expect(card.withheld).toBe(true);
     expect(card.methods.map((m) => m.id)).toEqual(["api-key", "chat-gpt"]);
@@ -1581,7 +1583,7 @@ describe("AcpSession", () => {
     const open = world(fake, spec, 60_000, undefined, { planSignIn: () => true });
     open.session.send("a");
     await open.idle();
-    const card2 = open.events.at(-1) as Extract<AgentEvent, { type: "agent-auth-required" }>;
+    const card2 = open.events.at(-2) as Extract<AgentEvent, { type: "agent-auth-required" }>;
     expect(card2.withheld).toBeUndefined();
     expect(card2.methods.map((m) => m.id)).toEqual(["api-key", "chat-gpt", "claude-login"]);
     await open.session.close();
@@ -1600,7 +1602,7 @@ describe("AcpSession", () => {
     await w.idle();
     // the login is only offered to a client that says it can run one
     expect(fake.inits[0]?.clientCapabilities?._meta).toEqual({ "terminal-auth": true });
-    const card = w.events.at(-1) as Extract<AgentEvent, { type: "agent-auth-required" }>;
+    const card = w.events.at(-2) as Extract<AgentEvent, { type: "agent-auth-required" }>;
     expect(card.methods).toContainEqual({ id: "opencode-login", name: "Login with opencode", kind: "terminal" });
     expect(await w.session.authenticate("opencode-login")).toMatchObject({
       kind: "terminal",
@@ -1649,11 +1651,13 @@ describe("AcpSession", () => {
     w.session.send("a");
     await w.idle();
     expect(w.session.status).toBe("error");
-    // the error stays: an agent that thinks it is logged in must not be contradicted silently
-    const err = w.events.at(-2) as Extract<AgentEvent, { type: "agent-error" }>;
+    // the error stays: an agent that thinks it is logged in must not be contradicted silently.
+    // Then the card, then the turn's end, which names the card as what the turn waits on
+    const err = w.events.at(-3) as Extract<AgentEvent, { type: "agent-error" }>;
     expect(err.type).toBe("agent-error");
     expect(err.message).toContain("401");
-    expect(w.events.at(-1)).toMatchObject({ type: "agent-auth-required", rejected: true, agentName: "Claude" });
+    expect(w.events.at(-2)).toMatchObject({ type: "agent-auth-required", rejected: true, agentName: "Claude" });
+    expect(w.events.at(-1)).toMatchObject({ type: "turn-end", stopReason: "auth" });
     // the process stays up, so the login runs over it and the refused message goes again
     expect(w.links[0]!.killed).toBe(false);
     expect(await w.session.authenticate("api-key", "sk-good")).toEqual({ kind: "done" });
@@ -1682,7 +1686,8 @@ describe("AcpSession", () => {
     expect(w.session.status).toBe("error");
     // the provider's words ride the card, not a row of their own
     expect(w.types()).not.toContain("agent-error");
-    expect(w.events.at(-1)).toMatchObject({
+    expect(w.events.at(-1)).toMatchObject({ type: "turn-end", stopReason: "auth" });
+    expect(w.events.at(-2)).toMatchObject({
       type: "agent-auth-required",
       rejected: true,
       provider: "aws",
@@ -1692,7 +1697,7 @@ describe("AcpSession", () => {
         { id: "aws-login", kind: "terminal" },
       ],
     });
-    expect(w.events.at(-1)).not.toHaveProperty("refresh");
+    expect(w.events.at(-2)).not.toHaveProperty("refresh");
     // the login is the shell's: `aws` is found where the terminal pane finds it
     expect(await w.session.authenticate("aws-login")).toMatchObject({
       kind: "terminal",
@@ -1732,12 +1737,13 @@ describe("AcpSession", () => {
     const w = world(fake, claudeSpec, 60_000, undefined, { claudeConfigDir: configDir });
     w.session.send("a");
     await w.idle();
-    expect(w.events.at(-1)).toMatchObject({
+    expect(w.events.at(-2)).toMatchObject({
       type: "agent-auth-required",
       provider: "aws",
       refresh: "aws sso login --profile claude",
       methods: [{ id: "aws-login" }],
     });
+    expect(w.events.at(-1)).toMatchObject({ type: "turn-end", stopReason: "auth" });
     await w.session.close();
   });
 
@@ -1748,7 +1754,8 @@ describe("AcpSession", () => {
     const w = world(fake);
     w.session.send("a");
     await w.idle();
-    expect(w.events.at(-1)).toMatchObject({ type: "agent-error" });
+    expect(w.events.at(-2)).toMatchObject({ type: "agent-error" });
+    expect(w.events.at(-1)).toMatchObject({ type: "turn-end", stopReason: "failed" });
     expect(w.types()).not.toContain("agent-auth-required");
     await w.session.close();
   });
@@ -1824,7 +1831,9 @@ describe("AcpSession", () => {
     w.session.send("a");
     await w.idle();
     expect(w.session.status).toBe("error");
-    expect(w.events.at(-1)).toMatchObject({ type: "agent-error", message: "model overloaded" });
+    // the row, then the turn's own end: a failure is an exit like any other
+    expect(w.events.at(-2)).toMatchObject({ type: "agent-error", message: "model overloaded" });
+    expect(w.events.at(-1)).toMatchObject({ type: "turn-end", stopReason: "failed" });
     expect(w.links[0]!.killed).toBe(true);
     w.session.send("b");
     await w.idle();
@@ -1841,7 +1850,8 @@ describe("AcpSession", () => {
     const w = world(fake);
     w.session.send("a");
     await w.idle();
-    expect(w.events.at(-1)).toMatchObject({ type: "agent-error", message: "You've hit your monthly spend limit" });
+    expect(w.events.at(-2)).toMatchObject({ type: "agent-error", message: "You've hit your monthly spend limit" });
+    expect(w.events.at(-1)).toMatchObject({ type: "turn-end", stopReason: "failed" });
     await w.session.close();
   });
 
@@ -1865,10 +1875,35 @@ describe("AcpSession", () => {
     w.session.send("a");
     await w.idle();
     expect(w.session.status).toBe("error");
-    expect(w.events.at(-1)).toMatchObject({
+    expect(w.events.at(-2)).toMatchObject({
       type: "agent-error",
       message: "agent process exited (signal SIGKILL): oom",
     });
+    expect(w.events.at(-1)).toMatchObject({ type: "turn-end", stopReason: "failed" });
+  });
+
+  test("every turn-start has one turn-end, whichever way the turn went", async () => {
+    let calls = 0;
+    const fake = fakeAgent(async (p, client) => {
+      const n = calls++;
+      if (n === 0) throw new acp.RequestError(-32603, "boom");
+      if (n === 2) throw acp.RequestError.authRequired();
+      return say("ok")(p, client);
+    });
+    const w = world(fake);
+    w.session.send("a");
+    await w.idle();
+    w.session.send("b");
+    await w.idle();
+    w.session.send("c");
+    await w.idle();
+    expect(w.types().filter((t) => t === "turn-start")).toHaveLength(3);
+    expect(w.events.filter((e) => e.type === "turn-end").map((e) => e.stopReason)).toEqual([
+      "failed",
+      "end_turn",
+      "auth",
+    ]);
+    await w.session.close();
   });
 
   const paste = (text: string, name?: string) => ({ kind: "paste" as const, text, ...(name ? { name } : {}) });
@@ -2834,15 +2869,47 @@ describe("AcpSession ask cards", () => {
     await waitFor(() => readFileSync(join(home, `${w.id}.jsonl`), "utf8").includes(id));
 
     const revived = world(fakeAgent(say("hi")), claudeSpec, 60_000, w.id);
-    expect(revived.events).toHaveLength(1);
+    // the card's end, then the turn's: the question was what the turn was on when the daemon died
+    expect(revived.events).toHaveLength(2);
     expect(revived.events[0]).toMatchObject({ type: "agent-ask-end", id, outcome: "expired" });
-    // a second read adds nothing: that end event closed the card for good
-    await waitFor(() => readFileSync(join(home, `${w.id}.jsonl`), "utf8").includes("expired"));
+    expect(revived.events[1]).toMatchObject({ type: "turn-end", stopReason: "lost" });
+    // a second read adds nothing: those end events closed the card and the turn for good
+    await waitFor(() => readFileSync(join(home, `${w.id}.jsonl`), "utf8").includes('"lost"'));
     const again = world(fakeAgent(say("hi")), claudeSpec, 60_000, w.id);
     expect(again.events).toHaveLength(0);
     await revived.session.close();
     await again.session.close();
     await w.session.close();
+  });
+
+  test("a turn the daemon died under is sealed when the transcript is read back, named by its last row", async () => {
+    const id = `w${Math.random().toString(36).slice(2, 8)}`;
+    const lines = [
+      { seq: 0, event: { type: "user-message", text: "go", ts: 1 } },
+      { seq: 1, event: { type: "turn-start", ts: 2 } },
+      { seq: 2, event: { type: "tool-start", toolId: "t1", name: "Bash", input: {} } },
+      { seq: 3, event: { type: "agent-error", message: "API Error: ENOTFOUND", ts: 3 } },
+      { seq: 4, event: { type: "usage", used: 1, size: 2, ts: 4 } },
+    ];
+    writeFileSync(join(home, `${id}.jsonl`), `${lines.map((l) => JSON.stringify(l)).join("\n")}\n`);
+    const w = world(fakeAgent(say("hi")), claudeSpec, 60_000, id);
+    expect(w.events).toEqual([{ type: "turn-end", stopReason: "failed", ts: 4 }]);
+    await waitFor(() => readFileSync(join(home, `${id}.jsonl`), "utf8").includes('"seq":5,'));
+    expect(
+      JSON.parse(
+        readFileSync(join(home, `${id}.jsonl`), "utf8")
+          .trim()
+          .split("\n")
+          .at(-1)!,
+      ),
+    ).toEqual({
+      seq: 5,
+      event: { type: "turn-end", stopReason: "failed", ts: 4 },
+    });
+    const again = world(fakeAgent(say("hi")), claudeSpec, 60_000, id);
+    expect(again.events).toHaveLength(0);
+    await w.session.close();
+    await again.session.close();
   });
 });
 

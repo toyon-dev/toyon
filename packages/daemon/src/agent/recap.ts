@@ -27,6 +27,10 @@ export interface TurnSlice {
   newestTs: number;
 }
 
+/** the daemon's own stop reasons, which say how a turn was ended rather than how the agent
+ * finished it (events.ts, turn-end) */
+const DAEMON_STOPS = new Set(["interrupted", "failed", "auth", "lost"]);
+
 /** a reply is read as it streams; only its tail is worth keeping */
 const REPLY_KEEP = 2_000;
 /** an error or a question, as one line on a row */
@@ -43,8 +47,8 @@ function slice(asks: string[], fixes: string[], ts: number): TurnSlice {
 
 /** The turns whose newest event is after `seenAt`, and always the last one: arriving while a turn
  * ran stamps `seenAt` in its middle, and its first message must not fall out of the window. A turn
- * starts at its turn-start, with the messages sent ahead of it; a failed one has no turn-end and
- * runs until the next one starts. */
+ * starts at its turn-start, with the messages sent ahead of it, and ends at its turn-end; a
+ * failed turn written before every exit wrote one has none, and runs until the next one starts. */
 export function turnsSince(entries: readonly TranscriptEntry[], seenAt: number): TurnSlice[] {
   const turns: TurnSlice[] = [];
   let pending: string[] = [];
@@ -158,7 +162,7 @@ export function openAskOf(entries: readonly TranscriptEntry[]): string | undefin
  * that kind of stop is about */
 export function factsOf(turns: readonly TurnSlice[], end: TurnEnd, ask?: string): TurnFacts {
   const last = turns.at(-1);
-  const cut = last?.stop && last.stop !== "end_turn" && last.stop !== "interrupted" ? last.stop : undefined;
+  const cut = last?.stop && last.stop !== "end_turn" && !DAEMON_STOPS.has(last.stop) ? last.stop : undefined;
   return {
     turns: Math.max(1, turns.length),
     edits: turns.reduce((n, t) => n + t.edits, 0),

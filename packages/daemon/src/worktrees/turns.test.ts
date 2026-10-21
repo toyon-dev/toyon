@@ -120,8 +120,9 @@ describe("TurnService", () => {
 
   test("a failure is stamped with its error, and a refused login says that is why", () => {
     const w = world(record("a"), record("b"));
-    w.say("a", user("go", 10), start(11), { type: "agent-error", message: "rate limited", ts: 12 });
-    w.say("b", user("go", 10), start(11), auth);
+    // the row or the card, then the turn's own end, in the order the daemon writes them
+    w.say("a", user("go", 10), start(11), { type: "agent-error", message: "rate limited", ts: 12 }, end(13, "failed"));
+    w.say("b", user("go", 10), start(11), auth, end(13, "auth"));
     w.status("a", "working", "error");
     w.status("b", "working", "error");
     expect(w.wt("a").lastTurn).toMatchObject({ end: "failed", facts: { error: "rate limited" } });

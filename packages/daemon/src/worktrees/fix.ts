@@ -65,12 +65,16 @@ function askedFor(entries: readonly TranscriptEntry[], toolId: string): boolean 
 
 /** How the chat ends, when it ends on a turn that was stopped or that failed and nothing has been
  * said since: the same reading the box makes to offer the press, so a press on a stale page sends
- * nothing. The figures a turn leaves behind it are not words, so they are read past. Null once
- * anything else is the last thing, including the ask a press already sent. */
+ * nothing. The figures a turn leaves behind it are not words, so they are read past; so is the
+ * end of a turn that failed, was refused a login or was lost with its daemon, to the row before
+ * it that says why. Null once anything else is the last thing, including the ask a press already
+ * sent. */
 export function lastStop(entries: readonly TranscriptEntry[]): Stop | null {
   for (let i = entries.length - 1; i >= 0; i--) {
     const e = entries[i]!.event;
     if (e.type === "usage" || e.type === "session-info") continue;
+    if (e.type === "turn-end" && (e.stopReason === "failed" || e.stopReason === "auth" || e.stopReason === "lost"))
+      continue;
     if (e.type === "turn-end" && e.stopReason === "interrupted") return { kind: "stopped" };
     if (e.type === "agent-error") return { kind: "failed", error: e.message };
     return null;

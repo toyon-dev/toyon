@@ -57,7 +57,7 @@ import { type Failure, fixPrompt } from "../agent/prompt.ts";
 import { firstAskOf } from "../agent/recap.ts";
 import type { AgentRegistry } from "../agent/registry.ts";
 import { makeNamer, taskText } from "../agent/tasks.ts";
-import { coalesce, Transcript, type TranscriptEntry, transcriptPathFor } from "../agent/transcript.ts";
+import { coalesce, sealOpenTurn, Transcript, type TranscriptEntry, transcriptPathFor } from "../agent/transcript.ts";
 import { cloneTree } from "../core/clone.ts";
 import { UserError } from "../core/errors.ts";
 import type { Hub } from "../core/hub.ts";
@@ -1317,7 +1317,12 @@ export class WorktreeService {
    * a restore moves it. Null when no archive has the id. */
   archivedTranscript(archiveId: string): TranscriptEntry[] | null {
     const files = this.archive.chatFiles(archiveId);
-    return files ? new Transcript(files.transcript, archiveId).entries : null;
+    if (!files) return null;
+    const { entries } = new Transcript(files.transcript, archiveId);
+    // a turn the daemon died under is sealed here in memory, as a session seals its own on disk:
+    // nothing writes an archive again
+    const seal = sealOpenTurn(entries);
+    return seal ? [...entries, { seq: (entries.at(-1)?.seq ?? -1) + 1, event: seal }] : entries;
   }
 
   /** an image in an archived chat, for the page that shows it; null unless the id names an archive

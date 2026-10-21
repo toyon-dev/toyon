@@ -2872,10 +2872,13 @@ function onServer(s: State, msg: StoreServerMsg): State {
       const id = msg.worktreeId;
       let next = withLocal(s, id, (l) => {
         const chat = applyEvent(l.chat, ev, msg.seq);
-        // a call marked as running on in the background has returned to the agent, and a turn's end
-        // or failure closes what it left open: the head moves on those too. A turn refused for
-        // want of a credential is over the same way, with or without an error row before the card
-        const ended = ev.type === "turn-end" || ev.type === "agent-error" || ev.type === "agent-auth-required";
+        // a call marked as running on in the background has returned to the agent, and a turn's
+        // end closes what it left open: the head moves on those too
+        const ended = ev.type === "turn-end";
+        // the message is spent when its turn ends, and when it fails before its turn ever starts
+        // (an attachment that could not be copied): no turn-end follows that, only the error row
+        // or the card, and the bubble shown ahead of the daemon would otherwise stand for good
+        const spent = ended || ev.type === "agent-error" || ev.type === "agent-auth-required";
         const moved =
           ev.type === "tool-start" || ev.type === "tool-end" || ended || (ev.type === "tool-update" && ev.background);
         const running = moved ? runningOf(chat, l.running) : l.running;
@@ -2892,7 +2895,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
         const row = s.rows.find((w) => w.id === id);
         const busy = isBusy(row?.agent);
         const said = !l.sending ? l : busy ? settled(l) : { ...l, sending: { at: l.sending.at } };
-        const base = askSettled(ev.type === "user-message" ? said : ended ? settled(l) : l, ev);
+        const base = askSettled(ev.type === "user-message" ? said : spent ? settled(l) : l, ev);
         return {
           // a message sent moves the conversation on from the hit a search landed on
           ...(ev.type === "user-message" ? withoutMark(base, "reveal") : base),
@@ -3254,16 +3257,14 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
       };
       return next;
     }
-    case "agent-error": {
-      // the failure ends the turn without a turn-end (the daemon drops the agent instead), so a
-      // call the API died under would otherwise shine and count its seconds for good
-      const cut = closeOpenCalls(items);
+    case "agent-error":
+      // a failure's turn-end follows the row and closes what the failure cut; a row mid-turn (an
+      // agent that took the text and not the image) closes nothing.
       // Claude reports a usage limit as prose and then fails the turn with the same sentence; the
       // error row takes the prose's place rather than saying it twice
       if (last?.kind === "assistant" && repeats(event.message, last.text))
-        return [...cut.slice(0, -1), { kind: "error", text: event.message, ...stamp }];
-      return [...cut, { kind: "error", text: event.message, ...stamp }];
-    }
+        return [...items.slice(0, -1), { kind: "error", text: event.message, ...stamp }];
+      return [...items, { kind: "error", text: event.message, ...stamp }];
     case "agent-blocked":
       return [...items, { kind: "blocked", tool: event.tool, path: event.path, reason: event.reason }];
     case "grafted":
@@ -3362,11 +3363,8 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
     case "adopted":
       return [...items, { kind: "adopted", branch: event.branch, ts: event.ts }];
     case "agent-auth-required":
-      // a credential refused mid-turn ends the turn without a turn-end, the way an error does
-      // (the daemon keeps the process for the login instead), so a call that was executing when
-      // the provider said no would otherwise shine for good, and the one behind it read queued
       return [
-        ...closeOpenCalls(items),
+        ...items,
         {
           kind: "auth",
           agent: event.agent,
@@ -3438,10 +3436,11 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
   }
 }
 
-/** A row reads as running by whether its call ended, and a turn cut off (a stop, a daemon
- * restart, a failure) leaves calls with no end: what the turn left open closes with it. A row
- * held open for a command running in the background outlives the turn by design, and its own
- * end closes it (the daemon writes one, at the latest when it restarts). */
+/** A row reads as running by whether its call ended, and a turn cut off (a stop, a failure, a
+ * daemon that died under it) ends in a turn-end all the same, leaving calls with no end: what the
+ * turn left open closes with it. A row held open for a command running in the background outlives
+ * the turn by design, and its own end closes it (the daemon writes one, at the latest when it
+ * restarts). */
 function closeOpenCalls(items: ChatItem[]): ChatItem[] {
   const cut = (i: ChatItem) => i.kind === "tool" && !i.done && !i.background;
   return items.some(cut) ? items.map((i) => (cut(i) ? { ...i, done: true } : i)) : items;

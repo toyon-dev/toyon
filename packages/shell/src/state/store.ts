@@ -84,7 +84,6 @@ import {
   SHELL_STREAM,
   toyonDark,
 } from "@toyon/shared";
-import { owedJump } from "../app/unseenJump.ts";
 import { stoppedAsk, stoppedBy } from "../surfaces/chat/ask.ts";
 import { dotClass } from "../surfaces/util.ts";
 import { mergeLinks } from "./links.ts";
@@ -1963,29 +1962,34 @@ function reduce(s: State, action: Action): State {
       if (ids.length === 0) return s;
       const hidden = { ...s, archiving: [...s.archiving, ...ids] };
       if (!s.activeId || !ids.includes(s.activeId)) return hidden;
-      // the selection leaves with the row. A row waiting on an answer comes first, since its agent
-      // is stuck until someone replies. Then, archiving being tidying up, the next row that is done
-      // too: landed, its agent at rest. Then the rest of what the rail owes the person: the nearest
-      // row unseen or working. With none, the closest row whose app is up: a task that is open and
-      // can be carried on. With none of those either, the lead, whose box starts the next worktree.
-      // Within a tier, the nearest above where the archived row sat, then round from the bottom,
-      // and the one above on a tie: the rail is ordered by last send, so above is the work touched
-      // more recently, and below is what has been left to sit, which is the last place to land
-      // after tidying up.
+      // the selection leaves with the row. The rows above it are looked at first, nearest first,
+      // and the rows below only when nothing above qualifies: the rail is ordered by last send,
+      // so above is the work touched more recently, and below is what has been left to sit, which
+      // nothing short of an empty top half pulls into focus. On each side the same ladder: a row
+      // waiting on an answer, since its agent is stuck until someone replies; then, archiving
+      // being tidying up, a row that is done too, landed with its agent at rest; then the rest of
+      // what the rail owes the person, a row unseen or working; then a row whose app is up, a task
+      // that is open and can be carried on. With nothing on either side, the lead, whose box
+      // starts the next worktree.
       const from = s.visible.filter((w) => w.id === s.activeId || !hidden.archiving.includes(w.id));
       const at = from.findIndex((w) => w.id === s.activeId);
-      const isDone = (w: OwnedWorktree) =>
-        w.id !== s.activeId && canArchive(w.worktree) && !!w.worktree.landed && w.agent === "idle";
-      const above = (hit: (w: OwnedWorktree) => boolean) =>
-        (from.findLast((w, i) => i < at && hit(w)) ?? from.findLast(hit))?.id;
-      const waiting = above((w) => w.id !== s.activeId && w.agent === "waiting");
-      const done = above(isDone);
-      const owed = owedJump(from, s.activeId, -1)?.activate;
-      const up = from
-        .map((w, i) => ({ id: w.id, i, far: Math.abs(i - at), up: !isLead(w.worktree) && dotClass(w) === "running" }))
-        .filter((w) => w.up && w.far > 0)
-        .sort((a, b) => a.far - b.far || a.i - b.i)[0]?.id;
-      const next = activate(hidden, waiting ?? done ?? owed ?? up ?? landingIn(hidden, s.activeRepoId));
+      const ladder: ((w: OwnedWorktree) => boolean)[] = [
+        (w) => w.agent === "waiting",
+        (w) => canArchive(w.worktree) && !!w.worktree.landed && w.agent === "idle",
+        (w) => !!w.unseen,
+        (w) => w.agent === "working",
+        (w) => !isLead(w.worktree) && dotClass(w) === "running",
+      ];
+      const side = (pick: (hit: (w: OwnedWorktree) => boolean) => OwnedWorktree | undefined) => {
+        for (const hit of ladder) {
+          const w = pick(hit);
+          if (w) return w.id;
+        }
+        return undefined;
+      };
+      const above = side((hit) => from.findLast((w, i) => i < at && hit(w)));
+      const below = () => side((hit) => from.find((w, i) => i > at && hit(w)));
+      const next = activate(hidden, above ?? below() ?? landingIn(hidden, s.activeRepoId));
       // the phone shows one worktree at a time, so a jump there is a screen the person never asked
       // for: the row goes and the list is what is left, where they pick the next one themselves
       return s.frame === "phone" ? { ...next, screen: "home" } : next;

@@ -206,6 +206,18 @@ export function archivedWindow(
   return { shown, rest: archived.length - shown.length };
 }
 
+/**
+ * The row an arrow lands on from `id` in a section's rows, or null at the section's end. Each
+ * section of the rail (the worktrees, the found ones, the archive) is its own list: the walk ends
+ * where the section does rather than crossing into the next, the way a list's arrows do, and the
+ * wrapping walk from anywhere is the global chord's.
+ */
+export function rowStep(ids: readonly string[], id: string, down: boolean): string | null {
+  const at = ids.indexOf(id);
+  if (at < 0) return null;
+  return ids[at + (down ? 1 : -1)] ?? null;
+}
+
 /** context in use past this share of the window is a figure worth a hover: below it the number
  * changes nothing you would do here */
 export const CONTEXT_HIGH = 0.5;

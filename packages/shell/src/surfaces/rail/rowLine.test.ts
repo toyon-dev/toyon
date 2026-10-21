@@ -13,6 +13,7 @@ import {
   type RowContext,
   rowLine,
   rowQuiet,
+  rowStep,
 } from "./rowLine.ts";
 
 // The order of the line's answers is the whole logic, and each step below was chosen against the
@@ -348,5 +349,20 @@ describe("the archived rows the rail draws", () => {
     expect(rest).toBe(9);
     // one inside the window is not drawn twice
     expect(archivedWindow(many(ARCHIVED_SHOWN + 10), "a2").shown).toHaveLength(ARCHIVED_SHOWN);
+  });
+});
+
+describe("the arrow walk within a section", () => {
+  const ids = ["a", "b", "c"];
+
+  test("steps to the neighbour and stops at the ends", () => {
+    expect(rowStep(ids, "a", true)).toBe("b");
+    expect(rowStep(ids, "b", false)).toBe("a");
+    expect(rowStep(ids, "c", true)).toBeNull();
+    expect(rowStep(ids, "a", false)).toBeNull();
+  });
+
+  test("a row outside the section walks nowhere", () => {
+    expect(rowStep(ids, "z", true)).toBeNull();
   });
 });

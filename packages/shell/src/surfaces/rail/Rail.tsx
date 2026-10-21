@@ -59,6 +59,7 @@ import {
   owedLine,
   rowLine,
   rowQuiet,
+  rowStep,
 } from "./rowLine.ts";
 import { slideLadder } from "./slideLadder.ts";
 import { createSpringLoad } from "./springLoad.ts";
@@ -191,6 +192,27 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
     );
     return () => cancelAnimationFrame(f);
   });
+  // ↑↓ walk a section's rows while one has focus, the way the changes panel's files do: the next
+  // row is picked and takes the focus, so the next press keeps walking. The ends stop the way a
+  // list's do, and each section is its own list (rowStep). ⌥↑/↓ and ⌃Tab are the walk from
+  // anywhere, and that one wraps (app/keys.ts). The row is found by `attr`, since the archive's
+  // rows must not carry data-wt: that marks a row a file can be dropped on.
+  const walkKey = (
+    e: React.KeyboardEvent,
+    ids: readonly string[],
+    id: string,
+    attr: "data-wt" | "data-arch",
+    pick: (id: string) => void,
+  ) => {
+    if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+    // a modified arrow is the global walk's, which runs after this: stepping here too moved two rows
+    if (e.altKey || e.ctrlKey || e.metaKey) return;
+    e.preventDefault();
+    const next = rowStep(ids, id, e.key === "ArrowDown");
+    if (next === null) return;
+    pick(next);
+    listRef.current?.querySelector<HTMLElement>(`[${attr}="${next}"]`)?.focus();
+  };
   const repos = useStore((s) => s.repos);
   const shipping = useStore((s) => s.shipping);
   const rows = useStore((s) => s.rows);
@@ -303,6 +325,7 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
         menu?.owner === "rail" && menu.key === a.id && "menu-open",
       )}
       data-state={rowState({ current: !onScreen && archivedPage?.id === a.id })}
+      data-arch={a.id}
       {...tip(archivedState(a), undefined, {
         placement: tipSide,
         card: true,
@@ -310,6 +333,17 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
         aside: archivedFigures(a),
       })}
       onClick={() => dispatch({ a: "open-archived", id: a.id })}
+      // the walk opens each page as it lands, as a click does; the window's "more" row is not a
+      // page and the walk stops short of it
+      onKeyDown={(e) =>
+        walkKey(
+          e,
+          arch.shown.map((x) => x.id),
+          a.id,
+          "data-arch",
+          (to) => dispatch({ a: "open-archived", id: to }),
+        )
+      }
       {...cm.contextMenu(() => archivedItems(a, { clientId, frame }, deps), a.id)}
     >
       {/* biome-ignore lint/a11y/useKeyWithClickEvents: on touch the whole seat opens the menu the kebab in it opens, since the kebab shows on a hover that never comes; the row menu carries the same actions for the keyboard */}
@@ -464,21 +498,11 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
               },
             ))}
         data-wt={id}
-        // ↑↓ walk the rows while one has focus, the way the changes panel's files do: the next row
-        // is picked and takes the focus, so the next press keeps walking. The ends stop the way a
-        // list's do, and the found list below is its own section. ⌥↑/↓ and ⌃Tab are the walk from
-        // anywhere, and that one wraps (app/keys.ts).
+        // a found row walks the found list, an owned one the worktrees above it (walkKey)
         onKeyDown={(e) => {
-          if (!owned || graftMode || (e.key !== "ArrowUp" && e.key !== "ArrowDown")) return;
-          // a modified arrow is the global walk's, which runs after this: stepping here too moved two rows
-          if (e.altKey || e.ctrlKey || e.metaKey) return;
-          e.preventDefault();
-          const down = e.key === "ArrowDown";
-          const at = worktrees.findIndex((w) => w.id === id);
-          const next = worktrees[at + (down ? 1 : -1)];
-          if (!next) return;
-          dispatch({ a: "activate", id: next.id });
-          listRef.current?.querySelector<HTMLElement>(`[data-wt="${next.id}"]`)?.focus();
+          if (graftMode) return;
+          const ids = (owned ? worktrees : discovered).map((w) => w.id);
+          walkKey(e, ids, id, "data-wt", (to) => dispatch({ a: "activate", id: to }));
         }}
         onClick={(e) => {
           // in graft mode the row you are on is the stock the others go onto, marked by its edge,

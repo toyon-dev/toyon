@@ -24,6 +24,7 @@ The composer's @ menu reaches the other worktrees of the project, the editor pan
 - While a commit or land runs, the commit box shows the step's line where the message was and keeps its height, so the foot does not jump. The typed message is held and clears only once the tree is clean, so a refused hook gives the words back to edit.
 - Waiting lines in the files tree, history, design pane, terminal, boot and import views and the pickers show as live text instead of a spinner beside the words.
 - The archived row's menu item reads delete instead of delete for good; the confirm dialog still spells out what goes with it.
+- When a sync finds that the changes carried on the row no longer fit over main, it asks the agent to fix them and names the clashing files, instead of leaving a bare line on the row.
 
 ### Fixed
 - A reply containing a raw HTML tag such as `<title>` or `<script>` drew nothing after the tag; the tags now show as text.

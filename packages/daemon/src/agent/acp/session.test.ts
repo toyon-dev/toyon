@@ -1097,6 +1097,27 @@ describe("AcpSession", () => {
     await w.session.close();
   });
 
+  test("stopping is on from the press until the turn ends, told to the rows at both edges", async () => {
+    let told = 0;
+    const stopping = untilCancelled();
+    const w = world(stopping, claudeSpec, 60_000, undefined, { onStopping: () => told++ });
+    w.session.send("go");
+    await Bun.sleep(30);
+    expect(w.session.stopping).toBe(false);
+    w.session.stop();
+    // the status itself does not move: the agent is still working until the cancel has taken
+    expect(w.session.stopping).toBe(true);
+    expect(w.session.status).toBe("working");
+    expect(told).toBe(1);
+    // a second press re-sends the cancel and moves nothing
+    w.session.stop();
+    expect(told).toBe(1);
+    await w.idle();
+    expect(w.session.stopping).toBe(false);
+    expect(told).toBe(2);
+    await w.session.close();
+  });
+
   test("a stop before the prompt has gone out keeps it from going, and the queue still runs", async () => {
     const stopping = untilCancelled();
     const w = world(stopping);
@@ -1180,28 +1201,6 @@ describe("AcpSession", () => {
     await w.session.close();
   });
 
-  test("permission requests are answered by policy: inside allowed, outside rejected with agent-blocked", async () => {
-    const answers: string[] = [];
-    const fake = fakeAgent(async (p, client) => {
-      for (const path of [join(wt, "ok.ts"), "/etc/passwd"]) {
-        const r = await client.request(acp.methods.client.session.requestPermission, {
-          sessionId: p.sessionId,
-          toolCall: { toolCallId: "t", title: "Edit", kind: "edit", locations: [{ path }] },
-          options: [
-            { optionId: "allow-once", name: "a", kind: "allow_once" },
-            { optionId: "reject", name: "r", kind: "reject_once" },
-          ],
-        });
-        answers.push(r.outcome.outcome === "selected" ? r.outcome.optionId : "cancelled");
-      }
-      return { stopReason: "end_turn" };
-    });
-    const w = world(fake);
-    w.session.send("edit");
-    await w.idle();
-    expect(answers).toEqual(["allow-once", "reject"]);
-    const blocked = w.events.find((e) => e.type === "agent-blocked");
-    expect(blocked).toMatchObject({ tool: "Edit", path: "/etc/passwd" });
   test("a steered message the agent answers after the stop, before the turn ends, is not sent again", async () => {
     // the cancel does not take at once (a command still running holds the interrupt off) and the
     // agent picks the steered message up meanwhile: its words, under a message of their own,
@@ -1236,6 +1235,28 @@ describe("AcpSession", () => {
     await w.session.close();
   });
 
+  test("permission requests are answered by policy: inside allowed, outside rejected with agent-blocked", async () => {
+    const answers: string[] = [];
+    const fake = fakeAgent(async (p, client) => {
+      for (const path of [join(wt, "ok.ts"), "/etc/passwd"]) {
+        const r = await client.request(acp.methods.client.session.requestPermission, {
+          sessionId: p.sessionId,
+          toolCall: { toolCallId: "t", title: "Edit", kind: "edit", locations: [{ path }] },
+          options: [
+            { optionId: "allow-once", name: "a", kind: "allow_once" },
+            { optionId: "reject", name: "r", kind: "reject_once" },
+          ],
+        });
+        answers.push(r.outcome.outcome === "selected" ? r.outcome.optionId : "cancelled");
+      }
+      return { stopReason: "end_turn" };
+    });
+    const w = world(fake);
+    w.session.send("edit");
+    await w.idle();
+    expect(answers).toEqual(["allow-once", "reject"]);
+    const blocked = w.events.find((e) => e.type === "agent-blocked");
+    expect(blocked).toMatchObject({ tool: "Edit", path: "/etc/passwd" });
     await w.session.close();
   });
 

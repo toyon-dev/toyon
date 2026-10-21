@@ -377,6 +377,13 @@
       background: var(--green);
       animation: pulse 1.2s ease-in-out infinite;
     }
+    /* asked to stop and still winding down: working's pulse in the stop button's red, so the row
+   says the press landed from across the rail, and the breath stops with the turn. The red is
+   the stop control's own colour, not the crash's: the pulse is what tells the two apart. */
+    &.stopping {
+      background: var(--red);
+      animation: pulse 1.2s ease-in-out infinite;
+    }
     /* blocked on you, not on the model. Steady rather than pulsing: working's motion means "leave it
    alone", and this one means the opposite. */
     &.waiting {
@@ -439,6 +446,15 @@
   @media (prefers-reduced-motion: reduce) {
     .dot.working {
       background: var(--yellow);
+      animation: none;
+    }
+    /* red held still reads as crashed, so the stop in progress keeps working's change colour and
+   wears the stop's red as a ring inside it: still, and still not the same dot as working. A
+   border rather than an inset shadow, so the unseen ring, which is the dot's box-shadow, can
+   sit outside it on the same row. */
+    .dot.stopping {
+      background: var(--yellow);
+      border: 1.5px solid var(--red);
       animation: none;
     }
   }

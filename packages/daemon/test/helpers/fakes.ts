@@ -18,6 +18,7 @@ import type { WorktreeProcs } from "../../src/runtime/supervisor.ts";
 
 export class FakeAgent implements AgentAdapter {
   status: AgentStatus = "idle";
+  stopping = false;
   sent: Array<{ text: string } & SendOpts> = [];
   stops = 0;
   onQueueChange: (() => void) | null = null;

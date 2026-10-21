@@ -3034,6 +3034,7 @@ export class WorktreeService {
           procs: rt?.procs?.states() ?? [],
           borrowed: rt?.borrowed.size ? [...rt.borrowed] : undefined,
           agent: rt?.agent.status ?? "idle",
+          stopping: rt?.agent.stopping || undefined,
           login: !!rt?.login,
           ahead,
           behind,

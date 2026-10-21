@@ -851,6 +851,10 @@ export interface WorktreeStatus {
   borrowed?: string[];
   /** "idle" for a row toyon does not run */
   agent: AgentStatus;
+  /** a stop was pressed and the turn has not ended yet: the agent is asked to stop and may still be
+   * winding down (a command it is running holds the interrupt off), so the status stays busy and
+   * this says the press landed. Absent otherwise. */
+  stopping?: true;
   /** the agent's terminal login is running here, or failed and still shows why: the login tab */
   login: boolean;
   /** commits ahead/behind the default branch, from the worktree's tree-state record, the same

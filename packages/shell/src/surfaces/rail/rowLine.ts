@@ -50,7 +50,7 @@ export const guestLine = (repoName: string, originTitle: string) => `in ${repoNa
 export const owedLine = (repoName: string) => `in ${repoName}, here while it needs you`;
 
 /** the dots that mean something is happening, or has broken, right now */
-const IN_FLIGHT: ReadonlySet<DotState> = new Set(["waiting", "working", "starting", "failed", "crashed"]);
+const IN_FLIGHT: ReadonlySet<DotState> = new Set(["waiting", "stopping", "working", "starting", "failed", "crashed"]);
 
 export interface RowContext {
   offline: boolean;

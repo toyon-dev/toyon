@@ -86,6 +86,8 @@ export interface AcpSessionDeps {
   setSessionId: (id: string) => void;
   onEvent: AgentEventListener;
   onStatus: AgentStatusListener;
+  /** `stopping` moved: on at a stop press, off when the turn it was for has ended */
+  onStopping?: () => void;
   /** whatever this connection learns about the agent's credentials, for the per-agent cache */
   onAuth?: (agentId: string, o: AuthObservation) => void;
   /** how much of its plan the account has used, as a reply reported it: per agent, like the
@@ -236,8 +238,6 @@ interface QueueItem {
   recorded?: Recorded;
   /** what Toyon's own message was sent for, when it is one: what rides behind it reads it */
   asked?: Asked["kind"];
-}
-
   /** steered, then handed back to the queue by a stop: the agent can still go on past the cancel
    * and pick the message up after all (a command still running holds the interrupt off, and the
    * adapter forces the turn closed only after a floor), and its answer then belongs to the
@@ -273,16 +273,19 @@ export class AcpSession implements AgentAdapter {
   /** messages steered into the running turn that the agent has not started answering. A cancel
    * takes such a message with the turn (the adapter never runs it), so a stop hands it back. */
   private steered: QueueItem[] = [];
-  /** the message refused for want of credentials; sent again after a login */
-  private refused: QueueItem | null = null;
   /** the message the agent was writing when the last steer went out, by the id its text carries.
    * A steer pre-empts that message, but its deltas already on the wire still trail in; text under
    * a newer id is the agent answering the steer, text under this one is the cut-off tail. */
   private steerMark: string | undefined;
   /** the id of the message whose text arrived last */
   private streamingId: string | undefined;
+  /** the message refused for want of credentials; sent again after a login */
+  private refused: QueueItem | null = null;
   private running = false;
   private interrupted = false;
+  /** a stop was pressed and the prompt it was for has not come back: what the rows show as the
+   * press having landed, since the status stays busy until the agent has in fact stopped */
+  private stopping_ = false;
   private stopped = false;
   /** landing ops out on the worktree: while any is, nothing starts a turn and nothing is steered
    * into one, and what is sent meanwhile waits in the queue. A count, since a sync that waited for
@@ -527,6 +530,16 @@ export class AcpSession implements AgentAdapter {
     this.d.onStatus(s);
   }
 
+  get stopping(): boolean {
+    return this.stopping_;
+  }
+
+  private setStopping(on: boolean) {
+    if (this.stopping_ === on) return;
+    this.stopping_ = on;
+    this.d.onStopping?.();
+  }
+
   /** A message from the person. One sent past an open card is their answer to it: the agent is
    * blocked on the card and would read nothing until it closed, so the card closes as passed and
    * the message is what the turn carries on with. Toyon's own message answers nothing: the card
@@ -593,6 +606,7 @@ export class AcpSession implements AgentAdapter {
     if (!live || !(this.running || this.own) || this.interrupted) return this.enqueue(item);
     // unanswered from the moment it goes out: a stop can land before the agent replies
     this.steered.push(item);
+    this.steerMark = this.streamingId;
     let outcome: SteerOutcome;
     try {
       outcome = steerOutcome(
@@ -608,7 +622,6 @@ export class AcpSession implements AgentAdapter {
           // prompt itself with it, since nothing here would be tracking a turn it started alone
           _meta: { steering: { idleBehavior: "promptRequired" } },
         }),
-    this.steerMark = this.streamingId;
       );
     } catch (e) {
       // nothing was injected: both adapters validate the request before they push anything
@@ -637,6 +650,17 @@ export class AcpSession implements AgentAdapter {
     if (this.live === live) preempted(live.tools);
   }
 
+  /** Words or a call from the agent while a steer is unanswered: it is answering. Past a stop the
+   * same words mean the cancel has not taken yet and the agent is answering what the stop handed
+   * back, so the copies leave the queue rather than run again once the turn ends. Only while that
+   * turn is still ending: a later turn's words say nothing about a copy still waiting. */
+  private answered() {
+    this.steered = [];
+    if (!this.interrupted || !this.queue.some((q) => q.handedBack)) return;
+    this.queue = this.queue.filter((q) => !q.handedBack);
+    this.queueChanged();
+  }
+
   /** off the unanswered list; false when a stop has already moved it to the queue */
   private unsteer(item: QueueItem): boolean {
     const at = this.steered.indexOf(item);
@@ -652,17 +676,6 @@ export class AcpSession implements AgentAdapter {
     this.cancelAsks();
     if (!this.running) {
       // a turn of the agent's own has no prompt to fail: the cancel goes out and the turn ends here
-  /** Words or a call from the agent while a steer is unanswered: it is answering. Past a stop the
-   * same words mean the cancel has not taken yet and the agent is answering what the stop handed
-   * back, so the copies leave the queue rather than run again once the turn ends. Only while that
-   * turn is still ending: a later turn's words say nothing about a copy still waiting. */
-  private answered() {
-    this.steered = [];
-    if (!this.interrupted || !this.queue.some((q) => q.handedBack)) return;
-    this.queue = this.queue.filter((q) => !q.handedBack);
-    this.queueChanged();
-  }
-
       if (this.own && this.live) {
         const { conn, sessionId } = this.live;
         fireAndForget(this.d.worktreeId, conn.ctx.notify(acp.methods.agent.session.cancel, { sessionId }), "cancel");
@@ -671,8 +684,10 @@ export class AcpSession implements AgentAdapter {
       return;
     }
     this.interrupted = true;
+    this.setStopping(true);
     // what the agent had not got to goes first, ahead of anything sent after it
     if (this.steered.length > 0) {
+      for (const item of this.steered) item.handedBack = true;
       this.queue.unshift(...this.steered);
       this.steered = [];
       this.queueChanged();
@@ -689,7 +704,6 @@ export class AcpSession implements AgentAdapter {
 
   /** the worktree is going away (or the daemon is): kill the process, remember nothing new */
   async close(): Promise<void> {
-      for (const item of this.steered) item.handedBack = true;
     this.stopped = true;
     this.clearReaper();
     // nothing may start a turn after this, so what was queued goes with the process
@@ -729,6 +743,7 @@ export class AcpSession implements AgentAdapter {
         this.interrupted = false;
         this.steered = [];
         for (const q of this.queue) q.handedBack = false;
+        this.setStopping(false);
       }
       // a handoff card proposed during the turn is still a person's answer owed once the turn is
       // over: the row keeps reading waiting from it, not idle
@@ -772,6 +787,7 @@ export class AcpSession implements AgentAdapter {
       this.steered = [];
       for (const q of this.queue) q.handedBack = false;
       this.running = false;
+      this.setStopping(false);
       this.maybeArmReaper();
     }
   }

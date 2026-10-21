@@ -1236,6 +1236,19 @@
     right: 0;
     z-index: 2;
   }
+  /* the press went out and the turn is still ending (`.composer.stopping` below is the other
+   thing: the stop being offered at all). The glyph breathes the way the rail dot does for the
+   same state, in the red it already wears, so the press reads as taken without the control
+   changing its meaning; a second press still goes. The breath ends with the turn. With motion
+   off the button holds still and the tip and the rail dot carry the state. */
+  .composer-stop.pending {
+    animation: pulse 1.2s ease-in-out infinite;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .composer-stop.pending {
+      animation: none;
+    }
+  }
   .composer.stopping .composer-field :is(textarea, .composer-ghost) {
     padding-right: 24px;
   }

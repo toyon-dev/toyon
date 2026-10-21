@@ -20,6 +20,9 @@ export interface HubEvents {
   log: (worktreeId: string, proc: string, line: string, retract?: number) => void;
   agent: (worktreeId: string, seq: number, event: AgentEvent) => void;
   agentStatus: (worktreeId: string, status: AgentStatus) => void;
+  /** a stop was pressed on the worktree's turn, or the turn it was for has ended: the rows carry
+   * the flag, and nothing else moves, so only the rows frame listens */
+  agentStopping: (worktreeId: string) => void;
   /** the agent stopped (finished, was stopped, failed, or is blocked asking) and the record says how */
   turnSettled: (worktreeId: string, turn: LastTurn) => void;
   /** the repo's check exited 0 in the worktree: what the tree built to pass it is worth keeping */

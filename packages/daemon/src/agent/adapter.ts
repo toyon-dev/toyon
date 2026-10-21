@@ -59,6 +59,8 @@ export interface SendOpts {
 
 export interface AgentAdapter {
   readonly status: AgentStatus;
+  /** a stop was pressed and the turn it was for has not ended: the status stays busy meanwhile */
+  readonly stopping: boolean;
   readonly queueLength: number;
   /** the waiting messages the shell draws as queued: those not yet shown in the transcript */
   readonly queueItems: QueuedMessage[];

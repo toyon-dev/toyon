@@ -79,6 +79,7 @@ export function clampW(n: number, fallback: number): number {
 /** the rail dot: what the worktree is doing right now */
 export type DotState =
   | "waiting"
+  | "stopping"
   | "working"
   | "failed"
   | "landed"
@@ -91,6 +92,8 @@ export type DotState =
 export function dotClass(w: WorktreeStatus): DotState {
   // a worktree that needs you outranks one that is merely busy
   if (w.agent === "waiting") return "waiting";
+  // asked to stop and still winding down: busy, and the press should show from across the rail
+  if (w.agent === "working" && w.stopping) return "stopping";
   if (w.agent === "working") return "working";
   // a turn that stopped on an error needs a person until the next one starts. The record outlives
   // the process and the daemon, which only the status does not; without it a server still running
@@ -108,6 +111,7 @@ export function dotClass(w: WorktreeStatus): DotState {
 
 const DOT_LABEL: Record<DotState, string> = {
   waiting: "Waiting for you",
+  stopping: "Agent stopping",
   working: "Agent working",
   failed: "Agent failed",
   landed: "Landed",

@@ -1716,8 +1716,12 @@ export function Composer({
             <IconButton
               icon="stop"
               tone="danger"
-              className="composer-stop"
-              label={`Stop the agent (context up to here is kept${queue.length ? "; queued messages go next" : ""})`}
+              className={cx("composer-stop", active?.stopping && "pending")}
+              label={
+                active?.stopping
+                  ? "Stopping: the agent is winding down; press again to send the stop once more"
+                  : `Stop the agent (context up to here is kept${queue.length ? "; queued messages go next" : ""})`
+              }
               hint="esc"
               onClick={() => id && sock?.send({ t: "stop-agent", worktreeId: id })}
             />

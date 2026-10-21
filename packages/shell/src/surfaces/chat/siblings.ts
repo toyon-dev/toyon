@@ -1,4 +1,6 @@
-import type { WorktreeStatus } from "@toyon/shared";
+import type { OwnedWorktree } from "@toyon/shared";
+import { sentAt } from "@toyon/shared";
+import { type DotState, dotClass } from "../util.ts";
 
 /** a worktree of the project a message can name, in the rail's order */
 export interface Sibling {
@@ -7,13 +9,18 @@ export interface Sibling {
   branch: string;
   /** its directory's name, which is what a terminal or a transcript path shows of it */
   dir: string;
+  /** the rail's dot for it, so the row says what the worktree is doing as the rail does */
+  dot: DotState;
+  /** when it was last sent to, which the rail is ordered by */
+  at: number;
 }
 
-/** The project's other worktrees with a chat to point at, in the rail's order: the rows Toyon
- * runs, less main and the spare (neither has a chat of its own) and the row the message is
- * written in. Nothing for a message with no project: a found worktree, a draft, an archive. */
+/** The project's other worktrees with a chat to point at, in the rail's order (the rows the rail
+ * shows, which are already sorted so): the rows Toyon runs, less main and the spare (neither has
+ * a chat of its own) and the row the message is written in. Nothing for a message with no
+ * project: a found worktree, a draft, an archive. */
 export function siblingWorktrees(
-  rows: readonly WorktreeStatus[],
+  rows: readonly OwnedWorktree[],
   repoId: string | undefined,
   self: string | null | undefined,
 ): Sibling[] {
@@ -21,19 +28,26 @@ export function siblingWorktrees(
   const out: Sibling[] = [];
   for (const r of rows) {
     const w = r.worktree;
-    if (!w || w.repoId !== repoId || w.id === self || w.kind !== "worktree") continue;
-    out.push({ id: w.id, title: w.title, branch: w.branch, dir: w.path.slice(w.path.lastIndexOf("/") + 1) });
+    if (w.repoId !== repoId || w.id === self || w.kind !== "worktree") continue;
+    out.push({
+      id: w.id,
+      title: w.title,
+      branch: w.branch,
+      dir: w.path.slice(w.path.lastIndexOf("/") + 1),
+      dot: dotClass(r),
+      at: sentAt(w),
+    });
   }
   return out;
 }
 
 /** letters and digits alone, so a title typed as its slug, with dashes, or run together all read
- * as the title: a mention ends at a space, so the words of a title cannot be typed with them */
+ * as the title; the words of a title typed with their spaces read the same way */
 const plain = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
 
 /** whether a `@` query names the worktree: by its title, its branch, its id (which names its
  * transcript) or its directory, each read without punctuation or spaces */
-export function matchesSibling(query: string, w: Sibling): boolean {
+export function matchesSibling(query: string, w: Pick<Sibling, "title" | "branch" | "id" | "dir">): boolean {
   const q = plain(query);
   if (!q) return true;
   return [w.title, w.branch, w.id, w.dir].some((name) => plain(name).includes(q));

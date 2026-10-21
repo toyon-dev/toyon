@@ -80,7 +80,7 @@ import {
   verdictLine,
 } from "../recap.ts";
 import { runLine, runOf, runTicking, useLastingRun } from "../runs.ts";
-import { chord, commandSource, folderList, pickLabel, procTrouble } from "../util.ts";
+import { ago, chord, commandSource, folderList, pickLabel, procTrouble } from "../util.ts";
 import { AttachmentSet } from "./AttachmentSet.tsx";
 import { agentReadiness } from "./agentReady.ts";
 import { answerLines, answered as hasAnswer, stoppedAsk } from "./ask.ts";
@@ -97,7 +97,7 @@ import { PickChip } from "./PickChip.tsx";
 import { QuestionCard } from "./QuestionCard.tsx";
 import { type Step, stepWalk, type WalkKey } from "./recall.ts";
 import { shellCommandOf, shellContext } from "./shellMode.ts";
-import { matchesSibling, siblingWorktrees } from "./siblings.ts";
+import { matchesSibling, type Sibling, siblingWorktrees } from "./siblings.ts";
 import { UsagePanel } from "./UsagePanel.tsx";
 import { compactAdvice, compactNudge, limitLevel, limitSummary } from "./usage.ts";
 import { useAgentCheck } from "./useAgentCheck.ts";
@@ -138,7 +138,7 @@ type Row =
   | { kind: "file"; path: string; status?: GitFileStatus }
   | { kind: "folder"; path: string }
   | { kind: "changes"; n: number }
-  | { kind: "worktree"; id: string; title: string; branch: string }
+  | ({ kind: "worktree" } & Sibling)
   | { kind: "cmd"; c: AgentCommand };
 
 /** how many of the project's other worktrees a bare `@` offers above the files, newest first;
@@ -373,8 +373,9 @@ export function Composer({
   const files = useLocalField(id, "files");
   // the folders the files tab shows, so `@src/app/` names one the tree has
   const folders = useMemo(() => folderList(files ?? NO_PATHS), [files]);
-  // the project's other rows with a chat, so `@` can point the agent at what another worktree did
-  const railRows = useStore((s) => s.rows);
+  // the project's other rows with a chat, in the rail's order, so `@` can point the agent at what
+  // another worktree did and offers the ones last sent to first
+  const railRows = useStore((s) => s.visible);
   const siblings = useMemo(() => siblingWorktrees(railRows, repoId, id), [railRows, repoId, id]);
   const git = useLocalField(id, "git");
   // this worktree's uncommitted files: the status when the row is subscribed, else the row's
@@ -528,7 +529,7 @@ export function Composer({
     // that name a file and no worktree leave the list the files', as before.
     const q = triggerQuery.trim();
     const named = q ? siblings.filter((w) => matchesSibling(q, w)) : siblings.slice(0, WORKTREES_UNASKED);
-    out.push(...named.map((w): Row => ({ kind: "worktree", id: w.id, title: w.title, branch: w.branch })));
+    out.push(...named.map((w): Row => ({ kind: "worktree", ...w })));
     out.push(...rankMentions(files ?? [], folders, git?.files ?? [], triggerQuery, 8));
     return out;
   }, [triggerKind, triggerQuery, files, folders, git, commands, ownRows, siblings]);
@@ -1431,7 +1432,15 @@ export function Composer({
             if (r.kind === "folder") return fileRow(r.path, undefined, trigger.query, { folder: true, gutter });
             if (r.kind === "changes")
               return <PaletteRow label="@changes" hint={`${r.n} uncommitted ${r.n === 1 ? "file" : "files"}`} />;
-            if (r.kind === "worktree") return <PaletteRow label={r.title} hint={`@${r.branch}`} />;
+            // the rail's row in short: its dot, its title, and when it was last sent to. The
+            // branch is what the pick writes, and reads under the mark once it is in the box.
+            if (r.kind === "worktree")
+              return (
+                <>
+                  <span className={`dot ${r.dot}`} />
+                  <PaletteRow label={r.title} hint={ago(r.at)} />
+                </>
+              );
             return <CommandRow c={r.c} query={trigger.query} />;
           }}
         />

@@ -34,7 +34,7 @@ export function MentionText({
   const files = useStore((s) => (worktreeId ? s.local[worktreeId]?.files : undefined));
   // the project's other open rows, by branch: an archived chat has no row, so its references to
   // rows since archived read as prose, which is what they are now
-  const rows = useStore((s) => s.rows);
+  const rows = useStore((s) => s.visible);
   const repoId = useStore((s) => worktreeById(s, worktreeId)?.worktree.repoId);
   const worktrees = useMemo(() => {
     const out = new Map<string, WorktreeMention>();

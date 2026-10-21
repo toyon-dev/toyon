@@ -235,13 +235,26 @@
       max-height: 8lh;
     }
   }
+  /* the op's line where the message was, in the field's own face and on its floor, so the box
+     keeps its shape as the words go and come back */
+  .commit-running {
+    flex: 1;
+    min-height: 3lh;
+    font: var(--type-ui);
+    /* the count ticks with the status; `font` resets the variant */
+    font-variant-numeric: tabular-nums;
+  }
+  /* The knobs row breaks before it squeezes: the acts are what can be pressed and keep their
+     width, and a count with its word is one mark, so in a narrow dock the acts drop to a line of
+     their own under the branch rather than either side being cut. The where span is no box of its
+     own, so its parts break with the row, and only the branch name gives way, taking what is left
+     of its line: a span with a width of its own was squeezed to nothing with the badge still
+     painting past it over the word beside it. */
+  .commit-box .composer-knobs {
+    flex-wrap: wrap;
+  }
   .commit-where {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    min-width: 0;
-    /* a count and its word are one mark: squeezed, the branch name gives way and a badge never
-       breaks onto a second line */
+    display: contents;
     & > :not(.branch-name) {
       flex-shrink: 0;
       white-space: nowrap;
@@ -250,6 +263,9 @@
   .branch-name {
     color: var(--text1);
     font: var(--type-mono-sm);
+    /* a basis of nothing, so the name is not what decides when the row breaks */
+    flex: 1 1 0;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -259,5 +275,7 @@
     align-items: center;
     gap: 4px;
     flex-shrink: 0;
+    /* on a line of its own, still at the row's end */
+    margin-left: auto;
   }
 }

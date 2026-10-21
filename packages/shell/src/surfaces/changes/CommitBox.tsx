@@ -21,7 +21,7 @@ import { useContextMenu } from "../../ui/menu.ts";
 import { tip } from "../../ui/Tooltip.tsx";
 import { behindNote } from "../chips/baseNote.ts";
 import { checkTip, messageGap, prCanMerge } from "../recap.ts";
-import { RUN_STATUS_TIP, runFacts, runOf, runStopTip, runTicking, useLastingRun } from "../runs.ts";
+import { RUN_STATUS_TIP, runFacts, runLine, runOf, runStopTip, runTicking, useLastingRun } from "../runs.ts";
 
 /** The foot of the changes panel, built like the chat composer: a message box over a row that says
  * where you are on the left and what you can do on the right. The message box shows the suggested
@@ -70,6 +70,13 @@ export function CommitBox({
   const runSecs = useSecondsSince(runTicking(shownRun) ? shownRun?.since : undefined);
   const [msg, setMsg] = useState("");
   useOnChange([id], () => setMsg(""));
+  // the words are the daemon's once pressed, and the box gives them up when the tree is clean: a
+  // commit that went through, or a land that did. A hook that refused leaves the tree dirty and
+  // the words where they were, to fix and press again; cleared at the press they were gone by
+  // the time the chat said why.
+  useOnChange([dirty], () => {
+    if (!dirty) setMsg("");
+  });
   const box = useRef<HTMLTextAreaElement>(null);
 
   // the message the landing verdict wrote, as the box's placeholder until it is taken in
@@ -113,7 +120,6 @@ export function CommitBox({
   const commit = () => {
     if (op || (!typed && !suggested)) return;
     shipOp(sock, dispatch, { t: "commit", worktreeId: id, message: typed ?? suggested ?? "" });
-    setMsg("");
   };
   const land = () => {
     if (op) return;
@@ -190,20 +196,34 @@ export function CommitBox({
           ? `${landWord}: ${heldStep}`
           : landWord
         : null;
-  const running = pressed;
-  // The run behind the word, under the rule where a line has the box's whole width: its stage,
-  // its time against the ceiling and its status ("pre-commit hook · 4m 13s of 30m"), with the
-  // stop at the end. Not on the knobs row, which is narrow and holds the word beside buttons: the
-  // line wrapped there four deep in a narrow dock. A terminated run is over, and the verdict or
-  // the shipped word says what it gave up after; the check over with the message still being
-  // written says so.
-  const facts = !askedRun
-    ? checking && !op
-      ? "writing the message"
-      : null
-    : shownRun
-      ? runFacts(shownRun, runSecs).join(" · ")
-      : null;
+  // the op's whole line: the run behind the word rides after it once it has lasted, its stage,
+  // its time against the ceiling and its status ("update: committing · pre-commit hook · 4m 13s
+  // of 30m"), the way the composer's line reads. One line, since where it stands has the box's
+  // whole width.
+  const running = pressed && shownRun ? runLine(pressed, shownRun, runSecs) : pressed;
+  // The message box stands for the op it was pressed under, the words gone from it: they are the
+  // daemon's now, and a box still offering them to edit beside "committing" read as a press not
+  // taken. The box holds the line in their place, and stays for the whole op: a land's commit
+  // empties the tree halfway through, and the line moving from the box to the row under it was a
+  // jump under the eye. On a clean tree there is no box, and the row's word is the line.
+  const boxHeld = useRef(false);
+  if (!running) boxHeld.current = false;
+  else if (dirty) boxHeld.current = true;
+  const boxUp = !!owned && (dirty || boxHeld.current);
+  const lineInBox = boxUp && !!running;
+  // Under the knobs, the check's run while the message is still being written: its stage, its
+  // time against the ceiling and its status, with the stop at the end. A terminated run is over,
+  // and the verdict says what it gave up after; the check over with the message still being
+  // written says so. An op's run is on the op's line.
+  const facts = op
+    ? null
+    : !askedRun
+      ? checking
+        ? "writing the message"
+        : null
+      : shownRun
+        ? runFacts(shownRun, runSecs).join(" · ")
+        : null;
   // the one stop the box offers: on the run its line is about, while there is a process to kill
   const stoppable = shownRun && (shownRun.status === "running" || shownRun.status === "detached") ? shownRun : null;
   const stop = stoppable && (
@@ -217,34 +237,42 @@ export function CommitBox({
 
   return (
     <div className="composer commit-box">
-      {owned && dirty && (
+      {boxUp && (
         <div className="composer-field">
-          <TextArea
-            size="lg"
-            bare
-            ref={box}
-            value={msg}
-            onChange={(e) => setMsg(e.target.value)}
-            onKeyDown={(e) => {
-              // enter breaks the line: a commit message is a subject, a blank line and a body,
-              // and the hooks that read it expect all three
-              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                e.preventDefault();
-                commit();
-              } else if (e.key === "Tab" && !e.shiftKey && msg === "" && suggested) {
-                e.preventDefault();
-                takeSuggestion();
+          {lineInBox ? (
+            // one span of plain text, no dots: the band is a gradient clipped to the element's own
+            // text, and a button inside it paints as a box of its own
+            <div className="commit-running live-text" data-tip={shownRun ? RUN_STATUS_TIP[shownRun.status] : undefined}>
+              {running}
+            </div>
+          ) : (
+            <TextArea
+              size="lg"
+              bare
+              ref={box}
+              value={msg}
+              onChange={(e) => setMsg(e.target.value)}
+              onKeyDown={(e) => {
+                // enter breaks the line: a commit message is a subject, a blank line and a body,
+                // and the hooks that read it expect all three
+                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                  e.preventDefault();
+                  commit();
+                } else if (e.key === "Tab" && !e.shiftKey && msg === "" && suggested) {
+                  e.preventDefault();
+                  takeSuggestion();
+                }
+              }}
+              placeholder={
+                suggested ??
+                (gap === "unanswered"
+                  ? "no message yet: the model did not answer. Check again, or write one here"
+                  : gap === "unasked"
+                    ? "no message yet: write one here to commit or land"
+                    : "commit message…")
               }
-            }}
-            placeholder={
-              suggested ??
-              (gap === "unanswered"
-                ? "no message yet: the model did not answer. Check again, or write one here"
-                : gap === "unasked"
-                  ? "no message yet: write one here to commit or land"
-                  : "commit message…")
-            }
-          />
+            />
+          )}
         </div>
       )}
       <div className="hint composer-knobs">
@@ -264,9 +292,13 @@ export function CommitBox({
         </span>
         <span className="commit-acts">
           {running ? (
-            // one span of plain text, no dots: the band is a gradient clipped to the element's own
-            // text, and a button inside it paints as a box of its own
-            <span className="live-text">{running}</span>
+            // the op's line where its button was, when the box above is not holding it, and the
+            // stop on its run at the end. One span of plain text, no dots: the band is a gradient
+            // clipped to the element's own text, and a button inside it paints as a box of its own
+            <>
+              {!lineInBox && <span className="live-text">{running}</span>}
+              {stop}
+            </>
           ) : (
             <>
               {owned && dirty && (
@@ -348,8 +380,8 @@ export function CommitBox({
       </div>
       {/* how far this trails main and the sync, said the way the composer says it: land stays the
           one lit verb in the row above, and a count has a line to itself however narrow the dock.
-          Above it, the run behind the word: what it is on and how long, its stop at the end. What
-          it prints is on the chat, on the row that streams it. */}
+          Above it, the check's run while the message is written: what it is on and how long, its
+          stop at the end. What it prints is on the chat, on the row that streams it. */}
       {(behindLine || facts) && (
         <div className="composer-notes">
           {facts && (

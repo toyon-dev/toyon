@@ -16,6 +16,13 @@ export interface Trigger {
 
 /** paths type straight through; a space ends the mention, since no path we list contains one */
 const IN_MENTION = /^[^\s]*$/;
+/** a word past the space that is only punctuation (`@toyon/fix ?`) is the sentence going on, not
+ * the title's next word: the match reads names without punctuation, so it would take it as one */
+const namesOn = (query: string) =>
+  query
+    .split(/\s+/)
+    .slice(1)
+    .every((w) => !w || /[a-z0-9]/i.test(w));
 
 /** `continues` says whether a query with spaces in it still names something, which only a
  * worktree title can: the menu stays open past a space while it does, so a title is typed as it
@@ -41,7 +48,7 @@ export function triggerAt(text: string, caret: number, continues?: (query: strin
   const query = text.slice(at + 1, caret);
   // a space in the query is allowed only while the words still name a worktree; a trailing
   // space is the title's next word about to be typed, and holds too
-  if (!IN_MENTION.test(query) && !continues?.(query)) return null;
+  if (!IN_MENTION.test(query) && !(namesOn(query) && continues?.(query))) return null;
   let to = caret;
   while (to < text.length && !/\s/.test(text[to] ?? "")) to++;
   return { kind: "file", query, from: at, to };

@@ -49,6 +49,18 @@ describe("triggerAt: @ mentions", () => {
     // the caret mid-word: the span runs to the end of that word
     expect(triggerAt("@message flash bug", 12, names)).toEqual({ kind: "file", query: "message fla", from: 0, to: 14 });
   });
+
+  test("punctuation after the mention is the sentence going on, not the title's next word", () => {
+    // the sibling match reads names without punctuation, so `toyon/fix ?` would still name the
+    // branch and the pick would eat the `?`
+    const names = (q: string) => q.toLowerCase().replace(/[^a-z0-9]/g, "") === "toyonfix";
+    expect(triggerAt("@toyon/fix ?", 12, names)).toBeNull();
+    expect(triggerAt("@toyon/fix !", 12, names)).toBeNull();
+    expect(triggerAt("@toyon/fix , ", 13, names)).toBeNull();
+    // a word with a letter in it, or the space just typed, still reads as the title
+    expect(triggerAt("@toyon/fix ", 11, names)?.query).toBe("toyon/fix ");
+    expect(triggerAt("@toyon/fix v2", 13, (q) => q.endsWith("v2"))?.query).toBe("toyon/fix v2");
+  });
 });
 
 describe("triggerAt: slash commands", () => {

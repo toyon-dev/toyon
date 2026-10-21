@@ -25,6 +25,9 @@ export interface ShipResult {
    * rebase cannot take: the failures an agent can be asked to resolve, named by what clears them
    * so the ask is for the same thing */
   conflict?: "rebase" | "merge";
+  /** the files the uncommitted work clashed in, when the branch's commits took the base and the
+   * work carried across a sync did not fit back over it */
+  carried?: string[];
   /** the step that stopped on the conflict, when one ran and its row is on the chat: a branch
    * refused for holding a merge ran nothing */
   step?: StepRow;
@@ -214,8 +217,16 @@ async function setAside(worktreePath: string): Promise<Aside | ShipResult | null
 
 /** The work set aside, back over whatever the sync left. Over the new base it may no longer fit;
  * then the branch returns to where it was and the work goes back exactly, index included, so a
- * sync that did not succeed leaves no trace. The ref goes only once the work is in the tree. */
-async function putBack(worktreePath: string, defaultBr: string, aside: Aside, taken: ShipResult): Promise<ShipResult> {
+ * sync that did not succeed leaves no trace, and the clash is the agent's to resolve the way a
+ * conflict in the branch's own commits is: the same ask, with the files named, since no step on
+ * the chat shows them. The ref goes only once the work is in the tree. */
+async function putBack(
+  worktreePath: string,
+  defaultBr: string,
+  how: "rebase" | "merge",
+  aside: Aside,
+  taken: ShipResult,
+): Promise<ShipResult> {
   let clash: string[] | null = null;
   if (taken.ok) {
     const applied = await git(worktreePath, "stash", "apply", aside.sha);
@@ -237,9 +248,12 @@ async function putBack(worktreePath: string, defaultBr: string, aside: Aside, ta
   await git(worktreePath, "update-ref", "-d", CARRIED);
   if (!clash) return taken;
   const named = clash.length ? ` (${listed(clash)})` : "";
+  const ask = how === "rebase" ? `rebase onto ${defaultBr}` : `merge ${defaultBr}`;
   return {
     ok: false,
-    message: `the uncommitted changes here conflict with ${defaultBr}${named}: commit them first, then sync`,
+    conflict: how,
+    carried: clash,
+    message: `the uncommitted changes here conflict with ${defaultBr}${named}: ask the agent to ${ask} and resolve them`,
   };
 }
 
@@ -286,10 +300,11 @@ export async function takeMainIn(
   }
   const { behind } = await aheadBehind(worktreePath, defaultBr);
   if (behind === 0) return { ok: true, message: `already up to date with ${defaultBr}` };
+  const how = await howToBring(worktreePath, defaultBr, own);
   const aside = carry ? await setAside(worktreePath) : null;
   if (aside && "message" in aside) return aside;
-  const taken = await bringIn(worktreePath, defaultBr, own, behind, w);
-  return aside ? putBack(worktreePath, defaultBr, aside, taken) : taken;
+  const taken = await bringIn(worktreePath, defaultBr, how, behind, w);
+  return aside ? putBack(worktreePath, defaultBr, how, aside, taken) : taken;
 }
 
 /** A landing by rebase puts the branch's commits on main as they are, so a merge among them lands
@@ -305,18 +320,25 @@ export async function requireLinear(worktreePath: string, base: string): Promise
   };
 }
 
+/** How the base comes into the branch: a rebase for a branch toyon owns, a merge for one it
+ * adopted. A rebase replays the branch's commits and drops the merges among them, and with a
+ * merge goes the conflict it resolved: the rebase would meet that conflict again on every sync,
+ * whatever was done about it. So a branch that holds one is merged with, which keeps the
+ * resolution. */
+async function howToBring(worktreePath: string, defaultBr: string, own: boolean): Promise<"rebase" | "merge"> {
+  if (!own) return "merge";
+  const merges = await git(worktreePath, "rev-list", "--merges", "--count", `${defaultBr}..HEAD`);
+  return merges.out === "0" ? "rebase" : "merge";
+}
+
 async function bringIn(
   worktreePath: string,
   defaultBr: string,
-  own: boolean,
+  how: "rebase" | "merge",
   behind: number,
   w: LandWatch,
 ): Promise<ShipResult> {
-  // a rebase replays the branch's commits and drops the merges among them, and with a merge goes
-  // the conflict it resolved: the rebase would meet that conflict again on every sync, whatever
-  // was done about it. A branch that holds one is merged with, which keeps the resolution.
-  const merges = own ? await git(worktreePath, "rev-list", "--merges", "--count", `${defaultBr}..HEAD`) : null;
-  if (own && merges?.out === "0") {
+  if (how === "rebase") {
     w.step(`rebasing onto ${defaultBr}`);
     const r = await w.git(worktreePath, ["rebase", defaultBr]);
     if (!r.ok) {

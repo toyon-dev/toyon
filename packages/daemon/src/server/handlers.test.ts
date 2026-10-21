@@ -56,11 +56,6 @@ async function until(done: () => boolean, ms = 15_000): Promise<void> {
   }
 }
 
-/** the text of the last `shipped` reply, the daemon's word on a landing op */
-function lastShipped(replies: ServerMsg[]): string | undefined {
-  const m = replies.at(-1);
-  return m?.t === "shipped" ? m.message : undefined;
-}
 afterEach(() => cleanup());
 
 /** a tab landing on the row: the subscribe that gives a cold worktree its agent, which the shell
@@ -1154,8 +1149,8 @@ describe("handlers", () => {
     expect(procs.get(main.id)?.started ?? []).toEqual([]);
   });
 
-  test("sync-main over uncommitted work that no longer fits toasts the refusal with no prompt to prefill", async () => {
-    const { services, ctx, replies, repo } = make();
+  test("sync-main over uncommitted work that no longer fits asks the agent, naming the files, with the work as it was", async () => {
+    const { services, ctx, replies, repo, agents } = make();
     const r = await services.repos.register(repo);
     r.needsSetup = false;
     const wt = await services.worktrees.create(r.id, "feature");
@@ -1163,10 +1158,12 @@ describe("handlers", () => {
     writeFileSync(join(repo, "README.md"), "main's\n");
     sh(repo, "git", "commit", "-qam", "main moves");
     await dispatch({ t: "sync-main", worktreeId: wt.id }, ctx, services);
-    const t = replies.find((m) => m.t === "shipped");
-    expect(t).toMatchObject({ t: "shipped", ok: false });
-    expect(t && "asked" in t ? t.asked : undefined).toBeUndefined();
-    expect(lastShipped(replies) ?? (t?.t === "shipped" ? t.message : "")).toContain("uncommitted");
+    // no step on the chat shows the clash, so the ask carries the files itself
+    expect(replies.find((m) => m.t === "shipped")).toMatchObject({ ok: false, asked: true });
+    expect(agents.get(wt.id)?.sent.at(-1)).toMatchObject({
+      text: expect.stringMatching(/^Rebase this branch onto main .*uncommitted changes, in README\.md\.$/),
+      asked: { kind: "conflict", why: "the uncommitted changes conflict with main" },
+    });
     expect(readFileSync(join(wt.path, "README.md"), "utf8")).toBe("mine, uncommitted\n");
   });
 

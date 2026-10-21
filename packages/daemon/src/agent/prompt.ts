@@ -39,8 +39,10 @@ export interface FailedRun {
  * chat; whether it is sent unasked or waits for a press is not said here (see RESPONSE). */
 export type Failure =
   | ({ kind: "hook"; hook: string } & FailedRun)
-  /** `step` is the rebase or merge that stopped, when one ran */
-  | { kind: "conflict"; base: string; how: "rebase" | "merge"; step?: FailedRun }
+  /** `step` is the rebase or merge that stopped, when one ran; `carried` names the files when
+   * the branch's commits took the base and it was the uncommitted work a sync carried across
+   * that clashed, since no step on the chat shows those */
+  | { kind: "conflict"; base: string; how: "rebase" | "merge"; step?: FailedRun; carried?: string[] }
   | ({ kind: "check" } & FailedRun)
   | ({ kind: "command" } & FailedRun)
   | { kind: "preview"; procs: readonly ProcState[]; log: readonly LogLine[] };
@@ -65,7 +67,7 @@ export function fixPrompt(f: Failure): string {
     case "hook":
       return hookFixPrompt(f.hook);
     case "conflict":
-      return conflictFixPrompt(f.base, f.how, !!f.step);
+      return conflictFixPrompt(f.base, f.how, !!f.step, f.carried);
     case "check":
       return checkFixPrompt(f.command);
     case "command":
@@ -84,6 +86,7 @@ export function fixWhy(f: Failure): string {
     case "hook":
       return `the ${f.hook} hook refused the ${f.hook.includes("push") ? "push" : "commit"}`;
     case "conflict":
+      if (f.carried) return `the uncommitted changes conflict with ${f.base}`;
       return f.how === "rebase" ? `the branch needs a rebase onto ${f.base}` : `the branch needs ${f.base} merged in`;
     case "check":
       return "the check failed";
@@ -123,12 +126,17 @@ function hookFixPrompt(hook: string): string {
 /** What the agent is sent to clear a conflict, in the words of how the base was being taken in:
  * a merge made to clear a rebase's conflict is one more thing the next sync has to work around,
  * and a merge left uncommitted is not in the branch for it to find. `shown` when the step that
- * stopped is attached. */
-function conflictFixPrompt(base: string, how: "rebase" | "merge", shown: boolean): string {
+ * stopped is attached; `carried` when the clash was in the uncommitted work alone, which no step
+ * shows, so the files are named here. */
+function conflictFixPrompt(base: string, how: "rebase" | "merge", shown: boolean, carried?: string[]): string {
   const ask =
     how === "rebase"
       ? `Rebase this branch onto ${base} and resolve the conflicts, keeping any uncommitted changes, then verify the app still works.`
       : `Merge ${base} into this branch, resolve the conflicts and commit the merge, then verify the app still works.`;
+  if (carried) {
+    const where = carried.length ? `, in ${carried.join(", ")}` : "";
+    return `${ask} The branch's own commits take ${base} cleanly; the conflicts are in the uncommitted changes${where}.`;
+  }
   return shown ? `${ask} What git printed when Toyon tried is attached below.` : ask;
 }
 

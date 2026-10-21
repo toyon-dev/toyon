@@ -1994,7 +1994,13 @@ export class WorktreeService {
     const failure: Failure | null = hook
       ? { kind: "hook", hook: hook.name, toolId: hook.toolId, command: hook.command, text: hook.text }
       : result.conflict
-        ? { kind: "conflict", base, how: result.conflict, ...(result.step ? { step: result.step } : {}) }
+        ? {
+            kind: "conflict",
+            base,
+            how: result.conflict,
+            ...(result.step ? { step: result.step } : {}),
+            ...(result.carried ? { carried: result.carried } : {}),
+          }
         : null;
     return failure && this.d.fix.report(wt.id, failure) ? { ...result, asked: true } : result;
   }

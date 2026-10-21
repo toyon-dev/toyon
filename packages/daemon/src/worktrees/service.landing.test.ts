@@ -686,15 +686,22 @@ describe("landing", () => {
       await noTrace(wt.path);
     });
 
-    test("work that no longer fits over main refuses, named, and the branch is back where it was", async () => {
+    test("work that no longer fits over main is the agent's to resolve, named, and the branch is back where it was", async () => {
       const wt = await dirtyWorktree();
       writeFileSync(join(wt.path, "README.md"), "mine, uncommitted\n");
       const [before, was] = [await porcelain(wt.path), await head(wt.path)];
       mainMoves("README.md", "main's\n");
       const { result } = await w.worktrees.sync(wt.id);
-      expect(result.ok).toBe(false);
-      expect(result.conflict).toBeUndefined();
+      expect(result).toMatchObject({ ok: false, conflict: "rebase", carried: ["README.md"], asked: true });
       expect(result.message).toContain("(README.md)");
+      // no step on the chat shows the clash, so the ask names the files itself
+      expect(sent(wt.id)).toEqual([
+        {
+          text: fixPrompt({ kind: "conflict", base: "main", how: "rebase", carried: ["README.md"] }),
+          asked: { kind: "conflict", why: "the uncommitted changes conflict with main" },
+        },
+      ]);
+      expect(sent(wt.id)[0]?.text).toContain("the conflicts are in the uncommitted changes, in README.md");
       expect(await head(wt.path)).toBe(was);
       expect(await porcelain(wt.path)).toBe(before);
       expect(readFileSync(join(wt.path, "README.md"), "utf8")).toBe("mine, uncommitted\n");
@@ -802,8 +809,8 @@ describe("landing", () => {
 
     test("a queued sync that fails says so on the chat as the daemon's own, and lets the queue go", async () => {
       const wt = await dirtyWorktree();
-      writeFileSync(join(wt.path, "README.md"), "mine, uncommitted\n");
-      mainMoves("README.md", "main's\n");
+      // a file main now has that is untracked here: the one sync refusal nobody is asked to fix
+      mainMoves("loose.txt", "main's\n");
       const failed: string[] = [];
       w.hub.on("failed", (_id, message) => failed.push(message));
       const agent = w.runtime.agentFor(wt.id) as unknown as FakeAgent;
@@ -811,9 +818,9 @@ describe("landing", () => {
       await w.worktrees.sync(wt.id);
       status(agent, "idle");
       await until(() => failed.length > 0);
-      expect(failed[0]).toContain("(README.md)");
+      expect(failed[0]).toContain("(loose.txt)");
       await until(() => !agent.held);
-      expect(readFileSync(join(wt.path, "README.md"), "utf8")).toBe("mine, uncommitted\n");
+      expect(readFileSync(join(wt.path, "loose.txt"), "utf8")).toBe("loose\n");
       await noTrace(wt.path);
     });
 

@@ -142,12 +142,10 @@ function HeldRow({
     <div className="msg-user queued-msg">
       <span className="queued-tag">
         <Icon name="clock" className="icon-inline" />
-        <span className="queued-word">uploading</span>
+        {/* the one waiting row with something under way: the bytes are moving, so the word shines
+            the way a running call's does, where a queued message holds still */}
+        <span className="live-text">uploading</span>
       </span>
-      <div className="queued-text">
-        {items.length > 0 && <QueuedChips items={items} next={next} worktreeId={worktreeId} onOpen={onOpen} />}
-        {text}
-      </div>
       <span className="queued-actions">
         <IconButton
           icon="edit"
@@ -160,6 +158,10 @@ function HeldRow({
           onClick={() => dispatch({ a: "drop-out", id: entry.id })}
         />
       </span>
+      <div className="queued-text">
+        {items.length > 0 && <QueuedChips items={items} next={next} worktreeId={worktreeId} onOpen={onOpen} />}
+        {text}
+      </div>
     </div>
   );
 }
@@ -688,19 +690,8 @@ export function ChatLog({
               >
                 <span className="queued-tag">
                   <Icon name="clock" className="icon-inline" />
-                  <span className="queued-word">queued</span>
+                  queued
                 </span>
-                <div className="queued-text">
-                  {message.attachments && (
-                    <QueuedChips
-                      items={message.attachments}
-                      next={queuedNumbers[i] ?? sentNumbers}
-                      worktreeId={id}
-                      onOpen={(path, line) => openSource(store, sock, id, path, line)}
-                    />
-                  )}
-                  {message.text}
-                </div>
                 <span className="queued-actions">
                   <IconButton
                     icon="edit"
@@ -713,6 +704,17 @@ export function ChatLog({
                     onClick={() => sock?.send({ t: "unqueue", worktreeId: id, index: i })}
                   />
                 </span>
+                <div className="queued-text">
+                  {message.attachments && (
+                    <QueuedChips
+                      items={message.attachments}
+                      next={queuedNumbers[i] ?? sentNumbers}
+                      worktreeId={id}
+                      onOpen={(path, line) => openSource(store, sock, id, path, line)}
+                    />
+                  )}
+                  {message.text}
+                </div>
               </div>
             ),
           )}

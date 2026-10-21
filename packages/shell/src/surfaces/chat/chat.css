@@ -273,37 +273,32 @@
     }
   }
 
+  /* a message the agent does not have yet: the sent bubble's box, the whole row a rung down the
+     ladder, and above the message a line saying what it waits on, with the edit and remove at its
+     end. The rung is the one mark, the way a row this app does not run is a rung down in the rail:
+     a dashed box and a faded row said it three times over, and the fade took the chips and the
+     edit and remove with it, so the one live thing on the row read as disabled. The word is at the
+     row's own tier, not a status colour: yellow here says held for a person, and this row waits on
+     the agent. Its own line rather than a slot beside the message: beside it, the word had to
+     centre on whatever the message led with (a line of text, a chip row, a thumbnail, three
+     heights), and the slot and the buttons took a third of a narrow dock's bubble from a chip's
+     name. The line is the tool row's shape, a summary over its body. */
   .queued-msg {
-    opacity: 0.65;
-    border: 1px dashed var(--border1);
-    background: var(--surface1);
+    color: var(--text1);
     display: flex;
-    gap: 8px;
-    align-items: flex-start;
-  }
-  /* the tag and the actions are each a box one line of the message tall, centred in it, so all
-     three sit on the message's first line however far it wraps. A baseline cannot do this: an icon
-     has none, and a box that leads with one hangs its bottom edge on the text's baseline. */
-  .queued-tag,
-  .queued-actions {
-    height: 1lh;
+    flex-wrap: wrap;
     align-items: center;
-  }
-  .queued-tag {
-    color: var(--yellow);
-  }
-  .queued-word {
-    font: var(--type-ui-sm);
-  }
-  .queued-text {
-    flex: 1;
-    overflow-wrap: break-word;
-    min-width: 0;
+    gap: 4px 8px;
   }
   .queued-actions {
     display: flex;
     gap: 4px;
-    flex-shrink: 0;
+    margin-left: auto;
+  }
+  .queued-text {
+    flex-basis: 100%;
+    overflow-wrap: break-word;
+    min-width: 0;
   }
   .msg-assistant {
     white-space: pre-wrap;

@@ -26,6 +26,11 @@ export type Choice = {
   /** under the label at the row's full width, on every row: a line that came and went with the
    * cursor moved every row below it as the pointer crossed the list */
   description?: ReactNode;
+  /** a longer sample the row's author attached (a mockup, a snippet), under the description in
+   * the mono face with its lines kept. On every row that has one, so the list is one height
+   * wherever the cursor is: a sample that came and went with the cursor resized the box as the
+   * pointer crossed the rows and moved the row the pointer was on. */
+  sample?: string;
   /** the one key that acts on this row rather than the list, said on the row it would act on at
    * the end of the label's line. Every row keeps the room for it and only the cursor's shows it,
    * so a label wraps the same wherever the cursor is; `on` false keeps the room and hides it. The
@@ -138,6 +143,7 @@ export function Choices({
               </span>
             )}
             {row.description && <span className="choice-desc">{row.description}</span>}
+            {row.sample && <pre className="choice-sample">{row.sample}</pre>}
           </>
         );
         if (row.field)

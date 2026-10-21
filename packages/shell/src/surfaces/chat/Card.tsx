@@ -10,7 +10,6 @@
 // is still what the agent waits on.
 
 import { type ReactNode, type RefObject, useCallback, useEffect, useRef } from "react";
-import { cx } from "../../ui/cx.ts";
 import { useOnChange } from "../../ui/hooks.ts";
 import { useCodeCopy } from "./useCodeCopy.tsx";
 
@@ -116,11 +115,11 @@ export function CardHead({ children, sub }: { children: ReactNode; sub?: ReactNo
 }
 
 /** What stands under the sentence to be read before it is answered: the command a yes would run,
- * a plan with no file behind it, the cursor row's preview. Set in code the band's text is the
- * block and gets the copy control, since someone saying no often runs the command themselves;
- * rendered markdown keeps its own fenced blocks, each with the control; a preview (`still`) is a
- * drawing, keeps its lines where they were put, and offers no copy. */
-export function CardBand(props: { code: string; still?: boolean } | { html: string }) {
+ * a plan with no file behind it. Set in code the band's text is the block and gets the copy
+ * control, since someone saying no often runs the command themselves; rendered markdown keeps its
+ * own fenced blocks, each with the control. An option's sample is not a band: it stands with its
+ * row (ui/Choices). */
+export function CardBand(props: { code: string } | { html: string }) {
   const band = useRef<HTMLDivElement>(null);
   const copy = useCodeCopy(band);
   if ("html" in props)
@@ -133,9 +132,9 @@ export function CardBand(props: { code: string; still?: boolean } | { html: stri
       </div>
     );
   return (
-    <div ref={props.still ? undefined : band} className={cx("card-band card-code", props.still && "card-still")}>
+    <div ref={band} className="card-band card-code">
       <pre>{props.code}</pre>
-      {!props.still && copy}
+      {copy}
     </div>
   );
 }

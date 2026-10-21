@@ -41,7 +41,7 @@ import {
   stripRecommended,
   walk,
 } from "./ask.ts";
-import { Card, CardBand, CardFoot, CardHead, type Root } from "./Card.tsx";
+import { Card, CardFoot, CardHead, type Root } from "./Card.tsx";
 import { DraftChip } from "./DraftChip.tsx";
 import { pickAttachments, useComposerPaste } from "./useIntake.ts";
 
@@ -302,12 +302,11 @@ export function QuestionCard({
 
   /** one question's page: its text, its options, the "other" row, the typed answer's field once
    * opened, and its own foot. Every page is in the DOM so the box stands at the tallest one's
-   * height; only the open page has the cursor, the preview and the field's ref. */
+   * height; only the open page has the cursor and the field's ref. */
   const page = (qq: AskQuestion, i: number) => {
     const open = i === current;
     const a = draft[i];
     const owning = ownChosen(a, !!qq.multi);
-    const under = open ? qq.options[cursor] : undefined;
     /* the field a row holds once something is typed against it. The on-screen keyboard's return
        key is named for what enter does from here: on a lone question the answer is the send, with
        several it walks on (to a question still open, or the send page). Decided by the shape of
@@ -332,6 +331,7 @@ export function QuestionCard({
           </>
         ),
         description: o.description,
+        sample: o.preview,
         // a multi-select's `n` is the typed answer, not a note
         hint:
           qq.note && !qq.multi ? { k: "n", label: "add a note", icon: "edit", on: a?.note === undefined } : undefined,
@@ -366,7 +366,6 @@ export function QuestionCard({
           }}
           onHint={noteAt}
         />
-        {under?.preview && <CardBand code={under.preview} still />}
         {foot(qq, a)}
       </div>
     );

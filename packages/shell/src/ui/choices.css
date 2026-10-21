@@ -50,6 +50,24 @@
     grid-column: 2 / -1;
     color: var(--ink1);
   }
+  /* the sample under the description: a mockup or a snippet, so the mono face with its lines
+     kept, wrapped rather than clipped because the overlay scrollbar hides until scrolled and a
+     clipped line looks whole. On the sunken floor with no corners of its own, the way a command
+     sits in its band; left-aligned because the row is a button. A long one scrolls inside its
+     cap rather than taking the card. */
+  .choice-sample {
+    grid-column: 2 / -1;
+    max-height: 12lh;
+    overflow-y: auto;
+    margin: 4px 0 2px;
+    padding: 6px 8px;
+    background: var(--sunken-floor);
+    color: var(--text1);
+    font: var(--type-mono-sm);
+    text-align: left;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
   /* the cursor row's own key, at the far end of the label's line */
   .choice-hint {
     grid-column: 3;

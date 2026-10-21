@@ -1708,15 +1708,16 @@
     font: var(--type-ui-sm);
   }
   /* What stands under the question to be read before it is answered: the command a yes would run,
-     the cursor row's preview, a plan with no file behind it. One band across the strip on the
-     strip's floor, the way the rows under it bleed to its edges and a command sits in its call's
-     band in the log; a box inside the box with corners of its own read as a bounded thing in a
-     place that draws none. The text keeps the column the question starts in. It can be long, so it scrolls in
-     the band rather than the page, and the band is positioned because it is the box a fenced
-     block's copy control (.code-copy) is placed in. Set in code, the band's text is the block, so
-     the fenced block takes no ground or corners of its own and wraps as the log's commands do; a
-     preview is a drawing and keeps its lines where they were put. A plan is prose, and its own
-     fenced blocks stay the chips they are in any rendered markdown. */
+     a plan with no file behind it. One band across the strip on the strip's floor, the way the
+     rows under it bleed to its edges and a command sits in its call's band in the log; a box
+     inside the box with corners of its own read as a bounded thing in a place that draws none.
+     The text keeps the column the question starts in. It can be long, so it scrolls in the band
+     rather than the page, and the band is positioned because it is the box a fenced block's copy
+     control (.code-copy) is placed in. Set in code, the band's text is the block, so the fenced
+     block takes no ground or corners of its own and wraps as the log's commands do. A plan is
+     prose, and its own fenced blocks stay the chips they are in any rendered markdown. An
+     option's sample is no band: it stands with its row (ui/choices.css), since one band that
+     followed the cursor resized the box as the pointer crossed the rows. */
   .card-band {
     position: relative;
     max-height: 40vh;
@@ -1734,10 +1735,6 @@
     font: var(--type-mono-sm);
     white-space: pre-wrap;
     word-break: break-word;
-  }
-  .card-still pre {
-    white-space: pre;
-    overflow-x: auto;
   }
   /* the actions under a page, at the page's floor: every page stands at the tallest one's height,
    and the slack goes above this row, so the send sits in one place whichever page is open. The

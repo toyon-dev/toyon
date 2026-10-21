@@ -1229,15 +1229,20 @@ describe("handlers", () => {
     r.needsSetup = false;
     const wt = await services.worktrees.create(r.id, "feature");
     const agent = agents.get(wt.id)!;
+    services.state.worktree(wt.id)!.promptedAt = 1;
     await expect(dispatch({ t: "continue", worktreeId: wt.id }, ctx, services)).rejects.toThrow(
       "nothing to go on from",
     );
+    // a refused press is not a send, so the row's place on the rail holds
+    expect(services.state.worktree(wt.id)?.promptedAt).toBe(1);
     agent.note({ type: "turn-end", stopReason: "interrupted", ts: 1 });
     await dispatch({ t: "continue", worktreeId: wt.id }, ctx, services);
     expect(agent.sent.at(-1)).toMatchObject({
       text: expect.stringContaining("Your last turn was stopped before it finished"),
       asked: { kind: "stopped", why: "to go on after the stop" },
     });
+    // going on is the person's message, so the row moves up the rail like a send's
+    expect(services.state.worktree(wt.id)?.promptedAt).toBeGreaterThan(1);
   });
 
   test("chat hands the text, context and attachments to the agent", async () => {

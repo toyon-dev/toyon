@@ -669,6 +669,8 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
 
   continue(msg, _ctx, s) {
     s.fix.goOn(msg.worktreeId);
+    // going on is the person's message to the agent, so its row moves up the rail like a send's
+    s.worktrees.markPrompted(msg.worktreeId);
   },
 
   async "write-file"(msg, ctx, s) {

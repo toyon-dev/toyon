@@ -1,6 +1,7 @@
 import {
   type ArchivedWorktree,
   archiveParts,
+  isBusy,
   isLead,
   isOwned,
   type LandMark,
@@ -12,7 +13,7 @@ import {
 import { dollars } from "../chat/usage.ts";
 import { originNote } from "../chips/baseNote.ts";
 import { clipLine, ended, landedLine, landedLines, lastStopLine, prLine, recapLine, when } from "../recap.ts";
-import { ago, type DotState, dotClass, isBusy, shipLabel, stateLabel } from "../util.ts";
+import { ago, type DotState, dotClass, shipLabel, stateLabel } from "../util.ts";
 
 /**
  * The line under a row's name on a screen.
@@ -109,7 +110,7 @@ export function rowQuiet(w: WorktreeStatus, op?: ShipOp | null): boolean {
 export function cardLines(w: WorktreeStatus & { worktree: NonNullable<WorktreeStatus["worktree"]> }): string[] {
   const turn = w.worktree.lastTurn;
   const landed = w.worktree.landed ? landedLines(w.worktree.lands) : [];
-  const recap = turn ? (isBusy(w) ? lastStopLine : recapLine)(turn) : undefined;
+  const recap = turn ? (isBusy(w.agent) ? lastStopLine : recapLine)(turn) : undefined;
   // a merged PR left behind by new work is history, and the row says nothing about it
   const standing = prStanding(w.worktree);
   const pr = standing && !w.worktree.landed ? prLine(standing) : undefined;

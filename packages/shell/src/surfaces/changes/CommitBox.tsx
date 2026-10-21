@@ -2,6 +2,7 @@ import {
   baseOf,
   canSync,
   describeLand,
+  isBusy,
   isOwned,
   canLand as landable,
   landPolicy,
@@ -150,8 +151,7 @@ export function CommitBox({
     landable(owned) &&
     !checking &&
     (stale || gap === "unwritten" || gap === "unanswered") &&
-    active.agent !== "working" &&
-    active.agent !== "waiting";
+    !isBusy(active.agent);
   const repo = useStore((s) => s.repos.find((r) => r.id === active.repoId) ?? null);
   const policy = landPolicy(repo?.config ?? {});
   const landTip = describeLand(policy, repo?.defaultBranch);
@@ -165,7 +165,7 @@ export function CommitBox({
   // waits for the turn to end. Until then the sync is a run that has started, and it reads as
   // one: the shining line where the button stood, not a button pressed in. The row's menu
   // takes it back.
-  const midTurn = active.agent === "working" || active.agent === "waiting";
+  const midTurn = isBusy(active.agent);
   const syncHeld = dirty && !owned ? "commit or discard the changes here first" : undefined;
   const syncQueued = !!active.syncQueued;
   const syncTip =

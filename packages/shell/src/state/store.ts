@@ -70,6 +70,7 @@ import {
   cardBox,
   DEFAULT_PERMISSION_MODE,
   defaultThemePrefs,
+  isBusy,
   isEditTool,
   isLead,
   isMain,
@@ -1073,7 +1074,7 @@ export function rowById(s: Pick<State, "rows">, id: string | null | undefined): 
 export function sendWaits(s: Pick<State, "rows" | "shipping">, id: string | null | undefined): boolean {
   const row = rowById(s, id);
   if (!row) return false;
-  return row.agent === "working" || row.agent === "waiting" || !!s.shipping[row.id] || (row.queued ?? 0) > 0;
+  return isBusy(row.agent) || !!s.shipping[row.id] || (row.queued ?? 0) > 0;
 }
 
 /** a row toyon owns, by id: what the chat, the composer and landing read */
@@ -1635,8 +1636,7 @@ function withSending(local: State["local"], rows: WorktreeStatus[], from: string
   }
   for (const w of rows) {
     const l = out[w.id];
-    if (l?.sending && !l.sending.message && (w.agent === "working" || w.agent === "waiting"))
-      out = { ...out, [w.id]: settled(l) };
+    if (l?.sending && !l.sending.message && isBusy(w.agent)) out = { ...out, [w.id]: settled(l) };
   }
   return out;
 }
@@ -2890,7 +2890,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
         // it; its mark holds until the row is busy, or until the turn is over before a status
         // frame ever said so
         const row = s.rows.find((w) => w.id === id);
-        const busy = row?.agent === "working" || row?.agent === "waiting";
+        const busy = isBusy(row?.agent);
         const said = !l.sending ? l : busy ? settled(l) : { ...l, sending: { at: l.sending.at } };
         const base = askSettled(ev.type === "user-message" ? said : ended ? settled(l) : l, ev);
         return {

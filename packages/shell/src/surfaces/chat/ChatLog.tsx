@@ -2,6 +2,7 @@ import {
   type ArchivedWorktree,
   type AttachmentInput,
   type AttachmentKind,
+  isBusy,
   nextNumbers,
   numbered,
   numbersAfter,
@@ -27,7 +28,7 @@ import { TAIL_SLACK, useOnChange, useSecondsSince, useTail } from "../../ui/hook
 import { Icon } from "../../ui/Icon.tsx";
 import { Spinner } from "../../ui/Spinner.tsx";
 import { selectedText, useKeyWithin, useSelectAllWithin } from "../../ui/selectAll.ts";
-import { elapsed, isBusy, pickLabel } from "../util.ts";
+import { elapsed, pickLabel } from "../util.ts";
 import { AttachmentSet } from "./AttachmentSet.tsx";
 import { ChatItemView, QUIET_AFTER, ThoughtRow, ToolRow } from "./ChatItemView.tsx";
 import { FileChip } from "./FileChip.tsx";
@@ -391,7 +392,7 @@ export function ChatLog({
     [id],
   );
 
-  const busy = !!active && isBusy(active);
+  const busy = isBusy(active?.agent);
   // the ask in the box under the log, with the stop on its own floor: a row here saying the agent
   // waits, with a second stop, said what the box already says. Parked, the box is the plain one
   // again and this row is the log's word that the turn is waiting on you.

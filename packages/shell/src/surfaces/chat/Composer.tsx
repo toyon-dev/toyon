@@ -15,6 +15,7 @@ import {
   cardBox,
   DEFAULT_PERMISSION_MODE,
   describeLand,
+  isBusy,
   isProvisional,
   landPolicy,
   landWord,
@@ -398,7 +399,7 @@ export function Composer({
   // the one thing to do about a full context, offered by the ring: the agent's own command,
   // when it has one and is not mid-turn
   const canCompact = commands.some((c) => c.name === "compact");
-  const midTurn = active?.agent === "working" || active?.agent === "waiting";
+  const midTurn = isBusy(active?.agent);
   // a send goes behind the turn, a landing op's hold or the messages queued already: the log
   // draws it in its place from the daemon's frame, not from a placeholder at the press
   const waits = useStore((s) => sendWaits(s, id));

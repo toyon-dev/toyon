@@ -22,6 +22,7 @@ import {
   type GitFileStatus,
   type GitInfo,
   hasOwnBranch,
+  isBusy,
   isLead,
   isMain,
   isProvisional,
@@ -1619,8 +1620,7 @@ export class WorktreeService {
       if (w.repoId !== target.repoId) throw new UserError("worktrees must belong to one repo");
       // a merge under an editing agent races its file tools, and a removal under one loses its
       // turn; refusing beats stopping someone's turn from a rail button
-      const status = this.d.runtime.agentFor(w.id)?.status;
-      if (status === "working" || status === "waiting")
+      if (isBusy(this.d.runtime.agentFor(w.id)?.status))
         throw new UserError(`${w.title}'s agent is mid-turn; stop it first`);
     }
     // uncommitted work is the one thing the merge would not carry and the removal would lose
@@ -2033,8 +2033,7 @@ export class WorktreeService {
    * saw. Refused here, where the tree is read under the op. At rest the tree moves only by the
    * person's own hand, and what they land is theirs to say. */
   private async movedMidTurn(wt: WorktreeInfo): Promise<ShipResult | null> {
-    const status = this.d.runtime.agentFor(wt.id)?.status;
-    if (status !== "working" && status !== "waiting") return null;
+    if (!isBusy(this.d.runtime.agentFor(wt.id)?.status)) return null;
     const l = wt.landing;
     if (!l || l.fingerprint === (await this.fingerprint(wt.path))) return null;
     return { ok: false, message: "the agent has changed files since the check: land once its turn ends" };
@@ -2105,8 +2104,7 @@ export class WorktreeService {
       release?.();
       this.d.hub.emit("worktreesChanged");
       // a sync that waited for the turn and then for this op runs now, while the tree is still
-      const status = this.d.runtime.agentFor(id)?.status;
-      if (status !== "working" && status !== "waiting") this.syncAfterTurn(id);
+      if (!isBusy(this.d.runtime.agentFor(id)?.status)) this.syncAfterTurn(id);
     }
   }
 
@@ -2499,8 +2497,8 @@ export class WorktreeService {
     // Carrying empties the tree for a moment, and a file tool writing into that gap is lost under
     // the work put back; a clean tree has no such gap. So under a turn the press is kept and runs
     // when the turn settles, which is what the person pressing it now wants of it anyway.
-    const status = this.d.runtime.agentFor(worktreeId)?.status;
-    if (carry && (status === "working" || status === "waiting") && (await statusFiles(r.path)).length > 0) {
+    const busy = isBusy(this.d.runtime.agentFor(worktreeId)?.status);
+    if (carry && busy && (await statusFiles(r.path)).length > 0) {
       this.syncQueued.add(worktreeId);
       this.d.hub.emit("worktreesChanged");
       return { result: { ok: true, message: `${r.name} syncs from ${r.base} once the turn ends` }, base: r.base };

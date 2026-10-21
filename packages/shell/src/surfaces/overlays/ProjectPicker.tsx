@@ -1,4 +1,4 @@
-import { isOwned, projectOrder, type RepoInfo, type WorktreeStatus } from "@toyon/shared";
+import { isBusy, isOwned, projectOrder, type RepoInfo, type WorktreeStatus } from "@toyon/shared";
 import { useCallback, useMemo, useRef } from "react";
 import { machineLine } from "../../app/machineLine.ts";
 import { machineItems } from "../../state/actions/machine.ts";
@@ -21,7 +21,6 @@ import { cx } from "../../ui/cx.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { ListPicker } from "../../ui/ListPicker.tsx";
 import type { Anchored } from "../../ui/Overlay.tsx";
-import { isBusy } from "../util.ts";
 import { PaletteRow } from "./PaletteRow.tsx";
 import { defaultParent, looksLikePath, type Row, rowsFor } from "./projectPicker.ts";
 
@@ -351,7 +350,7 @@ export function ProjectPicker({
 function hintOf(rows: readonly WorktreeStatus[], r: RepoInfo): string | undefined {
   const here = rows.filter((w) => w.repoId === r.id);
   const mine = here.filter(isOwned).filter((w) => w.worktree.kind !== "spare");
-  const working = mine.filter(isBusy).length;
+  const working = mine.filter((w) => isBusy(w.agent)).length;
   const n = mine.length - 1; // main is not a task
   // "where's my stuff" is asked here, before the rail is on screen: a project with worktrees
   // toyon did not make should say so at the point you are choosing it

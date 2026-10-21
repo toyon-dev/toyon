@@ -1,4 +1,4 @@
-import { isLead, isOwned, parseBridgeMsg } from "@toyon/shared";
+import { isBusy, isLead, isOwned, parseBridgeMsg } from "@toyon/shared";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { previewBus } from "../../app/previewBus.ts";
 import { nextSeq } from "../../state/actions/file.ts";
@@ -81,7 +81,7 @@ import { DesignPane } from "../design/DesignPane.tsx";
 import { EditorPane } from "../editor/EditorPane.tsx";
 import { Overlays } from "../overlays/Overlays.tsx";
 import { TerminalPane } from "../terminal/TerminalPane.tsx";
-import { chord, isBusy, pageErrorText, previewUrl, relFile } from "../util.ts";
+import { chord, pageErrorText, previewUrl, relFile } from "../util.ts";
 import { Boot } from "./Boot.tsx";
 import { carriedFrame, mountPath, shownFrame } from "./frames.ts";
 import { Greenfield } from "./Greenfield.tsx";
@@ -185,7 +185,7 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
   // to start it: the pane that came back mid-turn would be a form over a directory still being
   // written. Reopened by hand is always shown.
   const treeEmpty = active?.worktree.empty === true;
-  const busy = !!active && isBusy(active);
+  const busy = isBusy(active?.agent);
   const forcedSetup = needsSetup && !treeEmpty && !busy ? needsSetup : null;
   const setupRepo = forcedSetup ?? reopened;
   // a clone being watched takes the centre too: same reason as the setup pane, in that the

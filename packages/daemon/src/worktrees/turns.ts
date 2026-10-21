@@ -5,7 +5,7 @@
 // question, when the turn left work on the tree, and from a smaller question when it only
 // answered, so a finished turn has one within seconds whoever was looking.
 
-import type { AgentStatus, TurnEnd } from "@toyon/shared";
+import { type AgentStatus, isBusy, type TurnEnd } from "@toyon/shared";
 import { factsOf, openAskOf, turnsSince } from "../agent/recap.ts";
 import type { TranscriptEntry } from "../agent/transcript.ts";
 import type { Hub } from "../core/hub.ts";
@@ -93,7 +93,7 @@ export class TurnService {
  * blocked on a person is a stop of its own, the one most worth ringing. The finish is refined to
  * `stopped` from the transcript, which is the only place that knows it was interrupted. */
 function stopOf(prev: AgentStatus, next: AgentStatus): TurnEnd | null {
-  const busy = prev === "working" || prev === "waiting";
+  const busy = isBusy(prev);
   if (next === "waiting" && prev !== "waiting") return "asking";
   if (next === "idle" && busy) return "done";
   if (next === "error" && busy) return "failed";

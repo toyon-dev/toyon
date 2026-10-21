@@ -17,6 +17,7 @@ import {
   baseOf,
   canLand,
   describeDuration,
+  isBusy,
   keepsCopiesApart,
   type Landing,
   type LastTurn,
@@ -121,7 +122,7 @@ export class LandingService {
   }
 
   private note(worktreeId: string, status: AgentStatus) {
-    if (status === "working" || status === "waiting") this.busy.add(worktreeId);
+    if (isBusy(status)) this.busy.add(worktreeId);
     else this.busy.delete(worktreeId);
   }
 

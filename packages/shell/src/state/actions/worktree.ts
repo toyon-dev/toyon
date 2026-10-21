@@ -6,6 +6,7 @@ import {
   canRename,
   canSync,
   describeLand,
+  isBusy,
   isLead,
   isMain,
   isProvisional,
@@ -16,7 +17,7 @@ import {
   type ShipOp,
   type WorktreeStatus,
 } from "@toyon/shared";
-import { chord, isBusy } from "../../surfaces/util.ts";
+import { chord } from "../../surfaces/util.ts";
 import { grouped, type MenuEntry, type MenuItem } from "../../ui/menu.ts";
 import type { DaemonSocket } from "../../ws.ts";
 import { profileNames, profileOf } from "../profiles.ts";
@@ -134,7 +135,7 @@ export function worktreeItems(
   const gone: MenuItem[] = [];
   // stop stays offered while an ask is open: that is the way out of a question you do not want
   // to answer
-  if (isBusy(w))
+  if (isBusy(w.agent))
     stop.push({ id: "stop", label: "stop agent", onClick: () => sock?.send({ t: "stop-agent", worktreeId: id }) });
   const idle = !s.shipping[id];
   const phone = s.frame === "phone";
@@ -232,7 +233,7 @@ export function worktreeItems(
       onClick: () => sock?.send({ t: "unqueue-sync", worktreeId: id }),
     });
   } else if (canSync(w) && (w.behind ?? 0) > 0) {
-    const afterTurn = (w.agent === "working" || w.agent === "waiting") && (w.dirty ?? 0) > 0;
+    const afterTurn = isBusy(w.agent) && (w.dirty ?? 0) > 0;
     land.push({
       id: "sync",
       label: `sync from main${afterTurn ? " after the turn" : ""} (${w.behind} behind)`,

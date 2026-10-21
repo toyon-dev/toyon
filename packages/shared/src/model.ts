@@ -607,6 +607,12 @@ export function applyLog(lines: LogLine[], proc: string, line: string, retract =
 /** "waiting" means blocked on a person (an open ask card), not on the model */
 export type AgentStatus = "idle" | "working" | "waiting" | "error";
 
+/** The agent is doing something, or waiting for a person to let it carry on: mid-turn. Every
+ * reader that means this rather than "working" specifically says it through here, so a blocked
+ * row never reads idle somewhere, which is the mistake that costs: the waiting row is the one
+ * that needs you. Undefined is a row with no agent, which is not busy. */
+export const isBusy = (status: AgentStatus | undefined): boolean => status === "working" || status === "waiting";
+
 /** When the daemon holds off its machine's idle sleep: while Toyon is in use (an agent working, a
  * question waiting, a shell open from another device), whenever it runs, or never. */
 export const KEEP_AWAKE_MODES = ["use", "always", "off"] as const;

@@ -74,6 +74,25 @@ describe("the card a held restart shows", () => {
     expect(restartRows(["docs", "docs"], ["docs"], []).map((r) => r.dot)).toEqual(["working", "idle"]);
   });
 
+  test("a met chat that stops on a question turns into its asking row, not a finished one plus it", () => {
+    const seen = restartSeen(restartSeen([], ["fix login", "docs"]), ["fix login"]);
+    expect(restartRows(seen, ["fix login"], ["docs"])).toEqual([
+      { name: "fix login", dot: "working", note: null },
+      { name: "docs", dot: "waiting", note: "asking you" },
+    ]);
+  });
+
+  test("a met chat answered and replying again is held again, in its place", () => {
+    expect(restartRows(["fix login", "docs"], ["fix login", "docs"], []).map((r) => r.dot)).toEqual([
+      "working",
+      "working",
+    ]);
+  });
+
+  test("two chats sharing a title: one asking marks one row, the other has finished", () => {
+    expect(restartRows(["docs", "docs"], [], ["docs"]).map((r) => r.note)).toEqual(["asking you", "finished"]);
+  });
+
   test("the sentence counts what is left of what was met", () => {
     expect(restartHeldLine(1, 1)).toBe(
       "Toyon restarts once this chat finishes its reply, and this page reloads when it is back. Restarting now stops it mid-reply.",

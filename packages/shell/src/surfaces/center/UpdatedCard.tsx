@@ -127,10 +127,13 @@ function OwnCard() {
 
   const waiting = busy && wait.held.length > 0;
   const rows = waiting ? restartRows(wait.seen, wait.held, wait.asking) : [];
+  // the sentence counts replies, so a chat that stopped on a question is neither held nor finished
+  const replying = rows.filter((row) => row.dot === "working").length;
+  const met = rows.filter((row) => row.dot !== "waiting").length;
   return (
     <CrashCard
       title={COPY.title}
-      body={refused ?? (waiting ? restartHeldLine(wait.held.length, wait.seen.length) : COPY.waiting)}
+      body={refused ?? (waiting ? restartHeldLine(replying, met) : COPY.waiting)}
       action={
         waiting ? (
           <Button variant="outline" onClick={() => void restart(true)}>

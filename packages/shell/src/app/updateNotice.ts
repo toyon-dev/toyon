@@ -34,20 +34,29 @@ export const restartSeen = (seen: string[], held: string[]): string[] => [
 ];
 
 /** The card's list: the chats met holding the restart, replying or finished, then the ones stopped
- * on a question, which hold nothing. Two chats can share a title, so a name held once marks one
- * row and not both. */
+ * on a question, which hold nothing. A met chat that stops on a question mid-reply leaves the
+ * held list without finishing, so it turns into its "asking you" row in place rather than
+ * reading as finished with a second row for the question. Two chats can share a title, so a name
+ * held or asking once marks one row and not both. */
 export function restartRows(seen: string[], held: string[], asking: string[]): RestartRow[] {
   const left = [...held];
+  const asks = [...asking];
+  const take = (list: string[], name: string): boolean => {
+    const i = list.indexOf(name);
+    if (i === -1) return false;
+    list.splice(i, 1);
+    return true;
+  };
   const met = seen.map((name): RestartRow => {
-    const i = left.indexOf(name);
-    if (i === -1) return { name, dot: "idle", note: "finished" };
-    left.splice(i, 1);
-    return { name, dot: "working", note: null };
+    if (take(left, name)) return { name, dot: "working", note: null };
+    if (take(asks, name)) return { name, dot: "waiting", note: "asking you" };
+    return { name, dot: "idle", note: "finished" };
   });
-  return [...met, ...asking.map((name): RestartRow => ({ name, dot: "waiting", note: "asking you" }))];
+  return [...met, ...asks.map((name): RestartRow => ({ name, dot: "waiting", note: "asking you" }))];
 }
 
-/** the card's sentence over that list: how many of the chats met are still replying */
+/** the card's sentence over that list: how many of the chats met are still replying. A chat
+ * stopped on a question is neither, and is left to its row. */
 export function restartHeldLine(held: number, seen: number): string {
   const lead =
     held >= seen

@@ -17,7 +17,7 @@ import { selectedLines } from "../../app/copiedSource.ts";
 import type { EditorSync, SyncBuffer } from "../../state/fileSync.ts";
 import type { EditorBlame, EditorDisk, EditorView, FileRef } from "../../state/store.ts";
 import { Float } from "../../ui/Float.tsx";
-import { passPinch, useKeepWheel, useOnChange } from "../../ui/hooks.ts";
+import { passPinch, useKeepWheel, useOnChange, useWheelAxis } from "../../ui/hooks.ts";
 import type { Placement, Rect } from "../../ui/place.ts";
 import { blameCommit, blameLine } from "./blameLine.ts";
 import { diffFit, FOLD_MIN, type Hunk, type Pane } from "./diffFit.ts";
@@ -305,6 +305,7 @@ export default function Editor({
   onNew?: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  useWheelAxis(ref);
   useKeepWheel(ref);
   // setTheme is global: every editor follows, including ones created before the change
   useEffect(() => {

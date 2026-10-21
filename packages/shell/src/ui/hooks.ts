@@ -533,6 +533,75 @@ export function useKeepWheel(ref: RefObject<HTMLElement | null>): void {
   }, [ref]);
 }
 
+/** a wheel gesture's axis as it stands: settled once the hand has clearly moved along one */
+export interface WheelGesture {
+  axis: "x" | "y" | null;
+  /** travel along each axis while the axis is unsettled */
+  dx: number;
+  dy: number;
+  /** when the last event came, to tell one gesture from the next */
+  at: number;
+}
+export const NO_GESTURE: WheelGesture = { axis: null, dx: 0, dy: 0, at: Number.NEGATIVE_INFINITY };
+/** travel along one axis before a gesture's axis is settled: a mouse wheel's tick settles it at
+ * once, a trackpad's first fraction of a pixel does not */
+const AXIS_PX = 2;
+/** a single event this far along the other axis is a turn, not a lean */
+const TURN_PX = 4;
+/** quiet after which the next event begins a new gesture */
+const GESTURE_GAP = 300;
+
+/** Whether a wheel event scrolls, and the gesture after it. A trackpad reports both axes, and
+ * the first event of a two-finger scroll often leans a fraction of a pixel sideways as the
+ * fingers land. Monaco keeps each event's larger axis and rounds the amount up to a whole pixel,
+ * so that lean put the text a pixel under the gutter, and the vertical gesture after it never
+ * moved it back. A gesture has one axis, the one the hand has clearly moved along: until that is
+ * known nothing scrolls, and after it an event leaning the other way is dropped unless it is far
+ * enough along to be a turn. */
+export function wheelAxis(
+  g: WheelGesture,
+  e: { deltaX: number; deltaY: number },
+  now: number,
+): { scrolls: boolean; next: WheelGesture } {
+  const ax = Math.abs(e.deltaX);
+  const ay = Math.abs(e.deltaY);
+  // Monaco's own tie goes to the vertical
+  const lean = ax > ay ? "x" : "y";
+  const same = now - g.at <= GESTURE_GAP ? g : NO_GESTURE;
+  if (same.axis === null) {
+    const dx = same.dx + ax;
+    const dy = same.dy + ay;
+    const axis = Math.max(dx, dy) >= AXIS_PX ? (dx > dy ? "x" : "y") : null;
+    return { scrolls: axis !== null && axis === lean, next: { axis, dx, dy, at: now } };
+  }
+  if (lean === same.axis) return { scrolls: true, next: { ...same, at: now } };
+  const across = lean === "x" ? ax : ay;
+  if (across >= TURN_PX) return { scrolls: true, next: { ...same, axis: lean, at: now } };
+  return { scrolls: false, next: { ...same, at: now } };
+}
+
+/** Holds the box's wheel events to one axis per gesture (`wheelAxis`) ahead of the widget inside:
+ * in the capture phase, so the widget never sees a dropped event. A dropped event is still kept
+ * from the window as `useKeepWheel` keeps the rest, since an uncancelled first event is what arms
+ * the browser's swipe. A pinch is nobody's to hold. */
+export function useWheelAxis(ref: RefObject<HTMLElement | null>): void {
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    let gesture = NO_GESTURE;
+    const onWheel = (e: WheelEvent) => {
+      if (e.ctrlKey) return;
+      const { scrolls, next } = wheelAxis(gesture, e, e.timeStamp);
+      gesture = next;
+      if (scrolls) return;
+      e.stopPropagation();
+      if (keepsWheel(e, window.visualViewport?.scale ?? 1)) e.preventDefault();
+    };
+    el.addEventListener("wheel", onWheel, { capture: true, passive: false });
+    return () => el.removeEventListener("wheel", onWheel, { capture: true });
+  }, [ref]);
+}
+
 /** Marks an element `data-zoomed` while the window is pinch-zoomed, for a stylesheet that locks
  * the pinch at rest: a lock that held while zoomed would leave no way back out. */
 export function useZoomMark(ref: RefObject<HTMLElement | null>): void {

@@ -277,7 +277,8 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
   // On a screen a row slides along under a thumb, uncovering its verbs one rung at a time
   // (ui/slide.ts): the rung the finger is on is state, since it names a word, and the offset is
   // written to the node. The ladder is read off the row's own menu (slideLadder), so the slide
-  // offers what the menu does; its last rung is that menu, opened under the row as it is let go.
+  // offers what the menu does and only that, land before archive, so the short drag is the
+  // row's next step; its last rung is that menu, opened under the row as it is let go.
   const [slide, setSlide] = useState<{ key: string; step: number } | null>(null);
   const ladderOf = (w: WorktreeStatus) => (isOwned(w) ? slideLadder(rowItems(w)) : []);
   useSlide(listRef, {
@@ -721,7 +722,7 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
     // the row's ground while it slides: the cell it uncovers at its end, with the rung's word in
     // it. Below the first rung the word is the first rung's, a tier down on the list's own ground,
     // so the hand sees what a longer drag would do; on a rung the cell takes the rung's colour and
-    // the word is live, or stays dim on a row the verb is not for. Read, not pressed: letting go
+    // the word is live, or stays dim while the verb is off (busy). Read, not pressed: letting go
     // is what does it (ui/slide.ts). The row menu carries the same verbs for a tap on the seat
     // and for the keyboard.
     const at = slide?.key === id ? slide.step : null;

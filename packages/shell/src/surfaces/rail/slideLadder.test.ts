@@ -10,17 +10,21 @@ const item = (id: string, label = id, extra: Partial<MenuItem> = {}): MenuItem =
 });
 
 describe("the ladder a row slides through", () => {
-  test("archive, land, then the whole menu, in that order whatever the menu's is", () => {
-    const ladder = slideLadder(grouped([[item("changes")], [item("land")], [item("archive", "archive…")]]));
-    expect(ladder.map((r) => r.id)).toEqual(["archive", "land", "more"]);
-    expect(ladder[0]?.label).toBe("archive…");
-    expect(ladder[1]?.item?.id).toBe("land");
+  test("land, archive, then the whole menu, in that order whatever the menu's is", () => {
+    const ladder = slideLadder(grouped([[item("changes")], [item("archive", "archive…")], [item("land")]]));
+    expect(ladder.map((r) => r.id)).toEqual(["land", "archive", "more"]);
+    expect(ladder[0]?.item?.id).toBe("land");
+    expect(ladder[1]?.label).toBe("archive…");
   });
-  test("a verb the row is not offered keeps its rung, with nothing behind it", () => {
+  test("a landed row has no land rung, so archive is its short drag", () => {
     const ladder = slideLadder(grouped([[item("changes")], [item("archive")]]));
-    expect(ladder[1]).toMatchObject({ id: "land", label: "land", item: null });
+    expect(ladder.map((r) => r.id)).toEqual(["archive", "more"]);
   });
-  test("more has no item: it is the menu itself", () => {
-    expect(slideLadder([])[2]).toMatchObject({ id: "more", item: null });
+  test("a busy row keeps its land rung, off, rather than dropping it", () => {
+    const ladder = slideLadder(grouped([[item("land", "land", { disabled: "waiting on the one in progress" })]]));
+    expect(ladder[0]).toMatchObject({ id: "land", item: { disabled: "waiting on the one in progress" } });
+  });
+  test("more is always last and has no item: it is the menu itself", () => {
+    expect(slideLadder([])).toEqual([{ id: "more", label: "more", icon: "more", item: null }]);
   });
 });

@@ -103,9 +103,9 @@ export interface HttpOpts {
   grants: GrantCodes;
   /** the shell origins on other machines that have been let in here, whose pages may read answers */
   trusted: () => string[];
-  /** the chosen theme's grounds, for the manifest: what a phone paints its status bar above an
-   * installed shell, and the launch screen, which the list the app opens on continues */
-  manifestColors: () => { bar: string; ground: string };
+  /** the chosen theme's ground for the manifest: the launch screen and what a phone paints its
+   * status bar above an installed shell, both the list's, which is the screen the app opens on */
+  manifestGround: () => string;
   /** what the not-running page is told on the way out: the link that starts a daemon here, when
    * the helper that answers it is in place (core/helper.ts), and the port this daemon is on */
   offline: () => { start: string | null; port: number };
@@ -417,8 +417,8 @@ export function createFetch(opts: HttpOpts) {
       // some browsers colour an installed app's bars from the manifest alone and never read the
       // page's theme-color, so the file on disk is only the shape: the colours are the theme's
       if (rel === "/manifest.json") {
-        const { bar, ground } = opts.manifestColors();
-        const manifest = { ...(await Bun.file(file).json()), theme_color: bar, background_color: ground };
+        const ground = opts.manifestGround();
+        const manifest = { ...(await Bun.file(file).json()), theme_color: ground, background_color: ground };
         return Response.json(manifest, {
           headers: { "content-type": "application/manifest+json", "cache-control": NO_STORE },
         });

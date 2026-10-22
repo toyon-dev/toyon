@@ -18,19 +18,41 @@ export function cachedTheme(): Theme {
   return toyonDark;
 }
 
-export function applyTheme(theme: Theme, opts: { remember?: boolean } = {}) {
+/** the token the screen on the page stands on: the phone's list is surface1, everything else surface0 */
+export type Ground = "surface0" | "surface1";
+
+/**
+ * The ground before the store can say: the one index.html painted, read the same way. A phone's
+ * tab keeps the token of the screen it was reading, and a fresh one opens the list; the desk
+ * stands on surface0 whatever it shows.
+ */
+export function groundNow(): Ground {
+  if (frameNow() !== "phone") return "surface0";
+  try {
+    const g = sessionStorage.getItem(STORAGE.ground);
+    if (g === "surface0" || g === "surface1") return g;
+  } catch {}
+  return "surface1";
+}
+
+export function applyTheme(theme: Theme, opts: { remember?: boolean; ground?: Ground } = {}) {
   const root = document.documentElement;
   for (const [k, v] of Object.entries(themeToCssVars(theme))) root.style.setProperty(k, v);
   root.style.colorScheme = theme.kind;
   root.dataset.theme = theme.kind;
+  // The canvas follows the screen (base.css): on a phone the window starts behind the status bar,
+  // and the inset under it is the canvas, so a list standing on surface1 over a surface0 canvas
+  // showed a darker band at the top from the moment the bundle took over.
+  const ground = opts.ground ?? groundNow();
+  root.dataset.ground = ground;
   // What the platform paints above the page. An installed window's caption area (window-controls-
   // overlay) is the bar's ground, which the bar runs into. A phone's status bar is the screen's
-  // ground: the phone frame paints the inset under it the same, so the two agree whichever one
-  // the platform shows. A phone's installed app reads the static literals (index.html, the
-  // manifest), which carry the phone's answer; this sets it for the desk. Read once per theme: the frame a phone
+  // ground, the same the canvas under its inset shows, so the two agree whichever one the platform
+  // paints; a phone's installed app may read the static literals instead (index.html, the manifest
+  // the daemon serves), which carry the list's. The frame is read once per theme: the frame a phone
   // draws never flips, and a desk window narrowed under the phone width keeps a caption area the
   // bar's colour either way.
-  const above = frameNow() === "phone" ? theme.colors.surface0 : theme.colors.surface1;
+  const above = frameNow() === "phone" ? theme.colors[ground] : theme.colors.surface1;
   document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')?.setAttribute("content", above);
   if (opts.remember === false) return;
   try {

@@ -187,12 +187,22 @@ export function App() {
     return () => window.removeEventListener("focus", onFocus);
   }, [sock, connected, activeRepoId, rowRepoId]);
 
+  // the token the screen is painted in: the canvas and a phone's status bar stand on it (theme.ts),
+  // and it is kept for this tab alone, so a reload comes up in the colour of the screen it returns
+  // to, since the page paints it before this bundle runs (index.html). A fresh tab has none and
+  // opens the list, whose colour the page knows by itself.
+  const ground = useStore((s) => (s.frame === "phone" && s.screen === "home" ? "surface1" : "surface0"));
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(STORAGE.ground, ground);
+    } catch {}
+  }, [ground]);
   // paint the selected theme (or the picker's live preview); previews get the accent for their overlays
   useEffect(() => {
     // a picker preview paints but is not remembered: a crash mid-browse must not adopt it
-    applyTheme(theme, { remember: !previewing });
+    applyTheme(theme, { remember: !previewing, ground });
     previewBus.broadcast(bridgeThemeMsg(theme));
-  }, [theme, previewing]);
+  }, [theme, previewing, ground]);
 
   // Where the sun is has no media query behind it: the zone table lives in the daemon, so the shell
   // asks. It asks for every mode, not only the one that follows daylight, because the picker's row
@@ -237,15 +247,6 @@ export function App() {
   useEffect(() => {
     if (phoneRow !== null) storage.session.set(STORAGE.phoneRow, phoneRow ? "1" : "0");
   }, [phoneRow, storage]);
-  // the token the screen is painted in, kept for this tab alone: the page paints it before this
-  // bundle runs (index.html), so a reload comes up in the colour of the screen it returns to. A
-  // fresh tab has none and opens the list, whose colour the page knows by itself.
-  const ground = useStore((s) => (s.frame === "phone" && s.screen === "home" ? "surface1" : "surface0"));
-  useEffect(() => {
-    try {
-      sessionStorage.setItem(STORAGE.ground, ground);
-    } catch {}
-  }, [ground]);
   useEffect(() => {
     if (activeRepoId) storage.set(STORAGE.repo, activeRepoId);
   }, [activeRepoId, storage]);

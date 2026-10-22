@@ -68,7 +68,7 @@ const opts: HttpOpts = {
   managed: { source: null, hash: null },
   preview: () => null,
   bootstrap: async () => ({ t: "hello", repos: [{ id: "r1" }] }),
-  manifestColors: () => ({ bar: "#111111", ground: "#222222" }),
+  manifestGround: () => "#222222",
   offline: () => ({ start: null, port: 4141 }),
   open: async (path) => {
     if (path === "/bad.bin") throw new UserError("bad.bin is not a text file");
@@ -1101,7 +1101,7 @@ describe("static shell", () => {
     preview: () => null,
     metrics: () => ({ lag: 0 }),
     bootstrap: async () => ({}),
-    manifestColors: () => ({ bar: "#111111", ground: "#222222" }),
+    manifestGround: () => "#222222",
     offline: () => ({ start: startLink, port: 4242 }),
     restart: async () => null,
     restartWait: () => ({ waiting: null, asking: [] }),
@@ -1114,7 +1114,7 @@ describe("static shell", () => {
   test("the manifest carries the chosen theme's colours, whatever the file on disk says", async () => {
     const r = await serve(req("/manifest.json"), srv());
     expect(r?.headers.get("cache-control")).toBe("no-store");
-    expect(await r?.json()).toEqual({ name: "Toyon", theme_color: "#111111", background_color: "#222222" });
+    expect(await r?.json()).toEqual({ name: "Toyon", theme_color: "#222222", background_color: "#222222" });
   });
   test("the not-running page is told the start link, when there is one, and this daemon's port", async () => {
     startLink = null;

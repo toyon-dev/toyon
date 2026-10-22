@@ -424,13 +424,10 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
       managed: { source: opts.managed.source, hash: opts.managed.hash },
       preview: (id) => s.runtime.get(id)?.proxy?.handler ?? null,
       bootstrap: helloFrame,
-      manifestColors: () => {
-        // the phone's status bar sits on the screen's ground, not on the strip under it: painted
-        // the strip's colour, the two read as one tall band. The launch screen is the list's
-        // ground, which is the screen an installed app opens on.
-        const { surface0, surface1 } = s.themes.current().colors;
-        return { bar: surface0, ground: surface1 };
-      },
+      // the launch screen and the status bar over it are the list's ground, which is the screen an
+      // installed app opens on and what the page then paints under the inset (theme.ts); a bar
+      // in a colour of its own made the first screen two bands
+      manifestGround: () => s.themes.current().colors.surface1,
       open: (path) => s.opens.open(path),
       restart: (now) => s.restarter.request({ now }),
       restartWait: () => ({ waiting: s.restarter.waitingOn(), asking: s.restarter.asking() }),

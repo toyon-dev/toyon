@@ -9,21 +9,27 @@
       name="viewport"
       content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content"
     />
-    <!-- what a phone or an installed window paints above the page: the dark theme's ground, the
-         same literal as the manifest's. A phone's installed app paints its status bar from these
-         two (Firefox on Android from the manifest alone) and not from the value the theme sets
-         later, so the literal is the phone's answer, the screen's ground, and a desk window gets
-         the bar's ground from theme.ts at load. -->
-    <meta name="theme-color" content="#32302d" />
+    <!-- what a phone or an installed window paints above the page, before the bundle sets it for
+         the screen (theme.ts): the ground of the phone's list, which a fresh tab opens on, the
+         same literal as the manifest's, and the dark theme's bar ground for a desk window's
+         caption area. Some installed apps read only this and the manifest (Firefox on Android),
+         so the literal is the list's answer and not the dark theme's canvas. -->
+    <meta name="theme-color" content="#3d3835" />
     <link rel="manifest" href="/manifest.json" />
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
     <title>Toyon</title>
-    <!-- The canvas: the rule names the token, so it follows every theme applied later, and the
-         literal is the dark theme's, for a first visit. -->
+    <!-- The canvas, for a first visit when the script under it cannot paint: the rule names the
+         token, so it follows every theme applied later, and the literal is the dark theme's. In the
+         base layer, where the bundle's own canvas rule lives (base.css): unlayered it would beat
+         the one that follows the screen's ground, and the html's canvas would stay surface0 under
+         a list standing on surface1. -->
     <style>
-      html {
-        background: var(--surface0, #32302d);
-        color-scheme: dark;
+      @layer tokens, base, surfaces;
+      @layer base {
+        html {
+          background: var(--surface0, #32302d);
+          color-scheme: dark;
+        }
       }
     </style>
     <script>

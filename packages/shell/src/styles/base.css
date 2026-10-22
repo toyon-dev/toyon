@@ -16,6 +16,17 @@
     color: var(--text0);
     font: var(--type-ui);
   }
+  /* The canvas is the ground of the screen standing on it (theme.ts writes the token). On a phone
+     the window starts behind the status bar and the frame's top inset is the canvas showing
+     through, so the list, which stands on surface1, needs the canvas on surface1 too or the inset
+     reads as a darker band over it. All three, since each paints its own ground above. */
+  html[data-ground="surface1"] {
+    &,
+    body,
+    #root {
+      background: var(--surface1);
+    }
+  }
   html,
   body {
     overflow: hidden;

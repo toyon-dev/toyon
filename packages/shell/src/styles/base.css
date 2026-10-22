@@ -273,8 +273,11 @@
    an ask card's option rows. The row itself moves, edge and all, and the cell it uncovers at its
    end holds the rung's word, pinned near the screen's edge while the cell grows under it, so the
    word comes out whole from under the row and then stays put as the finger goes on. Short of the
-   first rung the cell is the list's own ground and the word a tier down; on a rung the cell lifts
-   to the seat tier, and a surface may tint it with the word's own colour instead (rail.css). The
+   first rung the cell is the recess tier, which the row on the rail's list uncovers as a well a
+   step below its ground in every theme, so the hand sees the row lift off something before any
+   verb is on; the card's rows already sit in that recess, so there the word alone says what is
+   coming. The word is a tier down either way. On a rung the cell lifts to the seat tier, and a
+   surface may tint it with the word's own colour instead (rail.css). The
    wrapper stands in the list where the row did and clips nothing: the row only ever moves toward
    its start, so its far end never leaves the wrapper's box. ---- */
   .slide {
@@ -305,7 +308,7 @@
     justify-content: flex-end;
     gap: 8px;
     padding-right: 16px;
-    background: transparent;
+    background: var(--sunken);
     --text1: var(--ink0);
     --text2: var(--ink1);
     /* the glyph at the edge carries the rung: the cell's colour is its, and a surface's tint names

@@ -23,14 +23,18 @@ export function slideAxis({ dx, dy }: Touch1): "slide" | "other" | null {
   return Math.abs(dx) > Math.abs(dy) && dx < 0 ? "slide" : "other";
 }
 
-/** Where a finger `dx` along the row has brought it: the rung it is on, 0 before the first, and the
- * offset the row is drawn at. The row follows the finger rung for rung and gives past the last. */
-export function slideAt(dx: number, rungs: number, rung = STEP): { step: number; x: number } {
+/** Where a finger `dx` along the row has brought it: the rung it is on, 0 before the first, the
+ * offset the row is drawn at, and how far up the well under it has come, 0 to 1. The row follows
+ * the finger rung for rung and gives past the last. The well is full half a rung in: a cell a few
+ * pixels wide painted at full depth was a dark sliver that popped in at the row's end as the
+ * finger first moved, and hung there as the row dropped back. */
+export function slideAt(dx: number, rungs: number, rung = STEP): { step: number; x: number; well: number } {
   const d = Math.max(0, -dx);
   const reach = rungs * rung;
   const step = Math.min(rungs, Math.floor(d / rung));
   const x = d <= reach ? d : reach + (d - reach) * GIVE;
-  return { step, x: -x };
+  const well = Math.min(1, d / (rung / 2));
+  return { step, x: -x, well };
 }
 
 /** the row a touch landed on, and what the hook needs to know about it */
@@ -61,8 +65,9 @@ export type SlideHandlers = {
  * the row drops back. A tap is still a tap, and a drag up or down is still the list's scroll;
  * only a drag along the row, toward its start, is the slide's.
  *
- * The row is told through `--slide-x` and `data-slide` (`drag`, `settle`), written to the node so
- * a move renders nothing; the rung is state, since it names a word. The stylesheet draws both.
+ * The row is told through `--slide-x`, `--slide-well` and `data-slide` (`drag`, `settle`), written
+ * to the node so a move renders nothing; the rung is state, since it names a word. The stylesheet
+ * draws both.
  */
 export function useSlide(list: RefObject<HTMLElement | null>, handlers: SlideHandlers) {
   const h = useRef(handlers);
@@ -78,7 +83,7 @@ export function useSlide(list: RefObject<HTMLElement | null>, handlers: SlideHan
     /** the click a drag's touch becomes is spent on the drag; a stamp rather than a flag, since
      * the click comes after the touch has ended */
     let spentUntil = 0;
-    const put = (r: SlideRow, x: number, state: "drag" | "settle") => {
+    const put = (r: SlideRow, x: number, well: number, state: "drag" | "settle") => {
       if (r.el.dataset.slide !== state) {
         r.el.dataset.slide = state;
         // the state names the transition and the value is what it plays; written in one style
@@ -86,9 +91,11 @@ export function useSlide(list: RefObject<HTMLElement | null>, handlers: SlideHan
         void r.el.offsetWidth;
       }
       r.el.style.setProperty("--slide-x", `${x}px`);
+      r.el.style.setProperty("--slide-well", `${Math.round(well * 100)}%`);
     };
     const rest = (r: SlideRow) => {
       r.el.style.removeProperty("--slide-x");
+      r.el.style.removeProperty("--slide-well");
       delete r.el.dataset.slide;
     };
     const drop = () => {
@@ -100,7 +107,7 @@ export function useSlide(list: RefObject<HTMLElement | null>, handlers: SlideHan
       dragging = false;
       step = 0;
       if (!r || !was) return;
-      put(r, 0, "settle");
+      put(r, 0, 0, "settle");
       if (at > 0) h.current.onPick(r.key, at);
       timer = window.setTimeout(() => {
         rest(r);
@@ -148,7 +155,7 @@ export function useSlide(list: RefObject<HTMLElement | null>, handlers: SlideHan
         h.current.onSlide({ key: r.key, step: 0 });
       }
       const at = slideAt(dx, r.rungs, r.rung);
-      put(r, at.x, "drag");
+      put(r, at.x, at.well, "drag");
       if (at.step !== step) {
         step = at.step;
         h.current.onSlide({ key: r.key, step });

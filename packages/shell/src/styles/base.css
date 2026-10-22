@@ -276,10 +276,13 @@
    first rung the cell is the recess tier, which the row on the rail's list uncovers as a well a
    step below its ground in every theme, so the hand sees the row lift off something before any
    verb is on; the card's rows already sit in that recess, so there the word alone says what is
-   coming. The word is a tier down either way. On a rung the cell lifts to the seat tier, and a
-   surface may tint it with the word's own colour instead (rail.css). The
-   wrapper stands in the list where the row did and clips nothing: the row only ever moves toward
-   its start, so its far end never leaves the wrapper's box. ---- */
+   coming. The well comes up with the slide (`--slide-well`, full half a rung in) rather than
+   standing at full depth from the first pixel: a cell a few pixels wide at full depth was a dark
+   sliver that popped in at the row's end as the finger first moved and hung there as the row
+   dropped back. The word is a tier down either way. On a rung the cell lifts to the seat tier,
+   and a surface may tint it with the word's own colour instead (rail.css). The wrapper stands in
+   the list where the row did and clips nothing: the row only ever moves toward its start, so its
+   far end never leaves the wrapper's box. ---- */
   .slide {
     position: relative;
     /* the list's scroll stays the browser's, and a move along the row reaches the slide uncut */
@@ -308,7 +311,7 @@
     justify-content: flex-end;
     gap: 8px;
     padding-right: 16px;
-    background: var(--sunken);
+    background: color-mix(in srgb, var(--sunken) var(--slide-well, 100%), transparent);
     --text1: var(--ink0);
     --text2: var(--ink1);
     /* the glyph at the edge carries the rung: the cell's colour is its, and a surface's tint names

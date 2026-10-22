@@ -19,7 +19,13 @@ describe("whose a touch is", () => {
 
 describe("where a finger has brought the row", () => {
   test("short of the first rung it is on none, and follows the finger", () => {
-    expect(slideAt(-30, 3)).toEqual({ step: 0, x: -30 });
+    expect(slideAt(-30, 3)).toMatchObject({ step: 0, x: -30 });
+  });
+  test("the well under it comes up over the first half rung", () => {
+    expect(slideAt(-8, 3).well).toBeCloseTo(8 / (STEP / 2));
+    expect(slideAt(-STEP / 2, 3).well).toBe(1);
+    expect(slideAt(-2 * STEP, 3).well).toBe(1);
+    expect(slideAt(-30, 1, 120).well).toBeCloseTo(0.5);
   });
   test("each rung is a step further", () => {
     expect(slideAt(-STEP, 3).step).toBe(1);
@@ -33,7 +39,7 @@ describe("where a finger has brought the row", () => {
     expect(past.x).toBeLessThan(-3 * STEP);
   });
   test("a drag the other way leaves the row where it is", () => {
-    expect(slideAt(40, 3)).toEqual({ step: 0, x: -0 });
+    expect(slideAt(40, 3)).toEqual({ step: 0, x: -0, well: 0 });
   });
   test("a list with longer words names a wider rung", () => {
     expect(slideAt(-STEP, 1, 120).step).toBe(0);

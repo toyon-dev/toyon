@@ -8,7 +8,8 @@ import "./spinner.css";
  * while a sync or a merge runs without the row moving. The squares (four cells in the icon box,
  * a lit pair going round) sit in the transcript, where the agent is composing and the
  * mark stands in for words that have not arrived. It never carries a label of its own:
- * the control or row it sits in says what is happening.
+ * the control or row it sits in says what is happening. index.html draws the squares once more
+ * by hand, for the wait before this bundle has loaded, so a change to the drawing is made twice.
  */
 export function Spinner({
   size = "inline",

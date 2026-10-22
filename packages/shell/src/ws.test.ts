@@ -60,12 +60,42 @@ class HangingSocket {
 
 const idle = { addEventListener() {}, removeEventListener() {} };
 const globals = globalThis as unknown as Record<string, unknown>;
-const held = { document: globals.document, window: globals.window, WebSocket: globals.WebSocket };
+const held = {
+  document: globals.document,
+  window: globals.window,
+  WebSocket: globals.WebSocket,
+  fetch: globals.fetch,
+};
 
 afterEach(() => {
   Object.assign(globals, held);
   HangingSocket.made = [];
 });
+
+const sleep = (ms: number) => new Promise((f) => setTimeout(f, ms));
+
+/** a page in front of someone whose every handshake hangs, with the health probe answering as given */
+function hanging(health: () => Promise<{ ok: boolean }>) {
+  globals.document = { ...idle, visibilityState: "visible" };
+  globals.window = idle;
+  globals.WebSocket = HangingSocket;
+  const probes: string[] = [];
+  globals.fetch = (url: string) => {
+    probes.push(String(url));
+    return health();
+  };
+  const status: Array<[boolean, unknown]> = [];
+  const sock = new DaemonSocket(
+    { origin: "https://away.tail1234.ts.net", token: "t" },
+    () => {},
+    (connected, failure) => status.push([connected, failure]),
+    // the test closes each handshake itself, so the order of events is its own and not a race
+    // between timers: the deadline never comes, the wait before asking why is 5ms, the retry 5
+    // to 10ms out
+    { connectDeadline: 2000, settle: 5, backoffMin: 10 },
+  );
+  return { sock, status, probes };
+}
 
 describe("DaemonSocket", () => {
   test("a handshake that hangs is closed at the deadline and reported down", async () => {
@@ -77,14 +107,47 @@ describe("DaemonSocket", () => {
       { origin: "https://away.tail1234.ts.net", token: "t" },
       () => {},
       (connected, failure) => status.push([connected, failure]),
-      20,
+      { connectDeadline: 20 },
     );
     const first = HangingSocket.made[0];
     expect(first).toBeDefined();
-    await new Promise((f) => setTimeout(f, 60));
+    await sleep(60);
     // closed from here, once, and the screen told; the retry and the probe follow as for any close
     expect(first?.closes).toBe(1);
     expect(status).toEqual([[false, undefined]]);
+    sock.dispose();
+  });
+
+  // a phone's first handshake on a cold link outlives the deadline and the retry connects: one
+  // drop is not a proxy, and the daemon is not even asked until a second one
+  test("one dead handshake with a healthy daemon stays at connecting; the second names the proxy", async () => {
+    const { sock, status, probes } = hanging(async () => ({ ok: true }));
+    HangingSocket.made[0]?.close();
+    await sleep(40);
+    // the retry is out and nothing has been asked or said beyond "down, no reason yet"
+    expect(HangingSocket.made.length).toBe(2);
+    expect(probes).toEqual([]);
+    expect(status).toEqual([
+      [false, undefined],
+      [false, null],
+    ]);
+    HangingSocket.made[1]?.close();
+    await sleep(40);
+    expect(probes).toEqual(["https://away.tail1234.ts.net/health"]);
+    expect(status.at(-1)).toEqual([false, "blocked"]);
+    sock.dispose();
+  });
+
+  test("the same two drops with nothing answering over HTTP is an outage, and one drop still is not", async () => {
+    const { sock, status, probes } = hanging(() => Promise.reject(new Error("no route")));
+    HangingSocket.made[0]?.close();
+    await sleep(40);
+    expect(probes).toEqual([]);
+    expect(status.at(-1)).toEqual([false, null]);
+    HangingSocket.made[1]?.close();
+    await sleep(40);
+    expect(probes.length).toBe(1);
+    expect(status.at(-1)).toEqual([false, "down"]);
     sock.dispose();
   });
 });

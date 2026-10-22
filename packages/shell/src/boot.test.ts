@@ -8,6 +8,14 @@ import { STORAGE } from "./state/keys.ts";
 
 const html = await Bun.file(new URL("../index.html", import.meta.url)).text();
 const vite = await Bun.file(new URL("../vite.config.ts", import.meta.url)).text();
+const main = await Bun.file(new URL("./main.tsx", import.meta.url)).text();
+
+// the mark the page draws while the bundle loads is the page's own, so the bundle names it by its
+// id to take it down once a screen stands
+test("the bundle takes down the mark the page drew for the wait", () => {
+  expect(html).toContain('id="boot"');
+  expect(main).toContain('getElementById("boot")');
+});
 
 test("the boot script reads the token fragment, and nothing else from the address", () => {
   expect(html).toContain("/token=([a-f0-9]+)/");

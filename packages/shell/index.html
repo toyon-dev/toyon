@@ -30,6 +30,79 @@
           background: var(--surface0, #32302d);
           color-scheme: dark;
         }
+        /* The wait for the bundle, marked: the four cells the transcript's composing mark draws
+           (ui/spinner.css), drawn again here because the bundle that owns them is what is being
+           waited for. Centred, where a phone's splash icon just was, in the cached theme's quiet
+           ink. Shown only once the wait is worth marking: a warm load is done inside the delay and
+           never flashes it. The bundle takes it down once a screen stands (main.tsx). */
+        #boot {
+          position: fixed;
+          inset: 0;
+          display: grid;
+          place-items: center;
+          pointer-events: none;
+          color: var(--boot-ink, #9e927e);
+          opacity: 0;
+          animation: boot-show 0s 400ms forwards;
+        }
+        #boot > span {
+          position: relative;
+          width: 13px;
+          height: 13px;
+        }
+        #boot > span > span {
+          position: absolute;
+          width: 5px;
+          height: 5px;
+          background: currentColor;
+          opacity: 0.25;
+          animation: boot-squares 0.48s steps(1) infinite;
+        }
+        #boot > span > span:nth-child(1) {
+          left: 1px;
+          top: 1px;
+          animation-delay: -0.12s;
+        }
+        #boot > span > span:nth-child(2) {
+          left: 7px;
+          top: 1px;
+          animation-delay: 0s;
+        }
+        #boot > span > span:nth-child(3) {
+          left: 7px;
+          top: 7px;
+          animation-delay: -0.36s;
+        }
+        #boot > span > span:nth-child(4) {
+          left: 1px;
+          top: 7px;
+          animation-delay: -0.24s;
+        }
+        @keyframes boot-show {
+          to {
+            opacity: 1;
+          }
+        }
+        @keyframes boot-squares {
+          0% {
+            opacity: 1;
+          }
+          25% {
+            opacity: 0.5;
+          }
+          50%,
+          75% {
+            opacity: 0.25;
+          }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          #boot > span > span {
+            animation: none;
+          }
+          #boot > span > span:first-child {
+            opacity: 1;
+          }
+        }
       }
     </style>
     <script>
@@ -47,12 +120,14 @@
         const phone = matchMedia("(max-width: 640px), ((hover: none) and (max-width: 1000px))").matches;
         const key = sessionStorage.getItem("toyon-ground") || (phone ? "surface1" : "surface0");
         document.documentElement.style.background = colors[key] || colors.surface0;
+        document.documentElement.style.setProperty("--boot-ink", colors.text1 || "#9e927e");
         if (t?.kind) document.documentElement.style.colorScheme = t.kind;
       } catch {}
     </script>
   </head>
   <body>
     <div id="root"></div>
+    <div id="boot" aria-hidden="true"><span><span></span><span></span><span></span><span></span></span></div>
     <script>
       // The daemon's hello, asked for while the bundle is still loading: the page's own code
       // starts hundreds of milliseconds after this line on a cold cache, and it should start

@@ -128,8 +128,10 @@ booted.then(() => {
     ),
   );
   // the ground the page painted before this bundle ran (index.html) has done its job: from here
-  // the stylesheet's ground is the one
+  // the stylesheet's ground is the one. The mark it drew for the wait is answered by the screen.
   document.documentElement.style.removeProperty("background");
+  document.documentElement.style.removeProperty("--boot-ink");
+  document.getElementById("boot")?.remove();
 });
 
 if ("serviceWorker" in navigator) {

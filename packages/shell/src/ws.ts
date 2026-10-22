@@ -361,6 +361,8 @@ const SETTLE = 1500;
 const CONNECT_DEADLINE = 5000;
 /** messages kept while disconnected; subscribe-shaped ones are deduped by worktree */
 const QUEUE_MAX = 50;
+/** the waits above, as a test turns them down; the page runs on the constants */
+export type SocketTiming = { connectDeadline?: number; settle?: number; backoffMin?: number };
 
 /** the frames that are a message leaving its box, which the daemon empties as each arrives */
 const takesBox = (
@@ -383,11 +385,17 @@ export class DaemonSocket {
   private sayTimer: ReturnType<typeof setTimeout> | null = null;
   /** the boxes a message was sent from while the socket was down, until the next hello asks */
   private sentDown = new Set<string>();
+  /** sockets closed in a row without the daemon speaking, since it last spoke or the page was last
+   * come back to; the second is what names a reason (diagnose) */
+  private drops = 0;
 
   /** where this socket's daemon answers; every fetch about that machine goes through these */
   readonly urls: DaemonUrls;
   /** held off on purpose (an edge machine not being looked at); nothing retries until `resume` */
   private suspended = false;
+  private readonly connectDeadline: number;
+  private readonly settle: number;
+  private readonly backoffMin: number;
 
   constructor(
     daemon: { origin: string; token: string },
@@ -395,9 +403,11 @@ export class DaemonSocket {
     /** `failure` names why the socket is down once that is known, null withdraws the one named, and
      * leaving it out keeps it */
     private onStatus: (connected: boolean, failure?: ConnectFailure | null) => void,
-    /** a test shortens it; see CONNECT_DEADLINE */
-    private connectDeadline = CONNECT_DEADLINE,
+    timing: SocketTiming = {},
   ) {
+    this.connectDeadline = timing.connectDeadline ?? CONNECT_DEADLINE;
+    this.settle = timing.settle ?? SETTLE;
+    this.backoffMin = timing.backoffMin ?? BACKOFF_MIN;
     this.urls = daemonUrls(daemon.origin, daemon.token);
     this.connect();
     document.addEventListener("visibilitychange", this.wake);
@@ -435,6 +445,7 @@ export class DaemonSocket {
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
     this.attempt = 0;
+    this.drops = 0;
     if (this.downAt !== null) {
       this.downAt = Date.now();
       this.onStatus(false, null);
@@ -447,9 +458,16 @@ export class DaemonSocket {
 
   /** A close with no code says nothing: a daemon that is down, a proxy that refuses upgrades and a
    * wrong token all look the same to the browser (1006). The daemon answers the token case with its
-   * own code; the other two are told apart by whether plain HTTP still reaches it. */
-  private async diagnose(code: number): Promise<ConnectFailure> {
+   * own code; the other two are told apart by whether plain HTTP still reaches it. One close is not
+   * enough to ask: a phone's first handshake on a cold link outlives the connect deadline, and the
+   * probe after it answers from the same slow link, so one drop with a healthy daemon read as a
+   * proxy, and one with a timed-out probe as an outage, for the seconds until the retry connected.
+   * The second drop in a row is the evidence; until then nothing is named and the line stays at
+   * connecting (null withdraws whatever was). A daemon that is down refuses at once, so its second
+   * drop is the first retry and the sentence lands as soon as it did. */
+  private async diagnose(code: number): Promise<ConnectFailure | null> {
     if (code === WS_CLOSE_UNAUTHORIZED) return "unauthorized";
+    if (this.drops < 2) return null;
     try {
       const r = await fetch(this.urls.health, { signal: AbortSignal.timeout(2000) });
       return r.ok ? "blocked" : "down";
@@ -482,7 +500,7 @@ export class DaemonSocket {
           if (current()) this.onStatus(false, failure);
         });
       },
-      Math.max(0, down + SETTLE - Date.now()),
+      Math.max(0, down + this.settle - Date.now()),
     );
   }
 
@@ -503,6 +521,7 @@ export class DaemonSocket {
         live = true;
         clearTimeout(deadline);
         this.attempt = 0;
+        this.drops = 0;
         this.downAt = null;
         if (this.sayTimer) clearTimeout(this.sayTimer);
         this.sayTimer = null;
@@ -523,8 +542,9 @@ export class DaemonSocket {
       if (this.closed || this.suspended) return;
       // the socket is retried in any case: a fresh token arrives with a reload, a daemon comes
       // back on its own, and a proxy is the person's to fix, so the reason is a message, not a stop
+      this.drops++;
       this.say(ev.code);
-      const base = Math.min(BACKOFF_MAX, BACKOFF_MIN * 2 ** this.attempt++);
+      const base = Math.min(BACKOFF_MAX, this.backoffMin * 2 ** this.attempt++);
       this.timer = setTimeout(() => this.connect(), base / 2 + Math.random() * (base / 2));
     };
     ws.onerror = () => ws.close();

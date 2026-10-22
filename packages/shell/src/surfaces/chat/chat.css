@@ -1049,9 +1049,13 @@
     & > .icon-inline {
       flex: none;
     }
+    /* clipped, since the line ends in an ellipsis, but with room past the edge: the verb leads
+       the line, and a focus ring drawn outside its box lost its top, left and bottom to a clip at
+       the edge. The margin is the ring and its offset, as on the ghost. */
     & .composer-offer-line {
       min-width: 0;
-      overflow: hidden;
+      overflow: clip;
+      overflow-clip-margin: 3px;
       text-overflow: ellipsis;
       white-space: nowrap;
     }

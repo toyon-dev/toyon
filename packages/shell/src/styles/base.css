@@ -861,12 +861,15 @@
       vertical-align: top;
       text-align: start;
     }
-    /* the header row sits on the same wash code does, so it reads as a header on any ground */
-    /* a cell is narrow, so a backticked word in one wraps as a word, never between its letters */
+    /* A cell is narrow, and a chip in one stays whole: a chip of several words (a version and its
+       state) that wrapped at its spaces became a stack of chips, each with its own box, and a
+       table of them read as cut off at the column's edge. The chip's width is the column's floor
+       instead, so a table of chips grows past the column and scrolls. */
     & td code,
     & th code {
-      overflow-wrap: normal;
+      white-space: nowrap;
     }
+    /* the header row sits on the same wash code does, so it reads as a header on any ground */
     & th {
       background: var(--code);
       font-weight: var(--weight-strong);

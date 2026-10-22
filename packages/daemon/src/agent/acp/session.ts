@@ -260,9 +260,10 @@ function recorded(reply?: AskReply): { answers?: AskAnswer[]; choiceId?: string 
 }
 
 /** one open ask card. `settle` is the only way out: it answers the agent's request, appends the
- * end event and forgets the card, and it is safe to call twice (the loser of a race does nothing). */
+ * end event and forgets the card, and it is safe to call twice (the loser of a race does nothing).
+ * `before` is what goes to the agent ahead of the answer on the wire (see `answer`). */
 interface PendingAsk {
-  settle: (outcome: AskOutcome, reply?: AskReply) => void;
+  settle: (outcome: AskOutcome, reply?: AskReply, before?: () => Promise<void>) => void;
   /** a question card's headers, what a message sent behind the answer names */
   headers?: string[];
 }
@@ -567,6 +568,14 @@ export class AcpSession implements AgentAdapter {
   }
 
   private post(text: string, opts: SendOpts = {}) {
+    const steer = this.deliver(text, opts);
+    if (steer) fireAndForget(this.d.worktreeId, steer, "agent steer");
+  }
+
+  /** `post`, handing back the steer in flight, settled once the agent has taken the message into
+   * its turn; nothing when the message went to the queue instead. Throws as `send` does for an
+   * attachment that cannot go. */
+  private deliver(text: string, opts: SendOpts = {}): Promise<void> | undefined {
     const { context, attachments, asked } = opts;
     const item: QueueItem = {
       text,
@@ -589,9 +598,10 @@ export class AcpSession implements AgentAdapter {
     // So does a hold: the tree is being rebased under the agent, and steering it now would have
     // it read and write files git is rewriting.
     if ((this.running || this.own) && !this.turn?.stopping && !this.held && this.live?.conn.steering) {
-      return fireAndForget(this.d.worktreeId, this.steer(item), "agent steer");
+      return this.steer(item);
     }
     this.enqueue(item);
+    return undefined;
   }
 
   private enqueue(item: QueueItem) {
@@ -1468,22 +1478,30 @@ export class AcpSession implements AgentAdapter {
         if (!choice) return { outcome: { outcome: "cancelled" } };
         // approving a plan is also choosing how the work after it runs: Claude's options say
         // whether edits are auto-accepted or approved one by one, and the worktree's mode follows
+        const res: acp.RequestPermissionResponse = { outcome: { outcome: "selected", optionId: choice.id } };
         if (plan && (choice.kind === "allow_once" || choice.kind === "allow_always")) {
           this.d.setMode?.(modeAfterPlan(choice.name));
           // the yes said yes to the file, which may no longer be the plan the agent holds
-          if (planPath) fireAndForget(this.d.worktreeId, this.sayPlanEdited(detail, planPath), "edited plan");
+          if (planPath) return this.sayPlanEdited(detail, planPath).then(() => res);
         }
-        return { outcome: { outcome: "selected", optionId: choice.id } };
+        return res;
       },
     );
   }
 
   /** A plan approved after it was rewritten. A permission answer is an option id and nothing else,
    * so the agent would go and build the version it proposed; the file it must work from goes in as
-   * a message instead, which steers into the turn the approval just released. */
+   * a message instead, which steers into the turn the approval releases. Awaited ahead of the
+   * approval itself, for the reason `answer` gives: steered once the card is closed on the wire,
+   * it would cut the plan tool off as it returns. */
   private async sayPlanEdited(proposed: string, path: string) {
-    if (!(await this.d.planEdited?.(path, proposed))) return;
-    this.post(`I edited the plan before approving it. Build what is in ${path}, not the plan you proposed.`);
+    try {
+      if (!(await this.d.planEdited?.(path, proposed))) return;
+      await this.deliver(`I edited the plan before approving it. Build what is in ${path}, not the plan you proposed.`);
+    } catch (e) {
+      // the approval still goes back; a reply that fails would read to the agent as a refusal
+      log.warn(this.d.worktreeId, "the edited plan was not sent", e);
+    }
   }
 
   private onElicit(
@@ -1532,18 +1550,21 @@ export class AcpSession implements AgentAdapter {
    * out settles the agent's request exactly once */
   private openAsk<R>(
     card: (id: string) => AgentEvent,
-    respond: (outcome: AskOutcome, reply?: AskReply) => R,
+    respond: (outcome: AskOutcome, reply?: AskReply) => R | Promise<R>,
     signal?: AbortSignal,
     headers?: string[],
   ): Promise<R> {
     const id = randomUUID();
     return new Promise<R>((resolve) => {
-      const settle = (outcome: AskOutcome, reply?: AskReply) => {
+      const settle = (outcome: AskOutcome, reply?: AskReply, before?: () => Promise<void>) => {
         if (!this.asks.delete(id)) return;
         signal?.removeEventListener("abort", onAbort);
         this.emit({ type: "agent-ask-end", id, outcome, ...recorded(reply), ts: Date.now() });
         this.syncStatus();
-        resolve(respond(outcome, reply));
+        // the card is closed here and open on the wire until the resolve: what goes before it
+        // reaches the agent while its request is still pending
+        const res = respond(outcome, reply);
+        resolve(before ? before().then(() => res) : res);
       };
       const onAbort = () => settle("cancelled");
       signal?.addEventListener("abort", onAbort, { once: true });
@@ -1554,25 +1575,41 @@ export class AcpSession implements AgentAdapter {
   }
 
   /** An answer closes its card. What was attached to the card cannot go in the answer (an
-   * elicitation's values are words), so it follows as a message of the person's own, posted
-   * straight after the settle: the turn is still running, so it joins it the way a message typed
-   * then would, behind the tool result the answer became. Posted, not sent: a send closes every
-   * other open card as passed, and this message answers nothing. A pass sends nothing on. */
+   * elicitation's values are words), and neither can words typed beside a pick (a permission
+   * answer is an option id and nothing else), so they follow as a message of the person's own:
+   * the turn is still running, so it joins it the way a message typed then would, behind the tool
+   * result the answer became. Posted, not sent: a send closes every other open card as passed,
+   * and this message answers nothing. A pass sends nothing on.
+   *
+   * It goes to the agent before the answer does, while the card's request is still open on the
+   * wire. Claude delivers a message steered with no card open by aborting the step it is on, and
+   * right after an answer that step is the ask tool itself, still returning the answer: the tool
+   * result came back as an interruption and the agent read the question as unanswered. A message
+   * steered while a card is open is delivered after the step instead, so the answer and what
+   * followed it reach the agent together. */
   answer(askId: string, reply: AskReply, followUp?: FollowUp) {
     const ask = this.asks.get(askId);
     // two shells can watch one worktree; the other one answering first is normal, not an error
     if (!ask) return log.debug(this.d.worktreeId, `answer for an ask that already closed (${askId})`);
     const skipped = reply.kind === "answers" && !reply.answers;
-    ask.settle(skipped ? "skipped" : "answered", reply);
-    // words typed beside a pick: a permission answer is an option id and nothing else, so they
-    // go in as the person's own message right behind the tool result the pick became, the way an
-    // edited plan is sent to its file. The turn is still running, so they steer into it.
     const note = reply.kind === "choice" ? reply.note?.trim() : undefined;
-    if (note) this.post(note);
-    if (skipped || !followUp?.attachments.length) return;
+    const attachments = skipped ? [] : (followUp?.attachments ?? []);
     const headers = ask.headers ?? [];
     const text = headers.length === 1 ? `with my answer to "${headers[0]}"` : "with my answers";
-    this.post(text, { attachments: followUp.attachments });
+    const before =
+      note || attachments.length
+        ? async () => {
+            try {
+              if (note) await this.deliver(note);
+              if (attachments.length) await this.deliver(text, { attachments });
+            } catch (e) {
+              // the answer still goes back: the card is closed, and a reply that fails would read
+              // to the agent as a question it could not put
+              log.warn(this.d.worktreeId, "what followed the answer did not go", e);
+            }
+          }
+        : undefined;
+    ask.settle(skipped ? "skipped" : "answered", reply, before);
   }
 
   /** every open card goes away with the turn or the process it belonged to. A card nobody stopped

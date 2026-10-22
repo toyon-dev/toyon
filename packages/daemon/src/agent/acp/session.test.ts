@@ -2377,6 +2377,72 @@ describe("AcpSession ask cards", () => {
     await w.session.close();
   });
 
+  test("what follows the answer reaches the agent before the answer does, while its request is still open", async () => {
+    // Claude delivers a message steered with no card open by aborting the step it is on, and right
+    // after an answer that step is the ask tool returning it: the answer came back cut off. Steered
+    // while the card is open, the message is delivered behind the step instead.
+    let steersAtAnswer = -1;
+    const fake: FakeAgent = fakeAgent(
+      async (p, client) => {
+        const answer = await client.request(acp.methods.client.elicitation.create, {
+          sessionId: p.sessionId,
+          ...(askForm({ note: true }) as object),
+        } as acp.CreateElicitationRequest);
+        steersAtAnswer = fake.steers.length;
+        await client.notify(acp.methods.client.session.update, {
+          sessionId: p.sessionId,
+          update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: JSON.stringify(answer) } },
+        });
+        return { stopReason: "end_turn" };
+      },
+      { steering: true, images: true },
+    );
+    const w = world(fake);
+    w.session.send("go");
+    await waitFor(() => !!openAsk(w.events));
+    const id = openAsk(w.events)!;
+    w.session.answer(id, { kind: "answers", answers: [{ selected: ["a"] }] }, { attachments: [await shot()] });
+    await w.idle();
+    expect(steersAtAnswer).toBe(1);
+    expect(saidBack(w.events)).toMatchObject({ action: "accept", content: { question_0: "a" } });
+    // and the transcript still reads the card closing first
+    const types = w.types();
+    expect(types.indexOf("agent-ask-end")).toBeLessThan(types.lastIndexOf("user-message"));
+    expect(types.filter((t) => t === "turn-start")).toHaveLength(1);
+    await w.session.close();
+  });
+
+  test("words typed beside a pick reach the agent before the pick does", async () => {
+    let steersAtPick = -1;
+    let picked: unknown;
+    const fake: FakeAgent = fakeAgent(
+      async (p, client) => {
+        picked = await client.request(acp.methods.client.session.requestPermission, {
+          sessionId: p.sessionId,
+          toolCall: { toolCallId: "t7", title: "Approve Plan", kind: "switch_mode" },
+          options: [
+            { optionId: "exit_plan_default", name: "Yes, manually approve edits", kind: "allow_once" },
+            { optionId: "cancel", name: "No, keep planning", kind: "reject_once" },
+          ],
+        });
+        steersAtPick = fake.steers.length;
+        return { stopReason: "end_turn" };
+      },
+      { steering: true },
+    );
+    const w = world(fake);
+    w.session.send("plan it");
+    await waitFor(() => !!openAsk(w.events));
+    w.session.answer(openAsk(w.events)!, { kind: "choice", choiceId: "cancel", note: "also cover the parked case" });
+    await w.idle();
+    expect(steersAtPick).toBe(1);
+    expect(fake.steers[0]!.prompt).toEqual([{ type: "text", text: "also cover the parked case" }]);
+    expect(picked).toEqual({ outcome: { outcome: "selected", optionId: "cancel" } });
+    const types = w.types();
+    expect(types.indexOf("agent-ask-end")).toBeLessThan(types.lastIndexOf("user-message"));
+    await w.session.close();
+  });
+
   test("an agent that takes no steering reads what followed the answer as the next turn", async () => {
     const fake = fakeAgent(asks(), { images: true });
     const w = world(fake);

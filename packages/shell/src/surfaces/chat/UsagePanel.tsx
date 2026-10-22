@@ -14,31 +14,48 @@ const PLACEMENT = tipPlacement("top");
  * worktree may be looking at figures another worktree heard a while ago */
 const STALE_MS = 5 * 60_000;
 
-/**
- * The figures behind the ring, a bar each: this worktree's context, then the account's plan
- * windows under the account they belong to, with when each one resets. This is the ring's hover,
- * in place of a tooltip, so the reset times are a glance away; nothing in it is pressed. The press
- * is the ring's own, and opens the compact menu. Anchored to the ring's wrapper.
- */
-export function UsagePanel({
-  usage,
-  limits,
-  auth,
-  now,
-  onClose,
-}: {
+interface Figures {
   usage: UsageFigures | undefined;
   limits: AgentLimits | undefined;
   /** who the agent says it is paying as, heading the plan windows: they are the account's, not
    * this worktree's, which the context bar above them is */
   auth: AuthStatus | undefined;
   now: number;
-  onClose: () => void;
-}) {
+}
+
+/**
+ * The figures behind the ring, a bar each: this worktree's context, then the account's plan
+ * windows under the account they belong to, with when each one resets. Nothing in it is pressed:
+ * where it stands depends on what the ring has to offer, so the box around it is not here.
+ */
+export function UsageMeters({ usage, limits, auth, now }: Figures) {
   const rows = limits ? limitRows(limits, now) : [];
   const who = rows.length ? accountLine(auth) : undefined;
   const stale = limits && now - limits.at > STALE_MS ? spanWords(now - limits.at) : null;
   const cost = usage?.cost !== undefined ? ` · ${dollars(usage.cost)}` : "";
+  return (
+    <div className="usage-figures">
+      {usage && (
+        <Meter
+          name="context"
+          used={usage.used / usage.size}
+          sub={`${tokens(usage.used)} of ${tokens(usage.size)}${cost}`}
+        />
+      )}
+      {who && <div className="usage-who section-title">{who}</div>}
+      {rows.map((r) => (
+        <Meter key={r.key} name={r.name} used={r.used} sub={r.sub} />
+      ))}
+      {stale && <div className="usage-stale hint">read {stale} ago</div>}
+    </div>
+  );
+}
+
+/**
+ * The figures as the ring's hover, in place of a tooltip, so the reset times are a glance away.
+ * The press is the ring's own, and opens the compact menu. Anchored to the ring's wrapper.
+ */
+export function UsagePanel({ onClose, ...figures }: Figures & { onClose: () => void }) {
   return (
     <Float
       className="usage-panel"
@@ -52,18 +69,7 @@ export function UsagePanel({
         }
       }}
     >
-      {usage && (
-        <Meter
-          name="context"
-          used={usage.used / usage.size}
-          sub={`${tokens(usage.used)} of ${tokens(usage.size)}${cost}`}
-        />
-      )}
-      {who && <div className="usage-who section-title">{who}</div>}
-      {rows.map((r) => (
-        <Meter key={r.key} name={r.name} used={r.used} sub={r.sub} />
-      ))}
-      {stale && <div className="usage-stale hint">read {stale} ago</div>}
+      <UsageMeters {...figures} />
     </Float>
   );
 }

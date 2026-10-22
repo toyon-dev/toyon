@@ -1316,6 +1316,12 @@
     color: var(--text1);
     font: var(--type-ui);
   }
+  /* the figures at the head of the compact menu, where a tap stands in for the hover: the menu
+   widens to the panel's measure, and on a phone the figures take the width the menu has */
+  .usage-figures {
+    min-width: 300px;
+    padding: 2px 0;
+  }
   /* a bar per figure: the name in a column so the bars line up, the figure at the far edge */
   .usage-row {
     display: flex;
@@ -1327,8 +1333,10 @@
       flex: 1 1 auto;
     }
   }
+  /* the name column is a measure of its words ("Fable week" on one line), so it is in em and grows
+   with the type tier where a thumb reads it */
   .usage-name {
-    width: 72px;
+    width: 5.5em;
     flex: none;
   }
   .usage-fig {
@@ -1337,9 +1345,9 @@
     text-align: right;
     font-variant-numeric: tabular-nums;
   }
-  /* under the bar, starting where the bar starts: the name column and the gap */
+  /* under the bar, starting where the bar starts: the inset, the name column and the gap */
   .usage-sub {
-    padding: 0 12px 4px 94px;
+    padding: 0 12px 4px calc(12px + 5.5em + 10px);
   }
   .usage-stale {
     padding: 2px 12px 4px;

@@ -68,6 +68,9 @@ export type { Point };
 
 export type MenuSpec = {
   items: MenuEntry[];
+  /** what the rows are about, drawn above them (the figures a verb acts on): for a trigger whose
+   * hover would have shown it, where there is no hover to be had */
+  head?: ReactNode;
   /** where it opens: at a pointer, or under an element's rect with `align` saying which edge */
   at?: Point;
   anchor?: DOMRect;
@@ -207,8 +210,9 @@ export function useContextMenu(owner: string) {
         };
       },
       /** a trigger's click opens the list under it; a second click closes it. `key` names what it
-       * is about, for a trigger that wants to look pressed while its list is up. */
-      dropdown(build: () => MenuEntry[], align: "left" | "right" = "left", key?: string) {
+       * is about, for a trigger that wants to look pressed while its list is up; `head` is built
+       * with the items and drawn above them. */
+      dropdown(build: () => MenuEntry[], align: "left" | "right" = "left", key?: string, head?: () => ReactNode) {
         return {
           "aria-haspopup": "menu" as const,
           onClick: (e: ReactMouseEvent) => {
@@ -217,6 +221,7 @@ export function useContextMenu(owner: string) {
             const el = e.currentTarget;
             menuStore.toggle({
               items: build(),
+              ...(head ? { head: head() } : {}),
               owner,
               key,
               target: el,

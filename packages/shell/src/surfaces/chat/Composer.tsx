@@ -99,7 +99,7 @@ import { QuestionCard } from "./QuestionCard.tsx";
 import { type Step, stepWalk, type WalkKey } from "./recall.ts";
 import { shellCommandOf, shellContext } from "./shellMode.ts";
 import { matchesSibling, type Sibling, siblingWorktrees } from "./siblings.ts";
-import { UsagePanel } from "./UsagePanel.tsx";
+import { UsageMeters, UsagePanel } from "./UsagePanel.tsx";
 import { compactAdvice, compactNudge, limitLevel, limitSummary } from "./usage.ts";
 import { useAgentCheck } from "./useAgentCheck.ts";
 import { attachCopied, pickAttachments, useComposerPaste } from "./useIntake.ts";
@@ -474,6 +474,11 @@ export function Composer({
   // figures again.
   const [usageHover, setUsageHover] = useState(false);
   const usageTimer = useRef(0);
+  // no hover to rest on: the tap's menu carries the figures above its verb, so a thumb reads what
+  // the pointer would have hovered for
+  const usageHead = touch
+    ? () => <UsageMeters usage={ringUsage} limits={limits} auth={agentInfo?.auth} now={Date.now()} />
+    : undefined;
   const closeUsage = () => {
     window.clearTimeout(usageTimer.current);
     setUsageHover(false);
@@ -1835,7 +1840,7 @@ export function Composer({
                   detail={[...(ringUsage && limits ? [limitSummary(limits, now)] : []), ...(nudge ? [nudge] : [])]}
                   // a summary cannot be taken back, so a click opens the menu rather than
                   // compacting, and the row there is the second press; a right-click opens the same
-                  {...cm.dropdown(compactItems, "left", "usage")}
+                  {...cm.dropdown(compactItems, "left", "usage", usageHead)}
                   {...cm.contextMenu(compactItems, "usage")}
                 />
                 {usageHover && (

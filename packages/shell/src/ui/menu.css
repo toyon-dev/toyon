@@ -39,6 +39,17 @@
       margin-left: auto;
       flex: none;
     }
+    /* a head above the rows (the figures a verb is about): the box widens to what the head needs,
+     and a rule parts it from the rows the way a group's rule does */
+    &.menu-headed {
+      width: max-content;
+      min-width: 220px;
+      max-width: calc(100vw - 8px);
+    }
+    & .menu-head {
+      margin-bottom: 4px;
+      border-bottom: 1px solid var(--border0);
+    }
     /* a rule between groups, inset to the row's text like the row idiom's own dividers */
     & .menu-sep {
       height: 1px;

@@ -129,7 +129,7 @@ function Menu({ spec }: { spec: MenuSpec }) {
   const gutter = items.some((it) => it.checked);
   return (
     <Float
-      className="menu"
+      className={cx("menu", spec.head !== undefined && "menu-headed")}
       role="menu"
       boxRef={box}
       anchor={() => rect}
@@ -144,6 +144,8 @@ function Menu({ spec }: { spec: MenuSpec }) {
       // a right-click on the menu itself is not a request for another one
       onContextMenu={(e) => e.preventDefault()}
     >
+      {/* what the rows are about, read before them: no index among the rows, so the keys never land on it */}
+      {spec.head !== undefined && <div className="menu-head">{spec.head}</div>}
       {entries.map((e, n) => {
         // a rule between groups: it has no index in the rows, so the arrows walk straight past it
         // biome-ignore lint/suspicious/noArrayIndexKey: a rule has no identity but its place

@@ -43,7 +43,7 @@ function setup() {
       return { id: "r1" };
     },
     found: async () => found,
-    refused: [t.paths.home],
+    refused: [t.paths.stateFile, t.paths.tokenFile],
     now: () => now,
   });
   const root = dirname(t.repo);
@@ -188,15 +188,21 @@ describe("what a path opens as", () => {
     expect(refusals).toEqual([]);
   });
 
-  test("a file under the daemon's home is refused, and the refusal is said to the shells", async () => {
+  test("the daemon's own state is refused by file, and the rest of its home opens", async () => {
     const { t, opens, refusals } = setup();
-    const inHome = join(t.paths.home, "secret.txt");
-    writeFileSync(inHome, "s");
-    await expect(opens.open(inHome)).rejects.toThrow(UserError);
-    expect(refusals).toEqual(["secret.txt is inside Toyon's own folder, which is not for editing"]);
-    // a symlink out of the home to a granted place is still the home's file
-    symlinkSync(inHome, join(t.paths.home, "..", "aside.txt"));
-    await expect(opens.open(join(t.paths.home, "..", "aside.txt"))).rejects.toThrow(UserError);
+    writeFileSync(t.paths.stateFile, "{}");
+    await expect(opens.open(t.paths.stateFile)).rejects.toThrow(UserError);
+    expect(refusals).toEqual(["state.json is Toyon's own state, which the daemon keeps itself"]);
+    // a symlink out of the home to a granted place is still the daemon's file
+    symlinkSync(t.paths.stateFile, join(t.paths.home, "..", "aside.json"));
+    await expect(opens.open(join(t.paths.home, "..", "aside.json"))).rejects.toThrow(UserError);
+    // a transcript sits in the same home and is the person's to read
+    mkdirSync(t.paths.transcriptsDir, { recursive: true });
+    const transcript = join(t.paths.transcriptsDir, "abc.jsonl");
+    writeFileSync(transcript, '{"t":"turn-start"}\n');
+    const o = await opens.open(transcript);
+    expect(o).toMatchObject({ kind: "loose", name: "abc.jsonl", text: '{"t":"turn-start"}\n' });
+    expect(refusals).toHaveLength(2);
   });
 });
 

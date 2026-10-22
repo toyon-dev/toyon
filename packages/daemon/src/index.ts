@@ -321,13 +321,23 @@ await self.start();
 // the policy comes after; a land cannot arrive before boot, so the closure never runs early
 const afterLand = new AfterLand({ state, hub, self, settled: () => idle.settled() });
 const repos = new RepoRegistry({ state, hub, runtime, worktrees, afterLand, self, drafts });
-// the door for a path from outside the shell; a grant never names anything under the daemon's home
+// the door for a path from outside the shell. The rest of the daemon's home (transcripts, the log,
+// themes) opens as any file; what it holds in memory and writes out whole does not, since an edit
+// on disk would be lost to its next save, and the credentials it holds are nobody's to edit.
 const opens = new OpenService({
   state,
   hub,
   register: (path) => repos.register(path),
   found: () => worktrees.discovered(),
-  refused: [paths.home],
+  refused: [
+    paths.stateFile,
+    paths.draftsFile,
+    paths.draftAttachmentsFile,
+    paths.remoteFile,
+    paths.pidFile,
+    paths.tokenFile,
+    paths.gitCredentialsFile,
+  ],
 });
 // which worktrees run: the ones being looked at, plus what a turn or a command holds; the rest
 // sleep on the clock, or sooner when the OS says memory is short

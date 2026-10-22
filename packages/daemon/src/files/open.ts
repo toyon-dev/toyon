@@ -61,7 +61,7 @@ export class OpenService {
       register: (path: string) => Promise<{ id: string }>;
       /** the worktrees toyon knows of but did not make; a file inside one opens there too */
       found: () => Promise<{ id: string; path: string }[]>;
-      /** roots a grant never names: the daemon's home, worktrees and archive included */
+      /** paths a grant never names: the daemon's own state and credentials, a file or a folder */
       refused: string[];
       now?: () => number;
     },
@@ -141,7 +141,7 @@ export class OpenService {
   private async grant(path: string, size: number, mtimeMs: number): Promise<OpenedFile> {
     const name = basename(path);
     if (this.d.refused.some((r) => within(path, canonical(resolve(r))))) {
-      throw new UserError(`${name} is inside Toyon's own folder, which is not for editing`);
+      throw new UserError(`${name} is Toyon's own state, which the daemon keeps itself`);
     }
     const id = shortId();
     // never read whole: a version off the stat is enough for a file nothing will write

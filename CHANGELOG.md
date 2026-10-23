@@ -2,6 +2,42 @@
 
 What changed in each release of Toyon, newest first.
 
+## 0.18.0 (2026-10-23)
+
+Stop and the ask cards say what they are doing while they do it, and the phone rail's swipe reads as one gesture with the rungs the row actually offers.
+
+### New
+- A plan card can take a note with its answer. Open the field under a row, write the note, and Enter answers with that row and sends the words after it, so a plan is accepted with a condition in one step. The draft stays with the card when you switch worktrees.
+- Up in a blank composer walks onto the card answers you wrote a note for, and puts that note back in the box, in with your messages and bang commands.
+- When Claude runs on Amazon Bedrock and the AWS sign-in has lapsed, the turn ends on a card instead of an error row. Its first button sets Claude Code to refresh the sign-in itself from then on; the others run a one-off login or send the message again.
+- On a phone, tapping the usage ring opens the meters with the menu beneath them.
+- An installed app and its splash screen get a full icon on one colour in place of the monogram.
+
+### Changed
+- Pressing stop shows at once: the button breathes and the rail dot pulses red until the turn has really ended. Before, nothing moved for as long as the cancel took, up to half a minute, so the press read as ignored.
+- An option's preview on an ask card sits under its own row and scrolls past twelve lines, instead of in a band that followed the cursor and resized the card.
+- The editor pane head leads with the file name and dims the directory after it. The directory shortens and then drops when the pane is narrow, and copy path and reveal moved into the head's right-click menu.
+- The phone rail's swipe follows one ladder, land, then archive, then more, and shows only the rungs the row's menu offers. A landed and clean row has no land rung, so archive takes the short drag. The well behind the row darkens with the slide and fades as the row settles.
+- Opening a file under Toyon's home works for transcripts, logs, themes and launcher sources. Only the daemon's own state and credentials are refused, and the refusal says so.
+- A slow first connection no longer flips the window to a reason: the shell tries twice before naming one, so the list stays on screen, and a wrong token is still named at once. The boot page draws the four-square mark after a short delay.
+- A queued message shows its tag on a line above the text, and the commit row's tip sits on the chat's side of the row as a rail row's does.
+
+### Fixed
+- With Fable at its weekly cap, the usage ring drew the next fullest window and the out-until warning matched no row. The Fable week is now a row of its own in the usage view, the ring and the warning.
+- A message sent mid-turn that the agent went on to answer past a stop was queued and run a second time.
+- A reply that ended in an error or on a sign-in card left its row marked as running, in the moment and in the stored chat.
+- An image attached to a card answer was lost; it now reaches the agent with the words.
+- A chat that paused to ask you something was listed twice on the updated card, as asking and as finished. It shows once, as asking.
+- Typing a full @ worktree name and a space now closes the mention menu, and a trailing ?, ! or . no longer keeps it open or gets swallowed by Enter.
+- Pressing go on after a stop or error now moves the row up the rail like any send.
+- On a phone, the status bar matches the screen behind it once the app has booted, instead of a different shade above the body.
+- A mostly vertical scroll in a diff no longer drifts it a pixel sideways.
+- A code chip inside a table cell no longer wraps at its spaces; a table of chips scrolls sideways on a phone instead.
+- The offer line under the composer clipped the focus ring on a long offer, and the sync note sat beside the behind-main count while a sync ran instead of at the row's end.
+
+### Not yet
+- The app icon is a stand-in until the final one is drawn.
+
 ## 0.17.0 (2026-10-21)
 
 The composer's @ menu reaches the other worktrees of the project, the editor pane can wrap long lines, and a git command that hangs no longer holds up every later landing.

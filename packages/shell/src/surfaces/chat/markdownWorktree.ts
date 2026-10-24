@@ -2,6 +2,7 @@ import type { ArchivedWorktree, OwnedWorktree } from "@toyon/shared";
 import type { TokenizerAndRendererExtension } from "marked";
 import type { State } from "../../state/store.ts";
 import { escapeHtml } from "./markdownHtml.ts";
+import { mentionTip } from "./mentions.ts";
 
 /** a worktree of the project as the agent's prose can name it: by its directory, `wt-xxxx`, which
  * is what its cwd, a transcript path and a log line all spell, and the row it is */
@@ -104,9 +105,15 @@ export function worktreeMention(namer: () => WorktreeNamer | undefined): Tokeniz
       const dir = token.text as string;
       const named = namer()?.(dir) ?? null;
       if (!named) return token.code ? `<code>${dir}</code>` : dir;
-      const tip = `the chat of "${named.title}" (${dir}${named.archived ? ", archived" : ""})`;
+      // The row's state is not in the names, which settle once per status tick on purpose, so a
+      // live row's mark goes out with an empty dot and a tip of the title and directory alone;
+      // the log fills both in and keeps them current as the rows move (mentionDots.ts). The
+      // directory rides on the mark for that, and so the tip can still say what the prose spelt.
+      // An archived row's dot is the hollow one from the start, since the archive does not move.
+      const t = mentionTip({ id: named.id, title: named.title, dir, ...(named.archived ? { archived: true } : {}) });
       const archived = named.archived ? ' data-archived=""' : "";
-      return `<span class="chat-mention" data-worktree="${attr(named.id)}" data-branch="${attr(named.branch)}"${archived} data-tip="${attr(tip)}" data-tip-placement="follow">@${escapeHtml(named.branch)}</span>`;
+      const dot = t.dot ? ` data-tip-dot="${attr(t.dot)}"` : "";
+      return `<span class="chat-mention" data-worktree="${attr(named.id)}" data-branch="${attr(named.branch)}" data-dir="${attr(dir)}"${archived} data-tip="${attr(t.text)}" data-tip-detail="${attr(t.detail.join("\n"))}"${dot} data-tip-placement="follow"><span class="dot${t.dot ? ` ${attr(t.dot)}` : ""}"></span>@${escapeHtml(named.branch)}</span>`;
     },
   };
 }

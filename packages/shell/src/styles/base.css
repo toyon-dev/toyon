@@ -443,6 +443,13 @@
      rather than as a dot with nothing in it, which is the whole message */
       box-shadow: inset 0 0 0 1.5px var(--ink2);
     }
+    /* a worktree in the archive, where a mark in a transcript names one: nothing runs there and
+   there is nothing to run, so the same absence of a fill, under a name of its own because it is
+   not a found checkout but the record of one that went */
+    &.archived {
+      background: none;
+      box-shadow: inset 0 0 0 1.5px var(--ink2);
+    }
     /* a turn finished here and nobody has looked yet. A modifier rather than a colour of its own: the
    dot underneath still says what the worktree is, and the ring says you have not seen it. Drawn as
    box-shadow so it grows outside the layout box and a finishing worktree never nudges its row.

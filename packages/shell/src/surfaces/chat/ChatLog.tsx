@@ -47,6 +47,7 @@ import {
 } from "./group.ts";
 import { openCard } from "./handoff.ts";
 import { ImageChip } from "./ImageChip.tsx";
+import { useMentionDots } from "./mentionDots.ts";
 import { PasteChip } from "./PasteChip.tsx";
 import { PickChip } from "./PickChip.tsx";
 import { isBlank } from "./recall.ts";
@@ -243,6 +244,8 @@ export function ChatLog({
   // message, so its queued row would say it twice and lift the log by a row until it drained.
   const echoed = sending?.message ? queue.findIndex((q) => q.text === sending.message?.text) : -1;
   const logRef = useRef<HTMLDivElement>(null);
+  // the agent's marks on the project's rows wear the rows' live dot, stamped in place
+  useMentionDots(logRef, id);
   // a hand resting on the transcript: select-all is the conversation, not the shell around it
   useSelectAllWithin(logRef);
   // and so is find: the browser's would read the rail and the panes with it, and count what is

@@ -1175,6 +1175,23 @@
     color: var(--text0);
     text-decoration-color: currentColor;
   }
+  /* The row's dot before its name, the rail's own, so a message says what the row is doing as the
+     rail does, and the hollow one for a row in the archive, whose press opens the archive's page
+     and not a live chat. A box on the line in prose, set on the middle of the x-height, a space
+     from the word, and outside the underline, which is the word's: the word opens something, the
+     dot says what it is. */
+  .chat-mention > .dot {
+    display: inline-block;
+    vertical-align: middle;
+    margin-right: 5px;
+  }
+  /* The dot is a box on the line, and the browser breaks a line after a box as freely as after a
+     space, so a dot was left at the end of one line with its name on the next. The mark with a
+     dot keeps to one line: a branch is a short slug, so it moves down whole rather than breaking,
+     where a path's mark still breaks anywhere. */
+  .chat-mention:has(> .dot) {
+    white-space: nowrap;
+  }
   /* The draft's references, over the field: the text again in the field's own metrics with the
      words transparent, so only the underlines show through under the words the textarea draws,
      and a path reads as a link before it is sent. The face and the wrapping are the field's, or
@@ -1194,6 +1211,11 @@
     }
     :where([data-hover]) & .chat-mention:hover {
       text-decoration-color: var(--text0);
+    }
+    /* a row in the archive wears a hollow dot once sent, and no dot fits over the field, so here
+       it is the underline that says so, a tier down */
+    & .chat-mention[data-archived] {
+      text-decoration-color: color-mix(in srgb, var(--text2) 55%, transparent);
     }
   }
   /* an empty box with something to say under its placeholder draws both itself, on one tier and

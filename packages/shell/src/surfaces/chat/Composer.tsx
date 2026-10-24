@@ -91,7 +91,7 @@ import { DraftChip } from "./DraftChip.tsx";
 import { HandoffCard } from "./HandoffCard.tsx";
 import { cardLine, openCard, parseHandoffArgs } from "./handoff.ts";
 import { MentionText, openMention } from "./Mentions.tsx";
-import { filterCommands, insertAt, settled, triggerAt } from "./mentions.ts";
+import { filterCommands, insertAt, mentionIndex, settled, triggerAt, type WorktreeMention } from "./mentions.ts";
 import { dismissOffer, offerOf, useDismissedOffers } from "./offer.ts";
 import { browseCommands, isMode, mergeCommands, ownCommandOf, ownCommands } from "./ownCommands.ts";
 import { PermissionCard } from "./PermissionCard.tsx";
@@ -378,6 +378,12 @@ export function Composer({
   // another worktree did and offers the ones last sent to first
   const railRows = useStore((s) => s.visible);
   const siblings = useMemo(() => siblingWorktrees(railRows, repoId, id), [railRows, repoId, id]);
+  // what a `@` word in the draft can name, read as the marks over the field read it (Mentions.tsx)
+  const siblingMentions = useMemo(
+    () => new Map<string, WorktreeMention>(siblings.map((w) => [w.branch, { id: w.id, title: w.title }])),
+    [siblings],
+  );
+  const mentions = useMemo(() => mentionIndex(files, siblingMentions), [files, siblingMentions]);
   // the names a paste can spell a worktree by: the rows above, then the archive, so a branch or a
   // `wt-xxxx` copied from a terminal names a row archived since, as the written reference does
   const archivedRows = useStore((s) => (repoId ? s.archived[repoId] : undefined));
@@ -547,14 +553,14 @@ export function Composer({
   }, [triggerKind, triggerQuery, files, folders, git, commands, ownRows, siblings]);
   // Opens even with nothing to show: an empty menu that says why beats a `/` that does nothing. Not
   // over a walked-back message: a recalled `/compact` was sent, not typed, and the menu would take
-  // the arrows the walk is using. Not over a `@` word its one row has nothing to add to (settled):
-  // the mark under the word already says it resolved, and the menu's live first row would take
+  // the arrows the walk is using. Not over a `@` word that already draws as a mark (settled), with
+  // the caret anywhere in it: the mark says it resolved, and the menu's live first row would take
   // return for a pick of the same word where the hand meant the send.
   const menuOpen =
     trigger !== null &&
     trigger.from !== dismissed &&
     !walk &&
-    !(trigger.kind === "file" && settled(trigger.query, rows.map(insertionFor)));
+    !(trigger.kind === "file" && settled(text.slice(trigger.from, trigger.to), mentions));
   // the agent's rows a bare `/` leaves out, said on the menu's key strip so they are not lost
   const more =
     triggerKind === "command" && triggerQuery !== undefined && !triggerQuery.trim()

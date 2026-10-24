@@ -4,7 +4,8 @@
 
 import type { AgentCommand } from "@toyon/shared";
 import { commandScore } from "../overlays/commands.ts";
-import { type DotState, folderList } from "../util.ts";
+import { when } from "../recap.ts";
+import { ago, type DotState, folderList } from "../util.ts";
 
 export interface Trigger {
   kind: "file" | "command";
@@ -121,13 +122,36 @@ function resolve(word: string, index: MentionIndex): MentionSpan | null {
   return null;
 }
 
-/** Whether the `@` menu has anything left to say over the word being typed: it has one row, and
- * the word is already what that row would write (its trailing space aside). The mark under the
- * word says the same thing, and a menu open there takes return for a pick of what is already
- * there instead of the send. Two rows are still a choice, and a title typed as words is not yet
- * the branch the pick writes. */
-export function settled(query: string, insertions: readonly string[]): boolean {
-  return insertions.length === 1 && insertions[0]?.trim() === `@${query}`;
+/** the dot a worktree mark wears: the rail's for a live row, the hollow one for the archive */
+export type MentionDot = DotState | "archived";
+
+/** What a worktree mark says, on either side of the transcript: its dot, and in the tip the row's
+ * title, then a line for its state in words and one for when it was last sent to, or `archived`
+ * alone for a row in the archive, and last the directory the agent's prose spelt it by, when it
+ * did. */
+export function mentionTip(w: WorktreeMention & { dir?: string }): {
+  text: string;
+  detail: string[];
+  dot?: MentionDot;
+} {
+  const detail: string[] = [];
+  if (w.archived) detail.push("archived");
+  else {
+    if (w.state) detail.push(w.state);
+    if (w.at !== undefined) detail.push(`last sent ${when(ago(w.at))}`);
+  }
+  if (w.dir) detail.push(w.dir);
+  return { text: w.title, detail, dot: w.archived ? "archived" : w.dot };
+}
+
+/** Whether the word the caret is in already draws as a mark, sigil included: the menu has nothing
+ * to add over one, wherever in the word the caret sits, and open there it takes return for a pick
+ * of what is already written instead of the send. The word is judged whole and as the marks judge
+ * it, so a title typed as words, a prefix of a branch, and a folder without its slash are still
+ * being chosen. */
+export function settled(word: string, index: MentionIndex): boolean {
+  const spans = mentionSpans(word, index);
+  return spans.length === 1 && spans[0]?.kind !== "text";
 }
 
 /** a message split at every `@` reference that names something in the project: a file or folder

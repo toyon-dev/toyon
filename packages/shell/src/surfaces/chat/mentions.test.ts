@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { filterCommands, insertAt, mentionIndex, mentionSpans, settled, triggerAt } from "./mentions.ts";
+import { filterCommands, insertAt, mentionIndex, mentionSpans, mentionTip, settled, triggerAt } from "./mentions.ts";
 
 // caret is written as | in the case names; the tests pass the index directly
 const at = (text: string, caret = text.length) => triggerAt(text, caret);
@@ -225,22 +225,60 @@ describe("mentionSpans: the references in a sent message", () => {
   });
 });
 
-describe("settled: the menu over a word its one row would only write again", () => {
-  test("one row, and the word is what it writes", () => {
-    expect(settled("toyon/code-review", ["@toyon/code-review "])).toBe(true);
-    expect(settled("changes", ["@changes "])).toBe(true);
-    expect(settled("src/App.tsx", ["@src/App.tsx "])).toBe(true);
-    expect(settled("src/", ["@src/ "])).toBe(true);
+describe("mentionTip: what a worktree mark's tip says", () => {
+  test("a live row: the title, its state, when it was last sent to, and its dot", () => {
+    const t = mentionTip({
+      id: "w1",
+      title: "Fix",
+      dot: "working",
+      state: "Agent working",
+      at: Date.now() - 5 * 60000,
+    });
+    expect(t).toEqual({ text: "Fix", detail: ["Agent working", "last sent 5m ago"], dot: "working" });
   });
 
-  test("still a choice while the row would write something else, or there is more than one", () => {
-    // a title typed as words: the pick writes the branch
-    expect(settled("Code review", ["@toyon/code-review "])).toBe(false);
-    // a prefix of the branch
-    expect(settled("toyon/code", ["@toyon/code-review "])).toBe(false);
-    // the folder's name without its slash: the pick adds it
-    expect(settled("src", ["@src/ "])).toBe(false);
-    expect(settled("toyon/fix", ["@toyon/fix ", "@toyon/fix-2 "])).toBe(false);
-    expect(settled("nothing", [])).toBe(false);
+  test("an archived row: archived alone, and the hollow dot", () => {
+    const t = mentionTip({ id: "w2", title: "Gone", archived: true, dot: "idle", state: "Idle", at: 1 });
+    expect(t).toEqual({ text: "Gone", detail: ["archived"], dot: "archived" });
+  });
+
+  test("the agent's side adds the directory its prose spelt, last", () => {
+    expect(mentionTip({ id: "w1", title: "Fix", dir: "wt-1234" }).detail).toEqual(["wt-1234"]);
+    expect(mentionTip({ id: "w2", title: "Gone", archived: true, dir: "wt-9999" }).detail).toEqual([
+      "archived",
+      "wt-9999",
+    ]);
+  });
+});
+
+describe("settled: the menu over a word that already draws as a mark", () => {
+  const index = mentionIndex(
+    ["src/App.tsx"],
+    new Map([
+      ["toyon/code-review", { id: "w1", title: "Code review" }],
+      ["toyon/code-review-2", { id: "w2", title: "Code review again" }],
+    ]),
+  );
+
+  test("the whole word is a branch, the changes set, a file or a folder", () => {
+    expect(settled("@toyon/code-review", index)).toBe(true);
+    expect(settled("@changes", index)).toBe(true);
+    expect(settled("@src/App.tsx", index)).toBe(true);
+    expect(settled("@src/", index)).toBe(true);
+    expect(settled("@src", index)).toBe(true);
+  });
+
+  test("still being chosen: a title as words, a prefix of a branch, a stranger", () => {
+    expect(settled("@Code review", index)).toBe(false);
+    expect(settled("@toyon/code", index)).toBe(false);
+    expect(settled("@toyon/other", index)).toBe(false);
+    expect(settled("@", index)).toBe(false);
+  });
+
+  test("the word is read whole, so the caret's place in it does not matter", () => {
+    // the composer hands over the span from the sigil to the next space, wherever the caret is
+    const text = "see @toyon/code-review btw";
+    const t = triggerAt(text, 11);
+    expect(t && settled(text.slice(t.from, t.to), index)).toBe(true);
   });
 });

@@ -127,15 +127,16 @@ function spawnIds(items: ChatItem[]): ReadonlySet<string> {
   return ids;
 }
 
-/** a call the agent was cut off writing: opened, then ended with no input and nothing to show. A
- * message sent mid-turn pre-empts the generation, and the daemon ends the half-written call once
- * the agent moves on (acp/map.ts); a turn that stopped or was cut by a restart ends it the same
- * way. Nothing ran, so there is no row: printed, it would carry the adapter's placeholder title
- * ("Terminal", "Asking for your input") as if a tool by that name had. */
+/** a call the agent was cut off writing. A message sent mid-turn pre-empts the generation, and the
+ * daemon ends the half-written call once the agent moves on, saying so (`cut`, acp/map.ts): the
+ * call may have a field of its input in, an Edit its path, so the end is what says nothing ran.
+ * A turn that stopped or was cut by a restart leaves such a call open with no input at all, and
+ * its turn-end closes it with nothing to show. Nothing ran, so there is no row: printed, it would
+ * carry the adapter's placeholder title ("Terminal", "Asking for your input") as if a tool by
+ * that name had, or an edit's path as if the file had changed. */
 function cutOff(item: ToolItem): boolean {
-  return (
-    item.done && !item.output && !item.isError && writingCall({ name: item.name, kind: item.toolKind }, item.input)
-  );
+  if (!item.done || item.isError) return false;
+  return !!item.cut || (!item.output && writingCall({ name: item.name, kind: item.toolKind }, item.input));
 }
 
 export function groupTools(items: ChatItem[], roots: string[]): ChatEntry[] {

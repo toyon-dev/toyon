@@ -189,7 +189,11 @@ describe("mapUpdate", () => {
     });
     // a message sent mid-turn pre-empts the generation after c1 opened: the agent's answer to it
     // starts with a new call, and c1 never gets an update
-    expect(run([bash("c1"), bash("c2")])).toEqual([start("c1"), { type: "tool-end", toolId: "c1" }, start("c2")]);
+    expect(run([bash("c1"), bash("c2")])).toEqual([
+      start("c1"),
+      { type: "tool-end", toolId: "c1", cut: true },
+      start("c2"),
+    ]);
     // the same, cut off after a field of the input closed (a partial refine the map holds back)
     expect(
       run([
@@ -197,7 +201,7 @@ describe("mapUpdate", () => {
         { sessionUpdate: "tool_call_update", toolCallId: "c3", rawInput: { command: "ls" } },
         { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "Instead" } },
       ]),
-    ).toEqual([start("c3"), { type: "tool-end", toolId: "c3" }, { type: "text-delta", text: "Instead" }]);
+    ).toEqual([start("c3"), { type: "tool-end", toolId: "c3", cut: true }, { type: "text-delta", text: "Instead" }]);
     // two calls in one message: the first's input is in before the second opens, so it stays open
     expect(
       run([
@@ -329,6 +333,47 @@ describe("mapUpdate", () => {
     run([open("k4", { claudeCode: { parentToolUseId: "task1" } })], nested);
     preempted(nested);
     expect(nested.get("k4")!.cut).toBeUndefined();
+    // an Edit whose path closed and went out on a quiet second, cut between the path and its
+    // strings: it reads as whole, but a whole call that ran returns before the agent's next word,
+    // so one still open then never ran. The end says so, since the shell has the path already.
+    const edit: ToolMemos = new Map();
+    run(
+      [
+        { sessionUpdate: "tool_call", toolCallId: "k5", title: "Edit", kind: "edit", status: "pending", rawInput: {} },
+        { sessionUpdate: "tool_call_update", toolCallId: "k5", title: "Edit a.ts", rawInput: { file_path: "a.ts" } },
+      ],
+      edit,
+    );
+    expect(release("k5", edit.get("k5")!)).toMatchObject({ type: "tool-update", toolId: "k5" });
+    expect(edit.get("k5")!.writing).toBe(false);
+    preempted(edit);
+    expect(run([{ sessionUpdate: "agent_message_chunk", content: { type: "text", text: "Sure" } }], edit)).toEqual([
+      { type: "tool-end", toolId: "k5", cut: true },
+      { type: "text-delta", text: "Sure" },
+    ]);
+    // the same call, whole and running when the steer landed: its result still ends it as a run
+    const ran: ToolMemos = new Map();
+    run(
+      [
+        { sessionUpdate: "tool_call", toolCallId: "k6", title: "Edit", kind: "edit", status: "pending", rawInput: {} },
+        {
+          sessionUpdate: "tool_call_update",
+          toolCallId: "k6",
+          rawInput: { file_path: "a.ts", old_string: "a", new_string: "b" },
+        },
+      ],
+      ran,
+    );
+    release("k6", ran.get("k6")!);
+    preempted(ran);
+    expect(
+      run([{ sessionUpdate: "tool_call_update", toolCallId: "k6", status: "completed", content: [] }], ran).map(
+        (e) => e.type,
+      ),
+    ).toEqual(["tool-end"]);
+    expect(run([{ sessionUpdate: "agent_message_chunk", content: { type: "text", text: "Done" } }], ran)).toEqual([
+      { type: "text-delta", text: "Done" },
+    ]);
   });
 
   test("an ask a steer cut while the question was being written ends when the agent moves on", () => {
@@ -853,7 +898,7 @@ describe("tool searches", () => {
     run([start], memos);
     expect(memos.get("t1")?.writing).toBe(true);
     expect(run([{ sessionUpdate: "agent_message_chunk", content: { type: "text", text: "so" } }], memos)).toEqual([
-      { type: "tool-end", toolId: "t1" },
+      { type: "tool-end", toolId: "t1", cut: true },
       { type: "text-delta", text: "so" },
     ]);
   });

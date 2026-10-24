@@ -127,6 +127,8 @@ export type ChatItem =
       background?: boolean;
       /** the daemon ran this command and it failed in a way the agent can be asked to fix */
       fixable?: Fixable;
+      /** the call never ran: a steered message cut the agent off writing it (no row; group.ts) */
+      cut?: true;
     }
   /** `seq` on the agent's own failure, the one the box offers to go on from; absent on a line the
    * daemon answered with, which is about a press and not the turn */
@@ -3244,6 +3246,7 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
         ...(event.images?.length ? { images: event.images } : {}),
         ...(event.detached ? { detached: true } : {}),
         ...(event.fixable ? { fixable: event.fixable } : {}),
+        ...(event.cut ? { cut: true } : {}),
         done: true,
       };
       return next;

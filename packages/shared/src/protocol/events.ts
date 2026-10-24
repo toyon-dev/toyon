@@ -287,7 +287,9 @@ export type AgentEvent =
   /** `images` are the pictures the call returned, which the row shows in place of output it has
    * none of: a read of a png says nothing in words. `detached` is a spawn whose call returned with
    * its subagent launched and still to do its work. `fixable` is the daemon's word that the
-   * failure can be handed to the agent. */
+   * failure can be handed to the agent. `cut` says the call never ran: a message steered into
+   * the turn pre-empted the agent while it was writing the call, and the daemon ended it once
+   * the agent moved on (acp/map.ts). It carries no output, and the shell draws no row for it. */
   | {
       type: "tool-end";
       toolId: string;
@@ -296,6 +298,7 @@ export type AgentEvent =
       images?: ToolImage[];
       detached?: boolean;
       fixable?: Fixable;
+      cut?: true;
     }
   /** The turn's last event, always: one per turn-start. `stopReason` is the agent's (ACP's
    * end_turn, max_tokens, refusal, ...) or the daemon's: `interrupted` for a stop, `failed` when

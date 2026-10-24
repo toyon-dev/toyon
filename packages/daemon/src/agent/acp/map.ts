@@ -212,12 +212,15 @@ export function release(toolId: string, memo: ToolMemo): AgentEvent | null {
 
 /** A steered message was injected: the main agent's generation is pre-empted, so a call of its own
  * still being written will not run, whatever part of its input has arrived or trails in after.
- * Marked rather than ended here, because a call whose whole input is held looks the same and may
- * be running already: that one ends by its status, and a cut one by whatever answers the steer
+ * Every open call of the main agent's is marked, not only one still counted as writing: a call
+ * whose first field closed and went out on a quiet second (`release`) reads as whole and running,
+ * and an Edit cut off between its path and its strings is exactly that. Marked rather than ended
+ * here, because a call that is whole may be running already: that one ends by its status, which
+ * lands before the agent says anything more, and a cut one by whatever answers the steer
  * (`abandoned`). A subagent's calls are its own generation and are left alone. */
 export function preempted(memos: ToolMemos) {
   for (const memo of memos.values()) {
-    if (!memo.ended && memo.writing && !memo.parent) memo.cut = true;
+    if (!memo.ended && !memo.parent) memo.cut = true;
   }
 }
 
@@ -234,18 +237,25 @@ export function preempted(memos: ToolMemos) {
  * earlier call of two in one message looks exactly like that, whole and about to run, so its input
  * goes out and the row stays open. A call cut off after a field closed and answered with a call
  * reads the same on the wire, so it is told apart by the steer that cut it (`preempted`): its
- * input never goes out, and the row ends as one that was never written. */
+ * input never goes out, and the row ends as one that was never written.
+ *
+ * A call the steer marked ends here whether or not it still counts as writing: one whose first
+ * field had already gone out looks whole, but a whole call that was running returns its result
+ * before the agent's next word or call, so one still open at that point never ran. Left open it
+ * would hold the batch's head for the rest of the turn: the row shines on, and the mark under the
+ * log stays away because a call of the agent's own is "running". The end says it was cut, so the
+ * shell can drop a row whose input it already has. */
 function abandoned(memos: ToolMemos, parent: string | undefined, opening = false): AgentEvent[] {
   const out: AgentEvent[] = [];
   for (const [toolId, memo] of memos) {
-    if (memo.ended || !memo.writing || memo.parent !== parent) continue;
+    if (memo.ended || memo.parent !== parent || !(memo.writing || memo.cut)) continue;
     if (opening && memo.held && !memo.cut) {
       const sent = release(toolId, memo);
       if (sent) out.push(sent);
       continue;
     }
     memo.ended = true;
-    out.push({ type: "tool-end", toolId });
+    out.push({ type: "tool-end", toolId, cut: true });
   }
   return out;
 }

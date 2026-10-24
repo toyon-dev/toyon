@@ -125,12 +125,13 @@ export function worktreeItems(
 ): MenuEntry[] {
   const id = w.worktree.id;
   const acts = worktreeActions(sock, dispatch);
-  // seven groups, in the order they are reached for: stop, go to it, what it is (its branch and
-  // its directory), change it, ship it (sync, land, hand on), run it, and remove on its own. The
-  // profile rows sit last but one, since a profile is picked once and read after; no terminal row,
-  // since on the row you are on it is ⌘J and on any other it is a click and ⌘J
-  const stop: MenuItem[] = [];
-  const go: MenuItem[] = [];
+  // six groups, in the order they are reached for: what is going on now (stop, the changes
+  // written), what it is (its branch and its directory), change it, ship it (sync, land, hand
+  // on), run it, and remove on its own. The first group comes and goes with the row's state, so
+  // its rows share one rule rather than each standing alone. The profile rows sit last but one,
+  // since a profile is picked once and read after; no terminal row, since on the row you are on
+  // it is ⌘J and on any other it is a click and ⌘J
+  const now: MenuItem[] = [];
   const about: MenuItem[] = [];
   const change: MenuItem[] = [];
   const ship: MenuItem[] = [];
@@ -139,13 +140,13 @@ export function worktreeItems(
   // stop stays offered while an ask is open: that is the way out of a question you do not want
   // to answer
   if (isBusy(w.agent))
-    stop.push({ id: "stop", label: "stop agent", onClick: () => sock?.send({ t: "stop-agent", worktreeId: id }) });
+    now.push({ id: "stop", label: "stop agent", onClick: () => sock?.send({ t: "stop-agent", worktreeId: id }) });
   const idle = !s.shipping[id];
   const phone = s.frame === "phone";
   // the phone's changes are a tab, always there, so its row is offered for work to read and not
   // for a panel to open
   if ((w.dirty ?? 0) > 0 || (w.ahead ?? 0) > 0 || (!phone && !s.layout.changes)) {
-    go.push({
+    now.push({
       id: "changes",
       label: `view changes${(w.dirty ?? 0) > 0 ? ` (${w.dirty})` : ""}`,
       onClick: () => {
@@ -270,7 +271,7 @@ export function worktreeItems(
       onClick: () => acts.archive(w),
     });
   }
-  return grouped([stop, go, about, change, ship, run, gone]);
+  return grouped([now, about, change, ship, run, gone]);
 }
 
 /** A discovered worktree is a directory toyon does not own, so this stays short on purpose.

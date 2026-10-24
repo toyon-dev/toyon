@@ -97,8 +97,8 @@ describe("a worktree's actions", () => {
       { graft: () => {}, ...here },
     );
     expect(labels(busy)).toEqual([
+      // what is going on now, one group: the two come and go with the row's state
       "stop agent",
-      "|",
       "view changes (2)",
       "|",
       "copy branch name",

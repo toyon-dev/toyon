@@ -149,17 +149,46 @@ describe("selfContext", () => {
 
 describe("worktreeContext", () => {
   const rows = [
-    { branch: "toyon/flash-bug", title: "Message flash bug", transcript: "/t/w1.jsonl" },
-    { branch: "toyon/flash", title: "Flash", transcript: "/t/w2.jsonl" },
+    { branch: "toyon/flash-bug", title: "Message flash bug", path: "/w/wt-w1", transcript: "/t/w1.jsonl" },
+    { branch: "toyon/flash", title: "Flash", path: "/w/wt-w2", transcript: "/t/w2.jsonl" },
   ];
+  // Oct 24, 2026 at noon UTC: a day in any zone the test runs in
+  const at = Date.UTC(2026, 9, 24, 12);
 
-  test("a branch named at a word start gets its paragraph: which worktree, and where its chat is", () => {
+  test("a branch named at a word start gets its paragraph: which worktree, its checkout, and where its chat is", () => {
     const [p, ...rest] = worktreeContext("do what @toyon/flash-bug did here", rows);
     expect(rest).toEqual([]);
-    expect(p).toContain('@toyon/flash-bug is the worktree "Message flash bug" in this project.');
+    expect(p).toContain(
+      '@toyon/flash-bug is the worktree "Message flash bug" in this project, checked out at /w/wt-w1.',
+    );
     expect(p).toContain("Its chat is at /t/w1.jsonl, one JSON object per line");
     expect(p).toContain('"user-message"');
     expect(p).toContain('"text-delta"');
+  });
+
+  test("an archived row is named in the past tense, with what became of its work and no checkout to look for", () => {
+    const gone = { branch: "toyon/gone", title: "Gone", path: "/w/wt-gone", transcript: "/a/gone/transcript.jsonl" };
+    const landed = worktreeContext("wdyt of @toyon/gone ?", [
+      { ...gone, archived: { at, landed: true, restorable: true } },
+    ]);
+    expect(landed).toHaveLength(1);
+    expect(landed[0]).toContain(
+      '@toyon/gone was the worktree "Gone" in this project, archived on Oct 24, 2026 after landing on main, so its work is in main\'s history. Its checkout at /w/wt-gone is gone. Its chat is at /a/gone/transcript.jsonl, one JSON object per line',
+    );
+    expect(landed[0]).not.toContain("checked out at");
+    const kept = worktreeContext("@toyon/gone", [{ ...gone, archived: { at, restorable: true } }]);
+    expect(kept[0]).toContain(
+      "archived on Oct 24, 2026 without landing; its commits are kept under an archive ref, not on any checkout.",
+    );
+    const nothing = worktreeContext("@toyon/gone", [{ ...gone, archived: { at, restorable: false } }]);
+    expect(nothing[0]).toContain("archived on Oct 24, 2026 without landing, and git kept nothing of it.");
+  });
+
+  test("a branch both open and archived is said once, as the row listed first", () => {
+    const again = { ...rows[1]!, title: "Flash again", archived: { at, restorable: true } };
+    const [p, ...rest] = worktreeContext("see @toyon/flash", [...rows, again]);
+    expect(rest).toEqual([]);
+    expect(p).toContain('is the worktree "Flash"');
   });
 
   test("the sentence's punctuation after the branch is not part of it, and a longer branch is not the shorter one", () => {

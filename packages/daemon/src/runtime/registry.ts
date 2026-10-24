@@ -1,7 +1,16 @@
 // One Runtime per worktree: its agent session (from the moment the worktree exists) plus, once
 // setup has run, its process group and preview proxy.
 
-import type { LogLine, ManagedPolicy, ProcState, Remote, RepoInfo, WorktreeInfo, WorktreeKind } from "@toyon/shared";
+import type {
+  ArchivedWorktree,
+  LogLine,
+  ManagedPolicy,
+  ProcState,
+  Remote,
+  RepoInfo,
+  WorktreeInfo,
+  WorktreeKind,
+} from "@toyon/shared";
 import { addressedByPort, DEFAULT_PERMISSION_MODE, LOGIN_STREAM, PREVIEW_PORTS, SHELL_STREAM } from "@toyon/shared";
 import { OPTION_FIELDS } from "../agent/acp/options.ts";
 import { AcpSession } from "../agent/acp/session.ts";
@@ -71,6 +80,9 @@ export interface RuntimeDeps {
   /** the paragraph behind a message that says what the worktree's preview page has thrown since
    * it last loaded, read as the message goes out; absent in tests */
   pageErrors?: (worktreeId: string) => string | undefined;
+  /** a project's archived worktrees, newest first, for a message that names one by its branch;
+   * read as the message goes out. Absent in tests, where only open rows can be named */
+  archived?: (repoId: string) => ArchivedWorktree[];
   /** the public name a front may forward preview ports under, and the gate they check
    * (core/remote.ts), as they stand now; absent in tests, where previews answer loopback only */
   remote?: () => Remote | null;
@@ -217,19 +229,31 @@ function defaultAgent(
       return w ? selfContext(w) : undefined;
     },
     pageErrors: () => d.pageErrors?.(wt.id),
-    // the project's other open worktrees, read as the message goes out: a row made since the
-    // session opened is one the message can name
+    // the project's other worktrees, open ones first and then the archive, read as the message
+    // goes out: a row made or archived since the session opened is one the message can name. The
+    // archive is newest first, so a branch reused and archived twice names its latest chat. The
+    // same set, in the same order, as the shell marks (chat/Mentions.tsx), so a word drawn as a
+    // chip is one the agent is told about. Not summarized at all for a message with no sigil.
     mentioned: (text) =>
-      worktreeContext(
-        text,
-        d.state.worktrees
-          .filter((w) => w.repoId === wt.repoId && w.id !== wt.id && w.kind === "worktree")
-          .map((w) => ({
-            branch: w.branch,
-            title: w.title,
-            transcript: transcriptPathFor(d.paths.transcriptsDir, w.id),
-          })),
-      ),
+      !text.includes("@")
+        ? []
+        : worktreeContext(text, [
+            ...d.state.worktrees
+              .filter((w) => w.repoId === wt.repoId && w.id !== wt.id && w.kind === "worktree")
+              .map((w) => ({
+                branch: w.branch,
+                title: w.title,
+                path: w.path,
+                transcript: transcriptPathFor(d.paths.transcriptsDir, w.id),
+              })),
+            ...(d.archived?.(wt.repoId) ?? []).map((a) => ({
+              branch: a.branch,
+              title: a.title,
+              path: a.path,
+              transcript: a.transcript,
+              archived: { at: a.archivedAt, landed: a.landed, restorable: a.restorable },
+            })),
+          ]),
     onProcess,
     spec,
     connect: (app, spec, prepared) => spawnAcp(app, d.agents.launch(spec, prepared), wt.path, wt.id),

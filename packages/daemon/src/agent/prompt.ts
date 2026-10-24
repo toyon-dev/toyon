@@ -283,28 +283,58 @@ export function selfContext(w: { title: string; branch: string; unnamed?: true }
   return `This worktree is "${w.title}", on branch ${w.branch}.`;
 }
 
-/** another worktree of the project, as a message can name it by its branch */
+/** another worktree of the project, open or archived, as a message can name it by its branch */
 export interface SiblingWorktree {
   branch: string;
   title: string;
-  /** its chat's transcript on disk */
+  /** its checkout: where it stands, or where it stood before the archive took it */
+  path: string;
+  /** its chat's transcript on disk, where the archive keeps it once the row is archived */
   transcript: string;
+  /** present on an archived row: when it went, and what became of its work */
+  archived?: {
+    at: number;
+    /** it had been merged into main */
+    landed?: boolean;
+    /** git still holds its commits under an archive ref */
+    restorable: boolean;
+  };
 }
 
 const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-/** One paragraph per sibling worktree the message names with `@<branch>`: which worktree that is
- * and where its chat is on disk, so "look at what @toyon/foo did and do the same here" needs no
- * path pasted. A reference, never the chat itself: the agent reads what it wants of it. The word
- * is read as the composer marks it, opening at a word start and ending at a space or at the
- * sentence's punctuation. The agent reads the file by its structure, so the paragraph says it. */
+const dayOf = (ts: number) =>
+  new Date(ts).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+
+/** what became of an archived row's work, so the agent knows whether any code is left to read
+ * and where: on main, under a ref it cannot check out, or nowhere */
+function archivedFate(a: NonNullable<SiblingWorktree["archived"]>): string {
+  if (a.landed) return "after landing on main, so its work is in main's history";
+  if (a.restorable) return "without landing; its commits are kept under an archive ref, not on any checkout";
+  return "without landing, and git kept nothing of it";
+}
+
+/** One paragraph per sibling worktree the message names with `@<branch>`: which worktree that is,
+ * where its checkout is and where its chat is on disk, so "look at what @toyon/foo did and do the
+ * same here" needs no path pasted. A reference, never the chat itself: the agent reads what it
+ * wants of it. An archived row is named in the past tense with what became of its work, so the
+ * agent reads the chat instead of hunting git for a checkout that is gone. The word is read as
+ * the composer marks it, opening at a word start and ending at a space or at the sentence's
+ * punctuation. The first row with a branch wins: a live row is listed before an archived one that
+ * had the same branch. The agent reads the file by its structure, so the paragraph says it. */
 export function worktreeContext(text: string, siblings: readonly SiblingWorktree[]): string[] {
   const out: string[] = [];
+  const said = new Set<string>();
   for (const s of siblings) {
+    if (said.has(s.branch)) continue;
     const named = new RegExp(`(^|\\s)@${escapeRegExp(s.branch)}(?=$|[\\s.,;:!?)\\]}'"])`);
     if (!named.test(text)) continue;
+    said.add(s.branch);
+    const chat = `Its chat is at ${s.transcript}, one JSON object per line: a "user-message" event is what the person wrote, the "text-delta" events after it are the agent's reply, and the rest is tool activity.`;
     out.push(
-      `@${s.branch} is the worktree "${s.title}" in this project. Its chat is at ${s.transcript}, one JSON object per line: a "user-message" event is what the person wrote, the "text-delta" events after it are the agent's reply, and the rest is tool activity.`,
+      s.archived
+        ? `@${s.branch} was the worktree "${s.title}" in this project, archived on ${dayOf(s.archived.at)} ${archivedFate(s.archived)}. Its checkout at ${s.path} is gone. ${chat}`
+        : `@${s.branch} is the worktree "${s.title}" in this project, checked out at ${s.path}. ${chat}`,
     );
   }
   return out;

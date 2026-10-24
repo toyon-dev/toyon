@@ -1414,13 +1414,6 @@
   .draft-row {
     display: flex;
     align-items: center;
-    gap: 10px;
-    flex-wrap: wrap;
-  }
-  .draft-runs {
-    display: flex;
-    align-items: center;
-    gap: 6px;
     & > .chip-picker {
       margin-left: -8px;
     }

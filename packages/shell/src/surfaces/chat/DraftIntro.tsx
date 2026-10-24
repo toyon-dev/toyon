@@ -1,6 +1,6 @@
 import type { OwnedWorktree } from "@toyon/shared";
 import { useDispatch, useStore } from "../../state/context.tsx";
-import { canCarry, type Draft, repoById, trunkOf } from "../../state/store.ts";
+import { type Draft, repoById, trunkOf } from "../../state/store.ts";
 import { Check } from "../../ui/Check.tsx";
 import { ProfileChip, useNewWorktreeProfile } from "../chips/ProfileChip.tsx";
 
@@ -29,9 +29,7 @@ export function DraftIntro({ draft, lead }: { draft: Draft; lead: OwnedWorktree 
     <div className="draft-intro">
       {profile && (
         <div className="draft-row hint">
-          <span className="draft-runs">
-            <ProfileChip repo={repo} value={profile} onChange={(p) => dispatch({ a: "draft-profile", profile: p })} />
-          </span>
+          <ProfileChip repo={repo} value={profile} onChange={(p) => dispatch({ a: "draft-profile", profile: p })} />
         </div>
       )}
       {/* What main's uncommitted files do when the box starts a worktree. Default: stay, since main
@@ -43,7 +41,7 @@ export function DraftIntro({ draft, lead }: { draft: Draft; lead: OwnedWorktree 
         <div className="draft-notes">
           <Check
             className="hint draft-note"
-            checked={canCarry(draft)}
+            checked={!!draft.carry}
             tip={`Move the ${dirty} uncommitted ${dirty === 1 ? "file" : "files"} into the new worktree, leaving ${repo.defaultBranch} clean`}
             onChange={(e) => dispatch({ a: "draft-carry", v: e.currentTarget.checked })}
           >

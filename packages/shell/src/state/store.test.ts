@@ -19,7 +19,6 @@ import { isUploading, settledInputs, toInput } from "./pending.ts";
 import {
   type Action,
   asksSetup,
-  canCarry,
   changesTabShown,
   changesTabStep,
   type Draft,
@@ -1162,8 +1161,8 @@ describe("drafting a worktree", () => {
 
   test("carrying main's changes is the draft's checkbox", () => {
     const s = run([{ a: "draft-carry", v: true }], found(wt("main", "main")));
-    expect(canCarry(s.draft)).toBe(true);
-    expect(canCarry(run([{ a: "draft-carry", v: false }], s).draft)).toBe(false);
+    expect(s.draft?.carry).toBe(true);
+    expect(run([{ a: "draft-carry", v: false }], s).draft?.carry).toBe(false);
   });
 
   test("a `!` command from a draft opens the base's shell and waits there until it is typed", () => {
@@ -1183,8 +1182,8 @@ describe("drafting a worktree", () => {
 
   test("a send from the spare makes that row the task in place: nothing moves, the draft closes", () => {
     const s = run([{ a: "set-draft", id: "sp", text: "typed" }], found(wt("sp", "spare"), wt("a")));
-    // the daemon's frame: the same id, a worktree now, made by this tab; its siblings beside it
-    const claimed = run([worktrees(wt("sp", "worktree", ME), wt("v2", "worktree", ME), wt("a"))], s);
+    // the daemon's frame: the same id, a worktree now, made by this tab
+    const claimed = run([worktrees(wt("sp", "worktree", ME), wt("a"))], s);
     expect(claimed.activeId).toBe("sp");
     expect(claimed.draft).toBeNull();
     // the words went with the row; what the daemon's draft frame says clears them like any box's

@@ -41,7 +41,7 @@ import { openSource } from "../../state/openSource.ts";
 import { fillFrame, type HeldFrame } from "../../state/outbox.ts";
 import { isUploading } from "../../state/pending.ts";
 import { useChatCentred, useGreenfield, useLocalField, usePreviewId, useTouch } from "../../state/selectors.ts";
-import { canCarry, composerBoxOf, type Draft, NEW_PROJECT_BOX, sendWaits, trunkOf } from "../../state/store.ts";
+import { composerBoxOf, type Draft, NEW_PROJECT_BOX, sendWaits, trunkOf } from "../../state/store.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { TextArea } from "../../ui/Field.tsx";
@@ -1135,7 +1135,7 @@ export function Composer({
         mode: mode ?? newMode,
         ...(newModel ? { model: newModel } : {}),
         ...(newEffort ? { effort: newEffort } : {}),
-        ...(canCarry(draft) ? { carry: true } : {}),
+        ...(draft?.carry ? { carry: true } : {}),
       };
       // the box remembers what it last started with, the way its mode and model chips do; the
       // agent is the daemon's default rather than this browser's so a spare or an adopted worktree

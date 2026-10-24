@@ -336,9 +336,6 @@ export interface Draft {
   carry?: boolean;
 }
 
-/** the draft moves its base's changes */
-export const canCarry = (d: Draft | null | undefined): boolean => !!d?.carry;
-
 /** the composer box the words are written in: the active row's own, the lead's included, since the
  * send makes that row the worktree and the words typed on it go with it */
 export const composerBoxOf = (active: OwnedWorktree | null): string | null => active?.worktree.id ?? null;
@@ -2807,11 +2804,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
       const known = new Set(s.rows.map((w) => w.id));
       const mine = (w: WorktreeStatus) => w.worktree?.kind === "worktree" && w.worktree.createdBy === s.clientId;
       const fresh = msg.rows.find((w) => !known.has(w.id) && mine(w));
-      const stayed =
-        !!activeId &&
-        s.rows.some((w) => w.id === activeId && w.worktree?.kind === "spare") &&
-        msg.rows.some((w) => w.id === activeId && mine(w));
-      if (fresh && s.rows.length > 0 && !stayed) activeId = fresh.id;
+      if (fresh && s.rows.length > 0) activeId = fresh.id;
       // a pending remove is done once the daemon stops listing the row; one it still lists is
       // still in flight (this frame is as likely another worktree's proc event as the reply)
       const archiving = s.archiving.filter((id) => msg.rows.some((w) => w.id === id));

@@ -1,11 +1,10 @@
 import type { CommitEntry } from "@toyon/shared";
 import { memo } from "react";
 import { commitItems } from "../../state/actions/commit.ts";
-import { useStore } from "../../state/context.tsx";
 import { useContextMenu } from "../../ui/menu.ts";
 import { rowState } from "../../ui/rowState.ts";
-import type { TipPlacement } from "../../ui/Tooltip.tsx";
 import { ago } from "../util.ts";
+import { useTipSide } from "./tipSide.ts";
 
 /** one row of the history list: the subject, and how long ago it landed.
  *
@@ -30,9 +29,7 @@ export const CommitRow = memo(function CommitRow({
   onToggle: (sha: string) => void;
 }) {
   const cm = useContextMenu("changes");
-  // the tip stands beside the row on the centre's side, as a rail row's does: the changes dock is
-  // the dock opposite the chat, so the centre is on the chat's side of it
-  const tipSide: TipPlacement = useStore((s) => s.chatSide);
+  const tipSide = useTipSide();
   return (
     <button
       className="row row-sm log-row row-edge"

@@ -3,6 +3,7 @@ import { memo } from "react";
 import { type MenuEntry, useContextMenu } from "../../ui/menu.ts";
 import { rowState } from "../../ui/rowState.ts";
 import { splitPath, xyClass, xyLetter } from "../util.ts";
+import { useTipSide } from "./tipSide.ts";
 
 export function LineCounts({ f }: { f: GitFileStatus }) {
   if (f.add === undefined && f.del === undefined) return null;
@@ -48,6 +49,7 @@ export const GitFileRow = memo(function GitFileRow({
   onHover: (path: string, entering: boolean) => void;
 }) {
   const cm = useContextMenu("changes");
+  const tipSide = useTipSide();
   const { name, dir } = splitPath(f.path);
   return (
     <button
@@ -62,10 +64,14 @@ export const GitFileRow = memo(function GitFileRow({
       {...cm.contextMenu(() => menu(f.path))}
       onMouseEnter={() => onHover(f.path, true)}
       onMouseLeave={() => onHover(f.path, false)}
+      // the whole path, on the row rather than on the label: a tip beside its anchor hangs off
+      // the anchor's edge, and the label's edge is inside the dock behind the status letter
+      data-tip={dir ? f.path : undefined}
+      data-tip-placement={tipSide}
     >
       {checking && <input type="checkbox" className="changes-check" checked={checked} readOnly tabIndex={-1} />}
       <span className={`xy ${xyClass(f.xy)}`}>{xyLetter(f.xy)}</span>
-      <span className="path" data-tip={dir ? f.path : undefined}>
+      <span className="path">
         <span className="name">{name}</span>
         {dir && <span className="dir row-dim">{dir}</span>}
       </span>

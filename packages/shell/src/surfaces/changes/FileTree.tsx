@@ -29,6 +29,7 @@ import { treeKey } from "../../ui/treeNav.ts";
 import { endPathDrag, PATH_MIME, startPathDrag } from "../chat/useIntake.ts";
 import { ancestors, xyClass, xyLetter } from "../util.ts";
 import { buildTree, marks, newFilePath, parentOf, type TreeRow, visibleRows } from "./fileTree.ts";
+import { useTipSide } from "./tipSide.ts";
 import "./tree.css";
 
 const NO_PATHS: string[] = [];
@@ -474,6 +475,7 @@ const TreeItem = memo(function TreeItem({
   onDragEnd: () => void;
 }) {
   const cm = useContextMenu("tree");
+  const tipSide = useTipSide();
   const submodule = row.kind === "submodule";
   // what opens as nothing says why on hover; an ignored file needs no word, it opens as any file
   const why = submodule
@@ -503,7 +505,7 @@ const TreeItem = memo(function TreeItem({
       onMouseEnter={() => onHover(row, true)}
       onMouseLeave={() => onHover(row, false)}
       {...cm.contextMenu(() => menu(row))}
-      {...(why ? tip(why) : {})}
+      {...(why ? tip(why, undefined, { placement: tipSide }) : {})}
     >
       <span className="tree-caret row-dim">
         {row.kind === "folder" && <Icon name="caret" className={cx("icon-inline disc-caret", !row.open && "shut")} />}

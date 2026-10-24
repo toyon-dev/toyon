@@ -83,9 +83,10 @@
   /* ---- inline code ---- */
   /* a backticked word is marked text, not a control: the mono face and a wash of the ink set it
    apart, so a sentence naming six paths reads as a sentence and not as a row of boxes. The size is
-   relative because mono runs small beside the UI face at the same pixel size, and because the same
-   word has to hold its proportion inside a heading or a table cell. The padding is optically
-   square: 5px of side bearing against the ~5px the line-height leaves above the caps. */
+   the mono tier, a point under the prose it sits in, which holds in a row, a table cell and a
+   chat heading alike since none of them leaves the body size; a document's own headings do, and
+   rescale it there (.md-preview). The padding is optically square: 5px of side bearing against
+   the ~5px the line-height leaves above the caps. */
   code {
     font: var(--type-mono);
     padding: 1px 5px;
@@ -957,6 +958,14 @@
     & h5,
     & h6 {
       margin: 18px 0 6px;
+    }
+    /* A backticked word in the two headings that climb the ladder keeps the proportion the body's
+       chip has against the body (12 on 15); at the mono tier's fixed size it read as a footnote
+       dropped into the title. The mono's own weight, not the heading's: a path is a path in a
+       title too, and the heavier mono shouts where the heading is already set in weight. */
+    & h1 code,
+    & h2 code {
+      font-size: 0.8em;
     }
     & > :first-child {
       margin-top: 0;

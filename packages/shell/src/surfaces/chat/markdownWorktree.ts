@@ -81,11 +81,12 @@ const TOKEN = new RegExp(`^(\`?)(${ID})\\1(?![\\w\\-/\`])`);
 
 const attr = (s: string) => escapeHtml(s).replace(/"/g, "&quot;");
 
-/** `wt-xxxx` in the agent's prose, drawn as the row it names. The agent's cwd and every path it
- * reads spell a worktree this way, so the id leaks into its replies however it is told to use
- * titles; here it reads as the title, and a press opens the row, as the person's own `@branch`
- * does on their side of the transcript. A directory no row or archived record has stays as
- * written, backticks and all. The namer is read at render, since the names come with the row. */
+/** `wt-xxxx` in the agent's prose, drawn as the row it names: `@branch`, the mark the person's
+ * own reference to a row wears on their side of the transcript, so both sides say one thing
+ * about a worktree, and the title in the tip. The agent's cwd and every path it reads spell a
+ * worktree by its directory, so the id leaks into its replies however it is told to use names.
+ * A press opens the row. A directory no row or archived record has stays as written, backticks
+ * and all. The namer is read at render, since the names come with the row. */
 export function worktreeMention(namer: () => WorktreeNamer | undefined): TokenizerAndRendererExtension {
   return {
     name: "worktree",
@@ -103,9 +104,9 @@ export function worktreeMention(namer: () => WorktreeNamer | undefined): Tokeniz
       const dir = token.text as string;
       const named = namer()?.(dir) ?? null;
       if (!named) return token.code ? `<code>${dir}</code>` : dir;
-      const tip = `${named.branch} (${dir})${named.archived ? ", archived" : ""}`;
+      const tip = `the chat of "${named.title}" (${dir}${named.archived ? ", archived" : ""})`;
       const archived = named.archived ? ' data-archived=""' : "";
-      return `<span class="chat-mention chat-mention-title" data-worktree="${attr(named.id)}"${archived} data-tip="${attr(tip)}" data-tip-placement="follow">${escapeHtml(named.title)}</span>`;
+      return `<span class="chat-mention" data-worktree="${attr(named.id)}" data-branch="${attr(named.branch)}"${archived} data-tip="${attr(tip)}" data-tip-placement="follow">@${escapeHtml(named.branch)}</span>`;
     },
   };
 }

@@ -32,15 +32,20 @@ export function MentionText({
   const store = useStoreInstance();
   const sock = useSock();
   const files = useStore((s) => (worktreeId ? s.local[worktreeId]?.files : undefined));
-  // the project's other open rows, by branch: an archived chat has no row, so its references to
-  // rows since archived read as prose, which is what they are now
+  // the project's other open rows by branch, then its archive: a reference written while a row
+  // was open keeps its mark after the row is archived, and opens the archived page, as the
+  // agent's own reference to that row does. A chat with no project resolves none.
   const rows = useStore((s) => s.visible);
   const repoId = useStore((s) => worktreeById(s, worktreeId)?.worktree.repoId);
+  const archived = useStore((s) => (repoId ? s.archived[repoId] : undefined));
   const worktrees = useMemo(() => {
     const out = new Map<string, WorktreeMention>();
     for (const w of siblingWorktrees(rows, repoId, worktreeId)) out.set(w.branch, { id: w.id, title: w.title });
+    for (const a of archived ?? []) {
+      if (!out.has(a.branch)) out.set(a.branch, { id: a.id, title: a.title, archived: true });
+    }
     return out;
-  }, [rows, repoId, worktreeId]);
+  }, [rows, archived, repoId, worktreeId]);
   const index = useMemo(() => mentionIndex(files, worktrees), [files, worktrees]);
   const spans = useMemo(() => mentionSpans(text, index), [text, index]);
   // a reference with no list to check it against is prose until the list arrives, so the list is
@@ -64,10 +69,19 @@ export function MentionText({
           );
         }
         if (s.kind === "worktree") {
-          const rowTip = tip(`the chat of "${s.title}"`, undefined, { placement: "follow" });
+          const rowTip = tip(`the chat of "${s.title}"${s.archived ? " (archived)" : ""}`, undefined, {
+            placement: "follow",
+          });
           return (
-            // biome-ignore lint/suspicious/noArrayIndexKey: same
-            <span key={i} className="chat-mention" data-worktree={s.id} {...rowTip}>
+            <span
+              // biome-ignore lint/suspicious/noArrayIndexKey: same
+              key={i}
+              className="chat-mention"
+              data-worktree={s.id}
+              data-branch={s.text.slice(1)}
+              data-archived={s.archived ? "" : undefined}
+              {...rowTip}
+            >
               {s.text}
             </span>
           );

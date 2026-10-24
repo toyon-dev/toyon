@@ -67,11 +67,11 @@ describe("a wt-xxxx in the agent's prose", () => {
         : null;
   const md = new Marked({ extensions: [worktreeMention(() => namer)] });
   const render = (s: string) => md.parseInline(s, { async: false }) as string;
-  // the title is text, where a quote is a quote; only the tip is an attribute
+  // the title sits in an attribute, so its quotes are escaped there
   const chip =
-    '<span class="chat-mention chat-mention-title" data-worktree="d486aa11bb" data-tip="toyon/table-edge-fade (wt-d486)" data-tip-placement="follow">Table "edge" fade</span>';
+    '<span class="chat-mention" data-worktree="d486aa11bb" data-branch="toyon/table-edge-fade" data-tip="the chat of &quot;Table &quot;edge&quot; fade&quot; (wt-d486)" data-tip-placement="follow">@toyon/table-edge-fade</span>';
 
-  test("bare, reads as the row's title, with the branch and directory in the tip", () => {
+  test("bare, reads as the row's branch with its sigil, the title in the tip", () => {
     expect(render("behind wt-d486's eval on the shared tier")).toBe(`behind ${chip}&#39;s eval on the shared tier`);
   });
   test("in a code span of its own, the same", () => {
@@ -79,7 +79,7 @@ describe("a wt-xxxx in the agent's prose", () => {
   });
   test("an archived row says so, and its press opens its page", () => {
     expect(render("see wt-16b6.")).toBe(
-      'see <span class="chat-mention chat-mention-title" data-worktree="16b6ee22ff" data-archived="" data-tip="toyon/smooth-streaming (wt-16b6), archived" data-tip-placement="follow">Smooth streaming</span>.',
+      'see <span class="chat-mention" data-worktree="16b6ee22ff" data-branch="toyon/smooth-streaming" data-archived="" data-tip="the chat of &quot;Smooth streaming&quot; (wt-16b6, archived)" data-tip-placement="follow">@toyon/smooth-streaming</span>.',
     );
   });
   test("a directory no row has stays as written, backticks and all", () => {

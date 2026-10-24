@@ -3,10 +3,21 @@ import type { Deps } from "../../state/actions/deps.ts";
 import { type ChatLink, linkOpener } from "../../state/actions/message.ts";
 import { outsidePath, worktreeLink } from "./markdownPaths.ts";
 
-/** the link at or around an element of a rendered message: the worktree file it names when the
- * checkout root is known, a file elsewhere on the daemon's disk, or a page out; a backticked
- * absolute path counts, as the path it names; null when the element is in none of these */
+/** the link at or around an element of a rendered message: a worktree of the project named by
+ * its branch, the worktree file it names when the checkout root is known, a file elsewhere on
+ * the daemon's disk, or a page out; a backticked absolute path counts, as the path it names;
+ * null when the element is in none of these */
 export function chatLink(target: Element, root: string | undefined | null): ChatLink | null {
+  const row = target.closest("[data-worktree]");
+  const id = row?.getAttribute("data-worktree");
+  if (row && id) {
+    return {
+      kind: "worktree",
+      id,
+      branch: row.getAttribute("data-branch") ?? "",
+      archived: row.hasAttribute("data-archived"),
+    };
+  }
   const a = target.closest("a, code[data-path]");
   if (!a) return null;
   const path = a.getAttribute("data-path");
@@ -29,15 +40,7 @@ export function openChatLink(
   worktreeId: string | null | undefined,
   deps: Deps,
 ) {
-  const target = e.target as Element;
-  const row = target.closest("[data-worktree]");
-  const id = row?.getAttribute("data-worktree");
-  if (row && id) {
-    e.preventDefault();
-    deps.dispatch(row.hasAttribute("data-archived") ? { a: "open-archived", id } : { a: "activate", id });
-    return;
-  }
-  const link = chatLink(target, root);
+  const link = chatLink(e.target as Element, root);
   // a backticked path is prose: a press on it selects text, and its open is its menu's alone
   const open = link && link.kind !== "path" ? linkOpener(link, worktreeId, deps) : null;
   if (!open) return;

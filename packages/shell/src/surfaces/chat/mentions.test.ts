@@ -196,6 +196,11 @@ describe("mentionSpans: the references in a sent message", () => {
       { kind: "worktree", text: "@toyon/flash-bug", id: "w1", title: "Message flash bug" },
       { kind: "text", text: " did, here." },
     ]);
+    // an archived row resolves too, and says so, so its mark opens the archived page
+    const gone = new Map([["toyon/stay-awake", { id: "w2", title: "Stay awake", archived: true as const }]]);
+    expect(mentionSpans("@toyon/stay-awake", mentionIndex(undefined, gone))).toEqual([
+      { kind: "worktree", text: "@toyon/stay-awake", id: "w2", title: "Stay awake", archived: true },
+    ]);
     // no file list yet: the worktrees still resolve
     expect(mentionSpans("@toyon/flash-bug", mentionIndex(undefined, worktrees))).toEqual([
       { kind: "worktree", text: "@toyon/flash-bug", id: "w1", title: "Message flash bug" },

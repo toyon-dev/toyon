@@ -60,13 +60,14 @@ export function fileItems(file: { href?: string }, ui: ChipUi = {}, kept?: Kept)
 }
 
 /** the link a message was right-clicked on: a page out on the web, a file in this worktree, a file
- * linked outside it (which the daemon opens by its absolute path), or a backticked path, which
- * has the file's menu and no click of its own */
+ * linked outside it (which the daemon opens by its absolute path), a backticked path, which
+ * has the file's menu and no click of its own, or a worktree of the project named by its branch */
 export type ChatLink =
   | { kind: "out"; href: string }
   | { kind: "file"; file: { path: string; line?: number; folder?: true } }
   | { kind: "outside"; href: string; path: string; line?: number }
-  | { kind: "path"; path: string };
+  | { kind: "path"; path: string }
+  | { kind: "worktree"; id: string; branch: string; archived: boolean };
 
 /** a link out of the chat: the page outside the shell, and its address as text */
 function linkItems(href: string): MenuItem[] {
@@ -78,6 +79,11 @@ function linkItems(href: string): MenuItem[] {
  * path. A backticked path is asked for the same way, and a refusal finds the span by that path, as
  * it finds a link by its href. Null when nothing opens. */
 export function linkOpener(link: ChatLink, worktreeId: string | null | undefined, deps: Deps): (() => void) | null {
+  // a row of the project opens wherever it is named, an archived one as its page
+  if (link.kind === "worktree") {
+    const { id, archived } = link;
+    return () => deps.dispatch(archived ? { a: "open-archived", id } : { a: "activate", id });
+  }
   if (!worktreeId) return null;
   if (link.kind === "outside") return () => openByPath(deps, worktreeId, link);
   if (link.kind === "path") return () => openByPath(deps, worktreeId, { href: link.path, path: link.path });
@@ -93,7 +99,11 @@ export function linkOpener(link: ChatLink, worktreeId: string | null | undefined
 /** a link to a file: the open the press makes, where it sits in Finder, then the path as text.
  * A file of this worktree is revealed through its row; any other path is revealed by where it is
  * on the daemon's disk. */
-function fileLinkGroups(link: Exclude<ChatLink, { kind: "out" }>, worktreeId: string | null, deps: Deps): MenuItem[][] {
+function fileLinkGroups(
+  link: Exclude<ChatLink, { kind: "out" | "worktree" }>,
+  worktreeId: string | null,
+  deps: Deps,
+): MenuItem[][] {
   const open = linkOpener(link, worktreeId, deps);
   const { sock } = deps;
   const reveal =
@@ -106,6 +116,16 @@ function fileLinkGroups(link: Exclude<ChatLink, { kind: "out" }>, worktreeId: st
   return [
     [...(open ? [{ id: "open", label: "open", onClick: open }] : []), ...revealItems(reveal, daemonHost(sock))],
     [{ id: "copy-path", label: "copy path", onClick: () => copyText(path) }],
+  ];
+}
+
+/** a worktree named in a message: the open the press makes, then its branch as text, which is
+ * what the name on screen is and what `@` in the composer takes */
+function worktreeGroups(link: Extract<ChatLink, { kind: "worktree" }>, deps: Deps): MenuItem[][] {
+  const open = linkOpener(link, null, deps);
+  return [
+    open ? [{ id: "open", label: link.archived ? "open archived chat" : "open chat", onClick: open }] : [],
+    [{ id: "copy-branch", label: "copy branch", onClick: () => copyText(link.branch) }],
   ];
 }
 
@@ -130,7 +150,9 @@ export function messageItems(
     ? []
     : link.kind === "out"
       ? [linkItems(link.href)]
-      : fileLinkGroups(link, worktreeId, deps);
+      : link.kind === "worktree"
+        ? worktreeGroups(link, deps)
+        : fileLinkGroups(link, worktreeId, deps);
   const copy: MenuItem[] = [{ id: "copy", label: "copy message", onClick: () => copyText(item.text) }];
   const again: MenuItem[] = [];
   if (item.kind === "user" && worktreeId) {

@@ -64,10 +64,12 @@ export interface MentionIndex {
   worktrees: ReadonlyMap<string, WorktreeMention>;
 }
 
-/** a worktree a message can name: its row, and the title the mark says */
+/** a worktree a message can name: its row, and the title the mark says; one in the archive opens
+ * as its page, so a reference written while it was open keeps its mark after it goes */
 export interface WorktreeMention {
   id: string;
   title: string;
+  archived?: true;
 }
 
 const NO_WORKTREES: ReadonlyMap<string, WorktreeMention> = new Map();
@@ -96,7 +98,7 @@ export type MentionSpan =
   | { kind: "file"; text: string; path: string }
   | { kind: "folder"; text: string; path: string }
   | { kind: "changes"; text: string }
-  | { kind: "worktree"; text: string; id: string; title: string };
+  | { kind: "worktree"; text: string; id: string; title: string; archived?: true };
 
 /** the sigil opens a word, as it must for the menu (`triggerAt`), and the word runs to the next space */
 const MENTION = /(^|\s)(@\S+)/g;
@@ -110,7 +112,14 @@ function resolve(word: string, index: MentionIndex): MentionSpan | null {
   if (folder && index.folders.has(folder)) return { kind: "folder", text: `@${word}`, path: folder };
   // a file wins over a branch of the same name: the path is what the agent reads first
   const wt = index.worktrees.get(word);
-  if (wt) return { kind: "worktree", text: `@${word}`, id: wt.id, title: wt.title };
+  if (wt)
+    return {
+      kind: "worktree",
+      text: `@${word}`,
+      id: wt.id,
+      title: wt.title,
+      ...(wt.archived ? { archived: true } : {}),
+    };
   return null;
 }
 

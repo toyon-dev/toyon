@@ -16,6 +16,27 @@ describe("message menus", () => {
     expect(ids(messageItems({ kind: "user", text: "hi" }, "w", deps))).toEqual(["copy", "draft"]);
   });
 
+  test("a worktree named in a message opens its row, or an archived one its page, and gives its branch", () => {
+    const sent: unknown[] = [];
+    const d = { sock: null, dispatch: (a: unknown) => sent.push(a) };
+    const live = { kind: "worktree", id: "r2", branch: "toyon/stay-awake", archived: false } as const;
+    const items = messageItems({ kind: "assistant", text: "see" }, "w", d, { link: live });
+    expect(ids(items)).toEqual(["open", "copy-branch", "copy"]);
+    expect(items.filter(isItem).find((i) => i.id === "open")?.label).toBe("open chat");
+    items
+      .filter(isItem)
+      .find((i) => i.id === "open")
+      ?.onClick?.();
+    expect(sent).toEqual([{ a: "activate", id: "r2" }]);
+    const gone = messageItems({ kind: "user", text: "see" }, null, d, { link: { ...live, archived: true } });
+    expect(ids(gone)).toEqual(["open", "copy-branch", "copy"]);
+    gone
+      .filter(isItem)
+      .find((i) => i.id === "open")
+      ?.onClick?.();
+    expect(sent[1]).toEqual({ a: "open-archived", id: "r2" });
+  });
+
   test("a link out leads with the page and its address", () => {
     const link = { kind: "out", href: "https://example.com/docs" } as const;
     expect(ids(messageItems({ kind: "assistant", text: "see" }, "w", deps, { link }))).toEqual([

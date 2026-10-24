@@ -379,12 +379,18 @@ export function useFileDrop() {
  * a figure offers an image and a text flavour and the picture is what was meant; then a non-image
  * file, attached as a file (a Finder copy carries no text to fall through to); then a selection copied in the editor
  * that takes in a line break, which is a piece of the file rather than words for the sentence, on a
- * chip named for its file and lines; then text long enough to bury the textarea. Anything shorter
- * is typed in as usual. ⌘⇧V types any text in, however long or wherever it was copied from.
- * `boxId` is where the attachment waits; `worktreeId` is the worktree on screen, whose files a copy
- * has to come from for its lines to mean anything to the agent.
+ * chip named for its file and lines; then text the field takes in a shape of its own (`takeText`,
+ * which says so with true: a worktree's name, put in as the `@branch` that names it); then text
+ * long enough to bury the textarea. Anything shorter is typed in as usual. ⌘⇧V types any text
+ * in, however long or wherever it was copied from. `boxId` is where the attachment waits;
+ * `worktreeId` is the worktree on screen, whose files a copy has to come from for its lines to
+ * mean anything to the agent.
  */
-export function useComposerPaste(boxId: string | null, worktreeId: string | null) {
+export function useComposerPaste(
+  boxId: string | null,
+  worktreeId: string | null,
+  takeText?: (text: string) => boolean,
+) {
   const store = useStoreInstance();
   // a paste event carries no modifiers, so the chord is noted on its keydown, which the browser
   // follows with the paste before the keyup that clears it
@@ -411,6 +417,10 @@ export function useComposerPaste(boxId: string | null, worktreeId: string | null
     // text/plain, never text/html: an editor or a web page offers both, and the markup is style
     // noise the model has no use for
     const text = e.clipboardData.getData("text/plain");
+    if (text.trim() && takeText?.(text)) {
+      e.preventDefault();
+      return;
+    }
     const source = text.trim() ? readCopiedSource(e.clipboardData, worktreeId) : null;
     if (!(source && text.includes("\n")) && !isLongPaste(text)) return;
     e.preventDefault();

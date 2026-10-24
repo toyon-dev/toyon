@@ -99,7 +99,7 @@ import { PickChip } from "./PickChip.tsx";
 import { QuestionCard } from "./QuestionCard.tsx";
 import { type Step, stepWalk, type WalkKey } from "./recall.ts";
 import { shellCommandOf, shellContext } from "./shellMode.ts";
-import { matchesSibling, type Sibling, siblingWorktrees } from "./siblings.ts";
+import { matchesSibling, pastedWorktree, type Sibling, siblingWorktrees } from "./siblings.ts";
 import { UsageMeters, UsagePanel } from "./UsagePanel.tsx";
 import { compactAdvice, compactNudge, limitLevel, limitSummary } from "./usage.ts";
 import { useAgentCheck } from "./useAgentCheck.ts";
@@ -287,7 +287,6 @@ export function Composer({
   const page = useLocalField(frameId, "page");
   // a project with nothing to run has no page to pick from, so the picker's button goes
   const chatCentred = useChatCentred();
-  const { onPaste, onPasteKey, onPasteKeyUp } = useComposerPaste(boxId, id);
   const copied = useCopied();
   const installPrompt = useInstallPrompt();
   const installOffered = useInstallOffered();
@@ -379,6 +378,16 @@ export function Composer({
   // another worktree did and offers the ones last sent to first
   const railRows = useStore((s) => s.visible);
   const siblings = useMemo(() => siblingWorktrees(railRows, repoId, id), [railRows, repoId, id]);
+  // the names a paste can spell a worktree by: the rows above, then the archive, so a branch or a
+  // `wt-xxxx` copied from a terminal names a row archived since, as the written reference does
+  const archivedRows = useStore((s) => (repoId ? s.archived[repoId] : undefined));
+  const worktreeNames = useMemo(
+    () => [
+      ...siblings,
+      ...(archivedRows ?? []).map((a) => ({ branch: a.branch, dir: a.path.slice(a.path.lastIndexOf("/") + 1) })),
+    ],
+    [siblings, archivedRows],
+  );
   const git = useLocalField(id, "git");
   // this worktree's uncommitted files: the status when the row is subscribed, else the row's
   // count, from the same record
@@ -549,6 +558,27 @@ export function Composer({
   const composerRef = useRef<HTMLTextAreaElement>(null);
   // the marks over the field scroll with it, or a long draft's underlines sit under the wrong words
   const marksRef = useRef<HTMLDivElement>(null);
+  /** words that arrive whole, by a drop or a paste, put into the draft over `from`..`to` with the
+   * caret after them. Not typed, so the menu stays shut on whatever trigger they make. */
+  const placeWords = (el: HTMLTextAreaElement, from: number, to: number, words: string) => {
+    const { text: next, caret: after } = spliceWords(text.slice(0, from) + text.slice(to), from, words);
+    setText(next);
+    setDismissed(triggerAt(next, after)?.from ?? null);
+    // the draft round-trips through the store, so the caret has to be placed after that render
+    requestAnimationFrame(() => {
+      el.focus();
+      el.setSelectionRange(after, after);
+      setCaret(after);
+    });
+  };
+  const { onPaste, onPasteKey, onPasteKeyUp } = useComposerPaste(boxId, id, (pasted) => {
+    // a worktree's name pasted on its own is a reference to it, and goes in as one
+    const words = pastedWorktree(pasted, worktreeNames);
+    const el = composerRef.current;
+    if (!words || !el) return false;
+    placeWords(el, el.selectionStart, el.selectionEnd, words);
+    return true;
+  });
   // the keyboard's place in the box: the ask while one is up, else the textarea
   const focusBox = () => (cardRef.current ?? composerRef.current)?.focus();
   const refocus = focusBox;
@@ -1522,16 +1552,7 @@ export function Composer({
               e.stopPropagation();
               const el = e.currentTarget;
               const at = caretAtPoint(el, e.clientX, e.clientY) ?? text.length;
-              const { text: next, caret: after } = spliceWords(text, at, taken.words);
-              setText(next);
-              // arrived whole, not typed: the menu stays shut on whatever trigger the words make
-              setDismissed(triggerAt(next, after)?.from ?? null);
-              // the draft round-trips through the store, so the caret has to be placed after that render
-              requestAnimationFrame(() => {
-                el.focus();
-                el.setSelectionRange(after, after);
-                setCaret(after);
-              });
+              placeWords(el, at, at, taken.words);
             }}
             onScroll={(e) => {
               if (marksRef.current) marksRef.current.scrollTop = e.currentTarget.scrollTop;

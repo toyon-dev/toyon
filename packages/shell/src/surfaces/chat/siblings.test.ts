@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { OwnedWorktree } from "@toyon/shared";
-import { matchesSibling, siblingWorktrees } from "./siblings.ts";
+import { matchesSibling, pastedWorktree, siblingWorktrees } from "./siblings.ts";
 
 const row = (
   id: string,
@@ -79,5 +79,37 @@ describe("matchesSibling", () => {
     expect(matchesSibling("wt-108c ", w)).toBe(false);
     // without the space the whole name still names it, so the row is offered to pick
     expect(matchesSibling("toyon/message-flash-bug", w)).toBe(true);
+  });
+});
+
+describe("pastedWorktree", () => {
+  const names = [
+    { branch: "toyon/code-review", dir: "wt-d55a" },
+    { branch: "toyon/flash-bug", dir: "wt-108c" },
+  ];
+
+  test("a branch or a directory pasted whole becomes the reference, with the space that lets the sentence go on", () => {
+    expect(pastedWorktree("toyon/code-review", names)).toBe("@toyon/code-review ");
+    expect(pastedWorktree("wt-108c", names)).toBe("@toyon/flash-bug ");
+    // a terminal's copy brings its line end along
+    expect(pastedWorktree("toyon/code-review\n", names)).toBe("@toyon/code-review ");
+  });
+
+  test("the first of two records with the name wins: the row open now over the archive's", () => {
+    const twice = [...names, { branch: "toyon/code-review", dir: "wt-0000" }];
+    expect(pastedWorktree("wt-0000", twice)).toBe("@toyon/code-review ");
+    expect(pastedWorktree("toyon/code-review", [{ branch: "toyon/code-review", dir: "wt-9999" }, ...names])).toBe(
+      "@toyon/code-review ",
+    );
+  });
+
+  test("anything else pastes as it is: a name among words, a reference already written, a stranger, nothing", () => {
+    expect(pastedWorktree("see toyon/code-review", names)).toBeNull();
+    expect(pastedWorktree("@toyon/code-review", names)).toBeNull();
+    expect(pastedWorktree("toyon/code-revie", names)).toBeNull();
+    expect(pastedWorktree("Toyon/Code-Review", names)).toBeNull();
+    expect(pastedWorktree("wt-d55a/packages", names)).toBeNull();
+    expect(pastedWorktree("  ", names)).toBeNull();
+    expect(pastedWorktree("toyon/code-review", [])).toBeNull();
   });
 });

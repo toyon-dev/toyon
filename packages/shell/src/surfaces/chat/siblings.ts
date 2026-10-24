@@ -41,6 +41,19 @@ export function siblingWorktrees(
   return out;
 }
 
+/** The reference a paste of a worktree's name stands for, `@branch` with the space that lets the
+ * sentence go on, or null for any other text. Only a name pasted whole and alone counts: the
+ * branch, or the directory `wt-xxxx` that a terminal, a path and the agent's prose spell the
+ * worktree by. The sentence's own `@branch` is already the reference and pastes as typed; a name
+ * inside other words is those words, and pastes as they are. The names are read in the order
+ * given, so a row open now wins over the archive's record of the same branch. */
+export function pastedWorktree(text: string, names: readonly Pick<Sibling, "branch" | "dir">[]): string | null {
+  const name = text.trim();
+  if (!name || /\s/.test(name)) return null;
+  const hit = names.find((w) => w.branch === name || w.dir === name);
+  return hit ? `@${hit.branch} ` : null;
+}
+
 /** letters and digits alone, so a title typed as its slug, with dashes, or run together all read
  * as the title; the words of a title typed with their spaces read the same way */
 const plain = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");

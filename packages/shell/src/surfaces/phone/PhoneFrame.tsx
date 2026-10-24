@@ -21,6 +21,7 @@ import { Rail } from "../rail/Rail.tsx";
 import { chord, previewUrl } from "../util.ts";
 import { PhoneBar } from "./PhoneBar.tsx";
 import { PhonePreview } from "./PhonePreview.tsx";
+import { phoneScreen } from "./screen.ts";
 import "./phone.css";
 
 /** read once at load (the token arrives in the URL fragment); calling it during render would write storage */
@@ -80,6 +81,15 @@ export function PhoneFrame() {
   const url = previewed ? previewUrl(previewed.worktree.id, previewed.worktree.proxyPort, remote, host) : null;
   // the tab under the strip's mark: a preview the row has none of falls back to its chat
   const tab: Screen = screen === "preview" && !previewed ? "chat" : screen;
+  const shown = phoneScreen({
+    incompatible,
+    serving: machine.serving,
+    machine: machines.displayName(machine.origin),
+    said: say !== null,
+    onWorktree,
+    editor: editor !== null,
+    tab,
+  });
 
   const tabs: TabItem<Screen>[] = [
     { id: "chat", label: "chat" },
@@ -142,25 +152,25 @@ export function PhoneFrame() {
         {/* .center-root is the isolation root every overlay counts its rungs inside, so the phone's
             column is one too, and the palette opens over this screen the way it does over the desk's */}
         <div className="center-root">
-          {incompatible && !machine.serving ? (
-            // another machine speaking another protocol: nothing of its can be shown, and no
-            // reload here would change that
-            <UpdatedCard foreign={machines.displayName(machine.origin)} />
-          ) : say !== null ? (
+          {shown.kind === "updated" ? (
+            // the card asks this machine's daemon for the restart itself, over HTTP, and reloads
+            // when the new one answers; for another machine it says where the update is to be done
+            <UpdatedCard foreign={shown.foreign ?? undefined} />
+          ) : shown.kind === "say" && say ? (
             <View wide>
               <p className={cx("status-line", say.live && "live-text")}>{say.text}</p>
             </View>
-          ) : !onWorktree ? (
+          ) : shown.kind === "home" ? (
             // this machine's worktrees: the list is the home screen, and the bar says which machine
             // and which project it is, with the other machines a tap into the switcher away
             <Rail placement="screen" />
-          ) : editor ? (
+          ) : shown.kind === "editor" && editor ? (
             // a file opened from the changes list or from a tool row in the chat: the diff over
             // whichever tab is open; its close returns there, and a tab or the way back shuts it
             <EditorPane editor={editor} placement="screen" />
-          ) : tab === "chat" ? (
+          ) : shown.kind === "tab" && shown.tab === "chat" ? (
             <ChatPanel placement="screen" archived={archivedPage} found={foundPage} />
-          ) : tab === "changes" ? (
+          ) : shown.kind === "tab" && shown.tab === "changes" ? (
             <ChangesDock placement="screen" />
           ) : null}
           {/* mounted for as long as this worktree is on screen, whichever tab is open, and keyed

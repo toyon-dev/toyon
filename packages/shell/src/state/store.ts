@@ -139,9 +139,8 @@ export type ChatItem =
   | { kind: "blocked"; tool: string; path: string; reason: string }
   /** a divider: what follows was said in another worktree, grafted in here */
   | { kind: "grafted"; title: string; branch: string }
-  /** the daemon's word on a land that merged, kept for the record; `archiveIds` are the variant
-   * siblings the landed one leaves behind, offered here where the land is read */
-  | { kind: "landed"; text: string; archiveIds: string[]; mark?: LandMark; ts: number }
+  /** the daemon's word on a land that merged, kept for the record */
+  | { kind: "landed"; text: string; mark?: LandMark; ts: number }
   /** the daemon's word on a restore from the archive: when it went, what branch it came back on,
    * and whether its uncommitted changes came with it */
   | { kind: "restored"; archivedAt: number; branch: string; uncommitted: boolean; ts: number }
@@ -329,19 +328,16 @@ export interface WorktreeLocal {
  * only what has to be fixed before the message goes. Its text and attachments live in `local`
  * under the row's own id, like any box's. */
 export interface Draft {
-  /** the same prompt in N parallel worktrees, keep the best */
-  variants: 1 | 2 | 3;
   /** the agent that works on it: the daemon's default when main is selected */
   agent: string;
   /** one of the repo's profiles; the repo's default when absent */
   profile?: string;
-  /** main's uncommitted changes move into the worktree; honoured only for a single one (canCarry) */
+  /** main's uncommitted changes move into the worktree */
   carry?: boolean;
 }
 
-/** the draft moves its base's changes: asked for, and making one worktree, since one set of changes
- * cannot move into three */
-export const canCarry = (d: Draft | null | undefined): boolean => !!d?.carry && d.variants === 1;
+/** the draft moves its base's changes */
+export const canCarry = (d: Draft | null | undefined): boolean => !!d?.carry;
 
 /** the composer box the words are written in: the active row's own, the lead's included, since the
  * send makes that row the worktree and the words typed on it go with it */
@@ -1433,7 +1429,6 @@ export type Action =
   | { a: "open-draft" }
   /** main's uncommitted changes go into the worktree the box starts */
   | { a: "draft-carry"; v: boolean }
-  | { a: "draft-variants"; n: Draft["variants"] }
   | { a: "draft-agent"; id: string }
   | { a: "draft-profile"; profile: string }
   /** show an archived worktree's page in the centre: what was kept, and the restore button */
@@ -1741,7 +1736,7 @@ function guessed(action: Action): boolean {
 
 /** a draft with nothing chosen yet: one worktree, the daemon's default agent */
 function freshDraft(s: State): Draft {
-  return { variants: 1, agent: s.defaultAgent };
+  return { agent: s.defaultAgent };
 }
 
 /** The lead row's box always starts a worktree: the provisional row is not a task until something
@@ -1750,7 +1745,7 @@ function freshDraft(s: State): Draft {
  * an archived worktree's page, which is about something else. Checked after every action, so a
  * snapshot, a reload or a click that lands on the lead opens it the same way, and leaving it for
  * anything else drops it, the send included: the row becomes the task under the same id, and what
- * was chosen (variants, moving main's changes) is spent. */
+ * was chosen (the profile, moving main's changes) is spent. */
 function withLauncher(s: State): State {
   const active = worktreeById(s, s.activeId);
   const launching = !!active && isLead(active.worktree) && !s.archivedPage && !isFirstRun(s);
@@ -1866,8 +1861,6 @@ function reduce(s: State, action: Action): State {
     }
     case "draft-carry":
       return s.draft ? { ...s, draft: { ...s.draft, carry: action.v } } : s;
-    case "draft-variants":
-      return s.draft ? { ...s, draft: { ...s.draft, variants: action.n } } : s;
     case "draft-agent":
       return s.draft ? { ...s, draft: { ...s.draft, agent: action.id } } : s;
     case "draft-profile":
@@ -2810,8 +2803,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
       }
       // auto-focus a worktree THIS tab just created (the "prompt spawns a tab" moment); one made
       // from another tab or the CLI stays where it is. A send from the lead row makes the task of
-      // that very row, which is already the one on screen: nothing moves, and a sibling made in the
-      // same send (the other variants) does not pull the selection off it.
+      // that very row, which is already the one on screen: nothing moves.
       const known = new Set(s.rows.map((w) => w.id));
       const mine = (w: WorktreeStatus) => w.worktree?.kind === "worktree" && w.worktree.createdBy === s.clientId;
       const fresh = msg.rows.find((w) => !known.has(w.id) && mine(w));
@@ -3281,7 +3273,6 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
         {
           kind: "landed",
           text: event.message,
-          archiveIds: event.archiveIds,
           ...(event.mark ? { mark: event.mark } : {}),
           ts: event.ts,
         },

@@ -85,11 +85,11 @@ describe("UploadStore lifetime", () => {
     expect(store.path(id)).not.toBeNull();
   });
 
-  test("a held upload outlives its box, across two variants, until the last one lets go", async () => {
+  test("a held upload outlives its box, across two messages naming it, until the last one lets go", async () => {
     const { store } = make();
     const id = await put(store);
     store.keep([id]);
-    // one message per variant, each naming the same upload
+    // two messages naming the same upload
     store.hold([id]);
     store.hold([id]);
     // the box empties as the message is sent

@@ -1109,7 +1109,7 @@ describe("preview reload after a turn", () => {
 describe("drafting a worktree", () => {
   const helloR = (...w: WorktreeStatus[]): Action => helloIn([repo("r")], ...w);
   const found = (...w: WorktreeStatus[]) => run([helloR(...w)]);
-  const fresh = (): Draft => ({ variants: 1, agent: "claude" });
+  const fresh = (): Draft => ({ agent: "claude" });
 
   test("the lead on screen is always a draft; a worktree on screen is not", () => {
     const s = found(wt("main", "main"), wt("a"));
@@ -1126,15 +1126,15 @@ describe("drafting a worktree", () => {
       ).draft,
     ).toEqual(fresh());
     // a snapshot that keeps main keeps what was chosen on it; leaving main starts over
-    const three = run([{ a: "draft-variants", n: 3 }, worktrees(wt("main", "main"), wt("a"))], s);
-    expect(three.draft?.variants).toBe(3);
+    const chosen = run([{ a: "draft-carry", v: true }, worktrees(wt("main", "main"), wt("a"))], s);
+    expect(chosen.draft?.carry).toBe(true);
     expect(
       run(
         [
           { a: "activate", id: "a" },
           { a: "activate", id: "main" },
         ],
-        three,
+        chosen,
       ).draft,
     ).toEqual(fresh());
   });
@@ -1160,10 +1160,9 @@ describe("drafting a worktree", () => {
     expect(localOf(typed, "sp").draft).toBe("hi");
   });
 
-  test("carrying main's changes holds for a single worktree only", () => {
+  test("carrying main's changes is the draft's checkbox", () => {
     const s = run([{ a: "draft-carry", v: true }], found(wt("main", "main")));
     expect(canCarry(s.draft)).toBe(true);
-    expect(canCarry(run([{ a: "draft-variants", n: 2 }], s).draft)).toBe(false);
     expect(canCarry(run([{ a: "draft-carry", v: false }], s).draft)).toBe(false);
   });
 
@@ -1218,14 +1217,12 @@ describe("drafting a worktree", () => {
     expect(
       run(
         [
-          { a: "draft-variants", n: 3 },
           { a: "draft-agent", id: "codex" },
           { a: "draft-profile", profile: "web" },
         ],
         s,
       ).draft,
     ).toEqual({
-      variants: 3,
       agent: "codex",
       profile: "web",
     });
@@ -2024,15 +2021,15 @@ describe("streams and notices", () => {
     // ends the op adds nothing to the chat
     const merged = run([
       ...base,
-      agent("a", { type: "landed", message: "a is on main", archiveIds: ["b"], ts: 0 }),
+      agent("a", { type: "landed", message: "a is on main", ts: 0 }),
       server({ t: "shipped", worktreeId: "a", ok: true, message: "a is on main" }),
     ]);
-    expect(localOf(merged, "a").chat).toEqual([{ kind: "landed", text: "a is on main", archiveIds: ["b"], ts: 0 }]);
+    expect(localOf(merged, "a").chat).toEqual([{ kind: "landed", text: "a is on main", ts: 0 }]);
     expect(merged.openUrl).toBeNull();
     // the landing rides along when the event carries it, so the row can say what landed
     const mark = { base: "x", tip: "y", at: 0, subjects: ["add the thing"] };
-    const said = run([...base, agent("a", { type: "landed", message: "m", archiveIds: [], mark, ts: 0 })]);
-    expect(localOf(said, "a").chat).toEqual([{ kind: "landed", text: "m", archiveIds: [], mark, ts: 0 }]);
+    const said = run([...base, agent("a", { type: "landed", message: "m", mark, ts: 0 })]);
+    expect(localOf(said, "a").chat).toEqual([{ kind: "landed", text: "m", mark, ts: 0 }]);
     const pr = run([...base, server({ t: "shipped", worktreeId: "a", ok: true, message: "m", url: "u" })]);
     expect(localOf(pr, "a").chat).toEqual([]);
     expect(pr.openUrl).toBe("u");
@@ -3305,11 +3302,11 @@ describe("a landing op in flight", () => {
     const s = run([
       three(),
       { a: "shipping", id: "a", op: "land" },
-      agent("a", { type: "landed", message: "a is on main", archiveIds: [], ts: 0 }),
+      agent("a", { type: "landed", message: "a is on main", ts: 0 }),
       server({ t: "shipped", worktreeId: "a", ok: true, message: "a is on main" }),
     ]);
     expect(s.shipping).toEqual({});
-    expect(localOf(s, "a").chat).toEqual([{ kind: "landed", text: "a is on main", archiveIds: [], ts: 0 }]);
+    expect(localOf(s, "a").chat).toEqual([{ kind: "landed", text: "a is on main", ts: 0 }]);
   });
 });
 

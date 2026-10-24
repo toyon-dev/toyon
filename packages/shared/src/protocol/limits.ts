@@ -16,7 +16,7 @@ import type { FileServerMsg, ServerMsg, TermServerMsg } from "./ws.ts";
  * an unknown `t` there is a zod failure the person reads as a wall of discriminator values. The
  * same goes for a new required field on an existing kind.
  */
-export const PROTOCOL_VERSION = 120;
+export const PROTOCOL_VERSION = 121;
 
 /** the most of a page's error the shell forwards: the message and where it was thrown, not a
  * stack, which the agent reads off the source anyway */
@@ -51,9 +51,6 @@ export const FILE_INLINE_CHARS = 20_000;
 
 /** the largest image or file one upload carries */
 export const UPLOAD_MAX_BYTES = 100 * 1024 * 1024;
-
-/** how many attempts one prompt can be run as, side by side */
-export const VARIANTS_MAX = 3;
 
 /** the name clipboard text too long to paste is attached under */
 export const PASTED_FILE_NAME = "pasted-text.txt";

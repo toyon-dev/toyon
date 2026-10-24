@@ -1389,51 +1389,41 @@
       font: var(--type-mono);
     }
   }
-  /* whether main's files come along, under the choices: a rule and no ground, since the composer's
-   ground means a place to type, and two boxes of it stacked read as one box with a seam */
+  /* whether main's files come along, under the choice when the repo offers one: a rule and no
+   ground, since the composer's ground means a place to type, and two boxes of it stacked read as
+   one box with a seam. Alone, the line stands with no rule over it. */
   .draft-notes {
-    margin-top: 4px;
-    padding-top: 8px;
-    border-top: 1px solid var(--border0);
     display: flex;
     flex-direction: column;
     gap: 6px;
+  }
+  .draft-row + .draft-notes {
+    margin-top: 4px;
+    padding-top: 8px;
+    border-top: 1px solid var(--border0);
   }
   .draft-note {
     /* the count ticks with the status; `font` on the hint resets the variant */
     font-variant-numeric: tabular-nums;
   }
-  /* the birth-time choices on one line: the three numbers with their word, then what runs it at
-   the right end. The chips' padding hangs into the gutters at both ends, so the first number starts
-   where the text in the box does and the profile ends where the knobs row's icons do. The number's
-   pull is named on the button, where --btn-pad-x is set; the profile's is on its wrapper, for the
-   reason .spawn-left gives: the panel is placed against the wrapper, and a button hanging out of it
-   lands the panel's lead 8px off the chip. */
+  /* the one birth-time choice, the profile, at the left of its row, where the knobs row's chips
+   start under the box: alone at the right end it read as a stray word. The chip's padding hangs
+   into the gutter so its word starts where the text in the box does; the pull is on its wrapper,
+   for the reason .spawn-left gives: the panel is placed against the wrapper, and a button hanging
+   out of it lands the panel's lead 8px off the chip. */
   .draft-row {
     display: flex;
     align-items: center;
     gap: 10px;
     flex-wrap: wrap;
-    & > .draft-variants > .btn:first-child {
-      margin-left: calc(-1 * var(--btn-pad-x));
-    }
-  }
-  .draft-runs > .chip-picker {
-    margin-right: -8px;
-  }
-  .draft-variants {
-    display: flex;
-    align-items: center;
-    gap: 2px;
-    & > span {
-      margin-left: 4px;
-    }
   }
   .draft-runs {
     display: flex;
     align-items: center;
     gap: 6px;
-    margin-left: auto;
+    & > .chip-picker {
+      margin-left: -8px;
+    }
   }
 
   /* ---- attachment chips ----

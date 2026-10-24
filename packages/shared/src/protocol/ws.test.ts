@@ -73,7 +73,6 @@ describe("parseClientMsg", () => {
           { kind: "pick", component: null, file: null, line: null, tag: "div", selector: "div", text: "", html: "" },
         ],
       },
-      { t: "create-worktree", repoId: "r", prompt: "x", variants: 3, boxId: "a" },
       { t: "unqueue", worktreeId: "a", index: 0, edit: true },
       { t: "redraft", worktreeId: "a", seq: 12 },
       { t: "create-worktree", repoId: "r", prompt: "x", agent: "codex" },
@@ -200,10 +199,6 @@ describe("parseClientMsg", () => {
     // a message names the box it was written in, which the daemon takes
     expect(parseClientMsg({ t: "chat", worktreeId: "a", text: "hi", boxId: "a" }).ok).toBe(true);
     expect(parseClientMsg({ t: "chat", worktreeId: "a", text: "hi", boxId: "" }).ok).toBe(false);
-    // one frame however many attempts, up to the most the intro offers
-    const attempts = (variants: number) => parseClientMsg({ t: "create-worktree", repoId: "r", prompt: "x", variants });
-    expect(attempts(0).ok).toBe(false);
-    expect(attempts(4).ok).toBe(false);
     expect(parseClientMsg({ t: "redraft", worktreeId: "a", seq: -1 }).ok).toBe(false);
     expect(chat([paste("x".repeat(PASTE_MAX_CHARS + 1))]).ok).toBe(false);
     expect(chat(Array(ATTACHMENT_LIMITS.paste + 1).fill(paste("x"))).ok).toBe(false);

@@ -106,14 +106,13 @@ export function buildCommands(
   }
   state.visible.forEach((w, i) => {
     if (w.worktree.id === id) return;
-    const v = w.worktree.variant;
     // a guest, or a row owed from elsewhere, is another project's: the line says whose, as the
     // rail's mark does
     const other = !!state.activeRepoId && w.repoId !== state.activeRepoId;
     const whose = other ? ` in ${state.repos.find((r) => r.id === w.repoId)?.name ?? w.repoId}` : "";
     add(
       `go:${w.worktree.id}`,
-      `switch to ${rowLabel(w, repo)}${v ? ` (v${v.index}/${v.of})` : ""}${whose}`,
+      `switch to ${rowLabel(w, repo)}${whose}`,
       () => dispatch({ a: "activate", id: w.worktree.id }),
       worktreeChord(i, state.visible.length),
     );

@@ -66,7 +66,7 @@ export class RunService {
    * any earlier run of its kind there. Nothing is done to a process behind that earlier entry;
    * `drop` first when it is still going. Under a `slot` it stands queued until one frees, and the
    * caller spawns only once `admitted` says so: a check is the repo's whole typecheck and test
-   * run, and a batch of variants settling together would run one per worktree, each slower than
+   * run, and several worktrees settling together would run one each, each slower than
    * the last, so at most `max` of a key run at once and the row says the rest are waiting. */
   begin(
     worktreeId: string,

@@ -2,8 +2,8 @@
 // newer work has pushed it down the rail and out of mind. Pure, so the daemon's sweep and its tests
 // read the same rule, and every condition errs toward keeping the row.
 
-import { hasOwnBranch, isUnseen, siblingsOf, type WorktreeInfo } from "./model.ts";
-import { railOrder, railUnitOf } from "./railOrder.ts";
+import { hasOwnBranch, isUnseen, type WorktreeInfo } from "./model.ts";
+import { railOrder } from "./railOrder.ts";
 
 /** rows sent to more recently that a worktree needs before it may go: someone with a handful of
  * chats never loses one */
@@ -27,16 +27,9 @@ export interface ArchiveFacts {
 
 /** why the worktree may archive itself now, as the rail will say it; null keeps it */
 export function archiveReason(wt: WorktreeInfo, f: ArchiveFacts): string | null {
-  const group = [wt, ...siblingsOf(wt, f.rows)];
-  // once one attempt has landed the group is decided, and each of the others is an attempt it beat
-  const decided = group.some((w) => !!w.lands?.length);
-  const lost = decided && !wt.lands?.length;
-  if (decided) {
-    if (!nothingToKeep(wt, f, lost)) return null;
-    // a group still being compared is compared as one, so it goes as one
-  } else if (!group.every((w) => nothingToKeep(w, f, false))) return null;
-  if (unitsAhead(wt, f.rows) < ARCHIVE_KEEP_RECENT) return null;
-  const what = lost ? "sibling landed" : wt.landed ? "landed" : "no changes";
+  if (!nothingToKeep(wt, f)) return null;
+  if (rowsAhead(wt, f.rows) < ARCHIVE_KEEP_RECENT) return null;
+  const what = wt.landed ? "landed" : "no changes";
   return `${what}, ${UNOPENED}${duration(f.afterMs)}`;
 }
 
@@ -51,9 +44,7 @@ export function archiveParts(reason: string): { what: string; idle?: string } {
   return { what: reason.slice(0, at).replace(/,\s*$/, ""), idle: reason.slice(at + UNOPENED.length) };
 }
 
-/** `lost`: the commits are an attempt a sibling beat, which the archive keeps for a later cherry-pick,
- * so only work left uncommitted since holds the row */
-function nothingToKeep(w: WorktreeInfo, f: ArchiveFacts, lost: boolean): boolean {
+function nothingToKeep(w: WorktreeInfo, f: ArchiveFacts): boolean {
   // toyon's own task on toyon's own branch: an adopted directory is the person's, and archiving
   // deletes it
   if (w.kind !== "worktree" || !hasOwnBranch(w)) return false;
@@ -64,20 +55,14 @@ function nothingToKeep(w: WorktreeInfo, f: ArchiveFacts, lost: boolean): boolean
   if (f.viewed(w.id) || f.pending(w.id) || f.drafted(w.id)) return false;
   if (f.now - (w.viewedAt ?? w.createdAt) < f.afterMs) return false;
   const c = f.counts(w.id);
-  return c.dirty === 0 && (lost ? c.ahead !== undefined : c.ahead === 0);
+  return c.dirty === 0 && c.ahead === 0;
 }
 
-/** how many rail units sit above this one, main aside */
-function unitsAhead(wt: WorktreeInfo, rows: readonly WorktreeInfo[]): number {
+/** how many rows sit above this one, main aside */
+function rowsAhead(wt: WorktreeInfo, rows: readonly WorktreeInfo[]): number {
   const tasks = railOrder(rows.filter((w) => w.kind === "worktree").map((worktree) => ({ worktree })));
-  const mine = railUnitOf(wt);
-  const seen = new Set<string>();
-  for (const { worktree: w } of tasks) {
-    const unit = railUnitOf(w);
-    if (unit === mine) return seen.size;
-    seen.add(unit);
-  }
-  return seen.size;
+  const at = tasks.findIndex(({ worktree: w }) => w.id === wt.id);
+  return at < 0 ? tasks.length : at;
 }
 
 function duration(ms: number): string {

@@ -1001,7 +1001,7 @@
 
   /* ---- badges ----
      A badge is a coloured word or count beside a name, and is never pressed: ahead on a worktree
-     row and under the commit box, the profile and variant marks on the rail. One colour per
+     row and under the commit box, the profile mark on the rail. One colour per
      meaning, wherever the word sits, so the aqua that says "landed" in the rail is the aqua that
      says it in the changes panel. A chip is the other thing: a bounded token you act on. */
   .badge-ahead {
@@ -1012,9 +1012,6 @@
   }
   .badge-dirty {
     color: var(--yellow);
-  }
-  .badge-variant {
-    color: var(--purple);
   }
   .badge-profile {
     color: var(--blue);

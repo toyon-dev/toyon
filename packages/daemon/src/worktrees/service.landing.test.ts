@@ -28,9 +28,8 @@ describe("landing", () => {
     expect((await w.worktrees.commit(wt.id, "add feature")).ok).toBe(true);
     const landedIds: string[] = [];
     w.hub.on("landed", (id) => landedIds.push(id));
-    const { result, archiveIds } = await w.worktrees.land(wt.id);
+    const { result } = await w.worktrees.land(wt.id);
     expect(result.ok).toBe(true);
-    expect(archiveIds).toEqual([]);
     // the hub hears of it too, after the row's own word, for a worktree that handed this work off
     expect(landedIds).toEqual([wt.id]);
     // the word on it goes on the transcript, where a reload reads it back
@@ -38,7 +37,6 @@ describe("landing", () => {
     expect(w.agents.get(wt.id)!.recorded.at(-1)).toMatchObject({
       type: "landed",
       message: "merged into main",
-      archiveIds: [],
       mark: { subjects: ["add feature"] },
     });
     expect(existsSync(join(w.repo, "feature.txt"))).toBe(true);
@@ -461,10 +459,9 @@ describe("landing", () => {
     const wt = await w.worktrees.create(repoId, "feature");
     writeFileSync(join(wt.path, "feature.txt"), "x\n");
     w.worktrees.setLanding(wt.id, { at: 1, check: "pass", ready: true, subject: "old words", fingerprint: "f" });
-    const { result, archiveIds } = await w.worktrees.land(wt.id, "add feature\n\nOne file.");
+    const { result } = await w.worktrees.land(wt.id, "add feature\n\nOne file.");
     expect(result.ok).toBe(true);
     expect(result.message).toBe("committed and merged into main");
-    expect(archiveIds).toEqual([]);
     expect(existsSync(join(w.repo, "feature.txt"))).toBe(true);
     // main had not moved, so the merge fast-forwards onto the commit itself
     expect((await git(w.repo, "log", "-1", "--format=%s", "main^2")).out).toBe("add feature");

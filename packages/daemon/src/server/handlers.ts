@@ -2,7 +2,6 @@
 // compile error. Handlers marshal (pick fields, shape replies) and call a service; they do not
 // run git or decide policy.
 
-import { randomBytes } from "node:crypto";
 import type { AttachmentInput, ClientMsg, FileBlame, ServerMsg, WorktreeInfo } from "@toyon/shared";
 import { isLead, pickTheme, SHELL_STREAM } from "@toyon/shared";
 import type { AttachmentStore } from "../agent/attachments.ts";
@@ -298,34 +297,8 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
       effort: msg.effort,
       carry: msg.carry,
     };
-    const of = msg.variants ?? 1;
     await sending(s, ctx, msg, msg.attachments, async () => {
-      if (of === 1) {
-        await s.worktrees.create(msg.repoId, msg.prompt, { ...opts, worktreeId: msg.worktreeId });
-        return;
-      }
-      // the attempts are made side by side as one group; the first is the row the message was
-      // typed in, and its siblings are made beside it
-      const group = randomBytes(4).toString("hex");
-      const made = await Promise.allSettled(
-        Array.from({ length: of }, (_, i) =>
-          s.worktrees.create(msg.repoId, msg.prompt, {
-            ...opts,
-            ...(i === 0 ? { worktreeId: msg.worktreeId } : {}),
-            variant: { group, index: i + 1, of },
-          }),
-        ),
-      );
-      const failed = made.flatMap((m) => (m.status === "rejected" ? [m.reason as unknown] : []));
-      if (failed.length === 0) return;
-      // one message, so one answer: it went if any attempt's agent has it
-      const went = failed.find((e) => e instanceof UserError && e.delivered);
-      if (went) throw went;
-      if (failed.length < of) {
-        const why = failed[0] instanceof Error ? failed[0].message : String(failed[0]);
-        throw new UserError(`${failed.length} of ${of} attempts did not start: ${why}`, { delivered: true });
-      }
-      throw failed[0];
+      await s.worktrees.create(msg.repoId, msg.prompt, { ...opts, worktreeId: msg.worktreeId });
     });
   },
 
@@ -554,10 +527,6 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     requireRun(s, msg.worktreeId);
     s.turns.stoppedByPerson(msg.worktreeId);
     s.runtime.agentFor(msg.worktreeId)?.stop();
-  },
-
-  async "pick-variant"(msg, _ctx, s) {
-    await s.worktrees.pickVariant(msg.worktreeId);
   },
 
   unqueue(msg, _ctx, s) {

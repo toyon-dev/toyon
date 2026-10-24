@@ -67,18 +67,6 @@ export function worktreeActions(sock: DaemonSocket | null, dispatch: Dispatch) {
       const title = window.prompt("Rename worktree (its branch follows as a slug):", w.worktree.title);
       if (title?.trim()) sock?.send({ t: "rename-worktree", worktreeId: w.worktree.id, title: title.trim() });
     },
-    pickVariant(w: OwnedWorktree) {
-      const v = w.worktree.variant;
-      if (!v) return;
-      const others = v.of - 1;
-      if (
-        window.confirm(
-          `Keep "${w.worktree.title}" and archive ${others} sibling variant(s)? Their directories and branches go; their chats and changes are kept.`,
-        )
-      ) {
-        sock?.send({ t: "pick-variant", worktreeId: w.worktree.id });
-      }
-    },
     /** run under another profile: only its procs restart, so no confirm */
     setProfile(w: OwnedWorktree, profile: string) {
       sock?.send({ t: "set-worktree-profile", worktreeId: w.worktree.id, profile });
@@ -203,7 +191,6 @@ export function worktreeItems(
     });
   }
   if (canRename(w.worktree)) change.push({ id: "rename", label: "rename…", onClick: () => acts.rename(w) });
-  if (w.worktree.variant) change.push({ id: "keep", label: "keep this variant…", onClick: () => acts.pickVariant(w) });
   if (ui.graft && canGraft(w.worktree)) {
     const graft = ui.graft;
     change.push({ id: "graft", label: "graft with…", onClick: () => graft(id) });

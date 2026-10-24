@@ -11,13 +11,7 @@ import {
 } from "@toyon/shared";
 import { type CSSProperties, useEffect, useMemo, useRef, useState } from "react";
 import { archivedItems, archivedState } from "../../state/actions/archive.ts";
-import {
-  archiveWorktrees,
-  discoveredItems,
-  shipOp,
-  worktreeActions,
-  worktreeItems,
-} from "../../state/actions/worktree.ts";
+import { archiveWorktrees, discoveredItems, shipOp, worktreeItems } from "../../state/actions/worktree.ts";
 import { useDispatch, useSock, useStore, useStoreInstance, useUrls } from "../../state/context.tsx";
 import { profileOf } from "../../state/profiles.ts";
 import {
@@ -259,7 +253,6 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
     return () => window.removeEventListener("keydown", onEsc);
   });
 
-  const acts = worktreeActions(sock, dispatch);
   const deps = { sock, dispatch };
   const graftWith = (id: string) => {
     setGraftMode(true);
@@ -612,22 +605,6 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
               </span>
             ) : null;
           })()}
-        {owned?.worktree.variant && (
-          // biome-ignore lint/a11y/useKeyWithClickEvents: a control inside the row's button, which cannot nest one; the row menu and the palette carry the same actions for the keyboard until the row is restructured
-          <span
-            className="rail-badge badge-variant clickable"
-            data-tip="Keep this variant, archive the others"
-            onClick={(e) => {
-              e.stopPropagation();
-              acts.pickVariant(owned);
-            }}
-          >
-            <span className="num">
-              v{owned.worktree.variant.index}/{owned.worktree.variant.of}
-            </span>
-            <span className="act">pick</span>
-          </span>
-        )}
         {/* another project's name, in the dim tier before the counts: the one place the row says it
             is not this project's. No glyph; the name is the mark. */}
         {otherRepo && <span className="rail-guest row-dim">{otherRepo.name}</span>}

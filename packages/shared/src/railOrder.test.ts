@@ -41,16 +41,6 @@ describe("railOrder", () => {
     expect(ids(rows)).toEqual(["main", "done", "new", "old"]);
   });
 
-  test("the attempt that landed stays beside the ones it beat", () => {
-    const v = (id: string, index: number, w: Partial<WorktreeInfo> = {}) =>
-      row(id, { promptedAt: 1, variant: { group: "g", index, of: 2 }, ...w });
-    expect(ids([v("v2", 2), row("other", { promptedAt: 5 }), v("v1", 1, { landed: true, promptedAt: 9 })])).toEqual([
-      "v1",
-      "v2",
-      "other",
-    ]);
-  });
-
   test("the spare leads the same way: it is the row new work is typed in", () => {
     expect(ids([row("new", { promptedAt: 5 }), row("spare", { kind: "spare", createdAt: 9 })])).toEqual([
       "spare",
@@ -72,17 +62,6 @@ describe("railOrder", () => {
       row("sent", { promptedAt: 2 }),
     ];
     expect(ids(rows)).toEqual(["turned", "made", "sent"]);
-  });
-
-  test("a variant group moves as one, at its newest sibling's time, in index order", () => {
-    const v = (id: string, index: number, promptedAt: number) =>
-      row(id, { promptedAt, variant: { group: "g", index, of: 3 } });
-    expect(ids([v("v2", 2, 1), row("other", { promptedAt: 5 }), v("v3", 3, 2), v("v1", 1, 7)])).toEqual([
-      "v1",
-      "v2",
-      "v3",
-      "other",
-    ]);
   });
 
   test("rows that tie keep the daemon's order", () => {

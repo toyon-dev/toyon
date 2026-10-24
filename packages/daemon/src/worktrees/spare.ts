@@ -401,7 +401,7 @@ export class SparePool {
 
 /** what the send stamps on the task at birth, so the first frame carries it */
 export type ClaimStamps = Partial<
-  Pick<WorktreeInfo, "createdBy" | "agent" | "mode" | "model" | "effort" | "variant" | "from" | "profile" | "unnamed">
+  Pick<WorktreeInfo, "createdBy" | "agent" | "mode" | "model" | "effort" | "from" | "profile" | "unnamed">
 >;
 
 /** a claimed spare: the row, already the task, and the git side of it */

@@ -1,5 +1,5 @@
 // Which worktrees git knows about. This is the source of truth for what *exists*; state.json stays
-// the sidecar for what toyon adds on top (proxy port, agent session, title, variant group).
+// the sidecar for what toyon adds on top (proxy port, agent session, title).
 //
 // Never enumerate `.git/worktrees/` instead: entries linger there for worktrees whose directory is
 // long gone, and only git filters them out (it reports those as prunable, if at all).

@@ -906,35 +906,6 @@ describe("handlers", () => {
     expect(lastOf(replies, "unsent")).toBeUndefined();
   });
 
-  test("variants are one frame: the daemon makes the group, and the box is taken once", async () => {
-    const { services, ctx, replies, repo, agents } = make();
-    const r = await services.repos.register(repo);
-    r.needsSetup = false;
-    const main = await mainOf(services, repo);
-    services.drafts.set(main.id, "try it three ways");
-    await dispatch(
-      { t: "create-worktree", repoId: r.id, prompt: "try it three ways", variants: 3, boxId: main.id },
-      ctx,
-      services,
-    );
-    const made = services.state.worktrees.filter((w) => w.variant);
-    expect(made.map((w) => w.variant!.index).sort()).toEqual([1, 2, 3]);
-    expect(new Set(made.map((w) => w.variant!.group)).size).toBe(1);
-    expect(made.every((w) => w.variant!.of === 3)).toBe(true);
-    expect(made.every((w) => agents.get(w.id)!.sent.length === 1)).toBe(true);
-    expect(services.drafts.has(main.id)).toBe(false);
-    expect(lastOf(replies, "unsent")).toBeUndefined();
-    // refused whole, the one message comes back once
-    services.drafts.set(main.id, "and again");
-    await dispatch(
-      { t: "create-worktree", repoId: r.id, prompt: "and again", variants: 2, agent: "no-such-agent", boxId: main.id },
-      ctx,
-      services,
-    );
-    expect(replies.filter((m) => m.t === "unsent")).toHaveLength(1);
-    expect(services.drafts.text(main.id)).toBe("and again");
-  });
-
   test("a queued message taken back to edit fills the worktree's box, its upload kept", async () => {
     const { services, ctx, repo, agents } = make();
     const uploads = services.attachments.uploads;
@@ -1316,12 +1287,6 @@ describe("handlers", () => {
     const readme = readFileSync(join(repo, "README.md"), "utf8");
     writeFileSync(join(repo, "README.md"), `${readme}started by hand\n`);
     writeFileSync(join(repo, "notes.txt"), "a new file\n");
-    // one set of changes cannot go three ways
-    await expect(
-      dispatch({ t: "create-worktree", repoId: r.id, prompt: "x", carry: true, variants: 2 }, ctx, services),
-    ).rejects.toBeInstanceOf(UserError);
-    expect(readFileSync(join(repo, "README.md"), "utf8")).toBe(`${readme}started by hand\n`);
-
     // without a move the files stay, and the agent is told they are not in its tree, by the count
     // the rail last read for main
     services.worktrees.rows();

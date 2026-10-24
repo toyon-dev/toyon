@@ -82,35 +82,11 @@ describe("archiveReason", () => {
     expect(archiveReason(old, facts(rows, { counts: () => ({ dirty: 0, ahead: 2 }) }))).toBeNull();
     expect(archiveReason(old, facts(rows, { counts: () => ({}) }))).toBeNull();
   });
-
-  test("a variant group is one rail unit and goes only when every sibling may", () => {
-    const v = (i: number, w: Partial<WorktreeInfo> = {}) =>
-      task(`v${i}`, 1, { variant: { group: "g", index: i, of: 2 }, ...w });
-    const rows = rail(v(1), v(2));
-    expect(archiveReason(rows[0]!, facts(rows))).not.toBeNull();
-    const held = rail(v(1), v(2, { unread: true }));
-    expect(archiveReason(held[0]!, facts(held))).toBeNull();
-  });
-
-  test("once one variant landed, the attempts it beat go on their own, commits and all", () => {
-    const v = (i: number, w: Partial<WorktreeInfo> = {}) =>
-      task(`v${i}`, 1, { variant: { group: "g", index: i, of: 3 }, ...w });
-    const won = v(1, { landed: true, lands: [{ base: "a", tip: "b", at: 1, subjects: [] }], viewedAt: 9 * HOUR });
-    const rows = rail(v(2), v(3), won);
-    const ahead = (id: string) => (id === "v1" ? { dirty: 0, ahead: 0 } : { dirty: 0, ahead: 3 });
-    // the winner was opened a moment ago and stays; the two it beat do not wait for it
-    expect(archiveReason(won, facts(rows, { counts: ahead }))).toBeNull();
-    expect(archiveReason(rows[0]!, facts(rows, { counts: ahead }))).toBe("sibling landed, not opened in 2h");
-    // work left uncommitted in one since, or counts git could not give, still hold it
-    const dirty = (id: string) => (id === "v2" ? { dirty: 1, ahead: 3 } : ahead(id));
-    expect(archiveReason(rows[0]!, facts(rows, { counts: dirty }))).toBeNull();
-    expect(archiveReason(rows[0]!, facts(rows, { counts: () => ({ dirty: 0 }) }))).toBeNull();
-  });
 });
 
 describe("a reason split at its wait", () => {
   test("how the work went, and how long nobody opened it", () => {
-    expect(archiveParts("sibling landed, not opened in 2h")).toEqual({ what: "sibling landed", idle: "2h" });
+    expect(archiveParts("landed, not opened in 2h")).toEqual({ what: "landed", idle: "2h" });
     expect(archiveParts("something else")).toEqual({ what: "something else" });
   });
 });

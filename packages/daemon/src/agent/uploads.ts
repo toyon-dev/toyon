@@ -2,7 +2,7 @@
 // uploaded when its chip appears, so a message names it by id and the chat frame stays small, and
 // a draft's chips are still there after a reload. An upload lives while something names it: a
 // composer box's pending list, or a message that has arrived and not been recorded yet (a queued
-// one records later, and variants send one upload to several worktrees). One that a box lets go of
+// one records later, and one upload may be named by several messages). One that a box lets go of
 // with no message holding it is deleted on the spot: a box is only emptied by a chip taken off, or
 // by a send, which holds the uploads before the box gives them up.
 

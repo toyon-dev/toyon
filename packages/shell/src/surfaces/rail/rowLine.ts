@@ -171,7 +171,7 @@ export function archivedLines(a: ArchivedWorktree): string[] {
  * state it wrapped under itself. The state says the row archived itself, so the reason does not
  * say it again. Only the wait on a merged row, whose state already says how the
  * work went; any other leads with the rest of the reason, since its state does not say there was
- * nothing to keep or that a sibling landed.
+ * nothing to keep.
  */
 export function archivedFigures(a: ArchivedWorktree): string[] | undefined {
   const auto = a.auto && autoArchived(a.auto, !!a.landed);

@@ -90,12 +90,9 @@ export class ArchiveSweep {
       const beforeGit = this.facts(repo.id, () => ({ dirty: 0, ahead: 0 }));
       const maybe = beforeGit.rows.filter((w) => archiveReason(w, beforeGit) !== null);
       if (maybe.length === 0) continue;
-      // git now rather than the rail's cached counts, for the rows in question and their siblings
+      // git now rather than the rail's cached counts, for the rows in question
       const fresh = new Map<string, Counts>();
-      for (const w of beforeGit.rows) {
-        if (!maybe.some((m) => m.id === w.id || (!!m.variant && m.variant.group === w.variant?.group))) continue;
-        fresh.set(w.id, await this.d.worktrees.freshCounts(w.id));
-      }
+      for (const w of maybe) fresh.set(w.id, await this.d.worktrees.freshCounts(w.id));
       const counts = (id: string) => fresh.get(id) ?? {};
       for (const w of maybe) {
         // the rule again, on facts as they stand now: the archives before this one took seconds,

@@ -52,7 +52,6 @@ import {
   PAGE_TITLE_MAX_CHARS,
   PASTE_MAX_CHARS,
   UPLOAD_MAX_BYTES,
-  VARIANTS_MAX,
 } from "./limits.ts";
 import { elementTraitsSchema, pickMetaSchema } from "./pick.ts";
 
@@ -569,8 +568,6 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
      * made and `clientId` says which tab focuses it. */
     worktreeId: id.optional(),
     prompt,
-    /** how many attempts at the one prompt, made as a group; one when absent */
-    variants: z.number().int().min(1).max(VARIANTS_MAX).optional(),
     context: ambient.optional(),
     attachments,
     /** registry id; the daemon's default when absent */
@@ -583,7 +580,7 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
     model: z.string().max(200).optional(),
     /** one of the agent's advertised effort levels; its own default when absent */
     effort: z.string().max(100).optional(),
-    /** move main's uncommitted changes into the new worktree; only for a single worktree from main */
+    /** move main's uncommitted changes into the new worktree */
     carry: z.boolean().optional(),
     boxId,
   }),
@@ -774,7 +771,6 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   z.object({ t: z.literal("page-error"), worktreeId: id, message: z.string().min(1).max(PAGE_ERROR_MAX_CHARS) }),
   /** the preview's page started over, or hot-swapped what it runs: what it threw before is gone */
   z.object({ t: z.literal("page-loaded"), worktreeId: id }),
-  z.object({ t: z.literal("pick-variant"), worktreeId: id }),
   /** take a waiting message out of the queue; with `edit`, back into the worktree's box, words and chips */
   z.object({
     t: z.literal("unqueue"),

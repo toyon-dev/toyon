@@ -97,10 +97,6 @@
       font: var(--type-mono);
       flex-shrink: 0;
     }
-    & .rail-badge.clickable {
-      padding: 1px 4px;
-      border-radius: var(--radius-xs);
-    }
     /* a guest row: another project's worktree, started from a row on this rail by a handoff. The
        project's name in the dim tier, before the counts, so the row says whose it is where the
        badges say what it runs. It gives way before the name does, with a floor, since the name is
@@ -113,18 +109,6 @@
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
-    }
-    :where([data-hover]) & .rail-badge.clickable:hover {
-      background: var(--element0);
-    }
-    & .rail-badge .act {
-      display: none;
-    }
-    :where([data-hover]) & .rail-badge.clickable:hover .num {
-      display: none;
-    }
-    :where([data-hover]) & .rail-badge.clickable:hover .act {
-      display: inline;
     }
     & .rail-more {
       display: none;

@@ -1,6 +1,6 @@
 import { blackGroundOf } from "@toyon/shared";
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import { useDispatch, useMachine, useSock, useStore, useStoreInstance } from "../state/context.tsx";
+import { useDispatch, useMachine, useSock, useStore } from "../state/context.tsx";
 import { STORAGE } from "../state/keys.ts";
 import { useActive, useActiveId, useActiveRow, useArchivedPage, useRows, useTheme } from "../state/selectors.ts";
 import { activeWorktreeRepoId } from "../state/store.ts";
@@ -8,7 +8,6 @@ import { useFileDrop } from "../surfaces/chat/useIntake.ts";
 import { PhoneFrame } from "../surfaces/phone/PhoneFrame.tsx";
 import { applyTheme, bridgeThemeMsg, rememberDaylight } from "../theme.ts";
 import { floats } from "../ui/floats.ts";
-import { useOnChange } from "../ui/hooks.ts";
 import { DeskFrame } from "./DeskFrame.tsx";
 import { useChords } from "./keys.ts";
 import { previewBus } from "./previewBus.ts";
@@ -27,7 +26,6 @@ const RECOUNT_AFTER_MS = 5000;
 /** the app-wide effects, and which frame draws the window; every surface reads its own state
  * through selectors, and each frame the layout state only it uses */
 export function App() {
-  const store = useStoreInstance();
   const dispatch = useDispatch();
   const sock = useSock();
   // what this machine remembers of itself: the selection, the sections; the layout and the rail
@@ -318,30 +316,6 @@ export function App() {
     window.open(openUrl, "_blank");
     dispatch({ a: "opened-url" });
   }, [openUrl, dispatch]);
-
-  // route follows you across variant siblings: comparing the same screen is the whole point of
-  // variants, so switching carries the current path over
-  const prevActiveRef = useRef<string | null>(null);
-  useOnChange([activeId], () => {
-    const prevId = prevActiveRef.current;
-    prevActiveRef.current = activeId;
-    if (!prevId || !activeId || prevId === activeId) return;
-    const s = store.getState();
-    const prev = rows.find((w) => w.id === prevId);
-    const next = rows.find((w) => w.id === activeId);
-    const g = prev?.worktree?.variant?.group;
-    if (!g || next?.worktree?.variant?.group !== g) return;
-    const pathOf = (id: string) => {
-      try {
-        const u = s.local[id]?.page.url;
-        return u ? new URL(u).pathname + new URL(u).search : "/";
-      } catch {
-        return "/";
-      }
-    };
-    const from = pathOf(prevId);
-    if (from !== pathOf(activeId)) previewBus.post(activeId, { type: "navigate", path: from });
-  });
 
   // The frame, decided in app/phone.ts and read here. Two of them, because the phone's is not the
   // desk's with rules turned off: the docks measure siblings, the rail's peek is an overlay sized

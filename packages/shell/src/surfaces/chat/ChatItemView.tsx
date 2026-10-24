@@ -4,7 +4,6 @@ import { copyText } from "../../state/actions/deps.ts";
 import { daemonHost } from "../../state/actions/editor.ts";
 import { openFile } from "../../state/actions/file.ts";
 import { type ChatLink, codeItems, imageItems, messageItems, pathItems } from "../../state/actions/message.ts";
-import { archiveWorktrees } from "../../state/actions/worktree.ts";
 import { useDispatch, useSock, useStore, useStoreInstance, useUrls } from "../../state/context.tsx";
 import { openSource } from "../../state/openSource.ts";
 import { type ChatItem, worktreeById } from "../../state/store.ts";
@@ -1257,13 +1256,8 @@ function RestoredRow({ item }: { item: Extract<ChatItem, { kind: "restored" }> }
 }
 
 /** the daemon's word on a land that merged, kept on the chat the way the graft divider is, with
- * how long ago it was: the row is the one record of the land a chat read later still shows. The
- * variant siblings it leaves behind are offered here, where the land is read, for as long as they
- * are still rows. */
+ * how long ago it was: the row is the one record of the land a chat read later still shows */
 function LandedRow({ item }: { item: Extract<ChatItem, { kind: "landed" }> }) {
-  const sock = useSock();
-  const dispatch = useDispatch();
-  const left = useStore((s) => item.archiveIds.filter((id) => worktreeById(s, id) !== null).length);
   const ago = useAgo(item.ts);
   // what landed, under the word: the head keeps how it landed, which on the PR route says whether
   // main here followed, and the line under it is the commits main got
@@ -1279,11 +1273,6 @@ function LandedRow({ item }: { item: Extract<ChatItem, { kind: "landed" }> }) {
       <span className="daemon-text">
         {item.text}, {ago}
       </span>
-      {left > 0 && (
-        <Button variant="inline" tone="strong" onClick={() => archiveWorktrees(sock, dispatch, item.archiveIds)}>
-          {left > 1 ? `archive ${left} worktrees` : "archive the other worktree"}
-        </Button>
-      )}
     </DaemonRow>
   );
 }

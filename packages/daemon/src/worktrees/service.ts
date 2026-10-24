@@ -43,7 +43,6 @@ import {
   type Shipping,
   sentAt,
   shipNoun,
-  siblingsOf,
   type TrunkStatus,
   timeoutFor,
   type WorktreeInfo,
@@ -124,7 +123,7 @@ import type { ArtifactCache } from "./cache.ts";
 import { discoverIn, type FoundWorktree } from "./discover.ts";
 import type { FixService } from "./fix.ts";
 import { type FillJob, fillLandMarks, unfilled } from "./landSubjects.ts";
-import { branchSlug, cleanTitle, freeSlot, shortId, titleFrom, variantLens } from "./naming.ts";
+import { branchSlug, cleanTitle, freeSlot, shortId, titleFrom } from "./naming.ts";
 import { type ClaimStamps, SparePool } from "./spare.ts";
 import { type TreeCore, TreeState } from "./treeState.ts";
 import { mainOf, Trunk } from "./trunk.ts";
@@ -143,8 +142,6 @@ const BASE_IGNORE = "base .gitignore";
 /** how much of what a commit-msg hook printed the next message is written against: its last
  * lines, where the complaint is */
 const REFUSAL_CHARS = 400;
-
-export type Variant = { group: string; index: number; of: number };
 
 /** what a grafted transcript keeps of a message: its text. The source's attachment store goes with
  * the source, so a stored ref would point at nothing, and a pick numbered in the source's session
@@ -203,7 +200,6 @@ export interface CreateOpts {
   createdBy?: string;
   /** registry id; the daemon's default when absent */
   agent?: string;
-  variant?: Variant;
   /** paragraphs Toyon attaches behind the text, out of the transcript */
   context?: string[];
   /** in the order they were attached */
@@ -298,11 +294,11 @@ export interface WorktreeServiceDeps {
  * fixes the failure, which the transcript then says in the line's place */
 export type ShipOutcome = ShipResult & { asked?: true };
 
-/** what a land op hands back: the result, the variant siblings a landing leaves behind to offer
- * up, and the mark it put on the record, so the row's word carries what landed. The mark comes
- * from the op and never from the record's last entry: a landing whose ref could not be kept
+/** what a land op hands back: the result, `landed` when the work reached main and the row's word
+ * is to be noted, and the mark it put on the record, so the word carries what landed. The mark
+ * comes from the op and never from the record's last entry: a landing whose ref could not be kept
  * writes no mark, and the last entry would then be an earlier landing's. */
-type Landed = { result: ShipResult; archiveIds?: string[]; mark?: LandMark | undefined };
+type Landed = { result: ShipResult; landed?: true; mark?: LandMark | undefined };
 
 /** the refusal for a found worktree another tool holds, with git's reason when it gave one */
 const heldBy = (found: Pick<FoundWorktree, "name" | "lockReason">) =>
@@ -444,7 +440,7 @@ export class WorktreeService {
       if (turn.end === "done") {
         const wt = d.state.worktree(worktreeId);
         const prompt = wt?.unnamed ? firstAskOf(d.runtime.agentFor(worktreeId)?.transcript() ?? []) : undefined;
-        if (wt && prompt) this.scheduleNaming(wt, prompt, wt.variant);
+        if (wt && prompt) this.scheduleNaming(wt, prompt);
       }
       // A sync that waited for the turn runs now that the tree is still; an agent stopped asking
       // is mid-turn still, and resumes into the same tree once answered
@@ -465,7 +461,7 @@ export class WorktreeService {
   // ---- create / remove / rename ----
 
   async create(repoId: string, prompt: string, opts: CreateOpts = {}): Promise<WorktreeInfo> {
-    const { variant, attachments } = opts;
+    const { attachments } = opts;
     const repo = this.d.state.requireRepo(repoId);
     // the row the message was typed on: the provisional one, else main's. What its preview has
     // thrown goes with the first message when the worktree made is another row; the row itself
@@ -480,21 +476,10 @@ export class WorktreeService {
     const profile = this.checkProfile(repo, opts.profile);
     // a message that is attachments alone is named from what they carry
     const task = taskText(prompt, attachments);
-    // the title is the prompt's first words until the agent names it; variants share a base so they
-    // read as siblings in the list. The branch is born on the directory's id and takes the title's
-    // slug with the name.
+    // the title is the prompt's first words until the agent names it. The branch is born on the
+    // directory's id and takes the title's slug with the name.
     const given = cleanTitle(opts.title ?? "") || undefined;
-    const base = given ?? titleFrom(task);
-    const title = variant ? `${base} v${variant.index}` : base;
-
-    // one set of changes can only move once
-    if (opts.carry && variant && variant.of > 1) {
-      throw new UserError(`only a single worktree can take the changes on ${repo.defaultBranch}`);
-    }
-
-    // perspective-diverse variants: same goal, different emphasis per attempt
-    const agentPrompt =
-      variant && variant.of >= 2 ? [prompt, variantLens(variant.index)].filter(Boolean).join("\n\n") : prompt;
+    const title = given ?? titleFrom(task);
 
     // fast path: claim the pre-warmed spare. Its runtime — agent included — already exists, so the
     // task's first message goes to the spare's agent. The spare was warmed under the default
@@ -510,7 +495,6 @@ export class WorktreeService {
       mode: opts.mode,
       model: opts.model,
       effort: opts.effort,
-      variant,
       from: opts.from,
       profile,
       // the claim stamped the prompt's words as a name still to be found; a given name is final
@@ -525,7 +509,7 @@ export class WorktreeService {
       release = rt.agent.hold();
       if (rt.agent.runningAgent !== null && rt.agent.runningAgent !== agent) await rt.agent.restart();
       carriedIn = await this.carryMain(repo, wt, !!opts.carry);
-      rt.agent.send(agentPrompt, { context: withCarry(context(wt.id), carriedIn), attachments });
+      rt.agent.send(prompt, { context: withCarry(context(wt.id), carriedIn), attachments });
     });
     if (claimed) {
       const { wt } = claimed;
@@ -554,7 +538,7 @@ export class WorktreeService {
       }
       release?.();
       if (restart) this.restartProcs(wt);
-      this.nameOrAsk(wt, task, given, variant);
+      this.nameOrAsk(wt, task, given);
       if (carriedIn?.unmoved) throw new UserError(carriedIn.unmoved, { delivered: true });
       return wt;
     }
@@ -590,7 +574,6 @@ export class WorktreeService {
       // made from a prompt, which is a send
       promptedAt: Date.now(),
       agent,
-      ...(variant ? { variant } : {}),
       ...(opts.from ? { from: opts.from } : {}),
       ...(opts.createdBy ? { createdBy: opts.createdBy } : {}),
       ...(profile !== undefined ? { profile } : {}),
@@ -602,17 +585,17 @@ export class WorktreeService {
     const carried = await this.carryMain(repo, wt, !!opts.carry);
     // setup + procs warm in the background; the agent starts immediately
     this.launch(wt, repo, repo.path);
-    this.d.runtime.ensureAgent(wt).agent.send(agentPrompt, { context: withCarry(context(id), carried), attachments });
-    this.nameOrAsk(wt, task, given, variant);
+    this.d.runtime.ensureAgent(wt).agent.send(prompt, { context: withCarry(context(id), carried), attachments });
+    this.nameOrAsk(wt, task, given);
     if (carried.unmoved) throw new UserError(carried.unmoved, { delivered: true });
     return wt;
   }
 
   /** the branch follows the title: a title given at birth moves it now, as the namer's answer
    * would have, and the namer is never asked; without one the namer is */
-  private nameOrAsk(wt: WorktreeInfo, task: string, given: string | undefined, variant?: Variant) {
+  private nameOrAsk(wt: WorktreeInfo, task: string, given: string | undefined) {
     if (given === undefined) {
-      this.scheduleNaming(wt, task, variant);
+      this.scheduleNaming(wt, task);
       return;
     }
     fireAndForget(wt.id, this.rename(wt.id, given), "branch for the given title");
@@ -956,27 +939,16 @@ export class WorktreeService {
     this.d.hub.emit("worktreesChanged");
   }
 
-  /** Async pretty-naming: solo worktrees rename directly; variant groups rename together
-   * (index 1 runs the Haiku call, then every sibling becomes <name>-v<index>). */
-  private scheduleNaming(wt: WorktreeInfo, prompt: string, variant?: Variant) {
+  /** async pretty-naming: the agent's quick model names the task, and the branch follows the title */
+  private scheduleNaming(wt: WorktreeInfo, prompt: string) {
     // nothing to name from: the slug stays rather than a name made up from an empty task
     if (!prompt.trim()) return;
-    if (variant && variant.index !== 1) return; // sibling 1 names the whole group
     if (this.naming.has(wt.id)) return;
     this.naming.add(wt.id);
     const asked = (this.d.namer ?? makeNamer(this.d.runtime))(prompt, wt);
-    const applied = variant
-      ? asked.then(async (name) => {
-          if (!name) return;
-          for (const sibling of [wt, ...siblingsOf(wt, this.d.state.worktrees)]) {
-            await this.rename(sibling.id, `${name} v${sibling.variant!.index}`).catch((e) => {
-              log.warn(sibling.id, "variant rename failed", e);
-            });
-          }
-        })
-      : asked.then((name) => {
-          if (name) return this.rename(wt.id, name);
-        });
+    const applied = asked.then((name) => {
+      if (name) return this.rename(wt.id, name);
+    });
     fireAndForget(
       wt.id,
       applied.finally(() => this.naming.delete(wt.id)),
@@ -1409,9 +1381,8 @@ export class WorktreeService {
     // its old directory when that is free, else a fresh slot's: the record keeps its id either way,
     // since its chat, session and archive ref are keyed by it
     const path = existsSync(old.path) ? join(dirname(old.path), freeSlot(dirname(old.path)).dir) : old.path;
-    const { variant: _variant, ...rest } = old;
     const wt: WorktreeInfo = {
-      ...rest,
+      ...old,
       repoId: repo.id,
       path,
       // the name it had; one taken since is found out under the lock, and the record follows
@@ -1588,18 +1559,6 @@ export class WorktreeService {
       wt.title = clean;
       delete wt.unnamed;
     });
-    this.d.state.save();
-    this.d.hub.emit("worktreesChanged");
-  }
-
-  /** Declare a variant the winner: remove its siblings, drop its variant badge. */
-  async pickVariant(worktreeId: string): Promise<void> {
-    const wt = this.d.state.worktree(worktreeId);
-    if (!wt?.variant) return;
-    for (const sibling of siblingsOf(wt, this.d.state.worktrees)) {
-      await this.archiveWorktree(sibling.id).catch((e) => log.warn(sibling.id, "could not archive variant sibling", e));
-    }
-    delete wt.variant;
     this.d.state.save();
     this.d.hub.emit("worktreesChanged");
   }
@@ -1965,8 +1924,8 @@ export class WorktreeService {
    * any, else merge the PR. Each step stops the rest when it fails, and the result says which: a
    * commit stands even when the rebase after it conflicts, since the work is safer committed. The
    * worktree stays, marked landed once the work is on main here, so the conversation can go on;
-   * closing it is its own press. Returns any variant siblings to offer up. */
-  async land(worktreeId: string, message?: string): Promise<{ result: ShipOutcome; archiveIds?: string[] }> {
+   * closing it is its own press. */
+  async land(worktreeId: string, message?: string): Promise<{ result: ShipOutcome }> {
     const { wt, repo } = this.landable(worktreeId, "land");
     // inside the op, so the press is the one out on the row from its first tick
     const out = await this.ship(wt.id, "land", async (): Promise<Landed> => {
@@ -1975,11 +1934,8 @@ export class WorktreeService {
       if (moved) return { result: moved };
       return this.landOp(wt, repo, message);
     });
-    if (out.result.ok && out.archiveIds) this.noteLanded(wt, out.result.message, out.archiveIds, out.mark);
-    return {
-      result: this.fixShip(wt, out.result, baseOf(repo)),
-      ...(out.archiveIds ? { archiveIds: out.archiveIds } : {}),
-    };
+    if (out.result.ok && out.landed) this.noteLanded(wt, out.result.message, out.mark);
+    return { result: this.fixShip(wt, out.result, baseOf(repo)) };
   }
 
   /** What a landing op's failure asks of the agent, after the op, whose hold on the queue is gone
@@ -2047,17 +2003,10 @@ export class WorktreeService {
   /** the word on a land that put the work on main, on the transcript the way a graft's marker is:
    * the row reads it back after a reload, where a frame to the sockets open at the time would not.
    * The siblings ride along for the row to offer, for as long as they are still rows. */
-  private noteLanded(wt: WorktreeInfo, message: string, archiveIds: string[], mark?: LandMark) {
-    this.d.runtime
-      .ensureAgent(wt)
-      .agent.note({ type: "landed", message, archiveIds, ...(mark ? { mark } : {}), ts: Date.now() });
+  private noteLanded(wt: WorktreeInfo, message: string, mark?: LandMark) {
+    this.d.runtime.ensureAgent(wt).agent.note({ type: "landed", message, ...(mark ? { mark } : {}), ts: Date.now() });
     // after the row's own word: a worktree that handed this work off hears of it from here
     this.d.hub.emit("landed", wt.id);
-  }
-
-  /** the variant siblings a land leaves behind: what the landed row offers to archive */
-  private siblingIds(wt: WorktreeInfo): string[] {
-    return siblingsOf(wt, this.d.state.worktrees).map((s) => s.id);
   }
 
   /** The record's branch is whatever the checkout is on. A hand switches branches in a worktree
@@ -2143,7 +2092,7 @@ export class WorktreeService {
       // press: it lands the merge, never a second PR of the same commit
       if (wt.pr?.state === "merged" && !prTaken(wt)) {
         const { mark, ...result } = await this.prMergedOp(wt.id, undefined, w);
-        return result.ok ? { result, archiveIds: this.siblingIds(wt), mark } : { result };
+        return result.ok ? { result, landed: true, mark } : { result };
       }
       // the branch is measured against origin's main, fetched now: main here is not pulled on
       // this route and can trail origin by days
@@ -2185,7 +2134,7 @@ export class WorktreeService {
         const { mark: noted, ...r } = await this.prMergedOp(wt.id, mark, w);
         const on = `origin's ${repo.defaultBranch} has this work already`;
         const result = { ...r, message: r.ok ? `${on}; ${r.message}` : `${on}, but ${r.message}` };
-        return r.ok ? { result, archiveIds: this.siblingIds(wt), mark: noted } : { result };
+        return r.ok ? { result, landed: true, mark: noted } : { result };
       }
       // the branch's earlier subjects go under the title only where GitHub will squash them away;
       // a PR merged by rebase or merge keeps its commits, and the message is the newest work's
@@ -2250,7 +2199,7 @@ export class WorktreeService {
     const did = committedHere ? "committed and merged" : "merged";
     return {
       result: { ...result, message: `${did} into ${repo.defaultBranch}` },
-      archiveIds: this.siblingIds(wt),
+      landed: true,
       mark: noted,
     };
   }
@@ -2333,7 +2282,7 @@ export class WorktreeService {
     const did = already
       ? `origin's ${repo.defaultBranch} has this work already`
       : `${committed ? `committed and ${how}` : how} ${repo.defaultBranch} and pushed`;
-    return { result: { ok: true, message: `${did}; ${here}` }, archiveIds: this.siblingIds(wt), mark: noted };
+    return { result: { ok: true, message: `${did}; ${here}` }, landed: true, mark: noted };
   }
 
   /** A landing onto the record, oldest first, with its tip kept under a ref: the branch restarts from
@@ -2444,7 +2393,7 @@ export class WorktreeService {
     const { mark, ...result } = await this.ship(worktreeId, "land", () => this.prMergedOp(worktreeId));
     if (result.ok) log.info(worktreeId, `landed: ${result.message}`);
     else log.warn(worktreeId, `landing failed: ${result.message}`);
-    if (result.ok && wt) this.noteLanded(wt, result.message, this.siblingIds(wt), mark);
+    if (result.ok && wt) this.noteLanded(wt, result.message, mark);
     return result;
   }
 

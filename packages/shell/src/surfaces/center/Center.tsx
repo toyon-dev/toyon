@@ -148,8 +148,8 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
   const bare = useBare();
   const termOpen = useStore((s) => s.layout.term) && !bare;
   // The terminal pane is keyed by worktree, so choosing another row remounts it. Its terminal takes
-  // the keyboard only when the pane is asked for (opened, or ⌘J and "open terminal" on one already
-  // open), never when a switch carries an open pane along: the caret stays where the switch left
+  // the keyboard only when the pane is asked for (opened, or ⌘J and "open a shell here" on one
+  // already open), never when a switch carries an open pane along: the caret stays where the switch left
   // it, in the composer after a draft's first send. Both are read against the last commit.
   const focusTerm = useStore((s) => s.focusTerm);
   const termShown = useRef(false);

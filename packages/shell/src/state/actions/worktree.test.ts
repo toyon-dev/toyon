@@ -74,19 +74,16 @@ describe("a worktree's actions", () => {
       here,
     );
     expect(labels(quiet)).toEqual([
-      "open terminal",
-      // no editor rows: a whole copy is reached from its terminal or its path, and the editor
-      // deep links stay on the file rows
-      "reveal in Finder",
-      "|",
-      "copy path",
       "copy branch name",
+      // no editor or terminal rows: a whole copy is reached by ⌘J on it or from its path, and
+      // the editor deep links stay on the file rows
+      "reveal in Finder",
+      "copy path",
       "|",
       "rename…",
       "mark as unread",
       "|",
       "land",
-      "|",
       "continue in another project…",
       "|",
       // nothing written, so the remove asks nothing and loses its ellipsis
@@ -103,11 +100,10 @@ describe("a worktree's actions", () => {
       "stop agent",
       "|",
       "view changes (2)",
-      "open terminal",
-      "reveal in Finder",
       "|",
-      "copy path",
       "copy branch name",
+      "reveal in Finder",
+      "copy path",
       "|",
       "rename…",
       "graft with…",
@@ -116,7 +112,6 @@ describe("a worktree's actions", () => {
       // dirty under a turn: the press waits for the turn, and the row says so
       "sync from main after the turn (3 behind)",
       "land",
-      "|",
       "continue in another project…",
       "|",
       "archive…",
@@ -146,10 +141,10 @@ describe("a worktree's actions", () => {
         hostname: "box.tail1234.ts.net",
       },
     );
-    expect(labels(away).slice(0, 4)).toEqual(["open terminal", "|", "copy path", "copy branch name"]);
+    expect(labels(away).slice(0, 3)).toEqual(["copy branch name", "copy path", "|"]);
   });
 
-  test("on the phone the terminal and the paths go, and view changes opens the changes tab", () => {
+  test("on the phone the paths go, and view changes opens the changes tab", () => {
     const sent: unknown[] = [];
     const phone = { layout: { ...defaultLayout, changes: true }, shipping: {}, frame: "phone" as const, repos: [] };
     const away = { hostname: "box.tail1234.ts.net" };
@@ -169,7 +164,6 @@ describe("a worktree's actions", () => {
       "mark as unread",
       "|",
       "land",
-      "|",
       "continue in another project…",
       "|",
       "archive…",
@@ -192,12 +186,18 @@ describe("a worktree's actions", () => {
   test("the palette hands the chat over as a file path and a session id, but not from main, which has no chat", () => {
     const s = { layout: { ...defaultLayout, changes: true }, shipping: {}, frame: "desk" as const, repos: [] };
     const palette = { ...here, palette: true };
-    const copies = (items: MenuEntry[]) => labels(items).slice(3, 7);
+    const copies = (items: MenuEntry[]) => labels(items).slice(0, 5);
     const chat = worktreeItems(owned({ transcript: "/t/w1.jsonl", sessionId: "s-1" }), null, s, deps, palette);
-    expect(copies(chat)).toEqual(["copy path", "copy branch name", "copy transcript path", "copy session id"]);
+    expect(copies(chat)).toEqual([
+      "copy branch name",
+      "reveal in Finder",
+      "copy path",
+      "copy transcript path",
+      "copy session id",
+    ]);
     // a session not opened yet has no id to copy
     const cold = worktreeItems(owned({ transcript: "/t/w1.jsonl" }), null, s, deps, palette);
-    expect(copies(cold)).toEqual(["copy path", "copy branch name", "copy transcript path", "|"]);
+    expect(copies(cold)).toEqual(["copy branch name", "reveal in Finder", "copy path", "copy transcript path", "|"]);
     const main = owned({ transcript: "/t/m.jsonl", sessionId: "s-2", worktree: { ...info, kind: "main" } });
     expect(labels(worktreeItems(main, null, s, deps, palette))).not.toContain("copy transcript path");
   });
@@ -205,7 +205,7 @@ describe("a worktree's actions", () => {
   test("the rail's menu copies the path and the branch alone: the hand-over rows are the palette's", () => {
     const s = { layout: { ...defaultLayout, changes: true }, shipping: {}, frame: "desk" as const, repos: [] };
     const rail = worktreeItems(owned({ transcript: "/t/w1.jsonl", sessionId: "s-1" }), null, s, deps, here);
-    expect(labels(rail).slice(3, 6)).toEqual(["copy path", "copy branch name", "|"]);
+    expect(labels(rail).slice(0, 4)).toEqual(["copy branch name", "reveal in Finder", "copy path", "|"]);
     expect(labels(rail)).not.toContain("copy session id");
   });
 
@@ -270,6 +270,8 @@ describe("a worktree's actions", () => {
     );
     const run = items.filter(isItem).filter((i) => i.id.startsWith("profile:"));
     expect(run.map((i) => `${i.label}${i.checked ? " *" : ""}`)).toEqual(["run with fe *", "run with full"]);
+    // picked once and read after, so the pair sits last but one, above the remove alone
+    expect(labels(items).slice(-5)).toEqual(["|", "run with fe", "run with full", "|", "archive"]);
   });
 
   test("the handoff is off with its reason under one project, live with two, and absent on the lead", () => {

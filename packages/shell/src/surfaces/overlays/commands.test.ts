@@ -61,10 +61,10 @@ describe("buildCommands", () => {
   } as unknown as CommandState;
 
   // the rows are keyed by id, so an id twice leaves a stale row behind when the list changes
-  test("gives every command its own id, though the app and a worktree both have a terminal", () => {
+  test("gives every command its own id, the worktree's scoped under it", () => {
     const ids = buildCommands(state, () => {}, null, wt, repo).map((c) => c.id);
     expect(ids).toContain("terminal");
-    expect(ids).toContain("wt:terminal");
+    expect(ids).toContain("wt:copy-branch");
     expect(ids.filter((id, i) => ids.indexOf(id) !== i)).toEqual([]);
   });
   test("a project with nothing to run offers none of a page's verbs, and no chat panel to toggle", () => {

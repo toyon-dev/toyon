@@ -125,15 +125,16 @@ export function worktreeItems(
 ): MenuEntry[] {
   const id = w.worktree.id;
   const acts = worktreeActions(sock, dispatch);
-  // eight groups: stop, go to it, copy from it, run it, change it, land it, hand it on; then
-  // remove on its own
+  // seven groups, in the order they are reached for: stop, go to it, what it is (its branch and
+  // its directory), change it, ship it (sync, land, hand on), run it, and remove on its own. The
+  // profile rows sit last but one, since a profile is picked once and read after; no terminal row,
+  // since on the row you are on it is ⌘J and on any other it is a click and ⌘J
   const stop: MenuItem[] = [];
   const go: MenuItem[] = [];
-  const copy: MenuItem[] = [];
-  const run: MenuItem[] = [];
+  const about: MenuItem[] = [];
   const change: MenuItem[] = [];
-  const land: MenuItem[] = [];
-  const handoff: MenuItem[] = [];
+  const ship: MenuItem[] = [];
+  const run: MenuItem[] = [];
   const gone: MenuItem[] = [];
   // stop stays offered while an ask is open: that is the way out of a question you do not want
   // to answer
@@ -154,30 +155,20 @@ export function worktreeItems(
       },
     });
   }
-  if (!phone) {
-    go.push({
-      id: "terminal",
-      label: "open terminal",
-      // asked for, so the terminal takes the keyboard even when the pane was already open elsewhere
-      onClick: () => {
-        dispatch({ a: "activate", id });
-        dispatch({ a: "focus-terminal" });
-      },
-    });
-  }
-  go.push(...revealItems(() => sock?.send({ t: "reveal", worktreeId: id }), ui.hostname));
-  if (!phone) copy.push({ id: "copy-path", label: "copy path", onClick: () => copyText(w.path) });
-  copy.push({ id: "copy-branch", label: "copy branch name", onClick: () => copyText(w.worktree.branch) });
+  // the branch first, the name it goes by everywhere else; then the directory, opened and copied
+  about.push({ id: "copy-branch", label: "copy branch name", onClick: () => copyText(w.worktree.branch) });
+  about.push(...revealItems(() => sock?.send({ t: "reveal", worktreeId: id }), ui.hostname));
+  if (!phone) about.push({ id: "copy-path", label: "copy path", onClick: () => copyText(w.path) });
   // what a second agent is pointed at: the chat as a file it can read, and the id the agent's
   // own CLI resumes. A path rather than a link, since a link would carry the token. The lead has
   // no chat, so nothing to hand over there.
   const { transcript, sessionId } = w;
   const plumbing = !phone && !!ui.palette;
   if (plumbing && transcript && !isLead(w.worktree)) {
-    copy.push({ id: "copy-transcript", label: "copy transcript path", onClick: () => copyText(transcript) });
+    about.push({ id: "copy-transcript", label: "copy transcript path", onClick: () => copyText(transcript) });
   }
   if (plumbing && sessionId) {
-    copy.push({ id: "copy-session", label: "copy session id", onClick: () => copyText(sessionId) });
+    about.push({ id: "copy-session", label: "copy session id", onClick: () => copyText(sessionId) });
   }
   // main runs procs too, and is where switching is wanted most; flat items, the menu has no
   // submenus. The one running now is on the list with its check, so the list also answers which.
@@ -230,14 +221,14 @@ export function worktreeItems(
   // the count on the row is read, not pressed, so the sync is offered here. Pressed mid-turn on
   // a dirty tree it waits for the turn to end, and until then the row offers to take it back.
   if (w.syncQueued) {
-    land.push({
+    ship.push({
       id: "sync",
       label: "call off the sync from main",
       onClick: () => sock?.send({ t: "unqueue-sync", worktreeId: id }),
     });
   } else if (canSync(w) && (w.behind ?? 0) > 0) {
     const afterTurn = isBusy(w.agent) && (w.dirty ?? 0) > 0;
-    land.push({
+    ship.push({
       id: "sync",
       label: `sync from main${afterTurn ? " after the turn" : ""} (${w.behind} behind)`,
       disabled: busy,
@@ -248,7 +239,7 @@ export function worktreeItems(
   if (canLand(w.worktree) && !(w.worktree.landed && w.dirty === 0)) {
     // the repo's route, whatever the settings say it is: there is one way work lands here. The
     // word is land, except for creating the PR, which is the one press that lands nothing yet.
-    land.push({
+    ship.push({
       id: "land",
       label: landWord(landPolicy(repo?.config ?? {}), w.worktree),
       detail: landDetail(repo),
@@ -257,10 +248,11 @@ export function worktreeItems(
     });
   }
   // continue the work in another open project: a worktree of that project, started from this
-  // one's chat. Only a task has work to hand on; the lead has no chat to propose it from. With
-  // one project open the row stays, off, so the verb is learnt before it is needed.
+  // one's chat, so it sits with land as the other place the work goes next. Only a task has work
+  // to hand on; the lead has no chat to propose it from. With one project open the row stays,
+  // off, so the verb is learnt before it is needed.
   if (w.worktree.kind === "worktree") {
-    handoff.push({
+    ship.push({
       id: "handoff",
       label: "continue in another project…",
       sub: true,
@@ -278,7 +270,7 @@ export function worktreeItems(
       onClick: () => acts.archive(w),
     });
   }
-  return grouped([stop, go, copy, run, change, land, handoff, gone]);
+  return grouped([stop, go, about, change, ship, run, gone]);
 }
 
 /** A discovered worktree is a directory toyon does not own, so this stays short on purpose.

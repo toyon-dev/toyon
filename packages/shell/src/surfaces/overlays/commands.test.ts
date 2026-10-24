@@ -39,6 +39,7 @@ describe("buildCommands", () => {
     picking: null,
     layout: { ...defaultLayout, changes: true },
     chatSide: "left",
+    blackGround: false,
     railOpen: true,
     themePrefs: { mode: "system", dark: "t", light: "t" },
     themes: [{ id: "t", name: "Night", kind: "dark" } as Theme],

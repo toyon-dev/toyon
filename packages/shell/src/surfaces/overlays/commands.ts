@@ -141,6 +141,7 @@ export type CommandState = Pick<
   | "picking"
   | "layout"
   | "chatSide"
+  | "blackGround"
   | "keepAwake"
   | "railOpen"
   | "themePrefs"
@@ -177,6 +178,7 @@ export function useCommands(): Command[] {
   const picking = useStore((s) => s.picking);
   const layout = useStore((s) => s.layout);
   const chatSide = useStore((s) => s.chatSide);
+  const blackGround = useStore((s) => s.blackGround);
   const keepAwake = useStore((s) => s.keepAwake);
   const railOpen = useStore((s) => s.railOpen);
   const themePrefs = useStore((s) => s.themePrefs);
@@ -204,6 +206,7 @@ export function useCommands(): Command[] {
       picking,
       layout,
       chatSide,
+      blackGround,
       keepAwake,
       railOpen,
       themePrefs,
@@ -244,6 +247,7 @@ export function useCommands(): Command[] {
     picking,
     layout,
     chatSide,
+    blackGround,
     keepAwake,
     railOpen,
     themePrefs,

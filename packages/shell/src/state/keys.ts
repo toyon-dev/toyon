@@ -43,6 +43,8 @@ export const STORAGE = {
   chatSide: "toyon-chat-side",
   /** "1" while the composer offers what is on the clipboard */
   clipboardOffer: "toyon-clipboard-offer",
+  /** "1" while the phone frame stands its dark theme on black, for an OLED panel */
+  blackGround: "toyon-black",
   /** "1" once the composer's one-time offer to install Toyon as an app was pressed or turned down */
   installOffered: "toyon-install-offered",
   /** every project's layout, keyed by repo id: {"<repo>":{changes,changesTab,chat,term,design}} */
@@ -85,6 +87,7 @@ export const WINDOW_KEYS: readonly Key[] = [
   STORAGE.railWidth,
   STORAGE.chatSide,
   STORAGE.clipboardOffer,
+  STORAGE.blackGround,
   STORAGE.installOffered,
   STORAGE.layouts,
   STORAGE.token,

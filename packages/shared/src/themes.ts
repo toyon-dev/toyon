@@ -893,6 +893,29 @@ export function sunkenFloorOf(theme: Theme): string {
   return stepL(theme.colors.surface0, -4);
 }
 
+/** the grounds a theme stands on, from the floor up to a control at rest and the lines between
+ * them: what moves together when a phone asks for black */
+const GROUND_KEYS: ThemeColorKey[] = ["surface0", "surface1", "surface2", "element0", "element1", "border0", "border1"];
+
+/**
+ * A dark theme stood on black: its grounds lowered together until the darkest of them is #000000,
+ * each keeping its L* distance above it, so a panel still parts from the floor by as much as it did.
+ * For a phone with an OLED panel, where black turns the pixels off and is the deepest ground the
+ * screen has, and where a session is a glance rather than hours, so the bloom light text takes on
+ * a near-black ground (see toyonDark) is not paid for long. Nothing else moves: text, accents,
+ * syntax and the diff tints are the theme's own, and so is its id, since it is still the theme
+ * that was chosen. A light theme has no black to go to and comes back as it is; a theme already on
+ * black comes back as it is too, so painting it twice is painting it once.
+ */
+export function blackGroundOf(theme: Theme): Theme {
+  if (theme.kind !== "dark") return theme;
+  const floor = Math.min(...GROUND_KEYS.map((k) => toLstar(theme.colors[k])));
+  if (floor <= 0) return theme;
+  const colors = { ...theme.colors };
+  for (const k of GROUND_KEYS) colors[k] = stepL(colors[k], -floor);
+  return { ...theme, colors };
+}
+
 /** The characters an edit touched, inside a line whose band already says it changed. Both surfaces
  * that show a diff paint this over the line tint, so it is a fraction of that tint rather than a
  * colour of its own: at full strength the two composite to nearly twice the wash and a block of

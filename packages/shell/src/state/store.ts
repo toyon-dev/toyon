@@ -748,6 +748,10 @@ export interface State {
   /** the worktree panel is kept open, instead of peeking on hover and collapsing to the strip */
   railOpen: boolean;
   chatSide: ChatSide;
+  /** the phone frame stands its dark theme on black (App.tsx paints it through `blackGroundOf`).
+   * Per browser, like the chat side: an OLED panel is a fact about the device in hand, and the
+   * theme itself is shared with every window the daemon serves */
+  blackGround: boolean;
   /** bumped to put the keyboard on the rail's current row */
   focusRail: number;
   /** the collapsed rail is peeked open by the worktree walk (⌥↑/↓, ⌃Tab), the way an alt-tab
@@ -910,6 +914,8 @@ export interface InitialOpts {
   storedRailOpen?: boolean;
   /** the side the chat dock was left on */
   storedChatSide?: ChatSide;
+  /** the phone frame was left standing on black */
+  storedBlackGround?: boolean;
   /** every project's remembered panel layout; the stored project's is painted before hello */
   storedLayouts?: Record<string, Layout>;
   /** the worktree each project was left on, so switching projects after a reload lands where you
@@ -978,6 +984,7 @@ export function initialState(opts: InitialOpts): State {
     walked: 0,
     railOpen: opts.storedRailOpen ?? false,
     chatSide: opts.storedChatSide ?? "left",
+    blackGround: opts.storedBlackGround ?? false,
     focusRail: 0,
     railPeek: false,
     unreadHold: null,
@@ -1553,6 +1560,8 @@ export type Action =
   | { a: "toggle-rail" }
   /** the chat dock, and the rail with it, to the other side of the window */
   | { a: "toggle-chat-side" }
+  /** the phone frame's dark theme on black, or back on its own ground */
+  | { a: "toggle-black-ground" }
   /** the version chip asked the registry, and waits on its answer */
   | { a: "update-check" }
   | { a: "update-check-settle"; check: UpdateCheck }
@@ -2285,6 +2294,8 @@ function reduce(s: State, action: Action): State {
       return { ...s, railOpen: !s.railOpen };
     case "toggle-chat-side":
       return { ...s, chatSide: s.chatSide === "left" ? "right" : "left" };
+    case "toggle-black-ground":
+      return { ...s, blackGround: !s.blackGround };
     case "update-check":
       return { ...s, updateCheck: "asking" };
     case "update-check-settle":

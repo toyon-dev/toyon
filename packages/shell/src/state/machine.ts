@@ -368,6 +368,7 @@ export function createMachine(init: MachineInit, env: MachineEnv): Machine {
       // how the window is laid out is the window's, whichever machine it shows
       storedRailOpen: read(STORAGE.rail) === "1",
       storedChatSide: read(STORAGE.chatSide) === "right" ? "right" : "left",
+      storedBlackGround: read(STORAGE.blackGround) === "1",
       storedLayouts: storedLayouts(read(STORAGE.layouts)),
       storedLastActive: storedLastActive(storage.get(STORAGE.lastActive)),
       storedDiscoveredOpen: storedSectionOpen(storage.get(STORAGE.discoveredOpen)),

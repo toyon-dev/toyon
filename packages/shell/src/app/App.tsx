@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef } from "react";
+import { blackGroundOf } from "@toyon/shared";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useDispatch, useMachine, useSock, useStore, useStoreInstance } from "../state/context.tsx";
 import { STORAGE } from "../state/keys.ts";
 import { useActive, useActiveId, useActiveRow, useArchivedPage, useRows, useTheme } from "../state/selectors.ts";
@@ -197,12 +198,23 @@ export function App() {
       sessionStorage.setItem(STORAGE.ground, ground);
     } catch {}
   }, [ground]);
-  // paint the selected theme (or the picker's live preview); previews get the accent for their overlays
+  // what this window paints: the selected theme (or the picker's live preview), stood on black on a
+  // phone that asked for it. The switch is this browser's, so the desk never sees it, and the
+  // theme itself, shared with every window the daemon serves, is left as chosen
+  const phone = useStore((s) => s.frame === "phone");
+  const black = useStore((s) => s.blackGround);
+  const painted = useMemo(() => (phone && black ? blackGroundOf(theme) : theme), [phone, black, theme]);
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE.blackGround, black ? "1" : "0");
+    } catch {}
+  }, [black]);
+  // previews get the accent for their overlays
   useEffect(() => {
     // a picker preview paints but is not remembered: a crash mid-browse must not adopt it
-    applyTheme(theme, { remember: !previewing, ground });
-    previewBus.broadcast(bridgeThemeMsg(theme));
-  }, [theme, previewing, ground]);
+    applyTheme(painted, { remember: !previewing, ground });
+    previewBus.broadcast(bridgeThemeMsg(painted));
+  }, [painted, previewing, ground]);
 
   // Where the sun is has no media query behind it: the zone table lives in the daemon, so the shell
   // asks. It asks for every mode, not only the one that follows daylight, because the picker's row

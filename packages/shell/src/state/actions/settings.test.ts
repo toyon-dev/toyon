@@ -16,6 +16,8 @@ describe("the settings menu", () => {
         agents: [{ id: "claude", name: "Claude" } as AgentInfo],
         defaultAgent: "claude",
         chatSide: "left",
+        blackGround: false,
+        frame: "desk",
         keepAwake: null,
       },
       { sock: null, dispatch: () => {} },
@@ -56,6 +58,8 @@ describe("the settings menu", () => {
           agents: [],
           defaultAgent: "claude",
           chatSide: "left",
+          blackGround: false,
+          frame: "desk",
           keepAwake,
         },
         { sock: null, dispatch: () => {} },
@@ -66,5 +70,34 @@ describe("the settings menu", () => {
     expect(row("use")?.detail).toBe("while in use");
     expect(row("always")?.detail).toBe("always");
     expect(row("off")?.detail).toBe("off");
+  });
+
+  test("the black background line is the phone's alone, beside the chat side, and flips on press", () => {
+    const dispatched: unknown[] = [];
+    const items = (frame: "desk" | "phone", blackGround: boolean) =>
+      settingsItems(
+        {
+          themePrefs: { mode: "system", dark: "t-dark", light: "t-light" },
+          themes: [],
+          systemDark: true,
+          daylight: null,
+          agents: [],
+          defaultAgent: "claude",
+          chatSide: "left",
+          blackGround,
+          frame,
+          keepAwake: null,
+        },
+        { sock: null, dispatch: (a) => dispatched.push(a) },
+      ).filter(isItem);
+    expect(items("desk", true).find((i) => i.id === "black-ground")).toBeUndefined();
+    const on = items("phone", true);
+    const row = on.find((i) => i.id === "black-ground");
+    expect(row?.label).toBe("black background");
+    expect(row?.detail).toBe("on");
+    expect(on.map((i) => i.id).indexOf("black-ground")).toBe(on.map((i) => i.id).indexOf("chat-side") + 1);
+    expect(items("phone", false).find((i) => i.id === "black-ground")?.detail).toBe("off");
+    row?.onClick();
+    expect(dispatched).toEqual([{ a: "toggle-black-ground" }]);
   });
 });

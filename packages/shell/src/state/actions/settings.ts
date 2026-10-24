@@ -31,7 +31,16 @@ export function pickThemeFile(onText: (name: string, source: string) => void) {
 
 export type SettingsState = Pick<
   State,
-  "themePrefs" | "themes" | "systemDark" | "daylight" | "agents" | "defaultAgent" | "chatSide" | "keepAwake"
+  | "themePrefs"
+  | "themes"
+  | "systemDark"
+  | "daylight"
+  | "agents"
+  | "defaultAgent"
+  | "chatSide"
+  | "blackGround"
+  | "frame"
+  | "keepAwake"
 >;
 
 /** What the settings card holds, as a list: the gear's right-click and the palette's settings
@@ -76,6 +85,19 @@ export function settingsItems(s: SettingsState, { sock, dispatch }: Deps): MenuE
         detail: s.chatSide,
         onClick: () => dispatch({ a: "toggle-chat-side" }),
       },
+      // the phone's alone: an OLED panel is the device in hand, and the desk's ground is ruled by
+      // hours of reading, where black makes light text bloom
+      ...(s.frame === "phone"
+        ? [
+            {
+              id: "black-ground",
+              topic: "theme",
+              label: "black background",
+              detail: s.blackGround ? "on" : "off",
+              onClick: () => dispatch({ a: "toggle-black-ground" }),
+            },
+          ]
+        : []),
       // only where the browser keeps a grant for reading the clipboard; the first press that
       // turns it on is where the browser asks
       ...(clipboard.access === "none"

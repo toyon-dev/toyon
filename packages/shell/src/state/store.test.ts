@@ -2561,6 +2561,20 @@ describe("chat side", () => {
   });
 });
 
+describe("black ground", () => {
+  test("off until this browser asks, kept across a reload, and hello leaves it alone", () => {
+    expect(initial.blackGround).toBe(false);
+    const from = initialState({ clientId: ME, storedBlackGround: true });
+    expect(from.blackGround).toBe(true);
+    expect(run([hello(wt("m1", "main"))], from).blackGround).toBe(true);
+  });
+  test("the toggle flips it and flips it back", () => {
+    const once = reducer(initial, { a: "toggle-black-ground" });
+    expect(once.blackGround).toBe(true);
+    expect(reducer(once, { a: "toggle-black-ground" }).blackGround).toBe(false);
+  });
+});
+
 describe("panel layout", () => {
   const two = () =>
     helloIn([repo("r1"), repo("r2")], wt("m1", "main", undefined, "r1"), wt("m2", "main", undefined, "r2"));

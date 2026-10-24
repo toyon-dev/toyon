@@ -1403,9 +1403,9 @@
     /* the count ticks with the status; `font` on the hint resets the variant */
     font-variant-numeric: tabular-nums;
   }
-  /* the birth-time choices on one line: batch, then the three numbers with their word, then what
-   runs it at the right end. The chips' padding hangs into the gutters at both ends, so batch starts
-   where the text in the box does and the profile ends where the knobs row's icons do. The batch
+  /* the birth-time choices on one line: the three numbers with their word, then what runs it at
+   the right end. The chips' padding hangs into the gutters at both ends, so the first number starts
+   where the text in the box does and the profile ends where the knobs row's icons do. The number's
    pull is named on the button, where --btn-pad-x is set; the profile's is on its wrapper, for the
    reason .spawn-left gives: the panel is placed against the wrapper, and a button hanging out of it
    lands the panel's lead 8px off the chip. */
@@ -1414,7 +1414,7 @@
     align-items: center;
     gap: 10px;
     flex-wrap: wrap;
-    & > .btn:first-child {
+    & > .draft-variants > .btn:first-child {
       margin-left: calc(-1 * var(--btn-pad-x));
     }
   }

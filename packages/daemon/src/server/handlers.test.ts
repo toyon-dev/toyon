@@ -181,7 +181,6 @@ function make() {
     },
   };
   const mcp = { fetch: async () => new Response("not here", { status: 404 }) };
-  const planned: string[][] = [];
   const chosen: Array<string | null> = [];
   const restarts: number[] = [];
   const restarter = new Restarter({
@@ -210,7 +209,6 @@ function make() {
     setInterval: () => {},
     setTimeout: () => {},
   });
-  const planArgs: Array<[prompt: string, cwd: string, agent: string]> = [];
   // no clock and no intervals: what a view starts is the question here, never what sleeps
   const idle = new IdlePolicy({
     runtime,
@@ -255,10 +253,6 @@ function make() {
     afterLand,
     restarter,
     update,
-    planTasks: async (prompt, cwd, agent) => {
-      planArgs.push([prompt, cwd, agent]);
-      return planned.shift() ?? null;
-    },
     folderDialog: { choose: async () => chosen.shift() ?? null, cancel: () => {} },
   };
   const replies: ServerMsg[] = [];
@@ -296,9 +290,7 @@ function make() {
     subs,
     terms,
     views,
-    planned,
     chosen,
-    planArgs,
     restarts,
     landingCalls,
     handoffCalls,
@@ -1545,29 +1537,6 @@ describe("handlers", () => {
     for (let i = 0; i < 20 && !services.readiness.describe()[0]?.checkFailed; i++) await Bun.sleep(5);
     expect(services.readiness.describe()[0]?.checkFailed).toBe("fakeReadiness: no adapter to connect to");
     await dispatch({ t: "agent-check", agent: "nope" }, ctx, services);
-  });
-
-  test("batch-worktrees plans with the injected planner and creates one worktree per task", async () => {
-    const { services, ctx, replies, planned, planArgs, repo } = make();
-    const r = await services.repos.register(repo);
-    r.needsSetup = false;
-    planned.push(["first task", "second task"]);
-    await dispatch(
-      { t: "batch-worktrees", repoId: r.id, prompt: "do two things", agent: "codex", model: "gpt-b" },
-      ctx,
-      services,
-    );
-    for (let i = 0; i < 100 && services.state.worktrees.filter((x) => x.kind === "worktree").length < 2; i++) {
-      await Bun.sleep(10);
-    }
-    const made = services.state.worktrees.filter((x) => x.kind === "worktree");
-    expect(made.map((x) => x.agent)).toEqual(["codex", "codex"]);
-    // the model the picker chose rides with every planned worktree, as it does on create-worktree
-    expect(made.map((x) => x.model)).toEqual(["gpt-b", "gpt-b"]);
-    // the rows appearing are the word on a batch that started; only a task that could not is said
-    expect(replies.some((m) => m.t === "shipped")).toBe(false);
-    // the request is split by the agent that will run the tasks, not by the default one
-    expect(planArgs.map((a) => a[2])).toEqual(["codex"]);
   });
 
   test("read-file and write-file refuse paths outside the worktree, and still answer", async () => {

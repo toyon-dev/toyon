@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { WorktreeInfo } from "@toyon/shared";
 import { FakeAgent } from "../../test/helpers/fakes.ts";
 import type { AgentSpec } from "./registry.ts";
-import { makeLander, parseName, parsePlan, taskText } from "./tasks.ts";
+import { makeLander, parseName, taskText } from "./tasks.ts";
 
 describe("taskText", () => {
   test("the text when there is any, else what the attachments carry", () => {
@@ -47,18 +47,6 @@ describe("parseName", () => {
     expect(parseName("")).toBeNull();
     expect(parseName(null)).toBeNull();
     expect(parseName("ab")).toBeNull();
-  });
-});
-
-describe("parsePlan", () => {
-  test("reads the array out of prose and caps it at five", () => {
-    expect(parsePlan('Here you go:\n["a", "b", 3, "", "c", "d", "e", "f"]')).toEqual(["a", "b", "c", "d", "e"]);
-  });
-  test("no array, bad JSON, or nothing usable → null", () => {
-    expect(parsePlan("one task")).toBeNull();
-    expect(parsePlan("[oops")).toBeNull();
-    expect(parsePlan("[1, 2]")).toBeNull();
-    expect(parsePlan(null)).toBeNull();
   });
 });
 

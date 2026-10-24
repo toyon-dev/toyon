@@ -331,8 +331,6 @@ export interface WorktreeLocal {
 export interface Draft {
   /** the same prompt in N parallel worktrees, keep the best */
   variants: 1 | 2 | 3;
-  /** an agent splits the prompt into a worktree per task instead */
-  batch: boolean;
   /** the agent that works on it: the daemon's default when main is selected */
   agent: string;
   /** one of the repo's profiles; the repo's default when absent */
@@ -343,7 +341,7 @@ export interface Draft {
 
 /** the draft moves its base's changes: asked for, and making one worktree, since one set of changes
  * cannot move into three */
-export const canCarry = (d: Draft | null | undefined): boolean => !!d?.carry && !d.batch && d.variants === 1;
+export const canCarry = (d: Draft | null | undefined): boolean => !!d?.carry && d.variants === 1;
 
 /** the composer box the words are written in: the active row's own, the lead's included, since the
  * send makes that row the worktree and the words typed on it go with it */
@@ -1436,7 +1434,6 @@ export type Action =
   /** main's uncommitted changes go into the worktree the box starts */
   | { a: "draft-carry"; v: boolean }
   | { a: "draft-variants"; n: Draft["variants"] }
-  | { a: "draft-batch"; v: boolean }
   | { a: "draft-agent"; id: string }
   | { a: "draft-profile"; profile: string }
   /** show an archived worktree's page in the centre: what was kept, and the restore button */
@@ -1701,7 +1698,7 @@ function noteError(s: State, id: string, text: string): State {
   return noteChat(revealChat(s), id, { kind: "error", text });
 }
 
-/** a failure with no worktree to answer on (a batch, a project, a found row's sync) goes under the
+/** a failure with no worktree to answer on (a project, a found row's sync) goes under the
  * composer on screen, the box the person is at */
 function noticeOnScreen(s: State, text: string): State {
   const box = composerBoxOf(worktreeById(s, s.activeId));
@@ -1744,7 +1741,7 @@ function guessed(action: Action): boolean {
 
 /** a draft with nothing chosen yet: one worktree, the daemon's default agent */
 function freshDraft(s: State): Draft {
-  return { variants: 1, batch: false, agent: s.defaultAgent };
+  return { variants: 1, agent: s.defaultAgent };
 }
 
 /** The lead row's box always starts a worktree: the provisional row is not a task until something
@@ -1871,8 +1868,6 @@ function reduce(s: State, action: Action): State {
       return s.draft ? { ...s, draft: { ...s.draft, carry: action.v } } : s;
     case "draft-variants":
       return s.draft ? { ...s, draft: { ...s.draft, variants: action.n } } : s;
-    case "draft-batch":
-      return s.draft ? { ...s, draft: { ...s.draft, batch: action.v } } : s;
     case "draft-agent":
       return s.draft ? { ...s, draft: { ...s.draft, agent: action.id } } : s;
     case "draft-profile":
@@ -3023,7 +3018,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
         openUrl: msg.ok && msg.url ? msg.url : s.openUrl,
       };
       // What happened is read where the work is: a failure as a line on the worktree's chat, or
-      // under the composer for an op with no worktree (a batch). A land that merged is on the
+      // under the composer for an op with no worktree (a project's). A land that merged is on the
       // transcript as the daemon's own event, so it reads back after a reload; a success with
       // nothing to offer says nothing here, since the panel and the row show it. So does a failure
       // the agent was sent to fix: the transcript has that as Toyon's own row.

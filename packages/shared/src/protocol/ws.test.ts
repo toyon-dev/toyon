@@ -77,7 +77,6 @@ describe("parseClientMsg", () => {
       { t: "unqueue", worktreeId: "a", index: 0, edit: true },
       { t: "redraft", worktreeId: "a", seq: 12 },
       { t: "create-worktree", repoId: "r", prompt: "x", agent: "codex" },
-      { t: "batch-worktrees", repoId: "r", prompt: "x", agent: "claude" },
       { t: "set-default-agent", agent: "codex" },
       { t: "install-agent", agent: "codex" },
       { t: "agent-auth", worktreeId: "a", methodId: "api-key", apiKey: "sk-x" },

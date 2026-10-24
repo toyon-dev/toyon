@@ -1,5 +1,5 @@
 // A one-question session on an ACP connection: a system prompt of its own, no chat behind it, the
-// reply text and nothing else. Naming a worktree and planning a batch ride on this, on the
+// reply text and nothing else. Naming a worktree and the landing questions ride on this, on the
 // worktree's already-running adapter or on a throwaway one.
 
 import * as acp from "@agentclientprotocol/sdk";

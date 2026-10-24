@@ -33,7 +33,7 @@ import type { RepoRegistry } from "../repos/registry.ts";
 import type { RouteService } from "../routes/service.ts";
 import type { RunService } from "../runs/service.ts";
 import type { IdlePolicy } from "../runtime/idle.ts";
-import { DEFAULT_AGENT_ID, type RuntimeRegistry } from "../runtime/registry.ts";
+import type { RuntimeRegistry } from "../runtime/registry.ts";
 import { daylightNow } from "../themes/daylight.ts";
 import type { ThemeStore } from "../themes/store.ts";
 import type { UpdateService } from "../update/service.ts";
@@ -107,8 +107,6 @@ export interface Services {
   restarter: Restarter;
   /** whether the Toyon installed is the one running */
   update: UpdateService;
-  /** request → 1–5 independent tasks, asked of the agent that will run them (tests inject a stub) */
-  planTasks: (prompt: string, cwd: string, agentId: string) => Promise<string[] | null>;
   /** the OS folder dialog behind the new-project form's folder button (tests inject a stub) */
   folderDialog: FolderDialog;
 }
@@ -353,34 +351,6 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
 
   "set-worktree-effort"(msg, _ctx, s) {
     s.worktrees.setEffort(msg.worktreeId, msg.effort);
-  },
-
-  "batch-worktrees"(msg, ctx, s) {
-    const repo = s.state.requireRepo(msg.repoId);
-    // a batch is many messages of its own making, and none of them is the box's to have back
-    if (msg.boxId) s.drafts.take(msg.boxId);
-    // plan + spawn in the background so the socket stays responsive: the rows appearing are the
-    // word on it, and a task that could not start is the one thing worth a line. That reply may
-    // land on a socket that has since closed; reply() tolerates that.
-    fireAndForget(
-      msg.repoId,
-      (async () => {
-        const agent = msg.agent ?? s.state.defaultAgent ?? DEFAULT_AGENT_ID;
-        const tasks = (await s.planTasks(msg.prompt, repo.path, agent)) ?? [msg.prompt];
-        let failed = 0;
-        for (const task of tasks) {
-          try {
-            await s.worktrees.create(msg.repoId, task, { agent: msg.agent, model: msg.model, effort: msg.effort });
-          } catch (e) {
-            failed++;
-            log.warn(msg.repoId, `batch: could not start "${task.slice(0, 60)}"`, e);
-          }
-        }
-        const started = tasks.length - failed;
-        if (failed) ctx.reply(shipped("", false, `batch: ${started} started, ${failed} failed (see daemon log)`));
-      })(),
-      "batch",
-    );
   },
 
   async "archive-worktree"(msg, _ctx, s) {

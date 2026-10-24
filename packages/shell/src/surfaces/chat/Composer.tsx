@@ -199,7 +199,7 @@ function insertionFor(r: Row): string {
  *
  * Three ways to send from here. A message to the worktree's own agent. The lead row's message,
  * where `draft` is set, which starts a worktree: the row itself becomes it when it is the spare,
- * or one is made from main when main is the lead. The intro's variants and batch apply, main's
+ * or one is made from main when main is the lead. The intro's variants apply, main's
  * uncommitted files move with it when the intro's note says so, and the draft gives way as the row
  * becomes the task. And a message into an `archived` worktree's chat, which restores it and then
  * goes to its agent: the box is that worktree's under the id it comes back with, and nothing here
@@ -1117,12 +1117,6 @@ export function Composer({
       setText("");
       return;
     }
-    // a batch splits the prompt into tasks and takes no attachments: refused rather than sent without
-    // them, since the draft closing would carry them out of sight
-    if (draft?.batch && attachments.length) {
-      refuse("a batch takes no attachments; remove them or turn batch off");
-      return;
-    }
     const prompt = typed ? typed.args : text.trim();
     const context = buildContext();
     const sent = attachments.length ? attachments.map(toInput) : undefined;
@@ -1148,31 +1142,17 @@ export function Composer({
       // gets the same one. Settings has no row for it because this is where it is chosen, and the
       // first send ever is the choice, even of the agent the chip already showed.
       if (spawnAgent !== defaultAgent || !agentChosen) sock?.send({ t: "set-default-agent", agent: spawnAgent });
-      if (draft?.batch) {
+      // one frame however many attempts: the daemon makes the group, this row first
+      const variants = draft && draft.variants > 1 ? { variants: draft.variants } : {};
+      const frame: HeldFrame = { t: "create-worktree", ...from, ...here, ...variants };
+      if (uploading) hold(boxId, boxId, prompt, frame);
+      else {
         leaveBox();
-        sock?.send({
-          t: "batch-worktrees",
-          repoId: active.worktree.repoId,
-          prompt,
-          agent: spawnAgent,
-          ...(newModel ? { model: newModel } : {}),
-          ...(newEffort ? { effort: newEffort } : {}),
-          boxId,
-        });
+        sock?.send(fillFrame(frame, boxId, prompt, attachments));
+        // the worktree takes a moment to make and its agent a moment more to take the turn: the
+        // log shows the message and the working mark from here, so nothing waits on the daemon
+        dispatch({ a: "sending", id: boxId, message: { text: prompt, attachments: sent } });
         dispatch({ a: "sent-box", id: boxId });
-      } else {
-        // one frame however many attempts: the daemon makes the group, this row first
-        const variants = draft && draft.variants > 1 ? { variants: draft.variants } : {};
-        const frame: HeldFrame = { t: "create-worktree", ...from, ...here, ...variants };
-        if (uploading) hold(boxId, boxId, prompt, frame);
-        else {
-          leaveBox();
-          sock?.send(fillFrame(frame, boxId, prompt, attachments));
-          // the worktree takes a moment to make and its agent a moment more to take the turn: the
-          // log shows the message and the working mark from here, so nothing waits on the daemon
-          dispatch({ a: "sending", id: boxId, message: { text: prompt, attachments: sent } });
-          dispatch({ a: "sent-box", id: boxId });
-        }
       }
     } else {
       // the session reads these when it opens, and the daemon handles frames in order, so they are
@@ -1968,7 +1948,7 @@ export function Composer({
           do about it now, each on its own line so the row above keeps its shape. Main against
           origin while drafting, with the pull, since a new worktree starts from main as it is and
           a main nobody has pulled today hands the agent stale code. What the message will be
-          (batch, variants, main's files coming along) is the intro's, above the box. How far a
+          (variants, main's files coming along) is the intro's, above the box. How far a
           worktree trails main is not a row here: land takes main in first, so the count is a fact
           on the verb's tooltip, and a row that left as the land ran moved the verb from under the
           cursor before archive took its place. The sync itself stays in the changes tab's foot and

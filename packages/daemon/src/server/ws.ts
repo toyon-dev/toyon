@@ -37,7 +37,7 @@ const DROP_ABOVE_BYTES = 4 * 1024 * 1024;
 const DROPPED_NOTICE = "\r\n[toyon] output dropped: this pane was too far behind\r\n";
 
 /** the frames that are a message sent from a composer box */
-const SENDS = new Set(["chat", "create-worktree", "restore-worktree", "batch-worktrees"]);
+const SENDS = new Set(["chat", "create-worktree", "restore-worktree"]);
 
 /** the box a frame that did not parse was sent from, read off the raw JSON; null when it is not a
  * send, or names no box */
@@ -124,7 +124,7 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
       ws.data.sent++;
       ws.data.bytes += json.length;
     } catch (e) {
-      // a reply to a socket that closed meanwhile (batch finishing late) is not an error
+      // a reply to a socket that closed meanwhile (a background op finishing late) is not an error
       log.debug("ws", "send to closed socket dropped", e);
     }
   };

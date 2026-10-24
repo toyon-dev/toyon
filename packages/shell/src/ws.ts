@@ -365,10 +365,8 @@ const QUEUE_MAX = 50;
 export type SocketTiming = { connectDeadline?: number; settle?: number; backoffMin?: number };
 
 /** the frames that are a message leaving its box, which the daemon empties as each arrives */
-const takesBox = (
-  msg: ClientMsg,
-): msg is Extract<ClientMsg, { t: "chat" | "create-worktree" | "restore-worktree" | "batch-worktrees" }> =>
-  msg.t === "chat" || msg.t === "create-worktree" || msg.t === "restore-worktree" || msg.t === "batch-worktrees";
+const takesBox = (msg: ClientMsg): msg is Extract<ClientMsg, { t: "chat" | "create-worktree" | "restore-worktree" }> =>
+  msg.t === "chat" || msg.t === "create-worktree" || msg.t === "restore-worktree";
 
 export class DaemonSocket {
   private ws: WebSocket | null = null;

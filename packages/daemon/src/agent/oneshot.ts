@@ -1,5 +1,5 @@
-// Ask an agent one question with no worktree behind it (the batch planner runs before any
-// worktree exists): spawn the adapter, ask, kill it.
+// Ask an agent one question with no worktree behind it: spawn the adapter, ask, kill it. For a
+// question asked before any worktree exists, or of an agent no worktree is running.
 
 import * as acp from "@agentclientprotocol/sdk";
 import { log } from "../core/log.ts";
@@ -24,10 +24,10 @@ export async function askFreshAgent(
   const app = acp
     .client({ name: "toyon" })
     // read-only mode should mean none arrive; if one does, the worktree rules still apply.
-    // Nothing here can ask a person: this runs before a worktree exists, so there is no chat to
+    // Nothing here can ask a person: this runs with no worktree behind it, so there is no chat to
     // draw a card in. For the same reason the client capabilities below stay as they are: without
-    // `elicitation.form` the Claude adapter drops AskUserQuestion from the tool list, so the namer
-    // and the batch planner cannot ask either.
+    // `elicitation.form` the Claude adapter drops AskUserQuestion from the tool list, so a side
+    // question cannot ask either.
     .onRequest(acp.methods.client.session.requestPermission, (c) => decideUnattended(c.params, prepared.bounds, cwd))
     .onNotification(acp.methods.client.session.update, (c) => {
       const u = c.params.update;

@@ -1514,7 +1514,7 @@ export class AcpSession implements AgentAdapter {
     signal: AbortSignal,
   ): acp.CreateElicitationResponse | Promise<acp.CreateElicitationResponse> {
     const live = this.live;
-    // a side session (naming, batch planning) shares this connection and has no chat to draw a
+    // a side session (naming, the landing questions) shares this connection and has no chat to draw a
     // card in; neither does a request-scoped elicitation, which names a request and not a session
     if (!live || !("sessionId" in params) || params.sessionId !== live.sessionId) {
       log.warn(this.d.worktreeId, "elicitation with no chat behind it; declined");

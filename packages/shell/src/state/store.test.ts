@@ -1109,7 +1109,7 @@ describe("preview reload after a turn", () => {
 describe("drafting a worktree", () => {
   const helloR = (...w: WorktreeStatus[]): Action => helloIn([repo("r")], ...w);
   const found = (...w: WorktreeStatus[]) => run([helloR(...w)]);
-  const fresh = (): Draft => ({ variants: 1, batch: false, agent: "claude" });
+  const fresh = (): Draft => ({ variants: 1, agent: "claude" });
 
   test("the lead on screen is always a draft; a worktree on screen is not", () => {
     const s = found(wt("main", "main"), wt("a"));
@@ -1164,7 +1164,6 @@ describe("drafting a worktree", () => {
     const s = run([{ a: "draft-carry", v: true }], found(wt("main", "main")));
     expect(canCarry(s.draft)).toBe(true);
     expect(canCarry(run([{ a: "draft-variants", n: 2 }], s).draft)).toBe(false);
-    expect(canCarry(run([{ a: "draft-batch", v: true }], s).draft)).toBe(false);
     expect(canCarry(run([{ a: "draft-carry", v: false }], s).draft)).toBe(false);
   });
 
@@ -1220,7 +1219,6 @@ describe("drafting a worktree", () => {
       run(
         [
           { a: "draft-variants", n: 3 },
-          { a: "draft-batch", v: true },
           { a: "draft-agent", id: "codex" },
           { a: "draft-profile", profile: "web" },
         ],
@@ -1228,7 +1226,6 @@ describe("drafting a worktree", () => {
       ).draft,
     ).toEqual({
       variants: 3,
-      batch: true,
       agent: "codex",
       profile: "web",
     });
@@ -2045,8 +2042,8 @@ describe("streams and notices", () => {
     const base = [hello(wt("a"))];
     const failed = run([...base, server({ t: "shipped", worktreeId: "a", ok: false, message: "nothing to commit" })]);
     expect(localOf(failed, "a").chat).toEqual([{ kind: "error", text: "nothing to commit" }]);
-    const batch = run([...base, server({ t: "shipped", worktreeId: "", ok: false, message: "batch: 1 failed" })]);
-    expect(localOf(batch, "a").notice).toBe("batch: 1 failed");
+    const none = run([...base, server({ t: "shipped", worktreeId: "", ok: false, message: "setup failed" })]);
+    expect(localOf(none, "a").notice).toBe("setup failed");
   });
   test("a notice stays under the box until something is written or attached", () => {
     const said = run([hello(wt("a")), { a: "notice", id: "a", text: "too many" }]);

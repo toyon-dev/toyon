@@ -27,7 +27,7 @@ import { ToolSet, ToyonMcp } from "./agent/mcp.ts";
 import { AgentReadiness } from "./agent/readiness.ts";
 import { loadAgentRegistry } from "./agent/registry.ts";
 import { prepareLaunch } from "./agent/sandbox.ts";
-import { lacksQuickModel, makeAnswerRecapper, makeLander, makePlanner } from "./agent/tasks.ts";
+import { lacksQuickModel, makeAnswerRecapper, makeLander } from "./agent/tasks.ts";
 import { transcriptPathFor } from "./agent/transcript.ts";
 import { forwardTranscripts } from "./agent/transcriptForward.ts";
 import { UploadStore } from "./agent/uploads.ts";
@@ -494,7 +494,6 @@ const {
     afterLand,
     restarter,
     update,
-    planTasks: makePlanner(agents),
     folderDialog: folderDialog(),
   },
 });

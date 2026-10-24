@@ -8,10 +8,9 @@ import { sh, tmpRepo } from "../../../test/helpers/tmp-repo.ts";
 import { makePaths } from "../../core/paths.ts";
 import { GIT } from "../../git/exec.ts";
 import { AttachmentStore } from "../attachments.ts";
-import { askFreshAgent } from "../oneshot.ts";
 import { AgentRegistry, type AgentSpec, BUILTIN_AGENTS, parseAgentsFile } from "../registry.ts";
 import { SETTINGS_REL } from "../sandbox.ts";
-import { NAME_SYSTEM, namePrompt, PLAN_SYSTEM, parseName, parsePlan, planPrompt } from "../tasks.ts";
+import { NAME_SYSTEM, namePrompt, parseName } from "../tasks.ts";
 import { UploadStore } from "../uploads.ts";
 import { AcpSession } from "./session.ts";
 import { spawnAcp } from "./transport.ts";
@@ -143,23 +142,12 @@ describe.skipIf(!enabled)("claude via ACP (integration)", () => {
     }
   }, 300_000);
 
-  test("ask() names a task on a side session without touching the transcript; a fresh agent plans a batch", async () => {
-    const { t, wt, events, session } = world();
+  test("ask() names a task on a side session without touching the transcript", async () => {
+    const { t, events, session } = world();
     try {
       const name = parseName(await session.ask(NAME_SYSTEM, namePrompt("make the header sticky on scroll")));
       expect(name).toMatch(/^[a-z0-9]+(-[a-z0-9]+){0,2}$/);
       expect(events).toEqual([]);
-      const registry = new AgentRegistry(BUILTIN_AGENTS, makePaths().agentsDir);
-      const plan = parsePlan(
-        await askFreshAgent(
-          registry,
-          "claude",
-          wt,
-          PLAN_SYSTEM,
-          planPrompt("add a dark mode toggle and fix the footer typo"),
-        ),
-      );
-      expect(plan?.length).toBeGreaterThanOrEqual(1);
     } finally {
       await session.close();
       t.cleanup();

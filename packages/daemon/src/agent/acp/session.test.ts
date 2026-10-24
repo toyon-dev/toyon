@@ -2601,7 +2601,7 @@ describe("AcpSession ask cards", () => {
   });
 
   test("an elicitation on a side session is declined and never touches the worktree transcript", async () => {
-    // the namer and the batch planner run on this same connection; a card there would appear in a
+    // the namer and the landing questions run on this same connection; a card there would appear in a
     // chat nobody was looking at, answering a question nobody asked for
     // the chat turn runs on s1; anything else here is a side session
     const fake = fakeAgent(async (p, client) => {

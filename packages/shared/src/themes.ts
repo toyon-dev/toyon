@@ -855,7 +855,10 @@ export function cssVarName(key: ThemeColorKey): string {
  * of visible change at either end of the range. Scaling channels by a percentage does not: 14% off
  * surface1 is 3.7 L* in the dark half and 11.4 in the light one. */
 function toLstar(hex: string): number {
-  const y = luminance(hex);
+  return lstarOfY(luminance(hex));
+}
+
+function lstarOfY(y: number): number {
   return y > 0.008856 ? 116 * y ** (1 / 3) - 16 : 903.3 * y;
 }
 
@@ -898,21 +901,30 @@ export function sunkenFloorOf(theme: Theme): string {
 const GROUND_KEYS: ThemeColorKey[] = ["surface0", "surface1", "surface2", "element0", "element1", "border0", "border1"];
 
 /**
- * A dark theme stood on black: its grounds lowered together until the darkest of them is #000000,
- * each keeping its L* distance above it, so a panel still parts from the floor by as much as it did.
- * For a phone with an OLED panel, where black turns the pixels off and is the deepest ground the
- * screen has, and where a session is a glance rather than hours, so the bloom light text takes on
- * a near-black ground (see toyonDark) is not paid for long. Nothing else moves: text, accents,
- * syntax and the diff tints are the theme's own, and so is its id, since it is still the theme
- * that was chosen. A light theme has no black to go to and comes back as it is; a theme already on
- * black comes back as it is too, so painting it twice is painting it once.
+ * A dark theme stood on black: the darkest of its grounds becomes #000000, and the other grounds
+ * and the two quiet text tiers follow it down until each keeps the contrast ratio it had against
+ * that floor. Contrast rather than L* distance, because the ratio's flare term is the thing that
+ * is true near black: a step of seven L* that parts the idle dot from the list on a brown ground
+ * all but vanishes on a black one, and the quiet tier at its old lightness reads lifted, with the
+ * status line under a title nearly as bright as the title. For a phone with an OLED panel, where
+ * black turns the pixels off and is the deepest ground the screen has, and where a session is a
+ * glance rather than hours, so the bloom light text takes on a near-black ground (see toyonDark)
+ * is not paid for long. Body text stays where it is, since it is what is read, and nothing else
+ * moves: accents, syntax and the diff tints are the theme's own, and so is its id, since it is
+ * still the theme that was chosen. A light theme has no black to go to and comes back as it is; a
+ * theme already on black comes back as it is too, so painting it twice is painting it once.
  */
 export function blackGroundOf(theme: Theme): Theme {
   if (theme.kind !== "dark") return theme;
-  const floor = Math.min(...GROUND_KEYS.map((k) => toLstar(theme.colors[k])));
-  if (floor <= 0) return theme;
+  const floorKey = GROUND_KEYS.reduce((a, b) => (luminance(theme.colors[b]) < luminance(theme.colors[a]) ? b : a));
+  const floor = theme.colors[floorKey];
+  if (luminance(floor) <= 0) return theme;
   const colors = { ...theme.colors };
-  for (const k of GROUND_KEYS) colors[k] = stepL(colors[k], -floor);
+  // the floor itself has a ratio of one, which is black: no case of its own
+  for (const k of [...GROUND_KEYS, "text1", "text2"] as const) {
+    const y = contrastRatio(theme.colors[k], floor) * 0.05 - 0.05;
+    colors[k] = stepL(colors[k], lstarOfY(y) - toLstar(colors[k]));
+  }
   return { ...theme, colors };
 }
 

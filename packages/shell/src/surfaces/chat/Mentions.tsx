@@ -87,8 +87,8 @@ export function MentionText({
   );
 }
 
-/** a press on a row holding `MentionText`: `@changes` shows the changes tab, a worktree opens its
- * row, and a file or folder opens as any file link in the transcript does */
+/** a press on a row holding `MentionText`: `@changes` shows the changes tab, and a worktree, a
+ * file or a folder opens as it does in the agent's rows */
 export function openMention(
   e: MouseEvent,
   root: string | undefined | null,
@@ -98,11 +98,6 @@ export function openMention(
   const target = e.target as Element;
   if (target.closest("[data-changes]")) {
     if (worktreeId) deps.dispatch({ a: "focus-changes", tab: "changes" });
-    return;
-  }
-  const row = target.closest("[data-worktree]")?.getAttribute("data-worktree");
-  if (row) {
-    deps.dispatch({ a: "activate", id: row });
     return;
   }
   openChatLink(e, root, worktreeId, deps);

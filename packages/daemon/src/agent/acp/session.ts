@@ -139,6 +139,9 @@ export interface AcpSessionDeps {
    * does). The record is expected to follow: the next turn re-applies the record before its
    * prompt, so one that still named the old value would put it back. */
   onOptionChanged?: (category: OptionCategory, value: string) => void;
+  /** the worktree's own title and branch, as a sentence after every message; read as each goes
+   * out, since the agent names the row after its first turn and the person renames it at will */
+  self?: () => string | undefined;
   /** where the preview stands, as a block after every message; read as each goes out, since the
    * port belongs to the runtime and not to this session */
   preview?: () => string | undefined;
@@ -1039,12 +1042,14 @@ export class AcpSession implements AgentAdapter {
     this.endTurn(mapStopReason(res.stopReason));
   }
 
-  /** what the shell attached when the message was sent, then where the preview stands now that
-   * it is going out and what its page has thrown, then what landed elsewhere since the last
-   * message, wrapped as one block */
+  /** what the shell attached when the message was sent, then what this worktree is called and
+   * which siblings the message names, then where the preview stands now that it is going out and
+   * what its page has thrown, then what landed elsewhere since the last message, wrapped as one
+   * block */
   private contextFor(item: QueueItem): string | undefined {
     return ambientBlock([
       ...(item.context ?? []),
+      this.d.self?.(),
       ...(this.d.mentioned?.(item.text) ?? []),
       this.d.preview?.(),
       this.d.pageErrors?.(),

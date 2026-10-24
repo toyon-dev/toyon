@@ -683,6 +683,26 @@ describe("AcpSession", () => {
     await w.session.close();
   });
 
+  test("the worktree's own name rides after the shell's context and before the siblings, read as each message goes out", async () => {
+    const fake = fakeAgent(say("ok"));
+    let name: string | undefined;
+    const w = world(fake, claudeSpec, 60_000, undefined, {
+      self: () => name,
+      preview: () => "preview",
+      mentioned: (text) => (text.includes("@toyon/other") ? ["@toyon/other is the worktree ..."] : []),
+    });
+    w.session.send("hi", { context: ["ctx"] });
+    await w.idle();
+    name = 'This worktree is "Named now", on branch toyon/named-now.';
+    w.session.send("see @toyon/other");
+    await w.idle();
+    expect(fake.prompts.map((p) => p.prompt.map((b) => (b as { text: string }).text))).toEqual([
+      ["hi", "[Attached by Toyon:\nctx\n\npreview]"],
+      ["see @toyon/other", `[Attached by Toyon:\n${name}\n\n@toyon/other is the worktree ...\n\npreview]`],
+    ]);
+    await w.session.close();
+  });
+
   test("queued prompts run in order on one process; the queue is visible in between", async () => {
     let release: () => void = () => {};
     const gate = new Promise<void>((r) => {

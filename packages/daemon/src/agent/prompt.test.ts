@@ -12,6 +12,7 @@ import {
   previewContext,
   procFixPrompt,
   SYSTEM_APPEND,
+  selfContext,
   worktreeContext,
 } from "./prompt.ts";
 
@@ -127,6 +128,22 @@ describe("SYSTEM_APPEND", () => {
     // recommended option picked with "I can't decide" beside it reads as a yes unless told otherwise
     expect(SYSTEM_APPEND).toContain("the text outranks the pick");
     expect(SYSTEM_APPEND).toContain("change nothing until they have decided");
+  });
+  test("names worktrees by title or branch, since every path the agent reads spells the directory", () => {
+    // a reply that says "behind wt-d486's eval" names a row by its id, the one handle the agent
+    // had; the directory is an id so that a rename never restarts the procs or the session
+    expect(SYSTEM_APPEND).toContain("use its title in quotes or its branch, never the directory");
+  });
+});
+
+describe("selfContext", () => {
+  test("gives the row's title and branch once it is named", () => {
+    expect(selfContext({ title: "Worktree naming", branch: "toyon/worktree-naming" })).toBe(
+      'This worktree is "Worktree naming", on branch toyon/worktree-naming.',
+    );
+  });
+  test("says nothing while the title is the prompt's first words standing in", () => {
+    expect(selfContext({ title: "Could toyon refer", branch: "toyon/wt-deab", unnamed: true })).toBeUndefined();
   });
 });
 

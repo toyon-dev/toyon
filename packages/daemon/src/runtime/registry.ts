@@ -11,7 +11,7 @@ import { AttachmentStore } from "../agent/attachments.ts";
 import type { ToyonMcp } from "../agent/mcp.ts";
 import { commandFolders, readCommandOrigins } from "../agent/origins.ts";
 import { ownPlanPath, planEdited, writePlanDoc } from "../agent/planDoc.ts";
-import { type PreviewStanding, previewContext, worktreeContext } from "../agent/prompt.ts";
+import { type PreviewStanding, previewContext, selfContext, worktreeContext } from "../agent/prompt.ts";
 import type { AgentReadiness } from "../agent/readiness.ts";
 import type { AgentRegistry } from "../agent/registry.ts";
 import { transcriptPathFor } from "../agent/transcript.ts";
@@ -211,6 +211,11 @@ function defaultAgent(
     worktreeId: wt.id,
     cwd: wt.path,
     preview: () => previewContext(preview()),
+    // the live record, not `wt`: the title and branch move after the session is made
+    self: () => {
+      const w = d.state.worktrees.find((w) => w.id === wt.id);
+      return w ? selfContext(w) : undefined;
+    },
     pageErrors: () => d.pageErrors?.(wt.id),
     // the project's other open worktrees, read as the message goes out: a row made since the
     // session opened is one the message can name

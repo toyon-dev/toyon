@@ -1175,6 +1175,12 @@
     color: var(--text0);
     text-decoration-color: currentColor;
   }
+  /* A worktree the agent named by its directory, drawn as the row's title: the title is words and
+     not a path, so it keeps the face of the prose around it and takes only the mark that says it
+     opens. The directory the agent wrote is in the tip, for a log or a terminal that still says it. */
+  .chat-mention-title {
+    font: inherit;
+  }
   /* The draft's references, over the field: the text again in the field's own metrics with the
      words transparent, so only the underlines show through under the words the textarea draws,
      and a path reads as a link before it is sent. The face and the wrapping are the field's, or

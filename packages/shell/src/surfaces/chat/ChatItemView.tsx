@@ -61,6 +61,7 @@ import {
 import { toolRowItems, toolRowOpen } from "./toolRowItems.ts";
 import { codeAt, useCodeCopy } from "./useCodeCopy.tsx";
 import { usePlanTitle } from "./usePlanTitle.ts";
+import { useWorktreeNamer } from "./useWorktreeNamer.ts";
 
 function Markdown({
   text,
@@ -80,7 +81,8 @@ function Markdown({
   fileRoot?: string;
   streaming?: boolean;
 }) {
-  const html = useMarkdown(text, { fileRoot, streaming });
+  const worktrees = useWorktreeNamer(worktreeId);
+  const html = useMarkdown(text, { fileRoot, streaming, worktrees });
   const sock = useSock();
   const dispatch = useDispatch();
   const cm = useContextMenu("chat");
@@ -458,9 +460,10 @@ export const ThoughtRow = memo(function ThoughtRow({
   // second lands is the string staying put while the body mounts.
   const steps = thoughtSteps(item.text);
   const earlier = steps.slice(0, -1);
+  const worktrees = useWorktreeNamer(worktreeId);
   const html = useMarkdown(
     steps.length ? earlier.join("\n\n") : normalizeThoughtMarkdown(item.text),
-    fileRoot || streaming ? { fileRoot, streaming } : undefined,
+    fileRoot || streaming || worktrees ? { fileRoot, streaming, worktrees } : undefined,
   );
   const sock = useSock();
   const dispatch = useDispatch();

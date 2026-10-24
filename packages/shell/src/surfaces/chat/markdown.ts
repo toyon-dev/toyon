@@ -8,6 +8,7 @@ import { dunder } from "./markdownDunder.ts";
 import { escapeHtml, htmlAsText } from "./markdownHtml.ts";
 import { assetPath, codePath, outsidePath, worktreeLink } from "./markdownPaths.ts";
 import { table } from "./markdownTable.ts";
+import { type WorktreeNamer, worktreeMention } from "./markdownWorktree.ts";
 import { cutAt, nextPace, type Pace, shownAt } from "./pace.ts";
 import { languageOf, paintCode } from "./syntax.ts";
 
@@ -15,7 +16,8 @@ import { languageOf, paintCode } from "./syntax.ts";
 // so it is coloured by the same seven. marked hands the block over before it escapes it, and
 // returning false hands one back in a language we have no grammar for.
 marked.use({
-  extensions: [dunder],
+  // the namer is read as each token renders, so it is the render in progress's (set below)
+  extensions: [dunder, worktreeMention(() => rendering?.worktrees)],
   renderer: {
     code({ text, lang }) {
       const language = languageOf((lang ?? "").trim().toLowerCase().split(/\s+/)[0] ?? "", "");
@@ -51,6 +53,8 @@ export interface MarkdownOptions {
   base?: MarkdownBase;
   /** the absolute checkout root: links beneath it open in Toyon's editor */
   fileRoot?: string;
+  /** the project's worktrees by directory: a `wt-xxxx` in the prose reads as the row's title */
+  worktrees?: WorktreeNamer;
   /** the text is a document written as markdown, whose raw HTML is part of it and is kept; a
    * reply, the default, draws a tag as the text it is */
   keepHtml?: boolean;
@@ -152,6 +156,7 @@ export function useMarkdown(text: string, options?: MarkdownOptions): string {
   const version = options?.base?.version;
   const urls = options?.base?.urls;
   const fileRoot = options?.fileRoot;
+  const worktrees = options?.worktrees;
   const keepHtml = !!options?.keepHtml;
   const streaming = !!options?.streaming;
   const shown = usePaced(text, streaming);
@@ -160,7 +165,10 @@ export function useMarkdown(text: string, options?: MarkdownOptions): string {
       worktreeId !== undefined && dir !== undefined && urls !== undefined
         ? { worktreeId, dir, version: version ?? null, urls }
         : undefined;
-    const at = base || fileRoot || keepHtml || streaming ? { base, fileRoot, keepHtml, streaming } : undefined;
+    const at =
+      base || fileRoot || worktrees || keepHtml || streaming
+        ? { base, fileRoot, worktrees, keepHtml, streaming }
+        : undefined;
     const since = performance.now() - lastAt.current;
     if (streaming || since >= STREAM_TICK_MS) {
       lastAt.current = performance.now();
@@ -172,6 +180,6 @@ export function useMarkdown(text: string, options?: MarkdownOptions): string {
       setHtml(renderMarkdown(shown, at));
     }, STREAM_TICK_MS - since);
     return () => clearTimeout(t);
-  }, [shown, worktreeId, dir, version, urls, fileRoot, keepHtml, streaming]);
+  }, [shown, worktreeId, dir, version, urls, fileRoot, worktrees, keepHtml, streaming]);
   return html;
 }

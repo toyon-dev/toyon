@@ -19,16 +19,25 @@ export function chatLink(target: Element, root: string | undefined | null): Chat
   return outside ? { kind: "outside", href, ...outside } : { kind: "out", href };
 }
 
-/** a press on a message: the file link under it opens in Toyon, and anything else is left to the
- * browser. The markup is the row's, so the row routes the press rather than each link. The open
- * itself is the link menu's "open" row, so the two never drift. */
+/** a press on a message: a worktree named in it opens its row (an archived one its page), the
+ * file link under it opens in Toyon, and anything else is left to the browser. The markup is the
+ * row's, so the row routes the press rather than each link. The open itself is the link menu's
+ * "open" row, so the two never drift. */
 export function openChatLink(
   e: MouseEvent,
   root: string | undefined | null,
   worktreeId: string | null | undefined,
   deps: Deps,
 ) {
-  const link = chatLink(e.target as Element, root);
+  const target = e.target as Element;
+  const row = target.closest("[data-worktree]");
+  const id = row?.getAttribute("data-worktree");
+  if (row && id) {
+    e.preventDefault();
+    deps.dispatch(row.hasAttribute("data-archived") ? { a: "open-archived", id } : { a: "activate", id });
+    return;
+  }
+  const link = chatLink(target, root);
   // a backticked path is prose: a press on it selects text, and its open is its menu's alone
   const open = link && link.kind !== "path" ? linkOpener(link, worktreeId, deps) : null;
   if (!open) return;

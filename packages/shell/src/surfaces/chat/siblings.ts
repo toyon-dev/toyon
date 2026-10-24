@@ -1,6 +1,6 @@
 import type { OwnedWorktree } from "@toyon/shared";
 import { sentAt } from "@toyon/shared";
-import { type DotState, dotClass } from "../util.ts";
+import { type DotState, dotClass, stateLabel } from "../util.ts";
 
 /** a worktree of the project a message can name, in the rail's order */
 export interface Sibling {
@@ -11,6 +11,8 @@ export interface Sibling {
   dir: string;
   /** the rail's dot for it, so the row says what the worktree is doing as the rail does */
   dot: DotState;
+  /** the dot in words, as the rail's tip says them */
+  state: string;
   /** when it was last sent to, which the rail is ordered by */
   at: number;
 }
@@ -35,6 +37,7 @@ export function siblingWorktrees(
       branch: w.branch,
       dir: w.path.slice(w.path.lastIndexOf("/") + 1),
       dot: dotClass(r),
+      state: stateLabel(r),
       at: sentAt(w),
     });
   }

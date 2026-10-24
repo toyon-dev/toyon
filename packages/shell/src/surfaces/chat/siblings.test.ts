@@ -32,7 +32,7 @@ describe("siblingWorktrees", () => {
 
   test("the project's worktree rows in the order given, less the one the message is in, with the rail's dot and time", () => {
     expect(siblingWorktrees(rows, "r1", "a")).toEqual([
-      { id: "b", title: "Row b", branch: "toyon/b", dir: "wt-b", dot: "idle", at: 5 },
+      { id: "b", title: "Row b", branch: "toyon/b", dir: "wt-b", dot: "idle", state: "Idle", at: 5 },
     ]);
     expect(siblingWorktrees(rows, "r1", null).map((w) => [w.id, w.dot])).toEqual([
       ["a", "working"],

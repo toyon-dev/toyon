@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { filterCommands, insertAt, mentionIndex, mentionSpans, triggerAt } from "./mentions.ts";
+import { filterCommands, insertAt, mentionIndex, mentionSpans, settled, triggerAt } from "./mentions.ts";
 
 // caret is written as | in the case names; the tests pass the index directly
 const at = (text: string, caret = text.length) => triggerAt(text, caret);
@@ -213,5 +213,34 @@ describe("mentionSpans: the references in a sent message", () => {
     expect(mentionSpans("@README.md", mentionIndex(["README.md"], worktrees))).toEqual([
       { kind: "file", text: "@README.md", path: "README.md" },
     ]);
+  });
+
+  test("a live row's mark carries what the rail says of it; an archived one has nothing to carry", () => {
+    const live = new Map([
+      ["toyon/fix", { id: "w1", title: "Fix", dot: "working" as const, state: "Agent working", at: 5 }],
+    ]);
+    expect(mentionSpans("@toyon/fix", mentionIndex(undefined, live))).toEqual([
+      { kind: "worktree", text: "@toyon/fix", id: "w1", title: "Fix", dot: "working", state: "Agent working", at: 5 },
+    ]);
+  });
+});
+
+describe("settled: the menu over a word its one row would only write again", () => {
+  test("one row, and the word is what it writes", () => {
+    expect(settled("toyon/code-review", ["@toyon/code-review "])).toBe(true);
+    expect(settled("changes", ["@changes "])).toBe(true);
+    expect(settled("src/App.tsx", ["@src/App.tsx "])).toBe(true);
+    expect(settled("src/", ["@src/ "])).toBe(true);
+  });
+
+  test("still a choice while the row would write something else, or there is more than one", () => {
+    // a title typed as words: the pick writes the branch
+    expect(settled("Code review", ["@toyon/code-review "])).toBe(false);
+    // a prefix of the branch
+    expect(settled("toyon/code", ["@toyon/code-review "])).toBe(false);
+    // the folder's name without its slash: the pick adds it
+    expect(settled("src", ["@src/ "])).toBe(false);
+    expect(settled("toyon/fix", ["@toyon/fix ", "@toyon/fix-2 "])).toBe(false);
+    expect(settled("nothing", [])).toBe(false);
   });
 });

@@ -91,7 +91,7 @@ import { DraftChip } from "./DraftChip.tsx";
 import { HandoffCard } from "./HandoffCard.tsx";
 import { cardLine, openCard, parseHandoffArgs } from "./handoff.ts";
 import { MentionText, openMention } from "./Mentions.tsx";
-import { filterCommands, insertAt, triggerAt } from "./mentions.ts";
+import { filterCommands, insertAt, settled, triggerAt } from "./mentions.ts";
 import { dismissOffer, offerOf, useDismissedOffers } from "./offer.ts";
 import { browseCommands, isMode, mergeCommands, ownCommandOf, ownCommands } from "./ownCommands.ts";
 import { PermissionCard } from "./PermissionCard.tsx";
@@ -522,10 +522,6 @@ export function Composer({
   // from: no menu there, and none on a project with no files yet
   const trigger =
     boxId && !outside && !project ? triggerAt(text, caret, (q) => siblings.some((w) => matchesSibling(q, w))) : null;
-  // opens even with nothing to show: an empty menu that says why beats a `/` that does nothing. Not
-  // over a walked-back message: a recalled `/compact` was sent, not typed, and the menu would take
-  // the arrows the walk is using.
-  const menuOpen = trigger !== null && trigger.from !== dismissed && !walk;
   // keyed on the query and the kind, not the trigger: triggerAt rebuilds that object on every keystroke
   const triggerKind = trigger?.kind;
   const triggerQuery = trigger?.query;
@@ -549,6 +545,16 @@ export function Composer({
     out.push(...rankMentions(files ?? [], folders, git?.files ?? [], triggerQuery, 8));
     return out;
   }, [triggerKind, triggerQuery, files, folders, git, commands, ownRows, siblings]);
+  // Opens even with nothing to show: an empty menu that says why beats a `/` that does nothing. Not
+  // over a walked-back message: a recalled `/compact` was sent, not typed, and the menu would take
+  // the arrows the walk is using. Not over a `@` word its one row has nothing to add to (settled):
+  // the mark under the word already says it resolved, and the menu's live first row would take
+  // return for a pick of the same word where the hand meant the send.
+  const menuOpen =
+    trigger !== null &&
+    trigger.from !== dismissed &&
+    !walk &&
+    !(trigger.kind === "file" && settled(trigger.query, rows.map(insertionFor)));
   // the agent's rows a bare `/` leaves out, said on the menu's key strip so they are not lost
   const more =
     triggerKind === "command" && triggerQuery !== undefined && !triggerQuery.trim()

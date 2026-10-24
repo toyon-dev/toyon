@@ -4,7 +4,7 @@
 
 import type { AgentCommand } from "@toyon/shared";
 import { commandScore } from "../overlays/commands.ts";
-import { folderList } from "../util.ts";
+import { type DotState, folderList } from "../util.ts";
 
 export interface Trigger {
   kind: "file" | "command";
@@ -70,6 +70,11 @@ export interface WorktreeMention {
   id: string;
   title: string;
   archived?: true;
+  /** what the rail's row says of a live one, for the mark's tip: its dot, the dot in words, and
+   * when it was last sent to. An archived row has none. */
+  dot?: DotState;
+  state?: string;
+  at?: number;
 }
 
 const NO_WORKTREES: ReadonlyMap<string, WorktreeMention> = new Map();
@@ -98,7 +103,7 @@ export type MentionSpan =
   | { kind: "file"; text: string; path: string }
   | { kind: "folder"; text: string; path: string }
   | { kind: "changes"; text: string }
-  | { kind: "worktree"; text: string; id: string; title: string; archived?: true };
+  | ({ kind: "worktree"; text: string } & WorktreeMention);
 
 /** the sigil opens a word, as it must for the menu (`triggerAt`), and the word runs to the next space */
 const MENTION = /(^|\s)(@\S+)/g;
@@ -112,15 +117,17 @@ function resolve(word: string, index: MentionIndex): MentionSpan | null {
   if (folder && index.folders.has(folder)) return { kind: "folder", text: `@${word}`, path: folder };
   // a file wins over a branch of the same name: the path is what the agent reads first
   const wt = index.worktrees.get(word);
-  if (wt)
-    return {
-      kind: "worktree",
-      text: `@${word}`,
-      id: wt.id,
-      title: wt.title,
-      ...(wt.archived ? { archived: true } : {}),
-    };
+  if (wt) return { kind: "worktree", text: `@${word}`, ...wt };
   return null;
+}
+
+/** Whether the `@` menu has anything left to say over the word being typed: it has one row, and
+ * the word is already what that row would write (its trailing space aside). The mark under the
+ * word says the same thing, and a menu open there takes return for a pick of what is already
+ * there instead of the send. Two rows are still a choice, and a title typed as words is not yet
+ * the branch the pick writes. */
+export function settled(query: string, insertions: readonly string[]): boolean {
+  return insertions.length === 1 && insertions[0]?.trim() === `@${query}`;
 }
 
 /** a message split at every `@` reference that names something in the project: a file or folder

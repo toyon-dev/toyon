@@ -4,6 +4,8 @@ import { listFiles } from "../../state/actions/file.ts";
 import { useSock, useStore, useStoreInstance } from "../../state/context.tsx";
 import { worktreeById } from "../../state/store.ts";
 import { tip } from "../../ui/Tooltip.tsx";
+import { when } from "../recap.ts";
+import { ago } from "../util.ts";
 import { openChatLink } from "./chatLink.ts";
 import { mentionIndex, mentionSpans, type WorktreeMention } from "./mentions.ts";
 import { siblingWorktrees } from "./siblings.ts";
@@ -40,7 +42,8 @@ export function MentionText({
   const archived = useStore((s) => (repoId ? s.archived[repoId] : undefined));
   const worktrees = useMemo(() => {
     const out = new Map<string, WorktreeMention>();
-    for (const w of siblingWorktrees(rows, repoId, worktreeId)) out.set(w.branch, { id: w.id, title: w.title });
+    for (const w of siblingWorktrees(rows, repoId, worktreeId))
+      out.set(w.branch, { id: w.id, title: w.title, dot: w.dot, state: w.state, at: w.at });
     for (const a of archived ?? []) {
       if (!out.has(a.branch)) out.set(a.branch, { id: a.id, title: a.title, archived: true });
     }
@@ -69,8 +72,15 @@ export function MentionText({
           );
         }
         if (s.kind === "worktree") {
+          // what the menu's row said of it, for a mark that went in without the menu, typed in
+          // full or dropped from the rail: the rail's dot and its words, and when the row was
+          // last sent to. The mark itself cannot carry the dot: over the field it is the draft
+          // again in the field's own metrics, and anything added to it shifts the marks after it
+          // off their words.
           const rowTip = tip(`the chat of "${s.title}"${s.archived ? " (archived)" : ""}`, undefined, {
             placement: "follow",
+            dot: s.dot,
+            detail: s.state && s.at !== undefined ? [s.state, `last sent ${when(ago(s.at))}`] : undefined,
           });
           return (
             <span

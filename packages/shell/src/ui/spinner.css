@@ -11,12 +11,16 @@
    the compositor animates by itself, where a colour or a shadow stepping on one element is a
    style pass and a repaint on the main thread for every frame of the whole turn, and every other
    animation on the page gets recalculated along with it. A quiet cell at a quarter opacity over
-   the ground is the same colour a quarter mix of the ink would paint. The box and the cell are
-   custom properties so the dot size below redraws the mark by naming three numbers. */
+   the ground is the same colour a quarter mix of the ink would paint. The box, the cell and the
+   gap are custom properties so the dot size below redraws the mark by naming three numbers, and
+   every cell is placed from the top left in whole pixels: a cell anchored to the right edge or
+   sized in halves paints 4px on one side and 3px on the other on a 1x screen. */
   .spinner {
     --spinner-box: 13px;
     --spinner-cell: 5px;
+    --spinner-gap: 1px;
     --spinner-inset: 1px;
+    --spinner-far: calc(var(--spinner-inset) + var(--spinner-cell) + var(--spinner-gap));
     position: relative;
     display: inline-block;
     flex-shrink: 0;
@@ -31,36 +35,40 @@
       opacity: 0.25;
       animation: squares 0.48s steps(1) infinite;
     }
-    /* cells clockwise from the top left, each in its corner of the box less the inset; the
-     head starts top right and each cell's delay puts it a step behind the one before it */
+    /* cells clockwise from the top left; the head starts top right and each cell's delay puts
+     it a step behind the one before it */
     & > span:nth-child(1) {
       left: var(--spinner-inset);
       top: var(--spinner-inset);
       animation-delay: -0.12s;
     }
     & > span:nth-child(2) {
-      right: var(--spinner-inset);
+      left: var(--spinner-far);
       top: var(--spinner-inset);
       animation-delay: 0s;
     }
     & > span:nth-child(3) {
-      right: var(--spinner-inset);
-      bottom: var(--spinner-inset);
+      left: var(--spinner-far);
+      top: var(--spinner-far);
       animation-delay: -0.36s;
     }
     & > span:nth-child(4) {
       left: var(--spinner-inset);
-      bottom: var(--spinner-inset);
+      top: var(--spinner-far);
       animation-delay: -0.24s;
     }
   }
   /* the dot's own box, for the rail's status slot: 8px so the row does not shift when a sync
-   starts, four 3px cells in the corners, 2px apart, since a thinner gap at this size runs the cells together.
+   starts, four 4px cells with a 1px gap, the inline mark's proportion, so it reads as one square
+   and not four specks (3px cells 2px apart did, rendered side by side). The drawing is 9px and
+   spills a pixel past the box to the right and below: a square beside an 8px dot wants to be a
+   little bigger than it to carry the same weight, and 9 is the first whole-pixel size above 8 with
+   equal cells and a 1px gap. Its centre is half a pixel off the dot's, which no screen can show.
    text1 rather than a state colour: the dot's colours say what the worktree is doing over time,
    and this is a git op you started that finishes on its own. */
   .spinner-dot {
     --spinner-box: 8px;
-    --spinner-cell: 3px;
+    --spinner-cell: 4px;
     --spinner-inset: 0px;
     vertical-align: 0;
     color: var(--text1);

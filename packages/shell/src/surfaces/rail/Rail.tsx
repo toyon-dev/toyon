@@ -272,8 +272,8 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
   // On a screen a row slides along under a thumb, uncovering its verbs one rung at a time
   // (ui/slide.ts): the rung the finger is on is state, since it names a word, and the offset is
   // written to the node. The ladder is read off the row's own menu (slideLadder), so the slide
-  // offers what the menu does and only that, land before archive, so the short drag is the
-  // row's next step; its last rung is that menu, opened under the row as it is let go.
+  // offers what the menu does and only that: archive, then that menu itself, opened under the
+  // row as it is let go.
   const [slide, setSlide] = useState<{ key: string; step: number } | null>(null);
   const ladderOf = (w: WorktreeStatus) => (isOwned(w) ? slideLadder(rowItems(w)) : []);
   useSlide(listRef, {

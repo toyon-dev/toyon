@@ -666,15 +666,10 @@
 
   /* A row's slide (base.css, .slide) wears each rung's colour: a tint of the colour the word
      itself is painted in, the way the find highlight tints its ground. Archive in the red the menu
-     paints the same verb in, land in the colour a landed row's badge wears; "more" keeps the seat
-     tier the base rule gives it. */
+     paints the same verb in; "more" keeps the seat tier the base rule gives it. */
   .rail-list .slide-verb[data-rung="archive"] {
     color: var(--red);
     background: color-mix(in srgb, var(--red) 22%, var(--surface1));
-  }
-  .rail-list .slide-verb[data-rung="land"] {
-    color: var(--aqua);
-    background: color-mix(in srgb, var(--aqua) 22%, var(--surface1));
   }
 
   /* ---- Touch, on either frame. The app root says so (data-touch, from the store), and both the

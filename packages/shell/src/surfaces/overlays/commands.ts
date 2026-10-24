@@ -98,7 +98,7 @@ export function buildCommands(
   if (wt && id) {
     // the active worktree's menu, line for line, each saying whose it is
     const repo = state.repos.find((r) => r.id === wt.worktree.repoId) ?? null;
-    addItems(worktreeItems(wt, repo, state, deps, { hostname: state.hostname }), {
+    addItems(worktreeItems(wt, repo, state, deps, { hostname: state.hostname, palette: true }), {
       scope: "wt",
       name: rowLabel(wt, repo),
     });

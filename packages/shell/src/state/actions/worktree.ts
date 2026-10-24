@@ -113,13 +113,15 @@ export type WorktreeItemState = Pick<State, "layout" | "shipping" | "frame" | "r
  * passes it and the palette has no graft line. `hostname` is where the page is open: the Finder
  * row only means something on the daemon's own machine. The phone frame has no terminal pane and
  * no shell to paste a path or a session id into, so those rows are the desk's; the branch name
- * stays, since it is read as much as it is pasted. */
+ * stays, since it is read as much as it is pasted. `palette` is the ⌘⇧P list, the one place the
+ * transcript path and the session id are offered: they point a second agent's CLI at this chat,
+ * which is asked for by name, and on the rail's menu they were two rows nobody found by reading. */
 export function worktreeItems(
   w: OwnedWorktree,
   repo: RepoInfo | null,
   s: WorktreeItemState,
   { sock, dispatch }: Deps,
-  ui: { graft?: (id: string) => void; hostname: string },
+  ui: { graft?: (id: string) => void; hostname: string; palette?: boolean },
 ): MenuEntry[] {
   const id = w.worktree.id;
   const acts = worktreeActions(sock, dispatch);
@@ -170,10 +172,11 @@ export function worktreeItems(
   // own CLI resumes. A path rather than a link, since a link would carry the token. The lead has
   // no chat, so nothing to hand over there.
   const { transcript, sessionId } = w;
-  if (!phone && transcript && !isLead(w.worktree)) {
+  const plumbing = !phone && !!ui.palette;
+  if (plumbing && transcript && !isLead(w.worktree)) {
     copy.push({ id: "copy-transcript", label: "copy transcript path", onClick: () => copyText(transcript) });
   }
-  if (!phone && sessionId) {
+  if (plumbing && sessionId) {
     copy.push({ id: "copy-session", label: "copy session id", onClick: () => copyText(sessionId) });
   }
   // main runs procs too, and is where switching is wanted most; flat items, the menu has no

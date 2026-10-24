@@ -22,13 +22,15 @@ describe("blackGroundOf", () => {
     expect(t.colors.surface0).toBe("#000000");
     const was = toyonDark.colors;
     for (const k of ["surface1", "surface2", "element0", "element1", "border0", "border1"] as const) {
-      expect(Math.abs(contrastRatio(t.colors[k], t.colors.surface0) - contrastRatio(was[k], was.surface0))).toBeLessThan(0.05);
+      expect(
+        Math.abs(contrastRatio(t.colors[k], t.colors.surface0) - contrastRatio(was[k], was.surface0)),
+      ).toBeLessThan(0.05);
       expect(lstar(t.colors[k])).toBeLessThan(lstar(was[k]));
     }
     // and so against each other: the idle dot (surface2) still parts from the list (surface1)
-    expect(Math.abs(contrastRatio(t.colors.surface2, t.colors.surface1) - contrastRatio(was.surface2, was.surface1))).toBeLessThan(
-      0.05,
-    );
+    expect(
+      Math.abs(contrastRatio(t.colors.surface2, t.colors.surface1) - contrastRatio(was.surface2, was.surface1)),
+    ).toBeLessThan(0.05);
     expect(lstar(t.colors.surface2)).toBeGreaterThan(lstar(t.colors.surface1) + 8);
   });
 

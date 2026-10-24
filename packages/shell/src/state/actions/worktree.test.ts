@@ -189,16 +189,24 @@ describe("a worktree's actions", () => {
     expect(labels(short)).toEqual(["take over"]);
   });
 
-  test("hands the chat over as a file path and a session id, but not from main, which has no chat", () => {
+  test("the palette hands the chat over as a file path and a session id, but not from main, which has no chat", () => {
     const s = { layout: { ...defaultLayout, changes: true }, shipping: {}, frame: "desk" as const, repos: [] };
+    const palette = { ...here, palette: true };
     const copies = (items: MenuEntry[]) => labels(items).slice(3, 7);
-    const chat = worktreeItems(owned({ transcript: "/t/w1.jsonl", sessionId: "s-1" }), null, s, deps, here);
+    const chat = worktreeItems(owned({ transcript: "/t/w1.jsonl", sessionId: "s-1" }), null, s, deps, palette);
     expect(copies(chat)).toEqual(["copy path", "copy branch name", "copy transcript path", "copy session id"]);
     // a session not opened yet has no id to copy
-    const cold = worktreeItems(owned({ transcript: "/t/w1.jsonl" }), null, s, deps, here);
+    const cold = worktreeItems(owned({ transcript: "/t/w1.jsonl" }), null, s, deps, palette);
     expect(copies(cold)).toEqual(["copy path", "copy branch name", "copy transcript path", "|"]);
     const main = owned({ transcript: "/t/m.jsonl", sessionId: "s-2", worktree: { ...info, kind: "main" } });
-    expect(labels(worktreeItems(main, null, s, deps, here))).not.toContain("copy transcript path");
+    expect(labels(worktreeItems(main, null, s, deps, palette))).not.toContain("copy transcript path");
+  });
+
+  test("the rail's menu copies the path and the branch alone: the hand-over rows are the palette's", () => {
+    const s = { layout: { ...defaultLayout, changes: true }, shipping: {}, frame: "desk" as const, repos: [] };
+    const rail = worktreeItems(owned({ transcript: "/t/w1.jsonl", sessionId: "s-1" }), null, s, deps, here);
+    expect(labels(rail).slice(3, 6)).toEqual(["copy path", "copy branch name", "|"]);
+    expect(labels(rail)).not.toContain("copy session id");
   });
 
   test("a landing op in flight keeps the other landing ops on the list, off, until it answers", () => {

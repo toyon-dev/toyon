@@ -204,28 +204,43 @@ export function treeBox(s: State, worktreeId: string): string | null {
 /** a file or folder named in a message, the way the @ menu names one */
 export const mentionOf = (path: string, folder: boolean) => `@${path}${folder ? "/" : ""}`;
 
-/** Words from the files tab, after what the box already holds. A space apart, because an `@` only
- * reads as a mention at the start of a word. Through set-draft like a keystroke, so the draft is
- * kept like one, and the keyboard goes to the box to finish the sentence. */
-function appendToBox(store: Store, worktreeId: string, words: string) {
-  const s = store.getState();
-  const boxId = treeBox(s, worktreeId);
-  if (!boxId) return;
-  const draft = s.local[boxId]?.draft ?? "";
-  const gap = draft === "" || /\s$/.test(draft) ? "" : " ";
-  store.dispatch({ a: "set-draft", id: boxId, text: `${draft}${gap}${words}` });
+/** paths named together, one mention each a space apart, with the space that ends the run so the
+ * sentence can go on */
+export const mentionRun = (items: readonly { path: string; folder: boolean }[]) =>
+  `${items.map((i) => mentionOf(i.path, i.folder)).join(" ")} `;
+
+/** `words` put into `text` at `at`, a space apart from the word before, since an `@` only reads as
+ * a mention at the start of a word; the caret lands after them */
+export function spliceWords(text: string, at: number, words: string): { text: string; caret: number } {
+  const gap = at > 0 && !/\s/.test(text[at - 1] ?? "") ? " " : "";
+  const next = `${text.slice(0, at)}${gap}${words}${text.slice(at)}`;
+  return { text: next, caret: at + gap.length + words.length };
+}
+
+/** Words from a menu or a drop away from the textarea, after what the box already holds. Through
+ * set-draft like a keystroke, so the draft is kept like one, and the keyboard goes to the box to
+ * finish the sentence. */
+export function appendWords(store: Store, boxId: string, words: string) {
+  const draft = store.getState().local[boxId]?.draft ?? "";
+  store.dispatch({ a: "set-draft", id: boxId, text: spliceWords(draft, draft.length, words).text });
   store.dispatch({ a: "focus-chat" });
 }
 
-/** "add to chat" on a files-tab row, or the row dropped on the chat: the path, as a mention */
+/** words from the files tab, into the composer on screen for the worktree the tab shows */
+function appendToBox(store: Store, worktreeId: string, words: string) {
+  const boxId = treeBox(store.getState(), worktreeId);
+  if (boxId) appendWords(store, boxId, words);
+}
+
+/** "add to chat" on a files-tab row: the path, as a mention */
 export function mentionInChat(store: Store, worktreeId: string, path: string, folder: boolean) {
-  appendToBox(store, worktreeId, `${mentionOf(path, folder)} `);
+  appendToBox(store, worktreeId, mentionRun([{ path, folder }]));
 }
 
 /** "add to chat" over the files checked in the changes list: every path, as one run of mentions */
 export function mentionFilesInChat(store: Store, worktreeId: string, paths: readonly string[]) {
   if (paths.length === 0) return;
-  appendToBox(store, worktreeId, `${paths.map((p) => mentionOf(p, false)).join(" ")} `);
+  appendToBox(store, worktreeId, mentionRun(paths.map((path) => ({ path, folder: false }))));
 }
 
 /** a sentence asking the agent to change the project's shape, left in the box and never sent */

@@ -35,7 +35,7 @@ import { listFiles, openFile } from "../../state/actions/file.ts";
 import { pathItems } from "../../state/actions/message.ts";
 import { terminalItems } from "../../state/actions/proc.ts";
 import { archiveWorktrees, shipOp } from "../../state/actions/worktree.ts";
-import { takeBackQueued, toInput } from "../../state/attach.ts";
+import { spliceWords, takeBackQueued, toInput } from "../../state/attach.ts";
 import { useDispatch, useMachine, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
 import { openSource } from "../../state/openSource.ts";
 import { fillFrame, type HeldFrame } from "../../state/outbox.ts";
@@ -86,6 +86,7 @@ import { AttachmentSet } from "./AttachmentSet.tsx";
 import { agentReadiness } from "./agentReady.ts";
 import { answerLines, answered as hasAnswer, stoppedAsk } from "./ask.ts";
 import { ComposerOffer } from "./ComposerOffer.tsx";
+import { caretAtPoint, takeCarried } from "./carried.ts";
 import { DraftChip } from "./DraftChip.tsx";
 import { HandoffCard } from "./HandoffCard.tsx";
 import { cardLine, openCard, parseHandoffArgs } from "./handoff.ts";
@@ -1512,6 +1513,26 @@ export function Composer({
               keepRecalled();
             }}
             onPaste={onPaste}
+            // a row dragged from inside toyon lands where the pointer let go, as dropped text does;
+            // a file drop is the window's (useFileDrop) and passes through untouched
+            onDrop={(e) => {
+              const taken = takeCarried(store, e);
+              if (!taken) return;
+              // taken here, so the panel behind does not append it a second time
+              e.stopPropagation();
+              const el = e.currentTarget;
+              const at = caretAtPoint(el, e.clientX, e.clientY) ?? text.length;
+              const { text: next, caret: after } = spliceWords(text, at, taken.words);
+              setText(next);
+              // arrived whole, not typed: the menu stays shut on whatever trigger the words make
+              setDismissed(triggerAt(next, after)?.from ?? null);
+              // the draft round-trips through the store, so the caret has to be placed after that render
+              requestAnimationFrame(() => {
+                el.focus();
+                el.setSelectionRange(after, after);
+                setCaret(after);
+              });
+            }}
             onScroll={(e) => {
               if (marksRef.current) marksRef.current.scrollTop = e.currentTarget.scrollTop;
             }}

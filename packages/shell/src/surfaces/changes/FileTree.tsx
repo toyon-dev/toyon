@@ -26,7 +26,7 @@ import { type MenuEntry, useContextMenu } from "../../ui/menu.ts";
 import { rowState } from "../../ui/rowState.ts";
 import { tip } from "../../ui/Tooltip.tsx";
 import { treeKey } from "../../ui/treeNav.ts";
-import { endPathDrag, PATH_MIME, startPathDrag } from "../chat/useIntake.ts";
+import { endCarry, startCarry } from "../chat/carried.ts";
 import { ancestors, xyClass, xyLetter } from "../util.ts";
 import { buildTree, marks, newFilePath, parentOf, type TreeRow, visibleRows } from "./fileTree.ts";
 import { useTipSide } from "./tipSide.ts";
@@ -284,16 +284,11 @@ export function FileTree({
     [worktreeId],
   );
   const dragStart = useCallback(
-    (row: TreeRow, e: DragEvent) => {
-      e.dataTransfer.setData(PATH_MIME, row.path);
-      // anywhere outside toyon takes the path as text
-      e.dataTransfer.setData("text/plain", row.path);
-      e.dataTransfer.effectAllowed = "copy";
-      startPathDrag({ worktreeId, path: row.path, folder: row.kind !== "file" });
-    },
+    (row: TreeRow, e: DragEvent) =>
+      startCarry(e, { kind: "paths", worktreeId, items: [{ path: row.path, folder: row.kind !== "file" }] }),
     [worktreeId],
   );
-  const dragEnd = useCallback(() => endPathDrag(store), [store]);
+  const dragEnd = useCallback(() => endCarry(store), [store]);
 
   return (
     <div
@@ -492,7 +487,8 @@ const TreeItem = memo(function TreeItem({
       aria-level={row.depth + 1}
       aria-expanded={row.kind === "folder" ? row.open : undefined}
       aria-selected={cursor}
-      // a div, not a button: Firefox never starts a drag on a button
+      // a div, not a button: Firefox before 147 started no drag from a button's padding. The rows
+      // that drag elsewhere are buttons, since that Firefox is gone; this one has no reason to move.
       className={cx("row row-sm tree-row row-rails row-edge", dropOver && "drop-over")}
       data-state={rowState({ current, cursor })}
       data-kind={row.kind}

@@ -18,7 +18,7 @@ import {
   worktreeActions,
   worktreeItems,
 } from "../../state/actions/worktree.ts";
-import { useDispatch, useSock, useStore, useUrls } from "../../state/context.tsx";
+import { useDispatch, useSock, useStore, useStoreInstance, useUrls } from "../../state/context.tsx";
 import { profileOf } from "../../state/profiles.ts";
 import {
   useActiveId,
@@ -37,6 +37,7 @@ import { Icon } from "../../ui/Icon.tsx";
 import { useContextMenu, useMenu } from "../../ui/menu.ts";
 import { Spinner } from "../../ui/Spinner.tsx";
 import { type TipPlacement, tip } from "../../ui/Tooltip.tsx";
+import { endCarry, startCarry } from "../chat/carried.ts";
 import { hasFiles } from "../chat/useIntake.ts";
 import { hhmm } from "../chips/baseNote.ts";
 import { ago, chord, dotClass, procTrouble, rowLabel, shipLabel, shipShown, stateLabel } from "../util.ts";
@@ -224,6 +225,7 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
    * (waiting on you, or finished and unseen), listed here while it is */
   const otherRepoOf = (w: OwnedWorktree) => (activeRepoId && w.repoId !== activeRepoId ? repoOf(w) : null);
   const cm = useContextMenu("rail");
+  const store = useStoreInstance();
   // the one menu, read here for two things: the peek stays open while the menu is the rail's, and
   // the row it is about stays lifted while the pointer is over the menu rather than the row
   const menu = useMenu();
@@ -437,6 +439,10 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
     const origin = owned ? originOf(owned) : null;
     const otherRepo = owned ? otherRepoOf(owned) : null;
     const showCheck = owned && !otherRepo && graftMode && canGraft(owned.worktree) && id !== activeId;
+    // what the row carries when dragged to the chat: its branch, for a row the `@` menu lists, which
+    // is a worktree of this project. Main and the spare have no chat of their own to point at, and
+    // the composer resolves no other project's branch.
+    const carried = owned && owned.worktree.kind === "worktree" && !otherRepo ? owned.worktree.branch : null;
     // a landing op out from this row takes the dot's slot, and with it the row's word: the tip
     // and the line under the name say what the spinner is doing, not the state it covers
     const op = shipShown(w, shipping[id]?.op);
@@ -499,6 +505,12 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
               },
             ))}
         data-wt={id}
+        // the row dragged to the chat names its worktree by branch, as the `@` menu does (carried)
+        draggable={carried !== null}
+        onDragStart={
+          carried !== null ? (e) => startCarry(e, { kind: "worktree", worktreeId: id, branch: carried }) : undefined
+        }
+        onDragEnd={() => endCarry(store)}
         // a found row walks the found list, an owned one the worktrees above it (walkKey)
         onKeyDown={(e) => {
           if (graftMode) return;

@@ -1,5 +1,6 @@
 import type { ArchivedWorktree, WorktreeStatus } from "@toyon/shared";
 import { useMemo } from "react";
+import { appendWords } from "../../state/attach.ts";
 import { useDispatch, useStore, useStoreInstance } from "../../state/context.tsx";
 import { useActive, useActiveWorktreeRepo, useDraft, useLocalField } from "../../state/selectors.ts";
 import { Button } from "../../ui/Button.tsx";
@@ -7,9 +8,10 @@ import { cx } from "../../ui/cx.ts";
 import { ArchivedNote } from "./ArchivedNote.tsx";
 import { ChatLog } from "./ChatLog.tsx";
 import { Composer } from "./Composer.tsx";
+import { carriedOver, takeCarried } from "./carried.ts";
 import { DraftIntro } from "./DraftIntro.tsx";
 import { FoundNote } from "./FoundNote.tsx";
-import { chatPanel, pathDropHandlers } from "./useIntake.ts";
+import { chatPanel } from "./useIntake.ts";
 import "./chat.css";
 
 /** The chat: transcript above, composer below. On the lead row, whose box starts a worktree, the
@@ -51,9 +53,19 @@ export function ChatPanel({
   // dropped files attach here, but the drop is taken on the window (see useFileDrop): this only
   // lends it the panel's bounds and shows the highlight while the pointer is inside them
   const over = useStore((s) => s.dragFiles?.at === "chat");
-  // a row dragged from the files tab is this window's own drag, so the panel takes it itself
+  // a row dragged from inside toyon is this window's own drag, so the panel takes it itself: on the
+  // textarea the words go in at the pointer (Composer), anywhere else on the panel at the end
   const store = useStoreInstance();
-  const pathDrop = useMemo(() => pathDropHandlers(store), [store]);
+  const carriedDrop = useMemo(
+    () => ({
+      onDragOver: (e: React.DragEvent) => carriedOver(store, e),
+      onDrop: (e: React.DragEvent) => {
+        const taken = takeCarried(store, e);
+        if (taken) appendWords(store, taken.boxId, taken.words);
+      },
+    }),
+    [store],
+  );
   return (
     <div
       className={cx(
@@ -62,7 +74,7 @@ export function ChatPanel({
         over && "drop-over",
       )}
       style={width === undefined ? undefined : { width }}
-      {...pathDrop}
+      {...carriedDrop}
       ref={(el) => {
         // the placement leaving must not clear the one arriving in the same commit
         if (el) chatPanel.el = el;

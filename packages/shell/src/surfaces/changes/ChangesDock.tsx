@@ -1,5 +1,5 @@
 import { baseOf, type CommitEntry, canSync, type GitFileStatus } from "@toyon/shared";
-import { Fragment, useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { type DragEvent, Fragment, useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { previewBus } from "../../app/previewBus.ts";
 import { commitItems } from "../../state/actions/commit.ts";
 import { discardQuestion, fileItems, openFile } from "../../state/actions/file.ts";
@@ -23,6 +23,7 @@ import { type MenuEntry, useContextMenu } from "../../ui/menu.ts";
 import { Tabs } from "../../ui/Tabs.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
 import { type TreeNavRow, treeKey } from "../../ui/treeNav.ts";
+import { endCarry, startCarry } from "../chat/carried.ts";
 import { ago, chord, shiftRanges } from "../util.ts";
 import { CommitBox } from "./CommitBox.tsx";
 import { CommitRow } from "./CommitRow.tsx";
@@ -543,6 +544,32 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
   const dir = archived ? archived.path : active ? active.worktree.path : "";
   // an archived worktree's files are only in git: nothing to open elsewhere, reveal or discard
   const kept = archived !== null;
+  // A row dragged to the chat names its file by its path, which is the one the agent reads, a
+  // commit's row included. In the uncommitted list a checked row dragged takes the whole pick with
+  // it, the way a Finder selection moves as one; the pick is read through a ref at the drag, so a
+  // check does not hand every memoized row a new handler.
+  const dragOne = useMemo(
+    () =>
+      wtId
+        ? (path: string, e: DragEvent) =>
+            startCarry(e, { kind: "paths", worktreeId: wtId, items: [{ path, folder: false }] })
+        : undefined,
+    [wtId],
+  );
+  const pickRef = useRef(picked);
+  pickRef.current = picked;
+  const dragPicked = useMemo(
+    () =>
+      wtId
+        ? (path: string, e: DragEvent) => {
+            const pick = pickRef.current;
+            if (!pick.includes(path)) return dragOne?.(path, e);
+            startCarry(e, { kind: "paths", worktreeId: wtId, items: pick.map((p) => ({ path: p, folder: false })) });
+          }
+        : undefined,
+    [wtId, dragOne],
+  );
+  const dragEnd = useCallback(() => endCarry(store), [store]);
   const menuUncommitted = useCallback(
     (path: string): MenuEntry[] =>
       wtId
@@ -714,6 +741,8 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
                     onCheck={kept ? undefined : check}
                     menu={menuUncommitted}
                     onHover={hoverFile}
+                    onDragStart={dragPicked}
+                    onDragEnd={dragEnd}
                   />
                   {names(i)}
                 </Fragment>
@@ -746,6 +775,8 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
                     onOpen={clickTurn}
                     menu={menuTurn}
                     onHover={hoverFile}
+                    onDragStart={dragOne}
+                    onDragEnd={dragEnd}
                   />
                   {names(turnAt + i)}
                 </Fragment>
@@ -782,6 +813,8 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
                     onOpen={clickCommitted}
                     menu={menuCommitted}
                     onHover={hoverFile}
+                    onDragStart={dragOne}
+                    onDragEnd={dragEnd}
                   />
                   {names(committedAt + i)}
                 </Fragment>
@@ -813,6 +846,8 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
                       onOpen={clickHistFile}
                       menu={menuAtCommit}
                       onHover={noHover}
+                      onDragStart={dragOne}
+                      onDragEnd={dragEnd}
                     />
                     {names(above + i)}
                   </>

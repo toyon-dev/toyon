@@ -1,5 +1,5 @@
 import type { GitFileStatus } from "@toyon/shared";
-import { memo } from "react";
+import { type DragEvent, memo } from "react";
 import { type MenuEntry, useContextMenu } from "../../ui/menu.ts";
 import { rowState } from "../../ui/rowState.ts";
 import { splitPath, xyClass, xyLetter } from "../util.ts";
@@ -27,6 +27,8 @@ export const GitFileRow = memo(function GitFileRow({
   onCheck,
   menu,
   onHover,
+  onDragStart,
+  onDragEnd,
 }: {
   f: GitFileStatus;
   /** what the list points `aria-activedescendant` at when the cursor is on this row */
@@ -47,6 +49,10 @@ export const GitFileRow = memo(function GitFileRow({
   /** what a right-click on this file offers */
   menu: (path: string) => MenuEntry[];
   onHover: (path: string, entering: boolean) => void;
+  /** the row dragged, to be dropped on the chat as its mention; a list with no worktree to name
+   * offers no drag */
+  onDragStart?: (path: string, e: DragEvent) => void;
+  onDragEnd?: () => void;
 }) {
   const cm = useContextMenu("changes");
   const tipSide = useTipSide();
@@ -61,6 +67,9 @@ export const GitFileRow = memo(function GitFileRow({
       // the list owns the keyboard: tab reaches the panel, not each of fifty files in it
       tabIndex={-1}
       onClick={(e) => (onCheck && (checking || e.shiftKey) ? onCheck(f.path) : onOpen(f.path))}
+      draggable={!!onDragStart}
+      onDragStart={onDragStart && ((e) => onDragStart(f.path, e))}
+      onDragEnd={onDragEnd}
       {...cm.contextMenu(() => menu(f.path))}
       onMouseEnter={() => onHover(f.path, true)}
       onMouseLeave={() => onHover(f.path, false)}

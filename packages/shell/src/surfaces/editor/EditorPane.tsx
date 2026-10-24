@@ -23,6 +23,7 @@ import { ErrorBoundary } from "../../ui/ErrorBoundary.tsx";
 import { usePersisted, useSettled } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { Pane } from "../../ui/Pane.tsx";
+import { endCarry, startCarry } from "../chat/carried.ts";
 import { splitPath } from "../util.ts";
 import { FileViewer } from "./FileViewer.tsx";
 import { HtmlPreview } from "./HtmlPreview.tsx";
@@ -54,10 +55,29 @@ const VIEW_ICONS = { diff: "diff", file: "text", preview: "book" } as const;
 /** the file's name first and its directory after, as the row in the changes panel has it: the name
  * is what the head is there to say, so it never shrinks, and the directory gives way when the
  * head is narrow. `note` qualifies the name (a commit's copy, last turn's) and stays with it. */
-function EditorTitle({ path, note }: { path: string; note?: string }) {
+function EditorTitle({
+  path,
+  note,
+  worktreeId,
+}: {
+  path: string;
+  note?: string;
+  /** the worktree the file is in, whose chat a drag of the name lands in as the file's mention; a
+   * loose file has none, and does not drag */
+  worktreeId?: string;
+}) {
+  const store = useStoreInstance();
   const { name, dir } = splitPath(path);
   return (
-    <span className="editor-title" data-tip={dir ? path : undefined}>
+    <span
+      className="editor-title"
+      data-tip={dir ? path : undefined}
+      draggable={!!worktreeId}
+      onDragStart={
+        worktreeId ? (e) => startCarry(e, { kind: "paths", worktreeId, items: [{ path, folder: false }] }) : undefined
+      }
+      onDragEnd={worktreeId ? () => endCarry(store) : undefined}
+    >
       <span className="editor-name">
         {name}
         {note}
@@ -164,7 +184,13 @@ export function EditorPane({
       height={full || onScreen ? undefined : height}
       resizable={!full && !onScreen}
       onDragStart={onDragStart ?? NO_DRAG}
-      title={<EditorTitle path={path} note={history ? ` at ${ref?.slice(0, 7)}` : since ? ", last turn" : undefined} />}
+      title={
+        <EditorTitle
+          path={path}
+          note={history ? ` at ${ref?.slice(0, 7)}` : since ? ", last turn" : undefined}
+          worktreeId={loose ? undefined : worktreeId}
+        />
+      }
       // the header names the file, so it answers with the file's actions, the same list its row in
       // the changes panel has; a commit's copy is read-only, so no discard. A loose file has no
       // row and no place in the worktree, so nothing to offer

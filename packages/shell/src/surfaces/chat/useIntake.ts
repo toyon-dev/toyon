@@ -3,10 +3,17 @@ import { useEffect, useRef } from "react";
 import { type Copied, clipboardOfferDone, clipboardPasted } from "../../app/clipboardOffer.ts";
 import { readCopiedSource } from "../../app/copiedSource.ts";
 import { createFile, nextSeq } from "../../state/actions/file.ts";
-import { attachFiles, attachText, attachUpload, mentionInChat, noticeIn, roomIn, treeBox } from "../../state/attach.ts";
+import { attachFiles, attachText, attachUpload, noticeIn, roomIn, treeBox } from "../../state/attach.ts";
 import type { Store } from "../../state/context.tsx";
 import { useSock, useStoreInstance } from "../../state/context.tsx";
-import { composerBoxOf, type DropZone, NEW_PROJECT_BOX, worktreeById } from "../../state/store.ts";
+import {
+  archivedPageOf,
+  composerBoxOf,
+  type DropZone,
+  foundPageOf,
+  NEW_PROJECT_BOX,
+  worktreeById,
+} from "../../state/store.ts";
 import type { DaemonSocket } from "../../ws.ts";
 import { parentOf } from "../changes/fileTree.ts";
 import { cardDropBox } from "./handoff.ts";
@@ -49,7 +56,12 @@ export function fadeFileDrag(store: Store) {
   if (drag) wait(store, DRAG_GONE_MS);
 }
 
-function endFileDrag(store: Store) {
+/** whether the drag in flight was escaped: a drop of it goes nowhere (carried.ts asks too) */
+export const fileDragRefused = () => drag?.refused ?? false;
+
+/** the drag is over, or a row's drag ended (carried.ts): the highlight goes out at once */
+export function endFileDrag(store: Store) {
+  if (!drag) return;
   clearTimeout(idle);
   drag = null;
   store.dispatch({ a: "drag-files", v: null });
@@ -63,46 +75,6 @@ function refuseFileDrag(store: Store) {
   if (!drag) return;
   drag.refused = true;
   store.dispatch({ a: "drag-files", v: null });
-}
-
-/** the type a files-tab row drags under, beside text/plain for anywhere outside toyon */
-export const PATH_MIME = "application/x-toyon-path";
-
-/** A files-tab row on its way somewhere. A drag's data is only readable at the drop, and the panel
- * has to decide at dragover whether it takes this one, so the row says here what it carries. */
-let pathDrag: { worktreeId: string; path: string; folder: boolean } | null = null;
-
-export function startPathDrag(carried: { worktreeId: string; path: string; folder: boolean }) {
-  pathDrag = carried;
-}
-
-export function endPathDrag(store: Store) {
-  pathDrag = null;
-  if (drag) endFileDrag(store);
-}
-
-const carriesPath = (e: React.DragEvent) => pathDrag !== null && Array.from(e.dataTransfer.types).includes(PATH_MIME);
-
-/** The chat panel's half of a row's drag. A worktree with a composer lights the panel and takes
- * the path as a mention; one without refuses it. Either way the drop is taken here, or the textarea
- * under the pointer would paste the raw path as well. */
-export function pathDropHandlers(store: Store) {
-  return {
-    onDragOver: (e: React.DragEvent) => {
-      if (!carriesPath(e) || !pathDrag) return;
-      e.preventDefault();
-      const takes = treeBox(store.getState(), pathDrag.worktreeId) !== null;
-      e.dataTransfer.dropEffect = takes ? "copy" : "none";
-      if (takes) noteFileDrag(store, { at: "chat" });
-    },
-    onDrop: (e: React.DragEvent) => {
-      if (!carriesPath(e) || !pathDrag) return;
-      e.preventDefault();
-      const { worktreeId, path, folder } = pathDrag;
-      endPathDrag(store);
-      mentionInChat(store, worktreeId, path, folder);
-    },
-  };
 }
 
 let imageSeq = 0;
@@ -170,10 +142,13 @@ export function pickAttachments(store: Store, boxId: string, { images = false } 
 /** the box a drop lands in: the one the composer on screen writes in, or the question card that
  * has the box, since a drop on the card goes with the answer and not with the message written
  * behind it. Read at drop time, like the pending counts. */
-function dropBox(store: Store): string | null {
+export function dropBox(store: Store): string | null {
   const s = store.getState();
   // the new-project view's box stands in for a worktree that does not exist yet
   if (s.newProject) return NEW_PROJECT_BOX;
+  // an archived or found worktree's page has its own box over the row underneath (Composer)
+  const page = archivedPageOf(s) ?? foundPageOf(s);
+  if (page) return page.id;
   const active = worktreeById(s, s.activeId);
   return cardDropBox(active ? s.local[active.worktree.id] : undefined) ?? composerBoxOf(active);
 }

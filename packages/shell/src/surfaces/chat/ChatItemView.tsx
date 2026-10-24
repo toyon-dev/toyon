@@ -740,7 +740,7 @@ export const ToolRow = memo(
                 It still names the row for the fold's label. */}
             {writing && !briefed ? (
               <span className="tool-writing" data-tip={hint}>
-                <Spinner variant="squares" />
+                <Spinner />
               </span>
             ) : (
               hint && <span className={cx("tool-hint", running && "live-text")}>{hint}</span>
@@ -756,7 +756,7 @@ export const ToolRow = memo(
             {count && <span className="tool-count">{count}</span>}
             {briefed && (
               <span className="tool-writing" data-tip={writing}>
-                <Spinner variant="squares" />
+                <Spinner />
               </span>
             )}
             {stoppable && (

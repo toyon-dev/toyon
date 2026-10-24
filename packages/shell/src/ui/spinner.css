@@ -1,82 +1,69 @@
 /* Spinner: the one drawn "in progress" mark. See Spinner.tsx for where it sits. */
 @layer tokens, base, surfaces;
 @layer base {
-  /* a ring with one quarter lit, turning. Drawn with borders rather than an SVG arc so it takes
-   currentColor the way an Icon does and needs no path at two sizes; the quiet three quarters are
-   the same colour at a quarter strength, so the ring reads as a whole shape and not a comma. */
-  .spinner {
-    display: inline-block;
-    flex-shrink: 0;
-    width: 13px;
-    height: 13px;
-    vertical-align: -2px;
-    border-radius: 50%;
-    border: 1.3px solid color-mix(in srgb, currentColor 25%, transparent);
-    border-top-color: currentColor;
-    animation: spin 0.8s linear infinite;
-  }
-  /* the dot's own box, for the rail's status slot: 8px so the row does not shift when a sync
-   starts, and the discovered dot's 1.5px ring, since a thinner line at this size is a smudge.
-   text1 rather than a state colour: the dot's colours say what the worktree is doing over time,
-   and this is a git op you started that finishes on its own. */
-  .spinner-dot {
-    width: 8px;
-    height: 8px;
-    vertical-align: 0;
-    border-width: 1.5px;
-    color: var(--text1);
-  }
-  @keyframes spin {
-    to {
-      transform: rotate(360deg);
-    }
-  }
-  /* The squares: four cells in the ring's box, square like the glyphs beside them. A pair goes
-   round clockwise, the head at full strength and one cell behind it at half, so the mark has a
-   direction. Never all four lit: that is the stop glyph filled in, and the stop button sits
-   beside it. Four steps with no easing, so it ticks rather than glides; with only four positions
-   a slower tick reads as a flicker, not a turn.
+  /* Four cells in an Icon's box, square like the glyphs beside them. A pair goes round
+   clockwise, the head at full strength and one cell behind it at half, so the mark has a
+   direction. Never all four lit: that is the stop glyph filled in, and in the transcript the
+   stop button sits beside it. Four steps with no easing, so it ticks rather than glides; with
+   only four positions a slower tick reads as a flicker, not a turn.
 
    Each cell is an element of its own, in the ink, fading through its turn: opacity is a property
    the compositor animates by itself, where a colour or a shadow stepping on one element is a
    style pass and a repaint on the main thread for every frame of the whole turn, and every other
    animation on the page gets recalculated along with it. A quiet cell at a quarter opacity over
-   the ground is the same colour a quarter mix of the ink would paint. */
-  .spinner-squares {
+   the ground is the same colour a quarter mix of the ink would paint. The box and the cell are
+   custom properties so the dot size below redraws the mark by naming three numbers. */
+  .spinner {
+    --spinner-box: 13px;
+    --spinner-cell: 5px;
+    --spinner-inset: 1px;
     position: relative;
-    border: 0;
-    border-radius: 0;
-    animation: none;
+    display: inline-block;
+    flex-shrink: 0;
+    width: var(--spinner-box);
+    height: var(--spinner-box);
+    vertical-align: -2px;
     & > span {
       position: absolute;
-      width: 5px;
-      height: 5px;
+      width: var(--spinner-cell);
+      height: var(--spinner-cell);
       background: currentColor;
       opacity: 0.25;
       animation: squares 0.48s steps(1) infinite;
     }
-    /* cells clockwise from the top left; the head starts top right and each cell's delay puts it
-     a step behind the one before it */
+    /* cells clockwise from the top left, each in its corner of the box less the inset; the
+     head starts top right and each cell's delay puts it a step behind the one before it */
     & > span:nth-child(1) {
-      left: 1px;
-      top: 1px;
+      left: var(--spinner-inset);
+      top: var(--spinner-inset);
       animation-delay: -0.12s;
     }
     & > span:nth-child(2) {
-      left: 7px;
-      top: 1px;
+      right: var(--spinner-inset);
+      top: var(--spinner-inset);
       animation-delay: 0s;
     }
     & > span:nth-child(3) {
-      left: 7px;
-      top: 7px;
+      right: var(--spinner-inset);
+      bottom: var(--spinner-inset);
       animation-delay: -0.36s;
     }
     & > span:nth-child(4) {
-      left: 1px;
-      top: 7px;
+      left: var(--spinner-inset);
+      bottom: var(--spinner-inset);
       animation-delay: -0.24s;
     }
+  }
+  /* the dot's own box, for the rail's status slot: 8px so the row does not shift when a sync
+   starts, four 3px cells in the corners, 2px apart, since a thinner gap at this size runs the cells together.
+   text1 rather than a state colour: the dot's colours say what the worktree is doing over time,
+   and this is a git op you started that finishes on its own. */
+  .spinner-dot {
+    --spinner-box: 8px;
+    --spinner-cell: 3px;
+    --spinner-inset: 0px;
+    vertical-align: 0;
+    color: var(--text1);
   }
   /* a cell's turn: the head for one step, the tail for the next, quiet for the two after */
   @keyframes squares {
@@ -91,17 +78,13 @@
       opacity: 0.25;
     }
   }
-  /* no rotation: a full ring that breathes, borrowing the working dot's pulse. The squares hold
-   one frame: one lit corner and three quiet, never four lit, for the reason above. */
+  /* no motion: the mark holds one frame, one lit corner and three quiet, never four lit, for the
+   reason above */
   @media (prefers-reduced-motion: reduce) {
-    .spinner {
-      border-color: currentColor;
-      animation: pulse 1.2s ease-in-out infinite;
-    }
-    .spinner-squares > span {
+    .spinner > span {
       animation: none;
     }
-    .spinner-squares > span:first-child {
+    .spinner > span:first-child {
       opacity: 1;
     }
   }

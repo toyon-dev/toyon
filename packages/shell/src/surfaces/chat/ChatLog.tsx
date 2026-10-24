@@ -641,7 +641,7 @@ export function ChatLog({
                   {/* the mark and not a word: "working" said what the mark says, and the row is
                     read a hundred times a session. A word stays only where it adds a fact the
                     mark cannot: who is working, or where the wait is. */}
-                  <Spinner variant="squares" />
+                  <Spinner />
                   {!busy && sending
                     ? sentSecs >= QUIET_AFTER && (
                         <>

@@ -271,6 +271,10 @@ describe("SYSTEM_APPEND", () => {
     expect(SYSTEM_APPEND).toContain("$PORT");
     // an install before the ignore file floods the changes list with every dependency
     expect(SYSTEM_APPEND).toContain(".gitignore");
+    // the land keys are the person's to set from the UI and the agent never lands, so the prompt
+    // stops at check rather than teach routes, methods, automerge and timeouts it never writes
+    expect(SYSTEM_APPEND).not.toContain("automerge");
+    expect(SYSTEM_APPEND).toContain("must pass before the work can land");
   });
   test("says the preview is already running, so the agent starts no server of its own", () => {
     expect(SYSTEM_APPEND).toContain("never start a dev server");

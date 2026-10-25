@@ -127,14 +127,13 @@ function attachAny(store: Store, boxId: string | null, files: File[]) {
 }
 
 /** The browser's file dialog, for a composer nothing can be pasted or dropped into: a phone's
- * keyboard offers a picture only to a field that takes one, and a textarea takes text. `images`
- * asks for pictures alone, which on a phone opens the photo picker, the newest screenshot first,
- * in place of the file browser. */
-export function pickAttachments(store: Store, boxId: string, { images = false } = {}) {
+ * keyboard offers a picture only to a field that takes one, and a textarea takes text. Unfiltered,
+ * so a phone offers its files beside its photos: iOS puts the photo library, the camera and the
+ * file browser on one sheet, and Android's browser lists photos as one source. */
+export function pickAttachments(store: Store, boxId: string) {
   const input = document.createElement("input");
   input.type = "file";
   input.multiple = true;
-  if (images) input.accept = "image/*";
   input.onchange = () => attachAny(store, boxId, Array.from(input.files ?? []));
   input.click();
 }

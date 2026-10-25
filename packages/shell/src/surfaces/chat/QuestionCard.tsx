@@ -51,7 +51,6 @@ export function QuestionCard({
   worktreeId,
   rootRef: root,
   numbers,
-  onScreen,
   onAnswer,
 }: {
   item: AskItem;
@@ -60,8 +59,6 @@ export function QuestionCard({
   rootRef: Root;
   /** the number each kind's next chip takes, counted on from what this session has sent and queued */
   numbers: Readonly<Record<AttachmentKind, number>>;
-  /** a phone: the attach button takes pictures alone, and the only way in */
-  onScreen: boolean;
   onAnswer?: (answers: AskAnswer[]) => void;
 }) {
   const sock = useSock();
@@ -272,14 +269,14 @@ export function QuestionCard({
           skip
         </Button>
       )}
-      {/* the way in for a picture where there is no paste or drop to bring it: a phone, above all.
-          At the far end, apart from the answer's own actions. */}
+      {/* the way in for a picture or a file where there is no paste or drop to bring it: a phone,
+          above all. At the far end, apart from the answer's own actions. */}
       <IconButton
         className="card-attach"
         icon="attach"
         tone="chrome"
-        label={onScreen ? "Attach a picture" : "Attach a picture or a file"}
-        onClick={() => pickAttachments(store, box, { images: onScreen })}
+        label="Attach a picture or a file"
+        onClick={() => pickAttachments(store, box)}
       />
     </CardFoot>
   );

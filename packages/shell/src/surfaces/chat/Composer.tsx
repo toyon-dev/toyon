@@ -1502,7 +1502,6 @@ export function Composer({
             worktreeId={id}
             rootRef={cardRef}
             numbers={numbersAfter(nextNumbers(sentBefore), queued)}
-            onScreen={onScreen}
             onAnswer={revived ? answerStopped : undefined}
           />
         ) : (
@@ -1896,8 +1895,8 @@ export function Composer({
               <IconButton
                 icon="attach"
                 tone="chrome"
-                label={onScreen ? "Attach a picture" : "Attach a picture or a file, or drop one here"}
-                onClick={() => pickAttachments(store, boxId, { images: onScreen })}
+                label={onScreen ? "Attach a picture or a file" : "Attach a picture or a file, or drop one here"}
+                onClick={() => pickAttachments(store, boxId)}
               />
             )}
             {/* the terminal is one shell per worktree, so it belongs with the other per-worktree

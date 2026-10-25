@@ -57,10 +57,17 @@ describe("matchesSibling", () => {
     expect(matchesSibling("flashbug", w)).toBe(true);
   });
 
-  test("the branch, the id a transcript is named by, and the directory", () => {
+  test("the branch", () => {
     expect(matchesSibling("toyon/mess", w)).toBe(true);
-    expect(matchesSibling("108c90", w)).toBe(true);
-    expect(matchesSibling("wt-108c", w)).toBe(true);
+  });
+
+  test("the id and the directory are not names the person sees, and a lone digit is in nearly every id", () => {
+    expect(matchesSibling("108c90", w)).toBe(false);
+    expect(matchesSibling("wt-108c", w)).toBe(false);
+    expect(matchesSibling("3", w)).toBe(false);
+    expect(matchesSibling("0", w)).toBe(false);
+    // a letter still finds the title anywhere in it
+    expect(matchesSibling("g", w)).toBe(true);
   });
 
   test("nothing typed matches everything; the wrong letters match nothing", () => {
@@ -75,20 +82,6 @@ describe("matchesSibling", () => {
     expect(matchesSibling("- ", w)).toBe(false);
   });
 
-  test("the id and the directory are read from their start, and not by a lone hex character", () => {
-    // a digit or an a-f letter is in nearly every id: it names the title or branch alone
-    expect(matchesSibling("3", w)).toBe(false);
-    expect(matchesSibling("0", w)).toBe(false);
-    expect(matchesSibling("c9", w)).toBe(false);
-    expect(matchesSibling("10", w)).toBe(false);
-    // three characters of the start name it; the same three from the middle do not
-    expect(matchesSibling("108", w)).toBe(true);
-    expect(matchesSibling("wt-1", w)).toBe(true);
-    expect(matchesSibling("905", w)).toBe(false);
-    // a letter still finds the title anywhere in it
-    expect(matchesSibling("g", w)).toBe(true);
-  });
-
   test("a trailing space holds only while a name has more to come", () => {
     // the title's next word is about to be typed
     expect(matchesSibling("message ", w)).toBe(true);
@@ -96,7 +89,6 @@ describe("matchesSibling", () => {
     // the name is typed whole: the space after it is the sentence going on
     expect(matchesSibling("toyon/message-flash-bug ", w)).toBe(false);
     expect(matchesSibling("message flash bug ", w)).toBe(false);
-    expect(matchesSibling("wt-108c ", w)).toBe(false);
     // without the space the whole name still names it, so the row is offered to pick
     expect(matchesSibling("toyon/message-flash-bug", w)).toBe(true);
   });

@@ -136,6 +136,19 @@ export interface KeyStore {
  * contains */
 export const scopedKey = (key: string, origin: string) => `${key}@${origin}`;
 
+/** What a machine leaves in IndexedDB, beside what it leaves in localStorage, so this file lists
+ * everything of a machine's in this browser: its last hello and the chats opened there
+ * (snapshot.ts, kept by snapshotStore.ts). One database, one object store, keyed the same way as
+ * above, with the chat's worktree id after a slash. */
+export const SNAPSHOT_DB = "toyon";
+export const SNAPSHOT_STORE = "snapshots";
+export const snapshotKey = {
+  hello: (origin: string) => `hello@${origin}`,
+  chat: (origin: string, id: string) => `chat@${origin}/${id}`,
+  /** the prefix every chat key of a machine starts with */
+  chats: (origin: string) => `chat@${origin}/`,
+};
+
 /** One machine's view of storage: every read and write lands under that machine's origin, and the
  * try/catch every storage call needs (a private window, a full quota) is here once. `session` is
  * the same over sessionStorage, for what is this tab's alone. */

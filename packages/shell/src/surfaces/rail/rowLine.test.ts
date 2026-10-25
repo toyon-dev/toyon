@@ -14,6 +14,7 @@ import {
   rowLine,
   rowQuiet,
   rowStep,
+  staleLine,
 } from "./rowLine.ts";
 
 // The order of the line's answers is the whole logic, and each step below was chosen against the
@@ -21,7 +22,6 @@ import {
 // was working again, read as the wrong thing on the device with the least room to say more.
 
 const ctx = (over: Partial<RowContext> = {}): RowContext => ({
-  offline: false,
   needsSetup: false,
   path: "~/w/a",
   ...over,
@@ -81,9 +81,13 @@ describe("the line under a row's name", () => {
     expect(rowLine(owned({}, { kind: "spare" }), ctx({ at: "4m" }))).toBe("new worktree");
   });
 
-  test("the socket being down wins over everything", () => {
-    expect(rowLine(owned({ agent: "waiting" }), ctx({ offline: true }))).toBe(OFFLINE_LINE);
-    expect(rowLine(found(), ctx({ offline: true }))).toBe(OFFLINE_LINE);
+  test("the bar's line while the socket is down: the retry until a failure is named, then the age", () => {
+    const at = Date.now() - 20 * 60_000;
+    expect(staleLine(null, at)).toBe(OFFLINE_LINE);
+    expect(staleLine("unauthorized", at)).toBe(OFFLINE_LINE);
+    expect(staleLine("down", at)).toBe("Not answering; as of 20m ago");
+    expect(staleLine("blocked", Date.now())).toBe("Not answering; as of just now");
+    expect(staleLine("down", null)).toBe("Not answering");
   });
 
   test("a found worktree says where it is, or who is holding it", () => {

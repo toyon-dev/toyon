@@ -5,8 +5,8 @@
 // The matching is pure so its rules have tests without a transcript on disk; the class around it
 // owns what costs something, reading and parsing the files.
 
-import { type ChatHit, queryTerms } from "@toyon/shared";
-import { coalesce, parseTranscript, type TranscriptEntry } from "../agent/transcript.ts";
+import { type ChatHit, coalesce, queryTerms } from "@toyon/shared";
+import { parseTranscript, type TranscriptEntry } from "../agent/transcript.ts";
 import type { StateStore } from "../core/state.ts";
 
 /** at most this many hits from one chat: the palette names a place to look, not every line in it */

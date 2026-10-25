@@ -10,6 +10,7 @@ import { connectionText, type Waiting, waitingText } from "./waiting.ts";
 const w = (over: Partial<Waiting> = {}): Waiting => ({
   connected: true,
   heard: true,
+  standing: false,
   connectFailure: null,
   hasToken: true,
   projectChord: "⌘O",
@@ -96,5 +97,20 @@ describe("what the centre says while it waits", () => {
     expect(text({ treeEmpty: true, landsFrom: "hello-page" })).toBe("nothing runs on main until hello-page lands");
     // main with code of its own boots like any worktree, whatever else is open
     expect(waitingText(w({ landsFrom: "hello-page" }))).toBeNull();
+  });
+
+  test("what stands on the screen outranks the sentence, unless the token is the trouble", () => {
+    expect(connectionText(w({ connected: false, connectFailure: "down", standing: true }))).toBeNull();
+    expect(connectionText(w({ connected: false, connectFailure: "blocked", standing: true }))).toBeNull();
+    expect(connectionText(w({ connected: false, connectFailure: null, standing: true }))).toBeNull();
+    expect(
+      connectionText(w({ connected: false, connectFailure: null, standing: true, title: null, heard: false })),
+    ).toBeNull();
+    expect(connectionText(w({ connected: false, connectFailure: "unauthorized", standing: true }))?.text).toContain(
+      "token",
+    );
+    expect(connectionText(w({ connected: false, connectFailure: "down", standing: false }))?.text).toContain(
+      "not running",
+    );
   });
 });

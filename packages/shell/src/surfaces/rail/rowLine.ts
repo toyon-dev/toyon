@@ -1,6 +1,7 @@
 import {
   type ArchivedWorktree,
   archiveParts,
+  type ConnectFailure,
   isBusy,
   isLead,
   isOwned,
@@ -23,7 +24,7 @@ import { ago, type DotState, dotClass, shipLabel, stateLabel } from "../util.ts"
  * than the list it was opened to read. A pure function, the way the rail walk and the recap decide
  * a choice like this: the order below is the whole logic, and it is what the test holds.
  *
- * The socket wins over everything, because nothing further is known. A found worktree runs nothing
+ * A found worktree runs nothing
  * of ours, so what it can say is where it is, or who is holding it. The lead is where new work
  * starts and its dot describes procs a phone never previews, so it says what a tap on it does. Then what
  * is happening now outranks what happened last: while a turn is running, waiting on you or broken,
@@ -32,8 +33,24 @@ import { ago, type DotState, dotClass, shipLabel, stateLabel } from "../util.ts"
  * agent's own account of what it did, where the state is a word the dot already carries.
  */
 
-/** what every row and the panel's ground say while the socket is down */
+/** what the rail's tips and the panel's ground say while the socket is down, and the bar before
+ * the daemon has been found down for good */
 export const OFFLINE_LINE = "Lost the daemon; retrying";
+
+/** the bar once the daemon is found down or unreachable and nothing says since when */
+export const NOT_ANSWERING = "Not answering";
+
+/**
+ * The bar's line while the socket is down. Before a failure is named, the retry; once the daemon
+ * is found down or unreachable, how old what is on screen is, from when the page last heard the
+ * daemon: a snapshot's time (state.recalledAt) or the last hello's (state.heardAt). The rows
+ * under it keep their own last line, since a list of twenty rows all saying the socket is down
+ * says nothing about the rows, and the dots' rings already say it is down.
+ */
+export function staleLine(failure: ConnectFailure | null, at: number | null): string {
+  if (failure !== "down" && failure !== "blocked") return OFFLINE_LINE;
+  return at === null ? NOT_ANSWERING : `${NOT_ANSWERING}; as of ${when(ago(at))}`;
+}
 
 /** a found worktree's state: git knows it, and nothing of ours runs there */
 export const FOUND_LINE = "Not run by Toyon";
@@ -53,7 +70,6 @@ export const owedLine = (repoName: string) => `in ${repoName}, here while it nee
 const IN_FLIGHT: ReadonlySet<DotState> = new Set(["waiting", "stopping", "working", "starting", "failed", "crashed"]);
 
 export interface RowContext {
-  offline: boolean;
   /** the row's repo has no confirmed config, which is the one idle the dot cannot explain */
   needsSetup: boolean;
   /** where the row is, as the person wrote it (a ~ for home) */
@@ -67,7 +83,6 @@ export interface RowContext {
 }
 
 export function rowLine(w: WorktreeStatus, ctx: RowContext): string {
-  if (ctx.offline) return OFFLINE_LINE;
   if (!isOwned(w)) return w.locked ? `Held by ${w.lockReason ?? "another tool"}` : ctx.path;
   // the spinner in the dot's slot is the line's subject; the lead too, since a pull runs there
   if (ctx.op) return shipLabel(ctx.op);

@@ -32,21 +32,45 @@ describe("offline page", () => {
 });
 
 describe("service worker", () => {
-  test("steps in for navigations alone", () => {
-    expect(worker).toContain('e.request.mode !== "navigate"');
+  test("steps in for navigations, and off loopback for the shell's assets alone", () => {
+    expect(worker).toContain('e.request.mode === "navigate"');
+    expect(worker).toContain('!here && url.origin === self.location.origin && url.pathname.startsWith("/assets/")');
   });
 
   test("takes a share in before the offline fallback, and sends the browser on to the shell", () => {
     // the share is a POST navigation; fetched through to the daemon it would be answered with the
     // same redirect and the files lost
-    expect(worker.indexOf('e.request.method === "POST"')).toBeLessThan(worker.indexOf("await fetch(e.request)"));
+    expect(worker.indexOf('e.request.method === "POST"')).toBeLessThan(worker.indexOf("e.respondWith(navigate(e))"));
     expect(worker).toContain('Response.redirect("/", 303)');
   });
 
-  test("caches the offline page and never the shell", () => {
-    // a cached index.html would boot an asset graph the daemon no longer has
+  test("keeps the offline page, and the shell off loopback alone", () => {
+    // on loopback a cached index.html would boot an asset graph the daemon no longer has, and the
+    // not-running page can start the daemon; anywhere else the shell is what to show
     expect(worker).toContain('"/offline.html"');
-    expect(worker).not.toContain("index.html");
-    expect(worker).not.toContain("/assets");
+    expect(worker).toContain("const here = loopback(self.location.hostname)");
+    expect(worker).toContain("here ? null : keepShell(res.clone())");
+  });
+
+  test("serves the kept shell only once the network has failed, and never for the offline page", () => {
+    const tried = worker.indexOf("const res = await fetch(e.request)");
+    const kept = worker.indexOf("caches.open(SHELL)).match(INDEX)");
+    expect(tried).toBeGreaterThan(0);
+    expect(kept).toBeGreaterThan(tried);
+    expect(worker).toContain("new URL(e.request.url).pathname !== PAGE");
+  });
+
+  test("an asset is the network's, kept as it passes, and the kept one when the network fails", () => {
+    const net = worker.indexOf("const res = await fetch(request)");
+    const put = worker.indexOf("cache.put(request, copy)");
+    const back = worker.indexOf("caches.open(SHELL)).match(request)");
+    expect(net).toBeGreaterThan(0);
+    expect(put).toBeGreaterThan(net);
+    expect(back).toBeGreaterThan(put);
+  });
+
+  test("a new build is a changed index, and goes in whole before the index that names it", () => {
+    expect(worker).toContain("(await kept.text()) === html");
+    expect(worker.indexOf("await cache.addAll(assets)")).toBeLessThan(worker.indexOf("await cache.put(INDEX"));
   });
 });

@@ -40,7 +40,14 @@ import { useDispatch, useMachine, useSock, useStore, useStoreInstance } from "..
 import { openSource } from "../../state/openSource.ts";
 import { fillFrame, type HeldFrame } from "../../state/outbox.ts";
 import { isUploading } from "../../state/pending.ts";
-import { useChatCentred, useGreenfield, useLocalField, usePreviewId, useTouch } from "../../state/selectors.ts";
+import {
+  useChatCentred,
+  useGreenfield,
+  useLocalField,
+  usePreviewId,
+  useSendsRefused,
+  useTouch,
+} from "../../state/selectors.ts";
 import { composerBoxOf, type Draft, NEW_PROJECT_BOX, sendWaits, trunkOf, worktreeById } from "../../state/store.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
@@ -119,6 +126,10 @@ import { usePlanTitle } from "./usePlanTitle.ts";
 import { WorktreeChip } from "./WorktreeChip.tsx";
 
 /** a frozen empty list, so a selector returning it does not read as a change every render */
+/** under the box when a send is pressed with the daemon found down: the words stay for the send
+ * that goes once it is back */
+const NOT_ANSWERING_LINE = "not answering; send once Toyon is back";
+
 const NO_CHOICES: ModelChoice[] = [];
 /** one empty list for a worktree not yet listed, so the folder memo holds until the files arrive */
 const NO_PATHS: string[] = [];
@@ -998,6 +1009,9 @@ export function Composer({
   // what could not be done, said under the box it was done to: the hands are there, and the next
   // keystroke answers it
   const refuse = (text: string) => boxId && dispatch({ a: "notice", id: boxId, text });
+  // the daemon found down or unreachable: nothing goes from here until it answers (selectors.ts).
+  // The field stays open, since what is typed is kept and goes with the next send.
+  const refused = useSendsRefused();
   // the seat's verb by name. The seat only offers it from an empty box, so this reads the facts
   // under it rather than the seat, and says why when there is nothing for the word to do.
   const runSeat = (name: "check" | "land" | "archive" | "handoff", args = "") => {
@@ -1076,6 +1090,7 @@ export function Composer({
     // daemon's default, since this is where it was chosen.
     if (project) {
       if (project.busy) return;
+      if (refused) return refuse(NOT_ANSWERING_LINE);
       if (project.why) return refuse(project.why);
       // an upload still on its way follows its chip to the row's box, and the send from there holds
       if (spawnAgent !== defaultAgent || !agentChosen) sock?.send({ t: "set-default-agent", agent: spawnAgent });
@@ -1084,6 +1099,9 @@ export function Composer({
       return;
     }
     if (blank) return;
+    // the daemon found down: nothing goes from here until it answers, except a bare mode word,
+    // which only sets this page's own state
+    if (refused && !(mode && !typed?.args)) return refuse(NOT_ANSWERING_LINE);
     // Only a message for the agent waits on the agent: a `!` command runs in the terminal and a
     // seat verb is git's, whatever the adapter's state. The daemon would refuse the message the
     // same way; the line above the knobs already says why, so the answer under the field is
@@ -1764,7 +1782,7 @@ export function Composer({
                       variant="inline"
                       tone="strong"
                       className="composer-verb"
-                      disabled={!!verb.ships && !!op}
+                      disabled={(!!verb.ships && !!op) || refused}
                       {...tip(verb.tip, undefined, { placement: "top" })}
                       // The word leaves with its press: the land's line replaces it as prose, and
                       // archive takes the row. Focus left on it would fall to the body, so the
@@ -2045,7 +2063,7 @@ export function Composer({
                 icon="send"
                 tone="primary"
                 label={project ? "Create the project" : "Send"}
-                disabled={project ? project.busy : blank}
+                disabled={refused || (project ? project.busy : blank)}
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={send}
               />

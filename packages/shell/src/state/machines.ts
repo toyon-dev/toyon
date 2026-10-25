@@ -141,6 +141,7 @@ export function createMachines(init: MachinesInit): Machines {
       watches.delete(origin);
       m.dispose();
       m.storage.clear();
+      m.forget();
       others.splice(others.indexOf(m), 1);
       if (active === m) active = serving;
       notify();

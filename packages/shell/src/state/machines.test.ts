@@ -3,6 +3,7 @@ import type { PairedMachine, Remote } from "@toyon/shared";
 import { createStore } from "./context.tsx";
 import type { Machine, MachineInit } from "./machine.ts";
 import { createMachines } from "./machines.ts";
+import { snapshotOf } from "./snapshot.ts";
 import { initialState } from "./store.ts";
 
 // The registry over fakes: which machine is active, which sockets are held, what is kept for
@@ -26,6 +27,8 @@ function fake(init: MachineInit, log: string[], remote: Remote | null = null): M
     terminals: {} as Machine["terminals"],
     storage: { clear: () => log.push(`clear ${name}`) } as unknown as Machine["storage"],
     heard: { version: null, protocol: null },
+    recalled: Promise.resolve(),
+    forget: () => log.push(`forget ${name}`),
     boot: () => {},
     dispose: () => log.push(`dispose ${name}`),
   };
@@ -46,6 +49,16 @@ function setup(list: PairedMachine[] = [work]) {
 }
 
 describe("machines", () => {
+  test("the last-known machine's paired list is the list, before any hello", () => {
+    const { machines } = setup([]);
+    const facts = { ...initialState({ clientId: "me" }), machine: "home", handed: [work] };
+    facts.rows = [{ id: "a", repoId: "r", path: "/w/a", name: "a", procs: [], agent: "idle", login: false }];
+    const hello = snapshotOf(facts, 1);
+    if (!hello) throw new Error("nothing kept");
+    machines.serving().store.dispatch({ a: "recall", hello, chats: {} });
+    expect(machines.list().map((m) => m.origin)).toEqual([home.origin, work.origin]);
+  });
+
   test("the serving machine is first and active; the saved ones follow, the serving one never twice", () => {
     const { machines } = setup([work, home]);
     expect(machines.list().map((m) => m.origin)).toEqual([home.origin, work.origin]);

@@ -18,6 +18,7 @@ import {
   canGraft,
   canLand,
   canRename,
+  coalesce,
   DEFAULT_MERGE_METHOD,
   describeDuration,
   type GitFileStatus,
@@ -58,7 +59,7 @@ import { type Failure, fixPrompt, type WorkStanding } from "../agent/prompt.ts";
 import { firstAskOf } from "../agent/recap.ts";
 import type { AgentRegistry } from "../agent/registry.ts";
 import { makeNamer, taskText } from "../agent/tasks.ts";
-import { coalesce, sealOpenTurn, Transcript, type TranscriptEntry, transcriptPathFor } from "../agent/transcript.ts";
+import { sealOpenTurn, Transcript, type TranscriptEntry, transcriptPathFor } from "../agent/transcript.ts";
 import { cloneTree } from "../core/clone.ts";
 import { UserError } from "../core/errors.ts";
 import type { Hub } from "../core/hub.ts";

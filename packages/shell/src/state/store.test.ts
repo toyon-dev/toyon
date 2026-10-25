@@ -17,6 +17,7 @@ import { addToChat, attachPick } from "./attach.ts";
 import { createStore } from "./context.tsx";
 import { outBoxId, outBoxOf, readyToGo } from "./outbox.ts";
 import { isUploading, settledInputs, toInput } from "./pending.ts";
+import { snapshotOf } from "./snapshot.ts";
 import {
   type Action,
   asksSetup,
@@ -4283,5 +4284,89 @@ describe("a pieces list", () => {
     ]);
     expect(chatOf(s)).toHaveLength(1);
     expect(chatOf(s)[0]).toMatchObject({ kind: "pieces", id: "l1", state: "done", pieces: [] });
+  });
+});
+
+describe("the last-known machine", () => {
+  /** what a page before this one kept: the store as a hello left it, taken as a snapshot */
+  const kept = (...rows: WorktreeStatus[]) => {
+    const snap = snapshotOf(run([helloIn([repo("r")], ...rows)]), 5);
+    if (!snap) throw new Error("nothing kept");
+    return snap;
+  };
+  const events = [
+    { seq: 0, event: { type: "user-message", text: "hi", ts: 1 } as AgentEvent },
+    { seq: 1, event: { type: "turn-start", ts: 1 } as AgentEvent },
+    { seq: 2, event: { type: "tool-start", toolId: "t", name: "Bash", input: {}, ts: 1 } as AgentEvent },
+  ];
+  const chat = { protocol: PROTOCOL_VERSION, at: 5, events, seq: 2 };
+  const fresh = initialState({ clientId: ME, storedActive: "a", storedPhoneRow: true, frame: "phone" });
+
+  test("lays the hello in unheard, with the time it was heard, and comes back to the stored row", () => {
+    const s = run([{ a: "recall", hello: kept(wt("a"), wt("b")), chats: { a: chat } }], fresh);
+    expect(s.heard).toBe(false);
+    expect(s.recalledAt).toBe(5);
+    expect(s.rows.map((w) => w.id)).toEqual(["a", "b"]);
+    expect(s.repos.map((r) => r.id)).toEqual(["r"]);
+    expect(s.activeId).toBe("a");
+    expect(s.screen).toBe("chat");
+    expect(s.visible.map((w) => w.id)).toEqual(["a", "b"]);
+  });
+
+  test("a chat comes back with its open calls closed and nothing running", () => {
+    const s = run([{ a: "recall", hello: kept(wt("a")), chats: { a: { ...chat, draft: "typed" } } }], fresh);
+    const l = s.local.a;
+    expect(l?.chat.map((i) => i.kind)).toEqual(["user", "tool"]);
+    expect(l?.chat.every((i) => i.kind !== "tool" || i.done)).toBe(true);
+    expect(l?.running).toBeUndefined();
+    // dated by the newest stamp in the tail, so a wait counted from it says the truth
+    expect(l?.chatAt).toBe(1);
+    expect(l?.draft).toBe("typed");
+  });
+
+  test("the page's own facts stay its own: version, install, knocks, update, the new-project view", () => {
+    const before = { ...fresh, version: "9", install: "bun" as const, knocks: [{ id: "k" }] as never, letIn: true };
+    const s = run([{ a: "recall", hello: kept(wt("a")), chats: {} }], before);
+    expect(s.version).toBe("9");
+    expect(s.install).toBe("bun");
+    expect(s.knocks).toEqual(before.knocks);
+    expect(s.letIn).toBe(true);
+    expect(s.newProject).toBeNull();
+    expect(s.themes).toBe(fresh.themes);
+  });
+
+  test("goes home when the stored row has no chat kept, and skips a chat with no row", () => {
+    const s = run([{ a: "recall", hello: kept(wt("a")), chats: { gone: chat } }], fresh);
+    expect(s.screen).toBe("home");
+    expect(s.local.gone).toBeUndefined();
+  });
+
+  test("a chat this build cannot read is dropped alone", () => {
+    const bad = new Proxy({ type: "tool-start" } as Record<string, unknown>, {
+      get: (t, k) => {
+        if (k === "type") return t.type;
+        throw new Error("unreadable");
+      },
+    }) as unknown as AgentEvent;
+    const s = run(
+      [
+        {
+          a: "recall",
+          hello: kept(wt("a"), wt("b")),
+          chats: { a: chat, b: { ...chat, events: [{ seq: 0, event: bad }] } },
+        },
+      ],
+      fresh,
+    );
+    expect(s.local.a?.chat).toHaveLength(2);
+    expect(s.local.b?.chat ?? []).toHaveLength(0);
+  });
+
+  test("the hello that follows clears the recall and stamps when it was heard", () => {
+    const recalled = run([{ a: "recall", hello: kept(wt("a")), chats: {} }], fresh);
+    const s = run([hello(wt("a"))], recalled);
+    expect(s.heard).toBe(true);
+    expect(s.recalledAt).toBeNull();
+    expect(s.heardAt).not.toBeNull();
   });
 });

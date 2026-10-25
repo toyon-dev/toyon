@@ -61,6 +61,9 @@ export function PhoneFrame() {
   const chatCentred = useChatCentred();
   const connected = useStore((s) => s.connected);
   const heard = useStore((s) => s.heard);
+  // what the screen had stands through a drop: a phone in a pocket loses its socket often, and
+  // the rows it had are worth more than a sentence about the socket
+  const standing = useStore((s) => s.recalledAt !== null || s.heard);
   const connectFailure = useStore((s) => s.connectFailure);
   const touch = useTouch();
   const machine = useMachine();
@@ -74,6 +77,7 @@ export function PhoneFrame() {
   const say = connectionText({
     connected,
     heard,
+    standing,
     connectFailure,
     // another machine's token came with its pairing, so a page listing it always has one
     hasToken: machine.serving ? HAS_TOKEN : true,

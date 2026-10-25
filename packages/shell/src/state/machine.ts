@@ -25,6 +25,8 @@ import { settleLoose } from "./looseSync.ts";
 import { isOpenedMsg, openFromOutside, refusedFromOutside } from "./openOutside.ts";
 import { fillFrame, namingFirst, outBoxOf, readyToGo, uploadsNamed } from "./outbox.ts";
 import { type PendingAttachment, settledInputs } from "./pending.ts";
+import { keepSnapshots } from "./recall.ts";
+import { idbStore, type SnapshotStore } from "./snapshotStore.ts";
 import { type Frame, initialState, isLayout, type Layout } from "./store.ts";
 
 export interface MachineInit {
@@ -47,6 +49,8 @@ export interface MachineEnv {
   touch: boolean;
   /** the storage a machine remembers itself in; a test hands in a stand-in */
   storage?: (origin: string) => ScopedStorage;
+  /** where the last-known machine is kept (snapshot.ts); a test hands in a Map */
+  snapshots?: SnapshotStore;
   /** reload the page: the serving machine's daemon moved on under it */
   reload: () => void;
 }
@@ -64,6 +68,11 @@ export interface Machine {
   readonly storage: ScopedStorage;
   /** the version and protocol the daemon last announced; null before its first hello */
   readonly heard: { version: string | null; protocol: number | null };
+  /** the last-known machine laid into the store, or found to be nothing: the first paint waits
+   * for it, so a page that cannot reach its daemon opens on what it last knew */
+  readonly recalled: Promise<void>;
+  /** what this browser keeps of the machine, gone: for a machine being forgotten */
+  forget(): void;
   /** a hello fetched before the socket (the serving machine's bootstrap), applied as the socket's
    * would be */
   boot(msg: ServerMsg): void;
@@ -399,6 +408,8 @@ export function createMachine(init: MachineInit, env: MachineEnv): Machine {
   let drafts: ReturnType<typeof syncDrafts>;
   let pending: ReturnType<typeof syncAttachments>;
   let files: FileSync;
+  // what this browser keeps of the machine, read back now and written as the frames arrive
+  const keeper = keepSnapshots(store, env.snapshots ?? idbStore(), init.origin);
   // the boxes a hello put a message back into, said under each once the store has the hello
   let reclaimed: string[] = [];
 
@@ -473,6 +484,7 @@ export function createMachine(init: MachineInit, env: MachineEnv): Machine {
         refusedFromOutside(store, msg);
         return;
       }
+      keeper.hear(msg);
       toStore(msg);
       for (const id of reclaimed.splice(0)) store.dispatch({ a: "notice", id, text: RELOADED_MID_UPLOAD });
     },
@@ -509,6 +521,8 @@ export function createMachine(init: MachineInit, env: MachineEnv): Machine {
     terminals,
     storage,
     heard,
+    recalled: keeper.recalled,
+    forget: () => keeper.forget(),
     boot(msg) {
       if (msg.t !== "hello" || msg.protocol !== PROTOCOL_VERSION) return;
       heard.version ??= msg.version;
@@ -525,6 +539,7 @@ export function createMachine(init: MachineInit, env: MachineEnv): Machine {
       drafts.dispose();
       pending.dispose();
       stopOutbox();
+      keeper.dispose();
     },
   };
 }

@@ -23,10 +23,11 @@ import {
 import { asksSetup } from "../../state/store.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
+import { useSecondsSince } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { CommandPalette } from "../overlays/CommandPalette.tsx";
 import { ProjectPicker } from "../overlays/ProjectPicker.tsx";
-import { LEAD_LINE, OFFLINE_LINE, rowLine } from "../rail/rowLine.ts";
+import { LEAD_LINE, rowLine, staleLine } from "../rail/rowLine.ts";
 import { ago, dotClass, shipLabel, shipShown } from "../util.ts";
 
 /**
@@ -79,6 +80,13 @@ export function PhoneBar({
   const foundPage = useFoundPage();
   const visible = useVisibleWorktrees();
   const offline = useOffline();
+  // what the bar says while the socket is down: the one place on the screen that says it, and
+  // how old what is on screen is, from a snapshot's time or the last hello's
+  const failure = useStore((s) => s.connectFailure);
+  const heardAt = useStore((s) => s.recalledAt ?? s.heardAt);
+  // ticking while down, so "20m ago" moves on while the store stands still
+  useSecondsSince(offline && heardAt !== null ? heardAt : undefined);
+  const stale = staleLine(failure, heardAt);
   const elsewhere = useOtherMachinesRows();
   const owed = needsYouAcross(visible, activeId, elsewhere);
   const lead = visible.find((w) => isLead(w.worktree));
@@ -101,31 +109,32 @@ export function PhoneBar({
   // place of the count, until a row is tapped (app/share.ts)
   const sharing = useStore((s) => s.sharing);
   const line = home
-    ? sharing
-      ? sharing
-      : // with more than one machine listed, where the project is comes before how much is in it:
-        // a machine is the bigger box, and the list under the bar is this machine's alone
-        repo && machineCount > 1
-        ? `${hereName} · ${count}`
-        : count
+    ? offline
+      ? stale
+      : sharing
+        ? sharing
+        : // with more than one machine listed, where the project is comes before how much is in it:
+          // a machine is the bigger box, and the list under the bar is this machine's alone
+          repo && machineCount > 1
+          ? `${hereName} · ${count}`
+          : count
     : archivedPage
       ? archivedHint(archivedPage)
-      : onLead
-        ? offline
-          ? OFFLINE_LINE
-          : leadOp
+      : offline
+        ? stale
+        : onLead
+          ? leadOp
             ? shipLabel(leadOp)
             : (repo?.name ?? null)
-        : active
-          ? rowLine(active, {
-              offline,
-              needsSetup: asksSetup(rowRepo),
-              path: active.worktree.path,
-              at: ago(sentAt(active.worktree)),
-            })
-          : foundPage
-            ? rowLine(foundPage, { offline, needsSetup: false, path: foundPage.path })
-            : null;
+          : active
+            ? rowLine(active, {
+                needsSetup: asksSetup(rowRepo),
+                path: active.worktree.path,
+                at: ago(sentAt(active.worktree)),
+              })
+            : foundPage
+              ? rowLine(foundPage, { needsSetup: false, path: foundPage.path })
+              : null;
   const asks = !home && !archivedPage && !!active && dotClass(active) === "waiting";
   const switching = useStore((s) => s.overlay?.kind === "projects" && s.overlay.form === "pill");
   const commands = useStore((s) => s.overlay?.kind === "commands");

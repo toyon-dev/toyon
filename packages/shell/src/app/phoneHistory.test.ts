@@ -3,7 +3,7 @@ import type { WorktreeStatus } from "@toyon/shared";
 import type { Store } from "../state/context.tsx";
 import { type Action, initialState, reducer, type State } from "../state/store.ts";
 import type { Entry } from "../ui/floats.ts";
-import { type FrameWalk, type FrameWalks, type HistoryHost, installPhoneHistory } from "./phoneHistory.ts";
+import { depthOf, type FrameWalk, type FrameWalks, type HistoryHost, installPhoneHistory } from "./phoneHistory.ts";
 
 const row = (id: string): WorktreeStatus =>
   ({
@@ -160,6 +160,11 @@ function stack() {
 const commit = () => Promise.resolve();
 
 describe("phone history", () => {
+  test("a page standing on the last-known machine has its depths before any hello", () => {
+    expect(depthOf(phone({ heard: false, recalledAt: 1, screen: "chat" }))).toBe(1);
+    expect(depthOf(phone({ heard: false, recalledAt: 1, screen: "home" }))).toBe(0);
+    expect(depthOf(phone({ heard: false }))).toBeNull();
+  });
   test("opening a worktree stands it on an entry over the list, and back returns to the list", () => {
     const { store } = storeOf(phone());
     const t = tab();

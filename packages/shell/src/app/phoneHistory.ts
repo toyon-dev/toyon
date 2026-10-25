@@ -55,7 +55,7 @@ const FLOOR = -1;
  * whose back belongs to the browser, and before the daemon's first hello, when the remembered row
  * is not listed yet and the depth would read as the list for a moment. */
 export function depthOf(s: State): number | null {
-  if (s.frame !== "phone" || !s.heard) return null;
+  if (s.frame !== "phone" || (!s.heard && s.recalledAt === null)) return null;
   // the same test PhoneFrame draws by: a row that went while its screen was open is the list, and
   // a row toyon does not own has a page of its own, as an archived one has
   const onWorktree = s.screen !== "home" && (rowById(s, s.activeId) !== null || archivedPageOf(s) !== null);

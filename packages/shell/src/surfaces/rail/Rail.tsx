@@ -701,7 +701,6 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
         {onScreen && (
           <span className="rail-say row-dim">
             {rowLine(w, {
-              offline,
               needsSetup: asksSetup(owned ? repoOf(owned) : null),
               path: wtDirLabel(w),
               op,

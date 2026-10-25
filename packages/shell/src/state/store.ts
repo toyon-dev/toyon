@@ -94,6 +94,7 @@ import { dotClass } from "../surfaces/util.ts";
 import { mergeLinks } from "./links.ts";
 import { type HeldFrame, type OutboxEntry, type Outgoing, outBoxId, outBoxOf } from "./outbox.ts";
 import { fromInputs, isUploading, type PendingAttachment, settledInputs } from "./pending.ts";
+import { type ChatSnapshot, type HelloSnapshot, newestTs, recalledHello } from "./snapshot.ts";
 
 /** `heard` is the shell's own clock when a live figure landed: the agent reports usage as soon as
  * the model accepts a request, before any of the reply, so a figure newer than the last thing in
@@ -772,6 +773,13 @@ export interface State {
   /** the daemon has said hello, over the socket or the bootstrap fetch: what the shell shows
    * before that is nothing, not a placeholder for an empty daemon */
   heard: boolean;
+  /** when the last hello was heard this page, for the age the bar says once the socket dies under
+   * an open tab; null before the first */
+  heardAt: number | null;
+  /** The screen stands on the last-known machine (snapshot.ts): when that was heard, by a page
+   * before this one. Null once a hello is heard, and while nothing was recalled. What is on screen
+   * is then as it was, never live, and every surface that says so reads this. */
+  recalledAt: number | null;
   local: Record<string, WorktreeLocal>;
   /** the file the editor pane has open; null when the pane is closed */
   editor: EditorFile | null;
@@ -1029,6 +1037,8 @@ export function initialState(opts: InitialOpts): State {
     storedActive: opts.storedActive ?? null,
     storedRepo: opts.storedRepo ?? null,
     heard: false,
+    heardAt: null,
+    recalledAt: null,
     local: {},
     editor: null,
     openUrl: null,
@@ -1505,6 +1515,9 @@ export type StoreServerMsg = Exclude<
 
 export type Action =
   | { a: "server"; msg: StoreServerMsg }
+  /** the last-known machine, read back before any hello: the hello this page would have heard,
+   * less what must not read as live, and the chats a person had opened there */
+  | { a: "recall"; hello: HelloSnapshot; chats: Record<string, ChatSnapshot> }
   | { a: "connected"; v: boolean; failure?: ConnectFailure | null }
   | { a: "activate"; id: string }
   /** keep the ring on a row just marked unread for as long as it stays the one on screen */
@@ -2508,6 +2521,8 @@ function reduce(s: State, action: Action): State {
       return action.v === false ? { ...s, incompatible: false } : { ...s, incompatible: true, connected: false };
     case "server":
       return onServer(s, action.msg);
+    case "recall":
+      return onRecall(s, action.hello, action.chats);
   }
 }
 
@@ -2699,81 +2714,132 @@ function isTrunk(s: Pick<State, "trunks">, id: string): boolean {
   return Object.values(s.trunks).some((t) => t.id === id);
 }
 
+/**
+ * The hello laid into the state: the rows, the projects and what this page remembers of them,
+ * with the selection restored across reloads. `recall` is the same hello built from the last-known
+ * machine (snapshot.ts) before any daemon has answered: the page's own facts stay its own (the
+ * version it runs, how it was installed, what it is asking about an update, who is knocking, and
+ * the new-project view, which a recalled page must never open), nothing is marked heard, and the
+ * knocks are not read, since the snapshot carries none.
+ */
+function onHello(s: State, msg: Extract<StoreServerMsg, { t: "hello" }>, recall: boolean): State {
+  // restore the previously selected worktree across reloads, a found one included: it is
+  // still listed, and its shell and dock are what the person was looking at
+  const has = (id: string | null) => !!id && msg.rows.some((w) => w.id === id);
+  const hasRepo = (id: string | null) => !!id && msg.repos.some((r) => r.id === id);
+  // the project narrows the fallback: a stored repo whose stored worktree is gone still opens
+  // on that repo, not on whichever worktree the daemon lists first
+  const repoId = hasRepo(s.activeRepoId) ? s.activeRepoId : hasRepo(s.storedRepo) ? s.storedRepo : null;
+  const activeId = has(s.activeId) ? s.activeId : has(s.storedActive) ? s.storedActive : landingIn(s, repoId, msg.rows);
+  const wt = msg.rows.find((w) => w.id === activeId);
+  // the rail the row was read from, when the row is on it: a reload on a guest comes back to
+  // the rail it was chosen from, not to the guest's own project
+  const onStored = !!repoId && !!wt && isOwned(wt) && onRail(wt, repoId, msg.rows, s.lent);
+  const next: State = {
+    ...s,
+    heard: !recall,
+    heardAt: recall ? s.heardAt : Date.now(),
+    recalledAt: recall ? s.recalledAt : null,
+    repos: msg.repos,
+    rows: msg.rows,
+    activeId,
+    // a reconnect keeps the loan; a reload on a row owed to this rail takes one out, since the
+    // look about to happen clears what lists it
+    lent: onStored ? (s.lent === activeId ? s.lent : lentTo(wt ?? null, repoId, msg.rows)) : null,
+    activeRepoId: onStored ? repoId : (wt?.repoId ?? repoId ?? msg.repos[0]?.id ?? null),
+    trunks: msg.trunks,
+    archiving: s.archiving.length ? [] : s.archiving,
+    shipping: shippingFrom({}, msg.rows, msg.trunks),
+    local: forgetVersions(
+      pruneLocal(withAttachments(withDrafts(s.local, msg.drafts), msg.attachments), msg.rows, s.archivedPage),
+    ),
+    lastActive: pruneLastActive(s.lastActive, msg.rows),
+    treeOpen: pruneByRow(s.treeOpen, msg.rows),
+    discoveredOpen: pruneByRepo(s.discoveredOpen, msg.repos),
+    archivedOpen: pruneByRepo(s.archivedOpen, msg.repos),
+    committedShut: pruneByRepo(s.committedShut, msg.repos),
+    turnOpen: pruneByRepo(s.turnOpen, msg.repos),
+    refs: pruneByRepo(s.refs, msg.repos),
+    chats: pruneByRepo(s.chats, msg.repos),
+    archived: pruneByRepo(s.archived, msg.repos),
+    themes: !recall && msg.themes ? msg.themes : s.themes,
+    themePrefs: !recall && msg.themePrefs ? msg.themePrefs : s.themePrefs,
+    agents: msg.agents,
+    defaultAgent: msg.defaultAgent,
+    agentChosen: msg.agentChosen,
+    home: msg.home,
+    folderDialog: msg.folderDialog,
+    keepAwake: msg.keepAwake,
+    remote: msg.remote,
+    machine: msg.machine,
+    managed: msg.managed,
+    tailscale: msg.tailscale,
+    handed: msg.machines,
+    gitIdentity: msg.gitIdentity,
+    newProject:
+      s.newProject ??
+      (!recall && msg.repos.length === 0 && msg.rows.length === 0 && msg.pending.length === 0 ? firstProject() : null),
+    pending: recall ? s.pending : msg.pending,
+    visits: msg.visits,
+    self: recall ? s.self : msg.self,
+    update: recall ? s.update : msg.update,
+    // a check asked of the daemon that went away is never answered
+    updateCheck: !recall && s.updateCheck === "asking" ? null : s.updateCheck,
+    version: recall ? s.version : msg.version,
+    install: recall ? s.install : msg.install,
+    registry: recall ? s.registry : msg.registry,
+    // an import this tab was watching may have finished while it was away
+    activeImportId: msg.pending.some((x) => x.id === s.activeImportId) ? s.activeImportId : null,
+  };
+  return recall ? next : withKnocks(next, msg.knocks, msg.letIn);
+}
+
+/** the chat a transcript makes, folded from nothing: what a backfill and a recall both do */
+function chatFrom(events: readonly { seq: number; event: AgentEvent }[]): { chat: ChatItem[]; usage?: UsageFigures } {
+  let chat: ChatItem[] = [];
+  let usage: UsageFigures | undefined;
+  for (const { seq, event } of events) {
+    chat = applyEvent(chat, event, seq);
+    if (event.type === "usage") usage = figuresOf(event);
+  }
+  return usage ? { chat, usage } : { chat };
+}
+
+/**
+ * The last-known machine laid in as the hello it was, then each chat a person had opened there.
+ * A chat's open calls are closed the way a turn's end closes them, and nothing is running: what is
+ * on screen is as it was, and must never count seconds or shimmer. The row the page was left on
+ * comes back only when its chat was kept; an empty transcript that never fills is not a screen to
+ * come back to, so the list is. A chat whose events this build no longer reads is dropped alone.
+ */
+function onRecall(s: State, hello: HelloSnapshot, chats: Record<string, ChatSnapshot>): State {
+  let next = onHello(s, recalledHello(hello), true);
+  next = { ...next, recalledAt: hello.at };
+  for (const [id, c] of Object.entries(chats)) {
+    if (!next.rows.some((w) => w.id === id)) continue;
+    try {
+      const { chat, usage } = chatFrom(c.events);
+      next = withLocal(next, id, (l) => ({
+        ...l,
+        chat: closeOpenCalls(chat),
+        chatAt: newestTs(c.events) ?? hello.at,
+        running: undefined,
+        ...(usage ? { usage } : {}),
+        ...(c.draft && !l.draft ? { draft: c.draft } : {}),
+      }));
+    } catch {
+      // a stored event this build does not read: that chat alone is not recalled
+    }
+  }
+  const active = next.activeId;
+  if (active && next.screen !== "home" && !(next.local[active]?.chat.length ?? 0)) next = { ...next, screen: "home" };
+  return next;
+}
+
 function onServer(s: State, msg: StoreServerMsg): State {
   switch (msg.t) {
-    case "hello": {
-      // restore the previously selected worktree across reloads, a found one included: it is
-      // still listed, and its shell and dock are what the person was looking at
-      const has = (id: string | null) => !!id && msg.rows.some((w) => w.id === id);
-      const hasRepo = (id: string | null) => !!id && msg.repos.some((r) => r.id === id);
-      // the project narrows the fallback: a stored repo whose stored worktree is gone still opens
-      // on that repo, not on whichever worktree the daemon lists first
-      const repoId = hasRepo(s.activeRepoId) ? s.activeRepoId : hasRepo(s.storedRepo) ? s.storedRepo : null;
-      const activeId = has(s.activeId)
-        ? s.activeId
-        : has(s.storedActive)
-          ? s.storedActive
-          : landingIn(s, repoId, msg.rows);
-      const wt = msg.rows.find((w) => w.id === activeId);
-      // the rail the row was read from, when the row is on it: a reload on a guest comes back to
-      // the rail it was chosen from, not to the guest's own project
-      const onStored = !!repoId && !!wt && isOwned(wt) && onRail(wt, repoId, msg.rows, s.lent);
-      const next: State = {
-        ...s,
-        heard: true,
-        repos: msg.repos,
-        rows: msg.rows,
-        activeId,
-        // a reconnect keeps the loan; a reload on a row owed to this rail takes one out, since the
-        // look about to happen clears what lists it
-        lent: onStored ? (s.lent === activeId ? s.lent : lentTo(wt ?? null, repoId, msg.rows)) : null,
-        activeRepoId: onStored ? repoId : (wt?.repoId ?? repoId ?? msg.repos[0]?.id ?? null),
-        trunks: msg.trunks,
-        archiving: s.archiving.length ? [] : s.archiving,
-        shipping: shippingFrom({}, msg.rows, msg.trunks),
-        local: forgetVersions(
-          pruneLocal(withAttachments(withDrafts(s.local, msg.drafts), msg.attachments), msg.rows, s.archivedPage),
-        ),
-        lastActive: pruneLastActive(s.lastActive, msg.rows),
-        treeOpen: pruneByRow(s.treeOpen, msg.rows),
-        discoveredOpen: pruneByRepo(s.discoveredOpen, msg.repos),
-        archivedOpen: pruneByRepo(s.archivedOpen, msg.repos),
-        committedShut: pruneByRepo(s.committedShut, msg.repos),
-        turnOpen: pruneByRepo(s.turnOpen, msg.repos),
-        refs: pruneByRepo(s.refs, msg.repos),
-        chats: pruneByRepo(s.chats, msg.repos),
-        archived: pruneByRepo(s.archived, msg.repos),
-        themes: msg.themes ?? s.themes,
-        themePrefs: msg.themePrefs ?? s.themePrefs,
-        agents: msg.agents,
-        defaultAgent: msg.defaultAgent,
-        agentChosen: msg.agentChosen,
-        home: msg.home,
-        folderDialog: msg.folderDialog,
-        keepAwake: msg.keepAwake,
-        remote: msg.remote,
-        machine: msg.machine,
-        managed: msg.managed,
-        tailscale: msg.tailscale,
-        handed: msg.machines,
-        gitIdentity: msg.gitIdentity,
-        newProject:
-          s.newProject ??
-          (msg.repos.length === 0 && msg.rows.length === 0 && msg.pending.length === 0 ? firstProject() : null),
-        pending: msg.pending,
-        visits: msg.visits,
-        self: msg.self,
-        update: msg.update,
-        // a check asked of the daemon that went away is never answered
-        updateCheck: s.updateCheck === "asking" ? null : s.updateCheck,
-        version: msg.version,
-        install: msg.install,
-        registry: msg.registry,
-        // an import this tab was watching may have finished while it was away
-        activeImportId: msg.pending.some((x) => x.id === s.activeImportId) ? s.activeImportId : null,
-      };
-      return withKnocks(next, msg.knocks, msg.letIn);
-    }
+    case "hello":
+      return onHello(s, msg, false);
     case "self": {
       // a build this page saw start and now sees end without a failure is one it is now behind,
       // when there were bundles to build: a land that touched only the daemon runs the same
@@ -3042,12 +3108,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
       return next;
     }
     case "backfill": {
-      let chat: ChatItem[] = [];
-      let usage: UsageFigures | undefined;
-      for (const { seq, event } of msg.events) {
-        chat = applyEvent(chat, event, seq);
-        if (event.type === "usage") usage = figuresOf(event);
-      }
+      const { chat, usage } = chatFrom(msg.events);
       // a message shown as sent stays shown until the transcript has it: a socket back mid-send
       // (a restore's checkout, say) hears it here rather than live
       const heard = (text: string) =>

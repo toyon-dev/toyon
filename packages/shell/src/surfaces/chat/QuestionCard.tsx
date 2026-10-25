@@ -11,7 +11,7 @@ import { toInput } from "../../state/attach.ts";
 import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
 import type { HeldFrame } from "../../state/outbox.ts";
 import { isUploading } from "../../state/pending.ts";
-import { useLocalField } from "../../state/selectors.ts";
+import { useLocalField, useSendsRefused } from "../../state/selectors.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
 import { type Choice, type ChoiceField, Choices } from "../../ui/Choices.tsx";
 import { handleChoiceKey } from "../../ui/choiceKeys.ts";
@@ -100,7 +100,12 @@ export function QuestionCard({
   const write = (next: AskAnswer[], at: number) =>
     dispatch({ a: "card-draft", id: worktreeId, card: { id: item.id, draft: next, current: at } });
 
+  // the daemon found down or unreachable: an answer sent now would wait in the socket's queue for a
+  // card the agent may have moved past, so every way of answering waits for the daemon
+  // (selectors.ts). Here and not at each press, since a tap on a lone option is a send too.
+  const refused = useSendsRefused();
   const send = (answers?: AskAnswer[]) => {
+    if (refused) return;
     if (onAnswer) {
       if (answers) onAnswer(answers);
       return;
@@ -251,7 +256,7 @@ export function QuestionCard({
   const foot = (qq?: AskQuestion, a?: AskAnswer) => (
     <CardFoot>
       {(!qq || !pickSends(qq)) && (
-        <Button variant="outline" size="md" disabled={!canSubmit(questions, draft)} onClick={submit}>
+        <Button variant="outline" size="md" disabled={refused || !canSubmit(questions, draft)} onClick={submit}>
           send
         </Button>
       )}

@@ -533,3 +533,38 @@ export type AgentEvent =
       choiceId?: string;
       ts: number;
     };
+
+/** one line of a worktree's transcript: the daemon numbers each event as it lands, and the number
+ * is what a backfill, a live frame and a chat search all name a row by */
+export type TranscriptEntry = { seq: number; event: AgentEvent };
+
+/** the entries with each run of adjacent text or thinking deltas folded into one, keeping the run's
+ * first seq. A streamed reply is a delta per token, so a whole long session sent raw is a frame of
+ * tens of thousands of entries and a fold in the shell that copies the chat once per token; the
+ * shell joins adjacent deltas into one row anyway, so what it renders is the same. The first seq is
+ * the row's name: the shell stamps it when the run's first delta lands, a chat search names the row
+ * by it, and it stays put while the run is still streaming. The shell runs the same fold over the
+ * tail it keeps of a chat, so a cap on that tail counts rows and not tokens. */
+export function coalesce(entries: readonly TranscriptEntry[]): TranscriptEntry[] {
+  const out: TranscriptEntry[] = [];
+  for (const entry of entries) {
+    const last = out.at(-1);
+    const { event } = entry;
+    if (event.type === "text-delta" && last?.event.type === "text-delta") {
+      // the run's id is its latest chunk's: that is the message a chunk after a bubble continues
+      const messageId = event.messageId ?? last.event.messageId;
+      out[out.length - 1] = {
+        seq: last.seq,
+        event: { type: "text-delta", text: last.event.text + event.text, ...(messageId ? { messageId } : {}) },
+      };
+    } else if (event.type === "thinking-delta" && last?.event.type === "thinking-delta") {
+      out[out.length - 1] = { seq: last.seq, event: { type: "thinking-delta", text: last.event.text + event.text } };
+    } else if (event.type === "tool-delta" && last?.event.type === "tool-delta" && last.event.toolId === event.toolId) {
+      // a watched command's output arrives a chunk at a time the same way
+      out[out.length - 1] = { seq: last.seq, event: { ...event, text: last.event.text + event.text } };
+    } else {
+      out.push(entry);
+    }
+  }
+  return out;
+}

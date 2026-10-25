@@ -44,6 +44,11 @@ export type Waiting = {
   connected: boolean;
   /** the bootstrap fetch answered, so the daemon is up and the socket is a moment away */
   heard: boolean;
+  /** Rows and chats stand on the screen and outrank the sentence while the socket is down: the
+   * last-known machine (state.recalledAt), or on a phone whatever it heard before the drop, with
+   * the bar saying how old that is. A desk keeps the sentence for a live tab, since on loopback
+   * the words say what to run. */
+  standing: boolean;
   connectFailure: ConnectFailure | null;
   hasToken: boolean;
   /** the chord that opens a project, spelled for this platform */
@@ -64,12 +69,15 @@ export type Waiting = {
  * since a phone in a pocket loses its socket far more often than a laptop does */
 export type Connection = Pick<
   Waiting,
-  "connected" | "heard" | "connectFailure" | "hasToken" | "projectChord" | "title" | "machine"
+  "connected" | "heard" | "standing" | "connectFailure" | "hasToken" | "projectChord" | "title" | "machine"
 >;
 
 /** the sentence while the socket is down or nothing is open, or null once there is a project to
  * talk about. The socket wins over everything, because nothing further is known. */
 export function connectionText(w: Connection): Said | null {
+  // what was last known stands, with the bar saying how old it is; a token the daemon refuses is
+  // the one failure that takes the screen, since what is standing may no longer be this page's
+  if (w.standing && !w.connected && w.connectFailure !== "unauthorized") return null;
   if (!w.connected && (!w.heard || w.connectFailure)) {
     // still trying, with no failure named yet: the one connection line that is a wait
     const probing = w.connectFailure === null;

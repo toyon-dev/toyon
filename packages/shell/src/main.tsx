@@ -11,6 +11,7 @@ import { MachinesProvider } from "./state/context.tsx";
 import { migrateStorage, STORAGE } from "./state/keys.ts";
 import { createMachine } from "./state/machine.ts";
 import { createMachines } from "./state/machines.ts";
+import { idbStore } from "./state/snapshotStore.ts";
 import { ErrorBoundary, markStaleBuild } from "./ui/ErrorBoundary.tsx";
 import "./styles/tokens.css";
 import "./styles/base.css";
@@ -60,6 +61,8 @@ const env = {
   frame: frameNow(),
   touch: touchNow(),
   reload: () => window.location.reload(),
+  // one connection to the browser's database, whichever machine is writing
+  snapshots: idbStore(),
 };
 const machines = createMachines({
   serving: { origin: location.origin, token: servingToken() },
@@ -99,9 +102,17 @@ declare global {
     toyonBoot?: Promise<unknown>;
   }
 }
-const booted = (window.toyonBoot ?? Promise.resolve(null)).then((boot) => {
-  const msg = boot as ServerMsg | null;
-  if (msg && typeof msg === "object" && msg.t === "hello") machines.active().boot(msg);
+// The last-known machine is read back alongside: a page whose daemon does not answer opens on what
+// it last knew (recall.ts), and a hello that arrives first wins.
+const booted = Promise.all([
+  (window.toyonBoot ?? Promise.resolve(null)).then((boot) => {
+    const msg = boot as ServerMsg | null;
+    if (msg && typeof msg === "object" && msg.t === "hello") machines.active().boot(msg);
+  }),
+  machines.active().recalled,
+]).catch((e) => {
+  // whatever went wrong before the first paint, the page paints: a blank window says nothing
+  console.error("boot", e);
 });
 
 // A browser that opened this address with no token has nothing to show but the ask: it knocks,

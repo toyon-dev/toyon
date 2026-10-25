@@ -4,43 +4,13 @@
 import { existsSync, readFileSync } from "node:fs";
 import { appendFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { AgentEvent } from "@toyon/shared";
+import type { AgentEvent, TranscriptEntry } from "@toyon/shared";
 import { log } from "../core/log.ts";
 
-export type TranscriptEntry = { seq: number; event: AgentEvent };
+export type { TranscriptEntry };
 
 export function transcriptPathFor(transcriptsDir: string, worktreeId: string): string {
   return join(transcriptsDir, `${worktreeId}.jsonl`);
-}
-
-/** the entries with each run of adjacent text or thinking deltas folded into one, keeping the run's
- * first seq. A streamed reply is a delta per token, so a whole long session sent raw is a frame of
- * tens of thousands of entries and a fold in the shell that copies the chat once per token; the
- * shell joins adjacent deltas into one row anyway, so what it renders is the same. The first seq is
- * the row's name: the shell stamps it when the run's first delta lands, a chat search names the row
- * by it, and it stays put while the run is still streaming. */
-export function coalesce(entries: TranscriptEntry[]): TranscriptEntry[] {
-  const out: TranscriptEntry[] = [];
-  for (const entry of entries) {
-    const last = out.at(-1);
-    const { event } = entry;
-    if (event.type === "text-delta" && last?.event.type === "text-delta") {
-      // the run's id is its latest chunk's: that is the message a chunk after a bubble continues
-      const messageId = event.messageId ?? last.event.messageId;
-      out[out.length - 1] = {
-        seq: last.seq,
-        event: { type: "text-delta", text: last.event.text + event.text, ...(messageId ? { messageId } : {}) },
-      };
-    } else if (event.type === "thinking-delta" && last?.event.type === "thinking-delta") {
-      out[out.length - 1] = { seq: last.seq, event: { type: "thinking-delta", text: last.event.text + event.text } };
-    } else if (event.type === "tool-delta" && last?.event.type === "tool-delta" && last.event.toolId === event.toolId) {
-      // a watched command's output arrives a chunk at a time the same way
-      out[out.length - 1] = { seq: last.seq, event: { ...event, text: last.event.text + event.text } };
-    } else {
-      out.push(entry);
-    }
-  }
-  return out;
 }
 
 /** events that are not the agent's own doing, read past when asking what a turn said last: the

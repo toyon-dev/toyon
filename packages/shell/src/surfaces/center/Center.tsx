@@ -132,6 +132,7 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
   const active = useActive();
   const connected = useStore((s) => s.connected);
   const heard = useStore((s) => s.heard);
+  const standing = useStore((s) => s.recalledAt !== null);
   const connectFailure = useStore((s) => s.connectFailure);
   const remote = useStore((s) => s.remote);
   const { host } = useUrls();
@@ -582,6 +583,7 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
   const say = waitingText({
     connected,
     heard,
+    standing,
     connectFailure,
     hasToken: machine.serving ? HAS_TOKEN : true,
     projectChord: chord("project"),

@@ -17,6 +17,7 @@ import {
   previewIdOf,
   repoById,
   rowById,
+  type State,
   type WorktreeLocal,
   worktreeById,
 } from "./store.ts";
@@ -29,6 +30,14 @@ export const useManaged = () => useStore((s) => s.managed);
 /** the socket has been down long enough to be worth saying so. It is down on first paint and for
  * a blink on every reconnect; painting either reads as the app still loading. */
 export const useOffline = (): boolean => useSettled(!useStore((s) => s.connected), 900);
+
+/** The daemon has been found down or unreachable, which is more than the blink `useOffline` waits
+ * out: a message, a card's answer or a seat verb sent now would wait in the socket's queue and
+ * land in a chat that may have moved on, so the controls that send refuse until it answers. A
+ * token failure is not this; the screen says so itself. */
+export const sendsRefused = (s: Pick<State, "connected" | "connectFailure">): boolean =>
+  !s.connected && (s.connectFailure === "down" || s.connectFailure === "blocked");
+export const useSendsRefused = (): boolean => useStore(sendsRefused);
 
 /** the active row when toyon owns it: what the chat, the composer and landing read. Null while a
  * found worktree is selected, so nothing that writes or talks to an agent sees one. Its identity

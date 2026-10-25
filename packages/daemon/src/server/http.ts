@@ -123,7 +123,9 @@ const IMMUTABLE = "private, max-age=31536000, immutable";
  * else the shell serves is: index.html is what maps those hashes to the current build, and a
  * cached one boots an asset graph the daemon no longer has. That lands on the stale-build screen
  * whose reload button reads the same cached index again, with no way out. manifest.json, icon.svg
- * and sw.js are unhashed for the same reason, and a cached worker script is slow to replace. */
+ * and sw.js are unhashed for the same reason, and a cached worker script is slow to replace. The
+ * worker itself keeps a copy of the index off loopback, for a navigation the network fails and
+ * not for freshness: a daemon that answers always replaces it. */
 const NO_STORE = "no-store";
 
 /** How something a person attached goes back out. One of the image types is drawn as that type and

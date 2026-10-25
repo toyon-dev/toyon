@@ -3,13 +3,12 @@
 // run git or decide policy.
 
 import type { AttachmentInput, ClientMsg, FileBlame, ServerMsg, WorktreeInfo } from "@toyon/shared";
-import { isLead, pickTheme, SHELL_STREAM } from "@toyon/shared";
+import { coalesce, isLead, pickTheme, SHELL_STREAM } from "@toyon/shared";
 import type { AttachmentStore } from "../agent/attachments.ts";
 import { agentConfigFiles, describeAgentConfig } from "../agent/config.ts";
 import type { ToyonMcp } from "../agent/mcp.ts";
 import type { AgentReadiness } from "../agent/readiness.ts";
 import type { AgentRegistry } from "../agent/registry.ts";
-import { coalesce } from "../agent/transcript.ts";
 import { GONE, uploadIds } from "../agent/uploads.ts";
 import type { KeepAwake } from "../core/awake.ts";
 import type { FolderDialog } from "../core/dialog.ts";

@@ -82,6 +82,16 @@ function sameAsLast(cwd: string, rel: string, markdown: string): boolean {
  * markdown itself.
  */
 export async function writePlanDoc(cwd: string, markdown: string): Promise<string | null> {
+  const rel = writePlanDocNow(cwd, markdown);
+  if (rel) await excludePlans(cwd);
+  return rel;
+}
+
+/** The same write, without waiting on the git exclude: for a caller with no turn to await in (the
+ * session restoring its transcript, a turn ending). The exclude still runs; a plan folder already
+ * excluded by an earlier write is the common case, and a first write that the exclude has not
+ * caught up with shows the folder in the diff for a moment, nothing worse. */
+export function writePlanDocNow(cwd: string, markdown: string): string | null {
   const dir = join(cwd, PLANS_DIR);
   const last = lastNumber(dir);
   if (last > 0) {
@@ -96,8 +106,15 @@ export async function writePlanDoc(cwd: string, markdown: string): Promise<strin
     log.warn(cwd, `could not write ${rel}; the plan stays on the card`, e);
     return null;
   }
-  await excludePlans(cwd);
+  excludePlans(cwd).catch((e) => log.warn(cwd, "could not exclude the plans folder", e));
   return rel;
+}
+
+/** the briefs of a pieces list as a plan file, so the list has a page to sit on when the agent
+ * wrote no plan: one heading per piece, the brief under it. The words are the agent's; only the
+ * file is Toyon's. */
+export function briefsDoc(pieces: ReadonlyArray<{ title: string; brief: string }>): string {
+  return pieces.map((p) => `## ${p.title}\n\n${p.brief.trim()}\n`).join("\n");
 }
 
 /**

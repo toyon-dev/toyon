@@ -40,6 +40,44 @@ export const TOYON_MCP_SERVER = "toyon";
 
 /** Toyon's first tool of its own: a proposal to continue the work in another open project */
 export const HANDOFF_TOOL = "handoff";
+/** the agent hands Toyon the pieces of the work it is planning, or one piece it came across:
+ * each goes on this worktree, a new one, or an open one, and the person decides on the list */
+export const SPLIT_TOOL = "split";
+
+/** where one piece of a plan goes: the agent proposes one of the first three, the person may
+ * change it, and `skip` is theirs alone */
+export type PieceFate = "here" | "worktree" | "send" | "skip";
+
+/** one piece of work the agent handed Toyon beside its plan */
+export interface Piece {
+  /** unique within its proposal (`p1`, `p2`, ...) */
+  id: string;
+  title: string;
+  /** markdown that stands on its own: the sibling's first message, or what is sent */
+  brief: string;
+  /** what this chat attached that the piece needs: named by the agent as the prompt captions
+   * them ("Image 2", "Paste 1"), resolved to the refs when proposed, so the shell can draw them */
+  attachments: AttachmentRef[];
+  /** what the agent proposed; never `skip` */
+  fate: Exclude<PieceFate, "skip">;
+  /** `worktree`: the sibling it waits for, resolved when proposed; absent to start at once */
+  after?: { id: string; branch: string; title: string };
+  /** `send`: the open worktree of this project the brief goes to */
+  to?: { id: string; branch: string; title: string };
+}
+
+/** what became of one piece when the person pressed go */
+export interface PieceOutcome {
+  pieceId: string;
+  fate: PieceFate;
+  /** the sibling made, or the worktree sent to */
+  worktreeId?: string;
+  title?: string;
+  /** queued until this branch lands */
+  after?: string;
+  /** in the daemon's words, when the piece could not be acted on */
+  error?: string;
+}
 
 /** ACP's tool categories; what the shell keys "did this turn edit anything" on */
 export type ToolKind =
@@ -374,7 +412,44 @@ export type AgentEvent =
   /** a worktree this one handed off to has landed there; `url` is its pull request when the
    * landing was one. Kept on the transcript so the row reads back after a reload, and read by the
    * next prompt so the agent here hears it too. */
-  | { type: "handoff-landed"; worktreeId: string; repoName: string; title: string; url?: string; ts: number }
+  /** `same`: a sibling of this project (a piece of this worktree's plan), not work in another one */
+  | {
+      type: "handoff-landed";
+      worktreeId: string;
+      repoName: string;
+      title: string;
+      url?: string;
+      same?: true;
+      ts: number;
+    }
+  /** the agent handed Toyon the pieces of its plan. `held`: proposed in plan mode, so the list
+   * shows beside the next plan card of the turn (`agent-permission.pieces`) and the person answers
+   * it with the plan; without it the proposal is Toyon's own card at once. Open until a
+   * `pieces-go`, `pieces` or `pieces-declined` with the same id. `plan` is the file the section
+   * sits on: the agent's plan when held, else the briefs Toyon wrote. */
+  | {
+      type: "pieces-proposed";
+      id: string;
+      pieces: Piece[];
+      mode: PermissionMode;
+      held?: true;
+      plan?: string;
+      ts: number;
+    }
+  /** a held proposal whose turn ended with no plan card: Toyon's own card from here */
+  | { type: "pieces-shown"; id: string; plan?: string; ts: number }
+  /** the person moved a piece; the last one per piece stands when go is pressed */
+  | { type: "pieces-fate"; id: string; pieceId: string; fate: PieceFate; ts: number }
+  /** the plan was approved, or go pressed: the card closes here and Toyon acts */
+  | { type: "pieces-go"; id: string; ts: number }
+  /** what became of each piece */
+  | { type: "pieces"; id: string; outcomes: PieceOutcome[]; ts: number }
+  /** the card closed with nothing done: the plan was sent back, or `outcome` says what failed */
+  | { type: "pieces-declined"; id: string; outcome?: "failed"; reason?: string; ts: number }
+  /** a queued piece's sibling landed and its worktree was made */
+  | { type: "piece-made"; id: string; pieceId: string; worktreeId: string; title: string; ts: number }
+  /** a queued piece will never be made: the sibling it waited for is gone */
+  | { type: "piece-dropped"; id: string; pieceId: string; reason: string; ts: number }
   /** a restore brought this worktree back from the archive: the daemon's word on it, kept on the
    * transcript so the chat reads why it stops and picks up again. `archivedAt` is when it went,
    * `branch` what the commits came back on (a new name when the old one was taken meanwhile), and
@@ -402,6 +477,8 @@ export type AgentEvent =
       command?: string;
       detail?: string;
       plan?: string;
+      /** the `pieces-proposed` this plan card carries beside it: the list the yes also answers */
+      pieces?: string;
       choices: AskChoice[];
       toolId?: string;
       ts: number;

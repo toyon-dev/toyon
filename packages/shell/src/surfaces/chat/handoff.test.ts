@@ -108,10 +108,14 @@ describe("parseHandoffArgs", () => {
       text: "bump the pin  to 0.85",
     });
   });
-  test("the refusals: too few projects, no such name, this one's own, a name shared", () => {
-    expect(parseHandoffArgs("acp", [repos[0]!], "r1")).toEqual({ error: "open another project first" });
+  test("here, or this worktree's own project, is a new worktree here", () => {
+    expect(parseHandoffArgs("here", repos, "r1")).toEqual({ repo: repos[0]! });
+    expect(parseHandoffArgs("HERE the badge", repos, "r1")).toEqual({ repo: repos[0]!, text: "the badge" });
+    expect(parseHandoffArgs("toyon", repos, "r1")).toEqual({ repo: repos[0]! });
+    expect(parseHandoffArgs("here", [repos[0]!], "r1")).toEqual({ repo: repos[0]! });
+  });
+  test("the refusals: no such name, a name shared", () => {
     expect(parseHandoffArgs("zed", repos, "r1")).toEqual({ error: 'no open project named "zed"' });
-    expect(parseHandoffArgs("toyon", repos, "r1")).toEqual({ error: "this worktree is already in toyon" });
     expect(parseHandoffArgs("toy", repos, "r2")).toEqual({ error: '"toy" names more than one project' });
   });
 });

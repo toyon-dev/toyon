@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { openFile } from "../../state/actions/file.ts";
 import { useDispatch, useSock, useUrls } from "../../state/context.tsx";
 import { readingView } from "../../state/store.ts";
@@ -17,6 +18,7 @@ export function MarkdownPreview({
   openSeq,
   focus,
   onChat,
+  lead,
 }: {
   text: string;
   path: string;
@@ -25,6 +27,8 @@ export function MarkdownPreview({
   openSeq: number;
   focus: boolean;
   onChat: (selected: string) => void;
+  /** drawn at the head of the page, above the markdown */
+  lead?: ReactNode;
 }) {
   const sock = useSock();
   const urls = useUrls();
@@ -38,5 +42,5 @@ export function MarkdownPreview({
     const target = assetPath(dir, href);
     if (target) openFile({ sock, dispatch }, { worktreeId, path: target, view: readingView(target) });
   };
-  return <Document html={html} openSeq={openSeq} focus={focus} onLink={onLink} onChat={onChat} />;
+  return <Document html={html} openSeq={openSeq} focus={focus} onLink={onLink} onChat={onChat} lead={lead} />;
 }

@@ -101,9 +101,9 @@ describe("ToyonMcp bearers", () => {
     mcp.close("w3");
   });
 
-  test("a body past 64 KiB is 413; unparsable JSON is a 400 parse error", async () => {
+  test("a body past 256 KiB is 413; unparsable JSON is a 400 parse error", async () => {
     const auth = bearerOf(mcp.open("w4"));
-    const big = await post("w4", undefined, { auth, raw: `{"pad":"${"x".repeat(70 * 1024)}"}` });
+    const big = await post("w4", undefined, { auth, raw: `{"pad":"${"x".repeat(260 * 1024)}"}` });
     expect(big.status).toBe(413);
     const bad = await post("w4", undefined, { auth, raw: "{not json" });
     expect(bad.status).toBe(400);

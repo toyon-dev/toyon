@@ -235,16 +235,14 @@ export function worktreeItems(
       onClick: () => shipOp(sock, dispatch, { t: "land", worktreeId: id }),
     });
   }
-  // continue the work in another open project: a worktree of that project, started from this
-  // one's chat, so it sits with land as the other place the work goes next. Only a task has work
-  // to hand on; the lead has no chat to propose it from. With one project open the row stays,
-  // off, so the verb is learnt before it is needed.
+  // continue the work elsewhere: a new worktree of this project, or a worktree of another open
+  // one, started from this one's chat, so it sits with land as the other place the work goes
+  // next. Only a task has work to hand on; the lead has no chat to propose it from.
   if (w.worktree.kind === "worktree") {
     ship.push({
       id: "handoff",
-      label: "continue in another project…",
+      label: "continue elsewhere…",
       sub: true,
-      disabled: s.repos.length < 2 ? "open another project first" : undefined,
       onClick: () => dispatch({ a: "open", overlay: { kind: "handoff", worktreeId: id } }),
     });
   }

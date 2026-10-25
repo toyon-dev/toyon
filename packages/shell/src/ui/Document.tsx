@@ -1,5 +1,5 @@
 import { matchChord } from "@toyon/shared";
-import { type CSSProperties, useLayoutEffect, useRef, useState } from "react";
+import { type CSSProperties, type ReactNode, useLayoutEffect, useRef, useState } from "react";
 import { DocumentFind } from "./DocumentFind.tsx";
 import { Float } from "./Float.tsx";
 import { isFind } from "./find.ts";
@@ -40,7 +40,9 @@ const JUMP_AIR = 16;
  * markdown output. `openSeq` ticks when the caller wants the document to take the keyboard again
  * (a pane opened on it), and `focus` says whether it should. `onLink` takes a link inside the page
  * (one to a file beside it, or a section); an http link opens its tab untouched. `onChat` takes
- * what ⌘L selected, as the page draws it.
+ * what ⌘L selected, as the page draws it. `lead` is drawn at the head of the page, above the
+ * markdown and scrolling with it, and stays out of the outline: a section of Toyon's own on a
+ * document that is the agent's.
  */
 export function Document({
   html,
@@ -48,12 +50,14 @@ export function Document({
   focus = true,
   onLink,
   onChat,
+  lead,
 }: {
   html: string;
   openSeq?: number;
   focus?: boolean;
   onLink?: (href: string) => void;
   onChat?: (selected: string) => void;
+  lead?: ReactNode;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const body = useRef<HTMLDivElement>(null);
@@ -77,9 +81,10 @@ export function Document({
     if (focus) ref.current?.focus();
   });
   // the headings are read off the rendered DOM rather than the markdown, so they are the ones the
-  // sanitizer let through, with the text the way it is drawn
+  // sanitizer let through, with the text the way it is drawn; off the body alone, so a lead's
+  // own heading is not a section of the document
   useOnChange([html], () => {
-    if (ref.current) setHeads(readHeadings(ref.current));
+    if (body.current) setHeads(readHeadings(body.current));
   });
   // the section being read: the last heading above the top edge, re-read on every scroll frame
   useLayoutEffect(() => {
@@ -160,6 +165,7 @@ export function Document({
   return (
     <>
       <div ref={ref} className="document" tabIndex={-1} onClick={onClick} onKeyDown={onKeyDown}>
+        {lead}
         <div
           ref={body}
           className="md md-preview"

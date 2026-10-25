@@ -180,6 +180,16 @@ function make() {
       if (text === "") throw new UserError("Write what it should do first");
     },
   };
+  // the pieces service's own behaviour is pieces.test.ts's; here only that the fields reach it
+  const piecesCalls: string[] = [];
+  const pieces = {
+    fate: (id: string, card: string, pieceId: string, fate: string) => {
+      piecesCalls.push(`fate ${id} ${card} ${pieceId} ${fate}`);
+    },
+    answer: async (id: string, card: string, go: boolean, note?: string) => {
+      piecesCalls.push(`answer ${id} ${card} ${go}${note ? ` note=${note}` : ""}`);
+    },
+  };
   const mcp = { fetch: async () => new Response("not here", { status: 404 }) };
   const chosen: Array<string | null> = [];
   const restarts: number[] = [];
@@ -244,6 +254,7 @@ function make() {
     fix,
     pageErrors,
     handoff,
+    pieces,
     mcp,
     themes,
     agents,
@@ -294,6 +305,7 @@ function make() {
     restarts,
     landingCalls,
     handoffCalls,
+    piecesCalls,
     ...f,
   };
 }
@@ -1457,6 +1469,23 @@ describe("handlers", () => {
     );
     expect(agent.answered).toHaveLength(1);
     expect(lastOf(replies, "unsent")).toMatchObject({ t: "unsent", boxId: "card:k2", items: [] });
+  });
+
+  test("a pieces list's fate and Toyon's card's answer reach the service with their fields", async () => {
+    const { services, ctx, repo, piecesCalls } = make();
+    const r = await services.repos.register(repo);
+    const main = services.state.worktrees.find((x) => x.repoId === r.id)!;
+    await dispatch({ t: "pieces-fate", worktreeId: main.id, id: "l1", pieceId: "p2", fate: "skip" }, ctx, services);
+    await dispatch({ t: "pieces-answer", worktreeId: main.id, id: "l1", go: true, note: "and tests" }, ctx, services);
+    await dispatch({ t: "pieces-answer", worktreeId: main.id, id: "l1", go: false }, ctx, services);
+    expect(piecesCalls).toEqual([
+      `fate ${main.id} l1 p2 skip`,
+      `answer ${main.id} l1 true note=and tests`,
+      `answer ${main.id} l1 false`,
+    ]);
+    await expect(
+      dispatch({ t: "pieces-answer", worktreeId: "nope", id: "l1", go: true }, ctx, services),
+    ).rejects.toBeInstanceOf(UserError);
   });
 
   test("a handoff card's answer and the verb reach the service with their fields; a refusal is the error frame", async () => {

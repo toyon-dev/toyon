@@ -172,7 +172,7 @@ describe("propose", () => {
     expect(await call()).toEqual({ text: FINISH });
     await w.handoff.answer(wt.id, lastProposal(wt.id).id, false);
     expect(await call()).toEqual({
-      text: "Three handoffs were proposed this turn already; finish your turn and let the person answer.",
+      text: "3 proposals were made this turn already; finish your turn and let the person answer.",
       isError: true,
     });
     // the next turn starts the count again
@@ -327,11 +327,12 @@ describe("ask", () => {
     expect(agent.sent.at(-1)!.asked).toEqual({ kind: "handoff", why: "continue in acp" });
   });
 
-  test("the worktree's own project and an unknown one are refused", async () => {
+  test("an unknown project is refused; the worktree's own is one piece for a new worktree here", async () => {
     const repoId = await registered();
     const a = await w.worktrees.create(repoId, "task");
-    await expect(w.handoff.ask(a.id, repoId, "x")).rejects.toThrow("repo is this worktree's own project");
     await expect(w.handoff.ask(a.id, "nope", "x")).rejects.toThrow("no such project");
+    await w.handoff.ask(a.id, repoId, "x");
+    expect(agentOf(a.id).sent.at(-1)!.asked).toEqual({ kind: "handoff", why: "a new worktree here" });
   });
 });
 

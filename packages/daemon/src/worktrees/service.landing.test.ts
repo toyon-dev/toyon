@@ -131,10 +131,14 @@ describe("landing", () => {
     await w.worktrees.gitStatus(wt.id);
     expect(w.state.worktree(wt.id)?.landed).toBeUndefined();
     // the agent fast-forwards main from the main checkout
+    const landedIds: string[] = [];
+    w.hub.on("landed", (id) => landedIds.push(id));
     expect((await git(w.repo, "merge", "--ff-only", wt.branch)).ok).toBe(true);
     expect(await w.worktrees.gitStatus(wt.id)).toMatchObject({ files: [], ahead: 0, behind: 0 });
     const row = w.state.worktree(wt.id)!;
     expect(row.landed).toBe(true);
+    // a landing the siblings and the origin wait on, however it happened
+    expect(landedIds).toEqual([wt.id]);
     expect(row.lands).toEqual([{ base: before, tip, at: expect.any(Number), subjects: ["add feature"] }]);
     expect((await git(w.repo, "rev-parse", `refs/toyon/lands/${wt.id}/0`)).out).toBe(tip);
     // a second landing, under a merge commit this time, counts only the commits after the first

@@ -147,4 +147,76 @@
     position: absolute;
     inset: 0;
   }
+
+  /* ---- the pieces section at the head of a plan ----
+   Toyon's own section on the agent's document: the list of what the plan splits into, one row
+   per piece, the fate words as the intro's variants were (ghost buttons, the chosen one lit), the
+   brief under it in the document's prose, and the chips the piece carries. It takes the page's
+   measure and side padding (the body's, base.css .md-preview) so its rows sit on the document's
+   text edge, clear of the outline strip, and scrolls with it; a rule under it parts it from the
+   plan, whose own top air then starts under the rule. */
+  .editor-pieces {
+    font: var(--type-ui-phone);
+    max-width: var(--chat-measure);
+    margin: 0 auto;
+    padding: 24px 32px 16px;
+    border-bottom: 1px solid var(--border0);
+  }
+  .editor-pieces-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 8px;
+  }
+  .editor-piece {
+    padding: 8px 0;
+  }
+  .editor-piece-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+  }
+  .editor-piece-n {
+    color: var(--text2);
+    font: var(--type-mono);
+    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
+  }
+  .editor-piece-title {
+    font: var(--type-ui);
+    font-weight: var(--weight-strong);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .editor-piece-fates {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    margin-left: auto;
+    flex-shrink: 0;
+  }
+  .editor-piece-brief {
+    margin: 4px 0 0 26px;
+    color: var(--text1);
+  }
+  .editor-piece-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 6px 0 0 26px;
+  }
+  .editor-piece-tail {
+    margin-left: auto;
+    font: var(--type-ui);
+    color: var(--text2);
+    flex-shrink: 0;
+  }
+  .editor-piece > .editor-piece-tail {
+    display: block;
+    margin: 4px 0 0 26px;
+  }
 }

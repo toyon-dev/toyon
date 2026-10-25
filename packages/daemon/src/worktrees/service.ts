@@ -221,6 +221,10 @@ export interface CreateOpts {
   title?: string;
   /** where the worktree came from, when it was made from somewhere: a handoff names its origin */
   from?: WorktreeInfo["from"];
+  /** made on an agent's proposal rather than typed into: its agent starts at once, its procs on
+   * the first look at it or the first request for its preview, which the idle policy's wake edges
+   * already are. A row the person typed into keeps its live preview, since the spare is warm. */
+  cold?: true;
 }
 
 /** what became of main's uncommitted files when a worktree was made from it */
@@ -583,8 +587,9 @@ export class WorktreeService {
     };
     // before the setup reads the tree and before the agent's first look at it
     const carried = await this.carryMain(repo, wt, !!opts.carry);
-    // setup + procs warm in the background; the agent starts immediately
-    this.launch(wt, repo, repo.path);
+    // setup + procs warm in the background; the agent starts immediately. A proposed worktree
+    // sets up and then waits for a look: nobody is watching its preview yet
+    this.launch(wt, repo, repo.path, opts.cold ? { start: false } : {});
     this.d.runtime.ensureAgent(wt).agent.send(prompt, { context: withCarry(context(id), carried), attachments });
     this.nameOrAsk(wt, task, given);
     if (carried.unmoved) throw new UserError(carried.unmoved, { delivered: true });
@@ -686,7 +691,12 @@ export class WorktreeService {
   /** the record goes in, the rail hears about it, and the slow part (a deps clone, setup
    * commands, the procs) runs behind; RuntimeRegistry.start emits worktreesChanged again once the
    * procs are up. The one step create, take-over and opening a ref all share. */
-  private launch(wt: WorktreeInfo, repo: RepoInfo, depsSource: string, opts: { setupCommands?: boolean } = {}) {
+  private launch(
+    wt: WorktreeInfo,
+    repo: RepoInfo,
+    depsSource: string,
+    opts: { setupCommands?: boolean; start?: boolean } = {},
+  ) {
     this.d.state.addWorktree(wt);
     this.d.hub.emit("worktreesChanged");
     fireAndForget(wt.id, this.setupAndStart(wt, repo, depsSource, opts), "setup + start");
@@ -1639,7 +1649,7 @@ export class WorktreeService {
     wt: WorktreeInfo,
     repo: RepoInfo,
     depsSource = repo.path,
-    opts: { setupCommands?: boolean } = {},
+    opts: { setupCommands?: boolean; start?: boolean } = {},
   ): Promise<void> {
     // marked for the runtime so a wake meanwhile (a tab landing on the row) does not start procs
     // on a tree whose deps are still being copied; the start at the end is this method's own
@@ -1679,7 +1689,7 @@ export class WorktreeService {
     wt: WorktreeInfo,
     repo: RepoInfo,
     depsSource: string,
-    { setupCommands = true }: { setupCommands?: boolean },
+    { setupCommands = true, start = true }: { setupCommands?: boolean; start?: boolean },
   ): Promise<void> {
     await this.mirrorBaseIgnore(repo);
     const ceiling = timeoutFor(repo.config, "setup");
@@ -1731,7 +1741,9 @@ export class WorktreeService {
         this.d.hub.emit("log", wt.id, "setup", `setup gave up after ${describeDuration(ceiling)}: ${cmd}`);
       } else if (code !== 0) this.d.hub.emit("log", wt.id, "setup", `setup failed (exit ${code}): ${cmd}`);
     }
-    await this.d.runtime.start(wt, repo);
+    // a cold worktree stops here: the first look at it, or the first request for its preview,
+    // wakes it through the runtime, which starts a worktree whose setup is done and procs are not up
+    if (start) await this.d.runtime.start(wt, repo);
   }
 
   // ---- landing ----
@@ -1916,6 +1928,9 @@ export class WorktreeService {
     await this.noteLand(repo, wt, mark);
     await this.restartFromMain(wt, baseOf(repo));
     await this.settleLanded(wt);
+    // a hand landing writes no `landed` row, since nothing of Toyon's ran, but it is a landing the
+    // siblings and the origin wait on all the same
+    this.d.hub.emit("landed", wt.id);
   }
 
   /** The one press. Commit what is uncommitted, take main in (a rebase for toyon's own branch),

@@ -10,13 +10,16 @@ import { randomUUID } from "node:crypto";
 import type { AgentEvent, RepoInfo, WorktreeInfo } from "@toyon/shared";
 import { DEFAULT_PERMISSION_MODE, HANDOFF_TOOL } from "@toyon/shared";
 import type { McpTool, McpToolResult, ToolProvider } from "../agent/mcp.ts";
-import { handoffAskPrompt, handoffPrompt } from "../agent/prompt.ts";
+import { handoffAskPrompt, handoffPrompt, pieceAskPrompt } from "../agent/prompt.ts";
 import type { TranscriptEntry } from "../agent/transcript.ts";
 import { UserError } from "../core/errors.ts";
 import type { Hub } from "../core/hub.ts";
 import { log } from "../core/log.ts";
 import type { StateStore } from "../core/state.ts";
 import type { RuntimeRegistry } from "../runtime/registry.ts";
+import { titleFrom } from "./naming.ts";
+import type { PiecesService } from "./pieces.ts";
+import { PER_TURN_MAX, proposedThisTurn } from "./proposals.ts";
 import type { CreateOpts } from "./service.ts";
 
 export interface HandoffDeps {
@@ -25,6 +28,8 @@ export interface HandoffDeps {
   runtime: Pick<RuntimeRegistry, "agentFor" | "ensureAgent">;
   /** WorktreeService.create, as a closure: the two services must not import each other */
   create: (repoId: string, prompt: string, opts: CreateOpts) => Promise<WorktreeInfo>;
+  /** the verb aimed at the worktree's own project is one piece, which is the pieces service's */
+  pieces: Pick<PiecesService, "propose">;
 }
 
 type Proposed = Extract<AgentEvent, { type: "handoff-proposed" }>;
@@ -39,8 +44,6 @@ interface Proposal {
 const MESSAGE_MAX = 20_000;
 const TITLE_MAX = 200;
 const PROJECT_MAX = 200;
-/** proposals one turn may make, answered or not: a loop ends here */
-const PER_TURN_MAX = 3;
 
 const refused = (text: string): McpToolResult => ({ text, isError: true });
 
@@ -53,17 +56,6 @@ function openProposals(entries: readonly TranscriptEntry[]): Proposed[] {
       open.delete(event.id);
   }
   return [...open.values()];
-}
-
-/** how many proposals the turn under way has made, declined ones included */
-function proposedThisTurn(entries: readonly TranscriptEntry[]): number {
-  let n = 0;
-  for (let i = entries.length - 1; i >= 0; i--) {
-    const e = entries[i]!.event;
-    if (e.type === "turn-start") break;
-    if (e.type === "handoff-proposed") n++;
-  }
-  return n;
 }
 
 export class HandoffService implements ToolProvider {
@@ -169,7 +161,9 @@ export class HandoffService implements ToolProvider {
     }
     // the person's own proposals are gated by the open card alone: no turn of theirs to finish
     if (by === "agent" && proposedThisTurn(entries) >= PER_TURN_MAX) {
-      return refused("Three handoffs were proposed this turn already; finish your turn and let the person answer.");
+      return refused(
+        `${PER_TURN_MAX} proposals were made this turn already; finish your turn and let the person answer.`,
+      );
     }
     const title = p.title?.trim();
     const { repo } = target;
@@ -238,23 +232,29 @@ export class HandoffService implements ToolProvider {
 
   /** The verb: the person wants the work continued in `repoId`. With the tool in the agent's
    * hands the agent is asked to propose it, so the message is its own account of the work, with
-   * the person's words carried; without the tool the card is raised from those words alone. */
+   * the person's words carried; without the tool the card is raised from those words alone.
+   * Aimed at the worktree's own project it is one piece for a new worktree here, through the
+   * split tool or from the words. */
   async ask(worktreeId: string, repoId: string, text?: string): Promise<void> {
     const wt = this.d.state.requireWorktree(worktreeId);
     const repo = this.d.state.repo(repoId);
     if (!repo) throw new UserError("no such project");
-    if (repo.id === wt.repoId) throw new UserError(`${repo.name} is this worktree's own project`);
+    const here = repo.id === wt.repoId;
     const agent = this.d.runtime.agentFor(worktreeId);
     if (!agent) throw new UserError("worktree still starting; try again in a moment");
     // whether the agent has the tool is only known once its process is up
     if (agent.mcpTools === null) await agent.warm();
     if (agent.mcpTools === true) {
-      agent.send(handoffAskPrompt(repo, text), { asked: { kind: "handoff", why: `continue in ${repo.name}` } });
+      agent.send(here ? pieceAskPrompt(text) : handoffAskPrompt(repo, text), {
+        asked: { kind: "handoff", why: here ? "a new worktree here" : `continue in ${repo.name}` },
+      });
       return;
     }
     const own = text?.trim();
-    if (!own) throw new UserError(`Write what ${repo.name} should do first`);
-    const r = this.propose(worktreeId, { project: repo.path, message: own }, "person");
+    if (!own) throw new UserError(`Write what ${here ? "the new worktree" : repo.name} should do first`);
+    const r = here
+      ? await this.d.pieces.propose(worktreeId, [{ title: titleFrom(own), brief: own, where: "worktree" }], "person")
+      : this.propose(worktreeId, { project: repo.path, message: own }, "person");
     if (r.isError) throw new UserError(r.text);
   }
 
@@ -273,6 +273,8 @@ export class HandoffService implements ToolProvider {
       repoName: repo.name,
       title: wt.title,
       ...(wt.pr?.url ? { url: wt.pr.url } : {}),
+      // a piece of this worktree's own plan: the row and the agent's sentence say sibling, not project
+      ...(wt.repoId === origin.repoId ? { same: true as const } : {}),
       ts: Date.now(),
     });
   }

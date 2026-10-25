@@ -6,18 +6,23 @@
 import { type ClientMsg, cardBox, type RepoInfo } from "@toyon/shared";
 import type { ChatItem, WorktreeLocal } from "../../state/store.ts";
 import { type AskItem, askLine } from "./ask.ts";
+import { type PiecesItem, piecesQuestion } from "./pieces.ts";
 
 export type HandoffItem = Extract<ChatItem, { kind: "handoff" }>;
 
-/** what can hold the composer box: an open ask, or a handoff still proposed */
-export type CardItem = AskItem | HandoffItem;
+/** what can hold the composer box: an open ask, a handoff still proposed, or a pieces list that
+ * is Toyon's own card (a held one rides beside a plan card and holds nothing itself) */
+export type CardItem = AskItem | HandoffItem | PiecesItem;
 
 /** the card the box shows: the newest one nothing has closed, or none */
 export function openCard(chat: ChatItem[]): CardItem | null {
   const item = chat.findLast(
-    (i) => (i.kind === "ask" && !i.outcome) || (i.kind === "handoff" && i.state === "proposed"),
+    (i) =>
+      (i.kind === "ask" && !i.outcome) ||
+      (i.kind === "handoff" && i.state === "proposed") ||
+      (i.kind === "pieces" && i.state === "proposed"),
   );
-  return item?.kind === "ask" || item?.kind === "handoff" ? item : null;
+  return item?.kind === "ask" || item?.kind === "handoff" || item?.kind === "pieces" ? item : null;
 }
 
 /** the box a drop on the chat goes to when a question card has the box: the card's own, since the
@@ -30,9 +35,11 @@ export function cardDropBox(l: Pick<WorktreeLocal, "chat" | "cardParked"> | unde
 }
 
 /** the line that stands for the card once it is set aside: the ask's own, or the question the
- * handoff card asks */
+ * handoff or the pieces card asks */
 export function cardLine(card: CardItem): string {
-  return card.kind === "ask" ? askLine(card) : `Continue in ${card.repo.name}?`;
+  if (card.kind === "ask") return askLine(card);
+  if (card.kind === "pieces") return piecesQuestion(card);
+  return `Continue in ${card.repo.name}?`;
 }
 
 /** the answer to the card: `note` rides with go alone, trimmed, and a blank one is left off */
@@ -51,22 +58,21 @@ export function handoffAnswer(
 export type HandoffArgs = { repo: RepoInfo; text?: string } | { error: string } | { pick: true };
 
 /** The first word names the project, by its name as listed: an exact match first (case does not
- * matter), else the one project whose name starts with it. The rest is the person's own words for
- * what that project should do. */
+ * matter), else the one project whose name starts with it; `here`, or this worktree's own
+ * project, means a new worktree here. The rest is the person's own words for what it should do. */
 export function parseHandoffArgs(args: string, repos: readonly RepoInfo[], hereRepoId: string): HandoffArgs {
   const trimmed = args.trim();
   if (!trimmed) return { pick: true };
-  if (repos.length < 2) return { error: "open another project first" };
   const gap = trimmed.search(/\s/);
   const word = gap === -1 ? trimmed : trimmed.slice(0, gap);
   // the words as typed: the message is theirs, and its spacing is not this parser's to tidy
   const text = gap === -1 ? undefined : trimmed.slice(gap).trim() || undefined;
   const needle = word.toLowerCase();
+  const own = repos.find((r) => r.id === hereRepoId);
+  if (needle === "here" && own) return { repo: own, ...(text ? { text } : {}) };
   const exact = repos.filter((r) => r.name.toLowerCase() === needle);
   const hits = exact.length > 0 ? exact : repos.filter((r) => r.name.toLowerCase().startsWith(needle));
   if (hits.length === 0) return { error: `no open project named "${word}"` };
   if (hits.length > 1) return { error: `"${word}" names more than one project` };
-  const repo = hits[0]!;
-  if (repo.id === hereRepoId) return { error: `this worktree is already in ${repo.name}` };
-  return { repo, ...(text ? { text } : {}) };
+  return { repo: hits[0]!, ...(text ? { text } : {}) };
 }

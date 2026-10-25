@@ -84,7 +84,7 @@ describe("a worktree's actions", () => {
       "mark as unread",
       "|",
       "land",
-      "continue in another project…",
+      "continue elsewhere…",
       "|",
       // nothing written, so the remove asks nothing and loses its ellipsis
       "archive",
@@ -112,7 +112,7 @@ describe("a worktree's actions", () => {
       // dirty under a turn: the press waits for the turn, and the row says so
       "sync from main after the turn (3 behind)",
       "land",
-      "continue in another project…",
+      "continue elsewhere…",
       "|",
       "archive…",
     ]);
@@ -164,7 +164,7 @@ describe("a worktree's actions", () => {
       "mark as unread",
       "|",
       "land",
-      "continue in another project…",
+      "continue elsewhere…",
       "|",
       "archive…",
     ]);
@@ -274,12 +274,12 @@ describe("a worktree's actions", () => {
     expect(labels(items).slice(-5)).toEqual(["|", "run with fe", "run with full", "|", "archive"]);
   });
 
-  test("the handoff is off with its reason under one project, live with two, and absent on the lead", () => {
+  test("the handoff is live under one project, since a new worktree here is a target, and absent on the lead", () => {
     const s = { layout: { ...defaultLayout, changes: true }, shipping: {}, frame: "desk" as const, repos: [] };
     const row = (items: MenuEntry[]) => items.filter(isItem).find((i) => i.id === "handoff");
     const alone = row(worktreeItems(owned(), null, s, deps, here));
-    expect(alone?.label).toBe("continue in another project…");
-    expect(alone?.disabled).toBe("open another project first");
+    expect(alone?.label).toBe("continue elsewhere…");
+    expect(alone?.disabled).toBeUndefined();
     expect(alone?.sub).toBe(true);
     const sent: unknown[] = [];
     const two = row(

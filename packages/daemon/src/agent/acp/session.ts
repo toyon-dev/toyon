@@ -22,6 +22,7 @@ import type {
   CommandOrigin,
   ModelChoice,
   PermissionMode,
+  Piece,
   QueuedMessage,
 } from "@toyon/shared";
 import { DEFAULT_PERMISSION_MODE, nextNumbers } from "@toyon/shared";
@@ -128,6 +129,13 @@ export interface AcpSessionDeps {
   onPlan?: (markdown: string, ownFile?: string) => Promise<string | null>;
   /** whether the plan file the card named says something other than what the agent proposed */
   planEdited?: (path: string, proposed: string) => Promise<boolean>;
+  /** a pieces list held beside a plan card was answered with the plan: approved, or sent back */
+  onPieces?: (id: string, approved: boolean) => void;
+  /** a held pieces list is Toyon's own card from here: its turn ended with no plan card, or the
+   * daemon came back under it. Takes the pieces and answers with the worktree-relative file their
+   * briefs were written to, for the card's section to sit on; nothing else, since this runs where
+   * nothing can be awaited (the transcript restoring, a turn ending). */
+  onPiecesShown?: (id: string, pieces: Piece[]) => string | null | undefined;
   /** the value the worktree asks for in this category (its model, its effort level); undefined
    * leaves the agent on its own default */
   option?: (category: OptionCategory) => string | undefined;
@@ -319,11 +327,17 @@ export class AcpSession implements AgentAdapter {
   /** ask cards waiting on a person, by ask id. The agent's request stays open on the wire until
    * one of these settles, and that is what blocks its turn. */
   private asks = new Map<string, PendingAsk>();
-  /** handoff cards waiting on a person, by proposal id. The tool answers the agent at once (its
-   * client times a call out before a person would answer), so nothing on the wire holds the turn;
-   * the open card is what the row reads `waiting` from. Seeded from the transcript and kept by
-   * the events that open and close one, so it survives a restart. */
-  private openHandoffs = new Set<string>();
+  /** handoff and pieces cards waiting on a person, by proposal id. The tool answers the agent at
+   * once (its client times a call out before a person would answer), so nothing on the wire holds
+   * the turn; the open card is what the row reads `waiting` from. Seeded from the transcript and
+   * kept by the events that open and close one, so it survives a restart. */
+  private openCards = new Set<string>();
+  /** a pieces list proposed in plan mode, waiting for the turn's plan card to carry it: answered
+   * with the plan, or shown as Toyon's own card once the turn ends without one */
+  private heldPieces: string | null = null;
+  /** the plan card a held list rode onto, while that card is open: a card that closes with no
+   * answer gives the list back to `heldPieces`, to be shown as Toyon's own */
+  private adopted: { ask: string; pieces: string } | null = null;
   private log: Transcript;
   /** the number the next attachment of each kind takes in this worktree's session; continues across
    * daemon restarts because the transcript remembers every attachment sent */
@@ -380,7 +394,7 @@ export class AcpSession implements AgentAdapter {
     // closes as failed rather than read "continuing" for good.
     const going = new Set<string>();
     for (const { event } of this.log.entries) {
-      this.trackHandoff(event);
+      this.trackCards(event);
       if (event.type === "handoff-go") going.add(event.id);
       else if (event.type === "handoff" || event.type === "handoff-declined") going.delete(event.id);
     }
@@ -397,15 +411,66 @@ export class AcpSession implements AgentAdapter {
       log.info(d.worktreeId, `sealed a turn left open: ${seal.stopReason}`);
       this.emit(seal);
     }
-    if (this.openHandoffs.size > 0) this.syncStatus();
+    // a list held for a plan card the daemon died under: the list is Toyon's card from here
+    this.showHeld();
+    if (this.openCards.size > 0) this.syncStatus();
   }
 
-  /** the open handoff cards follow their events; true when the set changed */
-  private trackHandoff(event: AgentEvent): boolean {
-    if (event.type === "handoff-proposed") return this.openHandoffs.add(event.id).size > 0;
+  /** the open cards follow their events; true when the set changed. A pieces list proposed in
+   * plan mode is held rather than open: the next plan card carries it, and its yes answers both. */
+  private trackCards(event: AgentEvent): boolean {
+    if (event.type === "handoff-proposed") return this.openCards.add(event.id).size > 0;
     if (event.type === "handoff-go" || event.type === "handoff" || event.type === "handoff-declined")
-      return this.openHandoffs.delete(event.id);
+      return this.openCards.delete(event.id);
+    if (event.type === "pieces-proposed") {
+      if (event.held) {
+        this.heldPieces = event.id;
+        return false;
+      }
+      return this.openCards.add(event.id).size > 0;
+    }
+    if (event.type === "pieces-shown") {
+      if (this.heldPieces === event.id) this.heldPieces = null;
+      return this.openCards.add(event.id).size > 0;
+    }
+    if (event.type === "agent-permission") {
+      // the card carries the list: the list is the card's to answer, for as long as the card is
+      if (event.pieces && this.heldPieces === event.pieces) {
+        this.heldPieces = null;
+        this.adopted = { ask: event.id, pieces: event.pieces };
+      }
+      return false;
+    }
+    if (event.type === "agent-ask-end" && this.adopted?.ask === event.id) {
+      // the card closed without an answer (the daemon died under it, the agent withdrew it): the
+      // list is held again, and shown as Toyon's own card where a held list is shown. An answer
+      // closes the list itself through `onPieces`, so nothing to do here for one.
+      if (event.outcome !== "answered") this.heldPieces = this.adopted.pieces;
+      this.adopted = null;
+      return false;
+    }
+    if (event.type === "pieces-go" || event.type === "pieces" || event.type === "pieces-declined") {
+      if (this.heldPieces === event.id) this.heldPieces = null;
+      if (this.adopted?.pieces === event.id) this.adopted = null;
+      return this.openCards.delete(event.id);
+    }
     return false;
+  }
+
+  /** a held pieces list with no plan card to ride on becomes Toyon's own card: at the end of the
+   * turn that proposed it, or on a restart under that turn. The briefs are written first, so the
+   * event names the file the card's section sits on. */
+  private showHeld(): void {
+    const id = this.heldPieces;
+    if (!id) return;
+    this.heldPieces = null;
+    this.openCards.add(id);
+    const proposed = this.log.entries.findLast(
+      ({ event }) => event.type === "pieces-proposed" && event.id === id,
+    )?.event;
+    const pieces = proposed?.type === "pieces-proposed" ? proposed.pieces : [];
+    const plan = this.d.onPiecesShown?.(id, pieces);
+    this.emit({ type: "pieces-shown", id, ...(typeof plan === "string" ? { plan } : {}), ts: Date.now() });
   }
 
   get commands(): AgentCommand[] {
@@ -531,7 +596,7 @@ export class AcpSession implements AgentAdapter {
 
   note(event: AgentEvent) {
     this.emit(event);
-    if (this.trackHandoff(event)) this.syncStatus();
+    if (this.trackCards(event)) this.syncStatus();
   }
 
   private emit(event: AgentEvent) {
@@ -562,11 +627,12 @@ export class AcpSession implements AgentAdapter {
 
   /** A message from the person. One sent past an open card is their answer to it: the agent is
    * blocked on the card and would read nothing until it closed, so the card closes as passed and
-   * the message is what the turn carries on with. Toyon's own message answers nothing: the card
-   * is the person's to answer, and the message waits behind it. */
+   * the message is what the turn carries on with. Toyon's own message answers nothing, and
+   * neither does one sent on from another chat: the card is the person's to answer, and the
+   * message waits behind it. */
   send(text: string, opts: SendOpts = {}) {
     if (this.stopped) return log.warn(this.d.worktreeId, "send after close dropped");
-    if (!opts.asked) for (const ask of [...this.asks.values()]) ask.settle("skipped");
+    if (!opts.asked && !opts.keepCards) for (const ask of [...this.asks.values()]) ask.settle("skipped");
     this.post(text, opts);
   }
 
@@ -778,9 +844,9 @@ export class AcpSession implements AgentAdapter {
         for (const q of this.queue) q.handedBack = false;
         this.setStopping(false);
       }
-      // a handoff card proposed during the turn is still a person's answer owed once the turn is
-      // over: the row keeps reading waiting from it, not idle
-      this.setStatus(this.openHandoffs.size > 0 ? "waiting" : "idle");
+      // a handoff or pieces card proposed during the turn is still a person's answer owed once
+      // the turn is over: the row keeps reading waiting from it, not idle
+      this.setStatus(this.openCards.size > 0 ? "waiting" : "idle");
     } catch (e) {
       // an AWS session that lapsed under Claude on Bedrock: the agent's own logins would not help,
       // so the card gets the daemon's. Read before the generic phrasing, which it can also match
@@ -838,6 +904,8 @@ export class AcpSession implements AgentAdapter {
     if (!turn?.open) return;
     turn.open = false;
     this.emit({ type: "turn-end", stopReason, ts: Date.now() });
+    // a pieces list handed over for a plan card that never came is the person's to answer anyway
+    this.showHeld();
     this.setStopping(false);
   }
 
@@ -1070,7 +1138,7 @@ export class AcpSession implements AgentAdapter {
     for (i--; i >= 0; i--) {
       const e = entries[i]!.event;
       if (isMessage(e)) break;
-      if (e.type === "handoff-landed") out.unshift(handoffLandedContext(e.title, e.repoName, e.url));
+      if (e.type === "handoff-landed") out.unshift(handoffLandedContext(e.title, e.repoName, e.url, e.same));
     }
     return out;
   }
@@ -1465,6 +1533,10 @@ export class AcpSession implements AgentAdapter {
     // offers only what keeps the mode meaning something
     const offered = plan ? orderPlanOptions(params.options) : params.options.filter((o) => o.kind !== "allow_always");
     const choices: AskChoice[] = offered.map((o) => ({ id: o.optionId, name: o.name, kind: o.kind }));
+    // the pieces list the agent handed over for this plan rides beside the card, and its yes is
+    // the list's yes; the list stays held until a choice is made, so a card a stop cancels leaves
+    // it for the turn's end to show as Toyon's own
+    const pieces = plan ? this.heldPieces : null;
     return this.openAsk<acp.RequestPermissionResponse>(
       (id) => ({
         type: "agent-permission",
@@ -1473,6 +1545,7 @@ export class AcpSession implements AgentAdapter {
         ...(parts.command ? { command: parts.command } : {}),
         ...(detail ? { detail } : {}),
         ...(planPath ? { plan: planPath } : {}),
+        ...(pieces ? { pieces } : {}),
         choices,
         ...(params.toolCall.toolCallId ? { toolId: params.toolCall.toolCallId } : {}),
         ts: Date.now(),
@@ -1484,11 +1557,17 @@ export class AcpSession implements AgentAdapter {
         // approving a plan is also choosing how the work after it runs: Claude's options say
         // whether edits are auto-accepted or approved one by one, and the worktree's mode follows
         const res: acp.RequestPermissionResponse = { outcome: { outcome: "selected", optionId: choice.id } };
-        if (plan && (choice.kind === "allow_once" || choice.kind === "allow_always")) {
-          this.d.setMode?.(modeAfterPlan(choice.name));
-          // the yes said yes to the file, which may no longer be the plan the agent holds
-          if (planPath) return this.sayPlanEdited(detail, planPath).then(() => res);
+        const approved = choice.kind === "allow_once" || choice.kind === "allow_always";
+        if (plan && approved) this.d.setMode?.(modeAfterPlan(choice.name));
+        // after the mode, so the act reads the mode the work runs in; a list handed over late,
+        // while the card was open, is answered with it too
+        const decided = pieces ?? (plan ? this.heldPieces : null);
+        if (decided) {
+          if (this.heldPieces === decided) this.heldPieces = null;
+          this.d.onPieces?.(decided, approved);
         }
+        // the yes said yes to the file, which may no longer be the plan the agent holds
+        if (plan && approved && planPath) return this.sayPlanEdited(detail, planPath).then(() => res);
         return res;
       },
     );
@@ -1629,7 +1708,7 @@ export class AcpSession implements AgentAdapter {
    * a person's answer owed */
   private syncStatus() {
     if (this.status === "error") return;
-    const waiting = this.asks.size > 0 || this.openHandoffs.size > 0;
+    const waiting = this.asks.size > 0 || this.openCards.size > 0;
     this.setStatus(waiting ? "waiting" : this.running || this.own ? "working" : "idle");
   }
 

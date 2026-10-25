@@ -43,6 +43,7 @@ import { netOfCalls } from "./mergeDiffs.ts";
 import { Painted } from "./Painted.tsx";
 import { PasteChip } from "./PasteChip.tsx";
 import { PickChip } from "./PickChip.tsx";
+import { PieceLaterRow, PiecesRow } from "./PiecesRow.tsx";
 import { ranClean } from "./shellMode.ts";
 import { languageOf, paintCode, paintDiff, pathInDiff } from "./syntax.ts";
 import { normalizeThoughtMarkdown, thoughtLine, thoughtSteps } from "./thought.ts";
@@ -1194,6 +1195,10 @@ export const ChatItemView = memo(function ChatItemView({
       return <HandoffRow item={item} />;
     case "handoff-landed":
       return <HandoffLandedRow item={item} />;
+    case "pieces":
+      return <PiecesRow item={item} />;
+    case "piece-later":
+      return <PieceLaterRow item={item} />;
     case "restored":
       return <RestoredRow item={item} />;
     case "adopted":

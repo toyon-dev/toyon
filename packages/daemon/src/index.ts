@@ -79,6 +79,7 @@ import { ChatSearch } from "./worktrees/chats.ts";
 import { FixService } from "./worktrees/fix.ts";
 import { HandoffService } from "./worktrees/handoff.ts";
 import { LandingService } from "./worktrees/landing.ts";
+import { PiecesService } from "./worktrees/pieces.ts";
 import { PrService } from "./worktrees/prs.ts";
 import { RefSearch } from "./worktrees/refs.ts";
 import { WorktreeService } from "./worktrees/service.ts";
@@ -279,12 +280,22 @@ interest.onFirst((id) => worktrees.tree.watch(id));
 interest.onLast((id) => worktrees.tree.unwatch(id));
 // a worktree whose changes touch a proc it reaches on main takes that proc over
 new BackendShare({ state, hub, runtime, own: (id, names) => worktrees.ownProcs(id, names) });
-// work continued in another open project; it makes worktrees through the service's own create
+// a plan's pieces across worktrees, and work continued in another open project; both make
+// worktrees through the service's own create
+const pieces = new PiecesService({
+  state,
+  hub,
+  runtime,
+  attachments,
+  create: (repoId, prompt, opts) => worktrees.create(repoId, prompt, opts),
+});
+tools.add(pieces);
 const handoff = new HandoffService({
   state,
   hub,
   runtime,
   create: (repoId, prompt, opts) => worktrees.create(repoId, prompt, opts),
+  pieces,
 });
 tools.add(handoff);
 // before the server: its agentStatus listener has to run ahead of the one that broadcasts the rows
@@ -487,6 +498,7 @@ const {
     fix,
     pageErrors,
     handoff,
+    pieces,
     mcp,
     themes,
     agents,

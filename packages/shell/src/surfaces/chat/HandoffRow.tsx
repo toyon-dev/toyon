@@ -62,9 +62,8 @@ export function HandoffRow({ item }: { item: HandoffItem }) {
 export function HandoffLandedRow({ item }: { item: Extract<ChatItem, { kind: "handoff-landed" }> }) {
   return (
     <DaemonRow icon="check" word="landed" tone="aqua" at={item.ts}>
-      <span className="daemon-text">
-        {item.title} in {item.repoName}
-      </span>
+      {/* a sibling of this project is named alone; work in another project says where */}
+      <span className="daemon-text">{item.same ? item.title : `${item.title} in ${item.repoName}`}</span>
       {item.url && (
         <Button variant="inline" tone="strong" onClick={() => window.open(item.url, "_blank")}>
           view PR

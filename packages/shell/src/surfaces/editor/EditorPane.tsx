@@ -11,6 +11,7 @@ import { browserEnv, looseSync, NO_SYNC } from "../../state/looseSync.ts";
 import { useTheme } from "../../state/selectors.ts";
 import {
   archivedPageOf,
+  type ChatItem,
   type EditorDisk,
   type EditorFile,
   type EditorView,
@@ -24,10 +25,12 @@ import { usePersisted, useSettled } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { Pane } from "../../ui/Pane.tsx";
 import { endCarry, startCarry } from "../chat/carried.ts";
+import { openPieces } from "../chat/pieces.ts";
 import { splitPath } from "../util.ts";
 import { FileViewer } from "./FileViewer.tsx";
 import { HtmlPreview } from "./HtmlPreview.tsx";
 import { MarkdownPreview } from "./MarkdownPreview.tsx";
+import { Pieces } from "./Pieces.tsx";
 import "./editor.css";
 
 // the grammars come in with the editor, and a file is only shown once they can colour it
@@ -49,6 +52,8 @@ function Loading({ what }: { what: string }) {
 
 /** a drag nobody starts: a pane on a phone's screen is not resized */
 const NO_DRAG = () => {};
+/** one empty chat for the selector, so a worktree with no chat yet does not make a new array a render */
+const NO_CHAT: ChatItem[] = [];
 
 const VIEW_ICONS = { diff: "diff", file: "text", preview: "book" } as const;
 
@@ -132,6 +137,17 @@ export function EditorPane({
   });
   // a commit's copy: read-only, and none of the working-tree wiring below applies to it
   const history = ref !== undefined;
+  // the pieces list drawn at the head of the plan open here: the list names its file (the briefs
+  // Toyon wrote, or the plan card's file once the card came), and a held list with no card yet
+  // sits on the worktree's plan. Read as one item off the store rather than the whole chat, so a
+  // streaming reply does not redraw the pane a delta at a time.
+  const planPath = useStore((s) => worktreeById(s, worktreeId)?.worktree.plan);
+  const open = useStore((s) => openPieces(localOf(s, worktreeId).chat ?? NO_CHAT));
+  const pieces = useMemo(() => {
+    if (history || loose || editor.view !== "preview" || !open) return null;
+    const on = open.plan ?? planPath;
+    return on && path === on ? open : null;
+  }, [history, loose, editor.view, planPath, path, open]);
   const sync = useMemo(
     () =>
       loose
@@ -299,6 +315,7 @@ export function EditorPane({
             text={disk.after}
             path={path}
             worktreeId={worktreeId}
+            lead={pieces ? <Pieces item={pieces} worktreeId={worktreeId} /> : undefined}
             // a copy only git holds, or a file from outside, has no bytes on disk for its images to be served from
             version={history || kept || loose ? undefined : disk.version}
             openSeq={editor.seq}

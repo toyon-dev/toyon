@@ -896,6 +896,23 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
    * for what that project should do; the agent is asked to propose it when it has the tool, and
    * the card is raised from the text alone when it has not */
   z.object({ t: z.literal("handoff-ask"), worktreeId: id, repoId: id, text: prompt.optional() }),
+  /** move one piece on a pieces list; recorded on the transcript, so every tab sees it */
+  z.object({
+    t: z.literal("pieces-fate"),
+    worktreeId: id,
+    id: z.string().max(64),
+    pieceId: z.string().max(16),
+    fate: z.enum(["here", "worktree", "send", "skip"]),
+  }),
+  /** answer Toyon's own pieces card: go acts on the list as the fates stand, with `note` added to
+   * every brief; not go closes it */
+  z.object({
+    t: z.literal("pieces-answer"),
+    worktreeId: id,
+    id: z.string().max(64),
+    go: z.boolean(),
+    note: z.string().max(5_000).optional(),
+  }),
   /** drop this agent's stored credential (ACP logout), whatever worktree it was logged in from */
   z.object({ t: z.literal("agent-logout"), agent: id }),
   /** a surface showing this agent is not ready came on screen: look again, if the daemon agrees it is worth it */

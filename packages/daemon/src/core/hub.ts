@@ -102,6 +102,10 @@ export interface HubEvents {
    * worktree another one handed work to tells that one here, so the two services need not know
    * each other. */
   landed: (worktreeId: string) => void;
+  /** the person answered a pieces list through the plan card it sat beside: approved with the
+   * plan, or sent back with it. The session raises it; the pieces service acts, so the two need
+   * not know each other. */
+  piecesDecided: (worktreeId: string, id: string, approved: boolean) => void;
 }
 
 type Listener<K extends keyof HubEvents> = HubEvents[K];

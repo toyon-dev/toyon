@@ -42,6 +42,9 @@ import type {
   PendingRepo,
   PermissionMode,
   PickVerb,
+  Piece,
+  PieceFate,
+  PieceOutcome,
   QueuedMessage,
   RefHit,
   Remote,
@@ -173,7 +176,16 @@ export type ChatItem =
       id: string;
       ask:
         | { kind: "question"; message: string; questions: AskQuestion[] }
-        | { kind: "permission"; title: string; command?: string; detail?: string; plan?: string; choices: AskChoice[] };
+        | {
+            kind: "permission";
+            title: string;
+            command?: string;
+            detail?: string;
+            plan?: string;
+            /** the pieces list this plan card carries beside it, whose yes is the plan's */
+            pieces?: string;
+            choices: AskChoice[];
+          };
       /** the row of the call a permission gates, which stays in the log to show what the call did */
       toolId?: string;
       outcome?: AskOutcome;
@@ -199,7 +211,47 @@ export type ChatItem =
       ts: number;
     }
   /** the daemon's word that a worktree this one handed off to landed in its project */
-  | { kind: "handoff-landed"; worktreeId: string; repoName: string; title: string; url?: string; ts: number };
+  | {
+      kind: "handoff-landed";
+      worktreeId: string;
+      repoName: string;
+      title: string;
+      url?: string;
+      same?: true;
+      ts: number;
+    }
+  /** the pieces of the agent's plan, handed to Toyon. `held` while it waits for the plan card it
+   * rides beside (the list is drawn on the plan, and the plan's yes is its yes; no card of its
+   * own), `proposed` as Toyon's own card in the box, `going` once yes is pressed, then `done` with
+   * what became of each piece, or `declined`. `fates` is the person's last press per piece, read
+   * over the agent's; `later` is what the pieces queued behind a sibling became when it landed. */
+  | {
+      kind: "pieces";
+      id: string;
+      pieces: Piece[];
+      fates: Record<string, PieceFate>;
+      mode: PermissionMode;
+      held?: true;
+      /** the file the list sits on: the agent's plan when held, else the briefs Toyon wrote */
+      plan?: string;
+      /** the plan card a held list rides beside, once it arrived */
+      companion?: string;
+      state: "held" | "proposed" | "going" | "done" | "declined";
+      outcomes: PieceOutcome[];
+      later: Array<{ pieceId: string; worktreeId?: string; title?: string; reason?: string }>;
+      reason?: string;
+      ts: number;
+    }
+  /** a queued piece's turn came, long after its list: its worktree is made, or it never will be */
+  | {
+      kind: "piece-later";
+      id: string;
+      pieceId: string;
+      title?: string;
+      worktreeId?: string;
+      reason?: string;
+      ts: number;
+    };
 
 /** what the box holds against one ask (surfaces/chat/ask.ts): one answer per question, and the
  * question on screen */
@@ -1665,9 +1717,20 @@ function runningOf(chat: ChatItem[], was: WorktreeLocal["running"]): WorktreeLoc
  * on purpose and waits folded. A handoff card is one of these: its note is the box's draft, and
  * it closes with the go or the decline that answers it. */
 function askSettled(l: WorktreeLocal, ev: AgentEvent): WorktreeLocal {
-  const asked = ev.type === "agent-question" || ev.type === "agent-permission" || ev.type === "handoff-proposed";
+  const asked =
+    ev.type === "agent-question" ||
+    ev.type === "agent-permission" ||
+    ev.type === "handoff-proposed" ||
+    (ev.type === "pieces-proposed" && !ev.held) ||
+    ev.type === "pieces-shown";
   const closed =
-    ev.type === "agent-ask-end" || ev.type === "handoff-go" || ev.type === "handoff-declined" ? ev.id : null;
+    ev.type === "agent-ask-end" ||
+    ev.type === "handoff-go" ||
+    ev.type === "handoff-declined" ||
+    ev.type === "pieces-go" ||
+    ev.type === "pieces-declined"
+      ? ev.id
+      : null;
   if (!asked && !closed) return l;
   const stopped = ev.type === "agent-ask-end" && stoppedBy(ev.outcome);
   const expired = ev.type === "agent-ask-end" && ev.outcome === "expired" ? ev.id : null;
@@ -2926,9 +2989,13 @@ function onServer(s: State, msg: StoreServerMsg): State {
         if (turn.edits && !turn.hmr) next = { ...next, reloadReq: { id, n: (next.reloadReq?.n ?? 0) + 1 } };
       }
       // the question goes in the box, so the box has to be on screen, the way a notice's does; so
-      // does a handoff's card, which is the same box
+      // does a handoff's or a pieces card, which is the same box
       if (
-        (ev.type === "agent-question" || ev.type === "agent-permission" || ev.type === "handoff-proposed") &&
+        (ev.type === "agent-question" ||
+          ev.type === "agent-permission" ||
+          ev.type === "handoff-proposed" ||
+          (ev.type === "pieces-proposed" && !ev.held) ||
+          ev.type === "pieces-shown") &&
         id === s.activeId
       )
         next = revealChat(next);
@@ -3339,9 +3406,87 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
           repoName: event.repoName,
           title: event.title,
           ...(event.url ? { url: event.url } : {}),
+          ...(event.same ? { same: true } : {}),
           ts: event.ts,
         },
       ];
+    case "pieces-proposed":
+      return [
+        ...items,
+        {
+          kind: "pieces",
+          id: event.id,
+          pieces: event.pieces,
+          fates: Object.fromEntries(event.pieces.map((p) => [p.id, p.fate])),
+          mode: event.mode,
+          ...(event.held ? { held: true } : {}),
+          ...(event.plan ? { plan: event.plan } : {}),
+          state: event.held ? "held" : "proposed",
+          outcomes: [],
+          later: [],
+          ts: event.ts,
+        },
+      ];
+    case "pieces-shown": {
+      const idx = piecesIndex(items, event.id, ["held", "proposed"]);
+      if (idx === -1) return items;
+      const card = items[idx] as PiecesCard;
+      return items.with(idx, { ...card, state: "proposed", ...(event.plan ? { plan: event.plan } : {}) });
+    }
+    case "pieces-fate": {
+      const idx = piecesIndex(items, event.id, ["held", "proposed"]);
+      if (idx === -1) return items;
+      const card = items[idx] as PiecesCard;
+      return items.with(idx, { ...card, fates: { ...card.fates, [event.pieceId]: event.fate } });
+    }
+    case "pieces-go": {
+      const idx = piecesIndex(items, event.id, ["held", "proposed"]);
+      if (idx === -1) return items;
+      return items.with(idx, { ...(items[idx] as PiecesCard), state: "going" });
+    }
+    case "pieces": {
+      const idx = piecesIndex(items, event.id, ["held", "proposed", "going"]);
+      // what became of the pieces belongs on the chat whether or not the list was seen (a torn
+      // transcript line); with no list to close it stands on its own
+      if (idx === -1) {
+        return [
+          ...items,
+          {
+            kind: "pieces",
+            id: event.id,
+            pieces: [],
+            fates: {},
+            mode: DEFAULT_PERMISSION_MODE,
+            state: "done",
+            outcomes: event.outcomes,
+            later: [],
+            ts: event.ts,
+          },
+        ];
+      }
+      return items.with(idx, { ...(items[idx] as PiecesCard), state: "done", outcomes: event.outcomes });
+    }
+    case "pieces-declined": {
+      const idx = piecesIndex(items, event.id, ["held", "proposed", "going"]);
+      if (idx === -1) return items;
+      const card = items[idx] as PiecesCard;
+      return items.with(idx, { ...card, state: "declined", ...(event.reason ? { reason: event.reason } : {}) });
+    }
+    case "piece-made":
+    case "piece-dropped": {
+      const idx = items.findLastIndex((i) => i.kind === "pieces" && i.id === event.id);
+      const card = idx === -1 ? undefined : (items[idx] as PiecesCard);
+      const entry =
+        event.type === "piece-made"
+          ? { pieceId: event.pieceId, worktreeId: event.worktreeId, title: event.title }
+          : { pieceId: event.pieceId, reason: event.reason };
+      const title = event.type === "piece-made" ? event.title : card?.pieces.find((p) => p.id === event.pieceId)?.title;
+      // the list's row on the plan learns what became of the piece; the chat gets a row of its
+      // own, since this comes long after the list was answered
+      const row: ChatItem = { kind: "piece-later", id: event.id, ...(title ? { title } : {}), ...entry, ts: event.ts };
+      const listed = card ? items.with(idx, { ...card, later: [...card.later, entry] }) : items;
+      return [...listed, row];
+    }
     case "restored":
       return [
         ...items,
@@ -3392,15 +3537,27 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
           ...(event.command ? { command: event.command } : {}),
           ...(event.detail ? { detail: event.detail } : {}),
           ...(event.plan ? { plan: event.plan } : {}),
+          ...(event.pieces ? { pieces: event.pieces } : {}),
           choices: event.choices,
         },
       };
+      // the held list the card carries learns which card that is, so the document can say so, and
+      // which file the card named, so the list sits on that plan and on no later one
+      const list = event.pieces ? items.findLastIndex((i) => i.kind === "pieces" && i.id === event.pieces) : -1;
+      const held =
+        list === -1
+          ? items
+          : items.with(list, {
+              ...(items[list] as PiecesCard),
+              companion: event.id,
+              ...(event.plan && !(items[list] as PiecesCard).plan ? { plan: event.plan } : {}),
+            });
       // a plan's call does nothing but ask, so its card takes the row like a question's. A command
       // or an edit runs once it is let through, and its row is where the output lands.
-      const gated = items.findLast((i) => i.kind === "tool" && i.id === event.toolId);
+      const gated = held.findLast((i) => i.kind === "tool" && i.id === event.toolId);
       if (gated?.kind !== "tool" || event.plan || gated.toolKind === "switch_mode")
-        return addAsk(items, event.toolId, card);
-      return [...items, { ...card, toolId: gated.id }];
+        return addAsk(held, event.toolId, card);
+      return [...held, { ...card, toolId: gated.id }];
     }
     case "agent-ask-end": {
       const idx = items.findLastIndex((i) => i.kind === "ask" && i.id === event.id && !i.outcome);
@@ -3450,6 +3607,12 @@ function cutRow(items: ChatItem[], messageId: string): number {
 
 type AskCard = Extract<ChatItem, { kind: "ask" }>;
 type HandoffCard = Extract<ChatItem, { kind: "handoff" }>;
+type PiecesCard = Extract<ChatItem, { kind: "pieces" }>;
+
+/** the pieces list `id` names while it is in one of `states` */
+function piecesIndex(items: ChatItem[], id: string, states: PiecesCard["state"][]): number {
+  return items.findLastIndex((i) => i.kind === "pieces" && i.id === id && states.includes(i.state));
+}
 
 /** the handoff `id` names, where nothing has settled it yet: the card still proposed, or the row
  * standing for a go whose worktree is still being made */

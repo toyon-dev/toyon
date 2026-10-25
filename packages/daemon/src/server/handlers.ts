@@ -40,6 +40,7 @@ import type { ChatSearch } from "../worktrees/chats.ts";
 import type { FixService } from "../worktrees/fix.ts";
 import type { HandoffService } from "../worktrees/handoff.ts";
 import type { LandingService } from "../worktrees/landing.ts";
+import type { PiecesService } from "../worktrees/pieces.ts";
 import type { PrService } from "../worktrees/prs.ts";
 import type { RefSearch } from "../worktrees/refs.ts";
 import type { WorktreeService } from "../worktrees/service.ts";
@@ -90,6 +91,8 @@ export interface Services {
   pageErrors: Pick<PageErrorService, "report" | "loaded">;
   /** work continued in another project: the card's answer, and the verb that asks for one */
   handoff: Pick<HandoffService, "answer" | "ask">;
+  /** a plan's pieces across worktrees: a fate moved on the list, and the answer to Toyon's card */
+  pieces: Pick<PiecesService, "fate" | "answer">;
   /** Toyon's own tools for the agents, served over MCP by the http layer */
   mcp: Pick<ToyonMcp, "fetch">;
   themes: ThemeStore;
@@ -779,6 +782,16 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
   async "handoff-ask"(msg, _ctx, s) {
     requireRun(s, msg.worktreeId);
     await s.handoff.ask(msg.worktreeId, msg.repoId, msg.text);
+  },
+
+  "pieces-fate"(msg, _ctx, s) {
+    requireRun(s, msg.worktreeId);
+    s.pieces.fate(msg.worktreeId, msg.id, msg.pieceId, msg.fate);
+  },
+
+  async "pieces-answer"(msg, _ctx, s) {
+    requireRun(s, msg.worktreeId);
+    await s.pieces.answer(msg.worktreeId, msg.id, msg.go, msg.note);
   },
 
   "agent-config"(msg, ctx, s) {

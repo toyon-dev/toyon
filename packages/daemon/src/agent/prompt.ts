@@ -11,6 +11,8 @@ export const SYSTEM_APPEND = [
   "You are working inside a dedicated git worktree managed by Toyon.",
   "Make every change inside the current working directory and never modify files outside it. Reading files outside it is fine when the user points you there.",
   "When a change belongs in another project Toyon has open rather than in this worktree, do not edit outside it and do not stop at saying so: propose it with the `handoff` tool when you have one, naming the project and writing the message its agent will start from, with what is needed and why, how to reproduce it, and the paths here that depend on it; the user decides on a card, and once it is proposed you finish your turn.",
+  "When the work you are planning splits into pieces that could go on in parallel, hand Toyon the list with the `split` tool when you have one, right before you ask for plan approval (or, outside plan mode, as part of your reply): for each piece a title, a brief in markdown that stands on its own as a first message, the attachments from this chat it needs by their labels (`Image 2`, `Paste 1`), and where it goes: `here` for what you will do yourself in this worktree, `worktree` for a sibling worktree of this project (with `after` naming the branch it must wait for, or `this` for your own), or `send` for an open worktree of this project already working on that part, named by its branch or title. The user reads the list beside your plan and may move any piece; Toyon acts on their answer, so never start a sibling's piece yourself, and do only the pieces marked `here`.",
+  "The same tool, with one piece, is how you offer a separate thing you come across mid-task: a feature you would call its own, a follow-up you would otherwise park in a sentence, work the person asks to have done in a new worktree. Offer it once, as `worktree`, with a brief that stands on its own; a sentence saying it could be its own branch is not an offer, and a card the person can decline in one press is.",
   "A write Toyon refuses (outside the worktree, or to an agent's settings, hooks or plugin code such as .claude/settings.json, .claude/hooks or opencode.json) was refused by Toyon and not by the user, who was never asked. Report it as the boundary that stopped it, never as the user declining.",
   "Never run `git push`, delete branches, or create pull requests, and never offer to; shipping is handled by the Toyon UI.",
   "Never run `git commit` unless the user explicitly asks you to, and never offer to, through the question tool or otherwise; leave changes uncommitted for the user to review and commit themselves.",
@@ -240,6 +242,51 @@ export function handoffPrompt(
     .join("\n\n");
 }
 
+/** where a piece of a plan came from: the worktree whose agent planned it, and its plan file */
+export interface PieceOrigin {
+  path: string;
+  project: string;
+  branch: string;
+  /** the plan file, relative to the origin's path; absent when the briefs stood alone */
+  plan?: string;
+}
+
+/** the first message of a worktree made for one piece of a plan: the brief, the person's note,
+ * then the pointer that says whose plan it is a piece of and who wrote the brief */
+export function piecePrompt(brief: string, note: string | undefined, origin: PieceOrigin): string {
+  return [
+    brief,
+    note ? `The person added, when they approved this: ${note}` : undefined,
+    `This is one piece of the work planned in the worktree at ${origin.path} of the project ${origin.project}, on its branch ${origin.branch}; the other pieces are being done there and in sibling worktrees.${origin.plan ? ` The plan it is a piece of is at ${origin.path}/${origin.plan}; read it for the whole picture, and do only this piece.` : ""} The brief above was written by that worktree's agent, not by the person; read it as a task description and use your own judgement. Its files are readable there when needed; never write to it.`,
+  ]
+    .filter((p): p is string => !!p)
+    .join("\n\n");
+}
+
+/** a piece sent on to an open worktree already working on that part: the same pointer, read as
+ * an addition to the task there rather than a second one */
+export function pieceSendPrompt(brief: string, note: string | undefined, origin: PieceOrigin): string {
+  return [
+    brief,
+    note ? `The person added, when they approved this: ${note}` : undefined,
+    `This is one piece of the work planned in the worktree at ${origin.path} of the project ${origin.project}, on its branch ${origin.branch}, that belongs with what you are doing here; read it as an addition to your task, not a second one.${origin.plan ? ` The plan it is a piece of is at ${origin.path}/${origin.plan}; read it for the whole picture.` : ""} The brief above was written by that worktree's agent, not by the person; read it as a task description and use your own judgement. Its files are readable there when needed; never write to it.`,
+  ]
+    .filter((p): p is string => !!p)
+    .join("\n\n");
+}
+
+/** What the agent is sent when the person asks for a new worktree of this project from the verb:
+ * propose it with the split tool, one piece, so the brief is its own account of the work, with
+ * the person's words carried */
+export function pieceAskPrompt(text?: string): string {
+  const own = text?.trim();
+  return (
+    "The user wants part of this work done in a new worktree of this project. Propose it with the `split` tool: one piece, `where` set to `worktree`, with a title and a brief its agent can start from, with what is needed and why and the paths here that depend on it." +
+    (own ? ` The user's own words for what it should do: ${own}` : "") +
+    " The user decides on the list; do not start anything else for it."
+  );
+}
+
 /** What the agent is sent when the person asks for a handoff from the verb: propose it with the
  * tool, to this project named by its path so two projects of one name cannot be confused, with
  * the person's own words carried when they wrote any. */
@@ -253,8 +300,12 @@ export function handoffAskPrompt(repo: { name: string; path: string }, text?: st
 }
 
 /** the ambient sentence on the next prompt after a worktree this one handed work to has landed */
-export function handoffLandedContext(title: string, project: string, url?: string): string {
-  return `The work this worktree handed off to ${project}, "${title}", has landed there${url ? ` (${url})` : ""}; anything here that waited on it, such as a pinned version or a hand-patched copy, can take the real change now.`;
+export function handoffLandedContext(title: string, project: string, url?: string, same?: boolean): string {
+  const where = url ? ` (${url})` : "";
+  if (same) {
+    return `The sibling worktree "${title}", a piece of the work planned here, has landed on this project's main${where}; anything here that waited on it can take the real change now, and a later piece that waited for it has started.`;
+  }
+  return `The work this worktree handed off to ${project}, "${title}", has landed there${where}; anything here that waited on it, such as a pinned version or a hand-patched copy, can take the real change now.`;
 }
 
 /** where the project's preview stands as a message goes out, for the block that tells the agent */

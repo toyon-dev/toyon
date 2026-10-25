@@ -60,8 +60,10 @@ export class ToolSet implements McpTools {
 const PROTOCOL_VERSIONS = ["2025-11-25", "2025-06-18", "2025-03-26"];
 const DEFAULT_PROTOCOL_VERSION = "2025-06-18";
 
-/** the largest request body taken: a tool call carries a message of some thousands of characters */
-const BODY_MAX_BYTES = 64 * 1024;
+/** the largest request body taken: a tool call carries a message of some thousands of characters,
+ * or a list of a few pieces each with a brief of that size; a bound well above either, so the
+ * piece count is the only number that decides how much a hand-over may carry */
+const BODY_MAX_BYTES = 256 * 1024;
 
 const PARSE_ERROR = -32700;
 const INVALID_PARAMS = -32602;

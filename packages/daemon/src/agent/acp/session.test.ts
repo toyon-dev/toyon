@@ -3696,3 +3696,156 @@ describe("AcpSession handoff", () => {
     await w.session.close();
   });
 });
+
+describe("AcpSession pieces", () => {
+  const PLAN_OPTIONS = [
+    { optionId: "exit_plan_default", name: "Yes, manually approve edits", kind: "allow_once" as const },
+    { optionId: "cancel", name: "No, keep planning", kind: "reject_once" as const },
+  ];
+  const held: AgentEvent = { type: "pieces-proposed", id: "l1", pieces: [], mode: "plan", held: true, ts: 1 };
+  /** an agent that asks for plan approval once a test lets it, then ends its turn */
+  function planner() {
+    let release = () => {};
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    const fake = fakeAgent(async (p, client) => {
+      await gate;
+      await client.request(acp.methods.client.session.requestPermission, {
+        sessionId: p.sessionId,
+        toolCall: {
+          toolCallId: "t1",
+          title: "Approve Plan",
+          kind: "switch_mode",
+          content: [{ type: "content", content: { type: "text", text: "# the plan\n\nstep one" } }],
+        },
+        options: PLAN_OPTIONS,
+      });
+      return { stopReason: "end_turn" };
+    });
+    return { fake, release };
+  }
+  const card = (events: AgentEvent[]) =>
+    events.findLast((e) => e.type === "agent-permission") as Extract<AgentEvent, { type: "agent-permission" }>;
+
+  test("a list handed over in plan mode rides beside the plan card, and the plan's yes answers both, after the mode", async () => {
+    const decided: Array<[string, boolean]> = [];
+    const modes: string[] = [];
+    const { fake, release } = planner();
+    const w = world(fake, claudeSpec, 60_000, undefined, {
+      onPieces: (id, approved) => decided.push([id, approved]),
+      setMode: (m) => modes.push(m),
+    });
+    w.session.send("plan it");
+    w.session.note(held);
+    release();
+    await waitFor(() => !!openAsk(w.events));
+    expect(card(w.events).pieces).toBe("l1");
+    // held, not open: the card is what the row waits on
+    expect(w.session.status).toBe("waiting");
+    w.session.answer(card(w.events).id, { kind: "choice", choiceId: "exit_plan_default" });
+    await w.idle();
+    expect(modes).toEqual(["ask"]);
+    expect(decided).toEqual([["l1", true]]);
+    // decided with the plan: no card of Toyon's at the turn's end
+    expect(w.types()).not.toContain("pieces-shown");
+    await w.session.close();
+  });
+
+  test("the plan sent back sends the list back with it", async () => {
+    const decided: Array<[string, boolean]> = [];
+    const { fake, release } = planner();
+    const w = world(fake, claudeSpec, 60_000, undefined, { onPieces: (id, approved) => decided.push([id, approved]) });
+    w.session.note(held);
+    w.session.send("plan it");
+    release();
+    await waitFor(() => !!openAsk(w.events));
+    w.session.answer(card(w.events).id, { kind: "choice", choiceId: "cancel" });
+    await w.idle();
+    expect(decided).toEqual([["l1", false]]);
+    expect(w.types()).not.toContain("pieces-shown");
+    await w.session.close();
+  });
+
+  test("a held list whose plan card never comes is Toyon's own card from the turn's end, and the row waits on it", async () => {
+    const shown: string[] = [];
+    const w = world(fakeAgent(say("no plan after all")), claudeSpec, 60_000, undefined, {
+      onPiecesShown: (id) => {
+        shown.push(id);
+        return null;
+      },
+    });
+    w.session.note(held);
+    w.session.send("plan it");
+    await w.idle();
+    expect(w.events.findLast((e) => e.type === "pieces-shown")).toMatchObject({ id: "l1" });
+    expect(shown).toEqual(["l1"]);
+    expect(w.session.status).toBe("waiting");
+    w.session.note({ type: "pieces-declined", id: "l1", ts: 2 });
+    expect(w.session.status).toBe("idle");
+    await w.session.close();
+  });
+
+  test("a restart under a held list shows it too: the turn it was held for is not coming", async () => {
+    const id = `w${Math.random().toString(36).slice(2, 8)}`;
+    writeFileSync(join(home, `${id}.jsonl`), `${JSON.stringify({ seq: 0, event: held })}\n`);
+    const shown: string[] = [];
+    const w = world(fakeAgent(say("hi")), claudeSpec, 60_000, id, {
+      // the briefs file the callback answers with rides on the event, so the card has its page
+      onPiecesShown: (id) => {
+        shown.push(id);
+        return ".toyon/plans/9.md";
+      },
+    });
+    expect(w.events.at(-1)).toMatchObject({ type: "pieces-shown", id: "l1", plan: ".toyon/plans/9.md" });
+    expect(shown).toEqual(["l1"]);
+    expect(w.session.status).toBe("waiting");
+    await w.session.close();
+  });
+
+  test("a restart under the plan card a held list rode onto shows the list: the card expired with it", async () => {
+    const id = `w${Math.random().toString(36).slice(2, 8)}`;
+    const card = {
+      type: "agent-permission",
+      id: "ask1",
+      title: "Approve Plan",
+      pieces: "l1",
+      choices: [{ id: "yes", name: "Yes", kind: "allow_once" }],
+      ts: 1,
+    };
+    writeFileSync(
+      join(home, `${id}.jsonl`),
+      `${[
+        JSON.stringify({ seq: 0, event: { type: "turn-start", ts: 0 } }),
+        JSON.stringify({ seq: 1, event: held }),
+        JSON.stringify({ seq: 2, event: card }),
+      ].join("\n")}\n`,
+    );
+    const shown: string[] = [];
+    const w = world(fakeAgent(say("hi")), claudeSpec, 60_000, id, {
+      onPiecesShown: (id) => {
+        shown.push(id);
+        return null;
+      },
+    });
+    // the card is sealed as expired, which hands the list back; the list is then Toyon's card
+    expect(w.types()).toContain("agent-ask-end");
+    expect(w.events.at(-1)).toMatchObject({ type: "pieces-shown", id: "l1" });
+    expect(shown).toEqual(["l1"]);
+    expect(w.session.status).toBe("waiting");
+    await w.session.close();
+  });
+
+  test("a message sent on from another chat leaves an open card too", async () => {
+    const fake = fakeAgent(asks());
+    const w = world(fake);
+    w.session.send("go");
+    await waitFor(() => !!openAsk(w.events));
+    w.session.send("And the lockfile.", { keepCards: true });
+    // the follow-up is a message like any other, not Toyon's own row, and the card is untouched
+    expect(w.types()).not.toContain("fix-asked");
+    expect(w.types()).not.toContain("agent-ask-end");
+    expect(openAsk(w.events)).toBeTruthy();
+    await w.session.close();
+  });
+});

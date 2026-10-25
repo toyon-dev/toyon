@@ -5,6 +5,8 @@
 import { afterEach, beforeEach } from "bun:test";
 import { existsSync, realpathSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { AttachmentStore } from "../../src/agent/attachments.ts";
+import { UploadStore } from "../../src/agent/uploads.ts";
 import { Hub } from "../../src/core/hub.ts";
 import { SelfWatch } from "../../src/core/self.ts";
 import { StateStore } from "../../src/core/state.ts";
@@ -18,6 +20,7 @@ import { Interest } from "../../src/server/interest.ts";
 import { ArtifactCache } from "../../src/worktrees/cache.ts";
 import { FixService } from "../../src/worktrees/fix.ts";
 import { HandoffService } from "../../src/worktrees/handoff.ts";
+import { PiecesService } from "../../src/worktrees/pieces.ts";
 import { WorktreeService } from "../../src/worktrees/service.ts";
 import { TurnService } from "../../src/worktrees/turns.ts";
 import { fakeAgents, fakeFactories } from "./fakes.ts";
@@ -37,12 +40,16 @@ export function world() {
   const hub = new Hub();
   const f = fakeFactories();
   const agents = fakeAgents(t.paths.agentsDir);
+  // one store for the runtime and the pieces service, so what a test puts in it is what a piece
+  // re-attaches
+  const attachments = new AttachmentStore(t.paths.attachmentsDir, new UploadStore(t.paths.uploadsDir));
   // main runs only while no spare stands in for it, as the daemon wires it
   const runtime = new RuntimeRegistry({
     hub,
     state,
     paths: t.paths,
     agents,
+    attachments,
     bridgeScript: () => "",
     mainLeads: (repoId: string): boolean => worktrees.spare.current(repoId) === null,
     ...f.factories,
@@ -87,11 +94,19 @@ export function world() {
   });
   const turns = new TurnService({ state, hub, transcript: (id) => runtime.agentFor(id)?.transcript() ?? [] });
   const repos = new RepoRegistry({ state, hub, runtime, worktrees, ...noSelf(state, hub) });
+  const pieces = new PiecesService({
+    state,
+    hub,
+    runtime,
+    attachments,
+    create: (repoId, prompt, opts) => worktrees.create(repoId, prompt, opts),
+  });
   const handoff = new HandoffService({
     state,
     hub,
     runtime,
     create: (repoId, prompt, opts) => worktrees.create(repoId, prompt, opts),
+    pieces,
   });
   return {
     ...t,
@@ -110,6 +125,8 @@ export function world() {
     fix,
     pageErrors,
     handoff,
+    pieces,
+    attachments,
     ...f,
   };
 }

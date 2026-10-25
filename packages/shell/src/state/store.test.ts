@@ -12,6 +12,7 @@ import {
   type WorktreeStatus,
 } from "@toyon/shared";
 import { openCard } from "../surfaces/chat/handoff.ts";
+import { openPieces } from "../surfaces/chat/pieces.ts";
 import { addToChat, attachPick } from "./attach.ts";
 import { createStore } from "./context.tsx";
 import { outBoxId, outBoxOf, readyToGo } from "./outbox.ts";
@@ -4048,5 +4049,168 @@ describe("the outbox", () => {
       message: { text: "yes", attachments: [toInput(settledImg)] },
       at: expect.any(Number),
     });
+  });
+});
+
+describe("a pieces list", () => {
+  const pieces = [
+    { id: "p1", title: "Rail", brief: "Fix the rail.", attachments: [], fate: "worktree" as const },
+    { id: "p2", title: "Notes", brief: "Add notes.", attachments: [], fate: "here" as const },
+  ];
+  const held: AgentEvent = { type: "pieces-proposed", id: "l1", pieces, mode: "plan", held: true, ts: 1 };
+  const shown: AgentEvent = {
+    type: "pieces-proposed",
+    id: "l1",
+    pieces,
+    mode: "auto",
+    plan: ".toyon/plans/2.md",
+    ts: 1,
+  };
+  const chatOf = (s: State) => s.local.a?.chat ?? [];
+
+  test("a held list is no card: it waits for the plan card, which names it, and the plan's yes closes it", () => {
+    const s = run([hello(wt("a")), agent("a", held)]);
+    expect(chatOf(s)).toEqual([
+      {
+        kind: "pieces",
+        id: "l1",
+        pieces,
+        fates: { p1: "worktree", p2: "here" },
+        mode: "plan",
+        held: true,
+        state: "held",
+        outcomes: [],
+        later: [],
+        ts: 1,
+      },
+    ]);
+    expect(openCard(chatOf(s))).toBeNull();
+    expect(openPieces(chatOf(s))?.id).toBe("l1");
+    const card: AgentEvent = {
+      type: "agent-permission",
+      id: "k1",
+      title: "Approve Plan",
+      plan: ".toyon/plans/1.md",
+      pieces: "l1",
+      choices: [{ id: "yes", name: "Yes", kind: "allow_once" }],
+      ts: 2,
+    };
+    const asked = reducer(s, agent("a", card));
+    // the list learns its card and the card's file, so it sits on that plan and on no later one
+    expect(chatOf(asked)[0]).toMatchObject({ kind: "pieces", companion: "k1", plan: ".toyon/plans/1.md" });
+    expect(chatOf(asked)[1]).toMatchObject({
+      kind: "ask",
+      ask: { kind: "permission", plan: ".toyon/plans/1.md", pieces: "l1" },
+    });
+    const going = reducer(asked, agent("a", { type: "pieces-go", id: "l1", ts: 3 }));
+    expect(chatOf(going)[0]).toMatchObject({ state: "going" });
+    const done = reducer(
+      going,
+      agent("a", {
+        type: "pieces",
+        id: "l1",
+        outcomes: [
+          { pieceId: "p1", fate: "worktree", worktreeId: "g", title: "Rail" },
+          { pieceId: "p2", fate: "here" },
+        ],
+        ts: 4,
+      }),
+    );
+    expect(chatOf(done)[0]).toMatchObject({
+      state: "done",
+      outcomes: [
+        { pieceId: "p1", worktreeId: "g" },
+        { pieceId: "p2", fate: "here" },
+      ],
+    });
+    // a done list is still what the plan draws, with its outcomes; a sent-back one is not
+    expect(openPieces(chatOf(done))?.state).toBe("done");
+    const back = reducer(asked, agent("a", { type: "pieces-declined", id: "l1", ts: 3 }));
+    expect(chatOf(back)[0]).toMatchObject({ state: "declined" });
+    expect(openPieces(chatOf(back))).toBeNull();
+  });
+
+  test("an unheld list is Toyon's own card at once, and a held one becomes it when shown", () => {
+    const s = run([hello(wt("a")), agent("a", shown)]);
+    expect(chatOf(s)[0]).toMatchObject({ kind: "pieces", state: "proposed", plan: ".toyon/plans/2.md" });
+    expect(openCard(chatOf(s))?.id).toBe("l1");
+    const h = run([hello(wt("a")), agent("a", held)]);
+    const later = reducer(h, agent("a", { type: "pieces-shown", id: "l1", ts: 2 }));
+    expect(chatOf(later)[0]).toMatchObject({ state: "proposed", held: true });
+    expect(openCard(chatOf(later))?.id).toBe("l1");
+    // the card's note starts over when the card arrives, and goes with the go or the decline
+    const noted = reducer(later, {
+      a: "card-draft",
+      id: "a",
+      card: { id: "l1", draft: [{ selected: [], note: "n" }], current: 0 },
+    });
+    expect(noted.local.a?.card?.id).toBe("l1");
+    expect(reducer(noted, agent("a", { type: "pieces-go", id: "l1", ts: 3 })).local.a?.card).toBeUndefined();
+    expect(reducer(noted, agent("a", { type: "pieces-declined", id: "l1", ts: 3 })).local.a?.card).toBeUndefined();
+  });
+
+  test("a fate pressed is the last word per piece, and what came later rides on the list and as a row of its own", () => {
+    const s = run([
+      hello(wt("a")),
+      agent("a", shown),
+      agent("a", { type: "pieces-fate", id: "l1", pieceId: "p1", fate: "skip", ts: 2 }),
+    ]);
+    expect(chatOf(s)[0]).toMatchObject({ fates: { p1: "skip", p2: "here" } });
+    const again = reducer(s, agent("a", { type: "pieces-fate", id: "l1", pieceId: "p1", fate: "here", ts: 3 }));
+    expect(chatOf(again)[0]).toMatchObject({ fates: { p1: "here", p2: "here" } });
+    const done = run(
+      [
+        agent("a", { type: "pieces-go", id: "l1", ts: 4 }),
+        agent("a", {
+          type: "pieces",
+          id: "l1",
+          outcomes: [
+            { pieceId: "p1", fate: "worktree", after: "toyon/x" },
+            { pieceId: "p2", fate: "here" },
+          ],
+          ts: 5,
+        }),
+      ],
+      s,
+    );
+    const made = reducer(
+      done,
+      agent("a", { type: "piece-made", id: "l1", pieceId: "p1", worktreeId: "g", title: "Rail", ts: 6 }),
+    );
+    expect(chatOf(made)[0]).toMatchObject({ later: [{ pieceId: "p1", worktreeId: "g", title: "Rail" }] });
+    expect(chatOf(made)[1]).toEqual({
+      kind: "piece-later",
+      id: "l1",
+      pieceId: "p1",
+      title: "Rail",
+      worktreeId: "g",
+      ts: 6,
+    });
+    const dropped = reducer(
+      done,
+      agent("a", { type: "piece-dropped", id: "l1", pieceId: "p1", reason: "gone", ts: 6 }),
+    );
+    expect(chatOf(dropped)[1]).toEqual({
+      kind: "piece-later",
+      id: "l1",
+      pieceId: "p1",
+      title: "Rail",
+      reason: "gone",
+      ts: 6,
+    });
+  });
+
+  test("outcomes with no list to close still leave the record", () => {
+    const s = run([
+      hello(wt("a")),
+      agent("a", {
+        type: "pieces",
+        id: "l1",
+        outcomes: [{ pieceId: "p1", fate: "worktree", worktreeId: "g", title: "Rail" }],
+        ts: 5,
+      }),
+    ]);
+    expect(chatOf(s)).toHaveLength(1);
+    expect(chatOf(s)[0]).toMatchObject({ kind: "pieces", id: "l1", state: "done", pieces: [] });
   });
 });

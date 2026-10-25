@@ -1,5 +1,7 @@
 // Domain records shared by daemon, shell and CLI: repos, worktrees, processes, git status, themes.
 
+import type { AttachmentRef } from "./protocol/events.ts";
+
 /** one way to run a repo: which of its procs, with what extra environment */
 export interface RunProfile {
   /** keys of ToyonConfig.run, started in this order */
@@ -319,6 +321,21 @@ export interface LandMark {
   subjects: string[];
 }
 
+/** a piece of a plan waiting for a sibling to land before its worktree is made; on the origin's
+ * record so it survives a restart and leaves with the origin */
+export interface QueuedPiece {
+  proposalId: string;
+  pieceId: string;
+  title: string;
+  brief: string;
+  after: { id: string; branch: string; title: string };
+  /** what the origin's chat attached, re-attached when the worktree is made */
+  attachments: AttachmentRef[];
+  /** what the person added when they approved */
+  note?: string;
+  queuedAt: number;
+}
+
 /** how many subjects a landing keeps: enough to say what a branch of ordinary size carried; a
  * longer one is cut where it is read */
 export const LAND_SUBJECTS_MAX = 8;
@@ -356,6 +373,8 @@ export interface WorktreeInfo {
   /** every landing, oldest first, each tip kept under a ref: the branch restarts from main after
    * one, so these are what still names the commits it carried */
   lands?: LandMark[];
+  /** pieces of a plan waiting for a sibling to land before their worktree is made */
+  queued?: QueuedPiece[];
   /** the pull request this worktree opened, and what GitHub last said about it; absent until the
    * PR route has run here. Gone with new work after it merged. */
   pr?: PrState;
@@ -367,7 +386,7 @@ export interface WorktreeInfo {
     /** made by a handoff from a worktree of another project: `ref` is that worktree's branch and
      * `origin` the row it came from. Kept as history once the origin is gone; while the origin is
      * listed, this row shows on its rail too. */
-    | { kind: "worktree"; ref: string; origin: { id: string; repoId: string } };
+    | { kind: "worktree"; ref: string; origin: { id: string; repoId: string }; plan?: string };
   /** the shell tab that asked for it (client nonce); that tab focuses it, others don't */
   createdBy?: string;
   /** registry id of the agent working here (stamped at creation, or on first use for older rows) */

@@ -91,11 +91,9 @@ describe("buildCommands", () => {
     );
     expect(asked?.label).toBe("let a device in (1)");
   });
-  test("the handoff stays off the palette with one project open, and is on it with two", () => {
+  test("the handoff is on the palette with one project open: a new worktree here is always a target", () => {
     const ids = (s: CommandState) => buildCommands(s, () => {}, null, wt, repo).map((c) => c.id);
-    expect(ids(state)).not.toContain("wt:handoff");
-    const other = { ...repo, id: "r2", name: "acp", path: "/acp" } as RepoInfo;
-    expect(ids({ ...state, repos: [repo, other] })).toContain("wt:handoff");
+    expect(ids(state)).toContain("wt:handoff");
   });
   test("a guest's switch row names its project, since the rail's mark does", () => {
     const other = { ...repo, id: "r2", name: "acp", path: "/acp" } as RepoInfo;

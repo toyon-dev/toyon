@@ -9,6 +9,9 @@ import {
   handoffPrompt,
   pasteCaption,
   pickCaption,
+  pieceAskPrompt,
+  piecePrompt,
+  pieceSendPrompt,
   previewContext,
   procFixPrompt,
   SYSTEM_APPEND,
@@ -89,6 +92,57 @@ describe("handoff prompts", () => {
       'The work this worktree handed off to acp, "Fix the form", has landed there (https://x/pull/7); anything here that waited on it, such as a pinned version or a hand-patched copy, can take the real change now.',
     );
     expect(handoffLandedContext("Fix the form", "acp")).toContain('"Fix the form", has landed there; anything');
+    // a sibling of this project, a piece of the plan here: no project named, the queue mentioned
+    expect(handoffLandedContext("Landed rule", "toyon", undefined, true)).toBe(
+      'The sibling worktree "Landed rule", a piece of the work planned here, has landed on this project\'s main; anything here that waited on it can take the real change now, and a later piece that waited for it has started.',
+    );
+  });
+});
+
+describe("pieces prompts", () => {
+  test("the system append hands the pieces of a plan to Toyon through the split tool, and one piece found mid-task", () => {
+    expect(SYSTEM_APPEND).toContain("hand Toyon the list with the `split` tool when you have one");
+    expect(SYSTEM_APPEND).toContain("never start a sibling's piece yourself, and do only the pieces marked `here`");
+    expect(SYSTEM_APPEND).toContain(
+      "The same tool, with one piece, is how you offer a separate thing you come across mid-task",
+    );
+  });
+
+  test("a sibling's first message: the brief, the note, then the pointer to the plan it is a piece of", () => {
+    const origin = { path: "/wt/toyon/wt-1a2b", project: "toyon", branch: "toyon/rail", plan: ".toyon/plans/3.md" };
+    expect(piecePrompt("Fix the rail.", "and tests", origin)).toBe(
+      [
+        "Fix the rail.",
+        "The person added, when they approved this: and tests",
+        "This is one piece of the work planned in the worktree at /wt/toyon/wt-1a2b of the project toyon, on its branch toyon/rail; the other pieces are being done there and in sibling worktrees. The plan it is a piece of is at /wt/toyon/wt-1a2b/.toyon/plans/3.md; read it for the whole picture, and do only this piece. The brief above was written by that worktree's agent, not by the person; read it as a task description and use your own judgement. Its files are readable there when needed; never write to it.",
+      ].join("\n\n"),
+    );
+    const { plan: _plan, ...bare } = origin;
+    const alone = piecePrompt("Fix the rail.", undefined, bare);
+    expect(alone.split("\n\n")).toHaveLength(2);
+    expect(alone).not.toContain("The plan it is a piece of");
+  });
+
+  test("a piece sent on reads as an addition to the task there, not a second one", () => {
+    const origin = { path: "/wt/toyon/wt-1a2b", project: "toyon", branch: "toyon/rail" };
+    const sent = pieceSendPrompt("Add the notes.", undefined, origin);
+    expect(sent).toContain(
+      "that belongs with what you are doing here; read it as an addition to your task, not a second one.",
+    );
+    expect(sent).toContain("written by that worktree's agent, not by the person");
+    expect(pieceSendPrompt("Add the notes.", "gently", origin)).toContain(
+      "The person added, when they approved this: gently",
+    );
+  });
+
+  test("the verb's ask for a new worktree here asks for one piece through the tool, with the person's words", () => {
+    const bare = pieceAskPrompt();
+    expect(bare).toContain("Propose it with the `split` tool: one piece, `where` set to `worktree`");
+    expect(bare).not.toContain("own words");
+    expect(bare.endsWith("do not start anything else for it.")).toBe(true);
+    expect(pieceAskPrompt("  the badge  ")).toContain(
+      "The user's own words for what it should do: the badge The user decides",
+    );
   });
 });
 

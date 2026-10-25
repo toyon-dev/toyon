@@ -19,7 +19,7 @@ import type { AgentAdapter, LoginRun } from "../agent/adapter.ts";
 import { AttachmentStore } from "../agent/attachments.ts";
 import type { ToyonMcp } from "../agent/mcp.ts";
 import { commandFolders, readCommandOrigins } from "../agent/origins.ts";
-import { ownPlanPath, planEdited, writePlanDoc } from "../agent/planDoc.ts";
+import { briefsDoc, ownPlanPath, planEdited, writePlanDoc, writePlanDocNow } from "../agent/planDoc.ts";
 import { type PreviewStanding, previewContext, selfContext, worktreeContext } from "../agent/prompt.ts";
 import type { AgentReadiness } from "../agent/readiness.ts";
 import type { AgentRegistry } from "../agent/registry.ts";
@@ -282,6 +282,10 @@ function defaultAgent(
     setMode: (mode) => {
       if (d.state.setMode(wt.id, mode)) d.hub.emit("worktreesChanged");
     },
+    // the pieces service is built after the runtime, so the hub is the seam, as it is for a landing
+    onPieces: (id, approved) => d.hub.emit("piecesDecided", wt.id, id, approved),
+    // the briefs as a file for the card's section; the record's own plan stays the agent's plan
+    onPiecesShown: (_id, pieces) => writePlanDocNow(wt.path, briefsDoc(pieces)),
     onPlan: async (markdown, ownFile) => {
       const w = d.state.worktree(wt.id);
       if (w && !w.planned) {

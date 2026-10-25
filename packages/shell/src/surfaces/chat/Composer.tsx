@@ -41,7 +41,7 @@ import { openSource } from "../../state/openSource.ts";
 import { fillFrame, type HeldFrame } from "../../state/outbox.ts";
 import { isUploading } from "../../state/pending.ts";
 import { useChatCentred, useGreenfield, useLocalField, usePreviewId, useTouch } from "../../state/selectors.ts";
-import { composerBoxOf, type Draft, NEW_PROJECT_BOX, sendWaits, trunkOf } from "../../state/store.ts";
+import { composerBoxOf, type Draft, NEW_PROJECT_BOX, sendWaits, trunkOf, worktreeById } from "../../state/store.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { TextArea } from "../../ui/Field.tsx";
@@ -96,6 +96,8 @@ import { dismissOffer, offerOf, useDismissedOffers } from "./offer.ts";
 import { browseCommands, isMode, mergeCommands, ownCommandOf, ownCommands } from "./ownCommands.ts";
 import { PermissionCard } from "./PermissionCard.tsx";
 import { PickChip } from "./PickChip.tsx";
+import { PiecesCard } from "./PiecesCard.tsx";
+import { type PiecesItem, piecesLine } from "./pieces.ts";
 import { QuestionCard } from "./QuestionCard.tsx";
 import { type Step, stepWalk, type WalkKey } from "./recall.ts";
 import { shellCommandOf, shellContext } from "./shellMode.ts";
@@ -275,6 +277,12 @@ export function Composer({
   const askRevived = useLocalField(id, "askRevived");
   const revived = !card && stopped && askRevived === stopped.id ? stopped : null;
   const cardUp = card && cardParked !== card.id ? card : revived;
+  // the pieces list a plan card carries beside it: what the plan's yes also does
+  const piecesOfPlan = useMemo((): PiecesItem | null => {
+    const id = cardUp?.kind === "ask" && cardUp.ask.kind === "permission" ? cardUp.ask.pieces : undefined;
+    const item = id ? chat.find((i) => i.kind === "pieces" && i.id === id) : undefined;
+    return item?.kind === "pieces" ? item : null;
+  }, [cardUp, chat]);
   // the revived card's own chips, dropped on it before or after the stop: they go in the answer
   const revivedBox = revived ? cardBox(revived.id) : null;
   const revivedItems = useLocalField(revivedBox, "attachments");
@@ -1246,6 +1254,14 @@ export function Composer({
   const queued = spawning ? [] : queue.flatMap((q) => q.attachments ?? []);
   const plan = active?.worktree.plan;
   const planLabel = usePlanTitle(active?.worktree.id, plan);
+  // a worktree made for one piece of a plan: the plan it is a piece of is the origin's, and the
+  // row points there until this worktree has a plan of its own
+  const fromPlan =
+    active?.worktree.from?.kind === "worktree" && active.worktree.from.plan ? active.worktree.from : null;
+  const originRow = useStore((s) => (fromPlan ? worktreeById(s, fromPlan.origin.id) : null));
+  // pieces of this worktree's plan waiting for a sibling to land, read off the record so a
+  // restart keeps the line
+  const queuedPieces = active?.worktree.queued ?? [];
   // the stop stands in for the field's esc, so it goes with the field when an ask card takes its
   // place: there esc parks the question, and a stop beside the ask's send read as the send's
   // opposite on one line
@@ -1301,6 +1317,42 @@ export function Composer({
             }
           >
             {planLabel}
+          </Button>
+        </div>
+      )}
+      {!plan && fromPlan && active && (
+        <div className="composer-plan">
+          <Icon name="spawn" className="icon-inline" />
+          {originRow ? (
+            <Button
+              variant="inline"
+              className="composer-plan-path"
+              data-tip={fromPlan.plan}
+              onClick={() =>
+                openFile({ sock, dispatch }, { worktreeId: fromPlan.origin.id, path: fromPlan.plan!, view: "preview" })
+              }
+            >
+              from the plan in {originRow.worktree.title}
+            </Button>
+          ) : (
+            <span className="composer-plan-path">from the plan in an archived worktree</span>
+          )}
+        </div>
+      )}
+      {/* what the plan's yes also does: the pieces the agent handed over for it, in the plan row's
+          shape, pressed to read the list on the plan itself, where any row can still be moved */}
+      {piecesOfPlan && active && (
+        <div className="composer-pieces">
+          <Icon name="spawn" className="icon-inline" />
+          <Button
+            variant="inline"
+            className="composer-plan-path"
+            data-tip="Read the list on the plan; any row can still be moved"
+            onClick={() =>
+              plan && openFile({ sock, dispatch }, { worktreeId: active.worktree.id, path: plan, view: "preview" })
+            }
+          >
+            {piecesLine(piecesOfPlan)}
           </Button>
         </div>
       )}
@@ -1494,6 +1546,8 @@ export function Composer({
       {cardUp && id ? (
         cardUp.kind === "handoff" ? (
           <HandoffCard key={cardUp.id} item={cardUp} worktreeId={id} rootRef={cardRef} />
+        ) : cardUp.kind === "pieces" ? (
+          <PiecesCard key={cardUp.id} item={cardUp} worktreeId={id} rootRef={cardRef} />
         ) : cardUp.ask.kind === "question" ? (
           <QuestionCard
             key={cardUp.id}
@@ -1962,8 +2016,21 @@ export function Composer({
           on the verb's tooltip, and a row that left as the land ran moved the verb from under the
           cursor before archive took its place. The sync itself stays in the changes tab's foot and
           the rail menu. */}
-      {(readiness || (origin && trunk)) && (
+      {(readiness || (origin && trunk) || queuedPieces.length > 0) && (
         <div className="composer-notes">
+          {/* pieces of this worktree's plan waiting on a sibling: one line each, the branch as the
+              chip a message draws it as, so the wait is read where the next message is written */}
+          {queuedPieces.map((q) => (
+            <div key={`${q.proposalId}/${q.pieceId}`} className="hint composer-note">
+              <span>
+                {q.title} starts when{" "}
+                <span className="chat-mention" data-worktree={q.after.id} data-branch={q.after.branch}>
+                  @{q.after.branch}
+                </span>{" "}
+                lands
+              </span>
+            </div>
+          ))}
           {/* the agent that cannot take the message, and the way out: the adapter fetched again,
               or, while the agent is still being chosen, one that is ready */}
           {readiness && agentInfo && (

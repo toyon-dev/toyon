@@ -55,6 +55,9 @@ export interface SendOpts {
   attachments?: AttachmentInput[];
   /** the message is Toyon's own, sent for this reason, and the transcript records it as such */
   asked?: Asked;
+  /** a message sent on from another chat (a piece of its plan): it answers no card here, so an
+   * open one stays open and the message waits behind it */
+  keepCards?: true;
 }
 
 export interface AgentAdapter {

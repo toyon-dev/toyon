@@ -65,8 +65,28 @@ describe("matchesSibling", () => {
 
   test("nothing typed matches everything; the wrong letters match nothing", () => {
     expect(matchesSibling("", w)).toBe(true);
-    expect(matchesSibling("-", w)).toBe(true);
     expect(matchesSibling("readme", w)).toBe(false);
+  });
+
+  test("punctuation alone names nothing: it is not the bare `@`", () => {
+    expect(matchesSibling("-", w)).toBe(false);
+    expect(matchesSibling("`", w)).toBe(false);
+    expect(matchesSibling("...", w)).toBe(false);
+    expect(matchesSibling("- ", w)).toBe(false);
+  });
+
+  test("the id and the directory are read from their start, and not by a lone hex character", () => {
+    // a digit or an a-f letter is in nearly every id: it names the title or branch alone
+    expect(matchesSibling("3", w)).toBe(false);
+    expect(matchesSibling("0", w)).toBe(false);
+    expect(matchesSibling("c9", w)).toBe(false);
+    expect(matchesSibling("10", w)).toBe(false);
+    // three characters of the start name it; the same three from the middle do not
+    expect(matchesSibling("108", w)).toBe(true);
+    expect(matchesSibling("wt-1", w)).toBe(true);
+    expect(matchesSibling("905", w)).toBe(false);
+    // a letter still finds the title anywhere in it
+    expect(matchesSibling("g", w)).toBe(true);
   });
 
   test("a trailing space holds only while a name has more to come", () => {

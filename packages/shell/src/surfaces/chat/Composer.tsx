@@ -107,6 +107,7 @@ import { compactAdvice, compactNudge, limitLevel, limitSummary } from "./usage.t
 import { useAgentCheck } from "./useAgentCheck.ts";
 import { attachCopied, pickAttachments, useComposerPaste, useWholeInsert } from "./useIntake.ts";
 import { usePlanTitle } from "./usePlanTitle.ts";
+import { WorktreeChip } from "./WorktreeChip.tsx";
 
 /** a frozen empty list, so a selector returning it does not read as a change every render */
 const NO_CHOICES: ModelChoice[] = [];
@@ -1332,16 +1333,21 @@ export function Composer({
         <div className="composer-plan">
           <Icon name="spawn" className="icon-inline" />
           {originRow ? (
-            <Button
-              variant="inline"
-              className="composer-plan-path"
-              data-tip={fromPlan.plan}
-              onClick={() =>
-                openFile({ sock, dispatch }, { worktreeId: fromPlan.origin.id, path: fromPlan.plan!, view: "preview" })
-              }
-            >
-              from the plan in {originRow.worktree.title}
-            </Button>
+            <span className="composer-plan-path">
+              <Button
+                variant="inline"
+                data-tip={fromPlan.plan}
+                onClick={() =>
+                  openFile(
+                    { sock, dispatch },
+                    { worktreeId: fromPlan.origin.id, path: fromPlan.plan!, view: "preview" },
+                  )
+                }
+              >
+                from the plan
+              </Button>{" "}
+              in <WorktreeChip id={originRow.worktree.id} title={originRow.worktree.title} />
+            </span>
           ) : (
             <span className="composer-plan-path">from the plan in an archived worktree</span>
           )}
@@ -2031,11 +2037,7 @@ export function Composer({
           {queuedPieces.map((q) => (
             <div key={`${q.proposalId}/${q.pieceId}`} className="hint composer-note">
               <span>
-                {q.title} starts when{" "}
-                <span className="chat-mention" data-worktree={q.after.id} data-branch={q.after.branch}>
-                  @{q.after.branch}
-                </span>{" "}
-                lands
+                {q.title} starts when <WorktreeChip id={q.after.id} title={q.after.branch} /> lands
               </span>
             </div>
           ))}

@@ -11,6 +11,7 @@ import { worktreeById } from "../../state/store.ts";
 import { Button } from "../../ui/Button.tsx";
 import { DaemonRow } from "./DaemonRow.tsx";
 import type { HandoffItem } from "./handoff.ts";
+import { WorktreeChip } from "./WorktreeChip.tsx";
 
 export function HandoffRow({ item }: { item: HandoffItem }) {
   const dispatch = useDispatch();
@@ -62,8 +63,10 @@ export function HandoffRow({ item }: { item: HandoffItem }) {
 export function HandoffLandedRow({ item }: { item: Extract<ChatItem, { kind: "handoff-landed" }> }) {
   return (
     <DaemonRow icon="check" word="landed" tone="aqua" at={item.ts}>
-      {/* a sibling of this project is named alone; work in another project says where */}
-      <span className="daemon-text">{item.same ? item.title : `${item.title} in ${item.repoName}`}</span>
+      {/* a sibling of this project is its chip; work in another project is named with where */}
+      <span className="daemon-text">
+        {item.same ? <WorktreeChip id={item.worktreeId} title={item.title} /> : `${item.title} in ${item.repoName}`}
+      </span>
       {item.url && (
         <Button variant="inline" tone="strong" onClick={() => window.open(item.url, "_blank")}>
           view PR

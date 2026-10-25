@@ -7,7 +7,7 @@
 
 import type { AttachmentRef, Piece, PieceFate } from "@toyon/shared";
 import { useMemo } from "react";
-import { useDispatch, useSock, useUrls } from "../../state/context.tsx";
+import { useSock, useUrls } from "../../state/context.tsx";
 import { Button } from "../../ui/Button.tsx";
 import { FileChip } from "../chat/FileChip.tsx";
 import { ImageChip } from "../chat/ImageChip.tsx";
@@ -15,24 +15,9 @@ import { renderMarkdown } from "../chat/markdown.ts";
 import { PasteChip } from "../chat/PasteChip.tsx";
 import { PickChip } from "../chat/PickChip.tsx";
 import { effectiveFate, fatesFor, type PiecesItem, pieceFate } from "../chat/pieces.ts";
+import { WorktreeChip } from "../chat/WorktreeChip.tsx";
 
 const WORD: Record<Exclude<PieceFate, "send">, string> = { here: "here", worktree: "new worktree", skip: "skip" };
-
-/** a sibling worktree named on a row, drawn as its mention chip; a press opens its row */
-function Branch({ id, branch }: { id: string; branch: string }) {
-  const dispatch = useDispatch();
-  return (
-    // biome-ignore lint/a11y/useKeyWithClickEvents: the chip is the mention a message draws, and the row's buttons carry the keyboard
-    <span
-      className="chat-mention"
-      data-worktree={id}
-      data-branch={branch}
-      onClick={() => dispatch({ a: "activate", id })}
-    >
-      @{branch}
-    </span>
-  );
-}
 
 function Chips({ refs, worktreeId }: { refs: AttachmentRef[]; worktreeId: string }) {
   const urls = useUrls();
@@ -92,7 +77,6 @@ function Brief({ text }: { text: string }) {
 
 /** what became of the piece, once the list was answered: the words give way to the outcome */
 function Outcome({ item, piece }: { item: PiecesItem; piece: Piece }) {
-  const dispatch = useDispatch();
   const outcome = item.outcomes.find((o) => o.pieceId === piece.id);
   const later = item.later.findLast((l) => l.pieceId === piece.id);
   if (item.state === "going") return <span className="editor-piece-tail live-text">starting</span>;
@@ -101,20 +85,30 @@ function Outcome({ item, piece }: { item: PiecesItem; piece: Piece }) {
   if (outcome.fate === "here") return <span className="editor-piece-tail">here</span>;
   if (outcome.fate === "skip") return <span className="editor-piece-tail">skipped</span>;
   if (outcome.fate === "send")
-    return <span className="editor-piece-tail">sent to {outcome.title ?? "the worktree"}</span>;
+    return (
+      <span className="editor-piece-tail">
+        sent to{" "}
+        {outcome.worktreeId ? (
+          <WorktreeChip id={outcome.worktreeId} title={outcome.title} />
+        ) : (
+          (outcome.title ?? "the worktree")
+        )}
+      </span>
+    );
   const made = outcome.worktreeId ? outcome : later?.worktreeId ? later : null;
   if (made?.worktreeId) {
     return (
       <span className="editor-piece-tail">
-        started:{" "}
-        <Button variant="inline" tone="strong" onClick={() => dispatch({ a: "activate", id: made.worktreeId! })}>
-          open
-        </Button>
+        started <WorktreeChip id={made.worktreeId} title={made.title} />
       </span>
     );
   }
   if (later?.reason) return <span className="editor-piece-tail">{later.reason}</span>;
-  return <span className="editor-piece-tail">queued until {outcome.after} lands</span>;
+  return (
+    <span className="editor-piece-tail">
+      queued until {piece.after ? <WorktreeChip id={piece.after.id} title={piece.after.branch} /> : outcome.after} lands
+    </span>
+  );
 }
 
 export function Pieces({ item, worktreeId }: { item: PiecesItem; worktreeId: string }) {
@@ -151,7 +145,7 @@ export function Pieces({ item, worktreeId }: { item: PiecesItem; worktreeId: str
                   {fatesFor(piece).map((w) =>
                     w === "send" && piece.to ? (
                       <Button key={w} variant="ghost" on={fate === w} onClick={() => press(piece, w)}>
-                        <Branch id={piece.to.id} branch={piece.to.branch} />
+                        <WorktreeChip id={piece.to.id} title={piece.to.branch} inert />
                       </Button>
                     ) : (
                       <Button key={w} variant="ghost" on={fate === w} onClick={() => press(piece, w)}>
@@ -168,7 +162,7 @@ export function Pieces({ item, worktreeId }: { item: PiecesItem; worktreeId: str
             <Chips refs={piece.attachments} worktreeId={worktreeId} />
             {deciding && fate === "worktree" && piece.after && (
               <div className="editor-piece-tail row-dim">
-                starts when <Branch id={piece.after.id} branch={piece.after.branch} /> lands
+                starts when <WorktreeChip id={piece.after.id} title={piece.after.branch} /> lands
               </div>
             )}
           </div>

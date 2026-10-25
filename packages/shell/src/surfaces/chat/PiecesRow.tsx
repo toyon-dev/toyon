@@ -3,28 +3,10 @@
 // here: it is read on the plan, and a held one is answered with the plan card. What a queued piece
 // became when its sibling landed is a row of its own, since it comes long after.
 
-import { useDispatch, useStore } from "../../state/context.tsx";
 import type { ChatItem } from "../../state/store.ts";
-import { worktreeById } from "../../state/store.ts";
-import { Button } from "../../ui/Button.tsx";
 import { DaemonRow } from "./DaemonRow.tsx";
 import type { PiecesItem } from "./pieces.ts";
-
-/** a sibling named on a row, a press away while it is still listed */
-function RowLink({ worktreeId, title }: { worktreeId: string; title: string }) {
-  const dispatch = useDispatch();
-  const there = useStore((s) => worktreeById(s, worktreeId) !== null);
-  return (
-    <Button
-      variant="inline"
-      tone="strong"
-      disabled={!there}
-      onClick={() => dispatch({ a: "activate", id: worktreeId })}
-    >
-      {title}
-    </Button>
-  );
-}
+import { WorktreeChip } from "./WorktreeChip.tsx";
 
 export function PiecesRow({ item }: { item: PiecesItem }) {
   if (item.state === "held" || item.state === "proposed") return null;
@@ -48,18 +30,32 @@ export function PiecesRow({ item }: { item: PiecesItem }) {
       </DaemonRow>
     );
   }
-  const titled = (pieceId: string) => item.pieces.find((p) => p.id === pieceId)?.title ?? pieceId;
+  const piece = (pieceId: string) => item.pieces.find((p) => p.id === pieceId);
+  const titled = (pieceId: string) => piece(pieceId)?.title ?? pieceId;
   const started = item.outcomes.filter((o) => o.fate === "worktree" && o.worktreeId);
   const queued = item.outcomes.filter((o) => o.fate === "worktree" && o.after);
   const sent = item.outcomes.filter((o) => o.fate === "send" && o.worktreeId);
   const here = item.outcomes.filter((o) => o.fate === "here").length;
   const errors = item.outcomes.filter((o) => o.error);
+  // every worktree named is the chip a message draws it as; the piece's title stands where the
+  // worktree is not one yet (queued) or where it names what was sent rather than where
   const parts: React.ReactNode[] = [];
   for (const o of started)
-    parts.push(<RowLink key={o.pieceId} worktreeId={o.worktreeId!} title={o.title ?? titled(o.pieceId)} />);
-  for (const o of queued) parts.push(<span key={o.pieceId}>{`${titled(o.pieceId)} queued after ${o.after}`}</span>);
+    parts.push(<WorktreeChip key={o.pieceId} id={o.worktreeId!} title={o.title ?? titled(o.pieceId)} />);
+  for (const o of queued) {
+    const after = piece(o.pieceId)?.after;
+    parts.push(
+      <span key={o.pieceId}>
+        {titled(o.pieceId)} queued after {after ? <WorktreeChip id={after.id} title={after.branch} /> : o.after}
+      </span>,
+    );
+  }
   for (const o of sent)
-    parts.push(<span key={o.pieceId}>{`${titled(o.pieceId)} sent to ${o.title ?? "a worktree"}`}</span>);
+    parts.push(
+      <span key={o.pieceId}>
+        {titled(o.pieceId)} sent to <WorktreeChip id={o.worktreeId!} title={o.title} />
+      </span>,
+    );
   if (here) parts.push(<span key="here">{`${here} here`}</span>);
   return (
     <DaemonRow
@@ -94,8 +90,7 @@ export function PieceLaterRow({ item }: { item: Extract<ChatItem, { kind: "piece
     return (
       <DaemonRow icon="spawn" word="split" tone="accent" at={item.ts}>
         <span className="daemon-text">
-          <RowLink worktreeId={item.worktreeId} title={item.title ?? "the worktree"} /> started, its branch having
-          landed
+          <WorktreeChip id={item.worktreeId} title={item.title ?? "the worktree"} /> started, its branch having landed
         </span>
       </DaemonRow>
     );

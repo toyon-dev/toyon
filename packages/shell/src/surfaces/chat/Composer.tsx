@@ -340,6 +340,9 @@ export function Composer({
   const quick = !!agentInfo?.quick;
   const agentModels = agentInfo?.models ?? NO_CHOICES;
   const agentEfforts = agentInfo?.efforts ?? NO_CHOICES;
+  // what its default rows stand for: the chips read these before a session has reported anything
+  const agentDefaultModel = agentInfo?.defaultModel;
+  const agentDefaultEffort = agentInfo?.defaultEffort;
   const [newModel, setNewModel] = useNewWorktreeModel(spawnAgent);
   const [newEffort, setNewEffort] = useNewWorktreeEffort(spawnAgent);
   // A new worktree lists every agent's models, and picking another agent's model switches the
@@ -1861,7 +1864,13 @@ export function Composer({
                   onClose={refocus}
                 />
               ) : (
-                <ModelChip models={agentModels} value={newModel} onChange={setNewModel} onClose={refocus} />
+                <ModelChip
+                  models={agentModels}
+                  value={newModel}
+                  runs={agentDefaultModel}
+                  onChange={setNewModel}
+                  onClose={refocus}
+                />
               )
             ) : (
               active && (
@@ -1869,19 +1878,27 @@ export function Composer({
                   models={agentModels}
                   value={active.worktree.model ?? ""}
                   current={currentModel}
+                  runs={agentDefaultModel}
                   onChange={(model) => sock?.send({ t: "set-worktree-model", worktreeId: active.worktree.id, model })}
                   onClose={refocus}
                 />
               )
             )}
             {choosing ? (
-              <EffortChip efforts={agentEfforts} value={newEffort} onChange={setNewEffort} onClose={refocus} />
+              <EffortChip
+                efforts={agentEfforts}
+                value={newEffort}
+                runs={agentDefaultEffort}
+                onChange={setNewEffort}
+                onClose={refocus}
+              />
             ) : (
               active && (
                 <EffortChip
                   efforts={agentEfforts}
                   value={active.worktree.effort ?? ""}
                   current={currentEffort}
+                  runs={agentDefaultEffort}
                   onChange={(effort) =>
                     sock?.send({ t: "set-worktree-effort", worktreeId: active.worktree.id, effort })
                   }

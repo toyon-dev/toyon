@@ -32,6 +32,10 @@ export interface PersistedState {
    * `thought_level`), keyed by agent id, so a picker has a list before a worktree's own session
    * exists */
   optionCache?: Record<string, Record<string, ModelChoice[]>>;
+  /** the value each agent ran per category the last time a session opened with nothing asked
+   * for, keyed like optionCache: what its default row stands for, which the row's words need not
+   * say (an agent's own settings pick its default) */
+  optionDefaults?: Record<string, Record<string, string>>;
   /** the shape before optionCache; read once at load and folded in */
   modelCache?: Record<string, ModelChoice[]>;
   /** shell theme selection (shared by every browser that connects) */
@@ -381,12 +385,26 @@ export class StateStore {
   cachedOptions(agentId: string, category: string): ModelChoice[] {
     return this.state.optionCache?.[agentId]?.[category] ?? [];
   }
-  /** returns whether the list changed, so the caller can skip a broadcast that says nothing new */
-  setCachedOptions(agentId: string, category: string, choices: ModelChoice[]): boolean {
-    if (JSON.stringify(this.cachedOptions(agentId, category)) === JSON.stringify(choices)) return false;
+  /** what the agent ran in the category when nothing was asked for, if a fresh session has said */
+  cachedDefault(agentId: string, category: string): string | undefined {
+    return this.state.optionDefaults?.[agentId]?.[category];
+  }
+  /** `runs` is the category's current value on a session that opened fresh with nothing asked
+   * for: the agent's own default. Absent on a resumed session or a list re-read after a switch,
+   * which keeps the default last seen. Returns whether anything changed, so the caller can skip a
+   * broadcast that says nothing new. */
+  setCachedOptions(agentId: string, category: string, choices: ModelChoice[], runs?: string): boolean {
+    const sameList = JSON.stringify(this.cachedOptions(agentId, category)) === JSON.stringify(choices);
+    const sameDefault = runs === undefined || runs === this.cachedDefault(agentId, category);
+    if (sameList && sameDefault) return false;
     this.state.optionCache ??= {};
     this.state.optionCache[agentId] ??= {};
     this.state.optionCache[agentId][category] = choices;
+    if (runs !== undefined) {
+      this.state.optionDefaults ??= {};
+      this.state.optionDefaults[agentId] ??= {};
+      this.state.optionDefaults[agentId][category] = runs;
+    }
     this.save();
     return true;
   }

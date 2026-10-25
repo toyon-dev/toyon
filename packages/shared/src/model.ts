@@ -703,6 +703,12 @@ export interface AgentInfo {
   models?: ModelChoice[];
   /** the effort levels it advertised the last time a session opened on a model that has them */
   efforts?: ModelChoice[];
+  /** the model it ran the last time a session opened with none asked for: what its default row
+   * stands for on this machine, which the row's own words need not say (Claude's reads "Opus"
+   * while a `model` in its settings runs something else). Absent until a fresh session has opened. */
+  defaultModel?: string;
+  /** the effort level it ran the last time a session opened with none asked for, the same way */
+  defaultEffort?: string;
   /** why its last check failed, in words a person can act on: its login hint when it refused for
    * want of a credential, the process's own first line otherwise. Absent once a check succeeds or a
    * session sees it logged in, and before any check has run. */
@@ -747,13 +753,21 @@ export function agentDefault(choices: ModelChoice[]): ModelChoice | undefined {
   return choices.find((c) => c.id === "default");
 }
 
-/** The row the agent's default only names. Claude's model select leads with "Default
- * (recommended)", described as "Opus (1M context)", which is the next row's name: two rows for
- * one model. The picker draws the named row in place of both. Nothing when the description names
- * no row (Claude's effort default carries none), and the default row stays. */
-export function defaultStandsFor(choices: ModelChoice[]): ModelChoice | undefined {
+/** The row the agent's default stands for, so the picker draws that row in place of both and one
+ * model is never two rows. First by what a fresh session that asked for nothing reported running
+ * (`runs`, AgentInfo's defaultModel or defaultEffort): the agent's own settings decide its default,
+ * and its default row's words do not follow them. Else by the row the default's description
+ * names: Claude's model select leads with "Default (recommended)", described as "Opus (1M
+ * context)", which is the next row's name. Nothing when neither names a row (Claude's effort
+ * default carries no description), and the default row stays. */
+export function defaultStandsFor(choices: ModelChoice[], runs?: string): ModelChoice | undefined {
   const own = agentDefault(choices);
-  if (!own?.description) return undefined;
+  if (!own) return undefined;
+  if (runs !== undefined && runs !== own.id) {
+    const ran = choices.find((c) => c.id === runs);
+    if (ran) return ran;
+  }
+  if (!own.description) return undefined;
   return choices.find((c) => c !== own && c.name === own.description);
 }
 

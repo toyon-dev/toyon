@@ -31,7 +31,10 @@ export interface AgentReadinessDeps {
   cwd: string;
   /** the choices a session listed before in a category (model, thought_level), from the state store */
   options: (agentId: string, category: string) => ModelChoice[];
-  learned: (agentId: string, category: string, choices: ModelChoice[]) => void;
+  /** what a fresh session that asked for nothing ran in the category: the agent's own default */
+  runs: (agentId: string, category: string) => string | undefined;
+  /** `runs` is the category's value on the fresh session the look opened: the agent's own default */
+  learned: (agentId: string, category: string, choices: ModelChoice[], runs: string) => void;
   /** whether the side questions can be put to it (it has a quick model) */
   quick: (agentId: string) => boolean;
   now?: () => number;
@@ -105,10 +108,14 @@ export class AgentReadiness {
       const e = this.known.get(info.id);
       const models = this.d.options(info.id, "model");
       const efforts = this.d.options(info.id, "thought_level");
+      const defaultModel = this.d.runs(info.id, "model");
+      const defaultEffort = this.d.runs(info.id, "thought_level");
       return {
         ...info,
         ...(models.length > 0 ? { models } : {}),
         ...(efforts.length > 0 ? { efforts } : {}),
+        ...(defaultModel !== undefined ? { defaultModel } : {}),
+        ...(defaultEffort !== undefined ? { defaultEffort } : {}),
         ...(this.d.quick(info.id) ? { quick: true as const } : {}),
         ...(e?.status ? { auth: e.status } : {}),
         ...(e?.canLogout ? { canLogout: true } : {}),
@@ -188,7 +195,10 @@ export class AgentReadiness {
       });
       found.canLogout = supportsLogout(init.agentCapabilities);
       const s = await link.conn.agent.request(acp.methods.agent.session.new, { cwd: this.d.cwd, mcpServers: [] });
-      for (const [category, opt] of readOptions(s.configOptions)) this.d.learned(agentId, category, opt.choices);
+      // a fresh session nothing was asked of: its values are the agent's own defaults
+      for (const [category, opt] of readOptions(s.configOptions)) {
+        this.d.learned(agentId, category, opt.choices, opt.current);
+      }
       if (init.agentCapabilities?.sessionCapabilities?.close) {
         await link.conn.agent.request(acp.methods.agent.session.close, { sessionId: s.sessionId }).catch((e) => {
           log.debug(tag, `session/close failed: ${e instanceof Error ? e.message : String(e)}`);

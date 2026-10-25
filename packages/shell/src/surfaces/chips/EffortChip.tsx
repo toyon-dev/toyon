@@ -22,12 +22,15 @@ export function EffortChip({
   efforts,
   value,
   current,
+  runs,
   onChange,
   onClose,
 }: {
   efforts: ModelChoice[];
   value: string;
   current?: string;
+  /** the agent's defaultEffort: what its default row stands for */
+  runs?: string;
   onChange: (id: string) => void;
   onClose?: () => void;
 }) {
@@ -36,6 +39,7 @@ export function EffortChip({
       choices={efforts}
       value={value}
       current={current}
+      runs={runs}
       what="an effort level"
       defaultLabel="default effort"
       defaultDescription="the level the agent runs at when nothing is asked for"

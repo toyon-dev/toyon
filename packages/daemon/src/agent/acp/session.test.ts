@@ -3239,18 +3239,24 @@ describe("AcpSession options", () => {
 
   test("the choices are learned when the session opens, and the record's model is applied before the prompt", async () => {
     let learned: Array<{ id: string; name: string }> = [];
+    const runs: Array<string | undefined> = [];
     let model: string | undefined = "big-model";
     const fake = fakeAgent(say("ok"));
     const w = world(fake, claudeSpec, 60_000, undefined, {
       option: (c) => (c === "model" ? model : undefined),
-      onOptionsLearned: (c, m) => {
-        if (c === "model") learned = m;
+      onOptionsLearned: (c, m, r) => {
+        if (c !== "model") return;
+        learned = m;
+        runs.push(r);
       },
     });
     w.session.send("one");
     await w.idle();
     expect(learned.map((m) => m.id)).toEqual(["test-model", "big-model"]);
     expect(fake.configs).toEqual(["model=big-model"]);
+    // the fresh session's model is the agent's own default; the list re-read after the switch
+    // says nothing about it, so the switch is never taken for the default
+    expect(runs).toEqual(["test-model", undefined]);
     // the switch is visible in the transcript, and not asked for again while it holds
     expect(infos(w.events)).toEqual([{ model: "test-model" }, { model: "big-model" }]);
     w.session.send("two");

@@ -191,8 +191,9 @@ const readiness = new AgentReadiness({
     ),
   cwd: paths.scratchDir,
   options: (id, category) => state.cachedOptions(id, category),
-  learned: (id, category, choices) => {
-    if (state.setCachedOptions(id, category, choices)) hub.emit("agentsChanged");
+  runs: (id, category) => state.cachedDefault(id, category),
+  learned: (id, category, choices, runs) => {
+    if (state.setCachedOptions(id, category, choices, runs)) hub.emit("agentsChanged");
   },
   // whether the side questions can be put to it, so the shell says once, on its page, that the
   // commit message is the person's to write, instead of every turn under the box

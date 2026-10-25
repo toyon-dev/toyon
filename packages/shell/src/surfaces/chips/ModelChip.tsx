@@ -30,12 +30,15 @@ export function ModelChip({
   models,
   value,
   current,
+  runs,
   onChange,
   onClose,
 }: {
   models: ModelChoice[];
   value: string;
   current?: string;
+  /** the agent's defaultModel: what its default row stands for */
+  runs?: string;
   onChange: (id: string) => void;
   onClose?: () => void;
 }) {
@@ -44,6 +47,7 @@ export function ModelChip({
       choices={models}
       value={value}
       current={current}
+      runs={runs}
       what="a model"
       defaultLabel="default model"
       defaultDescription="whatever the agent runs when nothing is asked for"

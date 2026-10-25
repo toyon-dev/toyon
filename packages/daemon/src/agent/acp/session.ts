@@ -145,8 +145,11 @@ export interface AcpSessionDeps {
   option?: (category: OptionCategory) => string | undefined;
   /** what the agent advertised for the category when a session opened or the list changed, for
    * the picker. Only categories present are reported: an agent that has effort on some models
-   * and not others keeps the last list it gave rather than flapping off. */
-  onOptionsLearned?: (category: OptionCategory, choices: ModelChoice[]) => void;
+   * and not others keeps the last list it gave rather than flapping off. `runs` is the value a
+   * fresh session opened on before toyon asked for anything: the agent's own default, which its
+   * settings pick and its default row's words need not follow. Absent on a resumed session (that
+   * value is the transcript's) and on a list re-read after a switch (that value is the switch). */
+  onOptionsLearned?: (category: OptionCategory, choices: ModelChoice[], runs?: string) => void;
   /** the agent moved to another value in the category on its own (a slash command in the chat
    * does). The record is expected to follow: the next turn re-applies the record before its
    * prompt, so one that still named the old value would put it back. */
@@ -1321,7 +1324,8 @@ export class AcpSession implements AgentAdapter {
     }
     const options = readOptions(configOptions);
     this.emit({ type: "session-info", sessionId: sessionId!, ...currentValues(options) });
-    this.learn(options);
+    // before the record's own choices go on below: a fresh session's values are the agent's defaults
+    this.learn(options, !resumed);
     const modeOption = modes ? null : readModeOption(configOptions);
     const live: Live = {
       conn,
@@ -1407,8 +1411,10 @@ export class AcpSession implements AgentAdapter {
     }
   }
 
-  private learn(options: LiveOptions) {
-    for (const [category, opt] of options) this.d.onOptionsLearned?.(category, opt.choices);
+  private learn(options: LiveOptions, fresh = false) {
+    for (const [category, opt] of options) {
+      this.d.onOptionsLearned?.(category, opt.choices, fresh ? opt.current : undefined);
+    }
   }
 
   private onUpdate(

@@ -73,8 +73,9 @@ function claudeIdWords(name: string): { label: string; version: string; qualifie
  * and the mark read as one thing.
  *
  * An agent that lists its own default row is taken at its word: that row stands in for the empty
- * option and no second "default" is drawn beside it. When that row only names another (Claude's
- * "Default" is "Opus"), the named row is drawn in place of both and marked recommended, so one
+ * option and no second "default" is drawn beside it. When that row stands for another, by what a
+ * fresh session ran with nothing asked (`runs`) or failing that by the row its description names
+ * (Claude's "Default" reads "Opus"), that row is drawn in place of both and marked default, so one
  * model is never two rows; not picking still follows the agent, picking it pins it. Names are
  * split by `modelWords`, unless two rows would then read the same, label and version both (an "Opus
  * 5" beside an "Opus (1M context)" that is also 5), when both keep the agent's own words so the chip
@@ -85,9 +86,10 @@ export function choiceRows(
   value: string,
   current: string | undefined,
   empty: { label: string; description: string },
+  runs?: string,
 ): { rows: ChipOption<string>[]; shown: string; picked: string } {
   const own = agentDefault(choices);
-  const named = defaultStandsFor(choices);
+  const named = defaultStandsFor(choices, runs);
   // the default's id (what the session reports when nothing is asked, or a record that asked for
   // it) reads as the row it names
   const asNamed = (id: string) => (named && id === own?.id ? named.id : id);
@@ -107,7 +109,7 @@ export function choiceRows(
         label: w ? w.label : c.name,
         ...(w?.version ? { suffix: w.version } : {}),
         ...(w?.version && split.some((o) => o.c !== c && o.words.label === w.label) ? { chip: reads(w) } : {}),
-        description: c === named ? ["recommended", description].filter(Boolean).join(" · ") : description,
+        description: c === named ? ["default", description].filter(Boolean).join(" · ") : description,
       };
     }),
     // the session reported something the list does not carry: show it rather than lie
@@ -163,10 +165,16 @@ export function agentModelRows(
         },
       ];
     }
-    const r = choiceRows(a.models, mine ? model : DEFAULT_OPTION, undefined, {
-      label: `${short} default`,
-      description: `whatever ${a.name} runs when nothing is asked for`,
-    });
+    const r = choiceRows(
+      a.models,
+      mine ? model : DEFAULT_OPTION,
+      undefined,
+      {
+        label: `${short} default`,
+        description: `whatever ${a.name} runs when nothing is asked for`,
+      },
+      a.defaultModel,
+    );
     if (mine) shown = agentModelKey(a.id, r.shown);
     return r.rows.map((o) => ({
       ...o,

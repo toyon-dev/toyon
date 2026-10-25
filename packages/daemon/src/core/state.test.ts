@@ -63,6 +63,23 @@ describe("state", () => {
     expect(loadState(paths).commandCache?.["claude:nope"]).toBeUndefined();
   });
 
+  test("the option cache keeps what a fresh session ran beside the list, and says when nothing moved", () => {
+    const store = new StateStore(paths, { repos: [], worktrees: [], sessions: {} });
+    const models = [
+      { id: "default", name: "Default" },
+      { id: "big", name: "Big" },
+    ];
+    expect(store.setCachedOptions("claude", "model", models, "big")).toBe(true);
+    expect(store.cachedDefault("claude", "model")).toBe("big");
+    // a re-read with nothing asked for leaves the default where it was
+    expect(store.setCachedOptions("claude", "model", models)).toBe(false);
+    expect(store.cachedDefault("claude", "model")).toBe("big");
+    // the same list on another default is news
+    expect(store.setCachedOptions("claude", "model", models, "default")).toBe(true);
+    expect(store.cachedDefault("claude", "model")).toBe("default");
+    expect(loadState(paths).optionDefaults).toEqual({ claude: { model: "default" } });
+  });
+
   test("a model cache from before the option cache is folded in once", () => {
     const models = [{ id: "big", name: "Big" }];
     saveState(paths, { repos: [], worktrees: [wt("a")], sessions: {}, modelCache: { claude: models } });

@@ -14,6 +14,7 @@ export function OptionChip({
   choices,
   value,
   current,
+  runs,
   what,
   defaultLabel,
   defaultDescription,
@@ -27,6 +28,9 @@ export function OptionChip({
   value: string;
   /** what the session last reported running, if anything */
   current?: string;
+  /** what the agent ran the last time a session opened with nothing asked for: the row its own
+   * default row stands for */
+  runs?: string;
   /** the noun, for the tooltip: "a model", "an effort level" */
   what: string;
   defaultLabel: string;
@@ -39,8 +43,8 @@ export function OptionChip({
   // the composer renders on every change to the chat, and the rows are the same until the agent's
   // list or the choice changes
   const { rows, shown, picked } = useMemo(
-    () => choiceRows(choices, value, current, { label: defaultLabel, description: defaultDescription }),
-    [choices, value, current, defaultLabel, defaultDescription],
+    () => choiceRows(choices, value, current, { label: defaultLabel, description: defaultDescription }, runs),
+    [choices, value, current, runs, defaultLabel, defaultDescription],
   );
   if (choices.length === 0) return null;
   const row = rows.find((o) => o.id === shown);

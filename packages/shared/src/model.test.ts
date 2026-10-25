@@ -10,6 +10,20 @@ describe("defaultStandsFor", () => {
   test("the row a default only names", () => {
     expect(defaultStandsFor(claude)?.id).toBe("opus[1m]");
   });
+  test("what a fresh session ran outranks the description: the agent's settings pick its default", () => {
+    expect(defaultStandsFor(claude, "sonnet")?.id).toBe("sonnet");
+    // a reported default is the default row itself: back to the description
+    expect(defaultStandsFor(claude, "default")?.id).toBe("opus[1m]");
+    // a reported id the list lacks names no row: back to the description
+    expect(defaultStandsFor(claude, "nope")?.id).toBe("opus[1m]");
+    // an effort default with no description now stands for what ran
+    const efforts = [
+      { id: "default", name: "Default" },
+      { id: "high", name: "High" },
+    ];
+    expect(defaultStandsFor(efforts, "high")?.id).toBe("high");
+    expect(defaultStandsFor(efforts)).toBeUndefined();
+  });
   test("nothing when the description names no row, so the default row stays", () => {
     expect(defaultStandsFor([{ id: "default", name: "Default" }, ...claude.slice(1)])).toBeUndefined();
     expect(

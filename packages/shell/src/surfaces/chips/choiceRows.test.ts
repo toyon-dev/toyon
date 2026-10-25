@@ -81,13 +81,37 @@ describe("modelWords", () => {
 });
 
 describe("choiceRows", () => {
-  test("a default that names a row is drawn once, as that row, marked recommended", () => {
+  test("a default that names a row is drawn once, as that row, marked default", () => {
     const { rows, shown } = choiceRows(claudeModels, "", undefined, empty);
     expect(rows).toEqual([
-      { id: "opus[1m]", label: "Opus", suffix: "5", description: "recommended · 1M context · Best for everyday" },
+      { id: "opus[1m]", label: "Opus", suffix: "5", description: "default · 1M context · Best for everyday" },
       { id: "sonnet", label: "Sonnet", suffix: "5" },
     ]);
     expect(shown).toBe("opus[1m]");
+  });
+  test("what a fresh session ran is the row the default stands for, whatever its words say", () => {
+    const { rows, shown, picked } = choiceRows(claudeModels, "", undefined, empty, "sonnet");
+    expect(rows).toEqual([
+      { id: "opus[1m]", label: "Opus", suffix: "5", description: "1M context · Best for everyday" },
+      { id: "sonnet", label: "Sonnet", suffix: "5", description: "default" },
+    ]);
+    expect(shown).toBe("sonnet");
+    expect(picked).toBe("sonnet");
+    // the default's id, reported or asked for, reads as that row too
+    expect(choiceRows(claudeModels, "default", "default", empty, "sonnet")).toMatchObject({
+      shown: "sonnet",
+      picked: "sonnet",
+    });
+    // an effort default with no description stands for what ran, and the mark sits there
+    const efforts = [
+      { id: "default", name: "Default" },
+      { id: "high", name: "High" },
+    ];
+    expect(choiceRows(efforts, "", undefined, empty, "high")).toMatchObject({
+      rows: [{ id: "high", label: "High", description: "default" }],
+      shown: "high",
+      picked: "high",
+    });
   });
   test("two rows that would read the same keep the agent's own names", () => {
     const both = [
@@ -236,6 +260,13 @@ describe("agentModelRows", () => {
   test("the chosen agent with no list shows its one row whatever model was remembered", () => {
     const agents = [agent({ id: "claude", models: claudeModels }), agent({ id: "codex" })];
     expect(agentModelRows(agents, "codex", "gpt-b").shown).toBe("codex ");
+  });
+  test("an agent's default row stands for the model its last fresh session ran", () => {
+    const agents = [agent({ id: "claude", models: claudeModels, defaultModel: "sonnet" }), agent({ id: "codex" })];
+    const { rows, shown } = agentModelRows(agents, "claude", "");
+    expect(shown).toBe("claude sonnet");
+    expect(rows.find((r) => r.id === "claude sonnet")?.description).toBe("default");
+    expect(rows.find((r) => r.id === "claude opus[1m]")?.description).toBe("1M context · Best for everyday");
   });
   test("one agent: no row takes its name", () => {
     const { rows } = agentModelRows([agent({ id: "claude", short: "Claude", models: claudeModels })], "claude", "");

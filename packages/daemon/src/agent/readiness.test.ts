@@ -89,6 +89,8 @@ function world(
   const adapter = fakeAdapter(opts);
   const learned: Array<[string, string, ModelChoice[]]> = [];
   const models = extra.models ?? {};
+  /** the model each agent's look opened on, by agent id */
+  const ran: Record<string, string> = {};
   let now = 1_000_000;
   const readiness = new AgentReadiness({
     infos: () => extra.infos ?? infos(),
@@ -96,16 +98,20 @@ function world(
     connect: adapter.connect,
     cwd: "/nowhere",
     options: (id, category) => (category === "model" ? (models[id] ?? []) : []),
-    learned: (id, category, choices) => {
+    runs: (id, category) => (category === "model" ? ran[id] : undefined),
+    learned: (id, category, choices, runs) => {
       learned.push([id, category, choices]);
-      if (category === "model") models[id] = choices;
+      if (category === "model") {
+        models[id] = choices;
+        ran[id] = runs;
+      }
     },
     quick: () => false,
     now: () => now,
   });
   let changes = 0;
   readiness.onChange = () => changes++;
-  return { readiness, adapter, learned, models, changes: () => changes, tick: (ms: number) => (now += ms) };
+  return { readiness, adapter, learned, models, ran, changes: () => changes, tick: (ms: number) => (now += ms) };
 }
 
 const max: AuthStatus = { kind: "account", label: "Claude Max", account: { email: "who@example.com" } };
@@ -185,7 +191,9 @@ describe("AgentReadiness: looking again", () => {
     await w.readiness.checkMissing();
     expect(w.learned).toEqual([["codex", "model", listed]]);
     expect(w.adapter.seen).toMatchObject({ connects: 1, sessions: 1, closes: 1, prompts: 0, kills: 1 });
-    expect(w.readiness.describe()[1]).toMatchObject({ models: listed, auth: max });
+    // the model the look's session opened on is the agent's own default, and rides the row
+    expect(w.ran).toEqual({ codex: "gpt-a" });
+    expect(w.readiness.describe()[1]).toMatchObject({ models: listed, defaultModel: "gpt-a", auth: max });
   });
 
   test("an agent that is not installed yet is looked at once it is, and once only until the cooldown", async () => {
@@ -234,6 +242,7 @@ describe("AgentReadiness: looking again", () => {
       connect: () => Promise.reject(new Error("spawn ENOENT")),
       cwd: "/nowhere",
       options: () => [],
+      runs: () => undefined,
       learned: () => {},
       quick: () => false,
     });
@@ -278,7 +287,12 @@ describe("AgentReadiness: looking again", () => {
     const ok = world({}, {});
     ok.readiness.observe("codex", { status: none });
     await ok.readiness.check("codex");
-    expect(ok.readiness.describe()[1]).toEqual({ ...ready("codex"), models: listed, auth: none });
+    expect(ok.readiness.describe()[1]).toEqual({
+      ...ready("codex"),
+      models: listed,
+      defaultModel: "gpt-a",
+      auth: none,
+    });
   });
 
   test("two looks at once share one spawn", async () => {

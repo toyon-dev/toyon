@@ -48,7 +48,7 @@ import {
   useSendsRefused,
   useTouch,
 } from "../../state/selectors.ts";
-import { composerBoxOf, type Draft, NEW_PROJECT_BOX, sendWaits, trunkOf, worktreeById } from "../../state/store.ts";
+import { composerBoxOf, type Draft, NEW_PROJECT_BOX, sendWaits, trunkOf } from "../../state/store.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { TextArea } from "../../ui/Field.tsx";
@@ -1314,16 +1314,9 @@ export function Composer({
   // row points there until this worktree has a plan of its own
   const fromPlan =
     active?.worktree.from?.kind === "worktree" && active.worktree.from.plan ? active.worktree.from : null;
-  const originList = useOriginFile(fromPlan ? { worktreeId: fromPlan.origin.id, path: fromPlan.plan! } : null);
-  // an origin off the rail is named from its project's archive, which the rail asks for only in
-  // the project on screen: a handoff's origin is in another, so ask for that one here
-  const originRepo = fromPlan?.origin.repoId;
-  const originListed = useStore(
-    (s) => !fromPlan || !!worktreeById(s, fromPlan.origin.id) || !!(originRepo && s.archived[originRepo]),
+  const originList = useOriginFile(
+    fromPlan ? { worktreeId: fromPlan.origin.id, repoId: fromPlan.origin.repoId, path: fromPlan.plan! } : null,
   );
-  useEffect(() => {
-    if (sock && originRepo && !originListed) sock.send({ t: "list-archived", repoId: originRepo });
-  }, [sock, originRepo, originListed]);
   // pieces of this worktree's plan waiting for a sibling to land, read off the record so a
   // restart keeps the line
   const queuedPieces = active?.worktree.queued ?? [];

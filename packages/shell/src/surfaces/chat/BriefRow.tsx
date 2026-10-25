@@ -2,11 +2,11 @@
 // a handoff from another project. The agent here was sent it as a message, and the transcript
 // holds it as one, but nobody typed it, so it is not the person's bubble: it is a row of Toyon's
 // own, the mirror of the origin's split row, saying where it came from. The brief itself opens
-// beside the chat on a press: in the briefs list on the origin while that file is there, the one
-// place the composer's own press goes, so the two presses never open two copies of one text;
-// otherwise as a document out of the transcript rather than a file, since in plan mode the
-// origin's plan file holds the plan and not the brief, a handoff has no file at all, and the
-// origin may be archived by the time it is read.
+// beside the chat on a press: in the briefs list on the origin while the origin is on the rail or
+// in the archive, the one place the composer's own press goes, so the two presses never open two
+// copies of one text; otherwise as a document out of the transcript rather than a file, since in
+// plan mode the origin's plan file holds the plan and not the brief, a handoff has no file at all,
+// and the origin may be gone from both lists by the time it is read.
 
 import type { Brief } from "@toyon/shared";
 import type { ReactNode } from "react";
@@ -37,10 +37,10 @@ export function BriefRow({
   children?: ReactNode;
 }) {
   const dispatch = useDispatch();
-  const list = useOriginFile(brief.file);
+  const list = useOriginFile(brief.file ? { ...brief.file, repoId: brief.origin.repoId } : null);
   const chip = <WorktreeChip id={brief.origin.id} title={brief.origin.title} />;
   const open = () => {
-    if (brief.file && list.origin) return list.open();
+    if (brief.file && list.kept) return list.open();
     dispatch({
       a: "open-loose",
       v: {
@@ -80,7 +80,7 @@ export function BriefRow({
         <Button
           variant="inline"
           data-tip={
-            brief.file && list.origin
+            brief.file && list.kept
               ? `Read the brief in ${brief.file.path}, beside the chat`
               : "Read the brief beside the chat"
           }

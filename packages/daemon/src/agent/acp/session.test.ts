@@ -666,6 +666,37 @@ describe("AcpSession", () => {
     await w.session.close();
   });
 
+  test("where the work stands rides after the worktree's name and before the siblings, awaited as each message goes out", async () => {
+    const fake = fakeAgent(say("ok"));
+    let standing: string | undefined = "The tree has 1 uncommitted file.";
+    const w = world(fake, claudeSpec, 60_000, undefined, {
+      self: () => "This worktree is named.",
+      standing: async () => standing,
+      preview: () => "preview",
+      mentioned: (text) => (text.includes("@toyon/other") ? ["@toyon/other is the worktree ..."] : []),
+    });
+    w.session.send("hi @toyon/other", { context: ["ctx"] });
+    await w.idle();
+    standing = "This worktree's work has landed on main.";
+    w.session.send("ok close this now?");
+    await w.idle();
+    standing = undefined;
+    w.session.send("and now");
+    await w.idle();
+    expect(fake.prompts.map((p) => p.prompt.map((b) => (b as { text: string }).text))).toEqual([
+      [
+        "hi @toyon/other",
+        "[Attached by Toyon:\nctx\n\nThis worktree is named.\n\nThe tree has 1 uncommitted file.\n\n@toyon/other is the worktree ...\n\npreview]",
+      ],
+      [
+        "ok close this now?",
+        "[Attached by Toyon:\nThis worktree is named.\n\nThis worktree's work has landed on main.\n\npreview]",
+      ],
+      ["and now", "[Attached by Toyon:\nThis worktree is named.\n\npreview]"],
+    ]);
+    await w.session.close();
+  });
+
   test("the worktrees a message names ride in the block after its own context and before the preview", async () => {
     const fake = fakeAgent(say("ok"));
     const w = world(fake, claudeSpec, 60_000, undefined, {

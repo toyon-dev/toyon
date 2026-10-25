@@ -17,6 +17,7 @@ import {
   procFixPrompt,
   SYSTEM_APPEND,
   selfContext,
+  standingContext,
   worktreeContext,
 } from "./prompt.ts";
 
@@ -323,6 +324,97 @@ describe("previewContext", () => {
     );
     expect(previewContext({ status: "unreachable", url, detail: "bound 3000 instead of $PORT" })).toContain(
       "The preview is unreachable: bound 3000 instead of $PORT;",
+    );
+  });
+});
+
+describe("standingContext", () => {
+  test("nothing known is no paragraph at all", () => {
+    expect(standingContext(null)).toBeUndefined();
+    expect(standingContext({ main: false, base: "main" })).toBeUndefined();
+  });
+  test("a landed row names what landed, three subjects at most, and says nothing is left to commit or land", () => {
+    expect(
+      standingContext({
+        main: false,
+        base: "main",
+        dirty: 0,
+        ahead: 0,
+        landed: { subjects: ["one", "two", "three", "four"], pr: 12 },
+      }),
+    ).toBe(
+      'This worktree\'s work has landed on main as "one"; "two"; "three" (and 1 more), through PR #12. The branch restarted from main, so there is nothing here to commit or land until new work is written.',
+    );
+    // a landing with nothing to say, and no PR
+    expect(standingContext({ main: false, base: "main", landed: { subjects: [] } })).toBe(
+      "This worktree's work has landed on main. The branch restarted from main, so there is nothing here to commit or land until new work is written.",
+    );
+  });
+  test("an unlanded row says what is uncommitted and how far the branch stands from its base", () => {
+    expect(standingContext({ main: false, base: "main", dirty: 3, ahead: 2, behind: 4 })).toBe(
+      "The tree has 3 uncommitted files, which the user commits from the commit box. The branch is 2 commits ahead of main and 4 behind it.",
+    );
+    expect(standingContext({ main: false, base: "main", dirty: 1, ahead: 1 })).toBe(
+      "The tree has 1 uncommitted file, which the user commits from the commit box. The branch is 1 commit ahead of main.",
+    );
+    expect(standingContext({ main: false, base: "main", dirty: 0, ahead: 0, behind: 0 })).toBe(
+      "The tree is clean. The branch is level with main.",
+    );
+    // a count not read is a clause left out, never a zero
+    expect(standingContext({ main: false, base: "develop", dirty: 0 })).toBe("The tree is clean.");
+    expect(standingContext({ main: false, base: "develop", ahead: 0, behind: 2 })).toBe(
+      "The branch is 0 commits ahead of develop and 2 behind it.",
+    );
+  });
+  test("an open PR is named with its address, checks, review, auto-merge and what it is missing", () => {
+    expect(
+      standingContext({
+        main: false,
+        base: "main",
+        dirty: 0,
+        ahead: 3,
+        unpushed: 1,
+        pr: { number: 7, url: "https://x/pull/7", state: "open", checks: "pass", review: "approved", automerge: true },
+      }),
+    ).toBe(
+      "The tree is clean. The branch is 3 commits ahead of main. Pull request #7 is open at https://x/pull/7, checks passing, review approved, auto-merge on; 1 commit here is not on it yet.",
+    );
+    expect(
+      standingContext({
+        main: false,
+        base: "main",
+        unpushed: 2,
+        pr: { number: 7, url: "https://x/pull/7", state: "open", checks: "fail", review: "changes_requested" },
+      }),
+    ).toBe(
+      "Pull request #7 is open at https://x/pull/7, checks failing, review changes requested; 2 commits here are not on it yet.",
+    );
+  });
+  test("a merged PR waits on the poll, a closed one on the next press, and a landed one is said once", () => {
+    const pr = { number: 7, url: "https://x/pull/7" };
+    expect(standingContext({ main: false, base: "main", dirty: 0, pr: { ...pr, state: "merged" } })).toBe(
+      "The tree is clean. PR #7 has merged on GitHub; Toyon lands it here on its next poll.",
+    );
+    expect(standingContext({ main: false, base: "main", dirty: 0, pr: { ...pr, state: "closed" } })).toBe(
+      "The tree is clean. PR #7 was closed without merging; the next land press creates a new one.",
+    );
+    expect(
+      standingContext({
+        main: false,
+        base: "main",
+        landed: { subjects: ["x"], pr: 7 },
+        pr: { ...pr, state: "merged" },
+      }),
+    ).toBe(
+      'This worktree\'s work has landed on main as "x", through PR #7. The branch restarted from main, so there is nothing here to commit or land until new work is written.',
+    );
+  });
+  test("main says it is main, counts its tree, and trails origin rather than a base", () => {
+    expect(standingContext({ main: true, base: "main", dirty: 2, behind: 3 })).toBe(
+      "This is the project's main checkout. The tree has 2 uncommitted files. It is 3 commits behind origin.",
+    );
+    expect(standingContext({ main: true, base: "main", dirty: 0, behind: 0 })).toBe(
+      "This is the project's main checkout. The tree is clean.",
     );
   });
 });

@@ -3,7 +3,7 @@
 // it; the others get it prepended to the first prompt of a session.
 
 import type { ContentBlock } from "@agentclientprotocol/sdk";
-import type { FileRef, ImageRef, LogLine, PasteRef, PickRef, ProcState, ProcStatus } from "@toyon/shared";
+import type { FileRef, ImageRef, LogLine, PasteRef, PickRef, ProcState, ProcStatus, PrState } from "@toyon/shared";
 import { attachmentLabel, clipOutput, fmtBytes, lineSpan } from "@toyon/shared";
 import type { Stored } from "./attachments.ts";
 
@@ -462,6 +462,96 @@ export function previewContext(p: PreviewStanding | null): string | undefined {
       line = `The preview is ${p.status}${p.detail ? `: ${p.detail}` : ""}; nothing answers${at} until it is back.`;
   }
   return line;
+}
+
+/** where the worktree's work stands as a message goes out, read from the tree and the record for
+ * the paragraph that tells the agent (standingContext) */
+export interface WorkStanding {
+  /** the project's main checkout: nothing is counted against main, and `behind` is against origin */
+  main: boolean;
+  /** the default branch's name, "main" nearly always */
+  base: string;
+  /** uncommitted file count; absent when the tree could not be read */
+  dirty?: number;
+  ahead?: number;
+  behind?: number;
+  /** commits a standing open PR is missing */
+  unpushed?: number;
+  /** the row is marked landed (merged into the base, no new work since): its last landing's
+   * subjects, and the PR it went through when it was one */
+  landed?: { subjects: string[]; pr?: number };
+  /** the PR the row still shows and acts on */
+  pr?: Pick<PrState, "number" | "url" | "state" | "checks" | "review" | "automerge">;
+}
+
+/** how many of a landing's subjects the paragraph names before folding the rest into a count */
+const STANDING_SUBJECTS = 3;
+
+const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`;
+
+/** The paragraph after every message that says where the work here stands: the tree, the
+ * branch against its base, a landing, a PR. The agent otherwise answers from its last picture of
+ * the tree, which a commit from the box, a land, a PR created by the press or an edit by hand
+ * has moved since; "commit first" after the work had landed was the case that asked for this.
+ * Nothing when nothing is known: a row whose tree has not been read and that carries no marks. */
+export function standingContext(s: WorkStanding | null): string | undefined {
+  if (!s) return undefined;
+  const tree =
+    s.dirty === undefined
+      ? undefined
+      : s.dirty === 0
+        ? "The tree is clean."
+        : `The tree has ${plural(s.dirty, "uncommitted file")}${s.main ? "" : ", which the user commits from the commit box"}.`;
+  if (s.main) {
+    const behind = s.behind ? ` It is ${plural(s.behind, "commit")} behind origin.` : "";
+    return `This is the project's main checkout.${tree ? ` ${tree}` : ""}${behind}`;
+  }
+  const parts: string[] = [];
+  if (s.landed) {
+    const named = s.landed.subjects.slice(0, STANDING_SUBJECTS).map((t) => `"${t}"`);
+    const more = s.landed.subjects.length - named.length;
+    const as = named.length ? ` as ${named.join("; ")}${more > 0 ? ` (and ${more} more)` : ""}` : "";
+    const through = s.landed.pr === undefined ? "" : `, through PR #${s.landed.pr}`;
+    parts.push(
+      `This worktree's work has landed on ${s.base}${as}${through}. The branch restarted from ${s.base}, so there is nothing here to commit or land until new work is written.`,
+    );
+  } else {
+    if (tree) parts.push(tree);
+    if (s.ahead !== undefined) {
+      const behind = s.behind ? ` and ${s.behind} behind it` : "";
+      parts.push(
+        s.ahead === 0 && !s.behind
+          ? `The branch is level with ${s.base}.`
+          : `The branch is ${plural(s.ahead, "commit")} ahead of ${s.base}${behind}.`,
+      );
+    }
+  }
+  const pr = s.pr;
+  if (pr && s.landed?.pr !== pr.number) {
+    switch (pr.state) {
+      case "open": {
+        const checks = pr.checks
+          ? `, checks ${{ pass: "passing", pending: "pending", fail: "failing" }[pr.checks]}`
+          : "";
+        const review = pr.review
+          ? `, review ${{ approved: "approved", changes_requested: "changes requested", review_required: "required" }[pr.review]}`
+          : "";
+        const auto = pr.automerge ? ", auto-merge on" : "";
+        const unpushed = s.unpushed
+          ? `; ${plural(s.unpushed, "commit")} here ${s.unpushed === 1 ? "is" : "are"} not on it yet`
+          : "";
+        parts.push(`Pull request #${pr.number} is open at ${pr.url}${checks}${review}${auto}${unpushed}.`);
+        break;
+      }
+      case "merged":
+        parts.push(`PR #${pr.number} has merged on GitHub; Toyon lands it here on its next poll.`);
+        break;
+      case "closed":
+        parts.push(`PR #${pr.number} was closed without merging; the next land press creates a new one.`);
+        break;
+    }
+  }
+  return parts.length ? parts.join(" ") : undefined;
 }
 
 /** what the model reads as an image's label: its session number (how the user will refer to it

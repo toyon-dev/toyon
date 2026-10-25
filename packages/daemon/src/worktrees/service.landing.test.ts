@@ -60,6 +60,31 @@ describe("landing", () => {
     expect(w.state.worktree(wt.id)?.landed).toBeUndefined();
   });
 
+  test("where the work stands is read off the tree as a message goes out: committed, landed, then edited by hand", async () => {
+    const repoId = await registered();
+    const wt = await w.worktrees.create(repoId, "feature");
+    writeFileSync(join(wt.path, "feature.txt"), "x\n");
+    expect(await w.worktrees.standing(wt.id)).toMatchObject({ main: false, base: "main", dirty: 1, ahead: 0 });
+    expect((await w.worktrees.commit(wt.id, "add feature")).ok).toBe(true);
+    const committed = await w.worktrees.standing(wt.id);
+    expect(committed).toMatchObject({ dirty: 0, ahead: 1 });
+    expect(committed?.landed).toBeUndefined();
+    expect((await w.worktrees.land(wt.id)).result.ok).toBe(true);
+    expect(await w.worktrees.standing(wt.id)).toMatchObject({
+      dirty: 0,
+      ahead: 0,
+      landed: { subjects: ["add feature"] },
+    });
+    // an edit by hand, with nothing to signal it: the read at send time is what makes it known,
+    // and the landed mark goes with it
+    writeFileSync(join(wt.path, "more.txt"), "y\n");
+    const edited = await w.worktrees.standing(wt.id);
+    expect(edited).toMatchObject({ dirty: 1 });
+    expect(edited?.landed).toBeUndefined();
+    const main = w.state.worktrees.find((x) => x.repoId === repoId && x.kind === "main")!;
+    expect(await w.worktrees.standing(main.id)).toMatchObject({ main: true, dirty: 0 });
+  });
+
   test("a commit by hand keeps the verdict on the tree it saw, without the message that is in git now", async () => {
     const repoId = await registered();
     const wt = await w.worktrees.create(repoId, "feature");

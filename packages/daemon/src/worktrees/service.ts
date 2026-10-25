@@ -36,6 +36,7 @@ import {
   movedPastLand,
   type PermissionMode,
   type PrState,
+  prStanding,
   prTaken,
   type RefKind,
   type RepoInfo,
@@ -52,7 +53,7 @@ import type { OptionField } from "../agent/acp/options.ts";
 import { attachmentsDirFor, isAttachmentFile } from "../agent/attachments.ts";
 import { canonical } from "../agent/bounds.ts";
 import { PLANS_DIR } from "../agent/planDoc.ts";
-import { type Failure, fixPrompt } from "../agent/prompt.ts";
+import { type Failure, fixPrompt, type WorkStanding } from "../agent/prompt.ts";
 import { firstAskOf } from "../agent/recap.ts";
 import type { AgentRegistry } from "../agent/registry.ts";
 import { makeNamer, taskText } from "../agent/tasks.ts";
@@ -2779,6 +2780,44 @@ export class WorktreeService {
       locked: disc.locked,
       defaultBranch: repo.defaultBranch,
       base: baseOf(repo),
+    };
+  }
+
+  /** Where the row's work stands as a message goes out, for the paragraph behind it (agent/prompt.ts
+   * standingContext). The tree is read now rather than taken from the last record: a commit from
+   * the box, a land, or an edit by hand a moment ago is what the agent must hear, and a read
+   * joins one already in flight. The marks come off the record, which the same read keeps. */
+  async standing(worktreeId: string): Promise<WorkStanding | null> {
+    const wt = this.d.state.worktree(worktreeId);
+    if (!wt || wt.kind === "spare" || this.going.has(worktreeId)) return null;
+    const repo = this.d.state.repo(wt.repoId);
+    if (!repo) return null;
+    const rec = (await this.tree.refresh(worktreeId)) ?? this.tree.get(worktreeId);
+    const core = rec?.core;
+    const last = wt.lands?.at(-1);
+    const pr = prStanding(wt);
+    return {
+      main: wt.kind === "main",
+      base: baseOf(repo),
+      ...(core ? { dirty: core.files.length } : {}),
+      ...(core?.ahead === undefined ? {} : { ahead: core.ahead }),
+      ...(core?.behind === undefined ? {} : { behind: core.behind }),
+      ...(core?.unpushed === undefined ? {} : { unpushed: core.unpushed }),
+      ...(wt.landed
+        ? { landed: { subjects: last?.subjects ?? [], ...(last?.pr === undefined ? {} : { pr: last.pr }) } }
+        : {}),
+      ...(pr
+        ? {
+            pr: {
+              number: pr.number,
+              url: pr.url,
+              state: pr.state,
+              ...(pr.checks ? { checks: pr.checks } : {}),
+              ...(pr.review ? { review: pr.review } : {}),
+              ...(pr.automerge ? { automerge: pr.automerge } : {}),
+            },
+          }
+        : {}),
     };
   }
 

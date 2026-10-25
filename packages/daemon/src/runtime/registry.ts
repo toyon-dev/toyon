@@ -20,7 +20,14 @@ import { AttachmentStore } from "../agent/attachments.ts";
 import type { ToyonMcp } from "../agent/mcp.ts";
 import { commandFolders, readCommandOrigins } from "../agent/origins.ts";
 import { briefsDoc, ownPlanPath, planEdited, writePlanDoc, writePlanDocNow } from "../agent/planDoc.ts";
-import { type PreviewStanding, previewContext, selfContext, worktreeContext } from "../agent/prompt.ts";
+import {
+  type PreviewStanding,
+  previewContext,
+  selfContext,
+  standingContext,
+  type WorkStanding,
+  worktreeContext,
+} from "../agent/prompt.ts";
 import type { AgentReadiness } from "../agent/readiness.ts";
 import type { AgentRegistry } from "../agent/registry.ts";
 import { transcriptPathFor } from "../agent/transcript.ts";
@@ -83,6 +90,9 @@ export interface RuntimeDeps {
   /** a project's archived worktrees, newest first, for a message that names one by its branch;
    * read as the message goes out. Absent in tests, where only open rows can be named */
   archived?: (repoId: string) => ArchivedWorktree[];
+  /** where a worktree's work stands (its tree read now, its landed and PR marks), for the
+   * paragraph behind every message; absent in tests */
+  standing?: (worktreeId: string) => Promise<WorkStanding | null>;
   /** the public name a front may forward preview ports under, and the gate they check
    * (core/remote.ts), as they stand now; absent in tests, where previews answer loopback only */
   remote?: () => Remote | null;
@@ -228,6 +238,7 @@ function defaultAgent(
       const w = d.state.worktrees.find((w) => w.id === wt.id);
       return w ? selfContext(w) : undefined;
     },
+    standing: async () => standingContext((await d.standing?.(wt.id)) ?? null),
     pageErrors: () => d.pageErrors?.(wt.id),
     // the project's other worktrees, open ones first and then the archive, read as the message
     // goes out: a row made or archived since the session opened is one the message can name. The

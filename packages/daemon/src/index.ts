@@ -25,6 +25,7 @@ import { spawnAcp } from "./agent/acp/transport.ts";
 import { AttachmentStore } from "./agent/attachments.ts";
 import { LinuxSandbox } from "./agent/linuxSandbox.ts";
 import { ToolSet, ToyonMcp } from "./agent/mcp.ts";
+import type { WorkStanding } from "./agent/prompt.ts";
 import { AgentReadiness } from "./agent/readiness.ts";
 import { loadAgentRegistry } from "./agent/registry.ts";
 import { prepareLaunch } from "./agent/sandbox.ts";
@@ -232,6 +233,7 @@ const runtime: RuntimeRegistry = new RuntimeRegistry({
   // asked only when a turn is sent, after the service below exists
   turnStarting: (id): Promise<void> => worktrees.turnStarted(id),
   archived: (repoId): ArchivedWorktree[] => worktrees.archived(repoId),
+  standing: (id): Promise<WorkStanding | null> => worktrees.standing(id),
   remote: () => setting.get(),
   gate: previewGate,
   // asked only once the policy exists: the first view comes from a socket, after boot

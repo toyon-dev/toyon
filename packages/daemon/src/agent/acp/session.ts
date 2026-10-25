@@ -157,6 +157,10 @@ export interface AcpSessionDeps {
   /** the worktree's own title and branch, as a sentence after every message; read as each goes
    * out, since the agent names the row after its first turn and the person renames it at will */
   self?: () => string | undefined;
+  /** where the worktree's work stands (the tree, the branch against its base, a landing, a PR),
+   * as a paragraph after every message. Read as each goes out, and awaited, since the tree is
+   * read for it: a commit from the box or a land a moment ago is what the agent must hear */
+  standing?: () => Promise<string | undefined>;
   /** where the preview stands, as a block after every message; read as each goes out, since the
    * port belongs to the runtime and not to this session */
   preview?: () => string | undefined;
@@ -1141,23 +1145,25 @@ export class AcpSession implements AgentAdapter {
       return;
     }
     const carried = this.carried(live, item.recorded.attachments);
+    const standing = await this.d.standing?.();
     const prefix = live.prefixPending ? SYSTEM_APPEND : undefined;
     live.prefixPending = false;
     const res = await live.conn.ctx.request(acp.methods.agent.session.prompt, {
       sessionId: live.sessionId,
-      prompt: buildPrompt(item.text, this.contextFor(item), prefix, carried),
+      prompt: buildPrompt(item.text, this.contextFor(item, standing), prefix, carried),
     });
     this.endTurn(mapStopReason(res.stopReason));
   }
 
   /** what the shell attached when the message was sent, then what this worktree is called and
-   * which siblings the message names, then where the preview stands now that it is going out and
-   * what its page has thrown, then what landed elsewhere since the last message, wrapped as one
-   * block */
-  private contextFor(item: QueueItem): string | undefined {
+   * where its work stands, which siblings the message names, then where the preview stands now
+   * that it is going out and what its page has thrown, then what landed elsewhere since the last
+   * message, wrapped as one block */
+  private contextFor(item: QueueItem, standing?: string): string | undefined {
     return ambientBlock([
       ...(item.context ?? []),
       this.d.self?.(),
+      standing,
       ...(this.d.mentioned?.(item.text) ?? []),
       this.d.preview?.(),
       this.d.pageErrors?.(),

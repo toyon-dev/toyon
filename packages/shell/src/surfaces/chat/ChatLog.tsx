@@ -48,6 +48,7 @@ import {
 } from "./group.ts";
 import { openCard } from "./handoff.ts";
 import { ImageChip } from "./ImageChip.tsx";
+import { MentionText, openMention } from "./Mentions.tsx";
 import { useMentionDots } from "./mentionDots.ts";
 import { PasteChip } from "./PasteChip.tsx";
 import { PickChip } from "./PickChip.tsx";
@@ -594,7 +595,8 @@ export function ChatLog({
             included, and under it the row below, which is one
             element from the press to the first reply so the mark never restarts */}
         {id && sending?.message && (
-          <div className="msg-user">
+          // biome-ignore lint/a11y/useKeyWithClickEvents: the links inside are the controls; the root only routes their clicks
+          <div className="msg-user" onClick={(e) => openMention(e, root, id, { sock, dispatch })}>
             {sending.message.attachments && (
               <QueuedChips
                 items={sending.message.attachments}
@@ -603,9 +605,9 @@ export function ChatLog({
                 onOpen={(path, line) => openSource(store, sock, id, path, line)}
               />
             )}
-            {/* plain words: a reference becomes a link when the sent row draws it, with the handlers
-                that open it */}
-            {sending.message.text}
+            {/* the references drawn as the sent row will draw them, a worktree by its title, so
+                the bubble does not change its words when the daemon's copy takes its place */}
+            <MentionText text={sending.message.text} worktreeId={id} root={root} />
           </div>
         )}
         {active &&

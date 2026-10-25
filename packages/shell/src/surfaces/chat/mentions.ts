@@ -61,8 +61,11 @@ export function triggerAt(text: string, caret: number, continues?: (query: strin
 export interface MentionIndex {
   files: ReadonlySet<string>;
   folders: ReadonlySet<string>;
-  /** the project's other open worktrees by branch: what `@toyon/foo` names when no file does */
+  /** the project's other worktrees by branch: what `@toyon/foo` names when no file does */
   worktrees: ReadonlyMap<string, WorktreeMention>;
+  /** the same rows with their branch, longest title first, so the longer of two titles that open
+   * alike ("Code review", "Code review again") is the one a reference reads as */
+  titled: readonly (WorktreeMention & { branch: string })[];
 }
 
 /** a worktree a message can name: its row, and the title the mark says; one in the archive opens
@@ -79,7 +82,7 @@ export interface WorktreeMention {
 }
 
 const NO_WORKTREES: ReadonlyMap<string, WorktreeMention> = new Map();
-const NO_INDEX: MentionIndex = { files: new Set(), folders: new Set(), worktrees: NO_WORKTREES };
+const NO_INDEX: MentionIndex = { files: new Set(), folders: new Set(), worktrees: NO_WORKTREES, titled: [] };
 
 // one index per file list: every bubble of a transcript reads the same list, and the folder walk
 // over a large checkout is not a thing to redo per row
@@ -90,13 +93,35 @@ export function mentionIndex(
   files: readonly string[] | undefined,
   worktrees: ReadonlyMap<string, WorktreeMention> = NO_WORKTREES,
 ): MentionIndex {
-  if (!files) return worktrees === NO_WORKTREES ? NO_INDEX : { ...NO_INDEX, worktrees };
-  let index = indexes.get(files);
-  if (!index) {
-    index = { files: new Set(files), folders: new Set(folderList(files)), worktrees: NO_WORKTREES };
-    indexes.set(files, index);
+  let index: MentionIndex | undefined;
+  if (!files) index = NO_INDEX;
+  else {
+    index = indexes.get(files);
+    if (!index) {
+      index = { ...NO_INDEX, files: new Set(files), folders: new Set(folderList(files)) };
+      indexes.set(files, index);
+    }
   }
-  return worktrees === NO_WORKTREES ? index : { ...index, worktrees };
+  if (worktrees === NO_WORKTREES) return index;
+  const titled = [...worktrees]
+    .map(([branch, w]) => ({ ...w, branch }))
+    .sort((a, b) => b.title.length - a.title.length);
+  return { ...index, worktrees, titled };
+}
+
+/** the project's worktrees a chat can name, by branch: the open rows in the rail's order, then
+ * the archive's record of any branch no open row has, so a reference written while a row was
+ * open keeps its mark, and opens the archived page, after the row is archived */
+export function mentionableWorktrees(
+  open: readonly (WorktreeMention & { branch: string })[],
+  archived: readonly { id: string; title: string; branch: string }[] | undefined,
+): Map<string, WorktreeMention> {
+  const out = new Map<string, WorktreeMention>();
+  for (const { branch, ...w } of open) out.set(branch, w);
+  for (const a of archived ?? []) {
+    if (!out.has(a.branch)) out.set(a.branch, { id: a.id, title: a.title, archived: true });
+  }
+  return out;
 }
 
 export type MentionSpan =
@@ -104,12 +129,16 @@ export type MentionSpan =
   | { kind: "file"; text: string; path: string }
   | { kind: "folder"; text: string; path: string }
   | { kind: "changes"; text: string }
-  | ({ kind: "worktree"; text: string } & WorktreeMention);
+  /** `text` is the reference as written, the branch or the title; `branch` is what the agent is sent */
+  | ({ kind: "worktree"; text: string; branch: string } & WorktreeMention);
 
 /** the sigil opens a word, as it must for the menu (`triggerAt`), and the word runs to the next space */
 const MENTION = /(^|\s)(@\S+)/g;
 /** what a sentence hangs on the end of a reference: `see @src/App.tsx.` names the file, not `App.tsx.` */
 const TRAILING = /[.,;:!?)\]}'"]$/;
+/** what may follow a title for it to be the whole reference: the sentence's punctuation, then a
+ * space or the end. `@Code reviewer` does not name "Code review". */
+const AFTER_TITLE = /^[.,;:!?)\]}'"]*(\s|$)/;
 
 function resolve(word: string, index: MentionIndex): MentionSpan | null {
   if (word === "changes") return { kind: "changes", text: "@changes" };
@@ -118,7 +147,20 @@ function resolve(word: string, index: MentionIndex): MentionSpan | null {
   if (folder && index.folders.has(folder)) return { kind: "folder", text: `@${word}`, path: folder };
   // a file wins over a branch of the same name: the path is what the agent reads first
   const wt = index.worktrees.get(word);
-  if (wt) return { kind: "worktree", text: `@${word}`, ...wt };
+  if (wt) return { kind: "worktree", text: `@${word}`, branch: word, ...wt };
+  return null;
+}
+
+/** The worktree whose title the text after a sigil opens with, longest first, read without case
+ * since the menu matches a title typed in any. The reference keeps the characters as written. */
+function resolveTitle(rest: string, index: MentionIndex): MentionSpan | null {
+  const lower = rest.toLowerCase();
+  for (const w of index.titled) {
+    const title = w.title.toLowerCase();
+    if (title && lower.startsWith(title) && AFTER_TITLE.test(rest.slice(title.length))) {
+      return { kind: "worktree", text: `@${rest.slice(0, title.length)}`, ...w };
+    }
+  }
   return null;
 }
 
@@ -145,20 +187,24 @@ export function mentionTip(w: WorktreeMention & { branch?: string; dir?: string 
   return { text: w.title, detail, dot: w.archived ? "archived" : w.dot };
 }
 
-/** Whether the word the caret is in already draws as a mark, sigil included: the menu has nothing
- * to add over one, wherever in the word the caret sits, and open there it takes return for a pick
- * of what is already written instead of the send. The word is judged whole and as the marks judge
- * it, so a title typed as words, a prefix of a branch, and a folder without its slash are still
- * being chosen. */
-export function settled(word: string, index: MentionIndex): boolean {
-  const spans = mentionSpans(word, index);
-  return spans.length === 1 && spans[0]?.kind !== "text";
+/** Whether the sigil at `from` in the draft already opens a mark: the menu has nothing to add over
+ * one, wherever in it the caret sits, and open there it takes return for a pick of what is already
+ * written instead of the send. The draft is read whole and as the marks read it, so a picked title
+ * with its spaces is settled, while a title half typed, a prefix of a branch, and a folder without
+ * its slash are still being chosen. */
+export function settled(text: string, from: number, index: MentionIndex): boolean {
+  let at = 0;
+  for (const s of mentionSpans(text, index)) {
+    if (at === from) return s.kind !== "text";
+    at += s.text.length;
+  }
+  return false;
 }
 
 /** a message split at every `@` reference that names something in the project: a file or folder
- * the index holds, the uncommitted set, or another worktree by its branch. Anything else stays
- * prose, an address included, so the mark says the agent has somewhere to look rather than that
- * a sigil was typed. */
+ * the index holds, the uncommitted set, or another worktree by its branch or its title. Anything
+ * else stays prose, an address included, so the mark says the agent has somewhere to look rather
+ * than that a sigil was typed. */
 export function mentionSpans(text: string, index: MentionIndex): MentionSpan[] {
   const out: MentionSpan[] = [];
   let last = 0;
@@ -170,13 +216,19 @@ export function mentionSpans(text: string, index: MentionIndex): MentionSpan[] {
   };
   for (const m of text.matchAll(MENTION)) {
     const start = m.index + (m[1] ?? "").length;
+    // a reference inside the one before it is that one's words: `@Code review again` is one row
+    if (start < last) continue;
+    // a title runs past the word's space; one of a single word yields to a file or a branch of
+    // its name, the way a branch yields to a file
+    const titled = resolveTitle(text.slice(start + 1), index);
     let word = (m[2] ?? "").slice(1);
-    let hit = resolve(word, index);
+    let hit = titled && /\s/.test(titled.text) ? titled : resolve(word, index);
     // punctuation is peeled from the end until the reference is one the index knows
     while (!hit && TRAILING.test(word)) {
       word = word.slice(0, -1);
       hit = word ? resolve(word, index) : null;
     }
+    hit ??= titled;
     if (!hit) continue;
     push(text.slice(last, start));
     out.push(hit);
@@ -184,6 +236,14 @@ export function mentionSpans(text: string, index: MentionIndex): MentionSpan[] {
   }
   push(text.slice(last));
   return out;
+}
+
+/** the message as the agent reads it: every worktree named by its title is named by its branch,
+ * which is the name the agent is told of and the one that holds when the row is renamed */
+export function asBranches(text: string, index: MentionIndex): string {
+  return mentionSpans(text, index)
+    .map((s) => (s.kind === "worktree" ? `@${s.branch}` : s.text))
+    .join("");
 }
 
 /** the draft with the trigger's span replaced, and where the caret lands after it */

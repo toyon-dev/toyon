@@ -5,7 +5,7 @@ import { useSock, useStore, useStoreInstance } from "../../state/context.tsx";
 import { worktreeById } from "../../state/store.ts";
 import { tip } from "../../ui/Tooltip.tsx";
 import { openChatLink } from "./chatLink.ts";
-import { mentionIndex, mentionSpans, mentionTip, type WorktreeMention } from "./mentions.ts";
+import { mentionableWorktrees, mentionIndex, mentionSpans, mentionTip } from "./mentions.ts";
 import { siblingWorktrees } from "./siblings.ts";
 
 /** a `@` opening a word: the shape a reference has before the file list says whether it is one */
@@ -32,21 +32,15 @@ export function MentionText({
   const store = useStoreInstance();
   const sock = useSock();
   const files = useStore((s) => (worktreeId ? s.local[worktreeId]?.files : undefined));
-  // the project's other open rows by branch, then its archive: a reference written while a row
-  // was open keeps its mark after the row is archived, and opens the archived page, as the
-  // agent's own reference to that row does. A chat with no project resolves none.
+  // the project's other open rows, then its archive, as the agent's own reference to a row
+  // resolves. A chat with no project resolves none.
   const rows = useStore((s) => s.visible);
   const repoId = useStore((s) => worktreeById(s, worktreeId)?.worktree.repoId);
   const archived = useStore((s) => (repoId ? s.archived[repoId] : undefined));
-  const worktrees = useMemo(() => {
-    const out = new Map<string, WorktreeMention>();
-    for (const w of siblingWorktrees(rows, repoId, worktreeId))
-      out.set(w.branch, { id: w.id, title: w.title, dot: w.dot, state: w.state, at: w.at });
-    for (const a of archived ?? []) {
-      if (!out.has(a.branch)) out.set(a.branch, { id: a.id, title: a.title, archived: true });
-    }
-    return out;
-  }, [rows, archived, repoId, worktreeId]);
+  const worktrees = useMemo(
+    () => mentionableWorktrees(siblingWorktrees(rows, repoId, worktreeId), archived),
+    [rows, archived, repoId, worktreeId],
+  );
   const index = useMemo(() => mentionIndex(files, worktrees), [files, worktrees]);
   const spans = useMemo(() => mentionSpans(text, index), [text, index]);
   // a reference with no list to check it against is prose until the list arrives, so the list is
@@ -70,8 +64,7 @@ export function MentionText({
           );
         }
         if (s.kind === "worktree") {
-          const branch = s.text.slice(1);
-          const t = mentionTip({ ...s, branch });
+          const t = mentionTip(s);
           const rowTip = tip(t.text, undefined, { placement: "follow", dot: t.dot, detail: t.detail });
           return (
             <span
@@ -79,14 +72,14 @@ export function MentionText({
               key={i}
               className="chat-mention"
               data-worktree={s.id}
-              data-branch={branch}
+              data-branch={s.branch}
               data-archived={s.archived ? "" : undefined}
               {...rowTip}
             >
               {/* the row's dot after the sigil, and the name as the rail reads it, on the sent
                   message alone: over the field the mark is the draft again in the field's own
-                  metrics, so it is the branch the draft holds, and a dot or a title in it would
-                  shift every mark after it off its word */}
+                  metrics, so it is the draft's characters, the title a pick wrote or a branch
+                  typed by hand, and a dot in it would shift every mark after it off its word */}
               {inField ? (
                 s.text
               ) : (

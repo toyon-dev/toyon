@@ -91,7 +91,15 @@ import { DraftChip } from "./DraftChip.tsx";
 import { HandoffCard } from "./HandoffCard.tsx";
 import { cardLine, openCard, parseHandoffArgs } from "./handoff.ts";
 import { MentionText, openMention } from "./Mentions.tsx";
-import { filterCommands, insertAt, mentionIndex, settled, triggerAt, type WorktreeMention } from "./mentions.ts";
+import {
+  asBranches,
+  filterCommands,
+  insertAt,
+  mentionableWorktrees,
+  mentionIndex,
+  settled,
+  triggerAt,
+} from "./mentions.ts";
 import { dismissOffer, offerOf, useDismissedOffers } from "./offer.ts";
 import { fileWord, useOriginFile } from "./originFile.ts";
 import { browseCommands, isMode, mergeCommands, ownCommandOf, ownCommands } from "./ownCommands.ts";
@@ -192,9 +200,10 @@ function emptyMenu(
 function insertionFor(r: Row): string {
   if (r.kind === "cmd") return `/${r.c.name} `; // verbatim: the adapter re-expands mcp: names
   if (r.kind === "folder") return `@${r.path}/ `;
-  // a worktree goes in by its branch, which has no spaces in it where a title has; the mark over
-  // the field says which row it is
-  if (r.kind === "worktree") return `@${r.branch} `;
+  // a worktree goes in by its title, the name the rail and the sent message read it by; the mark
+  // over the field underlines the whole of it, spaces and all, and the send writes the branch in
+  // its place for the agent (asBranches)
+  if (r.kind === "worktree") return `@${r.title} `;
   return r.kind === "changes" ? "@changes " : `@${r.path} `;
 }
 
@@ -391,19 +400,22 @@ export function Composer({
   // another worktree did and offers the ones last sent to first
   const railRows = useStore((s) => s.visible);
   const siblings = useMemo(() => siblingWorktrees(railRows, repoId, id), [railRows, repoId, id]);
-  // what a `@` word in the draft can name, read as the marks over the field read it (Mentions.tsx)
-  const siblingMentions = useMemo(
-    () => new Map<string, WorktreeMention>(siblings.map((w) => [w.branch, { id: w.id, title: w.title }])),
-    [siblings],
-  );
-  const mentions = useMemo(() => mentionIndex(files, siblingMentions), [files, siblingMentions]);
-  // the names a paste can spell a worktree by: the rows above, then the archive, so a branch or a
-  // `wt-xxxx` copied from a terminal names a row archived since, as the written reference does
+  // the archive, which a reference written while the row was open still names, as does a paste
+  // of its branch or its `wt-xxxx` directory copied from a terminal
   const archivedRows = useStore((s) => (repoId ? s.archived[repoId] : undefined));
+  // what a `@` in the draft can name, read as the marks over the field read it (Mentions.tsx):
+  // what the menu settles on, and what the send rewrites to a branch
+  const siblingMentions = useMemo(() => mentionableWorktrees(siblings, archivedRows), [siblings, archivedRows]);
+  const mentions = useMemo(() => mentionIndex(files, siblingMentions), [files, siblingMentions]);
+  // the names a paste can spell a worktree by: the rows above, then the archive
   const worktreeNames = useMemo(
     () => [
       ...siblings,
-      ...(archivedRows ?? []).map((a) => ({ branch: a.branch, dir: a.path.slice(a.path.lastIndexOf("/") + 1) })),
+      ...(archivedRows ?? []).map((a) => ({
+        title: a.title,
+        branch: a.branch,
+        dir: a.path.slice(a.path.lastIndexOf("/") + 1),
+      })),
     ],
     [siblings, archivedRows],
   );
@@ -566,14 +578,14 @@ export function Composer({
   }, [triggerKind, triggerQuery, files, folders, git, commands, ownRows, siblings]);
   // Opens even with nothing to show: an empty menu that says why beats a `/` that does nothing. Not
   // over a walked-back message: a recalled `/compact` was sent, not typed, and the menu would take
-  // the arrows the walk is using. Not over a `@` word that already draws as a mark (settled), with
-  // the caret anywhere in it: the mark says it resolved, and the menu's live first row would take
-  // return for a pick of the same word where the hand meant the send.
+  // the arrows the walk is using. Not over a `@` that already opens a mark (settled), with the
+  // caret anywhere in it: the mark says it resolved, and the menu's live first row would take
+  // return for a pick of the same words where the hand meant the send.
   const menuOpen =
     trigger !== null &&
     trigger.from !== dismissed &&
     !walk &&
-    !(trigger.kind === "file" && settled(text.slice(trigger.from, trigger.to), mentions));
+    !(trigger.kind === "file" && settled(text, trigger.from, mentions));
   // the agent's rows a bare `/` leaves out, said on the menu's key strip so they are not lost
   const more =
     triggerKind === "command" && triggerQuery !== undefined && !triggerQuery.trim()
@@ -1087,9 +1099,12 @@ export function Composer({
       );
       return;
     }
+    // the message as the agent reads it: a worktree the draft names by its title is named by its
+    // branch, the name the agent is told of; the bubble draws the branch as the title again
+    const message = asBranches(text.trim(), mentions);
     // the message as the row shows it on its way: the words and the chips the frame carries
     const taken = (): QueuedMessage => ({
-      text: text.trim(),
+      text: message,
       attachments: attachments.length ? attachments.map(toInput) : undefined,
     });
     // into an archived chat: one frame restores the worktree and hands the message to its agent,
@@ -1103,9 +1118,9 @@ export function Composer({
         return;
       }
       const frame: HeldFrame = { t: "restore-worktree", archiveId: archived.id, clientId };
-      if (uploading) return hold(boxId, boxId, text.trim(), frame);
+      if (uploading) return hold(boxId, boxId, message, frame);
       leaveBox();
-      sock?.send(fillFrame(frame, boxId, text.trim(), attachments));
+      sock?.send(fillFrame(frame, boxId, message, attachments));
       dispatch({ a: "sending", id: boxId, message: taken() });
       dispatch({ a: "sent-box", id: boxId });
       return;
@@ -1120,9 +1135,9 @@ export function Composer({
         return;
       }
       const frame: HeldFrame = { t: "adopt-worktree", worktreeId: found.id, clientId };
-      if (uploading) return hold(boxId, boxId, text.trim(), frame);
+      if (uploading) return hold(boxId, boxId, message, frame);
       leaveBox();
-      sock?.send(fillFrame(frame, boxId, text.trim(), attachments));
+      sock?.send(fillFrame(frame, boxId, message, attachments));
       dispatch({ a: "sending", id: boxId, message: taken() });
       dispatch({ a: "sent-box", id: boxId });
       return;
@@ -1154,7 +1169,7 @@ export function Composer({
       setText("");
       return;
     }
-    const prompt = typed ? typed.args : text.trim();
+    const prompt = typed ? asBranches(typed.args, mentions) : message;
     const context = buildContext();
     const sent = attachments.length ? attachments.map(toInput) : undefined;
     // a typed mode is the chip's next value too, so the box remembers it the way the chip does

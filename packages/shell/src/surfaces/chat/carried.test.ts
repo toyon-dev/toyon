@@ -15,8 +15,10 @@ describe("what a dragged row writes", () => {
       }),
     ).toBe("@src/App.tsx @src/ui/ ");
   });
-  test("a worktree goes in by its branch, as the @ menu writes it", () => {
-    expect(carriedWords({ kind: "worktree", worktreeId: "w2", branch: "toyon/flash-bug" })).toBe("@toyon/flash-bug ");
+  test("a worktree goes in by its title, as the @ menu writes it", () => {
+    expect(
+      carriedWords({ kind: "worktree", worktreeId: "w2", title: "Message flash bug", branch: "toyon/flash-bug" }),
+    ).toBe("@Message flash bug ");
   });
 });
 

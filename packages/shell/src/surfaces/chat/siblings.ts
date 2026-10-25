@@ -44,17 +44,21 @@ export function siblingWorktrees(
   return out;
 }
 
-/** The reference a paste of a worktree's name stands for, `@branch` with the space that lets the
- * sentence go on, or null for any other text. Only a name pasted whole and alone counts: the
- * branch, or the directory `wt-xxxx` that a terminal, a path and the agent's prose spell the
- * worktree by. The sentence's own `@branch` is already the reference and pastes as typed; a name
- * inside other words is those words, and pastes as they are. The names are read in the order
- * given, so a row open now wins over the archive's record of the same branch. */
-export function pastedWorktree(text: string, names: readonly Pick<Sibling, "branch" | "dir">[]): string | null {
+/** The reference a paste of a worktree's name stands for, `@title` as the `@` menu writes one,
+ * with the space that lets the sentence go on, or null for any other text. Only a name pasted
+ * whole and alone counts: the branch, or the directory `wt-xxxx` that a terminal, a path and the
+ * agent's prose spell the worktree by. The sentence's own `@branch` is already the reference and
+ * pastes as typed; a name inside other words is those words, and pastes as they are. The names
+ * are read in the order given, so a row open now wins over the archive's record of the same
+ * branch. */
+export function pastedWorktree(
+  text: string,
+  names: readonly Pick<Sibling, "title" | "branch" | "dir">[],
+): string | null {
   const name = text.trim();
   if (!name || /\s/.test(name)) return null;
   const hit = names.find((w) => w.branch === name || w.dir === name);
-  return hit ? `@${hit.branch} ` : null;
+  return hit ? `@${hit.title} ` : null;
 }
 
 /** The reference text put into the field whole without a paste stands for, read as pastedWorktree
@@ -62,7 +66,10 @@ export function pastedWorktree(text: string, names: readonly Pick<Sibling, "bran
  * the browser sees an insert and no paste. A tapped word suggestion is the same kind of insert, so
  * only a name no keyboard would offer as a word counts: one with a slash or a dash in it, which
  * every branch and every `wt-xxxx` directory has. */
-export function insertedWorktree(text: string, names: readonly Pick<Sibling, "branch" | "dir">[]): string | null {
+export function insertedWorktree(
+  text: string,
+  names: readonly Pick<Sibling, "title" | "branch" | "dir">[],
+): string | null {
   return /[/-]/.test(text) ? pastedWorktree(text, names) : null;
 }
 

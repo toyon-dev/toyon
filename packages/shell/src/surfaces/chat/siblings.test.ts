@@ -96,23 +96,26 @@ describe("matchesSibling", () => {
 
 describe("pastedWorktree", () => {
   const names = [
-    { branch: "toyon/code-review", dir: "wt-d55a" },
-    { branch: "toyon/flash-bug", dir: "wt-108c" },
+    { title: "Code review", branch: "toyon/code-review", dir: "wt-d55a" },
+    { title: "Message flash bug", branch: "toyon/flash-bug", dir: "wt-108c" },
   ];
 
-  test("a branch or a directory pasted whole becomes the reference, with the space that lets the sentence go on", () => {
-    expect(pastedWorktree("toyon/code-review", names)).toBe("@toyon/code-review ");
-    expect(pastedWorktree("wt-108c", names)).toBe("@toyon/flash-bug ");
+  test("a branch or a directory pasted whole becomes the reference by title, with the space that lets the sentence go on", () => {
+    expect(pastedWorktree("toyon/code-review", names)).toBe("@Code review ");
+    expect(pastedWorktree("wt-108c", names)).toBe("@Message flash bug ");
     // a terminal's copy brings its line end along
-    expect(pastedWorktree("toyon/code-review\n", names)).toBe("@toyon/code-review ");
+    expect(pastedWorktree("toyon/code-review\n", names)).toBe("@Code review ");
   });
 
   test("the first of two records with the name wins: the row open now over the archive's", () => {
-    const twice = [...names, { branch: "toyon/code-review", dir: "wt-0000" }];
-    expect(pastedWorktree("wt-0000", twice)).toBe("@toyon/code-review ");
-    expect(pastedWorktree("toyon/code-review", [{ branch: "toyon/code-review", dir: "wt-9999" }, ...names])).toBe(
-      "@toyon/code-review ",
-    );
+    const twice = [...names, { title: "Code review before", branch: "toyon/code-review", dir: "wt-0000" }];
+    expect(pastedWorktree("wt-0000", twice)).toBe("@Code review before ");
+    expect(
+      pastedWorktree("toyon/code-review", [
+        { title: "Code review before", branch: "toyon/code-review", dir: "wt-9999" },
+        ...names,
+      ]),
+    ).toBe("@Code review before ");
   });
 
   test("anything else pastes as it is: a name among words, a reference already written, a stranger, nothing", () => {
@@ -128,13 +131,13 @@ describe("pastedWorktree", () => {
 
 describe("insertedWorktree", () => {
   const names = [
-    { branch: "toyon/code-review", dir: "wt-d55a" },
-    { branch: "fixes", dir: "wt-108c" },
+    { title: "Code review", branch: "toyon/code-review", dir: "wt-d55a" },
+    { title: "Fixes", branch: "fixes", dir: "wt-108c" },
   ];
 
   test("a keyboard's clipboard key putting a branch or directory in whole reads as the paste would", () => {
-    expect(insertedWorktree("toyon/code-review", names)).toBe("@toyon/code-review ");
-    expect(insertedWorktree("wt-108c", names)).toBe("@fixes ");
+    expect(insertedWorktree("toyon/code-review", names)).toBe("@Code review ");
+    expect(insertedWorktree("wt-108c", names)).toBe("@Fixes ");
   });
 
   test("a name a keyboard could offer as a word suggestion does not: typing never tags", () => {

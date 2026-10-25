@@ -4,11 +4,11 @@ import type { Store } from "../../state/context.tsx";
 import { dropBox, endFileDrag, fileDragRefused, noteFileDrag } from "./useIntake.ts";
 
 /** What a row of toyon's own carries while it is dragged: files of one worktree (a files-tab row,
- * a changes row or the checked set behind it, the editor's head), or a worktree by its branch (a
- * rail row). Either lands in the composer as the mention the `@` menu would write. */
+ * a changes row or the checked set behind it, the editor's head), or a worktree (a rail row).
+ * Either lands in the composer as the mention the `@` menu would write. */
 export type Carried =
   | { kind: "paths"; worktreeId: string; items: readonly { path: string; folder: boolean }[] }
-  | { kind: "worktree"; worktreeId: string; branch: string };
+  | { kind: "worktree"; worktreeId: string; title: string; branch: string };
 
 /** the type the drag goes out under, beside text/plain for anywhere outside toyon */
 export const MENTION_MIME = "application/x-toyon-mention";
@@ -17,9 +17,10 @@ export const MENTION_MIME = "application/x-toyon-mention";
  * dragover whether it takes this one, so the row says here what it carries. */
 let carried: Carried | null = null;
 
-/** the words a carried drag writes, each a mention, with the space that ends the last one */
+/** the words a carried drag writes, each a mention, with the space that ends the last one: a
+ * worktree by its title, as the `@` menu writes it */
 export function carriedWords(c: Carried): string {
-  return c.kind === "worktree" ? `@${c.branch} ` : mentionRun(c.items);
+  return c.kind === "worktree" ? `@${c.title} ` : mentionRun(c.items);
 }
 
 /** what a drop outside toyon reads: the paths as a terminal takes them, or the branch */

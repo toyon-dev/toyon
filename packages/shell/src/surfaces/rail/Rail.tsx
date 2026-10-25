@@ -432,10 +432,13 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
     const origin = owned ? originOf(owned) : null;
     const otherRepo = owned ? otherRepoOf(owned) : null;
     const showCheck = owned && !otherRepo && graftMode && canGraft(owned.worktree) && id !== activeId;
-    // what the row carries when dragged to the chat: its branch, for a row the `@` menu lists, which
+    // what the row carries when dragged to the chat: itself, for a row the `@` menu lists, which
     // is a worktree of this project. Main and the spare have no chat of their own to point at, and
-    // the composer resolves no other project's branch.
-    const carried = owned && owned.worktree.kind === "worktree" && !otherRepo ? owned.worktree.branch : null;
+    // the composer resolves no other project's rows.
+    const carried =
+      owned && owned.worktree.kind === "worktree" && !otherRepo
+        ? { title: owned.worktree.title, branch: owned.worktree.branch }
+        : null;
     // a landing op out from this row takes the dot's slot, and with it the row's word: the tip
     // and the line under the name say what the spinner is doing, not the state it covers
     const op = shipShown(w, shipping[id]?.op);
@@ -498,10 +501,10 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
               },
             ))}
         data-wt={id}
-        // the row dragged to the chat names its worktree by branch, as the `@` menu does (carried)
+        // the row dragged to the chat names its worktree by title, as the `@` menu does (carried)
         draggable={carried !== null}
         onDragStart={
-          carried !== null ? (e) => startCarry(e, { kind: "worktree", worktreeId: id, branch: carried }) : undefined
+          carried !== null ? (e) => startCarry(e, { kind: "worktree", worktreeId: id, ...carried }) : undefined
         }
         onDragEnd={() => endCarry(store)}
         // a found row walks the found list, an owned one the worktrees above it (walkKey)

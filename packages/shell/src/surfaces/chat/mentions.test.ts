@@ -1,5 +1,16 @@
 import { describe, expect, test } from "bun:test";
-import { filterCommands, insertAt, mentionIndex, mentionSpans, mentionTip, settled, triggerAt } from "./mentions.ts";
+import {
+  asBranches,
+  filterCommands,
+  insertAt,
+  type MentionSpan,
+  mentionableWorktrees,
+  mentionIndex,
+  mentionSpans,
+  mentionTip,
+  settled,
+  triggerAt,
+} from "./mentions.ts";
 
 // caret is written as | in the case names; the tests pass the index directly
 const at = (text: string, caret = text.length) => triggerAt(text, caret);
@@ -191,28 +202,83 @@ describe("mentionSpans: the references in a sent message", () => {
   test("another worktree of the project resolves by its branch, with the sentence's punctuation left out", () => {
     const worktrees = new Map([["toyon/flash-bug", { id: "w1", title: "Message flash bug" }]]);
     const withRows = mentionIndex(["README.md"], worktrees);
+    const flash: MentionSpan = {
+      kind: "worktree",
+      text: "@toyon/flash-bug",
+      branch: "toyon/flash-bug",
+      id: "w1",
+      title: "Message flash bug",
+    };
     expect(mentionSpans("do what @toyon/flash-bug did, here.", withRows)).toEqual([
       { kind: "text", text: "do what " },
-      { kind: "worktree", text: "@toyon/flash-bug", id: "w1", title: "Message flash bug" },
+      flash,
       { kind: "text", text: " did, here." },
     ]);
     // an archived row resolves too, and says so, so its mark opens the archived page
     const gone = new Map([["toyon/stay-awake", { id: "w2", title: "Stay awake", archived: true as const }]]);
     expect(mentionSpans("@toyon/stay-awake", mentionIndex(undefined, gone))).toEqual([
-      { kind: "worktree", text: "@toyon/stay-awake", id: "w2", title: "Stay awake", archived: true },
+      {
+        kind: "worktree",
+        text: "@toyon/stay-awake",
+        branch: "toyon/stay-awake",
+        id: "w2",
+        title: "Stay awake",
+        archived: true,
+      },
     ]);
     // no file list yet: the worktrees still resolve
-    expect(mentionSpans("@toyon/flash-bug", mentionIndex(undefined, worktrees))).toEqual([
-      { kind: "worktree", text: "@toyon/flash-bug", id: "w1", title: "Message flash bug" },
-    ]);
+    expect(mentionSpans("@toyon/flash-bug", mentionIndex(undefined, worktrees))).toEqual([flash]);
     expect(mentionSpans("@toyon/other", withRows)).toEqual([{ kind: "text", text: "@toyon/other" }]);
   });
 
-  test("a file of the branch's name is the file", () => {
-    const worktrees = new Map([["README.md", { id: "w1", title: "Readme" }]]);
-    expect(mentionSpans("@README.md", mentionIndex(["README.md"], worktrees))).toEqual([
-      { kind: "file", text: "@README.md", path: "README.md" },
+  test("a worktree resolves by its title too, spaces and all, as the @ menu writes it", () => {
+    const worktrees = new Map([
+      ["toyon/code-review", { id: "w1", title: "Code review" }],
+      ["toyon/code-review-2", { id: "w2", title: "Code review again" }],
+      ["toyon/fixes", { id: "w3", title: "Fixes" }],
     ]);
+    const index = mentionIndex(["README.md"], worktrees);
+    const review: MentionSpan = {
+      kind: "worktree",
+      text: "@Code review",
+      branch: "toyon/code-review",
+      id: "w1",
+      title: "Code review",
+    };
+    expect(mentionSpans("do what @Code review did, here.", index)).toEqual([
+      { kind: "text", text: "do what " },
+      review,
+      { kind: "text", text: " did, here." },
+    ]);
+    // the longer of two titles that open alike is the one named; the punctuation after it is the sentence's
+    expect(mentionSpans("see @Code review again.", index)).toEqual([
+      { kind: "text", text: "see " },
+      {
+        kind: "worktree",
+        text: "@Code review again",
+        branch: "toyon/code-review-2",
+        id: "w2",
+        title: "Code review again",
+      },
+      { kind: "text", text: "." },
+    ]);
+    // a title typed in any case keeps its characters; a word that runs past the title names nothing
+    expect(mentionSpans("@code review", index)[0]).toEqual({ ...review, text: "@code review" });
+    expect(mentionSpans("@Code reviewer", index)).toEqual([{ kind: "text", text: "@Code reviewer" }]);
+    expect(mentionSpans("@Code", index)).toEqual([{ kind: "text", text: "@Code" }]);
+    // a title of one word reads as a word: the sentence's punctuation is left out
+    expect(mentionSpans("try @Fixes, then", index)).toEqual([
+      { kind: "text", text: "try " },
+      { kind: "worktree", text: "@Fixes", branch: "toyon/fixes", id: "w3", title: "Fixes" },
+      { kind: "text", text: ", then" },
+    ]);
+  });
+
+  test("a file of the branch's name is the file, and of a one-word title's name too", () => {
+    const worktrees = new Map([["README.md", { id: "w1", title: "Readme" }]]);
+    const index = mentionIndex(["README.md", "Readme"], worktrees);
+    expect(mentionSpans("@README.md", index)).toEqual([{ kind: "file", text: "@README.md", path: "README.md" }]);
+    expect(mentionSpans("@Readme", index)).toEqual([{ kind: "file", text: "@Readme", path: "Readme" }]);
   });
 
   test("a live row's mark carries what the rail says of it; an archived one has nothing to carry", () => {
@@ -220,8 +286,51 @@ describe("mentionSpans: the references in a sent message", () => {
       ["toyon/fix", { id: "w1", title: "Fix", dot: "working" as const, state: "Agent working", at: 5 }],
     ]);
     expect(mentionSpans("@toyon/fix", mentionIndex(undefined, live))).toEqual([
-      { kind: "worktree", text: "@toyon/fix", id: "w1", title: "Fix", dot: "working", state: "Agent working", at: 5 },
+      {
+        kind: "worktree",
+        text: "@toyon/fix",
+        branch: "toyon/fix",
+        id: "w1",
+        title: "Fix",
+        dot: "working",
+        state: "Agent working",
+        at: 5,
+      },
     ]);
+  });
+});
+
+describe("asBranches: the message as the agent reads it", () => {
+  const index = mentionIndex(
+    ["src/App.tsx"],
+    new Map([
+      ["toyon/code-review", { id: "w1", title: "Code review" }],
+      ["toyon/gone", { id: "w2", title: "Gone", archived: true as const }],
+    ]),
+  );
+
+  test("a worktree named by its title is named by its branch; everything else stays as written", () => {
+    expect(asBranches("do what @Code review did to @src/App.tsx, see @toyon/gone.", index)).toBe(
+      "do what @toyon/code-review did to @src/App.tsx, see @toyon/gone.",
+    );
+    expect(asBranches("@code review again", index)).toBe("@toyon/code-review again");
+    expect(asBranches("ask @kyle about @Code reviewer", index)).toBe("ask @kyle about @Code reviewer");
+    expect(asBranches("", index)).toBe("");
+  });
+});
+
+describe("mentionableWorktrees: what a chat's references resolve against", () => {
+  test("the open rows by branch, then the archive's record of any branch no open row has", () => {
+    const open = [{ branch: "toyon/a", id: "w1", title: "A", dot: "idle" as const, state: "Idle", at: 3 }];
+    const archived = [
+      { id: "w0", title: "A before", branch: "toyon/a" },
+      { id: "w9", title: "Gone", branch: "toyon/gone" },
+    ];
+    expect([...mentionableWorktrees(open, archived)]).toEqual([
+      ["toyon/a", { id: "w1", title: "A", dot: "idle", state: "Idle", at: 3 }],
+      ["toyon/gone", { id: "w9", title: "Gone", archived: true }],
+    ]);
+    expect(mentionableWorktrees([], undefined).size).toBe(0);
   });
 });
 
@@ -271,24 +380,36 @@ describe("settled: the menu over a word that already draws as a mark", () => {
   );
 
   test("the whole word is a branch, the changes set, a file or a folder", () => {
-    expect(settled("@toyon/code-review", index)).toBe(true);
-    expect(settled("@changes", index)).toBe(true);
-    expect(settled("@src/App.tsx", index)).toBe(true);
-    expect(settled("@src/", index)).toBe(true);
-    expect(settled("@src", index)).toBe(true);
+    expect(settled("@toyon/code-review", 0, index)).toBe(true);
+    expect(settled("@changes", 0, index)).toBe(true);
+    expect(settled("@src/App.tsx", 0, index)).toBe(true);
+    expect(settled("@src/", 0, index)).toBe(true);
+    expect(settled("@src", 0, index)).toBe(true);
   });
 
-  test("still being chosen: a title as words, a prefix of a branch, a stranger", () => {
-    expect(settled("@Code review", index)).toBe(false);
-    expect(settled("@toyon/code", index)).toBe(false);
-    expect(settled("@toyon/other", index)).toBe(false);
-    expect(settled("@", index)).toBe(false);
+  test("a title as the pick wrote it, spaces and all, is settled wherever the caret sits in it", () => {
+    const text = "see @Code review again btw";
+    expect(settled(text, 4, index)).toBe(true);
+    const names = (q: string) => "code review again".startsWith(q.toLowerCase().trimEnd());
+    for (const caret of [7, 13, 22]) {
+      const t = triggerAt(text, caret, names);
+      expect(t?.from).toBe(4);
+      expect(t && settled(text, t.from, index)).toBe(true);
+    }
+  });
+
+  test("still being chosen: a title half typed, a prefix of a branch, a stranger", () => {
+    expect(settled("@Code rev", 0, index)).toBe(false);
+    expect(settled("@toyon/code", 0, index)).toBe(false);
+    expect(settled("@toyon/other", 0, index)).toBe(false);
+    expect(settled("@", 0, index)).toBe(false);
+    // a sigil that is not the one asked about says nothing for it
+    expect(settled("@toyon/code-review @x", 19, index)).toBe(false);
   });
 
   test("the word is read whole, so the caret's place in it does not matter", () => {
-    // the composer hands over the span from the sigil to the next space, wherever the caret is
     const text = "see @toyon/code-review btw";
     const t = triggerAt(text, 11);
-    expect(t && settled(text.slice(t.from, t.to), index)).toBe(true);
+    expect(t && settled(text, t.from, index)).toBe(true);
   });
 });

@@ -57,6 +57,15 @@ export function pastedWorktree(text: string, names: readonly Pick<Sibling, "bran
   return hit ? `@${hit.branch} ` : null;
 }
 
+/** The reference text put into the field whole without a paste stands for, read as pastedWorktree
+ * reads a paste. A phone keyboard's clipboard key commits the copy the way it commits a word, so
+ * the browser sees an insert and no paste. A tapped word suggestion is the same kind of insert, so
+ * only a name no keyboard would offer as a word counts: one with a slash or a dash in it, which
+ * every branch and every `wt-xxxx` directory has. */
+export function insertedWorktree(text: string, names: readonly Pick<Sibling, "branch" | "dir">[]): string | null {
+  return /[/-]/.test(text) ? pastedWorktree(text, names) : null;
+}
+
 /** letters and digits alone, so a title typed as its slug, with dashes, or run together all read
  * as the title; the words of a title typed with their spaces read the same way */
 const plain = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { OwnedWorktree } from "@toyon/shared";
-import { matchesSibling, pastedWorktree, siblingWorktrees } from "./siblings.ts";
+import { insertedWorktree, matchesSibling, pastedWorktree, siblingWorktrees } from "./siblings.ts";
 
 const row = (
   id: string,
@@ -111,5 +111,24 @@ describe("pastedWorktree", () => {
     expect(pastedWorktree("wt-d55a/packages", names)).toBeNull();
     expect(pastedWorktree("  ", names)).toBeNull();
     expect(pastedWorktree("toyon/code-review", [])).toBeNull();
+  });
+});
+
+describe("insertedWorktree", () => {
+  const names = [
+    { branch: "toyon/code-review", dir: "wt-d55a" },
+    { branch: "fixes", dir: "wt-108c" },
+  ];
+
+  test("a keyboard's clipboard key putting a branch or directory in whole reads as the paste would", () => {
+    expect(insertedWorktree("toyon/code-review", names)).toBe("@toyon/code-review ");
+    expect(insertedWorktree("wt-108c", names)).toBe("@fixes ");
+  });
+
+  test("a name a keyboard could offer as a word suggestion does not: typing never tags", () => {
+    expect(insertedWorktree("fixes", names)).toBeNull();
+    // a typed character, or a name among words, as with a paste
+    expect(insertedWorktree("t", names)).toBeNull();
+    expect(insertedWorktree("see toyon/code-review", names)).toBeNull();
   });
 });

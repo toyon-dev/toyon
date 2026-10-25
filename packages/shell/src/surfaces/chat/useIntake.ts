@@ -1,5 +1,5 @@
 import { FILE_MAX_CHARS, isLead, isLongPaste, limitMessage } from "@toyon/shared";
-import { useEffect, useRef } from "react";
+import { type RefObject, useEffect, useRef } from "react";
 import { type Copied, clipboardOfferDone, clipboardPasted } from "../../app/clipboardOffer.ts";
 import { readCopiedSource } from "../../app/copiedSource.ts";
 import { createFile, nextSeq } from "../../state/actions/file.ts";
@@ -426,4 +426,34 @@ export function useComposerPaste(
     attachText(store, boxId, text, source ? { source } : {});
   };
   return { onPaste, onPasteKey, onPasteKeyUp };
+}
+
+/**
+ * Text the field is given whole without a paste. A phone keyboard's clipboard key is no paste to
+ * the browser: the keyboard commits the copied text in one insert, the way it commits a word, and
+ * no paste event carries it, so useComposerPaste never sees it. Every insert that arrives whole
+ * outside a composition is shown to `take`, which says with true that it put the text in itself.
+ * A native listener, since React's onBeforeInput is built on the older textInput event and does
+ * not say what kind of insert it is. On `root`, which stays mounted while `field` comes and goes
+ * behind a card.
+ */
+export function useWholeInsert(
+  root: RefObject<HTMLElement | null>,
+  field: RefObject<HTMLTextAreaElement | null>,
+  take: (text: string) => boolean,
+) {
+  const latest = useRef(take);
+  latest.current = take;
+  useEffect(() => {
+    const el = root.current;
+    if (!el) return;
+    const onBeforeInput = (e: Event) => {
+      const { inputType, data, isComposing } = e as InputEvent;
+      if (e.target !== field.current || isComposing || !data) return;
+      if (inputType !== "insertText" && inputType !== "insertFromPaste") return;
+      if (latest.current(data)) e.preventDefault();
+    };
+    el.addEventListener("beforeinput", onBeforeInput);
+    return () => el.removeEventListener("beforeinput", onBeforeInput);
+  }, [root, field]);
 }

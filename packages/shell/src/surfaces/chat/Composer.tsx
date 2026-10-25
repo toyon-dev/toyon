@@ -101,11 +101,11 @@ import { type PiecesItem, piecesLine } from "./pieces.ts";
 import { QuestionCard } from "./QuestionCard.tsx";
 import { type Step, stepWalk, type WalkKey } from "./recall.ts";
 import { shellCommandOf, shellContext } from "./shellMode.ts";
-import { matchesSibling, pastedWorktree, type Sibling, siblingWorktrees } from "./siblings.ts";
+import { insertedWorktree, matchesSibling, pastedWorktree, type Sibling, siblingWorktrees } from "./siblings.ts";
 import { UsageMeters, UsagePanel } from "./UsagePanel.tsx";
 import { compactAdvice, compactNudge, limitLevel, limitSummary } from "./usage.ts";
 import { useAgentCheck } from "./useAgentCheck.ts";
-import { attachCopied, pickAttachments, useComposerPaste } from "./useIntake.ts";
+import { attachCopied, pickAttachments, useComposerPaste, useWholeInsert } from "./useIntake.ts";
 import { usePlanTitle } from "./usePlanTitle.ts";
 
 /** a frozen empty list, so a selector returning it does not read as a change every render */
@@ -576,6 +576,8 @@ export function Composer({
       : 0;
 
   const composerRef = useRef<HTMLTextAreaElement>(null);
+  // the composer's own box, which stays while the field gives way to a card
+  const rootRef = useRef<HTMLDivElement>(null);
   // the marks over the field scroll with it, or a long draft's underlines sit under the wrong words
   const marksRef = useRef<HTMLDivElement>(null);
   /** words that arrive whole, by a drop or a paste, put into the draft over `from`..`to` with the
@@ -591,14 +593,19 @@ export function Composer({
       setCaret(after);
     });
   };
-  const { onPaste, onPasteKey, onPasteKeyUp } = useComposerPaste(boxId, id, (pasted) => {
-    // a worktree's name pasted on its own is a reference to it, and goes in as one
-    const words = pastedWorktree(pasted, worktreeNames);
+  /** a worktree's name arriving on its own is a reference to it, and goes in as one: `words` is
+   * the reference the name was read as, or null for any other text, which goes in as it is */
+  const takeWorktreeName = (words: string | null) => {
     const el = composerRef.current;
     if (!words || !el) return false;
     placeWords(el, el.selectionStart, el.selectionEnd, words);
     return true;
-  });
+  };
+  const { onPaste, onPasteKey, onPasteKeyUp } = useComposerPaste(boxId, id, (pasted) =>
+    takeWorktreeName(pastedWorktree(pasted, worktreeNames)),
+  );
+  // a phone keyboard's clipboard key puts the name in without a paste
+  useWholeInsert(rootRef, composerRef, (text) => takeWorktreeName(insertedWorktree(text, worktreeNames)));
   // the keyboard's place in the box: the ask while one is up, else the textarea
   const focusBox = () => (cardRef.current ?? composerRef.current)?.focus();
   const refocus = focusBox;
@@ -1289,6 +1296,7 @@ export function Composer({
 
   return (
     <div
+      ref={rootRef}
       className={cx("composer chat-input", stopShown && "stopping", foldable && "foldable", lean && "lean")}
       onFocus={(e) => setTyping(e.target instanceof HTMLTextAreaElement)}
       onBlur={() => setTyping(false)}

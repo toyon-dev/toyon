@@ -8,24 +8,25 @@
 import {
   type AgentEvent,
   coalesce,
+  type HelloFull,
   type PairedMachine,
   PROTOCOL_VERSION,
-  type ServerMsg,
+  type Stamps,
   type TranscriptEntry,
   type TrunkStatus,
   type WorktreeStatus,
 } from "@toyon/shared";
 
-export type HelloMsg = Extract<ServerMsg, { t: "hello" }>;
-
 /** The hello less what is heavy or the daemon's alone. Left out: themes (the painted one is cached
  * by theme.ts and the store starts with the built-in list; the rest come with the next hello),
- * drafts and attachments (the daemon owns those), knocks and letIn, self, update, pending.
- * Everything cheap stays, since a recalled hello that invents `install` or `gitIdentity` drives
- * the settings card and the new-project view into the wrong branch. */
+ * drafts and attachments (the daemon owns those), knocks and letIn, self, update, pending, and the
+ * stamps: the rows come back stilled (below), so the page cannot vouch for them as the daemon sent
+ * them, and a stamp it cannot send is not worth keeping. Everything cheap stays, since a recalled
+ * hello that invents `install` or `gitIdentity` drives the settings card and the new-project view
+ * into the wrong branch. */
 export type HelloSnapshot = Omit<
-  HelloMsg,
-  "t" | "themes" | "drafts" | "attachments" | "knocks" | "letIn" | "self" | "update" | "pending"
+  HelloFull,
+  "t" | "same" | "themes" | "drafts" | "attachments" | "knocks" | "letIn" | "self" | "update" | "pending" | "stamps"
 > & {
   /** when this was heard, epoch ms: what the bar's line says the age from */
   at: number;
@@ -37,9 +38,8 @@ export interface ChatSnapshot {
   /** the tail of the transcript, coalesced the way the daemon's backfill is (shared `coalesce`),
    * so the cap counts rows a reader sees and not streamed tokens */
   events: TranscriptEntry[];
-  /** the highest raw seq heard, live frames included: a delta protocol's `since`. A backfill's
-   * coalesced entries carry the run's first seq, so after a backfill alone this is a floor, not
-   * the truth; the backfill frame gains a `last` when the protocol does */
+  /** the highest raw seq heard: the backfill's `last`, then every live frame's. What the next
+   * subscribe sends as `since`, so the daemon answers with the tail alone. */
   seq: number;
   /** what was typed into the box and not sent; on reconnect it wins over the daemon's draft for
    * that box, as a draft typed during a drop does today */
@@ -91,18 +91,23 @@ export function snapshotOf(s: MachineFacts, at: number): HelloSnapshot | null {
 /** a snapshot this build can read: written by a page speaking the same protocol */
 export const recallable = (s: { protocol: number } | null | undefined): boolean => s?.protocol === PROTOCOL_VERSION;
 
+/** the stamps of a page that can vouch for nothing: what a recalled hello carries, since its rows
+ * are stilled and not what the daemon sent */
+export const NO_STAMPS: Stamps = { rows: "", repos: "", visits: "", themes: "" };
+
 /** The hello the reducer runs on recall: the snapshot with empties for what it left out, and every
  * row made still. An agent that was `working` reads as `idle`: the shimmer, the climbing seconds
  * and the preview tab all key on a live agent or a running server, and a frozen row must never
  * claim either. `waiting` and `error` stay, since they are still true of the row as last seen and
  * are what a phone is opened to find. */
-export function recalledHello(s: HelloSnapshot): HelloMsg {
+export function recalledHello(s: HelloSnapshot): HelloFull {
   const { at: _at, ...rest } = s;
   return {
     t: "hello",
     ...rest,
     rows: s.rows.map(stilled),
     trunks: Object.fromEntries(Object.entries(s.trunks).map(([id, t]) => [id, stilledTrunk(t)])),
+    stamps: NO_STAMPS,
     themes: [],
     drafts: {},
     attachments: {},
@@ -159,19 +164,39 @@ export function evictions(
 }
 
 /**
- * One chat's tail as the frames give it. The backfill replaces it whole; each live frame is added
- * raw, since the tap sits before the store's own batching and sees every streamed token. The fold
- * runs when the tail is read for a write, and when the raw run has grown past twice the cap, so
- * what is held between writes stays bounded by rows and not by tokens.
+ * One chat's tail as the frames give it. A whole backfill replaces it and one that follows a
+ * `since` adds to it; each live frame is added raw, since the tap sits before the store's own
+ * batching and sees every streamed token. The fold runs when the tail is read for a write, and
+ * when the raw run has grown past twice the cap, so what is held between writes stays bounded by
+ * rows and not by tokens.
  */
 export class ChatTail {
   private events: TranscriptEntry[] = [];
-  /** the highest raw seq heard */
+  /** the highest raw seq heard; -1 before any frame */
   seq = -1;
+  /** The page holds the chat up to `seq` from its first row: a backfill was heard whole. A recalled
+   * chat is the kept tail alone, and a subscribe that asked for what came after it would leave the
+   * rows above the tail unreachable, so the cursor is offered only when this is true. */
+  whole = false;
 
-  reset(entries: readonly TranscriptEntry[]) {
+  /** the transcript as a backfill or a recall gives it; `last` is the raw seq it reaches, which the
+   * coalesced entries do not say, and `whole` whether it reaches back to the first row */
+  reset(entries: readonly TranscriptEntry[], last: number, whole: boolean) {
     this.events = tailOf(coalesce(entries), CHAT_EVENTS_KEPT);
-    for (const e of entries) if (e.seq > this.seq) this.seq = e.seq;
+    this.seq = last;
+    this.whole = whole;
+  }
+
+  /** the tail a backfill sent past `since`: added, as the daemon's frame says the page holds the rest */
+  extend(entries: readonly TranscriptEntry[], last: number) {
+    this.events.push(...entries);
+    if (last > this.seq) this.seq = last;
+    if (this.events.length > CHAT_EVENTS_KEPT * 2) this.events = tailOf(coalesce(this.events), CHAT_EVENTS_KEPT);
+  }
+
+  /** the cursor a subscribe sends: the seq, while the page holds everything up to it */
+  since(): number | undefined {
+    return this.whole && this.seq >= 0 ? this.seq : undefined;
   }
 
   add(seq: number, event: AgentEvent) {

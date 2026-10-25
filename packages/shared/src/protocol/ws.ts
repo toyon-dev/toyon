@@ -54,86 +54,114 @@ import {
   UPLOAD_MAX_BYTES,
 } from "./limits.ts";
 import { elementTraitsSchema, pickMetaSchema } from "./pick.ts";
+import type { Stamps } from "./stamps.ts";
 
 /** one content-search match: path + 1-based line + the (trimmed) line text */
 export type SearchHit = { path: string; line: number; text: string };
 
+/** What a page learns first, with the stamps of what it may already hold. The light fields ride
+ * on every hello; see HelloFull and HelloSame for the rest. */
+export interface HelloBase {
+  t: "hello";
+  version: string;
+  /** what this machine is called in a shell that lists several (`machineLabel`): the tailnet
+   * device name, else the hostname's first label */
+  machine: string;
+  /** how this Toyon was installed: what the settings card says under the version, and whether
+   * a press there can ask for a newer one */
+  install: InstallMethod;
+  /** the registry updates come from, as npm's config names it: what the settings card says
+   * updates come from, so a company mirror that lags the public registry is visible. Null
+   * where nothing updates: a checkout, or a machine with updates off. */
+  registry: string | null;
+  protocol: number;
+  themePrefs: ThemePrefs;
+  /** the daemon's agent registry and which entry new worktrees get by default */
+  agents: AgentInfo[];
+  defaultAgent: string;
+  /** someone has picked that default. Until then it is toyon's own choice, and the first-run
+   * screens ask before the first message goes to an agent nobody named. */
+  agentChosen: boolean;
+  /** clones already in flight, so a tab that connects mid-import sees it straight away */
+  pending: PendingRepo[];
+  /** the daemon's home directory. RepoInfo.path is absolute while PathEntry.path is
+   * tilde-collapsed daemon side, so without this the shell cannot write a `~` path of its own */
+  home: string;
+  /** the daemon can open the OS folder dialog where the person is: a macOS daemon running
+   * locally. Anywhere else the dialog would open on a screen nobody at this shell can see. */
+  folderDialog: boolean;
+  /** when the daemon holds off the machine's idle sleep: the line in settings. Null where it
+   * has no way to (not a Mac, or turned off where it was started), and settings has no line. */
+  keepAwake: KeepAwakeMode | null;
+  /** the public name when there is one, and how a shell served from it reaches each preview:
+   * `w<id>.<name>` routed by the daemon's own listener, or `<name>:<proxy port>`. The front
+   * too: a shell that holds sockets to several machines keeps an edge machine's open only
+   * while looking at it, since an edge bills for a connection held. */
+  remote: Remote | null;
+  /** whether Tailscale here could hold a name for this machine: the bar offers "turn on" when
+   * it could and no name is set, and the card says what is missing when it cannot. Null until
+   * the daemon has asked once; the `tailscale` frame follows. */
+  tailscale: TailscaleReadiness | null;
+  /** other machines this daemon was handed (a deploy from this box): every shell that
+   * connects here lists them */
+  machines: PairedMachine[];
+  /** a device opening this machine's own address has been let in, at any time; until one has,
+   * the desk offers the address in the bar */
+  letIn: boolean;
+  /** the devices asking to be let in right now, oldest first */
+  knocks: Knock[];
+  /** git has a name and email to commit with. Making a project commits, and someone who has
+   * never used git has neither, so the new-project page asks for them when this is false. */
+  gitIdentity: boolean;
+  /** toyon is running from a checkout that has moved on without it; null the rest of the time */
+  self: SelfState | null;
+  /** the installed Toyon is not the one running, or a restart is waiting; null the rest of the time */
+  update: UpdateState | null;
+  /** the unsent text in every composer box that has some, by box id */
+  drafts: Record<string, string>;
+  /** what is attached and unsent in every composer box that has some, by box id */
+  attachments: Record<string, AttachmentInput[]>;
+  /** what whoever runs the machine has turned off, and from which file: the shell removes or
+   * greys the controls and says why, while the daemon and the CLI do the refusing */
+  managed: ManagedView;
+  /** the hash of each part a page keeps between hellos, as sent now: what a socket opened with
+   * `known` is measured against, and what a page echoes back on its next open */
+  stamps: Stamps;
+  /** every theme, left out when the page's `known` named the ones the daemon has: a theme is
+   * imported once in a long while, and the list is most of a hello's bytes */
+  themes?: Theme[];
+}
+
+/** the parts a page keeps between hellos, each stamped on the frame that moves it */
+export interface HelloStamped {
+  repos: RepoInfo[];
+  /** every row: toyon's own worktrees first, in its order, then the ones git knows about that
+   * toyon did not create; see the `worktrees` frame */
+  rows: WorktreeStatus[];
+  /** each project's default-branch checkout, by repo id: see TrunkStatus */
+  trunks: Record<string, TrunkStatus>;
+  /** each repo's remembered preview pages, best first, with their titles: the route bar's
+   * history, there on first paint */
+  visits: Record<string, PageEntry[]>;
+}
+
+/** the hello with every part: a page that holds nothing, or whose `known` no longer matches */
+export interface HelloFull extends HelloBase, HelloStamped {
+  same?: undefined;
+}
+
+/** the hello to a page whose `known` matched rows, repos and visits: it keeps what it holds, and
+ * the light fields alone are read again */
+export interface HelloSame extends HelloBase {
+  same: true;
+}
+
+export type HelloMsg = HelloFull | HelloSame;
+
 export type ServerMsg =
-  | {
-      t: "hello";
-      version: string;
-      /** what this machine is called in a shell that lists several (`machineLabel`): the tailnet
-       * device name, else the hostname's first label */
-      machine: string;
-      /** how this Toyon was installed: what the settings card says under the version, and whether
-       * a press there can ask for a newer one */
-      install: InstallMethod;
-      /** the registry updates come from, as npm's config names it: what the settings card says
-       * updates come from, so a company mirror that lags the public registry is visible. Null
-       * where nothing updates: a checkout, or a machine with updates off. */
-      registry: string | null;
-      protocol: number;
-      repos: RepoInfo[];
-      /** every row: toyon's own worktrees first, in its order, then the ones git knows about that
-       * toyon did not create; see the `worktrees` frame */
-      rows: WorktreeStatus[];
-      /** each project's default-branch checkout, by repo id: see TrunkStatus */
-      trunks: Record<string, TrunkStatus>;
-      themes: Theme[];
-      themePrefs: ThemePrefs;
-      /** the daemon's agent registry and which entry new worktrees get by default */
-      agents: AgentInfo[];
-      defaultAgent: string;
-      /** someone has picked that default. Until then it is toyon's own choice, and the first-run
-       * screens ask before the first message goes to an agent nobody named. */
-      agentChosen: boolean;
-      /** clones already in flight, so a tab that connects mid-import sees it straight away */
-      pending: PendingRepo[];
-      /** the daemon's home directory. RepoInfo.path is absolute while PathEntry.path is
-       * tilde-collapsed daemon side, so without this the shell cannot write a `~` path of its own */
-      home: string;
-      /** the daemon can open the OS folder dialog where the person is: a macOS daemon running
-       * locally. Anywhere else the dialog would open on a screen nobody at this shell can see. */
-      folderDialog: boolean;
-      /** when the daemon holds off the machine's idle sleep: the line in settings. Null where it
-       * has no way to (not a Mac, or turned off where it was started), and settings has no line. */
-      keepAwake: KeepAwakeMode | null;
-      /** the public name when there is one, and how a shell served from it reaches each preview:
-       * `w<id>.<name>` routed by the daemon's own listener, or `<name>:<proxy port>`. The front
-       * too: a shell that holds sockets to several machines keeps an edge machine's open only
-       * while looking at it, since an edge bills for a connection held. */
-      remote: Remote | null;
-      /** whether Tailscale here could hold a name for this machine: the bar offers "turn on" when
-       * it could and no name is set, and the card says what is missing when it cannot. Null until
-       * the daemon has asked once; the `tailscale` frame follows. */
-      tailscale: TailscaleReadiness | null;
-      /** other machines this daemon was handed (a deploy from this box): every shell that
-       * connects here lists them */
-      machines: PairedMachine[];
-      /** a device opening this machine's own address has been let in, at any time; until one has,
-       * the desk offers the address in the bar */
-      letIn: boolean;
-      /** the devices asking to be let in right now, oldest first */
-      knocks: Knock[];
-      /** git has a name and email to commit with. Making a project commits, and someone who has
-       * never used git has neither, so the new-project page asks for them when this is false. */
-      gitIdentity: boolean;
-      /** each repo's remembered preview pages, best first, with their titles: the route bar's
-       * history, there on first paint */
-      visits: Record<string, PageEntry[]>;
-      /** toyon is running from a checkout that has moved on without it; null the rest of the time */
-      self: SelfState | null;
-      /** the installed Toyon is not the one running, or a restart is waiting; null the rest of the time */
-      update: UpdateState | null;
-      /** the unsent text in every composer box that has some, by box id */
-      drafts: Record<string, string>;
-      /** what is attached and unsent in every composer box that has some, by box id */
-      attachments: Record<string, AttachmentInput[]>;
-      /** what whoever runs the machine has turned off, and from which file: the shell removes or
-       * greys the controls and says why, while the daemon and the CLI do the refusing */
-      managed: ManagedView;
-    }
-  | { t: "themes"; themes: Theme[]; prefs: ThemePrefs }
+  | HelloMsg
+  /** every theme, whole, with its stamp (see Stamps) */
+  | { t: "themes"; themes: Theme[]; prefs: ThemePrefs; stamp: string }
   /** the daemon fell behind the checkout it runs from, caught up, or started catching up */
   | { t: "self"; self: SelfState | null }
   /** the machines this daemon was handed changed: a deploy from this box, or a forget */
@@ -157,9 +185,10 @@ export type ServerMsg =
   | { t: "keep-awake"; mode: KeepAwakeMode | null }
   /** the files an agent reads and the MCP servers it will load, on request from settings */
   | ({ t: "agent-config" } & AgentConfigInfo)
-  | { t: "repos"; repos: RepoInfo[] }
-  /** one repo's history, whole, sent when its order or a title changes */
-  | { t: "visits"; repoId: string; pages: PageEntry[] }
+  | { t: "repos"; repos: RepoInfo[]; stamp: string }
+  /** one repo's history, whole, sent when its order or a title changes; `stamp` is of every
+   * repo's, since that is what the hello carries */
+  | { t: "visits"; repoId: string; pages: PageEntry[]; stamp: string }
   /** the pages a worktree's files define and which changed since you last had them open there: sent
    * on subscribe behind git status, and again whenever either moves */
   | ({ t: "routes"; worktreeId: string } & WorktreePages)
@@ -175,14 +204,25 @@ export type ServerMsg =
    * to travel in separate frames the rail would show it twice or not at all in between. A repo's
    * spare is among them, as the row new work is typed in; what its main checkout says rides
    * beside the rows in `trunks`, since main is not a row while a spare stands for it. */
-  | { t: "worktrees"; rows: WorktreeStatus[]; trunks: Record<string, TrunkStatus> }
+  | { t: "worktrees"; rows: WorktreeStatus[]; trunks: Record<string, TrunkStatus>; stamp: string }
   | { t: "proc"; worktreeId: string; proc: WorktreeStatus["procs"][number] }
   /** `retract` is how many of the proc's last lines this one redraws over; a redraw wiped as the
    * process moved on is a retract with an empty line */
   | { t: "log"; worktreeId: string; proc: string; line: string; retract?: number }
   | { t: "agent"; worktreeId: string; seq: number; event: AgentEvent }
-  /** on subscribe: the transcript so far and the dev servers' recent output */
-  | { t: "backfill"; worktreeId: string; events: Array<{ seq: number; event: AgentEvent }>; log?: LogLine[] }
+  /** On subscribe: the transcript and the dev servers' recent output. `last` is the highest raw
+   * seq on the transcript (-1 for none), which the coalesced events do not say, since a run is
+   * named by its first. With `after`, the events are only those past the subscribe's `since`,
+   * which it echoes, and the page adds them to the chat it holds; without it they are the whole
+   * transcript, which replaces it. */
+  | {
+      t: "backfill";
+      worktreeId: string;
+      events: Array<{ seq: number; event: AgentEvent }>;
+      log?: LogLine[];
+      last: number;
+      after?: number;
+    }
   /** one worktree's git state (GitInfo): the core within a moment of an edit, and for a subscriber
    * the extras behind it; nothing goes out for a state that reads the same as the last */
   | ({ t: "git-status"; worktreeId: string } & GitInfo)
@@ -542,8 +582,10 @@ export const themePrefsSchema = z.object({
 });
 
 export const clientMsgSchema = z.discriminatedUnion("t", [
-  /** receive this worktree's stream (agent events, logs, queue, git status); replies with a backfill */
-  z.object({ t: z.literal("subscribe"), worktreeId: id }),
+  /** receive this worktree's stream (agent events, logs, queue, git status); replies with a
+   * backfill. `since` is the highest raw seq of the chat the page holds: the backfill is what came
+   * after it, when the transcript still has it, and the whole chat otherwise. */
+  z.object({ t: z.literal("subscribe"), worktreeId: id, since: z.number().int().min(0).optional() }),
   z.object({ t: z.literal("unsubscribe"), worktreeId: id }),
   /** the worktree this tab is showing, or null while it shows none or is hidden; sent again on
    * reconnect. Looking is what keeps a worktree's dev servers running and what wakes them. */

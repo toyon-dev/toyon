@@ -55,6 +55,7 @@ import type {
   ServerMsg,
   ShipOp,
   Shipping,
+  Stamps,
   TailscaleReadiness,
   TermServerMsg,
   Theme,
@@ -74,6 +75,7 @@ import {
   cardBox,
   DEFAULT_PERMISSION_MODE,
   defaultThemePrefs,
+  encodeKnown,
   isBusy,
   isEditTool,
   isLead,
@@ -780,6 +782,12 @@ export interface State {
    * before this one. Null once a hello is heard, and while nothing was recalled. What is on screen
    * is then as it was, never live, and every surface that says so reads this. */
   recalledAt: number | null;
+  /** The stamps of the hello's parts as the daemon last sent them (shared `Stamps`), kept up by the
+   * frames that move them, and echoed on the next socket open as `known` so the hello leaves out
+   * what this page holds. Null before a live hello, and on a recalled page, whose rows are stilled
+   * and not what the daemon sent. A frame that moves a part without a stamp blanks it: the daemon
+   * never matches an empty one, so this page can never claim a state it does not hold. */
+  stamps: Stamps | null;
   local: Record<string, WorktreeLocal>;
   /** the file the editor pane has open; null when the pane is closed */
   editor: EditorFile | null;
@@ -1039,6 +1047,7 @@ export function initialState(opts: InitialOpts): State {
     heard: false,
     heardAt: null,
     recalledAt: null,
+    stamps: null,
     local: {},
     editor: null,
     openUrl: null,
@@ -2709,6 +2718,17 @@ function moveBox(s: State, from: string, to: string): State {
   return withLocal(moved, from, (f) => ({ ...f, draft: "", attachments: [] }));
 }
 
+/** the stamps with one part as a frame just said it; none before a hello, since the rest of the
+ * parts would be empty and the page holds nothing the daemon sent anyway */
+function stamped(s: Pick<State, "stamps">, part: keyof Stamps, stamp: string): Stamps | null {
+  return s.stamps ? { ...s.stamps, [part]: stamp } : null;
+}
+
+/** what the socket says it holds when it opens (`known`): null while nothing the daemon sent is held */
+export function knownOf(s: Pick<State, "stamps">): string | null {
+  return s.stamps ? encodeKnown(s.stamps) : null;
+}
+
 /** an id that names a project's main checkout rather than a row: the pull's target */
 function isTrunk(s: Pick<State, "trunks">, id: string): boolean {
   return Object.values(s.trunks).some((t) => t.id === id);
@@ -2723,45 +2743,48 @@ function isTrunk(s: Pick<State, "trunks">, id: string): boolean {
  * knocks are not read, since the snapshot carries none.
  */
 function onHello(s: State, msg: Extract<StoreServerMsg, { t: "hello" }>, recall: boolean): State {
+  // a hello marked same left out what this page already holds, as its `known` said
+  const { rows, repos, trunks, visits } = msg.same ? s : msg;
   // restore the previously selected worktree across reloads, a found one included: it is
   // still listed, and its shell and dock are what the person was looking at
-  const has = (id: string | null) => !!id && msg.rows.some((w) => w.id === id);
-  const hasRepo = (id: string | null) => !!id && msg.repos.some((r) => r.id === id);
+  const has = (id: string | null) => !!id && rows.some((w) => w.id === id);
+  const hasRepo = (id: string | null) => !!id && repos.some((r) => r.id === id);
   // the project narrows the fallback: a stored repo whose stored worktree is gone still opens
   // on that repo, not on whichever worktree the daemon lists first
   const repoId = hasRepo(s.activeRepoId) ? s.activeRepoId : hasRepo(s.storedRepo) ? s.storedRepo : null;
-  const activeId = has(s.activeId) ? s.activeId : has(s.storedActive) ? s.storedActive : landingIn(s, repoId, msg.rows);
-  const wt = msg.rows.find((w) => w.id === activeId);
+  const activeId = has(s.activeId) ? s.activeId : has(s.storedActive) ? s.storedActive : landingIn(s, repoId, rows);
+  const wt = rows.find((w) => w.id === activeId);
   // the rail the row was read from, when the row is on it: a reload on a guest comes back to
   // the rail it was chosen from, not to the guest's own project
-  const onStored = !!repoId && !!wt && isOwned(wt) && onRail(wt, repoId, msg.rows, s.lent);
+  const onStored = !!repoId && !!wt && isOwned(wt) && onRail(wt, repoId, rows, s.lent);
   const next: State = {
     ...s,
     heard: !recall,
     heardAt: recall ? s.heardAt : Date.now(),
     recalledAt: recall ? s.recalledAt : null,
-    repos: msg.repos,
-    rows: msg.rows,
+    stamps: recall ? null : msg.stamps,
+    repos,
+    rows,
     activeId,
     // a reconnect keeps the loan; a reload on a row owed to this rail takes one out, since the
     // look about to happen clears what lists it
-    lent: onStored ? (s.lent === activeId ? s.lent : lentTo(wt ?? null, repoId, msg.rows)) : null,
-    activeRepoId: onStored ? repoId : (wt?.repoId ?? repoId ?? msg.repos[0]?.id ?? null),
-    trunks: msg.trunks,
+    lent: onStored ? (s.lent === activeId ? s.lent : lentTo(wt ?? null, repoId, rows)) : null,
+    activeRepoId: onStored ? repoId : (wt?.repoId ?? repoId ?? repos[0]?.id ?? null),
+    trunks,
     archiving: s.archiving.length ? [] : s.archiving,
-    shipping: shippingFrom({}, msg.rows, msg.trunks),
+    shipping: shippingFrom({}, rows, trunks),
     local: forgetVersions(
-      pruneLocal(withAttachments(withDrafts(s.local, msg.drafts), msg.attachments), msg.rows, s.archivedPage),
+      pruneLocal(withAttachments(withDrafts(s.local, msg.drafts), msg.attachments), rows, s.archivedPage),
     ),
-    lastActive: pruneLastActive(s.lastActive, msg.rows),
-    treeOpen: pruneByRow(s.treeOpen, msg.rows),
-    discoveredOpen: pruneByRepo(s.discoveredOpen, msg.repos),
-    archivedOpen: pruneByRepo(s.archivedOpen, msg.repos),
-    committedShut: pruneByRepo(s.committedShut, msg.repos),
-    turnOpen: pruneByRepo(s.turnOpen, msg.repos),
-    refs: pruneByRepo(s.refs, msg.repos),
-    chats: pruneByRepo(s.chats, msg.repos),
-    archived: pruneByRepo(s.archived, msg.repos),
+    lastActive: pruneLastActive(s.lastActive, rows),
+    treeOpen: pruneByRow(s.treeOpen, rows),
+    discoveredOpen: pruneByRepo(s.discoveredOpen, repos),
+    archivedOpen: pruneByRepo(s.archivedOpen, repos),
+    committedShut: pruneByRepo(s.committedShut, repos),
+    turnOpen: pruneByRepo(s.turnOpen, repos),
+    refs: pruneByRepo(s.refs, repos),
+    chats: pruneByRepo(s.chats, repos),
+    archived: pruneByRepo(s.archived, repos),
     themes: !recall && msg.themes ? msg.themes : s.themes,
     themePrefs: !recall && msg.themePrefs ? msg.themePrefs : s.themePrefs,
     agents: msg.agents,
@@ -2778,9 +2801,9 @@ function onHello(s: State, msg: Extract<StoreServerMsg, { t: "hello" }>, recall:
     gitIdentity: msg.gitIdentity,
     newProject:
       s.newProject ??
-      (!recall && msg.repos.length === 0 && msg.rows.length === 0 && msg.pending.length === 0 ? firstProject() : null),
+      (!recall && repos.length === 0 && rows.length === 0 && msg.pending.length === 0 ? firstProject() : null),
     pending: recall ? s.pending : msg.pending,
-    visits: msg.visits,
+    visits,
     self: recall ? s.self : msg.self,
     update: recall ? s.update : msg.update,
     // a check asked of the daemon that went away is never answered
@@ -2794,9 +2817,13 @@ function onHello(s: State, msg: Extract<StoreServerMsg, { t: "hello" }>, recall:
   return recall ? next : withKnocks(next, msg.knocks, msg.letIn);
 }
 
-/** the chat a transcript makes, folded from nothing: what a backfill and a recall both do */
-function chatFrom(events: readonly { seq: number; event: AgentEvent }[]): { chat: ChatItem[]; usage?: UsageFigures } {
-  let chat: ChatItem[] = [];
+/** the chat a transcript makes, folded from nothing, or from the chat the events follow: what a
+ * backfill and a recall both do */
+function chatFrom(
+  events: readonly { seq: number; event: AgentEvent }[],
+  onto: ChatItem[] = [],
+): { chat: ChatItem[]; usage?: UsageFigures } {
+  let chat: ChatItem[] = onto;
   let usage: UsageFigures | undefined;
   for (const { seq, event } of events) {
     chat = applyEvent(chat, event, seq);
@@ -2862,9 +2889,9 @@ function onServer(s: State, msg: StoreServerMsg): State {
     case "update-checked":
       return { ...s, updateCheck: msg.check };
     case "visits":
-      return { ...s, visits: { ...s.visits, [msg.repoId]: msg.pages } };
+      return { ...s, visits: { ...s.visits, [msg.repoId]: msg.pages }, stamps: stamped(s, "visits", msg.stamp) };
     case "themes":
-      return { ...s, themes: msg.themes, themePrefs: msg.prefs };
+      return { ...s, themes: msg.themes, themePrefs: msg.prefs, stamps: stamped(s, "themes", msg.stamp) };
     case "daylight":
       return { ...s, daylight: { dark: msg.dark, until: msg.until } };
     case "keep-awake":
@@ -2950,10 +2977,17 @@ function onServer(s: State, msg: StoreServerMsg): State {
       if (msg.repos.length === 0 && !newProject) newProject = firstProject();
       // a project made from nothing was committed to, so git has a name and email now, whoever typed them
       const gitIdentity = s.gitIdentity || msg.repos.some((r) => r.made && !known.has(r.id));
-      if (activeRepoId === s.activeRepoId) return { ...s, repos: msg.repos, pendingOpen, newProject, gitIdentity };
+      const stamps = stamped(s, "repos", msg.stamp);
+      // the daemon drops a forgotten repo's history with the repo and sends no visits frame for
+      // it; pruned here, so what this page holds stays what the daemon has
+      const visits = pruneByRepo(s.visits, msg.repos);
+      if (activeRepoId === s.activeRepoId)
+        return { ...s, repos: msg.repos, stamps, visits, pendingOpen, newProject, gitIdentity };
       return settleView({
         ...s,
         repos: msg.repos,
+        stamps,
+        visits,
         pendingOpen,
         newProject,
         gitIdentity,
@@ -2985,6 +3019,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
             ...s,
             rows: msg.rows,
             trunks: msg.trunks,
+            stamps: stamped(s, "rows", msg.stamp),
             archiving: archiving.length === s.archiving.length ? s.archiving : archiving,
             shipping: shippingFrom(s.shipping, msg.rows, msg.trunks),
             // the bubble moves before the prune: a found row taken over leaves the list as the
@@ -3022,7 +3057,9 @@ function onServer(s: State, msg: StoreServerMsg): State {
     }
     case "proc": {
       const rows = s.rows.map((w) => (w.id === msg.worktreeId ? { ...w, procs: upsertProc(w.procs, msg.proc) } : w));
-      return { ...s, rows };
+      // the frame moves the rows and carries no stamp: the page cannot vouch for them until the
+      // next worktrees frame, so the part is blanked and the next hello sends them
+      return { ...s, rows, stamps: stamped(s, "rows", "") };
     }
     case "log":
       return withLocal(s, msg.worktreeId, (l) => ({
@@ -3108,20 +3145,26 @@ function onServer(s: State, msg: StoreServerMsg): State {
       return next;
     }
     case "backfill": {
-      const { chat, usage } = chatFrom(msg.events);
       // a message shown as sent stays shown until the transcript has it: a socket back mid-send
       // (a restore's checkout, say) hears it here rather than live
       const heard = (text: string) =>
         msg.events.some(({ event }) => event.type === "user-message" && event.text === text);
-      return withLocal(s, msg.worktreeId, ({ sending, ...l }) => ({
-        ...l,
-        ...(sending && !(sending.message && heard(sending.message.text)) ? { sending } : {}),
-        chat,
-        chatAt: Date.now(),
-        running: runningOf(chat, l.running),
-        log: msg.log ?? l.log,
-        ...(usage ? { usage } : {}),
-      }));
+      return withLocal(s, msg.worktreeId, ({ sending, ...l }) => {
+        // the frame follows the `since` this page sent, which named the chat it holds: the events
+        // are what came after, folded onto it the way live ones are. Without one it is the whole
+        // transcript, and replaces whatever is held. The keeper (recall.ts) strips the `after`
+        // from a tail this page cannot add to, so it is the one place that decides.
+        const { chat, usage } = msg.after !== undefined ? chatFrom(msg.events, l.chat) : chatFrom(msg.events);
+        return {
+          ...l,
+          ...(sending && !(sending.message && heard(sending.message.text)) ? { sending } : {}),
+          chat,
+          chatAt: Date.now(),
+          running: runningOf(chat, l.running),
+          log: msg.log ?? l.log,
+          ...(usage ? { usage } : {}),
+        };
+      });
     }
     case "git-status": {
       const held = s.local[msg.worktreeId]?.git;

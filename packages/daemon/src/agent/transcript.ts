@@ -55,6 +55,24 @@ export function parseTranscript(text: string, tag: string): TranscriptEntry[] {
   return out;
 }
 
+/** the highest seq on the transcript; -1 for none */
+export const lastSeq = (entries: readonly TranscriptEntry[]): number => entries.at(-1)?.seq ?? -1;
+
+/** The entries past `since`: what a page that holds the transcript up to that seq is missing. A
+ * binary search, since a long session is tens of thousands of entries and every subscribe asks.
+ * Seqs ascend but may skip (a torn line dropped at parse), so the search finds the first entry
+ * past `since` rather than the one at it. */
+export function after(entries: readonly TranscriptEntry[], since: number): TranscriptEntry[] {
+  let lo = 0;
+  let hi = entries.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (entries[mid]!.seq <= since) lo = mid + 1;
+    else hi = mid;
+  }
+  return entries.slice(lo);
+}
+
 export class Transcript {
   /** the whole session, read from disk once; from then on the in-memory copy serves backfills.
    * Never trimmed: the first prompt has to stay reachable by scrolling up, however long the

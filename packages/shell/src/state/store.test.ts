@@ -35,6 +35,7 @@ import {
   isFirstRun,
   isGreenfield,
   isSubPicker,
+  knownOf,
   localOf,
   NEW_PROJECT_BOX,
   type NewProjectState,
@@ -127,9 +128,12 @@ const trunksOf = (rows: WorktreeStatus[], over: Partial<TrunkStatus> = {}): Reco
       .filter((w) => w.worktree?.kind === "main")
       .map((w) => [w.repoId, { id: w.id, dirty: 0, empty: false, ...over }]),
   );
+/** the stamps a daemon's hello carries, as the frames below move them */
+const STAMPS = { rows: "w1", repos: "p1", visits: "v1", themes: "t1" };
 const helloIn = (repos: RepoInfo[], ...w: WorktreeStatus[]): Action =>
   server({
     t: "hello",
+    stamps: STAMPS,
     version: "0",
     machine: "box",
     install: "npm",
@@ -161,8 +165,9 @@ const helloIn = (repos: RepoInfo[], ...w: WorktreeStatus[]): Action =>
     managed: MANAGED_NONE,
   });
 const hello = (...w: WorktreeStatus[]): Action => helloIn([], ...w);
-const worktrees = (...w: WorktreeStatus[]): Action => server({ t: "worktrees", rows: w, trunks: trunksOf(w) });
-const repos = (...r: RepoInfo[]): Action => server({ t: "repos", repos: r });
+const worktrees = (...w: WorktreeStatus[]): Action =>
+  server({ t: "worktrees", rows: w, trunks: trunksOf(w), stamp: "w2" });
+const repos = (...r: RepoInfo[]): Action => server({ t: "repos", repos: r, stamp: "p2" });
 const agent = (id: string, event: AgentEvent): Action => server({ t: "agent", worktreeId: id, seq: 0, event });
 
 function run(actions: Action[], from: State = initial): State {
@@ -353,7 +358,7 @@ describe("per-worktree records", () => {
     const main = wt("main", "main");
     // the empty-tree fact rides on the trunk, beside the rows
     const emptyTrunk = (...rows: WorktreeStatus[]): Action =>
-      server({ t: "worktrees", rows, trunks: trunksOf(rows, { empty: true }) });
+      server({ t: "worktrees", rows, trunks: trunksOf(rows, { empty: true }), stamp: "w2" });
     const s = run([helloIn([fresh], main), emptyTrunk(main), { a: "activate", id: "main" }]);
     expect(isGreenfield(s)).toBe(true);
     // a repo with history, a configured repo, and a busy agent are each not greenfield
@@ -999,6 +1004,7 @@ describe("chat folding", () => {
       hello(wt("a")),
       server({
         t: "backfill",
+        last: 0,
         worktreeId: "a",
         events: [
           { seq: 0, event: { type: "user-message", text: "q", ts: 0 } },
@@ -1273,29 +1279,33 @@ describe("drafting a worktree", () => {
   test("the lead's preview is its own app while it drafts, and the trunk rides beside the rows", () => {
     const rows = [wt("sp", "spare"), wt("a")];
     const trunk: TrunkStatus = { id: "main-rec", behind: 3, dirty: 2, empty: false };
-    const s = run([server({ t: "worktrees", rows, trunks: { r: trunk } })], found(...rows));
+    const s = run([server({ t: "worktrees", rows, trunks: { r: trunk }, stamp: "w2" })], found(...rows));
     expect(previewIdOf(s)).toBe("sp");
     expect(s.trunks.r).toEqual(trunk);
     // a pull is pressed under the lead's box and shows working from the press; a frame built
     // before the daemon had it does not take that back
     const pulling = run([{ a: "shipping", id: "main-rec", op: "pull-main" }], s);
     expect(pulling.shipping["main-rec"]).toEqual({ op: "pull-main", sent: true });
-    expect(run([server({ t: "worktrees", rows, trunks: { r: trunk } })], pulling).shipping["main-rec"]).toEqual({
+    expect(
+      run([server({ t: "worktrees", rows, trunks: { r: trunk }, stamp: "w2" })], pulling).shipping["main-rec"],
+    ).toEqual({
       op: "pull-main",
       sent: true,
     });
     // the daemon lists the op on the trunk with its step, and a tab that never pressed shows it too
     const listed: TrunkStatus = { ...trunk, shipping: { op: "pull-main", step: "pulling main from origin" } };
-    const stepped = run([server({ t: "worktrees", rows, trunks: { r: listed } })], pulling);
+    const stepped = run([server({ t: "worktrees", rows, trunks: { r: listed }, stamp: "w2" })], pulling);
     expect(stepped.shipping["main-rec"]).toEqual({ op: "pull-main", step: "pulling main from origin" });
-    expect(run([server({ t: "worktrees", rows, trunks: { r: listed } })], s).shipping["main-rec"]).toEqual({
-      op: "pull-main",
-      step: "pulling main from origin",
-    });
+    expect(run([server({ t: "worktrees", rows, trunks: { r: listed }, stamp: "w2" })], s).shipping["main-rec"]).toEqual(
+      {
+        op: "pull-main",
+        step: "pulling main from origin",
+      },
+    );
     // listed, it rests on the frame that stops listing it, not on the word, which comes first
     const worded = run([server({ t: "shipped", worktreeId: "main-rec", ok: true, message: "pulled" })], stepped);
     expect(worded.shipping).toBe(stepped.shipping);
-    expect(run([server({ t: "worktrees", rows, trunks: { r: trunk } })], worded).shipping).toEqual({});
+    expect(run([server({ t: "worktrees", rows, trunks: { r: trunk }, stamp: "w2" })], worded).shipping).toEqual({});
     // a press over before any frame listed it rests on the word
     expect(
       run([server({ t: "shipped", worktreeId: "main-rec", ok: true, message: "pulled" })], pulling).shipping,
@@ -1768,7 +1778,7 @@ describe("drafts", () => {
       { seq: 3, event: said },
       { seq: 4, event: { type: "text-delta" as const, text: "answer" } },
     ];
-    const back = run([hello(wt("a")), server({ t: "backfill", worktreeId: "a", events })]);
+    const back = run([hello(wt("a")), server({ t: "backfill", worktreeId: "a", events, last: 0 })]);
     expect(back.local.a?.chat).toEqual(live.local.a?.chat);
   });
   test("a hit in an archived chat opens its page with the hit marked", () => {
@@ -1791,7 +1801,7 @@ describe("drafts", () => {
       { a: "open-archived", id: "z" },
       { a: "reveal", id: "z", seq: 0 },
       { a: "close" },
-      server({ t: "backfill", worktreeId: "z", events: [{ seq: 0, event: said }] }),
+      server({ t: "backfill", worktreeId: "z", events: [{ seq: 0, event: said }], last: 0 }),
       worktrees(wt("a")),
     ]);
     expect(s.archivedPage).toBe("z");
@@ -3012,7 +3022,10 @@ describe("an archived worktree's page", () => {
   test("its chat is under its own id, kept while the page is up and the row's once it is back", () => {
     const said = { type: "user-message" as const, text: "tidy the footer", ts: 1 };
     const s = run(
-      [{ a: "open-archived", id: "x" }, server({ t: "backfill", worktreeId: "x", events: [{ seq: 0, event: said }] })],
+      [
+        { a: "open-archived", id: "x" },
+        server({ t: "backfill", worktreeId: "x", events: [{ seq: 0, event: said }], last: 0 }),
+      ],
       listed(),
     );
     expect(s.local.x?.chat).toHaveLength(1);
@@ -3388,6 +3401,7 @@ describe("usage", () => {
       [
         server({
           t: "backfill",
+          last: 0,
           worktreeId: "a",
           events: [
             { seq: 0, event: usage(0.2) },
@@ -3515,16 +3529,100 @@ describe("attach a pick", () => {
   });
 });
 
+describe("the delta hello", () => {
+  const full = () => helloIn([repo("r")], wt("main", "main"), wt("a"));
+  const same = (): Action => {
+    const h = full();
+    if (h.a !== "server" || h.msg.t !== "hello" || h.msg.same) throw new Error("expected a full hello");
+    const { rows: _r, trunks: _t, repos: _p, visits: _v, themes: _th, ...light } = h.msg;
+    return server({ ...light, same: true, machine: "box2" });
+  };
+  test("a hello marked same keeps the rows, repos, trunks, visits and themes held, and reads the rest", () => {
+    const before = run([full(), worktrees(wt("main", "main"), wt("a"), wt("b"))]);
+    const s = run([same()], before);
+    expect(s.rows).toBe(before.rows);
+    expect(s.repos).toBe(before.repos);
+    expect(s.trunks).toBe(before.trunks);
+    expect(s.visits).toBe(before.visits);
+    expect(s.themes).toBe(before.themes);
+    expect(s.machine).toBe("box2");
+    expect(s.heard).toBe(true);
+    expect(s.activeId).toBe("main");
+  });
+  test("a hello without themes keeps the themes held; one with them takes them", () => {
+    const h = full();
+    if (h.a !== "server" || h.msg.t !== "hello") throw new Error("expected a hello");
+    const { themes: _th, ...rest } = h.msg;
+    const before = run([full()]);
+    expect(run([server(rest as typeof h.msg)], before).themes).toBe(before.themes);
+    const imported = [...initial.themes];
+    expect(run([server({ ...h.msg, themes: imported })], before).themes).toBe(imported);
+  });
+  test("the stamps follow the frames that move each part; a proc frame blanks the rows", () => {
+    expect(knownOf(initial)).toBeNull();
+    let s = run([full()]);
+    expect(knownOf(s)).toBe("w1.p1.v1.t1");
+    s = run([worktrees(wt("main", "main"), wt("a"))], s);
+    expect(knownOf(s)).toBe("w2.p1.v1.t1");
+    s = run([repos(repo("r"))], s);
+    expect(knownOf(s)).toBe("w2.p2.v1.t1");
+    s = run([server({ t: "visits", repoId: "r", pages: [], stamp: "v2" })], s);
+    expect(knownOf(s)).toBe("w2.p2.v2.t1");
+    s = run([server({ t: "themes", themes: initial.themes, prefs: initial.themePrefs, stamp: "t2" })], s);
+    expect(knownOf(s)).toBe("w2.p2.v2.t2");
+    s = run(
+      [server({ t: "proc", worktreeId: "a", proc: { name: "web", command: "vite", port: 1, status: "running" } })],
+      s,
+    );
+    expect(knownOf(s)).toBe(".p2.v2.t2");
+    s = run([worktrees(wt("main", "main"), wt("a"))], s);
+    expect(knownOf(s)).toBe("w2.p2.v2.t2");
+  });
+  test("a frame before any hello stamps nothing: the page holds nothing the daemon sent", () => {
+    expect(knownOf(run([worktrees(wt("main", "main"))]))).toBeNull();
+  });
+  test("a recalled page can vouch for nothing; the live hello after it can", () => {
+    const h = full();
+    if (h.a !== "server" || h.msg.t !== "hello" || h.msg.same) throw new Error("expected a full hello");
+    const kept = snapshotOf({ ...run([full()]), machine: "box", handed: [] }, 1);
+    if (!kept) throw new Error("nothing kept");
+    const recalled = run([{ a: "recall", hello: kept, chats: {} }]);
+    expect(recalled.stamps).toBeNull();
+    expect(knownOf(recalled)).toBeNull();
+    expect(knownOf(run([full()], recalled))).toBe("w1.p1.v1.t1");
+  });
+  test("a backfill past a since adds to the chat held; one without replaces it", () => {
+    const said = { type: "user-message" as const, text: "q", ts: 0 };
+    const held = run([
+      hello(wt("a")),
+      server({ t: "backfill", worktreeId: "a", events: [{ seq: 0, event: said }], last: 0 }),
+    ]);
+    const tail = [{ seq: 1, event: { type: "text-delta" as const, text: "answer" } }];
+    const added = run([server({ t: "backfill", worktreeId: "a", events: tail, after: 0, last: 1 })], held);
+    expect(added.local.a?.chat).toEqual([
+      { kind: "user", text: "q", seq: 0 },
+      { kind: "assistant", text: "answer", seq: 1 },
+    ]);
+    const replaced = run([server({ t: "backfill", worktreeId: "a", events: tail, last: 1 })], held);
+    expect(replaced.local.a?.chat).toEqual([{ kind: "assistant", text: "answer", seq: 1 }]);
+    // a tail for a chat this page does not hold cannot add to it: taken as what is there
+    const fresh = run([hello(wt("a")), server({ t: "backfill", worktreeId: "a", events: tail, after: 0, last: 1 })]);
+    expect(fresh.local.a?.chat).toEqual([{ kind: "assistant", text: "answer", seq: 1 }]);
+  });
+});
+
 describe("visits", () => {
   test("hello brings every repo's history and a visits frame replaces one of them", () => {
     const page = (path: string, title?: string) => ({ path, score: 1, last: 0, ...(title ? { title } : {}) });
     const h = helloIn([repo("r"), repo("q")]);
-    if (h.a !== "server" || h.msg.t !== "hello") throw new Error("expected a hello");
+    if (h.a !== "server" || h.msg.t !== "hello" || h.msg.same) throw new Error("expected a full hello");
     const s = run([
       server({ ...h.msg, visits: { r: [page("/a")], q: [page("/b", "Docs")] } }),
-      server({ t: "visits", repoId: "r", pages: [page("/c", "Pricing"), page("/a")] }),
+      server({ t: "visits", repoId: "r", pages: [page("/c", "Pricing"), page("/a")], stamp: "v2" }),
     ]);
     expect(s.visits).toEqual({ r: [page("/c", "Pricing"), page("/a")], q: [page("/b", "Docs")] });
+    // a repo forgotten takes its history with it, as it does on the daemon
+    expect(run([repos(repo("r"))], s).visits).toEqual({ r: [page("/c", "Pricing"), page("/a")] });
   });
 });
 

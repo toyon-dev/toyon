@@ -10,6 +10,7 @@ import {
 import { openFile } from "./actions/file.ts";
 import { createStore } from "./context.tsx";
 import { decide, FileSync } from "./fileSync.ts";
+import { NO_STAMPS } from "./snapshot.ts";
 import { initialState } from "./store.ts";
 
 describe("what a fresh read means for the editor's text", () => {
@@ -96,6 +97,7 @@ function harness() {
   const server = (msg: Exclude<ServerMsg, FileServerMsg>) => store.dispatch({ a: "server", msg } as never);
   server({
     t: "hello",
+    stamps: NO_STAMPS,
     version: "0",
     machine: "box",
     install: "npm",

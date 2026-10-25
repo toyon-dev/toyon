@@ -107,7 +107,7 @@ declare global {
 const booted = Promise.all([
   (window.toyonBoot ?? Promise.resolve(null)).then((boot) => {
     const msg = boot as ServerMsg | null;
-    if (msg && typeof msg === "object" && msg.t === "hello") machines.active().boot(msg);
+    machines.active().boot(msg && typeof msg === "object" && msg.t === "hello" ? msg : null);
   }),
   machines.active().recalled,
 ]).catch((e) => {

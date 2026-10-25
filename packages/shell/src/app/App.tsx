@@ -30,7 +30,8 @@ export function App() {
   const sock = useSock();
   // what this machine remembers of itself: the selection, the sections; the layout and the rail
   // are the window's, whichever machine it shows
-  const { storage } = useMachine();
+  const machine = useMachine();
+  const { storage } = machine;
   const activeId = useActiveId();
   const activeRepoId = useStore((s) => s.activeRepoId);
   const active = useActive();
@@ -63,6 +64,11 @@ export function App() {
   // previews still reload after an agent turn while hidden and switching back is instant; drop
   // the oldest beyond that. A reconnect re-subscribes the whole set.
   const subsRef = useRef<string[]>([]);
+  // a subscribe says how much of the chat this page holds, so the backfill is the rest alone
+  const subscribeTo = useCallback(
+    (id: string) => sock?.send({ t: "subscribe", worktreeId: id, since: machine.since(id) }),
+    [sock, machine],
+  );
   useEffect(() => {
     // any row, owned or found: a found worktree streams nothing but its git status, and that is
     // what its badges and the changes panel read
@@ -70,14 +76,14 @@ export function App() {
     const mru = [activeId, ...subsRef.current.filter((id) => id !== activeId)];
     for (const gone of mru.splice(MRU_SUBSCRIPTIONS)) sock.send({ t: "unsubscribe", worktreeId: gone });
     // only the newcomer needs a subscribe (and its backfill); the others have been streaming all along
-    if (!subsRef.current.includes(activeId)) sock.send({ t: "subscribe", worktreeId: activeId });
+    if (!subsRef.current.includes(activeId)) subscribeTo(activeId);
     subsRef.current = mru;
-  }, [activeId, connected, sock]);
+  }, [activeId, connected, sock, subscribeTo]);
   // a reconnect is a new socket: it knows nothing, so re-assert the whole set
   useEffect(() => {
     if (!sock || !connected) return;
-    for (const id of subsRef.current) sock.send({ t: "subscribe", worktreeId: id });
-  }, [connected, sock]);
+    for (const id of subsRef.current) subscribeTo(id);
+  }, [connected, sock, subscribeTo]);
   // Looking is what keeps a worktree's dev servers running, and what wakes them: the daemon hears
   // which worktree this tab shows, and none while the tab is hidden. A subscription is not a look
   // (the last few rows stay subscribed so their streams are warm), and a look at a new row waits a
@@ -116,9 +122,9 @@ export function App() {
   const archivedId = archivedPage?.id ?? null;
   useEffect(() => {
     if (!sock || !connected || !archivedId) return;
-    sock.send({ t: "subscribe", worktreeId: archivedId });
+    subscribeTo(archivedId);
     return () => sock.send({ t: "unsubscribe", worktreeId: archivedId });
-  }, [archivedId, connected, sock]);
+  }, [archivedId, connected, sock, subscribeTo]);
   // Worktrees that disappeared drop out of the set, and the daemon hears it: its set is per socket
   // and outlives the worktree, so an archived one this tab had looked at would still count as
   // subscribed there, and the subscribe its archived page sends under the same id would be taken

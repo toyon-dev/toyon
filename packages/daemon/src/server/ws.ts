@@ -3,6 +3,8 @@
 
 import { homedir, hostname } from "node:os";
 import {
+  type HelloFull,
+  type HelloMsg,
   type ManagedResolved,
   machineLabel,
   managedView,
@@ -10,6 +12,7 @@ import {
   parseClientMsg,
   type Remote,
   type ServerMsg,
+  type Stamps,
   streamKey,
   ThemeImportError,
   UPLOAD_MAX_BYTES,
@@ -31,6 +34,7 @@ import { setWaitingColors } from "../runtime/proxy.ts";
 import { dispatch, openedFrame, type Services } from "./handlers.ts";
 import { createFetch, type WsData } from "./http.ts";
 import { pairingRoutes } from "./pairing.ts";
+import { shapeHello, stampOf, stampsOf, visitsStamp } from "./stamps.ts";
 
 /** how far behind a socket may fall before its terminal output is dropped instead of queued */
 const DROP_ABOVE_BYTES = 4 * 1024 * 1024;
@@ -235,7 +239,7 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
       statusesQueued = false;
       try {
         const { rows, trunks } = s.worktrees.snapshot();
-        broadcast({ t: "worktrees", rows, trunks });
+        broadcast({ t: "worktrees", rows, trunks, stamp: stampOf({ rows, trunks }) });
       } catch (e) {
         log.warn("ws", "worktrees broadcast failed", e);
       }
@@ -244,7 +248,7 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
   s.hub.on("worktreesChanged", worktreesChanged);
   s.hub.on("agentStatus", worktreesChanged);
   s.hub.on("agentStopping", worktreesChanged);
-  s.hub.on("reposChanged", () => broadcast({ t: "repos", repos: s.state.repos }));
+  s.hub.on("reposChanged", () => broadcast({ t: "repos", repos: s.state.repos, stamp: stampOf(s.state.repos) }));
   s.hub.on("pendingChanged", () => broadcast({ t: "pending-repos", pending: s.repos.pending }));
   s.hub.on("proc", (worktreeId, proc) => broadcast({ t: "proc", worktreeId, proc }));
   s.hub.on("log", (worktreeId, proc, line, retract) =>
@@ -307,7 +311,7 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
   const themesChanged = () => {
     const cur = s.themes.current();
     setWaitingColors({ bg: cur.colors.surface0, fg: cur.colors.text1 });
-    broadcast({ t: "themes", themes: s.themes.themes, prefs: s.themes.prefs });
+    broadcast({ t: "themes", themes: s.themes.themes, prefs: s.themes.prefs, stamp: stampOf(s.themes.themes) });
   };
   s.hub.on("themesChanged", themesChanged);
   themesChanged();
@@ -335,7 +339,9 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
   // row by now, and the shell reads a main worktree's error under whichever composer is on screen
   s.hub.on("failed", (worktreeId, message) => broadcast({ t: "error", message, worktreeId }));
   s.hub.on("updateChanged", () => broadcast({ t: "update", update: s.update.get() }));
-  s.hub.on("visitsChanged", (repoId) => broadcast({ t: "visits", repoId, pages: s.routes.history(repoId) }));
+  s.hub.on("visitsChanged", (repoId) =>
+    broadcast({ t: "visits", repoId, pages: s.routes.history(repoId), stamp: visitsStamp(s.routes.historyAll()) }),
+  );
   s.hub.on("archiveChanged", (repoId) => broadcast({ t: "archived", repoId, items: s.worktrees.archived(repoId) }));
   // every tab, the writer included: it knows its own frame by the client id and leaves its box alone
   s.hub.on("draftChanged", (boxId, text, clientId) =>
@@ -347,21 +353,21 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
 
   // What a page learns first, over the socket or over the bootstrap fetch that precedes it. The
   // rows go out from what is known and the counts follow, rather than every page load waiting on a
-  // git pass across every worktree.
-  const helloFrame = async () => {
+  // git pass across every worktree. A socket that opened with `known` gets the parts it does not
+  // hold (stamps.ts); the bootstrap fetch knows nothing yet and gets them all.
+  const helloFrame = async (known: Stamps | null = null): Promise<HelloMsg> => {
     // a page load is when an install done in a terminal first matters to anyone
     await s.update.refresh();
     const { rows, trunks } = s.worktrees.snapshot();
-    return {
+    const parts = { rows, trunks, repos: s.state.repos, visits: s.routes.historyAll(), themes: s.themes.themes };
+    const full: HelloFull = {
       t: "hello",
       version,
       install: s.update.install(),
       registry: await s.update.registry(),
       protocol: PROTOCOL_VERSION,
-      repos: s.state.repos,
-      rows,
-      trunks,
-      themes: s.themes.themes,
+      ...parts,
+      stamps: stampsOf(parts),
       themePrefs: s.themes.prefs,
       agents: s.readiness.describe(),
       defaultAgent: s.agents.defaultId(s.state.defaultAgent),
@@ -377,13 +383,13 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
       knocks: opts.knocks.pending(),
       gitIdentity: await s.repos.gitIdentity(),
       pending: s.repos.pending,
-      visits: s.routes.historyAll(),
       self: s.self.get(),
       update: s.update.get(),
       drafts: s.drafts.all(),
       attachments: s.drafts.allAttachments(),
       managed: managedView(opts.managed),
-    } satisfies ServerMsg;
+    };
+    return shapeHello(full, known);
   };
 
   let branded = false;
@@ -465,7 +471,7 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
         }
         sockets.add(ws);
         link(ws);
-        send(ws, await helloFrame());
+        send(ws, await helloFrame(ws.data.known ?? null));
         // an adapter whose install failed at boot gets another try now: the network may have
         // come back since, and the shell is where someone would otherwise find it still failed
         fireAndForget("agents", s.agents.retryFailed(), "agent install retry");

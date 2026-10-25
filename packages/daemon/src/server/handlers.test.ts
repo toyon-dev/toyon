@@ -621,6 +621,37 @@ describe("handlers", () => {
     await expect(dispatch({ t: "subscribe", worktreeId: "nope" }, ctx, services)).rejects.toBeInstanceOf(UserError);
   });
 
+  test("subscribe with since gets the tail past it, marked; a since the transcript has not reached gets it whole", async () => {
+    const { services, ctx, replies, repo, agents } = make();
+    const r = await services.repos.register(repo);
+    r.needsSetup = false;
+    const wt = await services.worktrees.create(r.id, "tidy the footer");
+    const agent = agents.get(wt.id)!;
+    agent.note({ type: "user-message", text: "tidy the footer", ts: 1 });
+    agent.note({ type: "turn-start", ts: 2 });
+    agent.note({ type: "text-delta", text: "on " });
+    agent.note({ type: "text-delta", text: "it" });
+    await dispatch({ t: "subscribe", worktreeId: wt.id, since: 1 }, ctx, services);
+    // the run past the since, coalesced, with the raw seq it reaches
+    expect(replies[0]).toMatchObject({
+      t: "backfill",
+      events: [{ seq: 2, event: { type: "text-delta", text: "on it" } }],
+      after: 1,
+      last: 3,
+    });
+    await dispatch({ t: "unsubscribe", worktreeId: wt.id }, ctx, services);
+    replies.length = 0;
+    await dispatch({ t: "subscribe", worktreeId: wt.id, since: 3 }, ctx, services);
+    expect(replies[0]).toMatchObject({ t: "backfill", events: [], after: 3, last: 3 });
+    await dispatch({ t: "unsubscribe", worktreeId: wt.id }, ctx, services);
+    replies.length = 0;
+    // a page holding more than the transcript has is holding some other chat: the whole of this one
+    await dispatch({ t: "subscribe", worktreeId: wt.id, since: 7 }, ctx, services);
+    expect(replies[0]).toMatchObject({ t: "backfill", last: 3 });
+    expect(replies[0]).not.toHaveProperty("after");
+    expect((replies[0] as { events: unknown[] }).events).toHaveLength(3);
+  });
+
   test("subscribe to an archived worktree replies its chat in place; a message on restore goes to the agent", async () => {
     const { services, ctx, replies, subs, repo, agents, paths } = make();
     const r = await services.repos.register(repo);
@@ -637,7 +668,8 @@ describe("handlers", () => {
     replies.length = 0;
     await dispatch({ t: "subscribe", worktreeId: wt.id }, ctx, services);
     expect(replies.map((m) => m.t)).toEqual(["backfill", "queue", "agent-commands", "git-status"]);
-    expect(replies[0]).toMatchObject({ t: "backfill", events: [{ seq: 0, event: said }], log: [] });
+    expect(replies[0]).toMatchObject({ t: "backfill", events: [{ seq: 0, event: said }], log: [], last: 0 });
+    expect(replies[0]).not.toHaveProperty("after");
     // what it left in git, for the changes panel on its page, and a file of it read from there
     expect(replies[3]).toMatchObject({
       t: "git-status",

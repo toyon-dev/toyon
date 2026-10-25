@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { MANAGED_NONE, PROTOCOL_VERSION, type WorktreeStatus } from "@toyon/shared";
+import { type HelloFull, MANAGED_NONE, PROTOCOL_VERSION, type WorktreeStatus } from "@toyon/shared";
 import {
   CHAT_EVENTS_KEPT,
   CHATS_KEPT,
   ChatTail,
   evictions,
-  type HelloMsg,
+  NO_STAMPS,
   newestTs,
   recallable,
   recalledHello,
@@ -16,8 +16,8 @@ import { memoryStore } from "./snapshotStore.ts";
 import { initialState, reducer } from "./store.ts";
 
 /** the store as a hello leaves it, which is what a snapshot is taken from */
-const facts = (h: HelloMsg) => reducer(initialState({ clientId: "me" }), { a: "server", msg: h });
-const helloSnapshot = (h: HelloMsg, at: number) => snapshotOf(facts(h), at);
+const facts = (h: HelloFull) => reducer(initialState({ clientId: "me" }), { a: "server", msg: h });
+const helloSnapshot = (h: HelloFull, at: number) => snapshotOf(facts(h), at);
 
 // What the browser keeps of a machine, and what comes back: the hello less the heavy and the
 // daemon's own, rows made still, a chat's tail counted in rows a reader sees.
@@ -47,9 +47,10 @@ const row = (
   ...more,
 });
 
-const hello = (rows: WorktreeStatus[]): HelloMsg => ({
+const hello = (rows: WorktreeStatus[]): HelloFull => ({
   trunks: { r: { id: "m", dirty: 0, empty: false, shipping: { op: "pull" } as never } },
   t: "hello",
+  stamps: NO_STAMPS,
   version: "0.17.0",
   machine: "box",
   install: "npm",
@@ -149,7 +150,7 @@ describe("the chat tail", () => {
 
   test("a streamed reply of many tokens counts as one row, and the seq cursor is the highest raw seq", () => {
     const tail = new ChatTail();
-    tail.reset([{ seq: 0, event: { type: "turn-start", ts: 1 } }]);
+    tail.reset([{ seq: 0, event: { type: "turn-start", ts: 1 } }], 0, true);
     for (let i = 1; i <= 500; i++) tail.add(i, { type: "text-delta", text: "x" });
     const snap = tail.snapshot(undefined, 9);
     expect(snap.events).toHaveLength(2);
@@ -166,21 +167,32 @@ describe("the chat tail", () => {
     const rows = [];
     for (let i = 0; i < CHAT_EVENTS_KEPT + 10; i++)
       rows.push({ seq: i, event: { type: "turn-start" as const, ts: i } });
-    tail.reset(rows);
+    tail.reset(rows, rows.length - 1, true);
     const snap = tail.snapshot("a draft", 1);
     expect(snap.events).toHaveLength(CHAT_EVENTS_KEPT);
     expect(snap.events[0]?.seq).toBe(10);
     expect(snap.draft).toBe("a draft");
   });
 
-  test("a backfill replaces the tail; live frames add to it", () => {
+  test("a whole backfill replaces the tail; live frames and a tail past a since add to it", () => {
     const tail = new ChatTail();
-    tail.reset([delta(0, "a"), delta(1, "b")]);
+    // the coalesced entries name a run by its first seq: the cursor is the frame's `last`
+    tail.reset([delta(0, "a"), delta(1, "b")], 5, true);
+    expect(tail.seq).toBe(5);
+    expect(tail.since()).toBe(5);
     tail.add(7, { type: "text-delta", text: "c" });
     expect(tail.snapshot(undefined, 1).events).toEqual([{ seq: 0, event: { type: "text-delta", text: "abc" } }]);
-    tail.reset([delta(20, "z")]);
+    expect(tail.seq).toBe(7);
+    tail.extend([delta(8, "d")], 9);
+    expect(tail.snapshot(undefined, 1).events).toEqual([{ seq: 0, event: { type: "text-delta", text: "abcd" } }]);
+    expect(tail.seq).toBe(9);
+    tail.reset([delta(20, "z")], 20, true);
     expect(tail.snapshot(undefined, 1).events).toEqual([delta(20, "z")]);
     expect(tail.seq).toBe(20);
+    // a recalled tail is the kept rows alone: the cursor is kept but not offered
+    tail.reset([delta(20, "z")], 20, false);
+    expect(tail.seq).toBe(20);
+    expect(tail.since()).toBeUndefined();
   });
 });
 

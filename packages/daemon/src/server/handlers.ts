@@ -2,13 +2,14 @@
 // compile error. Handlers marshal (pick fields, shape replies) and call a service; they do not
 // run git or decide policy.
 
-import type { AttachmentInput, ClientMsg, FileBlame, ServerMsg, WorktreeInfo } from "@toyon/shared";
+import type { AttachmentInput, ClientMsg, FileBlame, ServerMsg, TranscriptEntry, WorktreeInfo } from "@toyon/shared";
 import { coalesce, isLead, pickTheme, SHELL_STREAM } from "@toyon/shared";
 import type { AttachmentStore } from "../agent/attachments.ts";
 import { agentConfigFiles, describeAgentConfig } from "../agent/config.ts";
 import type { ToyonMcp } from "../agent/mcp.ts";
 import type { AgentReadiness } from "../agent/readiness.ts";
 import type { AgentRegistry } from "../agent/registry.ts";
+import { after, lastSeq } from "../agent/transcript.ts";
 import { GONE, uploadIds } from "../agent/uploads.ts";
 import type { KeepAwake } from "../core/awake.ts";
 import type { FolderDialog } from "../core/dialog.ts";
@@ -178,6 +179,16 @@ const notify = async (s: Services, ctx: HandlerCtx, worktreeId: string, msg: Shi
 
 const requireRun = (s: Services, id: string): WorktreeInfo => s.worktrees.requireRun(id);
 
+/** The transcript as a backfill carries it: the whole of it, coalesced, or with `since` the part
+ * the page is missing, marked with the `since` it follows. A `since` the transcript has not reached
+ * is a chat from some other history (the page's record of a worktree that was deleted and its id
+ * reused), and that page gets the whole of it and replaces what it holds. */
+function backfillOf(entries: readonly TranscriptEntry[], since: number | undefined) {
+  const last = lastSeq(entries);
+  if (since === undefined || since > last) return { events: coalesce(entries), last };
+  return { events: coalesce(after(entries, since)), last, after: since };
+}
+
 export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
   async subscribe(msg, ctx, s) {
     const r = s.worktrees.readable(msg.worktreeId);
@@ -188,7 +199,7 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
       const kept = s.worktrees.archivedTranscript(msg.worktreeId);
       if (!kept) throw new UserError("unknown worktree");
       if (!ctx.subscribe(msg.worktreeId)) return;
-      ctx.reply({ t: "backfill", worktreeId: msg.worktreeId, events: coalesce(kept), log: [] });
+      ctx.reply({ t: "backfill", worktreeId: msg.worktreeId, ...backfillOf(kept, msg.since), log: [] });
       ctx.reply({ t: "queue", worktreeId: msg.worktreeId, items: [] });
       ctx.reply({ t: "agent-commands", worktreeId: msg.worktreeId, commands: [] });
       // and what it left in git, which the changes panel on its page reads
@@ -201,7 +212,7 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     // a worktree toyon merely knows about has no transcript, no queue and nothing to start: the
     // stream it gets is git status, which is what the changes panel and the rail badges read
     if (!r.wt) {
-      ctx.reply({ t: "backfill", worktreeId: msg.worktreeId, events: [], log: [] });
+      ctx.reply({ t: "backfill", worktreeId: msg.worktreeId, events: [], last: -1, log: [] });
       ctx.reply({ t: "queue", worktreeId: msg.worktreeId, items: [] });
       ctx.reply({ t: "agent-commands", worktreeId: msg.worktreeId, commands: [] });
       await gitAndPages(s, ctx, msg.worktreeId);
@@ -213,7 +224,7 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     ctx.reply({
       t: "backfill",
       worktreeId: msg.worktreeId,
-      events: coalesce(agent.transcript()),
+      ...backfillOf(agent.transcript(), msg.since),
       log: s.runtime.recentLogs(msg.worktreeId),
     });
     ctx.reply({ t: "queue", worktreeId: msg.worktreeId, items: agent.queueItems });

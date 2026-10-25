@@ -27,7 +27,7 @@ import { fillFrame, namingFirst, outBoxOf, readyToGo, uploadsNamed } from "./out
 import { type PendingAttachment, settledInputs } from "./pending.ts";
 import { keepSnapshots } from "./recall.ts";
 import { idbStore, type SnapshotStore } from "./snapshotStore.ts";
-import { type Frame, initialState, isLayout, type Layout } from "./store.ts";
+import { type Frame, initialState, isLayout, knownOf, type Layout } from "./store.ts";
 
 export interface MachineInit {
   /** `https://box.tail1234.ts.net`, or `http://127.0.0.1:4141` */
@@ -73,9 +73,14 @@ export interface Machine {
   readonly recalled: Promise<void>;
   /** what this browser keeps of the machine, gone: for a machine being forgotten */
   forget(): void;
-  /** a hello fetched before the socket (the serving machine's bootstrap), applied as the socket's
-   * would be */
-  boot(msg: ServerMsg): void;
+  /** The bootstrap fetch is answered: a hello, applied as the socket's would be, or null when
+   * the daemon did not answer. Either way the serving machine's socket, held until now, opens,
+   * and with a hello laid in it opens saying what the page already holds. */
+  boot(msg: ServerMsg | null): void;
+  /** the highest raw seq this page holds of a chat, for the subscribe's `since`: the keeper's
+   * cursor, and only while the store holds the chat it counts, since the tail the daemon then
+   * sends is added to that chat */
+  since(id: string): number | undefined;
   /** the machine is being forgotten, or the page is going: the socket closes and every listener goes */
   dispose(): void;
 }
@@ -484,11 +489,12 @@ export function createMachine(init: MachineInit, env: MachineEnv): Machine {
         refusedFromOutside(store, msg);
         return;
       }
-      keeper.hear(msg);
-      toStore(msg);
+      toStore(keeper.hear(msg));
       for (const id of reclaimed.splice(0)) store.dispatch({ a: "notice", id, text: RELOADED_MID_UPLOAD });
     },
     (v, failure) => store.dispatch({ a: "connected", v, failure }),
+    {},
+    { known: () => knownOf(store.getState()), held: init.serving },
   );
   bindUploads(store, sock.urls);
 
@@ -524,15 +530,24 @@ export function createMachine(init: MachineInit, env: MachineEnv): Machine {
     recalled: keeper.recalled,
     forget: () => keeper.forget(),
     boot(msg) {
-      if (msg.t !== "hello" || msg.protocol !== PROTOCOL_VERSION) return;
-      heard.version ??= msg.version;
-      // before the lists are read as the daemon's word: a dead outgoing box of this tab's would
-      // otherwise read as a box gone from the store, and be told empty rather than put back
-      const back = reclaimOutgoing(store, sock, msg);
-      pending.hello(msg.attachments);
-      store.dispatch({ a: "server", msg });
-      for (const id of back) store.dispatch({ a: "notice", id, text: RELOADED_MID_UPLOAD });
+      try {
+        if (msg?.t === "hello" && msg.protocol === PROTOCOL_VERSION) {
+          heard.version ??= msg.version;
+          // before the lists are read as the daemon's word: a dead outgoing box of this tab's would
+          // otherwise read as a box gone from the store, and be told empty rather than put back
+          const back = reclaimOutgoing(store, sock, msg);
+          pending.hello(msg.attachments);
+          store.dispatch({ a: "server", msg });
+          for (const id of back) store.dispatch({ a: "notice", id, text: RELOADED_MID_UPLOAD });
+        }
+      } finally {
+        // a hello this page could not lay in is still no reason to stay off the socket
+        sock.resume();
+      }
     },
+    // the keeper's word is about the frames it heard; the store's is about what is still laid
+    // in, since a row the daemon dropped and listed again loses its chat there first
+    since: (id) => (store.getState().local[id]?.chat.length ? keeper.since(id) : undefined),
     dispose() {
       sock.dispose();
       stopFiles();

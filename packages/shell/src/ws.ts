@@ -364,6 +364,16 @@ const QUEUE_MAX = 50;
 /** the waits above, as a test turns them down; the page runs on the constants */
 export type SocketTiming = { connectDeadline?: number; settle?: number; backoffMin?: number };
 
+/** what the socket asks of the page as it opens */
+export interface SocketHooks {
+  /** what the page holds of the daemon's hello (store `knownOf`), read at every open and sent as
+   * `known`, so the hello leaves those parts out; null while it holds nothing the daemon sent */
+  known?: () => string | null;
+  /** start held: nothing connects until `resume()`. The serving machine's socket waits for the
+   * bootstrap hello to be laid in, so its first open already says what the page holds. */
+  held?: boolean;
+}
+
 /** the frames that are a message leaving its box, which the daemon empties as each arrives */
 const takesBox = (msg: ClientMsg): msg is Extract<ClientMsg, { t: "chat" | "create-worktree" | "restore-worktree" }> =>
   msg.t === "chat" || msg.t === "create-worktree" || msg.t === "restore-worktree";
@@ -402,11 +412,13 @@ export class DaemonSocket {
      * leaving it out keeps it */
     private onStatus: (connected: boolean, failure?: ConnectFailure | null) => void,
     timing: SocketTiming = {},
+    private hooks: SocketHooks = {},
   ) {
     this.connectDeadline = timing.connectDeadline ?? CONNECT_DEADLINE;
     this.settle = timing.settle ?? SETTLE;
     this.backoffMin = timing.backoffMin ?? BACKOFF_MIN;
     this.urls = daemonUrls(daemon.origin, daemon.token);
+    this.suspended = hooks.held ?? false;
     this.connect();
     document.addEventListener("visibilitychange", this.wake);
     window.addEventListener("online", this.wake);
@@ -504,7 +516,8 @@ export class DaemonSocket {
 
   private connect() {
     if (this.closed || this.suspended) return;
-    const ws = new WebSocket(this.urls.ws);
+    const known = this.hooks.known?.() ?? null;
+    const ws = new WebSocket(known === null ? this.urls.ws : `${this.urls.ws}&known=${known}`);
     this.ws = ws;
     // connected means the daemon has spoken, not that the socket opened: a wrong token is opened
     // and then closed with a code, and flushing the queue into that would lose it

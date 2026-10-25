@@ -98,6 +98,44 @@ function hanging(health: () => Promise<{ ok: boolean }>) {
 }
 
 describe("DaemonSocket", () => {
+  test("the socket opens saying what the page holds, read afresh at every open", async () => {
+    globals.document = { ...idle, visibilityState: "visible" };
+    globals.window = idle;
+    globals.WebSocket = HangingSocket;
+    let known: string | null = null;
+    const sock = new DaemonSocket(
+      { origin: "https://away.tail1234.ts.net", token: "t" },
+      () => {},
+      () => {},
+      { connectDeadline: 2000, settle: 5, backoffMin: 10 },
+      { known: () => known },
+    );
+    expect(HangingSocket.made[0]?.url).toBe("wss://away.tail1234.ts.net/ws?token=t");
+    known = "a1.b2.c3.d4";
+    HangingSocket.made[0]?.close();
+    await sleep(40);
+    expect(HangingSocket.made[1]?.url).toBe("wss://away.tail1234.ts.net/ws?token=t&known=a1.b2.c3.d4");
+    sock.dispose();
+  });
+
+  test("a socket made held opens on resume alone", async () => {
+    globals.document = { ...idle, visibilityState: "visible" };
+    globals.window = idle;
+    globals.WebSocket = HangingSocket;
+    const sock = new DaemonSocket(
+      { origin: "https://away.tail1234.ts.net", token: "t" },
+      () => {},
+      () => {},
+      {},
+      { held: true },
+    );
+    await sleep(20);
+    expect(HangingSocket.made).toHaveLength(0);
+    sock.resume();
+    expect(HangingSocket.made).toHaveLength(1);
+    sock.dispose();
+  });
+
   test("a handshake that hangs is closed at the deadline and reported down", async () => {
     globals.document = { ...idle, visibilityState: "visible" };
     globals.window = idle;

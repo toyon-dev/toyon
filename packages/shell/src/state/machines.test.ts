@@ -30,6 +30,7 @@ function fake(init: MachineInit, log: string[], remote: Remote | null = null): M
     recalled: Promise.resolve(),
     forget: () => log.push(`forget ${name}`),
     boot: () => {},
+    since: () => undefined,
     dispose: () => log.push(`dispose ${name}`),
   };
 }

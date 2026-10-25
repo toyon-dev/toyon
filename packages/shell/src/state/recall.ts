@@ -23,8 +23,14 @@ export interface Keeper {
   /** the last-known machine laid in, or nothing to lay in; the first paint waits for this, and it
    * never rejects */
   recalled: Promise<void>;
-  /** every frame off the socket, before the store's own batching: the chat tails read the raw ones */
-  hear(msg: ServerMsg): void;
+  /** Every frame off the socket, before the store's own batching: the chat tails read the raw
+   * ones. Answers the frame as the store should read it: a backfill tail that follows a `since`
+   * other than the one this page holds is handed on without its `after`, so the store replaces
+   * its chat as the tails here do, and the two never disagree on what the page holds. */
+  hear<M extends ServerMsg>(msg: M): M;
+  /** the highest raw seq this page holds of a chat, for the subscribe's `since`; undefined when
+   * it holds nothing of it, or only a recalled tail with rows above it still to be heard */
+  since(id: string): number | undefined;
   /** what this browser keeps of the machine, gone: for a machine being forgotten */
   forget(): void;
   dispose(): void;
@@ -155,7 +161,7 @@ export function keepSnapshots(store: Store, snapshots: SnapshotStore, origin: st
       // the recalled chats are this page's tails from here: a draft typed on them is written
       // against them, and a backfill replaces them
       for (const [id, c] of Object.entries(kept)) {
-        tailOf(id).reset(c.events);
+        tailOf(id).reset(c.events, c.seq, false);
         drafts.set(id, c.draft ?? "");
       }
     })
@@ -166,15 +172,33 @@ export function keepSnapshots(store: Store, snapshots: SnapshotStore, origin: st
 
   return {
     recalled,
-    hear(msg) {
+    hear<M extends ServerMsg>(msg: M): M {
       if (msg.t === "backfill") {
-        tailOf(msg.worktreeId).reset(msg.events);
+        const tail = tailOf(msg.worktreeId);
         soon(msg.worktreeId);
-      } else if (msg.t === "agent") {
+        // the store's chat is the other half of what the page holds: a row the daemon dropped and
+        // listed again between the subscribe and this frame lost it there, and a tail folded onto
+        // nothing would stand as the whole chat with the rows above it never asked for again
+        const held = (store.getState().local[msg.worktreeId]?.chat.length ?? 0) > 0;
+        if (msg.after !== undefined && msg.after === tail.since() && held) {
+          tail.extend(msg.events, msg.last);
+          return msg;
+        }
+        // the whole transcript; or a tail past a `since` this page did not send, or cannot add to,
+        // taken as the daemon's word on what is there, with the rows above it still to be heard on
+        // the next subscribe
+        tail.reset(msg.events, msg.last, msg.after === undefined);
+        if (msg.after === undefined) return msg;
+        const { after: _a, ...whole } = msg;
+        return whole as M;
+      }
+      if (msg.t === "agent") {
         tailOf(msg.worktreeId).add(msg.seq, msg.event);
         soon(msg.worktreeId);
       }
+      return msg;
     },
+    since: (id) => tails.get(id)?.since(),
     forget() {
       for (const key of [...waiting.keys()]) {
         timers.clear(waiting.get(key));

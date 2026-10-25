@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { MANAGED_NONE, PROTOCOL_VERSION, type WorktreeStatus } from "@toyon/shared";
+import { type HelloFull, MANAGED_NONE, PROTOCOL_VERSION, type ServerMsg, type WorktreeStatus } from "@toyon/shared";
 import { createStore } from "./context.tsx";
 import { keepSnapshots } from "./recall.ts";
-import type { HelloMsg } from "./snapshot.ts";
+import { NO_STAMPS } from "./snapshot.ts";
 import { memoryStore } from "./snapshotStore.ts";
 import { initialState } from "./store.ts";
 
@@ -31,8 +31,9 @@ const row = (id: string): WorktreeStatus => ({
   login: false,
 });
 
-const hello = (...rows: WorktreeStatus[]): HelloMsg => ({
+const hello = (...rows: WorktreeStatus[]): HelloFull => ({
   t: "hello",
+  stamps: NO_STAMPS,
   version: "0",
   machine: "home",
   install: "npm",
@@ -137,7 +138,12 @@ describe("keeping the last-known machine", () => {
     const { s, store, keeper, fire } = setup();
     await keeper.recalled;
     s.dispatch({ a: "server", msg: hello(row("a")) });
-    keeper.hear({ t: "backfill", worktreeId: "a", events: [{ seq: 0, event: { type: "turn-start", ts: 1 } }] });
+    keeper.hear({
+      t: "backfill",
+      worktreeId: "a",
+      events: [{ seq: 0, event: { type: "turn-start", ts: 1 } }],
+      last: 0,
+    });
     keeper.hear({ t: "agent", worktreeId: "a", seq: 1, event: { type: "text-delta", text: "he" } });
     keeper.hear({ t: "agent", worktreeId: "a", seq: 2, event: { type: "text-delta", text: "llo" } });
     s.dispatch({ a: "set-draft", id: "a", text: "typed" });
@@ -150,6 +156,65 @@ describe("keeping the last-known machine", () => {
     ]);
     expect(chats.a?.seq).toBe(2);
     expect(chats.a?.at).toBe(1000);
+  });
+
+  test("what the page holds of a chat is the subscribe's since, and a tail past it is added", async () => {
+    const { s, store, keeper, fire } = setup();
+    await keeper.recalled;
+    s.dispatch({ a: "server", msg: hello(row("a")) });
+    expect(keeper.since("a")).toBeUndefined();
+    // the frames reach the store through the keeper, as the machine wires them
+    const hear = (msg: ServerMsg) => s.dispatch({ a: "server", msg: keeper.hear(msg) as never });
+    hear({
+      t: "backfill",
+      worktreeId: "a",
+      events: [{ seq: 0, event: { type: "user-message", text: "q", ts: 1 } }],
+      last: 4,
+    });
+    // the frame's last, not the coalesced entries' first seq
+    expect(keeper.since("a")).toBe(4);
+    const tail = {
+      t: "backfill" as const,
+      worktreeId: "a",
+      events: [{ seq: 5, event: { type: "text-delta" as const, text: "hi" } }],
+      after: 4,
+      last: 6,
+    };
+    expect(keeper.hear(tail)).toBe(tail);
+    expect(keeper.since("a")).toBe(6);
+    // a tail past a since this page did not send (its cursor moved on) is taken as the daemon's
+    // word on the chat, handed to the store without its after, and not offered as a cursor again
+    const stray: ServerMsg = {
+      t: "backfill" as const,
+      worktreeId: "a",
+      events: [{ seq: 9, event: { type: "turn-start" as const, ts: 2 } }],
+      after: 8,
+      last: 9,
+    };
+    expect(keeper.hear(stray)).toEqual({
+      t: "backfill",
+      worktreeId: "a",
+      events: [{ seq: 9, event: { type: "turn-start", ts: 2 } }],
+      last: 9,
+    });
+    expect(keeper.since("a")).toBeUndefined();
+    // the same for a tail the store has no chat to add to: the row was dropped and listed again
+    // between the subscribe and the frame, and its chat went with it
+    hear({
+      t: "backfill",
+      worktreeId: "a",
+      events: [{ seq: 0, event: { type: "user-message", text: "q", ts: 1 } }],
+      last: 9,
+    });
+    expect(keeper.since("a")).toBe(9);
+    s.dispatch({ a: "server", msg: { t: "worktrees", rows: [], trunks: {}, stamp: "w" } });
+    s.dispatch({ a: "server", msg: { t: "worktrees", rows: [row("a")], trunks: {}, stamp: "w" } });
+    const orphan: ServerMsg = { t: "backfill", worktreeId: "a", events: [], after: 9, last: 9 };
+    expect(keeper.hear(orphan)).toEqual({ t: "backfill", worktreeId: "a", events: [], last: 9 });
+    expect(keeper.since("a")).toBeUndefined();
+    fire();
+    await settle();
+    expect((await store.chats(ORIGIN)).a?.events).toEqual([]);
   });
 
   test("the page going dark writes at once", async () => {
@@ -169,7 +234,12 @@ describe("keeping the last-known machine", () => {
     const first = setup(store);
     await first.keeper.recalled;
     first.s.dispatch({ a: "server", msg: hello(row("a")) });
-    first.keeper.hear({ t: "backfill", worktreeId: "a", events: [{ seq: 0, event: { type: "turn-start", ts: 1 } }] });
+    first.keeper.hear({
+      t: "backfill",
+      worktreeId: "a",
+      events: [{ seq: 0, event: { type: "turn-start", ts: 1 } }],
+      last: 0,
+    });
     first.fire();
     await settle();
 
@@ -201,7 +271,7 @@ describe("keeping the last-known machine", () => {
     const { s, store, keeper, fire } = setup();
     await keeper.recalled;
     s.dispatch({ a: "server", msg: hello(row("a")) });
-    keeper.hear({ t: "backfill", worktreeId: "a", events: [] });
+    keeper.hear({ t: "backfill", worktreeId: "a", events: [], last: -1 });
     fire();
     await settle();
     expect(await store.hello(ORIGIN)).not.toBeNull();
@@ -216,13 +286,28 @@ describe("keeping the last-known machine", () => {
     const first = setup(store);
     await first.keeper.recalled;
     first.s.dispatch({ a: "server", msg: hello(row("a")) });
-    first.keeper.hear({ t: "backfill", worktreeId: "a", events: [{ seq: 0, event: { type: "turn-start", ts: 1 } }] });
+    first.keeper.hear({
+      t: "backfill",
+      worktreeId: "a",
+      events: [{ seq: 0, event: { type: "turn-start", ts: 1 } }],
+      last: 3,
+    });
     first.fire();
     await settle();
 
     const next = setup(store);
     await next.keeper.recalled;
     expect(next.s.getState().heard).toBe(false);
+    // the recalled chat is the kept tail alone: the first subscribe asks for the whole chat, and
+    // only once that is heard does the cursor go out
+    expect(next.keeper.since("a")).toBeUndefined();
+    next.keeper.hear({
+      t: "backfill",
+      worktreeId: "a",
+      events: [{ seq: 0, event: { type: "turn-start", ts: 1 } }],
+      last: 3,
+    });
+    expect(next.keeper.since("a")).toBe(3);
     next.s.dispatch({ a: "set-draft", id: "a", text: "from the pocket" });
     expect(next.pending()).toBe(1);
     next.fire();

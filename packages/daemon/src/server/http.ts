@@ -8,9 +8,11 @@ import {
   machineLabel,
   OFFLINE_SLOTS,
   type PreviewGrantMint,
+  parseKnown,
   RESTART_NOW,
   type Remote,
   type RestartWait,
+  type Stamps,
   type TailscaleReadiness,
 } from "@toyon/shared";
 import type { Server } from "bun";
@@ -49,6 +51,9 @@ export interface WsData {
   bytes: number;
   /** the worktree this socket's tab is showing; null while it shows none or is hidden */
   view: string | null;
+  /** the stamps of what the page already holds, when it opened with `known`: the hello leaves
+   * those parts out (server/stamps.ts) */
+  known?: Stamps;
   /** the shell on this socket was opened through the front: from another device */
   remote?: true;
   /** set on a socket a remote preview name upgraded: it is bridged to the app, never a shell */
@@ -222,6 +227,7 @@ export function createFetch(opts: HttpOpts) {
       const authed = sameSecret(url.searchParams.get("token"), opts.token);
       // after the token, never before: this is what teaches the daemon it is being framed
       if (authed) opts.noteShellOrigin(req.headers.get("origin"));
+      const known = parseKnown(url.searchParams.get("known"));
       const data: WsData = {
         authed,
         subs: new Set(),
@@ -230,6 +236,7 @@ export function createFetch(opts: HttpOpts) {
         sent: 0,
         bytes: 0,
         view: null,
+        ...(known ? { known } : {}),
         ...(remoteShell ? { remote: true as const } : {}),
       };
       // a wrong token is still upgraded, then closed with WS_CLOSE_UNAUTHORIZED from `open`: a

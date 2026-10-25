@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentEvent } from "@toyon/shared";
-import { sealOpenTurn, Transcript, type TranscriptEntry, transcriptPathFor } from "./transcript.ts";
+import { after, lastSeq, sealOpenTurn, Transcript, type TranscriptEntry, transcriptPathFor } from "./transcript.ts";
 
 function withDir(fn: (dir: string) => Promise<void> | void) {
   const dir = mkdtempSync(join(tmpdir(), "toyon-transcript-"));
@@ -100,5 +100,28 @@ describe("sealOpenTurn", () => {
     expect(sealOpenTurn(log(start, call, error, end, usage))).toBeNull();
     expect(sealOpenTurn(log({ type: "user-message", text: "hi", ts: 1 }))).toBeNull();
     expect(sealOpenTurn([])).toBeNull();
+  });
+});
+
+describe("the tail after a seq", () => {
+  const at = (seq: number): TranscriptEntry => ({ seq, event: { type: "turn-start", ts: seq } });
+  // a torn line dropped at parse leaves a gap: 0, 1, 2, 5, 6
+  const entries = [at(0), at(1), at(2), at(5), at(6)];
+
+  test("what follows the seq, found by search, a gap included", () => {
+    expect(after(entries, 1).map((e) => e.seq)).toEqual([2, 5, 6]);
+    expect(after(entries, 2).map((e) => e.seq)).toEqual([5, 6]);
+    expect(after(entries, 3).map((e) => e.seq)).toEqual([5, 6]);
+    expect(after(entries, 5).map((e) => e.seq)).toEqual([6]);
+  });
+  test("below the first is everything; at or past the last is nothing", () => {
+    expect(after(entries, -1)).toEqual(entries);
+    expect(after(entries, 6)).toEqual([]);
+    expect(after(entries, 9)).toEqual([]);
+    expect(after([], 0)).toEqual([]);
+  });
+  test("the last seq, -1 for none", () => {
+    expect(lastSeq(entries)).toBe(6);
+    expect(lastSeq([])).toBe(-1);
   });
 });

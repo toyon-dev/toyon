@@ -1283,11 +1283,21 @@ export function Composer({
   const [typing, setTyping] = useState(false);
   const foldable = onScreen && !parked && (cardUp ? !typing : blank && !copied);
   const lean = foldable && reading;
+  // a tap on the folded box is the log going to its end, where the box stands whole: the way
+  // back without the scroll. A control in it (the plan's path, an offer's word, the stop) keeps
+  // its own press; the field takes the caret and goes to the end with it.
+  const toEnd = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!lean || (e.target instanceof Element && e.target.closest("button, a, [role=button]"))) return;
+    const log = e.currentTarget.closest(".chat-log");
+    if (log) log.scrollTop = log.scrollHeight;
+  };
 
   return (
+    // biome-ignore lint/a11y/useKeyWithClickEvents: the tap on the folded box stands in for the scroll to the end, which the keyboard does with its own keys; the controls in the box keep theirs
     <div
       ref={rootRef}
       className={cx("composer chat-input", stopShown && "stopping", foldable && "foldable", lean && "lean")}
+      onClick={toEnd}
       onFocus={(e) => setTyping(e.target instanceof HTMLTextAreaElement)}
       onBlur={() => setTyping(false)}
     >

@@ -89,6 +89,16 @@
     &::placeholder {
       color: var(--text2);
     }
+    /* the send on touch takes the line's far end, beside the field rather than under it */
+    &:has(+ .choice-send) {
+      grid-column: 2;
+    }
+  }
+  /* at the foot of the field's lines, where a thumb finds the send of every messaging app, on the
+     line the caret is on once the note has grown */
+  .choice-send {
+    grid-column: 3;
+    align-self: end;
   }
   /* no cursor walks these rows, so the pointer's seat is theirs to draw */
   .choices-hover .choice {

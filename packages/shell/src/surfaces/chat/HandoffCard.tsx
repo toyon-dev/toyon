@@ -107,6 +107,7 @@ export function HandoffCard({
             placeholder: "a note for the agent there, sent with go",
             enterKeyHint: "send",
             onChange: (value) => write(setNote(draft, 0, value)),
+            onSend: () => answer(true),
           }
         : undefined,
       description: starting ? "starting" : undefined,

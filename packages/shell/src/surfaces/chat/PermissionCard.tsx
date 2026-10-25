@@ -143,6 +143,7 @@ export function PermissionCard({
             placeholder: deny ? "what to change, sent with your no" : "a note for the work, sent with your yes",
             enterKeyHint: "send",
             onChange: (value) => write([{ selected: [c.id], note: value }]),
+            onSend: () => decide(noted),
           }
         : undefined,
     };

@@ -11,7 +11,7 @@ import { toInput } from "../../state/attach.ts";
 import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
 import type { HeldFrame } from "../../state/outbox.ts";
 import { isUploading } from "../../state/pending.ts";
-import { useLocalField, useTouch } from "../../state/selectors.ts";
+import { useLocalField } from "../../state/selectors.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
 import { type Choice, type ChoiceField, Choices } from "../../ui/Choices.tsx";
 import { handleChoiceKey } from "../../ui/choiceKeys.ts";
@@ -65,7 +65,6 @@ export function QuestionCard({
   const dispatch = useDispatch();
   const store = useStoreInstance();
   const clientId = useStore((s) => s.clientId);
-  const touch = useTouch();
   const { message, questions } = ask;
   // what is dropped, pasted or picked onto the card waits in the card's own box, apart from the
   // message written behind it, and goes with the answer
@@ -242,17 +241,16 @@ export function QuestionCard({
 
   /** the actions under a page: the send where a pick alone is not one (several questions, or a
    * multi-select), the note on the pick where the agent takes one and a pick is made, and the
-   * skip. A field open on a lone question has no send: enter in it is the send, as enter on a
-   * row is, on every keyboard, and a button arriving under the list moved the box. Except on
-   * touch, where the return key that sends goes away with the keyboard and the field is left
-   * with no way out; the foot is already there with the skip and the attach, so a send beside
-   * them moves nothing. Nothing lists the keys: the arrows, enter and escape are what they are
-   * everywhere, and the one key that is not says so on its row. Each page carries its own foot;
-   * it sits at the page's floor so the send is in one place whichever page is open. The agent's
-   * stop is not here: it keeps the box's corner, as it does over the plain field. */
+   * skip. A field open on a lone question has no send here: enter in it is the send, as enter on
+   * a row is, on every keyboard, and a button arriving under the list moved the box; on touch
+   * the field carries its own send, since this foot is what the keyboard covers. Nothing lists
+   * the keys: the arrows, enter and escape are what they are everywhere, and the one key that
+   * is not says so on its row. Each page carries its own foot; it sits at the page's floor so
+   * the send is in one place whichever page is open. The agent's stop is not here: it keeps the
+   * box's corner, as it does over the plain field. */
   const foot = (qq?: AskQuestion, a?: AskAnswer) => (
     <CardFoot>
-      {(!qq || !pickSends(qq) || (touch && a?.note !== undefined)) && (
+      {(!qq || !pickSends(qq)) && (
         <Button variant="outline" size="md" disabled={!canSubmit(questions, draft)} onClick={submit}>
           send
         </Button>
@@ -315,6 +313,7 @@ export function QuestionCard({
       placeholder,
       enterKeyHint: sendPage(questions) === -1 ? "send" : "next",
       onChange: (value) => write(setNote(draft, i, value), i),
+      ...(sendPage(questions) === -1 ? { onSend: fieldEnter } : {}),
     });
     const rows: Choice[] = qq.options.map((o) => {
       const on = !!a?.selected.includes(o.value);

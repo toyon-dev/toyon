@@ -1,6 +1,7 @@
 import { type ReactNode, type RefObject, useRef, useState } from "react";
 import { useTouch } from "../state/selectors.ts";
 import "./choices.css";
+import { IconButton } from "./Button.tsx";
 import { cx } from "./cx.ts";
 import { TextArea } from "./Field.tsx";
 import { Icon, type IconName } from "./Icon.tsx";
@@ -19,6 +20,11 @@ export type ChoiceField = {
   /** what the on-screen keyboard's return key is named for */
   enterKeyHint: "send" | "next";
   onChange: (value: string) => void;
+  /** what return does in the field when it is the send, offered as a press at the field's end on
+   * touch: the card's foot goes under the keyboard on a tall card, and return reads as a new line
+   * to a thumb that learned the composer, so the one send sure to be on screen is on the field's
+   * own line. Left out where return walks on instead of sending. */
+  onSend?: () => void;
 };
 
 export type Choice = {
@@ -168,6 +174,18 @@ export function Choices({
                 value={row.field.value}
                 onChange={(e) => row.field?.onChange(e.target.value)}
               />
+              {/* the composer's glyph, so it is one glyph for "this goes" wherever a thumb meets
+                  it. The press lands inside the row, whose mousedown keeps the caret in the field,
+                  so the keyboard does not drop between the tap and the card closing. */}
+              {touch && row.field.onSend && (
+                <IconButton
+                  className="choice-send"
+                  icon="send"
+                  tone="primary"
+                  label="Send"
+                  onClick={row.field.onSend}
+                />
+              )}
             </div>,
           );
         return sliding(

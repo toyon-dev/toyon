@@ -109,6 +109,7 @@ export function PiecesCard({
               : "a note for every piece's agent, sent with go",
             enterKeyHint: "send",
             onChange: (value) => write(setNote(draft, 0, value)),
+            onSend: () => answer(true),
           }
         : undefined,
       description: starting ? "starting" : undefined,

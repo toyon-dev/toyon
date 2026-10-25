@@ -6,6 +6,7 @@ import { App } from "./app/App.tsx";
 import { LetMeIn } from "./app/LetMeIn.tsx";
 import { frameNow, installFrame, touchNow } from "./app/phone.ts";
 import { installPhoneHistory } from "./app/phoneHistory.ts";
+import { takeShared } from "./app/share.ts";
 import { MachinesProvider } from "./state/context.tsx";
 import { migrateStorage, STORAGE } from "./state/keys.ts";
 import { createMachine } from "./state/machine.ts";
@@ -132,6 +133,9 @@ booted.then(() => {
   document.documentElement.style.removeProperty("background");
   document.documentElement.style.removeProperty("--boot-ink");
   document.getElementById("boot")?.remove();
+  // files a phone's share sheet sent in, which the worker put by for this page: they attach in
+  // the composer the machine that served the page opens on
+  if (hasToken()) void takeShared(machines.active().store);
 });
 
 if ("serviceWorker" in navigator) {

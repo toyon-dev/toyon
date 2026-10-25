@@ -36,6 +36,13 @@ describe("service worker", () => {
     expect(worker).toContain('e.request.mode !== "navigate"');
   });
 
+  test("takes a share in before the offline fallback, and sends the browser on to the shell", () => {
+    // the share is a POST navigation; fetched through to the daemon it would be answered with the
+    // same redirect and the files lost
+    expect(worker.indexOf('e.request.method === "POST"')).toBeLessThan(worker.indexOf("await fetch(e.request)"));
+    expect(worker).toContain('Response.redirect("/", 303)');
+  });
+
   test("caches the offline page and never the shell", () => {
     // a cached index.html would boot an asset graph the daemon no longer has
     expect(worker).toContain('"/offline.html"');

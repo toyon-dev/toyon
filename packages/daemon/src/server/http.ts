@@ -275,6 +275,13 @@ export function createFetch(opts: HttpOpts) {
       });
     }
 
+    // a share into the installed app (the manifest's share_target) that the browser's worker did
+    // not take in: the files cannot reach a composer from here, so the browser is sent on to the
+    // shell, as the worker sends it, with nothing attached
+    if (url.pathname === "/share" && req.method === "POST") {
+      return new Response(null, { status: 303, headers: { location: "/", "cache-control": NO_STORE } });
+    }
+
     // pairing: knocks and their answers, the tailnet, the name itself, and the machines handed over
     const paired = await opts.pairing(req, url, d);
     if (paired) return paired;

@@ -10,6 +10,19 @@
   ],
   "background_color": "#3d3835",
   "theme_color": "#3d3835",
+  "share_target": {
+    "action": "/share",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "files": [
+        {
+          "name": "files",
+          "accept": ["*/*"]
+        }
+      ]
+    }
+  },
   "icons": [
     {
       "src": "/icon.svg",

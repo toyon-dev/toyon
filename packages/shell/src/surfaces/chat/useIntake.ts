@@ -116,7 +116,7 @@ export function attachCopied(store: Store, boxId: string, copied: Copied) {
 }
 
 /** files of any kind on their way to the composer: pictures as images, everything else as files */
-function attachAny(store: Store, boxId: string | null, files: File[]) {
+export function attachAny(store: Store, boxId: string | null, files: File[]) {
   const isImage = (f: File) => f.type.startsWith("image/");
   void attachImages(store, boxId, files.filter(isImage));
   attachFiles(

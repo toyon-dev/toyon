@@ -19,7 +19,7 @@ import { type Choice, Choices } from "../../ui/Choices.tsx";
 import { handleChoiceKey } from "../../ui/choiceKeys.ts";
 import { useOnChange } from "../../ui/hooks.ts";
 import type { AskItem } from "./ask.ts";
-import { Card, CardBand, CardHead, type Root } from "./Card.tsx";
+import { Card, CardBand, CardHead, type Root, takeKeyboard } from "./Card.tsx";
 import { renderMarkdown } from "./markdown.ts";
 import { rejectRow, typingStart } from "./permissionNote.ts";
 import { unwrapShell } from "./toolCall.ts";
@@ -159,7 +159,10 @@ export function PermissionCard({
       <Choices
         rows={rows}
         cursor={cursor}
-        onCursor={setCursor}
+        onCursor={(i) => {
+          setCursor(i);
+          takeKeyboard(root);
+        }}
         onPick={decide}
         onHint={(i) => openNote(i, note ?? "")}
       />

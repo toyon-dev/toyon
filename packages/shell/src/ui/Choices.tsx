@@ -118,8 +118,9 @@ export function Choices({
         const state = rowState({ cursor: on, checked: row.checked });
         const deny = row.tone === "deny" && "choice-deny";
         // mousemove, not mouseenter, for the same reason the picker gives: a row arriving under a
-        // stationary pointer must not steal the highlight the keyboard is on
-        const toRow = () => onCursor && cursor !== i && onCursor(i);
+        // stationary pointer must not steal the highlight the keyboard is on. Reported on every
+        // move, the row already under the cursor included: the owner takes the keyboard on it
+        const toRow = () => onCursor?.(i);
         /** the row in its slide wrapper, with the cell its hint's words come out in while it is
          * being slid; a row with no hint, or one whose key is spent (`on` false), slides to nothing */
         const sliding = (el: ReactNode) => {

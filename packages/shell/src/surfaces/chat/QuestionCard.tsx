@@ -41,7 +41,7 @@ import {
   stripRecommended,
   walk,
 } from "./ask.ts";
-import { Card, CardFoot, CardHead, type Root } from "./Card.tsx";
+import { Card, CardFoot, CardHead, type Root, takeKeyboard } from "./Card.tsx";
 import { DraftChip } from "./DraftChip.tsx";
 import { pickAttachments, useComposerPaste } from "./useIntake.ts";
 
@@ -359,7 +359,10 @@ export function QuestionCard({
         <Choices
           rows={rows}
           cursor={open ? cursor : undefined}
-          onCursor={setCursor}
+          onCursor={(oi) => {
+            setCursor(oi);
+            takeKeyboard(root);
+          }}
           onPick={(oi) => {
             pick(oi);
             // the row took focus on the press; the keys belong to the root

@@ -15,7 +15,7 @@ import { Button } from "../../ui/Button.tsx";
 import { type Choice, Choices } from "../../ui/Choices.tsx";
 import { handleChoiceKey } from "../../ui/choiceKeys.ts";
 import { dropBlankNote, setNote } from "./ask.ts";
-import { Card, CardHead, type Root } from "./Card.tsx";
+import { Card, CardHead, type Root, takeKeyboard } from "./Card.tsx";
 import { type PiecesItem, piecesAnswer, piecesQuestion } from "./pieces.ts";
 
 /** one slot, no pick: the note is the whole of what the card takes from the person */
@@ -138,7 +138,15 @@ export function PiecesCard({
       >
         {piecesQuestion(item)}
       </CardHead>
-      <Choices rows={rows} cursor={cursor} onCursor={setCursor} onPick={pick} />
+      <Choices
+        rows={rows}
+        cursor={cursor}
+        onCursor={(i) => {
+          setCursor(i);
+          takeKeyboard(root);
+        }}
+        onPick={pick}
+      />
     </Card>
   );
 }

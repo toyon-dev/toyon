@@ -71,6 +71,17 @@ function useCardFocus(root: Root, id: string) {
   };
 }
 
+/** The pointer is over a row: the row shows what its digit, enter and `n` would do, so the next
+ * key is read against it. A transcript row pressed to read keeps the keyboard after the release
+ * (it reads Escape and the arrows), and from there `n` on the option under the pointer did nothing
+ * but draw that row's ring. Not taken from a field of the card's own, where a note is being typed
+ * as the pointer drifts across the rows, nor from a hand that plainly wants the keyboard. */
+export function takeKeyboard(root: Root) {
+  const at = document.activeElement;
+  if (holdsKeyboard(at) || (at && root.current?.contains(at))) return;
+  root.current?.focus({ preventScroll: true });
+}
+
 export function Card({
   root,
   id,

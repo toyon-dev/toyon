@@ -13,7 +13,7 @@ import { useLocalField } from "../../state/selectors.ts";
 import { type Choice, Choices } from "../../ui/Choices.tsx";
 import { handleChoiceKey } from "../../ui/choiceKeys.ts";
 import { dropBlankNote, setNote } from "./ask.ts";
-import { Card, CardBand, CardHead, type Root } from "./Card.tsx";
+import { Card, CardBand, CardHead, type Root, takeKeyboard } from "./Card.tsx";
 import { type HandoffItem, handoffAnswer } from "./handoff.ts";
 import { renderMarkdown } from "./markdown.ts";
 
@@ -137,7 +137,15 @@ export function HandoffCard({
       {/* the message whole, in the band a plan is read in: the person is the one gate on what
           another project's agent will start from, so nothing of it is folded away */}
       <CardBand html={html} />
-      <Choices rows={rows} cursor={cursor} onCursor={setCursor} onPick={pick} />
+      <Choices
+        rows={rows}
+        cursor={cursor}
+        onCursor={(i) => {
+          setCursor(i);
+          takeKeyboard(root);
+        }}
+        onPick={pick}
+      />
     </Card>
   );
 }

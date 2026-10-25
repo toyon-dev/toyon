@@ -158,6 +158,18 @@ export function openPieces(entries: readonly TranscriptEntry[]): Proposed[] {
   return [...open.values()];
 }
 
+/** the file a list sits on, as the transcript last named it: the agent's plan on a held list, the
+ * briefs Toyon wrote when it was proposed as its own card or shown as one after its turn */
+export function listFile(entries: readonly TranscriptEntry[], id: string): string | undefined {
+  let file: string | undefined;
+  for (const { event } of entries) {
+    if ((event.type === "pieces-proposed" || event.type === "pieces-shown") && event.id === id && event.plan) {
+      file = event.plan;
+    }
+  }
+  return file;
+}
+
 /** where the piece stands as go is pressed: the last fate the person set, else the agent's */
 export function effectiveFate(entries: readonly TranscriptEntry[], proposal: Proposed, piece: Piece): PieceFate {
   let fate: PieceFate = piece.fate;
@@ -463,7 +475,7 @@ export class PiecesService implements ToolProvider {
     try {
       const repo = this.d.state.repo(wt.repoId);
       if (!repo) throw new UserError(`${wt.title}'s project is no longer open in Toyon`);
-      const origin = this.originOf(wt, repo.name);
+      const origin = this.originOf(wt, repo.name, listFile(entries, id));
       const outcomes: PieceOutcome[] = [];
       for (const piece of proposed.pieces) {
         const fate = effectiveFate(entries, proposed, piece);
@@ -585,8 +597,11 @@ export class PiecesService implements ToolProvider {
     }
   }
 
-  private originOf(wt: WorktreeInfo, project: string): PieceOrigin {
-    return { path: wt.path, project, branch: wt.branch, ...(wt.plan ? { plan: wt.plan } : {}) };
+  /** the pointer a piece carries: the origin, and the file its list sits on. That file, not the
+   * record's plan: outside plan mode the record's plan is whatever an earlier plan card left there,
+   * and a sibling sent to read it would read the wrong picture */
+  private originOf(wt: WorktreeInfo, project: string, plan: string | undefined): PieceOrigin {
+    return { path: wt.path, project, branch: wt.branch, ...(plan ? { plan } : {}) };
   }
 
   private async actOn(
@@ -634,8 +649,8 @@ export class PiecesService implements ToolProvider {
     return { pieceId: piece.id, fate, worktreeId: made.id, title: made.title };
   }
 
-  /** the sibling for a piece: seeded with the brief, the origin pointer, the origin's plan and
-   * what the origin's chat attached, in the origin's mode, cold until someone looks at it */
+  /** the sibling for a piece: seeded with the brief, the origin pointer, the file its list sits on
+   * and what the origin's chat attached, in the origin's mode, cold until someone looks at it */
   private async make(
     origin: WorktreeInfo,
     at: PieceOrigin,
@@ -653,7 +668,7 @@ export class PiecesService implements ToolProvider {
         kind: "worktree",
         ref: origin.branch,
         origin: { id: origin.id, repoId: origin.repoId },
-        ...(origin.plan ? { plan: origin.plan } : {}),
+        ...(at.plan ? { plan: at.plan } : {}),
       },
       cold: true,
     });
@@ -684,7 +699,8 @@ export class PiecesService implements ToolProvider {
       for (const q of due) {
         try {
           if (!repo) throw new UserError("the project is no longer open in Toyon");
-          const made = await this.make(origin, this.originOf(origin, repo.name), q, q.note);
+          const at = this.originOf(origin, repo.name, listFile(agent.transcript(), q.proposalId));
+          const made = await this.make(origin, at, q, q.note);
           agent.note({
             type: "piece-made",
             id: q.proposalId,

@@ -1135,22 +1135,6 @@
       white-space: nowrap;
     }
   }
-  /* the piece offer's line holds a second press, the title, which has to clip to the room left
-     after the words before it: a pressable word is an atomic inline, and the line's own ellipsis
-     drops one that does not fit whole. So the line is a row, and the title the one item that gives,
-     with the ellipsis on its own text. */
-  .composer-offer-piece .composer-offer-line {
-    display: flex;
-    align-items: baseline;
-    gap: 0.25em;
-    & .composer-offer-title {
-      min-width: 0;
-      overflow: clip;
-      overflow-clip-margin: 3px;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-  }
   /* an offer that can be turned down has its way out at the row's end */
   .composer-offer-close {
     margin-left: auto;

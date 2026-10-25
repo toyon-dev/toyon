@@ -14,13 +14,6 @@ export function openPieces(chat: readonly ChatItem[]): PiecesItem | null {
   return item?.kind === "pieces" ? item : null;
 }
 
-/** A list of one, as Toyon's own card: an offer, not a card. The agent came across one thing
- * mid-task and the box is not its to take for that; the line above the box says start, and the
- * person types on. A list of two or more is the card, since the fates on it are read on the plan. */
-export function isOffer(item: Pick<PiecesItem, "state" | "pieces">): boolean {
-  return item.state === "proposed" && item.pieces.length === 1;
-}
-
 /** where the piece stands: the person's last press, else what the agent proposed */
 export function effectiveFate(item: Pick<PiecesItem, "fates">, piece: Piece): PieceFate {
   return item.fates[piece.id] ?? piece.fate;

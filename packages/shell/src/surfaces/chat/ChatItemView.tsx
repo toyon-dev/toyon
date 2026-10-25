@@ -1229,7 +1229,7 @@ export const ChatItemView = memo(function ChatItemView({
     case "handoff-landed":
       return <HandoffLandedRow item={item} />;
     case "pieces":
-      return <PiecesRow item={item} />;
+      return <PiecesRow item={item} worktreeId={worktreeId} />;
     case "piece-later":
       return <PieceLaterRow item={item} />;
     case "restored":

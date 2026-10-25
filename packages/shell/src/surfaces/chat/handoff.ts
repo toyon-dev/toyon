@@ -20,8 +20,7 @@ export function openCard(chat: ChatItem[]): CardItem | null {
     (i) =>
       (i.kind === "ask" && !i.outcome) ||
       (i.kind === "handoff" && i.state === "proposed") ||
-      // a list of one is an offer line above the box, not a card (pieces.ts, isOffer)
-      (i.kind === "pieces" && i.state === "proposed" && i.pieces.length > 1),
+      (i.kind === "pieces" && i.state === "proposed"),
   );
   return item?.kind === "ask" || item?.kind === "handoff" || item?.kind === "pieces" ? item : null;
 }

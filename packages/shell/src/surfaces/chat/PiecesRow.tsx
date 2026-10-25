@@ -1,14 +1,20 @@
 // The pieces list's quiet rows in the transcript, once it is answered: that the go is making the
-// worktrees, what each piece became, or that the list was sent back. An open list has no row
-// here: it is read on the plan, and a held one is answered with the plan card. What a queued piece
-// became when its sibling landed is a row of its own, since it comes long after.
+// worktrees, what each piece became, or that nothing started. An open list has no row here: it is
+// read on the plan, and a held one is answered with the plan card. The file the list sat on stays
+// a press away from the row, since once the card is gone nothing else in the chat names it. What
+// a queued piece became when its sibling landed is a row of its own, since it comes long after.
 
+import { openFile } from "../../state/actions/file.ts";
+import { useDispatch, useSock } from "../../state/context.tsx";
 import type { ChatItem } from "../../state/store.ts";
+import { Button } from "../../ui/Button.tsx";
 import { DaemonRow } from "./DaemonRow.tsx";
 import type { PiecesItem } from "./pieces.ts";
 import { WorktreeChip } from "./WorktreeChip.tsx";
 
-export function PiecesRow({ item }: { item: PiecesItem }) {
+export function PiecesRow({ item, worktreeId }: { item: PiecesItem; worktreeId?: string | null }) {
+  const sock = useSock();
+  const dispatch = useDispatch();
   if (item.state === "held" || item.state === "proposed") return null;
   if (item.state === "going") {
     return (
@@ -20,7 +26,7 @@ export function PiecesRow({ item }: { item: PiecesItem }) {
   if (item.state === "declined") {
     return (
       <DaemonRow icon="close" word="not split" tone="quiet" at={item.ts} below={item.reason}>
-        <span className="daemon-text">the list was sent back</span>
+        <span className="daemon-text">nothing started</span>
       </DaemonRow>
     );
   }
@@ -51,6 +57,18 @@ export function PiecesRow({ item }: { item: PiecesItem }) {
       </span>,
     );
   if (here) parts.push(<span key="here">{`${here} here`}</span>);
+  // the file the list sat on: the agent's plan when the list rode beside a plan card, else the
+  // briefs Toyon wrote, each a page with the section drawn at its head
+  const plan = item.plan;
+  const file =
+    plan && worktreeId ? (
+      <Button
+        variant="inline"
+        onClick={() => openFile({ sock, dispatch }, { worktreeId, path: plan, view: "preview" })}
+      >
+        {item.companion ? "the plan" : "the briefs"}
+      </Button>
+    ) : null;
   return (
     <DaemonRow
       icon="spawn"
@@ -69,6 +87,7 @@ export function PiecesRow({ item }: { item: PiecesItem }) {
                 {p}
               </span>
             ))}
+        {file && <> · {file}</>}
       </span>
     </DaemonRow>
   );

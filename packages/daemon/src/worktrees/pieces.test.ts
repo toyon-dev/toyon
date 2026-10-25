@@ -219,10 +219,11 @@ describe("go", () => {
       piece({ title: "Later", brief: "Not now.", where: "here" }),
     );
     const proposed = lastProposal(a.id);
-    // the origin's own plan, as an approved card left it on the record, is what the sibling is
-    // pointed at; the briefs file the list sits on is the list's, not the record's
-    const plan = ".toyon/plans/1.md";
-    w.state.worktree(a.id)!.plan = plan;
+    // the sibling is pointed at the file the list sits on, the briefs here, and not at the record's
+    // plan, which outside plan mode is whatever an earlier plan card left there
+    const plan = proposed.plan!;
+    expect(plan).toMatch(/^\.toyon\/plans\/\d+\.md$/);
+    w.state.worktree(a.id)!.plan = ".toyon/plans/stale.md";
     w.state.save();
     w.pieces.fate(a.id, proposed.id, "p3", "skip");
     await w.pieces.answer(a.id, proposed.id, true, "  and tests  ");

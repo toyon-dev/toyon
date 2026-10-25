@@ -1,23 +1,22 @@
 // Toyon's own pieces card: the agent handed over the pieces of its work outside plan mode, so
 // there is no plan card for the list to ride beside, and the box asks instead. The list itself is
-// read and moved in the document on the right, which opens as the card arrives, the way a plan
-// does for a plan card; the card is the one line that says what go does and the two presses. A
-// note is the handoff card's note: `n` opens the field under go, and it is added to every brief.
+// read and moved in the document on the right, which the card opens on a press and never on its
+// own: a pane that opens itself is one the person has to close, and on the phone it took the
+// screen with the card behind it. The card is the one line that says what go does, the way to the
+// list, and the two presses. A note is the handoff card's note: `n` opens the field under go, and
+// it is added to every brief.
 
 import type { AskAnswer } from "@toyon/shared";
 import { useRef, useState } from "react";
 import { openFile } from "../../state/actions/file.ts";
-import { useDispatch, useSock, useStore } from "../../state/context.tsx";
+import { useDispatch, useSock } from "../../state/context.tsx";
 import { useLocalField } from "../../state/selectors.ts";
+import { Button } from "../../ui/Button.tsx";
 import { type Choice, Choices } from "../../ui/Choices.tsx";
 import { handleChoiceKey } from "../../ui/choiceKeys.ts";
-import { useOnChange } from "../../ui/hooks.ts";
 import { dropBlankNote, setNote } from "./ask.ts";
 import { Card, CardHead, type Root } from "./Card.tsx";
 import { type PiecesItem, piecesAnswer, piecesQuestion } from "./pieces.ts";
-
-/** the lists whose document this tab already opened once */
-const OPENED = new Set<string>();
 
 /** one slot, no pick: the note is the whole of what the card takes from the person */
 const BLANK: AskAnswer[] = [{ selected: [] }];
@@ -36,7 +35,6 @@ export function PiecesCard({
 }) {
   const sock = useSock();
   const dispatch = useDispatch();
-  const active = useStore((s) => s.activeId);
   const stored = useLocalField(worktreeId, "card");
   const draft = stored?.id === item.id ? stored.draft : BLANK;
   const note = draft[0]?.note;
@@ -48,14 +46,10 @@ export function PiecesCard({
   // go went out: the daemon's go event closes the card a round trip later
   const [starting, setStarting] = useState(false);
   const plan = item.plan;
-  // the list opens beside the box as the card arrives, once: it is what the two presses are
-  // about, but a card remounts on every return to the row, and a pane the person shut must stay
-  // shut
-  useOnChange([item.id, plan], () => {
-    if (!plan || active !== worktreeId || OPENED.has(item.id)) return;
-    OPENED.add(item.id);
-    openFile({ sock, dispatch }, { worktreeId, path: plan, view: "preview", focus: false });
-  });
+  // the file the list sits on, beside the box: the brief of one piece, the rows of a list
+  const read = () => {
+    if (plan) openFile({ sock, dispatch }, { worktreeId, path: plan, view: "preview" });
+  };
 
   const answer = (go: boolean) => {
     if (starting || !sock) return;
@@ -91,6 +85,9 @@ export function PiecesCard({
     if (e.key === "n") {
       e.preventDefault();
       openNote();
+    } else if (e.key === "r" && plan) {
+      e.preventDefault();
+      read();
     }
   };
 
@@ -115,16 +112,28 @@ export function PiecesCard({
       description: starting ? "starting" : undefined,
       disabled: starting,
     },
-    { label: "send back", tone: "deny", disabled: starting },
+    { label: "not now", tone: "deny", disabled: starting },
   ];
+  // the way to the list is a press, in words that say what is there: one brief, or rows whose
+  // fates can be changed before go
+  const open = plan ? (
+    <Button variant="inline" data-tip="Open it beside the box (r)" onClick={read}>
+      {one ? "Read the brief" : "Read the list"}
+    </Button>
+  ) : one ? (
+    "The brief is the agent's"
+  ) : (
+    "The list is the agent's"
+  );
 
   return (
     <Card root={root} id={item.id} onKeyDown={onKeyDown}>
       <CardHead
         sub={
-          one
-            ? "The brief is on the right. Nothing has started yet."
-            : "Change any row's fate in the document. Nothing has started yet."
+          <>
+            {open}
+            {one ? "" : " and change any row's fate there"}. Nothing has started yet.
+          </>
         }
       >
         {piecesQuestion(item)}

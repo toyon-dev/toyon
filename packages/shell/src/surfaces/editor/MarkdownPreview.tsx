@@ -19,6 +19,7 @@ export function MarkdownPreview({
   focus,
   onChat,
   lead,
+  leadOnly,
 }: {
   text: string;
   path: string;
@@ -29,6 +30,8 @@ export function MarkdownPreview({
   onChat: (selected: string) => void;
   /** drawn at the head of the page, above the markdown */
   lead?: ReactNode;
+  /** the lead is the whole page: the file's own text is not drawn under it */
+  leadOnly?: boolean;
 }) {
   const sock = useSock();
   const urls = useUrls();
@@ -42,5 +45,15 @@ export function MarkdownPreview({
     const target = assetPath(dir, href);
     if (target) openFile({ sock, dispatch }, { worktreeId, path: target, view: readingView(target) });
   };
-  return <Document html={html} openSeq={openSeq} focus={focus} onLink={onLink} onChat={onChat} lead={lead} />;
+  return (
+    <Document
+      html={html}
+      openSeq={openSeq}
+      focus={focus}
+      onLink={onLink}
+      onChat={onChat}
+      lead={lead}
+      leadOnly={leadOnly}
+    />
+  );
 }

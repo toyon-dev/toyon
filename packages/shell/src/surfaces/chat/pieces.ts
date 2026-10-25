@@ -14,6 +14,15 @@ export function openPieces(chat: readonly ChatItem[]): PiecesItem | null {
   return item?.kind === "pieces" ? item : null;
 }
 
+/** Whether the file the list sits on is the briefs Toyon wrote (one heading per piece, the brief
+ * under it), rather than the agent's plan. A held list has no file of its own: it sits on the
+ * worktree's plan and takes the plan card's path when the card comes, as its `companion`; a list
+ * shown as Toyon's own card names the briefs file. The page then shows the section alone, since the
+ * file says in prose what the rows draw; the file itself stays, for a sibling and for a restart. */
+export function onBriefs(item: Pick<PiecesItem, "plan" | "companion">): boolean {
+  return !!item.plan && !item.companion;
+}
+
 /** where the piece stands: the person's last press, else what the agent proposed */
 export function effectiveFate(item: Pick<PiecesItem, "fates">, piece: Piece): PieceFate {
   return item.fates[piece.id] ?? piece.fate;

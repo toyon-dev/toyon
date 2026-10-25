@@ -9,6 +9,7 @@ import type { AttachmentRef, Piece, PieceFate } from "@toyon/shared";
 import { useMemo } from "react";
 import { useSock, useUrls } from "../../state/context.tsx";
 import { Button } from "../../ui/Button.tsx";
+import { tip } from "../../ui/Tooltip.tsx";
 import { FileChip } from "../chat/FileChip.tsx";
 import { ImageChip } from "../chat/ImageChip.tsx";
 import { renderMarkdown } from "../chat/markdown.ts";
@@ -18,6 +19,15 @@ import { effectiveFate, fatesFor, type PiecesItem, pieceFate } from "../chat/pie
 import { WorktreeChip } from "../chat/WorktreeChip.tsx";
 
 const WORD: Record<Exclude<PieceFate, "send">, string> = { here: "here", worktree: "new worktree", skip: "skip" };
+
+/** what each word does once the list is answered: `go` is the press that answers it, Toyon's own
+ * card's go or the plan card's yes */
+function tipFor(fate: PieceFate, go: string, to?: string): string {
+  if (fate === "here") return `This worktree's agent does it after ${go}`;
+  if (fate === "worktree") return "Toyon starts a worktree with the brief as its first message";
+  if (fate === "send") return `The brief is sent to the agent of ${to ?? "that worktree"}`;
+  return "Nothing happens to this piece";
+}
 
 function Chips({ refs, worktreeId }: { refs: AttachmentRef[]; worktreeId: string }) {
   const urls = useUrls();
@@ -127,6 +137,9 @@ export function Pieces({ item, worktreeId }: { item: PiecesItem; worktreeId: str
       : item.state === "held"
         ? `Worktrees · ${read}; decided with the plan card`
         : `Worktrees · ${read}; change any row`;
+  // the press that answers the list: the plan card's yes for a held list, else Toyon's own card's go
+  const go = item.state === "held" ? "yes" : "go";
+  const sends = item.pieces.some((p) => p.to);
   return (
     <section className="editor-pieces">
       <div className="editor-pieces-head section-title">
@@ -137,6 +150,15 @@ export function Pieces({ item, worktreeId }: { item: PiecesItem; worktreeId: str
           </Button>
         )}
       </div>
+      {/* what the lit word on each row means once the list is answered: the words alone read as
+          buttons, and the lit one as nothing in particular */}
+      {deciding && (
+        <p className="editor-pieces-note hint">
+          With {go}, <b>here</b> means this worktree's agent does it, <b>new worktree</b> means Toyon starts one with
+          the brief as its first message, {sends && <>a branch means the brief is sent to that worktree's agent, </>}
+          and <b>skip</b> means nothing happens.
+        </p>
+      )}
       {item.pieces.map((piece, i) => {
         const fate = effectiveFate(item, piece);
         return (
@@ -146,13 +168,28 @@ export function Pieces({ item, worktreeId }: { item: PiecesItem; worktreeId: str
               <span className="editor-piece-title">{piece.title}</span>
               {deciding ? (
                 <span className="editor-piece-fates">
+                  {/* a label ahead of the words, so they read as one choice with the lit word its
+                      answer, and not as three buttons */}
+                  <span className="editor-piece-where hint">where</span>
                   {fatesFor(piece).map((w) =>
                     w === "send" && piece.to ? (
-                      <Button key={w} variant="ghost" on={fate === w} onClick={() => press(piece, w)}>
+                      <Button
+                        key={w}
+                        variant="ghost"
+                        on={fate === w}
+                        onClick={() => press(piece, w)}
+                        {...tip(tipFor(w, go, piece.to.title))}
+                      >
                         <WorktreeChip id={piece.to.id} title={piece.to.branch} inert />
                       </Button>
                     ) : (
-                      <Button key={w} variant="ghost" on={fate === w} onClick={() => press(piece, w)}>
+                      <Button
+                        key={w}
+                        variant="ghost"
+                        on={fate === w}
+                        onClick={() => press(piece, w)}
+                        {...tip(tipFor(w, go))}
+                      >
                         {WORD[w as Exclude<PieceFate, "send">]}
                       </Button>
                     ),

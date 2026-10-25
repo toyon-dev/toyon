@@ -3,6 +3,7 @@ import type { Piece } from "@toyon/shared";
 import {
   effectiveFate,
   fatesFor,
+  onBriefs,
   openPieces,
   type PiecesItem,
   pieceFate,
@@ -110,5 +111,14 @@ describe("openPieces", () => {
     expect(openPieces([done, declined])?.id).toBe("l1");
     expect(openPieces([declined])).toBeNull();
     expect(openPieces([list([], {}, { state: "held" })])?.state).toBe("held");
+  });
+});
+
+describe("onBriefs", () => {
+  test("a list with a file of its own and no plan card sits on the briefs Toyon wrote", () => {
+    expect(onBriefs(list([], {}, { plan: ".toyon/plans/1.md" }))).toBe(true);
+    expect(onBriefs(list([], {}, { held: true, plan: ".toyon/plans/1.md" }))).toBe(true);
+    expect(onBriefs(list([], {}, { held: true, state: "held" }))).toBe(false);
+    expect(onBriefs(list([], {}, { held: true, plan: ".toyon/plans/2.md", companion: "k1" }))).toBe(false);
   });
 });

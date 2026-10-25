@@ -25,7 +25,7 @@ import { usePersisted, useSettled } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { Pane } from "../../ui/Pane.tsx";
 import { endCarry, startCarry } from "../chat/carried.ts";
-import { openPieces } from "../chat/pieces.ts";
+import { onBriefs, openPieces } from "../chat/pieces.ts";
 import { splitPath } from "../util.ts";
 import { FileViewer } from "./FileViewer.tsx";
 import { HtmlPreview } from "./HtmlPreview.tsx";
@@ -316,6 +316,8 @@ export function EditorPane({
             path={path}
             worktreeId={worktreeId}
             lead={pieces ? <Pieces item={pieces} worktreeId={worktreeId} /> : undefined}
+            // the briefs Toyon wrote say in prose what the section draws as rows: the section alone
+            leadOnly={!!pieces && onBriefs(pieces)}
             // a copy only git holds, or a file from outside, has no bytes on disk for its images to be served from
             version={history || kept || loose ? undefined : disk.version}
             openSeq={editor.seq}

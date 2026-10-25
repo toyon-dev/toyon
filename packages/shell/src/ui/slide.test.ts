@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { STEP, slideAt, slideAxis } from "./slide.ts";
+import { FLICK, FLICK_WINDOW_MS, flickSpeed, rungLetGo, STEP, slideAt, slideAxis } from "./slide.ts";
 
 describe("whose a touch is", () => {
   test("nobody's until it has travelled", () => {
@@ -44,5 +44,55 @@ describe("where a finger has brought the row", () => {
   test("a list with longer words names a wider rung", () => {
     expect(slideAt(-STEP, 1, 120).step).toBe(0);
     expect(slideAt(-120, 1, 120).step).toBe(1);
+  });
+});
+
+describe("how fast the finger lifted", () => {
+  /** a flick: 60px toward the row's start over 50ms, lifted on the last move */
+  const flick = [
+    { x: 300, t: 1000 },
+    { x: 280, t: 1016 },
+    { x: 260, t: 1033 },
+    { x: 240, t: 1050 },
+  ];
+  test("is read off the moves just before the lift", () => {
+    expect(flickSpeed(flick, 1050)).toBeCloseTo(60 / 50);
+  });
+  test("a pause before the lift reads as still, since nothing moved in the window", () => {
+    expect(flickSpeed(flick, 1050 + FLICK_WINDOW_MS + 1)).toBe(0);
+  });
+  test("one move alone says nothing", () => {
+    expect(flickSpeed([{ x: 300, t: 1000 }], 1000)).toBe(0);
+    expect(flickSpeed([], 1000)).toBe(0);
+  });
+  test("the window drops the drag's slow start and keeps its end", () => {
+    const slowThenFast = [{ x: 300, t: 0 }, { x: 290, t: 500 }, ...flick];
+    expect(flickSpeed(slowThenFast, 1050)).toBeCloseTo(60 / 50);
+  });
+  test("moving the other way is no speed toward the start", () => {
+    expect(
+      flickSpeed(
+        [...flick].reverse().map((s, i) => ({ x: s.x, t: 1000 + i * 16 })),
+        1048,
+      ),
+    ).toBe(0);
+  });
+});
+
+describe("the rung a let-go does", () => {
+  test("the rung the finger is on, however fast it lifted", () => {
+    expect(rungLetGo(2, 0, 3)).toBe(2);
+    expect(rungLetGo(1, 5, 3)).toBe(1);
+  });
+  test("short of the first rung, a flick is the first rung", () => {
+    expect(rungLetGo(0, FLICK, 3)).toBe(1);
+    expect(rungLetGo(0, FLICK * 2, 1)).toBe(1);
+  });
+  test("short of the first rung and slow, nothing", () => {
+    expect(rungLetGo(0, FLICK / 2, 3)).toBe(0);
+    expect(rungLetGo(0, 0, 3)).toBe(0);
+  });
+  test("a row with no ladder has no rung to flick to", () => {
+    expect(rungLetGo(0, FLICK * 2, 0)).toBe(0);
   });
 });

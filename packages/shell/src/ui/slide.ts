@@ -12,8 +12,38 @@ const GIVE = 0.25;
 /** the drop back, in the stylesheet too; a verb that asks a question waits for it, so the row is
  * at rest when the question comes */
 export const SETTLE_MS = 220;
+/** a finger let go short of the first rung but moving this fast along the row, in px per ms, meant
+ * the rung: a quick flick lifts after 40 to 80px, under the rung, and a thumb asked to drag the
+ * row's own width to archive reads the swipe as broken. Half a pixel a millisecond is a flick on
+ * a phone and well above a drag that was slowing to stop. */
+export const FLICK = 0.5;
+/** the speed is read over the last stretch of the touch alone, so a drag that paused and then
+ * lifted is a let-go where it stood, not the flick it began as */
+export const FLICK_WINDOW_MS = 100;
 
 export type Touch1 = { dx: number; dy: number };
+
+/** one pointer move along the row: where it was, and when */
+export type Sample = { x: number; t: number };
+
+/** How fast a finger was moving along the row toward its start when it lifted at `at`, in px per
+ * ms, read off the moves within the window before it; 0 for a touch with too little recent travel
+ * to say, which is the case after a pause as well as a tap. */
+export function flickSpeed(trail: readonly Sample[], at: number): number {
+  const recent = trail.filter((s) => at - s.t <= FLICK_WINDOW_MS);
+  if (recent.length < 2) return 0;
+  const first = recent[0] as Sample;
+  const last = recent[recent.length - 1] as Sample;
+  const dt = last.t - first.t;
+  return dt > 0 ? Math.max(0, (first.x - last.x) / dt) : 0;
+}
+
+/** The rung a let-go does: the one the finger is on, or the first when it lifted short of it in a
+ * flick. A flick reaches the first rung alone; the rungs past it are a drag's. */
+export function rungLetGo(step: number, speed: number, rungs: number): number {
+  if (step > 0) return step;
+  return rungs > 0 && speed >= FLICK ? 1 : 0;
+}
 
 /** What a touch that has travelled this far is: the slide, which runs along the row toward its
  * start, somebody else's (the list scrolls up and down, and the edge swipe back runs the other way),
@@ -61,9 +91,11 @@ export type SlideHandlers = {
 /**
  * A list whose rows slide along under a finger, each uncovering a ladder of verbs one rung at a
  * time: the first rung after a short drag, the next after a longer one, and letting go does the
- * rung the finger is on. Short of the first rung, or past the last, letting go does nothing and
- * the row drops back. A tap is still a tap, and a drag up or down is still the list's scroll;
- * only a drag along the row, toward its start, is the slide's.
+ * rung the finger is on. Short of the first rung letting go does nothing and the row drops back,
+ * unless the finger was still moving fast when it lifted: a flick is the first rung, the way one
+ * puts away a mail. Past the last rung the row gives, and letting go is still the last rung. A tap
+ * is still a tap, and a drag up or down is still the list's scroll; only a drag along the row,
+ * toward its start, is the slide's.
  *
  * The row is told through `--slide-x`, `--slide-well` and `data-slide` (`drag`, `settle`), written
  * to the node so a move renders nothing; the rung is state, since it names a word. The stylesheet
@@ -79,6 +111,8 @@ export function useSlide(list: RefObject<HTMLElement | null>, handlers: SlideHan
     let from: { x: number; y: number } | null = null;
     let dragging = false;
     let step = 0;
+    /** the last stretch of the drag, for the speed it lifted at */
+    let trail: Sample[] = [];
     let timer = 0;
     /** the click a drag's touch becomes is spent on the drag; a stamp rather than a flag, since
      * the click comes after the touch has ended */
@@ -98,15 +132,23 @@ export function useSlide(list: RefObject<HTMLElement | null>, handlers: SlideHan
       r.el.style.removeProperty("--slide-well");
       delete r.el.dataset.slide;
     };
-    const drop = () => {
+    /** `speed` is how fast the finger was still moving when it let go; a cancel has none */
+    const drop = (speed = 0) => {
       const r = row;
       const was = dragging;
-      const at = step;
+      const at = r ? rungLetGo(step, speed, r.rungs) : 0;
+      const flicked = at !== step;
       row = null;
       from = null;
       dragging = false;
       step = 0;
+      trail = [];
       if (!r || !was) return;
+      // a flick names the rung it reached as the row starts back, so the word shows for the settle
+      if (flicked) {
+        h.current.onSlide({ key: r.key, step: at });
+        navigator.vibrate?.(8);
+      }
       put(r, 0, 0, "settle");
       if (at > 0) h.current.onPick(r.key, at);
       timer = window.setTimeout(() => {
@@ -154,6 +196,8 @@ export function useSlide(list: RefObject<HTMLElement | null>, handlers: SlideHan
         }
         h.current.onSlide({ key: r.key, step: 0 });
       }
+      trail.push({ x: e.clientX, t: e.timeStamp });
+      if (trail.length > 8) trail.shift();
       const at = slideAt(dx, r.rungs, r.rung);
       put(r, at.x, at.well, "drag");
       if (at.step !== step) {
@@ -167,7 +211,9 @@ export function useSlide(list: RefObject<HTMLElement | null>, handlers: SlideHan
       if (e.pointerId !== pointer) return;
       if (dragging) spentUntil = e.timeStamp + 400;
       pointer = null;
-      drop();
+      // the lift is the last sample: a finger that stopped before it lifted has an old trail and
+      // reads as still, since no move fires while it holds
+      drop(e.type === "pointerup" ? flickSpeed(trail, e.timeStamp) : 0);
     };
     // the click arrives after the pointer is let go, on the row the drag began on; swallowed
     // before the row hears it, since a slide that also opened the row would be two answers to

@@ -249,6 +249,14 @@ describe("go", () => {
       ].join("\n\n"),
     );
     expect(first.attachments).toHaveLength(1);
+    // the message is recorded as the sibling agent's, with its words alone and where it came from
+    expect(first.brief).toEqual({
+      via: "piece",
+      text: "Fix the rail.",
+      note: "and tests",
+      origin: { id: a.id, repoId, branch: a.branch, title: "Rail" },
+      plan,
+    });
     expect(first.attachments?.[0]).toMatchObject({ kind: "image", name: "shot.png" });
     // cold: its procs wait for a look at it; the look starts them
     await settle();
@@ -311,6 +319,8 @@ describe("go", () => {
     expect(sent.text).toContain("Add the notes.");
     expect(sent.text).toContain("belongs with what you are doing here; read it as an addition to your task");
     expect(sent.attachments?.[0]).toMatchObject({ kind: "image" });
+    // recorded as the sibling agent's words in that chat too, the way a new worktree's first is
+    expect(sent.brief).toMatchObject({ via: "piece", text: "Add the notes.", origin: { id: a.id, title: "Rail" } });
     // the sibling made from the chat is not the one to send to once it is gone
     await call(a.id, piece({ title: "More", brief: "More.", where: "send", to: b.branch }));
     const again = lastProposal(a.id);

@@ -500,6 +500,24 @@ describe("chat folding", () => {
       s.local.a?.chat.map((i) => (i.kind === "user" || i.kind === "assistant" ? `${i.kind}:${i.text}` : i.kind)),
     ).toEqual(["user:hi", "assistant:hello", "user:more", "assistant:x"]);
   });
+  test("a sibling agent's brief rides on its message, so the chat draws that one as Toyon's row", () => {
+    const brief = {
+      via: "piece" as const,
+      text: "Fix the rail.",
+      note: "and tests",
+      origin: { id: "o", repoId: "r", branch: "toyon/plan", title: "The plan" },
+      plan: ".toyon/plans/1.md",
+    };
+    const s = run([
+      hello(wt("a")),
+      agent("a", { type: "user-message", text: "Fix the rail.\n\nThis is one piece of…", ts: 0, brief }),
+      agent("a", { type: "user-message", text: "thanks", ts: 0 }),
+    ]);
+    expect(s.local.a?.chat).toEqual([
+      { kind: "user", text: "Fix the rail.\n\nThis is one piece of…", seq: 0, brief },
+      { kind: "user", text: "thanks", seq: 0 },
+    ]);
+  });
   test("the rest of a reply cut by a message sent mid-stream rejoins its row; the answer opens one below", () => {
     const head = "| Route | Time |\n|---|---|\n| react | 6";
     const s = run([
@@ -2168,6 +2186,13 @@ describe("the editor's open file", () => {
     // a worktree file of the same name is another file
     expect(reducer(s, readInto("notes.md", { after: "x" }))).toBe(s);
     expect(reducer(s, { a: "editor-conflict", file: { worktreeId: "a", path: "notes.md" }, theirs: null })).toBe(s);
+    // text with nothing behind it, a brief out of the transcript, is read and never saved
+    const text = run([hello(wt("a")), loose({ source: { kind: "text" } })]);
+    expect(text.editor).toMatchObject({
+      view: "preview",
+      loose: { source: { kind: "text" } },
+      disk: { writable: false },
+    });
     // a handle writes; more than the pane shows opens empty and locked whatever came with it
     const handle = { kind: "file" } as unknown as FileSystemFileHandle;
     expect(run([hello(wt("a")), loose({ source: { kind: "handle", handle } })]).editor?.disk?.writable).toBe(true);

@@ -281,8 +281,34 @@ export interface Fixable {
   hook?: string;
 }
 
+/** A message another worktree's agent wrote to start or add to this chat: the brief it handed
+ * Toyon for a piece of its plan, or a handoff from a worktree of another project. The message's
+ * own text is what this agent was sent: the brief with Toyon's pointer to the origin behind it.
+ * What is here is what the chat shows instead: the origin agent's words alone, the note the person
+ * typed at the approval, and the origin, which the row names in a chip. */
+export interface Brief {
+  via: "piece" | "handoff";
+  /** the origin agent's markdown, as it stood on its own */
+  text: string;
+  /** what the person added when they approved it */
+  note?: string;
+  /** the worktree whose agent wrote it, as it was then: kept whole, since the row outlives it */
+  origin: {
+    id: string;
+    repoId: string;
+    branch: string;
+    title: string;
+    /** the origin's project, named on a handoff, which crosses projects */
+    project?: string;
+  };
+  /** the plan the piece came from, relative to the origin's path */
+  plan?: string;
+}
+
 export type AgentEvent =
-  | { type: "user-message"; text: string; ts: number; attachments?: AttachmentRef[] }
+  /** `brief` marks the message as a sibling agent's rather than the person's, and the chat draws
+   * it as a row of Toyon's own; the text still went to the agent as any message does */
+  | { type: "user-message"; text: string; ts: number; attachments?: AttachmentRef[]; brief?: Brief }
   /** A message Toyon sent the agent itself, to fix what `why` names. It opens a turn the way a
    * person's message does, but it is its own event so that nothing reading what the person said
    * ever takes it for their words: `text` is what the agent was told, and the chat shows `why`. */

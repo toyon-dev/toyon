@@ -19,6 +19,7 @@ import type {
   AttachmentInput,
   AttachmentKind,
   AuthMethodInfo,
+  Brief,
   CommandOrigin,
   ModelChoice,
   PermissionMode,
@@ -260,6 +261,8 @@ interface QueueItem {
   recorded?: Recorded;
   /** what Toyon's own message was sent for, when it is one: what rides behind it reads it */
   asked?: Asked["kind"];
+  /** a sibling agent's brief, kept for the record the message makes once it is shown */
+  brief?: Brief;
   /** steered, then handed back to the queue by a stop: the agent can still go on past the cancel
    * and pick the message up after all (a command still running holds the interrupt off, and the
    * adapter forces the turn closed only after a floor), and its answer then belongs to the
@@ -689,12 +692,13 @@ export class AcpSession implements AgentAdapter {
    * its turn; nothing when the message went to the queue instead. Throws as `send` does for an
    * attachment that cannot go. */
   private deliver(text: string, opts: SendOpts = {}): Promise<void> | undefined {
-    const { context, attachments, asked } = opts;
+    const { context, attachments, asked, brief } = opts;
     const item: QueueItem = {
       text,
       context,
       ...(attachments?.length ? { attachments } : {}),
       ...(asked ? { asked: asked.kind } : {}),
+      ...(brief ? { brief } : {}),
     };
     // Toyon's own message is recorded as it is sent, however long it waits for its turn: it has
     // no bubble to take back, so it is never drawn as queued, and the row saying why it was sent
@@ -1091,7 +1095,7 @@ export class AcpSession implements AgentAdapter {
 
   /** write the attachments and show the message. Numbered and written in the order they were
    * attached before anything is shown, so the bubble and the prompt agree on "Image N". */
-  private async record({ text, attachments }: QueueItem): Promise<Recorded> {
+  private async record({ text, attachments, brief }: QueueItem): Promise<Recorded> {
     const stored: Stored[] = [];
     try {
       for (const a of attachments ?? [])
@@ -1105,6 +1109,7 @@ export class AcpSession implements AgentAdapter {
       text,
       ts: Date.now(),
       ...(stored.length ? { attachments: stored.map((s) => s.ref) } : {}),
+      ...(brief ? { brief } : {}),
     });
     return { attachments: stored };
   }

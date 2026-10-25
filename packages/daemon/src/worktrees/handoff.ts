@@ -7,7 +7,7 @@
 // rather than from a table here.
 
 import { randomUUID } from "node:crypto";
-import type { AgentEvent, RepoInfo, WorktreeInfo } from "@toyon/shared";
+import type { AgentEvent, Brief, RepoInfo, WorktreeInfo } from "@toyon/shared";
 import { DEFAULT_PERMISSION_MODE, HANDOFF_TOOL } from "@toyon/shared";
 import type { McpTool, McpToolResult, ToolProvider } from "../agent/mcp.ts";
 import { handoffAskPrompt, handoffPrompt, pieceAskPrompt } from "../agent/prompt.ts";
@@ -209,10 +209,17 @@ export class HandoffService implements ToolProvider {
       const added = note?.trim() || undefined;
       const prompt = handoffPrompt(proposed.message, added, { path: wt.path, project: origin.name, branch: wt.branch });
       // no createdBy: the row is nobody's to jump to, and the person stays where they are
+      const brief: Brief = {
+        via: "handoff",
+        text: proposed.message,
+        ...(added ? { note: added } : {}),
+        origin: { id: wt.id, repoId: wt.repoId, branch: wt.branch, title: wt.title, project: origin.name },
+      };
       const made = await this.d.create(repo.id, prompt, {
         ...(proposed.title ? { title: proposed.title } : {}),
         mode: proposed.mode,
         from: { kind: "worktree", ref: wt.branch, origin: { id: wt.id, repoId: wt.repoId } },
+        brief,
       });
       agent.note({
         type: "handoff",

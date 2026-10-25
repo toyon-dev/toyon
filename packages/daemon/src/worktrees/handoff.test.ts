@@ -209,6 +209,12 @@ describe("answer", () => {
     ).toBe(true);
     expect(first).toContain(`handed off from the worktree at ${a.path} of the project repo, on its branch ${a.branch}`);
     expect(first).toContain("written by that worktree's agent");
+    expect(agentOf(b.id).sent[0]!.brief).toEqual({
+      via: "handoff",
+      text: "Fix the form field.",
+      note: "and add a test",
+      origin: { id: a.id, repoId, branch: a.branch, title: a.title, project: "repo" },
+    });
     // the go closes the card before the worktree is made, and the handoff says where it went
     expect(agentOf(a.id).recorded.slice(-2)).toMatchObject([
       { type: "handoff-go", id },

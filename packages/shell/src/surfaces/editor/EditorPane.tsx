@@ -440,6 +440,14 @@ function EditorNote({ editor, disk, files }: { editor: EditorFile; disk: EditorD
       </div>
     );
   }
+  // text out of the chat's transcript, a sibling agent's brief: nothing on disk to save it to
+  if (editor.loose?.source.kind === "text" && !disk.writable) {
+    return (
+      <div className="editor-note">
+        <span className="hint">read-only: the brief as it was sent, kept in the chat and not in a file</span>
+      </div>
+    );
+  }
   // a file from outside with no handle to save through: the browser gave its bytes and kept its
   // place. A picture or other binary is read-only wherever it sits, and says so below instead.
   if (editor.loose && !disk.writable && !disk.tooLarge && !disk.binary) {

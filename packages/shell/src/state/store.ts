@@ -16,6 +16,7 @@ import type {
   AttachmentInput,
   AttachmentRef,
   AuthMethodInfo,
+  Brief,
   ChatHit,
   ChosenFolder,
   CommitEntry,
@@ -103,7 +104,8 @@ export type UsageFigures = { used: number; size: number; cost?: number; heard?: 
 
 export type ChatItem =
   /** `seq` on the rows a chat search can land on: the transcript entry the row starts at */
-  | { kind: "user"; text: string; attachments?: AttachmentRef[]; seq?: number }
+  /** `brief`: a sibling agent's message, drawn as Toyon's row and never as the person's bubble */
+  | { kind: "user"; text: string; attachments?: AttachmentRef[]; seq?: number; brief?: Brief }
   /** `messageId` is the agent's message the row's latest chunk came from, when the agent says */
   | { kind: "assistant"; text: string; seq?: number; messageId?: string }
   | { kind: "thinking"; text: string }
@@ -609,7 +611,9 @@ export type FileRef = Pick<OpenFile, "worktreeId" | "path" | "ref" | "since">;
 export type LooseSource =
   | { kind: "handle"; handle: FileSystemFileHandle }
   | { kind: "grant"; id: string; path: string; version: string | null }
-  | { kind: "bytes" };
+  | { kind: "bytes" }
+  /** text with nothing behind it (a brief out of the transcript): read, never saved */
+  | { kind: "text" };
 
 /** what a caller opens from outside every worktree: a dropped file, by name, with its text read */
 export interface OpenLoose {
@@ -2169,7 +2173,7 @@ function reduce(s: State, action: Action): State {
         before: v.text,
         after: v.text,
         version: null,
-        writable: v.source.kind !== "bytes" && !v.tooLarge && !v.binary,
+        writable: v.source.kind !== "bytes" && v.source.kind !== "text" && !v.tooLarge && !v.binary,
         binary: v.binary,
         tooLarge: v.tooLarge,
       };
@@ -3274,6 +3278,7 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
           kind: "user",
           text: event.text,
           ...(event.attachments?.length ? { attachments: event.attachments } : {}),
+          ...(event.brief ? { brief: event.brief } : {}),
           ...stamp,
         },
       ];

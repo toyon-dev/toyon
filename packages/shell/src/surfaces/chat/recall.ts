@@ -20,7 +20,8 @@ export const isBlank = (text: string) => text === "" || text === "!";
  * the sigil already said which kind of thing is wanted. Only what was typed: the check toyon ran
  * after a turn and a landing's git steps sit on the same rows, but nobody sent them from here, and
  * a walk that put the repo's check in the box would offer to run it by hand. A card answered with
- * a note is in it by the note alone, since the pick was a press. */
+ * a note is in it by the note alone, since the pick was a press. A sibling agent's brief was sent
+ * from another chat, and is not in it. */
 export function sentHistory(chat: ChatItem[], commandsOnly: boolean): Sent[] {
   const seen = new Set<string>();
   const out: Sent[] = [];
@@ -33,7 +34,9 @@ export function sentHistory(chat: ChatItem[], commandsOnly: boolean): Sent[] {
         : commandsOnly
           ? null
           : item.kind === "user"
-            ? item.text
+            ? item.brief
+              ? null
+              : item.text
             : item.kind === "ask"
               ? typedAnswer(item)
               : null;

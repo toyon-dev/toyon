@@ -22,6 +22,7 @@ import { elapsed, spanWords } from "../util.ts";
 import { AskRow } from "./AskRow.tsx";
 import { AttachmentSet } from "./AttachmentSet.tsx";
 import { answeredQuestion, answerLines, decidedPlan } from "./ask.ts";
+import { BriefRow } from "./BriefRow.tsx";
 import { chatLink, openChatLink } from "./chatLink.ts";
 import { DaemonRow, useAgo } from "./DaemonRow.tsx";
 import { FileChip } from "./FileChip.tsx";
@@ -1019,6 +1020,62 @@ export const ChatItemView = memo(function ChatItemView({
   const fileRoot = () => worktreeById(store.getState(), worktreeId)?.worktree.path;
   switch (item.kind) {
     case "user": {
+      const chips = item.attachments && worktreeId && (
+        <AttachmentSet>
+          <div className="msg-attachments">
+            {item.attachments.map((a) =>
+              a.kind === "image" ? (
+                <SentImageChip
+                  key={`${a.kind}-${a.n}`}
+                  img={a}
+                  worktreeId={worktreeId}
+                  src={urls.attachment(worktreeId, a.file)}
+                />
+              ) : a.kind === "file" ? (
+                <FileChip
+                  key={`${a.kind}-${a.n}`}
+                  className="in-chat"
+                  name={a.name}
+                  bytes={a.bytes}
+                  href={a.text ? urls.attachment(worktreeId, a.file) : undefined}
+                  kept={{ worktreeId, file: a.file }}
+                />
+              ) : a.kind === "paste" ? (
+                <PasteChip
+                  key={`${a.kind}-${a.n}`}
+                  className="in-chat"
+                  n={a.n}
+                  name={a.name}
+                  source={a.source}
+                  lines={a.lines}
+                  chars={a.chars}
+                  preview={a.preview}
+                  href={urls.attachment(worktreeId, a.file)}
+                />
+              ) : (
+                <PickChip
+                  key={`${a.kind}-${a.n}`}
+                  pick={a}
+                  className="in-chat"
+                  tipText="Hover to highlight on the page"
+                  onHover={(entering) => onPickHover?.(a, entering)}
+                  worktreeId={worktreeId}
+                  onOpen={(path, line) => openSource(store, sock, worktreeId, path, line)}
+                />
+              ),
+            )}
+          </div>
+        </AttachmentSet>
+      );
+      // a sibling agent's message is not the person's bubble: a row of Toyon's own says whose it
+      // is, and what it attached rides under the line
+      if (item.brief) {
+        return (
+          <BriefRow brief={item.brief} worktreeId={worktreeId} marked={marked}>
+            {chips}
+          </BriefRow>
+        );
+      }
       // the person's `@` references are links, as the agent's paths are: the row routes a press
       // on one, and the menu on one is the file's
       const root = fileRoot();
@@ -1032,53 +1089,7 @@ export const ChatItemView = memo(function ChatItemView({
           )}
           onClick={(e) => openMention(e, root, worktreeId, deps)}
         >
-          {item.attachments && worktreeId && (
-            <AttachmentSet>
-              <div className="msg-attachments">
-                {item.attachments.map((a) =>
-                  a.kind === "image" ? (
-                    <SentImageChip
-                      key={`${a.kind}-${a.n}`}
-                      img={a}
-                      worktreeId={worktreeId}
-                      src={urls.attachment(worktreeId, a.file)}
-                    />
-                  ) : a.kind === "file" ? (
-                    <FileChip
-                      key={`${a.kind}-${a.n}`}
-                      className="in-chat"
-                      name={a.name}
-                      bytes={a.bytes}
-                      href={a.text ? urls.attachment(worktreeId, a.file) : undefined}
-                      kept={{ worktreeId, file: a.file }}
-                    />
-                  ) : a.kind === "paste" ? (
-                    <PasteChip
-                      key={`${a.kind}-${a.n}`}
-                      className="in-chat"
-                      n={a.n}
-                      name={a.name}
-                      source={a.source}
-                      lines={a.lines}
-                      chars={a.chars}
-                      preview={a.preview}
-                      href={urls.attachment(worktreeId, a.file)}
-                    />
-                  ) : (
-                    <PickChip
-                      key={`${a.kind}-${a.n}`}
-                      pick={a}
-                      className="in-chat"
-                      tipText="Hover to highlight on the page"
-                      onHover={(entering) => onPickHover?.(a, entering)}
-                      worktreeId={worktreeId}
-                      onOpen={(path, line) => openSource(store, sock, worktreeId, path, line)}
-                    />
-                  ),
-                )}
-              </div>
-            </AttachmentSet>
-          )}
+          {chips}
           <MentionText text={item.text} worktreeId={worktreeId} root={root} />
         </div>
       );

@@ -15,6 +15,7 @@ import type {
   AgentEvent,
   AttachmentInput,
   AttachmentRef,
+  Brief,
   Piece,
   PieceFate,
   PieceOutcome,
@@ -35,6 +36,18 @@ import type { StateStore } from "../core/state.ts";
 import type { RuntimeRegistry } from "../runtime/registry.ts";
 import { matchBy, PER_TURN_MAX, proposedThisTurn } from "./proposals.ts";
 import type { CreateOpts } from "./service.ts";
+
+/** what the chat the brief lands in shows of it: the origin agent's words and the person's note,
+ * and the origin as it is now, since the row keeps it after the origin is gone */
+function briefOf(origin: WorktreeInfo, text: string, note: string | undefined, plan: string | undefined): Brief {
+  return {
+    via: "piece",
+    text,
+    ...(note ? { note } : {}),
+    origin: { id: origin.id, repoId: origin.repoId, branch: origin.branch, title: origin.title },
+    ...(plan ? { plan } : {}),
+  };
+}
 
 export interface PiecesDeps {
   state: StateStore;
@@ -622,6 +635,7 @@ export class PiecesService implements ToolProvider {
       this.d.runtime.ensureAgent(target).agent.send(pieceSendPrompt(piece.brief, note, origin), {
         keepCards: true,
         ...(attachments.length ? { attachments } : {}),
+        brief: briefOf(wt, piece.brief, note, origin.plan),
       });
       return { pieceId: piece.id, fate, worktreeId: target.id, title: target.title };
     }
@@ -670,6 +684,7 @@ export class PiecesService implements ToolProvider {
         origin: { id: origin.id, repoId: origin.repoId },
         ...(at.plan ? { plan: at.plan } : {}),
       },
+      brief: briefOf(origin, piece.brief, note, at.plan),
       cold: true,
     });
   }

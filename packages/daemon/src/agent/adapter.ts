@@ -8,6 +8,7 @@ import type {
   AskAnswer,
   Asked,
   AttachmentInput,
+  Brief,
   QueuedMessage,
 } from "@toyon/shared";
 
@@ -58,6 +59,9 @@ export interface SendOpts {
   /** a message sent on from another chat (a piece of its plan): it answers no card here, so an
    * open one stays open and the message waits behind it */
   keepCards?: true;
+  /** the message is another worktree's agent's brief, recorded as such so the chat draws it as
+   * Toyon's row and not as the person's words */
+  brief?: Brief;
 }
 
 export interface AgentAdapter {

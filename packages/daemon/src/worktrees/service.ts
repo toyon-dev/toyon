@@ -9,6 +9,7 @@ import {
   type AgentEvent,
   type ArchivedWorktree,
   type AttachmentInput,
+  type Brief,
   baseIsRemote,
   baseOf,
   type CommitEntry,
@@ -222,6 +223,8 @@ export interface CreateOpts {
   title?: string;
   /** where the worktree came from, when it was made from somewhere: a handoff names its origin */
   from?: WorktreeInfo["from"];
+  /** the prompt is another worktree's agent's brief, and its message is recorded as such */
+  brief?: Brief;
   /** made on an agent's proposal rather than typed into: its agent starts at once, its procs on
    * the first look at it or the first request for its preview, which the idle policy's wake edges
    * already are. A row the person typed into keeps its live preview, since the spare is warm. */
@@ -514,7 +517,7 @@ export class WorktreeService {
       release = rt.agent.hold();
       if (rt.agent.runningAgent !== null && rt.agent.runningAgent !== agent) await rt.agent.restart();
       carriedIn = await this.carryMain(repo, wt, !!opts.carry);
-      rt.agent.send(prompt, { context: withCarry(context(wt.id), carriedIn), attachments });
+      rt.agent.send(prompt, { context: withCarry(context(wt.id), carriedIn), attachments, brief: opts.brief });
     });
     if (claimed) {
       const { wt } = claimed;
@@ -591,7 +594,9 @@ export class WorktreeService {
     // setup + procs warm in the background; the agent starts immediately. A proposed worktree
     // sets up and then waits for a look: nobody is watching its preview yet
     this.launch(wt, repo, repo.path, opts.cold ? { start: false } : {});
-    this.d.runtime.ensureAgent(wt).agent.send(prompt, { context: withCarry(context(id), carried), attachments });
+    this.d.runtime
+      .ensureAgent(wt)
+      .agent.send(prompt, { context: withCarry(context(id), carried), attachments, brief: opts.brief });
     this.nameOrAsk(wt, task, given);
     if (carried.unmoved) throw new UserError(carried.unmoved, { delivered: true });
     return wt;

@@ -187,14 +187,15 @@ export function lastUsage(transcript: string): WorktreeStatus["usage"] | null {
   return null;
 }
 
-/** the first message in a transcript file, cut to what a row can show */
+/** the first message in a transcript file, cut to what a row can show: a sibling agent's brief
+ * by its own words, not the pointer behind them */
 export function firstPrompt(transcript: string): string | undefined {
   if (!existsSync(transcript)) return undefined;
   for (const line of readFileSync(transcript, "utf8").split("\n")) {
     if (!line.includes('"user-message"')) continue;
     try {
       const event = (JSON.parse(line) as { event?: AgentEvent }).event;
-      if (event?.type === "user-message") return event.text.slice(0, 500);
+      if (event?.type === "user-message") return (event.brief?.text ?? event.text).slice(0, 500);
     } catch {
       // a torn line is the transcript loader's to report; the next message will do
     }

@@ -38,14 +38,16 @@ import { matchBy, PER_TURN_MAX, proposedThisTurn } from "./proposals.ts";
 import type { CreateOpts } from "./service.ts";
 
 /** what the chat the brief lands in shows of it: the origin agent's words and the person's note,
- * and the origin as it is now, since the row keeps it after the origin is gone */
-function briefOf(origin: WorktreeInfo, text: string, note: string | undefined, plan: string | undefined): Brief {
+ * the origin as it is now, since the row keeps it after the origin is gone, and the briefs list
+ * on the origin when that is what the list's file is, so the row can open the brief there */
+function briefOf(origin: WorktreeInfo, text: string, note: string | undefined, at: PieceOrigin): Brief {
   return {
     via: "piece",
     text,
     ...(note ? { note } : {}),
     origin: { id: origin.id, repoId: origin.repoId, branch: origin.branch, title: origin.title },
-    ...(plan ? { plan } : {}),
+    ...(at.plan ? { plan: at.plan } : {}),
+    ...(at.plan && at.briefs ? { file: { worktreeId: origin.id, path: at.plan } } : {}),
   };
 }
 
@@ -172,15 +174,21 @@ export function openPieces(entries: readonly TranscriptEntry[]): Proposed[] {
 }
 
 /** the file a list sits on, as the transcript last named it: the agent's plan on a held list, the
- * briefs Toyon wrote when it was proposed as its own card or shown as one after its turn */
-export function listFile(entries: readonly TranscriptEntry[], id: string): string | undefined {
-  let file: string | undefined;
+ * briefs Toyon wrote when it was proposed as its own card or shown as one after its turn.
+ * `briefs` tells the two apart: only the briefs list holds each piece's brief under a heading. */
+export function listFile(entries: readonly TranscriptEntry[], id: string): ListFile | undefined {
+  let file: ListFile | undefined;
   for (const { event } of entries) {
     if ((event.type === "pieces-proposed" || event.type === "pieces-shown") && event.id === id && event.plan) {
-      file = event.plan;
+      file = { plan: event.plan, briefs: event.type === "pieces-shown" || !event.held };
     }
   }
   return file;
+}
+
+export interface ListFile {
+  plan: string;
+  briefs: boolean;
 }
 
 /** where the piece stands as go is pressed: the last fate the person set, else the agent's */
@@ -613,8 +621,13 @@ export class PiecesService implements ToolProvider {
   /** the pointer a piece carries: the origin, and the file its list sits on. That file, not the
    * record's plan: outside plan mode the record's plan is whatever an earlier plan card left there,
    * and a sibling sent to read it would read the wrong picture */
-  private originOf(wt: WorktreeInfo, project: string, plan: string | undefined): PieceOrigin {
-    return { path: wt.path, project, branch: wt.branch, ...(plan ? { plan } : {}) };
+  private originOf(wt: WorktreeInfo, project: string, file: ListFile | undefined): PieceOrigin {
+    return {
+      path: wt.path,
+      project,
+      branch: wt.branch,
+      ...(file ? { plan: file.plan, ...(file.briefs ? { briefs: true as const } : {}) } : {}),
+    };
   }
 
   private async actOn(
@@ -635,7 +648,7 @@ export class PiecesService implements ToolProvider {
       this.d.runtime.ensureAgent(target).agent.send(pieceSendPrompt(piece.brief, note, origin), {
         keepCards: true,
         ...(attachments.length ? { attachments } : {}),
-        brief: briefOf(wt, piece.brief, note, origin.plan),
+        brief: briefOf(wt, piece.brief, note, origin),
       });
       return { pieceId: piece.id, fate, worktreeId: target.id, title: target.title };
     }
@@ -683,8 +696,9 @@ export class PiecesService implements ToolProvider {
         ref: origin.branch,
         origin: { id: origin.id, repoId: origin.repoId },
         ...(at.plan ? { plan: at.plan } : {}),
+        ...(at.plan && at.briefs ? { briefs: true } : {}),
       },
-      brief: briefOf(origin, piece.brief, note, at.plan),
+      brief: briefOf(origin, piece.brief, note, at),
       cold: true,
     });
   }

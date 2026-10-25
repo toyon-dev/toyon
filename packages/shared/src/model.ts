@@ -385,8 +385,9 @@ export interface WorktreeInfo {
     | { kind: "branch" | "remote" | "pr"; ref: string; pr?: { number: number; url: string; title: string } }
     /** made by a handoff from a worktree of another project: `ref` is that worktree's branch and
      * `origin` the row it came from. Kept as history once the origin is gone; while the origin is
-     * listed, this row shows on its rail too. */
-    | { kind: "worktree"; ref: string; origin: { id: string; repoId: string }; plan?: string };
+     * listed, this row shows on its rail too. `plan` is the origin's file the piece came from, and
+     * `briefs` says it is the list Toyon wrote, one heading per piece, rather than an agent's plan. */
+    | { kind: "worktree"; ref: string; origin: { id: string; repoId: string }; plan?: string; briefs?: true };
   /** the shell tab that asked for it (client nonce); that tab focuses it, others don't */
   createdBy?: string;
   /** registry id of the agent working here (stamped at creation, or on first use for older rows) */

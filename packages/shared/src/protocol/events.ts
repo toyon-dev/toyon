@@ -303,6 +303,11 @@ export interface Brief {
   };
   /** the plan the piece came from, relative to the origin's path */
   plan?: string;
+  /** the file holding this brief under its own heading, when there is one: the briefs list Toyon
+   * wrote on the origin outside plan mode. The row opens it in place of the transcript's copy
+   * while the origin is there. In plan mode the origin's plan file holds the plan and not the
+   * brief, and a handoff writes nothing, so neither names one. */
+  file?: { worktreeId: string; path: string };
 }
 
 export type AgentEvent =

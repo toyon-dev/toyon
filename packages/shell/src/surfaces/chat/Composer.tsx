@@ -1363,12 +1363,14 @@ export function Composer({
                   )
                 }
               >
-                from the plan
+                from the {fromPlan.briefs ? "briefs" : "plan"}
               </Button>{" "}
               in <WorktreeChip id={originRow.worktree.id} title={originRow.worktree.title} />
             </span>
           ) : (
-            <span className="composer-plan-path">from the plan in an archived worktree</span>
+            <span className="composer-plan-path">
+              from the {fromPlan.briefs ? "briefs" : "plan"} in an archived worktree
+            </span>
           )}
         </div>
       )}

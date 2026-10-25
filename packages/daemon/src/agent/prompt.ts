@@ -249,6 +249,9 @@ export interface PieceOrigin {
   branch: string;
   /** the plan file, relative to the origin's path; absent when the briefs stood alone */
   plan?: string;
+  /** the plan file is the briefs list Toyon wrote, each piece under its own heading, and not an
+   * agent's plan: the sibling's brief can be read there as well as in its chat */
+  briefs?: true;
 }
 
 /** What the agent is told once its list was acted on with the plan's yes: which pieces started as

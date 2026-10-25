@@ -6,7 +6,7 @@ import type { FakeAgent } from "../../test/helpers/fakes.ts";
 import { planReader, registered, settle, until, useWorld, w } from "../../test/helpers/world.ts";
 import { briefsDoc, writePlanDocNow } from "../agent/planDoc.ts";
 import { StateStore } from "../core/state.ts";
-import { PIECES_MAX, type RawPiece, sectionText } from "./pieces.ts";
+import { listFile, PIECES_MAX, type RawPiece, sectionText } from "./pieces.ts";
 
 // A plan's pieces across worktrees: the tool's answers to the agent, the list's state on the
 // origin's transcript, what go makes, queues and sends, and the word back when a sibling lands.
@@ -237,7 +237,7 @@ describe("go", () => {
     ] satisfies PieceOutcome[]);
     expect(made).toMatchObject({
       mode: "ask",
-      from: { kind: "worktree", ref: a.branch, origin: { id: a.id, repoId }, plan },
+      from: { kind: "worktree", ref: a.branch, origin: { id: a.id, repoId }, plan, briefs: true },
     });
     expect(made.createdBy).toBeUndefined();
     const first = agentOf(made.id).sent[0]!;
@@ -256,6 +256,8 @@ describe("go", () => {
       note: "and tests",
       origin: { id: a.id, repoId, branch: a.branch, title: "Rail" },
       plan,
+      // the briefs list Toyon wrote holds this brief too, so the row can open it there
+      file: { worktreeId: a.id, path: plan },
     });
     expect(first.attachments?.[0]).toMatchObject({ kind: "image", name: "shot.png" });
     // cold: its procs wait for a look at it; the look starts them
@@ -545,5 +547,32 @@ describe("read off the plan", () => {
     await w.pieces.answer(b.id, lastProposal(b.id).id, true);
     await settle();
     expect(agentOf(b.id).sent).toHaveLength(sentBefore);
+  });
+});
+
+describe("listFile", () => {
+  const at = (seq: number, event: AgentEvent) => ({ seq, event });
+  const pieces: never[] = [];
+  test("Toyon's own card names the briefs it wrote; a held list names the agent's plan until it is shown", () => {
+    const own = at(1, { type: "pieces-proposed", id: "l1", pieces, mode: "ask", plan: ".toyon/plans/1.md", ts: 1 });
+    expect(listFile([own], "l1")).toEqual({ plan: ".toyon/plans/1.md", briefs: true });
+    // read off the plan in plan mode: the file is the plan, which holds no brief of its own
+    const read = at(2, {
+      type: "pieces-proposed",
+      id: "l2",
+      pieces,
+      mode: "plan",
+      held: true,
+      plan: ".toyon/plans/2.md",
+      by: "toyon",
+      ts: 2,
+    });
+    expect(listFile([own, read], "l2")).toEqual({ plan: ".toyon/plans/2.md", briefs: false });
+    // shown as Toyon's own card after its turn: the briefs written then are the file from here
+    const shown = at(3, { type: "pieces-shown", id: "l2", plan: ".toyon/plans/3.md", ts: 3 });
+    expect(listFile([own, read, shown], "l2")).toEqual({ plan: ".toyon/plans/3.md", briefs: true });
+    // the agent's own held list names no file until it is shown
+    const held = at(4, { type: "pieces-proposed", id: "l3", pieces, mode: "plan", held: true, ts: 4 });
+    expect(listFile([held], "l3")).toBeUndefined();
   });
 });

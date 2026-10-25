@@ -41,7 +41,7 @@ import { openSource } from "../../state/openSource.ts";
 import { fillFrame, type HeldFrame } from "../../state/outbox.ts";
 import { isUploading } from "../../state/pending.ts";
 import { useChatCentred, useGreenfield, useLocalField, usePreviewId, useTouch } from "../../state/selectors.ts";
-import { composerBoxOf, type Draft, NEW_PROJECT_BOX, sendWaits, trunkOf } from "../../state/store.ts";
+import { composerBoxOf, type Draft, NEW_PROJECT_BOX, sendWaits, trunkOf, worktreeById } from "../../state/store.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { TextArea } from "../../ui/Field.tsx";
@@ -1282,6 +1282,15 @@ export function Composer({
   const fromPlan =
     active?.worktree.from?.kind === "worktree" && active.worktree.from.plan ? active.worktree.from : null;
   const originList = useOriginFile(fromPlan ? { worktreeId: fromPlan.origin.id, path: fromPlan.plan! } : null);
+  // an origin off the rail is named from its project's archive, which the rail asks for only in
+  // the project on screen: a handoff's origin is in another, so ask for that one here
+  const originRepo = fromPlan?.origin.repoId;
+  const originListed = useStore(
+    (s) => !fromPlan || !!worktreeById(s, fromPlan.origin.id) || !!(originRepo && s.archived[originRepo]),
+  );
+  useEffect(() => {
+    if (sock && originRepo && !originListed) sock.send({ t: "list-archived", repoId: originRepo });
+  }, [sock, originRepo, originListed]);
   // pieces of this worktree's plan waiting for a sibling to land, read off the record so a
   // restart keeps the line
   const queuedPieces = active?.worktree.queued ?? [];
@@ -1352,16 +1361,15 @@ export function Composer({
       {!plan && fromPlan && active && (
         <div className="composer-plan">
           <Icon name="spawn" className="icon-inline" />
-          {originList.origin ? (
-            <span className="composer-plan-path">
-              <Button variant="inline" data-tip={fromPlan.plan} onClick={originList.open}>
-                from {fileWord(fromPlan.briefs)}
-              </Button>{" "}
-              in <WorktreeChip id={originList.origin.worktree.id} title={originList.origin.worktree.title} />
-            </span>
-          ) : (
-            <span className="composer-plan-path">from {fileWord(fromPlan.briefs)} in an archived worktree</span>
-          )}
+          {/* the origin is the chip wherever it stands: on the rail, or in the archive, whose page
+              the chip opens; a deleted one is named by its branch, the one name kept here. The
+              file reads from the origin either way, since the archive keeps its plans */}
+          <span className="composer-plan-path">
+            <Button variant="inline" data-tip={fromPlan.plan} onClick={originList.open}>
+              from {fileWord(fromPlan.briefs)}
+            </Button>{" "}
+            in <WorktreeChip id={fromPlan.origin.id} title={fromPlan.ref} />
+          </span>
         </div>
       )}
       {/* what the plan's yes also does: the pieces the agent handed over for it, in the plan row's

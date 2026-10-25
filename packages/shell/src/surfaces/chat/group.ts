@@ -61,11 +61,13 @@ export function floats(entry: ToolEntry): boolean {
  * as they are one command repeated, so those stay a row each. */
 const GROUPABLE: ReadonlySet<string> = new Set(["read", "edit", "fetch"]);
 
-/** what two calls have to share to print as one row: the glyph, the tool behind it and the file it
- * names. The agent's own tool name is in the key even where the row does not print it, so an edit
- * and a write of one file stay apart: they read the same on the line and are not the same call. A
+/** what two calls have to share to print as one row: the glyph, the kind behind it and the file it
+ * names. The agent's own tool name is not in the key: a write of a file and the edits that follow
+ * it print the same line (the glyph and the path, with no word for the tool), and the ordinary way
+ * an agent makes a file is a Write to create it and a run of Edits to patch it, which is one row's
+ * work. The body stacks the creation and each patch, and nets them into the file as it ended up. A
  * call that failed groups with nothing, since a count is how you miss it. The spawning call is in
- * the key too: a subagent reading a file and the main agent reading it are at different depths, and
+ * the key: a subagent reading a file and the main agent reading it are at different depths, and
  * folding them into one row would print the count on whichever depth happened to come first. */
 function groupKey(item: ToolItem, roots: string[]): string {
   if (item.isError || !item.toolKind || !GROUPABLE.has(item.toolKind)) return "";
@@ -74,23 +76,18 @@ function groupKey(item: ToolItem, roots: string[]): string {
   // `follows` from ever being asked
   if (isWrittenKind(item.toolKind) && emptyInput(item.input)) return "";
   const { hint } = toolLabel(item, roots);
-  return hint ? `${item.parentToolId ?? ""}\n${item.toolKind}\n${item.name}\n${hint}` : "";
+  return hint ? `${item.parentToolId ?? ""}\n${item.toolKind}\n${hint}` : "";
 }
 
 /** a call still being written, with no path to group on yet, that most likely joins the run right
- * above it: the same kind and tool at the same depth, with nothing between. The daemon holds the
- * path back until the whole input is in (acp/map.ts), so a row of its own would say "writing the
- * change" for as long as the write takes and then vanish into the row above as its count ticks. */
+ * above it: the same kind at the same depth, with nothing between. The daemon holds the path back
+ * until the whole input is in (acp/map.ts), so a row of its own would say "writing the change" for
+ * as long as the write takes and then vanish into the row above as its count ticks. */
 function follows(item: ToolItem, last: ChatEntry | undefined, roots: string[]): last is ToolEntry {
   if (!last || !("tools" in last) || item.done || item.isError) return false;
   if (!item.toolKind || !GROUPABLE.has(item.toolKind)) return false;
   const head = last.tools[0]!;
-  return (
-    head.toolKind === item.toolKind &&
-    head.name === item.name &&
-    head.parentToolId === item.parentToolId &&
-    groupKey(head, roots) !== ""
-  );
+  return head.toolKind === item.toolKind && head.parentToolId === item.parentToolId && groupKey(head, roots) !== "";
 }
 
 /** The row that shines while the agent decides its next move, or -1. Between an edit returning

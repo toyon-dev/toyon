@@ -151,9 +151,13 @@ describe("groupTools", () => {
       { at: 0, n: 1 },
       { at: 1, n: 1 },
     ]);
-    // and so is the same kind under another tool name, or a kind that never groups
-    expect(shape([tool("edit", "/wt/a.ts"), writing("edit", { name: "Write" })], ["/wt"])).toHaveLength(2);
+    // and so is a kind that never groups; the same kind under another tool name shines the run,
+    // since a write of the file and an edit of it are one row
     expect(shape([tool("execute", "ls"), writing("execute")], ["/wt"])).toHaveLength(2);
+    const write = [tool("edit", "/wt/a.ts"), writing("edit", { name: "Write" })];
+    const entries = groupTools(write, ["/wt"]);
+    expect(entries.map(shapeOf)).toEqual([{ at: 0, n: 1 }]);
+    expect("tools" in entries[0]! && entries[0].next).toBe(write[1] as ToolItem);
   });
 
   test("a subagent's call being written shines the run it is writing under, not the main flow's", () => {
@@ -241,12 +245,14 @@ describe("groupTools", () => {
     ]);
   });
 
-  test("the same file under two tool names stays two rows", () => {
-    const items = [tool("edit", "/wt/a.ts"), tool("edit", "/wt/a.ts", { name: "Write", title: "Write" })];
-    expect(shape(items, ["/wt"])).toEqual([
-      { at: 0, n: 1 },
-      { at: 1, n: 1 },
-    ]);
+  test("a write of a file and the edits that follow it are one row", () => {
+    // the ordinary way an agent makes a file: Write to create it, then a run of Edits to patch it
+    const items = [
+      tool("edit", "/wt/a.ts", { name: "Write", title: "Write" }),
+      tool("edit", "/wt/a.ts"),
+      tool("edit", "/wt/a.ts"),
+    ];
+    expect(shape(items, ["/wt"])).toEqual([{ at: 0, n: 3 }]);
   });
 
   test("a run replayed from an older toyon, with no kind, is a row per call", () => {

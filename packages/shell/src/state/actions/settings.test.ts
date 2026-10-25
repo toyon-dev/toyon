@@ -72,7 +72,7 @@ describe("the settings menu", () => {
     expect(row("off")?.detail).toBe("off");
   });
 
-  test("the black background line is the phone's alone, beside the chat side, and flips on press", () => {
+  test("the OLED black line is the phone's alone, beside the chat side, and flips on press", () => {
     const dispatched: unknown[] = [];
     const items = (frame: "desk" | "phone", blackGround: boolean) =>
       settingsItems(
@@ -93,7 +93,7 @@ describe("the settings menu", () => {
     expect(items("desk", true).find((i) => i.id === "black-ground")).toBeUndefined();
     const on = items("phone", true);
     const row = on.find((i) => i.id === "black-ground");
-    expect(row?.label).toBe("black background");
+    expect(row?.label).toBe("OLED black");
     expect(row?.detail).toBe("on");
     expect(on.map((i) => i.id).indexOf("black-ground")).toBe(on.map((i) => i.id).indexOf("chat-side") + 1);
     expect(items("phone", false).find((i) => i.id === "black-ground")?.detail).toBe("off");

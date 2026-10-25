@@ -1116,6 +1116,10 @@ describe("static shell", () => {
     expect(r?.headers.get("cache-control")).toBe("no-store");
     expect(await r?.json()).toEqual({ name: "Toyon", theme_color: "#222222", background_color: "#222222" });
   });
+  test("a phone that stands its theme on black asks for a black manifest", async () => {
+    const r = await serve(req("/manifest.json?black=1"), srv());
+    expect(await r?.json()).toEqual({ name: "Toyon", theme_color: "#000000", background_color: "#000000" });
+  });
   test("the not-running page is told the start link, when there is one, and this daemon's port", async () => {
     startLink = null;
     const bare = await (await serve(req("/offline.html"), srv()))?.text();

@@ -35,7 +35,7 @@ export function groundNow(): Ground {
   return "surface1";
 }
 
-export function applyTheme(theme: Theme, opts: { remember?: boolean; ground?: Ground } = {}) {
+export function applyTheme(theme: Theme, opts: { remember?: boolean; ground?: Ground; black?: boolean } = {}) {
   const root = document.documentElement;
   for (const [k, v] of Object.entries(themeToCssVars(theme))) root.style.setProperty(k, v);
   root.style.colorScheme = theme.kind;
@@ -54,6 +54,13 @@ export function applyTheme(theme: Theme, opts: { remember?: boolean; ground?: Gr
   // bar's colour either way.
   const above = frameNow() === "phone" ? theme.colors[ground] : theme.colors.surface1;
   document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')?.setAttribute("content", above);
+  // An installed app may paint its bars from the manifest alone, which the daemon serves in the
+  // theme it holds. A theme stood on black is this browser's doing, so the link says so and the
+  // daemon answers in black; what a browser installed already does with a changed manifest is
+  // its own: Chrome on Android re-reads it on a launch, iOS reads it when the app is added.
+  document
+    .querySelector<HTMLLinkElement>('link[rel="manifest"]')
+    ?.setAttribute("href", opts.black ? "/manifest.json?black=1" : "/manifest.json");
   if (opts.remember === false) return;
   try {
     localStorage.setItem(STORAGE.theme, JSON.stringify(theme));

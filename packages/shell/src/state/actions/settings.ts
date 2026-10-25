@@ -92,7 +92,7 @@ export function settingsItems(s: SettingsState, { sock, dispatch }: Deps): MenuE
             {
               id: "black-ground",
               topic: "theme",
-              label: "black background",
+              label: "OLED black",
               detail: s.blackGround ? "on" : "off",
               onClick: () => dispatch({ a: "toggle-black-ground" }),
             },

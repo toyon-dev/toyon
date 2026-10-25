@@ -415,9 +415,11 @@ export function createFetch(opts: HttpOpts) {
     const hashed = rel.startsWith("/assets/");
     if (existsSync(file) && Bun.file(file).size > 0) {
       // some browsers colour an installed app's bars from the manifest alone and never read the
-      // page's theme-color, so the file on disk is only the shape: the colours are the theme's
+      // page's theme-color, so the file on disk is only the shape: the colours are the theme's.
+      // A phone standing its theme on black says so in the link it points here (theme.ts), since
+      // that switch is the browser's own and the theme the daemon holds knows nothing of it
       if (rel === "/manifest.json") {
-        const ground = opts.manifestGround();
+        const ground = url.searchParams.get("black") === "1" ? "#000000" : opts.manifestGround();
         const manifest = { ...(await Bun.file(file).json()), theme_color: ground, background_color: ground };
         return Response.json(manifest, {
           headers: { "content-type": "application/manifest+json", "cache-control": NO_STORE },

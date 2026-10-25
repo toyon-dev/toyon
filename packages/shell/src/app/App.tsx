@@ -210,9 +210,10 @@ export function App() {
   // previews get the accent for their overlays
   useEffect(() => {
     // a picker preview paints but is not remembered: a crash mid-browse must not adopt it
-    applyTheme(painted, { remember: !previewing, ground });
+    // painted is the theme itself unless black changed it: a light theme stays as it is
+    applyTheme(painted, { remember: !previewing, ground, black: painted !== theme });
     previewBus.broadcast(bridgeThemeMsg(painted));
-  }, [painted, previewing, ground]);
+  }, [painted, theme, previewing, ground]);
 
   // Where the sun is has no media query behind it: the zone table lives in the daemon, so the shell
   // asks. It asks for every mode, not only the one that follows daylight, because the picker's row

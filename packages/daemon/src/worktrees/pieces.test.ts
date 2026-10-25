@@ -79,7 +79,8 @@ describe("the tool", () => {
     await refusal(piece({ brief: "   " }), "has no brief");
     await refusal(piece({ title: " " }), "has no title");
     await refusal(piece({ brief: "x".repeat(6_001) }), "over 6000 characters");
-    await refusal(piece({ title: "t".repeat(201) }), "over 200 characters");
+    await refusal(piece({ title: "t".repeat(21) }), "runs to 21 characters; a title is 1 to 3 plain words");
+    await refusal(piece({ title: "fix the form on save" }), "runs to 5 words");
     await refusal(piece({ where: "here", after: "this" }), "only a `worktree` piece takes");
     await refusal(piece({ where: "here", to: "Composer" }), "only a `send` piece takes");
     await refusal(piece({ where: "send" }), "names no worktree in `to`");

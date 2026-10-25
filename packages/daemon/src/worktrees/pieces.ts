@@ -34,6 +34,7 @@ import type { Hub } from "../core/hub.ts";
 import { fireAndForget, log } from "../core/log.ts";
 import type { StateStore } from "../core/state.ts";
 import type { RuntimeRegistry } from "../runtime/registry.ts";
+import { NAME_SHAPE, overNameShape } from "./naming.ts";
 import { matchBy, PER_TURN_MAX, proposedThisTurn } from "./proposals.ts";
 import type { CreateOpts } from "./service.ts";
 
@@ -81,7 +82,6 @@ export interface RawPiece {
 
 /** the caps keep a runaway agent from filling the list; six is what a person reads beside a plan */
 export const PIECES_MAX = 6;
-const TITLE_MAX = 200;
 const BRIEF_MAX = 6_000;
 const ATTACH_MAX = 10;
 
@@ -254,7 +254,10 @@ export class PiecesService implements ToolProvider {
             items: {
               type: "object",
               properties: {
-                title: { type: "string", description: "A short name for the piece, a few words." },
+                title: {
+                  type: "string",
+                  description: `A name for the piece, the way a teammate would say it: ${NAME_SHAPE}. It titles the worktree.`,
+                },
                 brief: {
                   type: "string",
                   description:
@@ -344,8 +347,9 @@ export class PiecesService implements ToolProvider {
       const title = p.title.trim();
       const brief = p.brief.trim();
       if (!title) return refused(`Piece ${i + 1} has no title.`);
-      if (title.length > TITLE_MAX)
-        return refused(`Piece ${i + 1}'s title is over ${TITLE_MAX} characters; a few words.`);
+      // the title is the worktree's: held to the namer's shape rather than cut to it
+      const over = overNameShape(title);
+      if (over) return refused(`Piece ${i + 1}'s title ${over}`);
       if (!brief) return refused(`Piece ${i + 1} ("${title}") has no brief; write what its agent starts from.`);
       if (brief.length > BRIEF_MAX) {
         return refused(`Piece ${i + 1}'s brief is over ${BRIEF_MAX} characters; cut it to what its agent needs.`);

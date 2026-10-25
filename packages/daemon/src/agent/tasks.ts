@@ -7,7 +7,7 @@
 import type { AttachmentInput, WorktreeInfo } from "@toyon/shared";
 import type { StateStore } from "../core/state.ts";
 import { DEFAULT_AGENT_ID, type RuntimeRegistry } from "../runtime/registry.ts";
-import { sentenceCase } from "../worktrees/naming.ts";
+import { NAME_SHAPE, overNameShape, sentenceCase } from "../worktrees/naming.ts";
 import { ANSWER_SYSTEM, LAND_SYSTEM, type LandVerdict, parseLanding } from "./landing.ts";
 import { parseRecap } from "./recap.ts";
 import type { AgentRegistry } from "./registry.ts";
@@ -31,11 +31,11 @@ function attachmentText(a: AttachmentInput): string {
   return `element <${a.component ?? a.tag}>${a.text ? ` "${a.text}"` : ""}`;
 }
 
-/** 1-3 plain words or nothing: an error message or a sentence must not become a title. A name too
- * long for the rail is refused rather than cut, since a cut can turn an error's opening words into
- * a name that passes. The answer comes back kebab-case however the prompt is worded, so a run of
- * punctuation reads as one space and the words are counted from there; the branch carries the slug,
- * and this is the title a person reads. */
+/** A name in the shape or nothing: an error message or a sentence must not become a title. A name
+ * too long for the rail is refused rather than cut, since a cut can turn an error's opening words
+ * into a name that passes. The answer comes back kebab-case however the prompt is worded, so a run
+ * of punctuation reads as one space and the words are counted from there; the branch carries the
+ * slug, and this is the title a person reads. */
 export function parseName(text: string | null): string | null {
   if (!text) return null;
   const line = text.trim().split("\n").at(-1) ?? "";
@@ -44,8 +44,7 @@ export function parseName(text: string | null): string | null {
     .replace(/[`"'.]/g, "")
     .replace(/[^\p{L}\p{N}]+/gu, " ")
     .trim();
-  const words = name.split(" ").filter(Boolean);
-  if (words.length < 1 || words.length > 3 || name.length < 3 || name.length > 20) return null;
+  if (name.length < 3 || overNameShape(name)) return null;
   if (/error|fail|sorry|cannot|unable|unauthori|forbidden|denied|\b[45]\d\d\b/.test(name)) return null;
   return sentenceCase(name);
 }
@@ -80,7 +79,7 @@ export const PIECES_SYSTEM = "You read plans and reply with only the requested J
 export const piecesPrompt = (markdown: string) =>
   [
     "Below is a plan. List the parts of it the plan itself means to build apart from the rest: a step or section it marks as its own branch, a sibling worktree, a follow-up, or independent work. Also list the part it keeps in this worktree, if it says so.",
-    'Reply with ONLY a JSON array of 0 to 6 objects, each {"title": a short name, "section": the exact heading text of that part, "where": "worktree" or "here", "after": optional, "this" when the plan says the part waits for this branch to land}.',
+    `Reply with ONLY a JSON array of 0 to 6 objects, each {"title": a name for the part, ${NAME_SHAPE}, "section": the exact heading text of that part, "where": "worktree" or "here", "after": optional, "this" when the plan says the part waits for this branch to land}.`,
     "Reply with an empty array when the plan is one piece of work with no part set apart.",
     `Plan:\n${markdown.slice(0, 12_000)}`,
   ].join("\n");

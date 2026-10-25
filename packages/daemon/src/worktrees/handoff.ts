@@ -17,7 +17,7 @@ import type { Hub } from "../core/hub.ts";
 import { log } from "../core/log.ts";
 import type { StateStore } from "../core/state.ts";
 import type { RuntimeRegistry } from "../runtime/registry.ts";
-import { titleFrom } from "./naming.ts";
+import { NAME_SHAPE, overNameShape, titleFrom } from "./naming.ts";
 import type { PiecesService } from "./pieces.ts";
 import { PER_TURN_MAX, proposedThisTurn } from "./proposals.ts";
 import type { CreateOpts } from "./service.ts";
@@ -42,7 +42,6 @@ interface Proposal {
 }
 
 const MESSAGE_MAX = 20_000;
-const TITLE_MAX = 200;
 const PROJECT_MAX = 200;
 
 const refused = (text: string): McpToolResult => ({ text, isError: true });
@@ -114,7 +113,10 @@ export class HandoffService implements ToolProvider {
             description:
               "What that project's agent starts from: what is needed and why, how to reproduce it, and the paths in this worktree that depend on it. It is sent as that agent's first message.",
           },
-          title: { type: "string", description: "A short name for the new worktree, a few words." },
+          title: {
+            type: "string",
+            description: `A name for the new worktree, the way a teammate would say it: ${NAME_SHAPE}.`,
+          },
         },
         required: ["project", "message"],
         additionalProperties: false,
@@ -146,7 +148,9 @@ export class HandoffService implements ToolProvider {
     const wt = this.d.state.worktree(worktreeId);
     if (!wt) throw new UserError("that chat is gone");
     if (p.project.length > PROJECT_MAX) return refused(`The project name is over ${PROJECT_MAX} characters.`);
-    if ((p.title ?? "").length > TITLE_MAX) return refused(`The title is over ${TITLE_MAX} characters; a few words.`);
+    // the title is the worktree's: held to the namer's shape rather than cut to it
+    const over = overNameShape(p.title?.trim() ?? "");
+    if (over) return refused(`The title ${over}`);
     if (p.message.length > MESSAGE_MAX) {
       return refused(`The message is over ${MESSAGE_MAX} characters; cut it to what the other agent needs.`);
     }

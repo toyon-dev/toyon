@@ -23,12 +23,32 @@ export function freeSlot(parent: string): { id: string; dir: string } {
   }
 }
 
+/** The shape of a name toyon gives a worktree, whoever found it: the namer's answer, a title an
+ * agent hands in with a piece or a handoff, the words a prompt opens with. About what the rail
+ * shows whole, so every row reads the same way whichever path named it. */
+export const NAME_WORDS_MAX = 3;
+export const NAME_CHARS_MAX = 20;
+/** the shape as a tool or a prompt asks for it */
+export const NAME_SHAPE = `1 to ${NAME_WORDS_MAX} plain words, ${NAME_CHARS_MAX} characters at most, like "sticky header"`;
+
+/** Why a title is sent back ("runs to 4 words; a title is ..."), for the tool that took it to say
+ * whose title; null within the shape. A title over the shape is refused rather than cut, since a
+ * cut one is a name nobody chose. */
+export function overNameShape(title: string): string | null {
+  const words = title.split(/\s+/).filter(Boolean).length;
+  const over =
+    words > NAME_WORDS_MAX ? `${words} words` : title.length > NAME_CHARS_MAX ? `${title.length} characters` : null;
+  return over && `runs to ${over}; a title is ${NAME_SHAPE}.`;
+}
+
 /** The first words of the prompt, as the title the task keeps until the agent names it. Words with
  * their spaces left in: nothing is spelled from the title, so it never has to be spelled git's way.
- * Held to about what the rail shows. */
+ * Within the name shape, dropping whole words first: a provisional title is cut where a chosen one
+ * would be refused, since nobody chose it. */
 export function titleFrom(prompt: string): string {
-  const words = prompt.split(/\s+/).filter(Boolean).slice(0, 3).join(" ");
-  return sentenceCase(cleanTitle(words) || "task");
+  const words = prompt.split(/\s+/).filter(Boolean).slice(0, NAME_WORDS_MAX);
+  while (words.length > 1 && words.join(" ").length > NAME_CHARS_MAX) words.pop();
+  return sentenceCase(cleanTitle(words.join(" ").slice(0, NAME_CHARS_MAX)) || "task");
 }
 
 /** a user- or model-supplied title as a person reads it: one line, no control characters, nothing

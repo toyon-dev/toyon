@@ -143,8 +143,8 @@ describe("propose", () => {
       text: expect.stringContaining("over 20000 characters"),
       isError: true,
     });
-    expect(await w.handoff.call(wt.id, { project: "acp", message: "m", title: "t".repeat(201) })).toMatchObject({
-      text: expect.stringContaining("over 200 characters"),
+    expect(await w.handoff.call(wt.id, { project: "acp", message: "m", title: "t".repeat(21) })).toMatchObject({
+      text: expect.stringContaining("runs to 21 characters; a title is 1 to 3 plain words"),
       isError: true,
     });
     expect(await w.handoff.call(wt.id, { project: "nope", message: "m" })).toEqual({

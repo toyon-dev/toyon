@@ -89,8 +89,8 @@ const MARGIN = 48;
 function reveal(root: HTMLElement, range: Range) {
   const r = range.getBoundingClientRect();
   const box = root.getBoundingClientRect();
-  // the box's foot may be spoken for (a composer standing sticky at its end), as scroll-padding
-  const foot = parseFloat(getComputedStyle(root).scrollPaddingBottom) || 0;
+  // the box's foot may be spoken for (a composer standing sticky at its end), as --scroll-foot
+  const foot = parseFloat(getComputedStyle(root).getPropertyValue("--scroll-foot")) || 0;
   if (r.top >= box.top + MARGIN && r.bottom <= box.bottom - foot - MARGIN) return;
   root.scrollTop += r.top - box.top - box.height / 3;
 }

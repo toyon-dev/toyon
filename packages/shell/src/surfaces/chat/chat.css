@@ -190,9 +190,18 @@
     /* the box at the foot paints over the rows scrolling under it, in a stack of the log's own */
     isolation: isolate;
     /* and covers the foot of the scrollport, whole at the end and its folded rows past the ride
-       (--cover, useFold): what brings a row into view (a reveal, a find) stops above it, which
-       both read off this */
-    scroll-padding-bottom: calc(var(--cover, 0px) + 12px);
+       (--cover, useFold): what brings a row into view stops above it. Our own reveals (useReveal,
+       a find) read the property, which holds whatever has the keyboard; the browser's own (a Tab
+       onto a link in a row, find in page) read the scroll padding, which is the same length
+       until the box itself holds focus. Then it is nothing: the browser reveals the caret by that
+       padding on every keystroke, and a caret in the box doing the covering never clears it, so
+       with the reader up in the log each key pulled the transcript down by a line. The same for
+       a field in a card the box holds, which a question reveals as it takes focus. */
+    --scroll-foot: calc(var(--cover, 0px) + 12px);
+    scroll-padding-bottom: var(--scroll-foot);
+    &:has(> .chat-input:focus-within) {
+      scroll-padding-bottom: 0;
+    }
     /* a short transcript sits on the composer instead of the top of the pane; once the
    content overflows there is no free space left and the margin collapses to nothing.
    justify-content: flex-end would do the same but makes the overflowing top unreachable.

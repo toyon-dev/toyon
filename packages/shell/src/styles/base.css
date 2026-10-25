@@ -56,6 +56,17 @@
     background: var(--element1);
     color: var(--ink0);
   }
+  /* How much of a scroller's foot is spoken for, by something standing sticky at its end (the
+     chat log's composer): what brings a row into view (useReveal, DocumentFind) stops above it.
+     Its own property beside the scroller's scroll-padding, because the scroller may have to drop
+     the padding while the browser would act on it wrongly (the chat log, while the box holds the
+     caret) and a reveal of a row still has to stop above the box. Registered so a value written
+     as a calc computes to one length the readers can parse. */
+  @property --scroll-foot {
+    syntax: "<length>";
+    inherits: false;
+    initial-value: 0px;
+  }
   /* where the keyboard is, in the accent: the ring the browser draws for that is its own blue,
      a different one in each browser, and the only colour in the shell that is not the theme's.
      Said once and at no specificity, so it is the floor for every control and never a contest:

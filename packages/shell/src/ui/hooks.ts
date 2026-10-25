@@ -182,8 +182,8 @@ export function useReveal(scroller: string) {
     if (!box) return;
     const b = box.getBoundingClientRect();
     const r = el.getBoundingClientRect();
-    // the scroller's own foot is spoken for (a box standing sticky at its end), as scroll-padding
-    const foot = parseFloat(getComputedStyle(box).scrollPaddingBottom) || 0;
+    // the scroller's own foot is spoken for (a box standing sticky at its end), as --scroll-foot
+    const foot = parseFloat(getComputedStyle(box).getPropertyValue("--scroll-foot")) || 0;
     const below = r.bottom - (b.bottom - foot);
     if (below <= 0) return;
     const pad = parseFloat(getComputedStyle(box).paddingTop) || 0;

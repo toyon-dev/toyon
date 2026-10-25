@@ -17,21 +17,20 @@ const lstar = (hex: string) => {
 };
 
 describe("blackGroundOf", () => {
-  test("stands a dark theme on black, each ground keeping its contrast against the floor", () => {
+  test("stands both screen grounds on black, the rest keeping their contrast against the floor", () => {
     const t = blackGroundOf(toyonDark);
+    // the chat's ground and the phone list's: every screen, and the status bar above it, is black
     expect(t.colors.surface0).toBe("#000000");
+    expect(t.colors.surface1).toBe("#000000");
     const was = toyonDark.colors;
-    for (const k of ["surface1", "surface2", "element0", "element1", "border0", "border1"] as const) {
+    for (const k of ["surface2", "element0", "element1", "border0", "border1"] as const) {
       expect(
         Math.abs(contrastRatio(t.colors[k], t.colors.surface0) - contrastRatio(was[k], was.surface0)),
       ).toBeLessThan(0.05);
       expect(lstar(t.colors[k])).toBeLessThan(lstar(was[k]));
     }
-    // and so against each other: the idle dot (surface2) still parts from the list (surface1)
-    expect(
-      Math.abs(contrastRatio(t.colors.surface2, t.colors.surface1) - contrastRatio(was.surface2, was.surface1)),
-    ).toBeLessThan(0.05);
-    expect(lstar(t.colors.surface2)).toBeGreaterThan(lstar(t.colors.surface1) + 8);
+    // the idle dot (surface2) still reads on the black list
+    expect(lstar(t.colors.surface2)).toBeGreaterThan(12);
   });
 
   test("the quiet text tiers keep the contrast they had against the floor, body text stays", () => {
@@ -56,15 +55,16 @@ describe("blackGroundOf", () => {
     }
     expect(t.syntax).toEqual(toyonDark.syntax);
     expect(themeToCssVars(t)["--accent"]).toBe(themeToCssVars(toyonDark)["--accent"]);
-    // the recess cut under the chrome follows it down, still a step under the chrome
-    expect(lstar(sunkenOf(t))).toBeLessThan(lstar(t.colors.surface1));
+    // the recess cut under the chrome has nowhere lower to go: it is the black it sits in
+    expect(sunkenOf(t)).toBe("#000000");
   });
 
-  test("the darkest ground is the one that lands on black, whichever it is", () => {
-    // Tokyo Night's ramp runs the other way: its floor is a control at rest, not surface0
+  test("a ramp that runs the other way measures from its own darkest ground", () => {
+    // Tokyo Night's floor is a control at rest, not surface0: it lands on black with the screens
     const t = blackGroundOf(tokyoNight);
     expect(t.colors.element1).toBe("#000000");
-    expect(lstar(t.colors.surface0)).toBeGreaterThan(0);
+    expect(t.colors.surface0).toBe("#000000");
+    expect(lstar(t.colors.text1)).toBeLessThan(lstar(tokyoNight.colors.text1));
   });
 
   test("a light theme has no black to go to, and a theme on black stays put", () => {

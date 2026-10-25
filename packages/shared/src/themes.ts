@@ -901,18 +901,20 @@ export function sunkenFloorOf(theme: Theme): string {
 const GROUND_KEYS: ThemeColorKey[] = ["surface0", "surface1", "surface2", "element0", "element1", "border0", "border1"];
 
 /**
- * A dark theme stood on black: the darkest of its grounds becomes #000000, and the other grounds
- * and the two quiet text tiers follow it down until each keeps the contrast ratio it had against
- * that floor. Contrast rather than L* distance, because the ratio's flare term is the thing that
- * is true near black: a step of seven L* that parts the idle dot from the list on a brown ground
- * all but vanishes on a black one, and the quiet tier at its old lightness reads lifted, with the
- * status line under a title nearly as bright as the title. For a phone with an OLED panel, where
- * black turns the pixels off and is the deepest ground the screen has, and where a session is a
- * glance rather than hours, so the bloom light text takes on a near-black ground (see toyonDark)
- * is not paid for long. Body text stays where it is, since it is what is read, and nothing else
- * moves: accents, syntax and the diff tints are the theme's own, and so is its id, since it is
- * still the theme that was chosen. A light theme has no black to go to and comes back as it is; a
- * theme already on black comes back as it is too, so painting it twice is painting it once.
+ * A dark theme stood on black: both grounds a screen stands on, surface0 under a chat and surface1
+ * under the phone's list and its bar, become #000000, so every screen and the status bar above it
+ * are black and panels part by their borders alone. The remaining grounds and the two quiet text
+ * tiers follow the darkest ground down until each keeps the contrast ratio it had against it.
+ * Contrast rather than L* distance, because the ratio's flare term is the thing that is true near
+ * black: a step of seven L* that parts the idle dot from the list on a brown ground all but
+ * vanishes on a black one, and the quiet tier at its old lightness reads lifted, with the status
+ * line under a title nearly as bright as the title. For a phone with an OLED panel, where black
+ * turns the pixels off and is the deepest ground the screen has, and where a session is a glance
+ * rather than hours, so the bloom light text takes on a near-black ground (see toyonDark) is not
+ * paid for long. Body text stays where it is, since it is what is read, and nothing else moves:
+ * accents, syntax and the diff tints are the theme's own, and so is its id, since it is still the
+ * theme that was chosen. A light theme has no black to go to and comes back as it is; a theme
+ * already on black comes back as it is too, so painting it twice is painting it once.
  */
 export function blackGroundOf(theme: Theme): Theme {
   if (theme.kind !== "dark") return theme;
@@ -920,11 +922,12 @@ export function blackGroundOf(theme: Theme): Theme {
   const floor = theme.colors[floorKey];
   if (luminance(floor) <= 0) return theme;
   const colors = { ...theme.colors };
-  // the floor itself has a ratio of one, which is black: no case of its own
   for (const k of [...GROUND_KEYS, "text1", "text2"] as const) {
     const y = contrastRatio(theme.colors[k], floor) * 0.05 - 0.05;
     colors[k] = stepL(colors[k], lstarOfY(y) - toLstar(colors[k]));
   }
+  colors.surface0 = "#000000";
+  colors.surface1 = "#000000";
   return { ...theme, colors };
 }
 

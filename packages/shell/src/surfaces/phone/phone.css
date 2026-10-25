@@ -18,6 +18,8 @@
     --row-height-log: var(--row-height-log-phone);
     --type-ui-sm: var(--type-ui-sm-phone);
     --type-ui: var(--type-ui-phone);
+    --type-mono-sm: var(--type-mono-sm-phone);
+    --type-mono: var(--type-mono-phone);
     --size-mono: var(--size-mono-phone);
     --size-mono-sm: var(--size-mono-sm-phone);
     font: var(--type-ui);

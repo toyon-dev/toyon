@@ -224,12 +224,19 @@
     --type-heading: 400 26px / 34px var(--face-ui);
     --type-mono-sm: 400 var(--size-mono-sm) var(--face-mono);
     --type-mono: 400 var(--size-mono) var(--face-mono);
+    /* Written out with the phone sizes rather than left to the redirect of --size-mono below: a
+     var() inside a custom property resolves where the property is declared, here on the root, so
+     --type-mono already holds the desk's 12px by the time the phone root points --size-mono
+     elsewhere, and a backticked word in a 15px sentence stayed at 12. */
+    --type-mono-sm-phone: 400 var(--size-mono-sm-phone) var(--face-mono);
+    --type-mono-phone: 400 var(--size-mono-phone) var(--face-mono);
 
     /* The two sizes above, on their own: Monaco and xterm parseFloat these, since a `font`
      shorthand is not parseable and both editors want a number. */
     --size-mono: 12px;
     --size-mono-sm: 11px;
-    --size-mono-phone: 13px;
+    /* the same point under the phone's 15px prose that the desk's mono sits under its 13px */
+    --size-mono-phone: 14px;
     --size-mono-sm-phone: 12px;
 
     /* 500 marks the one word in a row you would read first; 600 is for --type-ui-lg. Never 700:

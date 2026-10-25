@@ -2,7 +2,7 @@ import { type RefObject, useEffect, useRef } from "react";
 
 /** a finger has to travel this far before the touch is a drag, and which way it went by then decides
  * whose it is */
-const SLOP = 8;
+export const SLOP = 8;
 /** one rung of the ladder: how far the row slides for each verb. Enough that the longest word
  * and its glyph stand whole in the cell before the rung is reached, and short enough that a thumb
  * reaches the first rung without thinking about it; a list with longer words names its own. */
@@ -30,12 +30,20 @@ export type Sample = { x: number; t: number };
  * ms, read off the moves within the window before it; 0 for a touch with too little recent travel
  * to say, which is the case after a pause as well as a tap. */
 export function flickSpeed(trail: readonly Sample[], at: number): number {
+  return Math.max(0, -lifted(trail, at));
+}
+
+/** How fast the finger was moving along x when it lifted at `at`, in px per ms and signed, positive
+ * toward larger x, read off the moves within the window before it; 0 for a touch with too little
+ * recent travel to say. The row's flick is the leftward half of this; a screen swiped either way
+ * reads both. */
+export function lifted(trail: readonly Sample[], at: number): number {
   const recent = trail.filter((s) => at - s.t <= FLICK_WINDOW_MS);
   if (recent.length < 2) return 0;
   const first = recent[0] as Sample;
   const last = recent[recent.length - 1] as Sample;
   const dt = last.t - first.t;
-  return dt > 0 ? Math.max(0, (first.x - last.x) / dt) : 0;
+  return dt > 0 ? (last.x - first.x) / dt : 0;
 }
 
 /** The rung a let-go does: the one the finger is on, or the first when it lifted short of it in a

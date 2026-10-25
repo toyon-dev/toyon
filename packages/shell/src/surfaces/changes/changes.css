@@ -46,6 +46,17 @@
     /* the dense row, which is the control's in the bar above and the file rows' under it: at the
        dock's full row the labels floated mid-row with their rule far below them */
     --tabs-height: var(--row-height-sm);
+    /* A sideways drag on this face is the swipe between the phone's faces (useSwipe). The
+       browser's touch-action walk stops at the nearest scroll container, and a scroller with no
+       touch-action of its own hands a sideways drag to the browser as a pan, which cancels the
+       pointer even though nothing scrolls that way; so every scroller here names pan-y itself: the
+       panel (its hidden overflow is a scroll container for the walk), the list, the strip, and the
+       tree (tree.css). */
+    touch-action: pan-y;
+    & .changes-list,
+    & .tabs-list {
+      touch-action: pan-y;
+    }
   }
   .app[data-chat-side] .changes-dock.changes-screen {
     border-inline: 0;

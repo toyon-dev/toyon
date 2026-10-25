@@ -81,6 +81,16 @@
     --log-cover: var(--phone-strip, 0px);
     & .chat-log {
       padding-top: calc(12px + var(--log-cover));
+      /* a sideways drag on the log is the swipe between the phone's faces (useSwipe). The browser's
+         touch-action walk stops at the nearest scroll container, so this is said on the log and on
+         the one box inside it that scrolls on its own, and not on the frame: a scroller with no
+         touch-action of its own hands a sideways drag to the browser as a pan, which cancels the
+         pointer even though nothing scrolls that way. A tool block or a table inside keeps its own
+         sideways scroll, since the walk stops at it first. */
+      touch-action: pan-y;
+    }
+    & .chat-log > .tool-body {
+      touch-action: pan-y;
     }
     /* the daemon's band is surface0, which is this ground, so it takes the bar's tier. Its floor
        is the small row's: the full row here is a thumb's 52px, and this row is read, not pressed */

@@ -288,7 +288,9 @@ export function useTail(
   // anywhere. A wheel's sign is the direction, and so is a finger's, inverted; a trackpad's
   // momentum keeps sending wheel events, so the caret rides the glide out.
   const push = useCallback((dy: number) => {
-    if (dy === 0) return;
+    // a finger dragging the screen sideways (useSwipe) still reaches the log's touch listeners,
+    // and its few px of vertical jitter would show the jump while the reader is away from the end
+    if (Math.abs(dy) < 4) return;
     setMoving(dy < 0 ? "up" : "down");
     if (rest.current) clearTimeout(rest.current);
     rest.current = setTimeout(() => setMoving(null), SCROLL_REST);

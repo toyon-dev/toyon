@@ -70,6 +70,11 @@
     --tabs-height: var(--row-height-sm);
     flex: 1;
     min-width: 0;
+    /* the tabs' list is a sideways scroll container of its own (tabs.css), where the browser's
+       touch-action walk stops, so it names pan-y itself: a drag across the control is the swipe's */
+    & .tabs-list {
+      touch-action: pan-y;
+    }
   }
   /* The name and its state are not in the bar's flow: they stand only over a transcript, hung from
      the bar's foot over the top of the log, which is padded to clear them (chat.css), and slide up
@@ -111,17 +116,59 @@
       visibility 0s;
   }
 
-  /* the running app, in place: one frame, the column's width, on the centre's own ground. Hidden
-     rather than unmounted while another tab is open (PhoneFrame), and `hidden` has to win over the
-     flex display here or the frame would go on showing through the tab over it. */
+  /* The faces stand in a track one column wide. At rest the screen is the track's one child in
+     flow. For a drag the neighbour the finger is pulling in mounts beside it, absolute and a full
+     width off to its side, and the track slides under the finger (--swipe-x, useSwipe) so the two
+     move as one strip; the centre's root clips what is off to the side. The translate is none at
+     rest rather than 0, so the track is no containing block for anything until a drag. */
+  .phone-track {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    translate: var(--swipe-x, none);
+    &[data-swipe="settle"] {
+      transition: translate 0.22s ease-out;
+    }
+    /* the frame would take the finger the moment it crossed it; and a drag selects nothing */
+    &[data-swipe] {
+      user-select: none;
+      & iframe {
+        pointer-events: none;
+      }
+    }
+  }
+  /* the slot a screen stands in. `hidden` (the preview kept under another face) has to win over
+     the flex display here or the frame would go on showing through the face over it. */
+  .phone-face {
+    flex: 1;
+    min-height: 0;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    &[hidden] {
+      display: none;
+    }
+    &[data-side] {
+      position: absolute;
+      inset: 0;
+    }
+    &[data-side="left"] {
+      translate: -100%;
+    }
+    &[data-side="right"] {
+      translate: 100%;
+    }
+  }
+
+  /* the running app, in place: one frame, the column's width, on the centre's own ground */
   .phone-preview {
     flex: 1;
     min-height: 0;
     display: flex;
     flex-direction: column;
-  }
-  .phone-preview[hidden] {
-    display: none;
   }
   .phone-preview-frame {
     flex: 1;
@@ -132,7 +179,7 @@
 
   /* a pane on a screen is the column: the diff a changed file opens as, over whichever tab was
      open, until its close returns there */
-  .phone-screen > .center-root > .pane {
+  .phone-face > .pane {
     flex: 1;
     min-height: 0;
     min-width: 0;
@@ -149,6 +196,11 @@
     z-index: 1;
     background: var(--surface1);
     border-bottom: 1px solid var(--border0);
+    /* a sideways drag on the bar is the swipe between faces (useSwipe), and the one way out of the
+       app's face by gesture, since the frame under the bar keeps every touch that starts on it. A
+       surface with no touch-action of its own hands a sideways drag to the browser as a pan, which
+       cancels the pointer even though nothing here scrolls that way. */
+    touch-action: pan-y;
   }
   .phone-bar-row {
     display: flex;

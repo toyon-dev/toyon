@@ -17,9 +17,9 @@ import { stateLabel } from "../util.ts";
  * since the frame's entries are the tab's and a swipe can be spent on them while this frame is
  * hidden. The rest, the route bar's tracking, is what the phone gives up, for a bar it does not have.
  *
- * Kept mounted across the tabs of one worktree and hidden rather than unmounted (PhoneFrame), so
- * switching to the chat and back does not load the app again; unmounted with the worktree, so
- * leaving it does not keep its app running in the phone's tab.
+ * Kept mounted across the faces of one worktree, in a slot the frame hides rather than unmounts
+ * (PhoneFrame), so switching to the chat and back does not load the app again; unmounted with the
+ * worktree, so leaving it does not keep its app running in the phone's tab.
  *
  * Until the app is up there is nothing to frame: the line names the state instead, and looking at
  * the worktree is what wakes it (App's `view` effect runs on the phone too), so the line resolves
@@ -29,13 +29,11 @@ export function PhonePreview({
   gated,
   active,
   url,
-  hidden,
 }: {
   /** the frame's first request carries a one-time code (previewGrant.ts) */
   gated: boolean;
   active: OwnedWorktree;
   url: string;
-  hidden: boolean;
 }) {
   // On another machine the frame's first request carries a one-time code; until it is minted
   // there is no address to open, and the line below stands a moment longer. The code is asked for
@@ -60,7 +58,7 @@ export function PhonePreview({
     return () => window.removeEventListener("message", onMsg);
   }, [src]);
   return (
-    <div className="phone-preview" hidden={hidden}>
+    <div className="phone-preview">
       {up && src ? (
         <iframe ref={frameRef} className="phone-preview-frame" src={src} title={active.worktree.title} />
       ) : (

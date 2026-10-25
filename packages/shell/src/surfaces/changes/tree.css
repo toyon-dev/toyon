@@ -5,6 +5,11 @@
     flex: 1;
     min-height: 0;
     overflow-y: auto;
+    /* on a phone a sideways drag on the tree is the swipe between faces (changes.css says why
+       each scroller names this itself) */
+    .changes-screen & {
+      touch-action: pan-y;
+    }
     /* the tree holds focus for the panel, and the cursor row is what says so, as in the changes list */
     outline: none;
     /* a file dropped on the tree's own space lands at the root: the drop marker (base, .drop-over)

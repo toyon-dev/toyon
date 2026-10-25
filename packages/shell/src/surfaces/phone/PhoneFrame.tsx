@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { useDispatch, useMachine, useMachines, useStore, useUrls } from "../../state/context.tsx";
 import { openPreview, previewsGated } from "../../state/previewGrant.ts";
 import { useActive, useArchivedPage, useChatCentred, useFoundPage, useTouch } from "../../state/selectors.ts";
@@ -7,6 +7,7 @@ import { IconButton } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { useVisibleHeight, useZoomMark } from "../../ui/hooks.ts";
 import { Menus } from "../../ui/Menu.tsx";
+import { useSwipe } from "../../ui/swipe.ts";
 import { type TabItem, Tabs } from "../../ui/Tabs.tsx";
 import { Tooltips } from "../../ui/Tooltip.tsx";
 import { View } from "../../ui/View.tsx";
@@ -19,6 +20,7 @@ import { EditorPane } from "../editor/EditorPane.tsx";
 import { Overlays } from "../overlays/Overlays.tsx";
 import { Rail } from "../rail/Rail.tsx";
 import { chord, previewUrl } from "../util.ts";
+import { FACES, sideOf, swipeTo } from "./faces.ts";
 import { PhoneBar } from "./PhoneBar.tsx";
 import { PhonePreview } from "./PhonePreview.tsx";
 import { phoneScreen } from "./screen.ts";
@@ -31,14 +33,21 @@ const HAS_TOKEN = hasToken();
  * The shell on a phone. It controls the agents and never sets a project up, imports or makes one:
  * those happen where the daemon is, and none of the centre's own views mount here.
  *
- * One screen at a time: the list, or a worktree with three tabs under the bar and a diff over any
+ * One screen at a time: the list, or a worktree with three faces under the bar and a diff over any
  * of them. The same components as the desk, at the tier this frame's root swaps in (phone.css), so
  * the frame and its tier cannot disagree. What the centre would otherwise bring, this frame owes
  * instead: the menus and tips, the overlays, and a sentence for when there is nothing to show,
  * which matters here because a phone drops its connection every time it goes in a pocket.
+ *
+ * The screens stand in a line (faces.ts), and a finger slides between them (useSwipe): for the
+ * length of a drag the neighbour it is pulling in is mounted beside the screen, and letting go
+ * makes it the screen or takes it away again. Each screen has a slot of its own, keyed and in a
+ * fixed order, so a slot mounts or unmounts and no screen's node is ever moved: a moved iframe
+ * reloads, and a moved list loses its scroll.
  */
 export function PhoneFrame() {
   const rootRef = useRef<HTMLDivElement>(null);
+  const trackRef = useRef<HTMLDivElement>(null);
   useZoomMark(rootRef);
   // the palette's list is bounded by this, so it ends above the keyboard rather than under it
   useVisibleHeight(rootRef);
@@ -56,6 +65,8 @@ export function PhoneFrame() {
   const touch = useTouch();
   const machine = useMachine();
   const machines = useMachines();
+  /** the neighbour mounted beside the screen for the length of a drag */
+  const [aside, setAside] = useState<Screen | null>(null);
 
   // the socket being down wins over everything, and having no project at all comes next: the same
   // two sentences the centre says, and the only two of its that are not about a preview
@@ -89,6 +100,26 @@ export function PhoneFrame() {
     onWorktree,
     editor: editor !== null,
     tab,
+  });
+  // the face in flow: the list, or the open tab; null under a cover (the sentence, the updated
+  // card, a diff), when no face is the screen
+  const face: Screen | null = shown.kind === "home" ? "home" : shown.kind === "tab" ? shown.tab : null;
+  const keepPreview = previewed !== null && url !== null;
+
+  useSwipe(rootRef, trackRef, {
+    take: (_target, way) => {
+      // the list, a diff, the sentence, the updated card: no swipe; and never a second neighbour
+      // while one is still beside the screen (a drop-back's settle has not called onEnd yet)
+      if (shown.kind !== "tab" || aside !== null) return false;
+      const to = swipeTo(shown.tab, way, keepPreview);
+      if (!to) return false;
+      setAside(to);
+      return true;
+    },
+    onEnd: (went) => {
+      if (went && aside) dispatch({ a: "screen", to: aside });
+      setAside(null);
+    },
   });
 
   const tabs: TabItem<Screen>[] = [
@@ -152,38 +183,64 @@ export function PhoneFrame() {
         {/* .center-root is the isolation root every overlay counts its rungs inside, so the phone's
             column is one too, and the palette opens over this screen the way it does over the desk's */}
         <div className="center-root">
-          {shown.kind === "updated" ? (
-            // the card asks this machine's daemon for the restart itself, over HTTP, and reloads
-            // when the new one answers; for another machine it says where the update is to be done
-            <UpdatedCard foreign={shown.foreign ?? undefined} />
-          ) : shown.kind === "say" && say ? (
-            <View wide>
-              <p className={cx("status-line", say.live && "live-text")}>{say.text}</p>
-            </View>
-          ) : shown.kind === "home" ? (
-            // this machine's worktrees: the list is the home screen, and the bar says which machine
-            // and which project it is, with the other machines a tap into the switcher away
-            <Rail placement="screen" />
-          ) : shown.kind === "editor" && editor ? (
-            // a file opened from the changes list or from a tool row in the chat: the diff over
-            // whichever tab is open; its close returns there, and a tab or the way back shuts it
-            <EditorPane editor={editor} placement="screen" />
-          ) : shown.kind === "tab" && shown.tab === "chat" ? (
-            <ChatPanel placement="screen" archived={archivedPage} found={foundPage} />
-          ) : shown.kind === "tab" && shown.tab === "changes" ? (
-            <ChangesDock placement="screen" />
-          ) : null}
-          {/* mounted for as long as this worktree is on screen, whichever tab is open, and keyed
-              to it: the app is not loaded again for a tab switch, and not kept for another row */}
-          {previewed && url && (
-            <PhonePreview
-              key={previewed.worktree.id}
-              gated={previewsGated(machine, remote)}
-              active={previewed}
-              url={url}
-              hidden={tab !== "preview" || editor !== null}
-            />
-          )}
+          <div className="phone-track" ref={trackRef}>
+            {/* what covers the faces: the updated card, the sentence, or a file opened from the
+                changes list or from a tool row in the chat, the diff over whichever face is open;
+                its close returns there, and a face or the way back shuts it. A slot of its own, so
+                a diff opened over the app never takes the app's slot and reloads it. */}
+            {face === null && (
+              <div key="cover" className="phone-face">
+                {shown.kind === "updated" ? (
+                  // the card asks this machine's daemon for the restart itself, over HTTP, and
+                  // reloads when the new one answers; for another machine it says where the
+                  // update is to be done
+                  <UpdatedCard foreign={shown.foreign ?? undefined} />
+                ) : shown.kind === "say" && say ? (
+                  <View wide>
+                    <p className={cx("status-line", say.live && "live-text")}>{say.text}</p>
+                  </View>
+                ) : shown.kind === "editor" && editor ? (
+                  <EditorPane editor={editor} placement="screen" />
+                ) : null}
+              </div>
+            )}
+            {FACES.map((f) => {
+              const current = f === face;
+              // a neighbour is never the face itself: the store can move under a drag (the row
+              // going, a popstate from the system's edge-back), and a face marked as its own
+              // neighbour would stand a full width off the screen
+              const beside = f === aside && !current;
+              // the app stays mounted under the worktree's other faces, and under a diff, so a
+              // face switch does not load it again; it goes with the worktree
+              if (!current && !beside && !(f === "preview" && keepPreview)) return null;
+              return (
+                <div
+                  key={f}
+                  className="phone-face"
+                  hidden={!current && !beside}
+                  data-side={beside && face ? sideOf(face, f) : undefined}
+                >
+                  {f === "home" ? (
+                    // this machine's worktrees: the list is the home screen, and the bar says which
+                    // machine and which project it is, with the other machines a tap into the
+                    // switcher away
+                    <Rail placement="screen" />
+                  ) : f === "chat" ? (
+                    <ChatPanel placement="screen" archived={archivedPage} found={foundPage} />
+                  ) : f === "changes" ? (
+                    <ChangesDock placement="screen" />
+                  ) : previewed && url ? (
+                    <PhonePreview
+                      key={previewed.worktree.id}
+                      gated={previewsGated(machine, remote)}
+                      active={previewed}
+                      url={url}
+                    />
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
           <Overlays />
         </div>
       </div>

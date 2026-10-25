@@ -38,13 +38,15 @@ export async function sharedFiles(storage: CacheStorage | undefined = globalThis
   }
 }
 
-/** the box a drop on the chat would go into, once the daemon's hello has put a worktree on screen */
-function untilBox(store: Store): Promise<string> {
+/** the box a drop on the chat would go into, once `ready` says the page is there: the daemon's
+ * hello has put a worktree on screen, or a row has been tapped */
+function untilBox(store: Store, ready: () => boolean = () => true): Promise<string> {
+  const boxNow = () => (ready() ? dropBox(store) : null);
   return new Promise((resolve) => {
-    const now = dropBox(store);
+    const now = boxNow();
     if (now) return resolve(now);
     const stop = store.subscribe(() => {
-      const box = dropBox(store);
+      const box = boxNow();
       if (!box) return;
       stop();
       resolve(box);
@@ -52,14 +54,28 @@ function untilBox(store: Store): Promise<string> {
   });
 }
 
-/** What was shared into the app, attached in the composer the page opens on: pictures as images,
- * the rest as files, the way a drop sorts them. On the phone the chat comes up over the list, so
- * the chips are in view and the message can be written under them. */
+/** what the bar says over the list while a share waits for its chat */
+export function sharingLine(files: readonly File[]): string {
+  const [first] = files;
+  if (files.length === 1 && first) return `pick a chat for ${first.name}`;
+  const noun = files.every((f) => f.type.startsWith("image/")) ? "images" : "files";
+  return `pick a chat for ${files.length} ${noun}`;
+}
+
+/** What was shared into the app, attached in a composer: pictures as images, the rest as files,
+ * the way a drop sorts them. On the desk that is the composer on screen, which is in view. A phone
+ * lands on its list instead, the bar saying what waits, and the row tapped is the chat it goes
+ * to: the app was opened from another app, and whichever chat was open last is not a choice. */
 export async function takeShared(store: Store, storage?: CacheStorage): Promise<void> {
   const files = await sharedFiles(storage);
   if (files.length === 0) return;
-  const box = await untilBox(store);
+  if (store.getState().frame !== "phone") {
+    attachAny(store, await untilBox(store), files);
+    return;
+  }
+  store.dispatch({ a: "screen", to: "home" });
+  store.dispatch({ a: "sharing", v: sharingLine(files) });
+  const box = await untilBox(store, () => store.getState().screen !== "home");
+  store.dispatch({ a: "sharing", v: null });
   attachAny(store, box, files);
-  const s = store.getState();
-  if (s.frame === "phone" && s.activeId) store.dispatch({ a: "screen", to: "chat" });
 }

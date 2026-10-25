@@ -95,12 +95,17 @@ export function PhoneBar({
       : (archivedPage?.title ?? active?.worktree.title ?? foundPage?.name ?? null);
   const tasks = visible.filter((w) => !isLead(w.worktree)).length;
   const count = tasks === 0 ? "no worktrees yet" : `${tasks} ${tasks === 1 ? "worktree" : "worktrees"}`;
+  // files shared into the app wait on the list for the chat they go to: the line says so, in
+  // place of the count, until a row is tapped (app/share.ts)
+  const sharing = useStore((s) => s.sharing);
   const line = home
-    ? // with more than one machine listed, where the project is comes before how much is in it:
-      // a machine is the bigger box, and the list under the bar is this machine's alone
-      repo && machineCount > 1
-      ? `${hereName} · ${count}`
-      : count
+    ? sharing
+      ? sharing
+      : // with more than one machine listed, where the project is comes before how much is in it:
+        // a machine is the bigger box, and the list under the bar is this machine's alone
+        repo && machineCount > 1
+        ? `${hereName} · ${count}`
+        : count
     : archivedPage
       ? archivedHint(archivedPage)
       : onLead

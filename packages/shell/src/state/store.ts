@@ -777,6 +777,9 @@ export interface State {
   reloadReq: { id: string; n: number } | null;
   /** a file is being dragged over a place that takes a drop, and which; null over anywhere else */
   dragFiles: DropZone | null;
+  /** files shared into the installed app wait for a chat to be picked from the phone's list: the
+   * line the bar says over the list meanwhile (app/share.ts holds the files) */
+  sharing: string | null;
   /** the armed element picker's verb: ⌘E's chat, ⌘I's code */
   picking: PickVerb | false;
   overlay: Overlay | null;
@@ -1023,6 +1026,7 @@ export function initialState(opts: InitialOpts): State {
     openUrl: null,
     reloadReq: null,
     dragFiles: null,
+    sharing: null,
     picking: false,
     overlay: null,
     paletteReturn: null,
@@ -1583,6 +1587,7 @@ export type Action =
   /** links a preview's page showed, for an app with no route table */
   | { a: "links"; id: string; links: PageLink[] }
   | { a: "drag-files"; v: DropZone | null }
+  | { a: "sharing"; v: string | null }
   | { a: "set-picking"; v: PickVerb | false }
   | { a: "preview-size"; text: string | null }
   /** open an overlay (closes any other); palettes forget a pending return, sub-pickers keep it */
@@ -2295,6 +2300,8 @@ function reduce(s: State, action: Action): State {
       });
     case "drag-files":
       return sameZone(s.dragFiles, action.v) ? s : { ...s, dragFiles: action.v };
+    case "sharing":
+      return s.sharing === action.v ? s : { ...s, sharing: action.v };
     case "set-picking":
       return { ...s, picking: action.v };
     case "preview-size":

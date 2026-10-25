@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { sharedFiles } from "./share.ts";
+import { sharedFiles, sharingLine } from "./share.ts";
 
 // The cache storage as the worker leaves it: one entry per shared file, the name in a header.
 // Only what sharedFiles reads is modelled.
@@ -56,6 +56,15 @@ describe("files shared into the installed app", () => {
       },
     } as unknown as CacheStorage;
     expect(await sharedFiles(refusing)).toEqual([]);
+  });
+
+  test("the list's line names one file, or counts them by what they are", () => {
+    const png = (name: string) => new File(["x"], name, { type: "image/png" });
+    expect(sharingLine([png("shot.png")])).toBe("pick a chat for shot.png");
+    expect(sharingLine([png("a.png"), png("b.png")])).toBe("pick a chat for 2 images");
+    expect(sharingLine([png("a.png"), new File(["x"], "log.txt", { type: "text/plain" })])).toBe(
+      "pick a chat for 2 files",
+    );
   });
 
   test("the worker and the page agree on the cache and the header", () => {

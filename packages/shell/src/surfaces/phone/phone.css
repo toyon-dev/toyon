@@ -78,7 +78,8 @@
   }
   /* The name and its state are not in the bar's flow: they stand only over a transcript, hung from
      the bar's foot over the top of the log, which is padded to clear them (chat.css), and slide up
-     out of their seat while the log is away from its end. Hung rather than collapsed, because a
+     out of their seat while the log is away from its end or the keyboard is up, for the room
+     either leaves to read in. Hung rather than collapsed, because a
      bar that changed height would move the log's top edge, and every line with it, under the
      thumb doing the scrolling. The seat starts on the bar's own rule and the strip draws one at
      its foot, so the bar keeps one edge either way; the seat clips, so the strip leaves at the

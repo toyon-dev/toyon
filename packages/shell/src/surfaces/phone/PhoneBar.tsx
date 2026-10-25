@@ -67,6 +67,8 @@ export function PhoneBar({
   const machines = useMachines();
   const here = useMachine();
   const reading = useStore((s) => s.reading);
+  // the strip goes for the room while the reader is up the log, and while the keyboard is up
+  const typing = useStore((s) => s.typing);
   const repo = useActiveRepo();
   // the row's own project, for what is said of the row: a guest's setup is its project's to ask
   const rowRepo = useActiveWorktreeRepo();
@@ -227,7 +229,7 @@ export function PhoneBar({
           read, so the one part that may go while the reader is up in the log, and by then it has
           been read */}
       {tabs && !fold && (
-        <div className="phone-title-seat" data-away={reading || undefined}>
+        <div className="phone-title-seat" data-away={reading || typing || undefined}>
           <div className="phone-title-strip">
             {titleBlock}
             {owedButton}

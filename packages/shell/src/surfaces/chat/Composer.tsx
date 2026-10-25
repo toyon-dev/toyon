@@ -1294,6 +1294,12 @@ export function Composer({
   const [typing, setTyping] = useState(false);
   const foldable = onScreen && !parked && (cardUp ? !typing : blank && !copied);
   const lean = foldable && reading;
+  // on the phone the caret in a field is the keyboard up, which the bar folds its strip for
+  useEffect(() => {
+    if (!onScreen) return;
+    dispatch({ a: "typing", on: typing });
+    return () => dispatch({ a: "typing", on: false });
+  }, [onScreen, typing, dispatch]);
   // a tap on the folded box is the log going to its end, where the box stands whole: the way
   // back without the scroll. A control in it (the plan's path, an offer's word, the stop) keeps
   // its own press; the field takes the caret and goes to the end with it.

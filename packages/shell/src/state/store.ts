@@ -826,10 +826,14 @@ export interface State {
   /** the window has no hover, so a tap is the only pointer: what the desk shows on hover has to be
    * reachable another way, on either frame */
   touch: boolean;
-  /** The transcript on the phone frame is scrolled away from its end: the bar folds its tabs into
-   * its row, where the name was, and a blank composer gives up its height, until the end is back
-   * in view. The log on screen sets it (ChatLog); the desk never reads it. */
+  /** The transcript on the phone frame is scrolled past the box's ride: the bar folds its name
+   * strip away and the box's ghost takes one line, until the end is back within reach. The log
+   * on screen sets it (ChatLog); the desk never reads it. */
   reading: boolean;
+  /** A field in the box or a card on the phone frame holds the caret, so the keyboard is up and
+   * the screen is half: the bar folds its name strip away for the room. The box sets it
+   * (Composer); the desk never reads it. */
+  typing: boolean;
   /** one-shot: the changes panel starts closed and opens itself the first time the active
    * worktree has something to show, unless a remembered layout or a hand has already decided it */
   changesAuto: boolean;
@@ -1051,6 +1055,7 @@ export function initialState(opts: InitialOpts): State {
     frame: opts.frame ?? "desk",
     touch: opts.touch ?? false,
     reading: false,
+    typing: false,
     changesAuto: true,
     zen: false,
     focusTerm: 0,
@@ -1631,6 +1636,8 @@ export type Action =
   | { a: "touch"; v: boolean }
   /** the transcript on the phone frame left its end, or came back to it */
   | { a: "reading"; on: boolean }
+  /** a field in the box on the phone frame took the caret, or let it go */
+  | { a: "typing"; on: boolean }
   /** hold the collapsed rail's peek open while the worktree walk runs, or let it fall closed */
   | { a: "rail-peek"; on: boolean }
   /** open or close the active project's discovered section */
@@ -2391,6 +2398,8 @@ function reduce(s: State, action: Action): State {
       return s.touch === action.v ? s : { ...s, touch: action.v };
     case "reading":
       return s.reading === action.on ? s : { ...s, reading: action.on };
+    case "typing":
+      return s.typing === action.on ? s : { ...s, typing: action.on };
     case "rail-peek":
       return s.railPeek === action.on ? s : { ...s, railPeek: action.on };
     case "toggle-discovered": {

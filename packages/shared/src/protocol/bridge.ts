@@ -49,7 +49,11 @@ export type ShellToBridgeMsg =
    * that leaves zen and lets everything else (Escape included) reach the page */
   | { type: "zen"; on: boolean }
   /** the page's same-origin links, for an app whose routes no scan could read */
-  | { type: "links" };
+  | { type: "links" }
+  /** report the finger (`touch` below): the shell on a phone slides between its screens under a
+   * drag, and a drag on this frame is never seen by the shell. Off by default, so a desk's preview
+   * streams nothing. */
+  | { type: "touches"; on: boolean };
 
 /** a link a page offers: where it goes, as a path, and what it says */
 export type PageLink = { path: string; text: string };
@@ -88,6 +92,16 @@ export const bridgeToShellSchema = z.discriminatedUnion("type", [
     links: z.array(z.object({ path: z.string().max(2048), text: z.string().max(120) })).max(200),
   }),
   z.object({ type: z.literal("hmr") }),
+  /** one finger on the page, while asked for (`touches`): where it is in the frame's own
+   * coordinates, at each phase of a drag the page leaves alone. The bridge reports only a drag
+   * that starts on nothing that scrolls sideways or claims the sideways gesture through
+   * touch-action, and stops at the first move a handler of the page cancels. */
+  z.object({
+    type: z.literal("touch"),
+    phase: z.enum(["start", "move", "end", "cancel"]),
+    x: z.number(),
+    y: z.number(),
+  }),
   z.object({
     type: z.literal("page-error"),
     message: z.string(),

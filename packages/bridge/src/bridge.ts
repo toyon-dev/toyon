@@ -515,6 +515,57 @@ function highlightFile(path: string, ranges: Array<[number, number]> | null) {
   }
 }
 
+// ---- the finger, for the phone's swipe between its screens ----
+
+// The shell on a phone slides between its screens under a finger, and a finger on this frame is
+// never seen by the shell. Asked for (`touches`), the frame reports a one-finger drag the page
+// leaves alone: one that starts on nothing that scrolls sideways and nothing that claims the
+// sideways gesture through touch-action, and that no handler of the page cancels. A sideways
+// gesture of the page's own does one of those, or the browser's own pan would take it from the
+// page. A shell framed as a preview slides its own screens and reports nothing.
+let touches = false;
+let tracking = false;
+const claims = (on: Element | null): boolean => {
+  for (let el = on; el && el !== document.documentElement; el = el.parentElement) {
+    const cs = getComputedStyle(el);
+    const ox = cs.overflowX;
+    if ((ox === "auto" || ox === "scroll") && el.scrollWidth > el.clientWidth + 1) return true;
+    const ta = cs.touchAction;
+    if (ta !== "auto" && ta !== "manipulation" && !ta.includes("pan-x")) return true;
+  }
+  return false;
+};
+const touchAt = (e: TouchEvent, phase: "start" | "move" | "end" | "cancel") => {
+  const t = e.touches[0] ?? e.changedTouches[0];
+  if (t) post({ type: "touch", phase, x: t.clientX, y: t.clientY });
+};
+window.addEventListener(
+  "touchstart",
+  (e) => {
+    tracking = false;
+    if (!touches || window.__toyonShell || e.touches.length !== 1) return;
+    const on = e.target instanceof Element ? e.target : null;
+    if (on?.closest("input, textarea, [contenteditable]") || claims(on)) return;
+    tracking = true;
+    touchAt(e, "start");
+  },
+  { capture: true, passive: true },
+);
+// read once every listener of the page has had the event, since one of them cancelling it is the
+// page taking the gesture; the rest of the drag is reported on the same delay so the order holds
+const touchLater = (e: TouchEvent, phase: "move" | "end" | "cancel") => {
+  if (!tracking) return;
+  setTimeout(() => {
+    if (!tracking) return;
+    const taken = phase === "move" && (e.defaultPrevented || e.touches.length !== 1);
+    if (phase !== "move" || taken) tracking = false;
+    touchAt(e, taken ? "cancel" : phase);
+  }, 0);
+};
+window.addEventListener("touchmove", (e) => touchLater(e, "move"), { passive: true });
+window.addEventListener("touchend", (e) => touchLater(e, "end"), true);
+window.addEventListener("touchcancel", (e) => touchLater(e, "cancel"), true);
+
 // ---- commands from the shell ----
 
 window.addEventListener("message", (e) => {
@@ -546,6 +597,9 @@ window.addEventListener("message", (e) => {
       else history.forward();
       break;
     }
+    case "touches":
+      touches = d.on;
+      break;
     case "links": {
       // the pages an app with no route table offers from here: same-origin links a click would follow
       const seen = new Set<string>();

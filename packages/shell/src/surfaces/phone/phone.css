@@ -35,6 +35,12 @@
        strip under it. */
     padding-top: env(safe-area-inset-top, 0px);
   }
+  /* the bar is each screen's own (PhoneFrame), inside the one row rather than in the app's bar
+     row, so the whole page moves under a finger: the app's two rows become one. Both classes, to
+     outweigh the app's own rule at the same tier. */
+  .app.phone {
+    grid-template-rows: 1fr;
+  }
 
   /* No pinch on the phone: the frame is already sized for the hand, and a stray second finger
    left the whole app magnified and panning. Panning stays, since every list here scrolls. Two
@@ -141,8 +147,9 @@
       }
     }
   }
-  /* the slot a screen stands in. `hidden` (the preview kept under another face) has to win over
-     the flex display here or the frame would go on showing through the face over it. */
+  /* the slot a screen stands in: its bar, then the screen. `hidden` (the preview kept under
+     another face) has to win over the flex display here or the frame would go on showing through
+     the face over it. */
   .phone-face {
     flex: 1;
     min-height: 0;

@@ -43,7 +43,9 @@ const HAS_TOKEN = hasToken();
  * length of a drag the neighbour it is pulling in is mounted beside the screen, and letting go
  * makes it the screen or takes it away again. Each screen has a slot of its own, keyed and in a
  * fixed order, so a slot mounts or unmounts and no screen's node is ever moved: a moved iframe
- * reloads, and a moved list loses its scroll.
+ * reloads, and a moved list loses its scroll. The bar is each slot's own, so the whole page
+ * moves under the finger, bar included, and a worktree's bar arrives with its pill already on
+ * the face it belongs to.
  */
 export function PhoneFrame() {
   const rootRef = useRef<HTMLDivElement>(null);
@@ -110,7 +112,7 @@ export function PhoneFrame() {
   const face: Screen | null = shown.kind === "home" ? "home" : shown.kind === "tab" ? shown.tab : null;
   const keepPreview = previewed !== null && url !== null;
 
-  useSwipe(rootRef, trackRef, {
+  const onFrameTouch = useSwipe(rootRef, trackRef, {
     take: (_target, way) => {
       // the list, a diff, the sentence, the updated card: no swipe; and never a second neighbour
       // while one is still beside the screen (a drop-back's settle has not called onEnd yet)
@@ -125,6 +127,30 @@ export function PhoneFrame() {
       setAside(null);
     },
   });
+
+  /** the bar over a slot: the list's names the project, a worktree's holds the way back and the
+   * faces, with the pill on the slot's own face. One beside the screen opens no float of its own. */
+  const bar = (f: Screen, beside: boolean) => (
+    <PhoneBar
+      screen={f === "home" ? "home" : "chat"}
+      beside={beside}
+      fold={f !== "chat" || editor !== null}
+      tabs={
+        f !== "home" &&
+        say === null && (
+          <Tabs<Screen>
+            fill
+            segmented
+            owner="phone-tabs"
+            label="worktree"
+            items={tabs}
+            current={f}
+            onPick={(to) => dispatch({ a: "screen", to })}
+          />
+        )
+      }
+    />
+  );
 
   const tabs: TabItem<Screen>[] = [
     { id: "chat", label: "chat" },
@@ -164,24 +190,6 @@ export function PhoneFrame() {
     >
       <Tooltips />
       <Menus />
-      <PhoneBar
-        screen={onWorktree ? "chat" : "home"}
-        fold={tab !== "chat" || editor !== null}
-        tabs={
-          onWorktree &&
-          say === null && (
-            <Tabs<Screen>
-              fill
-              segmented
-              owner="phone-tabs"
-              label="worktree"
-              items={tabs}
-              current={tab}
-              onPick={(to) => dispatch({ a: "screen", to })}
-            />
-          )
-        }
-      />
       {/* the desk's .docks row with one column in it, and here for the same reason (phone.css) */}
       <div className="phone-screen">
         {/* .center-root is the isolation root every overlay counts its rungs inside, so the phone's
@@ -194,6 +202,7 @@ export function PhoneFrame() {
                 a diff opened over the app never takes the app's slot and reloads it. */}
             {face === null && (
               <div key="cover" className="phone-face">
+                {bar(onWorktree ? tab : "home", false)}
                 {shown.kind === "updated" ? (
                   // the card asks this machine's daemon for the restart itself, over HTTP, and
                   // reloads when the new one answers; for another machine it says where the
@@ -224,6 +233,7 @@ export function PhoneFrame() {
                   hidden={!current && !beside}
                   data-side={beside && face ? sideOf(face, f) : undefined}
                 >
+                  {bar(f, beside)}
                   {f === "home" ? (
                     // this machine's worktrees: the list is the home screen, and the bar says which
                     // machine and which project it is, with the other machines a tap into the
@@ -239,6 +249,7 @@ export function PhoneFrame() {
                       gated={previewsGated(machine, remote)}
                       active={previewed}
                       url={url}
+                      onTouch={onFrameTouch}
                     />
                   ) : null}
                 </div>

@@ -1,4 +1,4 @@
-import { type RefObject, useEffect, useRef } from "react";
+import { type RefObject, useCallback, useEffect, useRef } from "react";
 import { flushSync } from "react-dom";
 import { FLICK, lifted, type Sample, SLOP, type Touch1 } from "./slide.ts";
 
@@ -44,6 +44,13 @@ export function sideways(target: Element, root: Element): HTMLElement | null {
   return null;
 }
 
+/** one finger on a frame inside the column, as its bridge reports it: in the frame's own
+ * coordinates, which move with the frame */
+export type FrameTouch = { phase: "start" | "move" | "end" | "cancel"; x: number; y: number };
+
+/** the pointer id a drag fed from a frame runs under; a pointer's own ids are never negative */
+const FRAME = -1;
+
 export type SwipeHandlers = {
   /** the first move decided a way: mount what stands beside the screen that way and say so, or say
    * there is nothing, in which case the touch is let go */
@@ -69,6 +76,12 @@ export type SwipeHandlers = {
  * the box scrollable, without inertia. A touch moving left out of a `.slide` row is the row's
  * ladder; one such a row refuses is then nobody's.
  *
+ * A finger on an app's frame in the column is never seen here: the frame keeps every touch that
+ * starts on it. Its bridge reports the ones the app leaves alone (FrameTouch), and the function
+ * returned feeds them in as the same drag, with one correction: the frame slides with the track,
+ * so a finger still on the screen reads as moving the other way inside it, and the track's own
+ * offset is added back.
+ *
  * The track is told through `--swipe-x` and `data-swipe` (`drag`, `settle`), written to the node so
  * a move renders nothing; the stylesheet draws it. The neighbour is mounted by the frame when `take`
  * says a way, and unmounted or made the screen when `onEnd` says how the swipe ended.
@@ -77,9 +90,10 @@ export function useSwipe(
   root: RefObject<HTMLElement | null>,
   track: RefObject<HTMLElement | null>,
   handlers: SwipeHandlers,
-) {
+): (touch: FrameTouch) => void {
   const h = useRef(handlers);
   h.current = handlers;
+  const feed = useRef<(touch: FrameTouch) => void>(() => {});
   useEffect(() => {
     const el = root.current;
     if (!el) return;
@@ -160,13 +174,14 @@ export function useSwipe(
       pointer = e.pointerId;
       lastX = e.clientX;
     };
-    const onMove = (e: PointerEvent) => {
-      if (!from || !target || e.pointerId !== pointer) return;
-      const dx = e.clientX - from.x;
-      const dy = e.clientY - from.y;
+    /** one move of the finger, the pointer's own or a frame's: `e` is the pointer's, for capture */
+    const move = (cx: number, cy: number, t: number, e?: PointerEvent) => {
+      if (!from || !target) return;
+      const dx = cx - from.x;
+      const dy = cy - from.y;
       if (scrolling && box) {
-        box.scrollLeft -= e.clientX - lastX;
-        lastX = e.clientX;
+        box.scrollLeft -= cx - lastX;
+        lastX = cx;
         return;
       }
       if (!way) {
@@ -175,30 +190,53 @@ export function useSwipe(
         if (w === "other") return clear();
         if (box) {
           scrolling = true;
-          lastX = e.clientX;
-          capture(e);
+          lastX = cx;
+          if (e) capture(e);
           return;
         }
         if (w === "left" && target.closest(".slide")) return clear();
         if (!h.current.take(target, w)) return clear();
         way = w;
-        capture(e);
+        if (e) capture(e);
       }
-      trail.push({ x: e.clientX, t: e.timeStamp });
+      trail.push({ x: cx, t });
       if (trail.length > 8) trail.shift();
       x = swipeAt(dx, track.current?.clientWidth ?? 0, way);
       put(x, "drag");
     };
-    const onEnd = (e: PointerEvent) => {
-      if (e.pointerId !== pointer) return;
-      if (way || scrolling) spentUntil = e.timeStamp + 400;
+    /** the finger lifted (`up`), or the browser took it */
+    const end = (t: number, up: boolean) => {
       if (!way) return clear();
       const width = track.current?.clientWidth ?? 0;
-      const speed = e.type === "pointerup" ? lifted(trail, e.timeStamp) : 0;
-      const went = e.type === "pointerup" && swipeLetGo(x, width, way, speed);
+      const speed = up ? lifted(trail, t) : 0;
+      const went = up && swipeLetGo(x, width, way, speed);
       // a flick that went is a tick under the thumb, as a row's rung is
       if (went && Math.abs(x) < width * COMMIT) navigator.vibrate?.(8);
       settle(went);
+    };
+    const onMove = (e: PointerEvent) => {
+      if (e.pointerId !== pointer) return;
+      move(e.clientX, e.clientY, e.timeStamp, e);
+    };
+    const onEnd = (e: PointerEvent) => {
+      if (e.pointerId !== pointer) return;
+      if (way || scrolling) spentUntil = e.timeStamp + 400;
+      end(e.timeStamp, e.type === "pointerup");
+    };
+    feed.current = (touch) => {
+      const now = performance.now();
+      if (touch.phase === "start") {
+        // a settle still playing, or a pointer's own drag under way, is not taken again
+        if (track.current?.dataset.swipe || from) return;
+        from = { x: touch.x, y: touch.y };
+        target = track.current;
+        box = null;
+        pointer = FRAME;
+        return;
+      }
+      if (pointer !== FRAME) return;
+      if (touch.phase === "move") return move(touch.x + x, touch.y, now);
+      end(now, touch.phase === "end");
     };
     // the click arrives after the pointer is let go, on whatever the drag began on; swallowed
     // before it hears it, since a swipe that also pressed a row would be two answers to one touch
@@ -213,6 +251,7 @@ export function useSwipe(
     el.addEventListener("pointercancel", onEnd);
     el.addEventListener("click", onClick, true);
     return () => {
+      feed.current = () => {};
       window.clearTimeout(timer);
       el.removeEventListener("pointerdown", onStart);
       el.removeEventListener("pointermove", onMove);
@@ -221,4 +260,5 @@ export function useSwipe(
       el.removeEventListener("click", onClick, true);
     };
   }, [root, track]);
+  return useCallback((touch: FrameTouch) => feed.current(touch), []);
 }

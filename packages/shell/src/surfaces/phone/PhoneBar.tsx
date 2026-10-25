@@ -55,9 +55,14 @@ export function PhoneBar({
   screen,
   tabs,
   fold,
+  beside = false,
 }: {
   screen: "home" | "chat";
   tabs?: ReactNode;
+  /** the bar of a screen mounted beside the one on screen for a drag (PhoneFrame): the same row,
+   * but the floats that hang from it (the switcher, the palette) open from the screen's own bar
+   * alone, or an open one would stand twice */
+  beside?: boolean;
   /** The bar is its one row, with no strip under it: for the app and the code, and for a diff
    * over any tab. A transcript folds the strip itself, while it is scrolled away from its end;
    * the strip hangs over the top of the log instead of standing on it, so the fold moves no text
@@ -136,8 +141,8 @@ export function PhoneBar({
               ? rowLine(foundPage, { needsSetup: false, path: foundPage.path })
               : null;
   const asks = !home && !archivedPage && !!active && dotClass(active) === "waiting";
-  const switching = useStore((s) => s.overlay?.kind === "projects" && s.overlay.form === "pill");
-  const commands = useStore((s) => s.overlay?.kind === "commands");
+  const switching = useStore((s) => s.overlay?.kind === "projects" && s.overlay.form === "pill") && !beside;
+  const commands = useStore((s) => s.overlay?.kind === "commands") && !beside;
   // the two lines: what you are looking at, and its state. In the row where there are no tabs
   // (the list, or a worktree while the socket is down), in the strip under the row where there are
   const titleBlock = (

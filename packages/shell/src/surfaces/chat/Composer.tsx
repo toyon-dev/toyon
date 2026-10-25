@@ -41,7 +41,7 @@ import { openSource } from "../../state/openSource.ts";
 import { fillFrame, type HeldFrame } from "../../state/outbox.ts";
 import { isUploading } from "../../state/pending.ts";
 import { useChatCentred, useGreenfield, useLocalField, usePreviewId, useTouch } from "../../state/selectors.ts";
-import { composerBoxOf, type Draft, NEW_PROJECT_BOX, sendWaits, trunkOf, worktreeById } from "../../state/store.ts";
+import { composerBoxOf, type Draft, NEW_PROJECT_BOX, sendWaits, trunkOf } from "../../state/store.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { TextArea } from "../../ui/Field.tsx";
@@ -93,6 +93,7 @@ import { cardLine, openCard, parseHandoffArgs } from "./handoff.ts";
 import { MentionText, openMention } from "./Mentions.tsx";
 import { filterCommands, insertAt, mentionIndex, settled, triggerAt, type WorktreeMention } from "./mentions.ts";
 import { dismissOffer, offerOf, useDismissedOffers } from "./offer.ts";
+import { fileWord, useOriginFile } from "./originFile.ts";
 import { browseCommands, isMode, mergeCommands, ownCommandOf, ownCommands } from "./ownCommands.ts";
 import { PermissionCard } from "./PermissionCard.tsx";
 import { PickChip } from "./PickChip.tsx";
@@ -1280,7 +1281,7 @@ export function Composer({
   // row points there until this worktree has a plan of its own
   const fromPlan =
     active?.worktree.from?.kind === "worktree" && active.worktree.from.plan ? active.worktree.from : null;
-  const originRow = useStore((s) => (fromPlan ? worktreeById(s, fromPlan.origin.id) : null));
+  const originList = useOriginFile(fromPlan ? { worktreeId: fromPlan.origin.id, path: fromPlan.plan! } : null);
   // pieces of this worktree's plan waiting for a sibling to land, read off the record so a
   // restart keeps the line
   const queuedPieces = active?.worktree.queued ?? [];
@@ -1351,26 +1352,15 @@ export function Composer({
       {!plan && fromPlan && active && (
         <div className="composer-plan">
           <Icon name="spawn" className="icon-inline" />
-          {originRow ? (
+          {originList.origin ? (
             <span className="composer-plan-path">
-              <Button
-                variant="inline"
-                data-tip={fromPlan.plan}
-                onClick={() =>
-                  openFile(
-                    { sock, dispatch },
-                    { worktreeId: fromPlan.origin.id, path: fromPlan.plan!, view: "preview" },
-                  )
-                }
-              >
-                from the {fromPlan.briefs ? "briefs" : "plan"}
+              <Button variant="inline" data-tip={fromPlan.plan} onClick={originList.open}>
+                from {fileWord(fromPlan.briefs)}
               </Button>{" "}
-              in <WorktreeChip id={originRow.worktree.id} title={originRow.worktree.title} />
+              in <WorktreeChip id={originList.origin.worktree.id} title={originList.origin.worktree.title} />
             </span>
           ) : (
-            <span className="composer-plan-path">
-              from the {fromPlan.briefs ? "briefs" : "plan"} in an archived worktree
-            </span>
+            <span className="composer-plan-path">from {fileWord(fromPlan.briefs)} in an archived worktree</span>
           )}
         </div>
       )}

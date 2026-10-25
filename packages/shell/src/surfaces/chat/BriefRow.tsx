@@ -10,17 +10,17 @@
 
 import type { Brief } from "@toyon/shared";
 import type { ReactNode } from "react";
-import { nextSeq, openFile } from "../../state/actions/file.ts";
-import { useDispatch, useSock, useStore } from "../../state/context.tsx";
-import { worktreeById } from "../../state/store.ts";
+import { nextSeq } from "../../state/actions/file.ts";
+import { useDispatch } from "../../state/context.tsx";
 import { Button } from "../../ui/Button.tsx";
 import { rowState } from "../../ui/rowState.ts";
 import { DaemonRow } from "./DaemonRow.tsx";
+import { fileWord, useOriginFile } from "./originFile.ts";
 import { WorktreeChip } from "./WorktreeChip.tsx";
 
 /** the brief as the pane shows it: the origin agent's words, and the note under a rule */
 export function briefDocument(brief: Brief): string {
-  return brief.note ? `${brief.text.trimEnd()}\n\n---\n\nYou added, when you approved it: ${brief.note}\n` : brief.text;
+  return brief.note ? `${brief.text.trimEnd()}\n\n---\n\nYou added: ${brief.note}\n` : brief.text;
 }
 
 export function BriefRow({
@@ -36,18 +36,11 @@ export function BriefRow({
   /** what the message attached, as the chips a sent message draws */
   children?: ReactNode;
 }) {
-  const sock = useSock();
   const dispatch = useDispatch();
-  // the briefs list is a file of the origin's, and goes with the origin when that is archived
-  const listed = useStore((s) => (brief.file ? worktreeById(s, brief.file.worktreeId) : null));
+  const list = useOriginFile(brief.file);
   const chip = <WorktreeChip id={brief.origin.id} title={brief.origin.title} />;
   const open = () => {
-    if (brief.file && listed) {
-      return openFile(
-        { sock, dispatch },
-        { worktreeId: brief.file.worktreeId, path: brief.file.path, view: "preview" },
-      );
-    }
+    if (brief.file && list.origin) return list.open();
     dispatch({
       a: "open-loose",
       v: {
@@ -78,7 +71,7 @@ export function BriefRow({
           </>
         ) : brief.plan ? (
           <>
-            from the {brief.file ? "briefs" : "plan"} in {chip}
+            from {fileWord(!!brief.file)} in {chip}
           </>
         ) : (
           <>from {chip}</>
@@ -87,7 +80,7 @@ export function BriefRow({
         <Button
           variant="inline"
           data-tip={
-            brief.file && listed
+            brief.file && list.origin
               ? `Read the brief in ${brief.file.path}, beside the chat`
               : "Read the brief beside the chat"
           }

@@ -550,13 +550,10 @@ export function coalesce(entries: readonly TranscriptEntry[]): TranscriptEntry[]
   for (const entry of entries) {
     const last = out.at(-1);
     const { event } = entry;
-    if (event.type === "text-delta" && last?.event.type === "text-delta") {
-      // the run's id is its latest chunk's: that is the message a chunk after a bubble continues
-      const messageId = event.messageId ?? last.event.messageId;
-      out[out.length - 1] = {
-        seq: last.seq,
-        event: { type: "text-delta", text: last.event.text + event.text, ...(messageId ? { messageId } : {}) },
-      };
+    if (event.type === "text-delta" && last?.event.type === "text-delta" && last.event.messageId === event.messageId) {
+      // a run is one message: the shell opens a row per message id, and a fold across two ids
+      // would hand it back one row on reload
+      out[out.length - 1] = { seq: last.seq, event: { ...last.event, text: last.event.text + event.text } };
     } else if (event.type === "thinking-delta" && last?.event.type === "thinking-delta") {
       out[out.length - 1] = { seq: last.seq, event: { type: "thinking-delta", text: last.event.text + event.text } };
     } else if (event.type === "tool-delta" && last?.event.type === "tool-delta" && last.event.toolId === event.toolId) {

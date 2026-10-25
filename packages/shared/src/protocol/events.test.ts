@@ -21,13 +21,19 @@ describe("coalesce", () => {
     ]);
   });
 
-  test("a folded run of prose keeps its latest chunk's message id", () => {
+  test("a run of prose folds under one message id; another id, or none, starts a run of its own", () => {
     const entries = [
       { seq: 0, event: { type: "text-delta", text: "a", messageId: "m1" } },
-      { seq: 1, event: { type: "text-delta", text: "b", messageId: "m2" } },
-      { seq: 2, event: { type: "text-delta", text: "c" } },
+      { seq: 1, event: { type: "text-delta", text: "b", messageId: "m1" } },
+      { seq: 2, event: { type: "text-delta", text: "c", messageId: "m2" } },
+      { seq: 3, event: { type: "text-delta", text: "d" } },
+      { seq: 4, event: { type: "text-delta", text: "e" } },
     ] as const;
-    expect(coalesce([...entries])).toEqual([{ seq: 0, event: { type: "text-delta", text: "abc", messageId: "m2" } }]);
+    expect(coalesce([...entries])).toEqual([
+      { seq: 0, event: { type: "text-delta", text: "ab", messageId: "m1" } },
+      { seq: 2, event: { type: "text-delta", text: "c", messageId: "m2" } },
+      { seq: 3, event: { type: "text-delta", text: "de" } },
+    ]);
   });
 
   test("a watched command's output chunks fold under their row; another row's chunk breaks the run", () => {

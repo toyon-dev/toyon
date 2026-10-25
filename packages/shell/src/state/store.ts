@@ -3345,8 +3345,11 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
       ];
     case "text-delta": {
       const named = event.messageId ? { messageId: event.messageId } : {};
-      if (last?.kind === "assistant")
-        return [...items.slice(0, -1), { ...last, text: last.text + event.text, ...named }];
+      // a chunk under another message's id is another message: a notice the harness writes
+      // without one, and the reply that follows under a fresh id, neither end in a newline, and
+      // glued onto one row they read as one sentence
+      if (last?.kind === "assistant" && last.messageId === event.messageId)
+        return [...items.slice(0, -1), { ...last, text: last.text + event.text }];
       // a message sent while the reply streamed sits between that reply's chunks, and rendering
       // the rest as a row of its own cuts a table or a fence in two. The rest goes back to its
       // row, above the bubble; the answer to the message arrives under a new id and opens a row

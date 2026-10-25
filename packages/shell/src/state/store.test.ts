@@ -544,6 +544,28 @@ describe("chat folding", () => {
     ]);
     expect(moved.local.a?.chat.map((i) => i.kind)).toEqual(["assistant", "user", "tool", "assistant"]);
   });
+  test("a chunk under another message's id opens its own row; a harness notice names none", () => {
+    const notice = "**Notice:** the safeguards stopped the response above";
+    const s = run([
+      hello(wt("a")),
+      server({ t: "agent", worktreeId: "a", seq: 1, event: { type: "text-delta", text: "On it", messageId: "m1" } }),
+      server({ t: "agent", worktreeId: "a", seq: 2, event: { type: "text-delta", text: notice } }),
+      server({ t: "agent", worktreeId: "a", seq: 3, event: { type: "text-delta", text: "The edit", messageId: "m2" } }),
+      server({ t: "agent", worktreeId: "a", seq: 4, event: { type: "text-delta", text: " failed.", messageId: "m2" } }),
+    ]);
+    expect(s.local.a?.chat).toEqual([
+      { kind: "assistant", text: "On it", seq: 1, messageId: "m1" },
+      { kind: "assistant", text: notice, seq: 2 },
+      { kind: "assistant", text: "The edit failed.", seq: 3, messageId: "m2" },
+    ]);
+    // an agent that names no messages still streams one row
+    const unnamed = run([
+      hello(wt("a")),
+      agent("a", { type: "text-delta", text: "a" }),
+      agent("a", { type: "text-delta", text: "b" }),
+    ]);
+    expect(unnamed.local.a?.chat.map((i) => i.kind === "assistant" && i.text)).toEqual(["ab"]);
+  });
   test("an error that repeats the prose just streamed takes its place", () => {
     const limit = "You've hit your monthly spend limit";
     const s = run([

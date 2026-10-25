@@ -1637,6 +1637,32 @@ export class WorktreeService {
     fireAndForget(worktreeId, this.d.runtime.wake(worktreeId), "start a parked preview");
   }
 
+  /** The person asked for the preview back, on a row whose app is down: a parked row starts, a
+   * proc that crashed, never answered or was stopped goes back under supervision, and a row asleep
+   * or cold wakes (a wake that failed, say for want of a port, is tried again). The press is the
+   * only path here: the agent writing a file starts a parked preview and nothing more, because a
+   * crashed proc is restarted once its turn ends, not on every edit. */
+  retryPreview(worktreeId: string): void {
+    const wt = this.d.state.worktree(worktreeId);
+    if (!wt) return;
+    if (wt.parked) {
+      this.startPreview(worktreeId);
+      return;
+    }
+    const procs = this.d.runtime.get(worktreeId)?.procs;
+    const down =
+      procs && !procs.asleep
+        ? procs.states().filter((p) => p.status === "crashed" || p.status === "unreachable" || p.status === "stopped")
+        : [];
+    if (down.length === 0) {
+      fireAndForget(worktreeId, this.d.runtime.wake(worktreeId), "preview asked for");
+      return;
+    }
+    for (const p of down) {
+      fireAndForget(worktreeId, this.d.runtime.restartStream(worktreeId, p.name), "preview asked for");
+    }
+  }
+
   // ---- setup ----
 
   /** Clone deps from the base checkout, run the repo's setup commands, then start the runtime.

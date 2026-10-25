@@ -42,6 +42,7 @@ import {
   type OpenLoose,
   owedElsewhere,
   previewIdOf,
+  previewReload,
   reducer,
   routeTarget,
   type State,
@@ -1282,6 +1283,16 @@ describe("where a typed path goes", () => {
     expect(routeTarget(run([{ a: "activate", id: "b" }], s))).toBeNull();
     const starting = run([worktrees(wt("main", "main"), app(wt("a"), "starting")), { a: "activate", id: "a" }], s);
     expect(routeTarget(starting)).toEqual({ worktreeId: "a", repoId: "r" });
+  });
+
+  test("⌘R reloads the frame while the app is up, asks for the app while it is down, and is the browser's with no preview", () => {
+    const s = run([helloIn([repo("r")], app(wt("main", "main"), "running"), app(wt("a"), "crashed"), wt("b"))]);
+    expect(previewReload(s)).toEqual({ id: "main", act: "frame" });
+    expect(previewReload(run([{ a: "activate", id: "a" }], s))).toEqual({ id: "a", act: "start" });
+    // no procs yet: asleep under a port ceiling, or a start that failed, reads the same from here
+    expect(previewReload(run([{ a: "activate", id: "b" }], s))).toEqual({ id: "b", act: "start" });
+    // a chat in the centre has nothing that could be a preview, so the key reloads the shell
+    expect(previewReload(run([repos(pageless("r"))], s))).toBeNull();
   });
 });
 

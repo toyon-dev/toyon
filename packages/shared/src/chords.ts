@@ -188,10 +188,11 @@ export const CHORDS: readonly Chord[] = [
   // U for URL: the address bar's list, since ⌘L is the chat's and ⌘G searches the chats. Only Firefox has
   // a use for ⌘U (view source); Monaco's cursor-undo on it is unbound (Editor.tsx).
   { id: "routes", key: "u" },
-  // ⌘R reloads the preview, the frame the hand is looking at, not the shell around it. ⌘⇧R is left
-  // to the browser: its hard reload takes the shell and every preview with it, which is what the
-  // bigger reload should mean. With no preview up there is no frame to mean, so the shell lets ⌘R
-  // through to the browser (app/keys.ts). An installed app always hands ⌘R over; a tab may keep it.
+  // ⌘R reloads the preview, the frame the hand is looking at, not the shell around it, and with
+  // that app down it asks the daemon for the app again. ⌘⇧R is left to the browser: its hard reload
+  // takes the shell and every preview with it, which is what the bigger reload should mean. Where
+  // nothing on screen could be a preview (a chat in the centre, an archived page) the shell lets
+  // ⌘R through to the browser (app/keys.ts). An installed app always hands ⌘R over; a tab may keep it.
   { id: "reload", key: "r" },
   // ⌘←/→ are the browser's back and forward, and with a preview up they step that frame, the page
   // the hand is looking at, the same way ⌘R reloads it. Left to the browser they walk the tab's

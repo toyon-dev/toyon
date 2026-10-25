@@ -2,7 +2,7 @@
 
 Every copy of your project runs its own dev server on its own port, and the preview in the middle of the window is that server in a frame. Switching chats switches frames; each one keeps its page, its scroll and its cookies.
 
-The frame is a browser. cmd+R reloads it, cmd+left and cmd+right step its history, cmd+U opens a list of the app's pages, and cmd+. gives the page the whole window. If a server ignores `$PORT` and comes up somewhere else, the preview follows it there and the log says which flag to add.
+The frame is a browser. cmd+R reloads it (and starts the app again when it is down), cmd+left and cmd+right step its history, cmd+U opens a list of the app's pages, and cmd+. gives the page the whole window. If a server ignores `$PORT` and comes up somewhere else, the preview follows it there and the log says which flag to add.
 
 ## What the agent is told
 

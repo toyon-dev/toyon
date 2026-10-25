@@ -16,7 +16,7 @@ import { settingsItems } from "../../state/actions/settings.ts";
 import { worktreeItems } from "../../state/actions/worktree.ts";
 import { useDispatch, useMachines, useOtherMachines, useSock, useStore, useUrls } from "../../state/context.tsx";
 import type { OtherMachine } from "../../state/machines.ts";
-import { type Action, isChatCentred, repoById, type State, worktreeById } from "../../state/store.ts";
+import { type Action, isChatCentred, previewReload, repoById, type State, worktreeById } from "../../state/store.ts";
 import { isItem, type MenuEntry } from "../../ui/menu.ts";
 import type { DaemonSocket } from "../../ws.ts";
 import { chord, rowLabel } from "../util.ts";
@@ -89,7 +89,13 @@ export function buildCommands(
       () => togglePick(id, state.picking, dispatch, "code"),
       chord("inspect"),
     );
-    add("reload", "reload preview", () => previewBus.post(id, { type: "reload" }));
+    // the same verb as ⌘R: the frame while the app is up, the app itself while it is down
+    const reload = previewReload(state);
+    if (reload?.act === "start") {
+      add("reload", "start the preview", () => sock?.send({ t: "preview-start", worktreeId: reload.id }));
+    } else {
+      add("reload", "reload preview", () => previewBus.post(id, { type: "reload" }));
+    }
   }
 
   // the settings card's choices: the same list the gear's right-click shows
@@ -160,6 +166,7 @@ export type CommandState = Pick<
   | "frame"
   | "self"
   | "archivedPage"
+  | "notesPage"
   | "archived"
   | "knocks"
   | "tailscale"
@@ -197,6 +204,7 @@ export function useCommands(): Command[] {
   const frame = useStore((s) => s.frame);
   const self = useStore((s) => s.self);
   const archivedPage = useStore((s) => s.archivedPage);
+  const notesPage = useStore((s) => s.notesPage);
   const archived = useStore((s) => s.archived);
   const knocks = useStore((s) => s.knocks);
   const tailscale = useStore((s) => s.tailscale);
@@ -225,6 +233,7 @@ export function useCommands(): Command[] {
       frame,
       self,
       archivedPage,
+      notesPage,
       archived,
       knocks,
       tailscale,
@@ -266,6 +275,7 @@ export function useCommands(): Command[] {
     frame,
     self,
     archivedPage,
+    notesPage,
     archived,
     knocks,
     tailscale,

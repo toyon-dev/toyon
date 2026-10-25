@@ -1248,10 +1248,14 @@ export function trunkOf(s: Pick<State, "trunks">, repoId: string | null | undefi
   return (repoId && s.trunks[repoId]) || null;
 }
 
+/** what reading the preview on screen takes: the fields that say whether the chat has the centre
+ * and whether a page of toyon's own covers it */
+type PreviewPick = Pick<State, "repos" | "rows" | "activeId" | "activeRepoId" | "archivedPage" | "notesPage">;
+
 /** the preview on screen, if there is one: the active row's (the lead's own app while it drafts),
  * and none while the chat has the centre. The element picker and the bridge's page context follow
  * this one. */
-export function previewIdOf(s: State): string | null {
+export function previewIdOf(s: PreviewPick): string | null {
   if (isChatCentred(s)) return null;
   // an archived worktree's page, or the release notes, covers the preview: what is on screen has
   // no page to pick from
@@ -1270,6 +1274,17 @@ export function routeTarget(s: State): { worktreeId: string; repoId: string } | 
   if (s.archivedPage || s.notesPage) return null;
   const wt = worktreeById(s, s.activeId);
   return wt && previewUp(wt) ? { worktreeId: wt.worktree.id, repoId: wt.repoId } : null;
+}
+
+/** What ⌘R and the palette's reload mean on the worktree on screen: the frame reloads while its
+ * app is up, and with the app down (crashed, stopped, parked, asleep under a port ceiling) the
+ * daemon is asked for it again, which is what the boot pane's buttons do. Null where nothing on
+ * screen could be a preview (a chat in the centre, an archived page, a found worktree): there the
+ * key is the browser's and reloads the shell. */
+export function previewReload(s: PreviewPick): { id: string; act: "frame" | "start" } | null {
+  const id = previewIdOf(s);
+  const wt = worktreeById(s, id);
+  return wt ? { id: wt.worktree.id, act: previewUp(wt) ? "frame" : "start" } : null;
 }
 
 /** The row a guest of `repoId`'s rail started from, or null when `w` is no guest there: a guest is

@@ -721,6 +721,29 @@ describe("unseen", () => {
     expect(procs.restarts).toEqual([web.name]);
   });
 
+  test("asking for the preview restarts the procs that are down, and wakes a row with none down", async () => {
+    const repoId = await registered();
+    const wt = await w.worktrees.create(repoId, "fix it");
+    await settle();
+    const procs = w.procs.get(wt.id)!;
+    const web = procs.states()[0]!;
+    await procs.start("api", "true");
+    // everything up: nothing to restart, and the wake has nothing to do
+    w.worktrees.retryPreview(wt.id);
+    await settle();
+    expect(procs.restarts).toEqual([]);
+    (procs as unknown as { states_: (typeof web)[] }).states_[0]!.status = "crashed";
+    w.worktrees.retryPreview(wt.id);
+    await settle();
+    expect(procs.restarts).toEqual([web.name]);
+    // asleep, the whole set comes back together rather than one proc at a time
+    await procs.sleep("nobody looked");
+    w.worktrees.retryPreview(wt.id);
+    await settle();
+    expect(procs.asleep).toBe(false);
+    expect(procs.restarts).toEqual([web.name]);
+  });
+
   test("a turn that ends after you looked rings it again", async () => {
     await registered();
     const main = w.state.worktrees.find((x) => x.kind === "main")!;

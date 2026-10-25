@@ -892,7 +892,7 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
 
   "preview-start"(msg, _ctx, s) {
     requireRun(s, msg.worktreeId);
-    s.worktrees.startPreview(msg.worktreeId);
+    s.worktrees.retryPreview(msg.worktreeId);
   },
 
   async "search-refs"(msg, ctx, s) {

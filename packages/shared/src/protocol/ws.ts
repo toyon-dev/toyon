@@ -942,7 +942,9 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   /** kill the run of that kind out on the worktree (its setup command, its check, its commit with
    * the hooks in it); the run's own end reports it as terminated */
   z.object({ t: z.literal("run-stop"), worktreeId: id, kind: z.enum(["setup", "check", "commit"]) }),
-  /** start the procs of a parked worktree: one back from the archive, or one taken over */
+  /** bring the worktree's preview up from wherever it stands: a parked one (back from the archive,
+   * or taken over) starts, a crashed or stopped proc restarts, an asleep or cold row wakes. The
+   * boot pane's buttons and ⌘R on a row whose app is down. */
   z.object({ t: z.literal("preview-start"), worktreeId: id }),
   /** the ref palette: local branches, remote branches and open PRs matching the query; replies
    * `refs`. An empty query lists the work that is open. */

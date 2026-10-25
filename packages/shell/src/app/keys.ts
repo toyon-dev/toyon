@@ -20,6 +20,7 @@ import {
   isFirstRun,
   localOf,
   previewIdOf,
+  previewReload,
   routeTarget,
 } from "../state/store.ts";
 import { isInstalledApp } from "../surfaces/util.ts";
@@ -32,8 +33,8 @@ import { unseenJump } from "./unseenJump.ts";
 /** the chords a focused Monaco keeps for itself (see useChords) */
 const MONACO_OWNS = new Set<ChordId>(["design", "chats"]);
 
-/** the chords that act on the previewed page itself, and so mean nothing without one */
-const PAGE_CHORDS = new Set<ChordId>(["reload", "back", "forward"]);
+/** the chords that step the previewed page's history, and so mean nothing without one */
+const PAGE_CHORDS = new Set<ChordId>(["back", "forward"]);
 
 /** the chords that answer on the new-project view: the rest act on a worktree, and the page is about
  * a project that has none yet, over one that is not on screen */
@@ -116,9 +117,13 @@ export function useChords() {
       if (monaco && chord && MONACO_OWNS.has(chord.id)) return;
       // the terminal and the editor type into a textarea of their own, so this covers them as well
       if (chord && fieldKeeps(chord.id, document.activeElement)) return;
-      // with no page up (setup, a stopped app, an update waiting on a reload, a chat) ⌘R and ⌘←/→
-      // are the browser's again: the shell is the only thing on screen they could mean
+      // with no page up (setup, a stopped app, an update waiting on a reload, a chat) ⌘←/→ are the
+      // browser's again: the shell is the only thing on screen they could mean
       if (chord && PAGE_CHORDS.has(chord.id) && !(previewIdOf(s) && routeTarget(s))) return;
+      // ⌘R too, but only where nothing on screen could be a preview: a row whose app is down still
+      // has the boot pane standing in for one, and a reload there asks for the app back rather than
+      // taking the whole shell down around it
+      if (chord?.id === "reload" && !previewReload(s)) return;
       if (chord) {
         const claimed = e.defaultPrevented;
         e.preventDefault();
@@ -181,7 +186,15 @@ export function useChords() {
             if (s.overlay?.kind === "routes") dispatch({ a: "close" });
             else if (routeTarget(s)) dispatch({ a: "open", overlay: { kind: "routes" } });
             break;
-          case "reload":
+          case "reload": {
+            // the frame on screen, or with its app down the daemon's start of it (a press with
+            // neither went to the browser)
+            const to = previewReload(s);
+            if (!to) break;
+            if (to.act === "frame") previewBus.post(to.id, { type: "reload" });
+            else sock?.send({ t: "preview-start", worktreeId: to.id });
+            break;
+          }
           case "back":
           case "forward": {
             // the frame on screen only, which is up by now (a press with none went to the browser)

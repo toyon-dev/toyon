@@ -17,6 +17,16 @@ test("the bundle takes down the mark the page drew for the wait", () => {
   expect(main).toContain('getElementById("boot")');
 });
 
+// the hello's fetch leaves with the first bytes of the page only if its script sits in the head
+// above the stylesheet and module tags Vite appends there: a classic script after a stylesheet
+// link waits for the stylesheet
+test("the bootstrap script sits in the head, ahead of the bundle's own tags", () => {
+  const boot = html.indexOf("window.toyonBoot");
+  expect(boot).toBeGreaterThan(-1);
+  expect(boot).toBeLessThan(html.indexOf("</head>"));
+  expect(boot).toBeLessThan(html.indexOf('<script type="module"'));
+});
+
 test("the boot script reads the token fragment, and nothing else from the address", () => {
   expect(html).toContain("/token=([a-f0-9]+)/");
   expect(html).not.toContain("pair=");

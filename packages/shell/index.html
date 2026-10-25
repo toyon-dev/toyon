@@ -124,14 +124,13 @@
         if (t?.kind) document.documentElement.style.colorScheme = t.kind;
       } catch {}
     </script>
-  </head>
-  <body>
-    <div id="root"></div>
-    <div id="boot" aria-hidden="true"><span><span></span><span></span><span></span><span></span></span></div>
     <script>
       // The daemon's hello, asked for while the bundle is still loading: the page's own code
       // starts hundreds of milliseconds after this line on a cold cache, and it should start
-      // knowing the project rather than painting a placeholder and correcting it. The token is
+      // knowing the project rather than painting a placeholder and correcting it. In the head,
+      // above the stylesheet and module tags Vite appends here: a classic script placed after a
+      // stylesheet link waits for that stylesheet before it runs, and on a cold link that is the
+      // whole stylesheet's download before the first byte of this request leaves. The token is
       // where ws.ts will look for it: the fragment on a fresh link, storage on every load after.
       // Nothing here is trusted beyond the first paint; the socket's own hello replaces it. A
       // device with no token at all gets null, and the bundle asks to be let in.
@@ -147,6 +146,10 @@
         }
       })();
     </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <div id="boot" aria-hidden="true"><span><span></span><span></span><span></span><span></span></span></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

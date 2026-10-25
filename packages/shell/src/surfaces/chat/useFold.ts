@@ -2,15 +2,16 @@ import { type RefObject, useEffect } from "react";
 import { foldedAt } from "./fold.ts";
 
 /**
- * The box's fold on the phone, and the lengths the stylesheet rides on. The box is the log's last
- * child, sticky at its foot (chat.css): with `--fold` as a negative bottom offset it rides down
+ * The box's fold on the phone, and the lengths the stylesheet rides on. On the phone the box is
+ * the log's last child, sticky at its foot (chat.css): with `--fold` as a negative bottom offset it rides down
  * with the end of the transcript, pixel for pixel in the compositor, and stops with its top rows
  * on screen. Nothing here runs per scroll frame for the ride. This measures the box as its shape
  * changes and writes four lengths on the wrap: `--box-h`, the box as it stands, for the bands'
  * cap; `--fold`, how far it may ride, its height less its folded rows, and zero on the desk or
  * for a box the fold cannot take; `--keep`, what of it stays on screen at the end of the ride,
  * for the pill that stands on it; and `--cover`, what of the scrollport it covers as the reader
- * stands, the whole box or past the ride its folded rows, for what brings a row into view.
+ * stands, the whole box or past the ride its folded rows, for what brings a row into view. On
+ * the desk the box stands under the log, so none of this is found and nothing is written.
  *
  * The folded rows are measured by folding the box in place for one layout and putting it back
  * before anything paints: they are content the box renders (a plan row, the field's first line,

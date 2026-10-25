@@ -187,8 +187,9 @@ type LogRow =
  * `lead` is a line the conversation starts from: the first child of the log, so it sits on the
  * composer in an empty chat and scrolls up as the conversation grows, the way a message would.
  * `tail` is the last thing said, after every message. `foot` is the box (and the lead row's intro
- * over it), the log's own last children: the box stands sticky at the scroller's foot, so it
- * ends what scrolls rather than sitting under it (chat.css). A removed worktree's chat is
+ * over it): on the desk it stands under the log, so the log's scrollbar ends above it; on the
+ * phone it is the log's own last child, sticky at the scroller's foot, so it rides with the end
+ * of the transcript (chat.css, useFold). A removed worktree's chat is
  * `archived` instead of `active`: the same log under the same id, with nothing running in it. One
  * toyon does not run is `found`: an empty log under the row's id, holding what its box sends on
  * the way. */
@@ -549,7 +550,7 @@ export function ChatLog({
   );
   rowCache.current = cached.cache;
 
-  return (
+  const wrap = (
     <div className="chat-wrap">
       <div className="chat-log" ref={logRef}>
         {lead}
@@ -721,9 +722,9 @@ export function ChatLog({
             />
           ))}
         {tail}
-        {/* the pill's seat, which rides with the box and stops over what it keeps on screen */}
+        {/* the pill's seat, which on the phone rides with the box and stops over what it keeps on screen */}
         <div className="jump-seat">{jump}</div>
-        {foot}
+        {phone && foot}
       </div>
       {find && (
         <DocumentFind
@@ -738,5 +739,14 @@ export function ChatLog({
         />
       )}
     </div>
+  );
+  if (phone) return wrap;
+  // the foot under the log on the desk: the log's scrollbar ends above the box, where a bar that
+  // ran down beside it read as the box's own
+  return (
+    <>
+      {wrap}
+      {foot}
+    </>
   );
 }

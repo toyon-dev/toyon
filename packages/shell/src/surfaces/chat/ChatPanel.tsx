@@ -66,8 +66,9 @@ export function ChatPanel({
     }),
     [store],
   );
-  // the foot of the log: the intro and the box, which the log renders as its own last children so
-  // the box stands in the scroller it ends (sticky at its foot, chat.css)
+  // the foot of the log: the intro and the box, which the log places under itself on the desk and
+  // renders as its own last children on the phone, where the box rides in the scroller it ends
+  // (sticky at its foot, chat.css)
   const foot = (
     <>
       {!archived && !found && draft && !sending && <DraftIntro draft={draft} lead={active} />}

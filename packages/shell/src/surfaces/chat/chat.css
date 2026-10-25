@@ -81,6 +81,9 @@
     --log-cover: var(--phone-strip, 0px);
     & .chat-log {
       padding-top: calc(12px + var(--log-cover));
+      /* no padding under the box at the foot: a sticky box stays inside its parent's content box,
+         so padding there is a strip it could never cover */
+      padding-bottom: 0;
       /* a sideways drag on the log is the swipe between the phone's faces (useSwipe). The browser's
          touch-action walk stops at the nearest scroll container, so this is said on the log and on
          the one box inside it that scrolls on its own, and not on the frame: a scroller with no
@@ -169,7 +172,8 @@
     /* the one height a band in the log may have of its own (.tool-body, and the picture inside
        one). Most of the transcript, but not all of it: what is left is the row's own line above
        the band and the composer under it, so the thing the band answers and the place to answer
-       it stay on screen for the whole run. */
+       it stay on screen for the whole run. The box's share is taken off only on the phone, where
+       it stands in the log (--box-h, useFold); on the desk the wrap ends above it. */
     --body-cap: calc(60cqh - 0.6 * var(--box-h, 0px));
   }
 
@@ -181,22 +185,22 @@
        took its width from the column and every bubble jumped sideways; the gutter is held whether
        or not the log overflows. An overlay scrollbar takes no width, so this costs it nothing. */
     scrollbar-gutter: stable;
-    /* no padding under the box at the foot: a sticky box stays inside its parent's content box,
-       so padding there is a strip it could never cover */
-    padding: 12px var(--chat-inset, 12px) 0;
+    padding: 12px var(--chat-inset, 12px);
     display: flex;
     flex-direction: column;
     gap: 10px;
     /* the box at the foot paints over the rows scrolling under it, in a stack of the log's own */
     isolation: isolate;
-    /* and covers the foot of the scrollport, whole at the end and its folded rows past the ride
-       (--cover, useFold): what brings a row into view stops above it. Our own reveals (useReveal,
-       a find) read the property, which holds whatever has the keyboard; the browser's own (a Tab
-       onto a link in a row, find in page) read the scroll padding, which is the same length
-       until the box itself holds focus. Then it is nothing: the browser reveals the caret by that
-       padding on every keystroke, and a caret in the box doing the covering never clears it, so
-       with the reader up in the log each key pulled the transcript down by a line. The same for
-       a field in a card the box holds, which a question reveals as it takes focus. */
+    /* and on the phone covers the foot of the scrollport, whole at the end and its folded rows
+       past the ride (--cover, useFold): what brings a row into view stops above it. Our own
+       reveals (useReveal, a find) read the property, which holds whatever has the keyboard; the
+       browser's own (a Tab onto a link in a row, find in page) read the scroll padding, which is
+       the same length until the box itself holds focus. Then it is nothing: the browser reveals
+       the caret by that padding on every keystroke, and a caret in the box doing the covering
+       never clears it, so with the reader up in the log each key pulled the transcript down by a
+       line. The same for a field in a card the box holds, which a question reveals as it takes
+       focus. On the desk the box is under the log and covers nothing, and the padding is the row's
+       own 12px. */
     --scroll-foot: calc(var(--cover, 0px) + 12px);
     scroll-padding-bottom: var(--scroll-foot);
     &:has(> .chat-input:focus-within) {
@@ -219,9 +223,14 @@
        12px apart, where under a message the same padding is ground on ground and invisible. The
        output then sits on the box the way a terminal's last line sits on its prompt, and the
        box's border is the one line between them. The reply landing under the row makes it not
-       last, and the room is back. The pill's seat stands between them with no height of its own. */
-    & > .tool-row[open]:has(+ .jump-seat + .chat-input) {
+       last, and the room is back. The pill's seat stands between them with no height of its own:
+       on the desk it ends the log and the log's own padding goes, on the phone the box follows it
+       and takes the gap back. */
+    & > .tool-row[open]:has(+ .jump-seat:last-child, + .jump-seat + .chat-input) {
       border-bottom: 0;
+    }
+    &:has(> .tool-row[open] + .jump-seat:last-child) {
+      padding-bottom: 0;
     }
     & > .tool-row[open] + .jump-seat + .chat-input {
       margin-top: -10px;
@@ -233,12 +242,13 @@
     }
   }
 
-  /* ---- the foot: the box at the end of the log, in it ----
-     The composer is the log's last child, so a swipe that starts on it scrolls the transcript,
-     and a card arriving grows the log the way a row does, which the tail's pin answers. It stands
-     sticky at the log's foot: on the desk at the foot itself, so it stays put while the rows
-     scroll under it; on the phone, where --fold is set (useFold), as far below the foot as its
-     folded rows allow, so the box rides down with the end of the transcript and stops with those
+  /* ---- the foot: the box at the end of the log ----
+     On the desk the box stands under the log, a sibling of the wrap, so the log's scrollbar ends
+     above it: in the log the bar ran the panel's height down beside the box, and read as the box's
+     own. On the phone the composer is the log's last child, so a swipe that starts on it scrolls
+     the transcript, and a card arriving grows the log the way a row does, which the tail's pin
+     answers. It stands sticky at the log's foot, as far below the foot as its folded rows allow
+     (--fold, useFold), so the box rides down with the end of the transcript and stops with those
      rows showing, in the compositor, with no script on the scroll. It bleeds the log's inset back
      out and pads its own; the lead row's intro before it bleeds the same. The 2px over the gap is
      the 12px a row had above the box. */

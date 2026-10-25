@@ -3,6 +3,7 @@ import type { Piece } from "@toyon/shared";
 import {
   effectiveFate,
   fatesFor,
+  isOffer,
   openPieces,
   type PiecesItem,
   pieceFate,
@@ -110,5 +111,15 @@ describe("openPieces", () => {
     expect(openPieces([done, declined])?.id).toBe("l1");
     expect(openPieces([declined])).toBeNull();
     expect(openPieces([list([], {}, { state: "held" })])?.state).toBe("held");
+  });
+});
+
+describe("isOffer", () => {
+  test("one piece proposed as Toyon's own is the offer line; more, or any other state, is not", () => {
+    expect(isOffer(list([piece("p1")]))).toBe(true);
+    expect(isOffer(list([piece("p1"), piece("p2")]))).toBe(false);
+    expect(isOffer(list([piece("p1")], {}, { state: "held" }))).toBe(false);
+    expect(isOffer(list([piece("p1")], {}, { state: "going" }))).toBe(false);
+    expect(isOffer(list([piece("p1")], {}, { state: "declined" }))).toBe(false);
   });
 });

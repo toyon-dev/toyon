@@ -16,6 +16,9 @@ import { dropBlankNote, setNote } from "./ask.ts";
 import { Card, CardHead, type Root } from "./Card.tsx";
 import { type PiecesItem, piecesAnswer, piecesQuestion } from "./pieces.ts";
 
+/** the lists whose document this tab already opened once */
+const OPENED = new Set<string>();
+
 /** one slot, no pick: the note is the whole of what the card takes from the person */
 const BLANK: AskAnswer[] = [{ selected: [] }];
 
@@ -45,10 +48,13 @@ export function PiecesCard({
   // go went out: the daemon's go event closes the card a round trip later
   const [starting, setStarting] = useState(false);
   const plan = item.plan;
-  // the list opens beside the box as the card arrives: it is what the two presses are about
+  // the list opens beside the box as the card arrives, once: it is what the two presses are
+  // about, but a card remounts on every return to the row, and a pane the person shut must stay
+  // shut
   useOnChange([item.id, plan], () => {
-    if (plan && active === worktreeId)
-      openFile({ sock, dispatch }, { worktreeId, path: plan, view: "preview", focus: false });
+    if (!plan || active !== worktreeId || OPENED.has(item.id)) return;
+    OPENED.add(item.id);
+    openFile({ sock, dispatch }, { worktreeId, path: plan, view: "preview", focus: false });
   });
 
   const answer = (go: boolean) => {

@@ -97,7 +97,7 @@ import { browseCommands, isMode, mergeCommands, ownCommandOf, ownCommands } from
 import { PermissionCard } from "./PermissionCard.tsx";
 import { PickChip } from "./PickChip.tsx";
 import { PiecesCard } from "./PiecesCard.tsx";
-import { type PiecesItem, piecesLine } from "./pieces.ts";
+import { isOffer, openPieces, type PiecesItem, piecesAnswer, piecesLine } from "./pieces.ts";
 import { QuestionCard } from "./QuestionCard.tsx";
 import { type Step, stepWalk, type WalkKey } from "./recall.ts";
 import { shellCommandOf, shellContext } from "./shellMode.ts";
@@ -278,6 +278,11 @@ export function Composer({
   const askRevived = useLocalField(id, "askRevived");
   const revived = !card && stopped && askRevived === stopped.id ? stopped : null;
   const cardUp = card && cardParked !== card.id ? card : revived;
+  // one piece the agent handed over on its own: an offer line above the box, not a card
+  const pieceOffer = useMemo((): PiecesItem | null => {
+    const item = openPieces(chat ?? []);
+    return item && isOffer(item) ? item : null;
+  }, [chat]);
   // the pieces list a plan card carries beside it: what the plan's yes also does
   const piecesOfPlan = useMemo((): PiecesItem | null => {
     const id = cardUp?.kind === "ask" && cardUp.ask.kind === "permission" ? cardUp.ask.pieces : undefined;
@@ -1388,6 +1393,39 @@ export function Composer({
           }}
         >
           {cardLine(parked)}
+        </ComposerOffer>
+      )}
+      {/* one piece the agent handed over on its own, mid-task: an offer in the box's own shape
+          rather than a card that takes it, since the box is not the agent's to hold for an idea
+          it had. The word starts the worktree, the title opens the brief beside the box, the x
+          sends it back. A list of two or more is the card, its fates read on the plan. */}
+      {pieceOffer && id && (
+        <ComposerOffer
+          className="composer-offer-piece"
+          icon="spawn"
+          verb="start"
+          tip="Start a worktree for this piece; the brief the agent wrote is its first message"
+          onPress={() => sock?.send(piecesAnswer(pieceOffer, id, true, undefined))}
+          onDismiss={() => sock?.send(piecesAnswer(pieceOffer, id, false, undefined))}
+        >
+          a worktree for{" "}
+          {pieceOffer.plan ? (
+            // the title is the press that opens the brief: a word after it would be the first
+            // thing the line's ellipsis takes
+            <Button
+              variant="inline"
+              className="composer-offer-title"
+              data-tip="Read the brief the agent wrote, beside the box"
+              onClick={() =>
+                pieceOffer.plan &&
+                openFile({ sock, dispatch }, { worktreeId: id, path: pieceOffer.plan, view: "preview" })
+              }
+            >
+              {pieceOffer.pieces[0]?.title}
+            </Button>
+          ) : (
+            <span className="composer-offer-title">{pieceOffer.pieces[0]?.title}</span>
+          )}
         </ComposerOffer>
       )}
       {/* a command that failed and that Toyon did not hand to the agent on its own: the same shape,

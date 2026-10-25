@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { RepoInfo } from "@toyon/shared";
 import type { ChatItem } from "../../state/store.ts";
 import { cardDropBox, cardLine, type HandoffItem, handoffAnswer, openCard, parseHandoffArgs } from "./handoff.ts";
+import type { PiecesItem } from "./pieces.ts";
 
 const repo = (id: string, name = id): RepoInfo => ({
   id,
@@ -39,6 +40,27 @@ describe("openCard", () => {
     expect(openCard([handoff({ state: "continued" }), ask("k1", "answered")])).toBeNull();
     expect(openCard([handoff({ state: "declined" }), ask("k1")])?.id).toBe("k1");
     expect(openCard([])).toBeNull();
+  });
+
+  test("a pieces list of two is Toyon's card; a list of one is an offer line and holds nothing", () => {
+    const p = (id: string) => ({ id, title: id, brief: "", attachments: [], fate: "worktree" as const });
+    const pieces = (n: number, over: Partial<PiecesItem> = {}): PiecesItem => ({
+      kind: "pieces",
+      id: "l1",
+      pieces: Array.from({ length: n }, (_, i) => p(`p${i + 1}`)),
+      fates: {},
+      mode: "auto",
+      state: "proposed",
+      outcomes: [],
+      later: [],
+      ts: 1,
+      ...over,
+    });
+    expect(openCard([pieces(2)])?.id).toBe("l1");
+    expect(openCard([pieces(1)])).toBeNull();
+    expect(openCard([ask("k1", "answered"), pieces(1)])).toBeNull();
+    expect(openCard([pieces(2, { state: "held" })])).toBeNull();
+    expect(openCard([pieces(2, { state: "going" })])).toBeNull();
   });
 });
 

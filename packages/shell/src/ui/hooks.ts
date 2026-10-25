@@ -182,7 +182,9 @@ export function useReveal(scroller: string) {
     if (!box) return;
     const b = box.getBoundingClientRect();
     const r = el.getBoundingClientRect();
-    const below = r.bottom - b.bottom;
+    // the scroller's own foot is spoken for (a box standing sticky at its end), as scroll-padding
+    const foot = parseFloat(getComputedStyle(box).scrollPaddingBottom) || 0;
+    const below = r.bottom - (b.bottom - foot);
     if (below <= 0) return;
     const pad = parseFloat(getComputedStyle(box).paddingTop) || 0;
     box.scrollTop += Math.min(below, Math.max(0, r.top - b.top - pad));

@@ -37,10 +37,12 @@
     inset: 0;
     display: flex;
     flex-direction: column;
-    & .chat-log,
+    /* the column's inset, in the wrap's width (the nearest container of the log and of the foot
+       inside it), so the foot's bleed back out of the log is the length the log's padding is */
+    --chat-inset: max(12px, calc((100cqw - var(--chat-measure)) / 2));
     & .draft-intro,
     & .chat-input {
-      padding-inline: max(12px, calc((100% - var(--chat-measure)) / 2));
+      padding-inline: var(--chat-inset);
     }
     /* what an assumed project opened on: the log's first row, so it takes the log's column */
     & .chat-centre-note {
@@ -66,52 +68,19 @@
      The box has no floor of its own here: the field's three lines are it, the on-screen keyboard
      takes the rest and the transcript gives way to it.
 
-     The log runs the whole column and the foot (the box, with the lead row's intro over it)
-     stands on it, in the grid's last rows over the one the log spans; the log pads its end by the
-     foot's full height (--foot, useFold) so the last row sits on the box as it does on the desk.
-     Over the log rather than under it because the foot moves: scrolled up from the end it rides
-     down with the end of the transcript, a translate by --ride, and a log whose height holds
-     through that is a ride that lays out no row and a tail pin with nothing to answer. */
+     Scrolled up from the end, the box rides down with the end of the transcript and stops with
+     its top rows on screen: its sticky offset at the log's foot (below) is --fold here and
+     nothing on the desk, the box's height less its folded rows, which useFold measures. */
   .chat-screen {
     flex: 1;
     min-height: 0;
-    display: grid;
-    grid-template-rows: minmax(0, 1fr) auto auto;
-    grid-template-columns: minmax(0, 1fr);
-    & > .chat-wrap {
-      grid-area: 1 / 1 / -1 / 2;
-    }
-    /* each placed in its own cell, all three outright: an item left to place itself, even one
-       locked to its row, dodges the cells the others hold and opens a second column beside them.
-       Painted over the log in their order. The intro takes the ground: a row scrolled under it
-       would show through. */
-    & > .draft-intro {
-      grid-area: 2 / 1;
-      position: relative;
-      background: var(--surface0);
-    }
-    & > .chat-input {
-      grid-area: 3 / 1;
-    }
-    & > .draft-intro,
-    & > .chat-input {
-      translate: 0 var(--ride, 0px);
-    }
+    display: flex;
+    flex-direction: column;
     /* the bar's name strip hangs over the top of the log (phone.css) and goes while it is scrolled
        away from its end, so the log starts under it and whatever stands at its top stands clear of it */
     --log-cover: var(--phone-strip, 0px);
     & .chat-log {
       padding-top: calc(12px + var(--log-cover));
-      padding-bottom: calc(12px + var(--foot, 0px));
-    }
-    /* the pill stands on the foot as it shows, ridden or folded */
-    & .jump {
-      bottom: calc(10px + var(--foot-show, 0px));
-    }
-    /* a band's cap is a share of what the foot leaves of the column, as it is of the log the
-       desk's box leaves */
-    & .chat-wrap {
-      --body-cap: calc(60cqh - 0.6 * var(--foot, 0px));
     }
     /* the daemon's band is surface0, which is this ground, so it takes the bar's tier. Its floor
        is the small row's: the full row here is a thumb's 52px, and this row is read, not pressed */
@@ -119,25 +88,15 @@
       background: var(--surface1);
       min-height: var(--row-height-sm);
     }
-    /* Away from the end, a box that holds nothing is one line: the field, with the stop if the
-       agent has the turn. It is what the box's ride leaves on screen, so the fold moves nothing.
-       A press in it is the caret arriving, and the whole box is back for the keyboard coming up
-       (Composer takes the class off while the caret is in it). */
+    /* Away from the end, past the ride, the box stands folded: its top rows, the plan it runs on,
+       the offers and the field's first line with the stop if the agent has the turn, or a card's
+       question, and the rest below the screen's edge. The fold is the ride's stop and lays out
+       nothing; what changes here is the field's ghost alone, which takes one line so that its
+       second does not show under the edge. A press in the field is the caret arriving, and the
+       ride is the same with the keyboard up: the line with the caret is the one that stays. */
     & .chat-input.lean {
-      & .composer-plan,
-      & .composer-notice,
-      & .composer-knobs,
-      & .composer-notes,
       & .composer-subline {
         display: none;
-      }
-      /* the region's floor, and the textarea's height as well: a textarea left to itself is two
-         rows tall, and its own height keeps it from stretching to them */
-      & .composer-field {
-        min-height: 1lh;
-      }
-      & .composer-field textarea {
-        height: 1lh;
       }
       & .composer-ghost {
         white-space: nowrap;
@@ -149,12 +108,27 @@
         white-space: nowrap;
       }
     }
-    /* A card folds the same way, to the line that stands for it set aside (.composer-card-line).
-       The card itself goes rather than shrinks: it keeps its state mounted, and nothing on it is
-       pressed from up the log, since the line's press is the log going to its end, where the card
-       stands whole. Hiding it drops the keys with it, which on a phone is no loss. */
-    & .chat-input.lean .card {
-      display: none;
+    /* The folded rows, measured and never painted (useFold folds the box in place for one
+       layout): what stands above the field and the field as one line, and of a card its strip
+       and the question itself. Everything under them is what the ride takes off the screen. The
+       textarea's height as well as the region's floor: a textarea left to itself is two rows
+       tall, and its own height keeps it from stretching to them. */
+    & .chat-input.fold-measure {
+      & .composer-notice,
+      & .composer-knobs,
+      & .composer-notes,
+      & .composer-subline,
+      & .card > :not(.card-tabs, .card-pages, .card-head),
+      & .card-page > :not(.card-head),
+      & .card-sub {
+        display: none;
+      }
+      & .composer-field {
+        min-height: 1lh;
+      }
+      & .composer-field textarea {
+        height: 1lh;
+      }
     }
     & .chat-input {
       background: var(--sunken-floor);
@@ -186,7 +160,7 @@
        one). Most of the transcript, but not all of it: what is left is the row's own line above
        the band and the composer under it, so the thing the band answers and the place to answer
        it stay on screen for the whole run. */
-    --body-cap: 60cqh;
+    --body-cap: calc(60cqh - 0.6 * var(--box-h, 0px));
   }
 
   .chat-log {
@@ -197,10 +171,18 @@
        took its width from the column and every bubble jumped sideways; the gutter is held whether
        or not the log overflows. An overlay scrollbar takes no width, so this costs it nothing. */
     scrollbar-gutter: stable;
-    padding: 12px;
+    /* no padding under the box at the foot: a sticky box stays inside its parent's content box,
+       so padding there is a strip it could never cover */
+    padding: 12px var(--chat-inset, 12px) 0;
     display: flex;
     flex-direction: column;
     gap: 10px;
+    /* the box at the foot paints over the rows scrolling under it, in a stack of the log's own */
+    isolation: isolate;
+    /* and covers the foot of the scrollport, whole at the end and its folded rows past the ride
+       (--cover, useFold): what brings a row into view (a reveal, a find) stops above it, which
+       both read off this */
+    scroll-padding-bottom: calc(var(--cover, 0px) + 12px);
     /* a short transcript sits on the composer instead of the top of the pane; once the
    content overflows there is no free space left and the margin collapses to nothing.
    justify-content: flex-end would do the same but makes the overflowing top unreachable.
@@ -218,17 +200,52 @@
        12px apart, where under a message the same padding is ground on ground and invisible. The
        output then sits on the box the way a terminal's last line sits on its prompt, and the
        box's border is the one line between them. The reply landing under the row makes it not
-       last, and the padding is back. */
-    &:has(> .tool-row[open]:last-child) {
-      padding-bottom: 0;
-    }
-    & > .tool-row[open]:last-child {
+       last, and the room is back. The pill's seat stands between them with no height of its own. */
+    & > .tool-row[open]:has(+ .jump-seat + .chat-input) {
       border-bottom: 0;
+    }
+    & > .tool-row[open] + .jump-seat + .chat-input {
+      margin-top: -10px;
     }
     /* the log scrolls; a row never gives up height to make the transcript fit. Flex would take it
        from any row that clips its own overflow, and a row squeezed to a line hides what it holds. */
     & > * {
       flex-shrink: 0;
+    }
+  }
+
+  /* ---- the foot: the box at the end of the log, in it ----
+     The composer is the log's last child, so a swipe that starts on it scrolls the transcript,
+     and a card arriving grows the log the way a row does, which the tail's pin answers. It stands
+     sticky at the log's foot: on the desk at the foot itself, so it stays put while the rows
+     scroll under it; on the phone, where --fold is set (useFold), as far below the foot as its
+     folded rows allow, so the box rides down with the end of the transcript and stops with those
+     rows showing, in the compositor, with no script on the scroll. It bleeds the log's inset back
+     out and pads its own; the lead row's intro before it bleeds the same. The 2px over the gap is
+     the 12px a row had above the box. */
+  .chat-log > .draft-intro,
+  .chat-log > .chat-input {
+    margin-inline: calc(-1 * var(--chat-inset, 12px));
+  }
+  .chat-log > .chat-input {
+    position: sticky;
+    bottom: calc(-1 * var(--fold, 0px));
+    z-index: 2;
+    margin-top: 2px;
+  }
+  .chat-log > .draft-intro + .chat-input {
+    margin-top: -10px;
+  }
+  /* the pill's seat, before the box and with no height of its own: sticky a little above what the
+     box keeps on screen, so the pill rides with the box and stops over its folded rows. First in
+     an empty log it takes the first child's auto margin, which stands the box on the foot. */
+  .jump-seat {
+    position: sticky;
+    bottom: calc(var(--keep, 0px) + 10px);
+    height: 0;
+    z-index: 1;
+    &:not(:first-child) {
+      margin-top: -10px;
     }
   }
 
@@ -239,10 +256,10 @@
      segment and stays, since now it is news and not a shortcut; scrolling up past it puts the
      up caret beside the words. Rendered only while it has something to offer, so the fade is the
      mount's (starting-style) and the unmount is instant: a pill is a shortcut, not a thing to
-     watch leave. */
+     watch leave. Drawn up from its seat (.jump-seat), which rides with the box. */
   .jump {
     position: absolute;
-    bottom: 10px;
+    bottom: 0;
     left: 50%;
     transform: translateX(-50%);
     display: flex;
@@ -1121,11 +1138,6 @@
   /* an offer that can be turned down has its way out at the row's end */
   .composer-offer-close {
     margin-left: auto;
-  }
-  /* the line a card folds to on a phone (Composer): rendered with the card, so folding the box
-     in place measures the fold, and shown only by the fold */
-  .chat-input:not(.lean) .composer-card-line {
-    display: none;
   }
   /* the frame is base's (.composer); the floor is the field's region, in lines of the prose face,
      so the box grows with what is attached above it (four image chips stand in it on their own)

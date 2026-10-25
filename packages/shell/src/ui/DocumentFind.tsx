@@ -18,8 +18,22 @@ function shown(node: Text): boolean {
   return typeof el.checkVisibility === "function" ? el.checkVisibility() : true;
 }
 
-function textNodesOf(root: Node): Text[] {
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+/** whether a node is under what `skip` names */
+function inside(node: Node, skip: string): boolean {
+  const el = node instanceof Element ? node : node.parentElement;
+  return !!el?.closest(skip);
+}
+
+/** the text under `root`, less the subtrees `skip` names (a box standing in the document that is
+ * not part of it) */
+function textNodesOf(root: Node, skip?: string): Text[] {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, (n) =>
+    n instanceof Element
+      ? skip && n.matches(skip)
+        ? NodeFilter.FILTER_REJECT
+        : NodeFilter.FILTER_SKIP
+      : NodeFilter.FILTER_ACCEPT,
+  );
   const nodes: Text[] = [];
   for (let n = walker.nextNode(); n; n = walker.nextNode()) {
     const t = n as Text;
@@ -31,9 +45,9 @@ function textNodesOf(root: Node): Text[] {
 type Found = { matches: Match[]; ranges: Range[] };
 const NOTHING: Found = { matches: [], ranges: [] };
 
-function search(body: HTMLElement, query: string): Found {
+function search(body: HTMLElement, query: string, skip?: string): Found {
   if (!query) return NOTHING;
-  const nodes = textNodesOf(body);
+  const nodes = textNodesOf(body, skip);
   const matches = matchOffsets(nodes.map((n) => n.data).join(""), query);
   const segments = segmentsOf(nodes.map((n) => n.data.length));
   const ranges = matches.map((m) => {
@@ -75,7 +89,9 @@ const MARGIN = 48;
 function reveal(root: HTMLElement, range: Range) {
   const r = range.getBoundingClientRect();
   const box = root.getBoundingClientRect();
-  if (r.top >= box.top + MARGIN && r.bottom <= box.bottom - MARGIN) return;
+  // the box's foot may be spoken for (a composer standing sticky at its end), as scroll-padding
+  const foot = parseFloat(getComputedStyle(root).scrollPaddingBottom) || 0;
+  if (r.top >= box.top + MARGIN && r.bottom <= box.bottom - foot - MARGIN) return;
   root.scrollTop += r.top - box.top - box.height / 3;
 }
 
@@ -96,11 +112,14 @@ export function DocumentFind({
   seq,
   onClose,
   onReveal,
+  skip,
 }: {
   root: RefObject<HTMLElement | null>;
   body: RefObject<HTMLElement | null>;
   seed: string;
   seq: number;
+  /** what under `body` is not the document: a selector for the subtrees not read */
+  skip?: string;
   /** the match the reader was on when the box closed, for the document to keep as its selection */
   onClose: (current: Range | null) => void;
   /** the box was scrolled to bring a match into view, for a root that follows its own end */
@@ -124,7 +143,10 @@ export function DocumentFind({
     const el = body.current;
     if (!el) return;
     let raf = 0;
-    const observer = new MutationObserver(() => {
+    const observer = new MutationObserver((records) => {
+      // a change wholly inside what is not read (the box at a log's foot being typed in, or
+      // measured) changes no match
+      if (skip && records.every((r) => inside(r.target, skip))) return;
       if (!raf)
         raf = requestAnimationFrame(() => {
           raf = 0;
@@ -137,13 +159,13 @@ export function DocumentFind({
       observer.disconnect();
       if (raf) cancelAnimationFrame(raf);
     };
-  }, [body]);
+  }, [body, skip]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: `tick` is the document changing under the search, which is what re-reads it
   useLayoutEffect(() => {
     const el = body.current;
     if (!el) return;
-    const next = search(el, query);
+    const next = search(el, query, skip);
     const fresh = query !== searched.current;
     searched.current = query;
     if (fresh) show.current = true;
@@ -157,7 +179,7 @@ export function DocumentFind({
     live.current = { found: next, at: index };
     setFound(next);
     setAt(index);
-  }, [query, tick]);
+  }, [query, tick, skip]);
 
   useLayoutEffect(() => {
     paint(found.ranges, at);

@@ -31,6 +31,11 @@ const LOCAL_LAYERS: Record<string, { root: string; why: string }> = {
   ".composer-verb-tail": { root: ".composer-field", why: "the clause at the line's end, pressed over the textarea" },
   ".composer-marks .chat-mention": { root: ".composer-field", why: "a reference's mark, pressed over the textarea" },
   ".composer-stop": { root: ".composer-field", why: "the stop in the field's corner, over the textarea's box" },
+  ".chat-log > .chat-input": {
+    root: ".chat-log",
+    why: "the box sticky at the log's foot, over the rows scrolling under it",
+  },
+  ".jump-seat": { root: ".chat-log", why: "the pill's seat over the rows, under the box it rides with" },
 };
 
 const cssFiles = () => [...new Glob("**/*.css").scanSync({ cwd: SRC })].sort();

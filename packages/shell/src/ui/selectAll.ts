@@ -1,4 +1,4 @@
-import { type RefObject, useEffect } from "react";
+import { type RefObject, useCallback, useEffect } from "react";
 
 /** The browser's select-all, on a surface that is read and not edited, takes the whole shell with
  * it: the rail, the bar, every dock. A surface that is a document of its own answers the chord
@@ -21,22 +21,27 @@ export function isSelectAll(e: {
  * means this surface. `act` is handed the element, and the event has been claimed.
  *
  * `elsewhere` lets the surface answer for a hand that is on none: it is asked about a key that
- * reached the window unclaimed from outside `ref`, and is handed what holds the keyboard. */
+ * reached the window unclaimed from outside `ref`, and is handed what holds the keyboard.
+ * `except` names what stands inside `ref` without being the surface (a box to type in at a
+ * log's foot): a hand there keeps the browser's own answer. */
 export function useKeyWithin(
   ref: RefObject<HTMLElement | null>,
   match: (e: KeyboardEvent) => boolean,
   act: (el: HTMLElement, e: KeyboardEvent) => void,
   elsewhere?: (held: Element | null) => boolean,
+  except?: string,
 ) {
   useEffect(() => {
     let pointed = false;
     const onDown = (e: PointerEvent) => {
-      pointed = !!ref.current && e.target instanceof Node && ref.current.contains(e.target);
+      const target = e.target instanceof Element ? e.target : null;
+      pointed = !!ref.current && !!target && ref.current.contains(target) && !(except && target.closest(except));
     };
     const onKey = (e: KeyboardEvent) => {
       const el = ref.current;
       if (!el || e.defaultPrevented || !match(e)) return;
       const held = document.activeElement;
+      if (except && held?.closest(except)) return;
       const inside = held && held !== document.body ? el.contains(held) : pointed;
       if (!inside && !elsewhere?.(held)) return;
       e.preventDefault();
@@ -48,12 +53,21 @@ export function useKeyWithin(
       window.removeEventListener("pointerdown", onDown, true);
       window.removeEventListener("keydown", onKey);
     };
-  }, [ref, match, act, elsewhere]);
+  }, [ref, match, act, elsewhere, except]);
+}
+
+/** What of a surface select-all takes, when not the whole of it: `upTo` names the child the
+ * selection stops before, and `except` what inside the surface keeps the browser's own select-all
+ * (useKeyWithin). One value for the surface's life, so the listener is set once. */
+export interface SelectionScope {
+  upTo?: (el: HTMLElement) => Element | null;
+  except?: string;
 }
 
 /** select-all on a surface that is read and not edited: the surface, not the shell around it */
-export function useSelectAllWithin(ref: RefObject<HTMLElement | null>) {
-  useKeyWithin(ref, isSelectAll, selectContents);
+export function useSelectAllWithin(ref: RefObject<HTMLElement | null>, scope?: SelectionScope) {
+  const act = useCallback((el: HTMLElement) => selectContents(el, scope?.upTo?.(el)), [scope]);
+  useKeyWithin(ref, isSelectAll, act, undefined, scope?.except);
 }
 
 /** what is selected inside `el`, or null when the selection is empty, blank, or lies elsewhere.
@@ -66,9 +80,11 @@ export function selectedText(el: Element): string | null {
   return text.trim() ? text : null;
 }
 
-export function selectContents(el: Element) {
+/** the contents of `el` as the selection, stopping before `upTo` when there is one */
+export function selectContents(el: Element, upTo?: Element | null) {
   const range = document.createRange();
   range.selectNodeContents(el);
+  if (upTo) range.setEndBefore(upTo);
   const sel = window.getSelection();
   if (!sel) return;
   sel.removeAllRanges();

@@ -1,113 +1,90 @@
 import { type RefObject, useEffect } from "react";
-import { foldAt } from "./fold.ts";
+import { foldedAt } from "./fold.ts";
 
 /**
- * The phone's foot riding the end of the transcript. On the screen the log runs the whole column
- * and the foot (the box, with the lead row's intro over it) stands on it, so the log's padding is
- * what keeps the last row above the box, and while the reader scrolls up the foot slides down
- * with the end of the transcript, pixel for pixel, as far as the box's fold (fold.ts). A ride is a
- * translate and nothing else: the log's height holds, so no row is laid out again per frame, and
- * the tail's pin, which answers the log resizing, has nothing to answer. Past the extent the box
- * is folded, which is `reading` in the store: the box swaps to its line (Composer) and the bar's
- * strip goes. Measured here and not kept in state, because the ride changes on every scroll
- * event and a value in state would render the log for each.
+ * The box's fold on the phone, and the lengths the stylesheet rides on. The box is the log's last
+ * child, sticky at its foot (chat.css): with `--fold` as a negative bottom offset it rides down
+ * with the end of the transcript, pixel for pixel in the compositor, and stops with its top rows
+ * on screen. Nothing here runs per scroll frame for the ride. This measures the box as its shape
+ * changes and writes four lengths on the wrap: `--box-h`, the box as it stands, for the bands'
+ * cap; `--fold`, how far it may ride, its height less its folded rows, and zero on the desk or
+ * for a box the fold cannot take; `--keep`, what of it stays on screen at the end of the ride,
+ * for the pill that stands on it; and `--cover`, what of the scrollport it covers as the reader
+ * stands, the whole box or past the ride its folded rows, for what brings a row into view.
  *
- * The extent is the box's full height less its folded height, read by folding the box in place
- * for a layout and putting it back before anything paints: the folded line is content the box
- * renders (the field's one line, a card's question) and not a number the stylesheet knows.
+ * The folded rows are measured by folding the box in place for one layout and putting it back
+ * before anything paints: they are content the box renders (a plan row, the field's first line,
+ * a card's question) and not a number the stylesheet knows.
  *
- * Written on the panel: `--ride` is the translate as applied (none while the box is not one the
- * fold can take, or stands folded), `--foot` the foot at its full height, which the log pads for
- * folded or not (a fold that shortened the padding would move the reader nearer the end, which
- * unfolds it), and `--foot-show` what of it is on screen, for the pill above it.
+ * `reading` in the store is by place, a reader past the ride's extent: the bar's strip folds and
+ * the field's ghost takes its one-line form (Composer). Read off scroll events, which flip the
+ * flag at the threshold and write nothing per frame.
  */
-export function useFold(
-  panelRef: RefObject<HTMLElement | null>,
-  logRef: RefObject<HTMLElement | null>,
-  on: boolean,
-  pinned: () => boolean,
-  setReading: (on: boolean) => void,
-): void {
+export function useFold(logRef: RefObject<HTMLElement | null>, on: boolean, setReading: (on: boolean) => void): void {
   useEffect(() => {
-    const panel = panelRef.current;
     const log = logRef.current;
     const wrap = log?.parentElement;
-    const box = panel?.querySelector<HTMLElement>(":scope > .chat-input");
-    if (!on || !panel || !log || !wrap || !box) {
+    const box = log?.querySelector<HTMLElement>(":scope > .chat-input");
+    if (!log || !wrap || !box) {
       setReading(false);
       return;
     }
     let extent = 0;
     let folded = false;
-    // the foot as it stands, and at its full height
-    let shown = 0;
-    let foot = 0;
-    const foldable = () => box.classList.contains("foldable");
-    const feet = () => [...panel.children].filter((c): c is HTMLElement => c !== wrap && c instanceof HTMLElement);
+    let full = 0;
+    let kept = 0;
+    const cover = () => wrap.style.setProperty("--cover", `${folded ? kept : full}px`);
     const measure = () => {
-      const lean = box.classList.contains("lean");
-      if (foldable()) {
-        box.classList.toggle("lean", !lean);
-        const other = box.offsetHeight;
-        box.classList.toggle("lean", lean);
-        extent = lean ? other - box.offsetHeight : box.offsetHeight - other;
+      full = box.offsetHeight;
+      kept = full;
+      if (on && box.classList.contains("foldable")) {
+        // the box folded for the layout shortens the log, and a log at its end is clamped back by
+        // the difference, which the restored height does not undo: the place is put back by hand
+        const top = log.scrollTop;
+        box.classList.add("fold-measure");
+        kept = box.offsetHeight;
+        box.classList.remove("fold-measure");
+        log.scrollTop = top;
       }
-      shown = feet().reduce((h, c) => h + c.offsetHeight, 0);
-      foot = lean ? shown + extent : shown;
-      panel.style.setProperty("--foot", `${foot}px`);
+      extent = full - kept;
+      wrap.style.setProperty("--box-h", `${full}px`);
+      wrap.style.setProperty("--fold", `${extent}px`);
+      wrap.style.setProperty("--keep", `${kept}px`);
+      cover();
     };
-    const apply = () => {
-      const gap = log.scrollHeight - log.scrollTop - log.clientHeight;
-      const next = foldAt(gap, extent, folded);
-      const ride = foldable() && !box.classList.contains("lean") ? next.ride : 0;
-      panel.style.setProperty("--ride", `${ride}px`);
-      panel.style.setProperty("--foot-show", `${shown - ride}px`);
-      if (next.folded !== folded) {
-        folded = next.folded;
-        setReading(folded);
-      }
+    const place = () => {
+      if (!on) return;
+      const next = foldedAt(log.scrollHeight - log.scrollTop - log.clientHeight, extent, folded);
+      if (next === folded) return;
+      folded = next;
+      cover();
+      setReading(folded);
     };
     measure();
-    apply();
-    log.addEventListener("scroll", apply, { passive: true });
+    place();
+    log.addEventListener("scroll", place, { passive: true });
     const ro = new ResizeObserver(() => {
-      const was = foot;
       measure();
-      apply();
-      // the foot growing (a card arriving, a draft climbing) pads the log further, which puts the
-      // end under the box: a reader at the end stays at it, as on the desk, where the log gives
-      // way to the box and the pin answers that
-      if (foot > was && pinned()) log.scrollTop = log.scrollHeight;
+      place();
     });
-    for (const c of feet()) ro.observe(c);
-    // the box's shape changes under the same class list (a card folding, the caret arriving), and
-    // the intro comes and goes with the lead row's draft. The measure's own toggle is two records
-    // that leave the class list as it was, and acting on them would measure without end.
+    ro.observe(box);
+    // the box's shape changes under the same height (a card arriving, the caret leaving a blank
+    // field). The measure's own toggle is two records that leave the class list as it was, and
+    // acting on them would measure without end.
     let classes = box.className;
-    const mo = new MutationObserver((records) => {
-      let changed = false;
-      for (const r of records) {
-        if (r.type !== "childList") continue;
-        changed = true;
-        for (const n of r.addedNodes) if (n instanceof HTMLElement) ro.observe(n);
-        for (const n of r.removedNodes) if (n instanceof HTMLElement) ro.unobserve(n);
-      }
-      if (box.className !== classes) {
-        classes = box.className;
-        changed = true;
-      }
-      if (!changed) return;
+    const mo = new MutationObserver(() => {
+      if (box.className === classes) return;
+      classes = box.className;
       measure();
-      apply();
+      place();
     });
     mo.observe(box, { attributes: true, attributeFilter: ["class"] });
-    mo.observe(panel, { childList: true });
     return () => {
-      log.removeEventListener("scroll", apply);
+      log.removeEventListener("scroll", place);
       ro.disconnect();
       mo.disconnect();
-      for (const v of ["--ride", "--foot", "--foot-show"]) panel.style.removeProperty(v);
+      for (const v of ["--box-h", "--fold", "--keep", "--cover"]) wrap.style.removeProperty(v);
       setReading(false);
     };
-  }, [panelRef, logRef, on, pinned, setReading]);
+  }, [logRef, on, setReading]);
 }

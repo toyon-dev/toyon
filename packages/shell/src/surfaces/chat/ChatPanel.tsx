@@ -66,6 +66,20 @@ export function ChatPanel({
     }),
     [store],
   );
+  // the foot of the log: the intro and the box, which the log renders as its own last children so
+  // the box stands in the scroller it ends (sticky at its foot, chat.css)
+  const foot = (
+    <>
+      {!archived && !found && draft && !sending && <DraftIntro draft={draft} lead={active} />}
+      {archived ? (
+        <Composer active={null} archived={archived} placement={placement} />
+      ) : found ? (
+        <Composer active={null} found={found} placement={placement} />
+      ) : (
+        <Composer active={active} draft={draft} placement={placement} />
+      )}
+    </>
+  );
   return (
     <div
       className={cx(
@@ -82,9 +96,9 @@ export function ChatPanel({
       }}
     >
       {archived ? (
-        <ChatLog active={null} archived={archived} tail={<ArchivedNote item={archived} />} />
+        <ChatLog active={null} archived={archived} tail={<ArchivedNote item={archived} />} foot={foot} />
       ) : found ? (
-        <ChatLog active={null} found={found} tail={<FoundNote row={found} />} />
+        <ChatLog active={null} found={found} tail={<FoundNote row={found} />} foot={foot} />
       ) : (
         <ChatLog
           active={active}
@@ -101,15 +115,8 @@ export function ChatPanel({
               </p>
             )
           }
+          foot={foot}
         />
-      )}
-      {!archived && !found && draft && !sending && <DraftIntro draft={draft} lead={active} />}
-      {archived ? (
-        <Composer active={null} archived={archived} placement={placement} />
-      ) : found ? (
-        <Composer active={null} found={found} placement={placement} />
-      ) : (
-        <Composer active={active} draft={draft} placement={placement} />
       )}
     </div>
   );

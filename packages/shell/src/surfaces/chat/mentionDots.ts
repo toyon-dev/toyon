@@ -8,12 +8,14 @@
 import { type RefObject, useEffect } from "react";
 import { useStore } from "../../state/context.tsx";
 import { worktreeById } from "../../state/store.ts";
+import { FOOT, inFoot } from "./foot.ts";
 import { mentionTip } from "./mentions.ts";
 import { type Sibling, siblingWorktrees } from "./siblings.ts";
 
 export function stampMentions(root: ParentNode, rows: readonly Sibling[]) {
   const byId = new Map(rows.map((w) => [w.id, w]));
-  for (const el of root.querySelectorAll<HTMLElement>(".chat-mention[data-dir]:not([data-archived])")) {
+  // the box at the log's foot draws the person's marks from the store already
+  for (const el of root.querySelectorAll<HTMLElement>(`.chat-mention[data-dir]:not([data-archived], :is(${FOOT}) *)`)) {
     const w = byId.get(el.dataset.worktree ?? "");
     if (!w) continue;
     const t = mentionTip({ ...w, dir: el.dataset.dir });
@@ -37,7 +39,9 @@ export function useMentionDots(logRef: RefObject<HTMLElement | null>, worktreeId
     const siblings = siblingWorktrees(rows, repoId, null);
     stampMentions(root, siblings);
     let frame = 0;
-    const observer = new MutationObserver(() => {
+    const observer = new MutationObserver((records) => {
+      // a keystroke in the box redraws its ghost and marks under the same root; no row moved
+      if (records.every((r) => inFoot(r.target))) return;
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => stampMentions(root, siblings));
     });

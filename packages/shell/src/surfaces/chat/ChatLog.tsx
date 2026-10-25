@@ -27,11 +27,12 @@ import { isFind } from "../../ui/find.ts";
 import { useOnChange, useSecondsSince, useTail } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { Spinner } from "../../ui/Spinner.tsx";
-import { selectedText, useKeyWithin, useSelectAllWithin } from "../../ui/selectAll.ts";
+import { type SelectionScope, selectedText, useKeyWithin, useSelectAllWithin } from "../../ui/selectAll.ts";
 import { elapsed, pickLabel } from "../util.ts";
 import { AttachmentSet } from "./AttachmentSet.tsx";
 import { ChatItemView, QUIET_AFTER, ThoughtRow, ToolRow } from "./ChatItemView.tsx";
 import { FileChip } from "./FileChip.tsx";
+import { FOOT } from "./foot.ts";
 import {
   type ChatEntry,
   groupTools,
@@ -62,6 +63,10 @@ const panelRef = {
     return chatPanel.el;
   },
 };
+
+/** select-all is the rows: the log ends in the box, which is not what was read, and a caret in
+ * the box keeps the browser's select-all of what is typed */
+const ROWS: SelectionScope = { upTo: (el) => el.querySelector(":scope > .jump-seat"), except: FOOT };
 
 /** What a queued message carries, on its row: the chips it was sent with, numbered as they will be
  * when it goes, and nothing to take off, since the message is taken back whole. An image and a
@@ -181,21 +186,26 @@ type LogRow =
 /** the transcript for the active worktree: items, working indicator, waiting messages, jump-down pill.
  * `lead` is a line the conversation starts from: the first child of the log, so it sits on the
  * composer in an empty chat and scrolls up as the conversation grows, the way a message would.
- * `tail` is the last thing said, after every message. A removed worktree's chat is `archived`
- * instead of `active`: the same log under the same id, with nothing running in it. One toyon does
- * not run is `found`: an empty log under the row's id, holding what its box sends on the way. */
+ * `tail` is the last thing said, after every message. `foot` is the box (and the lead row's intro
+ * over it), the log's own last children: the box stands sticky at the scroller's foot, so it
+ * ends what scrolls rather than sitting under it (chat.css). A removed worktree's chat is
+ * `archived` instead of `active`: the same log under the same id, with nothing running in it. One
+ * toyon does not run is `found`: an empty log under the row's id, holding what its box sends on
+ * the way. */
 export function ChatLog({
   active,
   archived,
   found,
   lead,
   tail,
+  foot,
 }: {
   active: OwnedWorktree | null;
   archived?: ArchivedWorktree | null;
   found?: WorktreeStatus | null;
   lead?: React.ReactNode;
   tail?: React.ReactNode;
+  foot?: React.ReactNode;
 }) {
   const sock = useSock();
   const store = useStoreInstance();
@@ -242,7 +252,7 @@ export function ChatLog({
   // the agent's marks on the project's rows wear the rows' live dot, stamped in place
   useMentionDots(logRef, id);
   // a hand resting on the transcript: select-all is the conversation, not the shell around it
-  useSelectAllWithin(logRef);
+  useSelectAllWithin(logRef, ROWS);
   // and so is find: the browser's would read the rail and the panes with it, and count what is
   // not on screen. A selection in the log at the press is what is looked for. The box, once open,
   // answers ⌘F itself, so a press with the caret in it never reaches here. A hand on the chrome
@@ -297,13 +307,13 @@ export function ChatLog({
     </div>
   );
   // On a phone, a reader up in the log wants the screen for it: the box rides down with the end
-  // of the transcript as they scroll up, as if the two were one piece, and once it has ridden as
-  // far as its one line it folds to that line and the bar folds to its row, and both stay that
-  // way until the end is back within the box's reach. By place and not by the hand, unlike the
-  // pill: bars that came and went with each turn of the thumb were a thing to watch, and the end
-  // is the one place the box and the name are for.
+  // of the transcript as they scroll up, one piece with it, and once it has ridden as far as its
+  // top rows it stops on them and the bar folds to its row, and both stay that way until the end
+  // is back within the box's reach. By place and not by the hand, unlike the pill: bars that came
+  // and went with each turn of the thumb were a thing to watch, and the end is the one place the
+  // box and the name are for.
   const setReading = useCallback((on: boolean) => dispatch({ a: "reading", on }), [dispatch]);
-  useFold(panelRef, logRef, phone, follow.pinned, setReading);
+  useFold(logRef, phone, setReading);
 
   // The composer's walk back through what was sent marks the row it is on and brings that row to
   // the top of the log, so what came after it is what fills the pane. A walk that ends in a blank box
@@ -711,11 +721,15 @@ export function ChatLog({
             />
           ))}
         {tail}
+        {/* the pill's seat, which rides with the box and stops over what it keeps on screen */}
+        <div className="jump-seat">{jump}</div>
+        {foot}
       </div>
       {find && (
         <DocumentFind
           root={logRef}
           body={logRef}
+          skip={FOOT}
           seed={find.seed}
           seq={find.seq}
           onClose={closeFind}
@@ -723,7 +737,6 @@ export function ChatLog({
           onReveal={follow.read}
         />
       )}
-      {jump}
     </div>
   );
 }

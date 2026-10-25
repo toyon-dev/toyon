@@ -1274,26 +1274,15 @@ export function Composer({
   // place: there esc parks the question, and a stop beside the ask's send read as the send's
   // opposite on one line
   const stopShown = stoppable && !cardUp;
-  // Away from the end of the log on a phone the box rides down with the end and then folds to a
-  // line (useFold), for as long as it holds nothing. A card folds the same way, to the line that
-  // stands for it when it is set aside. Not while a field holds the caret: the caret in the box is
-  // the keyboard up and the box in use, and the fold would take the caret with it, and the
-  // keyboard down is the log jumping under the thumb. The caret is watched here and not in the
-  // stylesheet because the fold is what hides the card, and because the ride's extent is measured
-  // by folding the box in place, which has to fold it whatever holds focus.
+  // Away from the end of the log on a phone the box rides down with the end and stops with its
+  // top rows on screen (useFold, chat.css), for as long as it holds nothing: the field's first
+  // line stays, caret and keyboard with it. A card rides the same way, to its question. Not while
+  // the card's own field holds the caret: its line is down the card, and the ride would take it
+  // under the edge. `lean` is the box past the ride, for the ghost's one-line form.
   const reading = useStore((s) => s.reading);
   const [typing, setTyping] = useState(false);
-  const foldable = onScreen && !parked && !typing && (!!cardUp || (blank && !copied));
+  const foldable = onScreen && !parked && (cardUp ? !typing : blank && !copied);
   const lean = foldable && reading;
-  // hiding the card dropped its focus on the body; back from the fold it takes the keys again, as
-  // it did arriving (Card), unless the hand went somewhere meanwhile
-  useOnChange([lean], () => {
-    if (lean || !cardUp) return;
-    const f = requestAnimationFrame(() => {
-      if (document.activeElement === document.body) cardRef.current?.focus();
-    });
-    return () => cancelAnimationFrame(f);
-  });
 
   return (
     <div
@@ -1540,22 +1529,6 @@ export function Composer({
             return <CommandRow c={r.c} query={trigger.query} />;
           }}
         />
-      )}
-      {/* the card folded while the reader is up the log: the same line as the question set aside,
-          since from up there the two are one thing, a question waiting at the end. The press is
-          the log going to its end, as it does on a send, where the card stands whole again.
-          Rendered with the card and shown by the fold (the stylesheet), so the fold's measure
-          finds it in place. */}
-      {cardUp && id && (
-        <ComposerOffer
-          icon="chat"
-          verb="answer"
-          tip="Back to the question"
-          className="composer-card-line"
-          onPress={() => dispatch({ a: "answered", id })}
-        >
-          {cardLine(cardUp)}
-        </ComposerOffer>
       )}
       {cardUp && id ? (
         cardUp.kind === "handoff" ? (

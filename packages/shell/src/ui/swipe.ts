@@ -52,9 +52,9 @@ export type FrameTouch = { phase: "start" | "move" | "end" | "cancel"; x: number
 const FRAME = -1;
 
 export type SwipeHandlers = {
-  /** the first move decided a way: mount what stands beside the screen that way and say so, or say
-   * there is nothing, in which case the touch is let go */
-  take: (target: Element, way: Way) => boolean;
+  /** the first move decided a way: mount what stands beside the screen that way and name the
+   * track that slides for it, or say there is nothing, in which case the touch is let go */
+  take: (target: Element, way: Way) => HTMLElement | null;
   /** the track is at rest again: the swipe went through (the screen is to change), or dropped back.
    * Called inside a flushSync, so the screen the frame draws for the answer lands in the same
    * frame as the track's reset. */
@@ -82,15 +82,15 @@ export type SwipeHandlers = {
  * so a finger still on the screen reads as moving the other way inside it, and the track's own
  * offset is added back.
  *
- * The track is told through `--swipe-x` and `data-swipe` (`drag`, `settle`), written to the node so
- * a move renders nothing; the stylesheet draws it. The neighbour is mounted by the frame when `take`
- * says a way, and unmounted or made the screen when `onEnd` says how the swipe ended.
+ * The track is `take`'s to name per drag, since a frame may keep more than one (a page that slides
+ * whole, and a strip of faces that slides under a bar that stays). It is moved through its own
+ * `translate` and told its state through `data-swipe` (`drag`, `settle`), written to the node so a
+ * move renders nothing; the stylesheet draws the settle. Written as the property and not a custom
+ * one, because a custom property inherits, and a track inside a track would slide twice. The
+ * neighbour is mounted by the frame when `take` says a way, and unmounted or made the screen when
+ * `onEnd` says how the swipe ended.
  */
-export function useSwipe(
-  root: RefObject<HTMLElement | null>,
-  track: RefObject<HTMLElement | null>,
-  handlers: SwipeHandlers,
-): (touch: FrameTouch) => void {
+export function useSwipe(root: RefObject<HTMLElement | null>, handlers: SwipeHandlers): (touch: FrameTouch) => void {
   const h = useRef(handlers);
   h.current = handlers;
   const feed = useRef<(touch: FrameTouch) => void>(() => {});
@@ -105,6 +105,8 @@ export function useSwipe(
     let lastX = 0;
     /** the swipe's way once the track is being dragged */
     let way: Way | null = null;
+    /** the track `take` named for this drag; it stays through the settle */
+    let track: HTMLElement | null = null;
     let x = 0;
     let pointer: number | null = null;
     let trail: Sample[] = [];
@@ -112,7 +114,7 @@ export function useSwipe(
     /** the click a drag's touch becomes is spent on the drag */
     let spentUntil = 0;
     const put = (at: number, state: "drag" | "settle") => {
-      const t = track.current;
+      const t = track;
       if (!t) return;
       if (t.dataset.swipe !== state) {
         t.dataset.swipe = state;
@@ -120,15 +122,16 @@ export function useSwipe(
         // update the move can land with no transition to play it, so the state is flushed first
         void t.offsetWidth;
       }
-      t.style.setProperty("--swipe-x", `${at}px`);
+      t.style.translate = `${at}px`;
     };
     const rest = () => {
-      const t = track.current;
+      const t = track;
+      track = null;
       if (!t) return;
       // the attribute goes first and is flushed, so the reset itself plays no transition
       delete t.dataset.swipe;
       void t.offsetWidth;
-      t.style.removeProperty("--swipe-x");
+      t.style.removeProperty("translate");
     };
     const clear = () => {
       from = null;
@@ -150,7 +153,7 @@ export function useSwipe(
     /** the drag is over: the track settles in or back, and once at rest the frame is told */
     const settle = (went: boolean) => {
       const w = way;
-      const width = track.current?.clientWidth ?? 0;
+      const width = track?.clientWidth ?? 0;
       clear();
       if (!w) return;
       put(went ? (w === "left" ? -width : width) : 0, "settle");
@@ -164,7 +167,7 @@ export function useSwipe(
       // a second finger is a pinch, and it ends whatever the first had begun
       if (!e.isPrimary) return way ? settle(false) : clear();
       // a settle still playing is not taken again; a pinched window pans with one finger
-      if (track.current?.dataset.swipe || (window.visualViewport?.scale ?? 1) > 1.01) return;
+      if (track || (window.visualViewport?.scale ?? 1) > 1.01) return;
       const on = e.target instanceof Element ? e.target : null;
       if (!on || on.closest("textarea, input, [contenteditable], iframe, .float")) return;
       window.clearTimeout(timer);
@@ -195,19 +198,21 @@ export function useSwipe(
           return;
         }
         if (w === "left" && target.closest(".slide")) return clear();
-        if (!h.current.take(target, w)) return clear();
+        const t = h.current.take(target, w);
+        if (!t) return clear();
+        track = t;
         way = w;
         if (e) capture(e);
       }
       trail.push({ x: cx, t });
       if (trail.length > 8) trail.shift();
-      x = swipeAt(dx, track.current?.clientWidth ?? 0, way);
+      x = swipeAt(dx, track?.clientWidth ?? 0, way);
       put(x, "drag");
     };
     /** the finger lifted (`up`), or the browser took it */
     const end = (t: number, up: boolean) => {
       if (!way) return clear();
-      const width = track.current?.clientWidth ?? 0;
+      const width = track?.clientWidth ?? 0;
       const speed = up ? lifted(trail, t) : 0;
       const went = up && swipeLetGo(x, width, way, speed);
       // a flick that went is a tick under the thumb, as a row's rung is
@@ -227,9 +232,9 @@ export function useSwipe(
       const now = performance.now();
       if (touch.phase === "start") {
         // a settle still playing, or a pointer's own drag under way, is not taken again
-        if (track.current?.dataset.swipe || from) return;
+        if (track || from) return;
         from = { x: touch.x, y: touch.y };
-        target = track.current;
+        target = el;
         box = null;
         pointer = FRAME;
         return;
@@ -259,6 +264,6 @@ export function useSwipe(
       el.removeEventListener("pointercancel", onEnd);
       el.removeEventListener("click", onClick, true);
     };
-  }, [root, track]);
+  }, [root]);
   return useCallback((touch: FrameTouch) => feed.current(touch), []);
 }

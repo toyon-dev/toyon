@@ -32,6 +32,10 @@ export const TOUCH_QUERY = "(hover: none)";
 export const frameNow = (): Frame => (window.matchMedia?.(FRAME_QUERY).matches ? "phone" : "desk");
 /** whether this window has no hover right now, for the same seeding */
 export const touchNow = (): boolean => window.matchMedia?.(TOUCH_QUERY).matches ?? false;
+/** whether this shell is shown inside another page's frame: another shell's preview of it. A
+ * framed shell is the app being looked at, and leaves the finger and the history to the shell
+ * around it: it lays no entries of its own and slides no screens of its own. */
+export const framedNow = (): boolean => window.top !== window;
 
 /**
  * Keeps the store's two facts current. A media query fires once, when its answer changes, where a

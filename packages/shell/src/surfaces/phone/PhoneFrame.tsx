@@ -1,4 +1,5 @@
-import { useRef, useState } from "react";
+import { type RefObject, useRef, useState } from "react";
+import { framedNow } from "../../app/phone.ts";
 import { useDispatch, useMachine, useMachines, useStore, useUrls } from "../../state/context.tsx";
 import { openPreview, previewsGated } from "../../state/previewGrant.ts";
 import { useActive, useArchivedPage, useChatCentred, useFoundPage, useTouch } from "../../state/selectors.ts";
@@ -28,6 +29,10 @@ import "./phone.css";
 
 /** read once at load (the token arrives in the URL fragment); calling it during render would write storage */
 const HAS_TOKEN = hasToken();
+/** a shell framed as another shell's preview is the app being looked at: the finger on it is the
+ * outer shell's swipe (its bridge reports it), so this frame slides nothing of its own */
+const SWIPES = !framedNow();
+const NO_ROOT: RefObject<HTMLDivElement | null> = { current: null };
 
 /**
  * The shell on a phone. It controls the agents and never sets a project up, imports or makes one:
@@ -43,13 +48,20 @@ const HAS_TOKEN = hasToken();
  * length of a drag the neighbour it is pulling in is mounted beside the screen, and letting go
  * makes it the screen or takes it away again. Each screen has a slot of its own, keyed and in a
  * fixed order, so a slot mounts or unmounts and no screen's node is ever moved: a moved iframe
- * reloads, and a moved list loses its scroll. The bar is each slot's own, so the whole page
- * moves under the finger, bar included, and a worktree's bar arrives with its pill already on
- * the face it belongs to.
+ * reloads, and a moved list loses its scroll.
+ *
+ * Two tracks slide, one inside the other, because the list and a worktree are two pages and a
+ * worktree's three faces are one page looked at three ways. The page track holds the list and the
+ * worktree, each with a bar of its own, so between them the whole page moves, bar included. The
+ * worktree's faces stand in a second track under its one bar, so between faces only the face
+ * moves and the bar stays where the thumb left it, its pill gliding to the face that arrives.
  */
 export function PhoneFrame() {
   const rootRef = useRef<HTMLDivElement>(null);
-  const trackRef = useRef<HTMLDivElement>(null);
+  /** slides between the list and the worktree */
+  const pageRef = useRef<HTMLDivElement>(null);
+  /** slides between a worktree's faces, under its bar */
+  const facesRef = useRef<HTMLDivElement>(null);
   useZoomMark(rootRef);
   // the palette's list is bounded by this, so it ends above the keyboard rather than under it
   useVisibleHeight(rootRef);
@@ -112,15 +124,16 @@ export function PhoneFrame() {
   const face: Screen | null = shown.kind === "home" ? "home" : shown.kind === "tab" ? shown.tab : null;
   const keepPreview = previewed !== null && url !== null;
 
-  const onFrameTouch = useSwipe(rootRef, trackRef, {
+  const onFrameTouch = useSwipe(SWIPES ? rootRef : NO_ROOT, {
     take: (_target, way) => {
       // the list, a diff, the sentence, the updated card: no swipe; and never a second neighbour
       // while one is still beside the screen (a drop-back's settle has not called onEnd yet)
-      if (shown.kind !== "tab" || aside !== null) return false;
+      if (shown.kind !== "tab" || aside !== null) return null;
       const to = swipeTo(shown.tab, way, keepPreview);
-      if (!to) return false;
+      if (!to) return null;
       setAside(to);
-      return true;
+      // back to the list the page goes, bar and all; to another face only the face
+      return (to === "home" ? pageRef : facesRef).current;
     },
     onEnd: (went) => {
       if (went && aside) dispatch({ a: "screen", to: aside });
@@ -128,13 +141,14 @@ export function PhoneFrame() {
     },
   });
 
-  /** the bar over a slot: the list's names the project, a worktree's holds the way back and the
-   * faces, with the pill on the slot's own face. One beside the screen opens no float of its own. */
+  /** the bar over a page: the list's names the project, a worktree's holds the way back and the
+   * faces, with the pill on the open face. One beside the screen opens no float of its own. */
   const bar = (f: Screen, beside: boolean) => (
     <PhoneBar
       screen={f === "home" ? "home" : "chat"}
       beside={beside}
       fold={f !== "chat" || editor !== null}
+      away={aside !== null && aside !== "home"}
       tabs={
         f !== "home" &&
         say === null && (
@@ -151,6 +165,20 @@ export function PhoneFrame() {
       }
     />
   );
+
+  /** what stands in place of a face: the updated card, the connection's sentence, or a diff */
+  const cover =
+    shown.kind === "updated" ? (
+      // the card asks this machine's daemon for the restart itself, over HTTP, and reloads when
+      // the new one answers; for another machine it says where the update is to be done
+      <UpdatedCard foreign={shown.foreign ?? undefined} />
+    ) : shown.kind === "say" && say ? (
+      <View wide>
+        <p className={cx("status-line", say.live && "live-text")}>{say.text}</p>
+      </View>
+    ) : shown.kind === "editor" && editor ? (
+      <EditorPane editor={editor} placement="screen" />
+    ) : null;
 
   const tabs: TabItem<Screen>[] = [
     { id: "chat", label: "chat" },
@@ -195,66 +223,66 @@ export function PhoneFrame() {
         {/* .center-root is the isolation root every overlay counts its rungs inside, so the phone's
             column is one too, and the palette opens over this screen the way it does over the desk's */}
         <div className="center-root">
-          <div className="phone-track" ref={trackRef}>
-            {/* what covers the faces: the updated card, the sentence, or a file opened from the
-                changes list or from a tool row in the chat, the diff over whichever face is open;
-                its close returns there, and a face or the way back shuts it. A slot of its own, so
-                a diff opened over the app never takes the app's slot and reloads it. */}
-            {face === null && (
-              <div key="cover" className="phone-face">
-                {bar(onWorktree ? tab : "home", false)}
-                {shown.kind === "updated" ? (
-                  // the card asks this machine's daemon for the restart itself, over HTTP, and
-                  // reloads when the new one answers; for another machine it says where the
-                  // update is to be done
-                  <UpdatedCard foreign={shown.foreign ?? undefined} />
-                ) : shown.kind === "say" && say ? (
-                  <View wide>
-                    <p className={cx("status-line", say.live && "live-text")}>{say.text}</p>
-                  </View>
-                ) : shown.kind === "editor" && editor ? (
-                  <EditorPane editor={editor} placement="screen" />
-                ) : null}
+          <div className="phone-track" ref={pageRef}>
+            {/* the list: the page, or beside the worktree's for a drag back to it. This machine's
+                worktrees, with the bar saying which machine and which project it is and the other
+                machines a tap into the switcher away; or, with nothing to list, the cover. */}
+            {(!onWorktree || aside === "home") && (
+              <div key="home" className="phone-face" data-side={onWorktree ? "left" : undefined}>
+                {bar("home", onWorktree)}
+                {!onWorktree && face === null ? cover : <Rail placement="screen" />}
               </div>
             )}
-            {FACES.map((f) => {
-              const current = f === face;
-              // a neighbour is never the face itself: the store can move under a drag (the row
-              // going, a popstate from the system's edge-back), and a face marked as its own
-              // neighbour would stand a full width off the screen
-              const beside = f === aside && !current;
-              // the app stays mounted under the worktree's other faces, and under a diff, so a
-              // face switch does not load it again; it goes with the worktree
-              if (!current && !beside && !(f === "preview" && keepPreview)) return null;
-              return (
-                <div
-                  key={f}
-                  className="phone-face"
-                  hidden={!current && !beside}
-                  data-side={beside && face ? sideOf(face, f) : undefined}
-                >
-                  {bar(f, beside)}
-                  {f === "home" ? (
-                    // this machine's worktrees: the list is the home screen, and the bar says which
-                    // machine and which project it is, with the other machines a tap into the
-                    // switcher away
-                    <Rail placement="screen" />
-                  ) : f === "chat" ? (
-                    <ChatPanel placement="screen" archived={archivedPage} found={foundPage} />
-                  ) : f === "changes" ? (
-                    <ChangesDock placement="screen" />
-                  ) : previewed && url ? (
-                    <PhonePreview
-                      key={previewed.worktree.id}
-                      gated={previewsGated(machine, remote)}
-                      active={previewed}
-                      url={url}
-                      onTouch={onFrameTouch}
-                    />
-                  ) : null}
+            {onWorktree && (
+              <div key="worktree" className="phone-face">
+                {bar(tab, false)}
+                <div className="phone-track" ref={facesRef}>
+                  {/* what covers the faces: the updated card, the sentence, or a file opened from
+                      the changes list or from a tool row in the chat, the diff over whichever face
+                      is open; its close returns there, and a face or the way back shuts it. A slot
+                      of its own, so a diff opened over the app never takes the app's slot and
+                      reloads it. */}
+                  {face === null && (
+                    <div key="cover" className="phone-face">
+                      {cover}
+                    </div>
+                  )}
+                  {FACES.map((f) => {
+                    if (f === "home") return null;
+                    const current = f === face;
+                    // a neighbour is never the face itself: the store can move under a drag (the
+                    // row going, a popstate from the system's edge-back), and a face marked as its
+                    // own neighbour would stand a full width off the screen
+                    const beside = f === aside && !current;
+                    // the app stays mounted under the worktree's other faces, and under a diff, so
+                    // a face switch does not load it again; it goes with the worktree
+                    if (!current && !beside && !(f === "preview" && keepPreview)) return null;
+                    return (
+                      <div
+                        key={f}
+                        className="phone-face"
+                        hidden={!current && !beside}
+                        data-side={beside && face ? sideOf(face, f) : undefined}
+                      >
+                        {f === "chat" ? (
+                          <ChatPanel placement="screen" archived={archivedPage} found={foundPage} />
+                        ) : f === "changes" ? (
+                          <ChangesDock placement="screen" />
+                        ) : previewed && url ? (
+                          <PhonePreview
+                            key={previewed.worktree.id}
+                            gated={previewsGated(machine, remote)}
+                            active={previewed}
+                            url={url}
+                            onTouch={onFrameTouch}
+                          />
+                        ) : null}
+                      </div>
+                    );
+                  })}
                 </div>
-              );
-            })}
+              </div>
+            )}
           </div>
           <Overlays />
         </div>

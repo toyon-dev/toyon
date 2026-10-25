@@ -56,6 +56,7 @@ export function PhoneBar({
   tabs,
   fold,
   beside = false,
+  away = false,
 }: {
   screen: "home" | "chat";
   tabs?: ReactNode;
@@ -63,6 +64,9 @@ export function PhoneBar({
    * but the floats that hang from it (the switcher, the palette) open from the screen's own bar
    * alone, or an open one would stand twice */
   beside?: boolean;
+  /** the strip slides out of its seat for now: the faces are sliding under this bar, and the strip
+   * is the chat's, not the bar's, so it goes before the face beside the chat arrives under it */
+  away?: boolean;
   /** The bar is its one row, with no strip under it: for the app and the code, and for a diff
    * over any tab. A transcript folds the strip itself, while it is scrolled away from its end;
    * the strip hangs over the top of the log instead of standing on it, so the fold moves no text
@@ -243,7 +247,7 @@ export function PhoneBar({
           read, so the one part that may go while the reader is up in the log, and by then it has
           been read */}
       {tabs && !fold && (
-        <div className="phone-title-seat" data-away={reading || typing || undefined}>
+        <div className="phone-title-seat" data-away={reading || typing || away || undefined}>
           <div className="phone-title-strip">
             {titleBlock}
             {owedButton}

@@ -522,7 +522,10 @@ function highlightFile(path: string, ranges: Array<[number, number]> | null) {
 // leaves alone: one that starts on nothing that scrolls sideways and nothing that claims the
 // sideways gesture through touch-action, and that no handler of the page cancels. A sideways
 // gesture of the page's own does one of those, or the browser's own pan would take it from the
-// page. A shell framed as a preview slides its own screens and reports nothing.
+// page. A shell framed as a preview is the app being looked at and reports like any other; it
+// slides no screens of its own while framed, so the touch-action its screens name for that
+// swipe is not read as a claim, where a box of its own that scrolls sideways, and a row's slide
+// cancelling the move, still are.
 let touches = false;
 let tracking = false;
 const claims = (on: Element | null): boolean => {
@@ -530,6 +533,7 @@ const claims = (on: Element | null): boolean => {
     const cs = getComputedStyle(el);
     const ox = cs.overflowX;
     if ((ox === "auto" || ox === "scroll") && el.scrollWidth > el.clientWidth + 1) return true;
+    if (window.__toyonShell) continue;
     const ta = cs.touchAction;
     if (ta !== "auto" && ta !== "manipulation" && !ta.includes("pan-x")) return true;
   }
@@ -543,7 +547,7 @@ window.addEventListener(
   "touchstart",
   (e) => {
     tracking = false;
-    if (!touches || window.__toyonShell || e.touches.length !== 1) return;
+    if (!touches || e.touches.length !== 1) return;
     const on = e.target instanceof Element ? e.target : null;
     if (on?.closest("input, textarea, [contenteditable]") || claims(on)) return;
     tracking = true;

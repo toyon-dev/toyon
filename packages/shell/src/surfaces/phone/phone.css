@@ -123,11 +123,13 @@
       visibility 0s;
   }
 
-  /* The faces stand in a track one column wide. At rest the screen is the track's one child in
+  /* The screens stand in a track one column wide. At rest the screen is the track's one child in
      flow. For a drag the neighbour the finger is pulling in mounts beside it, absolute and a full
-     width off to its side, and the track slides under the finger (--swipe-x, useSwipe) so the two
-     move as one strip; the centre's root clips what is off to the side. The translate is none at
-     rest rather than 0, so the track is no containing block for anything until a drag. */
+     width off to its side, and the track slides under the finger (its translate, written by
+     useSwipe) so the two move as one strip; the centre's root clips what is off to the side. The
+     track is one of two: the page track holds the list and the worktree, and the worktree holds
+     a second track of its faces under its bar (PhoneFrame). No translate at rest, so the track is
+     no containing block for anything until a drag. */
   .phone-track {
     position: relative;
     flex: 1;
@@ -135,7 +137,6 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
-    translate: var(--swipe-x, none);
     &[data-swipe="settle"] {
       transition: translate 0.22s ease-out;
     }
@@ -147,9 +148,10 @@
       }
     }
   }
-  /* the slot a screen stands in: its bar, then the screen. `hidden` (the preview kept under
-     another face) has to win over the flex display here or the frame would go on showing through
-     the face over it. */
+  /* the slot a screen stands in: on the page track its bar, then the list or the worktree's own
+     track of faces; on that track the face alone. `hidden` (the preview kept under another face)
+     has to win over the flex display here or the frame would go on showing through the face over
+     it. */
   .phone-face {
     flex: 1;
     min-height: 0;

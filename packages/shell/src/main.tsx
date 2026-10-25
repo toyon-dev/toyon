@@ -4,7 +4,7 @@ import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
 import { App } from "./app/App.tsx";
 import { LetMeIn } from "./app/LetMeIn.tsx";
-import { frameNow, installFrame, touchNow } from "./app/phone.ts";
+import { framedNow, frameNow, installFrame, touchNow } from "./app/phone.ts";
 import { installPhoneHistory } from "./app/phoneHistory.ts";
 import { takeShared } from "./app/share.ts";
 import { MachinesProvider } from "./state/context.tsx";
@@ -22,7 +22,8 @@ import { hasToken, saveToken, servingToken } from "./ws.ts";
 // (toyon inside toyon: without this the outer shell takes every keystroke meant for this one)
 window.__toyonShell = true;
 // a shell shown in another shell's preview: base.css lets its scrolls chain out to the window
-if (window.top !== window) document.documentElement.dataset.framed = "";
+const framed = framedNow();
+if (framed) document.documentElement.dataset.framed = "";
 
 migrateStorage(location.origin);
 
@@ -74,8 +75,12 @@ const machines = createMachines({
 installFrame({ dispatch: (a) => machines.broadcast(a) });
 onPrefersDarkChange((v) => machines.broadcast({ a: "system-dark", v }));
 // the phone's way back is one history per machine on screen: a switch starts it over on the
-// list of the machine switched to, which is where a switch lands
-let uninstallHistory = installPhoneHistory(machines.active().store);
+// list of the machine switched to, which is where a switch lands. A framed shell lays none: its
+// entries would be the outer tab's, stacked over the outer shell's, and its list re-laid over the
+// floor on every back would take every swipe the outer shell spends on its preview and keep it.
+const installHistory = (store: Parameters<typeof installPhoneHistory>[0]) =>
+  framed ? () => {} : installPhoneHistory(store);
+let uninstallHistory = installHistory(machines.active().store);
 let shown = machines.active();
 machines.subscribe(() => {
   const next = machines.active();
@@ -83,7 +88,7 @@ machines.subscribe(() => {
   shown = next;
   uninstallHistory();
   if (next.store.getState().frame === "phone") next.store.dispatch({ a: "screen", to: "home" });
-  uninstallHistory = installPhoneHistory(next.store);
+  uninstallHistory = installHistory(next.store);
 });
 
 // a rebuilt shell rotates every hashed chunk name, so a tab open across a rebuild imports a URL the

@@ -444,7 +444,7 @@
    dead strip between two calls where a hover does nothing. -12px is the log's own padding, put back
    inside the row so the glyph still sits in its column. */
   .tool-row {
-    font: var(--type-mono);
+    font: var(--type-log);
     /* the log tier, not the label tier: the comment above says twenty calls in a turn are text to
      skip over, but they were painted in text1, the same colour as the file names in the dock
      that you actually read. Skippable and readable were the same weight. */

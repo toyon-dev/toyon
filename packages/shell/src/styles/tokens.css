@@ -132,7 +132,7 @@
      tier's 36px: a turn stacks twenty of these between paragraphs of prose, and at a tap target's
      height each one stood further apart than the lines of the reply around it, so the log read as
      a list of buttons and not as text to skip over. 24px is the pitch of the prose it sits in (15px
-     at 1.5 is 22.5px), so a run of calls steps like the lines of a reply. The 13px mono is smaller
+     at 1.5 is 22.5px), so a run of calls steps like the lines of a reply. The 12px mono is smaller
      than that prose, so the same pitch still leaves each row more air than a wrapped line gets. A
      thumb that lands a row off opens the neighbouring call, which costs one more tap. */
     --row-height-log: var(--row-height-sm);
@@ -230,6 +230,12 @@
      elsewhere, and a backticked word in a 15px sentence stayed at 12. */
     --type-mono-sm-phone: 400 var(--size-mono-sm-phone) var(--face-mono);
     --type-mono-phone: 400 var(--size-mono-phone) var(--face-mono);
+    /* the line of a tool call in the transcript, the type to --row-height-log's height. On the desk
+     it is the body mono, a point under the prose like a backticked word. Under a thumb it drops to
+     the small mono: at the body tier a path in a tool row stood as tall as the words of the reply,
+     and twenty of them between two paragraphs no longer read as lines to skip over. */
+    --type-log: var(--type-mono);
+    --type-log-phone: var(--type-mono-sm-phone);
 
     /* The two sizes above, on their own: Monaco and xterm parseFloat these, since a `font`
      shorthand is not parseable and both editors want a number. */

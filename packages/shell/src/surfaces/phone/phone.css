@@ -20,6 +20,7 @@
     --type-ui: var(--type-ui-phone);
     --type-mono-sm: var(--type-mono-sm-phone);
     --type-mono: var(--type-mono-phone);
+    --type-log: var(--type-log-phone);
     --size-mono: var(--size-mono-phone);
     --size-mono-sm: var(--size-mono-sm-phone);
     font: var(--type-ui);

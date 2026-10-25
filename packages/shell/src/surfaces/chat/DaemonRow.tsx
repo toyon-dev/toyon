@@ -38,17 +38,22 @@ type Props = Omit<HTMLAttributes<HTMLDivElement>, "className"> & {
    * row's: the row spans the log, so a tip on it came up on every pass of the pointer from the
    * transcript to the composer and, trailing the pointer, lay over the next message. */
   at?: number;
-  /** a second line under the head, in the dimmer tier: the reason a call was refused */
-  below?: ReactNode;
+  /** what goes under the sentence, in the dimmer tier, one line each: the reason a call was
+   * refused, how a landing went and when, the branch a grafted chat was on. The row draws the
+   * lines, so every caller's byline is the same byline. */
+  below?: ReactNode | ReactNode[];
   children?: ReactNode;
 };
 
 /** A row the daemon writes into the transcript itself, as opposed to one the agent or the person
  * wrote. One box for all of them: it spans the log the way a tool row does, so its edge stands on
  * the open band's edge and its glyph on the tool rows' glyph column, and the word beside the glyph
- * is not the odd row out in a scrolled-back turn. */
+ * is not the odd row out in a scrolled-back turn. The word is a column of its own: the sentence
+ * and every line under it start where the sentence starts, so a byline reads as the sentence's
+ * and not as a second thing said beside the word. */
 export function DaemonRow({ icon, word, tone, at, below, children, ...rest }: Props) {
   const tip = at !== undefined ? { "data-tip": `${word} ${AT.format(at)}`, "data-tip-placement": "top" } : null;
+  const lines = (Array.isArray(below) ? below : [below]).filter((l) => l !== undefined && l !== null && l !== false);
   return (
     <div {...rest} className="daemon-row row-edge" data-tone={tone}>
       <div className="daemon-head">
@@ -56,9 +61,16 @@ export function DaemonRow({ icon, word, tone, at, below, children, ...rest }: Pr
           <Icon name={icon} className="icon-inline" />
           {word}
         </span>
-        {children}
+        <div className="daemon-body">
+          <div className="daemon-line">{children}</div>
+          {lines.map((line, i) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: a fixed list, built whole from the record
+            <div key={i} className="daemon-below row-dim">
+              {line}
+            </div>
+          ))}
+        </div>
       </div>
-      {below}
     </div>
   );
 }

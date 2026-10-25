@@ -991,14 +991,31 @@
     & .daemon-tag {
       color: var(--row-edge-color);
     }
+    /* the word stands on the sentence's first line, not the middle of the block: a sentence that
+       wraps on a phone is two lines, and a word centred between them floated off both. Each part
+       keeps the row's own line box, so on one line nothing moves. */
     & .daemon-head {
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       gap: 8px;
     }
+    /* the sentence and the lines under it, as one column beside the word */
+    & .daemon-body {
+      flex: 1;
+      min-width: 0;
+    }
+    & .daemon-line {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+    }
+    /* the tool and path a refused call is quoted by are set like the tool row they stand for: at
+       the body mono they outgrew the row's own word. The row's line box, said after the shorthand
+       that resets it, so the name sits level with the word. */
     & .tool-name,
     & .tool-hint {
-      font: var(--type-mono);
+      font: var(--type-log);
+      line-height: 1lh;
     }
     & .tool-name {
       color: var(--text1);

@@ -17,7 +17,7 @@ import { grouped, type MenuEntry, useContextMenu } from "../../ui/menu.ts";
 import { rowState } from "../../ui/rowState.ts";
 import { Spinner } from "../../ui/Spinner.tsx";
 import { treeKey } from "../../ui/treeNav.ts";
-import { ended, landedLine } from "../recap.ts";
+import { landedWhat } from "../recap.ts";
 import { elapsed, spanWords } from "../util.ts";
 import { AskRow } from "./AskRow.tsx";
 import { AttachmentSet } from "./AttachmentSet.tsx";
@@ -1185,7 +1185,7 @@ export const ChatItemView = memo(function ChatItemView({
           icon="lock"
           word="blocked"
           tone="red"
-          below={<div className="daemon-below row-dim">{item.reason}</div>}
+          below={item.reason}
           {...cm.contextMenu(() => pathItems(item.path, undefined, daemonHost(deps.sock)))}
         >
           <span className="tool-name">{item.tool}</span>
@@ -1194,17 +1194,19 @@ export const ChatItemView = memo(function ChatItemView({
       );
     case "grafted":
       // layers is the rail's glyph for a worktree merged from several: this divider is where one of
-      // those merges shows in the transcript
+      // those merges shows in the transcript. The title is the sentence and the branch its byline,
+      // the way the rail shows a row and the way a landing reads: side by side, a narrow column
+      // wrapped the title and cut the branch.
       return (
         <DaemonRow
           icon="layers"
           word="grafted"
           tone="accent"
+          below={item.branch}
           data-tip={`what follows was said in ${item.title} before it was merged in here`}
           data-tip-placement="follow"
         >
-          <span className="tool-name">{item.title}</span>
-          <span className="tool-hint">{item.branch}</span>
+          <span className="daemon-text">{item.title}</span>
         </DaemonRow>
       );
     case "asked":
@@ -1295,20 +1297,15 @@ function RestoredRow({ item }: { item: Extract<ChatItem, { kind: "restored" }> }
  * how long ago it was: the row is the one record of the land a chat read later still shows */
 function LandedRow({ item }: { item: Extract<ChatItem, { kind: "landed" }> }) {
   const ago = useAgo(item.ts);
-  // what landed, under the word: the head keeps how it landed, which on the PR route says whether
-  // main here followed, and the line under it is the commits main got
-  const what = item.mark && landedLine(item.mark);
+  // what landed is the sentence: the commits main got are the news, read back where the work was
+  // asked for. How it landed and when is the byline under it, which on the PR route names the PR
+  // and says whether main here followed. A landing with nothing to say keeps the byline as its
+  // sentence.
+  const what = item.mark && landedWhat(item.mark);
+  const how = `${item.text}, ${ago}`;
   return (
-    <DaemonRow
-      icon="check"
-      word="landed"
-      tone="aqua"
-      at={item.ts}
-      below={what ? <div className="daemon-below row-dim">{ended(what)}</div> : undefined}
-    >
-      <span className="daemon-text">
-        {item.text}, {ago}
-      </span>
+    <DaemonRow icon="check" word="landed" tone="aqua" at={item.ts} below={what ? how : undefined}>
+      <span className="daemon-text">{what ?? how}</span>
     </DaemonRow>
   );
 }

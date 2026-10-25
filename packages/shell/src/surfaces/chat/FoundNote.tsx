@@ -23,7 +23,7 @@ export function FoundNote({ row }: { row: WorktreeStatus }) {
       icon={row.locked ? "lock" : "branch"}
       word={row.locked ? "held" : "discovered"}
       tone="quiet"
-      below={<div className="daemon-below row-dim">{note}</div>}
+      below={note}
     >
       {/* the path in the mono the grafted row names a branch in: a code chip in the head outweighs
           the word beside it. Inside the sentence, which is what grows and keeps the offer at the

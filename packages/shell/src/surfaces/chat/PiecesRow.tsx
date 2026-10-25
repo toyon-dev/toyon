@@ -19,13 +19,7 @@ export function PiecesRow({ item }: { item: PiecesItem }) {
   }
   if (item.state === "declined") {
     return (
-      <DaemonRow
-        icon="close"
-        word="not split"
-        tone="quiet"
-        at={item.ts}
-        below={item.reason ? <div className="daemon-below row-dim">{item.reason}</div> : undefined}
-      >
+      <DaemonRow icon="close" word="not split" tone="quiet" at={item.ts} below={item.reason}>
         <span className="daemon-text">the list was sent back</span>
       </DaemonRow>
     );
@@ -63,11 +57,7 @@ export function PiecesRow({ item }: { item: PiecesItem }) {
       word="split"
       tone="accent"
       at={item.ts}
-      below={
-        errors.length ? (
-          <div className="daemon-below row-dim">{errors.map((o) => `${titled(o.pieceId)}: ${o.error}`).join("; ")}</div>
-        ) : undefined
-      }
+      below={errors.length ? errors.map((o) => `${titled(o.pieceId)}: ${o.error}`).join("; ") : undefined}
     >
       <span className="daemon-text">
         {parts.length === 0
@@ -96,13 +86,7 @@ export function PieceLaterRow({ item }: { item: Extract<ChatItem, { kind: "piece
     );
   }
   return (
-    <DaemonRow
-      icon="close"
-      word="dropped"
-      tone="quiet"
-      at={item.ts}
-      below={item.reason ? <div className="daemon-below row-dim">{item.reason}</div> : undefined}
-    >
+    <DaemonRow icon="close" word="dropped" tone="quiet" at={item.ts} below={item.reason}>
       <span className="daemon-text">{item.title ?? "a queued piece"}</span>
     </DaemonRow>
   );

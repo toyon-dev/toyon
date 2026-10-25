@@ -30,23 +30,7 @@ export function ArchivedNote({ item }: { item: ArchivedWorktree }) {
   // chat, and this is the last word on it
   const landed = landedLines(item.lands);
   return (
-    <DaemonRow
-      icon="archive"
-      word="archived"
-      tone="quiet"
-      at={item.archivedAt}
-      below={
-        <>
-          {landed.map((line, i) => (
-            // biome-ignore lint/suspicious/noArrayIndexKey: a fixed list, built whole from the record
-            <div key={i} className="daemon-below row-dim">
-              {line}
-            </div>
-          ))}
-          <div className="daemon-below row-dim">{note}</div>
-        </>
-      }
-    >
+    <DaemonRow icon="archive" word="archived" tone="quiet" at={item.archivedAt} below={[...landed, note]}>
       <span className="daemon-text">
         {ago}
         {item.landed ? ", after it was merged into main" : ""}

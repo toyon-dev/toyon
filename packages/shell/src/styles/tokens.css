@@ -230,7 +230,8 @@
      elsewhere, and a backticked word in a 15px sentence stayed at 12. */
     --type-mono-sm-phone: 400 var(--size-mono-sm-phone) var(--face-mono);
     --type-mono-phone: 400 var(--size-mono-phone) var(--face-mono);
-    /* the line of a tool call in the transcript, the type to --row-height-log's height. On the desk
+    /* the line of a tool call in the transcript, the type to --row-height-log's height, and the
+     tool name or path a daemon row quotes on the same column. On the desk
      it is the body mono, a point under the prose like a backticked word. Under a thumb it drops to
      the small mono: at the body tier a path in a tool row stood as tall as the words of the reply,
      and twenty of them between two paragraphs no longer read as lines to skip over. */

@@ -30,13 +30,7 @@ export function HandoffRow({ item }: { item: HandoffItem }) {
   }
   if (item.state === "declined") {
     return (
-      <DaemonRow
-        icon="close"
-        word="not continued"
-        tone="quiet"
-        at={item.ts}
-        below={item.reason ? <div className="daemon-below row-dim">{item.reason}</div> : undefined}
-      >
+      <DaemonRow icon="close" word="not continued" tone="quiet" at={item.ts} below={item.reason}>
         <span className="daemon-text">in {item.repo.name}</span>
       </DaemonRow>
     );

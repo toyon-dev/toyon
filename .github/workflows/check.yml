@@ -22,7 +22,7 @@ jobs:
         with:
           # pinned rather than read from package.json so a runner and a laptop disagree only
           # when someone means them to; engines.bun there is the floor for humans
-          bun-version: 1.4.2
+          bun-version: 1.4.4
       # the agent sandbox on Linux, so its tests run it for real rather than skip. Ubuntu 24.04 blocks
       # unprivileged user namespaces through AppArmor; the profile is the one `toyon doctor` prints
       - if: runner.os == 'Linux'
@@ -50,7 +50,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.2
+          bun-version: 1.4.4
       - uses: actions/setup-node@v4
         with:
           node-version: 20

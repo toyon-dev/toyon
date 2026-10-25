@@ -1,9 +1,11 @@
 #!/usr/bin/env bun
 // The whole suite as several `bun test` processes side by side, each a shard run serially:
 // `bun scripts/test.ts [bun test args]`. Not `bun test --parallel`: on Bun 1.4.2 a parallel
-// worker now and then spins for ever inside a synchronous spawn whose child has already exited
+// worker now and then spun for ever inside a synchronous spawn whose child had already exited
 // (the git fixtures make thousands of them), and no test timeout can fire on a thread that never
-// yields. A plain `bun test` process does not, so the parallelism is across processes instead.
+// yields. Three parallel runs of the git fixtures on 1.4.4 did not reproduce it; the parallelism
+// stays across processes until a full suite has run the other way, and this wrapper is also what
+// holds the machine slot.
 
 import { availableParallelism } from "node:os";
 import { resolve } from "node:path";
@@ -16,8 +18,8 @@ const SHARDS =
   Number(process.env.TOYON_TEST_SHARDS) || Math.max(1, Math.min(8, Math.floor(availableParallelism() / 2)));
 const root = resolve(import.meta.dir, "..");
 const args = process.argv.slice(2);
-// bunfig's [test] timeout does not reach Bun 1.4.2, which then stops a test at five seconds; the
-// git fixtures need the room it asks for whenever the machine is busy with a second run
+// bunfig's [test] timeout does not reach Bun through 1.4.4, which then stops a test at five
+// seconds; the git fixtures need the room it asks for whenever the machine is busy with a second run
 if (!args.some((arg) => arg.startsWith("--timeout"))) args.unshift("--timeout", "20000");
 
 // queued behind the machine's other runs; inside `check` the slot is already held

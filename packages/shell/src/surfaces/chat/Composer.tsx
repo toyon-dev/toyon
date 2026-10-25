@@ -1027,14 +1027,25 @@ export function Composer({
   // agent took the message. So the daemon is told the box's exact words first (a keystroke may
   // still be waiting out its pause, and a recalled message was never a draft there), and the
   // frame goes before this tab empties its own.
+  // What follows a send on a touch window is the agent's turn, read rather than typed, and the
+  // on-screen keyboard would cover half of it; so the caret leaves the box with the message. The
+  // next message is a tap on the box away. Not on the desk, where the keyboard costs nothing and
+  // the caret stays for the follow-up. iOS spends an edge swipe on dropping the keyboard before it
+  // is a back, so with the keyboard down the swipe after a send is the back it was meant as.
+  const restHand = () => {
+    if (touch) composerRef.current?.blur();
+  };
   const leaveBox = () => {
     if (boxId) sock?.send({ t: "set-draft", boxId, text, clientId });
+    restHand();
   };
   // A send while a chip's bytes are still on their way takes the box all the same: the message
   // waits in an outgoing box, which the daemon hears about once the uploads land (outbox.ts), and
   // the log of `log` shows it waiting. Nothing is said to the daemon here.
-  const hold = (from: string, log: string, words: string, frame: HeldFrame) =>
+  const hold = (from: string, log: string, words: string, frame: HeldFrame) => {
     dispatch({ a: "hold-send", id: from, log, text: words, frame });
+    restHand();
+  };
   // attachments alone are a message: a pasted error or a picked element often says it all
   const send = () => {
     if (!boxId) return;
@@ -1989,8 +2000,8 @@ export function Composer({
               />
             )}
             {/* the send where return breaks the line: a touch window, and last in the row, under
-              the thumb. A press that moved focus to the button would drop the keyboard between
-              two messages, so the press keeps the caret where it is. */}
+              the thumb. The press keeps the caret where it is: a sent message lets go of the box
+              itself (restHand), and a refused one keeps the keyboard up for the fix. */}
             {touch && boxId && (active || takes || project) && (
               <IconButton
                 icon="send"

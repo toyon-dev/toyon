@@ -20,6 +20,14 @@ if (!readFileSync(join(root, "CHANGELOG.md"), "utf8").includes(`\n## ${version} 
   );
   process.exit(2);
 }
+// the adapter pins beside npm, before the bump: a pin that fell releases behind should be a
+// decision made at the release, not found after it. Printed, not refused: an upgrade can be
+// deferred on purpose, and a registry that cannot be reached must not stop a release.
+const pinsReport = Bun.spawnSync([process.execPath, join(root, "scripts", "adapter-pins.ts")], {
+  stdout: "inherit",
+  stderr: "inherit",
+});
+if (pinsReport.exitCode !== 0) console.log("an adapter pin is behind npm: bump it in packages/daemon/src/agent/registry.ts, or release as pinned");
 for (const pkg of ["bridge", "cli", "daemon", "shared", "shell"]) {
   const file = join(root, "packages", pkg, "package.json");
   const json = JSON.parse(readFileSync(file, "utf8"));

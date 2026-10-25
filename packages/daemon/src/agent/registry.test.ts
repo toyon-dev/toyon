@@ -49,7 +49,7 @@ describe("claude's terminal login", () => {
     const claude = BUILTIN_AGENTS.find((a) => a.id === "claude")!;
     // claude-agent-acp names its no-browser login `claude-login` and takes `--cli auth login`: a new
     // adapter version is checked for both before this pin moves
-    expect(claude.run).toMatchObject({ pkg: "@agentclientprotocol/claude-agent-acp", version: "0.84.0" });
+    expect(claude.run).toMatchObject({ pkg: "@agentclientprotocol/claude-agent-acp", version: "0.95.0" });
     // `plan` marks it as the consumer sign-in a managed policy can withhold
     expect(claude.terminalLogins).toEqual({
       "claude-login": { args: ["--cli", "auth", "login", "--claudeai"], env: { NO_BROWSER: "1" }, plan: true },
@@ -82,14 +82,14 @@ describe("agent registry", () => {
     ]);
     expect(() => reg.require("claude")).toThrow(/not ready/);
     await reg.installMissing();
-    expect(calls).toEqual(["@agentclientprotocol/claude-agent-acp@0.84.0", "@agentclientprotocol/codex-acp@2.0.1"]);
+    expect(calls).toEqual(["@agentclientprotocol/claude-agent-acp@0.95.0", "@agentclientprotocol/codex-acp@2.0.1"]);
     expect(changes[0]).toEqual(["claude:installing", "codex:not installed yet", "opencode:not installed"]);
     expect(changes.at(-1)).toEqual(["claude:ok", "codex:ok", "opencode:not installed"]);
     const l = reg.launch(reg.require("claude"), prepared);
     expect(l.command).toBe(process.execPath);
-    expect(l.env).toEqual({ CLAUDE_CODE_ENABLE_FUNCTION_HOOKS: "1", FROM_SETUP: "1" });
+    expect(l.env).toEqual({ FROM_SETUP: "1" });
     expect(l.args[0]).toMatch(/claude-agent-acp\/dist\/index\.js$/);
-    expect(JSON.parse(readFileSync(join(l.args[0]!, "../../package.json"), "utf8")).version).toBe("0.84.0");
+    expect(JSON.parse(readFileSync(join(l.args[0]!, "../../package.json"), "utf8")).version).toBe("0.95.0");
     // already at the pinned version: nothing to do
     await reg.installMissing();
     expect(calls).toHaveLength(2);
@@ -162,7 +162,7 @@ describe("agent registry", () => {
     expect(reg.infos()[0]).toMatchObject({ id: "claude", available: true });
     // OpenCode is fetched on demand and nobody asked, so it is not listed
     expect(reg.adapters()).toEqual([
-      { id: "claude", installed: "0.75.1", pinned: "0.84.0", error: "install failed: registry unreachable" },
+      { id: "claude", installed: "0.75.1", pinned: "0.95.0", error: "install failed: registry unreachable" },
       { id: "codex", installed: "2.0.1", pinned: "2.0.1" },
     ]);
   });
@@ -331,13 +331,13 @@ describe("agent registry", () => {
     const { installer, calls } = fakeInstaller(fail);
     const reg = new AgentRegistry(BUILTIN_AGENTS, tmp(), installer, undefined, undefined, () => now);
     await reg.installMissing();
-    expect(calls).toEqual(["@agentclientprotocol/claude-agent-acp@0.84.0", "@agentclientprotocol/codex-acp@2.0.1"]);
+    expect(calls).toEqual(["@agentclientprotocol/claude-agent-acp@0.95.0", "@agentclientprotocol/codex-acp@2.0.1"]);
     // a tab reloaded right after: too soon to download again
     await reg.retryFailed();
     expect(calls).toHaveLength(2);
     now += 31_000;
     await reg.retryFailed();
-    expect(calls).toEqual([...calls.slice(0, 2), "@agentclientprotocol/claude-agent-acp@0.84.0"]);
+    expect(calls).toEqual([...calls.slice(0, 2), "@agentclientprotocol/claude-agent-acp@0.95.0"]);
     // failed again, so the window starts over, and doubles: a failure that will not change is
     // not downloaded on every reconnect
     await reg.retryFailed();
@@ -395,9 +395,9 @@ describe("agent registry", () => {
     expect(reg.adapters()[0]).toMatchObject({ id: "claude", error: "install failed: registry unreachable" });
     // the files arrive without this registry's install having put them there
     fail.clear();
-    await installer(join(dir, "claude"), "@agentclientprotocol/claude-agent-acp", "0.84.0");
+    await installer(join(dir, "claude"), "@agentclientprotocol/claude-agent-acp", "0.95.0");
     await reg.install("claude");
-    expect(reg.adapters()[0]).toEqual({ id: "claude", installed: "0.84.0", pinned: "0.84.0" });
+    expect(reg.adapters()[0]).toEqual({ id: "claude", installed: "0.95.0", pinned: "0.95.0" });
   });
 
   test("bun's output becomes its first error line, with the way out for a certificate it will not trust", () => {

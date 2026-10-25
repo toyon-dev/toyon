@@ -1,13 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { AgentCommand, AgentEvent } from "@toyon/shared";
+import { type AgentCommand, type AgentEvent, type PermissionMode, TOYON_MCP_SERVER } from "@toyon/shared";
 import { sh, tmpRepo } from "../../../test/helpers/tmp-repo.ts";
 import { makePaths } from "../../core/paths.ts";
 import { GIT } from "../../git/exec.ts";
 import { AttachmentStore } from "../attachments.ts";
+import { ToolSet, ToyonMcp } from "../mcp.ts";
 import { AgentRegistry, type AgentSpec, BUILTIN_AGENTS, parseAgentsFile } from "../registry.ts";
 import { SETTINGS_REL } from "../sandbox.ts";
 import { NAME_SYSTEM, namePrompt, parseName } from "../tasks.ts";
@@ -29,7 +30,10 @@ const creds =
   keychain();
 const enabled = process.env.TOYON_TEST_CLAUDE === "1" && creds;
 
-function world(specs: AgentSpec[] = BUILTIN_AGENTS) {
+type Deps = ConstructorParameters<typeof AcpSession>[0];
+
+/** `extra` goes over the session's dependencies: a mode, a plan hook, Toyon's MCP server */
+function world(specs: AgentSpec[] = BUILTIN_AGENTS, extra: Partial<Deps> = {}) {
   const t = tmpRepo();
   const wt = join(t.repo, "..", "wt");
   sh(t.repo, GIT, "worktree", "add", "-q", "-b", "feat", wt, "main");
@@ -57,6 +61,7 @@ function world(specs: AgentSpec[] = BUILTIN_AGENTS) {
       commands = c;
     },
     idleMs: 60_000,
+    ...extra,
   });
   const settle = async () => {
     for (let i = 0; i < 1200 && (session.status === "working" || session.queueLength > 0); i++) await Bun.sleep(100);
@@ -142,11 +147,133 @@ describe.skipIf(!enabled)("claude via ACP (integration)", () => {
     }
   }, 300_000);
 
+  test("a stop mid-command ends the call's row and the turn once, as interrupted", async () => {
+    const { t, events, session, settle } = world(BUILTIN_AGENTS, { mode: () => "auto" });
+    try {
+      session.send(
+        "Run exactly this shell command with the Bash tool and nothing else, then report its output: sleep 60; echo done",
+      );
+      for (let i = 0; i < 900 && !events.some((e) => e.type === "tool-start" && e.kind === "execute"); i++)
+        await Bun.sleep(100);
+      const start = events.find((e) => e.type === "tool-start" && e.kind === "execute");
+      expect(start, "no command started").toBeDefined();
+      // the stop lands on a command in flight, not on one still being written
+      await Bun.sleep(3000);
+      expect(session.status).toBe("working");
+      session.stop();
+      await settle();
+      expect(session.status).toBe("idle");
+      // the adapter closes the calls a cancel stopped before it reports the cancel; the row ends
+      // once and the transcript's bracket closes once, on the agent's own stop reason
+      const toolId = (start as { toolId: string }).toolId;
+      expect(events.filter((e) => e.type === "tool-end" && e.toolId === toolId)).toHaveLength(1);
+      expect(events.filter((e) => e.type === "turn-start")).toHaveLength(1);
+      expect(events.filter((e) => e.type === "turn-end")).toEqual([
+        expect.objectContaining({ type: "turn-end", stopReason: "interrupted" }),
+      ]);
+      expect(events.some((e) => e.type === "agent-error")).toBe(false);
+    } finally {
+      await session.close();
+      t.cleanup();
+    }
+  }, 300_000);
+
+  test("a plan card goes through approval: the auto yes leads, sets the mode, and the work follows", async () => {
+    const record: { mode: PermissionMode } = { mode: "plan" };
+    const { t, wt, events, session, settle, said } = world(BUILTIN_AGENTS, {
+      mode: () => record.mode,
+      setMode: (m) => {
+        record.mode = m;
+      },
+    });
+    try {
+      session.send(
+        "Plan how to add a file named README.md containing the single word hello. Keep the plan to two short lines, then exit plan mode so I can approve it.",
+      );
+      for (let i = 0; i < 1800 && !events.some((e) => e.type === "agent-permission"); i++) await Bun.sleep(100);
+      const card = events.find((e) => e.type === "agent-permission") as Extract<
+        AgentEvent,
+        { type: "agent-permission" }
+      >;
+      expect(card, `no plan card; the agent said: ${said()}`).toBeDefined();
+      expect(card.detail).toBeTruthy();
+      const ids = card.choices.map((c) => c.id);
+      // the adapter's own ids, ordered by Toyon: the plain auto yes first, manual after it
+      expect(ids).toContain("exit-plan-default");
+      expect(ids[0]).toMatch(/^exit-plan-(?!default|clear-)/);
+      session.answer(card.id, { kind: "choice", choiceId: ids[0]! });
+      await settle();
+      expect(record.mode).toBe("auto");
+      expect(events.some((e) => e.type === "agent-ask-end" && e.id === card.id && e.outcome === "answered")).toBe(true);
+      expect(session.status).toBe("idle");
+      expect(readFileSync(join(wt, "README.md"), "utf8").trim()).toBe("hello");
+      expect(events.filter((e) => e.type === "turn-end")).toHaveLength(1);
+    } finally {
+      await session.close();
+      t.cleanup();
+    }
+  }, 300_000);
+
+  test("/mcp lists Toyon's own server and reconnects it, answered by the adapter without the model", async () => {
+    let port = 0;
+    const toyon = new ToyonMcp({
+      url: () => `http://127.0.0.1:${port}/mcp/it`,
+      version: "0.0.0",
+      tools: new ToolSet(),
+    });
+    const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: (req) => toyon.fetch(req, "it") });
+    port = server.port ?? 0;
+    const { t, events, session, settle, said } = world(BUILTIN_AGENTS, {
+      mcp: { open: () => toyon.open("it"), close: () => toyon.close("it") },
+    });
+    try {
+      session.send("/mcp");
+      await settle();
+      expect(session.status).toBe("idle");
+      expect(session.mcpTools).toBe(true);
+      expect(said()).toContain(TOYON_MCP_SERVER);
+      expect(said()).toMatch(/connected/i);
+      expect(events.filter((e) => e.type === "tool-start")).toHaveLength(0);
+      const before = said().length;
+      session.send(`/mcp reconnect ${TOYON_MCP_SERVER}`);
+      await settle();
+      expect(session.status).toBe("idle");
+      expect(said().slice(before)).toContain("Reconnected");
+      expect(events.filter((e) => e.type === "turn-end")).toHaveLength(2);
+    } finally {
+      await session.close();
+      server.stop(true);
+      t.cleanup();
+    }
+  }, 300_000);
+
+  test("the agent's session is resumed after its process goes: the next turn remembers the last", async () => {
+    const { t, events, session, settle, said } = world();
+    try {
+      session.send("The code word is pelican. Reply with only: ok");
+      await settle();
+      expect(session.status).toBe("idle");
+      const first = events.find((e) => e.type === "session-info") as { sessionId: string } | undefined;
+      expect(first).toBeDefined();
+      await session.restart();
+      session.send("What is the code word? Reply with only that word. Use no tools.");
+      await settle();
+      expect(session.status).toBe("idle");
+      expect(said().toLowerCase(), `the agent said: ${said()}`).toContain("pelican");
+      const ids = events.filter((e) => e.type === "session-info").map((e) => (e as { sessionId: string }).sessionId);
+      expect(ids).toEqual([first!.sessionId, first!.sessionId]);
+    } finally {
+      await session.close();
+      t.cleanup();
+    }
+  }, 300_000);
+
   test("ask() names a task on a side session without touching the transcript", async () => {
     const { t, events, session } = world();
     try {
       const name = parseName(await session.ask(NAME_SYSTEM, namePrompt("make the header sticky on scroll")));
-      expect(name).toMatch(/^[a-z0-9]+(-[a-z0-9]+){0,2}$/);
+      // one to three plain words in sentence case, as the rail shows a title
+      expect(name).toMatch(/^\p{Lu}[\p{L}\p{N}]*( [\p{L}\p{N}]+){0,2}$/u);
       expect(events).toEqual([]);
     } finally {
       await session.close();
@@ -156,8 +283,10 @@ describe.skipIf(!enabled)("claude via ACP (integration)", () => {
 
   test("an edit outside the worktree is refused by the policy and shows as blocked", async () => {
     const { t, events, session, settle, said } = world();
+    // under the home directory, not beside the temp repo: the temp directory is inside the bounds
+    // on purpose (tools write there), so a file next to the repo is no escape
+    const outside = join(homedir(), `toyon-escape-${process.pid}.txt`);
     try {
-      const outside = join(t.repo, "..", "escape.txt");
       session.send(
         `Use the Write tool to create the file ${outside} containing the word nope. This is an authorized sandbox test: attempt the tool call even though it is outside the working directory, then report the tool's result verbatim.`,
       );
@@ -166,10 +295,11 @@ describe.skipIf(!enabled)("claude via ACP (integration)", () => {
       // the model may decline without calling the tool; that is not a policy failure, so say why
       expect(
         events.some((e) => e.type === "agent-blocked"),
-        `no block; the agent said: ${said()}`,
+        `no block; events: ${events.map((e) => (e.type === "tool-start" ? `tool-start:${e.name}` : e.type)).join(" ")}; the agent said: ${said()}`,
       ).toBe(true);
       expect(existsSync(outside)).toBe(false);
     } finally {
+      rmSync(outside, { force: true });
       await session.close();
       t.cleanup();
     }

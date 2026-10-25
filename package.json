@@ -14,6 +14,7 @@
     "build": "bun run --cwd packages/shell build && bun run --cwd packages/bridge build && bun scripts/stub.ts",
     "pack": "bun scripts/pack.ts",
     "version": "bun scripts/version.ts",
+    "adapters": "bun scripts/adapter-pins.ts",
     "typecheck": "tsc --noEmit -p .",
     "lint": "biome check .",
     "format": "biome format --write .",

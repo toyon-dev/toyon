@@ -1,4 +1,4 @@
-import { emptyInput, isEditTool, isWrittenKind, SHELL_TOOL, writingCall } from "@toyon/shared";
+import { emptyInput, isEditTool, isWrittenKind, SHELL_TOOL, TOOL_SEARCH, writingCall } from "@toyon/shared";
 import type { ChatItem } from "../../state/store.ts";
 import { thoughtLine } from "./thought.ts";
 import { isBackgroundSpawn, isGuardian, toolLabel } from "./toolCall.ts";
@@ -139,6 +139,17 @@ function cutOff(item: ToolItem): boolean {
   return !!item.cut || (!item.output && writingCall({ name: item.name, kind: item.toolKind }, item.input));
 }
 
+/** A tool load that has done its work and been followed by something. Claude keeps the schema of
+ * a seldom-used tool out of its prompt and loads it with a ToolSearch the moment before the call,
+ * so the row ("loaded WebFetch") is the call under it said once more, a beat early, and a
+ * transcript that flips to plan mode or fetches a page prints two rows for the one thing. The row
+ * stays while the load runs, where its shine is what says the agent is busy, and until the next
+ * thing lands, which takes its place rather than leaving a hole: a transcript's last item is kept,
+ * since a load nothing followed is the one case the row says something the next row does not. */
+function settledLoad(item: ToolItem, last: boolean): boolean {
+  return item.name === TOOL_SEARCH && item.done && !item.isError && !last;
+}
+
 export function groupTools(items: ChatItem[], roots: string[]): ChatEntry[] {
   const spawns = spawnIds(items);
   const out: ChatEntry[] = [];
@@ -152,7 +163,7 @@ export function groupTools(items: ChatItem[], roots: string[]): ChatEntry[] {
       out.push({ at, item });
       continue;
     }
-    if (cutOff(item)) continue;
+    if (cutOff(item) || settledLoad(item, at === items.length - 1)) continue;
     if (spawns.has(item.id)) {
       key = "";
       const entry: SpawnEntry = { at, spawn: item, run: [], end: at };

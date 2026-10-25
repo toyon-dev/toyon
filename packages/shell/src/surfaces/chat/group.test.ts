@@ -440,6 +440,37 @@ describe("groupTools", () => {
     expect(shape([tool("edit", "/wt/b.ts")], ["/wt"])).toEqual([{ at: 0, n: 1 }]);
   });
 
+  test("a tool load is a row only while it runs or until something follows it", () => {
+    // Claude's ToolSearch, as the daemon sends it: no kind of its own, the sentence as its title
+    const load = (extra: Partial<ChatItem> = {}) =>
+      tool("other", "", {
+        name: "ToolSearch",
+        title: "loaded WebFetch",
+        input: { query: "select:WebFetch" },
+        ...extra,
+      });
+    const fetch = tool("fetch", "", { name: "WebFetch", title: "Fetch", input: { url: "https://x.y" } });
+    // settled and followed by the call it loaded: the call is the row
+    expect(shape([text("a"), load(), fetch])).toEqual([
+      { at: 0, n: 0 },
+      { at: 2, n: 1 },
+    ]);
+    // still running: the row shines for it
+    expect(shape([load({ done: false })])).toEqual([{ at: 0, n: 1 }]);
+    // settled with nothing after it yet: the row holds its place until the next thing lands
+    expect(shape([text("a"), load()])).toEqual([
+      { at: 0, n: 0 },
+      { at: 1, n: 1 },
+    ]);
+    // one that failed ran into something worth reading, and stays
+    expect(shape([load({ isError: true }), fetch])).toEqual([
+      { at: 0, n: 1 },
+      { at: 1, n: 1 },
+    ]);
+    // a thought landing after it is the next thing, the same as a call
+    expect(shape([load(), thought("Now the fetch.")])).toEqual([{ at: 1, n: 0 }]);
+  });
+
   test("two subagents reading one file do not fold into each other's row", () => {
     const items = [
       tool("read", "/wt/a.ts", { parentToolId: "task1" }),

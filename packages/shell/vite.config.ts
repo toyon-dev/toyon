@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { DAEMON_DEFAULT_PORT, SHELL_DEV_PORT } from "@toyon/shared/ports";
 import react from "@vitejs/plugin-react";
 import { defineConfig, type Plugin } from "vite";
+import { precompress } from "./scripts/precompress.ts";
 
 // Both defaults are for `bun run shell:dev` against the daemon you started by hand. Run as a
 // toyon proc (scripts/dev.sh), the supervisor hands us $PORT to listen on and the sibling daemon's
@@ -45,7 +46,7 @@ function nestedToken(home: string): Plugin {
 }
 
 export default defineConfig({
-  plugins: [react(), ...(nestedHome ? [nestedToken(nestedHome)] : [])],
+  plugins: [react(), precompress(), ...(nestedHome ? [nestedToken(nestedHome)] : [])],
   build: {
     // A rebuild rotates every hashed chunk name, and the daemon serves this directory straight off
     // disk: clearing it first pulls the chunks out from under whatever tabs are already open, which

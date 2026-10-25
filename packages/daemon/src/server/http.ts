@@ -34,6 +34,7 @@ import type { OpenReply } from "../files/open.ts";
 import type { RepoRegistry } from "../repos/registry.ts";
 import type { PreviewData, PreviewHandler } from "../runtime/proxy.ts";
 import { preflight, withCors } from "./cors.ts";
+import { acceptedEncodings, encoded, pickSibling } from "./encoding.ts";
 import { openToAnyOrigin } from "./pairing.ts";
 
 export interface WsData {
@@ -145,6 +146,11 @@ export function createFetch(opts: HttpOpts) {
   /** what a preview routed by name is checked against; the gate on each preview port is the same */
   const gateFor = (remote: Remote | null): PreviewGate | null =>
     remote && { grant, host: remote.host, redeem: (code) => opts.grants.redeem(code) };
+  /** index.html, gzipped when taken. Never a sibling on disk: the page keeps one name across
+   * builds, so a sibling from the last build could outlive its page for the seconds between the
+   * two writes, and a stale page boots an asset graph the daemon no longer has. */
+  const page = async (req: Request, file: string) =>
+    encoded(req, await Bun.file(file).text(), { "content-type": "text/html;charset=utf-8", "cache-control": NO_STORE });
   const health = async () => {
     const remote = opts.remote();
     return Response.json({
@@ -242,10 +248,15 @@ export function createFetch(opts: HttpOpts) {
     // like /ws: the page has it before any of its own code runs.
     if (url.pathname === "/bootstrap") {
       if (!sameSecret(url.searchParams.get("token"), opts.token)) return new Response("unauthorized", { status: 401 });
-      const headers: Record<string, string> = { "cache-control": NO_STORE };
+      const headers: Record<string, string> = {
+        "content-type": "application/json;charset=utf-8",
+        "cache-control": NO_STORE,
+      };
       // before first paint, so the preview iframes that paint make their first request with it
       if (remote && remoteShell) headers["set-cookie"] = grantCookie(grant, remote.host);
-      return Response.json(await opts.bootstrap(), { headers });
+      // gzipped on the way out: the hello is the one answer a phone's first paint waits on, and
+      // with every row and theme in it, it is hundreds of KB raw and a few tens gzipped
+      return encoded(req, JSON.stringify(await opts.bootstrap()), headers);
     }
 
     // A page served from files newer than the daemon speaks another protocol and has stopped its
@@ -443,14 +454,30 @@ export function createFetch(opts: HttpOpts) {
           headers: { "content-type": "text/html; charset=utf-8", "cache-control": NO_STORE },
         });
       }
-      return new Response(Bun.file(file), { headers: { "cache-control": hashed ? IMMUTABLE : NO_STORE } });
+      // A hashed asset goes out as the sibling the build compressed for it when the browser takes
+      // one, under the type of the file it stands for (a .br file's own guess is octet-stream,
+      // which would fail a module import). `vary` goes on the identity answer too, so a cache that
+      // held it never hands it to a request the next one would answer encoded.
+      if (hashed) {
+        const sibling = pickSibling(file, acceptedEncodings(req.headers.get("accept-encoding")));
+        return new Response(Bun.file(sibling.path), {
+          headers: {
+            "content-type": Bun.file(file).type,
+            "cache-control": IMMUTABLE,
+            vary: "accept-encoding",
+            ...(sibling.encoding ? { "content-encoding": sibling.encoding } : {}),
+          },
+        });
+      }
+      if (rel === "/index.html") return page(req, file);
+      return new Response(Bun.file(file), { headers: { "cache-control": NO_STORE } });
     }
     // a hashed asset that is gone means the shell was rebuilt under an open tab. Falling through to
     // index.html would answer a module request with HTML, so the import fails on MIME rather than
     // status and the tab can't tell why; 404 lets vite raise preloadError instead.
     if (hashed) return new Response("not found", { status: 404 });
     const index = join(opts.shellDist, "index.html");
-    if (existsSync(index)) return new Response(Bun.file(index), { headers: { "cache-control": NO_STORE } });
+    if (existsSync(index)) return page(req, index);
     return new Response("Toyon daemon running; shell not built (run: bun run build)", { status: 200 });
   }
 

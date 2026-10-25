@@ -77,6 +77,8 @@ export class UpdateService {
   private unreachable: string | null = null;
   /** the registry npm is set up for, once anything has asked */
   private registryName: string | null = null;
+  /** the one ask of npm for it, shared by every caller that arrives before it answers */
+  private registryAsk: Promise<string> | null = null;
   /** the version last read off disk that is not yet counted, and when it was first read */
   private seen: string | null = null;
   private seenAt = 0;
@@ -116,6 +118,9 @@ export class UpdateService {
     d.hub.on("holdsChanged", () => {
       this.busyAt = this.now();
     });
+    // asked now, not at the first page: every page's hello wants the name, a cold npm takes half
+    // a second or more to say it, and a boot is when that half second costs nobody anything
+    fireAndForget("update", this.registry(), "npm registry");
   }
 
   /** once a minute: what is installed, and whether now is the moment */
@@ -143,10 +148,19 @@ export class UpdateService {
     this.announce();
   }
 
-  /** the registry updates come from, for the settings card; asked of npm once */
+  /** the registry updates come from, for the settings card; asked of npm once. The promise is
+   * what is kept, not only its answer, so two first pages on a cold daemon share one spawn. */
   async registry(): Promise<string | null> {
     if (this.d.method === "none" || this.d.managedBy) return null;
-    this.registryName ??= await this.d.registry();
+    if (this.registryName !== null) return this.registryName;
+    this.registryAsk ??= this.d.registry();
+    try {
+      this.registryName = await this.registryAsk;
+    } catch (e) {
+      // the ask failed, not the answer: the next page asks again instead of inheriting the throw
+      this.registryAsk = null;
+      throw e;
+    }
     return this.registryName;
   }
 

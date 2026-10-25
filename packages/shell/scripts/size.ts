@@ -15,6 +15,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { siblingSize } from "./precompress.ts";
 
 const shell = new URL("..", import.meta.url).pathname;
 const dist = join(shell, "dist");
@@ -35,23 +36,31 @@ function report(root: string) {
   const { js, css } = entryFiles(root);
   const jsBytes = statSync(join(root, "assets", js)).size;
   const cssBytes = statSync(join(root, "assets", css)).size;
-  const gz = (p: string) => Bun.gzipSync(new Uint8Array(readFileSync(p))).length;
+  // the bytes on the wire are the siblings the build wrote: gzip over plain http, brotli over
+  // https. A dist built without them (an older build) is gzipped here for the number.
+  const gz = (p: string) => siblingSize(p, "gz") ?? Bun.gzipSync(new Uint8Array(readFileSync(p))).length;
   const jsGz = gz(join(root, "assets", js));
   const cssGz = gz(join(root, "assets", css));
+  const jsBr = siblingSize(join(root, "assets", js), "br");
+  const cssBr = siblingSize(join(root, "assets", css), "br");
+  const br = (n: number | null) => (n === null ? "" : `  br ${pad(n, 8)}`);
 
   let lazyBytes = 0;
   let lazyCount = 0;
   for (const f of readdirSync(join(root, "assets"))) {
-    // --why builds with sourcemaps; they ship to nobody, so they are not payload
-    if (f === js || f === css || f.endsWith(".map")) continue;
+    // --why builds with sourcemaps; they ship to nobody, so they are not payload, and the
+    // compressed siblings are the same bytes again in another coat
+    if (f === js || f === css || /\.(map|br|gz)$/.test(f)) continue;
     lazyBytes += statSync(join(root, "assets", f)).size;
     lazyCount++;
   }
 
   console.log("eager, every load:");
-  console.log(`  ${pad(jsBytes, 9)}  gzip ${pad(jsGz, 8)}  ${js}`);
-  console.log(`  ${pad(cssBytes, 9)}  gzip ${pad(cssGz, 8)}  ${css}`);
-  console.log(`  ${pad(jsBytes + cssBytes, 9)}  gzip ${pad(jsGz + cssGz, 8)}  total (${kb(jsBytes + cssBytes)})`);
+  console.log(`  ${pad(jsBytes, 9)}  gzip ${pad(jsGz, 8)}${br(jsBr)}  ${js}`);
+  console.log(`  ${pad(cssBytes, 9)}  gzip ${pad(cssGz, 8)}${br(cssBr)}  ${css}`);
+  console.log(
+    `  ${pad(jsBytes + cssBytes, 9)}  gzip ${pad(jsGz + cssGz, 8)}${br(jsBr !== null && cssBr !== null ? jsBr + cssBr : null)}  total (${kb(jsBytes + cssBytes)})`,
+  );
   console.log(`lazy, on demand:`);
   console.log(`  ${pad(lazyBytes, 9)}  across ${lazyCount} files (${kb(lazyBytes)})`);
 }

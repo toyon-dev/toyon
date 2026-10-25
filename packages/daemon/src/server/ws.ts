@@ -120,7 +120,9 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
 
   const raw = (ws: ServerWebSocket<WsData>, json: string) => {
     try {
-      ws.send(json);
+      // the flag is what deflates a frame: negotiating the extension below compresses nothing by
+      // itself. Every shell frame is JSON, and the hello on each open is the largest of them.
+      ws.send(json, true);
       ws.data.sent++;
       ws.data.bytes += json.length;
     } catch (e) {
@@ -443,6 +445,13 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
     websocket: {
       // idleTimeout and sendPings stay at Bun's defaults (120 s, on): they are what close a tab that
       // died without a word, which is what lets go of the worktree it was showing
+      //
+      // permessage-deflate, which every browser offers: the hello goes out again on each open,
+      // and a phone opens a socket every time it leaves a pocket. One shared compressor with no
+      // window per socket; a front that strips the extension leaves the frames as they were. If
+      // /health's lag rises on a busy daemon, `{ compress: "shared", decompress: false }` keeps
+      // the daemon's side of it alone.
+      perMessageDeflate: true,
       async open(ws: ServerWebSocket<WsData>) {
         const preview = ws.data.preview;
         if (preview) {

@@ -177,16 +177,109 @@ const req = (path: string, init: RequestInit & { host?: string } = {}) =>
     headers: { host: init.host ?? "localhost", ...(init.headers as Record<string, string>) },
   });
 
+/** a hello the size of a machine with rows: what gzip is for */
+const bigHello = {
+  t: "hello",
+  rows: Array.from({ length: 80 }, (_, i) => ({ id: `wt-${i}`, title: `Worktree ${i}`, branch: `toyon/branch-${i}` })),
+};
+/** a body Bun's own decoding has not touched: `Response.json()` in a test reads the raw bytes */
+const gunzipped = async (r: Response | undefined) =>
+  JSON.parse(Buffer.from(Bun.gunzipSync(new Uint8Array(await r!.arrayBuffer()))).toString());
+
 describe("bootstrap", () => {
   test("the hello frame, for the token, never cached", async () => {
     const r = await fetch(req("/bootstrap?token=secret"), srv());
     expect(r?.status).toBe(200);
     expect(r?.headers.get("cache-control")).toContain("no-store");
+    expect(r?.headers.get("content-type")).toBe("application/json;charset=utf-8");
     expect(await r?.json()).toEqual({ t: "hello", repos: [{ id: "r1" }] });
   });
   test("refused without the token", async () => {
     expect((await fetch(req("/bootstrap"), srv()))?.status).toBe(401);
     expect((await fetch(req("/bootstrap?token=wrong"), srv()))?.status).toBe(401);
+  });
+  test("the hello goes out gzipped when the page takes it, still never cached, the cookie kept", async () => {
+    const f = withRemote("mac.tail1234.ts.net", {}, { bootstrap: async () => bigHello });
+    const r = await f(
+      req("/bootstrap?token=secret", {
+        host: "mac.tail1234.ts.net",
+        headers: { "x-forwarded-proto": "https", "accept-encoding": "gzip, deflate, br" },
+      }),
+      srv(),
+    );
+    expect(r?.status).toBe(200);
+    expect(r?.headers.get("content-encoding")).toBe("gzip");
+    expect(r?.headers.get("vary")).toBe("accept-encoding");
+    expect(r?.headers.get("cache-control")).toBe("no-store");
+    expect(r?.headers.get("content-type")).toBe("application/json;charset=utf-8");
+    expect(r?.headers.get("set-cookie")).toContain("toyon_preview=");
+    expect(await gunzipped(r)).toEqual(bigHello);
+  });
+  test("a small hello, or one not asked for gzipped, goes out as it is", async () => {
+    const small = await fetch(req("/bootstrap?token=secret", { headers: { "accept-encoding": "gzip" } }), srv());
+    expect(small?.headers.get("content-encoding")).toBeNull();
+    expect(await small?.json()).toEqual({ t: "hello", repos: [{ id: "r1" }] });
+    const f = createFetch({ ...opts, bootstrap: async () => bigHello });
+    const raw = await f(req("/bootstrap?token=secret"), srv());
+    expect(raw?.headers.get("content-encoding")).toBeNull();
+    expect(await raw?.json()).toEqual(bigHello);
+  });
+});
+
+describe("static shell", () => {
+  // a built dist: the page, a hashed asset with both siblings, one with none
+  const dist = mkdtempSync(join(tmpdir(), "toyon-dist-"));
+  mkdirSync(join(dist, "assets"));
+  const html = `<!doctype html><html><head><title>Toyon</title><!-- ${"padding ".repeat(200)} --></head></html>`;
+  writeFileSync(join(dist, "index.html"), html);
+  writeFileSync(join(dist, "assets", "index-abc123.js"), "export default 1;");
+  writeFileSync(join(dist, "assets", "index-abc123.js.br"), "br-bytes");
+  writeFileSync(join(dist, "assets", "index-abc123.js.gz"), "gz-bytes");
+  writeFileSync(join(dist, "assets", "plain-def456.js"), "export default 2;");
+  afterAll(() => rmSync(dist, { recursive: true, force: true }));
+  const f = createFetch({ ...opts, shellDist: dist });
+  const get = (path: string, accept?: string) =>
+    f(req(path, { headers: accept ? { "accept-encoding": accept } : {} }), srv());
+
+  test("a hashed asset goes out brotli when the browser takes it, as the type of the file it stands for", async () => {
+    const r = await get("/assets/index-abc123.js", "gzip, deflate, br");
+    expect(r?.status).toBe(200);
+    expect(r?.headers.get("content-encoding")).toBe("br");
+    expect(r?.headers.get("content-type")).toContain("javascript");
+    expect(r?.headers.get("vary")).toBe("accept-encoding");
+    expect(r?.headers.get("cache-control")).toContain("immutable");
+    expect(await r?.text()).toBe("br-bytes");
+  });
+  test("gzip when brotli is not offered, as over plain http", async () => {
+    const r = await get("/assets/index-abc123.js", "gzip, deflate");
+    expect(r?.headers.get("content-encoding")).toBe("gzip");
+    expect(await r?.text()).toBe("gz-bytes");
+  });
+  test("the file itself when nothing is offered, or no sibling was built; vary says so either way", async () => {
+    const r = await get("/assets/index-abc123.js");
+    expect(r?.headers.get("content-encoding")).toBeNull();
+    expect(r?.headers.get("vary")).toBe("accept-encoding");
+    expect(await r?.text()).toBe("export default 1;");
+    const plain = await get("/assets/plain-def456.js", "gzip, deflate, br");
+    expect(plain?.headers.get("content-encoding")).toBeNull();
+    expect(plain?.headers.get("cache-control")).toContain("immutable");
+    expect(await plain?.text()).toBe("export default 2;");
+  });
+  test("a hashed asset that is gone is 404, never the page", async () => {
+    expect((await get("/assets/old-000000.js", "br"))?.status).toBe(404);
+  });
+  test("the page goes out gzipped when taken, as the page for any route, and is still never stored", async () => {
+    for (const path of ["/", "/some/deep/route"]) {
+      const r = await get(path, "gzip, deflate, br");
+      expect(r?.status).toBe(200);
+      expect(r?.headers.get("content-encoding")).toBe("gzip");
+      expect(r?.headers.get("content-type")).toBe("text/html;charset=utf-8");
+      expect(r?.headers.get("cache-control")).toBe("no-store");
+      expect(Buffer.from(Bun.gunzipSync(new Uint8Array(await r!.arrayBuffer()))).toString()).toBe(html);
+    }
+    const raw = await get("/");
+    expect(raw?.headers.get("content-encoding")).toBeNull();
+    expect(await raw?.text()).toBe(html);
   });
 });
 

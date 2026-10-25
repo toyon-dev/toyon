@@ -19,6 +19,8 @@ function make(
     installFails?: boolean;
     /** what the restarter answers a request with: a refusal, or null having restarted */
     refuse?: string | null;
+    /** how many asks of npm for the registry's name throw before one answers */
+    nameFails?: number;
   } = {},
 ) {
   const hub = new Hub();
@@ -30,6 +32,7 @@ function make(
   let asked = false;
   let requests = 0;
   let registryAsks = 0;
+  let nameAsks = 0;
   const working: string[] = [];
   const installs: string[][] = [];
   const state = {
@@ -49,7 +52,11 @@ function make(
       registryAsks++;
       return { version: latest, registry: REGISTRY };
     },
-    registry: async () => REGISTRY,
+    registry: async () => {
+      nameAsks++;
+      if (nameAsks <= (start.nameFails ?? 0)) throw new Error("npm: spawn failed");
+      return REGISTRY;
+    },
     command: (v) => (method === "npm" ? ["npm", "install", "-g", `toyon@${v}`] : null),
     install: async (command) => {
       installs.push(command);
@@ -95,6 +102,7 @@ function make(
     },
     requests: () => requests,
     registryAsks: () => registryAsks,
+    nameAsks: () => nameAsks,
   };
 }
 
@@ -213,13 +221,32 @@ describe("UpdateService: what is out", () => {
     expect(update.status()).toEqual({ managedBy: null, registry: REGISTRY, unreachable: null, latest: "0.3.0" });
   });
 
-  test("the registry updates come from is read for hello without asking it anything, and is nothing where nothing updates", async () => {
-    const { update, registryAsks } = make();
-    expect(await update.registry()).toBe(REGISTRY);
+  test("the registry's name is asked of npm once, at boot, and every hello shares that answer; nothing where nothing updates", async () => {
+    const { update, registryAsks, nameAsks } = make();
+    // the constructor asked; a tick later the answer is in
+    await Promise.resolve();
+    expect(nameAsks()).toBe(1);
+    const [a, b] = await Promise.all([update.registry(), update.registry()]);
+    expect(a).toBe(REGISTRY);
+    expect(b).toBe(REGISTRY);
+    expect(nameAsks()).toBe(1);
     expect(registryAsks()).toBe(0);
-    expect(await make({ method: "none" }).update.registry()).toBeNull();
+    const off = make({ method: "none" });
+    expect(await off.update.registry()).toBeNull();
+    expect(off.nameAsks()).toBe(0);
     expect(await make({ managedBy: "policy" }).update.registry()).toBeNull();
     expect(make({ managedBy: "env" }).update.status().registry).toBeNull();
+  });
+
+  test("an ask that fails is asked again by the next page, not inherited as the answer", async () => {
+    const { update, nameAsks } = make({ nameFails: 1 });
+    // the boot-time ask threw and was logged; nothing of it is kept
+    await Promise.resolve();
+    expect(nameAsks()).toBe(1);
+    expect(await update.registry()).toBe(REGISTRY);
+    expect(nameAsks()).toBe(2);
+    expect(await update.registry()).toBe(REGISTRY);
+    expect(nameAsks()).toBe(2);
   });
 });
 

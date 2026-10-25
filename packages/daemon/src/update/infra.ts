@@ -10,7 +10,7 @@ import { run, runLive } from "../git/exec.ts";
  * `registry` names the one asked, for saying so. */
 export async function latestVersion(): Promise<{ version: string | null; registry: string }> {
   const registry = await npmRegistry();
-  const r = await run("npm", ["view", "toyon", "version", "--json"], homedir());
+  const r = await run("npm", ["view", "toyon", "version", "--json"], homedir(), undefined, { timeoutMs: NPM_MS });
   if (!r.ok) return { version: null, registry };
   try {
     const v = JSON.parse(r.out) as unknown;
@@ -21,10 +21,15 @@ export async function latestVersion(): Promise<{ version: string | null; registr
   }
 }
 
+/** how long one npm command may take before it is given up on: the first page's hello waits on
+ * the registry's name, and a check runs two of them, so a mirror that hangs costs a minute at
+ * most and not the ten every other spawn gets */
+const NPM_MS = 30_000;
+
 /** the registry npm is set up for on this machine, read from its config and not asked anything;
- * a phrase when npm is missing or says nothing */
+ * a phrase when npm is missing, says nothing, or does not answer in time */
 export async function npmRegistry(): Promise<string> {
-  const config = await run("npm", ["config", "get", "registry"], homedir());
+  const config = await run("npm", ["config", "get", "registry"], homedir(), undefined, { timeoutMs: NPM_MS });
   return config.ok && config.out !== "" ? config.out : "the npm registry";
 }
 

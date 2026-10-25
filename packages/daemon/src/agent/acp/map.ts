@@ -43,6 +43,10 @@ export interface ToolMemo {
   held?: ToolRefine;
   /** a message steered into the turn landed while the call was being written (`preempted`) */
   cut?: boolean;
+  /** a held input went out on a guess that the call was whole (`release`): a quiet second, or the
+   * next call opening. Nothing on the wire said so, and the one thing that tells a whole call from
+   * one cut off after its first field is what follows it (`abandoned`). */
+  released?: boolean;
   /** the call that spawned this one, so a subagent's stream is read apart from the main agent's */
   parent?: string;
   /** the call starts a subagent, so its return may be only the launch (endOf) */
@@ -207,6 +211,7 @@ export function release(toolId: string, memo: ToolMemo): AgentEvent | null {
   if (!held) return null;
   delete memo.held;
   if (!emptyInput(memo.input)) memo.writing = false;
+  memo.released = true;
   return memo.ended ? null : { type: "tool-update", toolId, ...held };
 }
 
@@ -244,11 +249,18 @@ export function preempted(memos: ToolMemos) {
  * before the agent's next word or call, so one still open at that point never ran. Left open it
  * would hold the batch's head for the rest of the turn: the row shines on, and the mark under the
  * log stays away because a call of the agent's own is "running". The end says it was cut, so the
- * shell can drop a row whose input it already has. */
+ * shell can drop a row whose input it already has.
+ *
+ * The same holds for a call whose input went out on a guess (`released`) with no steer marked
+ * on the daemon's side: the adapter injects a steered message where it finds a seam, which can
+ * be the middle of a call opened long after the steer was accepted, and the abort reads here as a
+ * path going out on the quiet second and then the agent's next thought. Only words tell: a call
+ * released by the next call opening is the first of a batch, whole and about to run. */
 function abandoned(memos: ToolMemos, parent: string | undefined, opening = false): AgentEvent[] {
   const out: AgentEvent[] = [];
   for (const [toolId, memo] of memos) {
-    if (memo.ended || memo.parent !== parent || !(memo.writing || memo.cut)) continue;
+    if (memo.ended || memo.parent !== parent) continue;
+    if (!(memo.writing || memo.cut || (memo.released && !opening))) continue;
     if (opening && memo.held && !memo.cut) {
       const sent = release(toolId, memo);
       if (sent) out.push(sent);

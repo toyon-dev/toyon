@@ -376,6 +376,74 @@ describe("mapUpdate", () => {
     ]);
   });
 
+  test("a call released on a guess ends unwritten when the agent's own words follow it, steer or not", () => {
+    // a Write whose path went out on the quiet second and whose content never came: the adapter
+    // injected a steer accepted minutes earlier into the middle of the call, so no mark was set
+    // here, and the row shone with its clock ticking until the next message. A thought from the
+    // main agent says the call never ran, since one that did returns before the agent thinks again.
+    const memos: ToolMemos = new Map();
+    run(
+      [
+        { sessionUpdate: "tool_call", toolCallId: "w1", title: "Preparing file…", kind: "edit", rawInput: {} },
+        { sessionUpdate: "tool_call_update", toolCallId: "w1", title: "Write a.md", rawInput: { file_path: "a.md" } },
+      ],
+      memos,
+    );
+    expect(release("w1", memos.get("w1")!)).toMatchObject({ type: "tool-update", toolId: "w1" });
+    expect(memos.get("w1")!.cut).toBeUndefined();
+    expect(run([{ sessionUpdate: "agent_thought_chunk", content: { type: "text", text: "Instead" } }], memos)).toEqual([
+      { type: "tool-end", toolId: "w1", cut: true },
+      { type: "thinking-delta", text: "Instead" },
+    ]);
+    // the first call of two in one message is released by the second opening and is whole: it
+    // runs, and its result lands before the agent's next word, so nothing cuts it
+    const batch: ToolMemos = new Map();
+    run(
+      [
+        { sessionUpdate: "tool_call", toolCallId: "b1", title: "Terminal", kind: "execute", rawInput: {} },
+        { sessionUpdate: "tool_call_update", toolCallId: "b1", title: "ls", rawInput: { command: "ls" } },
+        {
+          sessionUpdate: "tool_call",
+          toolCallId: "b2",
+          title: "Terminal",
+          kind: "execute",
+          rawInput: { command: "pwd" },
+        },
+      ],
+      batch,
+    );
+    expect(batch.get("b1")!.released).toBe(true);
+    expect(batch.get("b1")!.ended).toBe(false);
+    expect(
+      run([{ sessionUpdate: "tool_call_update", toolCallId: "b1", status: "completed", content: [] }], batch).map(
+        (e) => e.type,
+      ),
+    ).toEqual(["tool-end"]);
+    // a subagent's words say nothing about the main agent's released call
+    const spawn: ToolMemos = new Map();
+    run(
+      [
+        { sessionUpdate: "tool_call", toolCallId: "s1", title: "Terminal", kind: "execute", rawInput: {} },
+        { sessionUpdate: "tool_call_update", toolCallId: "s1", title: "ls", rawInput: { command: "ls" } },
+      ],
+      spawn,
+    );
+    release("s1", spawn.get("s1")!);
+    expect(
+      run(
+        [
+          {
+            sessionUpdate: "agent_message_chunk",
+            content: { type: "text", text: "found it" },
+            _meta: { claudeCode: { parentToolUseId: "task1" } },
+          },
+        ],
+        spawn,
+      ).map((e) => e.type),
+    ).toEqual(["tool-delta"]);
+    expect(spawn.get("s1")!.ended).toBe(false);
+  });
+
   test("an ask a steer cut while the question was being written ends when the agent moves on", () => {
     // the adapter sends an ask with no kind of its own, so the question is what says it is written.
     // Left open it would hold the head of the batch for the rest of the turn: every command and

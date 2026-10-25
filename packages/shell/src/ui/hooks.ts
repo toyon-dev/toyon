@@ -270,6 +270,8 @@ export function useTail(
   useOnChange([news], () => {
     if (!pinned.current) setAway(true);
   });
+  // one function for the life of the hook, so an effect keyed on it runs once
+  const isPinned = useCallback(() => pinned.current, []);
   const read = useCallback(() => {
     const el = ref.current;
     if (!el) return;
@@ -388,7 +390,7 @@ export function useTail(
       if (rest.current) clearTimeout(rest.current);
     };
   }, [ref, read, push, hold]);
-  return { offEnd, offStart, away, moving, pinned: () => pinned.current, jump, start, read };
+  return { offEnd, offStart, away, moving, pinned: isPinned, jump, start, read };
 }
 
 /** where a selection end sits inside `el`, as a count of the text before it */

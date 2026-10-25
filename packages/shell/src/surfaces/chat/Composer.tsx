@@ -1250,14 +1250,17 @@ export function Composer({
   // place: there esc parks the question, and a stop beside the ask's send read as the send's
   // opposite on one line
   const stopShown = stoppable && !cardUp;
-  // away from the end of the log on a phone the box is a line, for as long as it holds nothing;
-  // the stylesheet keeps it whole while the caret is in it. A card folds the same way, to the line
-  // that stands for it when it is set aside, unless its own field holds the caret: the fold would
-  // take the caret with it, and the keyboard down is the log jumping under the thumb. The caret is
-  // watched here and not in the stylesheet because the fold is what hides the card.
+  // Away from the end of the log on a phone the box rides down with the end and then folds to a
+  // line (useFold), for as long as it holds nothing. A card folds the same way, to the line that
+  // stands for it when it is set aside. Not while a field holds the caret: the caret in the box is
+  // the keyboard up and the box in use, and the fold would take the caret with it, and the
+  // keyboard down is the log jumping under the thumb. The caret is watched here and not in the
+  // stylesheet because the fold is what hides the card, and because the ride's extent is measured
+  // by folding the box in place, which has to fold it whatever holds focus.
   const reading = useStore((s) => s.reading);
   const [typing, setTyping] = useState(false);
-  const lean = onScreen && reading && !parked && (cardUp ? !typing : blank && !copied);
+  const foldable = onScreen && !parked && !typing && (!!cardUp || (blank && !copied));
+  const lean = foldable && reading;
   // hiding the card dropped its focus on the body; back from the fold it takes the keys again, as
   // it did arriving (Card), unless the hand went somewhere meanwhile
   useOnChange([lean], () => {
@@ -1270,7 +1273,7 @@ export function Composer({
 
   return (
     <div
-      className={cx("composer chat-input", stopShown && "stopping", lean && "lean")}
+      className={cx("composer chat-input", stopShown && "stopping", foldable && "foldable", lean && "lean")}
       onFocus={(e) => setTyping(e.target instanceof HTMLTextAreaElement)}
       onBlur={() => setTyping(false)}
     >
@@ -1474,12 +1477,15 @@ export function Composer({
       )}
       {/* the card folded while the reader is up the log: the same line as the question set aside,
           since from up there the two are one thing, a question waiting at the end. The press is
-          the log going to its end, as it does on a send, where the card stands whole again. */}
-      {cardUp && lean && id && (
+          the log going to its end, as it does on a send, where the card stands whole again.
+          Rendered with the card and shown by the fold (the stylesheet), so the fold's measure
+          finds it in place. */}
+      {cardUp && id && (
         <ComposerOffer
           icon="chat"
           verb="answer"
           tip="Back to the question"
+          className="composer-card-line"
           onPress={() => dispatch({ a: "answered", id })}
         >
           {cardLine(cardUp)}

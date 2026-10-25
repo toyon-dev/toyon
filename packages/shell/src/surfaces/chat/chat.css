@@ -64,22 +64,54 @@
      that has none to give.
 
      The box has no floor of its own here: the field's three lines are it, the on-screen keyboard
-     takes the rest and the transcript gives way to it. */
+     takes the rest and the transcript gives way to it.
+
+     The log runs the whole column and the foot (the box, with the lead row's intro over it)
+     stands on it, in the grid's last rows over the one the log spans; the log pads its end by the
+     foot's full height (--foot, useFold) so the last row sits on the box as it does on the desk.
+     Over the log rather than under it because the foot moves: scrolled up from the end it rides
+     down with the end of the transcript, a translate by --ride, and a log whose height holds
+     through that is a ride that lays out no row and a tail pin with nothing to answer. */
   .chat-screen {
     flex: 1;
     min-height: 0;
-    display: flex;
-    flex-direction: column;
+    display: grid;
+    grid-template-rows: minmax(0, 1fr) auto auto;
+    grid-template-columns: minmax(0, 1fr);
+    & > .chat-wrap {
+      grid-area: 1 / 1 / -1 / 2;
+    }
+    /* each placed in its own cell, all three outright: an item left to place itself, even one
+       locked to its row, dodges the cells the others hold and opens a second column beside them.
+       Painted over the log in their order. The intro takes the ground: a row scrolled under it
+       would show through. */
+    & > .draft-intro {
+      grid-area: 2 / 1;
+      position: relative;
+      background: var(--surface0);
+    }
+    & > .chat-input {
+      grid-area: 3 / 1;
+    }
+    & > .draft-intro,
+    & > .chat-input {
+      translate: 0 var(--ride, 0px);
+    }
     /* the bar's name strip hangs over the top of the log (phone.css) and goes while it is scrolled
        away from its end, so the log starts under it and whatever stands at its top stands clear of it */
     --log-cover: var(--phone-strip, 0px);
     & .chat-log {
       padding-top: calc(12px + var(--log-cover));
+      padding-bottom: calc(12px + var(--foot, 0px));
     }
-    /* the log gives way to a tall box, but not past the strip's height: a box that took the whole
-       column put its own first lines under the strip, where no scroll brings them out */
+    /* the pill stands on the foot as it shows, ridden or folded */
+    & .jump {
+      bottom: calc(10px + var(--foot-show, 0px));
+    }
+    /* a band's cap is a share of what the foot leaves of the column, as it is of the log the
+       desk's box leaves */
     & .chat-wrap {
-      min-height: var(--log-cover);
+      --body-cap: calc(60cqh - 0.6 * var(--foot, 0px));
     }
     /* the daemon's band is surface0, which is this ground, so it takes the bar's tier. Its floor
        is the small row's: the full row here is a thumb's 52px, and this row is read, not pressed */
@@ -88,9 +120,10 @@
       min-height: var(--row-height-sm);
     }
     /* Away from the end, a box that holds nothing is one line: the field, with the stop if the
-       agent has the turn. It grows the log at its foot, where nothing moves under the thumb. A press in it
-       is the caret arriving, and the whole box is back for the keyboard coming up. */
-    & .chat-input.lean:not(:focus-within) {
+       agent has the turn. It is what the box's ride leaves on screen, so the fold moves nothing.
+       A press in it is the caret arriving, and the whole box is back for the keyboard coming up
+       (Composer takes the class off while the caret is in it). */
+    & .chat-input.lean {
       & .composer-plan,
       & .composer-notice,
       & .composer-knobs,
@@ -116,12 +149,10 @@
         white-space: nowrap;
       }
     }
-    /* A card folds the same way, to the line that stands for it set aside (Composer renders it).
+    /* A card folds the same way, to the line that stands for it set aside (.composer-card-line).
        The card itself goes rather than shrinks: it keeps its state mounted, and nothing on it is
        pressed from up the log, since the line's press is the log going to its end, where the card
-       stands whole. Hiding it drops the keys with it, which on a phone is no loss. Not gated on
-       focus-within like the field: the card's root holds focus while it is read, and the caret
-       in its own field is the Composer's to watch. */
+       stands whole. Hiding it drops the keys with it, which on a phone is no loss. */
     & .chat-input.lean .card {
       display: none;
     }
@@ -1063,6 +1094,11 @@
   /* an offer that can be turned down has its way out at the row's end */
   .composer-offer-close {
     margin-left: auto;
+  }
+  /* the line a card folds to on a phone (Composer): rendered with the card, so folding the box
+     in place measures the fold, and shown only by the fold */
+  .chat-input:not(.lean) .composer-card-line {
+    display: none;
   }
   /* the frame is base's (.composer); the floor is the field's region, in lines of the prose face,
      so the box grows with what is attached above it (four image chips stand in it on their own)

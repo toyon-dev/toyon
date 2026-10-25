@@ -12,7 +12,7 @@ import {
   SHELL_TOOL,
   type WorktreeStatus,
 } from "@toyon/shared";
-import { type ComponentProps, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type ComponentProps, useCallback, useMemo, useRef, useState } from "react";
 import { previewBus } from "../../app/previewBus.ts";
 import { takeBackQueued } from "../../state/attach.ts";
 import { useDispatch, useSock, useStore, useStoreInstance, useUrls } from "../../state/context.tsx";
@@ -24,7 +24,7 @@ import { IconButton } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { DocumentFind } from "../../ui/DocumentFind.tsx";
 import { isFind } from "../../ui/find.ts";
-import { TAIL_SLACK, useOnChange, useSecondsSince, useTail } from "../../ui/hooks.ts";
+import { useOnChange, useSecondsSince, useTail } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { Spinner } from "../../ui/Spinner.tsx";
 import { selectedText, useKeyWithin, useSelectAllWithin } from "../../ui/selectAll.ts";
@@ -52,6 +52,7 @@ import { PasteChip } from "./PasteChip.tsx";
 import { PickChip } from "./PickChip.tsx";
 import { isBlank } from "./recall.ts";
 import { cachedRows, type RowCache } from "./rowCache.ts";
+import { useFold } from "./useFold.ts";
 import { chatPanel } from "./useIntake.ts";
 
 /** the panel the log sits in, whichever placement mounted it: ⌘F from the composer under the log
@@ -177,12 +178,6 @@ type LogRow =
   | { kind: "thought"; props: ComponentProps<typeof ThoughtRow> }
   | { kind: "item"; props: ComponentProps<typeof ChatItemView> };
 
-/** how far up from the end a phone's bars fold, past the height the box hands the log as it folds
- * and the tail's own slack: the fold must leave the reader off the end by a margin a finger's
- * next tick does not cross, or the tick pins them back to the end and the box unfolds under the
- * thumb. Counted from the box's own height because a card is three times the blank field. */
-const READ_SPARE = 90;
-
 /** the transcript for the active worktree: items, working indicator, waiting messages, jump-down pill.
  * `lead` is a line the conversation starts from: the first child of the log, so it sits on the
  * composer in an empty chat and scrolls up as the conversation grows, the way a message would.
@@ -301,31 +296,14 @@ export function ChatLog({
       )}
     </div>
   );
-  // On a phone, a reader up in the log wants the screen for it: the bar folds to its row and a
-  // blank composer to a line, and both stay that way until the end is back in view. By place and
-  // not by the hand, unlike the pill: bars that came and went with each turn of the thumb were a
-  // thing to watch, and the end is the one place the box and the name are for. The fold waits
-  // until they are the box's height and more up, where leaving the end is enough to unfold,
-  // because the box folding hands the log its height at the foot: a reader nearer the end than
-  // that is at the end once it has, which unfolds the box, which pins them back to where they set
-  // out from.
-  useEffect(() => {
-    const el = logRef.current;
-    if (!phone || !follow.offEnd || !el) {
-      dispatch({ a: "reading", on: false });
-      return;
-    }
-    const far = () => {
-      const box = panelRef.current?.querySelector<HTMLElement>(":scope > .chat-input")?.offsetHeight ?? 0;
-      if (el.scrollHeight - el.scrollTop - el.clientHeight <= box + TAIL_SLACK + READ_SPARE) return;
-      dispatch({ a: "reading", on: true });
-      el.removeEventListener("scroll", far);
-    };
-    far();
-    el.addEventListener("scroll", far, { passive: true });
-    return () => el.removeEventListener("scroll", far);
-  }, [phone, follow.offEnd, dispatch]);
-  useEffect(() => () => dispatch({ a: "reading", on: false }), [dispatch]);
+  // On a phone, a reader up in the log wants the screen for it: the box rides down with the end
+  // of the transcript as they scroll up, as if the two were one piece, and once it has ridden as
+  // far as its one line it folds to that line and the bar folds to its row, and both stay that
+  // way until the end is back within the box's reach. By place and not by the hand, unlike the
+  // pill: bars that came and went with each turn of the thumb were a thing to watch, and the end
+  // is the one place the box and the name are for.
+  const setReading = useCallback((on: boolean) => dispatch({ a: "reading", on }), [dispatch]);
+  useFold(panelRef, logRef, phone, follow.pinned, setReading);
 
   // The composer's walk back through what was sent marks the row it is on and brings that row to
   // the top of the log, so what came after it is what fills the pane. A walk that ends in a blank box

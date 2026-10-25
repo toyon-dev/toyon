@@ -242,12 +242,22 @@ describe("mentionTip: what a worktree mark's tip says", () => {
     expect(t).toEqual({ text: "Gone", detail: ["archived"], dot: "archived" });
   });
 
+  test("the branch follows the state, since the mark reads as the title", () => {
+    expect(mentionTip({ id: "w1", title: "Fix", state: "Idle", branch: "toyon/fix" }).detail).toEqual([
+      "Idle",
+      "toyon/fix",
+    ]);
+    expect(mentionTip({ id: "w2", title: "Gone", archived: true, branch: "toyon/gone" }).detail).toEqual([
+      "archived",
+      "toyon/gone",
+    ]);
+  });
+
   test("the agent's side adds the directory its prose spelt, last", () => {
     expect(mentionTip({ id: "w1", title: "Fix", dir: "wt-1234" }).detail).toEqual(["wt-1234"]);
-    expect(mentionTip({ id: "w2", title: "Gone", archived: true, dir: "wt-9999" }).detail).toEqual([
-      "archived",
-      "wt-9999",
-    ]);
+    expect(
+      mentionTip({ id: "w2", title: "Gone", archived: true, branch: "toyon/gone", dir: "wt-9999" }).detail,
+    ).toEqual(["archived", "toyon/gone", "wt-9999"]);
   });
 });
 

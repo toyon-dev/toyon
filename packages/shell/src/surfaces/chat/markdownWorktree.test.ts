@@ -67,12 +67,12 @@ describe("a wt-xxxx in the agent's prose", () => {
         : null;
   const md = new Marked({ extensions: [worktreeMention(() => namer)] });
   const render = (s: string) => md.parseInline(s, { async: false }) as string;
-  // the title sits in an attribute, so its quotes are escaped there; the dot goes out empty for
-  // the log to fill in from the rows (mentionDots.ts)
+  // the title sits in an attribute too, so its quotes are escaped there; the dot goes out empty
+  // for the log to fill in from the rows (mentionDots.ts)
   const chip =
-    '<span class="chat-mention" data-worktree="d486aa11bb" data-branch="toyon/table-edge-fade" data-dir="wt-d486" data-tip="Table &quot;edge&quot; fade" data-tip-detail="wt-d486" data-tip-placement="follow"><span class="dot"></span>@toyon/table-edge-fade</span>';
+    '<span class="chat-mention" data-worktree="d486aa11bb" data-branch="toyon/table-edge-fade" data-dir="wt-d486" data-tip="Table &quot;edge&quot; fade" data-tip-detail="toyon/table-edge-fade\nwt-d486" data-tip-placement="follow">@<span class="chat-mention-dot"><span class="dot"></span></span>Table "edge" fade</span>';
 
-  test("bare, reads as the row's branch with its sigil, the title in the tip", () => {
+  test("bare, reads as the row's title with its sigil, the branch in the tip", () => {
     expect(render("behind wt-d486's eval on the shared tier")).toBe(`behind ${chip}&#39;s eval on the shared tier`);
   });
   test("in a code span of its own, the same", () => {
@@ -80,7 +80,7 @@ describe("a wt-xxxx in the agent's prose", () => {
   });
   test("an archived row says so, wears the hollow dot from the start, and its press opens its page", () => {
     expect(render("see wt-16b6.")).toBe(
-      'see <span class="chat-mention" data-worktree="16b6ee22ff" data-branch="toyon/smooth-streaming" data-dir="wt-16b6" data-archived="" data-tip="Smooth streaming" data-tip-detail="archived\nwt-16b6" data-tip-dot="archived" data-tip-placement="follow"><span class="dot archived"></span>@toyon/smooth-streaming</span>.',
+      'see <span class="chat-mention" data-worktree="16b6ee22ff" data-branch="toyon/smooth-streaming" data-dir="wt-16b6" data-archived="" data-tip="Smooth streaming" data-tip-detail="archived\ntoyon/smooth-streaming\nwt-16b6" data-tip-dot="archived" data-tip-placement="follow">@<span class="chat-mention-dot"><span class="dot archived"></span></span>Smooth streaming</span>.',
     );
   });
   test("a directory no row has stays as written, backticks and all", () => {

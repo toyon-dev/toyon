@@ -82,9 +82,9 @@ const TOKEN = new RegExp(`^(\`?)(${ID})\\1(?![\\w\\-/\`])`);
 
 const attr = (s: string) => escapeHtml(s).replace(/"/g, "&quot;");
 
-/** `wt-xxxx` in the agent's prose, drawn as the row it names: `@branch`, the mark the person's
+/** `wt-xxxx` in the agent's prose, drawn as the row it names: `@title`, the mark the person's
  * own reference to a row wears on their side of the transcript, so both sides say one thing
- * about a worktree, and the title in the tip. The agent's cwd and every path it reads spell a
+ * about a worktree, and the branch in the tip. The agent's cwd and every path it reads spell a
  * worktree by its directory, so the id leaks into its replies however it is told to use names.
  * A press opens the row. A directory no row or archived record has stays as written, backticks
  * and all. The namer is read at render, since the names come with the row. */
@@ -110,10 +110,16 @@ export function worktreeMention(namer: () => WorktreeNamer | undefined): Tokeniz
       // the log fills both in and keeps them current as the rows move (mentionDots.ts). The
       // directory rides on the mark for that, and so the tip can still say what the prose spelt.
       // An archived row's dot is the hollow one from the start, since the archive does not move.
-      const t = mentionTip({ id: named.id, title: named.title, dir, ...(named.archived ? { archived: true } : {}) });
+      const t = mentionTip({
+        id: named.id,
+        title: named.title,
+        branch: named.branch,
+        dir,
+        ...(named.archived ? { archived: true } : {}),
+      });
       const archived = named.archived ? ' data-archived=""' : "";
       const dot = t.dot ? ` data-tip-dot="${attr(t.dot)}"` : "";
-      return `<span class="chat-mention" data-worktree="${attr(named.id)}" data-branch="${attr(named.branch)}" data-dir="${attr(dir)}"${archived} data-tip="${attr(t.text)}" data-tip-detail="${attr(t.detail.join("\n"))}"${dot} data-tip-placement="follow"><span class="dot${t.dot ? ` ${attr(t.dot)}` : ""}"></span>@${escapeHtml(named.branch)}</span>`;
+      return `<span class="chat-mention" data-worktree="${attr(named.id)}" data-branch="${attr(named.branch)}" data-dir="${attr(dir)}"${archived} data-tip="${attr(t.text)}" data-tip-detail="${attr(t.detail.join("\n"))}"${dot} data-tip-placement="follow">@<span class="chat-mention-dot"><span class="dot${t.dot ? ` ${attr(t.dot)}` : ""}"></span></span>${escapeHtml(named.title)}</span>`;
     },
   };
 }

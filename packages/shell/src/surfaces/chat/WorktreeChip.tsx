@@ -34,7 +34,8 @@ export function WorktreeChip({ id, title, inert }: { id: string; title?: string;
   );
   const branch = live?.branch ?? archived?.branch;
   if (!branch) return <span>{title ?? id}</span>;
-  const t = mentionTip(live ?? { id, title: archived?.title ?? title ?? branch, archived: true });
+  // the mark reads as the rail's row does, by title; the branch is the tip's and the right-click's
+  const t = mentionTip(live ?? { id, title: archived?.title ?? title ?? branch, archived: true, branch });
   const rowTip = tip(t.text, undefined, { placement: "follow", dot: t.dot, detail: t.detail });
   const open = linkOpener({ kind: "worktree", id, branch, archived: !live }, null, { sock, dispatch });
   return (
@@ -55,7 +56,13 @@ export function WorktreeChip({ id, title, inert }: { id: string; title?: string;
             }
       }
     >
-      {t.dot && <span className={`dot ${t.dot}`} />}@{branch}
+      @
+      {t.dot && (
+        <span className="chat-mention-dot">
+          <span className={`dot ${t.dot}`} />
+        </span>
+      )}
+      {t.text}
     </span>
   );
 }

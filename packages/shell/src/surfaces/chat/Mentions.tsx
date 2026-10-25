@@ -70,7 +70,8 @@ export function MentionText({
           );
         }
         if (s.kind === "worktree") {
-          const t = mentionTip(s);
+          const branch = s.text.slice(1);
+          const t = mentionTip({ ...s, branch });
           const rowTip = tip(t.text, undefined, { placement: "follow", dot: t.dot, detail: t.detail });
           return (
             <span
@@ -78,15 +79,27 @@ export function MentionText({
               key={i}
               className="chat-mention"
               data-worktree={s.id}
-              data-branch={s.text.slice(1)}
+              data-branch={branch}
               data-archived={s.archived ? "" : undefined}
               {...rowTip}
             >
-              {/* the row's dot before its name, on the sent message alone: over the field the
-                  mark is the draft again in the field's own metrics, and a dot in it would shift
-                  every mark after it off its word */}
-              {!inField && t.dot && <span className={`dot ${t.dot}`} />}
-              {s.text}
+              {/* the row's dot after the sigil, and the name as the rail reads it, on the sent
+                  message alone: over the field the mark is the draft again in the field's own
+                  metrics, so it is the branch the draft holds, and a dot or a title in it would
+                  shift every mark after it off its word */}
+              {inField ? (
+                s.text
+              ) : (
+                <>
+                  @
+                  {t.dot && (
+                    <span className="chat-mention-dot">
+                      <span className={`dot ${t.dot}`} />
+                    </span>
+                  )}
+                  {t.text}
+                </>
+              )}
             </span>
           );
         }

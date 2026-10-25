@@ -127,9 +127,9 @@ export type MentionDot = DotState | "archived";
 
 /** What a worktree mark says, on either side of the transcript: its dot, and in the tip the row's
  * title, then a line for its state in words and one for when it was last sent to, or `archived`
- * alone for a row in the archive, and last the directory the agent's prose spelt it by, when it
- * did. */
-export function mentionTip(w: WorktreeMention & { dir?: string }): {
+ * alone for a row in the archive, then the branch, which the mark no longer shows since it reads
+ * as the title, and last the directory the agent's prose spelt it by, when it did. */
+export function mentionTip(w: WorktreeMention & { branch?: string; dir?: string }): {
   text: string;
   detail: string[];
   dot?: MentionDot;
@@ -140,6 +140,7 @@ export function mentionTip(w: WorktreeMention & { dir?: string }): {
     if (w.state) detail.push(w.state);
     if (w.at !== undefined) detail.push(`last sent ${when(ago(w.at))}`);
   }
+  if (w.branch) detail.push(w.branch);
   if (w.dir) detail.push(w.dir);
   return { text: w.title, detail, dot: w.archived ? "archived" : w.dot };
 }

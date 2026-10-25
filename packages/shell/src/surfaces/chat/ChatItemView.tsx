@@ -1,5 +1,5 @@
 import { LOGIN_STREAM, type PickMeta, SHELL_TOOL, type ShipOp, type ToolImage } from "@toyon/shared";
-import { Fragment, memo, type ReactNode, useMemo, useRef, useState } from "react";
+import { Fragment, memo, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { copyText } from "../../state/actions/deps.ts";
 import { daemonHost } from "../../state/actions/editor.ts";
 import { openFile } from "../../state/actions/file.ts";
@@ -367,6 +367,14 @@ function Fold({
   // a leaf is closed whatever was pinned: a row pinned open while its call ran, that then printed
   // nothing, would otherwise hold an empty band
   const open = !leaf && (pinned ?? auto);
+  // The body mounts the first time the row opens and stays from then on. A transcript is mostly
+  // closed rows, and a closed body is still its output parsed into coloured spans and a subtree
+  // the browser lays out: mounting every one of them is what a cold load and a tap from the
+  // phone's list spent their seconds on, for bodies nobody had opened.
+  const [opened, setOpened] = useState(open);
+  useEffect(() => {
+    if (open) setOpened(true);
+  }, [open]);
   const toggle = () => {
     if (leaf) return;
     if (!open) reveal(card.current);
@@ -422,9 +430,51 @@ function Fold({
         {summary}
       </summary>
       <div className="tool-body" ref={body}>
-        {children}
+        {open || opened ? children : null}
       </div>
     </details>
+  );
+}
+
+/** A thought's body, parsed where the body mounts (Fold): a closed row's reasoning is turned into
+ * markup the first time someone opens it, not on every paint of the log. */
+function ThoughtBody({
+  markdown,
+  streaming,
+  worktreeId,
+  fileRoot,
+}: {
+  markdown: string;
+  streaming?: boolean;
+  worktreeId?: string | null;
+  fileRoot?: string;
+}) {
+  const worktrees = useWorktreeNamer(worktreeId);
+  const html = useMarkdown(
+    markdown,
+    fileRoot || streaming || worktrees ? { fileRoot, streaming, worktrees } : undefined,
+  );
+  const sock = useSock();
+  const dispatch = useDispatch();
+  // the DOMPurify-sanitized markup goes in through the hook, which keeps a selection through the
+  // re-renders of a thought still streaming
+  const body = useRef<HTMLDivElement>(null);
+  useLiveHtml(body, html);
+  // the markup goes into a child of the band so the band keeps a child of its own beside it
+  const root = useRef<HTMLDivElement>(null);
+  const codeCopy = useCodeCopy(root);
+  return (
+    <div className="tool-part">
+      {/* biome-ignore lint/a11y/useKeyWithClickEvents: the links inside are the controls; the root only routes their clicks */}
+      <div
+        ref={root}
+        className="tool-out thought-out md"
+        onClick={(e) => openChatLink(e, fileRoot, worktreeId, { sock, dispatch })}
+      >
+        <div ref={body} />
+        {codeCopy}
+      </div>
+    </div>
   );
 }
 
@@ -460,33 +510,14 @@ export const ThoughtRow = memo(function ThoughtRow({
   // second lands is the string staying put while the body mounts.
   const steps = thoughtSteps(item.text);
   const earlier = steps.slice(0, -1);
-  const worktrees = useWorktreeNamer(worktreeId);
-  const html = useMarkdown(
-    steps.length ? earlier.join("\n\n") : normalizeThoughtMarkdown(item.text),
-    fileRoot || streaming || worktrees ? { fileRoot, streaming, worktrees } : undefined,
-  );
-  const sock = useSock();
-  const dispatch = useDispatch();
   const word = streaming ? "Thinking" : "Thought";
-  // the DOMPurify-sanitized markup goes in through the hook, which keeps a selection through the
-  // re-renders of a thought still streaming
-  const body = useRef<HTMLDivElement>(null);
-  useLiveHtml(body, html);
-  // the markup goes into a child of the band so the band keeps a child of its own beside it
-  const root = useRef<HTMLDivElement>(null);
-  const codeCopy = useCodeCopy(root);
   const out = (
-    <div className="tool-part">
-      {/* biome-ignore lint/a11y/useKeyWithClickEvents: the links inside are the controls; the root only routes their clicks */}
-      <div
-        ref={root}
-        className="tool-out thought-out md"
-        onClick={(e) => openChatLink(e, fileRoot, worktreeId, { sock, dispatch })}
-      >
-        <div ref={body} />
-        {codeCopy}
-      </div>
-    </div>
+    <ThoughtBody
+      markdown={steps.length ? earlier.join("\n\n") : normalizeThoughtMarkdown(item.text)}
+      streaming={streaming}
+      worktreeId={worktreeId}
+      fileRoot={fileRoot}
+    />
   );
   // a finished thought of one line is the line, printed where the word would go, with nothing
   // under it: a headline per step (Codex) folded into a card each was a column of lids

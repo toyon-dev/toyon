@@ -106,6 +106,9 @@ export interface HubEvents {
    * plan, or sent back with it. The session raises it; the pieces service acts, so the two need
    * not know each other. */
   piecesDecided: (worktreeId: string, id: string, approved: boolean) => void;
+  /** a plan card went up with no pieces list handed over beside it: the pieces service may read
+   * one off the plan on the quick model, for an agent that does not know the tool */
+  planUnsplit: (worktreeId: string, markdown: string, planPath: string) => void;
 }
 
 type Listener<K extends keyof HubEvents> = HubEvents[K];

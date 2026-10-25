@@ -236,6 +236,11 @@ export type ChatItem =
       plan?: string;
       /** the plan card a held list rides beside, once it arrived */
       companion?: string;
+      /** read off the plan by Toyon, when the agent handed nothing over */
+      by?: "toyon";
+      /** the plan file moved under the list: the rows were read off a plan that is no longer the
+       * one on disk */
+      stale?: true;
       state: "held" | "proposed" | "going" | "done" | "declined";
       outcomes: PieceOutcome[];
       later: Array<{ pieceId: string; worktreeId?: string; title?: string; reason?: string }>;
@@ -3410,7 +3415,14 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
           ts: event.ts,
         },
       ];
-    case "pieces-proposed":
+    case "pieces-proposed": {
+      // a list held while a plan card is already up (read off the plan by Toyon, or handed over
+      // late) is that card's, and sits on the card's file
+      const card = event.held
+        ? items.findLast((i) => i.kind === "ask" && !i.outcome && i.ask.kind === "permission" && !!i.ask.plan)
+        : undefined;
+      const late =
+        card?.kind === "ask" && card.ask.kind === "permission" ? { companion: card.id, plan: card.ask.plan } : {};
       return [
         ...items,
         {
@@ -3421,12 +3433,20 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
           mode: event.mode,
           ...(event.held ? { held: true } : {}),
           ...(event.plan ? { plan: event.plan } : {}),
+          ...(event.by ? { by: event.by } : {}),
+          ...late,
           state: event.held ? "held" : "proposed",
           outcomes: [],
           later: [],
           ts: event.ts,
         },
       ];
+    }
+    case "pieces-stale": {
+      const idx = piecesIndex(items, event.id, ["held", "proposed"]);
+      if (idx === -1) return items;
+      return items.with(idx, { ...(items[idx] as PiecesCard), stale: true });
+    }
     case "pieces-shown": {
       const idx = piecesIndex(items, event.id, ["held", "proposed"]);
       if (idx === -1) return items;

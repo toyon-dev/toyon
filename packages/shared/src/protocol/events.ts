@@ -265,7 +265,7 @@ export type AskOutcome = "answered" | "skipped" | "cancelled" | "expired";
  * the person pressed to send it on after a turn that was stopped or that failed */
 export interface Asked {
   /** `preview` is a dev server that will not come up */
-  kind: "hook" | "conflict" | "check" | "command" | "preview" | "handoff" | "stopped" | "failed";
+  kind: "hook" | "conflict" | "check" | "command" | "preview" | "handoff" | "stopped" | "failed" | "pieces";
   why: string;
   /** the row of the command that failed, when the failure was one: what it printed went to the
    * agent with this message, and its row is not offered or attached again */
@@ -434,10 +434,19 @@ export type AgentEvent =
       mode: PermissionMode;
       held?: true;
       plan?: string;
+      /** read off the plan by Toyon on the quick model, when the agent handed nothing over */
+      by?: "toyon";
+      /** a Toyon-read list: a hash of the plan text it was read from, which a later change to
+       * the file is measured against (the card's own text is the agent's proposal, which a list
+       * read again has already moved past) */
+      read?: string;
       ts: number;
     }
   /** a held proposal whose turn ended with no plan card: Toyon's own card from here */
   | { type: "pieces-shown"; id: string; plan?: string; ts: number }
+  /** the plan file moved under an open list: the rows were read off a plan that is no longer
+   * the one on disk. A list Toyon read is read again after this; the agent's is only marked. */
+  | { type: "pieces-stale"; id: string; ts: number }
   /** the person moved a piece; the last one per piece stands when go is pressed */
   | { type: "pieces-fate"; id: string; pieceId: string; fate: PieceFate; ts: number }
   /** the plan was approved, or go pressed: the card closes here and Toyon acts */

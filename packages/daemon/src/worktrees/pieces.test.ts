@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AgentEvent, PieceOutcome } from "@toyon/shared";
 import type { FakeAgent } from "../../test/helpers/fakes.ts";
-import { registered, settle, until, useWorld, w } from "../../test/helpers/world.ts";
+import { planReader, registered, settle, until, useWorld, w } from "../../test/helpers/world.ts";
 import { briefsDoc, writePlanDocNow } from "../agent/planDoc.ts";
 import { StateStore } from "../core/state.ts";
-import { PIECES_MAX, type RawPiece } from "./pieces.ts";
+import { PIECES_MAX, type RawPiece, sectionText } from "./pieces.ts";
 
 // A plan's pieces across worktrees: the tool's answers to the agent, the list's state on the
 // origin's transcript, what go makes, queues and sends, and the word back when a sibling lands.
@@ -361,5 +361,178 @@ describe("go", () => {
       { id: "p1", title: "Fix the rail", brief: "fix the rail badge", attachments: [], fate: "worktree" },
     ]);
     expect(existsSync(join(a.path, lastProposal(a.id).plan!))).toBe(true);
+  });
+});
+
+describe("read off the plan", () => {
+  const PLAN = [
+    "# Two things",
+    "",
+    "## Context",
+    "",
+    "Why.",
+    "",
+    "## 1. The rail (this worktree)",
+    "",
+    "Fix the rail here.",
+    "",
+    "## 2. The composer (sibling worktree, after this lands)",
+    "",
+    "Move the box.",
+    "",
+    "## Verification",
+    "",
+    "- tests",
+    "",
+  ].join("\n");
+  const TWO = [
+    { title: "The rail", section: "1. The rail (this worktree)", where: "here" as const },
+    { title: "The composer", section: "2. The composer", where: "worktree" as const, after: "this" },
+  ];
+  /** the plan card up on a chat, as the session notes it, with the plan's text as its detail */
+  const cardOn = (id: string, plan: string, detail = PLAN) =>
+    agentOf(id).note({
+      type: "agent-permission",
+      id: `ask-${plan}`,
+      title: "Approve Plan",
+      detail,
+      plan,
+      choices: [{ id: "yes", name: "Yes", kind: "allow_once" }],
+      ts: 1,
+    });
+
+  test("sectionText cuts a heading and its body, matched loosely, up to the next heading of its level or above", () => {
+    expect(sectionText(PLAN, "the rail")).toBe("## 1. The rail (this worktree)\n\nFix the rail here.");
+    expect(sectionText(PLAN, "2. The composer (sibling worktree, after this lands)")).toBe(
+      "## 2. The composer (sibling worktree, after this lands)\n\nMove the box.",
+    );
+    expect(sectionText(PLAN, "nothing like it")).toBeNull();
+    expect(sectionText("# Only\n\ntext", "only")).toBe("# Only\n\ntext");
+    // a short title at the top is not the section named after it: the exact heading wins, and a
+    // word is too short to stand for a name
+    const titled = "# Rail\n\n## 1. The rail (this worktree)\n\nFix.\n\n## 2. The box\n\nMove.\n";
+    expect(sectionText(titled, "1. The rail (this worktree)")).toBe("## 1. The rail (this worktree)\n\nFix.");
+    expect(sectionText(titled, "the rail")).toBe("## 1. The rail (this worktree)\n\nFix.");
+  });
+
+  test("an `after` the model made up is dropped, not the list: the piece starts at once", async () => {
+    const repoId = await registered();
+    const a = await w.worktrees.create(repoId, "task", { title: "Rail", mode: "plan" });
+    planReader.fn = () => [TWO[0]!, { ...TWO[1]!, after: "the rail" }];
+    cardOn(a.id, ".toyon/plans/1.md");
+    w.hub.emit("planUnsplit", a.id, PLAN, ".toyon/plans/1.md");
+    await until(() => recorded(a.id, "pieces-proposed").length === 1);
+    expect(lastProposal(a.id).pieces[1]).toMatchObject({ title: "The composer", fate: "worktree" });
+    expect(lastProposal(a.id).pieces[1]!.after).toBeUndefined();
+    expect(lastProposal(a.id).read).toMatch(/^[0-9a-f]{16}$/);
+  });
+
+  test("a plan card with no list: the pieces are read off the plan and held beside it, the briefs cut from the sections", async () => {
+    const repoId = await registered();
+    const a = await w.worktrees.create(repoId, "task", { title: "Rail", mode: "plan" });
+    planReader.fn = () => TWO;
+    cardOn(a.id, ".toyon/plans/1.md");
+    w.hub.emit("planUnsplit", a.id, PLAN, ".toyon/plans/1.md");
+    await until(() => recorded(a.id, "pieces-proposed").length === 1);
+    const read = lastProposal(a.id);
+    expect(read).toMatchObject({ by: "toyon", held: true });
+    expect(read.pieces.map((p) => [p.title, p.fate, p.brief])).toEqual([
+      ["The rail", "here", "## 1. The rail (this worktree)\n\nFix the rail here."],
+      ["The composer", "worktree", "## 2. The composer (sibling worktree, after this lands)\n\nMove the box."],
+    ]);
+    expect(read.pieces[1]!.after).toMatchObject({ id: a.id });
+  });
+
+  test("one piece, no card for that plan, or a list already there: nothing is read", async () => {
+    const repoId = await registered();
+    const a = await w.worktrees.create(repoId, "task", { title: "Rail", mode: "plan" });
+    planReader.fn = () => [TWO[0]!];
+    cardOn(a.id, ".toyon/plans/1.md");
+    w.hub.emit("planUnsplit", a.id, PLAN, ".toyon/plans/1.md");
+    await settle();
+    expect(recorded(a.id, "pieces-proposed")).toHaveLength(0);
+    planReader.fn = () => TWO;
+    w.hub.emit("planUnsplit", a.id, PLAN, ".toyon/plans/9.md");
+    await settle();
+    expect(recorded(a.id, "pieces-proposed")).toHaveLength(0);
+    // the agent handed one over meanwhile: Toyon's read is not a second list
+    await call(a.id, piece());
+    w.hub.emit("planUnsplit", a.id, PLAN, ".toyon/plans/1.md");
+    await settle();
+    expect(recorded(a.id, "pieces-proposed")).toHaveLength(1);
+    expect(lastProposal(a.id).by).toBeUndefined();
+  });
+
+  test("the plan moving under a list marks it stale; one Toyon read is read again with the fates pressed carried by title", async () => {
+    const repoId = await registered();
+    const a = await w.worktrees.create(repoId, "task", { title: "Rail", mode: "plan" });
+    mkdirSync(join(a.path, ".toyon/plans"), { recursive: true });
+    writeFileSync(join(a.path, ".toyon/plans/1.md"), PLAN);
+    planReader.fn = () => TWO;
+    cardOn(a.id, ".toyon/plans/1.md");
+    w.hub.emit("planUnsplit", a.id, PLAN, ".toyon/plans/1.md");
+    await until(() => recorded(a.id, "pieces-proposed").length === 1);
+    const first = lastProposal(a.id);
+    w.pieces.fate(a.id, first.id, "p2", "skip");
+    // the file as it stands is the plan: no mark
+    w.hub.emit("treeChanged", a.id);
+    await settle();
+    expect(recorded(a.id, "pieces-stale")).toHaveLength(0);
+    // the plan grows a third part: the mark, then the list read again, the skip carried over
+    const grown = `${PLAN}\n## 3. Docs (sibling worktree)\n\nWrite docs.\n`;
+    writeFileSync(join(a.path, ".toyon/plans/1.md"), grown);
+    planReader.fn = () => [...TWO, { title: "Docs", section: "3. Docs", where: "worktree" as const }];
+    w.hub.emit("treeChanged", a.id);
+    await until(() => recorded(a.id, "pieces-proposed").length === 2);
+    expect(recorded(a.id, "pieces-stale")).toMatchObject([{ id: first.id }]);
+    expect(recorded(a.id, "pieces-declined")).toMatchObject([{ id: first.id, reason: "the plan changed; read again" }]);
+    const again = lastProposal(a.id);
+    expect(again).toMatchObject({ by: "toyon", held: true });
+    expect(again.pieces.map((p) => p.title)).toEqual(["The rail", "The composer", "Docs"]);
+    expect(recorded(a.id, "pieces-fate").at(-1)).toMatchObject({ id: again.id, pieceId: "p2", fate: "skip" });
+    // marked once: another change to the file is not a second mark on the same list
+    w.hub.emit("treeChanged", a.id);
+    await settle();
+    expect(recorded(a.id, "pieces-stale")).toHaveLength(1);
+  });
+
+  test("the agent's own list is only marked stale: the agent hands over again if it re-plans", async () => {
+    const repoId = await registered();
+    const a = await w.worktrees.create(repoId, "task", { title: "Rail", mode: "plan" });
+    mkdirSync(join(a.path, ".toyon/plans"), { recursive: true });
+    writeFileSync(join(a.path, ".toyon/plans/1.md"), PLAN);
+    await call(a.id, piece());
+    cardOn(a.id, ".toyon/plans/1.md");
+    writeFileSync(join(a.path, ".toyon/plans/1.md"), `${PLAN}\nmore\n`);
+    planReader.fn = () => TWO;
+    w.hub.emit("treeChanged", a.id);
+    await until(() => recorded(a.id, "pieces-stale").length === 1);
+    await settle();
+    expect(recorded(a.id, "pieces-proposed")).toHaveLength(1);
+    expect(recorded(a.id, "pieces-declined")).toHaveLength(0);
+  });
+
+  test("the plan's yes tells the agent what the list started, steered into its turn; Toyon's own card does not", async () => {
+    const repoId = await registered();
+    const a = await w.worktrees.create(repoId, "task", { title: "Rail", mode: "plan" });
+    await call(a.id, piece({ title: "Mine", brief: "I do this.", where: "here" }), piece());
+    const id = lastProposal(a.id).id;
+    const before = agentOf(a.id).sent.length;
+    w.hub.emit("piecesDecided", a.id, id, true);
+    await until(() => recorded(a.id, "pieces").length === 1);
+    // the steer waits a beat for the card's answer to be on the wire
+    await until(() => agentOf(a.id).sent.length === before + 1);
+    const told = agentOf(a.id).sent.at(-1)!;
+    expect(told.asked?.kind).toBe("pieces");
+    expect(told.keepCards).toBe(true);
+    expect(told.text).toContain('"Rail fixes" started in a sibling worktree of this project');
+    expect(told.text).toContain('Do "Mine" here, and only that.');
+    // Toyon's own card, answered between turns: nothing to steer into
+    const b = await w.worktrees.create(repoId, "task", { title: "Other" });
+    await call(b.id, piece({ title: "Theirs" }));
+    const sentBefore = agentOf(b.id).sent.length;
+    await w.pieces.answer(b.id, lastProposal(b.id).id, true);
+    await settle();
+    expect(agentOf(b.id).sent).toHaveLength(sentBefore);
   });
 });

@@ -131,6 +131,10 @@ export interface AcpSessionDeps {
   planEdited?: (path: string, proposed: string) => Promise<boolean>;
   /** a pieces list held beside a plan card was answered with the plan: approved, or sent back */
   onPieces?: (id: string, approved: boolean) => void;
+  /** a plan card went up with no list handed over for it: takes the plan's markdown and its file,
+   * for a list read off the plan by Toyon, which arrives held and rides the card like one the
+   * agent handed over */
+  onPlanUnsplit?: (markdown: string, planPath: string) => void;
   /** a held pieces list is Toyon's own card from here: its turn ended with no plan card, or the
    * daemon came back under it. Takes the pieces and answers with the worktree-relative file their
    * briefs were written to, for the card's section to sit on; nothing else, since this runs where
@@ -338,6 +342,9 @@ export class AcpSession implements AgentAdapter {
   /** the plan card a held list rode onto, while that card is open: a card that closes with no
    * answer gives the list back to `heldPieces`, to be shown as Toyon's own */
   private adopted: { ask: string; pieces: string } | null = null;
+  /** the plan card open right now, so a list held after it went up (read off the plan by Toyon,
+   * or handed over late) is the card's to answer too */
+  private openPlanAsk: string | null = null;
   private log: Transcript;
   /** the number the next attachment of each kind takes in this worktree's session; continues across
    * daemon restarts because the transcript remembers every attachment sent */
@@ -414,7 +421,12 @@ export class AcpSession implements AgentAdapter {
     // a list held for a plan card the daemon died under: the list is Toyon's card from here
     this.showHeld();
     if (this.openCards.size > 0) this.syncStatus();
+    this.restored = true;
   }
+
+  /** the transcript is read and every card on it tracked: from here each event written tracks
+   * itself as it is written */
+  private restored = false;
 
   /** the open cards follow their events; true when the set changed. A pieces list proposed in
    * plan mode is held rather than open: the next plan card carries it, and its yes answers both. */
@@ -425,6 +437,9 @@ export class AcpSession implements AgentAdapter {
     if (event.type === "pieces-proposed") {
       if (event.held) {
         this.heldPieces = event.id;
+        // held while a plan card is already up: that card answers it, and a card that closes
+        // unanswered hands it back, as for a list the card went up with
+        if (this.openPlanAsk) this.adopted = { ask: this.openPlanAsk, pieces: event.id };
         return false;
       }
       return this.openCards.add(event.id).size > 0;
@@ -434,6 +449,7 @@ export class AcpSession implements AgentAdapter {
       return this.openCards.add(event.id).size > 0;
     }
     if (event.type === "agent-permission") {
+      if (event.plan) this.openPlanAsk = event.id;
       // the card carries the list: the list is the card's to answer, for as long as the card is
       if (event.pieces && this.heldPieces === event.pieces) {
         this.heldPieces = null;
@@ -441,12 +457,30 @@ export class AcpSession implements AgentAdapter {
       }
       return false;
     }
-    if (event.type === "agent-ask-end" && this.adopted?.ask === event.id) {
-      // the card closed without an answer (the daemon died under it, the agent withdrew it): the
-      // list is held again, and shown as Toyon's own card where a held list is shown. An answer
-      // closes the list itself through `onPieces`, so nothing to do here for one.
-      if (event.outcome !== "answered") this.heldPieces = this.adopted.pieces;
-      this.adopted = null;
+    if (event.type === "agent-ask-end") {
+      if (this.openPlanAsk === event.id) this.openPlanAsk = null;
+      if (this.adopted?.ask === event.id) {
+        const pieces = this.adopted.pieces;
+        this.adopted = null;
+        // the card closed without an answer (the daemon died under it, the agent withdrew it,
+        // the person stopped): the agent's list is held again, and shown as Toyon's own card
+        // where a held list is shown. One Toyon read for the card goes with the card, since
+        // nobody asked for it apart from the plan. An answer closes the list itself through
+        // `onPieces`, so nothing to do here for one.
+        if (event.outcome !== "answered") {
+          const list = this.log.entries.findLast(
+            ({ event: e }) => e.type === "pieces-proposed" && e.id === pieces,
+          )?.event;
+          if (list?.type === "pieces-proposed" && list.by === "toyon") {
+            this.note({
+              type: "pieces-declined",
+              id: pieces,
+              reason: "the plan card closed before it was answered",
+              ts: Date.now(),
+            });
+          } else this.heldPieces = pieces;
+        }
+      }
       return false;
     }
     if (event.type === "pieces-go" || event.type === "pieces" || event.type === "pieces-declined") {
@@ -596,12 +630,15 @@ export class AcpSession implements AgentAdapter {
 
   note(event: AgentEvent) {
     this.emit(event);
-    if (this.trackCards(event)) this.syncStatus();
   }
 
+  /** every event the session writes, its own and a service's, passes the card tracking: a card
+   * closing live (an ask ending, cancelled or answered) moves the held list the same way its
+   * replay does on a restart. The restore walks the transcript itself, so it tracks nothing here. */
   private emit(event: AgentEvent) {
     const entry = this.log.append(event);
     this.d.onEvent(event, entry.seq);
+    if (this.restored && this.trackCards(event)) this.syncStatus();
   }
 
   private setStatus(s: AgentStatus) {
@@ -1537,6 +1574,9 @@ export class AcpSession implements AgentAdapter {
     // the list's yes; the list stays held until a choice is made, so a card a stop cancels leaves
     // it for the turn's end to show as Toyon's own
     const pieces = plan ? this.heldPieces : null;
+    // no list for this plan: Toyon may read one off it, which lands as a held list while the card
+    // is up and is answered with it (a late list, below)
+    if (plan && planPath && !pieces && detail.trim()) this.d.onPlanUnsplit?.(detail, planPath);
     return this.openAsk<acp.RequestPermissionResponse>(
       (id) => ({
         type: "agent-permission",

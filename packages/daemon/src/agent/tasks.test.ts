@@ -2,7 +2,25 @@ import { describe, expect, test } from "bun:test";
 import type { WorktreeInfo } from "@toyon/shared";
 import { FakeAgent } from "../../test/helpers/fakes.ts";
 import type { AgentSpec } from "./registry.ts";
-import { makeLander, parseName, taskText } from "./tasks.ts";
+import { makeLander, parseName, parsePieces, taskText } from "./tasks.ts";
+
+describe("parsePieces", () => {
+  test("a JSON array of titled sections with where and after; anything else dropped, capped at six", () => {
+    expect(
+      parsePieces(
+        'Here you go:\n[{"title":"Rail","section":"1. The rail","where":"here"},{"title":"Box","section":"2. The box","where":"worktree","after":"this"},{"title":"x","section":"","where":"worktree"},{"title":"y","section":"s","where":"elsewhere"},"junk"]',
+      ),
+    ).toEqual([
+      { title: "Rail", section: "1. The rail", where: "here" },
+      { title: "Box", section: "2. The box", where: "worktree", after: "this" },
+    ]);
+    expect(parsePieces("[]")).toEqual([]);
+    expect(parsePieces("no json")).toBeNull();
+    expect(parsePieces(null)).toBeNull();
+    const many = Array.from({ length: 8 }, (_, i) => ({ title: `t${i}`, section: `s${i}`, where: "here" }));
+    expect(parsePieces(JSON.stringify(many))).toHaveLength(6);
+  });
+});
 
 describe("taskText", () => {
   test("the text when there is any, else what the attachments carry", () => {

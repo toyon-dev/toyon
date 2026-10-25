@@ -71,6 +71,62 @@ export function lacksQuickModel(
   return offered.length > 0 && !offered.some((m) => m.id === quick);
 }
 
+/** The pieces of a plan, read off its text when the agent handed none over: a JSON list of the
+ * sections the plan itself marks as a separate branch, a sibling worktree or a follow-up. The
+ * section is named by its heading so the brief can be cut from the plan verbatim; `after` is only
+ * "this" (waits for this branch to land) or a branch that exists, since a sibling not yet made has
+ * no branch to name. */
+export const PIECES_SYSTEM = "You read plans and reply with only the requested JSON.";
+export const piecesPrompt = (markdown: string) =>
+  [
+    "Below is a plan. List the parts of it the plan itself means to build apart from the rest: a step or section it marks as its own branch, a sibling worktree, a follow-up, or independent work. Also list the part it keeps in this worktree, if it says so.",
+    'Reply with ONLY a JSON array of 0 to 6 objects, each {"title": a short name, "section": the exact heading text of that part, "where": "worktree" or "here", "after": optional, "this" when the plan says the part waits for this branch to land}.',
+    "Reply with an empty array when the plan is one piece of work with no part set apart.",
+    `Plan:\n${markdown.slice(0, 12_000)}`,
+  ].join("\n");
+
+export interface ReadPiece {
+  title: string;
+  section: string;
+  where: "here" | "worktree";
+  after?: string;
+}
+
+export function parsePieces(text: string | null): ReadPiece[] | null {
+  if (!text) return null;
+  const start = text.indexOf("[");
+  const end = text.lastIndexOf("]");
+  if (start === -1 || end <= start) return null;
+  try {
+    const arr = JSON.parse(text.slice(start, end + 1));
+    if (!Array.isArray(arr)) return null;
+    const out: ReadPiece[] = [];
+    for (const x of arr) {
+      if (!x || typeof x !== "object") continue;
+      const { title, section, where, after } = x as Record<string, unknown>;
+      if (typeof title !== "string" || !title.trim() || typeof section !== "string" || !section.trim()) continue;
+      if (where !== "here" && where !== "worktree") continue;
+      out.push({
+        title: title.trim(),
+        section: section.trim(),
+        where,
+        ...(typeof after === "string" && after.trim() ? { after: after.trim() } : {}),
+      });
+    }
+    return out.slice(0, 6);
+  } catch {
+    // the model wrapped or truncated the array: no list, the plan stays whole
+    return null;
+  }
+}
+
+/** reads a plan's pieces on the worktree's own agent's quick model; null where there is none */
+export function makePiecesReader(...deps: Parameters<typeof makeQuickAsker>) {
+  const ask = makeQuickAsker(...deps);
+  return async (wt: WorktreeInfo, markdown: string): Promise<ReadPiece[] | null> =>
+    parsePieces(await ask(wt, PIECES_SYSTEM, piecesPrompt(markdown)));
+}
+
 /** A question on the worktree's own agent, its quick model or nothing: the side questions that
  * would rather go unasked than cost what the chat costs. It never starts a runtime, and never
  * wakes an agent whose model list is already known to lack its quick model. */

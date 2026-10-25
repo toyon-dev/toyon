@@ -4052,6 +4052,41 @@ describe("the outbox", () => {
   });
 });
 
+describe("a list read off the plan", () => {
+  const pieces = [{ id: "p1", title: "Rail", brief: "Fix.", attachments: [], fate: "worktree" as const }];
+  const card: AgentEvent = {
+    type: "agent-permission",
+    id: "k1",
+    title: "Approve Plan",
+    plan: ".toyon/plans/1.md",
+    choices: [{ id: "yes", name: "Yes", kind: "allow_once" }],
+    ts: 1,
+  };
+  const late: AgentEvent = { type: "pieces-proposed", id: "l2", pieces, mode: "plan", held: true, by: "toyon", ts: 2 };
+
+  test("held after the card went up, it is the card's and sits on the card's file", () => {
+    const s = run([hello(wt("a")), agent("a", card), agent("a", late)]);
+    expect(s.local.a?.chat.at(-1)).toMatchObject({
+      kind: "pieces",
+      id: "l2",
+      by: "toyon",
+      companion: "k1",
+      plan: ".toyon/plans/1.md",
+      state: "held",
+    });
+  });
+
+  test("the plan moving under it marks it stale", () => {
+    const s = run([
+      hello(wt("a")),
+      agent("a", card),
+      agent("a", late),
+      agent("a", { type: "pieces-stale", id: "l2", ts: 3 }),
+    ]);
+    expect(s.local.a?.chat.at(-1)).toMatchObject({ kind: "pieces", stale: true });
+  });
+});
+
 describe("a pieces list", () => {
   const pieces = [
     { id: "p1", title: "Rail", brief: "Fix the rail.", attachments: [], fate: "worktree" as const },

@@ -284,6 +284,7 @@ function defaultAgent(
     },
     // the pieces service is built after the runtime, so the hub is the seam, as it is for a landing
     onPieces: (id, approved) => d.hub.emit("piecesDecided", wt.id, id, approved),
+    onPlanUnsplit: (markdown, planPath) => d.hub.emit("planUnsplit", wt.id, markdown, planPath),
     // the briefs as a file for the card's section; the record's own plan stays the agent's plan
     onPiecesShown: (_id, pieces) => writePlanDocNow(wt.path, briefsDoc(pieces)),
     onPlan: async (markdown, ownFile) => {

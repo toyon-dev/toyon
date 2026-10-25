@@ -5,7 +5,9 @@
 import { afterEach, beforeEach } from "bun:test";
 import { existsSync, realpathSync } from "node:fs";
 import { dirname, join } from "node:path";
+import type { WorktreeInfo } from "@toyon/shared";
 import { AttachmentStore } from "../../src/agent/attachments.ts";
+import type { ReadPiece } from "../../src/agent/tasks.ts";
 import { UploadStore } from "../../src/agent/uploads.ts";
 import { Hub } from "../../src/core/hub.ts";
 import { SelfWatch } from "../../src/core/self.ts";
@@ -100,6 +102,8 @@ export function world() {
     runtime,
     attachments,
     create: (repoId, prompt, opts) => worktrees.create(repoId, prompt, opts),
+    // a test plants what the quick model would read off a plan; nothing, by default
+    reader: async (wt, markdown) => planReader.fn?.(wt, markdown) ?? null,
   });
   const handoff = new HandoffService({
     state,
@@ -134,9 +138,13 @@ export function world() {
 /** the world under test, fresh before each test of a file that called useWorld() */
 export let w: World;
 
+/** what the quick model reads off a plan, planted by a test; cleared before each */
+export const planReader: { fn: ((wt: WorktreeInfo, markdown: string) => ReadPiece[] | null) | null } = { fn: null };
+
 /** a world per test: built before each, shut down and deleted after */
 export function useWorld(): void {
   beforeEach(() => {
+    planReader.fn = null;
     w = world();
   });
   afterEach(async () => {

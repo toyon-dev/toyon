@@ -3752,6 +3752,92 @@ describe("AcpSession pieces", () => {
     await w.session.close();
   });
 
+  test("a plan card with no list asks for one to be read off the plan; a card with one does not", async () => {
+    const unsplit: Array<[string, string]> = [];
+    const { fake, release } = planner();
+    const w = world(fake, claudeSpec, 60_000, undefined, {
+      onPlan: async () => ".toyon/plans/1.md",
+      onPlanUnsplit: (markdown, planPath) => unsplit.push([markdown, planPath]),
+    });
+    w.session.send("plan it");
+    release();
+    await waitFor(() => !!openAsk(w.events));
+    expect(unsplit).toEqual([["# the plan\n\nstep one", ".toyon/plans/1.md"]]);
+    w.session.answer(card(w.events).id, { kind: "choice", choiceId: "cancel" });
+    await w.idle();
+    await w.session.close();
+    const quiet: Array<[string, string]> = [];
+    const second = planner();
+    const w2 = world(second.fake, claudeSpec, 60_000, undefined, {
+      onPlan: async () => ".toyon/plans/1.md",
+      onPlanUnsplit: (markdown, planPath) => quiet.push([markdown, planPath]),
+    });
+    w2.session.send("plan it");
+    w2.session.note(held);
+    second.release();
+    await waitFor(() => !!openAsk(w2.events));
+    expect(quiet).toEqual([]);
+    w2.session.answer(card(w2.events).id, { kind: "choice", choiceId: "cancel" });
+    await w2.idle();
+    await w2.session.close();
+  });
+
+  test("a list held after the card went up is the card's: the plan's yes answers it", async () => {
+    const decided: Array<[string, boolean]> = [];
+    const { fake, release } = planner();
+    const w = world(fake, claudeSpec, 60_000, undefined, {
+      onPlan: async () => ".toyon/plans/1.md",
+      onPieces: (id, approved) => decided.push([id, approved]),
+    });
+    w.session.send("plan it");
+    release();
+    await waitFor(() => !!openAsk(w.events));
+    expect(card(w.events).pieces).toBeUndefined();
+    // read off the plan by Toyon while the card is up
+    w.session.note({ ...held, by: "toyon" } as AgentEvent);
+    w.session.answer(card(w.events).id, { kind: "choice", choiceId: "exit_plan_default" });
+    await w.idle();
+    expect(decided).toEqual([["l1", true]]);
+    expect(w.types()).not.toContain("pieces-shown");
+    await w.session.close();
+  });
+
+  test("a card that closes unanswered hands the agent's list back, and closes one Toyon read for it", async () => {
+    // the agent's own list: held again, shown as Toyon's card at the turn's end
+    const first = planner();
+    const w = world(first.fake, claudeSpec, 60_000, undefined, {
+      onPlan: async () => ".toyon/plans/1.md",
+      onPiecesShown: () => null,
+    });
+    w.session.send("plan it");
+    w.session.note(held);
+    first.release();
+    await waitFor(() => !!openAsk(w.events));
+    w.session.stop();
+    await w.idle();
+    expect(w.types()).toContain("pieces-shown");
+    expect(w.types()).not.toContain("pieces-declined");
+    await w.session.close();
+    // one Toyon read for the card: nobody asked for it apart from the plan, so it goes with it
+    const second = planner();
+    const w2 = world(second.fake, claudeSpec, 60_000, undefined, {
+      onPlan: async () => ".toyon/plans/1.md",
+      onPiecesShown: () => null,
+    });
+    w2.session.send("plan it");
+    second.release();
+    await waitFor(() => !!openAsk(w2.events));
+    w2.session.note({ ...held, by: "toyon" } as AgentEvent);
+    w2.session.stop();
+    await w2.idle();
+    expect(w2.events.findLast((e) => e.type === "pieces-declined")).toMatchObject({
+      id: "l1",
+      reason: "the plan card closed before it was answered",
+    });
+    expect(w2.types()).not.toContain("pieces-shown");
+    await w2.session.close();
+  });
+
   test("the plan sent back sends the list back with it", async () => {
     const decided: Array<[string, boolean]> = [];
     const { fake, release } = planner();

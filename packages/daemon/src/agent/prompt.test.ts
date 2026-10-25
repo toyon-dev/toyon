@@ -12,6 +12,7 @@ import {
   pieceAskPrompt,
   piecePrompt,
   pieceSendPrompt,
+  piecesActedPrompt,
   previewContext,
   procFixPrompt,
   SYSTEM_APPEND,
@@ -100,6 +101,35 @@ describe("handoff prompts", () => {
 });
 
 describe("pieces prompts", () => {
+  test("the sentence after the plan's yes says what the list started and what is the agent's own", () => {
+    const pieces = [
+      { id: "p1", title: "Persist" },
+      { id: "p2", title: "Expiry" },
+      { id: "p3", title: "CLI" },
+      { id: "p4", title: "Docs" },
+    ];
+    expect(
+      piecesActedPrompt(pieces, [
+        { pieceId: "p1", fate: "here" },
+        { pieceId: "p2", fate: "worktree" },
+        { pieceId: "p3", fate: "worktree", after: "toyon/persist" },
+        { pieceId: "p4", fate: "skip" },
+      ]),
+    ).toBe(
+      'Toyon acted on the pieces you handed over with the plan\'s approval: "Expiry" started in a sibling worktree of this project; "CLI" waits for toyon/persist to land and then starts in its own worktree; "Docs" was skipped by the person. Do "Persist" here, and only that. The siblings read the plan at its path in this worktree; never do their pieces yourself.',
+    );
+    expect(
+      piecesActedPrompt(pieces, [
+        { pieceId: "p2", fate: "send", title: "Composer" },
+        { pieceId: "p3", fate: "skip" },
+        { pieceId: "p4", fate: "skip" },
+      ]),
+    ).toContain('"Expiry" went to the open worktree "Composer"; "CLI", "Docs" were skipped by the person.');
+    expect(piecesActedPrompt(pieces, [{ pieceId: "p2", fate: "worktree", error: "no port" }])).toContain(
+      '"Expiry" (no port) could not start. Nothing on the list is yours here.',
+    );
+  });
+
   test("the system append hands the pieces of a plan to Toyon through the split tool, and one piece found mid-task", () => {
     expect(SYSTEM_APPEND).toContain("hand Toyon the list with the `split` tool when you have one");
     expect(SYSTEM_APPEND).toContain("never start a sibling's piece yourself, and do only the pieces marked `here`");

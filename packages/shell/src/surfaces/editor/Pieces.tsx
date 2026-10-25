@@ -118,11 +118,15 @@ export function Pieces({ item, worktreeId }: { item: PiecesItem; worktreeId: str
   const skipAll = () => {
     for (const piece of item.pieces) if (effectiveFate(item, piece) !== "skip") press(piece, "skip");
   };
+  // who read the list off the plan, what answers it, and whether the plan has moved since
+  const read = item.by === "toyon" ? "read off the plan by Toyon" : "read off the plan";
   const head = !deciding
     ? "Worktrees"
-    : item.state === "held"
-      ? "Worktrees · read off the plan; decided with the plan card"
-      : "Worktrees · read off the plan; change any row";
+    : item.stale
+      ? `Worktrees · ${read}; the plan changed since these were read`
+      : item.state === "held"
+        ? `Worktrees · ${read}; decided with the plan card`
+        : `Worktrees · ${read}; change any row`;
   return (
     <section className="editor-pieces">
       <div className="editor-pieces-head section-title">

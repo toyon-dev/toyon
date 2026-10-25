@@ -8,7 +8,9 @@
 // pressed are `pieces-fate` events, the last one per piece standing. A piece that waits for a
 // sibling to land is held on the origin's record, so it survives a restart and leaves with it.
 
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import type {
   AgentEvent,
   AttachmentInput,
@@ -22,8 +24,9 @@ import type {
 import { DEFAULT_PERMISSION_MODE, SPLIT_TOOL } from "@toyon/shared";
 import type { AttachmentStore } from "../agent/attachments.ts";
 import type { McpTool, McpToolResult, ToolProvider } from "../agent/mcp.ts";
-import { briefsDoc, writePlanDocNow } from "../agent/planDoc.ts";
-import { type PieceOrigin, piecePrompt, pieceSendPrompt } from "../agent/prompt.ts";
+import { briefsDoc, planEdited, writePlanDocNow } from "../agent/planDoc.ts";
+import { type PieceOrigin, piecePrompt, pieceSendPrompt, piecesActedPrompt } from "../agent/prompt.ts";
+import type { ReadPiece } from "../agent/tasks.ts";
 import type { TranscriptEntry } from "../agent/transcript.ts";
 import { UserError } from "../core/errors.ts";
 import type { Hub } from "../core/hub.ts";
@@ -41,6 +44,9 @@ export interface PiecesDeps {
   attachments: Pick<AttachmentStore, "reattach">;
   /** WorktreeService.create, as a closure: the two services must not import each other */
   create: (repoId: string, prompt: string, opts: CreateOpts) => Promise<WorktreeInfo>;
+  /** the pieces a plan names, read off its text on the quick model (tasks.ts); null where the
+   * agent has no quick model, or the plan is one piece of work */
+  reader: (wt: WorktreeInfo, markdown: string) => Promise<ReadPiece[] | null>;
 }
 
 type Proposed = Extract<AgentEvent, { type: "pieces-proposed" }>;
@@ -69,6 +75,77 @@ const refused = (text: string): McpToolResult => ({ text, isError: true });
 const HELD =
   "Handed to the person; the list shows beside your plan and they decide where each piece goes. Ask for plan approval now.";
 const SHOWN = "Handed to the person as a card; they decide. Finish your turn.";
+
+type PlanCard = Extract<AgentEvent, { type: "agent-permission" }>;
+
+/** the plan card open on a chat, if one is: an `agent-permission` with a plan and no end yet */
+export function openPlanCard(entries: readonly TranscriptEntry[]): PlanCard | null {
+  const open = new Map<string, PlanCard>();
+  for (const { event } of entries) {
+    if (event.type === "agent-permission" && event.plan) open.set(event.id, event);
+    else if (event.type === "agent-ask-end") open.delete(event.id);
+  }
+  return [...open.values()].at(-1) ?? null;
+}
+
+/** The text of a plan's section, as the brief a piece read off the plan starts from: the heading
+ * line and everything under it up to the next heading of the same or a higher level. The heading
+ * is matched loosely, since the model quotes it from memory: case and punctuation aside, the
+ * same, else the heading containing the name, else the name containing a heading long enough to
+ * be a name and not a word (a plan titled "Rail" would otherwise be the whole brief of its rail
+ * section). An exact match anywhere wins over a loose one earlier. Null when nothing matches. */
+export function sectionText(markdown: string, heading: string): string | null {
+  const norm = (s: string) =>
+    s
+      .toLowerCase()
+      .replace(/[`*_~]/g, "")
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim();
+  const want = norm(heading);
+  if (!want) return null;
+  const lines = markdown.split("\n");
+  const heads: Array<{ i: number; level: number; have: string }> = [];
+  for (let i = 0; i < lines.length; i++) {
+    const m = /^(#{1,6})\s+(.*)$/.exec(lines[i] ?? "");
+    const have = m ? norm(m[2] ?? "") : "";
+    if (m && have) heads.push({ i, level: m[1]!.length, have });
+  }
+  const rungs: Array<(have: string) => boolean> = [
+    (have) => have === want,
+    (have) => have.includes(want),
+    (have) => have.length >= 12 && want.includes(have),
+  ];
+  for (const rung of rungs) {
+    const hit = heads.find((h) => rung(h.have));
+    if (!hit) continue;
+    const { i, level } = hit;
+    let end = lines.length;
+    for (let j = i + 1; j < lines.length; j++) {
+      const n = /^(#{1,6})\s/.exec(lines[j] ?? "");
+      if (n && n[1]!.length <= level) {
+        end = j;
+        break;
+      }
+    }
+    const text = lines.slice(i, end).join("\n").trim();
+    return text.length > BRIEF_MAX ? text.slice(0, BRIEF_MAX) : text;
+  }
+  return null;
+}
+
+/** the plan text as a list remembers it, for the stale check: trimmed, so a trailing newline the
+ * editor adds is no move */
+export function hashText(text: string): string {
+  return createHash("sha1").update(text.trim()).digest("hex").slice(0, 16);
+}
+
+/** the held list still waiting for a plan card: one shown as Toyon's own card keeps `held` on its
+ * event but belongs to no card, so it is not this */
+function heldUnshown(entries: readonly TranscriptEntry[]): Proposed | null {
+  const shown = new Set<string>();
+  for (const { event } of entries) if (event.type === "pieces-shown") shown.add(event.id);
+  return openPieces(entries).find((p) => p.held && !shown.has(p.id)) ?? null;
+}
 
 /** the proposals on a transcript nothing has closed, newest last */
 export function openPieces(entries: readonly TranscriptEntry[]): Proposed[] {
@@ -104,8 +181,16 @@ const KIND_OF: Record<string, AttachmentRef["kind"]> = {
 export class PiecesService implements ToolProvider {
   constructor(private d: PiecesDeps) {
     d.hub.on("piecesDecided", (worktreeId, id, approved) =>
-      fireAndForget(worktreeId, approved ? this.act(worktreeId, id) : this.decline(worktreeId, id), "pieces"),
+      fireAndForget(
+        worktreeId,
+        approved ? this.act(worktreeId, id, undefined, true) : this.decline(worktreeId, id),
+        "pieces",
+      ),
     );
+    d.hub.on("planUnsplit", (worktreeId, markdown, planPath) =>
+      fireAndForget(worktreeId, this.read(worktreeId, markdown, planPath), "pieces read off the plan"),
+    );
+    d.hub.on("treeChanged", (worktreeId) => fireAndForget(worktreeId, this.stale(worktreeId), "pieces stale"));
     d.hub.on("landed", (worktreeId) => fireAndForget(worktreeId, this.landed(worktreeId), "pieces after landing"));
     d.hub.on("worktreesChanged", () => this.sweep());
     this.sweep();
@@ -207,7 +292,13 @@ export class PiecesService implements ToolProvider {
   /** A proposal onto the chat. Held beside the next plan card in plan mode, Toyon's own card
    * otherwise, with the briefs written as a file for the section to sit on. One open list per
    * chat, and the turn's allowance is shared with handoff. */
-  async propose(worktreeId: string, raw: RawPiece[], by: "agent" | "person" = "agent"): Promise<McpToolResult> {
+  async propose(
+    worktreeId: string,
+    raw: RawPiece[],
+    by: "agent" | "person" | "toyon" = "agent",
+    /** a Toyon-read list: the hash of the plan text it was read from */
+    read?: string,
+  ): Promise<McpToolResult> {
     const wt = this.d.state.worktree(worktreeId);
     if (!wt) throw new UserError("that chat is gone");
     if (raw.length > PIECES_MAX)
@@ -274,9 +365,10 @@ export class PiecesService implements ToolProvider {
         `${PER_TURN_MAX} proposals were made this turn already; finish your turn and let the person answer.`,
       );
     }
-    // the agent's list in plan mode rides the plan card it is about to ask for; the person's own
-    // (the verb aimed at this project) has no card coming and is a card of its own at once
-    const held = by === "agent" && wt.mode === "plan";
+    // the agent's list in plan mode rides the plan card it is about to ask for, and one Toyon read
+    // off the plan rides the card that is up; the person's own (the verb aimed at this project)
+    // has no card coming and is a card of its own at once
+    const held = by !== "person" && wt.mode === "plan";
     const plan = held ? null : writePlanDocNow(wt.path, briefsDoc(pieces));
     agent.note({
       type: "pieces-proposed",
@@ -285,6 +377,8 @@ export class PiecesService implements ToolProvider {
       mode: wt.mode ?? DEFAULT_PERMISSION_MODE,
       ...(held ? { held: true } : {}),
       ...(plan ? { plan } : {}),
+      ...(by === "toyon" ? { by: "toyon" as const } : {}),
+      ...(by === "toyon" && read ? { read } : {}),
       ts: Date.now(),
     });
     return { text: held ? HELD : SHOWN };
@@ -354,8 +448,11 @@ export class PiecesService implements ToolProvider {
   /** The yes. The go is on the transcript before anything slow starts, so the card closes on
    * every tab at once; then each piece in turn, on its own, so one that fails is one outcome and
    * not the end of the list: `here` and `skip` are nothing to do, `send` is a message into the
-   * open worktree, `worktree` is a sibling made now or queued behind the branch it waits for. */
-  async act(worktreeId: string, id: string, note?: string): Promise<void> {
+   * open worktree, `worktree` is a sibling made now or queued behind the branch it waits for.
+   * `tell`: the list went with a plan's yes, so the agent is about to build and is told what the
+   * list started elsewhere, steered into that turn once the card's answer is on the wire; Toyon's
+   * own card is answered between turns, and a message there would start one. */
+  async act(worktreeId: string, id: string, note?: string, tell = false): Promise<void> {
     const wt = this.d.state.worktree(worktreeId);
     if (!wt) return;
     const agent = this.d.runtime.ensureAgent(wt).agent;
@@ -379,10 +476,112 @@ export class PiecesService implements ToolProvider {
         }
       }
       agent.note({ type: "pieces", id, outcomes, ts: Date.now() });
+      if (tell && outcomes.some((o) => o.fate !== "here")) {
+        // the card's answer must be on the wire before anything is steered into the turn it
+        // releases: a steer that lands while the plan tool is still being answered aborts the
+        // tool, and the approval with it (session.ts, sayPlanEdited). The card closes on the
+        // transcript as it is answered, so wait for that, then a beat for the write.
+        for (let i = 0; i < 30 && openPlanCard(agent.transcript()); i++) await Bun.sleep(100);
+        await Bun.sleep(100);
+        agent.send(piecesActedPrompt(proposed.pieces, outcomes), {
+          asked: { kind: "pieces", why: "what the split started, so the agent builds only its own piece" },
+          keepCards: true,
+        });
+      }
     } catch (e) {
       const reason = e instanceof Error ? e.message : String(e);
       agent.note({ type: "pieces-declined", id, outcome: "failed", reason, ts: Date.now() });
       throw e;
+    }
+  }
+
+  /** A plan card went up with no list for it: read the pieces off the plan on the quick model and
+   * hold them beside that card. Only while the card is still up and no list arrived meanwhile; a
+   * plan that reads as one piece of work gets nothing. */
+  async read(worktreeId: string, markdown: string, planPath: string): Promise<void> {
+    const wt = this.d.state.worktree(worktreeId);
+    if (!wt) return;
+    const agent = this.d.runtime.ensureAgent(wt).agent;
+    if (openPieces(agent.transcript()).length > 0) return;
+    const found = await this.d.reader(wt, markdown);
+    if (!found || found.length < 2) return;
+    // the card may have been answered while the model read: a list held now would wait for a
+    // card that is not coming and show as Toyon's own at the turn's end, which nobody asked for
+    const card = openPlanCard(agent.transcript());
+    if (!card || card.plan !== planPath || openPieces(agent.transcript()).length > 0) return;
+    await this.proposeRead(wt, markdown, found);
+  }
+
+  /** The pieces read off a plan as a held list on the chat, briefs cut from the plan's sections,
+   * the plan's text hashed onto the list for the stale check. An `after` the model made up (a
+   * sibling piece's name, which is no branch yet) is dropped rather than refusing the list: the
+   * piece starts at once, and the person can see as much on the row. */
+  private async proposeRead(wt: WorktreeInfo, markdown: string, found: ReadPiece[]): Promise<Proposed | null> {
+    const siblings = this.siblings(wt);
+    const known = (q: string) =>
+      q === "this" || q === wt.branch || !("refused" in this.named(siblings, q.startsWith("@") ? q.slice(1) : q));
+    const raw = found.map((p): RawPiece => {
+      const brief = sectionText(markdown, p.section) ?? `${p.title}\n\n${p.section}`;
+      const after = p.where === "worktree" && p.after && known(p.after) ? p.after : undefined;
+      return { title: p.title, brief, where: p.where, ...(after ? { after } : {}) };
+    });
+    const r = await this.propose(wt.id, raw, "toyon", hashText(markdown));
+    if (r.isError) {
+      log.warn(wt.id, `the list read off the plan was refused: ${r.text}`);
+      return null;
+    }
+    const agent = this.d.runtime.agentFor(wt.id);
+    return agent ? (openPieces(agent.transcript()).find((p) => p.by === "toyon") ?? null) : null;
+  }
+
+  /** The plan file moved under an open held list: mark the list stale, and a list Toyon read is
+   * read again from the file as it stands, the fates pressed carried over by title. The agent's
+   * own list is only marked, since the agent hands over again when it re-plans. Run on every tree
+   * change of a watched worktree, so the gates come first: a held list exists only in plan mode,
+   * and one already shown as Toyon's own card belongs to no plan card. Everything it needs is on
+   * the transcript, so a restart changes nothing. */
+  async stale(worktreeId: string): Promise<void> {
+    const wt = this.d.state.worktree(worktreeId);
+    if (wt?.mode !== "plan") return;
+    const agent = this.d.runtime.agentFor(worktreeId);
+    if (!agent) return;
+    const entries = agent.transcript();
+    const open = heldUnshown(entries);
+    if (!open) return;
+    if (entries.some(({ event }) => event.type === "pieces-stale" && event.id === open.id)) return;
+    const card = openPlanCard(entries);
+    if (!card?.plan || !card.detail) return;
+    let markdown: string;
+    try {
+      markdown = readFileSync(join(wt.path, card.plan), "utf8");
+    } catch (e) {
+      log.warn(worktreeId, `could not read ${card.plan} to see whether the plan moved`, e);
+      return;
+    }
+    // a Toyon-read list is measured against the text it was read from; the agent's against the
+    // plan it proposed, which is the card's text
+    const moved = open.read ? hashText(markdown) !== open.read : planEdited(wt.path, card.plan, card.detail);
+    if (!moved) return;
+    agent.note({ type: "pieces-stale", id: open.id, ts: Date.now() });
+    if (open.by !== "toyon") return;
+    const found = await this.d.reader(wt, markdown);
+    if (!found || found.length < 2) return;
+    if (openPlanCard(agent.transcript())?.id !== card.id) return;
+    const pressed = new Map<string, PieceFate>();
+    for (const { event } of agent.transcript()) {
+      if (event.type === "pieces-fate" && event.id === open.id) {
+        const title = open.pieces.find((p) => p.id === event.pieceId)?.title;
+        if (title) pressed.set(title.toLowerCase(), event.fate);
+      }
+    }
+    agent.note({ type: "pieces-declined", id: open.id, reason: "the plan changed; read again", ts: Date.now() });
+    const fresh = await this.proposeRead(wt, markdown, found);
+    if (!fresh) return;
+    for (const piece of fresh.pieces) {
+      const fate = pressed.get(piece.title.toLowerCase());
+      if (fate && fate !== piece.fate && !(fate === "send" && !piece.to)) {
+        agent.note({ type: "pieces-fate", id: fresh.id, pieceId: piece.id, fate, ts: Date.now() });
+      }
     }
   }
 

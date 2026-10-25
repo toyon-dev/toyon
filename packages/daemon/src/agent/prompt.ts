@@ -251,6 +251,40 @@ export interface PieceOrigin {
   plan?: string;
 }
 
+/** What the agent is told once its list was acted on with the plan's yes: which pieces started as
+ * siblings, which wait, which were sent on, and that the rest are its own. Steered into the turn
+ * the approval releases, since the approval itself is an option id and says nothing of the list. */
+export function piecesActedPrompt(
+  pieces: ReadonlyArray<{ id: string; title: string }>,
+  outcomes: ReadonlyArray<{ pieceId: string; fate: string; title?: string; after?: string; error?: string }>,
+): string {
+  const titled = (id: string) => `"${pieces.find((p) => p.id === id)?.title ?? id}"`;
+  const list = (xs: string[]) => xs.join(", ");
+  const started = outcomes.filter((o) => o.fate === "worktree" && !o.after && !o.error).map((o) => titled(o.pieceId));
+  const queued = outcomes.filter((o) => o.fate === "worktree" && o.after && !o.error);
+  const sent = outcomes.filter((o) => o.fate === "send" && !o.error);
+  const here = outcomes.filter((o) => o.fate === "here").map((o) => titled(o.pieceId));
+  const skipped = outcomes.filter((o) => o.fate === "skip").map((o) => titled(o.pieceId));
+  const failed = outcomes.filter((o) => o.error).map((o) => `${titled(o.pieceId)} (${o.error})`);
+  const parts: string[] = [];
+  if (started.length)
+    parts.push(
+      `${list(started)} started in ${started.length === 1 ? "a sibling worktree" : "sibling worktrees"} of this project`,
+    );
+  if (queued.length)
+    parts.push(
+      queued
+        .map((o) => `${titled(o.pieceId)} waits for ${o.after} to land and then starts in its own worktree`)
+        .join("; "),
+    );
+  if (sent.length)
+    parts.push(sent.map((o) => `${titled(o.pieceId)} went to the open worktree "${o.title ?? "named"}"`).join("; "));
+  if (skipped.length) parts.push(`${list(skipped)} ${skipped.length === 1 ? "was" : "were"} skipped by the person`);
+  if (failed.length) parts.push(`${list(failed)} could not start`);
+  const own = here.length ? `Do ${list(here)} here, and only that.` : "Nothing on the list is yours here.";
+  return `Toyon acted on the pieces you handed over with the plan's approval: ${parts.join("; ")}. ${own} The siblings read the plan at its path in this worktree; never do their pieces yourself.`;
+}
+
 /** the first message of a worktree made for one piece of a plan: the brief, the person's note,
  * then the pointer that says whose plan it is a piece of and who wrote the brief */
 export function piecePrompt(brief: string, note: string | undefined, origin: PieceOrigin): string {

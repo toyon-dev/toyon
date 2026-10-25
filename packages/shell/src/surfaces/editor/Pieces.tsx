@@ -223,7 +223,7 @@ export function Pieces({ item, worktreeId }: { item: PiecesItem; worktreeId: str
                   )}
                 </p>
               )}
-              <Text text={piece.brief} />
+              <Text text={piece.plan} />
               <Chips refs={piece.attachments} worktreeId={worktreeId} />
             </div>
           </details>

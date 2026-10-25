@@ -217,7 +217,7 @@ describe("a worktree's actions", () => {
         layout: { ...defaultLayout, changes: true },
         shipping: { w1: { op: "land" } },
         frame: "desk" as const,
-        // two projects, so the handoff row is live and only the landing ops are off
+        // two projects, so the split row is live and only the landing ops are off
         repos: [other, other],
       },
       deps,
@@ -274,9 +274,9 @@ describe("a worktree's actions", () => {
     expect(labels(items).slice(-5)).toEqual(["|", "run with fe", "run with full", "|", "archive"]);
   });
 
-  test("the handoff is live under one project, since a new worktree here is a target, and absent on the lead", () => {
+  test("the split is live under one project, since a new worktree here is a target, and absent on the lead", () => {
     const s = { layout: { ...defaultLayout, changes: true }, shipping: {}, frame: "desk" as const, repos: [] };
-    const row = (items: MenuEntry[]) => items.filter(isItem).find((i) => i.id === "handoff");
+    const row = (items: MenuEntry[]) => items.filter(isItem).find((i) => i.id === "split");
     const alone = row(worktreeItems(owned(), null, s, deps, here));
     expect(alone?.label).toBe("continue elsewhere…");
     expect(alone?.disabled).toBeUndefined();
@@ -293,7 +293,7 @@ describe("a worktree's actions", () => {
     );
     expect(two?.disabled).toBeUndefined();
     two?.onClick();
-    expect(sent).toEqual([{ a: "open", overlay: { kind: "handoff", worktreeId: "w1" } }]);
+    expect(sent).toEqual([{ a: "open", overlay: { kind: "split", worktreeId: "w1" } }]);
     // the lead has no chat to propose it from
     const main = owned({ worktree: { ...info, kind: "main" } });
     expect(row(worktreeItems(main, null, { ...s, repos: [other, other] }, deps, here))).toBeUndefined();

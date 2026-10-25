@@ -215,7 +215,7 @@ export type ChatItem =
   /** the daemon's word that a worktree made from a piece of this one's work landed in its
    * project; `again` is the branch this worktree waited for landing once more */
   | {
-      kind: "handoff-landed";
+      kind: "piece-landed";
       worktreeId: string;
       repoName: string;
       title: string;
@@ -470,7 +470,7 @@ export type Overlay =
   /** the lines a picked element with no recorded source may be written on, when none is clearly it */
   | { kind: "element-sources"; worktreeId: string; hits: SearchHit[] }
   /** the other open projects, one of which this worktree's work continues in */
-  | { kind: "handoff"; worktreeId: string };
+  | { kind: "split"; worktreeId: string };
 
 /** the project switcher: pick a registered repo, or type a path to open another. `pill` hangs off
  * the pill in the bar, for a click on it; `center` is the same switcher over the preview, for a key
@@ -627,7 +627,7 @@ export type LooseSource =
   | { kind: "handle"; handle: FileSystemFileHandle }
   | { kind: "grant"; id: string; path: string; version: string | null }
   | { kind: "bytes" }
-  /** text with nothing behind it (a brief out of the transcript): read, never saved */
+  /** text with nothing behind it (a message's text out of the transcript): read, never saved */
   | { kind: "text" };
 
 /** what a caller opens from outside every worktree: a dropped file, by name, with its text read */
@@ -1524,7 +1524,7 @@ export const isSubPicker = (o: Overlay) =>
   o.kind === "agent" ||
   o.kind === "agent-page" ||
   o.kind === "choose-folder" ||
-  o.kind === "handoff";
+  o.kind === "split";
 
 /** what reaches the reducer: terminal frames are routed to the pane, file answers to fileSync, and
  * a file opened from outside the shell, or refused to a link that asked, to its opener, before
@@ -3506,11 +3506,11 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
           ts: event.ts,
         },
       ];
-    case "handoff-landed":
+    case "piece-landed":
       return [
         ...items,
         {
-          kind: "handoff-landed",
+          kind: "piece-landed",
           worktreeId: event.worktreeId,
           repoName: event.repoName,
           title: event.title,

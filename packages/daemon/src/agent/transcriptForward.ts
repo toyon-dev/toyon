@@ -9,8 +9,10 @@ import { log } from "../core/log.ts";
 
 /** The pass this build makes, written to the stamp once every transcript has had it. Bumped with
  * each new rewrite, so the next upgrade's first boot reads the files again and no boot after
- * does: an archive is read at a restore, and listing hundreds of them must not mean reading them. */
-export const FORWARD_STEP = "2";
+ * does: an archive is read at a restore, and listing hundreds of them must not mean reading them.
+ * Step 3 is step 2's rewrites plus the landing word and a piece's `plan`, which a daemon that
+ * ran step 2 the same day has not seen. */
+export const FORWARD_STEP = "3";
 
 type Stored = { event?: Record<string, unknown> & { type?: unknown; kind?: unknown } };
 
@@ -22,8 +24,9 @@ const MARKS = ['"page', '"brief"', '"handoff'];
  * stays, since the agent's reply to it is on the chat, under the one asked kind that still says a
  * person pressed for it. Step 2: a message that carried another agent's brief becomes the
  * `handed` row that says so, with the brief as the text the row opens, since the brief no longer
- * rides on a bubble; a handoff's card events become a pieces list of one, since the handoff tool
- * folded into split. A torn line, or a line of another type that carries a word, is left. */
+ * rides on a bubble; a handoff's card events become a pieces list of one and its landing word a
+ * piece's, since the handoff tool folded into split; a piece's text is its `plan`, not a brief.
+ * A torn line, or a line of another type that carries a word, is left. */
 export function forwardLine(line: string): { drop: true } | { line: string } | null {
   if (!MARKS.some((m) => line.includes(m))) return null;
   let entry: Stored;
@@ -65,7 +68,7 @@ export function forwardLine(line: string): { drop: true } | { line: string } | n
             {
               id: "p1",
               title: e.title ?? "Continue",
-              brief: e.message ?? "",
+              plan: e.message ?? "",
               attachments: [],
               fate: "worktree",
               project: { id: repo.id, name: repo.name },
@@ -76,6 +79,18 @@ export function forwardLine(line: string): { drop: true } | { line: string } | n
         },
       }),
     };
+  }
+  if (e?.type === "handoff-landed")
+    return { line: JSON.stringify({ ...entry, event: { ...e, type: "piece-landed" } }) };
+  if (
+    e?.type === "pieces-proposed" &&
+    Array.isArray(e.pieces) &&
+    e.pieces.some((p) => p && typeof p === "object" && "brief" in p)
+  ) {
+    const pieces = (e.pieces as Array<Record<string, unknown>>).map(({ brief, ...rest }) =>
+      brief === undefined ? rest : { ...rest, plan: brief },
+    );
+    return { line: JSON.stringify({ ...entry, event: { ...e, pieces } }) };
   }
   if (e?.type === "handoff-go") return { line: JSON.stringify({ ...entry, event: { ...e, type: "pieces-go" } }) };
   if (e?.type === "handoff") {

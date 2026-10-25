@@ -8,11 +8,11 @@ describe("parsePieces", () => {
   test("a JSON array of titled sections with where and after; anything else dropped, capped at six", () => {
     expect(
       parsePieces(
-        'Here you go:\n[{"title":"Rail","section":"1. The rail","where":"here"},{"title":"Box","section":"2. The box","brief":" Build the box. ","where":"worktree","after":"this"},{"title":"x","section":"","where":"worktree"},{"title":"y","section":"s","where":"elsewhere"},"junk"]',
+        'Here you go:\n[{"title":"Rail","section":"1. The rail","where":"here"},{"title":"Box","section":"2. The box","plan":" Build the box. ","where":"worktree","after":"this"},{"title":"x","section":"","where":"worktree"},{"title":"y","section":"s","where":"elsewhere"},"junk"]',
       ),
     ).toEqual([
       { title: "Rail", section: "1. The rail", where: "here" },
-      { title: "Box", section: "2. The box", brief: "Build the box.", where: "worktree", after: "this" },
+      { title: "Box", section: "2. The box", plan: "Build the box.", where: "worktree", after: "this" },
     ]);
     expect(parsePieces("[]")).toEqual([]);
     expect(parsePieces("no json")).toBeNull();

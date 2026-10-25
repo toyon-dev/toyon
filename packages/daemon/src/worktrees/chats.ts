@@ -135,7 +135,7 @@ export function searchRows(
 
 /** what a chat was asked for: the first thing the person sent there, which is true of the whole
  * chat where the last turn's recap is only where it stopped. Undefined for a chat that has only
- * the model's words, which a chat opened by a handoff can be. */
+ * the model's words, which a chat opened from another agent's piece can be. */
 export function firstAsk(rows: SaidRow[]): string | undefined {
   return rows.find((r) => r.role === "user")?.text.slice(0, ASK);
 }

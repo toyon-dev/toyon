@@ -123,7 +123,7 @@ export function PieceLaterRow({ item }: { item: Extract<ChatItem, { kind: "piece
 /** a worktree made from a piece of this one's work landed, with its pull request when the landing
  * was one: the record of the piece closing, read where it was opened. On the worktree that waited
  * for that branch before it started, the same row says it landed again. */
-export function PieceLandedRow({ item }: { item: Extract<ChatItem, { kind: "handoff-landed" }> }) {
+export function PieceLandedRow({ item }: { item: Extract<ChatItem, { kind: "piece-landed" }> }) {
   return (
     <DaemonRow icon="check" word={item.again ? "landed again" : "landed"} tone="aqua" at={item.ts}>
       {/* a sibling of this project is its chip; work in another project is named with where */}

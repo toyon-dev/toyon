@@ -24,7 +24,7 @@ export function freeSlot(parent: string): { id: string; dir: string } {
 }
 
 /** The shape of a name toyon gives a worktree, whoever found it: the namer's answer, a title an
- * agent hands in with a piece or a handoff, the words a prompt opens with. About what the rail
+ * agent hands in with a piece, the words a prompt opens with. About what the rail
  * shows whole, so every row reads the same way whichever path named it. */
 export const NAME_WORDS_MAX = 3;
 export const NAME_CHARS_MAX = 20;

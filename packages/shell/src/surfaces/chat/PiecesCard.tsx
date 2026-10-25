@@ -66,7 +66,7 @@ export function PiecesCard({
   const read = () => {
     if (plan) openFile({ sock, dispatch }, { worktreeId, path: plan, view: "preview" });
   };
-  const html = useMemo(() => (only ? renderMarkdown(only.brief) : ""), [only]);
+  const html = useMemo(() => (only ? renderMarkdown(only.plan) : ""), [only]);
 
   /** the rows: one piece's fates, or go and not now for a list */
   const shape: OneRow[] = useMemo(

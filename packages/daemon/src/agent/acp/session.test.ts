@@ -3584,7 +3584,7 @@ describe("AcpSession cards", () => {
   const proposed = (id: string): AgentEvent => ({
     type: "pieces-proposed",
     id,
-    pieces: [{ id: "p1", title: "Fix it", brief: "do it there", attachments: [], fate: "worktree" }],
+    pieces: [{ id: "p1", title: "Fix it", plan: "do it there", attachments: [], fate: "worktree" }],
     mode: "auto",
     ts: 1,
   });
@@ -3708,7 +3708,7 @@ describe("AcpSession cards", () => {
     w.session.send("one");
     await w.idle();
     w.session.note({
-      type: "handoff-landed",
+      type: "piece-landed",
       worktreeId: "b",
       repoName: "other",
       title: "Fix the adapter",

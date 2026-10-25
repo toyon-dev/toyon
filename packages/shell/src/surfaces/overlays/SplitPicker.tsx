@@ -12,7 +12,7 @@ import { PaletteRow } from "./PaletteRow.tsx";
  * there, with whatever is in the composer as the person's own words, and the card follows in the
  * box. The words went with the ask, so the box empties the way a send empties it: here and at
  * the daemon, which holds every box's draft. */
-export function HandoffPicker({ worktreeId }: { worktreeId: string }) {
+export function SplitPicker({ worktreeId }: { worktreeId: string }) {
   const dispatch = useDispatch();
   const sock = useSock();
   const clientId = useStore((s) => s.clientId);

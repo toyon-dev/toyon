@@ -27,7 +27,7 @@ import type {
 import { DEFAULT_PERMISSION_MODE, SPLIT_TOOL } from "@toyon/shared";
 import type { AttachmentStore } from "../agent/attachments.ts";
 import type { McpTool, McpToolResult, ToolProvider } from "../agent/mcp.ts";
-import { briefsDoc, planEdited, writePlanDocNow } from "../agent/planDoc.ts";
+import { listDoc, planEdited, writePlanDocNow } from "../agent/planDoc.ts";
 import { handedPrompt, type PieceOrigin, pieceAskPrompt, pieceSendPrompt, piecesActedPrompt } from "../agent/prompt.ts";
 import type { ReadPiece } from "../agent/tasks.ts";
 import type { TranscriptEntry } from "../agent/transcript.ts";
@@ -53,8 +53,8 @@ function handedOrigin(origin: WorktreeInfo, project: string | undefined): Handed
 }
 
 /** the plan a piece's worktree is born with: the piece's text under its title */
-export function pieceDoc(piece: Pick<Piece, "title" | "brief">): string {
-  return `# ${piece.title}\n\n${piece.brief.trim()}\n`;
+export function pieceDoc(piece: Pick<Piece, "title" | "plan">): string {
+  return `# ${piece.title}\n\n${piece.plan.trim()}\n`;
 }
 
 export interface PiecesDeps {
@@ -75,7 +75,7 @@ type Proposed = Extract<AgentEvent, { type: "pieces-proposed" }>;
 /** one piece as the tool or the verb hands it in, before anything is checked */
 export interface RawPiece {
   title: string;
-  brief: string;
+  plan: string;
   /** the attachments of this chat it needs, by their labels in the prompt ("Image 2") */
   attachments?: string[];
   where: "here" | "worktree" | "send";
@@ -90,7 +90,7 @@ export interface RawPiece {
 
 /** the caps keep a runaway agent from filling the list; six is what a person reads beside a plan */
 export const PIECES_MAX = 6;
-const BRIEF_MAX = 20_000;
+const PLAN_MAX = 20_000;
 const ATTACH_MAX = 10;
 const PROJECT_MAX = 200;
 
@@ -112,11 +112,11 @@ export function openPlanCard(entries: readonly TranscriptEntry[]): PlanCard | nu
   return [...open.values()].at(-1) ?? null;
 }
 
-/** The text of a plan's section, as the brief a piece read off the plan starts from: the heading
+/** The text of a plan's section, as the plan a piece read off the plan starts from: the heading
  * line and everything under it up to the next heading of the same or a higher level. The heading
  * is matched loosely, since the model quotes it from memory: case and punctuation aside, the
  * same, else the heading containing the name, else the name containing a heading long enough to
- * be a name and not a word (a plan titled "Rail" would otherwise be the whole brief of its rail
+ * be a name and not a word (a plan titled "Rail" would otherwise be the whole plan of its rail
  * section). An exact match anywhere wins over a loose one earlier. Null when nothing matches. */
 export function sectionText(markdown: string, heading: string): string | null {
   const norm = (s: string) =>
@@ -152,7 +152,7 @@ export function sectionText(markdown: string, heading: string): string | null {
       }
     }
     const text = lines.slice(i, end).join("\n").trim();
-    return text.length > BRIEF_MAX ? text.slice(0, BRIEF_MAX) : text;
+    return text.length > PLAN_MAX ? text.slice(0, PLAN_MAX) : text;
   }
   return null;
 }
@@ -302,7 +302,7 @@ export class PiecesService implements ToolProvider {
                   type: "string",
                   description: `A name for the piece, the way a teammate would say it: ${NAME_SHAPE}. It titles the worktree.`,
                 },
-                brief: {
+                plan: {
                   type: "string",
                   description:
                     "The plan its agent builds from, in markdown that stands on its own: what is needed and why, the paths that depend on it, and what done looks like.",
@@ -331,7 +331,7 @@ export class PiecesService implements ToolProvider {
                     "Another project open in Toyon, by its name as listed or its path: the worktree is made there, or `to` is one of its worktrees. Leave out for this project.",
                 },
               },
-              required: ["title", "brief", "where"],
+              required: ["title", "plan", "where"],
               additionalProperties: false,
             },
           },
@@ -345,7 +345,7 @@ export class PiecesService implements ToolProvider {
   /** a call from the agent, over MCP: the shape is checked here, since the client's own check
    * cannot be relied on, and then it is a proposal like the person's */
   async call(worktreeId: string, args: unknown): Promise<McpToolResult> {
-    const shape = `split takes { pieces: [{ title: string, brief: string, where: "here" | "worktree" | "send", attachments?: string[], after?: string, to?: string, project?: string }] }, 1 to ${PIECES_MAX} pieces.`;
+    const shape = `split takes { pieces: [{ title: string, plan: string, where: "here" | "worktree" | "send", attachments?: string[], after?: string, to?: string, project?: string }] }, 1 to ${PIECES_MAX} pieces.`;
     const a = args && typeof args === "object" && !Array.isArray(args) ? (args as Record<string, unknown>) : null;
     const list = a && Array.isArray(a.pieces) ? (a.pieces as unknown[]) : null;
     if (!list || list.length === 0) return refused(shape);
@@ -355,7 +355,7 @@ export class PiecesService implements ToolProvider {
       const shaped =
         p &&
         typeof p.title === "string" &&
-        typeof p.brief === "string" &&
+        typeof p.plan === "string" &&
         (p.where === "here" || p.where === "worktree" || p.where === "send") &&
         (p.attachments === undefined ||
           (Array.isArray(p.attachments) && p.attachments.every((l) => typeof l === "string"))) &&
@@ -365,7 +365,7 @@ export class PiecesService implements ToolProvider {
       if (!shaped) return refused(shape);
       pieces.push({
         title: p.title as string,
-        brief: p.brief as string,
+        plan: p.plan as string,
         where: p.where as RawPiece["where"],
         ...(p.attachments ? { attachments: p.attachments as string[] } : {}),
         ...(p.after !== undefined ? { after: p.after as string } : {}),
@@ -398,14 +398,14 @@ export class PiecesService implements ToolProvider {
     for (const [i, p] of raw.entries()) {
       // the title is a row's name beside the namer's: the same case
       const title = sentenceCase(p.title.trim());
-      const brief = p.brief.trim();
+      const plan = p.plan.trim();
       if (!title) return refused(`Piece ${i + 1} has no title.`);
       // the title is the worktree's: held to the namer's shape rather than cut to it
       const over = overNameShape(title);
       if (over) return refused(`Piece ${i + 1}'s title ${over}`);
-      if (!brief) return refused(`Piece ${i + 1} ("${title}") has no brief; write the plan its agent builds from.`);
-      if (brief.length > BRIEF_MAX) {
-        return refused(`Piece ${i + 1}'s brief is over ${BRIEF_MAX} characters; cut it to what its agent needs.`);
+      if (!plan) return refused(`Piece ${i + 1} ("${title}") has no plan; write the plan its agent builds from.`);
+      if (plan.length > PLAN_MAX) {
+        return refused(`Piece ${i + 1}'s plan is over ${PLAN_MAX} characters; cut it to what its agent needs.`);
       }
       if ((p.attachments?.length ?? 0) > ATTACH_MAX) {
         return refused(`Piece ${i + 1} names more than ${ATTACH_MAX} attachments.`);
@@ -418,7 +418,7 @@ export class PiecesService implements ToolProvider {
           return refused(`This chat has no attachment "${label.trim()}"; name them as the messages caption them.`);
         attachments.push(ref);
       }
-      const piece: Piece = { id: `p${i + 1}`, title, brief, attachments, fate: p.where };
+      const piece: Piece = { id: `p${i + 1}`, title, plan, attachments, fate: p.where };
       if (p.project !== undefined) {
         if (p.where === "here") return refused(`Piece ${i + 1} ("${title}") is \`here\` and names a project.`);
         const found = this.resolveProject(wt, p.project);
@@ -473,7 +473,7 @@ export class PiecesService implements ToolProvider {
     // off the plan rides the card that is up; the person's own (the verb) has no card coming and
     // is a card of its own at once
     const held = by !== "person" && wt.mode === "plan";
-    const plan = held ? null : writePlanDocNow(wt.path, briefsDoc(pieces));
+    const plan = held ? null : writePlanDocNow(wt.path, listDoc(pieces));
     agent.note({
       type: "pieces-proposed",
       id: randomUUID(),
@@ -672,9 +672,9 @@ export class PiecesService implements ToolProvider {
     for (const p of found) sections.set(p.section, (sections.get(p.section) ?? 0) + 1);
     const raw = found.map((p): RawPiece => {
       const own = sections.get(p.section) === 1 ? sectionText(markdown, p.section) : null;
-      const brief = own ?? p.brief ?? sectionText(markdown, p.section) ?? `${p.title}\n\n${p.section}`;
+      const plan = own ?? p.plan ?? sectionText(markdown, p.section) ?? `${p.title}\n\n${p.section}`;
       const after = p.where === "worktree" && p.after && known(p.after) ? p.after : undefined;
-      return { title: p.title, brief, where: p.where, ...(after ? { after } : {}) };
+      return { title: p.title, plan, where: p.where, ...(after ? { after } : {}) };
     });
     const r = await this.propose(wt.id, raw, "toyon", hashText(markdown));
     if (r.isError) {
@@ -759,7 +759,7 @@ export class PiecesService implements ToolProvider {
     if (!own) throw new UserError(`Write what ${here ? "the new worktree" : repo.name} should do first`);
     const r = await this.propose(
       worktreeId,
-      [{ title: titleFrom(own), brief: own, where: "worktree", ...(here ? {} : { project: repo.path }) }],
+      [{ title: titleFrom(own), plan: own, where: "worktree", ...(here ? {} : { project: repo.path }) }],
       "person",
     );
     if (r.isError) throw new UserError(r.text);
@@ -793,12 +793,12 @@ export class PiecesService implements ToolProvider {
         throw new UserError(`"${piece.to?.title ?? "the worktree"}" is no longer open`);
       }
       const attachments = await this.reattachAll(wt.id, piece.attachments);
-      this.d.runtime.ensureAgent(target).agent.send(pieceSendPrompt(piece.brief, note, origin), {
+      this.d.runtime.ensureAgent(target).agent.send(pieceSendPrompt(piece.plan, note, origin), {
         keepCards: true,
         ...(attachments.length ? { attachments } : {}),
         handed: {
           via: "message",
-          body: piece.brief,
+          body: piece.plan,
           origin: handedOrigin(wt, piece.project ? origin.project : undefined),
           ...(note ? { note } : {}),
         },
@@ -814,7 +814,7 @@ export class PiecesService implements ToolProvider {
         proposalId: proposed.id,
         pieceId: piece.id,
         title: piece.title,
-        brief: piece.brief,
+        plan: piece.plan,
         after: waits,
         ...(piece.project ? { project: piece.project } : {}),
         attachments: piece.attachments,
@@ -863,7 +863,7 @@ export class PiecesService implements ToolProvider {
   private async make(
     origin: WorktreeInfo,
     at: PieceOrigin,
-    piece: Pick<Piece, "title" | "brief" | "attachments" | "project">,
+    piece: Pick<Piece, "title" | "plan" | "attachments" | "project">,
     note: string | undefined,
     after?: Named,
   ): Promise<WorktreeInfo> {
@@ -892,7 +892,7 @@ export class PiecesService implements ToolProvider {
         // the text rides on the record too: what a search, a recap and the archive's row read
         handed: {
           via: "plan",
-          body: piece.brief,
+          body: piece.plan,
           origin: handedOrigin(origin, piece.project ? at.project : undefined),
           ...(note ? { note } : {}),
         },
@@ -1010,7 +1010,7 @@ export class PiecesService implements ToolProvider {
     const repo = this.d.state.repo(wt.repoId);
     if (!repo) return;
     this.d.runtime.ensureAgent(origin).agent.note({
-      type: "handoff-landed",
+      type: "piece-landed",
       worktreeId: wt.id,
       repoName: repo.name,
       title: wt.title,
@@ -1033,7 +1033,7 @@ export class PiecesService implements ToolProvider {
       if (w.kind !== "worktree" || w.landed || w.id === landedId || madeNow.has(w.id)) continue;
       if (w.from?.kind !== "worktree" || w.from.after?.id !== landedId) continue;
       this.d.runtime.ensureAgent(w).agent.note({
-        type: "handoff-landed",
+        type: "piece-landed",
         worktreeId: landed.id,
         repoName: repo.name,
         title: landed.title,

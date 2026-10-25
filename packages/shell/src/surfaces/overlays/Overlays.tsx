@@ -8,13 +8,13 @@ import { CommandPalette } from "./CommandPalette.tsx";
 import { DevicesCard } from "./DevicesCard.tsx";
 import { ElementSources } from "./ElementSources.tsx";
 import { FolderPicker } from "./FolderPicker.tsx";
-import { HandoffPicker } from "./HandoffPicker.tsx";
 import { KeepAwakePicker } from "./KeepAwakePicker.tsx";
 import { KeysHelp } from "./KeysHelp.tsx";
 import { ProjectPicker } from "./ProjectPicker.tsx";
 import { QuickOpen } from "./QuickOpen.tsx";
 import { RefPicker } from "./RefPicker.tsx";
 import { SearchPalette } from "./SearchPalette.tsx";
+import { SplitPicker } from "./SplitPicker.tsx";
 import { ThemePicker } from "./ThemePicker.tsx";
 import "./overlays.css";
 
@@ -43,7 +43,7 @@ export function Overlays() {
       {overlay?.kind === "keep-awake" && <KeepAwakePicker />}
       {overlay?.kind === "agent" && <AgentPicker />}
       {overlay?.kind === "agent-page" && <AgentPage agentId={overlay.agent} />}
-      {overlay?.kind === "handoff" && <HandoffPicker worktreeId={overlay.worktreeId} />}
+      {overlay?.kind === "split" && <SplitPicker worktreeId={overlay.worktreeId} />}
       {overlay?.kind === "commands" && !phone && <CommandPalette />}
       {/* keyed by form: the folder button swaps center for disk in this same slot, and the disk form
           has to mount fresh to start in the home directory with the caret in it */}

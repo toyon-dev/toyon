@@ -1243,7 +1243,7 @@ export const ChatItemView = memo(function ChatItemView({
           {sentChips(item.attachments)}
         </HandedRow>
       );
-    case "handoff-landed":
+    case "piece-landed":
       return <PieceLandedRow item={item} />;
     case "pieces":
       return <PiecesRow item={item} worktreeId={worktreeId} />;

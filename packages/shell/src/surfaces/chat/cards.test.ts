@@ -6,7 +6,7 @@ import type { PiecesItem } from "./pieces.ts";
 const pieces = (over: Partial<PiecesItem> = {}): PiecesItem => ({
   kind: "pieces",
   id: "l1",
-  pieces: [{ id: "p1", title: "Rail", brief: "Fix the rail.", attachments: [], fate: "worktree" }],
+  pieces: [{ id: "p1", title: "Rail", plan: "Fix the rail.", attachments: [], fate: "worktree" }],
   fates: { p1: "worktree" },
   mode: "auto",
   state: "proposed",

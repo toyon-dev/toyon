@@ -20,7 +20,7 @@ import {
 const piece = (id: string, over: Partial<Piece> = {}): Piece => ({
   id,
   title: `Piece ${id}`,
-  brief: "do it",
+  plan: "do it",
   attachments: [],
   fate: "worktree",
   ...over,

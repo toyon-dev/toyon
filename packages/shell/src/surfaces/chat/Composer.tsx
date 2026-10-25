@@ -108,7 +108,7 @@ import {
   triggerAt,
 } from "./mentions.ts";
 import { dismissOffer, offerOf, useDismissedOffers } from "./offer.ts";
-import { browseCommands, isMode, mergeCommands, ownCommandOf, ownCommands, parseHandoffArgs } from "./ownCommands.ts";
+import { browseCommands, isMode, mergeCommands, ownCommandOf, ownCommands, parseSplitArgs } from "./ownCommands.ts";
 import { PermissionCard } from "./PermissionCard.tsx";
 import { PickChip } from "./PickChip.tsx";
 import { PiecesCard } from "./PiecesCard.tsx";
@@ -1014,13 +1014,13 @@ export function Composer({
   const refused = useSendsRefused();
   // the seat's verb by name. The seat only offers it from an empty box, so this reads the facts
   // under it rather than the seat, and says why when there is nothing for the word to do.
-  const runSeat = (name: "check" | "land" | "archive" | "handoff", args = "") => {
+  const runSeat = (name: "check" | "land" | "archive" | "split", args = "") => {
     if (!active || !id) return;
-    if (name === "handoff") {
+    if (name === "split") {
       // the new worktree's plan is written from this chat, and a worktree not yet made has none
       if (spawning) return refuse("a new worktree has nothing to continue yet");
-      const parsed = parseHandoffArgs(args, repos, active.worktree.repoId);
-      if ("pick" in parsed) dispatch({ a: "open", overlay: { kind: "handoff", worktreeId: id } });
+      const parsed = parseSplitArgs(args, repos, active.worktree.repoId);
+      if ("pick" in parsed) dispatch({ a: "open", overlay: { kind: "split", worktreeId: id } });
       else if ("error" in parsed) refuse(parsed.error);
       else
         sock?.send({
@@ -1178,7 +1178,7 @@ export function Composer({
       return;
     }
     if (typed && !mode) {
-      runSeat(typed.name as "check" | "land" | "archive" | "handoff", typed.args);
+      runSeat(typed.name as "check" | "land" | "archive" | "split", typed.args);
       setText("");
       return;
     }

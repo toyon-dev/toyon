@@ -3753,7 +3753,7 @@ describe("a sibling's landing, and a guest from another project", () => {
 
   test("a landing elsewhere is a row, and the branch a sibling waited for landing again is one too", () => {
     const landed: AgentEvent = {
-      type: "handoff-landed",
+      type: "piece-landed",
       worktreeId: "g",
       repoName: "r2",
       title: "Bump the pin",
@@ -3762,9 +3762,9 @@ describe("a sibling's landing, and a guest from another project", () => {
     };
     const s = run([hello(wt("a")), agent("a", landed), agent("a", { ...landed, same: true, again: true, ts: 4 })]);
     expect(s.local.a?.chat).toEqual([
-      { kind: "handoff-landed", worktreeId: "g", repoName: "r2", title: "Bump the pin", url: "https://x/1", ts: 3 },
+      { kind: "piece-landed", worktreeId: "g", repoName: "r2", title: "Bump the pin", url: "https://x/1", ts: 3 },
       {
-        kind: "handoff-landed",
+        kind: "piece-landed",
         worktreeId: "g",
         repoName: "r2",
         title: "Bump the pin",
@@ -4162,7 +4162,7 @@ describe("the outbox", () => {
 });
 
 describe("a list read off the plan", () => {
-  const pieces = [{ id: "p1", title: "Rail", brief: "Fix.", attachments: [], fate: "worktree" as const }];
+  const pieces = [{ id: "p1", title: "Rail", plan: "Fix.", attachments: [], fate: "worktree" as const }];
   const card: AgentEvent = {
     type: "agent-permission",
     id: "k1",
@@ -4198,8 +4198,8 @@ describe("a list read off the plan", () => {
 
 describe("a pieces list", () => {
   const pieces = [
-    { id: "p1", title: "Rail", brief: "Fix the rail.", attachments: [], fate: "worktree" as const },
-    { id: "p2", title: "Notes", brief: "Add notes.", attachments: [], fate: "here" as const },
+    { id: "p1", title: "Rail", plan: "Fix the rail.", attachments: [], fate: "worktree" as const },
+    { id: "p2", title: "Notes", plan: "Add notes.", attachments: [], fate: "here" as const },
   ];
   const held: AgentEvent = { type: "pieces-proposed", id: "l1", pieces, mode: "plan", held: true, ts: 1 };
   const shown: AgentEvent = {

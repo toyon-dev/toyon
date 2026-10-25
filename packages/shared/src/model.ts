@@ -328,7 +328,7 @@ export interface QueuedPiece {
   pieceId: string;
   title: string;
   /** the plan its worktree is born with */
-  brief: string;
+  plan: string;
   /** the worktree it waits for, or a piece of the same list not yet made into one */
   after: { id: string; branch: string; title: string } | { piece: string };
   /** another open project the worktree is made in */

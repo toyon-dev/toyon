@@ -23,7 +23,7 @@ const HANDED =
 const HANDOFF =
   '{"seq":2,"event":{"type":"handoff-proposed","id":"h","repo":{"id":"r2","name":"acp","path":"/p/acp"},"message":"Bump the pin.","title":"Bump pin","by":"agent","mode":"auto","ts":7}}';
 const HANDOFF_AS_PIECES =
-  '{"seq":2,"event":{"type":"pieces-proposed","id":"h","pieces":[{"id":"p1","title":"Bump pin","brief":"Bump the pin.","attachments":[],"fate":"worktree","project":{"id":"r2","name":"acp"}}],"mode":"auto","ts":7}}';
+  '{"seq":2,"event":{"type":"pieces-proposed","id":"h","pieces":[{"id":"p1","title":"Bump pin","plan":"Bump the pin.","attachments":[],"fate":"worktree","project":{"id":"r2","name":"acp"}}],"mode":"auto","ts":7}}';
 const WENT =
   '{"seq":3,"event":{"type":"handoff","id":"h","worktreeId":"b","repoId":"r2","repoName":"acp","title":"Bump pin","ts":8}}';
 const WENT_AS_PIECES =
@@ -49,10 +49,20 @@ describe("forwardLine", () => {
     expect(forwardLine('{"seq":5,"event":{"type":"handoff-declined","id":"h","ts":9}}')).toEqual({
       line: '{"seq":5,"event":{"type":"pieces-declined","id":"h","ts":9}}',
     });
-    // the landed word keeps its name, and a message that only mentions a brief is left alone
+    // the landing word becomes a piece's, a piece's text is its plan, and a message that only
+    // mentions a brief is left alone
     expect(
       forwardLine('{"seq":6,"event":{"type":"handoff-landed","worktreeId":"b","repoName":"acp","title":"x","ts":9}}'),
-    ).toBeNull();
+    ).toEqual({
+      line: '{"seq":6,"event":{"type":"piece-landed","worktreeId":"b","repoName":"acp","title":"x","ts":9}}',
+    });
+    expect(
+      forwardLine(
+        '{"seq":8,"event":{"type":"pieces-proposed","id":"l","pieces":[{"id":"p1","title":"Rail","brief":"Fix.","attachments":[],"fate":"here"}],"mode":"auto","ts":9}}',
+      ),
+    ).toEqual({
+      line: '{"seq":8,"event":{"type":"pieces-proposed","id":"l","pieces":[{"id":"p1","title":"Rail","attachments":[],"fate":"here","plan":"Fix."}],"mode":"auto","ts":9}}',
+    });
     expect(forwardLine('{"seq":7,"event":{"type":"user-message","text":"read the brief","ts":9}}')).toBeNull();
   });
 });

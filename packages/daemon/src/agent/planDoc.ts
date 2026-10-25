@@ -111,10 +111,10 @@ export function writePlanDocNow(cwd: string, markdown: string): string | null {
 }
 
 /** a pieces list as a page of its own, for the section to sit on when the agent wrote no plan:
- * a title, then each piece's text under its own heading. The words are the agent's; only the file
+ * a title, then each piece's plan under its own heading. The words are the agent's; only the file
  * is Toyon's, and it is never the worktree's plan on its record. */
-export function briefsDoc(pieces: ReadonlyArray<{ title: string; brief: string }>): string {
-  return `# Worktrees\n\n${pieces.map((p) => `## ${p.title}\n\n${p.brief.trim()}\n`).join("\n")}`;
+export function listDoc(pieces: ReadonlyArray<{ title: string; plan: string }>): string {
+  return `# Worktrees\n\n${pieces.map((p) => `## ${p.title}\n\n${p.plan.trim()}\n`).join("\n")}`;
 }
 
 /**

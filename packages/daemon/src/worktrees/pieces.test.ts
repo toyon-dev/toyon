@@ -6,7 +6,7 @@ import type { AgentEvent, PieceOutcome, RepoInfo } from "@toyon/shared";
 import type { FakeAgent } from "../../test/helpers/fakes.ts";
 import { sh } from "../../test/helpers/tmp-repo.ts";
 import { planReader, registered, settle, until, useWorld, w } from "../../test/helpers/world.ts";
-import { briefsDoc, writePlanDocNow } from "../agent/planDoc.ts";
+import { listDoc, writePlanDocNow } from "../agent/planDoc.ts";
 import { StateStore } from "../core/state.ts";
 import { GIT } from "../git/exec.ts";
 import { listFile, PIECES_MAX, type RawPiece, sectionText } from "./pieces.ts";
@@ -64,7 +64,7 @@ const SHOWN = "Handed to the person as a card; they decide. Finish your turn.";
 
 const piece = (over: Partial<RawPiece> = {}): RawPiece => ({
   title: "Rail fixes",
-  brief: "Fix the rail.",
+  plan: "Fix the rail.",
   where: "worktree",
   ...over,
 });
@@ -97,7 +97,7 @@ describe("the tool", () => {
     expect(tool.description).toContain(`${b.branch}, "Composer"`);
     expect(tool.description).not.toContain('"Rail"');
     expect(tool.inputSchema).toMatchObject({ required: ["pieces"], additionalProperties: false });
-    for (const bad of [{}, { pieces: [] }, { pieces: [{ title: 1, brief: "b", where: "here" }] }, { pieces: "x" }]) {
+    for (const bad of [{}, { pieces: [] }, { pieces: [{ title: 1, plan: "b", where: "here" }] }, { pieces: "x" }]) {
       expect(await w.pieces.call(a.id, bad)).toMatchObject({
         text: expect.stringContaining("split takes"),
         isError: true,
@@ -106,16 +106,16 @@ describe("the tool", () => {
     expect(recorded(a.id, "pieces-proposed")).toHaveLength(0);
   });
 
-  test("each piece is checked: caps, a blank brief, where and after and to agree, names resolve", async () => {
+  test("each piece is checked: caps, a blank plan, where and after and to agree, names resolve", async () => {
     const repoId = await registered();
     const a = await w.worktrees.create(repoId, "task", { title: "Rail" });
     await w.worktrees.create(repoId, "task", { title: "Composer" });
     await w.worktrees.create(repoId, "task", { title: "Composer notes" });
     const refusal = async (p: RawPiece, said: string) =>
       expect(await call(a.id, p)).toMatchObject({ text: expect.stringContaining(said), isError: true });
-    await refusal(piece({ brief: "   " }), "has no brief");
+    await refusal(piece({ plan: "   " }), "has no plan");
     await refusal(piece({ title: " " }), "has no title");
-    await refusal(piece({ brief: "x".repeat(20_001) }), "over 20000 characters");
+    await refusal(piece({ plan: "x".repeat(20_001) }), "over 20000 characters");
 
     await refusal(piece({ title: "t".repeat(21) }), "runs to 21 characters; a title is 1 to 3 plain words");
     await refusal(piece({ title: "fix the form on save" }), "runs to 5 words");
@@ -138,7 +138,7 @@ describe("the tool", () => {
     const repoId = await registered();
     const planning = await w.worktrees.create(repoId, "task", { title: "Rail", mode: "plan" });
     const other = await w.worktrees.create(repoId, "task", { title: "Composer" });
-    expect(await call(planning.id, piece(), piece({ title: "Here", brief: "Mine.", where: "here" }))).toEqual({
+    expect(await call(planning.id, piece(), piece({ title: "Here", plan: "Mine.", where: "here" }))).toEqual({
       text: HELD,
     });
     const held = lastProposal(planning.id);
@@ -151,7 +151,7 @@ describe("the tool", () => {
     expect(w.state.worktree(planning.id)?.plan).toBeUndefined();
 
     expect(
-      await call(other.id, piece({ after: "this" }), piece({ title: "Mine", brief: "Do it.", where: "here" })),
+      await call(other.id, piece({ after: "this" }), piece({ title: "Mine", plan: "Do it.", where: "here" })),
     ).toEqual({
       text: SHOWN,
     });
@@ -196,7 +196,7 @@ describe("the tool", () => {
     const a = await w.worktrees.create(repoId, "task", { mode: "plan" });
     // the session's path when a held list is shown: the briefs written in the same tick, the
     // record's plan untouched, so the card's section has its page and the composer keeps the plan
-    const plan = writePlanDocNow(a.path, briefsDoc([{ title: "Rail fixes", brief: "Fix the rail." }]));
+    const plan = writePlanDocNow(a.path, listDoc([{ title: "Rail fixes", plan: "Fix the rail." }]));
     expect(plan).toMatch(/^\.toyon\/plans\/\d+\.md$/);
     expect(readFileSync(join(a.path, plan!), "utf8")).toBe("# Worktrees\n\n## Rail fixes\n\nFix the rail.\n");
     expect(w.state.worktree(a.id)?.plan).toBeUndefined();
@@ -230,7 +230,7 @@ describe("fates", () => {
     const repoId = await registered();
     const a = await w.worktrees.create(repoId, "task", { title: "Rail" });
     const b = await w.worktrees.create(repoId, "task", { title: "Composer" });
-    await call(a.id, piece(), piece({ title: "Notes", brief: "Add notes.", where: "send", to: b.branch }));
+    await call(a.id, piece(), piece({ title: "Notes", plan: "Add notes.", where: "send", to: b.branch }));
     const id = lastProposal(a.id).id;
     w.pieces.fate(a.id, id, "p1", "skip");
     w.pieces.fate(a.id, id, "p1", "here");
@@ -251,7 +251,7 @@ describe("fates", () => {
 });
 
 describe("go", () => {
-  test("here and skip do nothing; worktree makes a sibling seeded with the brief, the note, the origin, its plan and the image", async () => {
+  test("here and skip do nothing; worktree makes a sibling seeded with the plan, the note, the origin, its plan and the image", async () => {
     const repoId = await registered();
     const a = await w.worktrees.create(repoId, "task", { title: "Rail", mode: "ask" });
     // the branch follows the given title a moment after the create; the pointer names the branch
@@ -260,9 +260,9 @@ describe("go", () => {
     await imageOn(a.id);
     await call(
       a.id,
-      piece({ title: "Mine", brief: "I do this.", where: "here" }),
+      piece({ title: "Mine", plan: "I do this.", where: "here" }),
       piece({ attachments: ["Image 1"] }),
-      piece({ title: "Later", brief: "Not now.", where: "here" }),
+      piece({ title: "Later", plan: "Not now.", where: "here" }),
     );
     const proposed = lastProposal(a.id);
     // the sibling is pointed at the file the list sits on, the briefs here, and not at the record's
@@ -319,7 +319,7 @@ describe("go", () => {
     const repoId = await registered();
     const a = await w.worktrees.create(repoId, "task", { title: "Rail" });
     const b = await w.worktrees.create(repoId, "task", { title: "Composer" });
-    await call(a.id, piece({ after: b.branch }), piece({ title: "Mine own", brief: "Then this.", after: "this" }));
+    await call(a.id, piece({ after: b.branch }), piece({ title: "Mine own", plan: "Then this.", after: "this" }));
     const proposed = lastProposal(a.id);
     await w.pieces.answer(a.id, proposed.id, true);
     expect(outcomesOf(a.id)).toEqual([
@@ -328,7 +328,7 @@ describe("go", () => {
     ]);
     expect(madeTitled("Rail fixes")).toBeUndefined();
     const queued = w.state.worktree(a.id)!.queued!;
-    expect(queued.map((q) => [q.pieceId, "id" in q.after ? q.after.id : q.after.piece, q.brief])).toEqual([
+    expect(queued.map((q) => [q.pieceId, "id" in q.after ? q.after.id : q.after.piece, q.plan])).toEqual([
       ["p1", b.id, "Fix the rail."],
       ["p2", a.id, "Then this."],
     ]);
@@ -358,7 +358,7 @@ describe("go", () => {
     await imageOn(a.id);
     await call(
       a.id,
-      piece({ title: "Notes", brief: "Add the notes.", where: "send", to: "Composer", attachments: ["Image 1"] }),
+      piece({ title: "Notes", plan: "Add the notes.", where: "send", to: "Composer", attachments: ["Image 1"] }),
     );
     const proposed = lastProposal(a.id);
     await w.pieces.answer(a.id, proposed.id, true);
@@ -371,7 +371,7 @@ describe("go", () => {
     // recorded as sent on another agent's behalf in that chat, its own words the text the row opens
     expect(sent.handed).toMatchObject({ via: "message", body: "Add the notes.", origin: { id: a.id, title: "Rail" } });
     // the sibling made from the chat is not the one to send to once it is gone
-    await call(a.id, piece({ title: "More", brief: "More.", where: "send", to: b.branch }));
+    await call(a.id, piece({ title: "More", plan: "More.", where: "send", to: b.branch }));
     const again = lastProposal(a.id);
     await w.worktrees.archiveWorktree(b.id);
     await w.pieces.answer(a.id, again.id, true);
@@ -387,7 +387,7 @@ describe("go", () => {
     const a = await w.worktrees.create(repoId, "task", { title: "Rail" });
     const b = await w.worktrees.create(repoId, "task", { title: "Composer" });
     const c = await w.worktrees.create(repoId, "task", { title: "Notes" });
-    await call(a.id, piece({ after: b.branch }), piece({ title: "Other", brief: "Other.", after: c.branch }));
+    await call(a.id, piece({ after: b.branch }), piece({ title: "Other", plan: "Other.", after: c.branch }));
     const proposed = lastProposal(a.id);
     await w.pieces.answer(a.id, proposed.id, true);
     expect(w.state.worktree(a.id)!.queued).toHaveLength(2);
@@ -406,7 +406,7 @@ describe("go", () => {
     expect(madeTitled("Other")).toBeUndefined();
   });
 
-  test("the person's verb aimed at this project is one piece: the agent is asked with the tool, else the words are the brief", async () => {
+  test("the person's verb aimed at this project is one piece: the agent is asked with the tool, else the words are the plan", async () => {
     const repoId = await registered();
     const a = await w.worktrees.create(repoId, "task", { title: "Rail" });
     await w.pieces.ask(a.id, repoId, "fix the rail badge");
@@ -418,7 +418,7 @@ describe("go", () => {
     await expect(w.pieces.ask(a.id, repoId)).rejects.toThrow("Write what the new worktree should do first");
     await w.pieces.ask(a.id, repoId, "fix the rail badge");
     expect(lastProposal(a.id).pieces).toEqual([
-      { id: "p1", title: "Fix the rail", brief: "fix the rail badge", attachments: [], fate: "worktree" },
+      { id: "p1", title: "Fix the rail", plan: "fix the rail badge", attachments: [], fate: "worktree" },
     ]);
     expect(existsSync(join(a.path, lastProposal(a.id).plan!))).toBe(true);
   });
@@ -496,7 +496,7 @@ describe("read off the plan", () => {
     await until(() => recorded(a.id, "pieces-proposed").length === 1);
     const read = lastProposal(a.id);
     expect(read).toMatchObject({ by: "toyon", held: true });
-    expect(read.pieces.map((p) => [p.title, p.fate, p.brief])).toEqual([
+    expect(read.pieces.map((p) => [p.title, p.fate, p.plan])).toEqual([
       ["The rail", "here", "## 1. The rail (this worktree)\n\nFix the rail here."],
       ["The composer", "worktree", "## 2. The composer (sibling worktree, after this lands)\n\nMove the box."],
     ]);
@@ -575,7 +575,7 @@ describe("read off the plan", () => {
   test("the plan's yes tells the agent what the list started, steered into its turn; Toyon's own card does not", async () => {
     const repoId = await registered();
     const a = await w.worktrees.create(repoId, "task", { title: "Rail", mode: "plan" });
-    await call(a.id, piece({ title: "Mine", brief: "I do this.", where: "here" }), piece());
+    await call(a.id, piece({ title: "Mine", plan: "I do this.", where: "here" }), piece());
     const id = lastProposal(a.id).id;
     const before = agentOf(a.id).sent.length;
     w.hub.emit("piecesDecided", a.id, id, true);
@@ -603,7 +603,7 @@ describe("listFile", () => {
   test("Toyon's own card names the page it wrote; a held list names the agent's plan until it is shown", () => {
     const own = at(1, { type: "pieces-proposed", id: "l1", pieces, mode: "ask", plan: ".toyon/plans/1.md", ts: 1 });
     expect(listFile([own], "l1")).toBe(".toyon/plans/1.md");
-    // read off the plan in plan mode: the file is the plan, which holds no brief of its own
+    // read off the plan in plan mode: the file is the plan, which holds no plan of its own
     const read = at(2, {
       type: "pieces-proposed",
       id: "l2",
@@ -631,9 +631,9 @@ describe("chains", () => {
     await until(() => a.branch === "toyon/rail");
     await call(
       a.id,
-      piece({ title: "First", brief: "One." }),
-      piece({ title: "Second", brief: "Two.", after: "First" }),
-      piece({ title: "Third", brief: "Three.", after: "second" }),
+      piece({ title: "First", plan: "One." }),
+      piece({ title: "Second", plan: "Two.", after: "First" }),
+      piece({ title: "Third", plan: "Three.", after: "second" }),
     );
     const proposed = lastProposal(a.id);
     expect(proposed.pieces.map((p) => p.after)).toEqual([undefined, { piece: "p1" }, { piece: "p2" }]);
@@ -660,11 +660,11 @@ describe("chains", () => {
       ["p3", expect.objectContaining({ id: second.id, title: "Second" })],
     ]);
     // the first lands again with a follow-up: the second hears so, and only the second
-    expect(recorded(second.id, "handoff-landed")).toHaveLength(0);
+    expect(recorded(second.id, "piece-landed")).toHaveLength(0);
     await land(first.id, "two.txt");
-    await until(() => recorded(second.id, "handoff-landed").length === 1);
-    expect(recorded(second.id, "handoff-landed")[0]).toMatchObject({ title: "First", same: true, again: true });
-    expect(recorded(a.id, "handoff-landed").filter((e) => "again" in e)).toHaveLength(0);
+    await until(() => recorded(second.id, "piece-landed").length === 1);
+    expect(recorded(second.id, "piece-landed")[0]).toMatchObject({ title: "First", same: true, again: true });
+    expect(recorded(a.id, "piece-landed").filter((e) => "again" in e)).toHaveLength(0);
     await until(() => second.branch === "toyon/second");
     await land(second.id, "three.txt");
     await until(() => recorded(a.id, "piece-made").length === 2);
@@ -678,10 +678,10 @@ describe("chains", () => {
     await until(() => a.branch === "toyon/rail");
     await call(
       a.id,
-      piece({ title: "Mine", brief: "Mine.", where: "here" }),
-      piece({ title: "Second", brief: "Two.", after: "Mine" }),
-      piece({ title: "Gone", brief: "Gone." }),
-      piece({ title: "Fourth", brief: "Four.", after: "Gone" }),
+      piece({ title: "Mine", plan: "Mine.", where: "here" }),
+      piece({ title: "Second", plan: "Two.", after: "Mine" }),
+      piece({ title: "Gone", plan: "Gone." }),
+      piece({ title: "Fourth", plan: "Four.", after: "Gone" }),
     );
     const proposed = lastProposal(a.id);
     w.pieces.fate(a.id, proposed.id, "p3", "skip");
@@ -693,12 +693,12 @@ describe("chains", () => {
       { pieceId: "p4", fate: "worktree", worktreeId: madeTitled("Fourth")!.id },
     ]);
     // a piece waits only for one earlier on the list: not itself, not a later one
-    const r = await call(a.id, piece({ title: "Self", brief: "s", after: "Self" }));
+    const r = await call(a.id, piece({ title: "Self", plan: "s", after: "Self" }));
     expect(r.text).toContain("is this piece or a later one");
     const fwd = await call(
       a.id,
-      piece({ title: "Early", brief: "e", after: "Late" }),
-      piece({ title: "Late", brief: "l" }),
+      piece({ title: "Early", plan: "e", after: "Late" }),
+      piece({ title: "Late", plan: "l" }),
     );
     expect(fwd.text).toContain('"Late" is this piece or a later one');
   });
@@ -711,7 +711,7 @@ describe("another project", () => {
     const a = await w.worktrees.create(repoId, "task", { title: "Rail", mode: "ask" });
     await until(() => a.branch === "toyon/rail");
     expect(w.pieces.tool(a.id).description).toContain("name in `project`: claude-agent-acp");
-    const r = await call(a.id, piece({ title: "Fix form", brief: "Fix the form field.", project: "claude" }));
+    const r = await call(a.id, piece({ title: "Fix form", plan: "Fix the form field.", project: "claude" }));
     expect(r.isError).toBeUndefined();
     const proposed = lastProposal(a.id);
     expect(proposed.pieces[0]!.project).toEqual({ id: acp.id, name: "claude-agent-acp" });
@@ -733,9 +733,9 @@ describe("another project", () => {
     // the made worktree landing tells the origin, as a landing in another project
     await until(() => b.branch === "toyon/fix-form");
     await land(b.id, "form.txt");
-    await until(() => recorded(a.id, "handoff-landed").length === 1);
-    expect(recorded(a.id, "handoff-landed")[0]).toMatchObject({ worktreeId: b.id, repoName: "claude-agent-acp" });
-    expect(recorded(a.id, "handoff-landed")[0]).not.toHaveProperty("same");
+    await until(() => recorded(a.id, "piece-landed").length === 1);
+    expect(recorded(a.id, "piece-landed")[0]).toMatchObject({ worktreeId: b.id, repoName: "claude-agent-acp" });
+    expect(recorded(a.id, "piece-landed")[0]).not.toHaveProperty("same");
   });
 
   test("the own project, an unknown one and a `here` piece with a project are refused in words", async () => {

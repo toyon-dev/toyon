@@ -141,6 +141,16 @@ export function loadState(paths: Paths): PersistedState {
     log.error("state", `${STATE_FILE} is not valid JSON; copied to ${backup} and starting empty`, e);
     return structuredClone(empty);
   }
+  // a queued piece's text was its `brief` until 0.17: the field is `plan` now, moved once here
+  for (const w of state.worktrees) {
+    for (const q of w.queued ?? []) {
+      const old = q as unknown as { brief?: string; plan?: string };
+      if (old.brief !== undefined && old.plan === undefined) {
+        old.plan = old.brief;
+        delete old.brief;
+      }
+    }
+  }
   // sessions belong to worktrees; a removed worktree's entry is an orphan
   const ids = new Set(state.worktrees.map((w) => w.id));
   for (const id of Object.keys(state.sessions)) if (!ids.has(id)) delete state.sessions[id];

@@ -53,7 +53,7 @@ export interface Piece {
   id: string;
   title: string;
   /** markdown that stands on its own: the plan its worktree is born with, or what is sent */
-  brief: string;
+  plan: string;
   /** what this chat attached that the piece needs: named by the agent as the prompt captions
    * them ("Image 2", "Paste 1"), resolved to the refs when proposed, so the shell can draw them */
   attachments: AttachmentRef[];
@@ -421,7 +421,7 @@ export type AgentEvent =
    * another one. `again`: the branch this worktree waited for before it started landed once more,
    * with follow-up commits; written on the waiting worktree's own transcript. */
   | {
-      type: "handoff-landed";
+      type: "piece-landed";
       worktreeId: string;
       repoName: string;
       title: string;

@@ -44,7 +44,7 @@ import { agentModeFor, modeAfterPlan, orderPlanOptions } from "../modes.ts";
 import { markOrigins } from "../origins.ts";
 import { formatOutput } from "../output.ts";
 import { decide, decideUnattended, pickOption } from "../policy.ts";
-import { ambientBlock, buildPrompt, handoffLandedContext, SYSTEM_APPEND } from "../prompt.ts";
+import { ambientBlock, buildPrompt, pieceLandedContext, SYSTEM_APPEND } from "../prompt.ts";
 import type { AgentSpec } from "../registry.ts";
 import { type Bounds, type Prepared, prepareLaunch } from "../sandbox.ts";
 import { sealOpenTurn, Transcript, type TranscriptEntry, transcriptPathFor } from "../transcript.ts";
@@ -340,7 +340,7 @@ export class AcpSession implements AgentAdapter {
   /** ask cards waiting on a person, by ask id. The agent's request stays open on the wire until
    * one of these settles, and that is what blocks its turn. */
   private asks = new Map<string, PendingAsk>();
-  /** handoff and pieces cards waiting on a person, by proposal id. The tool answers the agent at
+  /** pieces cards waiting on a person, by proposal id. The tool answers the agent at
    * once (its client times a call out before a person would answer), so nothing on the wire holds
    * the turn; the open card is what the row reads `waiting` from. Seeded from the transcript and
    * kept by the events that open and close one, so it survives a restart. */
@@ -900,7 +900,7 @@ export class AcpSession implements AgentAdapter {
         for (const q of this.queue) q.handedBack = false;
         this.setStopping(false);
       }
-      // a handoff or pieces card proposed during the turn is still a person's answer owed once
+      // a pieces card proposed during the turn is still a person's answer owed once
       // the turn is over: the row keeps reading waiting from it, not idle
       this.setStatus(this.openCards.size > 0 ? "waiting" : "idle");
     } catch (e) {
@@ -1194,7 +1194,7 @@ export class AcpSession implements AgentAdapter {
     for (i--; i >= 0; i--) {
       const e = entries[i]!.event;
       if (isMessage(e)) break;
-      if (e.type === "handoff-landed") out.unshift(handoffLandedContext(e.title, e.repoName, e.url, e.same, e.again));
+      if (e.type === "piece-landed") out.unshift(pieceLandedContext(e.title, e.repoName, e.url, e.same, e.again));
     }
     return out;
   }
@@ -1766,7 +1766,7 @@ export class AcpSession implements AgentAdapter {
   }
 
   /** a card is opened inside a running turn, so the turn's own status would say "working" while
-   * the agent is in fact blocked on a person; a handoff card holds no turn at all, and is still
+   * the agent is in fact blocked on a person; a pieces card holds no turn at all, and is still
    * a person's answer owed */
   private syncStatus() {
     if (this.status === "error") return;

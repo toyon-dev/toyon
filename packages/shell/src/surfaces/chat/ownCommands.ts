@@ -8,7 +8,7 @@ import { type AgentCommand, PERMISSION_MODES, type PermissionMode, type RepoInfo
 
 /** the names toyon answers itself: a mode, the seat's verb, or a new worktree for part of the
  * work, here or in another open project */
-export type OwnName = PermissionMode | "check" | "land" | "archive" | "handoff";
+export type OwnName = PermissionMode | "check" | "land" | "archive" | "split";
 
 /** a draft that leads with one of toyon's own commands: the name, and whatever followed it */
 export type OwnInvocation = { name: OwnName; args: string };
@@ -28,21 +28,21 @@ export function ownCommands(landLine: string): AgentCommand[] {
     { name: "land", description: landLine },
     { name: "archive", description: "archive this worktree once its work has landed" },
     {
-      name: "handoff",
+      name: "split",
       description: "a new worktree for part of this work, here or in another project, born with a plan for it",
       hint: "<project> [<message>]",
     },
   ];
 }
 
-/** what `/handoff <project> [text]` means: the project the new worktree goes in and the person's
+/** what `/split <project> [text]` means: the project the new worktree goes in and the person's
  * own words, the picker when nothing was named, or why the name does not pick one */
-export type HandoffArgs = { repo: RepoInfo; text?: string } | { error: string } | { pick: true };
+export type SplitArgs = { repo: RepoInfo; text?: string } | { error: string } | { pick: true };
 
 /** The first word names the project, by its name as listed: an exact match first (case does not
  * matter), else the one project whose name starts with it; `here`, or this worktree's own
  * project, means a new worktree here. The rest is the person's own words for what it should do. */
-export function parseHandoffArgs(args: string, repos: readonly RepoInfo[], hereRepoId: string): HandoffArgs {
+export function parseSplitArgs(args: string, repos: readonly RepoInfo[], hereRepoId: string): SplitArgs {
   const trimmed = args.trim();
   if (!trimmed) return { pick: true };
   const gap = trimmed.search(/\s/);

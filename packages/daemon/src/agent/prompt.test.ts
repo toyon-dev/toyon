@@ -5,10 +5,10 @@ import {
   buildPrompt,
   fileCaption,
   handedPrompt,
-  handoffLandedContext,
   pasteCaption,
   pickCaption,
   pieceAskPrompt,
+  pieceLandedContext,
   pieceSendPrompt,
   piecesActedPrompt,
   previewContext,
@@ -91,16 +91,16 @@ describe("prompts for work in another project", () => {
   });
 
   test("the landed sentence names the project and the title, with the PR when the landing was one", () => {
-    expect(handoffLandedContext("Fix the form", "acp", "https://x/pull/7")).toBe(
+    expect(pieceLandedContext("Fix the form", "acp", "https://x/pull/7")).toBe(
       'The work this worktree handed off to acp, "Fix the form", has landed there (https://x/pull/7); anything here that waited on it, such as a pinned version or a hand-patched copy, can take the real change now.',
     );
-    expect(handoffLandedContext("Fix the form", "acp")).toContain('"Fix the form", has landed there; anything');
+    expect(pieceLandedContext("Fix the form", "acp")).toContain('"Fix the form", has landed there; anything');
     // a sibling of this project, a piece of the plan here: no project named, the queue mentioned
-    expect(handoffLandedContext("Landed rule", "toyon", undefined, true)).toBe(
+    expect(pieceLandedContext("Landed rule", "toyon", undefined, true)).toBe(
       'The sibling worktree "Landed rule", a piece of the work planned here, has landed on this project\'s main; anything here that waited on it can take the real change now, and a later piece that waited for it has started.',
     );
     // the branch this worktree waited for before it started landed once more
-    expect(handoffLandedContext("First", "toyon", undefined, true, true)).toBe(
+    expect(pieceLandedContext("First", "toyon", undefined, true, true)).toBe(
       'The branch this worktree waited for before it started, "First", landed again on this project\'s main with follow-up commits; Toyon rebases onto main when this lands, and its latest commits are readable now if they touch your piece.',
     );
   });

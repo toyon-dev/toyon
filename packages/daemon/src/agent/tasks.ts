@@ -72,7 +72,7 @@ export function lacksQuickModel(
 
 /** The pieces of a plan, read off its text when the agent handed none over: a JSON list of the
  * sections the plan itself marks as a separate branch, a sibling worktree or a follow-up. The
- * section is named by its heading so the brief can be cut from the plan verbatim where it stands
+ * section is named by its heading so the piece's plan can be cut from the plan verbatim where it stands
  * alone, and the model writes one where it does not; `after` is only
  * "this" (waits for this branch to land) or a branch that exists, since a sibling not yet made has
  * no branch to name. */
@@ -80,7 +80,7 @@ export const PIECES_SYSTEM = "You read plans and reply with only the requested J
 export const piecesPrompt = (markdown: string) =>
   [
     "Below is a plan. List the parts of it the plan itself means to build apart from the rest: a step or section it marks as its own branch, a sibling worktree, a follow-up, or independent work. Also list the part it keeps in this worktree, if it says so.",
-    `Reply with ONLY a JSON array of 0 to 6 objects, each {"title": a name for the part, ${NAME_SHAPE}, "section": the exact heading text of that part, "brief": the plan for that part's agent in markdown, from the plan's own words: what to build, why, the files, and what done looks like, 150 to 500 words, "where": "worktree" or "here", "after": optional, "this" when the plan says the part waits for this branch to land}.`,
+    `Reply with ONLY a JSON array of 0 to 6 objects, each {"title": a name for the part, ${NAME_SHAPE}, "section": the exact heading text of that part, "plan": the plan for that part's agent in markdown, from the plan's own words: what to build, why, the files, and what done looks like, 150 to 500 words, "where": "worktree" or "here", "after": optional, "this" when the plan says the part waits for this branch to land}.`,
     "Reply with an empty array when the plan is one piece of work with no part set apart.",
     `Plan:\n${markdown.slice(0, 12_000)}`,
   ].join("\n");
@@ -90,7 +90,7 @@ export interface ReadPiece {
   section: string;
   /** the plan for the part's agent, in the model's words off the plan: what a sibling is born
    * with when the section it names is shared with another part or missing */
-  brief?: string;
+  plan?: string;
   where: "here" | "worktree";
   after?: string;
 }
@@ -106,13 +106,13 @@ export function parsePieces(text: string | null): ReadPiece[] | null {
     const out: ReadPiece[] = [];
     for (const x of arr) {
       if (!x || typeof x !== "object") continue;
-      const { title, section, brief, where, after } = x as Record<string, unknown>;
+      const { title, section, plan, where, after } = x as Record<string, unknown>;
       if (typeof title !== "string" || !title.trim() || typeof section !== "string" || !section.trim()) continue;
       if (where !== "here" && where !== "worktree") continue;
       out.push({
         title: title.trim(),
         section: section.trim(),
-        ...(typeof brief === "string" && brief.trim() ? { brief: brief.trim() } : {}),
+        ...(typeof plan === "string" && plan.trim() ? { plan: plan.trim() } : {}),
         where,
         ...(typeof after === "string" && after.trim() ? { after: after.trim() } : {}),
       });

@@ -127,6 +127,25 @@ describe("state", () => {
     expect(loadState(paths).trustedOrigins?.at(-1)?.origin).toBe("https://m19.example");
   });
 
+  test("a queued piece stored with its text as `brief` reads back as `plan`, moved once", () => {
+    const queued = {
+      proposalId: "l1",
+      pieceId: "p1",
+      title: "Rail",
+      brief: "Fix.",
+      after: { id: "b", branch: "toyon/b", title: "B" },
+      attachments: [],
+      queuedAt: 1,
+    };
+    writeFileSync(
+      paths.stateFile,
+      JSON.stringify({ repos: [], worktrees: [{ ...wt("a"), queued: [queued] }], sessions: {} }),
+    );
+    const loaded = loadState(paths).worktrees[0]!.queued![0]!;
+    expect(loaded.plan).toBe("Fix.");
+    expect("brief" in loaded).toBe(false);
+  });
+
   test("corrupt file is backed up, not silently discarded", () => {
     writeFileSync(paths.stateFile, '{"repos": [');
     const s = loadState(paths);

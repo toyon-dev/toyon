@@ -1,6 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import { PERMISSION_MODES } from "@toyon/shared";
-import { browseCommands, commandTiers, mergeCommands, ownCommandOf, ownCommands } from "./ownCommands.ts";
+import { PERMISSION_MODES, type RepoInfo } from "@toyon/shared";
+import {
+  browseCommands,
+  commandTiers,
+  mergeCommands,
+  ownCommandOf,
+  ownCommands,
+  parseHandoffArgs,
+} from "./ownCommands.ts";
 
 const own = ownCommands("Commit and merge into main here");
 const planLine = PERMISSION_MODES.find((m) => m.id === "plan")?.description;
@@ -106,5 +113,45 @@ describe("ownCommandOf", () => {
   test("the name is the whole first word", () => {
     expect(ownCommandOf("/planning", own)).toBeNull();
     expect(ownCommandOf("/", own)).toBeNull();
+  });
+});
+
+describe("parseHandoffArgs", () => {
+  const repo = (id: string, name = id): RepoInfo => ({
+    id,
+    path: `/p/${id}`,
+    name,
+    defaultBranch: "main",
+    config: { run: {} },
+    configFile: ".toyon/settings.json",
+    needsSetup: false,
+  });
+  const repos = [repo("r1", "toyon"), repo("r2", "claude-agent-acp"), repo("r3", "Toyon-Mono")];
+  test("nothing named opens the picker", () => {
+    expect(parseHandoffArgs("", repos, "r1")).toEqual({ pick: true });
+    expect(parseHandoffArgs("   ", repos, "r1")).toEqual({ pick: true });
+  });
+  test("an exact name, whatever its case, then a unique prefix", () => {
+    expect(parseHandoffArgs("claude-agent-acp", repos, "r1")).toEqual({ repo: repos[1]! });
+    expect(parseHandoffArgs("CLAUDE-AGENT-ACP", repos, "r1")).toEqual({ repo: repos[1]! });
+    expect(parseHandoffArgs("cla", repos, "r1")).toEqual({ repo: repos[1]! });
+    // an exact match wins over the prefix it also is
+    expect(parseHandoffArgs("toyon", repos, "r2")).toEqual({ repo: repos[0]! });
+  });
+  test("the rest is the person's own words", () => {
+    expect(parseHandoffArgs("cla bump the pin  to 0.85", repos, "r1")).toEqual({
+      repo: repos[1]!,
+      text: "bump the pin  to 0.85",
+    });
+  });
+  test("here, or this worktree's own project, is a new worktree here", () => {
+    expect(parseHandoffArgs("here", repos, "r1")).toEqual({ repo: repos[0]! });
+    expect(parseHandoffArgs("HERE the badge", repos, "r1")).toEqual({ repo: repos[0]!, text: "the badge" });
+    expect(parseHandoffArgs("toyon", repos, "r1")).toEqual({ repo: repos[0]! });
+    expect(parseHandoffArgs("here", [repos[0]!], "r1")).toEqual({ repo: repos[0]! });
+  });
+  test("the refusals: no such name, a name shared", () => {
+    expect(parseHandoffArgs("zed", repos, "r1")).toEqual({ error: 'no open project named "zed"' });
+    expect(parseHandoffArgs("toy", repos, "r2")).toEqual({ error: '"toy" names more than one project' });
   });
 });

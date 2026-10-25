@@ -187,15 +187,17 @@ export function lastUsage(transcript: string): WorktreeStatus["usage"] | null {
   return null;
 }
 
-/** the first message in a transcript file, cut to what a row can show: a sibling agent's brief
- * by its own words, not the pointer behind them */
+/** the first message in a transcript file, cut to what a row can show. A worktree born with a
+ * plan another agent wrote, or a piece sent on, is summed up by that text's own words, which the
+ * handed row carries as its body, not by the pointer that was the message. */
 export function firstPrompt(transcript: string): string | undefined {
   if (!existsSync(transcript)) return undefined;
   for (const line of readFileSync(transcript, "utf8").split("\n")) {
-    if (!line.includes('"user-message"')) continue;
+    if (!line.includes('"user-message"') && !line.includes('"handed"')) continue;
     try {
       const event = (JSON.parse(line) as { event?: AgentEvent }).event;
-      if (event?.type === "user-message") return (event.brief?.text ?? event.text).slice(0, 500);
+      if (event?.type === "user-message") return event.text.slice(0, 500);
+      if (event?.type === "handed") return (event.body ?? event.text).slice(0, 500);
     } catch {
       // a torn line is the transcript loader's to report; the next message will do
     }

@@ -1,5 +1,5 @@
 // The card that takes the message box when the agent's turn is stopped on the person: a question,
-// a permission, a handoff. The keyboard is already there, the box never scrolls away, and it is
+// a permission, a list of pieces. The keyboard is already there, the box never scrolls away, and it is
 // where a reply is written anyway. A card is a head (the sentence asked), a band to read before
 // answering (a command, a plan, a preview), the numbered choices (`ui/Choices`), and a foot of
 // actions; this is the frame they share.

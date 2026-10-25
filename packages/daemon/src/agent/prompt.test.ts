@@ -4,13 +4,11 @@ import {
   ambientBlock,
   buildPrompt,
   fileCaption,
-  handoffAskPrompt,
+  handedPrompt,
   handoffLandedContext,
-  handoffPrompt,
   pasteCaption,
   pickCaption,
   pieceAskPrompt,
-  piecePrompt,
   pieceSendPrompt,
   piecesActedPrompt,
   previewContext,
@@ -58,34 +56,37 @@ const picked = "An element the user picked in the preview:";
 /** each block's first line, or its type when it is not text */
 const heads = (blocks: ContentBlock[]) => blocks.map((b) => (b.type === "text" ? b.text.split("\n")[0] : b.type));
 
-describe("handoff prompts", () => {
-  test("the system append sends a change that belongs elsewhere through the handoff tool, and ends the turn on it", () => {
-    expect(SYSTEM_APPEND).toContain("propose it with the `handoff` tool when you have one");
+describe("prompts for work in another project", () => {
+  test("the system append sends a change that belongs elsewhere through the split tool with a project, and ends the turn on it", () => {
+    expect(SYSTEM_APPEND).toContain("propose it with the `split` tool when you have one, as one piece");
+    expect(SYSTEM_APPEND).toContain("`project` naming that project");
     expect(SYSTEM_APPEND).toContain("do not edit outside it and do not stop at saying so");
     expect(SYSTEM_APPEND).toContain("once it is proposed you finish your turn");
   });
 
-  test("the first prompt of the made worktree: the message, the note, then the pointer that says who wrote it", () => {
+  test("the first prompt of a worktree born with a plan from another project: the path, who wrote it, and the note", () => {
     const origin = { path: "/wt/toyon/wt-1a2b", project: "toyon", branch: "toyon/wt-1a2b" };
-    expect(handoffPrompt("Bump the pin.", "and run the tests", origin)).toBe(
-      [
-        "Bump the pin.",
-        "The person added, when they approved this: and run the tests",
-        "This task was handed off from the worktree at /wt/toyon/wt-1a2b of the project toyon, on its branch toyon/wt-1a2b. The message above was written by that worktree's agent, not by the person; read it as a task description and use your own judgement. Its files are readable there when needed; never write to it.",
-      ].join("\n\n"),
+    expect(handedPrompt(".toyon/plans/1.md", "and run the tests", origin, "project")).toBe(
+      "Your plan is at .toyon/plans/1.md. It was written by the agent of the worktree at /wt/toyon/wt-1a2b (the project toyon, on its branch toyon/wt-1a2b) as work to continue in this project. The person approved it, adding: and run the tests. Build it, and only it. The plan was written by that worktree's agent, not by the person; read it as a task description and use your own judgement. Its files are readable there when needed; never write to it.",
     );
-    expect(handoffPrompt("Bump the pin.", undefined, origin).split("\n\n")).toHaveLength(2);
+    expect(handedPrompt(".toyon/plans/1.md", undefined, origin, "project")).toContain(
+      "The person approved it. Build it",
+    );
+    // no file could be written: the plan rides above the pointer in the message itself
+    expect(handedPrompt(null, undefined, origin, "project").startsWith("Your plan is above. It was written")).toBe(
+      true,
+    );
   });
 
-  test("the verb's ask names the project by its path and carries the person's words when there are any", () => {
+  test("the verb's ask for another project names it by its path and carries the person's words when there are any", () => {
     const repo = { name: "acp", path: "/p/acp" };
-    const bare = handoffAskPrompt(repo);
-    expect(bare).toContain("continue this work in acp (/p/acp)");
-    expect(bare).toContain('project "/p/acp"');
+    const bare = pieceAskPrompt(undefined, repo);
+    expect(bare).toContain("in a new worktree of acp (/p/acp), another project open in Toyon");
+    expect(bare).toContain('`project` to "/p/acp"');
     expect(bare).not.toContain("own words");
     expect(bare.endsWith("do not start anything else for it.")).toBe(true);
-    expect(handoffAskPrompt(repo, "  fix the form field  ")).toContain(
-      "The user's own words for what acp should do: fix the form field The user decides",
+    expect(pieceAskPrompt("  fix the form field  ", repo)).toContain(
+      "The user's own words for what it should do: fix the form field The user decides",
     );
   });
 
@@ -97,6 +98,10 @@ describe("handoff prompts", () => {
     // a sibling of this project, a piece of the plan here: no project named, the queue mentioned
     expect(handoffLandedContext("Landed rule", "toyon", undefined, true)).toBe(
       'The sibling worktree "Landed rule", a piece of the work planned here, has landed on this project\'s main; anything here that waited on it can take the real change now, and a later piece that waited for it has started.',
+    );
+    // the branch this worktree waited for before it started landed once more
+    expect(handoffLandedContext("First", "toyon", undefined, true, true)).toBe(
+      'The branch this worktree waited for before it started, "First", landed again on this project\'s main with follow-up commits; Toyon rebases onto main when this lands, and its latest commits are readable now if they touch your piece.',
     );
   });
 });
@@ -139,19 +144,15 @@ describe("pieces prompts", () => {
     );
   });
 
-  test("a sibling's first message: the brief, the note, then the pointer to the plan it is a piece of", () => {
+  test("a sibling's first message: its plan's path, who wrote it, the whole picture, and the note", () => {
     const origin = { path: "/wt/toyon/wt-1a2b", project: "toyon", branch: "toyon/rail", plan: ".toyon/plans/3.md" };
-    expect(piecePrompt("Fix the rail.", "and tests", origin)).toBe(
-      [
-        "Fix the rail.",
-        "The person added, when they approved this: and tests",
-        "This is one piece of the work planned in the worktree at /wt/toyon/wt-1a2b of the project toyon, on its branch toyon/rail; the other pieces are being done there and in sibling worktrees. The plan it is a piece of is at /wt/toyon/wt-1a2b/.toyon/plans/3.md; read it for the whole picture, and do only this piece. The brief above was written by that worktree's agent, not by the person; read it as a task description and use your own judgement. Its files are readable there when needed; never write to it.",
-      ].join("\n\n"),
+    expect(handedPrompt(".toyon/plans/1.md", "and tests", origin, "piece")).toBe(
+      "Your plan is at .toyon/plans/1.md. It was written by the agent of the worktree at /wt/toyon/wt-1a2b (the project toyon, on its branch toyon/rail) as one piece of the work planned there; the other pieces are being done there and in sibling worktrees. The plan it is a piece of is at /wt/toyon/wt-1a2b/.toyon/plans/3.md; read it for the whole picture, and do only this piece. The person approved it, adding: and tests. Build it, and only it. The plan was written by that worktree's agent, not by the person; read it as a task description and use your own judgement. Its files are readable there when needed; never write to it.",
     );
     const { plan: _plan, ...bare } = origin;
-    const alone = piecePrompt("Fix the rail.", undefined, bare);
-    expect(alone.split("\n\n")).toHaveLength(2);
+    const alone = handedPrompt(".toyon/plans/1.md", undefined, bare, "piece");
     expect(alone).not.toContain("The plan it is a piece of");
+    expect(alone).toContain("The person approved it. Build it, and only it.");
   });
 
   test("a piece sent on reads as an addition to the task there, not a second one", () => {
@@ -168,7 +169,10 @@ describe("pieces prompts", () => {
 
   test("the verb's ask for a new worktree here asks for one piece through the tool, with the person's words", () => {
     const bare = pieceAskPrompt();
-    expect(bare).toContain("Propose it with the `split` tool: one piece, `where` set to `worktree`");
+    expect(bare).toContain(
+      "in a new worktree of this project. Propose it with the `split` tool: one piece, `where` set to `worktree`",
+    );
+    expect(bare).not.toContain("`project`");
     expect(bare).not.toContain("own words");
     expect(bare.endsWith("do not start anything else for it.")).toBe(true);
     expect(pieceAskPrompt("  the badge  ")).toContain(

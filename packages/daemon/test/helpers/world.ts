@@ -21,7 +21,6 @@ import { RuntimeRegistry } from "../../src/runtime/registry.ts";
 import { Interest } from "../../src/server/interest.ts";
 import { ArtifactCache } from "../../src/worktrees/cache.ts";
 import { FixService } from "../../src/worktrees/fix.ts";
-import { HandoffService } from "../../src/worktrees/handoff.ts";
 import { PiecesService } from "../../src/worktrees/pieces.ts";
 import { WorktreeService } from "../../src/worktrees/service.ts";
 import { TurnService } from "../../src/worktrees/turns.ts";
@@ -105,13 +104,6 @@ export function world() {
     // a test plants what the quick model would read off a plan; nothing, by default
     reader: async (wt, markdown) => planReader.fn?.(wt, markdown) ?? null,
   });
-  const handoff = new HandoffService({
-    state,
-    hub,
-    runtime,
-    create: (repoId, prompt, opts) => worktrees.create(repoId, prompt, opts),
-    pieces,
-  });
   return {
     ...t,
     interest,
@@ -128,7 +120,6 @@ export function world() {
     refused,
     fix,
     pageErrors,
-    handoff,
     pieces,
     attachments,
     ...f,

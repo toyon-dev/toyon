@@ -19,7 +19,6 @@ import type {
   AttachmentInput,
   AttachmentKind,
   AuthMethodInfo,
-  Brief,
   CommandOrigin,
   ModelChoice,
   PermissionMode,
@@ -29,7 +28,7 @@ import type {
 import { DEFAULT_PERMISSION_MODE, nextNumbers } from "@toyon/shared";
 import { UserError } from "../../core/errors.ts";
 import { fireAndForget, log } from "../../core/log.ts";
-import type { AgentAdapter, AskOpts, AskReply, AuthOutcome, FollowUp, SendOpts } from "../adapter.ts";
+import type { AgentAdapter, AskOpts, AskReply, AuthOutcome, FollowUp, Handed, SendOpts } from "../adapter.ts";
 import type { AttachmentStore, Stored } from "../attachments.ts";
 import {
   AWS_EXPIRED_RE,
@@ -261,8 +260,8 @@ interface QueueItem {
   recorded?: Recorded;
   /** what Toyon's own message was sent for, when it is one: what rides behind it reads it */
   asked?: Asked["kind"];
-  /** a sibling agent's brief, kept for the record the message makes once it is shown */
-  brief?: Brief;
+  /** sent on another agent's behalf: the record the message makes is `handed`, not a bubble */
+  handed?: Handed;
   /** steered, then handed back to the queue by a stop: the agent can still go on past the cancel
    * and pick the message up after all (a command still running holds the interrupt off, and the
    * adapter forces the turn closed only after a floor), and its answer then belongs to the
@@ -377,7 +376,9 @@ export class AcpSession implements AgentAdapter {
       ...(d.claudeConfigDir !== undefined ? { configDir: d.claudeConfigDir } : {}),
     });
     this.seq = nextNumbers(
-      this.log.entries.map(({ event }) => (event.type === "user-message" ? event.attachments : undefined)),
+      this.log.entries.map(({ event }) =>
+        event.type === "user-message" || event.type === "handed" ? event.attachments : undefined,
+      ),
     );
     // a turn the daemon died under has no end: read what it is owed before the rows below are
     // added (they would read as the turn doing more), and write it after them, as its last event
@@ -405,22 +406,22 @@ export class AcpSession implements AgentAdapter {
       const output = [formatOutput(text, 0, false), "ended with the daemon that was watching it"].filter(Boolean);
       this.emit({ type: "tool-end", toolId, output: output.join("\n"), isError: true });
     }
-    // a handoff card is answered through the daemon, not the agent's process, so one the daemon
+    // a pieces card is answered through the daemon, not the agent's process, so one the daemon
     // died under is still open: the row reads waiting from it again. A go the daemon died under
-    // is another matter: the worktree it was making is not coming, so the row that stood for it
-    // closes as failed rather than read "continuing" for good.
+    // is another matter: the worktrees it was making are not coming, so the list that stood for
+    // them closes as failed rather than read "starting" for good.
     const going = new Set<string>();
     for (const { event } of this.log.entries) {
       this.trackCards(event);
-      if (event.type === "handoff-go") going.add(event.id);
-      else if (event.type === "handoff" || event.type === "handoff-declined") going.delete(event.id);
+      if (event.type === "pieces-go") going.add(event.id);
+      else if (event.type === "pieces" || event.type === "pieces-declined") going.delete(event.id);
     }
     for (const id of going) {
       this.emit({
-        type: "handoff-declined",
+        type: "pieces-declined",
         id,
         outcome: "failed",
-        reason: "Toyon stopped while the worktree was being made",
+        reason: "Toyon stopped while the worktrees were being made",
         ts: Date.now(),
       });
     }
@@ -428,7 +429,8 @@ export class AcpSession implements AgentAdapter {
       log.info(d.worktreeId, `sealed a turn left open: ${seal.stopReason}`);
       this.emit(seal);
     }
-    // a list held for a plan card the daemon died under: the list is Toyon's card from here
+    // a list held for a plan card the daemon died under stays held in plan mode, for the next
+    // plan card; anywhere else it is Toyon's card from here
     this.showHeld();
     if (this.openCards.size > 0) this.syncStatus();
     this.restored = true;
@@ -441,9 +443,6 @@ export class AcpSession implements AgentAdapter {
   /** the open cards follow their events; true when the set changed. A pieces list proposed in
    * plan mode is held rather than open: the next plan card carries it, and its yes answers both. */
   private trackCards(event: AgentEvent): boolean {
-    if (event.type === "handoff-proposed") return this.openCards.add(event.id).size > 0;
-    if (event.type === "handoff-go" || event.type === "handoff" || event.type === "handoff-declined")
-      return this.openCards.delete(event.id);
     if (event.type === "pieces-proposed") {
       if (event.held) {
         this.heldPieces = event.id;
@@ -473,10 +472,11 @@ export class AcpSession implements AgentAdapter {
         const pieces = this.adopted.pieces;
         this.adopted = null;
         // the card closed without an answer (the daemon died under it, the agent withdrew it,
-        // the person stopped): the agent's list is held again, and shown as Toyon's own card
-        // where a held list is shown. One Toyon read for the card goes with the card, since
-        // nobody asked for it apart from the plan. An answer closes the list itself through
-        // `onPieces`, so nothing to do here for one.
+        // the person stopped): the agent's list is held again and rides the next plan card, since
+        // the list is the agent's word on the work and a card going away says nothing about it.
+        // One Toyon read for the card goes with the card, since nobody asked for it apart from
+        // the plan. An answer closes the list itself through `onPieces`, so nothing to do here
+        // for one.
         if (event.outcome !== "answered") {
           const list = this.log.entries.findLast(
             ({ event: e }) => e.type === "pieces-proposed" && e.id === pieces,
@@ -501,12 +501,15 @@ export class AcpSession implements AgentAdapter {
     return false;
   }
 
-  /** a held pieces list with no plan card to ride on becomes Toyon's own card: at the end of the
-   * turn that proposed it, or on a restart under that turn. The briefs are written first, so the
-   * event names the file the card's section sits on. */
+  /** A held pieces list with no plan card to ride on becomes Toyon's own card, once the worktree
+   * is out of plan mode: at the end of a turn, on a restart, or as the next message goes out
+   * after the mode chip moved. In plan mode it stays held, since a plan card is still coming and
+   * the list is that card's to answer; a card that went away unanswered hands it back here rather
+   * than demote it. The page for the list is written first, so the event names the file the
+   * card's section sits on. Once per list: a second call finds nothing held. */
   private showHeld(): void {
     const id = this.heldPieces;
-    if (!id) return;
+    if (!id || this.mode() === "plan") return;
     this.heldPieces = null;
     this.openCards.add(id);
     const proposed = this.log.entries.findLast(
@@ -610,7 +613,9 @@ export class AcpSession implements AgentAdapter {
    * handed back by a stop or by the agent) just goes next: drawn as queued it would show twice, and
    * taking it back to edit would send a second copy. */
   private waiting(): QueueItem[] {
-    return this.queue.filter((q) => !q.recorded);
+    // a message sent on another agent's behalf has no bubble to take back, so it is never queued
+    // in sight either: its row appears when it is recorded
+    return this.queue.filter((q) => !q.recorded && !q.handed);
   }
 
   onQueueChange: (() => void) | null = null;
@@ -680,6 +685,9 @@ export class AcpSession implements AgentAdapter {
   send(text: string, opts: SendOpts = {}) {
     if (this.stopped) return log.warn(this.d.worktreeId, "send after close dropped");
     if (!opts.asked && !opts.keepCards) for (const ask of [...this.asks.values()]) ask.settle("skipped");
+    // a list held for a plan card while the mode chip has since left plan mode: no card is coming
+    // for it, so it is Toyon's own card before the message goes
+    this.showHeld();
     this.post(text, opts);
   }
 
@@ -692,13 +700,13 @@ export class AcpSession implements AgentAdapter {
    * its turn; nothing when the message went to the queue instead. Throws as `send` does for an
    * attachment that cannot go. */
   private deliver(text: string, opts: SendOpts = {}): Promise<void> | undefined {
-    const { context, attachments, asked, brief } = opts;
+    const { context, attachments, asked, handed } = opts;
     const item: QueueItem = {
       text,
       context,
       ...(attachments?.length ? { attachments } : {}),
       ...(asked ? { asked: asked.kind } : {}),
-      ...(brief ? { brief } : {}),
+      ...(handed ? { handed } : {}),
     };
     // Toyon's own message is recorded as it is sent, however long it waits for its turn: it has
     // no bubble to take back, so it is never drawn as queued, and the row saying why it was sent
@@ -1095,7 +1103,7 @@ export class AcpSession implements AgentAdapter {
 
   /** write the attachments and show the message. Numbered and written in the order they were
    * attached before anything is shown, so the bubble and the prompt agree on "Image N". */
-  private async record({ text, attachments, brief }: QueueItem): Promise<Recorded> {
+  private async record({ text, attachments, handed }: QueueItem): Promise<Recorded> {
     const stored: Stored[] = [];
     try {
       for (const a of attachments ?? [])
@@ -1104,13 +1112,10 @@ export class AcpSession implements AgentAdapter {
       // copied, or never going to be: a message that fails here is not tried again
       this.d.attachments.uploads.release(uploadIds(attachments));
     }
-    this.emit({
-      type: "user-message",
-      text,
-      ts: Date.now(),
-      ...(stored.length ? { attachments: stored.map((s) => s.ref) } : {}),
-      ...(brief ? { brief } : {}),
-    });
+    const attached = stored.length ? { attachments: stored.map((s) => s.ref) } : {};
+    // a message sent on another agent's behalf is Toyon's row on the chat, not a bubble
+    if (handed) this.emit({ type: "handed", ...handed, text, ...attached, ts: Date.now() });
+    else this.emit({ type: "user-message", text, ts: Date.now(), ...attached });
     return { attachments: stored };
   }
 
@@ -1182,14 +1187,14 @@ export class AcpSession implements AgentAdapter {
    * carry, and the next prompt starts past them. */
   private landedSince(): string[] {
     const entries = this.log.entries;
-    const isMessage = (e: AgentEvent) => e.type === "user-message" || e.type === "fix-asked";
+    const isMessage = (e: AgentEvent) => e.type === "user-message" || e.type === "fix-asked" || e.type === "handed";
     let i = entries.length - 1;
     while (i >= 0 && !isMessage(entries[i]!.event)) i--;
     const out: string[] = [];
     for (i--; i >= 0; i--) {
       const e = entries[i]!.event;
       if (isMessage(e)) break;
-      if (e.type === "handoff-landed") out.unshift(handoffLandedContext(e.title, e.repoName, e.url, e.same));
+      if (e.type === "handoff-landed") out.unshift(handoffLandedContext(e.title, e.repoName, e.url, e.same, e.again));
     }
     return out;
   }

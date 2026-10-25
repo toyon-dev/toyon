@@ -65,13 +65,15 @@ describe("sentHistory", () => {
     expect(sentHistory(chat, true)).toEqual([]);
   });
 
-  test("a sibling agent's brief was sent from another chat, and is not in it", () => {
-    const brief = {
-      kind: "user",
-      text: "Fix the rail.\n\nThis is one piece of…",
-      brief: { via: "piece", text: "Fix the rail.", origin: { id: "o", repoId: "r", branch: "b", title: "The plan" } },
+  test("what Toyon sent on another agent's behalf is its own row, and is not in it", () => {
+    const handed = {
+      kind: "handed",
+      via: "message",
+      body: "Fix the rail.",
+      origin: { id: "o", repoId: "r", branch: "b", title: "The plan" },
+      ts: 1,
     } as const satisfies ChatItem;
-    expect(sentHistory([brief, user("thanks")], false)).toEqual([{ text: "thanks", at: 1 }]);
+    expect(sentHistory([handed, user("thanks")], false)).toEqual([{ text: "thanks", at: 1 }]);
   });
 
   test("what toyon ran itself is not in it: the check after a turn, a landing's git steps", () => {

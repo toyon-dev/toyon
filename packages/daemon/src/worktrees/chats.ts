@@ -77,6 +77,10 @@ export function saidRows(entries: TranscriptEntry[]): SaidRow[] {
     if (event.type === "user-message") {
       turnTs = event.ts;
       push(seq, "user", event.text, event.ts);
+    } else if (event.type === "handed") {
+      // sent on another agent's behalf: its own words are what a search should find
+      turnTs = event.ts;
+      push(seq, "user", event.body ?? event.text, event.ts);
     } else if (event.type === "turn-start") {
       turnTs = event.ts;
     } else if (event.type === "text-delta") {

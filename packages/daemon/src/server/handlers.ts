@@ -38,7 +38,6 @@ import type { ThemeStore } from "../themes/store.ts";
 import type { UpdateService } from "../update/service.ts";
 import type { ChatSearch } from "../worktrees/chats.ts";
 import type { FixService } from "../worktrees/fix.ts";
-import type { HandoffService } from "../worktrees/handoff.ts";
 import type { LandingService } from "../worktrees/landing.ts";
 import type { PiecesService } from "../worktrees/pieces.ts";
 import type { PrService } from "../worktrees/prs.ts";
@@ -89,10 +88,9 @@ export interface Services {
   fix: Pick<FixService, "press" | "goOn">;
   /** what each worktree's preview page threw, as the shell forwards it */
   pageErrors: Pick<PageErrorService, "report" | "loaded">;
-  /** work continued in another project: the card's answer, and the verb that asks for one */
-  handoff: Pick<HandoffService, "answer" | "ask">;
-  /** a plan's pieces across worktrees: a fate moved on the list, and the answer to Toyon's card */
-  pieces: Pick<PiecesService, "fate" | "answer">;
+  /** a plan's pieces across worktrees: a fate moved on the list, the answer to Toyon's card, and
+   * the verb that asks for a new worktree here or in another project */
+  pieces: Pick<PiecesService, "fate" | "answer" | "ask">;
   /** Toyon's own tools for the agents, served over MCP by the http layer */
   mcp: Pick<ToyonMcp, "fetch">;
   themes: ThemeStore;
@@ -784,14 +782,9 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
 
   // the card's events are the word on it, on every tab; only a refusal comes back here, as the
   // error frame tagged with the worktree
-  async "handoff-answer"(msg, _ctx, s) {
+  async "pieces-ask"(msg, _ctx, s) {
     requireRun(s, msg.worktreeId);
-    await s.handoff.answer(msg.worktreeId, msg.id, msg.go, msg.note);
-  },
-
-  async "handoff-ask"(msg, _ctx, s) {
-    requireRun(s, msg.worktreeId);
-    await s.handoff.ask(msg.worktreeId, msg.repoId, msg.text);
+    await s.pieces.ask(msg.worktreeId, msg.repoId, msg.text);
   },
 
   "pieces-fate"(msg, _ctx, s) {

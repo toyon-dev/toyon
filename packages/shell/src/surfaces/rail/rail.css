@@ -97,7 +97,7 @@
       font: var(--type-mono);
       flex-shrink: 0;
     }
-    /* a guest row: another project's worktree, started from a row on this rail by a handoff. The
+    /* a guest row: another project's worktree, started from a piece of a row on this rail. The
        project's name in the dim tier, before the counts, so the row says whose it is where the
        badges say what it runs. It gives way before the name does, with a floor, since the name is
        what the row is found by. */

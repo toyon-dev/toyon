@@ -2,8 +2,11 @@ import { describe, expect, test } from "bun:test";
 import type { Piece } from "@toyon/shared";
 import {
   effectiveFate,
+  fateSentence,
   fatesFor,
-  onBriefs,
+  fateWord,
+  listPage,
+  oneRows,
   openPieces,
   type PiecesItem,
   pieceFate,
@@ -11,6 +14,7 @@ import {
   piecesCounts,
   piecesLine,
   piecesQuestion,
+  waitOf,
 } from "./pieces.ts";
 
 const piece = (id: string, over: Partial<Piece> = {}): Piece => ({
@@ -35,6 +39,7 @@ const list = (pieces: Piece[], fates: PiecesItem["fates"] = {}, over: Partial<Pi
 });
 const after = { id: "b", branch: "toyon/b", title: "B" };
 const to = { id: "c", branch: "toyon/c", title: "C" };
+const project = { id: "r2", name: "acp" };
 
 describe("fates", () => {
   test("the person's last press stands over the agent's proposal", () => {
@@ -42,9 +47,10 @@ describe("fates", () => {
     expect(effectiveFate(list([p]), p)).toBe("worktree");
     expect(effectiveFate(list([p], { p1: "skip" }), p)).toBe("skip");
   });
-  test("a piece for an open worktree is sent there or skipped; any other goes here, to a worktree, or is skipped", () => {
+  test("a piece for an open worktree is sent there or skipped; one for another project goes there or is skipped; any other goes here, to a worktree, or is skipped", () => {
     expect(fatesFor(piece("p1"))).toEqual(["here", "worktree", "skip"]);
     expect(fatesFor(piece("p1", { fate: "send", to }))).toEqual(["send", "skip"]);
+    expect(fatesFor(piece("p1", { project }))).toEqual(["worktree", "skip"]);
   });
   test("a press and an answer are the daemon's frames", () => {
     expect(pieceFate(list([]), "a", "p1", "skip")).toEqual({
@@ -68,6 +74,13 @@ describe("fates", () => {
       go: false,
     });
   });
+  test("a wait is a worktree already open, or a piece of the same list by its title", () => {
+    const l = list([piece("p1"), piece("p2", { after: { piece: "p1" } }), piece("p3", { after })]);
+    expect(waitOf(l, l.pieces[0]!)).toBeNull();
+    expect(waitOf(l, l.pieces[1]!)).toEqual({ kind: "piece", title: "Piece p1" });
+    expect(waitOf(l, l.pieces[2]!)).toEqual({ kind: "branch", ...after });
+    expect(waitOf(l, piece("p4", { after: { piece: "p9" } }))).toEqual({ kind: "piece", title: "another piece" });
+  });
 });
 
 describe("the words", () => {
@@ -82,24 +95,98 @@ describe("the words", () => {
       skipped: 1,
     });
   });
-  test("the line above the plan card: what starts, then what stays put", () => {
-    expect(piecesLine(list(four))).toBe("with yes: 1 worktree, 1 queued, 1 message; 1 here");
-    expect(piecesLine(list([piece("p1"), piece("p2"), piece("p3", { fate: "here" })], { p3: "skip" }))).toBe(
-      "with yes: 2 worktrees; 1 skipped",
+  test("the byline under the plan card: what its yes starts, as fact", () => {
+    expect(piecesLine(list(four), "a")).toBe(
+      "Starts this plan here, 1 worktree now, 1 when toyon/b lands and 1 sent on.",
     );
-    expect(piecesLine(list([piece("p1", { fate: "here" })]))).toBe("with yes: nothing starts; 1 here");
+    expect(piecesLine(list([piece("p1"), piece("p2"), piece("p3", { fate: "here" })], { p3: "skip" }), "a")).toBe(
+      "Starts 2 worktrees now; 1 skipped.",
+    );
+    // a wait on this branch reads as this branch, and two waits on it as one count
+    const self = { id: "a", branch: "toyon/a", title: "A" };
+    expect(piecesLine(list([piece("p1", { after: self }), piece("p2", { after: self })]), "a")).toBe(
+      "Starts 2 when this branch lands.",
+    );
+    expect(piecesLine(list([piece("p1", { after: { piece: "p2" } }), piece("p2", { after })]), "a")).toBe(
+      "Starts 2 queued.",
+    );
+    expect(piecesLine(list([piece("p1", { fate: "here" })]), "a")).toBe("Starts this plan here.");
+    expect(piecesLine(list([piece("p1")], { p1: "skip" }), "a")).toBe("Starts nothing; 1 skipped.");
   });
-  test("the card's question: one piece by its title, a list by its counts", () => {
+  test("the card's question: one piece by what the agent proposed, a list by its counts", () => {
     expect(piecesQuestion(list([piece("p1", { title: "Inbound comments" })]))).toBe(
       "Start a worktree for Inbound comments?",
     );
     expect(piecesQuestion(list([piece("p1", { title: "Later", after })]))).toBe("Queue a worktree for Later?");
     expect(piecesQuestion(list([piece("p1", { title: "Notes", fate: "send", to })]))).toBe("Send Notes to C?");
-    expect(piecesQuestion(list([piece("p1", { title: "Notes" })], { p1: "skip" }))).toBe("Skip Notes?");
+    expect(piecesQuestion(list([piece("p1", { title: "Notes", project })]))).toBe("Continue in acp?");
+    // the rows carry the fates, so a press on the plan page does not move the question
+    expect(piecesQuestion(list([piece("p1", { title: "Notes" })], { p1: "skip" }))).toBe("Start a worktree for Notes?");
     expect(piecesQuestion(list(four))).toBe("Start 1 worktree, queue 1, send 1, do 1 here?");
     expect(piecesQuestion(list([piece("p1"), piece("p2"), piece("p3", { fate: "here" })], { p3: "skip" }))).toBe(
       "Start 2 worktrees, skip 1?",
     );
+  });
+  test("the fate as a row's words, and as the sentence the open row states", () => {
+    const p = piece("p1", { after });
+    expect(fateWord(p, "worktree")).toBe("new worktree");
+    expect(fateWord(piece("p1", { project }), "worktree")).toBe("new worktree in acp");
+    expect(fateWord(p, "here")).toBe("here");
+    expect(fateWord(p, "skip")).toBe("skip");
+    expect(fateWord(piece("p1", { fate: "send", to }), "send")).toBe("sent to C");
+    expect(fateSentence(p, "worktree", { kind: "branch", ...after })).toBe(
+      "Starts as a new worktree, once toyon/b lands, with this text as its plan.",
+    );
+    expect(fateSentence(piece("p1", { project }), "worktree", null)).toBe(
+      "Starts as a new worktree in acp, with this text as its plan.",
+    );
+    expect(fateSentence(p, "here", null)).toBe("This worktree's agent does it.");
+    expect(fateSentence(piece("p1", { fate: "send", to }), "send", null)).toBe("Goes to C's agent as a message.");
+    expect(fateSentence(p, "skip", null)).toBe("Skipped: nothing happens to this piece.");
+  });
+});
+
+describe("oneRows", () => {
+  test("the agent's proposal first, the alternative, then not now; a note where an agent elsewhere reads it", () => {
+    const l = list([piece("p1")]);
+    expect(oneRows(l, l.pieces[0]!).map((r) => [r.fate, r.label, r.notes])).toEqual([
+      ["worktree", "start a worktree", true],
+      ["here", "do it here", false],
+      [null, "not now", false],
+    ]);
+    const here = list([piece("p1", { fate: "here" })]);
+    expect(oneRows(here, here.pieces[0]!).map((r) => r.fate)).toEqual(["here", "worktree", null]);
+  });
+  test("a wait queues the worktree and says what it waits for", () => {
+    const l = list([piece("p1", { after: { piece: "p2" } }), piece("p2", { title: "Layer 1" })]);
+    const rows = oneRows(l, l.pieces[0]!);
+    expect(rows[0]).toEqual({
+      fate: "worktree",
+      label: "queue a worktree",
+      description: "a copy of this project, with this text as its plan once Layer 1 lands",
+      notes: true,
+    });
+  });
+  test("a send piece is sent or not; one for another project goes there or not, never here", () => {
+    const send = list([piece("p1", { fate: "send", to })]);
+    expect(oneRows(send, send.pieces[0]!).map((r) => [r.fate, r.label])).toEqual([
+      ["send", "send to C"],
+      [null, "not now"],
+    ]);
+    const there = list([piece("p1", { project })]);
+    expect(oneRows(there, there.pieces[0]!).map((r) => [r.fate, r.label])).toEqual([
+      ["worktree", "start a worktree in acp"],
+      [null, "not now"],
+    ]);
+  });
+});
+
+describe("listPage", () => {
+  test("a list with a file of its own and no plan card sits on the page Toyon wrote", () => {
+    expect(listPage(list([], {}, { plan: ".toyon/plans/1.md" }))).toBe(true);
+    expect(listPage(list([], {}, { held: true, plan: ".toyon/plans/1.md" }))).toBe(true);
+    expect(listPage(list([], {}, { held: true, state: "held" }))).toBe(false);
+    expect(listPage(list([], {}, { held: true, plan: ".toyon/plans/2.md", companion: "k1" }))).toBe(false);
   });
 });
 
@@ -111,14 +198,5 @@ describe("openPieces", () => {
     expect(openPieces([done, declined])?.id).toBe("l1");
     expect(openPieces([declined])).toBeNull();
     expect(openPieces([list([], {}, { state: "held" })])?.state).toBe("held");
-  });
-});
-
-describe("onBriefs", () => {
-  test("a list with a file of its own and no plan card sits on the briefs Toyon wrote", () => {
-    expect(onBriefs(list([], {}, { plan: ".toyon/plans/1.md" }))).toBe(true);
-    expect(onBriefs(list([], {}, { held: true, plan: ".toyon/plans/1.md" }))).toBe(true);
-    expect(onBriefs(list([], {}, { held: true, state: "held" }))).toBe(false);
-    expect(onBriefs(list([], {}, { held: true, plan: ".toyon/plans/2.md", companion: "k1" }))).toBe(false);
   });
 });

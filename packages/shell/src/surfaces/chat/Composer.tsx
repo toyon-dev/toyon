@@ -7,6 +7,7 @@ import type {
   OwnedWorktree,
   PermissionMode,
   QueuedMessage,
+  QueuedPiece,
   WorktreeStatus,
 } from "@toyon/shared";
 import {
@@ -48,7 +49,7 @@ import {
   useSendsRefused,
   useTouch,
 } from "../../state/selectors.ts";
-import { composerBoxOf, type Draft, NEW_PROJECT_BOX, sendWaits, trunkOf } from "../../state/store.ts";
+import { composerBoxOf, type Draft, NEW_PROJECT_BOX, sendWaits, sentAttachments, trunkOf } from "../../state/store.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { TextArea } from "../../ui/Field.tsx";
@@ -93,10 +94,9 @@ import { AttachmentSet } from "./AttachmentSet.tsx";
 import { agentReadiness } from "./agentReady.ts";
 import { answerLines, answered as hasAnswer, stoppedAsk } from "./ask.ts";
 import { ComposerOffer } from "./ComposerOffer.tsx";
+import { cardLine, openCard } from "./cards.ts";
 import { caretAtPoint, takeCarried } from "./carried.ts";
 import { DraftChip } from "./DraftChip.tsx";
-import { HandoffCard } from "./HandoffCard.tsx";
-import { cardLine, openCard, parseHandoffArgs } from "./handoff.ts";
 import { MentionText, openMention } from "./Mentions.tsx";
 import {
   asBranches,
@@ -108,12 +108,10 @@ import {
   triggerAt,
 } from "./mentions.ts";
 import { dismissOffer, offerOf, useDismissedOffers } from "./offer.ts";
-import { fileWord, useOriginFile } from "./originFile.ts";
-import { browseCommands, isMode, mergeCommands, ownCommandOf, ownCommands } from "./ownCommands.ts";
+import { browseCommands, isMode, mergeCommands, ownCommandOf, ownCommands, parseHandoffArgs } from "./ownCommands.ts";
 import { PermissionCard } from "./PermissionCard.tsx";
 import { PickChip } from "./PickChip.tsx";
 import { PiecesCard } from "./PiecesCard.tsx";
-import { type PiecesItem, piecesLine } from "./pieces.ts";
 import { QuestionCard } from "./QuestionCard.tsx";
 import { type Step, stepWalk, type WalkKey } from "./recall.ts";
 import { shellCommandOf, shellContext } from "./shellMode.ts";
@@ -171,6 +169,14 @@ type Row =
 const WORKTREES_UNASKED = 3;
 
 const cmdRow = (c: AgentCommand): Row => ({ kind: "cmd", c });
+
+/** the piece of the same list a queued piece waits for, by its title: not a worktree yet, so no
+ * chip to draw; the list's other queued entries are where the title is kept */
+function queuedTitle(q: QueuedPiece, all: readonly QueuedPiece[]): string {
+  const after = q.after;
+  if ("id" in after) return after.branch;
+  return all.find((o) => o.proposalId === q.proposalId && o.pieceId === after.piece)?.title ?? "another piece";
+}
 
 /** The new-project view's box: a project that does not exist yet, so no worktree stands behind the
  * box and return makes the project instead of sending. What is typed and attached waits in
@@ -286,7 +292,7 @@ export function Composer({
   const walk = mark?.by === "walk" ? mark : undefined;
   const chat = useLocalField(id, "chat");
   const queue = useLocalField(id, "queue");
-  // the agent's open question, or a handoff proposed to the person, takes the box until it is
+  // the agent's open question, or a list of pieces proposed to the person, takes the box until it is
   // answered, unless it was set aside with escape to write a message instead: then the plain box
   // is back with a line offering it
   const card = useMemo(() => (id && !drafting ? openCard(chat) : null), [id, drafting, chat]);
@@ -299,12 +305,6 @@ export function Composer({
   const askRevived = useLocalField(id, "askRevived");
   const revived = !card && stopped && askRevived === stopped.id ? stopped : null;
   const cardUp = card && cardParked !== card.id ? card : revived;
-  // the pieces list a plan card carries beside it: what the plan's yes also does
-  const piecesOfPlan = useMemo((): PiecesItem | null => {
-    const id = cardUp?.kind === "ask" && cardUp.ask.kind === "permission" ? cardUp.ask.pieces : undefined;
-    const item = id ? chat.find((i) => i.kind === "pieces" && i.id === id) : undefined;
-    return item?.kind === "pieces" ? item : null;
-  }, [cardUp, chat]);
   // the revived card's own chips, dropped on it before or after the stop: they go in the answer
   const revivedBox = revived ? cardBox(revived.id) : null;
   const revivedItems = useLocalField(revivedBox, "attachments");
@@ -1017,14 +1017,14 @@ export function Composer({
   const runSeat = (name: "check" | "land" | "archive" | "handoff", args = "") => {
     if (!active || !id) return;
     if (name === "handoff") {
-      // the other project's agent starts from this chat, and a worktree not yet made has none
+      // the new worktree's plan is written from this chat, and a worktree not yet made has none
       if (spawning) return refuse("a new worktree has nothing to continue yet");
       const parsed = parseHandoffArgs(args, repos, active.worktree.repoId);
       if ("pick" in parsed) dispatch({ a: "open", overlay: { kind: "handoff", worktreeId: id } });
       else if ("error" in parsed) refuse(parsed.error);
       else
         sock?.send({
-          t: "handoff-ask",
+          t: "pieces-ask",
           worktreeId: id,
           repoId: parsed.repo.id,
           ...(parsed.text ? { text: parsed.text } : {}),
@@ -1305,18 +1305,11 @@ export function Composer({
 
   // the number each chip will carry on send, counting each kind on from this session's: a message
   // that starts a worktree starts that worktree's session, so its count starts over
-  const sentBefore = spawning ? [] : chat.map((c) => (c.kind === "user" ? c.attachments : undefined));
+  const sentBefore = spawning ? [] : sentAttachments(chat);
   // a queued message takes its numbers ahead of what is written here
   const queued = spawning ? [] : queue.flatMap((q) => q.attachments ?? []);
   const plan = active?.worktree.plan;
   const planLabel = usePlanTitle(active?.worktree.id, plan);
-  // a worktree made for one piece of a plan: the plan it is a piece of is the origin's, and the
-  // row points there until this worktree has a plan of its own
-  const fromPlan =
-    active?.worktree.from?.kind === "worktree" && active.worktree.from.plan ? active.worktree.from : null;
-  const originList = useOriginFile(
-    fromPlan ? { worktreeId: fromPlan.origin.id, repoId: fromPlan.origin.repoId, path: fromPlan.plan! } : null,
-  );
   // pieces of this worktree's plan waiting for a sibling to land, read off the record so a
   // restart keeps the line
   const queuedPieces = active?.worktree.queued ?? [];
@@ -1381,37 +1374,6 @@ export function Composer({
             }
           >
             {planLabel}
-          </Button>
-        </div>
-      )}
-      {!plan && fromPlan && active && (
-        <div className="composer-plan">
-          <Icon name="spawn" className="icon-inline" />
-          {/* the origin is the chip wherever it stands: on the rail, or in the archive, whose page
-              the chip opens; a deleted one is named by its branch, the one name kept here. The
-              file reads from the origin either way, since the archive keeps its plans */}
-          <span className="composer-plan-path">
-            <Button variant="inline" data-tip={fromPlan.plan} onClick={originList.open}>
-              from {fileWord(fromPlan.briefs)}
-            </Button>{" "}
-            in <WorktreeChip id={fromPlan.origin.id} title={fromPlan.ref} />
-          </span>
-        </div>
-      )}
-      {/* what the plan's yes also does: the pieces the agent handed over for it, in the plan row's
-          shape, pressed to read the list on the plan itself, where any row can still be moved */}
-      {piecesOfPlan && active && (
-        <div className="composer-pieces">
-          <Icon name="spawn" className="icon-inline" />
-          <Button
-            variant="inline"
-            className="composer-plan-path"
-            data-tip="Read the list on the plan; any row can still be moved"
-            onClick={() =>
-              plan && openFile({ sock, dispatch }, { worktreeId: active.worktree.id, path: plan, view: "preview" })
-            }
-          >
-            {piecesLine(piecesOfPlan)}
           </Button>
         </div>
       )}
@@ -1587,9 +1549,7 @@ export function Composer({
         />
       )}
       {cardUp && id ? (
-        cardUp.kind === "handoff" ? (
-          <HandoffCard key={cardUp.id} item={cardUp} worktreeId={id} rootRef={cardRef} />
-        ) : cardUp.kind === "pieces" ? (
+        cardUp.kind === "pieces" ? (
           <PiecesCard key={cardUp.id} item={cardUp} worktreeId={id} rootRef={cardRef} />
         ) : cardUp.ask.kind === "question" ? (
           <QuestionCard
@@ -2076,11 +2036,18 @@ export function Composer({
       {(readiness || (origin && trunk) || queuedPieces.length > 0) && (
         <div className="composer-notes">
           {/* pieces of this worktree's plan waiting on a sibling: one line each, the branch as the
-              chip a message draws it as, so the wait is read where the next message is written */}
+              chip a message draws it as, or the piece of the same list by its title while it is
+              not a worktree yet, so the wait is read where the next message is written */}
           {queuedPieces.map((q) => (
             <div key={`${q.proposalId}/${q.pieceId}`} className="hint composer-note">
               <span>
-                {q.title} starts when <WorktreeChip id={q.after.id} title={q.after.branch} /> lands
+                {q.title} starts when{" "}
+                {"id" in q.after ? (
+                  <WorktreeChip id={q.after.id} title={q.after.branch} />
+                ) : (
+                  queuedTitle(q, queuedPieces)
+                )}{" "}
+                lands
               </span>
             </div>
           ))}

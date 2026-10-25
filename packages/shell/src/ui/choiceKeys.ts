@@ -68,7 +68,7 @@ export type ChoiceKeyHandlers = ChoiceList & {
   onCursor?: (to: number) => void;
   onPick: (at: number, by: "digit" | "enter") => void;
   /** the card's send: ⌘⏎ anywhere, and plain enter on a list with no cursor. A card with no send
-   * of its own (a permission, a handoff) reads ⌘⏎ as enter. */
+   * of its own (a permission, a pieces card) reads ⌘⏎ as enter. */
   onSubmit?: () => void;
   onEscape: () => void;
   onFieldEnter?: () => void;

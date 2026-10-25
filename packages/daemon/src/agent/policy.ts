@@ -57,7 +57,7 @@ export function decide(
   // request a person answers in every mode.
   if (kind === "switch_mode") return { kind: "prompt" };
   // Toyon's own tools write nothing through the file tools, and their arguments are the daemon's
-  // to check when the call lands. What handoff proposes is the person's to decide on its own
+  // to check when the call lands. What split proposes is the person's to decide on its own
   // card, so a permission card in front of it would be two gates for one decision. Allowed in
   // every mode.
   if (toyonTool(req.toolCall) !== null) return { kind: "allow" };

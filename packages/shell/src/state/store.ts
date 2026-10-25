@@ -16,7 +16,6 @@ import type {
   AttachmentInput,
   AttachmentRef,
   AuthMethodInfo,
-  Brief,
   ChatHit,
   ChosenFolder,
   CommitEntry,
@@ -28,6 +27,7 @@ import type {
   Fixable,
   GitFileStatus,
   GitInfo,
+  HandedOrigin,
   InstallMethod,
   KeepAwakeMode,
   Knock,
@@ -107,8 +107,23 @@ export type UsageFigures = { used: number; size: number; cost?: number; heard?: 
 
 export type ChatItem =
   /** `seq` on the rows a chat search can land on: the transcript entry the row starts at */
-  /** `brief`: a sibling agent's message, drawn as Toyon's row and never as the person's bubble */
-  | { kind: "user"; text: string; attachments?: AttachmentRef[]; seq?: number; brief?: Brief }
+  | { kind: "user"; text: string; attachments?: AttachmentRef[]; seq?: number }
+  /** a message Toyon sent the agent on another agent's behalf: this worktree's first message,
+   * pointing at the plan it was born with (`plan`, at `path`), or a piece of another chat's work
+   * sent into this one (`message`, its own markdown in `body`). Drawn as Toyon's row and never as
+   * the person's bubble; `note` is what the person added when they approved it. */
+  | {
+      kind: "handed";
+      via: "plan" | "message";
+      body?: string;
+      path?: string;
+      note?: string;
+      origin: HandedOrigin;
+      /** what the origin's chat attached, sent again with this message */
+      attachments?: AttachmentRef[];
+      seq?: number;
+      ts: number;
+    }
   /** `messageId` is the agent's message the row's latest chunk came from, when the agent says */
   | { kind: "assistant"; text: string; seq?: number; messageId?: string }
   | { kind: "thinking"; text: string }
@@ -197,25 +212,8 @@ export type ChatItem =
       answers?: AskAnswer[];
       choiceId?: string;
     }
-  /** a proposal to continue the work in another open project: a card in the box while `proposed`,
-   * then the record of where it went (`continued`, with the row made there) or that it did not
-   * (`declined`, with the daemon's `reason` when the worktree could not be made) */
-  | {
-      kind: "handoff";
-      id: string;
-      repo: { id: string; name: string; path: string };
-      message: string;
-      title?: string;
-      by: "agent" | "person";
-      mode: PermissionMode;
-      /** `starting` is the go pressed and the worktree still being made: the card is closed and a
-       * row stands for it until the daemon says where it went or why it did not */
-      state: "proposed" | "starting" | "continued" | "declined";
-      worktreeId?: string;
-      reason?: string;
-      ts: number;
-    }
-  /** the daemon's word that a worktree this one handed off to landed in its project */
+  /** the daemon's word that a worktree made from a piece of this one's work landed in its
+   * project; `again` is the branch this worktree waited for landing once more */
   | {
       kind: "handoff-landed";
       worktreeId: string;
@@ -223,6 +221,7 @@ export type ChatItem =
       title: string;
       url?: string;
       same?: true;
+      again?: true;
       ts: number;
     }
   /** the pieces of the agent's plan, handed to Toyon. `held` while it waits for the plan card it
@@ -237,7 +236,7 @@ export type ChatItem =
       fates: Record<string, PieceFate>;
       mode: PermissionMode;
       held?: true;
-      /** the file the list sits on: the agent's plan when held, else the briefs Toyon wrote */
+      /** the file the list sits on: the agent's plan when held, else the page Toyon wrote for it */
       plan?: string;
       /** the plan card a held list rides beside, once it arrived */
       companion?: string;
@@ -284,6 +283,19 @@ export interface ComposerWalk {
  * it. `n` counts the picks, so the same hit picked again is scrolled to again. Writing one replaces
  * the other. */
 export type ChatMark = ({ by: "walk" } & ComposerWalk) | { by: "reveal"; seq: number; n: number };
+
+/** a row that opened a turn: a message of the person's, or one Toyon sent on another agent's
+ * behalf, which the agent read the same way. What counts "since the last message" counts from
+ * either, and so does what a message attached. */
+export function startsTurn(item: ChatItem): boolean {
+  return item.kind === "user" || item.kind === "handed";
+}
+
+/** what each message so far attached, in order, for numbering the next: a message of the
+ * person's and one handed in from another chat both took their numbers */
+export function sentAttachments(chat: readonly ChatItem[]): (AttachmentRef[] | undefined)[] {
+  return chat.map((c) => (startsTurn(c) ? (c as { attachments?: AttachmentRef[] }).attachments : undefined));
+}
 
 /** the changes panel's lists: the working tree, the branch's commits, every file */
 export const CHANGES_TABS = ["files", "changes", "history"] as const;
@@ -1311,8 +1323,8 @@ export function previewReload(s: PreviewPick): { id: string; act: "frame" | "sta
 }
 
 /** The row a guest of `repoId`'s rail started from, or null when `w` is no guest there: a guest is
- * another project's worktree made by a handoff from one of this rail's rows, listed here for as
- * long as that row is. Own rows are never guests, and a handoff whose origin is gone, not toyon's
+ * another project's worktree made from a piece of one of this rail's rows, listed here for as
+ * long as that row is. Own rows are never guests, and a piece whose origin is gone, not toyon's
  * or of some third project leaves the row to its own rail alone. */
 export function guestOf(w: OwnedWorktree, repoId: string, rows: readonly WorktreeStatus[]): OwnedWorktree | null {
   const from = w.worktree.from;
@@ -1772,23 +1784,15 @@ function runningOf(chat: ChatItem[], was: WorktreeLocal["running"]): WorktreeLoc
  * else leaves them be. A stop closes the ask and keeps its answers, since the question can still
  * be answered as a message. A card that expired was closed by a restart and not by a press, so it
  * comes back revived, open in the box, the way the person left it; a cancelled one was stopped
- * on purpose and waits folded. A handoff card is one of these: its note is the box's draft, and
- * it closes with the go or the decline that answers it. */
+ * on purpose and waits folded. Toyon's own pieces card is one of these: its note is the box's
+ * draft, and it closes with the go or the decline that answers it. */
 function askSettled(l: WorktreeLocal, ev: AgentEvent): WorktreeLocal {
   const asked =
     ev.type === "agent-question" ||
     ev.type === "agent-permission" ||
-    ev.type === "handoff-proposed" ||
     (ev.type === "pieces-proposed" && !ev.held) ||
     ev.type === "pieces-shown";
-  const closed =
-    ev.type === "agent-ask-end" ||
-    ev.type === "handoff-go" ||
-    ev.type === "handoff-declined" ||
-    ev.type === "pieces-go" ||
-    ev.type === "pieces-declined"
-      ? ev.id
-      : null;
+  const closed = ev.type === "agent-ask-end" || ev.type === "pieces-go" || ev.type === "pieces-declined" ? ev.id : null;
   if (!asked && !closed) return l;
   const stopped = ev.type === "agent-ask-end" && stoppedBy(ev.outcome);
   const expired = ev.type === "agent-ask-end" && ev.outcome === "expired" ? ev.id : null;
@@ -3132,11 +3136,10 @@ function onServer(s: State, msg: StoreServerMsg): State {
         if (turn.edits && !turn.hmr) next = { ...next, reloadReq: { id, n: (next.reloadReq?.n ?? 0) + 1 } };
       }
       // the question goes in the box, so the box has to be on screen, the way a notice's does; so
-      // does a handoff's or a pieces card, which is the same box
+      // does a pieces card, which is the same box
       if (
         (ev.type === "agent-question" ||
           ev.type === "agent-permission" ||
-          ev.type === "handoff-proposed" ||
           (ev.type === "pieces-proposed" && !ev.held) ||
           ev.type === "pieces-shown") &&
         id === s.activeId
@@ -3382,8 +3385,23 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
           kind: "user",
           text: event.text,
           ...(event.attachments?.length ? { attachments: event.attachments } : {}),
-          ...(event.brief ? { brief: event.brief } : {}),
           ...stamp,
+        },
+      ];
+    case "handed":
+      // what the agent was sent is the pointer, not the row: the row names where it came from
+      return [
+        ...items,
+        {
+          kind: "handed",
+          via: event.via,
+          ...(event.body ? { body: event.body } : {}),
+          ...(event.path ? { path: event.path } : {}),
+          ...(event.note ? { note: event.note } : {}),
+          origin: event.origin,
+          ...(event.attachments?.length ? { attachments: event.attachments } : {}),
+          ...stamp,
+          ts: event.ts,
         },
       ];
     case "text-delta": {
@@ -3488,63 +3506,6 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
           ts: event.ts,
         },
       ];
-    case "handoff-proposed":
-      return [
-        ...items,
-        {
-          kind: "handoff",
-          id: event.id,
-          repo: event.repo,
-          message: event.message,
-          ...(event.title ? { title: event.title } : {}),
-          by: event.by,
-          mode: event.mode,
-          state: "proposed",
-          ts: event.ts,
-        },
-      ];
-    case "handoff-go": {
-      const idx = openHandoffIndex(items, event.id);
-      if (idx === -1) return items;
-      const next = items.slice();
-      const card = next[idx] as HandoffCard;
-      next[idx] = { ...card, state: "starting" };
-      return next;
-    }
-    case "handoff": {
-      const idx = openHandoffIndex(items, event.id);
-      // the record of where the work went belongs on the chat whether or not the proposal was seen
-      // (a torn transcript line); with no card to close it stands on its own, and says only what
-      // the event does
-      if (idx === -1)
-        return [
-          ...items,
-          {
-            kind: "handoff",
-            id: event.id,
-            repo: { id: event.repoId, name: event.repoName, path: "" },
-            message: "",
-            title: event.title,
-            by: "agent",
-            mode: DEFAULT_PERMISSION_MODE,
-            state: "continued",
-            worktreeId: event.worktreeId,
-            ts: event.ts,
-          },
-        ];
-      const next = items.slice();
-      const card = next[idx] as HandoffCard;
-      next[idx] = { ...card, state: "continued", worktreeId: event.worktreeId, title: event.title };
-      return next;
-    }
-    case "handoff-declined": {
-      const idx = openHandoffIndex(items, event.id);
-      if (idx === -1) return items;
-      const next = items.slice();
-      const card = next[idx] as HandoffCard;
-      next[idx] = { ...card, state: "declined", ...(event.reason ? { reason: event.reason } : {}) };
-      return next;
-    }
     case "handoff-landed":
       return [
         ...items,
@@ -3555,6 +3516,7 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
           title: event.title,
           ...(event.url ? { url: event.url } : {}),
           ...(event.same ? { same: true } : {}),
+          ...(event.again ? { again: true } : {}),
           ts: event.ts,
         },
       ];
@@ -3763,26 +3725,17 @@ function closeOpenCalls(items: ChatItem[]): ChatItem[] {
  * anything else between (a call, an error) means the message moved on */
 function cutRow(items: ChatItem[], messageId: string): number {
   let at = items.length - 1;
-  while (at >= 0 && items[at]?.kind === "user") at--;
+  while (at >= 0 && startsTurn(items[at]!)) at--;
   const row = items[at];
   return row?.kind === "assistant" && row.messageId === messageId ? at : -1;
 }
 
 type AskCard = Extract<ChatItem, { kind: "ask" }>;
-type HandoffCard = Extract<ChatItem, { kind: "handoff" }>;
 type PiecesCard = Extract<ChatItem, { kind: "pieces" }>;
 
 /** the pieces list `id` names while it is in one of `states` */
 function piecesIndex(items: ChatItem[], id: string, states: PiecesCard["state"][]): number {
   return items.findLastIndex((i) => i.kind === "pieces" && i.id === id && states.includes(i.state));
-}
-
-/** the handoff `id` names, where nothing has settled it yet: the card still proposed, or the row
- * standing for a go whose worktree is still being made */
-function openHandoffIndex(items: ChatItem[], id: string): number {
-  return items.findLastIndex(
-    (i) => i.kind === "handoff" && i.id === id && (i.state === "proposed" || i.state === "starting"),
-  );
 }
 
 function allowed(card: AskCard, choiceId: string | undefined): boolean {

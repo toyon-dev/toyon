@@ -8,11 +8,10 @@ import { byName } from "./commands.ts";
 import { PaletteRow } from "./PaletteRow.tsx";
 
 /** The verb's picker: a new worktree of this project, first, or another open project this
- * worktree's work continues in. Picking one asks this worktree's agent to propose it there, with
- * whatever is in the composer as the person's own words, and the card follows in the box (a piece
- * on the plan for a worktree here, a handoff card for another project). The words went with the
- * ask, so the box empties the way a send empties it: here and at the daemon, which holds every
- * box's draft. */
+ * worktree's work continues in. Picking one asks this worktree's agent to propose one piece
+ * there, with whatever is in the composer as the person's own words, and the card follows in the
+ * box. The words went with the ask, so the box empties the way a send empties it: here and at
+ * the daemon, which holds every box's draft. */
 export function HandoffPicker({ worktreeId }: { worktreeId: string }) {
   const dispatch = useDispatch();
   const sock = useSock();
@@ -29,7 +28,7 @@ export function HandoffPicker({ worktreeId }: { worktreeId: string }) {
   const close = () => dispatch({ a: "close" });
   const pick = (r: RepoInfo) => {
     if (!wt) return close();
-    sock?.send({ t: "handoff-ask", worktreeId, repoId: r.id, ...(text ? { text } : {}) });
+    sock?.send({ t: "pieces-ask", worktreeId, repoId: r.id, ...(text ? { text } : {}) });
     if (text) {
       sock?.send({ t: "set-draft", boxId: worktreeId, text: "", clientId });
       dispatch({ a: "set-draft", id: worktreeId, text: "" });

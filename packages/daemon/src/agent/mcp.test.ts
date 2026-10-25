@@ -6,7 +6,7 @@ import { type McpTool, type McpToolResult, type ToolProvider, ToolSet, ToyonMcp 
 // The hand-rolled MCP server: who gets in (a per-worktree bearer and nothing else), the
 // streamable-HTTP shape Claude Code's client expects, and the four methods it answers.
 
-const tool: McpTool = { name: "handoff", description: "propose", inputSchema: { type: "object" } };
+const tool: McpTool = { name: "split", description: "propose", inputSchema: { type: "object" } };
 const calls: Array<[string, string, unknown]> = [];
 let answer: McpToolResult | Error = { text: "proposed" };
 const mcp = new ToyonMcp({
@@ -156,15 +156,15 @@ describe("ToyonMcp methods", () => {
   test("tools/call passes worktree, name and arguments, and wraps the text and isError", async () => {
     calls.length = 0;
     answer = { text: "proposed" };
-    const ok = await post("w5", rpc("tools/call", { name: "handoff", arguments: { project: "b" } }), { auth });
+    const ok = await post("w5", rpc("tools/call", { name: "split", arguments: { project: "b" } }), { auth });
     expect(await ok.json()).toEqual({
       jsonrpc: "2.0",
       id: 1,
       result: { content: [{ type: "text", text: "proposed" }] },
     });
-    expect(calls).toEqual([["w5", "handoff", { project: "b" }]]);
+    expect(calls).toEqual([["w5", "split", { project: "b" }]]);
     answer = { text: "no such project", isError: true };
-    const refused = await post("w5", rpc("tools/call", { name: "handoff", arguments: {} }), { auth });
+    const refused = await post("w5", rpc("tools/call", { name: "split", arguments: {} }), { auth });
     expect(await refused.json()).toEqual({
       jsonrpc: "2.0",
       id: 1,
@@ -174,14 +174,14 @@ describe("ToyonMcp methods", () => {
 
   test("a UserError from the tool is isError text; any other throw is logged and -32603", async () => {
     answer = new UserError("that chat is gone");
-    const user = await post("w5", rpc("tools/call", { name: "handoff", arguments: {} }), { auth });
+    const user = await post("w5", rpc("tools/call", { name: "split", arguments: {} }), { auth });
     expect(await user.json()).toEqual({
       jsonrpc: "2.0",
       id: 1,
       result: { content: [{ type: "text", text: "that chat is gone" }], isError: true },
     });
     answer = new Error("disk on fire");
-    const bug = await post("w5", rpc("tools/call", { name: "handoff", arguments: {} }), { auth });
+    const bug = await post("w5", rpc("tools/call", { name: "split", arguments: {} }), { auth });
     expect(bug.status).toBe(200);
     expect(await bug.json()).toEqual({ jsonrpc: "2.0", id: 1, error: { code: -32603, message: "internal error" } });
     answer = { text: "proposed" };
@@ -221,18 +221,18 @@ describe("ToolSet", () => {
 
   test("lists what the services registered, in order, asked per worktree", () => {
     const set = new ToolSet();
-    set.add(provider("handoff", "h"));
+    set.add(provider("split", "h"));
     set.add(provider("design_check", "d"));
     expect(set.list("w1").map((t) => [t.name, t.description])).toEqual([
-      ["handoff", "handoff for w1"],
+      ["split", "split for w1"],
       ["design_check", "design_check for w1"],
     ]);
   });
 
   test("routes a call by name and refuses one nobody registered", async () => {
     const set = new ToolSet();
-    set.add(provider("handoff", "h"));
-    expect(await set.call("w1", "handoff", { project: "b" })).toEqual({ text: 'h:w1:{"project":"b"}' });
+    set.add(provider("split", "h"));
+    expect(await set.call("w1", "split", { project: "b" })).toEqual({ text: 'h:w1:{"project":"b"}' });
     expect(await set.call("w1", "nope", {})).toEqual({ text: "unknown tool nope", isError: true });
   });
 });

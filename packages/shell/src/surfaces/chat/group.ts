@@ -1,5 +1,5 @@
 import { emptyInput, isEditTool, isWrittenKind, SHELL_TOOL, TOOL_SEARCH, writingCall } from "@toyon/shared";
-import type { ChatItem } from "../../state/store.ts";
+import { type ChatItem, startsTurn } from "../../state/store.ts";
 import { thoughtLine } from "./thought.ts";
 import { isBackgroundSpawn, isGuardian, toolLabel } from "./toolCall.ts";
 
@@ -229,7 +229,7 @@ export function spawnsAtWork(items: ChatItem[]): Set<string> {
   let thisTurn = true;
   for (let i = items.length - 1; i >= 0; i--) {
     const item = items[i]!;
-    if (item.kind === "user") thisTurn = false;
+    if (startsTurn(item)) thisTurn = false;
     if (item.kind !== "tool" || !item.subagent) continue;
     if (item.isError) ids.delete(item.id);
     else if (!item.done) ids.add(item.id);

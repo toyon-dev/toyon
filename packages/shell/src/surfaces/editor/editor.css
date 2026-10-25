@@ -148,93 +148,68 @@
     inset: 0;
   }
 
-  /* ---- the pieces section at the head of a plan ----
-   Toyon's own section on the agent's document: the list of what the plan splits into, one row
-   per piece, the fate words as a labelled choice (a quiet "where", then ghost buttons with the
-   chosen one lit), the brief under it in the document's prose, and the chips the piece carries. It
-   takes the page's measure and side padding (the body's, base.css .md-preview) so its rows sit on
-   the document's text edge, clear of the outline strip, and scrolls with it; a rule under it parts
-   it from the plan, whose own top air then starts under the rule. On the briefs file Toyon wrote
-   the section is the whole page (the file says in prose what the rows draw), so it is the last
-   child: no rule, and the body's own foot of air instead. */
+  /* ---- the Worktrees block at the head of a plan ----
+   Toyon's own section on the agent's document (Pieces.tsx): one line per piece, the fate at its
+   end in the quiet tier, and the plan under a rule. It takes the page's measure and side padding
+   (the body's, base.css .md-preview) so its rows sit on the document's text edge, clear of the
+   outline strip, and scrolls with it; the rule parts it from the plan, whose own top air then
+   starts under it. A row is a fold, as a tool row in the chat is: pressed, the piece's text opens
+   under its line and the plan moves down by that much, and nothing is replaced. */
   .editor-pieces {
-    font: var(--type-ui-phone);
+    font: var(--type-ui);
     max-width: var(--chat-measure);
     margin: 0 auto;
     padding: 24px 32px 16px;
     border-bottom: 1px solid var(--border0);
   }
-  .editor-pieces:last-child {
-    padding-bottom: 48px;
-    border-bottom: none;
+  .editor-pieces-title {
+    margin: 0 0 4px 12px;
   }
-  .editor-pieces-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    margin-bottom: 8px;
-  }
-  /* what the words mean, once, under the head rather than on every row; the words it names are
-     set apart in the row's own tier so the eye can match them to the buttons below */
   .editor-pieces-note {
-    margin: -4px 0 12px;
-    & b {
-      color: var(--text1);
-      font-weight: var(--weight-strong);
+    margin: 0 0 8px 12px;
+  }
+  /* the rows bleed past the title's edge by the row inset, so a seat lit under the pointer has
+     air around the words and the words themselves stay on the text edge */
+  .editor-piece {
+    margin: 0 -12px;
+    & > .editor-piece-row {
+      min-height: var(--row-height-sm);
+      padding: 0 12px;
+      gap: 12px;
+      align-items: baseline;
+      cursor: pointer;
+      list-style: none;
+      border-radius: var(--radius);
+    }
+    & > summary::-webkit-details-marker {
+      display: none;
     }
   }
-  .editor-piece-where {
-    margin-right: 4px;
-  }
-  .editor-piece {
-    padding: 8px 0;
-  }
-  .editor-piece-row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    min-width: 0;
-  }
-  .editor-piece-n {
-    color: var(--text2);
-    font: var(--type-mono);
-    font-variant-numeric: tabular-nums;
-    flex-shrink: 0;
-  }
   .editor-piece-title {
-    font: var(--type-ui);
-    font-weight: var(--weight-strong);
+    color: var(--text0);
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .editor-piece-fates {
-    display: flex;
-    align-items: center;
-    gap: 2px;
+  .editor-piece-fate {
     margin-left: auto;
     flex-shrink: 0;
+    white-space: nowrap;
   }
-  .editor-piece-brief {
-    margin: 4px 0 0 26px;
+  .editor-piece-body {
+    padding: 4px 12px 10px;
+  }
+  .editor-piece-line {
+    margin: 0 0 8px;
+  }
+  .editor-piece-text {
     color: var(--text1);
   }
   .editor-piece-chips {
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
-    margin: 6px 0 0 26px;
-  }
-  .editor-piece-tail {
-    margin-left: auto;
-    font: var(--type-ui);
-    color: var(--text2);
-    flex-shrink: 0;
-  }
-  .editor-piece > .editor-piece-tail {
-    display: block;
-    margin: 4px 0 0 26px;
+    margin-top: 6px;
   }
 }

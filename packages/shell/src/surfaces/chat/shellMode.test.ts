@@ -44,6 +44,19 @@ describe("shellContext", () => {
     );
   });
 
+  test("a message handed in from another chat is a message: the runs before it are not since it", () => {
+    const handed: ChatItem = {
+      kind: "handed",
+      via: "message",
+      origin: { id: "o", repoId: "r", branch: "b", title: "O" },
+      ts: 1,
+    };
+    const chat = [run("old", "```\nstale\n```"), handed, run("ls", "```\na\n```")];
+    expect(shellContext(chat)).toBe(
+      "Shell commands the user ran since their last message, and what each printed:\n$ ls\na",
+    );
+  });
+
   test("nothing to say when nothing ran, or only the agent did, or the run is still going", () => {
     expect(shellContext([user("hi")])).toBeUndefined();
     expect(shellContext([user("hi"), agentRun("ls")])).toBeUndefined();

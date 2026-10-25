@@ -8,9 +8,13 @@ import type {
   AskAnswer,
   Asked,
   AttachmentInput,
-  Brief,
   QueuedMessage,
 } from "@toyon/shared";
+
+/** what a message sent on another agent's behalf records beside its text: the plan this
+ * worktree was born with, or a piece of another chat's work sent into this one (events.ts
+ * `handed`), with the text and the stamp the session adds */
+export type Handed = Omit<Extract<AgentEvent, { type: "handed" }>, "type" | "text" | "ts" | "attachments">;
 
 /** a login the agent's own CLI runs in a terminal */
 export interface LoginRun {
@@ -59,9 +63,10 @@ export interface SendOpts {
   /** a message sent on from another chat (a piece of its plan): it answers no card here, so an
    * open one stays open and the message waits behind it */
   keepCards?: true;
-  /** the message is another worktree's agent's brief, recorded as such so the chat draws it as
-   * Toyon's row and not as the person's words */
-  brief?: Brief;
+  /** the message is sent on another agent's behalf: the pointer at a plan this worktree was born
+   * with, or a piece of another chat's work. Recorded as `handed`, which the chat draws as Toyon's
+   * row and never as the person's words, and never as queued. */
+  handed?: Handed;
 }
 
 export interface AgentAdapter {

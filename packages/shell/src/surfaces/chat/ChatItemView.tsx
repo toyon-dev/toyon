@@ -1,4 +1,11 @@
-import { LOGIN_STREAM, type PickMeta, SHELL_TOOL, type ShipOp, type ToolImage } from "@toyon/shared";
+import {
+  type AttachmentRef,
+  LOGIN_STREAM,
+  type PickMeta,
+  SHELL_TOOL,
+  type ShipOp,
+  type ToolImage,
+} from "@toyon/shared";
 import { Fragment, memo, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { copyText } from "../../state/actions/deps.ts";
 import { daemonHost } from "../../state/actions/editor.ts";
@@ -22,7 +29,6 @@ import { elapsed, spanWords } from "../util.ts";
 import { AskRow } from "./AskRow.tsx";
 import { AttachmentSet } from "./AttachmentSet.tsx";
 import { answeredQuestion, answerLines, decidedPlan } from "./ask.ts";
-import { BriefRow } from "./BriefRow.tsx";
 import { chatLink, openChatLink } from "./chatLink.ts";
 import { DaemonRow, useAgo } from "./DaemonRow.tsx";
 import { FileChip } from "./FileChip.tsx";
@@ -36,7 +42,7 @@ import {
   type ToolEntry,
   type ToolItem,
 } from "./group.ts";
-import { HandoffLandedRow, HandoffRow } from "./HandoffRow.tsx";
+import { HandedRow } from "./HandedRow.tsx";
 import { SentImageChip } from "./ImageChip.tsx";
 import { MentionText, openMention } from "./Mentions.tsx";
 import { useMarkdown } from "./markdown.ts";
@@ -44,7 +50,7 @@ import { netOfCalls } from "./mergeDiffs.ts";
 import { Painted } from "./Painted.tsx";
 import { PasteChip } from "./PasteChip.tsx";
 import { PickChip } from "./PickChip.tsx";
-import { PieceLaterRow, PiecesRow } from "./PiecesRow.tsx";
+import { PieceLandedRow, PieceLaterRow, PiecesRow } from "./PiecesRow.tsx";
 import { ranClean } from "./shellMode.ts";
 import { languageOf, paintCode, paintDiff, pathInDiff } from "./syntax.ts";
 import { normalizeThoughtMarkdown, thoughtLine, thoughtSteps } from "./thought.ts";
@@ -1018,64 +1024,60 @@ export const ChatItemView = memo(function ChatItemView({
   const deps = { sock, dispatch: store.dispatch };
   // the agent runs at the worktree's real path even when the UI gives it a title-shaped symlink
   const fileRoot = () => worktreeById(store.getState(), worktreeId)?.worktree.path;
+  /** what a message attached, as the chips a sent message draws under its line: the person's
+   * own message and one Toyon sent on another agent's behalf draw them the same way */
+  const sentChips = (attachments: AttachmentRef[] | undefined) =>
+    attachments &&
+    worktreeId && (
+      <AttachmentSet>
+        <div className="msg-attachments">
+          {attachments.map((a) =>
+            a.kind === "image" ? (
+              <SentImageChip
+                key={`${a.kind}-${a.n}`}
+                img={a}
+                worktreeId={worktreeId}
+                src={urls.attachment(worktreeId, a.file)}
+              />
+            ) : a.kind === "file" ? (
+              <FileChip
+                key={`${a.kind}-${a.n}`}
+                className="in-chat"
+                name={a.name}
+                bytes={a.bytes}
+                href={a.text ? urls.attachment(worktreeId, a.file) : undefined}
+                kept={{ worktreeId, file: a.file }}
+              />
+            ) : a.kind === "paste" ? (
+              <PasteChip
+                key={`${a.kind}-${a.n}`}
+                className="in-chat"
+                n={a.n}
+                name={a.name}
+                source={a.source}
+                lines={a.lines}
+                chars={a.chars}
+                preview={a.preview}
+                href={urls.attachment(worktreeId, a.file)}
+              />
+            ) : (
+              <PickChip
+                key={`${a.kind}-${a.n}`}
+                pick={a}
+                className="in-chat"
+                tipText="Hover to highlight on the page"
+                onHover={(entering) => onPickHover?.(a, entering)}
+                worktreeId={worktreeId}
+                onOpen={(path, line) => openSource(store, sock, worktreeId, path, line)}
+              />
+            ),
+          )}
+        </div>
+      </AttachmentSet>
+    );
   switch (item.kind) {
     case "user": {
-      const chips = item.attachments && worktreeId && (
-        <AttachmentSet>
-          <div className="msg-attachments">
-            {item.attachments.map((a) =>
-              a.kind === "image" ? (
-                <SentImageChip
-                  key={`${a.kind}-${a.n}`}
-                  img={a}
-                  worktreeId={worktreeId}
-                  src={urls.attachment(worktreeId, a.file)}
-                />
-              ) : a.kind === "file" ? (
-                <FileChip
-                  key={`${a.kind}-${a.n}`}
-                  className="in-chat"
-                  name={a.name}
-                  bytes={a.bytes}
-                  href={a.text ? urls.attachment(worktreeId, a.file) : undefined}
-                  kept={{ worktreeId, file: a.file }}
-                />
-              ) : a.kind === "paste" ? (
-                <PasteChip
-                  key={`${a.kind}-${a.n}`}
-                  className="in-chat"
-                  n={a.n}
-                  name={a.name}
-                  source={a.source}
-                  lines={a.lines}
-                  chars={a.chars}
-                  preview={a.preview}
-                  href={urls.attachment(worktreeId, a.file)}
-                />
-              ) : (
-                <PickChip
-                  key={`${a.kind}-${a.n}`}
-                  pick={a}
-                  className="in-chat"
-                  tipText="Hover to highlight on the page"
-                  onHover={(entering) => onPickHover?.(a, entering)}
-                  worktreeId={worktreeId}
-                  onOpen={(path, line) => openSource(store, sock, worktreeId, path, line)}
-                />
-              ),
-            )}
-          </div>
-        </AttachmentSet>
-      );
-      // a sibling agent's message is not the person's bubble: a row of Toyon's own says whose it
-      // is, and what it attached rides under the line
-      if (item.brief) {
-        return (
-          <BriefRow brief={item.brief} worktreeId={worktreeId} marked={marked}>
-            {chips}
-          </BriefRow>
-        );
-      }
+      const chips = sentChips(item.attachments);
       // the person's `@` references are links, as the agent's paths are: the row routes a press
       // on one, and the menu on one is the file's
       const root = fileRoot();
@@ -1235,10 +1237,14 @@ export const ChatItemView = memo(function ChatItemView({
       return <DaemonRow icon="stop" word="stopped" tone="quiet" />;
     case "landed":
       return <LandedRow item={item} />;
-    case "handoff":
-      return <HandoffRow item={item} />;
+    case "handed":
+      return (
+        <HandedRow item={item} worktreeId={worktreeId} marked={marked}>
+          {sentChips(item.attachments)}
+        </HandedRow>
+      );
     case "handoff-landed":
-      return <HandoffLandedRow item={item} />;
+      return <PieceLandedRow item={item} />;
     case "pieces":
       return <PiecesRow item={item} worktreeId={worktreeId} />;
     case "piece-later":

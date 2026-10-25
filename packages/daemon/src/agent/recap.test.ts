@@ -39,6 +39,18 @@ describe("a message Toyon sent itself", () => {
   test("is not the task, even when it is the first thing on the transcript", () => {
     expect(firstAskOf(log(fix, user("add a header", 9)))).toBe("add a header");
   });
+  test("a message sent on another agent's behalf is a task the turn answers, by its own words", () => {
+    const handed: AgentEvent = {
+      type: "handed",
+      via: "message",
+      text: "Add the notes.\n\nThis is one piece of the work planned elsewhere.",
+      body: "Add the notes.",
+      origin: { id: "a", repoId: "r", branch: "toyon/rail", title: "Rail" },
+      ts: 5,
+    };
+    const turns = turnsSince(log(handed, start(6), say("Done."), end(7)), 0);
+    expect(turns.map((t) => [t.asks, t.fixes])).toEqual([[["Add the notes."], []]]);
+  });
 });
 
 describe("turnsSince", () => {
@@ -228,34 +240,6 @@ describe("openAskOf", () => {
     expect(openAskOf(log(q, p))).toBe("Approve the plan");
     expect(openAskOf(log(q, p, closed("p")))).toBe("Which port?");
     expect(openAskOf(log(q, closed("q")))).toBeUndefined();
-  });
-
-  test("a handoff proposal is a card until a handoff or a decline with its id", () => {
-    const h: AgentEvent = {
-      type: "handoff-proposed",
-      id: "h",
-      repo: { id: "r2", name: "claude-agent-acp", path: "/p/acp" },
-      message: "fix it there",
-      by: "agent",
-      mode: "auto",
-      ts: 1,
-    };
-    expect(openAskOf(log(h))).toBe("Continue in claude-agent-acp?");
-    expect(openAskOf(log(h, { type: "handoff-declined", id: "h", ts: 2 }))).toBeUndefined();
-    expect(openAskOf(log(h, { type: "handoff-go", id: "h", ts: 2 }))).toBeUndefined();
-    const went: AgentEvent = {
-      type: "handoff",
-      id: "h",
-      worktreeId: "b",
-      repoId: "r2",
-      repoName: "claude-agent-acp",
-      title: "Fix it",
-      ts: 2,
-    };
-    expect(openAskOf(log(h, went))).toBeUndefined();
-    // a question opened after the card is the newer one
-    const q: AgentEvent = { type: "agent-question", id: "q", message: "Which port?", questions: [], ts: 3 };
-    expect(openAskOf(log(h, q))).toBe("Which port?");
   });
 });
 

@@ -19,7 +19,7 @@ import { useDispatch, useSock, useStore, useStoreInstance, useUrls } from "../..
 import { openSource } from "../../state/openSource.ts";
 import type { OutboxEntry } from "../../state/outbox.ts";
 import { useLocalField } from "../../state/selectors.ts";
-import { localOf, type PendingAttachment } from "../../state/store.ts";
+import { localOf, type PendingAttachment, sentAttachments } from "../../state/store.ts";
 import { IconButton } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { DocumentFind } from "../../ui/DocumentFind.tsx";
@@ -31,6 +31,7 @@ import { type SelectionScope, selectedText, useKeyWithin, useSelectAllWithin } f
 import { elapsed, pickLabel } from "../util.ts";
 import { AttachmentSet } from "./AttachmentSet.tsx";
 import { ChatItemView, QUIET_AFTER, ThoughtRow, ToolRow } from "./ChatItemView.tsx";
+import { openCard } from "./cards.ts";
 import { FileChip } from "./FileChip.tsx";
 import { FOOT } from "./foot.ts";
 import {
@@ -46,7 +47,6 @@ import {
   spawnsAtWork,
   type ToolEntry,
 } from "./group.ts";
-import { openCard } from "./handoff.ts";
 import { ImageChip } from "./ImageChip.tsx";
 import { MentionText, openMention } from "./Mentions.tsx";
 import { useMentionDots } from "./mentionDots.ts";
@@ -218,10 +218,7 @@ export function ChatLog({
   const queue = useLocalField(id, "queue");
   const sending = useLocalField(id, "sending");
   // each queued message's chips count on from the sent ones and from the messages queued ahead of it
-  const sentNumbers = useMemo(
-    () => nextNumbers(items.map((c) => (c.kind === "user" ? c.attachments : undefined))),
-    [items],
-  );
+  const sentNumbers = useMemo(() => nextNumbers(sentAttachments(items)), [items]);
   const queuedNumbers = useMemo(() => {
     let at = sentNumbers;
     return queue.map((q) => {

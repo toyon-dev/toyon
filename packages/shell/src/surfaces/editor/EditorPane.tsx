@@ -25,7 +25,8 @@ import { usePersisted, useSettled } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { Pane } from "../../ui/Pane.tsx";
 import { endCarry, startCarry } from "../chat/carried.ts";
-import { onBriefs, openPieces } from "../chat/pieces.ts";
+import { listPage, openPieces } from "../chat/pieces.ts";
+import { usePlanTitle } from "../chat/usePlanTitle.ts";
 import { splitPath } from "../util.ts";
 import { FileViewer } from "./FileViewer.tsx";
 import { HtmlPreview } from "./HtmlPreview.tsx";
@@ -59,24 +60,30 @@ const VIEW_ICONS = { diff: "diff", file: "text", preview: "book" } as const;
 
 /** the file's name first and its directory after, as the row in the changes panel has it: the name
  * is what the head is there to say, so it never shrinks, and the directory gives way when the
- * head is narrow. `note` qualifies the name (a commit's copy, last turn's) and stays with it. */
+ * head is narrow. `note` qualifies the name (a commit's copy, last turn's) and stays with it. A
+ * `title` stands in for the name and the directory both, with the path as the tip: the
+ * worktree's plan is read by what it is called, not by the numbered file it sits in. */
 function EditorTitle({
   path,
   note,
+  title,
   worktreeId,
 }: {
   path: string;
   note?: string;
+  title?: string;
   /** the worktree the file is in, whose chat a drag of the name lands in as the file's mention; a
    * loose file has none, and does not drag */
   worktreeId?: string;
 }) {
   const store = useStoreInstance();
-  const { name, dir } = splitPath(path);
+  const split = splitPath(path);
+  const name = title ?? split.name;
+  const dir = title ? "" : split.dir;
   return (
     <span
       className="editor-title"
-      data-tip={dir ? path : undefined}
+      data-tip={dir || title ? path : undefined}
       draggable={!!worktreeId}
       onDragStart={
         worktreeId ? (e) => startCarry(e, { kind: "paths", worktreeId, items: [{ path, folder: false }] }) : undefined
@@ -137,11 +144,14 @@ export function EditorPane({
   });
   // a commit's copy: read-only, and none of the working-tree wiring below applies to it
   const history = ref !== undefined;
-  // the pieces list drawn at the head of the plan open here: the list names its file (the briefs
+  // the pieces list drawn at the head of the plan open here: the list names its file (the page
   // Toyon wrote, or the plan card's file once the card came), and a held list with no card yet
   // sits on the worktree's plan. Read as one item off the store rather than the whole chat, so a
   // streaming reply does not redraw the pane a delta at a time.
   const planPath = useStore((s) => worktreeById(s, worktreeId)?.worktree.plan);
+  // the worktree's own plan is titled by its heading, as the line under the box names it
+  const ownPlan = !loose && !history && planPath === path;
+  const planTitle = usePlanTitle(ownPlan ? worktreeId : undefined, ownPlan ? path : undefined);
   const open = useStore((s) => openPieces(localOf(s, worktreeId).chat ?? NO_CHAT));
   const pieces = useMemo(() => {
     if (history || loose || editor.view !== "preview" || !open) return null;
@@ -204,6 +214,7 @@ export function EditorPane({
         <EditorTitle
           path={path}
           note={history ? ` at ${ref?.slice(0, 7)}` : since ? ", last turn" : undefined}
+          title={ownPlan && planTitle ? planTitle : undefined}
           worktreeId={loose ? undefined : worktreeId}
         />
       }
@@ -316,8 +327,9 @@ export function EditorPane({
             path={path}
             worktreeId={worktreeId}
             lead={pieces ? <Pieces item={pieces} worktreeId={worktreeId} /> : undefined}
-            // the briefs Toyon wrote say in prose what the section draws as rows: the section alone
-            leadOnly={!!pieces && onBriefs(pieces)}
+            // the page Toyon wrote for a list holds each piece's text under its heading, which the
+            // rows already unfold: the block alone, or every text would read twice
+            leadOnly={!!pieces && listPage(pieces)}
             // a copy only git holds, or a file from outside, has no bytes on disk for its images to be served from
             version={history || kept || loose ? undefined : disk.version}
             openSeq={editor.seq}
@@ -440,11 +452,11 @@ function EditorNote({ editor, disk, files }: { editor: EditorFile; disk: EditorD
       </div>
     );
   }
-  // text out of the chat's transcript, a sibling agent's brief: nothing on disk to save it to
+  // text out of the chat's transcript, a message another agent sent: nothing on disk to save it to
   if (editor.loose?.source.kind === "text" && !disk.writable) {
     return (
       <div className="editor-note">
-        <span className="hint">read-only: the brief as it was sent, kept in the chat and not in a file</span>
+        <span className="hint">read-only: the message as it was sent, kept in the chat and not in a file</span>
       </div>
     );
   }

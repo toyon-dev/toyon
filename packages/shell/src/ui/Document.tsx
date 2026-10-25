@@ -43,7 +43,7 @@ const JUMP_AIR = 16;
  * what ⌘L selected, as the page draws it. `lead` is drawn at the head of the page, above the
  * markdown and scrolling with it, and stays out of the outline: a section of Toyon's own on a
  * document that is the agent's. `leadOnly` makes the lead the whole page: the markdown is not
- * drawn, for a file that says in prose what the lead already draws as rows.
+ * drawn, for a file that holds in prose what the lead already draws as rows.
  */
 export function Document({
   html,

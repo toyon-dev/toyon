@@ -213,7 +213,7 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
   const rows = useStore((s) => s.rows);
   const repoOf = (w: OwnedWorktree) => repos.find((r) => r.id === w.repoId) ?? null;
   /** the row a guest of this rail started from, when `w` is one: another project's worktree a
-   * handoff made from here, listed on this rail while its origin is */
+   * piece of a row here, listed on this rail while its origin is */
   const originOf = (w: OwnedWorktree) => (activeRepoId ? guestOf(w, activeRepoId, rows) : null);
   /** the row's project when it is not this rail's: a guest's, or that of a row owed from elsewhere
    * (waiting on you, or finished and unseen), listed here while it is */

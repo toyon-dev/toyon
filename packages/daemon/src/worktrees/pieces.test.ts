@@ -1,11 +1,14 @@
-import { describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { afterEach, describe, expect, test } from "bun:test";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AgentEvent, PieceOutcome } from "@toyon/shared";
+import type { AgentEvent, PieceOutcome, RepoInfo } from "@toyon/shared";
 import type { FakeAgent } from "../../test/helpers/fakes.ts";
+import { sh } from "../../test/helpers/tmp-repo.ts";
 import { planReader, registered, settle, until, useWorld, w } from "../../test/helpers/world.ts";
 import { briefsDoc, writePlanDocNow } from "../agent/planDoc.ts";
 import { StateStore } from "../core/state.ts";
+import { GIT } from "../git/exec.ts";
 import { listFile, PIECES_MAX, type RawPiece, sectionText } from "./pieces.ts";
 
 // A plan's pieces across worktrees: the tool's answers to the agent, the list's state on the
@@ -20,6 +23,40 @@ const lastProposal = (id: string) => agentOf(id).recorded.findLast((e) => e.type
 const outcomesOf = (id: string) =>
   (agentOf(id).recorded.findLast((e) => e.type === "pieces") as Extract<AgentEvent, { type: "pieces" }>).outcomes;
 const madeTitled = (title: string) => w.state.worktrees.find((x) => x.kind === "worktree" && x.title === title);
+
+/** other projects made for a test, taken down with it */
+const made: string[] = [];
+afterEach(() => {
+  for (const dir of made.splice(0)) rmSync(dir, { recursive: true, force: true });
+});
+
+/** a second project open beside the world's own, under a name of the test's choosing (the
+ * world's is `repo`, which is a checkout's directory name like any other) */
+async function otherProject(name: string): Promise<RepoInfo> {
+  const root = mkdtempSync(join(tmpdir(), "toyon-pieces-"));
+  made.push(root);
+  const dir = join(root, name);
+  sh(root, GIT, "init", "-q", "-b", "main", dir);
+  sh(dir, GIT, "config", "user.email", "t@t");
+  sh(dir, GIT, "config", "user.name", "t");
+  sh(dir, GIT, "config", "commit.gpgsign", "false");
+  writeFileSync(join(dir, "README.md"), `${name}\n`);
+  sh(dir, GIT, "add", "-A");
+  sh(dir, GIT, "commit", "-q", "-m", "init");
+  const repo = await w.repos.register(dir);
+  repo.needsSetup = false;
+  repo.config = { run: { web: "true" } };
+  w.state.save();
+  return repo;
+}
+
+/** a commit on the worktree and its landing, through the service, as a person's land goes */
+async function land(id: string, file: string) {
+  const wt = w.state.worktree(id)!;
+  writeFileSync(join(wt.path, file), "x\n");
+  expect((await w.worktrees.commit(id, `add ${file}`)).ok).toBe(true);
+  expect((await w.worktrees.land(id)).result.ok).toBe(true);
+}
 
 const HELD =
   "Handed to the person; the list shows beside your plan and they decide where each piece goes. Ask for plan approval now.";
@@ -78,7 +115,8 @@ describe("the tool", () => {
       expect(await call(a.id, p)).toMatchObject({ text: expect.stringContaining(said), isError: true });
     await refusal(piece({ brief: "   " }), "has no brief");
     await refusal(piece({ title: " " }), "has no title");
-    await refusal(piece({ brief: "x".repeat(6_001) }), "over 6000 characters");
+    await refusal(piece({ brief: "x".repeat(20_001) }), "over 20000 characters");
+
     await refusal(piece({ title: "t".repeat(21) }), "runs to 21 characters; a title is 1 to 3 plain words");
     await refusal(piece({ title: "fix the form on save" }), "runs to 5 words");
     await refusal(piece({ where: "here", after: "this" }), "only a `worktree` piece takes");
@@ -121,7 +159,7 @@ describe("the tool", () => {
     expect(shown.held).toBeUndefined();
     expect(shown.plan).toMatch(/^\.toyon\/plans\/\d+\.md$/);
     expect(readFileSync(join(other.path, shown.plan!), "utf8")).toBe(
-      "## Rail fixes\n\nFix the rail.\n\n## Mine\n\nDo it.\n",
+      "# Worktrees\n\n## Rail fixes\n\nFix the rail.\n\n## Mine\n\nDo it.\n",
     );
     // the briefs file is the list's, named on the event; the record's plan stays the agent's plan
     expect(w.state.worktree(other.id)?.plan).toBeUndefined();
@@ -160,20 +198,27 @@ describe("the tool", () => {
     // record's plan untouched, so the card's section has its page and the composer keeps the plan
     const plan = writePlanDocNow(a.path, briefsDoc([{ title: "Rail fixes", brief: "Fix the rail." }]));
     expect(plan).toMatch(/^\.toyon\/plans\/\d+\.md$/);
-    expect(readFileSync(join(a.path, plan!), "utf8")).toBe("## Rail fixes\n\nFix the rail.\n");
+    expect(readFileSync(join(a.path, plan!), "utf8")).toBe("# Worktrees\n\n## Rail fixes\n\nFix the rail.\n");
     expect(w.state.worktree(a.id)?.plan).toBeUndefined();
     // a blank `after` is not "wait for whichever sibling is open"
     expect(await call(a.id, piece({ after: " " }))).toEqual({
-      text: 'Piece 1 ("Rail fixes") has a blank `after`; name the branch, or leave it out.',
+      text: 'Piece 1 ("Rail fixes") has a blank `after`; name what it waits for, or leave it out.',
       isError: true,
     });
+  });
+
+  test("a title is a row's name beside the namer's, so it takes the same case", async () => {
+    const repoId = await registered();
+    const a = await w.worktrees.create(repoId, "task", { title: "Rail" });
+    expect(await call(a.id, piece({ title: "wire bytes" }))).toEqual({ text: SHOWN });
+    expect(lastProposal(a.id).pieces[0]!.title).toBe("Wire bytes");
   });
 
   test("the person's own list in plan mode is a card at once: no plan card of theirs is coming", async () => {
     const repoId = await registered();
     const a = await w.worktrees.create(repoId, "task", { mode: "plan" });
     agentOf(a.id).mcpTools = false;
-    await w.handoff.ask(a.id, repoId, "move the rail");
+    await w.pieces.ask(a.id, repoId, "move the rail");
     const shown = lastProposal(a.id);
     expect(shown.held).toBeUndefined();
     expect(shown.plan).toMatch(/^\.toyon\/plans\/\d+\.md$/);
@@ -236,29 +281,28 @@ describe("go", () => {
       { pieceId: "p2", fate: "worktree", worktreeId: made.id, title: "Rail fixes" },
       { pieceId: "p3", fate: "skip" },
     ] satisfies PieceOutcome[]);
+    // born with the piece's text as its own plan, on its record and in its plans folder
     expect(made).toMatchObject({
       mode: "ask",
-      from: { kind: "worktree", ref: a.branch, origin: { id: a.id, repoId }, plan, briefs: true },
+      plan: ".toyon/plans/1.md",
+      planned: true,
+      from: { kind: "worktree", ref: a.branch, origin: { id: a.id, repoId }, plan },
     });
     expect(made.createdBy).toBeUndefined();
+    expect(readFileSync(join(made.path, ".toyon/plans/1.md"), "utf8")).toBe("# Rail fixes\n\nFix the rail.\n");
     const first = agentOf(made.id).sent[0]!;
     expect(first.text).toBe(
-      [
-        "Fix the rail.",
-        "The person added, when they approved this: and tests",
-        `This is one piece of the work planned in the worktree at ${a.path} of the project repo, on its branch ${a.branch}; the other pieces are being done there and in sibling worktrees. The plan it is a piece of is at ${a.path}/${plan}; read it for the whole picture, and do only this piece. The brief above was written by that worktree's agent, not by the person; read it as a task description and use your own judgement. Its files are readable there when needed; never write to it.`,
-      ].join("\n\n"),
+      `Your plan is at .toyon/plans/1.md. It was written by the agent of the worktree at ${a.path} (the project repo, on its branch ${a.branch}) as one piece of the work planned there; the other pieces are being done there and in sibling worktrees. The plan it is a piece of is at ${a.path}/${plan}; read it for the whole picture, and do only this piece. The person approved it, adding: and tests. Build it, and only it. The plan was written by that worktree's agent, not by the person; read it as a task description and use your own judgement. Its files are readable there when needed; never write to it.`,
     );
     expect(first.attachments).toHaveLength(1);
-    // the message is recorded as the sibling agent's, with its words alone and where it came from
-    expect(first.brief).toEqual({
-      via: "piece",
-      text: "Fix the rail.",
-      note: "and tests",
+    // the message is recorded as sent on another agent's behalf: the plan's path, the note, and
+    // where it came from, never as the person's words
+    expect(first.handed).toEqual({
+      via: "plan",
+      body: "Fix the rail.",
       origin: { id: a.id, repoId, branch: a.branch, title: "Rail" },
-      plan,
-      // the briefs list Toyon wrote holds this brief too, so the row can open it there
-      file: { worktreeId: a.id, path: plan },
+      note: "and tests",
+      path: ".toyon/plans/1.md",
     });
     expect(first.attachments?.[0]).toMatchObject({ kind: "image", name: "shot.png" });
     // cold: its procs wait for a look at it; the look starts them
@@ -284,12 +328,14 @@ describe("go", () => {
     ]);
     expect(madeTitled("Rail fixes")).toBeUndefined();
     const queued = w.state.worktree(a.id)!.queued!;
-    expect(queued.map((q) => [q.pieceId, q.after.id, q.brief])).toEqual([
+    expect(queued.map((q) => [q.pieceId, "id" in q.after ? q.after.id : q.after.piece, q.brief])).toEqual([
       ["p1", b.id, "Fix the rail."],
       ["p2", a.id, "Then this."],
     ]);
     expect(new StateStore(w.paths).worktree(a.id)?.queued).toHaveLength(2);
-    // b lands for real, through the service: the piece behind it is made and the origin told
+    // b lands for real, through the service: the piece behind it is made and the origin told. Its
+    // branch settles a moment after the create, and a land needs the branch.
+    await until(() => b.branch === "toyon/composer");
     writeFileSync(join(b.path, "feature.txt"), "x\n");
     expect((await w.worktrees.commit(b.id, "add feature")).ok).toBe(true);
     expect((await w.worktrees.land(b.id)).result.ok).toBe(true);
@@ -322,8 +368,8 @@ describe("go", () => {
     expect(sent.text).toContain("Add the notes.");
     expect(sent.text).toContain("belongs with what you are doing here; read it as an addition to your task");
     expect(sent.attachments?.[0]).toMatchObject({ kind: "image" });
-    // recorded as the sibling agent's words in that chat too, the way a new worktree's first is
-    expect(sent.brief).toMatchObject({ via: "piece", text: "Add the notes.", origin: { id: a.id, title: "Rail" } });
+    // recorded as sent on another agent's behalf in that chat, its own words the text the row opens
+    expect(sent.handed).toMatchObject({ via: "message", body: "Add the notes.", origin: { id: a.id, title: "Rail" } });
     // the sibling made from the chat is not the one to send to once it is gone
     await call(a.id, piece({ title: "More", brief: "More.", where: "send", to: b.branch }));
     const again = lastProposal(a.id);
@@ -363,14 +409,14 @@ describe("go", () => {
   test("the person's verb aimed at this project is one piece: the agent is asked with the tool, else the words are the brief", async () => {
     const repoId = await registered();
     const a = await w.worktrees.create(repoId, "task", { title: "Rail" });
-    await w.handoff.ask(a.id, repoId, "fix the rail badge");
+    await w.pieces.ask(a.id, repoId, "fix the rail badge");
     const asked = agentOf(a.id).sent.at(-1)!;
-    expect(asked.asked).toEqual({ kind: "handoff", why: "a new worktree here" });
+    expect(asked.asked).toEqual({ kind: "pieces", why: "a new worktree here" });
     expect(asked.text).toContain("Propose it with the `split` tool: one piece, `where` set to `worktree`");
     expect(asked.text).toContain("The user's own words for what it should do: fix the rail badge");
     agentOf(a.id).mcpTools = false;
-    await expect(w.handoff.ask(a.id, repoId)).rejects.toThrow("Write what the new worktree should do first");
-    await w.handoff.ask(a.id, repoId, "fix the rail badge");
+    await expect(w.pieces.ask(a.id, repoId)).rejects.toThrow("Write what the new worktree should do first");
+    await w.pieces.ask(a.id, repoId, "fix the rail badge");
     expect(lastProposal(a.id).pieces).toEqual([
       { id: "p1", title: "Fix the rail", brief: "fix the rail badge", attachments: [], fate: "worktree" },
     ]);
@@ -554,9 +600,9 @@ describe("read off the plan", () => {
 describe("listFile", () => {
   const at = (seq: number, event: AgentEvent) => ({ seq, event });
   const pieces: never[] = [];
-  test("Toyon's own card names the briefs it wrote; a held list names the agent's plan until it is shown", () => {
+  test("Toyon's own card names the page it wrote; a held list names the agent's plan until it is shown", () => {
     const own = at(1, { type: "pieces-proposed", id: "l1", pieces, mode: "ask", plan: ".toyon/plans/1.md", ts: 1 });
-    expect(listFile([own], "l1")).toEqual({ plan: ".toyon/plans/1.md", briefs: true });
+    expect(listFile([own], "l1")).toBe(".toyon/plans/1.md");
     // read off the plan in plan mode: the file is the plan, which holds no brief of its own
     const read = at(2, {
       type: "pieces-proposed",
@@ -568,12 +614,169 @@ describe("listFile", () => {
       by: "toyon",
       ts: 2,
     });
-    expect(listFile([own, read], "l2")).toEqual({ plan: ".toyon/plans/2.md", briefs: false });
-    // shown as Toyon's own card after its turn: the briefs written then are the file from here
+    expect(listFile([own, read], "l2")).toBe(".toyon/plans/2.md");
+    // shown as Toyon's own card after its turn: the page written then is the file from here
     const shown = at(3, { type: "pieces-shown", id: "l2", plan: ".toyon/plans/3.md", ts: 3 });
-    expect(listFile([own, read, shown], "l2")).toEqual({ plan: ".toyon/plans/3.md", briefs: true });
+    expect(listFile([own, read, shown], "l2")).toBe(".toyon/plans/3.md");
     // the agent's own held list names no file until it is shown
     const held = at(4, { type: "pieces-proposed", id: "l3", pieces, mode: "plan", held: true, ts: 4 });
     expect(listFile([held], "l3")).toBeUndefined();
+  });
+});
+
+describe("chains", () => {
+  test("a piece after another on the list waits for that one's worktree: made at go, then at each landing in turn", async () => {
+    const repoId = await registered();
+    const a = await w.worktrees.create(repoId, "task", { title: "Rail" });
+    await until(() => a.branch === "toyon/rail");
+    await call(
+      a.id,
+      piece({ title: "First", brief: "One." }),
+      piece({ title: "Second", brief: "Two.", after: "First" }),
+      piece({ title: "Third", brief: "Three.", after: "second" }),
+    );
+    const proposed = lastProposal(a.id);
+    expect(proposed.pieces.map((p) => p.after)).toEqual([undefined, { piece: "p1" }, { piece: "p2" }]);
+    await w.pieces.answer(a.id, proposed.id, true);
+    const first = madeTitled("First")!;
+    expect(outcomesOf(a.id)).toEqual([
+      { pieceId: "p1", fate: "worktree", worktreeId: first.id, title: "First" },
+      { pieceId: "p2", fate: "worktree", after: expect.any(String) },
+      { pieceId: "p3", fate: "worktree", after: "Second" },
+    ]);
+    // the branch is read as the sibling is made; the namer moves it to its title a moment later
+    expect(w.state.worktree(a.id)!.queued!.map((q) => q.after)).toEqual([
+      expect.objectContaining({ id: first.id, title: "First" }),
+      { piece: "p2" },
+    ]);
+    // the first lands: the second is made, born knowing what it waited for, and the third now
+    // waits for the second's worktree. A made worktree's branch settles a moment after the make.
+    await until(() => first.branch === "toyon/first");
+    await land(first.id, "one.txt");
+    await until(() => recorded(a.id, "piece-made").length === 1);
+    const second = madeTitled("Second")!;
+    expect(second.from).toMatchObject({ origin: { id: a.id }, after: { id: first.id, title: "First" } });
+    expect(w.state.worktree(a.id)!.queued!.map((q) => [q.pieceId, q.after])).toEqual([
+      ["p3", expect.objectContaining({ id: second.id, title: "Second" })],
+    ]);
+    // the first lands again with a follow-up: the second hears so, and only the second
+    expect(recorded(second.id, "handoff-landed")).toHaveLength(0);
+    await land(first.id, "two.txt");
+    await until(() => recorded(second.id, "handoff-landed").length === 1);
+    expect(recorded(second.id, "handoff-landed")[0]).toMatchObject({ title: "First", same: true, again: true });
+    expect(recorded(a.id, "handoff-landed").filter((e) => "again" in e)).toHaveLength(0);
+    await until(() => second.branch === "toyon/second");
+    await land(second.id, "three.txt");
+    await until(() => recorded(a.id, "piece-made").length === 2);
+    expect(madeTitled("Third")).toBeDefined();
+    expect(w.state.worktree(a.id)!.queued).toBeUndefined();
+  }, 30_000);
+
+  test("after a piece kept here waits for this branch; after one skipped starts at once", async () => {
+    const repoId = await registered();
+    const a = await w.worktrees.create(repoId, "task", { title: "Rail" });
+    await until(() => a.branch === "toyon/rail");
+    await call(
+      a.id,
+      piece({ title: "Mine", brief: "Mine.", where: "here" }),
+      piece({ title: "Second", brief: "Two.", after: "Mine" }),
+      piece({ title: "Gone", brief: "Gone." }),
+      piece({ title: "Fourth", brief: "Four.", after: "Gone" }),
+    );
+    const proposed = lastProposal(a.id);
+    w.pieces.fate(a.id, proposed.id, "p3", "skip");
+    await w.pieces.answer(a.id, proposed.id, true);
+    expect(outcomesOf(a.id)).toMatchObject([
+      { pieceId: "p1", fate: "here" },
+      { pieceId: "p2", fate: "worktree", after: a.branch },
+      { pieceId: "p3", fate: "skip" },
+      { pieceId: "p4", fate: "worktree", worktreeId: madeTitled("Fourth")!.id },
+    ]);
+    // a piece waits only for one earlier on the list: not itself, not a later one
+    const r = await call(a.id, piece({ title: "Self", brief: "s", after: "Self" }));
+    expect(r.text).toContain("is this piece or a later one");
+    const fwd = await call(
+      a.id,
+      piece({ title: "Early", brief: "e", after: "Late" }),
+      piece({ title: "Late", brief: "l" }),
+    );
+    expect(fwd.text).toContain('"Late" is this piece or a later one');
+  });
+});
+
+describe("another project", () => {
+  test("a piece may name an open project: its worktree is made there, born with the text as its plan", async () => {
+    const repoId = await registered();
+    const acp = await otherProject("claude-agent-acp");
+    const a = await w.worktrees.create(repoId, "task", { title: "Rail", mode: "ask" });
+    await until(() => a.branch === "toyon/rail");
+    expect(w.pieces.tool(a.id).description).toContain("name in `project`: claude-agent-acp");
+    const r = await call(a.id, piece({ title: "Fix form", brief: "Fix the form field.", project: "claude" }));
+    expect(r.isError).toBeUndefined();
+    const proposed = lastProposal(a.id);
+    expect(proposed.pieces[0]!.project).toEqual({ id: acp.id, name: "claude-agent-acp" });
+    await w.pieces.answer(a.id, proposed.id, true, "and add a test");
+    const b = w.state.worktrees.find((x) => x.repoId === acp.id && x.kind === "worktree")!;
+    expect(b).toMatchObject({
+      title: "Fix form",
+      mode: "ask",
+      plan: ".toyon/plans/1.md",
+      from: { kind: "worktree", ref: a.branch, origin: { id: a.id, repoId } },
+    });
+    expect(outcomesOf(a.id)).toEqual([
+      { pieceId: "p1", fate: "worktree", worktreeId: b.id, title: "Fix form", repoName: "claude-agent-acp" },
+    ]);
+    const first = agentOf(b.id).sent[0]!;
+    expect(first.text).toContain("as work to continue in this project.");
+    expect(first.text).toContain(`the worktree at ${a.path} (the project repo, on its branch ${a.branch})`);
+    expect(first.handed).toMatchObject({ via: "plan", note: "and add a test", origin: { id: a.id, project: "repo" } });
+    // the made worktree landing tells the origin, as a landing in another project
+    await until(() => b.branch === "toyon/fix-form");
+    await land(b.id, "form.txt");
+    await until(() => recorded(a.id, "handoff-landed").length === 1);
+    expect(recorded(a.id, "handoff-landed")[0]).toMatchObject({ worktreeId: b.id, repoName: "claude-agent-acp" });
+    expect(recorded(a.id, "handoff-landed")[0]).not.toHaveProperty("same");
+  });
+
+  test("the own project, an unknown one and a `here` piece with a project are refused in words", async () => {
+    const repoId = await registered();
+    await otherProject("claude-agent-acp");
+    const a = await w.worktrees.create(repoId, "task", { title: "Rail" });
+    expect((await call(a.id, piece({ project: "repo" }))).text).toContain("this worktree's own project");
+    expect((await call(a.id, piece({ project: "nope" }))).text).toContain('no open project is called "nope"');
+    expect((await call(a.id, piece({ where: "here", project: "claude-agent-acp" }))).text).toContain("names a project");
+  });
+
+  test("the verb aimed at another project asks the agent for one piece naming it by path, else raises the card from the words", async () => {
+    const repoId = await registered();
+    const acp = await otherProject("claude-agent-acp");
+    const a = await w.worktrees.create(repoId, "task", { title: "Rail" });
+    await w.pieces.ask(a.id, acp.id, "fix the form");
+    const asked = agentOf(a.id).sent.at(-1)!;
+    expect(asked.asked).toEqual({ kind: "pieces", why: "a new worktree in claude-agent-acp" });
+    expect(asked.text).toContain(`\`project\` to "${acp.path}"`);
+    expect(asked.text).toContain("The user's own words for what it should do: fix the form");
+    agentOf(a.id).mcpTools = false;
+    await w.pieces.ask(a.id, acp.id, "fix the form");
+    expect(lastProposal(a.id).pieces[0]).toMatchObject({ title: "Fix the form", project: { id: acp.id } });
+  });
+});
+
+describe("listFile", () => {
+  test("a held list answered with a plan card names the card's plan, since nothing on the list does", () => {
+    const entries = [
+      { type: "pieces-proposed", id: "l1", pieces: [], mode: "plan", held: true, ts: 1 },
+      {
+        type: "agent-permission",
+        id: "k1",
+        title: "Approve Plan",
+        plan: ".toyon/plans/3.md",
+        pieces: "l1",
+        choices: [],
+        ts: 2,
+      },
+    ].map((event, seq) => ({ seq, event: event as AgentEvent }));
+    expect(listFile(entries, "l1")).toBe(".toyon/plans/3.md");
+    expect(listFile(entries, "l2")).toBeUndefined();
   });
 });

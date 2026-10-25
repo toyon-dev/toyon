@@ -1,6 +1,6 @@
 // The logic behind the pieces list, kept out of the components so it has tests without a DOM. A
-// pieces list is the agent's hand-over of its plan's work: what the document draws at the head of
-// the plan, what the yes line and Toyon's own card say about it, and what a press on a row sends.
+// pieces list is the agent's hand-over of its work: what the plan page draws at its head, what the
+// plan card's byline and Toyon's own card say about it, and what a press on a row sends.
 
 import type { ClientMsg, Piece, PieceFate } from "@toyon/shared";
 import type { ChatItem } from "../../state/store.ts";
@@ -14,12 +14,12 @@ export function openPieces(chat: readonly ChatItem[]): PiecesItem | null {
   return item?.kind === "pieces" ? item : null;
 }
 
-/** Whether the file the list sits on is the briefs Toyon wrote (one heading per piece, the brief
- * under it), rather than the agent's plan. A held list has no file of its own: it sits on the
+/** Whether the file the list sits on is the page Toyon wrote for it (each piece's text under its
+ * own heading), rather than an agent's plan. A held list has no file of its own: it sits on the
  * worktree's plan and takes the plan card's path when the card comes, as its `companion`; a list
- * shown as Toyon's own card names the briefs file. The page then shows the section alone, since the
- * file says in prose what the rows draw; the file itself stays, for a sibling and for a restart. */
-export function onBriefs(item: Pick<PiecesItem, "plan" | "companion">): boolean {
+ * shown as Toyon's own card names the page. There the block is the whole page, since the rows
+ * unfold to the same text the file holds; the file itself stays, for a restart. */
+export function listPage(item: Pick<PiecesItem, "plan" | "companion">): boolean {
   return !!item.plan && !item.companion;
 }
 
@@ -28,8 +28,21 @@ export function effectiveFate(item: Pick<PiecesItem, "fates">, piece: Piece): Pi
   return item.fates[piece.id] ?? piece.fate;
 }
 
-/** how the list would act on a yes, by fate: siblings made now, siblings queued behind a branch,
- * messages sent on, pieces kept here, and pieces skipped */
+/** what a `worktree` piece waits for before it starts: a worktree already open, or a piece of
+ * the same list, named by its title; null for one that starts at once */
+export type Wait = { kind: "branch"; id: string; branch: string; title: string } | { kind: "piece"; title: string };
+
+export function waitOf(item: Pick<PiecesItem, "pieces">, piece: Piece): Wait | null {
+  const after = piece.after;
+  if (!after) return null;
+  if ("piece" in after) {
+    return { kind: "piece", title: item.pieces.find((p) => p.id === after.piece)?.title ?? "another piece" };
+  }
+  return { kind: "branch", ...after };
+}
+
+/** how the list would act on a yes, by fate: siblings made now, siblings queued behind a branch
+ * or a piece, messages sent on, pieces kept here, and pieces skipped */
 export function piecesCounts(item: Pick<PiecesItem, "pieces" | "fates">) {
   const counts = { worktrees: 0, queued: 0, sent: 0, here: 0, skipped: 0 };
   for (const piece of item.pieces) {
@@ -46,30 +59,44 @@ export function piecesCounts(item: Pick<PiecesItem, "pieces" | "fates">) {
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
-/** the line above the plan card: what its yes also does, acts first, then what stays put */
-export function piecesLine(item: Pick<PiecesItem, "pieces" | "fates">): string {
+/** a, b and c */
+const joinAnd = (parts: string[]): string =>
+  parts.length <= 1 ? (parts[0] ?? "") : `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}`;
+
+/** The byline under a plan card that carries a list: what its yes starts, as fact. `selfId` is
+ * the worktree the card is in, so a wait on its own branch reads "this branch". */
+export function piecesLine(item: Pick<PiecesItem, "pieces" | "fates">, selfId?: string): string {
   const c = piecesCounts(item);
-  const acts = [
-    c.worktrees ? plural(c.worktrees, "worktree") : "",
-    c.queued ? `${c.queued} queued` : "",
-    c.sent ? plural(c.sent, "message") : "",
-  ].filter(Boolean);
-  const stays = [c.here ? `${c.here} here` : "", c.skipped ? `${c.skipped} skipped` : ""].filter(Boolean);
-  if (acts.length === 0) return `with yes: nothing starts; ${stays.join(", ") || "nothing on the list"}`;
-  return `with yes: ${acts.join(", ")}${stays.length ? `; ${stays.join(", ")}` : ""}`;
+  const acts: string[] = [];
+  if (c.here) acts.push("this plan here");
+  if (c.worktrees) acts.push(`${plural(c.worktrees, "worktree")} now`);
+  if (c.queued) {
+    const waits = item.pieces.filter((p) => effectiveFate(item, p) === "worktree" && p.after);
+    const own = waits.every((p) => p.after && "id" in p.after && p.after.id === selfId);
+    const one = waits.length === 1 ? waitOf(item, waits[0]!) : null;
+    acts.push(
+      own
+        ? `${c.queued} when this branch lands`
+        : one
+          ? `1 when ${one.kind === "branch" ? one.branch : one.title} lands`
+          : `${c.queued} queued`,
+    );
+  }
+  if (c.sent) acts.push(`${c.sent} sent on`);
+  const skipped = c.skipped ? `; ${c.skipped} skipped` : "";
+  if (acts.length === 0) return `Starts nothing${skipped}.`;
+  return `Starts ${joinAnd(acts)}${skipped}.`;
 }
 
-/** the question Toyon's own card asks: the one-piece shape first, since a thing found mid-task is
- * one piece, then the counts for a list */
+/** the question Toyon's own card asks: one piece by what the agent proposed for it, a list by
+ * its counts as the fates stand */
 export function piecesQuestion(item: Pick<PiecesItem, "pieces" | "fates">): string {
   const only = item.pieces.length === 1 ? item.pieces[0] : undefined;
   if (only) {
-    const fate = effectiveFate(item, only);
-    if (fate === "worktree")
-      return only.after ? `Queue a worktree for ${only.title}?` : `Start a worktree for ${only.title}?`;
-    if (fate === "send") return `Send ${only.title} to ${only.to?.title ?? "the worktree"}?`;
-    if (fate === "here") return `Keep ${only.title} here?`;
-    return `Skip ${only.title}?`;
+    if (only.fate === "send") return `Send ${only.title} to ${only.to?.title ?? "the worktree"}?`;
+    if (only.fate === "here") return `Keep ${only.title} here?`;
+    if (only.project) return `Continue in ${only.project.name}?`;
+    return only.after ? `Queue a worktree for ${only.title}?` : `Start a worktree for ${only.title}?`;
   }
   const c = piecesCounts(item);
   const parts = [
@@ -81,6 +108,76 @@ export function piecesQuestion(item: Pick<PiecesItem, "pieces" | "fates">): stri
   ].filter(Boolean);
   const line = parts.join(", ");
   return `${line.charAt(0).toUpperCase()}${line.slice(1)}?`;
+}
+
+/** one row of Toyon's card for a single piece: the fate it answers with (null for not now), its
+ * label, a line under it, and whether a note makes sense on it (an agent elsewhere reads it) */
+export interface OneRow {
+  fate: PieceFate | null;
+  label: string;
+  description?: string;
+  notes: boolean;
+}
+
+/** the rows for one piece, in digit order: what the agent proposed first, so enter on an
+ * untouched card is the proposal, the alternative, then not now. A piece for another project has
+ * no "here": the work does not belong in this worktree. */
+export function oneRows(item: Pick<PiecesItem, "pieces">, piece: Piece): OneRow[] {
+  const wait = waitOf(item, piece);
+  const where = wait ? ` once ${wait.kind === "branch" ? wait.branch : wait.title} lands` : "";
+  const worktree: OneRow = piece.project
+    ? {
+        fate: "worktree",
+        label: `start a worktree in ${piece.project.name}`,
+        description: `a copy of that project, with this text as its plan${where}`,
+        notes: true,
+      }
+    : {
+        fate: "worktree",
+        label: wait ? "queue a worktree" : "start a worktree",
+        description: `a copy of this project, with this text as its plan${where}`,
+        notes: true,
+      };
+  const here: OneRow = {
+    fate: "here",
+    label: "do it here",
+    description: "this worktree's agent, after its turn",
+    notes: false,
+  };
+  const notNow: OneRow = { fate: null, label: "not now", notes: false };
+  if (piece.fate === "send") {
+    return [
+      {
+        fate: "send",
+        label: `send to ${piece.to?.title ?? "the worktree"}`,
+        description: "that worktree's agent, as a message",
+        notes: true,
+      },
+      notNow,
+    ];
+  }
+  if (piece.fate === "here") return [here, worktree, notNow];
+  return piece.project ? [worktree, notNow] : [worktree, here, notNow];
+}
+
+/** the fate as the row's words: the plain state of the piece before go */
+export function fateWord(piece: Piece, fate: PieceFate): string {
+  if (fate === "worktree") return piece.project ? `new worktree in ${piece.project.name}` : "new worktree";
+  if (fate === "here") return "here";
+  if (fate === "skip") return "skip";
+  return `sent to ${piece.to?.title ?? "the worktree"}`;
+}
+
+/** what the fate does once the list is answered, as the sentence the open row states */
+export function fateSentence(piece: Piece, fate: PieceFate, wait: Wait | null): string {
+  if (fate === "worktree") {
+    const where = piece.project ? ` in ${piece.project.name}` : "";
+    const when = wait ? `, once ${wait.kind === "branch" ? wait.branch : wait.title} lands` : "";
+    return `Starts as a new worktree${where}${when}, with this text as its plan.`;
+  }
+  if (fate === "here") return "This worktree's agent does it.";
+  if (fate === "send") return `Goes to ${piece.to?.title ?? "that worktree"}'s agent as a message.`;
+  return "Skipped: nothing happens to this piece.";
 }
 
 /** the answer to Toyon's own card: `note` rides with go alone, trimmed, and a blank one is left off */
@@ -105,7 +202,9 @@ export function pieceFate(
 }
 
 /** the fates a piece may take from a press: a piece aimed at an open worktree is sent there or
- * skipped; any other goes here, to a new worktree, or is skipped */
+ * skipped; one for another project goes there or is skipped; any other goes here, to a new
+ * worktree, or is skipped */
 export function fatesFor(piece: Piece): PieceFate[] {
-  return piece.fate === "send" ? ["send", "skip"] : ["here", "worktree", "skip"];
+  if (piece.fate === "send") return ["send", "skip"];
+  return piece.project ? ["worktree", "skip"] : ["here", "worktree", "skip"];
 }

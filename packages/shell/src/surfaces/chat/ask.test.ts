@@ -65,6 +65,9 @@ describe("stoppedAsk", () => {
     expect(stoppedAsk([ask("k1", "cancelled")])?.id).toBe("k1");
     expect(stoppedAsk([ask("k1", "expired"), { kind: "assistant", text: "…" }])?.id).toBe("k1");
     expect(stoppedAsk([ask("k1", "cancelled"), { kind: "user", text: "never mind" }])).toBeNull();
+    // a message Toyon sent on another agent's behalf moved the chat on the same way
+    const origin = { id: "o", repoId: "r", branch: "b", title: "O" };
+    expect(stoppedAsk([ask("k1", "cancelled"), { kind: "handed", via: "message", origin, ts: 1 }])).toBeNull();
     expect(stoppedAsk([ask("k1", "cancelled"), ask("k2", "answered")])).toBeNull();
     expect(stoppedAsk([ask("k1", "skipped")])).toBeNull();
     expect(stoppedAsk([ask("k1")])).toBeNull();

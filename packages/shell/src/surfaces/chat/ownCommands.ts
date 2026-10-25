@@ -4,9 +4,10 @@
 // A name earns a row only where toyon already owns the action; an agent's own command is never
 // reimplemented here, and a name with no home in the shell (clear, cost, todos) gets no row.
 
-import { type AgentCommand, PERMISSION_MODES, type PermissionMode } from "@toyon/shared";
+import { type AgentCommand, PERMISSION_MODES, type PermissionMode, type RepoInfo } from "@toyon/shared";
 
-/** the names toyon answers itself: a mode, the seat's verb, or the handoff to another project */
+/** the names toyon answers itself: a mode, the seat's verb, or a new worktree for part of the
+ * work, here or in another open project */
 export type OwnName = PermissionMode | "check" | "land" | "archive" | "handoff";
 
 /** a draft that leads with one of toyon's own commands: the name, and whatever followed it */
@@ -28,10 +29,34 @@ export function ownCommands(landLine: string): AgentCommand[] {
     { name: "archive", description: "archive this worktree once its work has landed" },
     {
       name: "handoff",
-      description: "continue this work in another project; Toyon starts a worktree there with your message",
+      description: "a new worktree for part of this work, here or in another project, born with a plan for it",
       hint: "<project> [<message>]",
     },
   ];
+}
+
+/** what `/handoff <project> [text]` means: the project the new worktree goes in and the person's
+ * own words, the picker when nothing was named, or why the name does not pick one */
+export type HandoffArgs = { repo: RepoInfo; text?: string } | { error: string } | { pick: true };
+
+/** The first word names the project, by its name as listed: an exact match first (case does not
+ * matter), else the one project whose name starts with it; `here`, or this worktree's own
+ * project, means a new worktree here. The rest is the person's own words for what it should do. */
+export function parseHandoffArgs(args: string, repos: readonly RepoInfo[], hereRepoId: string): HandoffArgs {
+  const trimmed = args.trim();
+  if (!trimmed) return { pick: true };
+  const gap = trimmed.search(/\s/);
+  const word = gap === -1 ? trimmed : trimmed.slice(0, gap);
+  // the words as typed: the message is theirs, and its spacing is not this parser's to tidy
+  const text = gap === -1 ? undefined : trimmed.slice(gap).trim() || undefined;
+  const needle = word.toLowerCase();
+  const own = repos.find((r) => r.id === hereRepoId);
+  if (needle === "here" && own) return { repo: own, ...(text ? { text } : {}) };
+  const exact = repos.filter((r) => r.name.toLowerCase() === needle);
+  const hits = exact.length > 0 ? exact : repos.filter((r) => r.name.toLowerCase().startsWith(needle));
+  if (hits.length === 0) return { error: `no open project named "${word}"` };
+  if (hits.length > 1) return { error: `"${word}" names more than one project` };
+  return { repo: hits[0]!, ...(text ? { text } : {}) };
 }
 
 /** the `/` menu's three tiers, in rank order: the person's own skills and commands (the ones the

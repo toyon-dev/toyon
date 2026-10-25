@@ -2,7 +2,7 @@
 // than a message for the agent. Pure, like mentions.ts, so the rules have tests.
 
 import { CHECK_TOOL, clipOutput, SHELL_TOOL, type ShellInput } from "@toyon/shared";
-import type { ChatItem } from "../../state/store.ts";
+import { type ChatItem, startsTurn } from "../../state/store.ts";
 import { parseToolOutput } from "./toolCall.ts";
 
 /** the command a draft asks to run, or null for a draft that is a message. A sigil rather than a
@@ -49,7 +49,7 @@ export function shellContext(chat: ChatItem[]): string | undefined {
   const asked = new Set(chat.flatMap((i) => (i.kind === "asked" && i.toolId ? [i.toolId] : [])));
   for (let i = chat.length - 1; i >= 0; i--) {
     const item = chat[i]!;
-    if (item.kind === "user") break;
+    if (startsTurn(item)) break;
     if (item.kind !== "tool" || !item.done || asked.has(item.id)) continue;
     const command = commandOf(item);
     if (command === null) continue;

@@ -15,7 +15,7 @@ export function transcriptPathFor(transcriptsDir: string, worktreeId: string): s
 
 /** events that are not the agent's own doing, read past when asking what a turn said last: the
  * figures it left, and a message queued behind it that no turn has picked up yet */
-const NOT_THE_TURNS = new Set<AgentEvent["type"]>(["usage", "session-info", "user-message", "fix-asked"]);
+const NOT_THE_TURNS = new Set<AgentEvent["type"]>(["usage", "session-info", "user-message", "fix-asked", "handed"]);
 
 /** The turn-end a transcript is owed when its last turn has none: the daemon died under it. The
  * reason reads off the last thing the agent did: the auth card, the error row, or anything else,

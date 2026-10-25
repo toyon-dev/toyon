@@ -80,6 +80,12 @@ export function turnsSince(entries: readonly TranscriptEntry[], seenAt: number):
         (into?.fixes ?? pendingFixes).push(e.why);
         break;
       }
+      case "handed": {
+        // a message sent on another agent's behalf is a task the turn answers, as a person's is
+        const into = open && open.stop === undefined && open.error === undefined && !open.auth ? open : null;
+        (into?.asks ?? pending).push(e.body ?? e.text);
+        break;
+      }
       case "turn-start":
         open = start(e.ts);
         break;
@@ -142,16 +148,13 @@ function countWrite(t: TurnSlice, writes: Set<string>, toolId: string, ev: Param
   t.edits++;
 }
 
-/** what the newest card nothing has closed is asking. A handoff proposal is a card too: the
- * person has Go and Not now in front of them, so the row and the jump chord treat it as an ask */
+/** what the newest card nothing has closed is asking */
 export function openAskOf(entries: readonly TranscriptEntry[]): string | undefined {
   const open = new Map<string, string>();
   for (const { event: e } of entries) {
     if (e.type === "agent-question") open.set(e.id, e.message);
     else if (e.type === "agent-permission") open.set(e.id, e.title);
     else if (e.type === "agent-ask-end") open.delete(e.id);
-    else if (e.type === "handoff-proposed") open.set(e.id, `Continue in ${e.repo.name}?`);
-    else if (e.type === "handoff-go" || e.type === "handoff" || e.type === "handoff-declined") open.delete(e.id);
   }
   const last = [...open.values()].at(-1)?.trim();
   return last ? clip(last) : undefined;
@@ -175,9 +178,16 @@ export function factsOf(turns: readonly TurnSlice[], end: TurnEnd, ask?: string)
   };
 }
 
-/** the first thing anyone asked here: the task itself, whatever the title has become */
+/** the first thing anyone asked here: the task itself, whatever the title has become. For a
+ * worktree born with a plan another agent wrote, the plan's own text, not the pointer at it. */
 export function firstAskOf(entries: readonly TranscriptEntry[]): string | undefined {
-  for (const { event: e } of entries) if (e.type === "user-message" && e.text.trim()) return e.text;
+  for (const { event: e } of entries) {
+    if (e.type === "user-message" && e.text.trim()) return e.text;
+    if (e.type === "handed") {
+      const said = e.body ?? e.text;
+      if (said.trim()) return said;
+    }
+  }
   return undefined;
 }
 

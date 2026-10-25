@@ -15,7 +15,6 @@ import {
   type AgentCommand,
   type AgentEvent,
   emptyInput,
-  HANDOFF_TOOL,
   TOOL_SEARCH,
   TOYON_MCP_SERVER,
   type ToolImage,
@@ -145,14 +144,9 @@ export function toyonTool(update: { name?: string | null; _meta?: Record<string,
   return null;
 }
 
-/** a Toyon tool's row words: the handoff names the project it proposes once the input has one;
- * any other reads as the adapter titled it, else as its bare name */
-function toyonTitle(tool: string, rawInput: unknown, title: string | null | undefined): string {
-  if (tool !== HANDOFF_TOOL) return title && toyonTool({ name: title }) === null ? title : tool;
-  const project = asRecord(rawInput).project;
-  return typeof project === "string" && project.trim()
-    ? `Continue in ${project.trim()}`
-    : "Continue in another project";
+/** a Toyon tool's row words: as the adapter titled it, else its bare name */
+function toyonTitle(tool: string, title: string | null | undefined): string {
+  return title && toyonTool({ name: title }) === null ? title : tool;
 }
 
 /** the words a call's row starts with: the agent's own, except a network ask's, which reads as the
@@ -178,7 +172,7 @@ function heading(update: {
   }
   // folded to the bare name the shell keys on, whatever prefix the adapter put on it
   const own = toyonTool(update);
-  if (own) return { name: own, title: toyonTitle(own, update.rawInput, update.title), kind: "other" };
+  if (own) return { name: own, title: toyonTitle(own, update.title), kind: "other" };
   return { name, title: update.title, ...(update.kind ? { kind: update.kind } : {}) };
 }
 
@@ -366,16 +360,8 @@ export function mapUpdate(
       }
       const refined: ToolRefine = { ...memo.held };
       // a ToolSearch's title is read off its query, which the update carries in the input and never
-      // in its title: that only ever repeats the loader's name. A handoff's is the project it
-      // names, read the same way once the input is in.
-      const title =
-        memo.name === TOOL_SEARCH
-          ? toolSearchTitle(update.rawInput)
-          : memo.name === HANDOFF_TOOL
-            ? update.rawInput !== undefined
-              ? toyonTitle(HANDOFF_TOOL, update.rawInput, update.title)
-              : undefined
-            : update.title;
+      // in its title: that only ever repeats the loader's name
+      const title = memo.name === TOOL_SEARCH ? toolSearchTitle(update.rawInput) : update.title;
       if (title && title !== memo.title) refined.title = memo.title = title;
       // a folded name stays folded: the adapter's update repeats its own spelling of the same tool
       if (update.name && update.name !== memo.name && toyonTool(update) !== memo.name)

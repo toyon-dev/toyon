@@ -1,12 +1,13 @@
 // Pieces: a plan's work across worktrees. The agent hands Toyon a list of pieces through its own
-// tool (`split`), beside its plan or during a reply, and each piece goes on this worktree, a
-// sibling worktree of the project, or an open worktree already working on that part. Nothing
-// starts until the person says so: in plan mode the list rides beside the next plan card and the
-// plan's yes is its yes; otherwise it is a card of Toyon's own. The list's whole state lives on
-// the origin's transcript, as a handoff's does: a proposal is open from its `pieces-proposed`
-// until a `pieces-go`, `pieces` or `pieces-declined` with the same id, and the fates the person
-// pressed are `pieces-fate` events, the last one per piece standing. A piece that waits for a
-// sibling to land is held on the origin's record, so it survives a restart and leaves with it.
+// tool (`split`), beside its plan or during a reply, and each piece goes on this worktree, a new
+// worktree of this project or of another open one, or an open worktree already working on that
+// part. Nothing starts until the person says so: in plan mode the list rides beside the next plan
+// card and the plan's yes is its yes; otherwise it is a card of Toyon's own. A piece's text is the
+// plan its worktree is born with. The list's whole state lives on the origin's transcript: a
+// proposal is open from its `pieces-proposed` until a `pieces-go`, `pieces` or `pieces-declined`
+// with the same id, and the fates the person pressed are `pieces-fate` events, the last one per
+// piece standing. A piece that waits for a sibling to land is held on the origin's record, so it
+// survives a restart and leaves with the origin.
 
 import { createHash, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -15,18 +16,19 @@ import type {
   AgentEvent,
   AttachmentInput,
   AttachmentRef,
-  Brief,
+  HandedOrigin,
   Piece,
   PieceFate,
   PieceOutcome,
   QueuedPiece,
+  RepoInfo,
   WorktreeInfo,
 } from "@toyon/shared";
 import { DEFAULT_PERMISSION_MODE, SPLIT_TOOL } from "@toyon/shared";
 import type { AttachmentStore } from "../agent/attachments.ts";
 import type { McpTool, McpToolResult, ToolProvider } from "../agent/mcp.ts";
 import { briefsDoc, planEdited, writePlanDocNow } from "../agent/planDoc.ts";
-import { type PieceOrigin, piecePrompt, pieceSendPrompt, piecesActedPrompt } from "../agent/prompt.ts";
+import { handedPrompt, type PieceOrigin, pieceAskPrompt, pieceSendPrompt, piecesActedPrompt } from "../agent/prompt.ts";
 import type { ReadPiece } from "../agent/tasks.ts";
 import type { TranscriptEntry } from "../agent/transcript.ts";
 import { UserError } from "../core/errors.ts";
@@ -34,22 +36,25 @@ import type { Hub } from "../core/hub.ts";
 import { fireAndForget, log } from "../core/log.ts";
 import type { StateStore } from "../core/state.ts";
 import type { RuntimeRegistry } from "../runtime/registry.ts";
-import { NAME_SHAPE, overNameShape } from "./naming.ts";
+import { NAME_SHAPE, overNameShape, sentenceCase, titleFrom } from "./naming.ts";
 import { matchBy, PER_TURN_MAX, proposedThisTurn } from "./proposals.ts";
 import type { CreateOpts } from "./service.ts";
 
-/** what the chat the brief lands in shows of it: the origin agent's words and the person's note,
- * the origin as it is now, since the row keeps it after the origin is gone, and the briefs list
- * on the origin when that is what the list's file is, so the row can open the brief there */
-function briefOf(origin: WorktreeInfo, text: string, note: string | undefined, at: PieceOrigin): Brief {
+/** the origin as the chat the piece lands in names it: kept whole, since the row outlives the
+ * origin, and with the project's name when the piece crossed into another one */
+function handedOrigin(origin: WorktreeInfo, project: string | undefined): HandedOrigin {
   return {
-    via: "piece",
-    text,
-    ...(note ? { note } : {}),
-    origin: { id: origin.id, repoId: origin.repoId, branch: origin.branch, title: origin.title },
-    ...(at.plan ? { plan: at.plan } : {}),
-    ...(at.plan && at.briefs ? { file: { worktreeId: origin.id, path: at.plan } } : {}),
+    id: origin.id,
+    repoId: origin.repoId,
+    branch: origin.branch,
+    title: origin.title,
+    ...(project ? { project } : {}),
   };
+}
+
+/** the plan a piece's worktree is born with: the piece's text under its title */
+export function pieceDoc(piece: Pick<Piece, "title" | "brief">): string {
+  return `# ${piece.title}\n\n${piece.brief.trim()}\n`;
 }
 
 export interface PiecesDeps {
@@ -74,16 +79,20 @@ export interface RawPiece {
   /** the attachments of this chat it needs, by their labels in the prompt ("Image 2") */
   attachments?: string[];
   where: "here" | "worktree" | "send";
-  /** `worktree`: the branch it waits for, or "this" for the origin itself */
+  /** `worktree`: the branch it waits for, another piece of the list by its title, or "this" for
+   * the origin itself */
   after?: string;
   /** `send`: the open worktree it goes to, by branch or title */
   to?: string;
+  /** another open project, by name or path: the worktree is made there, or `to` is one of its */
+  project?: string;
 }
 
 /** the caps keep a runaway agent from filling the list; six is what a person reads beside a plan */
 export const PIECES_MAX = 6;
-const BRIEF_MAX = 6_000;
+const BRIEF_MAX = 20_000;
 const ATTACH_MAX = 10;
+const PROJECT_MAX = 200;
 
 const refused = (text: string): McpToolResult => ({ text, isError: true });
 
@@ -156,7 +165,7 @@ export function hashText(text: string): string {
 
 /** the held list still waiting for a plan card: one shown as Toyon's own card keeps `held` on its
  * event but belongs to no card, so it is not this */
-function heldUnshown(entries: readonly TranscriptEntry[]): Proposed | null {
+export function heldUnshown(entries: readonly TranscriptEntry[]): Proposed | null {
   const shown = new Set<string>();
   for (const { event } of entries) if (event.type === "pieces-shown") shown.add(event.id);
   return openPieces(entries).find((p) => p.held && !shown.has(p.id)) ?? null;
@@ -173,22 +182,18 @@ export function openPieces(entries: readonly TranscriptEntry[]): Proposed[] {
   return [...open.values()];
 }
 
-/** the file a list sits on, as the transcript last named it: the agent's plan on a held list, the
- * briefs Toyon wrote when it was proposed as its own card or shown as one after its turn.
- * `briefs` tells the two apart: only the briefs list holds each piece's brief under a heading. */
-export function listFile(entries: readonly TranscriptEntry[], id: string): ListFile | undefined {
-  let file: ListFile | undefined;
+/** The file a list sits on, as the transcript names it: the page Toyon wrote when the list was
+ * proposed as its own card or shown as one after its turn, else the plan of the card a held list
+ * rode beside, which is the only place a held list's file is named. A sibling's pointer reads
+ * the whole picture there. */
+export function listFile(entries: readonly TranscriptEntry[], id: string): string | undefined {
+  let file: string | undefined;
   for (const { event } of entries) {
     if ((event.type === "pieces-proposed" || event.type === "pieces-shown") && event.id === id && event.plan) {
-      file = { plan: event.plan, briefs: event.type === "pieces-shown" || !event.held };
-    }
+      file = event.plan;
+    } else if (event.type === "agent-permission" && event.pieces === id && event.plan) file = event.plan;
   }
   return file;
-}
-
-export interface ListFile {
-  plan: string;
-  briefs: boolean;
 }
 
 /** where the piece stands as go is pressed: the last fate the person set, else the agent's */
@@ -211,6 +216,12 @@ const KIND_OF: Record<string, AttachmentRef["kind"]> = {
   element: "pick",
 };
 
+/** a worktree as a piece names it, on the list and on the record */
+type Named = { id: string; branch: string; title: string };
+
+/** what a piece became in one pass of go, for the pieces of the list that wait on it */
+type Became = { fate: PieceFate; worktree?: Named; queued?: true };
+
 export class PiecesService implements ToolProvider {
   constructor(private d: PiecesDeps) {
     d.hub.on("piecesDecided", (worktreeId, id, approved) =>
@@ -229,21 +240,54 @@ export class PiecesService implements ToolProvider {
     this.sweep();
   }
 
-  /** the other worktrees of the origin's project a piece may wait for or be sent to */
-  private siblings(wt: WorktreeInfo): WorktreeInfo[] {
-    return this.d.state.worktrees.filter((w) => w.repoId === wt.repoId && w.kind === "worktree" && w.id !== wt.id);
+  /** the other open worktrees of a project a piece may wait for or be sent to */
+  private siblings(wt: WorktreeInfo, repoId = wt.repoId): WorktreeInfo[] {
+    return this.d.state.worktrees.filter((w) => w.repoId === repoId && w.kind === "worktree" && w.id !== wt.id);
   }
 
-  /** the tool as the agent sees it, listed with the sibling worktrees it can name right now */
+  /** the projects a piece can cross into: every open one but the worktree's own */
+  private otherProjects(wt: WorktreeInfo): RepoInfo[] {
+    return this.d.state.repos.filter((r) => r.id !== wt.repoId);
+  }
+
+  /** The project a name or a path means. Names are the checkout's directory name, so two open
+   * projects can share one; a path settles it, and the refusal for an ambiguous name says so. A
+   * unique prefix is enough, as it is in the shell's own picker. Never the worktree's own project,
+   * which a piece reaches by naming none. */
+  resolveProject(wt: WorktreeInfo, project: string): { repo: RepoInfo } | { refused: string } {
+    const q = project.trim();
+    const others = this.otherProjects(wt);
+    if (others.length === 0) return { refused: "no other project is open in Toyon." };
+    const names = others.map((r) => r.name).join(", ");
+    if (!q) return { refused: `name the project. Open projects: ${names}.` };
+    const found = matchRepos(others, q);
+    if (found.length === 1) return { repo: found[0]! };
+    if (found.length > 1) {
+      return {
+        refused: `"${q}" names more than one open project: ${found.map((r) => r.path).join(", ")}. Say which by its path.`,
+      };
+    }
+    const own = this.d.state.repo(wt.repoId);
+    if (own && matchRepos([own], q).length === 1) {
+      return { refused: `${own.name} is this worktree's own project; leave \`project\` out for a worktree here.` };
+    }
+    return { refused: `no open project is called "${q}". Open projects: ${names}.` };
+  }
+
+  /** the tool as the agent sees it, listed with the worktrees and projects it can name right now */
   tool(worktreeId: string): McpTool {
     const wt = this.d.state.worktree(worktreeId);
     const names = wt ? this.siblings(wt).map((w) => `${w.branch}, "${w.title}"`) : [];
     const open = names.length
       ? `Open worktrees of this project you can name in \`after\` or \`to\`: ${names.join("; ")}.`
       : "No other worktree of this project is open right now.";
+    const projects = wt ? this.otherProjects(wt).map((r) => r.name) : [];
+    const elsewhere = projects.length
+      ? ` Other projects open in Toyon you can name in \`project\`: ${projects.join(", ")}.`
+      : "";
     return {
       name: SPLIT_TOOL,
-      description: `Hand Toyon the pieces of the work you are planning, or one piece you came across: each goes on this worktree, a new one, or an open one; the person decides on the list beside your plan. Nothing starts. ${open}`,
+      description: `Hand Toyon the pieces of the work you are planning, or one piece you came across: each goes on this worktree, a new worktree of this project or of another open one, or an open worktree already on that part; the person decides on the list beside your plan. Nothing starts. ${open}${elsewhere}`,
       inputSchema: {
         type: "object",
         properties: {
@@ -261,7 +305,7 @@ export class PiecesService implements ToolProvider {
                 brief: {
                   type: "string",
                   description:
-                    "Markdown that stands on its own as a first message: what is needed and why, and the paths that depend on it.",
+                    "The plan its agent builds from, in markdown that stands on its own: what is needed and why, the paths that depend on it, and what done looks like.",
                 },
                 attachments: {
                   type: "array",
@@ -273,14 +317,19 @@ export class PiecesService implements ToolProvider {
                   type: "string",
                   enum: ["here", "worktree", "send"],
                   description:
-                    "here: you do it in this worktree. worktree: a new sibling worktree of this project. send: an open worktree of this project already working on that part.",
+                    "here: you do it in this worktree. worktree: a new worktree, of this project or of the one `project` names. send: an open worktree already working on that part.",
                 },
                 after: {
                   type: "string",
                   description:
-                    'worktree only: the branch the piece must wait for before it starts, or "this" for your own.',
+                    'worktree only: what the piece waits for before it starts: a branch, another piece of this list by its title, or "this" for your own branch.',
                 },
                 to: { type: "string", description: "send only: the open worktree it goes to, by branch or title." },
+                project: {
+                  type: "string",
+                  description:
+                    "Another project open in Toyon, by its name as listed or its path: the worktree is made there, or `to` is one of its worktrees. Leave out for this project.",
+                },
               },
               required: ["title", "brief", "where"],
               additionalProperties: false,
@@ -296,7 +345,7 @@ export class PiecesService implements ToolProvider {
   /** a call from the agent, over MCP: the shape is checked here, since the client's own check
    * cannot be relied on, and then it is a proposal like the person's */
   async call(worktreeId: string, args: unknown): Promise<McpToolResult> {
-    const shape = `split takes { pieces: [{ title: string, brief: string, where: "here" | "worktree" | "send", attachments?: string[], after?: string, to?: string }] }, 1 to ${PIECES_MAX} pieces.`;
+    const shape = `split takes { pieces: [{ title: string, brief: string, where: "here" | "worktree" | "send", attachments?: string[], after?: string, to?: string, project?: string }] }, 1 to ${PIECES_MAX} pieces.`;
     const a = args && typeof args === "object" && !Array.isArray(args) ? (args as Record<string, unknown>) : null;
     const list = a && Array.isArray(a.pieces) ? (a.pieces as unknown[]) : null;
     if (!list || list.length === 0) return refused(shape);
@@ -311,7 +360,8 @@ export class PiecesService implements ToolProvider {
         (p.attachments === undefined ||
           (Array.isArray(p.attachments) && p.attachments.every((l) => typeof l === "string"))) &&
         (p.after === undefined || typeof p.after === "string") &&
-        (p.to === undefined || typeof p.to === "string");
+        (p.to === undefined || typeof p.to === "string") &&
+        (p.project === undefined || typeof p.project === "string");
       if (!shaped) return refused(shape);
       pieces.push({
         title: p.title as string,
@@ -320,14 +370,17 @@ export class PiecesService implements ToolProvider {
         ...(p.attachments ? { attachments: p.attachments as string[] } : {}),
         ...(p.after !== undefined ? { after: p.after as string } : {}),
         ...(p.to !== undefined ? { to: p.to as string } : {}),
+        ...(p.project !== undefined ? { project: p.project as string } : {}),
       });
     }
     return this.propose(worktreeId, pieces, "agent");
   }
 
   /** A proposal onto the chat. Held beside the next plan card in plan mode, Toyon's own card
-   * otherwise, with the briefs written as a file for the section to sit on. One open list per
-   * chat, and the turn's allowance is shared with handoff. */
+   * otherwise, with the pieces written as a page for the section to sit on. One open list per
+   * chat: a list the agent hands over again replaces the one still held for a plan card, since
+   * the new one is its word now, and a list already shown as a card is the person's to answer
+   * first. The turn's allowance caps how many an agent may raise. */
   async propose(
     worktreeId: string,
     raw: RawPiece[],
@@ -341,22 +394,23 @@ export class PiecesService implements ToolProvider {
       return refused(`At most ${PIECES_MAX} pieces in one list; fold the rest into \`here\`.`);
     const agent = this.d.runtime.ensureAgent(wt).agent;
     const entries = agent.transcript();
-    const siblings = this.siblings(wt);
     const pieces: Piece[] = [];
     for (const [i, p] of raw.entries()) {
-      const title = p.title.trim();
+      // the title is a row's name beside the namer's: the same case
+      const title = sentenceCase(p.title.trim());
       const brief = p.brief.trim();
       if (!title) return refused(`Piece ${i + 1} has no title.`);
       // the title is the worktree's: held to the namer's shape rather than cut to it
       const over = overNameShape(title);
       if (over) return refused(`Piece ${i + 1}'s title ${over}`);
-      if (!brief) return refused(`Piece ${i + 1} ("${title}") has no brief; write what its agent starts from.`);
+      if (!brief) return refused(`Piece ${i + 1} ("${title}") has no brief; write the plan its agent builds from.`);
       if (brief.length > BRIEF_MAX) {
         return refused(`Piece ${i + 1}'s brief is over ${BRIEF_MAX} characters; cut it to what its agent needs.`);
       }
       if ((p.attachments?.length ?? 0) > ATTACH_MAX) {
         return refused(`Piece ${i + 1} names more than ${ATTACH_MAX} attachments.`);
       }
+      if ((p.project?.length ?? 0) > PROJECT_MAX) return refused(`Piece ${i + 1}'s project name is too long.`);
       const attachments: AttachmentRef[] = [];
       for (const label of p.attachments ?? []) {
         const ref = attachmentNamed(entries, label);
@@ -365,6 +419,12 @@ export class PiecesService implements ToolProvider {
         attachments.push(ref);
       }
       const piece: Piece = { id: `p${i + 1}`, title, brief, attachments, fate: p.where };
+      if (p.project !== undefined) {
+        if (p.where === "here") return refused(`Piece ${i + 1} ("${title}") is \`here\` and names a project.`);
+        const found = this.resolveProject(wt, p.project);
+        if ("refused" in found) return refused(`Piece ${i + 1} ("${title}"): ${found.refused}`);
+        piece.project = { id: found.repo.id, name: found.repo.name };
+      }
       if (p.where !== "worktree" && p.after !== undefined) {
         return refused(`Piece ${i + 1} ("${title}") has \`after\`, which only a \`worktree\` piece takes.`);
       }
@@ -373,38 +433,45 @@ export class PiecesService implements ToolProvider {
       }
       if (p.where === "worktree" && p.after !== undefined) {
         const q = p.after.trim();
-        if (!q) return refused(`Piece ${i + 1} ("${title}") has a blank \`after\`; name the branch, or leave it out.`);
-        if (q === "this" || q === wt.branch) piece.after = { id: wt.id, branch: wt.branch, title: wt.title };
-        else {
-          const found = this.named(siblings, q);
-          if ("refused" in found) return refused(`Piece ${i + 1} ("${title}"): ${found.refused}`);
-          piece.after = found.worktree;
-        }
+        if (!q)
+          return refused(`Piece ${i + 1} ("${title}") has a blank \`after\`; name what it waits for, or leave it out.`);
+        const after = this.resolveAfter(wt, raw, i, q);
+        if ("refused" in after) return refused(`Piece ${i + 1} ("${title}"): ${after.refused}`);
+        piece.after = after.after;
       }
       if (p.where === "send") {
         const q = p.to?.trim() ?? "";
         if (!q) return refused(`Piece ${i + 1} ("${title}") is \`send\` and names no worktree in \`to\`.`);
         const found = this.named(
-          siblings.filter((w) => !w.landed),
+          this.siblings(wt, piece.project?.id).filter((w) => !w.landed),
           q,
+          piece.project?.name,
         );
         if ("refused" in found) return refused(`Piece ${i + 1} ("${title}"): ${found.refused}`);
         piece.to = found.worktree;
       }
       pieces.push(piece);
     }
-    if (openPieces(entries).length > 0) {
+    // the agent's own earlier list, still waiting for its plan card, gives way to the new one;
+    // any other open list is the person's to answer first
+    const waiting = heldUnshown(entries);
+    const replaced = openPieces(entries).filter((o) => by === "agent" && o.id === waiting?.id && o.by !== "toyon");
+    if (openPieces(entries).some((o) => !replaced.includes(o))) {
       return refused("A pieces list is already waiting for the person on this chat; finish your turn.");
     }
-    // the person's own proposals are gated by the open card alone: no turn of theirs to finish
+    // the person's own proposals are gated by the open card alone: no turn of theirs to finish.
+    // Before the held list goes, so a refusal here leaves the agent its last list.
     if (by === "agent" && proposedThisTurn(entries) >= PER_TURN_MAX) {
       return refused(
         `${PER_TURN_MAX} proposals were made this turn already; finish your turn and let the person answer.`,
       );
     }
+    for (const o of replaced) {
+      agent.note({ type: "pieces-declined", id: o.id, reason: "handed over again", ts: Date.now() });
+    }
     // the agent's list in plan mode rides the plan card it is about to ask for, and one Toyon read
-    // off the plan rides the card that is up; the person's own (the verb aimed at this project)
-    // has no card coming and is a card of its own at once
+    // off the plan rides the card that is up; the person's own (the verb) has no card coming and
+    // is a card of its own at once
     const held = by !== "person" && wt.mode === "plan";
     const plan = held ? null : writePlanDocNow(wt.path, briefsDoc(pieces));
     agent.note({
@@ -421,14 +488,52 @@ export class PiecesService implements ToolProvider {
     return { text: held ? HELD : SHOWN };
   }
 
-  /** the worktree a branch or a title names, on the ladder the handoff's project picker uses */
+  /** What a piece waits for: an earlier piece of the same list by its title, the origin's own
+   * branch as "this" or by name, else an open worktree of the project by branch or title. A piece
+   * on the list first, since a sibling and a piece can share a name only once the piece has
+   * started, by which time the list is answered. Only an earlier one: go acts in list order, so a
+   * piece can wait only for what was made or queued before it. */
+  private resolveAfter(
+    wt: WorktreeInfo,
+    raw: readonly RawPiece[],
+    at: number,
+    q: string,
+  ): { after: NonNullable<Piece["after"]> } | { refused: string } {
+    const bare = q.startsWith("@") ? q.slice(1) : q;
+    const titled = raw.map((p, i) => ({ i, title: p.title.trim() }));
+    const onList = matchBy(
+      titled.filter((p) => p.i < at),
+      bare,
+      [(p) => p.title],
+    );
+    if (onList.length === 1) return { after: { piece: `p${onList[0]!.i + 1}` } };
+    if (onList.length > 1)
+      return { refused: `"${q}" names more than one piece on the list; give them different titles.` };
+    if (
+      matchBy(
+        titled.filter((p) => p.i >= at),
+        bare,
+        [(p) => p.title],
+      ).length > 0
+    ) {
+      return { refused: `"${q}" is this piece or a later one; a piece waits only for one earlier on the list.` };
+    }
+    if (bare === "this" || bare === wt.branch) return { after: { id: wt.id, branch: wt.branch, title: wt.title } };
+    const found = this.named(this.siblings(wt), bare);
+    if ("refused" in found) return found;
+    return { after: found.worktree };
+  }
+
+  /** the worktree a branch or a title names, on the ladder the project picker uses; `where` is
+   * the project as the refusal names it */
   private named(
     among: readonly WorktreeInfo[],
     q: string,
-  ): { worktree: { id: string; branch: string; title: string } } | { refused: string } {
+    where = "this project",
+  ): { worktree: Named } | { refused: string } {
     const bare = q.startsWith("@") ? q.slice(1) : q;
     const list = among.map((w) => `${w.branch}, "${w.title}"`).join("; ");
-    if (among.length === 0) return { refused: "no other worktree of this project is open." };
+    if (among.length === 0) return { refused: `no other worktree of ${where} is open.` };
     const found = matchBy(among, bare, [(w) => w.branch, (w) => w.title]);
     if (found.length === 1) {
       const w = found[0]!;
@@ -439,7 +544,7 @@ export class PiecesService implements ToolProvider {
         refused: `"${q}" names more than one worktree: ${found.map((w) => w.branch).join(", ")}. Say which by its branch.`,
       };
     }
-    return { refused: `no open worktree of this project is called "${q}". Open: ${list}.` };
+    return { refused: `no open worktree of ${where} is called "${q}". Open: ${list}.` };
   }
 
   /** the person moved a piece: recorded, so every tab sees it, and read when go is pressed */
@@ -483,12 +588,14 @@ export class PiecesService implements ToolProvider {
   }
 
   /** The yes. The go is on the transcript before anything slow starts, so the card closes on
-   * every tab at once; then each piece in turn, on its own, so one that fails is one outcome and
-   * not the end of the list: `here` and `skip` are nothing to do, `send` is a message into the
-   * open worktree, `worktree` is a sibling made now or queued behind the branch it waits for.
-   * `tell`: the list went with a plan's yes, so the agent is about to build and is told what the
-   * list started elsewhere, steered into that turn once the card's answer is on the wire; Toyon's
-   * own card is answered between turns, and a message there would start one. */
+   * every tab at once; then each piece in list order, on its own, so one that fails is one outcome
+   * and not the end of the list: `here` and `skip` are nothing to do, `send` is a message into
+   * the open worktree, `worktree` is a worktree made now or queued behind what it waits for. A
+   * piece that waits for another on the list waits for that one's worktree, made or queued
+   * earlier in the same pass, which is why the order matters. `tell`: the list went with a plan's
+   * yes, so the agent is about to build and is told what the list started elsewhere, steered into
+   * that turn once the card's answer is on the wire; Toyon's own card is answered between turns,
+   * and a message there would start one. */
   async act(worktreeId: string, id: string, note?: string, tell = false): Promise<void> {
     const wt = this.d.state.worktree(worktreeId);
     if (!wt) return;
@@ -502,13 +609,15 @@ export class PiecesService implements ToolProvider {
       if (!repo) throw new UserError(`${wt.title}'s project is no longer open in Toyon`);
       const origin = this.originOf(wt, repo.name, listFile(entries, id));
       const outcomes: PieceOutcome[] = [];
+      const became = new Map<string, Became>();
       for (const piece of proposed.pieces) {
         const fate = effectiveFate(entries, proposed, piece);
         try {
-          outcomes.push(await this.actOn(wt, origin, proposed.id, piece, fate, note));
+          outcomes.push(await this.actOn(wt, origin, proposed, piece, fate, note, became));
         } catch (e) {
           const error = e instanceof Error ? e.message : String(e);
           log.warn(worktreeId, `piece "${piece.title}" (${fate}) failed`, e);
+          became.set(piece.id, { fate: "skip" });
           outcomes.push({ pieceId: piece.id, fate, error });
         }
       }
@@ -543,22 +652,27 @@ export class PiecesService implements ToolProvider {
     const found = await this.d.reader(wt, markdown);
     if (!found || found.length < 2) return;
     // the card may have been answered while the model read: a list held now would wait for a
-    // card that is not coming and show as Toyon's own at the turn's end, which nobody asked for
+    // card that is not coming
     const card = openPlanCard(agent.transcript());
     if (!card || card.plan !== planPath || openPieces(agent.transcript()).length > 0) return;
     await this.proposeRead(wt, markdown, found);
   }
 
-  /** The pieces read off a plan as a held list on the chat, briefs cut from the plan's sections,
-   * the plan's text hashed onto the list for the stale check. An `after` the model made up (a
-   * sibling piece's name, which is no branch yet) is dropped rather than refusing the list: the
-   * piece starts at once, and the person can see as much on the row. */
+  /** The pieces read off a plan as a held list on the chat, the plan's text hashed onto the list
+   * for the stale check. A piece's text is its section of the plan, verbatim, when the heading it
+   * names is its alone; a section two parts share (rows of one table, say) or none at all is the
+   * model's own plan for the part, never the whole plan and never one section twice. An `after`
+   * the model made up (a sibling piece's name, which is no branch yet) is dropped rather than
+   * refusing the list: the piece starts at once, and the person can see as much on the row. */
   private async proposeRead(wt: WorktreeInfo, markdown: string, found: ReadPiece[]): Promise<Proposed | null> {
     const siblings = this.siblings(wt);
     const known = (q: string) =>
       q === "this" || q === wt.branch || !("refused" in this.named(siblings, q.startsWith("@") ? q.slice(1) : q));
+    const sections = new Map<string, number>();
+    for (const p of found) sections.set(p.section, (sections.get(p.section) ?? 0) + 1);
     const raw = found.map((p): RawPiece => {
-      const brief = sectionText(markdown, p.section) ?? `${p.title}\n\n${p.section}`;
+      const own = sections.get(p.section) === 1 ? sectionText(markdown, p.section) : null;
+      const brief = own ?? p.brief ?? sectionText(markdown, p.section) ?? `${p.title}\n\n${p.section}`;
       const after = p.where === "worktree" && p.after && known(p.after) ? p.after : undefined;
       return { title: p.title, brief, where: p.where, ...(after ? { after } : {}) };
     });
@@ -622,50 +736,87 @@ export class PiecesService implements ToolProvider {
     }
   }
 
+  /** The verb: the person wants part of this work done in a new worktree of project `repoId`,
+   * this one or another open one. With the tool in the agent's hands the agent is asked to
+   * propose it, so the plan is its own account of the work, with the person's words carried;
+   * without the tool the card is raised from those words alone. */
+  async ask(worktreeId: string, repoId: string, text?: string): Promise<void> {
+    const wt = this.d.state.requireWorktree(worktreeId);
+    const repo = this.d.state.repo(repoId);
+    if (!repo) throw new UserError("no such project");
+    const here = repo.id === wt.repoId;
+    const agent = this.d.runtime.agentFor(worktreeId);
+    if (!agent) throw new UserError("worktree still starting; try again in a moment");
+    // whether the agent has the tool is only known once its process is up
+    if (agent.mcpTools === null) await agent.warm();
+    if (agent.mcpTools === true) {
+      agent.send(pieceAskPrompt(text, here ? undefined : repo), {
+        asked: { kind: "pieces", why: here ? "a new worktree here" : `a new worktree in ${repo.name}` },
+      });
+      return;
+    }
+    const own = text?.trim();
+    if (!own) throw new UserError(`Write what ${here ? "the new worktree" : repo.name} should do first`);
+    const r = await this.propose(
+      worktreeId,
+      [{ title: titleFrom(own), brief: own, where: "worktree", ...(here ? {} : { project: repo.path }) }],
+      "person",
+    );
+    if (r.isError) throw new UserError(r.text);
+  }
+
   /** the pointer a piece carries: the origin, and the file its list sits on. That file, not the
    * record's plan: outside plan mode the record's plan is whatever an earlier plan card left there,
    * and a sibling sent to read it would read the wrong picture */
-  private originOf(wt: WorktreeInfo, project: string, file: ListFile | undefined): PieceOrigin {
-    return {
-      path: wt.path,
-      project,
-      branch: wt.branch,
-      ...(file ? { plan: file.plan, ...(file.briefs ? { briefs: true as const } : {}) } : {}),
-    };
+  private originOf(wt: WorktreeInfo, project: string, file: string | undefined): PieceOrigin {
+    return { path: wt.path, project, branch: wt.branch, ...(file ? { plan: file } : {}) };
   }
 
   private async actOn(
     wt: WorktreeInfo,
     origin: PieceOrigin,
-    proposalId: string,
+    proposed: Proposed,
     piece: Piece,
     fate: PieceFate,
     note: string | undefined,
+    became: Map<string, Became>,
   ): Promise<PieceOutcome> {
-    if (fate === "here" || fate === "skip") return { pieceId: piece.id, fate };
+    const crossed = piece.project ? { repoName: piece.project.name } : {};
+    if (fate === "here" || fate === "skip") {
+      became.set(piece.id, { fate });
+      return { pieceId: piece.id, fate };
+    }
     if (fate === "send") {
       const target = piece.to ? this.d.state.worktree(piece.to.id) : undefined;
-      if (target?.kind !== "worktree" || target.repoId !== wt.repoId) {
+      const repoId = piece.project?.id ?? wt.repoId;
+      if (target?.kind !== "worktree" || target.repoId !== repoId) {
         throw new UserError(`"${piece.to?.title ?? "the worktree"}" is no longer open`);
       }
       const attachments = await this.reattachAll(wt.id, piece.attachments);
       this.d.runtime.ensureAgent(target).agent.send(pieceSendPrompt(piece.brief, note, origin), {
         keepCards: true,
         ...(attachments.length ? { attachments } : {}),
-        brief: briefOf(wt, piece.brief, note, origin),
+        handed: {
+          via: "message",
+          body: piece.brief,
+          origin: handedOrigin(wt, piece.project ? origin.project : undefined),
+          ...(note ? { note } : {}),
+        },
       });
-      return { pieceId: piece.id, fate, worktreeId: target.id, title: target.title };
+      became.set(piece.id, { fate, worktree: { id: target.id, branch: target.branch, title: target.title } });
+      return { pieceId: piece.id, fate, worktreeId: target.id, title: target.title, ...crossed };
     }
-    const waits = piece.after ? this.d.state.worktree(piece.after.id) : undefined;
-    if (piece.after && waits && waits.kind === "worktree" && !waits.landed) {
+    const waits = this.waitsFor(wt, piece, became);
+    if (waits) {
       // refs, not inputs: an adopted upload expires long before a land, and the refs read back
       // from the store whenever the sibling is made
       const queued: QueuedPiece = {
-        proposalId,
+        proposalId: proposed.id,
         pieceId: piece.id,
         title: piece.title,
         brief: piece.brief,
-        after: piece.after,
+        after: waits,
+        ...(piece.project ? { project: piece.project } : {}),
         attachments: piece.attachments,
         ...(note ? { note } : {}),
         queuedAt: Date.now(),
@@ -674,35 +825,81 @@ export class PiecesService implements ToolProvider {
       live.queued = [...(live.queued ?? []), queued];
       this.d.state.save();
       this.d.hub.emit("worktreesChanged");
-      return { pieceId: piece.id, fate, after: piece.after.branch };
+      became.set(piece.id, { fate, queued: true });
+      // what the row says it waits for: a branch, or a piece of the list still to be made
+      const after =
+        "piece" in waits ? (proposed.pieces.find((p) => p.id === waits.piece)?.title ?? waits.piece) : waits.branch;
+      return { pieceId: piece.id, fate, after, ...crossed };
     }
     const made = await this.make(wt, origin, piece, note);
-    return { pieceId: piece.id, fate, worktreeId: made.id, title: made.title };
+    became.set(piece.id, { fate, worktree: { id: made.id, branch: made.branch, title: made.title } });
+    return { pieceId: piece.id, fate, worktreeId: made.id, title: made.title, ...crossed };
   }
 
-  /** the sibling for a piece: seeded with the brief, the origin pointer, the file its list sits on
-   * and what the origin's chat attached, in the origin's mode, cold until someone looks at it */
+  /** What a `worktree` piece still has to wait for as go runs, or null to make it now. A branch
+   * it named that has not landed; a piece of the list made into a worktree in this pass, by that
+   * worktree; a piece itself queued, by the piece, until it is made; a piece kept here, by the
+   * origin's own branch; a piece sent on, by the worktree it went to; a piece skipped or failed,
+   * nothing. */
+  private waitsFor(wt: WorktreeInfo, piece: Piece, became: Map<string, Became>): QueuedPiece["after"] | null {
+    const after = piece.after;
+    if (!after) return null;
+    if (!("piece" in after)) {
+      const waits = this.d.state.worktree(after.id);
+      return waits && waits.kind === "worktree" && !waits.landed ? after : null;
+    }
+    const on = became.get(after.piece);
+    if (!on) return null;
+    if (on.queued) return { piece: after.piece };
+    if (on.worktree) return on.worktree;
+    if (on.fate === "here") return { id: wt.id, branch: wt.branch, title: wt.title };
+    return null;
+  }
+
+  /** the worktree for a piece, born with the piece's text as its plan, the origin pointer as its
+   * first message, and what the origin's chat attached; in the origin's write mode (a plan it was
+   * given is approved by the go, so never in plan mode), cold until someone looks at it. In the
+   * origin's project, or in the one the piece named. */
   private async make(
     origin: WorktreeInfo,
     at: PieceOrigin,
-    piece: Pick<Piece, "title" | "brief" | "attachments">,
+    piece: Pick<Piece, "title" | "brief" | "attachments" | "project">,
     note: string | undefined,
+    after?: Named,
   ): Promise<WorktreeInfo> {
+    const repoId = piece.project?.id ?? origin.repoId;
+    if (piece.project && !this.d.state.repo(repoId)) {
+      throw new UserError(`${piece.project.name} is no longer open in Toyon`);
+    }
     // right before the create, since the create's send is what holds the uploads
     const attachments = await this.reattachAll(origin.id, piece.attachments);
-    // no createdBy, as a handoff: the row is nobody's to jump to, and the person stays put
-    return this.d.create(origin.repoId, piecePrompt(piece.brief, note, at), {
+    const mode = origin.mode === "plan" ? "auto" : origin.mode;
+    const via = piece.project ? "project" : "piece";
+    // no createdBy: the row is nobody's to jump to, and the person stays put
+    return this.d.create(repoId, piece.title, {
       title: piece.title,
-      ...(origin.mode ? { mode: origin.mode } : {}),
+      ...(mode ? { mode } : {}),
       ...(attachments.length ? { attachments } : {}),
       from: {
         kind: "worktree",
         ref: origin.branch,
         origin: { id: origin.id, repoId: origin.repoId },
         ...(at.plan ? { plan: at.plan } : {}),
-        ...(at.plan && at.briefs ? { briefs: true } : {}),
+        ...(after ? { after } : {}),
       },
-      brief: briefOf(origin, piece.brief, note, at),
+      plan: {
+        markdown: pieceDoc(piece),
+        // the text rides on the record too: what a search, a recap and the archive's row read
+        handed: {
+          via: "plan",
+          body: piece.brief,
+          origin: handedOrigin(origin, piece.project ? at.project : undefined),
+          ...(note ? { note } : {}),
+        },
+        // a tree that would not take the file gets the plan in the message itself
+        prompt: (path) =>
+          path ? handedPrompt(path, note, at, via) : `${pieceDoc(piece)}\n${handedPrompt(null, note, at, via)}`,
+      },
       cold: true,
     });
   }
@@ -717,14 +914,20 @@ export class PiecesService implements ToolProvider {
     return out;
   }
 
-  /** a worktree landed: every piece queued behind it, on any origin, is made now and the origin's
-   * chat told; one that could not be made is dropped with the reason */
+  /** A worktree landed. The worktree it came from, when a piece made it, is told on its chat and
+   * in its agent's next prompt. Every piece queued behind it, on any origin, is made now and that
+   * origin's chat told, a piece waiting on one of those re-pointed at the worktree made; one that
+   * could not be made is dropped with the reason, and what waited on it goes too. Then every
+   * worktree that waited for this branch before it started hears that it landed again. */
   async landed(landedId: string): Promise<void> {
+    this.tellOrigin(landedId);
+    // the worktrees this landing makes waited for it by design: this is their first word, not again
+    const madeNow = new Set<string>();
     for (const origin of this.d.state.worktrees) {
-      const due = origin.queued?.filter((q) => q.after.id === landedId) ?? [];
+      const due = origin.queued?.filter((q) => !("piece" in q.after) && q.after.id === landedId) ?? [];
       if (due.length === 0) continue;
       const repo = this.d.state.repo(origin.repoId);
-      origin.queued = origin.queued?.filter((q) => q.after.id !== landedId);
+      origin.queued = origin.queued?.filter((q) => !due.includes(q));
       if (origin.queued?.length === 0) delete origin.queued;
       this.d.state.save();
       this.d.hub.emit("worktreesChanged");
@@ -733,7 +936,7 @@ export class PiecesService implements ToolProvider {
         try {
           if (!repo) throw new UserError("the project is no longer open in Toyon");
           const at = this.originOf(origin, repo.name, listFile(agent.transcript(), q.proposalId));
-          const made = await this.make(origin, at, q, q.note);
+          const made = await this.make(origin, at, q, q.note, "piece" in q.after ? undefined : q.after);
           agent.note({
             type: "piece-made",
             id: q.proposalId,
@@ -742,37 +945,28 @@ export class PiecesService implements ToolProvider {
             title: made.title,
             ts: Date.now(),
           });
+          madeNow.add(made.id);
+          this.repoint(origin, q, { id: made.id, branch: made.branch, title: made.title });
         } catch (e) {
           const reason = e instanceof Error ? e.message : String(e);
           log.warn(origin.id, `queued piece "${q.title}" could not be made`, e);
           agent.note({ type: "piece-dropped", id: q.proposalId, pieceId: q.pieceId, reason, ts: Date.now() });
+          this.dropDependents(origin, q);
         }
       }
     }
+    this.tellWaiters(landedId, madeNow);
   }
 
-  /** a queued piece whose awaited sibling is gone will never be made: dropped, and the origin's
-   * chat told why. Saves and emits only on a change, so the frame this answers to finds nothing
-   * more to do. */
-  sweep(): void {
+  /** the queued pieces of the same list that waited for `made`'s piece now wait for its worktree */
+  private repoint(origin: WorktreeInfo, made: QueuedPiece, worktree: Named): void {
+    const live = this.d.state.worktree(origin.id);
+    if (!live?.queued) return;
     let changed = false;
-    for (const origin of this.d.state.worktrees) {
-      if (!origin.queued?.length) continue;
-      const live = (id: string) => this.d.state.worktree(id)?.kind === "worktree";
-      const gone = origin.queued.filter((q) => !live(q.after.id));
-      if (gone.length === 0) continue;
-      origin.queued = origin.queued.filter((q) => live(q.after.id));
-      if (origin.queued.length === 0) delete origin.queued;
-      changed = true;
-      const agent = this.d.runtime.ensureAgent(origin).agent;
-      for (const q of gone) {
-        agent.note({
-          type: "piece-dropped",
-          id: q.proposalId,
-          pieceId: q.pieceId,
-          reason: `the worktree it waited for, "${q.after.title}", is gone`,
-          ts: Date.now(),
-        });
+    for (const q of live.queued) {
+      if (q.proposalId === made.proposalId && "piece" in q.after && q.after.piece === made.pieceId) {
+        q.after = worktree;
+        changed = true;
       }
     }
     if (changed) {
@@ -780,6 +974,114 @@ export class PiecesService implements ToolProvider {
       this.d.hub.emit("worktreesChanged");
     }
   }
+
+  /** a dropped piece takes the pieces that waited on it with it, with the reason on the chat */
+  private dropDependents(origin: WorktreeInfo, dropped: QueuedPiece): void {
+    const live = this.d.state.worktree(origin.id);
+    if (!live?.queued) return;
+    const gone = live.queued.filter(
+      (q) => q.proposalId === dropped.proposalId && "piece" in q.after && q.after.piece === dropped.pieceId,
+    );
+    if (gone.length === 0) return;
+    live.queued = live.queued.filter((q) => !gone.includes(q));
+    if (live.queued.length === 0) delete live.queued;
+    this.d.state.save();
+    this.d.hub.emit("worktreesChanged");
+    const agent = this.d.runtime.ensureAgent(live).agent;
+    for (const q of gone) {
+      agent.note({
+        type: "piece-dropped",
+        id: q.proposalId,
+        pieceId: q.pieceId,
+        reason: `the piece it waited for, "${dropped.title}", was dropped`,
+        ts: Date.now(),
+      });
+      this.dropDependents(live, q);
+    }
+  }
+
+  /** the worktree a landed one came from hears of the landing, on its chat and in its agent's
+   * next prompt. Nothing when the origin is gone or was never a worktree. */
+  private tellOrigin(landedId: string): void {
+    const wt = this.d.state.worktree(landedId);
+    if (wt?.from?.kind !== "worktree") return;
+    const origin = this.d.state.worktree(wt.from.origin.id);
+    if (origin?.kind !== "worktree") return;
+    const repo = this.d.state.repo(wt.repoId);
+    if (!repo) return;
+    this.d.runtime.ensureAgent(origin).agent.note({
+      type: "handoff-landed",
+      worktreeId: wt.id,
+      repoName: repo.name,
+      title: wt.title,
+      ...(wt.pr?.url ? { url: wt.pr.url } : {}),
+      // a piece of this worktree's own plan: the row and the agent's sentence say sibling, not project
+      ...(wt.repoId === origin.repoId ? { same: true as const } : {}),
+      ts: Date.now(),
+    });
+  }
+
+  /** every live worktree that waited for the landed branch before it started hears that the
+   * branch landed again: follow-ups on it may touch the piece, and the agent reads them off main.
+   * Not the ones this landing just made, whose first word it is. */
+  private tellWaiters(landedId: string, madeNow: ReadonlySet<string>): void {
+    const landed = this.d.state.worktree(landedId);
+    if (!landed) return;
+    const repo = this.d.state.repo(landed.repoId);
+    if (!repo) return;
+    for (const w of this.d.state.worktrees) {
+      if (w.kind !== "worktree" || w.landed || w.id === landedId || madeNow.has(w.id)) continue;
+      if (w.from?.kind !== "worktree" || w.from.after?.id !== landedId) continue;
+      this.d.runtime.ensureAgent(w).agent.note({
+        type: "handoff-landed",
+        worktreeId: landed.id,
+        repoName: repo.name,
+        title: landed.title,
+        ...(landed.pr?.url ? { url: landed.pr.url } : {}),
+        ...(w.repoId === landed.repoId ? { same: true as const } : {}),
+        again: true,
+        ts: Date.now(),
+      });
+    }
+  }
+
+  /** a queued piece whose awaited worktree is gone will never be made: dropped, and the origin's
+   * chat told why, and the pieces that waited on it with it. One that waits for another piece of
+   * its list is left to that piece. Saves and emits only on a change, so the frame this answers
+   * to finds nothing more to do. */
+  sweep(): void {
+    let changed = false;
+    for (const origin of this.d.state.worktrees) {
+      if (!origin.queued?.length) continue;
+      const live = (id: string) => this.d.state.worktree(id)?.kind === "worktree";
+      const gone = origin.queued.filter((q) => !("piece" in q.after) && !live(q.after.id));
+      if (gone.length === 0) continue;
+      origin.queued = origin.queued.filter((q) => !gone.includes(q));
+      if (origin.queued.length === 0) delete origin.queued;
+      changed = true;
+      const agent = this.d.runtime.ensureAgent(origin).agent;
+      for (const q of gone) {
+        const title = "piece" in q.after ? q.after.piece : q.after.title;
+        agent.note({
+          type: "piece-dropped",
+          id: q.proposalId,
+          pieceId: q.pieceId,
+          reason: `the worktree it waited for, "${title}", is gone`,
+          ts: Date.now(),
+        });
+        this.dropDependents(origin, q);
+      }
+    }
+    if (changed) {
+      this.d.state.save();
+      this.d.hub.emit("worktreesChanged");
+    }
+  }
+}
+
+/** the repos `q` names: its path or its name, on the ladder every target climbs */
+function matchRepos(repos: readonly RepoInfo[], q: string): RepoInfo[] {
+  return matchBy(repos, q, [(r) => r.path, (r) => r.name]);
 }
 
 /** the attachment a prompt label names, among everything this chat's messages carried: the
@@ -790,7 +1092,7 @@ function attachmentNamed(entries: readonly TranscriptEntry[], label: string): At
   const kind = KIND_OF[m[1]!.toLowerCase()];
   const n = Number(m[2]);
   for (const { event } of entries) {
-    if (event.type !== "user-message") continue;
+    if (event.type !== "user-message" && event.type !== "handed") continue;
     const ref = event.attachments?.find((a) => a.kind === kind && a.n === n);
     if (ref) return ref;
   }

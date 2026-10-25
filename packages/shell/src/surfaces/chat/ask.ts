@@ -3,7 +3,7 @@
 // request with one response; the box shows one question at a time and the keyboard walks them.
 
 import type { AskAnswer, AskOutcome, AskQuestion } from "@toyon/shared";
-import type { ChatItem } from "../../state/store.ts";
+import { type ChatItem, startsTurn } from "../../state/store.ts";
 
 export type AskItem = Extract<ChatItem, { kind: "ask" }>;
 
@@ -25,7 +25,7 @@ export function stoppedBy(outcome: AskOutcome | undefined): boolean {
  * chat has moved on. A permission has no such afterlife, since the call it gated went with the
  * turn. */
 export function stoppedAsk(chat: ChatItem[]): AskItem | null {
-  const item = chat.findLast((i) => i.kind === "ask" || i.kind === "user");
+  const item = chat.findLast((i) => i.kind === "ask" || startsTurn(i));
   if (item?.kind !== "ask" || item.ask.kind !== "question") return null;
   return stoppedBy(item.outcome) ? item : null;
 }

@@ -9,7 +9,6 @@ import {
   type AgentEvent,
   type ArchivedWorktree,
   type AttachmentInput,
-  type Brief,
   baseIsRemote,
   baseOf,
   type CommitEntry,
@@ -52,9 +51,10 @@ import {
   type WorktreeStatus,
 } from "@toyon/shared";
 import type { OptionField } from "../agent/acp/options.ts";
+import type { Handed } from "../agent/adapter.ts";
 import { attachmentsDirFor, isAttachmentFile } from "../agent/attachments.ts";
 import { canonical } from "../agent/bounds.ts";
-import { PLANS_DIR } from "../agent/planDoc.ts";
+import { PLANS_DIR, writePlanDocNow } from "../agent/planDoc.ts";
 import { type Failure, fixPrompt, type WorkStanding } from "../agent/prompt.ts";
 import { firstAskOf } from "../agent/recap.ts";
 import type { AgentRegistry } from "../agent/registry.ts";
@@ -161,7 +161,7 @@ async function deleteTree(path: string): Promise<boolean> {
 }
 
 function withoutAttachments(event: AgentEvent): AgentEvent {
-  if (event.type !== "user-message") return event;
+  if (event.type !== "user-message" && event.type !== "handed") return event;
   const { attachments: _attachments, ...rest } = event;
   return rest;
 }
@@ -222,10 +222,13 @@ export interface CreateOpts {
   /** the row's name from birth, when the caller already has one: no provisional title from the
    * prompt's first words, and the namer is never asked */
   title?: string;
-  /** where the worktree came from, when it was made from somewhere: a handoff names its origin */
+  /** where the worktree came from, when it was made from somewhere: a piece names its origin */
   from?: WorktreeInfo["from"];
-  /** the prompt is another worktree's agent's brief, and its message is recorded as such */
-  brief?: Brief;
+  /** born with a plan another agent wrote: written as the worktree's plan file before its agent
+   * starts and set on the record. `prompt` is the first message once the file's path is known
+   * (null when the tree would not take the file), sent in place of the one given, and recorded
+   * as `handed` with these facts and the path beside it, never as the person's words. */
+  plan?: { markdown: string; handed: Handed; prompt: (path: string | null) => string };
   /** made on an agent's proposal rather than typed into: its agent starts at once, its procs on
    * the first look at it or the first request for its preview, which the idle policy's wake edges
    * already are. A row the person typed into keeps its live preview, since the spare is warm. */
@@ -518,7 +521,12 @@ export class WorktreeService {
       release = rt.agent.hold();
       if (rt.agent.runningAgent !== null && rt.agent.runningAgent !== agent) await rt.agent.restart();
       carriedIn = await this.carryMain(repo, wt, !!opts.carry);
-      rt.agent.send(prompt, { context: withCarry(context(wt.id), carriedIn), attachments, brief: opts.brief });
+      const born = this.bornWith(wt, opts.plan);
+      rt.agent.send(born?.text ?? prompt, {
+        context: withCarry(context(wt.id), carriedIn),
+        attachments,
+        ...(born ? { handed: born.handed } : {}),
+      });
     });
     if (claimed) {
       const { wt } = claimed;
@@ -595,12 +603,32 @@ export class WorktreeService {
     // setup + procs warm in the background; the agent starts immediately. A proposed worktree
     // sets up and then waits for a look: nobody is watching its preview yet
     this.launch(wt, repo, repo.path, opts.cold ? { start: false } : {});
-    this.d.runtime
-      .ensureAgent(wt)
-      .agent.send(prompt, { context: withCarry(context(id), carried), attachments, brief: opts.brief });
+    const born = this.bornWith(wt, opts.plan);
+    this.d.runtime.ensureAgent(wt).agent.send(born?.text ?? prompt, {
+      context: withCarry(context(id), carried),
+      attachments,
+      ...(born ? { handed: born.handed } : {}),
+    });
     this.nameOrAsk(wt, task, given);
     if (carried.unmoved) throw new UserError(carried.unmoved, { delivered: true });
     return wt;
+  }
+
+  /** A worktree born with a plan another agent wrote: the plan is its file before the agent's
+   * first look, and the record names it so the composer's line and the pane read it as any
+   * approved plan. What the first message records rides back with the path. A write the tree
+   * refuses leaves the pointer naming no file; the agent is told as much by the prompt. */
+  private bornWith(wt: WorktreeInfo, plan: CreateOpts["plan"]): { text: string; handed: Handed } | null {
+    if (!plan) return null;
+    const path = writePlanDocNow(wt.path, plan.markdown);
+    if (path) {
+      const live = this.d.state.requireWorktree(wt.id);
+      live.plan = path;
+      live.planned = true;
+      this.d.state.save();
+      this.d.hub.emit("worktreesChanged");
+    }
+    return { text: plan.prompt(path), handed: { ...plan.handed, ...(path ? { path } : {}) } };
   }
 
   /** the branch follows the title: a title given at birth moves it now, as the namer's answer

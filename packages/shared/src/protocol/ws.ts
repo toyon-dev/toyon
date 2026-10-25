@@ -925,19 +925,10 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
     choiceId: z.string().max(200),
     note: z.string().max(10_000).optional(),
   }),
-  /** answer a handoff card: go makes the worktree in the other project, with `note` added to the
-   * message the agent wrote; not go closes the card */
-  z.object({
-    t: z.literal("handoff-answer"),
-    worktreeId: id,
-    id: z.string().max(64),
-    go: z.boolean(),
-    note: z.string().max(5_000).optional(),
-  }),
-  /** the verb: continue this worktree's work in project `repoId`. `text` is the person's own words
-   * for what that project should do; the agent is asked to propose it when it has the tool, and
-   * the card is raised from the text alone when it has not */
-  z.object({ t: z.literal("handoff-ask"), worktreeId: id, repoId: id, text: prompt.optional() }),
+  /** the verb: a new worktree for part of this work, in project `repoId` (this one, or another
+   * open one). `text` is the person's own words for what it should do; the agent is asked to
+   * propose one piece when it has the tool, and the card is raised from the text alone when not */
+  z.object({ t: z.literal("pieces-ask"), worktreeId: id, repoId: id, text: prompt.optional() }),
   /** move one piece on a pieces list; recorded on the transcript, so every tab sees it */
   z.object({
     t: z.literal("pieces-fate"),
@@ -947,7 +938,7 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
     fate: z.enum(["here", "worktree", "send", "skip"]),
   }),
   /** answer Toyon's own pieces card: go acts on the list as the fates stand, with `note` added to
-   * every brief; not go closes it */
+   * every piece; not go closes it */
   z.object({
     t: z.literal("pieces-answer"),
     worktreeId: id,

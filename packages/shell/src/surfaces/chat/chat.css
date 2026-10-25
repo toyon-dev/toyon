@@ -1129,16 +1129,6 @@
       white-space: nowrap;
     }
   }
-  /* what the plan card's yes also does, in the plan row's shape, above the card it answers with:
-   one line, since the list itself is read on the plan */
-  .composer-pieces {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    min-width: 0;
-    margin-bottom: 6px;
-    color: var(--text1);
-  }
   /* the question set aside, at the top of the box where it stood, in the plan row's shape so the
      two stack as one column of glyphs: the glyph in the row's own tier, then the word that brings
      the question back and what is asked, a tier under the word as the line after the box's other
@@ -1790,7 +1780,7 @@
     }
   }
   /* ---- the card ----
-   The agent is stopped on the person (a question, a permission, a handoff), so the card takes
+   The agent is stopped on the person (a question, a permission, a list of pieces), so the card takes
    the message box: the keyboard is already there, the box never scrolls away, and the strip is
    full bleed by design (the frame is base's .composer). One question at a time; the keys walk
    them. Nothing here draws a ground of its own: the strip's sunken ground is the box, and the

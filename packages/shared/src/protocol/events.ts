@@ -34,14 +34,13 @@ export const TOOL_SEARCH = "ToolSearch";
 export const ASK_TOOL = "AskUserQuestion";
 
 /** The MCP server the daemon serves each agent, carrying Toyon's own tools. Adapters prefix a
- * tool's name with it (Claude: `mcp__toyon__handoff`), so the daemon folds every spelling back to
+ * tool's name with it (Claude: `mcp__toyon__split`), so the daemon folds every spelling back to
  * the bare name and the shell keys rows on that. */
 export const TOYON_MCP_SERVER = "toyon";
 
-/** Toyon's first tool of its own: a proposal to continue the work in another open project */
-export const HANDOFF_TOOL = "handoff";
-/** the agent hands Toyon the pieces of the work it is planning, or one piece it came across:
- * each goes on this worktree, a new one, or an open one, and the person decides on the list */
+/** Toyon's one tool of its own: the agent hands Toyon the pieces of the work it is planning, or
+ * one piece it came across. Each goes on this worktree, a new one here or in another open
+ * project, or an open worktree already on that part, and the person decides on the list. */
 export const SPLIT_TOOL = "split";
 
 /** where one piece of a plan goes: the agent proposes one of the first three, the person may
@@ -53,17 +52,21 @@ export interface Piece {
   /** unique within its proposal (`p1`, `p2`, ...) */
   id: string;
   title: string;
-  /** markdown that stands on its own: the sibling's first message, or what is sent */
+  /** markdown that stands on its own: the plan its worktree is born with, or what is sent */
   brief: string;
   /** what this chat attached that the piece needs: named by the agent as the prompt captions
    * them ("Image 2", "Paste 1"), resolved to the refs when proposed, so the shell can draw them */
   attachments: AttachmentRef[];
   /** what the agent proposed; never `skip` */
   fate: Exclude<PieceFate, "skip">;
-  /** `worktree`: the sibling it waits for, resolved when proposed; absent to start at once */
-  after?: { id: string; branch: string; title: string };
-  /** `send`: the open worktree of this project the brief goes to */
+  /** `worktree`: what it waits for before it starts, resolved when proposed; absent to start at
+   * once. A worktree already open, or another piece of the same list by its id. */
+  after?: { id: string; branch: string; title: string } | { piece: string };
+  /** `send`: the open worktree the text goes to */
   to?: { id: string; branch: string; title: string };
+  /** another open project the piece goes to: its worktree is made there, or `to` is one of its
+   * rows. Absent for the origin's own project. */
+  project?: { id: string; name: string };
 }
 
 /** what became of one piece when the person pressed go */
@@ -73,6 +76,8 @@ export interface PieceOutcome {
   /** the sibling made, or the worktree sent to */
   worktreeId?: string;
   title?: string;
+  /** the project the worktree is in, when it is not the origin's */
+  repoName?: string;
   /** queued until this branch lands */
   after?: string;
   /** in the daemon's words, when the piece could not be acted on */
@@ -265,7 +270,7 @@ export type AskOutcome = "answered" | "skipped" | "cancelled" | "expired";
  * the person pressed to send it on after a turn that was stopped or that failed */
 export interface Asked {
   /** `preview` is a dev server that will not come up */
-  kind: "hook" | "conflict" | "check" | "command" | "preview" | "handoff" | "stopped" | "failed" | "pieces";
+  kind: "hook" | "conflict" | "check" | "command" | "preview" | "stopped" | "failed" | "pieces";
   why: string;
   /** the row of the command that failed, when the failure was one: what it printed went to the
    * agent with this message, and its row is not offered or attached again */
@@ -281,39 +286,35 @@ export interface Fixable {
   hook?: string;
 }
 
-/** A message another worktree's agent wrote to start or add to this chat: the brief it handed
- * Toyon for a piece of its plan, or a handoff from a worktree of another project. The message's
- * own text is what this agent was sent: the brief with Toyon's pointer to the origin behind it.
- * What is here is what the chat shows instead: the origin agent's words alone, the note the person
- * typed at the approval, and the origin, which the row names in a chip. */
-export interface Brief {
-  via: "piece" | "handoff";
-  /** the origin agent's markdown, as it stood on its own */
-  text: string;
-  /** what the person added when they approved it */
-  note?: string;
-  /** the worktree whose agent wrote it, as it was then: kept whole, since the row outlives it */
-  origin: {
-    id: string;
-    repoId: string;
-    branch: string;
-    title: string;
-    /** the origin's project, named on a handoff, which crosses projects */
-    project?: string;
-  };
-  /** the plan the piece came from, relative to the origin's path */
-  plan?: string;
-  /** the file holding this brief under its own heading, when there is one: the briefs list Toyon
-   * wrote on the origin outside plan mode. The row opens it in place of the transcript's copy
-   * while the origin is there. In plan mode the origin's plan file holds the plan and not the
-   * brief, and a handoff writes nothing, so neither names one. */
-  file?: { worktreeId: string; path: string };
+/** The worktree whose agent wrote what another chat was handed, as it was then: kept whole,
+ * since the row outlives it. `project` names the origin's project when it is not this one. */
+export interface HandedOrigin {
+  id: string;
+  repoId: string;
+  branch: string;
+  title: string;
+  project?: string;
 }
 
 export type AgentEvent =
-  /** `brief` marks the message as a sibling agent's rather than the person's, and the chat draws
-   * it as a row of Toyon's own; the text still went to the agent as any message does */
-  | { type: "user-message"; text: string; ts: number; attachments?: AttachmentRef[]; brief?: Brief }
+  | { type: "user-message"; text: string; ts: number; attachments?: AttachmentRef[] }
+  /** A message Toyon sent the agent on another agent's behalf, which the chat draws as a row of
+   * Toyon's own and never as the person's words. `plan`: this worktree's first message, which
+   * points the agent at the plan it was born with, at `path`; `message`: a piece of another
+   * chat's work sent into this one, whose own markdown is `body`. `text` is what the agent was
+   * sent, `note` what the person added when they approved it. */
+  | {
+      type: "handed";
+      via: "plan" | "message";
+      text: string;
+      body?: string;
+      path?: string;
+      note?: string;
+      origin: HandedOrigin;
+      /** what the origin's chat attached for the piece, carried on this message */
+      attachments?: AttachmentRef[];
+      ts: number;
+    }
   /** A message Toyon sent the agent itself, to fix what `why` names. It opens a turn the way a
    * person's message does, but it is its own event so that nothing reading what the person said
    * ever takes it for their words: `text` is what the agent was told, and the chat shows `why`. */
@@ -414,36 +415,11 @@ export type AgentEvent =
    * the row reads back after a reload. `mark` is the landing as the record keeps it, what landed
    * included; absent on a row written before marks said so */
   | { type: "landed"; message: string; mark?: LandMark; ts: number }
-  /** a proposal to continue this work in another open project: the agent's through its handoff
-   * tool, or the person's through the verb (`by`). A card until a `handoff-go`, a `handoff` or a
-   * `handoff-declined` with the same id closes it. `message` is what the other project's agent would start from, as
-   * written; `title` the name its row would take; `mode` the permission mode it would start in,
-   * which is this worktree's. The card shows the project's `path` beside its name, since two open
-   * projects can share a name. */
-  | {
-      type: "handoff-proposed";
-      id: string;
-      repo: { id: string; name: string; path: string };
-      message: string;
-      title?: string;
-      by: "agent" | "person";
-      mode: PermissionMode;
-      ts: number;
-    }
-  /** the person said go, and the daemon is making the worktree: the card closes here, on every
-   * tab, since making a worktree in a large checkout takes as long as its checkout does, and a
-   * card that holds its rows that long reads as a press that did nothing. A `handoff` or a
-   * `handoff-declined` with the same id says what became of it. */
-  | { type: "handoff-go"; id: string; ts: number }
-  /** the worktree is made: `worktreeId` is the row in the other project */
-  | { type: "handoff"; id: string; worktreeId: string; repoId: string; repoName: string; title: string; ts: number }
-  /** the card closed with no worktree made: a press, or `outcome` says what else, with `reason`
-   * in the daemon's words. After a `handoff-go` it is the go that failed. */
-  | { type: "handoff-declined"; id: string; outcome?: "failed"; reason?: string; ts: number }
-  /** a worktree this one handed off to has landed there; `url` is its pull request when the
-   * landing was one. Kept on the transcript so the row reads back after a reload, and read by the
-   * next prompt so the agent here hears it too. */
-  /** `same`: a sibling of this project (a piece of this worktree's plan), not work in another one */
+  /** a worktree made from a piece of this one's work has landed; `url` is its pull request when
+   * the landing was one. Kept on the transcript so the row reads back after a reload, and read by
+   * the next prompt so the agent here hears it too. `same`: a sibling of this project, not work in
+   * another one. `again`: the branch this worktree waited for before it started landed once more,
+   * with follow-up commits; written on the waiting worktree's own transcript. */
   | {
       type: "handoff-landed";
       worktreeId: string;
@@ -451,13 +427,14 @@ export type AgentEvent =
       title: string;
       url?: string;
       same?: true;
+      again?: true;
       ts: number;
     }
   /** the agent handed Toyon the pieces of its plan. `held`: proposed in plan mode, so the list
    * shows beside the next plan card of the turn (`agent-permission.pieces`) and the person answers
    * it with the plan; without it the proposal is Toyon's own card at once. Open until a
    * `pieces-go`, `pieces` or `pieces-declined` with the same id. `plan` is the file the section
-   * sits on: the agent's plan when held, else the briefs Toyon wrote. */
+   * sits on: the agent's plan when held, else the page Toyon wrote for the list. */
   | {
       type: "pieces-proposed";
       id: string;

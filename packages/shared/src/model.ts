@@ -327,8 +327,12 @@ export interface QueuedPiece {
   proposalId: string;
   pieceId: string;
   title: string;
+  /** the plan its worktree is born with */
   brief: string;
-  after: { id: string; branch: string; title: string };
+  /** the worktree it waits for, or a piece of the same list not yet made into one */
+  after: { id: string; branch: string; title: string } | { piece: string };
+  /** another open project the worktree is made in */
+  project?: { id: string; name: string };
   /** what the origin's chat attached, re-attached when the worktree is made */
   attachments: AttachmentRef[];
   /** what the person added when they approved */
@@ -383,11 +387,18 @@ export interface WorktreeInfo {
    * which is a PR made from the worktree. Absent on a task toyon started from a prompt. */
   from?:
     | { kind: "branch" | "remote" | "pr"; ref: string; pr?: { number: number; url: string; title: string } }
-    /** made by a handoff from a worktree of another project: `ref` is that worktree's branch and
-     * `origin` the row it came from. Kept as history once the origin is gone; while the origin is
-     * listed, this row shows on its rail too. `plan` is the origin's file the piece came from, and
-     * `briefs` says it is the list Toyon wrote, one heading per piece, rather than an agent's plan. */
-    | { kind: "worktree"; ref: string; origin: { id: string; repoId: string }; plan?: string; briefs?: true };
+    /** made from a piece of another worktree's work, in this project or another: `ref` is that
+     * worktree's branch and `origin` the row it came from. Kept as history once the origin is
+     * gone; while the origin is listed, this row shows on its rail too. `plan` is the origin's
+     * file the piece came from, for the whole picture; `after` the branch this one waited for
+     * before it was made, so a later landing of it can be said here. */
+    | {
+        kind: "worktree";
+        ref: string;
+        origin: { id: string; repoId: string };
+        plan?: string;
+        after?: { id: string; branch: string; title: string };
+      };
   /** the shell tab that asked for it (client nonce); that tab focuses it, others don't */
   createdBy?: string;
   /** registry id of the agent working here (stamped at creation, or on first use for older rows) */

@@ -16,7 +16,7 @@ import {
 } from "../../state/store.ts";
 import type { DaemonSocket } from "../../ws.ts";
 import { parentOf } from "../changes/fileTree.ts";
-import { cardDropBox } from "./handoff.ts";
+import { cardDropBox } from "./cards.ts";
 import { imageFiles, otherFiles, type PreparedImage, prepareImage, readText } from "./images.ts";
 
 /** the chat panel, registered by ChatPanel wherever it is placed. The drop is handled on the window (a file dropped on

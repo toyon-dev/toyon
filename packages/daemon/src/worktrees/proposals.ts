@@ -1,11 +1,10 @@
-// What the two proposing tools share: a handoff and a pieces list are both cards an agent raises
-// on its own chat for the person to answer, so one turn's allowance covers both, and both name
-// their targets by a ladder of looser and looser matches.
+// What a proposing tool shares with the verbs: a pieces list is a card an agent raises on its own
+// chat for the person to answer, so one turn has an allowance of them, and targets are named by a
+// ladder of looser and looser matches.
 
 import type { TranscriptEntry } from "../agent/transcript.ts";
 
-/** proposals one turn may make, answered or not, handoffs and pieces lists together: a loop ends
- * here */
+/** proposals one turn may make, answered or not: a loop ends here */
 export const PER_TURN_MAX = 3;
 
 /** how many proposals the turn under way has made, declined ones included */
@@ -14,7 +13,7 @@ export function proposedThisTurn(entries: readonly TranscriptEntry[]): number {
   for (let i = entries.length - 1; i >= 0; i--) {
     const e = entries[i]!.event;
     if (e.type === "turn-start") break;
-    if (e.type === "handoff-proposed" || e.type === "pieces-proposed") n++;
+    if (e.type === "pieces-proposed") n++;
   }
   return n;
 }

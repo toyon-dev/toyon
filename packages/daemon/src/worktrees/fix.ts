@@ -53,7 +53,7 @@ function lastAsked(entries: readonly TranscriptEntry[]): Asked["kind"] | undefin
   for (let i = entries.length - 1; i >= 0; i--) {
     const e = entries[i]!.event;
     if (e.type === "fix-asked") return e.kind;
-    if (e.type === "user-message") return undefined;
+    if (e.type === "user-message" || e.type === "handed") return undefined;
   }
   return undefined;
 }

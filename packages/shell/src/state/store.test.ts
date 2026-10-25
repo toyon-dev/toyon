@@ -3,6 +3,7 @@ import {
   type AgentEvent,
   type AttachmentInput,
   MANAGED_NONE,
+  nextNumbers,
   type OwnedWorktree,
   PROTOCOL_VERSION,
   type RepoInfo,
@@ -11,7 +12,7 @@ import {
   type WorktreeInfo,
   type WorktreeStatus,
 } from "@toyon/shared";
-import { openCard } from "../surfaces/chat/handoff.ts";
+import { openCard } from "../surfaces/chat/cards.ts";
 import { openPieces } from "../surfaces/chat/pieces.ts";
 import { addToChat, attachPick } from "./attach.ts";
 import { createStore } from "./context.tsx";
@@ -49,6 +50,8 @@ import {
   routeTarget,
   type State,
   type StoreServerMsg,
+  sentAttachments,
+  startsTurn,
   whatsNew,
 } from "./store.ts";
 
@@ -506,23 +509,74 @@ describe("chat folding", () => {
       s.local.a?.chat.map((i) => (i.kind === "user" || i.kind === "assistant" ? `${i.kind}:${i.text}` : i.kind)),
     ).toEqual(["user:hi", "assistant:hello", "user:more", "assistant:x"]);
   });
-  test("a sibling agent's brief rides on its message, so the chat draws that one as Toyon's row", () => {
-    const brief = {
-      via: "piece" as const,
-      text: "Fix the rail.",
-      note: "and tests",
-      origin: { id: "o", repoId: "r", branch: "toyon/plan", title: "The plan" },
-      plan: ".toyon/plans/1.md",
-    };
+  test("what Toyon sent on another agent's behalf is its own row, never the person's bubble", () => {
+    const origin = { id: "o", repoId: "r", branch: "toyon/plan", title: "The plan" };
     const s = run([
       hello(wt("a")),
-      agent("a", { type: "user-message", text: "Fix the rail.\n\nThis is one piece of…", ts: 0, brief }),
+      agent("a", {
+        type: "handed",
+        via: "plan",
+        text: "Your plan is at .toyon/plans/1.md.",
+        path: ".toyon/plans/1.md",
+        note: "and tests",
+        origin,
+        ts: 5,
+      }),
+      agent("a", {
+        type: "handed",
+        via: "message",
+        text: "Fix the rail.\n\nThis is one piece…",
+        body: "Fix the rail.",
+        origin,
+        ts: 6,
+      }),
       agent("a", { type: "user-message", text: "thanks", ts: 0 }),
     ]);
     expect(s.local.a?.chat).toEqual([
-      { kind: "user", text: "Fix the rail.\n\nThis is one piece of…", seq: 0, brief },
+      { kind: "handed", via: "plan", path: ".toyon/plans/1.md", note: "and tests", origin, seq: 0, ts: 5 },
+      { kind: "handed", via: "message", body: "Fix the rail.", origin, seq: 0, ts: 6 },
       { kind: "user", text: "thanks", seq: 0 },
     ]);
+  });
+  test("a message handed in from another chat opens a turn as the person's does: it cuts a reply, and its chips take numbers", () => {
+    const origin = { id: "o", repoId: "r", branch: "toyon/plan", title: "The plan" };
+    const img = {
+      kind: "image" as const,
+      n: 1,
+      name: "a.png",
+      mimeType: "image/png",
+      bytes: 1,
+      width: 1,
+      height: 1,
+      file: "a",
+    };
+    const s = run([
+      hello(wt("a")),
+      server({ t: "agent", worktreeId: "a", seq: 1, event: { type: "text-delta", text: "head", messageId: "m1" } }),
+      server({
+        t: "agent",
+        worktreeId: "a",
+        seq: 2,
+        event: {
+          type: "handed",
+          via: "message",
+          text: "Fix the rail.",
+          body: "Fix the rail.",
+          origin,
+          attachments: [img],
+          ts: 0,
+        },
+      }),
+      server({ t: "agent", worktreeId: "a", seq: 3, event: { type: "text-delta", text: " tail", messageId: "m1" } }),
+    ]);
+    const chat = s.local.a?.chat ?? [];
+    expect(chat).toEqual([
+      { kind: "assistant", text: "head tail", seq: 1, messageId: "m1" },
+      { kind: "handed", via: "message", body: "Fix the rail.", origin, attachments: [img], seq: 2, ts: 0 },
+    ]);
+    expect(chat.map(startsTurn)).toEqual([false, true]);
+    expect(sentAttachments(chat)).toEqual([undefined, [img]]);
+    expect(nextNumbers(sentAttachments(chat))).toEqual({ image: 2, file: 1, paste: 1, pick: 1 });
   });
   test("the rest of a reply cut by a message sent mid-stream rejoins its row; the answer opens one below", () => {
     const head = "| Route | Time |\n|---|---|\n| react | 6";
@@ -3679,27 +3733,9 @@ describe("the checkout's build", () => {
   });
 });
 
-describe("a handoff", () => {
-  // the agent in r1's worktree `a` proposes continuing in r2; on go the daemon makes `g` there,
-  // pointing back at `a`, which is what makes `g` a guest of r1's rail
-  const proposal: AgentEvent = {
-    type: "handoff-proposed",
-    id: "h1",
-    repo: { id: "r2", name: "r2", path: "/p/r2" },
-    message: "bump the pin",
-    by: "agent",
-    mode: "auto",
-    ts: 1,
-  };
-  const went: AgentEvent = {
-    type: "handoff",
-    id: "h1",
-    worktreeId: "g",
-    repoId: "r2",
-    repoName: "r2",
-    title: "Bump the pin",
-    ts: 2,
-  };
+describe("a sibling's landing, and a guest from another project", () => {
+  // a piece of r1's worktree `a` was started in r2 as `g`, pointing back at `a`, which is what
+  // makes `g` a guest of r1's rail
   const guest = (origin = "a", originRepo = "r1") =>
     wt("g", "worktree", undefined, "r2", {
       kind: "worktree",
@@ -3715,113 +3751,29 @@ describe("a handoff", () => {
   const both = (...extra: WorktreeStatus[]) => helloIn([repo("r1"), repo("r2")], ...rows(), ...extra);
   const ids = (s: State) => s.visible.map((w) => w.worktree.id);
 
-  test("a proposal is a card in the box; the handoff closes it with where the work went", () => {
-    const s = run([hello(wt("a")), agent("a", proposal)]);
+  test("a landing elsewhere is a row, and the branch a sibling waited for landing again is one too", () => {
+    const landed: AgentEvent = {
+      type: "handoff-landed",
+      worktreeId: "g",
+      repoName: "r2",
+      title: "Bump the pin",
+      url: "https://x/1",
+      ts: 3,
+    };
+    const s = run([hello(wt("a")), agent("a", landed), agent("a", { ...landed, same: true, again: true, ts: 4 })]);
     expect(s.local.a?.chat).toEqual([
+      { kind: "handoff-landed", worktreeId: "g", repoName: "r2", title: "Bump the pin", url: "https://x/1", ts: 3 },
       {
-        kind: "handoff",
-        id: "h1",
-        repo: { id: "r2", name: "r2", path: "/p/r2" },
-        message: "bump the pin",
-        by: "agent",
-        mode: "auto",
-        state: "proposed",
-        ts: 1,
-      },
-    ]);
-    expect(openCard(s.local.a?.chat ?? [])?.id).toBe("h1");
-    // the go closes the card at once: the worktree is still being made, and the row stands for it
-    const going = reducer(s, agent("a", { type: "handoff-go", id: "h1", ts: 2 }));
-    expect(going.local.a?.chat).toHaveLength(1);
-    expect(going.local.a?.chat[0]).toMatchObject({ state: "starting" });
-    expect(openCard(going.local.a?.chat ?? [])).toBeNull();
-    const after = reducer(going, agent("a", went));
-    expect(after.local.a?.chat).toHaveLength(1);
-    expect(after.local.a?.chat[0]).toMatchObject({ state: "continued", worktreeId: "g", title: "Bump the pin" });
-    expect(openCard(after.local.a?.chat ?? [])).toBeNull();
-    // a go that could not make the worktree closes the row with the reason
-    const failed = reducer(
-      going,
-      agent("a", { type: "handoff-declined", id: "h1", outcome: "failed", reason: "no agent", ts: 3 }),
-    );
-    expect(failed.local.a?.chat[0]).toMatchObject({ state: "declined", reason: "no agent" });
-    // a go with no card to close changes nothing
-    expect(reducer(after, agent("a", { type: "handoff-go", id: "h1", ts: 4 })).local.a?.chat).toEqual(
-      after.local.a?.chat,
-    );
-  });
-
-  test("a decline closes it too, with the daemon's reason when the worktree could not be made", () => {
-    const s = run([hello(wt("a")), agent("a", proposal)]);
-    const pressed = reducer(s, agent("a", { type: "handoff-declined", id: "h1", ts: 2 }));
-    expect(pressed.local.a?.chat[0]).toMatchObject({ state: "declined" });
-    expect(pressed.local.a?.chat[0]).not.toHaveProperty("reason");
-    const failed = reducer(
-      s,
-      agent("a", { type: "handoff-declined", id: "h1", outcome: "failed", reason: "no agent", ts: 2 }),
-    );
-    expect(failed.local.a?.chat[0]).toMatchObject({ state: "declined", reason: "no agent" });
-    // a decline with no card to close changes nothing
-    expect(reducer(pressed, agent("a", { type: "handoff-declined", id: "h1", ts: 3 })).local.a?.chat).toEqual(
-      pressed.local.a?.chat,
-    );
-  });
-
-  test("a landing elsewhere is a row", () => {
-    const s = run([
-      hello(wt("a")),
-      agent("a", {
-        type: "handoff-landed",
+        kind: "handoff-landed",
         worktreeId: "g",
         repoName: "r2",
         title: "Bump the pin",
         url: "https://x/1",
-        ts: 3,
-      }),
+        same: true,
+        again: true,
+        ts: 4,
+      },
     ]);
-    expect(s.local.a?.chat).toEqual([
-      { kind: "handoff-landed", worktreeId: "g", repoName: "r2", title: "Bump the pin", url: "https://x/1", ts: 3 },
-    ]);
-  });
-
-  test("a continued event with no proposal still leaves the record", () => {
-    const s = run([hello(wt("a")), agent("a", went)]);
-    expect(s.local.a?.chat).toHaveLength(1);
-    expect(s.local.a?.chat[0]).toMatchObject({
-      kind: "handoff",
-      id: "h1",
-      state: "continued",
-      worktreeId: "g",
-      title: "Bump the pin",
-      repo: { id: "r2", name: "r2" },
-      message: "",
-    });
-  });
-
-  test("a proposal on the row on screen opens a shut chat, the way an ask does", () => {
-    let s = run([hello(wt("a"), wt("b"))]);
-    s = { ...s, layout: { ...s.layout, chat: false } };
-    s = reducer(s, agent("b", proposal));
-    expect(s.layout.chat).toBe(false);
-    s = reducer(s, agent("a", proposal));
-    expect(s.layout.chat).toBe(true);
-  });
-
-  test("the note draft and a parked card end with the card, and a new proposal takes the box back", () => {
-    let s = run([hello(wt("a")), agent("a", proposal)]);
-    const card = { id: "h1", draft: [{ selected: [], note: "mind the lockfile" }], current: 0 };
-    s = reducer(s, { a: "card-draft", id: "a", card });
-    s = reducer(s, { a: "card-park", id: "a", cardId: "h1" });
-    expect(s.local.a).toMatchObject({ card, cardParked: "h1" });
-    const closed = reducer(s, agent("a", { type: "handoff-go", id: "h1", ts: 2 }));
-    expect(closed.local.a?.card).toBeUndefined();
-    expect(closed.local.a?.cardParked).toBeUndefined();
-    const declined = reducer(s, agent("a", { type: "handoff-declined", id: "h1", ts: 2 }));
-    expect(declined.local.a?.card).toBeUndefined();
-    expect(declined.local.a?.cardParked).toBeUndefined();
-    const next = reducer(s, agent("a", { ...proposal, id: "h2", ts: 3 }));
-    expect(next.local.a?.card).toBeUndefined();
-    expect(next.local.a?.cardParked).toBeUndefined();
   });
 
   test("a guest is on this rail while its origin is, and leaves with it", () => {
@@ -3842,7 +3794,7 @@ describe("a handoff", () => {
     expect(ids(archiving)).toEqual(["m1"]);
   });
 
-  test("a guest is absent from a third project's rail, and a handoff from a row not here is no guest", () => {
+  test("a guest is absent from a third project's rail, and a piece from a row not here is no guest", () => {
     let s = run([helloIn([repo("r1"), repo("r2"), repo("r3")], ...rows(), wt("m3", "main", undefined, "r3"), guest())]);
     s = reducer(s, { a: "activate-repo", id: "r3" });
     expect(ids(s)).toEqual(["m3"]);
@@ -3964,7 +3916,7 @@ describe("a handoff", () => {
     expect(answered.lent).toBeNull();
   });
 
-  test("a handoff-made row never steals focus: no tab asked for it", () => {
+  test("a row made from a piece never steals focus: no tab asked for it", () => {
     const s = run([both(), { a: "activate", id: "a" }]);
     const next = reducer(s, worktrees(...rows(), guest()));
     expect(next.activeId).toBe("a");

@@ -10,19 +10,22 @@ import { log } from "../core/log.ts";
 /** The pass this build makes, written to the stamp once every transcript has had it. Bumped with
  * each new rewrite, so the next upgrade's first boot reads the files again and no boot after
  * does: an archive is read at a restore, and listing hundreds of them must not mean reading them. */
-export const FORWARD_STEP = "1";
+export const FORWARD_STEP = "2";
 
-type Stored = { event?: { type?: unknown; kind?: unknown } };
+type Stored = { event?: Record<string, unknown> & { type?: unknown; kind?: unknown } };
 
-/** the word every line to touch carries, so the rest are never parsed */
-const MARK = '"page';
+/** the words a line to touch carries, so the rest are never parsed */
+const MARKS = ['"page', '"brief"', '"handoff'];
 
-/** What becomes of a stored line: dropped, rewritten, or left as it is (null). The "preview
- * threw" row 0.12.0 to 0.15.0 wrote onto the chat goes; the message its press sent stays, since
- * the agent's reply to it is on the chat, under the one asked kind that still says a person
- * pressed for it. A torn line, or a line of another type that carries the word, is left. */
+/** What becomes of a stored line: dropped, rewritten, or left as it is (null). Step 1: the
+ * "preview threw" row 0.12.0 to 0.15.0 wrote onto the chat goes; the message its press sent
+ * stays, since the agent's reply to it is on the chat, under the one asked kind that still says a
+ * person pressed for it. Step 2: a message that carried another agent's brief becomes the
+ * `handed` row that says so, with the brief as the text the row opens, since the brief no longer
+ * rides on a bubble; a handoff's card events become a pieces list of one, since the handoff tool
+ * folded into split. A torn line, or a line of another type that carries a word, is left. */
 export function forwardLine(line: string): { drop: true } | { line: string } | null {
-  if (!line.includes(MARK)) return null;
+  if (!MARKS.some((m) => line.includes(m))) return null;
   let entry: Stored;
   try {
     entry = JSON.parse(line);
@@ -33,6 +36,66 @@ export function forwardLine(line: string): { drop: true } | { line: string } | n
   if (e?.type === "page-error") return { drop: true };
   if (e?.type === "fix-asked" && e.kind === "page")
     return { line: JSON.stringify({ ...entry, event: { ...e, kind: "command" } }) };
+  if (e?.type === "user-message" && e.brief && typeof e.brief === "object") {
+    const brief = e.brief as Record<string, unknown>;
+    const { brief: _brief, ...rest } = e;
+    return {
+      line: JSON.stringify({
+        ...entry,
+        event: {
+          ...rest,
+          type: "handed",
+          via: "message",
+          body: brief.text,
+          origin: brief.origin,
+          ...(brief.note ? { note: brief.note } : {}),
+        },
+      }),
+    };
+  }
+  if (e?.type === "handoff-proposed") {
+    const repo = (e.repo ?? {}) as Record<string, unknown>;
+    return {
+      line: JSON.stringify({
+        ...entry,
+        event: {
+          type: "pieces-proposed",
+          id: e.id,
+          pieces: [
+            {
+              id: "p1",
+              title: e.title ?? "Continue",
+              brief: e.message ?? "",
+              attachments: [],
+              fate: "worktree",
+              project: { id: repo.id, name: repo.name },
+            },
+          ],
+          mode: e.mode,
+          ts: e.ts,
+        },
+      }),
+    };
+  }
+  if (e?.type === "handoff-go") return { line: JSON.stringify({ ...entry, event: { ...e, type: "pieces-go" } }) };
+  if (e?.type === "handoff") {
+    return {
+      line: JSON.stringify({
+        ...entry,
+        event: {
+          type: "pieces",
+          id: e.id,
+          outcomes: [
+            { pieceId: "p1", fate: "worktree", worktreeId: e.worktreeId, title: e.title, repoName: e.repoName },
+          ],
+          ts: e.ts,
+        },
+      }),
+    };
+  }
+  if (e?.type === "handoff-declined") {
+    return { line: JSON.stringify({ ...entry, event: { ...e, type: "pieces-declined" } }) };
+  }
   return null;
 }
 

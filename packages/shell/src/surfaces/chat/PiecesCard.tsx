@@ -10,8 +10,9 @@
 import type { AskAnswer } from "@toyon/shared";
 import { useMemo, useRef, useState } from "react";
 import { openFile } from "../../state/actions/file.ts";
-import { useDispatch, useSock } from "../../state/context.tsx";
+import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { useLocalField } from "../../state/selectors.ts";
+import { worktreeById } from "../../state/store.ts";
 import { Button } from "../../ui/Button.tsx";
 import { type Choice, Choices } from "../../ui/Choices.tsx";
 import { handleChoiceKey } from "../../ui/choiceKeys.ts";
@@ -43,6 +44,10 @@ export function PiecesCard({
   const sock = useSock();
   const dispatch = useDispatch();
   const stored = useLocalField(worktreeId, "card");
+  // the new worktree starts in this one's mode as it stands when go is pressed (a plan it is given
+  // is approved by the go, so never plan mode), so the card reads the record, not the proposal
+  const live = useStore((s) => worktreeById(s, worktreeId)?.worktree.mode) ?? item.mode;
+  const mode = live === "plan" ? "auto" : live;
   const draft = stored?.id === item.id ? stored.draft : BLANK;
   const note = draft[0]?.note;
   const noting = note !== undefined;
@@ -164,7 +169,7 @@ export function PiecesCard({
           sub={
             <>
               {only.project
-                ? `Starts a worktree in ${only.project.name}, in ${item.mode} mode${item.mode === "auto" ? ", which runs without asking" : ""}, with this as its plan. `
+                ? `Starts a worktree in ${only.project.name}, in ${mode} mode${mode === "auto" ? ", which runs without asking" : ""}, with this as its plan. `
                 : ""}
               Nothing has started yet.
             </>

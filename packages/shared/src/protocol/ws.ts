@@ -204,8 +204,18 @@ export type ServerMsg =
    * to travel in separate frames the rail would show it twice or not at all in between. A repo's
    * spare is among them, as the row new work is typed in; what its main checkout says rides
    * beside the rows in `trunks`, since main is not a row while a spare stands for it. */
-  | { t: "worktrees"; rows: WorktreeStatus[]; trunks: Record<string, TrunkStatus>; stamp: string }
-  | { t: "proc"; worktreeId: string; proc: WorktreeStatus["procs"][number] }
+  | {
+      t: "worktrees";
+      /** every row's id in the daemon's order, which the page keeps: a row absent from here is gone */
+      ids: string[];
+      /** the rows that are new or changed since the last frame this page was sent, which was its
+       * hello or the frame before; every other row is as the page holds it */
+      rows: WorktreeStatus[];
+      /** the trunks, when any of them moved */
+      trunks?: Record<string, TrunkStatus>;
+      /** of the whole set after this frame, as the hello's `stamps.rows` */
+      stamp: string;
+    }
   /** `retract` is how many of the proc's last lines this one redraws over; a redraw wiped as the
    * process moved on is a retract with an empty line */
   | { t: "log"; worktreeId: string; proc: string; line: string; retract?: number }

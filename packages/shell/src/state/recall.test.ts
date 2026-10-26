@@ -207,8 +207,8 @@ describe("keeping the last-known machine", () => {
       last: 9,
     });
     expect(keeper.since("a")).toBe(9);
-    s.dispatch({ a: "server", msg: { t: "worktrees", rows: [], trunks: {}, stamp: "w" } });
-    s.dispatch({ a: "server", msg: { t: "worktrees", rows: [row("a")], trunks: {}, stamp: "w" } });
+    s.dispatch({ a: "server", msg: { t: "worktrees", ids: [], rows: [], trunks: {}, stamp: "w" } });
+    s.dispatch({ a: "server", msg: { t: "worktrees", ids: ["a"], rows: [row("a")], trunks: {}, stamp: "w" } });
     const orphan: ServerMsg = { t: "backfill", worktreeId: "a", events: [], after: 9, last: 9 };
     expect(keeper.hear(orphan)).toEqual({ t: "backfill", worktreeId: "a", events: [], last: 9 });
     expect(keeper.since("a")).toBeUndefined();

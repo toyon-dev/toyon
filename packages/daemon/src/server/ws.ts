@@ -34,6 +34,7 @@ import { setWaitingColors } from "../runtime/proxy.ts";
 import { dispatch, openedFrame, type Services } from "./handlers.ts";
 import { createFetch, type WsData } from "./http.ts";
 import { pairingRoutes } from "./pairing.ts";
+import { Published, type RowsFrame } from "./rows.ts";
 import { shapeHello, stampOf, stampsOf, visitsStamp } from "./stamps.ts";
 
 /** how far behind a socket may fall before its terminal output is dropped instead of queued */
@@ -228,6 +229,22 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
   });
 
   // ---- what a hub event pushes to clients ----
+  // The rows every page holds are one published set (rows.ts): a page's hello carries it and
+  // every frame after moves it by the rows that changed. A frame goes only to a socket that has
+  // its hello, since a socket still waiting on its hello's reads has nothing to move.
+  const published = new Published();
+  const sendRows = (frame: RowsFrame) => {
+    const json = JSON.stringify(frame);
+    for (const ws of sockets) if (ws.data.helloed) raw(ws, json);
+  };
+  const publishRows = () => {
+    try {
+      const frame = published.publish(s.worktrees.snapshot());
+      if (frame) sendRows(frame);
+    } catch (e) {
+      log.warn("ws", "worktrees broadcast failed", e);
+    }
+  };
   // One frame per burst: the events of one tick (a create's save and its emit, ten proc events)
   // build one snapshot, after the tick has finished changing state. The snapshot waits on nothing,
   // so frames cannot land out of order and a send moves its row at the press.
@@ -237,20 +254,16 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
     statusesQueued = true;
     setTimeout(() => {
       statusesQueued = false;
-      try {
-        const { rows, trunks } = s.worktrees.snapshot();
-        broadcast({ t: "worktrees", rows, trunks, stamp: stampOf({ rows, trunks }) });
-      } catch (e) {
-        log.warn("ws", "worktrees broadcast failed", e);
-      }
+      publishRows();
     }, 0);
   };
   s.hub.on("worktreesChanged", worktreesChanged);
   s.hub.on("agentStatus", worktreesChanged);
   s.hub.on("agentStopping", worktreesChanged);
+  // a proc's state is on its row: the same frame, which is one row and not one per page
+  s.hub.on("proc", worktreesChanged);
   s.hub.on("reposChanged", () => broadcast({ t: "repos", repos: s.state.repos, stamp: stampOf(s.state.repos) }));
   s.hub.on("pendingChanged", () => broadcast({ t: "pending-repos", pending: s.repos.pending }));
-  s.hub.on("proc", (worktreeId, proc) => broadcast({ t: "proc", worktreeId, proc }));
   s.hub.on("log", (worktreeId, proc, line, retract) =>
     sendTo(worktreeId, retract ? { t: "log", worktreeId, proc, line, retract } : { t: "log", worktreeId, proc, line }),
   );
@@ -354,17 +367,23 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
   // What a page learns first, over the socket or over the bootstrap fetch that precedes it. The
   // rows go out from what is known and the counts follow, rather than every page load waiting on a
   // git pass across every worktree. A socket that opened with `known` gets the parts it does not
-  // hold (stamps.ts); the bootstrap fetch knows nothing yet and gets them all.
-  const helloFrame = async (known: Stamps | null = null): Promise<HelloMsg> => {
+  // hold (stamps.ts); the bootstrap fetch knows nothing yet and gets them all. In two steps: the
+  // reads that wait, then the frame itself with no wait in it, so the rows a hello carries are the
+  // set published at that moment and the socket is marked as holding them in the same breath.
+  const helloReads = async () => {
     // a page load is when an install done in a terminal first matters to anyone
     await s.update.refresh();
-    const { rows, trunks } = s.worktrees.snapshot();
+    return { registry: await s.update.registry(), gitIdentity: await s.repos.gitIdentity() };
+  };
+  const helloNow = (read: Awaited<ReturnType<typeof helloReads>>, known: Stamps | null): HelloMsg => {
+    publishRows();
+    const { rows, trunks } = published.current();
     const parts = { rows, trunks, repos: s.state.repos, visits: s.routes.historyAll(), themes: s.themes.themes };
     const full: HelloFull = {
       t: "hello",
       version,
       install: s.update.install(),
-      registry: await s.update.registry(),
+      registry: read.registry,
       protocol: PROTOCOL_VERSION,
       ...parts,
       stamps: stampsOf(parts),
@@ -381,7 +400,7 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
       machines: s.state.machines,
       letIn: s.state.letIn,
       knocks: opts.knocks.pending(),
-      gitIdentity: await s.repos.gitIdentity(),
+      gitIdentity: read.gitIdentity,
       pending: s.repos.pending,
       self: s.self.get(),
       update: s.update.get(),
@@ -431,7 +450,7 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
       }),
       managed: { source: opts.managed.source, hash: opts.managed.hash },
       preview: (id) => s.runtime.get(id)?.proxy?.handler ?? null,
-      bootstrap: helloFrame,
+      bootstrap: async () => helloNow(await helloReads(), null),
       // the launch screen and the status bar over it are the list's ground, which is the screen an
       // installed app opens on and what the page then paints under the inset (theme.ts); a bar
       // in a colour of its own made the first screen two bands
@@ -471,7 +490,11 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
         }
         sockets.add(ws);
         link(ws);
-        send(ws, await helloFrame(ws.data.known ?? null));
+        const read = await helloReads();
+        // no wait between these three: the hello carries the set published here, and the socket
+        // holds it from the next frame on
+        send(ws, helloNow(read, ws.data.known ?? null));
+        ws.data.helloed = true;
         // an adapter whose install failed at boot gets another try now: the network may have
         // come back since, and the shell is where someone would otherwise find it still failed
         fireAndForget("agents", s.agents.retryFailed(), "agent install retry");

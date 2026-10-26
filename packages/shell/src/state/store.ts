@@ -96,6 +96,7 @@ import { dotClass } from "../surfaces/util.ts";
 import { mergeLinks } from "./links.ts";
 import { type HeldFrame, type OutboxEntry, type Outgoing, outBoxId, outBoxOf } from "./outbox.ts";
 import { fromInputs, isUploading, type PendingAttachment, settledInputs } from "./pending.ts";
+import { rowsFrom } from "./rows.ts";
 import { type ChatSnapshot, type HelloSnapshot, newestTs, recalledHello } from "./snapshot.ts";
 
 /** `heard` is the shell's own clock when a live figure landed: the agent reports usage as soon as
@@ -3001,44 +3002,48 @@ function onServer(s: State, msg: StoreServerMsg): State {
       });
     }
     case "worktrees": {
+      // the frame names every row and carries the ones that moved; the list is rebuilt from it
+      // and what is held, and the stamp is vouched for only when every id was found
+      const { rows, complete } = rowsFrom(s.rows, msg);
+      const trunks = msg.trunks ?? s.trunks;
       let activeId = s.activeId;
       // the selection holds as long as its row is still listed, found rows included: a push
       // arrives on every proc event and must not bounce the selection back to an owned row
-      if (!activeId || !msg.rows.some((w) => w.id === activeId)) {
-        activeId = landingIn(s, s.activeRepoId, msg.rows);
+      if (!activeId || !rows.some((w) => w.id === activeId)) {
+        activeId = landingIn(s, s.activeRepoId, rows);
       }
       // auto-focus a worktree THIS tab just created (the "prompt spawns a tab" moment); one made
       // from another tab or the CLI stays where it is. A send from the lead row makes the task of
       // that very row, which is already the one on screen: nothing moves.
       const known = new Set(s.rows.map((w) => w.id));
       const mine = (w: WorktreeStatus) => w.worktree?.kind === "worktree" && w.worktree.createdBy === s.clientId;
-      const fresh = msg.rows.find((w) => !known.has(w.id) && mine(w));
+      const fresh = rows.find((w) => !known.has(w.id) && mine(w));
       if (fresh && s.rows.length > 0) activeId = fresh.id;
       // a pending remove is done once the daemon stops listing the row; one it still lists is
       // still in flight (this frame is as likely another worktree's proc event as the reply)
-      const archiving = s.archiving.filter((id) => msg.rows.some((w) => w.id === id));
+      const archiving = s.archiving.filter((id) => rows.some((w) => w.id === id));
       return settleView({
         ...activate(
           {
             ...s,
-            rows: msg.rows,
-            trunks: msg.trunks,
-            stamps: stamped(s, "rows", msg.stamp),
+            rows,
+            trunks,
+            stamps: stamped(s, "rows", complete ? msg.stamp : ""),
             archiving: archiving.length === s.archiving.length ? s.archiving : archiving,
-            shipping: shippingFrom(s.shipping, msg.rows, msg.trunks),
+            shipping: shippingFrom(s.shipping, rows, trunks),
             // the bubble moves before the prune: a found row taken over leaves the list as the
             // record takes its place, and the send it carried goes with the selection
             local: pruneLocal(
               withSending(
-                landedClean(s.local, s.rows, msg.rows),
-                msg.rows,
+                landedClean(s.local, s.rows, rows),
+                rows,
                 s.activeId,
                 activeId === fresh?.id ? fresh.id : undefined,
               ),
-              msg.rows,
+              rows,
               s.archivedPage,
             ),
-            treeOpen: pruneByRow(s.treeOpen, msg.rows),
+            treeOpen: pruneByRow(s.treeOpen, rows),
           },
           activeId,
         ),
@@ -3058,12 +3063,6 @@ function onServer(s: State, msg: StoreServerMsg): State {
         archivedPage: fresh ? null : s.archivedPage,
         notesPage: fresh ? false : s.notesPage,
       });
-    }
-    case "proc": {
-      const rows = s.rows.map((w) => (w.id === msg.worktreeId ? { ...w, procs: upsertProc(w.procs, msg.proc) } : w));
-      // the frame moves the rows and carries no stamp: the page cannot vouch for them until the
-      // next worktrees frame, so the part is blanked and the next hello sends them
-      return { ...s, rows, stamps: stamped(s, "rows", "") };
     }
     case "log":
       return withLocal(s, msg.worktreeId, (l) => ({
@@ -3343,14 +3342,6 @@ function onServer(s: State, msg: StoreServerMsg): State {
       return s;
     }
   }
-}
-
-function upsertProc(procs: WorktreeStatus["procs"], p: WorktreeStatus["procs"][number]) {
-  const idx = procs.findIndex((x) => x.name === p.name);
-  if (idx === -1) return [...procs, p];
-  const next = procs.slice();
-  next[idx] = p;
-  return next;
 }
 
 export /** the agent's figures as the store keeps them: cost only when it reported one */

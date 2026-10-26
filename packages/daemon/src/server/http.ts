@@ -54,6 +54,8 @@ export interface WsData {
   /** the stamps of what the page already holds, when it opened with `known`: the hello leaves
    * those parts out (server/stamps.ts) */
   known?: Stamps;
+  /** the hello went out: the socket holds the published rows, and the frames that move them go here */
+  helloed?: true;
   /** the shell on this socket was opened through the front: from another device */
   remote?: true;
   /** set on a socket a remote preview name upgraded: it is bridged to the app, never a shell */

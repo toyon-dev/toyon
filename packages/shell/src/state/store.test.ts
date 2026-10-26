@@ -168,8 +168,9 @@ const helloIn = (repos: RepoInfo[], ...w: WorktreeStatus[]): Action =>
     managed: MANAGED_NONE,
   });
 const hello = (...w: WorktreeStatus[]): Action => helloIn([], ...w);
+/** a frame with every row: what the daemon sends when all of them moved, and the whole list */
 const worktrees = (...w: WorktreeStatus[]): Action =>
-  server({ t: "worktrees", rows: w, trunks: trunksOf(w), stamp: "w2" });
+  server({ t: "worktrees", ids: w.map((x) => x.id), rows: w, trunks: trunksOf(w), stamp: "w2" });
 const repos = (...r: RepoInfo[]): Action => server({ t: "repos", repos: r, stamp: "p2" });
 const agent = (id: string, event: AgentEvent): Action => server({ t: "agent", worktreeId: id, seq: 0, event });
 
@@ -361,7 +362,13 @@ describe("per-worktree records", () => {
     const main = wt("main", "main");
     // the empty-tree fact rides on the trunk, beside the rows
     const emptyTrunk = (...rows: WorktreeStatus[]): Action =>
-      server({ t: "worktrees", rows, trunks: trunksOf(rows, { empty: true }), stamp: "w2" });
+      server({
+        t: "worktrees",
+        ids: rows.map((w) => w.id),
+        rows,
+        trunks: trunksOf(rows, { empty: true }),
+        stamp: "w2",
+      });
     const s = run([helloIn([fresh], main), emptyTrunk(main), { a: "activate", id: "main" }]);
     expect(isGreenfield(s)).toBe(true);
     // a repo with history, a configured repo, and a busy agent are each not greenfield
@@ -1333,7 +1340,10 @@ describe("drafting a worktree", () => {
   test("the lead's preview is its own app while it drafts, and the trunk rides beside the rows", () => {
     const rows = [wt("sp", "spare"), wt("a")];
     const trunk: TrunkStatus = { id: "main-rec", behind: 3, dirty: 2, empty: false };
-    const s = run([server({ t: "worktrees", rows, trunks: { r: trunk }, stamp: "w2" })], found(...rows));
+    const s = run(
+      [server({ t: "worktrees", ids: rows.map((w) => w.id), rows, trunks: { r: trunk }, stamp: "w2" })],
+      found(...rows),
+    );
     expect(previewIdOf(s)).toBe("sp");
     expect(s.trunks.r).toEqual(trunk);
     // a pull is pressed under the lead's box and shows working from the press; a frame built
@@ -1341,25 +1351,33 @@ describe("drafting a worktree", () => {
     const pulling = run([{ a: "shipping", id: "main-rec", op: "pull-main" }], s);
     expect(pulling.shipping["main-rec"]).toEqual({ op: "pull-main", sent: true });
     expect(
-      run([server({ t: "worktrees", rows, trunks: { r: trunk }, stamp: "w2" })], pulling).shipping["main-rec"],
+      run([server({ t: "worktrees", ids: rows.map((w) => w.id), rows, trunks: { r: trunk }, stamp: "w2" })], pulling)
+        .shipping["main-rec"],
     ).toEqual({
       op: "pull-main",
       sent: true,
     });
     // the daemon lists the op on the trunk with its step, and a tab that never pressed shows it too
     const listed: TrunkStatus = { ...trunk, shipping: { op: "pull-main", step: "pulling main from origin" } };
-    const stepped = run([server({ t: "worktrees", rows, trunks: { r: listed }, stamp: "w2" })], pulling);
-    expect(stepped.shipping["main-rec"]).toEqual({ op: "pull-main", step: "pulling main from origin" });
-    expect(run([server({ t: "worktrees", rows, trunks: { r: listed }, stamp: "w2" })], s).shipping["main-rec"]).toEqual(
-      {
-        op: "pull-main",
-        step: "pulling main from origin",
-      },
+    const stepped = run(
+      [server({ t: "worktrees", ids: rows.map((w) => w.id), rows, trunks: { r: listed }, stamp: "w2" })],
+      pulling,
     );
+    expect(stepped.shipping["main-rec"]).toEqual({ op: "pull-main", step: "pulling main from origin" });
+    expect(
+      run([server({ t: "worktrees", ids: rows.map((w) => w.id), rows, trunks: { r: listed }, stamp: "w2" })], s)
+        .shipping["main-rec"],
+    ).toEqual({
+      op: "pull-main",
+      step: "pulling main from origin",
+    });
     // listed, it rests on the frame that stops listing it, not on the word, which comes first
     const worded = run([server({ t: "shipped", worktreeId: "main-rec", ok: true, message: "pulled" })], stepped);
     expect(worded.shipping).toBe(stepped.shipping);
-    expect(run([server({ t: "worktrees", rows, trunks: { r: trunk }, stamp: "w2" })], worded).shipping).toEqual({});
+    expect(
+      run([server({ t: "worktrees", ids: rows.map((w) => w.id), rows, trunks: { r: trunk }, stamp: "w2" })], worded)
+        .shipping,
+    ).toEqual({});
     // a press over before any frame listed it rests on the word
     expect(
       run([server({ t: "shipped", worktreeId: "main-rec", ok: true, message: "pulled" })], pulling).shipping,
@@ -3624,13 +3642,38 @@ describe("the delta hello", () => {
     expect(knownOf(s)).toBe("w2.p2.v2.t1");
     s = run([server({ t: "themes", themes: initial.themes, prefs: initial.themePrefs, stamp: "t2" })], s);
     expect(knownOf(s)).toBe("w2.p2.v2.t2");
-    s = run(
-      [server({ t: "proc", worktreeId: "a", proc: { name: "web", command: "vite", port: 1, status: "running" } })],
-      s,
-    );
+    // a frame naming an id this page holds nothing for cannot be vouched for
+    s = run([server({ t: "worktrees", ids: ["main", "a", "ghost"], rows: [], stamp: "w3" })], s);
     expect(knownOf(s)).toBe(".p2.v2.t2");
+    expect(s.rows.map((w) => w.id)).toEqual(["main", "a"]);
     s = run([worktrees(wt("main", "main"), wt("a"))], s);
     expect(knownOf(s)).toBe("w2.p2.v2.t2");
+  });
+  test("a worktrees frame carries the rows that moved; the rest keep their identity and the trunks hold", () => {
+    const before = run([full(), { a: "activate", id: "a" }]);
+    const main = before.rows[0]!;
+    const moved = run(
+      [
+        server({
+          t: "worktrees",
+          ids: ["main", "a", "b"],
+          rows: [{ ...wt("a"), agent: "working" as const }, wt("b")],
+          stamp: "w3",
+        }),
+      ],
+      before,
+    );
+    expect(moved.rows.map((w) => w.id)).toEqual(["main", "a", "b"]);
+    expect(moved.rows[0]).toBe(main);
+    expect(moved.rows[1]?.agent).toBe("working");
+    expect(moved.trunks).toBe(before.trunks);
+    expect(moved.activeId).toBe("a");
+    expect(knownOf(moved)).toBe("w3.p1.v1.t1");
+    // a row gone from the ids is gone, with what the page kept of it
+    const gone = run([server({ t: "worktrees", ids: ["main", "b"], rows: [], stamp: "w4" })], moved);
+    expect(gone.rows.map((w) => w.id)).toEqual(["main", "b"]);
+    expect(gone.local.a).toBeUndefined();
+    expect(gone.activeId).toBe("main");
   });
   test("a frame before any hello stamps nothing: the page holds nothing the daemon sent", () => {
     expect(knownOf(run([worktrees(wt("main", "main"))]))).toBeNull();

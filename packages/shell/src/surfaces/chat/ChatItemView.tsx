@@ -24,6 +24,7 @@ import { grouped, type MenuEntry, useContextMenu } from "../../ui/menu.ts";
 import { rowState } from "../../ui/rowState.ts";
 import { Spinner } from "../../ui/Spinner.tsx";
 import { treeKey } from "../../ui/treeNav.ts";
+import { hhmm } from "../chips/baseNote.ts";
 import { landedWhat } from "../recap.ts";
 import { elapsed, spanWords } from "../util.ts";
 import { AskRow } from "./AskRow.tsx";
@@ -710,9 +711,11 @@ export const ToolRow = memo(
       );
     const calls = run ? runCalls(run) : 0;
     const clean = ranClean(tools);
+    // a row held open for a wakeup the agent booked says when it is back, not that it is running
+    const status = background ? (last.until ? `wakes ${hhmm(last.until)}` : "in the background") : "";
     const what =
       [label, hint].filter(Boolean).join(" ") +
-      (background ? ", in the background" : "") +
+      (status ? `, ${status}` : "") +
       (waits ? ", queued" : "") +
       (clean ? ", done" : "");
     // no count while the call is still being written: a spawn's "0 calls" beside the mark read as
@@ -783,7 +786,7 @@ export const ToolRow = memo(
             ) : (
               hint && <span className={cx("tool-hint", running && "live-text")}>{hint}</span>
             )}
-            {background && <span className="tool-status">in the background</span>}
+            {status && <span className="tool-status">{status}</span>}
             {/* the row is faint and still (chat.css), and the word says what the faintness means */}
             {waits && <span className="tool-status">queued</span>}
             {/* the mark is drawn, so the fold's label carries the word for it */}

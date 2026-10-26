@@ -549,6 +549,56 @@ describe("AcpSession", () => {
     await w.session.close();
   });
 
+  test("a wakeup the agent booked: its row stays open past the turn, the rail counts it, and the agent coming back on its own ends it", async () => {
+    let ctx: acp.AgentContext | undefined;
+    let sid = "";
+    const fake = fakeAgent(async (p, client) => {
+      ctx = client;
+      sid = p.sessionId;
+      return { stopReason: "end_turn" };
+    });
+    const w = world(fake, claudeSpec, 60_000, undefined, { ownSettleMs: 30 });
+    w.session.send("go");
+    await w.idle();
+    const update = (u: acp.SessionUpdate) =>
+      ctx!.notify(acp.methods.client.session.update, { sessionId: sid, update: u });
+    const n = w.events.length;
+    await update({
+      sessionUpdate: "tool_call",
+      toolCallId: "k1",
+      title: "ScheduleWakeup",
+      kind: "other",
+      status: "pending",
+      rawInput: { delaySeconds: 600, reason: "watching CI" },
+    });
+    await update({
+      sessionUpdate: "tool_call_update",
+      toolCallId: "k1",
+      status: "completed",
+      content: [{ type: "content", content: { type: "text", text: "Wakeup scheduled" } }],
+    });
+    // the call has returned to the agent: its own turn settles without waiting on the booking
+    for (let i = 0; i < 100 && w.events.at(-1)?.type !== "turn-end"; i++) await Bun.sleep(5);
+    expect(w.types().slice(n)).toEqual(["turn-start", "tool-start", "tool-update", "turn-end"]);
+    const booked = w.events[n + 2] as Extract<AgentEvent, { type: "tool-update" }>;
+    expect(booked).toMatchObject({ toolId: "k1", background: true });
+    expect(w.session.status).toBe("idle");
+    // the rail reads the booking off the session, and when the agent is due
+    expect(w.session.holding).toBe(1);
+    expect(w.session.wakes).toBe(booked.until!);
+    // the agent back on its own is the wakeup: the row ends ahead of the turn it opens
+    const m = w.events.length;
+    await update({ sessionUpdate: "agent_message_chunk", content: { type: "text", text: "back" } });
+    expect(w.events.slice(m, m + 2)).toEqual([
+      { type: "tool-end", toolId: "k1", output: "woke", isError: false },
+      { type: "turn-start", ts: expect.any(Number) },
+    ]);
+    expect(w.session.holding).toBe(0);
+    expect(w.session.wakes).toBeNull();
+    for (let i = 0; i < 100 && w.events.at(-1)?.type !== "turn-end"; i++) await Bun.sleep(5);
+    await w.session.close();
+  });
+
   test("a row a restart left held open for a background command is ended on the next boot", async () => {
     const id = `w${Math.random().toString(36).slice(2, 8)}`;
     const entries = [

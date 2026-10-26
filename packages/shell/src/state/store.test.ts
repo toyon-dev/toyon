@@ -1097,6 +1097,19 @@ describe("chat folding", () => {
     expect(s.local.a?.chat.length).toBe(2);
   });
 
+  test("a row held open for a wakeup the agent booked keeps the time it is due, and is not the call waited on", () => {
+    const s = run([
+      hello(wt("a")),
+      agent("a", { type: "turn-start", ts: 0 }),
+      agent("a", { type: "tool-start", toolId: "k1", name: "ScheduleWakeup", input: { delaySeconds: 600 } }),
+      agent("a", { type: "tool-update", toolId: "k1", background: true, until: 1_700_000_000_000 }),
+      agent("a", { type: "turn-end", stopReason: "end_turn", ts: 0 }),
+    ]);
+    const tools = s.local.a!.chat.filter((i) => i.kind === "tool");
+    expect(tools).toMatchObject([{ id: "k1", done: false, background: true, until: 1_700_000_000_000 }]);
+    expect(s.local.a?.running).toBeUndefined();
+  });
+
   test("a turn-end leaves a row held open for a command running in the background: its own end closes it", () => {
     const s = run([
       hello(wt("a")),

@@ -25,6 +25,7 @@ import { toolImage } from "../attachments.ts";
 import { type BackgroundStart, backgroundStart, spawnDetached } from "./background.ts";
 import { unifiedDiff } from "./diff.ts";
 import { currentValues, readOptions } from "./options.ts";
+import { wakeupAt } from "./wakeup.ts";
 
 export interface ToolMemo {
   name: string;
@@ -65,6 +66,8 @@ export type ImageSink = (file: string, bytes: Buffer) => void;
 /** a command Claude Code sent to the background has returned (background.ts): whether the session
  * has taken it on, in which case the row stays open and the session ends it when the command ends */
 export type BackgroundSink = (toolId: string, start: BackgroundStart, input: unknown) => boolean;
+/** the session takes a wakeup's row on, to end it when the agent is back; `until` is the booked time */
+export type WakeupSink = (toolId: string, until: number) => void;
 
 /** Which call spawned this one, out of the `_meta` each adapter stamps on its own updates.
  *
@@ -272,6 +275,7 @@ export function mapUpdate(
   tag: string,
   sink?: ImageSink,
   background?: BackgroundSink,
+  wakeup?: WakeupSink,
 ): AgentEvent[] {
   switch (update.sessionUpdate) {
     case "agent_message_chunk": {
@@ -326,7 +330,7 @@ export function mapUpdate(
       });
       // some agents report a one-shot tool already finished
       if (update.status === "completed" || update.status === "failed")
-        out.push(endOf(update.toolCallId, memo, update.status, sink, background));
+        out.push(endOf(update.toolCallId, memo, update.status, sink, background, wakeup));
       return out;
     }
     case "tool_call_update": {
@@ -391,7 +395,7 @@ export function mapUpdate(
       if (update.content) memo.content = update.content;
       if (update.rawOutput !== undefined) memo.rawOutput = update.rawOutput;
       if ((update.status === "completed" || update.status === "failed") && !memo.ended) {
-        out.push(endOf(update.toolCallId, memo, update.status, sink, background));
+        out.push(endOf(update.toolCallId, memo, update.status, sink, background, wakeup));
       }
       return out;
     }
@@ -433,6 +437,7 @@ function endOf(
   status: "completed" | "failed",
   sink?: ImageSink,
   background?: BackgroundSink,
+  wakeup?: WakeupSink,
 ): AgentEvent {
   memo.ended = true;
   const output = summarizeToolOutput(memo.content, memo.rawOutput);
@@ -441,6 +446,16 @@ function endOf(
   if (status === "completed" && memo.kind === "execute" && background) {
     const start = backgroundStart(memo.input, output);
     if (start && background(toolId, start, memo.input)) return { type: "tool-update", toolId, background: true };
+  }
+  // a wakeup the agent booked has only been booked: the row stays open, saying when, and the
+  // session ends it when the agent is back (wakeup.ts). The adapter names the call by its title
+  // where it sends no name.
+  if (status === "completed" && wakeup) {
+    const until = wakeupAt(memo.name || memo.title, memo.input);
+    if (until !== null) {
+      wakeup(toolId, until);
+      return { type: "tool-update", toolId, background: true, until };
+    }
   }
   const images = sink ? toolImages(memo.content, sink) : [];
   // read off the whole of what the call returned: the output above is cut to length, and a spawn's

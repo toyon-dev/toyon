@@ -277,6 +277,7 @@ function defaultAgent(
     onEvent: (event, seq) => d.hub.emit("agent", wt.id, seq, event),
     onStatus: (status) => d.hub.emit("agentStatus", wt.id, status),
     onStopping: () => d.hub.emit("agentStopping", wt.id),
+    onHolding: () => d.hub.emit("agentHolding", wt.id),
     beforeTurn: async () => d.turnStarting?.(wt.id),
     onAuth: (agentId, o) => d.readiness?.observe(agentId, o),
     onLimits: (agentId, limits) => d.readiness?.observeLimits(agentId, limits),

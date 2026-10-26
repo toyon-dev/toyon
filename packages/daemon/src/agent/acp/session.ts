@@ -64,6 +64,7 @@ import { currentValues, type LiveOptions, type OptionCategory, readModeOption, r
 import { parseRateLimit } from "./ratelimit.ts";
 import { STEER_METHOD, type SteerOutcome, steerOutcome, supportsSteering } from "./steering.ts";
 import type { AcpLink } from "./transport.ts";
+import { Wakeups } from "./wakeup.ts";
 
 export type AgentEventListener = (event: AgentEvent, seq: number) => void;
 export type AgentStatusListener = (status: AgentStatus) => void;
@@ -89,6 +90,9 @@ export interface AcpSessionDeps {
   onStatus: AgentStatusListener;
   /** `stopping` moved: on at a stop press, off when the turn it was for has ended */
   onStopping?: () => void;
+  /** `holding` moved: a row held open past the turn for something still going (a command sent
+   * to the background, a wakeup booked) opened or closed */
+  onHolding?: () => void;
   /** whatever this connection learns about the agent's credentials, for the per-agent cache */
   onAuth?: (agentId: string, o: AuthObservation) => void;
   /** how much of its plan the account has used, as a reply reported it: per agent, like the
@@ -113,6 +117,8 @@ export interface AcpSessionDeps {
   claudeConfigDir?: string;
   /** how often such a command's files are looked at */
   taskPollMs?: number;
+  /** how long past a booked wakeup its row waits for the turn (tests shorten it) */
+  wakeupGraceMs?: number;
   /** the worktree's bounds, after the agent's own setup has run (agent/sandbox.ts `prepareLaunch`) */
   prepare?: (cwd: string, spec: AgentSpec) => Promise<Prepared>;
   /** A message is about to go to the agent as a turn of its own. Awaited, so whatever is read here
@@ -335,6 +341,7 @@ export class AcpSession implements AgentAdapter {
   /** the commands the agent sent to the background and has not heard the end of: their rows are
    * open, and the process they run under stays up for them */
   private tasks: BackgroundTasks;
+  private wakeups: Wakeups;
   /** questions in flight on side sessions; the reaper waits for them */
   private asking = 0;
   /** ask cards waiting on a person, by ask id. The agent's request stays open on the wire until
@@ -371,9 +378,14 @@ export class AcpSession implements AgentAdapter {
     this.log = new Transcript(transcriptPathFor(d.transcriptsDir, d.worktreeId), d.worktreeId);
     this.tasks = new BackgroundTasks({
       note: (e) => this.emit(e),
-      onEnd: () => this.maybeArmReaper(),
+      onEnd: () => this.holdingChanged(),
       ...(d.taskPollMs !== undefined ? { pollMs: d.taskPollMs } : {}),
       ...(d.claudeConfigDir !== undefined ? { configDir: d.claudeConfigDir } : {}),
+    });
+    this.wakeups = new Wakeups({
+      note: (e) => this.emit(e),
+      onChange: () => this.holdingChanged(),
+      ...(d.wakeupGraceMs !== undefined ? { graceMs: d.wakeupGraceMs } : {}),
     });
     this.seq = nextNumbers(
       this.log.entries.map(({ event }) =>
@@ -670,6 +682,22 @@ export class AcpSession implements AgentAdapter {
     return this.turn?.stopping ?? false;
   }
 
+  /** rows held open past the turn for something still going under the agent: commands it sent
+   * to the background and still running, wakeups it booked and not yet back from */
+  get holding(): number {
+    return this.tasks.size + this.wakeups.size;
+  }
+
+  /** the earliest wakeup booked, as a time, or null while none is */
+  get wakes(): number | null {
+    return this.wakeups.next;
+  }
+
+  private holdingChanged() {
+    this.d.onHolding?.();
+    this.maybeArmReaper();
+  }
+
   private setStopping(on: boolean) {
     const turn = this.turn;
     if (!turn || turn.stopping === on) return;
@@ -873,6 +901,8 @@ export class AcpSession implements AgentAdapter {
   private async drain() {
     // the prompt going out is the next turn, so the one the agent was on alone is over
     this.endOwn("end_turn");
+    // and a wakeup it booked is not waited for: the message is what brought it back
+    this.wakeups.wake("a message came first");
     this.turn = { open: false, stopping: false };
     this.clearReaper();
     this.setStatus("working");
@@ -1240,6 +1270,7 @@ export class AcpSession implements AgentAdapter {
         this.d.mcp?.close();
         this.cancelAsks();
         this.tasks.endAll("the agent stopped, and the command with it");
+        this.wakeups.endAll("the agent stopped before it woke");
         this.endOwn("interrupted");
       }
     });
@@ -1494,7 +1525,12 @@ export class AcpSession implements AgentAdapter {
       this.d.worktreeId,
       (file, bytes) =>
         fireAndForget(this.d.worktreeId, this.d.attachments.putToolImage(this.d.worktreeId, file, bytes), "tool image"),
-      (toolId, start, input) => this.tasks.start(toolId, start, input),
+      (toolId, start, input) => {
+        const taken = this.tasks.start(toolId, start, input);
+        if (taken) this.holdingChanged();
+        return taken;
+      },
+      (toolId, until) => this.wakeups.start(toolId, until),
     );
     this.forward(live, events);
     this.holdInput(live, params.update);
@@ -1785,6 +1821,8 @@ export class AcpSession implements AgentAdapter {
       if (!doing) return;
       this.own = { open: new Set(), settle: null };
       this.clearReaper();
+      // the agent back on its own is the wakeup it booked: its row ends ahead of the turn
+      this.wakeups.wake("woke");
       this.emit({ type: "turn-start", ts: Date.now() });
       this.syncStatus();
     }
@@ -1810,10 +1848,11 @@ export class AcpSession implements AgentAdapter {
     this.maybeArmReaper();
   }
 
-  /** nothing to hold the process for: no turn, no question out, no card open, and no command the
-   * agent sent to the background still running under it (its process would go with the reap) */
+  /** nothing to hold the process for: no turn, no question out, no card open, and nothing held
+   * open under it (a command sent to the background, whose process would go with the reap, or a
+   * wakeup booked, whose timer would) */
   private quiet(): boolean {
-    return !this.running && !this.own && !this.asking && this.asks.size === 0 && this.tasks.size === 0;
+    return !this.running && !this.own && !this.asking && this.asks.size === 0 && this.holding === 0;
   }
 
   private maybeArmReaper() {
@@ -1843,6 +1882,7 @@ export class AcpSession implements AgentAdapter {
     // would otherwise sit here forever with no process left to answer
     this.cancelAsks();
     this.tasks.endAll("the agent stopped, and the command with it");
+    this.wakeups.endAll("the agent stopped before it woke");
     const conn = this.conn;
     this.conn = null;
     this.live = null;

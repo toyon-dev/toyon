@@ -149,6 +149,8 @@ export type ChatItem =
       /** the call's own process has exited and what it started is still running: the row is not
        * done, and says why not */
       background?: boolean;
+      /** when what the row waits for is due, where known: a wakeup the agent booked */
+      until?: number;
       /** the daemon ran this command and it failed in a way the agent can be asked to fix */
       fixable?: Fixable;
       /** the call never ran: a steered message cut the agent off writing it (no row; group.ts) */
@@ -3469,6 +3471,7 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
         ...(event.input !== undefined ? { input: event.input } : {}),
         ...(event.kind ? { toolKind: event.kind } : {}),
         ...(event.background ? { background: true } : {}),
+        ...(event.until ? { until: event.until } : {}),
       };
       return next;
     }

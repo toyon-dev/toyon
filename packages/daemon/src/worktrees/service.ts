@@ -3103,6 +3103,8 @@ export class WorktreeService {
           borrowed: rt?.borrowed.size ? [...rt.borrowed] : undefined,
           agent: rt?.agent.status ?? "idle",
           stopping: rt?.agent.stopping || undefined,
+          background: rt?.agent.holding || undefined,
+          wakes: rt?.agent.wakes ?? undefined,
           login: !!rt?.login,
           ahead,
           behind,

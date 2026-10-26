@@ -107,6 +107,13 @@ describe("the line under a row's name", () => {
     expect(rowLine(owned({ agent: "waiting" }, { lastTurn: turn }), ctx())).toBe("Waiting for you");
     expect(rowLine(owned({ agent: "working" }, { lastTurn: turn }), ctx())).toBe("Agent working");
     expect(rowLine(owned({}, { lastTurn: { ...done, end: "failed" } }), ctx())).toBe("Agent failed");
+    // a command still running under an idle agent, or a wakeup booked, is happening now too; a
+    // wakeup says when, and a turn in flight outranks either
+    expect(rowLine(owned({ background: 1 }, { lastTurn: turn }), ctx())).toBe("Running in the background");
+    const wakes = new Date(2026, 0, 1, 12, 44).getTime();
+    expect(rowLine(owned({ background: 1, wakes }, { lastTurn: turn }), ctx({ at: "4m" }))).toBe("Wakes 12:44 · 4m");
+    expect(rowLine(owned({ agent: "working", background: 1, wakes }, { lastTurn: turn }), ctx())).toBe("Agent working");
+    expect(rowQuiet(owned({ background: 1 }))).toBe(false);
     expect(rowLine(owned({ procs: [{ name: "web", status: "crashed" } as never] }, { lastTurn: turn }), ctx())).toBe(
       "Crashed",
     );

@@ -67,7 +67,15 @@ export const guestLine = (repoName: string, originTitle: string) => `in ${repoNa
 export const owedLine = (repoName: string) => `in ${repoName}, here while it needs you`;
 
 /** the dots that mean something is happening, or has broken, right now */
-const IN_FLIGHT: ReadonlySet<DotState> = new Set(["waiting", "stopping", "working", "starting", "failed", "crashed"]);
+const IN_FLIGHT: ReadonlySet<DotState> = new Set([
+  "waiting",
+  "stopping",
+  "working",
+  "background",
+  "starting",
+  "failed",
+  "crashed",
+]);
 
 export interface RowContext {
   /** the row's repo has no confirmed config, which is the one idle the dot cannot explain */

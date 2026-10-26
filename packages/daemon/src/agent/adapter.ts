@@ -73,6 +73,12 @@ export interface AgentAdapter {
   readonly status: AgentStatus;
   /** a stop was pressed and the turn it was for has not ended: the status stays busy meanwhile */
   readonly stopping: boolean;
+  /** rows held open past the turn for something still going under an idle agent: commands sent
+   * to the background and running, wakeups booked and not yet back from. The rail reads it as
+   * the worktree not being done. */
+  readonly holding: number;
+  /** the earliest wakeup booked, as a time, or null while none is */
+  readonly wakes: number | null;
   readonly queueLength: number;
   /** the waiting messages the shell draws as queued: those not yet shown in the transcript */
   readonly queueItems: QueuedMessage[];

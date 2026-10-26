@@ -340,7 +340,9 @@ export type AgentEvent =
     }
   /** the agent refined a running tool call (a placeholder title became the real one, input arrived).
    * `background`: the call's own process has exited and what it started (a server put in the
-   * background with `&`) is still running, so the row stays open for that, and its stop kills it. */
+   * background with `&`) is still running, so the row stays open for that, and its stop kills it.
+   * `until` is the time what the row waits for is due, where one is known: a wakeup the agent
+   * scheduled for itself, whose row stays open until the agent is back. */
   | {
       type: "tool-update";
       toolId: string;
@@ -349,6 +351,7 @@ export type AgentEvent =
       input?: unknown;
       kind?: ToolKind;
       background?: boolean;
+      until?: number;
     }
   /** prose a subagent wrote, going to the row that spawned it rather than the transcript. It reads
    * as the main agent's own writing anywhere else, and the panel is where the rest of that call's

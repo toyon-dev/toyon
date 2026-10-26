@@ -572,6 +572,41 @@ describe("mapUpdate", () => {
     expect(foreground.map((e) => e.type)).toEqual(["tool-start", "tool-end"]);
   });
 
+  test("a wakeup the agent booked keeps its row open with the time, and one ending the loop closes as usual", () => {
+    const booking = (rawInput: unknown): SessionUpdate[] => [
+      {
+        sessionUpdate: "tool_call",
+        toolCallId: "k1",
+        title: "ScheduleWakeup",
+        kind: "other",
+        status: "pending",
+        rawInput,
+      },
+      {
+        sessionUpdate: "tool_call_update",
+        toolCallId: "k1",
+        status: "completed",
+        content: [{ type: "content", content: { type: "text", text: "Wakeup scheduled" } }],
+      },
+    ];
+    const taken: unknown[] = [];
+    const memos: ToolMemos = new Map();
+    const before = Date.now();
+    const events = booking({ delaySeconds: 600, reason: "watching CI" }).flatMap((u) =>
+      mapUpdate(u, memos, "t", undefined, undefined, (toolId, until) => taken.push([toolId, until])),
+    );
+    expect(events.map((e) => e.type)).toEqual(["tool-start", "tool-update"]);
+    const update = events[1] as Extract<AgentEvent, { type: "tool-update" }>;
+    expect(update).toMatchObject({ toolId: "k1", background: true });
+    expect(update.until).toBeGreaterThanOrEqual(before + 600_000);
+    expect(taken).toEqual([["k1", update.until]]);
+    expect(memos.get("k1")?.ended).toBe(true);
+    // the loop's end books nothing: the row ends the way any call does
+    const stopping: ToolMemos = new Map();
+    const stopped = booking({ stop: true }).flatMap((u) => mapUpdate(u, stopping, "t", undefined, undefined, () => {}));
+    expect(stopped.map((e) => e.type)).toEqual(["tool-start", "tool-end"]);
+  });
+
   test("a command reported completed that exited non-zero is an error (OpenCode marks every call completed)", () => {
     expect(
       run([

@@ -406,6 +406,16 @@
       background: var(--green);
       animation: pulse 1.2s ease-in-out infinite;
     }
+    /* the agent idle with something still going under it: a command it sent to the background, a
+   wakeup it booked. A colour of its own rather than working's green, since the two differ in
+   the one way that matters at the rail: this row takes a message now, and that one is mid-turn.
+   It breathes like working, slower, because something is still happening. Purple is the one
+   accent no other mark wears (blue is the archive's), so it is not mistaken for any of them
+   from across the rail. */
+    &.background {
+      background: var(--purple);
+      animation: pulse 2.4s ease-in-out infinite;
+    }
     /* asked to stop and still winding down: working's pulse in the stop button's red, so the row
    says the press landed from across the rail, and the breath stops with the turn. The red is
    the stop control's own colour, not the crash's: the pulse is what tells the two apart. */
@@ -491,6 +501,10 @@
     .dot.stopping {
       background: var(--yellow);
       border: 1.5px solid var(--red);
+      animation: none;
+    }
+    /* purple is this dot's alone, so held still it is still this dot */
+    .dot.background {
       animation: none;
     }
   }

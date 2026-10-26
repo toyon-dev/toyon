@@ -260,6 +260,7 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
   s.hub.on("worktreesChanged", worktreesChanged);
   s.hub.on("agentStatus", worktreesChanged);
   s.hub.on("agentStopping", worktreesChanged);
+  s.hub.on("agentHolding", worktreesChanged);
   // a proc's state is on its row: the same frame, which is one row and not one per page
   s.hub.on("proc", worktreesChanged);
   s.hub.on("reposChanged", () => broadcast({ t: "repos", repos: s.state.repos, stamp: stampOf(s.state.repos) }));

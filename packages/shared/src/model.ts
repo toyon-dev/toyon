@@ -895,6 +895,14 @@ export interface WorktreeStatus {
    * winding down (a command it is running holds the interrupt off), so the status stays busy and
    * this says the press landed. Absent otherwise. */
   stopping?: true;
+  /** rows the daemon holds open past the turn for something still going under an idle agent: a
+   * command it sent to the background and a wakeup it scheduled. The agent is not working, and
+   * a message sent now starts a turn as usual, but the worktree is not done either. Absent when
+   * none. */
+  background?: number;
+  /** the earliest wakeup the agent scheduled, as a time, while one is pending: the row says
+   * when the agent comes back on its own */
+  wakes?: number;
   /** the agent's terminal login is running here, or failed and still shows why: the login tab */
   login: boolean;
   /** commits ahead/behind the default branch, from the worktree's tree-state record, the same

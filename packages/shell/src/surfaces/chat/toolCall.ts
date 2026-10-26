@@ -66,6 +66,8 @@ const KIND_ICON: Record<ToolKind, IconName> = {
 };
 
 const SKILL_TOOL = "Skill";
+/** Claude Code's booking of its own return, the self-paced loop: a call that returns at once */
+const WAKEUP_TOOL = "ScheduleWakeup";
 
 /** Claude's tools that arrive with no kind, which would otherwise all wear the dot: the glyph is
  * picked by the tool's name instead. A Map, since a name is the agent's string and an object would
@@ -75,6 +77,8 @@ const NAME_ICON = new Map<string, IconName>([
   [ASK_TOOL, "chat"],
   // a watch on something running in the background, which reports as time passes
   ["Monitor", "clock"],
+  // a wakeup the agent booked for itself: the row stays open until it is back, saying when
+  [WAKEUP_TOOL, "clock"],
   // what a background command or subagent printed
   ["TaskOutput", "terminal"],
   // a packaged set of instructions loaded over the agent's own
@@ -261,7 +265,9 @@ export function toolLabel(call: ToolCall, roots: string[] = []): ToolRowText {
   // already carries a pair, so the row prints the query as the agent typed it. A ToolSearch's query
   // is a loader's syntax (`select:A,B`) that the daemon has already reshaped into the title.
   const query = call.name === TOOL_SEARCH ? "" : field(call, "query");
-  const v = filePathOf(call) || command || field(call, "path") || field(call, "pattern") || query;
+  // a wakeup's line is what the agent said it was waiting on; the booked time is the row's status
+  const reason = call.name === WAKEUP_TOOL ? field(call, "reason") : "";
+  const v = filePathOf(call) || command || field(call, "path") || field(call, "pattern") || query || reason;
   const raw = v || skillForm(call) || (call.title && call.title !== call.name ? call.title : "");
   // Claude's Bash tool sends a sentence of its own ("Build the project"); it beats the command as
   // the row's label, and the command still shows inside

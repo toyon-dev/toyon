@@ -13,6 +13,7 @@ import {
   type ShipOp,
   type WorktreeStatus,
 } from "@toyon/shared";
+import { hhmm } from "./chips/baseNote.ts";
 
 /** Preview iframes hit the worktree's proxy port. Locally that is always loopback (the daemon
  * binds 127.0.0.1); in cloud mode the same port is a public TLS port on the host that served this
@@ -81,6 +82,7 @@ export type DotState =
   | "waiting"
   | "stopping"
   | "working"
+  | "background"
   | "failed"
   | "landed"
   | "crashed"
@@ -99,6 +101,10 @@ export function dotClass(w: WorktreeStatus): DotState {
   // the process and the daemon, which only the status does not; without it a server still running
   // underneath paints the row green, the colour of work going fine.
   if (w.agent === "error" || w.worktree?.lastTurn?.end === "failed") return "failed";
+  // the turn is over and the agent idle, and something it started is still going under it: a
+  // command sent to the background, a wakeup booked. Not working: a message sent now starts a
+  // turn as usual, and the stop is the row's own. Not idle either: the worktree is not done.
+  if (w.background) return "background";
   if (w.worktree?.landed) return "landed";
   // unreachable wears the crashed colour: alive, but nothing to show, and it needs a person
   if (w.procs.some((p) => p.status === "crashed" || p.status === "unreachable")) return "crashed";
@@ -113,6 +119,7 @@ const DOT_LABEL: Record<DotState, string> = {
   waiting: "Waiting for you",
   stopping: "Agent stopping",
   working: "Agent working",
+  background: "Running in the background",
   failed: "Agent failed",
   landed: "Landed",
   crashed: "Crashed",
@@ -126,7 +133,10 @@ const DOT_LABEL: Record<DotState, string> = {
  * the one state the colour cannot explain: nothing runs there because nothing was told to. */
 export function stateLabel(w: WorktreeStatus, needsSetup = false): string {
   const d = dotClass(w);
-  return d === "idle" && needsSetup ? "Not set up" : DOT_LABEL[d];
+  if (d === "idle" && needsSetup) return "Not set up";
+  // a wakeup booked is the one background state with a time to give: when the agent is back
+  if (d === "background" && w.wakes) return `Wakes ${hhmm(w.wakes)}`;
+  return DOT_LABEL[d];
 }
 
 /** a proc's status in words, for its tab's tip: the same words the rail's dot uses where the two

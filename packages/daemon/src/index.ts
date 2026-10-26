@@ -79,6 +79,7 @@ import { ArtifactCache } from "./worktrees/cache.ts";
 import { ChatSearch } from "./worktrees/chats.ts";
 import { FixService } from "./worktrees/fix.ts";
 import { LandingService } from "./worktrees/landing.ts";
+import { WorktreeLookup } from "./worktrees/lookup.ts";
 import { PiecesService } from "./worktrees/pieces.ts";
 import { PrService } from "./worktrees/prs.ts";
 import { RefSearch } from "./worktrees/refs.ts";
@@ -293,6 +294,10 @@ const pieces = new PiecesService({
   reader: makePiecesReader(runtime, agents, state),
 });
 tools.add(pieces);
+// which worktrees of the project exist and what each was about, for a question asked by topic
+tools.add(
+  new WorktreeLookup({ state, transcriptsDir: paths.transcriptsDir, archived: (repoId) => worktrees.archived(repoId) }),
+);
 // before the server: its agentStatus listener has to run ahead of the one that broadcasts the rows
 const turns = new TurnService({
   state,

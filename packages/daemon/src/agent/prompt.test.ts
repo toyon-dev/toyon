@@ -64,6 +64,12 @@ describe("prompts for work in another project", () => {
     expect(SYSTEM_APPEND).toContain("once it is proposed you finish your turn");
   });
 
+  test("the system append points a question by topic or ticket at the worktrees tool, not at git", () => {
+    expect(SYSTEM_APPEND).toContain("call the `worktrees` tool when you have one");
+    expect(SYSTEM_APPEND).toContain("with a `query` it keeps only those whose title, branch or chat mention it");
+    expect(SYSTEM_APPEND).toContain("`git worktree list` knows neither titles nor chats");
+  });
+
   test("the first prompt of a worktree born with a plan from another project: the path, who wrote it, and the note", () => {
     const origin = { path: "/wt/toyon/wt-1a2b", project: "toyon", branch: "toyon/wt-1a2b" };
     expect(handedPrompt(".toyon/plans/1.md", "and run the tests", origin, "project")).toBe(

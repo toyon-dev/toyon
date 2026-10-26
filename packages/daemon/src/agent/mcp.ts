@@ -1,5 +1,5 @@
 // Toyon's own tools, served to each worktree's agent over MCP (streamable HTTP, JSON responses).
-// Hand-rolled: one tool and four JSON-RPC methods are the whole protocol here, and the SDK's
+// Hand-rolled: two tools and four JSON-RPC methods are the whole protocol here, and the SDK's
 // server would pull a web framework into the bundled daemon for them. Stateless, so a daemon
 // restart under a running agent costs nothing: the next call carries everything it needs.
 
@@ -102,7 +102,9 @@ export class ToyonMcp {
   /** A fresh bearer for this worktree's agent process, replacing any earlier one: the old process
    * is gone or going, and a credential that outlived it would be one more thing to have leaked.
    * In memory only, never logged. It shows in the agent's process arguments, which is accepted: it
-   * grants one propose-only tool on one chat, and the daemon token is a different secret. */
+   * grants a propose-only tool on one chat and a read of the project's worktree titles and chat
+   * paths, which the same agent can read off disk anyway, and the daemon token is a different
+   * secret. */
   open(worktreeId: string): acp.McpServer {
     const bearer = randomBytes(32).toString("base64url");
     this.bearers.set(worktreeId, bearer);

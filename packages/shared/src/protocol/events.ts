@@ -38,10 +38,15 @@ export const ASK_TOOL = "AskUserQuestion";
  * the bare name and the shell keys rows on that. */
 export const TOYON_MCP_SERVER = "toyon";
 
-/** Toyon's one tool of its own: the agent hands Toyon the pieces of the work it is planning, or
- * one piece it came across. Each goes on this worktree, a new one here or in another open
- * project, or an open worktree already on that part, and the person decides on the list. */
+/** The agent hands Toyon the pieces of the work it is planning, or one piece it came across.
+ * Each goes on this worktree, a new one here or in another open project, or an open worktree
+ * already on that part, and the person decides on the list. */
 export const SPLIT_TOOL = "split";
+
+/** The agent asks Toyon which worktrees of this project exist, open and archived, by title and
+ * branch with where each chat is on disk, with a query to find the one that worked on a topic:
+ * what `git worktree list` cannot say, since git knows neither titles nor chats. */
+export const WORKTREES_TOOL = "worktrees";
 
 /** where one piece of a plan goes: the agent proposes one of the first three, the person may
  * change it, and `skip` is theirs alone */

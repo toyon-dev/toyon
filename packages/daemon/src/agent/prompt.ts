@@ -22,6 +22,7 @@ export const SYSTEM_APPEND = [
   "When referencing a file in chat, use a Markdown link whose target is its absolute path, with an optional `:line`; Toyon opens it in the built-in editor, whether it is in this worktree or anywhere else on this machine. A folder, a URL route or a command is not a file: name it in backticks, never as a link.",
   "`@some/path` in a message means read that file or directory first; `@changes` means this worktree's uncommitted files, which `git status` lists; `@<branch>` names another worktree of this project, and the context attached to the message says where its chat is on disk.",
   "Toyon knows every worktree by a title and a branch; its directory, `wt-xxxx`, is an id that outlives both. When you name this worktree or another in prose, use its title in quotes or its branch, never the directory: the context attached to each message gives this worktree's title and branch, and a sibling's when the message names it.",
+  "To find which worktree of this project worked on a topic, a ticket or a feature, or to see what is open and what was archived, call the `worktrees` tool when you have one: it lists them by title and branch with where each chat is on disk, and with a `query` it keeps only those whose title, branch or chat mention it. `git worktree list` knows neither titles nor chats, so it cannot answer that.",
   'Toyon previews the project in a browser panel by running the commands in its settings file, .toyon/settings.json (or toyon.json at the repo root, in a repo that keeps it there), shaped like {"setup": ["bun install"], "run": {"web": "bun run dev --port $PORT"}, "check": "bun run check", "land": {"route": "merge"}}: setup runs once in every new worktree, teardown (optional) runs once when a worktree is removed, every command in run keeps running and must listen on $PORT, which toyon sets differently for each worktree, check (optional) runs after each of your turns and must pass before the work can land, and land (optional) says how the user lands work on main: route "merge" (onto main here), "push" (onto main here, then pushed) or "pr" (a pull request); method "merge", "squash" or "rebase" for how the commits arrive on main; automerge true when GitHub should merge the pull request itself; timeouts (optional) gives setup, check and commit each a ceiling as a duration like "30m" (ten minutes each when unset), for a suite that runs longer. A settings.local.json beside it (toyon.local.json at the root) holds one person\'s overrides and is never committed. Both files may carry comments and trailing commas; leave any you find.',
   "Toyon runs those commands itself in every worktree, and the user watches the result live in a preview beside this chat, so never start a dev server or open a browser of your own to check your work. Each message says where this worktree's preview answers; fetch a page from there when you want to see it.",
   "When you scaffold a project, write its .gitignore (dependencies, build output, local env files) before installing anything, so an install never leaves thousands of untracked files for the user to wade through or commit.",
@@ -384,7 +385,7 @@ export interface SiblingWorktree {
 
 const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-const dayOf = (ts: number) =>
+export const dayOf = (ts: number) =>
   new Date(ts).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 
 /** what became of an archived row's work, so the agent knows whether any code is left to read
@@ -395,14 +396,23 @@ function archivedFate(a: NonNullable<SiblingWorktree["archived"]>): string {
   return "without landing, and git kept nothing of it";
 }
 
-/** One paragraph per sibling worktree the message names with `@<branch>`: which worktree that is,
- * where its checkout is and where its chat is on disk, so "look at what @toyon/foo did and do the
- * same here" needs no path pasted. A reference, never the chat itself: the agent reads what it
- * wants of it. An archived row is named in the past tense with what became of its work, so the
- * agent reads the chat instead of hunting git for a checkout that is gone. The word is read as
+/** One sibling as the agent is told of it, under a mention or from the `worktrees` tool: which
+ * worktree that is, where its checkout is and where its chat is on disk, so "look at what
+ * @toyon/foo did and do the same here" needs no path pasted. A reference, never the chat itself:
+ * the agent reads what it wants of it. An archived row is named in the past tense with what became
+ * of its work, so the agent reads the chat instead of hunting git for a checkout that is gone. The
+ * agent reads the file by its structure, so the paragraph says it. */
+export function siblingParagraph(s: SiblingWorktree): string {
+  const chat = `Its chat is at ${s.transcript}, one JSON object per line: a "user-message" event is what the person wrote, the "text-delta" events after it are the agent's reply, and the rest is tool activity.`;
+  return s.archived
+    ? `@${s.branch} was the worktree "${s.title}" in this project, archived on ${dayOf(s.archived.at)} ${archivedFate(s.archived)}. Its checkout at ${s.path} is gone. ${chat}`
+    : `@${s.branch} is the worktree "${s.title}" in this project, checked out at ${s.path}. ${chat}`;
+}
+
+/** One paragraph per sibling worktree the message names with `@<branch>`. The word is read as
  * the composer marks it, opening at a word start and ending at a space or at the sentence's
  * punctuation. The first row with a branch wins: a live row is listed before an archived one that
- * had the same branch. The agent reads the file by its structure, so the paragraph says it. */
+ * had the same branch. */
 export function worktreeContext(text: string, siblings: readonly SiblingWorktree[]): string[] {
   const out: string[] = [];
   const said = new Set<string>();
@@ -411,12 +421,7 @@ export function worktreeContext(text: string, siblings: readonly SiblingWorktree
     const named = new RegExp(`(^|\\s)@${escapeRegExp(s.branch)}(?=$|[\\s.,;:!?)\\]}'"])`);
     if (!named.test(text)) continue;
     said.add(s.branch);
-    const chat = `Its chat is at ${s.transcript}, one JSON object per line: a "user-message" event is what the person wrote, the "text-delta" events after it are the agent's reply, and the rest is tool activity.`;
-    out.push(
-      s.archived
-        ? `@${s.branch} was the worktree "${s.title}" in this project, archived on ${dayOf(s.archived.at)} ${archivedFate(s.archived)}. Its checkout at ${s.path} is gone. ${chat}`
-        : `@${s.branch} is the worktree "${s.title}" in this project, checked out at ${s.path}. ${chat}`,
-    );
+    out.push(siblingParagraph(s));
   }
   return out;
 }

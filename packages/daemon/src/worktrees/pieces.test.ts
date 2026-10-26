@@ -170,7 +170,7 @@ describe("the tool", () => {
     expect(lastProposal(other.id).pieces[0]!.to).toEqual({ id: planning.id, branch: planning.branch, title: "Rail" });
   });
 
-  test("one open list per chat, and the turn's allowance is shared with handoff", async () => {
+  test("one open list per chat, and three proposals a turn", async () => {
     const repoId = await registered();
     const a = await w.worktrees.create(repoId, "task");
     agentOf(a.id).note({ type: "turn-start", ts: 1 });

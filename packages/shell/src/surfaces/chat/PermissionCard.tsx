@@ -57,9 +57,14 @@ export function PermissionCard({
   // a plan is a file in the worktree, the agent's own or one toyon wrote for it, read in the pane
   // as the document it is; only an ask with no file behind it still carries its markdown
   const html = useMemo(() => (ask.detail && !plan ? renderMarkdown(ask.detail) : ""), [ask.detail, plan]);
+  // On a phone the plan is not opened for the person: the pane there is a cover over the whole
+  // column, so it would hide the card it is about, and the chat under it is unmounted, so closing
+  // it would mount the card again and open the plan again, with no way out. The box's plan row
+  // opens it on a press instead.
+  const phone = useStore((s) => s.frame === "phone");
   const readPlan = () => {
     // the caret stays on the ask, which is what the agent is blocked on
-    if (plan && active === worktreeId)
+    if (plan && active === worktreeId && !phone)
       openFile({ sock, dispatch }, { worktreeId, path: plan, view: "preview", focus: false });
   };
   // the plan opens beside the box as the ask arrives: it is what the options are asking about

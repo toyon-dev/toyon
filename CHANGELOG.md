@@ -2,6 +2,47 @@
 
 What changed in each release of Toyon, newest first.
 
+## 0.19.0 (2026-10-26)
+
+A plan can be split into pieces that each get their own worktree, worktrees go by their titles everywhere, and the phone shell becomes a place you can work from: screens you swipe between, chats you can read offline, a share sheet that lands in a chat, and a true black background.
+
+### New
+- An agent can split its plan into pieces. The list shows at the head of the plan, one line per piece, each bound for this worktree, a new worktree of this project or of another one you have open, or an open worktree already on that part. You read and move each piece before you approve; nothing starts until you do. A worktree made from a piece is born with that text as its approved plan, its first message says who wrote it, and a piece can wait on an earlier one. The `/split` verb raises the same card from your own words.
+- A worktree made from a piece shows a brief row beside its chat with the origin agent's words, your note and the file they came from; pressing it opens that file, or the archived copy once the origin is gone.
+- Rail rows, changes rows, file rows and the editor head can be dragged into the composer, which inserts a mention at the drop point. A pasted branch name or worktree directory that matches a sibling becomes its mention as well, on the desk and from a phone keyboard.
+- The phone's screens sit in one line and a sideways swipe moves between them, including the preview, with each screen keeping its scroll position. One swipe back also closes the keyboard.
+- The phone keeps your chats and transcripts in its own storage. When the daemon cannot be reached it shows the last known rows read-only, and sends are refused until it is back.
+- Sharing a file to Toyon from a phone goes to the worktree list, where the row you tap receives it, skipping the attach button's picker. The attach button itself takes any file now, not only pictures.
+- A phone can turn on OLED black in settings: the chosen dark theme's grounds go to true black, text and accents stay as they were, and an installed app paints its status bar to match.
+- A quick flick on a phone rail row archives it without reaching the rung.
+- A note field on a card draws a send at the end of its row on touch, so a note goes without reaching for the composer.
+- The composer, agent prose and Toyon's own rows name a worktree by its title with a status dot, never by its id or branch. The agent is told the title and branch on each send and renames show up live, and a mention still reaches an archived worktree, whose tip says so and opens its page.
+
+### Changed
+- Handoff is folded into pieces: the one tool and the one card cover sending work to an open worktree as well as a new one. Stored handoff rows in old chats are rewritten once when the daemon starts, so nothing is lost.
+- The variants count on the new-worktree row and the batch button are gone. Pasting feedback into one box gave no view of what would happen; the pieces list is that view.
+- Open terminal left the worktree row menu and the palette, since cmd+J already opens the app terminal. The menu now leads with copy branch name, reveal in Finder and copy path, puts stop agent and view changes under one rule, and drops copy transcript path and copy session id, which stay in the palette.
+- The swipe ladder on a phone rail row no longer offers land. Landing stays a press from the composer, where its line says what it will do.
+- On a phone the composer rides with the end of the transcript and folds to one line as you read back, the name strip folds while you type, a tap on the folded box takes you to the end, and the keyboard drops after a send.
+- Each message tells the agent where the worktree stands: clean or dirty, how far ahead of main, landed or not, and any PR on it. Before, it only heard about a sibling's land and answered from a stale picture after your own land, commit or push.
+- The model picker labels the default row with the model and effort the agent actually ran, instead of a fixed name.
+- The spinner is the four-square mark everywhere; the ring is gone.
+- A Write followed by Edits of the same file folds into one row with a count, and a tool-search row is dropped once the next item lands, staying only when nothing followed it.
+- On the desk the log's scrollbar stops above the composer instead of running alongside it.
+- The daemon row's byline sits under its sentence in the dim tier, and a grafted row stacks its branch on a phone instead of truncating it. Tips on the changes rows sit on the chat's side of the row.
+- The shell loads faster over a slow link: assets ship precompressed, the first request goes out before the stylesheet, a reopened chat fetches only what changed, and a fold's body is built the first time it opens. The largest transcript paints in less than half the time on a throttled phone.
+- Phone type is sized from the phone: inline code sits one point under the prose, and tool rows return to the small mono.
+- The Claude Code adapter is pinned to 0.95.0.
+
+### Fixed
+- An Edit cut off after its path went out left a running row that hid the spinner for the whole turn, and a tool call steered into could keep shining after the agent moved on.
+- A nameless notice from Claude Code ran into the model's next reply as one line of text.
+- A worktree mention lost its link once the worktree was archived, @- listed every worktree, and a lone digit or hex letter matched through the directory name. Mentions now match by title and branch only.
+- Hovering a card option moved the cursor but left the keyboard on a transcript row, so the digit and letter keys went there.
+- cmd+R reloads only the preview in every state; where the app is crashed, stopped or asleep it starts the preview instead of reloading the shell.
+- The "Toyon was updated" card showed on a phone only for other machines, so a phone could not tell its own daemon needed a restart.
+- In a browser without scroll-driven animations the first column of a wide table was dimmed at rest.
+
 ## 0.18.0 (2026-10-23)
 
 Stop and the ask cards say what they are doing while they do it, and the phone rail's swipe reads as one gesture with the rungs the row actually offers.

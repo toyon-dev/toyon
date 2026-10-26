@@ -1,6 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import type { KeepAwakeMode } from "@toyon/shared";
-import { type Demand, idleSleepAssertion, KeepAwake, type KeepAwakeDeps } from "./awake.ts";
+import {
+  BRIDGE_MS,
+  CARRIED_ENV,
+  carryEnv,
+  type Demand,
+  idleSleepAssertion,
+  idleSleepBridge,
+  KeepAwake,
+  type KeepAwakeDeps,
+} from "./awake.ts";
 import { Hub } from "./hub.ts";
 
 const MIN = 60_000;
@@ -12,6 +21,7 @@ function make(over: Partial<KeepAwakeDeps> = {}) {
   let demand: Demand = null;
   let held = 0;
   let taken = 0;
+  const bridged: number[] = [];
   let pending: { fn: () => void; at: number } | null = null;
   const awake = new KeepAwake({
     hub,
@@ -22,6 +32,9 @@ function make(over: Partial<KeepAwakeDeps> = {}) {
       return () => {
         held--;
       };
+    },
+    bridge: (ms) => {
+      bridged.push(ms);
     },
     mode: () => "use",
     answerable: () => true,
@@ -51,7 +64,7 @@ function make(over: Partial<KeepAwakeDeps> = {}) {
     demand = to;
     hub.emit("agentStatus", id, to ?? "idle");
   };
-  return { hub, awake, advance, status, held: () => held, taken: () => taken };
+  return { hub, awake, advance, status, held: () => held, taken: () => taken, bridged };
 }
 
 describe("KeepAwake", () => {
@@ -194,6 +207,52 @@ describe("KeepAwake", () => {
     awake.remoteShells(1);
     expect(held()).toBe(0);
   });
+
+  test("a restart bridges a hold in place, and says so for the replacement", () => {
+    const { awake, held, bridged } = make();
+    awake.remoteShells(1);
+    expect(awake.stop({ handoff: true })).toBe(true);
+    expect(held()).toBe(0);
+    expect(bridged).toEqual([BRIDGE_MS]);
+  });
+
+  test("a restart with nothing held bridges nothing, and a plain stop never does", () => {
+    const idle = make();
+    expect(idle.awake.stop({ handoff: true })).toBe(false);
+    expect(idle.bridged).toEqual([]);
+    const stopped = make();
+    stopped.awake.remoteShells(1);
+    expect(stopped.awake.stop()).toBe(true);
+    expect(stopped.bridged).toEqual([]);
+  });
+
+  test("the replacement of a daemon that was holding starts inside the window", () => {
+    const { held, advance } = make({ carried: true });
+    expect(held()).toBe(1);
+    advance(29 * MIN);
+    expect(held()).toBe(1);
+    advance(1 * MIN);
+    expect(held()).toBe(0);
+  });
+
+  test("a device reconnecting to the replacement keeps the one hold past the window", () => {
+    const { awake, held, taken, advance } = make({ carried: true });
+    advance(5 * MIN);
+    awake.remoteShells(1);
+    advance(60 * MIN);
+    expect(held()).toBe(1);
+    expect(taken()).toBe(1);
+  });
+
+  test("the replacement of a daemon holding nothing starts with nothing", () => {
+    const { held } = make({ carried: false });
+    expect(held()).toBe(0);
+  });
+
+  test("carried means nothing where there is no assertion to take", () => {
+    const { taken } = make({ carried: true, assert: null });
+    expect(taken()).toBe(0);
+  });
 });
 
 describe("idleSleepAssertion", () => {
@@ -201,5 +260,15 @@ describe("idleSleepAssertion", () => {
     expect(idleSleepAssertion(undefined, "darwin")).not.toBeNull();
     expect(idleSleepAssertion("off", "darwin")).toBeNull();
     expect(idleSleepAssertion(undefined, "linux")).toBeNull();
+    expect(idleSleepBridge(undefined, "darwin")).not.toBeNull();
+    expect(idleSleepBridge("off", "darwin")).toBeNull();
+    expect(idleSleepBridge(undefined, "linux")).toBeNull();
+  });
+});
+
+describe("carryEnv", () => {
+  test("carries a hold, and never a stale one", () => {
+    expect(carryEnv({ A: "1" }, true)).toEqual({ A: "1", [CARRIED_ENV]: "1" });
+    expect(carryEnv({ A: "1", [CARRIED_ENV]: "1" }, false)).toEqual({ A: "1" });
   });
 });

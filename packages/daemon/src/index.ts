@@ -34,7 +34,7 @@ import { transcriptPathFor } from "./agent/transcript.ts";
 import { forwardTranscripts } from "./agent/transcriptForward.ts";
 import { UploadStore } from "./agent/uploads.ts";
 import { locateAssets, pruneAssets } from "./core/assets.ts";
-import { idleSleepAssertion, KeepAwake } from "./core/awake.ts";
+import { CARRIED_ENV, carryEnv, idleSleepAssertion, idleSleepBridge, KeepAwake } from "./core/awake.ts";
 import { cloud } from "./core/cloud.ts";
 import { folderDialog } from "./core/dialog.ts";
 import { GrantCodes } from "./core/grants.ts";
@@ -425,6 +425,8 @@ const keepAwake = new KeepAwake({
   hub,
   demand: () => runtime.demand(),
   assert: idleSleepAssertion(process.env.TOYON_KEEP_AWAKE),
+  bridge: idleSleepBridge(process.env.TOYON_KEEP_AWAKE),
+  carried: process.env[CARRIED_ENV] === "1",
   mode: () => state.keepAwake,
   answerable: () => setting.get() !== null,
 });
@@ -615,7 +617,9 @@ async function shutdown(signal: string, opts: { respawn?: boolean } = {}) {
   shuttingDown = true;
   log.info("daemon", `${signal}: stopping dev servers`);
   idleExit.stop();
-  keepAwake.stop();
+  // a Mac whose display is dark and whose only hold was ours sleeps in the seconds before the
+  // replacement is up, so a restart hands the hold over rather than letting go
+  const heldAwake = keepAwake.stop({ handoff: opts.respawn === true });
   tailnet.stop();
   // before the sockets close: what the tabs show now is what the next daemon brings back
   idle.shutdown();
@@ -644,7 +648,7 @@ async function shutdown(signal: string, opts: { respawn?: boolean } = {}) {
     await Bun.sleep(250);
     log.info("daemon", "starting the replacement");
     try {
-      respawn(paths.logFile);
+      respawn(paths.logFile, carryEnv(process.env, heldAwake));
     } catch (e) {
       // the listener is closed and the pid file gone, so a process that stayed here would be a
       // daemon nobody can reach and `toyon` would not know to start another

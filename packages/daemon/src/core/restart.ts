@@ -41,18 +41,18 @@ export async function replacementRuns(): Promise<{ ok: true } | { ok: false; rea
   };
 }
 
-/** Start the replacement, writing to `logFile` as the CLI's own start does. Call this last, after
- * the listener is closed: the replacement binds the same port and has no retry, so a spawn before
- * the port is free is a daemon that is simply gone. Nothing here waits for it to come up; the
- * shell reconnects on its own and says so when it cannot. */
-export function respawn(logFile: string): void {
+/** Start the replacement, writing to `logFile` as the CLI's own start does, in `env`. Call this
+ * last, after the listener is closed: the replacement binds the same port and has no retry, so a
+ * spawn before the port is free is a daemon that is simply gone. Nothing here waits for it to come
+ * up; the shell reconnects on its own and says so when it cannot. */
+export function respawn(logFile: string, env: NodeJS.ProcessEnv = process.env): void {
   const logFd = openLog(logFile);
   // the bun running this daemon, and the arguments it was given: the entry is argv[1] in the
   // source tree and in the npm package alike, so the replacement starts exactly as this one did
   const child = spawn(process.execPath, process.argv.slice(1), {
     detached: true,
     stdio: ["ignore", logFd, logFd],
-    env: { ...process.env },
+    env: { ...env },
   });
   // a spawn that fails emits error and never exit; unhandled, that throws in the old process on its
   // way out, with nothing in the log to say the replacement never started

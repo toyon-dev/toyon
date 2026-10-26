@@ -23,6 +23,12 @@ export interface KeepAwakeDeps {
   /** take the OS's idle-sleep assertion; the function it returns lets it go. Null where there is
    * none to take, and nothing is ever held. */
   assert: (() => () => void) | null;
+  /** leave an assertion that outlives this process for `ms`, across a restart: the one `assert`
+   * takes goes with the process, and the replacement cannot take its own until it is up */
+  bridge?: ((ms: number) => void) | null;
+  /** this daemon replaced one that was holding the machine awake, so the devices it was holding
+   * it for are coming back: start inside the window rather than wait for the first to arrive */
+  carried?: boolean;
   /** the line in settings, read each time */
   mode: () => KeepAwakeMode;
   /** a shell can be opened from another device, so a question may be answered from one. Without
@@ -41,13 +47,26 @@ export interface KeepAwakeDeps {
  * to bed does not hold a laptop up all night. */
 export const WAIT_MS = 30 * 60_000;
 
+/** A minute: the old daemon's assertion dies with it, and a Mac whose display is already dark and
+ * whose keyboard has been idle past its sleep timer sleeps within seconds of the last assertion
+ * going. The replacement is up in a few seconds and takes its own; the bridge only has to outlast
+ * the gap, and a replacement that never comes up leaves nothing held for long. */
+export const BRIDGE_MS = 60_000;
+
+/** the replacement reads this from its environment: the daemon it replaced was holding */
+export const CARRIED_ENV = "TOYON_KEEP_AWAKE_CARRIED";
+
 /** `TOYON_KEEP_AWAKE=off` leaves the machine's sleep alone. Only macOS has the assertion: a Linux
  * machine that runs Toyon is a server, which does not idle-sleep. */
+function hasIdleSleep(raw: string | undefined, platform: string): boolean {
+  return raw !== "off" && platform === "darwin";
+}
+
 export function idleSleepAssertion(
   raw: string | undefined,
   platform: string = process.platform,
 ): KeepAwakeDeps["assert"] {
-  if (raw === "off" || platform !== "darwin") return null;
+  if (!hasIdleSleep(raw, platform)) return null;
   return () => {
     // -w: the assertion goes with this process however it ends, so a killed daemon holds nothing
     const child = spawn("/usr/bin/caffeinate", ["-i", "-w", String(process.pid)], { stdio: "ignore" });
@@ -57,6 +76,25 @@ export function idleSleepAssertion(
       child.kill();
     };
   };
+}
+
+export function idleSleepBridge(raw: string | undefined, platform: string = process.platform): KeepAwakeDeps["bridge"] {
+  if (!hasIdleSleep(raw, platform)) return null;
+  return (ms) => {
+    // detached and timed, not -w: it has to outlive this process, and has to end on its own
+    const child = spawn("/usr/bin/caffeinate", ["-i", "-t", String(Math.ceil(ms / 1000))], {
+      stdio: "ignore",
+      detached: true,
+    });
+    child.on("error", (e) => log.warn("awake", "caffeinate did not start, so the Mac may sleep during the restart", e));
+    child.unref();
+  };
+}
+
+/** the environment for the replacement: carries the hold when there was one, and never a stale one */
+export function carryEnv(env: NodeJS.ProcessEnv, held: boolean): NodeJS.ProcessEnv {
+  const { [CARRIED_ENV]: _stale, ...rest } = env;
+  return held ? { ...rest, [CARRIED_ENV]: "1" } : rest;
 }
 
 export class KeepAwake {
@@ -74,6 +112,14 @@ export class KeepAwake {
   constructor(private d: KeepAwakeDeps) {
     this.waitMs = d.waitMs ?? WAIT_MS;
     this.now = d.now ?? Date.now;
+    // a restart dropped every device's socket at once, the same as each of them leaving now
+    if (d.carried && d.assert) {
+      this.remoteLeftAt = this.now();
+      log.info(
+        "awake",
+        `the last daemon was holding off idle sleep; holding on for ${humanMs(this.waitMs)} unless a device comes back`,
+      );
+    }
     d.hub.on("agentStatus", (_id, status) => {
       // each question is waited on for the full window, whatever else was already waiting
       if (status === "waiting") this.waitingAt = this.now();
@@ -100,11 +146,15 @@ export class KeepAwake {
     this.reconsider();
   }
 
-  /** the daemon is going down: nothing to hold any more */
-  stop(): void {
+  /** the daemon is going down: nothing to hold any more. Answers whether it was holding. With
+   * `handoff`, a replacement is coming: a hold in place is bridged until it can take its own. */
+  stop(opts: { handoff?: boolean } = {}): boolean {
+    const held = this.release !== null;
     this.gone = true;
     this.disarm();
+    if (held && opts.handoff) this.d.bridge?.(BRIDGE_MS);
     this.hold(false);
+    return held;
   }
 
   private reconsider(): void {

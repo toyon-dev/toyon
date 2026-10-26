@@ -55,6 +55,10 @@ export type SwipeHandlers = {
   /** the first move decided a way: mount what stands beside the screen that way and name the
    * track that slides for it, or say there is nothing, in which case the touch is let go */
   take: (target: Element, way: Way) => HTMLElement | null;
+  /** the finger let go and the track is settling: in, when the swipe went through, or back. Said
+   * at once, so what else moves with the screen (the control's pill) sets off with the settle
+   * rather than after it. */
+  onSettle?: (went: boolean) => void;
   /** the track is at rest again: the swipe went through (the screen is to change), or dropped back.
    * Called inside a flushSync, so the screen the frame draws for the answer lands in the same
    * frame as the track's reset. */
@@ -157,6 +161,7 @@ export function useSwipe(root: RefObject<HTMLElement | null>, handlers: SwipeHan
       clear();
       if (!w) return;
       put(went ? (w === "left" ? -width : width) : 0, "settle");
+      h.current.onSettle?.(went);
       timer = window.setTimeout(() => {
         flushSync(() => h.current.onEnd(went));
         rest();

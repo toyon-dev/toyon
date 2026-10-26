@@ -220,37 +220,26 @@ describe("phone history", () => {
     expect(store.getState().screen).toBe("home");
   });
 
-  test("back from another tab returns to the chat, and then to the list", () => {
+  test("back from any face leaves the worktree for the list", () => {
     const { store } = storeOf(phone());
     const t = tab();
     installPhoneHistory(store, t.host);
     store.dispatch({ a: "screen", to: "chat" });
     store.dispatch({ a: "screen", to: "changes" });
-    expect(t.depths()).toEqual([-1, 0, 1, 2]);
-    t.back();
-    expect(store.getState().screen).toBe("chat");
+    expect(t.depths()).toEqual([-1, 0, 1]);
     t.back();
     expect(store.getState().screen).toBe("home");
   });
 
-  test("the tabs beside the chat share one entry", () => {
+  test("the faces share the worktree's one entry", () => {
     const { store } = storeOf(phone());
     const t = tab();
     installPhoneHistory(store, t.host);
     store.dispatch({ a: "screen", to: "changes" });
     store.dispatch({ a: "screen", to: "preview" });
-    store.dispatch({ a: "screen", to: "changes" });
-    expect(t.depths()).toEqual([-1, 0, 1, 2]);
-    expect(t.index()).toBe(3);
-  });
-
-  test("the chat tab picked by hand walks the other tab's entry down", () => {
-    const { store } = storeOf(phone());
-    const t = tab();
-    installPhoneHistory(store, t.host);
-    store.dispatch({ a: "screen", to: "changes" });
     store.dispatch({ a: "screen", to: "chat" });
     t.settle();
+    expect(t.depths()).toEqual([-1, 0, 1]);
     expect(t.index()).toBe(2);
     expect(store.getState().screen).toBe("chat");
     t.back();
@@ -278,17 +267,15 @@ describe("phone history", () => {
     expect(t.depths()).toEqual([-1, 0, 1]);
   });
 
-  test("back from a diff shuts it onto the tab it came from", () => {
+  test("back from a diff shuts it onto the face it came from", () => {
     const { store, set } = storeOf(phone({ screen: "changes" }));
     const t = tab();
     installPhoneHistory(store, t.host);
     set({ ...store.getState(), editor: {} as State["editor"] });
-    expect(t.depths()).toEqual([-1, 0, 1, 2, 3]);
+    expect(t.depths()).toEqual([-1, 0, 1, 2]);
     t.back();
     expect(store.getState().editor).toBeNull();
     expect(store.getState().screen).toBe("changes");
-    t.back();
-    expect(store.getState().screen).toBe("chat");
     t.back();
     expect(store.getState().screen).toBe("home");
   });
@@ -460,21 +447,19 @@ describe("phone history", () => {
     expect(t.index()).toBe(1);
   });
 
-  test("on the preview tab a swipe walks the app back first", () => {
+  test("on the app's face a swipe walks the app back first", () => {
     const { store } = storeOf(phone({ screen: "preview" }));
     const t = tab();
     installPhoneHistory(store, t.host, undefined, t.frames);
     t.appPush();
-    expect(t.depths()).toEqual([-1, 0, 1, 2, "app"]);
+    expect(t.depths()).toEqual([-1, 0, 1, "app"]);
     t.back();
     expect(store.getState().screen).toBe("preview");
-    t.back();
-    expect(store.getState().screen).toBe("chat");
     t.back();
     expect(store.getState().screen).toBe("home");
   });
 
-  test("the chat tab picked over an app that navigated walks the app's entries first", () => {
+  test("the chat picked over an app that navigated leaves its entries, and the next swipe walks them all", () => {
     const { store } = storeOf(phone({ screen: "preview" }));
     const t = tab();
     installPhoneHistory(store, t.host, undefined, t.frames);
@@ -482,10 +467,12 @@ describe("phone history", () => {
     t.appPush();
     store.dispatch({ a: "screen", to: "chat" });
     t.settle();
-    expect(t.index()).toBe(2);
+    expect(t.index()).toBe(4);
     expect(store.getState().screen).toBe("chat");
     t.back();
     expect(store.getState().screen).toBe("home");
+    t.settle();
+    expect(t.index()).toBe(1);
   });
 
   test("forward into the hidden app's entry moves nothing", () => {
@@ -522,15 +509,15 @@ describe("phone history", () => {
   });
 
   test("nothing is laid while a step down waits on its answer", () => {
-    const { store } = storeOf(phone({ screen: "changes" }));
+    const { store, set } = storeOf(phone({ screen: "changes", editor: {} as State["editor"] }));
     const t = tab();
     installPhoneHistory(store, t.host, undefined, t.frames);
     t.appPush();
-    store.dispatch({ a: "screen", to: "chat" });
-    store.dispatch({ a: "screen", to: "changes" });
+    set({ ...store.getState(), editor: null });
+    set({ ...store.getState(), editor: {} as State["editor"] });
     expect(t.depths()).toEqual([-1, 0, 1, 2, "app"]);
     t.settle();
     expect(t.index()).toBe(3);
-    expect(store.getState().screen).toBe("changes");
+    expect(store.getState().editor).not.toBeNull();
   });
 });

@@ -84,6 +84,9 @@ export function PhoneFrame() {
   const machines = useMachines();
   /** the neighbour mounted beside the screen for the length of a drag */
   const [aside, setAside] = useState<Screen | null>(null);
+  /** the face the finger let go toward, while the track is still settling in: the pill sets off
+   * for it now, with the face, where waiting for the screen to change left it a beat behind */
+  const [heading, setHeading] = useState<Screen | null>(null);
 
   // the socket being down wins over everything, and having no project at all comes next: the same
   // two sentences the centre says, and the only two of its that are not about a preview
@@ -135,9 +138,13 @@ export function PhoneFrame() {
       // back to the list the page goes, bar and all; to another face only the face
       return (to === "home" ? pageRef : facesRef).current;
     },
+    onSettle: (went) => {
+      if (went && aside) setHeading(aside);
+    },
     onEnd: (went) => {
       if (went && aside) dispatch({ a: "screen", to: aside });
       setAside(null);
+      setHeading(null);
     },
   });
 
@@ -158,7 +165,9 @@ export function PhoneFrame() {
             owner="phone-tabs"
             label="worktree"
             items={tabs}
-            current={f}
+            // the pill is on the face the finger is settling toward before the screen is; the
+            // list is no face, and a settle toward it moves the whole bar instead
+            current={heading && heading !== "home" ? heading : f}
             onPick={(to) => dispatch({ a: "screen", to })}
           />
         )

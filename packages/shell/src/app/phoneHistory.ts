@@ -1,5 +1,5 @@
 import type { Store } from "../state/context.tsx";
-import { archivedPageOf, isChatCentred, rowById, type State, worktreeById } from "../state/store.ts";
+import { archivedPageOf, rowById, type State } from "../state/store.ts";
 import { type Entry, type FloatStack, floats } from "../ui/floats.ts";
 
 /**
@@ -8,12 +8,12 @@ import { type Entry, type FloatStack, floats } from "../ui/floats.ts";
  * leaves Toyon for whatever the tab held before it, and a tab opened from a home-screen icon held nothing:
  * a blank page.
  *
- * The screens stack four deep: the list, a worktree's chat over it, another of its tabs over the
- * chat, and a file's diff over whichever tab it opened from. Each level stands on an entry of its
- * own, marked with its depth, so going back is the browser moving one entry down and this module
- * closing whatever stands above the entry it landed on. A worktree opens on its chat, so the chat
- * is what back from another tab returns to; the other tabs share one level between them, because
- * moving from one to the other is a choice of what to look at, not somewhere the person went.
+ * The screens stack three deep: the list, a worktree over it, and a file's diff over whichever of
+ * the worktree's faces it opened from. Each level stands on an entry of its own, marked with its
+ * depth, so going back is the browser moving one entry down and this module closing whatever
+ * stands above the entry it landed on. A worktree's faces (chat, app, code) share its one level,
+ * because moving between them is a choice of what to look at, made on the control or by a drag
+ * across the screen, not somewhere the person went: back from any face leaves the worktree.
  *
  * The list stands on an entry of its own too, over a floor: the entry the page arrived on, which
  * is the tab's first in an installed app. Back from the list lands on the floor, and the list's
@@ -60,10 +60,7 @@ export function depthOf(s: State): number | null {
   // a row toyon does not own has a page of its own, as an archived one has
   const onWorktree = s.screen !== "home" && (rowById(s, s.activeId) !== null || archivedPageOf(s) !== null);
   if (!onWorktree) return 0;
-  // the tab PhoneFrame draws: a preview the row has none of is its chat
-  const previewed = worktreeById(s, s.activeId) !== null && !isChatCentred(s) && archivedPageOf(s) === null;
-  const offChat = s.screen === "changes" || (s.screen === "preview" && previewed);
-  return 1 + (offChat ? 1 : 0) + (s.editor ? 1 : 0);
+  return 1 + (s.editor ? 1 : 0);
 }
 
 export interface HistoryHost {
@@ -184,9 +181,9 @@ export function installPhoneHistory(
       boxes.shut(box);
       return;
     }
-    // the diff shuts onto the tab under it (a move to the tab already open does that), below
-    // another tab is the chat, and below the chat is the list
-    const to = landed === 0 ? "home" : s.editor && landed === screens - 1 ? s.screen : "chat";
+    // the diff shuts onto the face under it (a move to the face already open does that), and
+    // below the worktree is the list
+    const to = landed === 0 ? "home" : s.screen;
     store.dispatch({ a: "screen", to });
   };
 
@@ -234,7 +231,7 @@ export function installPhoneHistory(
     const screens = depthOf(s);
     if (screens === null || screens === 0) return;
     // on its own tab the app's history is the person's to walk, the way it is in a tab of its own
-    const shown = s.screen === "preview" && !s.editor && screens === 2;
+    const shown = s.screen === "preview" && !s.editor && screens === 1;
     if (shown || walk.dir === "forward") return;
     // a swipe spent on a frame nobody is looking at: the screen it was meant for drops a level, and
     // the sync that follows walks the shell's entry down to match

@@ -11,10 +11,14 @@ export const sideOf = (from: Screen, to: Screen): "left" | "right" =>
 
 /** The screen a swipe `way` from `from` reaches, or null for nothing that way. A finger moving
  * right pulls in the screen to the left. The preview is in the line only while the worktree has
- * one; nothing is left of the list, and nothing right of the code. The list itself is never left
- * by a swipe: a row's own slide owns the sideways move there. */
-export function swipeTo(from: Screen, way: Way, previewed: boolean): Screen | null {
-  if (from === "home") return null;
+ * one; nothing is left of the list, and nothing right of the code. The list is left by a swipe
+ * only for `back`, the face it just came from (backFace): otherwise a row's own slide owns the
+ * sideways move there. */
+export function swipeTo(from: Screen, way: Way, previewed: boolean, back: Screen | null = null): Screen | null {
+  if (from === "home") {
+    if (way !== "left" || !back || back === "home") return null;
+    return back === "preview" && !previewed ? "chat" : back;
+  }
   const line = FACES.filter((f) => f !== "preview" || previewed);
   const at = line.indexOf(from);
   if (at < 0) return null;

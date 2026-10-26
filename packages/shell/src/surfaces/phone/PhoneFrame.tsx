@@ -3,7 +3,7 @@ import { framedNow } from "../../app/phone.ts";
 import { useDispatch, useMachine, useMachines, useStore, useUrls } from "../../state/context.tsx";
 import { openPreview, previewsGated } from "../../state/previewGrant.ts";
 import { useActive, useArchivedPage, useChatCentred, useFoundPage, useTouch } from "../../state/selectors.ts";
-import type { Screen } from "../../state/store.ts";
+import { backFace, type Screen } from "../../state/store.ts";
 import { IconButton } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { useVisibleHeight, useZoomMark } from "../../ui/hooks.ts";
@@ -71,6 +71,7 @@ export function PhoneFrame() {
   const archivedPage = useArchivedPage();
   const foundPage = useFoundPage();
   const editor = useStore((s) => s.editor);
+  const left = useStore((s) => s.left);
   const remote = useStore((s) => s.remote);
   const chatCentred = useChatCentred();
   const connected = useStore((s) => s.connected);
@@ -106,9 +107,13 @@ export function PhoneFrame() {
   // a row that went while its screen was open (archived from the desk, or removed) leaves the
   // screen pointing at nothing; the list is where that lands
   const onWorktree = screen !== "home" && (active !== null || archivedPage !== null || foundPage !== null);
+  // the worktree the list just came from, mounted beside it for a drag back in (faces.ts): the
+  // row is still the active one, so its page is the same page, on the face it was left on
+  const returning = !onWorktree && aside !== null && aside !== "home";
   // the app is the worktree's own, running: a project with nothing to run has no app, and an
   // archived worktree's page is about work that no longer runs
-  const previewed = onWorktree && !chatCentred && !archivedPage ? active : null;
+  const previewable = !chatCentred && !archivedPage ? active : null;
+  const previewed = onWorktree || returning ? previewable : null;
   const { host } = useUrls();
   const url = previewed ? previewUrl(previewed.worktree.id, previewed.worktree.proxyPort, remote, host) : null;
   // the tab under the strip's mark: a preview the row has none of falls back to its chat
@@ -128,15 +133,22 @@ export function PhoneFrame() {
   const keepPreview = previewed !== null && url !== null;
 
   const onFrameTouch = useSwipe(SWIPES ? rootRef : NO_ROOT, {
-    take: (_target, way) => {
-      // the list, a diff, the sentence, the updated card: no swipe; and never a second neighbour
-      // while one is still beside the screen (a drop-back's settle has not called onEnd yet)
-      if (shown.kind !== "tab" || aside !== null) return null;
-      const to = swipeTo(shown.tab, way, keepPreview);
+    take: (target, way) => {
+      // a diff, the sentence, the updated card: no swipe; the list only for the moment it can go
+      // back; and never a second neighbour while one is still beside the screen (a drop-back's
+      // settle has not called onEnd yet)
+      if (aside !== null) return null;
+      const from = shown.kind === "tab" ? shown.tab : shown.kind === "home" ? "home" : null;
+      if (!from) return null;
+      const back = from === "home" ? backFace({ left }, Date.now()) : null;
+      // a touch moving left out of a row of the list is the row's ladder, except in the moment the
+      // list can go back, when the rail refuses it (Rail) and the page takes it
+      if (way === "left" && !back && target.closest(".slide")) return null;
+      const to = swipeTo(from, way, previewable !== null, back);
       if (!to) return null;
       setAside(to);
-      // back to the list the page goes, bar and all; to another face only the face
-      return (to === "home" ? pageRef : facesRef).current;
+      // between the list and the worktree the page goes, bar and all; to another face only the face
+      return (to === "home" || from === "home" ? pageRef : facesRef).current;
     },
     onSettle: (went) => {
       if (went && aside) setHeading(aside);
@@ -155,7 +167,8 @@ export function PhoneFrame() {
       screen={f === "home" ? "home" : "chat"}
       beside={beside}
       fold={f !== "chat" || editor !== null}
-      away={aside !== null && aside !== "home"}
+      // the bar of a page coming back in is already on its face; nothing is leaving it
+      away={!beside && aside !== null && aside !== "home"}
       tabs={
         f !== "home" &&
         say === null && (
@@ -242,9 +255,9 @@ export function PhoneFrame() {
                 {!onWorktree && face === null ? cover : <Rail placement="screen" />}
               </div>
             )}
-            {onWorktree && (
-              <div key="worktree" className="phone-face">
-                {bar(tab, false)}
+            {(onWorktree || returning) && (
+              <div key="worktree" className="phone-face" data-side={returning ? "right" : undefined}>
+                {bar(returning && aside ? aside : tab, returning)}
                 <div className="phone-track" ref={facesRef}>
                   {/* what covers the faces: the updated card, the sentence, or a file opened from
                       the changes list or from a tool row in the chat, the diff over whichever face
@@ -258,7 +271,9 @@ export function PhoneFrame() {
                   )}
                   {FACES.map((f) => {
                     if (f === "home") return null;
-                    const current = f === face;
+                    // on a page coming back in beside the list, the face it was left on is the
+                    // page's own face: the whole page stands aside, not the face within it
+                    const current = returning ? f === aside : f === face;
                     // a neighbour is never the face itself: the store can move under a drag (the
                     // row going, a popstate from the system's edge-back), and a face marked as its
                     // own neighbour would stand a full width off the screen

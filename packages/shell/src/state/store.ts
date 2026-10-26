@@ -852,6 +852,11 @@ export interface State {
    * only across a reload of this tab (App.tsx): the tab is where you are, not a setting, and the
    * row you were last on is remembered already. */
   screen: Screen;
+  /** The worktree face the list was reached from, and when. For a moment after a swipe back lands
+   * on the list a thumb's return stroke is often not meant for a row; within BACK_MS a leftward
+   * swipe on the list slides that face back in (PhoneFrame) and no row slides (Rail). Only the
+   * way back writes it: a row going out from under its screen leaves nothing to return to. */
+  left: { face: Screen; at: number } | null;
   /** Which frame this window draws (app/phone.ts). The panels a project remembers are the desk's
    * layout, so `reducer` writes them only while this is the desk, whatever action moved a flag: a
    * row menu or the palette reached from the phone can flip one, and the desk must not inherit it. */
@@ -1088,6 +1093,7 @@ export function initialState(opts: InitialOpts): State {
     // row alone does not say it was read: one is stored the whole time, the row hello lands on
     // before anything is chosen included
     screen: opts.storedActive && opts.storedPhoneRow ? "chat" : "home",
+    left: null,
     frame: opts.frame ?? "desk",
     touch: opts.touch ?? false,
     reading: false,
@@ -1510,6 +1516,17 @@ export function foundPageOf(s: Pick<State, "rows" | "activeId" | "archivedPage">
 export function whatsNew(s: Pick<State, "version" | "ranBefore" | "notesSeen">): string | null {
   if (s.notesSeen || s.ranBefore === null || !newer(s.version, s.ranBefore)) return null;
   return s.version;
+}
+
+/** how long after the list arrives from a worktree a leftward swipe on it is the way back there
+ * rather than a row's slide: long enough for a hand to see it went back by mistake, short enough
+ * that a row swiped on purpose is never kept waiting for long */
+export const BACK_MS = 1500;
+
+/** the worktree face a leftward swipe on the list returns to at `now`, or null once the moment
+ * for it has passed and the rows own the gesture again */
+export function backFace(s: Pick<State, "left">, now: number): Screen | null {
+  return s.left && now - s.left.at < BACK_MS ? s.left.face : null;
 }
 
 export function archivedPageOf(s: Pick<State, "archivedPage" | "activeRepoId" | "archived">): ArchivedWorktree | null {
@@ -2436,6 +2453,7 @@ function reduce(s: State, action: Action): State {
         ...(action.to === "changes" && s.screen !== "changes" ? withLayout(s, { changesTab: "changes" }) : s),
         screen: action.to,
         editor: null,
+        left: action.to === "home" && s.screen !== "home" ? { face: s.screen, at: Date.now() } : s.left,
       };
     case "frame": {
       if (s.frame === action.v) return s;

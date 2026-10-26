@@ -22,6 +22,8 @@ import { snapshotOf } from "./snapshot.ts";
 import {
   type Action,
   asksSetup,
+  BACK_MS,
+  backFace,
   changesTabShown,
   changesTabStep,
   type Draft,
@@ -247,6 +249,25 @@ describe("the phone's screen", () => {
     expect(pick(at(wt("main", "main"), wt("a")), "a")).toBe("chat");
     expect(pick(at(wt("main", "main"), { ...wt("a"), agent: "waiting" }), "a")).toBe("chat");
     expect(pick(at(wt("main", "main"), wt("a")), "main")).toBe("chat");
+  });
+
+  test("the way back to the list remembers the face it left, for a moment", () => {
+    try {
+      setSystemTime(new Date(1000));
+      const on = run([hello(wt("main", "main"), wt("a")), { a: "activate", id: "a" }, { a: "screen", to: "changes" }]);
+      expect(backFace(on, 1000)).toBe(null);
+      const back = run([{ a: "screen", to: "home" }], on);
+      expect(back.left).toEqual({ face: "changes", at: 1000 });
+      expect(backFace(back, 1000 + BACK_MS - 1)).toBe("changes");
+      expect(backFace(back, 1000 + BACK_MS)).toBe(null);
+      // the list asked for again writes nothing new: there is no face under it to return to
+      setSystemTime(new Date(5000));
+      expect(run([{ a: "screen", to: "home" }], back).left).toEqual({ face: "changes", at: 1000 });
+      // a row going out from under its screen is not a way back
+      expect(run([{ a: "archive-worktrees", ids: ["a"] }], { ...on, frame: "phone" }).left).toBe(null);
+    } finally {
+      setSystemTime();
+    }
   });
 
   test("a worktrees frame does not, though it re-asserts the selection", () => {

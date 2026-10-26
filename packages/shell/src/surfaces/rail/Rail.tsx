@@ -25,7 +25,7 @@ import {
   useVisibleDiscovered,
   useVisibleWorktrees,
 } from "../../state/selectors.ts";
-import { asksSetup, guestOf, isDrafted, trunkOf } from "../../state/store.ts";
+import { asksSetup, backFace, guestOf, isDrafted, trunkOf } from "../../state/store.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
 import { Icon } from "../../ui/Icon.tsx";
 import { useContextMenu, useMenu } from "../../ui/menu.ts";
@@ -278,9 +278,12 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
   // row as it is let go.
   const [slide, setSlide] = useState<{ key: string; step: number } | null>(null);
   const ladderOf = (w: WorktreeStatus) => (isOwned(w) ? slideLadder(rowItems(w)) : []);
+  // for a moment after the list arrived from a worktree, a leftward swipe is the way back there
+  // (PhoneFrame) and no row's: a thumb's return stroke off the swipe back was archiving rows
+  const left = useStore((s) => s.left);
   useSlide(listRef, {
     rowOf: (target) => {
-      if (!onScreen || graftMode) return null;
+      if (!onScreen || graftMode || backFace({ left }, Date.now())) return null;
       const el = target.closest<HTMLElement>(".slide");
       const key = el?.dataset.row;
       const w = key ? worktrees.find((x) => x.id === key) : undefined;

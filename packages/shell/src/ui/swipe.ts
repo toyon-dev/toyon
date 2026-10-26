@@ -77,8 +77,8 @@ export type SwipeHandlers = {
  * touch-action chain at the nearest scroller (Chrome, Gecko) the browser has taken such a drag
  * natively and cancelled the pointer before this is reached, and on WebKit, which intersects
  * touch-action all the way up and so lets the screen's `pan-y` reach the box, this is what keeps
- * the box scrollable, without inertia. A touch moving left out of a `.slide` row is the row's
- * ladder; one such a row refuses is then nobody's.
+ * the box scrollable, without inertia. Whose a touch moving out of a row that slides on its own is
+ * (the row's ladder, or the track's) is `take`'s to say, by the target it is handed.
  *
  * A finger on an app's frame in the column is never seen here: the frame keeps every touch that
  * starts on it. Its bridge reports the ones the app leaves alone (FrameTouch), and the function
@@ -202,7 +202,6 @@ export function useSwipe(root: RefObject<HTMLElement | null>, handlers: SwipeHan
           if (e) capture(e);
           return;
         }
-        if (w === "left" && target.closest(".slide")) return clear();
         const t = h.current.take(target, w);
         if (!t) return clear();
         track = t;

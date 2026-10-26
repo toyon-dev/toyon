@@ -21,9 +21,16 @@ describe("the screen a swipe reaches", () => {
   test("nothing is right of the code", () => {
     expect(swipeTo("changes", "left", true)).toBe(null);
   });
-  test("the list is never left by a swipe", () => {
+  test("the list is not left by a swipe on its own", () => {
     expect(swipeTo("home", "left", true)).toBe(null);
     expect(swipeTo("home", "right", true)).toBe(null);
+  });
+  test("left from the list goes back to the face it just came from", () => {
+    expect(swipeTo("home", "left", true, "changes")).toBe("changes");
+    expect(swipeTo("home", "left", true, "preview")).toBe("preview");
+    expect(swipeTo("home", "left", false, "preview")).toBe("chat");
+    expect(swipeTo("home", "right", true, "chat")).toBe(null);
+    expect(swipeTo("home", "left", true, "home")).toBe(null);
   });
 });
 

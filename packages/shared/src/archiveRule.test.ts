@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { type ArchiveFacts, archiveParts, archiveReason } from "./archiveRule.ts";
+import { type ArchiveFacts, archiveParts, archiveReason, heldBy } from "./archiveRule.ts";
 import type { WorktreeInfo } from "./model.ts";
 
 const HOUR = 60 * 60_000;
@@ -81,6 +81,37 @@ describe("archiveReason", () => {
     expect(archiveReason(old, facts(rows, { counts: () => ({ dirty: 1, ahead: 0 }) }))).toBeNull();
     expect(archiveReason(old, facts(rows, { counts: () => ({ dirty: 0, ahead: 2 }) }))).toBeNull();
     expect(archiveReason(old, facts(rows, { counts: () => ({}) }))).toBeNull();
+  });
+});
+
+describe("what a row holds", () => {
+  test("nothing, for a finished, read, clean task with an idle agent and an empty box", () => {
+    expect(heldBy(task("t", 1), facts([]))).toBeNull();
+  });
+
+  test("each fact in the words a question says, the concrete ones first", () => {
+    const t = task("t", 1);
+    expect(heldBy(t, facts([], { counts: () => ({}) }))).toBe("its changes are not counted yet");
+    expect(heldBy(t, facts([], { counts: () => ({ dirty: 2, ahead: 0 }) }))).toBe("it has uncommitted changes");
+    expect(heldBy(t, facts([], { counts: () => ({ dirty: 0, ahead: 1 }) }))).toBe("it has commits not on main");
+    expect(heldBy(t, facts([], { drafted: () => true }))).toBe("unsent text waits in its composer");
+    expect(heldBy(t, facts([], { pending: () => true }))).toBe("its agent is still busy");
+    const ended = (end: "stopped" | "failed" | "asking") =>
+      task("t", 1, { lastTurn: { at: 1, end, facts: { turns: 1, edits: 0, toolErrors: 0 } } });
+    expect(heldBy(task("t", 1, { lastTurn: undefined }), facts([]))).toBe("its agent has not run yet");
+    expect(heldBy(ended("stopped"), facts([]))).toBe("its last turn was stopped");
+    expect(heldBy(ended("failed"), facts([]))).toBe("its last turn failed");
+    expect(heldBy(ended("asking"), facts([]))).toBe("its agent is waiting on an answer");
+    expect(heldBy(task("t", 1, { seenAt: 0 }), facts([]))).toBe("its last reply is unread");
+    expect(heldBy(task("t", 1, { unread: true }), facts([]))).toBe("its last reply is unread");
+    expect(heldBy(task("t", 1, { planned: true }), facts([]))).toBe("it showed a plan");
+    expect(heldBy(task("t", 1, { pr: { number: 1, url: "u", state: "open", at: 0 } }), facts([]))).toBe(
+      "its pull request is still open",
+    );
+    // git work outranks the rest: it is the one thing the question used to be about
+    expect(heldBy(ended("failed"), facts([], { counts: () => ({ dirty: 1, ahead: 0 }) }))).toBe(
+      "it has uncommitted changes",
+    );
   });
 });
 

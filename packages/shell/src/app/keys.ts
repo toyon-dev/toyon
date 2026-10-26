@@ -17,6 +17,7 @@ import {
   changesTabStep,
   chatChordAction,
   isChatCentred,
+  isDrafted,
   isFirstRun,
   localOf,
   previewIdOf,
@@ -165,7 +166,7 @@ export function useChords() {
             // (the composer dropping an attachment) is spent.
             if (e.repeat || claimed) break;
             const w = s.draft || s.archivedPage ? undefined : s.visible.find((w) => w.id === s.activeId);
-            if (w) worktreeActions(sock, dispatch).archive(w);
+            if (w) worktreeActions(sock, dispatch, (id) => isDrafted(s, id)).archive(w);
             break;
           }
           case "new":

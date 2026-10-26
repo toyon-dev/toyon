@@ -6,6 +6,7 @@ import {
   canRename,
   canSync,
   describeLand,
+  heldBy,
   isBusy,
   isLead,
   isMain,
@@ -39,9 +40,20 @@ export function shipOp(sock: DaemonSocket | null, dispatch: Dispatch, msg: Extra
   sock?.send(msg);
 }
 
-/** uncommitted files or commits ahead of main, or counts not in yet, which could be either: the
- * worktrees whose archive still asks first */
-const hasWork = (w: WorktreeStatus) => w.dirty === undefined || w.ahead === undefined || w.dirty > 0 || w.ahead > 0;
+/** whether words or an attachment wait in a worktree's composer, read off the store when asked:
+ * a menu is built as it opens, so the reading is taken then and nothing re-renders per keystroke */
+export type Drafted = (id: string) => boolean;
+
+/** What the row holds that its archive should ask about first, in the words the question uses,
+ * or null: the one rule the daemon's sweep reads before archiving a row of its own accord, so a
+ * press never takes away what the sweep would have kept. The daemon's "busy" is an agent not idle
+ * or still owed something; here that is the status, a queue behind the turn, or a landing op out. */
+const heldOf = (w: OwnedWorktree, drafted: Drafted): string | null =>
+  heldBy(w.worktree, {
+    pending: () => w.agent !== "idle" || (w.queued ?? 0) > 0 || !!w.shipping,
+    drafted,
+    counts: () => ({ dirty: w.dirty, ahead: w.ahead }),
+  });
 
 /** send the archives and take the rows off screen in the same breath: the daemon confirms by
  * dropping them from its next snapshot, or an error frame puts them back, the reason on the row's chat */
@@ -60,7 +72,7 @@ export function markUnread(sock: DaemonSocket | null, dispatch: Dispatch, id: st
 
 /** confirm-then-send worktree actions: the rail's badges reach these directly, the menu and the
  * palette through `worktreeItems` */
-export function worktreeActions(sock: DaemonSocket | null, dispatch: Dispatch) {
+export function worktreeActions(sock: DaemonSocket | null, dispatch: Dispatch, drafted: Drafted) {
   return {
     rename(w: OwnedWorktree) {
       if (!canRename(w.worktree)) return;
@@ -84,17 +96,18 @@ export function worktreeActions(sock: DaemonSocket | null, dispatch: Dispatch) {
     },
     archive(w: OwnedWorktree) {
       if (!canArchive(w.worktree)) return;
-      // nothing written: the rail's archived section brings the chat back, so there is nothing to ask
-      if (!hasWork(w)) return archiveWorktrees(sock, dispatch, [w.worktree.id]);
+      const held = heldOf(w, drafted);
+      // nothing held: the rail's archived section brings the chat back, so there is nothing to ask
+      if (!held) return archiveWorktrees(sock, dispatch, [w.worktree.id]);
       const ok = window.confirm(
-        `Archive worktree "${w.worktree.title}"?\n\nIts directory and branch (${w.worktree.branch}) go. The chat, the commits and any uncommitted changes are kept, and the project menu can restore it.`,
+        `Archive worktree "${w.worktree.title}"? ${held[0]?.toUpperCase()}${held.slice(1)}.\n\nIts directory and branch (${w.worktree.branch}) go. The chat, its draft, the commits and any uncommitted changes are kept, and the project menu can restore it.`,
       );
       if (ok) archiveWorktrees(sock, dispatch, [w.worktree.id]);
     },
   };
 }
 
-export type WorktreeItemState = Pick<State, "layout" | "shipping" | "frame" | "repos">;
+export type WorktreeItemState = Pick<State, "layout" | "shipping" | "frame" | "repos"> & { drafted: Drafted };
 
 /** Everything a worktree of ours can do, in the order the rail's menu shows it; the palette reads
  * the same list with the title appended. `graft` is the rail's own multi-select, so only the rail
@@ -112,7 +125,7 @@ export function worktreeItems(
   ui: { graft?: (id: string) => void; hostname: string; palette?: boolean },
 ): MenuEntry[] {
   const id = w.worktree.id;
-  const acts = worktreeActions(sock, dispatch);
+  const acts = worktreeActions(sock, dispatch, s.drafted);
   // six groups, in the order they are reached for: what is going on now (stop, the changes
   // written), what it is (its branch and its directory), change it, ship it (sync, land, hand
   // on), run it, and remove on its own. The first group comes and goes with the row's state, so
@@ -250,7 +263,7 @@ export function worktreeItems(
   if (canArchive(w.worktree)) {
     gone.push({
       id: "archive",
-      label: hasWork(w) ? "archive…" : "archive",
+      label: heldOf(w, s.drafted) ? "archive…" : "archive",
       key: chord("wt-archive"),
       danger: true,
       onClick: () => acts.archive(w),

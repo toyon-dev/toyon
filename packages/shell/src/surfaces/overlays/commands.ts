@@ -13,10 +13,26 @@ import { machineItems } from "../../state/actions/machine.ts";
 import { procItems } from "../../state/actions/proc.ts";
 import { projectItems } from "../../state/actions/project.ts";
 import { settingsItems } from "../../state/actions/settings.ts";
-import { worktreeItems } from "../../state/actions/worktree.ts";
-import { useDispatch, useMachines, useOtherMachines, useSock, useStore, useUrls } from "../../state/context.tsx";
+import { type Drafted, worktreeItems } from "../../state/actions/worktree.ts";
+import {
+  useDispatch,
+  useMachines,
+  useOtherMachines,
+  useSock,
+  useStore,
+  useStoreInstance,
+  useUrls,
+} from "../../state/context.tsx";
 import type { OtherMachine } from "../../state/machines.ts";
-import { type Action, isChatCentred, previewReload, repoById, type State, worktreeById } from "../../state/store.ts";
+import {
+  type Action,
+  isChatCentred,
+  isDrafted,
+  previewReload,
+  repoById,
+  type State,
+  worktreeById,
+} from "../../state/store.ts";
 import { isItem, type MenuEntry } from "../../ui/menu.ts";
 import type { DaemonSocket } from "../../ws.ts";
 import { chord, rowLabel } from "../util.ts";
@@ -173,12 +189,16 @@ export type CommandState = Pick<
 > & {
   /** where the page is open: a worktree's editor and Finder rows only exist on the daemon's machine */
   hostname: string;
+  /** whether a worktree's box holds words or an attachment, read as a row is built and not held
+   * as a field: the boxes change per keystroke, and that is no reason to rebuild the list */
+  drafted: Drafted;
 };
 
 export function useCommands(): Command[] {
   const dispatch = useDispatch();
   const sock = useSock();
   const { host } = useUrls();
+  const store = useStoreInstance();
   const machines = useMachines();
   const others = useOtherMachines();
   const picking = useStore((s) => s.picking);
@@ -238,6 +258,7 @@ export function useCommands(): Command[] {
       knocks,
       tailscale,
       hostname: host,
+      drafted: (id) => isDrafted(store.getState(), id),
     };
     const cross: CrossMachine = {
       machines: others,
@@ -282,6 +303,7 @@ export function useCommands(): Command[] {
     dispatch,
     sock,
     host,
+    store,
     machines,
     others,
   ]);

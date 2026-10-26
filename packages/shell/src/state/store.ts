@@ -1162,6 +1162,12 @@ export function localOf(s: State, id: string | null | undefined): WorktreeLocal 
   return (id && s.local[id]) || EMPTY_LOCAL;
 }
 
+/** written in: words, or something attached. The same reading the daemon takes of its box. */
+export function isDrafted(s: State, id: string): boolean {
+  const l = localOf(s, id);
+  return l.draft.trim() !== "" || l.attachments.length > 0;
+}
+
 /** any row by id, owned or not. Reads only the rows, so the app menu and the palette can ask with
  * the state they already hold. */
 export function rowById(s: Pick<State, "rows">, id: string | null | undefined): WorktreeStatus | null {

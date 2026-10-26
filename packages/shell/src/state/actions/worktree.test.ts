@@ -2,8 +2,9 @@ import { describe, expect, test } from "bun:test";
 import type { OwnedWorktree, WorktreeInfo, WorktreeStatus } from "@toyon/shared";
 import { isItem, type MenuEntry } from "../../ui/menu.ts";
 import { defaultLayout } from "../store.ts";
-import { discoveredItems, worktreeItems } from "./worktree.ts";
+import { discoveredItems, worktreeActions, worktreeItems } from "./worktree.ts";
 
+/** a task whose last turn finished and was read: the quiet row, which an archive asks nothing of */
 const info: WorktreeInfo = {
   id: "w1",
   repoId: "r",
@@ -13,6 +14,8 @@ const info: WorktreeInfo = {
   kind: "worktree",
   proxyPort: 1,
   createdAt: 0,
+  lastTurn: { at: 1, end: "done", facts: { turns: 1, edits: 0, toolErrors: 0 } },
+  seenAt: 2,
 };
 
 const owned = (over: Partial<OwnedWorktree> = {}): OwnedWorktree =>
@@ -48,7 +51,7 @@ describe("a worktree's actions", () => {
       defaultBranch: "main",
       config: { run: {}, land: { route: "pr" } },
     } as never;
-    const state = { layout: defaultLayout, shipping: {}, frame: "desk" as const, repos: [] };
+    const state = { layout: defaultLayout, shipping: {}, frame: "desk" as const, repos: [], drafted: () => false };
     const word = (items: MenuEntry[]) => items.filter(isItem).find((i) => i.id === "land")?.label;
     expect(word(worktreeItems(owned(), prRepo, state, deps, here))).toBe("create pr");
     const opened = owned({ worktree: { ...info, pr: { number: 7, url: "u", state: "open", at: 1 } } });
@@ -56,7 +59,7 @@ describe("a worktree's actions", () => {
     expect(word(worktreeItems(owned(), null, state, deps, here))).toBe("land");
   });
   test("a landed row offers no land, however far ahead a squash on GitHub left it counting", () => {
-    const state = { layout: defaultLayout, shipping: {}, frame: "desk" as const, repos: [] };
+    const state = { layout: defaultLayout, shipping: {}, frame: "desk" as const, repos: [], drafted: () => false };
     const word = (items: MenuEntry[]) => items.filter(isItem).find((i) => i.id === "land")?.label;
     const landed = owned({ ahead: 1, worktree: { ...info, landed: true } });
     expect(word(worktreeItems(landed, null, state, deps, here))).toBeUndefined();
@@ -69,7 +72,13 @@ describe("a worktree's actions", () => {
     const quiet = worktreeItems(
       owned(),
       null,
-      { layout: { ...defaultLayout, changes: true }, shipping: {}, frame: "desk" as const, repos: [] },
+      {
+        layout: { ...defaultLayout, changes: true },
+        shipping: {},
+        frame: "desk" as const,
+        repos: [],
+        drafted: () => false,
+      },
       deps,
       here,
     );
@@ -92,7 +101,13 @@ describe("a worktree's actions", () => {
     const busy = worktreeItems(
       owned({ agent: "working", dirty: 2, behind: 3 }),
       null,
-      { layout: { ...defaultLayout, changes: false }, shipping: {}, frame: "desk" as const, repos: [] },
+      {
+        layout: { ...defaultLayout, changes: false },
+        shipping: {},
+        frame: "desk" as const,
+        repos: [],
+        drafted: () => false,
+      },
       deps,
       { graft: () => {}, ...here },
     );
@@ -121,7 +136,13 @@ describe("a worktree's actions", () => {
     const queued = worktreeItems(
       owned({ agent: "working", dirty: 2, behind: 3, syncQueued: true }),
       null,
-      { layout: { ...defaultLayout, changes: false }, shipping: {}, frame: "desk" as const, repos: [] },
+      {
+        layout: { ...defaultLayout, changes: false },
+        shipping: {},
+        frame: "desk" as const,
+        repos: [],
+        drafted: () => false,
+      },
       { sock: { send: (m: unknown) => sent.push(m) } as never, dispatch: () => {} },
       here,
     );
@@ -131,11 +152,67 @@ describe("a worktree's actions", () => {
     expect(sent).toEqual([{ t: "unqueue-sync", worktreeId: "w1" }]);
   });
 
+  test("the archive asks about whatever the sweep would have kept the row for, not git work alone", () => {
+    const s = { layout: { ...defaultLayout, changes: true }, shipping: {}, frame: "desk" as const, repos: [] };
+    const word = (w: OwnedWorktree, drafted = false) =>
+      worktreeItems(w, null, { ...s, drafted: () => drafted }, deps, here)
+        .filter(isItem)
+        .find((i) => i.id === "archive")?.label;
+    expect(word(owned())).toBe("archive");
+    // words typed and not sent: the case a swipe on a clean row used to take away unasked
+    expect(word(owned(), true)).toBe("archive…");
+    expect(word(owned({ agent: "working" }))).toBe("archive…");
+    expect(word(owned({ queued: 1 }))).toBe("archive…");
+    expect(word(owned({ worktree: { ...info, seenAt: 0 } }))).toBe("archive…");
+    expect(word(owned({ worktree: { ...info, planned: true } }))).toBe("archive…");
+    expect(word(owned({ worktree: { ...info, pr: { number: 1, url: "u", state: "open", at: 0 } } }))).toBe("archive…");
+    expect(word(owned({ dirty: undefined }))).toBe("archive…");
+  });
+
+  test("the question says what the row holds; a row holding nothing is archived without one", () => {
+    const sent: unknown[] = [];
+    const sock = { send: (m: unknown) => sent.push(m) } as never;
+    const asked: string[] = [];
+    // no DOM under bun: the one window the action reaches for is the confirm
+    const g = globalThis as { window?: unknown };
+    g.window = {
+      confirm: (text: string) => {
+        asked.push(text);
+        return false;
+      },
+    };
+    try {
+      worktreeActions(
+        sock,
+        () => {},
+        () => true,
+      ).archive(owned());
+      expect(asked[0]).toStartWith('Archive worktree "feature"? Unsent text waits in its composer.');
+      expect(asked[0]).toContain("The chat, its draft, the commits");
+      expect(sent).toEqual([]);
+      worktreeActions(
+        sock,
+        () => {},
+        () => false,
+      ).archive(owned());
+      expect(asked).toHaveLength(1);
+      expect(sent).toEqual([{ t: "archive-worktree", worktreeId: "w1" }]);
+    } finally {
+      delete g.window;
+    }
+  });
+
   test("from another device the Finder row goes, since nothing there could open", () => {
     const away = worktreeItems(
       owned(),
       null,
-      { layout: { ...defaultLayout, changes: true }, shipping: {}, frame: "desk" as const, repos: [] },
+      {
+        layout: { ...defaultLayout, changes: true },
+        shipping: {},
+        frame: "desk" as const,
+        repos: [],
+        drafted: () => false,
+      },
       deps,
       {
         hostname: "box.tail1234.ts.net",
@@ -146,7 +223,13 @@ describe("a worktree's actions", () => {
 
   test("on the phone the paths go, and view changes opens the changes tab", () => {
     const sent: unknown[] = [];
-    const phone = { layout: { ...defaultLayout, changes: true }, shipping: {}, frame: "phone" as const, repos: [] };
+    const phone = {
+      layout: { ...defaultLayout, changes: true },
+      shipping: {},
+      frame: "phone" as const,
+      repos: [],
+      drafted: () => false,
+    };
     const away = { hostname: "box.tail1234.ts.net" };
     const items = worktreeItems(
       owned({ dirty: 2, transcript: "/t/w1.jsonl", sessionId: "s-1" }),
@@ -184,7 +267,13 @@ describe("a worktree's actions", () => {
   });
 
   test("the palette hands the chat over as a file path and a session id, but not from main, which has no chat", () => {
-    const s = { layout: { ...defaultLayout, changes: true }, shipping: {}, frame: "desk" as const, repos: [] };
+    const s = {
+      layout: { ...defaultLayout, changes: true },
+      shipping: {},
+      frame: "desk" as const,
+      repos: [],
+      drafted: () => false,
+    };
     const palette = { ...here, palette: true };
     const copies = (items: MenuEntry[]) => labels(items).slice(0, 5);
     const chat = worktreeItems(owned({ transcript: "/t/w1.jsonl", sessionId: "s-1" }), null, s, deps, palette);
@@ -203,7 +292,13 @@ describe("a worktree's actions", () => {
   });
 
   test("the rail's menu copies the path and the branch alone: the hand-over rows are the palette's", () => {
-    const s = { layout: { ...defaultLayout, changes: true }, shipping: {}, frame: "desk" as const, repos: [] };
+    const s = {
+      layout: { ...defaultLayout, changes: true },
+      shipping: {},
+      frame: "desk" as const,
+      repos: [],
+      drafted: () => false,
+    };
     const rail = worktreeItems(owned({ transcript: "/t/w1.jsonl", sessionId: "s-1" }), null, s, deps, here);
     expect(labels(rail).slice(0, 4)).toEqual(["copy branch name", "reveal in Finder", "copy path", "|"]);
     expect(labels(rail)).not.toContain("copy session id");
@@ -219,6 +314,7 @@ describe("a worktree's actions", () => {
         frame: "desk" as const,
         // two projects, so the split row is live and only the landing ops are off
         repos: [other, other],
+        drafted: () => false,
       },
       deps,
       here,
@@ -232,7 +328,13 @@ describe("a worktree's actions", () => {
     const ringed = worktreeItems(
       owned({ unseen: true }),
       null,
-      { layout: { ...defaultLayout, changes: true }, shipping: {}, frame: "desk" as const, repos: [] },
+      {
+        layout: { ...defaultLayout, changes: true },
+        shipping: {},
+        frame: "desk" as const,
+        repos: [],
+        drafted: () => false,
+      },
       deps,
       here,
     );
@@ -240,7 +342,13 @@ describe("a worktree's actions", () => {
     const quiet = worktreeItems(
       owned(),
       null,
-      { layout: { ...defaultLayout, changes: true }, shipping: {}, frame: "desk" as const, repos: [] },
+      {
+        layout: { ...defaultLayout, changes: true },
+        shipping: {},
+        frame: "desk" as const,
+        repos: [],
+        drafted: () => false,
+      },
       deps,
       here,
     );
@@ -264,7 +372,13 @@ describe("a worktree's actions", () => {
     const items = worktreeItems(
       owned(),
       repo,
-      { layout: { ...defaultLayout, changes: true }, shipping: {}, frame: "desk" as const, repos: [] },
+      {
+        layout: { ...defaultLayout, changes: true },
+        shipping: {},
+        frame: "desk" as const,
+        repos: [],
+        drafted: () => false,
+      },
       deps,
       here,
     );
@@ -275,7 +389,13 @@ describe("a worktree's actions", () => {
   });
 
   test("the split is live under one project, since a new worktree here is a target, and absent on the lead", () => {
-    const s = { layout: { ...defaultLayout, changes: true }, shipping: {}, frame: "desk" as const, repos: [] };
+    const s = {
+      layout: { ...defaultLayout, changes: true },
+      shipping: {},
+      frame: "desk" as const,
+      repos: [],
+      drafted: () => false,
+    };
     const row = (items: MenuEntry[]) => items.filter(isItem).find((i) => i.id === "split");
     const alone = row(worktreeItems(owned(), null, s, deps, here));
     expect(alone?.label).toBe("continue elsewhere…");

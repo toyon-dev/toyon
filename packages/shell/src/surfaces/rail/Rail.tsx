@@ -25,7 +25,7 @@ import {
   useVisibleDiscovered,
   useVisibleWorktrees,
 } from "../../state/selectors.ts";
-import { asksSetup, guestOf, trunkOf } from "../../state/store.ts";
+import { asksSetup, guestOf, isDrafted, trunkOf } from "../../state/store.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
 import { Icon } from "../../ui/Icon.tsx";
 import { useContextMenu, useMenu } from "../../ui/menu.ts";
@@ -254,6 +254,8 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
   });
 
   const deps = { sock, dispatch };
+  // read as a menu opens, not subscribed: the rail has no business re-rendering per keystroke
+  const drafted = (id: string) => isDrafted(store.getState(), id);
   const graftWith = (id: string) => {
     setGraftMode(true);
     // on the row you are on it means "graft others onto this": nothing to check yet
@@ -262,7 +264,7 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
   /** what a row can do: the long list for ours, the short one for a found worktree */
   const rowItems = (w: WorktreeStatus) =>
     isOwned(w)
-      ? worktreeItems(w, repoOf(w), { layout, shipping, frame, repos }, deps, {
+      ? worktreeItems(w, repoOf(w), { layout, shipping, frame, repos, drafted }, deps, {
           // no graft line on a guest: nothing on this rail is of its project
           ...(otherRepoOf(w) ? {} : { graft: graftWith }),
           hostname: host,

@@ -1,6 +1,8 @@
 // When a worktree archives itself: it finished, left nothing to keep, nobody is waiting on it, and
 // newer work has pushed it down the rail and out of mind. Pure, so the daemon's sweep and its tests
-// read the same rule, and every condition errs toward keeping the row.
+// read the same rule, and every condition errs toward keeping the row. What the row holds is one
+// question (`heldBy`), asked by the sweep before it archives and by the shell before it confirms an
+// archive someone pressed for, so the two never disagree about what is worth a second look.
 
 import { hasOwnBranch, isUnseen, type WorktreeInfo } from "./model.ts";
 import { railOrder } from "./railOrder.ts";
@@ -9,7 +11,17 @@ import { railOrder } from "./railOrder.ts";
  * chats never loses one */
 export const ARCHIVE_KEEP_RECENT = 5;
 
-export interface ArchiveFacts {
+/** what the record alone cannot say about a row: the facts whoever asks reads off their own side */
+export interface KeepFacts {
+  /** its agent is working, asking, or holding a message (queued, steered, refused) */
+  pending: (id: string) => boolean;
+  /** words wait in its composer box */
+  drafted: (id: string) => boolean;
+  /** uncommitted files and commits ahead of main; a count not known reads as work */
+  counts: (id: string) => { dirty?: number; ahead?: number };
+}
+
+export interface ArchiveFacts extends KeepFacts {
   now: number;
   /** how long nobody may have opened it */
   afterMs: number;
@@ -17,12 +29,29 @@ export interface ArchiveFacts {
   rows: readonly WorktreeInfo[];
   /** a tab shows it right now */
   viewed: (id: string) => boolean;
-  /** its agent is working, asking, or holding a message (queued, steered, refused) */
-  pending: (id: string) => boolean;
-  /** words wait in its composer box */
-  drafted: (id: string) => boolean;
-  /** uncommitted files and commits ahead of main; a count not known reads as work */
-  counts: (id: string) => { dirty?: number; ahead?: number };
+}
+
+/** What the worktree holds that archiving would take out of reach, as a clause a question can
+ * say ("its agent is still busy"), or null when it holds nothing. The concrete first: what git
+ * counts, then the words typed, then the agent, then how the last turn ended and what it showed. */
+export function heldBy(w: WorktreeInfo, f: KeepFacts): string | null {
+  const c = f.counts(w.id);
+  if (c.dirty === undefined || c.ahead === undefined) return "its changes are not counted yet";
+  if (c.dirty > 0) return "it has uncommitted changes";
+  if (c.ahead > 0) return "it has commits not on main";
+  if (f.drafted(w.id)) return "unsent text waits in its composer";
+  if (f.pending(w.id)) return "its agent is still busy";
+  // finished cleanly and read: a stop, a failure or a question is a row someone has to come back to
+  const end = w.lastTurn?.end;
+  if (!end) return "its agent has not run yet";
+  if (end === "stopped") return "its last turn was stopped";
+  if (end === "failed") return "its last turn failed";
+  if (end === "asking") return "its agent is waiting on an answer";
+  if (isUnseen(w)) return "its last reply is unread";
+  // a plan it showed is worth keeping whatever became of it, and an open PR is work under review
+  if (w.planned) return "it showed a plan";
+  if (w.pr?.state === "open") return "its pull request is still open";
+  return null;
 }
 
 /** why the worktree may archive itself now, as the rail will say it; null keeps it */
@@ -48,14 +77,9 @@ function nothingToKeep(w: WorktreeInfo, f: ArchiveFacts): boolean {
   // toyon's own task on toyon's own branch: an adopted directory is the person's, and archiving
   // deletes it
   if (w.kind !== "worktree" || !hasOwnBranch(w)) return false;
-  // finished cleanly and read: a stop, a failure or a question is a row someone has to come back to
-  if (w.lastTurn?.end !== "done" || isUnseen(w)) return false;
-  // a plan it showed is worth keeping whatever became of it, and an open PR is work under review
-  if (w.planned || w.pr?.state === "open") return false;
-  if (f.viewed(w.id) || f.pending(w.id) || f.drafted(w.id)) return false;
+  if (f.viewed(w.id)) return false;
   if (f.now - (w.viewedAt ?? w.createdAt) < f.afterMs) return false;
-  const c = f.counts(w.id);
-  return c.dirty === 0 && c.ahead === 0;
+  return heldBy(w, f) === null;
 }
 
 /** how many rows sit above this one, main aside */

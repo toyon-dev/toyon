@@ -24,9 +24,9 @@ describe("ownCommands", () => {
     expect(own.find((c) => c.name === "archive")?.hint).toBeUndefined();
   });
 
-  test("split names the project and takes the message after it", () => {
+  test("split takes a project, when one leads, and the message after it", () => {
     const row = own.find((c) => c.name === "split");
-    expect(row?.hint).toBe("<project> [<message>]");
+    expect(row?.hint).toBe("[<project>] [<message>]");
     expect(row?.description).toContain("another project");
     expect(ownCommandOf("/split acp bump the pin", own)).toEqual({ name: "split", args: "acp bump the pin" });
     expect(ownCommandOf("/split", own)).toEqual({ name: "split", args: "" });
@@ -131,15 +131,13 @@ describe("parseSplitArgs", () => {
     expect(parseSplitArgs("", repos, "r1")).toEqual({ pick: true });
     expect(parseSplitArgs("   ", repos, "r1")).toEqual({ pick: true });
   });
-  test("an exact name, whatever its case, then a unique prefix", () => {
+  test("a whole name leads, whatever its case; a name that is also a prefix wins as the name", () => {
     expect(parseSplitArgs("claude-agent-acp", repos, "r1")).toEqual({ repo: repos[1]! });
     expect(parseSplitArgs("CLAUDE-AGENT-ACP", repos, "r1")).toEqual({ repo: repos[1]! });
-    expect(parseSplitArgs("cla", repos, "r1")).toEqual({ repo: repos[1]! });
-    // an exact match wins over the prefix it also is
     expect(parseSplitArgs("toyon", repos, "r2")).toEqual({ repo: repos[0]! });
   });
-  test("the rest is the person's own words", () => {
-    expect(parseSplitArgs("cla bump the pin  to 0.85", repos, "r1")).toEqual({
+  test("the rest after a name is the person's own words", () => {
+    expect(parseSplitArgs("claude-agent-acp bump the pin  to 0.85", repos, "r1")).toEqual({
       repo: repos[1]!,
       text: "bump the pin  to 0.85",
     });
@@ -150,8 +148,12 @@ describe("parseSplitArgs", () => {
     expect(parseSplitArgs("toyon", repos, "r1")).toEqual({ repo: repos[0]! });
     expect(parseSplitArgs("here", [repos[0]!], "r1")).toEqual({ repo: repos[0]! });
   });
-  test("the refusals: no such name, a name shared", () => {
-    expect(parseSplitArgs("zed", repos, "r1")).toEqual({ error: 'no open project named "zed"' });
-    expect(parseSplitArgs("toy", repos, "r2")).toEqual({ error: '"toy" names more than one project' });
+  test("no name leading means here, and every word typed is the message", () => {
+    expect(parseSplitArgs("fix the footer", repos, "r2")).toEqual({ repo: repos[1]!, text: "fix the footer" });
+    // a prefix is a word, not a name: "toy" could open a message as easily as shorten a project
+    expect(parseSplitArgs("toy the badge", repos, "r2")).toEqual({ repo: repos[1]!, text: "toy the badge" });
+    expect(parseSplitArgs("cla", repos, "r1")).toEqual({ repo: repos[0]!, text: "cla" });
+    // this chat's project is always listed; were it not, the picker is the only honest answer
+    expect(parseSplitArgs("fix the footer", repos, "r9")).toEqual({ pick: true });
   });
 });

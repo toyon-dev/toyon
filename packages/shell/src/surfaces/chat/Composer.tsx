@@ -1021,7 +1021,6 @@ export function Composer({
       if (spawning) return refuse("a new worktree has nothing to continue yet");
       const parsed = parseSplitArgs(args, repos, active.worktree.repoId);
       if ("pick" in parsed) dispatch({ a: "open", overlay: { kind: "split", worktreeId: id } });
-      else if ("error" in parsed) refuse(parsed.error);
       else
         sock?.send({
           t: "pieces-ask",

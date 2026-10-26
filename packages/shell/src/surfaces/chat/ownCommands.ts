@@ -30,33 +30,35 @@ export function ownCommands(landLine: string): AgentCommand[] {
     {
       name: "split",
       description: "a new worktree for part of this work, here or in another project, born with a plan for it",
-      hint: "<project> [<message>]",
+      hint: "[<project>] [<message>]",
     },
   ];
 }
 
-/** what `/split <project> [text]` means: the project the new worktree goes in and the person's
- * own words, the picker when nothing was named, or why the name does not pick one */
-export type SplitArgs = { repo: RepoInfo; text?: string } | { error: string } | { pick: true };
+/** what `/split [project] [text]` means: the project the new worktree goes in and the person's
+ * own words, or the picker when nothing at all was typed */
+export type SplitArgs = { repo: RepoInfo; text?: string } | { pick: true };
 
-/** The first word names the project, by its name as listed: an exact match first (case does not
- * matter), else the one project whose name starts with it; `here`, or this worktree's own
- * project, means a new worktree here. The rest is the person's own words for what it should do. */
+/** The project is this worktree's own unless the first word names another: a project's name as
+ * listed, whole (case does not matter), or `here` for this one. Only a whole name picks, because
+ * the first word of a message is a plain word (fix, add, the) and a prefix would silently route
+ * it to a project that starts the same way. Everything after a name, or everything typed when
+ * there is none, is the person's own words for what the new worktree should do. */
 export function parseSplitArgs(args: string, repos: readonly RepoInfo[], hereRepoId: string): SplitArgs {
   const trimmed = args.trim();
   if (!trimmed) return { pick: true };
+  const own = repos.find((r) => r.id === hereRepoId);
   const gap = trimmed.search(/\s/);
   const word = gap === -1 ? trimmed : trimmed.slice(0, gap);
   // the words as typed: the message is theirs, and its spacing is not this parser's to tidy
-  const text = gap === -1 ? undefined : trimmed.slice(gap).trim() || undefined;
+  const rest = gap === -1 ? undefined : trimmed.slice(gap).trim() || undefined;
   const needle = word.toLowerCase();
-  const own = repos.find((r) => r.id === hereRepoId);
-  if (needle === "here" && own) return { repo: own, ...(text ? { text } : {}) };
-  const exact = repos.filter((r) => r.name.toLowerCase() === needle);
-  const hits = exact.length > 0 ? exact : repos.filter((r) => r.name.toLowerCase().startsWith(needle));
-  if (hits.length === 0) return { error: `no open project named "${word}"` };
-  if (hits.length > 1) return { error: `"${word}" names more than one project` };
-  return { repo: hits[0]!, ...(text ? { text } : {}) };
+  const named = needle === "here" ? own : repos.find((r) => r.name.toLowerCase() === needle);
+  if (named) return { repo: named, ...(rest ? { text: rest } : {}) };
+  // no name led, so the whole line is the message and the worktree is born here; a project this
+  // chat belongs to is always listed, and the picker covers the one case where it is not
+  if (!own) return { pick: true };
+  return { repo: own, text: trimmed };
 }
 
 /** the `/` menu's three tiers, in rank order: the person's own skills and commands (the ones the

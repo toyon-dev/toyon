@@ -990,6 +990,12 @@ describe("tool searches", () => {
     expect(memos.get("t1")?.writing).toBe(false);
   });
 
+  test("an MCP tool loaded is said as its server and its words, not its wire name", () => {
+    expect(run([start, input("select:mcp__Amplitude__search_amp_entities,WebFetch")]).at(-1)).toMatchObject({
+      title: "loaded Amplitude search amp entities, WebFetch",
+    });
+  });
+
   test("a keyword query reads as what was looked for, as typed", () => {
     expect(run([start, input("  notebook jupyter ")]).at(-1)).toMatchObject({
       title: "looked for a tool: notebook jupyter",

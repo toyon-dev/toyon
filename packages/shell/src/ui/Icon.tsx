@@ -55,6 +55,7 @@ export type IconName =
   | "phone"
   | "laptop"
   | "devices"
+  | "cube"
   | "dot";
 
 const ICON_PATHS: Record<IconName, string> = {
@@ -176,6 +177,10 @@ const ICON_PATHS: Record<IconName, string> = {
   // a paperclip: the one wire, turned twice
   attach:
     "M13.7 7.4 8.2 12.9a3.6 3.6 0 0 1-5.1-5.1l5.5-5.5a2.4 2.4 0 0 1 3.4 3.4l-5.5 5.5a1.2 1.2 0 0 1-1.7-1.7l5.1-5.1",
+  // a box seen from a corner: a service of its own that the agent called, an MCP server's tool.
+  // It says nothing about where the service runs, since one is as often a local process as a
+  // host, which is why it is not a cloud; and not a plug, which reads as a plugin of the app
+  cube: "M8 2.4 13.2 5.2v5.6L8 13.6 2.8 10.8V5.2z M2.8 5.2 8 8l5.2-2.8 M8 8v5.6",
   // a step that happened under a name we cannot read: a marker, deliberately without a meaning
   dot: "M8 4.6a3.4 3.4 0 1 0 0 6.8 3.4 3.4 0 1 0 0-6.8z",
 };

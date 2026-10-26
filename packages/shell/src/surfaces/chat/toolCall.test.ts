@@ -319,6 +319,29 @@ describe("toolLabel", () => {
     });
   });
 
+  test("an MCP tool's row is its server and its words, and the call's rationale once the input is in", () => {
+    // the adapter titles the call with its wire name and never replaces it: as it opens, with no
+    // input, the row already reads as two words under the cube
+    const name = "mcp__Amplitude__search_amp_entities";
+    expect(toolLabel({ name, title: name, toolKind: "other", input: {} })).toEqual({
+      label: "tool",
+      name: "Amplitude",
+      icon: "cube",
+      hint: "search amp entities",
+      command: "",
+    });
+    // the input says what the call is for: that beats the tool's name, as Bash's description does
+    const input = { queries: ["workstream"], rationale: "Locate existing workstream dashboards" };
+    expect(toolLabel({ name, title: name, toolKind: "other", input })).toMatchObject({
+      name: "Amplitude",
+      hint: "Locate existing workstream dashboards",
+    });
+    // a replayed line written before the kind was sent reads the same
+    expect(toolLabel({ name, input: {} })).toMatchObject({ name: "Amplitude", hint: "search amp entities" });
+    // rationale is read on MCP rows alone: on a kinded tool the word could mean anything
+    expect(toolLabel({ name: "Bash", toolKind: "execute", input: { command: "ls", rationale: "x" } }).hint).toBe("ls");
+  });
+
   test("a kind no longer in ACP (an old transcript line) falls back to the generic row", () => {
     const call = {
       name: "compile main.c",
@@ -393,8 +416,12 @@ describe("toolLabel", () => {
     expect(toolLabel(output)).toMatchObject({ name: "TaskOutput", icon: "terminal" });
     // named only by its title
     expect(toolLabel({ name: "", title: "Monitor", toolKind: "other" as const, input: {} }).icon).toBe("clock");
-    // a name nobody listed, and one an object would have answered for, keep the dot
-    expect(toolLabel({ name: "mcp__x__y", input: {} }).icon).toBe("dot");
+    // a name nobody listed, and one an object would have answered for, keep the dot; an MCP
+    // server's tool wears the cube, unless a kind or a command's verb says more
+    expect(toolLabel({ name: "mcp__x__y", input: {} }).icon).toBe("cube");
+    expect(toolLabel({ name: "mcp__x__y", toolKind: "fetch", input: {} }).icon).toBe("globe");
+    expect(toolLabel({ name: "mcp__x__y", input: { command: "ls" } }).icon).toBe("folder");
+    expect(toolLabel({ name: "unlisted", input: {} }).icon).toBe("dot");
     expect(toolLabel({ name: "constructor", input: {} }).icon).toBe("dot");
   });
 

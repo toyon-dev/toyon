@@ -3,6 +3,7 @@ import {
   CHECK_TOOL,
   emptyInput,
   isWrittenKind,
+  mcpTool,
   SHELL_TOOL,
   type Span,
   splitSpanLines,
@@ -71,7 +72,8 @@ const WAKEUP_TOOL = "ScheduleWakeup";
 
 /** Claude's tools that arrive with no kind, which would otherwise all wear the dot: the glyph is
  * picked by the tool's name instead. A Map, since a name is the agent's string and an object would
- * answer "constructor". A tool not listed here and not kinded (an MCP server's) keeps the dot. */
+ * answer "constructor". A tool not listed here and not kinded keeps the dot, unless it is an MCP
+ * server's, which wears the cube (below). */
 const NAME_ICON = new Map<string, IconName>([
   // the glyph the ask's parked row wears
   [ASK_TOOL, "chat"],
@@ -268,10 +270,18 @@ export function toolLabel(call: ToolCall, roots: string[] = []): ToolRowText {
   // a wakeup's line is what the agent said it was waiting on; the booked time is the row's status
   const reason = call.name === WAKEUP_TOOL ? field(call, "reason") : "";
   const v = filePathOf(call) || command || field(call, "path") || field(call, "pattern") || query || reason;
-  const raw = v || skillForm(call) || (call.title && call.title !== call.name ? call.title : "");
+  // An MCP server's tool arrives with no kind and its wire name for a title (`mcp__Amplitude__
+  // search_amp_entities`), which the adapter never replaces with words. The row reads it as two: the
+  // server where the tool's name would go, and the tool's own name as words where the path or
+  // command would, unless the input says what the call is for. `rationale` is the field servers
+  // give that sentence, as Claude's Bash gives it in `description`; it is read on these rows alone,
+  // since on a kinded tool the word could be anything.
+  const mcp = mcpTool(call.name);
+  const raw =
+    v || skillForm(call) || (call.title && call.title !== call.name ? call.title : "") || (mcp ? mcp.tool : "");
   // Claude's Bash tool sends a sentence of its own ("Build the project"); it beats the command as
   // the row's label, and the command still shows inside
-  const detail = relPath(field(call, "description") || raw, roots);
+  const detail = relPath(field(call, "description") || (mcp ? field(call, "rationale") : "") || raw, roots);
   // the maps are exhaustive over ToolKind, so a kind added to ACP is a compile error rather than a
   // blank glyph. A replayed transcript line is JSON.parse'd and cast, though, so a kind written by
   // an older toyon can be a string neither map has: fall back rather than print "undefined".
@@ -289,7 +299,7 @@ export function toolLabel(call: ToolCall, roots: string[] = []): ToolRowText {
   const ask = call.name === ASK_TOOL;
   const glyphSays = kind !== "other" || NAME_ICON.has(call.name);
   const titleSays = call.name === call.title || call.name === SHELL_TOOL || call.name === CHECK_TOOL;
-  const own = detail && (glyphSays || titleSays || call.name === TOOL_SEARCH) ? "" : call.name;
+  const own = mcp ? mcp.server : detail && (glyphSays || titleSays || call.name === TOOL_SEARCH) ? "" : call.name;
   // the glyph already says the kind, so the row prints a word only where one adds to it: the tool's
   // own name, or the kind itself on a row with no detail to stand on
   const name = own && own.toLowerCase() !== label ? own : detail ? "" : label;
@@ -298,8 +308,14 @@ export function toolLabel(call: ToolCall, roots: string[] = []): ToolRowText {
   return {
     label: ask ? "ask" : label,
     name,
-    // a call sent with no name carries the tool's name as its title
-    icon: NAME_ICON.get(call.name) ?? NAME_ICON.get(call.title ?? "") ?? byVerb ?? KIND_ICON[kind],
+    // a call sent with no name carries the tool's name as its title. An MCP server's tool with no
+    // kind wears the cube rather than the dot: its name is read (the server, beside it), and the
+    // glyph says the call went to a service of its own. A kind the adapter did set says more.
+    icon:
+      NAME_ICON.get(call.name) ??
+      NAME_ICON.get(call.title ?? "") ??
+      byVerb ??
+      (mcp && kind === "other" ? "cube" : KIND_ICON[kind]),
     hint: detail === name ? "" : detail,
     command: command && command !== detail ? command : "",
   };

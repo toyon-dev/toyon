@@ -15,6 +15,7 @@ import {
   type AgentCommand,
   type AgentEvent,
   emptyInput,
+  mcpTool,
   TOOL_SEARCH,
   TOYON_MCP_SERVER,
   type ToolImage,
@@ -125,10 +126,16 @@ function toolSearchTitle(rawInput: unknown): string {
   if (typeof query !== "string") return "";
   const names = /^select:(.*)$/.exec(query.trim());
   if (!names) return `looked for a tool: ${query.trim()}`;
+  // an MCP server's tool is loaded under its wire name; the sentence says the server and the
+  // tool's words, as the tool's own row will
   const loaded = (names[1] ?? "")
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean)
+    .map((s) => {
+      const mcp = mcpTool(s);
+      return mcp ? `${mcp.server} ${mcp.tool}` : s;
+    })
     .join(", ");
   return loaded ? `loaded ${loaded}` : "";
 }

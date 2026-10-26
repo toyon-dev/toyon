@@ -45,6 +45,22 @@ export function writingCall(call: { name: string; kind?: string }, input: unknow
   return (isWrittenKind(call.kind) || call.name === ASK_TOOL || call.name === TOOL_SEARCH) && emptyInput(input);
 }
 
+/** An MCP server's tool, under the name an adapter gives it: Claude's `mcp__<server>__<tool>`, or
+ * `<server>/<tool>`. Neither is a word anyone would print, so this reads the two words out of it:
+ * the server as named, and the tool as words, its underscores and hyphens read as spaces. The
+ * split is at the first `__` after the prefix, so a server with one underscore of its own keeps
+ * it; a server written with a double underscore is the one spelling this cannot tell apart, and
+ * such a name is read with the shorter server. Null for a name that is not an MCP tool's. */
+const MCP_NAME = /^(?:mcp__(.+?)__(.+)|([A-Za-z0-9_-]+)\/([A-Za-z0-9_-]+))$/;
+
+export function mcpTool(name: string): { server: string; tool: string } | null {
+  const m = MCP_NAME.exec(name);
+  if (!m) return null;
+  const server = m[1] ?? m[3] ?? "";
+  const tool = m[2] ?? m[4] ?? "";
+  return { server, tool: tool.replace(/[_-]+/g, " ").trim() };
+}
+
 /** no input yet: nothing, or the empty list of locations a call with no raw input starts as */
 export function emptyInput(input: unknown): boolean {
   if (!input || typeof input !== "object") return true;

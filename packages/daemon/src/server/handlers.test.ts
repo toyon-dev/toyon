@@ -1016,6 +1016,38 @@ describe("handlers", () => {
     expect(revealed).toHaveLength(1);
   });
 
+  test("reveal-transcript shows the chat's file once something is written to it", async () => {
+    const { services, ctx, repo, paths } = make();
+    const r = await services.repos.register(repo);
+    r.needsSetup = false;
+    const task = await services.worktrees.create(r.id, "a task");
+    const revealed: string[] = [];
+    services.files.revealPath = (path) => {
+      revealed.push(path);
+    };
+    // nothing said yet: the row carries no file, so the shell offers none, and the daemon refuses
+    // the press a stale menu could still make
+    const rowFile = () => services.worktrees.rows().find((w) => w.id === task.id)?.transcript;
+    expect(rowFile()).toBeUndefined();
+    await expect(dispatch({ t: "reveal-transcript", worktreeId: task.id }, ctx, services)).rejects.toThrow(
+      "nothing has been written",
+    );
+    const file = transcriptPathFor(paths.transcriptsDir, task.id);
+    writeFileSync(file, `${JSON.stringify({ seq: 0, event: { type: "user-message", text: "hi", ts: 1 } })}\n`);
+    expect(rowFile()).toBe(file);
+    await dispatch({ t: "reveal-transcript", worktreeId: task.id }, ctx, services);
+    expect(revealed).toEqual([file]);
+    // archived, the chat moved under the archive and the same id finds it there
+    await dispatch({ t: "archive-worktree", worktreeId: task.id }, ctx, services);
+    const kept = services.worktrees.archivedChats(r.id).find((a) => a.id === task.id)?.transcript;
+    if (!kept) throw new Error("the archive kept no chat");
+    await dispatch({ t: "reveal-transcript", worktreeId: task.id }, ctx, services);
+    expect(revealed).toEqual([file, kept]);
+    await expect(dispatch({ t: "reveal-transcript", worktreeId: "nobody" }, ctx, services)).rejects.toThrow(
+      "nothing has been written",
+    );
+  });
+
   test("a first keystroke on the plus warms its agent once; an empty box, a task's box and a spare still warming do not", async () => {
     const { services, ctx, repo, agents } = make();
     const r = await services.repos.register(repo);

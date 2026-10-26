@@ -930,7 +930,8 @@ export interface WorktreeStatus {
    * alone cannot separate "just finished" from "untouched for a week". */
   unseen?: boolean;
   /** the chat's transcript on disk: what another tool is pointed at to read this chat. Absent on
-   * a found worktree, which has no chat. */
+   * a found worktree, which has no chat, and on one nothing has been said in yet, so the rows that
+   * offer the file are not offered a file that is not there. */
   transcript?: string;
   /** the agent's own session id here, once it has opened one: what its CLI resumes outside toyon */
   sessionId?: string;

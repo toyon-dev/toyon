@@ -591,6 +591,12 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     s.files.revealPath(path);
   },
 
+  // the chat as the file under Toyon's home that a second tool is pointed at, shown where it
+  // sits: beside the live transcripts, or under the archive once the row archived
+  "reveal-transcript"(msg, _ctx, s) {
+    s.files.revealPath(s.worktrees.transcriptPath(msg.worktreeId));
+  },
+
   async "discard-files"(msg, _ctx, s) {
     // one at a time: each takes its file's lock, and a refusal on one (its changes are already
     // gone) stops the run there, with the files before it discarded and the status saying so

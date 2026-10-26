@@ -4,6 +4,7 @@ import { ago } from "../../surfaces/util.ts";
 import { grouped, type MenuEntry, type MenuItem } from "../../ui/menu.ts";
 import type { State } from "../store.ts";
 import { copyText, type Deps } from "./deps.ts";
+import { daemonHost, revealItems } from "./editor.ts";
 
 /** what an archived worktree's row says beside its title, in the picker and on the rail: how it
  * ended, what came with it, what its agent cost, and how long ago. The spend alone, no context
@@ -53,12 +54,20 @@ export function archivedItems(
     },
   ];
   // the chat is still a file, moved under the archive, so it can be handed to another tool from
-  // here as well as from a live row. Not from the phone, which has no shell to paste it into.
+  // here as well as from a live row: shown in Finder, which is where it is found by reading, and
+  // the session id the agent's own CLI resumes. Not the id from the phone, which has no shell to
+  // paste it into; not Finder from another device, since it opens on the daemon's screen.
   const copy: MenuItem[] = [{ id: "copy-branch", label: "copy branch name", onClick: () => copyText(a.branch) }];
+  copy.push(
+    ...revealItems(
+      () => sock?.send({ t: "reveal-transcript", worktreeId: a.id }),
+      daemonHost(sock),
+      "reveal transcript in Finder",
+    ),
+  );
   const { sessionId } = a;
-  if (s.frame !== "phone") {
-    copy.push({ id: "copy-transcript", label: "copy transcript path", onClick: () => copyText(a.transcript) });
-    if (sessionId) copy.push({ id: "copy-session", label: "copy session id", onClick: () => copyText(sessionId) });
+  if (s.frame !== "phone" && sessionId) {
+    copy.push({ id: "copy-session", label: "copy session id", onClick: () => copyText(sessionId) });
   }
   const gone: MenuItem[] = [
     {

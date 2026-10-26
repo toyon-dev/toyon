@@ -2967,6 +2967,24 @@ export class WorktreeService {
     return this.d.state.requireWorktree(worktreeId);
   }
 
+  /** a live worktree's chat file, once the first message has put it on disk: the row carries it
+   * so the menu can offer it, and offers nothing before, since Finder shows nothing for a path
+   * that is not there. A stat per row per push, which is cheap beside the usage read next to it. */
+  private writtenTranscript(worktreeId: string): string | undefined {
+    const path = transcriptPathFor(this.d.paths.transcriptsDir, worktreeId);
+    return existsSync(path) ? path : undefined;
+  }
+
+  /** the chat's file on disk, for a Finder reveal: a live worktree's, or the archive's once the
+   * chat moved there, since an archive keeps its worktree's id. The shell offers the row only
+   * when the status carried a file, so a refusal here is the safety net for a race with the
+   * first message or an archive that moved under it. */
+  transcriptPath(id: string): string {
+    const path = this.d.state.worktree(id) ? this.writtenTranscript(id) : this.archive.chatFiles(id)?.transcript;
+    if (!path || !existsSync(path)) throw new UserError("nothing has been written to this chat yet");
+    return path;
+  }
+
   /** A message typed into a worktree's box. A worktree archived under it, a moment ago or
    * mid-send, comes back with the message as its first, the way one typed on its archived page
    * does; otherwise the agent gets it and the row is stamped as prompted. */
@@ -3113,7 +3131,7 @@ export class WorktreeService {
           queued: rt?.agent.queueLength || undefined,
           unseen: isUnseen(wt) || undefined,
           usage: this.usageFor(wt.id),
-          transcript: transcriptPathFor(this.d.paths.transcriptsDir, wt.id),
+          transcript: this.writtenTranscript(wt.id),
           sessionId: this.d.state.session(wt.id),
           shipping: this.ops.get(wt.id),
           syncQueued: this.syncQueued.has(wt.id) || undefined,

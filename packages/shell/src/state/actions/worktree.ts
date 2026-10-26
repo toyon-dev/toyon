@@ -24,7 +24,7 @@ import type { DaemonSocket } from "../../ws.ts";
 import { profileNames, profileOf } from "../profiles.ts";
 import type { Action, State } from "../store.ts";
 import { copyText, type Deps } from "./deps.ts";
-import { revealItems } from "./editor.ts";
+import { openedOnDaemonMachine, revealItems } from "./editor.ts";
 
 type Dispatch = (a: Action) => void;
 
@@ -115,8 +115,9 @@ export type WorktreeItemState = Pick<State, "layout" | "shipping" | "frame" | "r
  * row only means something on the daemon's own machine. The phone frame has no terminal pane and
  * no shell to paste a path or a session id into, so those rows are the desk's; the branch name
  * stays, since it is read as much as it is pasted. `palette` is the ⌘⇧P list, the one place the
- * transcript path and the session id are offered: they point a second agent's CLI at this chat,
- * which is asked for by name, and on the rail's menu they were two rows nobody found by reading. */
+ * transcript path and the session id are copied: they point a second agent's CLI at this chat,
+ * which is asked for by name, and on the rail's menu they were two rows nobody found by reading.
+ * The transcript shown in Finder stays on the rail's menu, since that row says what it opens. */
 export function worktreeItems(
   w: OwnedWorktree,
   repo: RepoInfo | null,
@@ -163,10 +164,19 @@ export function worktreeItems(
   if (!phone) about.push({ id: "copy-path", label: "copy path", onClick: () => copyText(w.path) });
   // what a second agent is pointed at: the chat as a file it can read, and the id the agent's
   // own CLI resumes. A path rather than a link, since a link would carry the token. The lead has
-  // no chat, so nothing to hand over there.
+  // no chat, so nothing to hand over there. The file shown in Finder is on every menu: the row
+  // names what it opens, so it is found by reading where the copy rows were not.
   const { transcript, sessionId } = w;
+  const chat = !!transcript && !isLead(w.worktree);
+  if (chat && openedOnDaemonMachine(ui.hostname)) {
+    about.push({
+      id: "reveal-transcript",
+      label: "reveal transcript in Finder",
+      onClick: () => sock?.send({ t: "reveal-transcript", worktreeId: id }),
+    });
+  }
   const plumbing = !phone && !!ui.palette;
-  if (plumbing && transcript && !isLead(w.worktree)) {
+  if (plumbing && chat) {
     about.push({ id: "copy-transcript", label: "copy transcript path", onClick: () => copyText(transcript) });
   }
   if (plumbing && sessionId) {

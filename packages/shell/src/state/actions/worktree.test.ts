@@ -275,23 +275,34 @@ describe("a worktree's actions", () => {
       drafted: () => false,
     };
     const palette = { ...here, palette: true };
-    const copies = (items: MenuEntry[]) => labels(items).slice(0, 5);
+    const copies = (items: MenuEntry[]) => labels(items).slice(0, 6);
     const chat = worktreeItems(owned({ transcript: "/t/w1.jsonl", sessionId: "s-1" }), null, s, deps, palette);
     expect(copies(chat)).toEqual([
       "copy branch name",
       "reveal in Finder",
       "copy path",
+      "reveal transcript in Finder",
       "copy transcript path",
       "copy session id",
     ]);
     // a session not opened yet has no id to copy
     const cold = worktreeItems(owned({ transcript: "/t/w1.jsonl" }), null, s, deps, palette);
-    expect(copies(cold)).toEqual(["copy branch name", "reveal in Finder", "copy path", "copy transcript path", "|"]);
+    expect(copies(cold)).toEqual([
+      "copy branch name",
+      "reveal in Finder",
+      "copy path",
+      "reveal transcript in Finder",
+      "copy transcript path",
+      "|",
+    ]);
+    // the lead has no chat, so neither transcript row
     const main = owned({ transcript: "/t/m.jsonl", sessionId: "s-2", worktree: { ...info, kind: "main" } });
-    expect(labels(worktreeItems(main, null, s, deps, palette))).not.toContain("copy transcript path");
+    const lead = labels(worktreeItems(main, null, s, deps, palette));
+    expect(lead).not.toContain("copy transcript path");
+    expect(lead).not.toContain("reveal transcript in Finder");
   });
 
-  test("the rail's menu copies the path and the branch alone: the hand-over rows are the palette's", () => {
+  test("the rail's menu reveals the transcript but copies only the path and the branch: the paste rows are the palette's", () => {
     const s = {
       layout: { ...defaultLayout, changes: true },
       shipping: {},
@@ -299,9 +310,33 @@ describe("a worktree's actions", () => {
       repos: [],
       drafted: () => false,
     };
-    const rail = worktreeItems(owned({ transcript: "/t/w1.jsonl", sessionId: "s-1" }), null, s, deps, here);
-    expect(labels(rail).slice(0, 4)).toEqual(["copy branch name", "reveal in Finder", "copy path", "|"]);
+    const sent: unknown[] = [];
+    const sock = { send: (m: unknown) => sent.push(m) } as never;
+    const rail = worktreeItems(
+      owned({ transcript: "/t/w1.jsonl", sessionId: "s-1" }),
+      null,
+      s,
+      { sock, dispatch: () => {} },
+      here,
+    );
+    expect(labels(rail).slice(0, 5)).toEqual([
+      "copy branch name",
+      "reveal in Finder",
+      "copy path",
+      "reveal transcript in Finder",
+      "|",
+    ]);
     expect(labels(rail)).not.toContain("copy session id");
+    rail
+      .filter(isItem)
+      .find((i) => i.id === "reveal-transcript")
+      ?.onClick?.();
+    expect(sent).toEqual([{ t: "reveal-transcript", worktreeId: "w1" }]);
+    // Finder is the daemon's screen: from another device the row is not offered
+    const away = worktreeItems(owned({ transcript: "/t/w1.jsonl" }), null, s, deps, {
+      hostname: "box.tail1234.ts.net",
+    });
+    expect(labels(away)).not.toContain("reveal transcript in Finder");
   });
 
   test("a landing op in flight keeps the other landing ops on the list, off, until it answers", () => {

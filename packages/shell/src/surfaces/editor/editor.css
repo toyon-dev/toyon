@@ -154,7 +154,9 @@
    (the body's, base.css .md-preview) so its rows sit on the document's text edge, clear of the
    outline strip, and scrolls with it; the rule parts it from the plan, whose own top air then
    starts under it. A row is a fold, as a tool row in the chat is: pressed, the piece's text opens
-   under its line and the plan moves down by that much, and nothing is replaced. */
+   under its line and the plan moves down by that much, and nothing is replaced. A list of one has
+   no fold: its line is a plain line, not a .row, so nothing lifts under the pointer, and the
+   text stands open under it. */
   .editor-pieces {
     font: var(--type-ui);
     max-width: var(--chat-measure);
@@ -173,13 +175,16 @@
   .editor-piece {
     margin: 0 -12px;
     & > .editor-piece-row {
+      display: flex;
       min-height: var(--row-height-sm);
       padding: 0 12px;
       gap: 12px;
       align-items: baseline;
+      border-radius: var(--radius);
+    }
+    & > summary.editor-piece-row {
       cursor: pointer;
       list-style: none;
-      border-radius: var(--radius);
     }
     & > summary::-webkit-details-marker {
       display: none;

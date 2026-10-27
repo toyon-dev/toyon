@@ -3,9 +3,10 @@
 // person answers the list with the plan card (or Toyon's own card in the box); a row here is a
 // fold, the idiom a tool row in the chat uses: pressed, it opens under itself with one line that
 // states its fate and offers the others, then the piece's text, the plan still below. One row is
-// open at a time, and Escape folds it before the pane's own close. Once the list is answered the
-// fate words give way to what each piece became, so the whole picture is one press away from any
-// row, and a sibling opening the origin's plan sees the same block.
+// open at a time, and Escape folds it before the pane's own close. A list of one has nothing to
+// choose between, so its piece stands open under its line with no fold to press. Once the list is
+// answered the fate words give way to what each piece became, so the whole picture is one press
+// away from any row, and a sibling opening the origin's plan sees the same block.
 
 import type { AttachmentRef, Piece, PieceFate } from "@toyon/shared";
 import { type KeyboardEvent, useMemo, useState } from "react";
@@ -166,6 +167,7 @@ export function Pieces({ item, worktreeId }: { item: PiecesItem; worktreeId: str
   // the row open under its line, one at a time: opening another folds it
   const [open, setOpen] = useState<string | null>(null);
   const deciding = item.state === "held" || item.state === "proposed";
+  const lone = item.pieces.length === 1;
   const press = (piece: Piece, fate: PieceFate) => sock?.send(pieceFate(item, worktreeId, piece.id, fate));
   // an open row is one rung under the pane on the Escape ladder: the first Escape folds it, and
   // the pane never hears that one
@@ -183,6 +185,52 @@ export function Pieces({ item, worktreeId }: { item: PiecesItem; worktreeId: str
         const fate = effectiveFate(item, piece);
         const wait = waitOf(item, piece);
         const others = deciding ? fatesFor(piece).filter((f) => f !== fate) : [];
+        const line = (
+          <>
+            <span className="editor-piece-title">{piece.title}</span>
+            <span className="editor-piece-fate hint">
+              {deciding ? (
+                <FateWords piece={piece} fate={fate} wait={wait} selfId={worktreeId} />
+              ) : (
+                <Outcome item={item} piece={piece} />
+              )}
+            </span>
+          </>
+        );
+        const body = (
+          <div className="editor-piece-body">
+            {deciding && (
+              <p className="editor-piece-line hint">
+                {fateSentence(piece, fate, wait)}
+                {others.length > 0 && (
+                  <>
+                    {" "}
+                    Instead:{" "}
+                    {others.map((f, i) => (
+                      <span key={f}>
+                        {i > 0 && " · "}
+                        <Button variant="inline" onClick={() => press(piece, f)}>
+                          {f === "send" && piece.to ? `send to ${piece.to.title}` : fateWord(piece, f)}
+                        </Button>
+                      </span>
+                    ))}
+                  </>
+                )}
+              </p>
+            )}
+            <Text text={piece.plan} />
+            <Chips refs={piece.attachments} worktreeId={worktreeId} />
+          </div>
+        );
+        // the only piece is not a fold: its line is read, not pressed, and the text is already there
+        if (lone) {
+          return (
+            <div key={piece.id} className="editor-piece">
+              <div className="editor-piece-row">{line}</div>
+              {body}
+            </div>
+          );
+        }
         return (
           <details
             key={piece.id}
@@ -193,39 +241,8 @@ export function Pieces({ item, worktreeId }: { item: PiecesItem; worktreeId: str
               else if (open === piece.id) setOpen(null);
             }}
           >
-            <summary className="row editor-piece-row">
-              <span className="editor-piece-title">{piece.title}</span>
-              <span className="editor-piece-fate hint">
-                {deciding ? (
-                  <FateWords piece={piece} fate={fate} wait={wait} selfId={worktreeId} />
-                ) : (
-                  <Outcome item={item} piece={piece} />
-                )}
-              </span>
-            </summary>
-            <div className="editor-piece-body">
-              {deciding && (
-                <p className="editor-piece-line hint">
-                  {fateSentence(piece, fate, wait)}
-                  {others.length > 0 && (
-                    <>
-                      {" "}
-                      Instead:{" "}
-                      {others.map((f, i) => (
-                        <span key={f}>
-                          {i > 0 && " · "}
-                          <Button variant="inline" onClick={() => press(piece, f)}>
-                            {f === "send" && piece.to ? `send to ${piece.to.title}` : fateWord(piece, f)}
-                          </Button>
-                        </span>
-                      ))}
-                    </>
-                  )}
-                </p>
-              )}
-              <Text text={piece.plan} />
-              <Chips refs={piece.attachments} worktreeId={worktreeId} />
-            </div>
+            <summary className="row editor-piece-row">{line}</summary>
+            {body}
           </details>
         );
       })}

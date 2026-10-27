@@ -3941,6 +3941,33 @@ describe("AcpSession pieces", () => {
     await w.session.close();
   });
 
+  test("the plan sent back tells the agent its list went with it, ahead of the no", async () => {
+    const { fake, release } = planner();
+    const w = world(fake, claudeSpec, 60_000, undefined, { mode: () => "plan", onPieces: () => {} });
+    w.session.note(held);
+    w.session.send("plan it");
+    release();
+    await waitFor(() => !!openAsk(w.events));
+    w.session.answer(card(w.events).id, { kind: "choice", choiceId: "cancel" });
+    await waitFor(() => fake.prompts.length > 1);
+    expect((fake.prompts.at(-1)!.prompt[0] as { text: string }).text).toContain("went back with the plan");
+    // recorded once the card is closed and before the no reaches the agent
+    const types = w.types();
+    expect(types.indexOf("agent-ask-end")).toBeLessThan(types.lastIndexOf("user-message"));
+    await w.session.close();
+    // a list Toyon read off the plan was never the agent's hand-over: nothing to say about it
+    const second = planner();
+    const w2 = world(second.fake, claudeSpec, 60_000, undefined, { mode: () => "plan", onPieces: () => {} });
+    w2.session.note({ ...held, by: "toyon" } as AgentEvent);
+    w2.session.send("plan it");
+    second.release();
+    await waitFor(() => !!openAsk(w2.events));
+    w2.session.answer(card(w2.events).id, { kind: "choice", choiceId: "cancel" });
+    await w2.idle();
+    expect(second.fake.prompts).toHaveLength(1);
+    await w2.session.close();
+  });
+
   test("outside plan mode a held list whose plan card never comes is Toyon's own card from the turn's end, and the row waits on it", async () => {
     const shown: string[] = [];
     const w = world(fakeAgent(say("no plan after all")), claudeSpec, 60_000, undefined, {

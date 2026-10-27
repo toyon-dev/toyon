@@ -490,10 +490,7 @@ export class AcpSession implements AgentAdapter {
         // the plan. An answer closes the list itself through `onPieces`, so nothing to do here
         // for one.
         if (event.outcome !== "answered") {
-          const list = this.log.entries.findLast(
-            ({ event: e }) => e.type === "pieces-proposed" && e.id === pieces,
-          )?.event;
-          if (list?.type === "pieces-proposed" && list.by === "toyon") {
+          if (this.proposed(pieces)?.by === "toyon") {
             this.note({
               type: "pieces-declined",
               id: pieces,
@@ -524,11 +521,7 @@ export class AcpSession implements AgentAdapter {
     if (!id || this.mode() === "plan") return;
     this.heldPieces = null;
     this.openCards.add(id);
-    const proposed = this.log.entries.findLast(
-      ({ event }) => event.type === "pieces-proposed" && event.id === id,
-    )?.event;
-    const pieces = proposed?.type === "pieces-proposed" ? proposed.pieces : [];
-    const plan = this.d.onPiecesShown?.(id, pieces);
+    const plan = this.d.onPiecesShown?.(id, this.proposed(id)?.pieces ?? []);
     this.emit({ type: "pieces-shown", id, ...(typeof plan === "string" ? { plan } : {}), ts: Date.now() });
   }
 
@@ -1666,9 +1659,35 @@ export class AcpSession implements AgentAdapter {
         }
         // the yes said yes to the file, which may no longer be the plan the agent holds
         if (plan && approved && planPath) return this.sayPlanEdited(detail, planPath).then(() => res);
+        // the no took the agent's list with it, and the agent heard only that the hand-over went
+        // through; a list Toyon read for the card was never the agent's to hand over again
+        if (plan && !approved && decided && this.proposed(decided)?.by !== "toyon") {
+          return this.sayPiecesDeclined().then(() => res);
+        }
         return res;
       },
     );
+  }
+
+  /** the proposal a pieces list id names, from the transcript */
+  private proposed(id: string) {
+    const list = this.log.entries.findLast(({ event }) => event.type === "pieces-proposed" && event.id === id)?.event;
+    return list?.type === "pieces-proposed" ? list : undefined;
+  }
+
+  /** A plan sent back with the agent's own list beside it. The rejection is an option id, and the
+   * split tool's result still reads as a hand-over that stands, so the agent would send the next
+   * plan up without a list; the word that the list went too goes in as a message, awaited ahead
+   * of the answer as `sayPlanEdited` is. */
+  private async sayPiecesDeclined() {
+    try {
+      await this.deliver(
+        "The pieces list you handed over went back with the plan. Hand over a list again with `split` before you ask for approval.",
+      );
+    } catch (e) {
+      // the no still goes back; a reply that fails would read to the agent as a refusal
+      log.warn(this.d.worktreeId, "the declined list was not sent", e);
+    }
   }
 
   /** A plan approved after it was rewritten. A permission answer is an option id and nothing else,

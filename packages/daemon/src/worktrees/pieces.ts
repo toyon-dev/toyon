@@ -39,6 +39,7 @@ import type { RuntimeRegistry } from "../runtime/registry.ts";
 import { NAME_SHAPE, overNameShape, sentenceCase, titleFrom } from "./naming.ts";
 import { matchBy, PER_TURN_MAX, proposedThisTurn } from "./proposals.ts";
 import type { CreateOpts } from "./service.ts";
+import type { RowCounts } from "./treeState.ts";
 
 /** the origin as the chat the piece lands in names it: kept whole, since the row outlives the
  * origin, and with the project's name when the piece crossed into another one */
@@ -65,6 +66,9 @@ export interface PiecesDeps {
   attachments: Pick<AttachmentStore, "reattach">;
   /** WorktreeService.create, as a closure: the two services must not import each other */
   create: (repoId: string, prompt: string, opts: CreateOpts) => Promise<WorktreeInfo>;
+  /** the rail's numbers for a worktree as its tree was last read (WorktreeService.tree.counts);
+   * nothing for a tree never read */
+  counts: (worktreeId: string) => RowCounts | undefined;
   /** the pieces a plan names, read off its text on the quick model (tasks.ts); null where the
    * agent has no quick model, or the plan is one piece of work */
   reader: (wt: WorktreeInfo, markdown: string) => Promise<ReadPiece[] | null>;
@@ -99,6 +103,8 @@ const refused = (text: string): McpToolResult => ({ text, isError: true });
 const HELD =
   "Handed to the person; the list shows beside your plan and they decide where each piece goes. Ask for plan approval now.";
 const SHOWN = "Handed to the person as a card; they decide. Finish your turn.";
+const SHOWN_HERE =
+  "Handed to the person as a card. This worktree holds no work yet, so the card leads with doing it here; they decide. Finish your turn.";
 
 type PlanCard = Extract<AgentEvent, { type: "agent-permission" }>;
 
@@ -473,6 +479,8 @@ export class PiecesService implements ToolProvider {
     // off the plan rides the card that is up; the person's own (the verb) has no card coming and
     // is a card of its own at once
     const held = by !== "person" && wt.mode === "plan";
+    const here = by === "agent" && !held && this.offerHere(wt, pieces);
+    if (here) pieces[0]!.fate = "here";
     const plan = held ? null : writePlanDocNow(wt.path, listDoc(pieces));
     agent.note({
       type: "pieces-proposed",
@@ -485,7 +493,22 @@ export class PiecesService implements ToolProvider {
       ...(by === "toyon" && read ? { read } : {}),
       ts: Date.now(),
     });
-    return { text: held ? HELD : SHOWN };
+    return { text: held ? HELD : here ? SHOWN_HERE : SHOWN };
+  }
+
+  /** Whether the agent's one offer should open on "do it here". The agent offers what it comes
+   * across as `worktree` by rule, since it cannot reliably tell whether its own tree holds
+   * anything; Toyon can. A worktree that is clean and level with main would be left empty by a
+   * sibling, its chat's context unused, so the card leads with here and the person can still
+   * move it. Only a piece that has a here: one for another project, an open worktree or a
+   * branch to wait for has none. The numbers are the rail's last read, so a tree never read is
+   * not known to be empty. */
+  private offerHere(wt: WorktreeInfo, pieces: readonly Piece[]): boolean {
+    if (pieces.length !== 1) return false;
+    const p = pieces[0]!;
+    if (p.fate !== "worktree" || p.project || p.to || p.after) return false;
+    const counts = this.d.counts(wt.id);
+    return counts?.dirty === 0 && counts.ahead === 0;
   }
 
   /** What a piece waits for: an earlier piece of the same list by its title, the origin's own

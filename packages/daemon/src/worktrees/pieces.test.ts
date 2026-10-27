@@ -61,6 +61,8 @@ async function land(id: string, file: string) {
 const HELD =
   "Handed to the person; the list shows beside your plan and they decide where each piece goes. Ask for plan approval now.";
 const SHOWN = "Handed to the person as a card; they decide. Finish your turn.";
+const SHOWN_HERE =
+  "Handed to the person as a card. This worktree holds no work yet, so the card leads with doing it here; they decide. Finish your turn.";
 
 const piece = (over: Partial<RawPiece> = {}): RawPiece => ({
   title: "Rail fixes",
@@ -212,6 +214,60 @@ describe("the tool", () => {
     const a = await w.worktrees.create(repoId, "task", { title: "Rail" });
     expect(await call(a.id, piece({ title: "wire bytes" }))).toEqual({ text: SHOWN });
     expect(lastProposal(a.id).pieces[0]!.title).toBe("Wire bytes");
+  });
+
+  test("the agent's one offer from a worktree that holds nothing opens on here; any work, a project, a target, a wait or a list keeps it a worktree", async () => {
+    const repoId = await registered();
+    const acp = await otherProject("claude-agent-acp");
+    const a = await w.worktrees.create(repoId, "task", { title: "Rail" });
+    const b = await w.worktrees.create(repoId, "task", { title: "Composer" });
+    // each ask is its own turn, so the turn's allowance is not what refuses one
+    const decline = async () => {
+      await w.pieces.answer(a.id, lastProposal(a.id).id, false);
+      agentOf(a.id).note({ type: "turn-start", ts: Date.now() });
+    };
+    const fateOf = () => lastProposal(a.id).pieces.map((p) => p.fate);
+    // the numbers are the rail's last read: a tree never read is not known to be empty
+    expect(w.worktrees.tree.counts(a.id)).toBeUndefined();
+    expect(await call(a.id, piece())).toEqual({ text: SHOWN });
+    expect(fateOf()).toEqual(["worktree"]);
+    await decline();
+    await w.worktrees.tree.refresh(a.id);
+    expect(w.worktrees.tree.counts(a.id)).toMatchObject({ dirty: 0, ahead: 0 });
+    expect(await call(a.id, piece())).toEqual({ text: SHOWN_HERE });
+    expect(fateOf()).toEqual(["here"]);
+    await decline();
+    // the piece has no here: another project, an open worktree, or a branch to wait for
+    for (const p of [piece({ project: acp.path }), piece({ where: "send", to: b.branch }), piece({ after: "this" })]) {
+      expect(await call(a.id, p)).toEqual({ text: SHOWN });
+      expect(fateOf()).toEqual([p.where]);
+      await decline();
+    }
+    // a list is the agent's split of its own work, not an offer
+    expect(await call(a.id, piece(), piece({ title: "Notes", plan: "Notes." }))).toEqual({ text: SHOWN });
+    expect(fateOf()).toEqual(["worktree", "worktree"]);
+    await decline();
+    // the person's own verb asks for a worktree and gets one
+    agentOf(a.id).mcpTools = false;
+    await w.pieces.ask(a.id, repoId, "fix the rail badge");
+    expect(fateOf()).toEqual(["worktree"]);
+    await decline();
+    // a tree with work on it, uncommitted or committed, is the branch's: the sibling is right
+    writeFileSync(join(a.path, "rail.txt"), "x\n");
+    await w.worktrees.tree.refresh(a.id);
+    expect(await call(a.id, piece())).toEqual({ text: SHOWN });
+    expect(fateOf()).toEqual(["worktree"]);
+    await decline();
+    expect((await w.worktrees.commit(a.id, "add rail")).ok).toBe(true);
+    await w.worktrees.tree.refresh(a.id);
+    expect(w.worktrees.tree.counts(a.id)).toMatchObject({ dirty: 0, ahead: 1 });
+    expect(await call(a.id, piece())).toEqual({ text: SHOWN });
+    expect(fateOf()).toEqual(["worktree"]);
+    // in plan mode the list rides the plan card and is not an offer, empty tree or not
+    const planning = await w.worktrees.create(repoId, "task", { title: "Later", mode: "plan" });
+    await w.worktrees.tree.refresh(planning.id);
+    expect(await call(planning.id, piece())).toEqual({ text: HELD });
+    expect(lastProposal(planning.id).pieces[0]!.fate).toBe("worktree");
   });
 
   test("the person's own list in plan mode is a card at once: no plan card of theirs is coming", async () => {

@@ -291,6 +291,7 @@ const pieces = new PiecesService({
   runtime,
   attachments,
   create: (repoId, prompt, opts) => worktrees.create(repoId, prompt, opts),
+  counts: (id) => worktrees.tree.counts(id),
   reader: makePiecesReader(runtime, agents, state),
 });
 tools.add(pieces);

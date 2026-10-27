@@ -231,7 +231,9 @@ export interface CreateOpts {
   plan?: { markdown: string; handed: Handed; prompt: (path: string | null) => string };
   /** made on an agent's proposal rather than typed into: its agent starts at once, its procs on
    * the first look at it or the first request for its preview, which the idle policy's wake edges
-   * already are. A row the person typed into keeps its live preview, since the spare is warm. */
+   * already are. A row the person typed into keeps its live preview, since the spare is warm. A
+   * cold create never claims the spare: that row is the one the person types new work into, and
+   * a claim would retitle it under their fingers and leave their draft in the proposal's box. */
   cold?: true;
 }
 
@@ -495,8 +497,10 @@ export class WorktreeService {
 
     // fast path: claim the pre-warmed spare. Its runtime — agent included — already exists, so the
     // task's first message goes to the spare's agent. The spare was warmed under the default
-    // profile; another one means its procs restart once the tree is on its branch.
-    const spare = this.d.state.worktrees.find((w) => w.repoId === repoId && w.kind === "spare");
+    // profile; another one means its procs restart once the tree is on its branch. A cold create
+    // is a proposal's, not a send from the row, so it takes a checkout of its own: the spare stays
+    // the person's, draft and all, and a row meant to wait for a look does not arrive running.
+    const spare = opts.cold ? undefined : this.d.state.worktrees.find((w) => w.repoId === repoId && w.kind === "spare");
     const restart = !!spare && profile !== undefined && profile !== resolveRun(repo, spare).profile;
     let carriedIn: Carried | undefined;
     let release: (() => void) | undefined;
@@ -512,7 +516,7 @@ export class WorktreeService {
       // the claim stamped the prompt's words as a name still to be found; a given name is final
       unnamed: given ? undefined : (true as const),
     };
-    const claimed = await this.spare.claim(repoId, title, opts.worktreeId, stamps, async (wt) => {
+    const prepare = async (wt: WorktreeInfo) => {
       // the tree is there and the branch is not yet: main's changes come in, and the message
       // goes on a held queue, so the turn starts on the branch rather than commit to a detached
       // head. The spare's agent may be up already, warmed on the first keystroke under the
@@ -527,7 +531,8 @@ export class WorktreeService {
         attachments,
         ...(born ? { handed: born.handed } : {}),
       });
-    });
+    };
+    const claimed = spare ? await this.spare.claim(repoId, title, opts.worktreeId, stamps, prepare) : null;
     if (claimed) {
       const { wt } = claimed;
       const rt = this.d.runtime.ensureAgent(wt);

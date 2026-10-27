@@ -36,6 +36,27 @@ describe("spare pool", () => {
     expect(wt.agent).toBe("claude");
   });
 
+  test("a cold create leaves a ready spare alone: the row being typed in stays the person's", async () => {
+    const repoId = await registered();
+    await w.worktrees.spare.ensure(repoId);
+    const spare = w.state.worktrees.find((x) => x.kind === "spare")!;
+    // words in the plus: the spare's agent is warming for a send that is still to come
+    w.worktrees.spare.typed(spare.id, "what I was about to ask");
+    const spareAgent = w.agents.get(spare.id)!;
+    const wt = await w.worktrees.create(repoId, "A piece", { title: "A piece", cold: true });
+    expect(wt.id).not.toBe(spare.id);
+    expect(wt.kind).toBe("worktree");
+    expect(wt.title).toBe("A piece");
+    // the spare is untouched: same id, still the spare, nothing sent into its agent, so the box
+    // keyed on its id still holds what was typed, and the person's own send still claims it
+    expect(spare.kind).toBe("spare");
+    expect(spareAgent.sent).toHaveLength(0);
+    expect(w.worktrees.spare.current(repoId)).toEqual({ worktreeId: spare.id, ready: true });
+    const own = await w.worktrees.create(repoId, "what I was about to ask", { worktreeId: spare.id });
+    expect(own.id).toBe(spare.id);
+    expect(spareAgent.sent[0]?.text).toBe("what I was about to ask");
+  });
+
   test("a claim carries the mode, model and effort the task asked for, like a cold create does", async () => {
     const repoId = await registered();
     await w.worktrees.spare.ensure(repoId);

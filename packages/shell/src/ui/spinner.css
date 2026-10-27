@@ -65,13 +65,48 @@
    little bigger than it to carry the same weight, and 9 is the first whole-pixel size above 8 with
    equal cells and a 1px gap. Its centre is half a pixel off the dot's, which no screen can show.
    text1 rather than a state colour: the dot's colours say what the worktree is doing over time,
-   and this is a git op you started that finishes on its own. */
+   and this is a git op you started that finishes on its own.
+
+   Its own gait: the cells fill the square one at a time, clockwise from the top left, then clear
+   in the same order. The walking pair above is the agent's mark, learned in the transcript as the
+   agent composing, and a row wearing it read as the agent at work when the agent was idle and a
+   land was out. A fill is a frame the walk never shows, so the two are told apart at a glance from
+   across the rail, and a wait that fills has a direction, which a land's steps do. The square is
+   full for one step of the eight: the rule against four lit is the transcript's, where the stop
+   button sits beside the mark, and nothing stands beside this one. Slower than the walk, since an
+   op holds the seat for the length of a check and a pace that ticks four times a second there is
+   a row that will not settle. */
   .spinner-dot {
     --spinner-box: 8px;
     --spinner-cell: 4px;
     --spinner-inset: 0px;
     vertical-align: 0;
     color: var(--text1);
+    & > span {
+      animation: fill 1.6s steps(1) infinite;
+    }
+    & > span:nth-child(1) {
+      animation-delay: 0s;
+    }
+    & > span:nth-child(2) {
+      animation-delay: 0.2s;
+    }
+    & > span:nth-child(3) {
+      animation-delay: 0.4s;
+    }
+    & > span:nth-child(4) {
+      animation-delay: 0.6s;
+    }
+  }
+  /* a cell's turn in the fill: lit for half the cycle, quiet for the other half, so the cells
+   behind it in the order light while it is still lit and clear after it does */
+  @keyframes fill {
+    0% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.25;
+    }
   }
   /* a cell's turn: the head for one step, the tail for the next, quiet for the two after */
   @keyframes squares {
@@ -87,12 +122,13 @@
     }
   }
   /* no motion: the mark holds one frame, one lit corner and three quiet, never four lit, for the
-   reason above */
+   reason above. The dot holds half full, its top row, so it is still not the walk's frame. */
   @media (prefers-reduced-motion: reduce) {
     .spinner > span {
       animation: none;
     }
-    .spinner > span:first-child {
+    .spinner > span:first-child,
+    .spinner-dot > span:nth-child(2) {
       opacity: 1;
     }
   }

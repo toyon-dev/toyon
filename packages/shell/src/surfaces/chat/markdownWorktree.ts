@@ -119,7 +119,7 @@ export function worktreeMention(namer: () => WorktreeNamer | undefined): Tokeniz
       });
       const archived = named.archived ? ' data-archived=""' : "";
       const dot = t.dot ? ` data-tip-dot="${attr(t.dot)}"` : "";
-      return `<span class="chat-mention" data-worktree="${attr(named.id)}" data-branch="${attr(named.branch)}" data-dir="${attr(dir)}"${archived} data-tip="${attr(t.text)}" data-tip-detail="${attr(t.detail.join("\n"))}"${dot} data-tip-placement="follow">@<span class="chat-mention-dot"><span class="dot${t.dot ? ` ${attr(t.dot)}` : ""}"></span></span>${escapeHtml(named.title)}</span>`;
+      return `<span class="chat-mention" data-worktree="${attr(named.id)}" data-branch="${attr(named.branch)}" data-dir="${attr(dir)}"${archived} data-tip="${attr(t.text)}" data-tip-detail="${attr(t.detail.join("\n"))}"${dot} data-tip-placement="follow">@${escapeHtml(named.title)}<span class="chat-mention-dot"><span class="dot${t.dot ? ` ${attr(t.dot)}` : ""}"></span></span></span>`;
     },
   };
 }

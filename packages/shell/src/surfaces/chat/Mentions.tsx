@@ -76,7 +76,7 @@ export function MentionText({
               data-archived={s.archived ? "" : undefined}
               {...rowTip}
             >
-              {/* the row's dot after the sigil, and the name as the rail reads it, on the sent
+              {/* the name as the rail reads it with the row's dot trailing it, on the sent
                   message alone: over the field the mark is the draft again in the field's own
                   metrics, so it is the draft's characters, the title a pick wrote or a branch
                   typed by hand, and a dot in it would shift every mark after it off its word */}
@@ -84,13 +84,12 @@ export function MentionText({
                 s.text
               ) : (
                 <>
-                  @
+                  @{t.text}
                   {t.dot && (
                     <span className="chat-mention-dot">
                       <span className={`dot ${t.dot}`} />
                     </span>
                   )}
-                  {t.text}
                 </>
               )}
             </span>

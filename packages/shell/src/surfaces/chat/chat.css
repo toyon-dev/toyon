@@ -1269,45 +1269,32 @@
     color: var(--text0);
     text-decoration-color: currentColor;
   }
-  /* A worktree's mark reads as its row in the rail does, the dot and the title, written as one
-     word: the sigil, the dot, the name, under one underline. The title is words, so the mark
-     wears the prose's face and not the mono a path's mark wears; in the mono a capital and a
-     space read as a string, and the dot already says which kind of mark it is. The underline is
-     pinned to a pixel so the seat below can carry it at the same weight on the phone's type. */
+  /* A worktree's mark reads as its row in the rail does, the title with the row's dot: the sigil
+     glued to the name as every mention is, under one underline, and the dot trailing the word.
+     The title is words, so the mark wears the prose's face and not the mono a path's mark wears;
+     in the mono a capital and a space read as a string, and the dot already says which kind of
+     mark it is. The underline is pinned to a pixel so it weighs the same on the phone's type. */
   .chat-mention[data-worktree] {
     font: inherit;
     text-decoration-thickness: 1px;
   }
   /* The row's dot, the rail's own, so a message says what the row is doing as the rail does, and
      the hollow one for a row in the archive, whose press opens the archive's page and not a live
-     chat. It sits in a seat between the sigil and the name: a box on the line is skipped by the
-     underline, which left a gap under the dot and the dot floating beside its word, so the seat
-     draws that stretch of the line itself, a pixel below the baseline's underline offset. The seat
-     is what draws it and not the dot, because a working dot pulses its opacity and would blink the
-     line with it. Up a pixel from the baseline, the dot sits on the capitals' middle. */
+     chat. It sits in a seat after the name, where the underline ends: a box on the line is
+     skipped by the underline, which is wanted here, since the dot is not a letter of the word.
+     Up a pixel from the baseline, the dot sits on the capitals' middle. */
   .chat-mention-dot {
     display: inline-block;
     vertical-align: 1px;
-    padding: 0 2px;
-    position: relative;
+    padding-left: 4px;
     & > .dot {
       display: block;
     }
-    &::after {
-      content: "";
-      position: absolute;
-      inset: auto 0 -4px;
-      height: 1px;
-      background: color-mix(in srgb, currentColor 55%, transparent);
-    }
   }
-  :where([data-hover]) .chat-mention:hover > .chat-mention-dot::after {
-    background: currentColor;
-  }
-  /* The dot is a box on the line, and the browser breaks a line after a box as freely as after a
-     space, so a dot was left at the end of one line with its name on the next. The mark with a
-     dot keeps to one line: a title is a few words, so it moves down whole rather than breaking at
-     its spaces, where a path's mark still breaks anywhere. */
+  /* The dot is a box on the line, and the browser breaks a line before a box as freely as at a
+     space, so a dot was left alone at the start of a line with its name on the one above. The
+     mark with a dot keeps to one line: a title is a few words, so it moves down whole rather than
+     breaking at its spaces, where a path's mark still breaks anywhere. */
   .chat-mention:has(> .chat-mention-dot) {
     white-space: nowrap;
   }

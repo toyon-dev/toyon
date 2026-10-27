@@ -56,13 +56,12 @@ export function WorktreeChip({ id, title, inert }: { id: string; title?: string;
             }
       }
     >
-      @
+      @{t.text}
       {t.dot && (
         <span className="chat-mention-dot">
           <span className={`dot ${t.dot}`} />
         </span>
       )}
-      {t.text}
     </span>
   );
 }

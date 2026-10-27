@@ -144,10 +144,14 @@ describe("pieces prompts", () => {
 
   test("the system append hands the pieces of a plan to Toyon through the split tool, and one piece found mid-task", () => {
     expect(SYSTEM_APPEND).toContain("hand Toyon the list with the `split` tool when you have one");
+    expect(SYSTEM_APPEND).toContain(
+      "or, outside plan mode, before you start on your own pieces, never at the end of the turn",
+    );
     expect(SYSTEM_APPEND).toContain("never start a sibling's piece yourself, and do only the pieces marked `here`");
     expect(SYSTEM_APPEND).toContain(
       "The same tool, with one piece, is how you offer a separate thing you come across mid-task",
     );
+    expect(SYSTEM_APPEND).toContain("as soon as you see it rather than when your own work is done");
   });
 
   test("a sibling's first message: its plan's path, who wrote it, the whole picture, and the note", () => {

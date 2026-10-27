@@ -1323,9 +1323,19 @@ function LandedRow({ item }: { item: Extract<ChatItem, { kind: "landed" }> }) {
   // sentence.
   const what = item.mark && landedWhat(item.mark);
   const how = `${item.text}, ${ago}`;
+  // the pull request it went through, offered the way the split row offers its list: in the
+  // sentence, after the thing it belongs to
+  const pr = item.url && (
+    <Button variant="inline" onClick={() => window.open(item.url, "_blank")}>
+      the PR
+    </Button>
+  );
   return (
     <DaemonRow icon="check" word="landed" tone="aqua" at={item.ts} below={what ? how : undefined}>
-      <span className="daemon-text">{what ?? how}</span>
+      <span className="daemon-text">
+        {what ?? how}
+        {pr && <> · {pr}</>}
+      </span>
     </DaemonRow>
   );
 }

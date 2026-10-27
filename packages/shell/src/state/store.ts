@@ -168,7 +168,7 @@ export type ChatItem =
   /** a divider: what follows was said in another worktree, grafted in here */
   | { kind: "grafted"; title: string; branch: string }
   /** the daemon's word on a land that merged, kept for the record */
-  | { kind: "landed"; text: string; mark?: LandMark; ts: number }
+  | { kind: "landed"; text: string; mark?: LandMark; url?: string; ts: number }
   /** the daemon's word on a restore from the archive: when it went, what branch it came back on,
    * and whether its uncommitted changes came with it */
   | { kind: "restored"; archivedAt: number; branch: string; uncommitted: boolean; ts: number }
@@ -3521,6 +3521,7 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
           kind: "landed",
           text: event.message,
           ...(event.mark ? { mark: event.mark } : {}),
+          ...(event.url ? { url: event.url } : {}),
           ts: event.ts,
         },
       ];

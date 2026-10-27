@@ -421,8 +421,9 @@ export type AgentEvent =
   | { type: "grafted"; title: string; branch: string; ts: number }
   /** a land put this worktree's work on main: the daemon's word on it, kept on the transcript so
    * the row reads back after a reload. `mark` is the landing as the record keeps it, what landed
-   * included; absent on a row written before marks said so */
-  | { type: "landed"; message: string; mark?: LandMark; ts: number }
+   * included; absent on a row written before marks said so. `url` is the pull request when the
+   * landing was one: the row is read back long after the composer's foot stops offering it */
+  | { type: "landed"; message: string; mark?: LandMark; url?: string; ts: number }
   /** a worktree made from a piece of this one's work has landed; `url` is its pull request when
    * the landing was one. Kept on the transcript so the row reads back after a reload, and read by
    * the next prompt so the agent here hears it too. `same`: a sibling of this project, not work in

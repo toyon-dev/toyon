@@ -2198,6 +2198,9 @@ describe("streams and notices", () => {
     const mark = { base: "x", tip: "y", at: 0, subjects: ["add the thing"] };
     const said = run([...base, agent("a", { type: "landed", message: "m", mark, ts: 0 })]);
     expect(localOf(said, "a").chat).toEqual([{ kind: "landed", text: "m", mark, ts: 0 }]);
+    // and the pull request it went through, for the row to link once the foot no longer offers it
+    const byPr = run([...base, agent("a", { type: "landed", message: "m", mark, url: "https://x/pull/1", ts: 0 })]);
+    expect(localOf(byPr, "a").chat).toEqual([{ kind: "landed", text: "m", mark, url: "https://x/pull/1", ts: 0 }]);
     const pr = run([...base, server({ t: "shipped", worktreeId: "a", ok: true, message: "m", url: "u" })]);
     expect(localOf(pr, "a").chat).toEqual([]);
     expect(pr.openUrl).toBe("u");

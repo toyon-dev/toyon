@@ -312,7 +312,8 @@ export type ShipOutcome = ShipResult & { asked?: true };
  * is to be noted, and the mark it put on the record, so the word carries what landed. The mark
  * comes from the op and never from the record's last entry: a landing whose ref could not be kept
  * writes no mark, and the last entry would then be an earlier landing's. */
-type Landed = { result: ShipResult; landed?: true; mark?: LandMark | undefined };
+/** `url` is the pull request a landing went through, for the row's word to link */
+type Landed = { result: ShipResult; landed?: true; mark?: LandMark | undefined; url?: string | undefined };
 
 /** the refusal for a found worktree another tool holds, with git's reason when it gave one */
 const heldBy = (found: Pick<FoundWorktree, "name" | "lockReason">) =>
@@ -2015,7 +2016,7 @@ export class WorktreeService {
       if (moved) return { result: moved };
       return this.landOp(wt, repo, message);
     });
-    if (out.result.ok && out.landed) this.noteLanded(wt, out.result.message, out.mark);
+    if (out.result.ok && out.landed) this.noteLanded(wt, out.result.message, out.mark, out.url);
     return { result: this.fixShip(wt, out.result, baseOf(repo)) };
   }
 
@@ -2084,8 +2085,14 @@ export class WorktreeService {
   /** the word on a land that put the work on main, on the transcript the way a graft's marker is:
    * the row reads it back after a reload, where a frame to the sockets open at the time would not.
    * The siblings ride along for the row to offer, for as long as they are still rows. */
-  private noteLanded(wt: WorktreeInfo, message: string, mark?: LandMark) {
-    this.d.runtime.ensureAgent(wt).agent.note({ type: "landed", message, ...(mark ? { mark } : {}), ts: Date.now() });
+  private noteLanded(wt: WorktreeInfo, message: string, mark?: LandMark, url?: string) {
+    this.d.runtime.ensureAgent(wt).agent.note({
+      type: "landed",
+      message,
+      ...(mark ? { mark } : {}),
+      ...(url ? { url } : {}),
+      ts: Date.now(),
+    });
     // after the row's own word: a worktree that handed this work off hears of it from here
     this.d.hub.emit("landed", wt.id);
   }
@@ -2173,7 +2180,7 @@ export class WorktreeService {
       // press: it lands the merge, never a second PR of the same commit
       if (wt.pr?.state === "merged" && !prTaken(wt)) {
         const { mark, ...result } = await this.prMergedOp(wt.id, undefined, w);
-        return result.ok ? { result, landed: true, mark } : { result };
+        return result.ok ? { result, landed: true, mark, url: wt.pr.url } : { result };
       }
       // the branch is measured against origin's main, fetched now: main here is not pulled on
       // this route and can trail origin by days
@@ -2215,7 +2222,7 @@ export class WorktreeService {
         const { mark: noted, ...r } = await this.prMergedOp(wt.id, mark, w);
         const on = `origin's ${repo.defaultBranch} has this work already`;
         const result = { ...r, message: r.ok ? `${on}; ${r.message}` : `${on}, but ${r.message}` };
-        return r.ok ? { result, landed: true, mark: noted } : { result };
+        return r.ok ? { result, landed: true, mark: noted, url: wt.pr?.url } : { result };
       }
       // the branch's earlier subjects go under the title only where GitHub will squash them away;
       // a PR merged by rebase or merge keeps its commits, and the message is the newest work's
@@ -2474,7 +2481,7 @@ export class WorktreeService {
     const { mark, ...result } = await this.ship(worktreeId, "land", () => this.prMergedOp(worktreeId));
     if (result.ok) log.info(worktreeId, `landed: ${result.message}`);
     else log.warn(worktreeId, `landing failed: ${result.message}`);
-    if (result.ok && wt) this.noteLanded(wt, result.message, mark);
+    if (result.ok && wt) this.noteLanded(wt, result.message, mark, wt.pr?.url);
     return result;
   }
 

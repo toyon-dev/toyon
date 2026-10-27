@@ -295,10 +295,11 @@ describe("landing", () => {
     expect(w.state.worktree(wt.id)?.lands).toEqual([
       { base: before, tip, at: expect.any(Number), pr: 7, subjects: ["Add the feature"] },
     ]);
-    // the poll's word on the row carries the mark too
+    // the poll's word on the row carries the mark too, and the PR it went through for the row to link
     expect(w.agents.get(wt.id)!.recorded.at(-1)).toMatchObject({
       type: "landed",
       mark: { pr: 7, subjects: ["Add the feature"] },
+      url: "https://x/pull/7",
     });
     expect((await git(w.repo, "rev-parse", "main")).out).toBe(before);
     // the base is origin's main, which the PR landed on: the branch restarts from there, and

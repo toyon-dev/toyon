@@ -2036,13 +2036,19 @@ export function Composer({
         <div className="composer-notes">
           {/* pieces of this worktree's plan waiting on a sibling: one line each, the branch as the
               chip a message draws it as, or the piece of the same list by its title while it is
-              not a worktree yet, so the wait is read where the next message is written */}
+              not a worktree yet, so the wait is read where the next message is written. A piece
+              queued after this very branch says so in words: a chip naming the worktree whose box
+              this is would repeat the title read just above it */}
           {queuedPieces.map((q) => (
             <div key={`${q.proposalId}/${q.pieceId}`} className="hint composer-note">
               <span>
                 {q.title} starts when{" "}
                 {"id" in q.after ? (
-                  <WorktreeChip id={q.after.id} title={q.after.branch} />
+                  q.after.id === active?.worktree.id ? (
+                    "this branch"
+                  ) : (
+                    <WorktreeChip id={q.after.id} title={q.after.branch} />
+                  )
                 ) : (
                   queuedTitle(q, queuedPieces)
                 )}{" "}

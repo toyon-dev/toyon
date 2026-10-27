@@ -40,7 +40,8 @@ export function PiecesRow({ item, worktreeId }: { item: PiecesItem; worktreeId?:
   const errors = item.outcomes.filter((o) => o.error);
   // every worktree named is the chip a message draws it as, with its project after it when that
   // is not this one; the piece's title stands where the worktree is not one yet (queued) or
-  // where it names what was sent rather than where
+  // where it names what was sent rather than where. A piece queued after the worktree this
+  // transcript belongs to says "this branch": its chip would name the row the reader is in
   const parts: React.ReactNode[] = [];
   for (const o of started)
     parts.push(
@@ -54,7 +55,15 @@ export function PiecesRow({ item, worktreeId }: { item: PiecesItem; worktreeId?:
     parts.push(
       <span key={o.pieceId}>
         {titled(o.pieceId)} queued after{" "}
-        {after && "id" in after ? <WorktreeChip id={after.id} title={after.branch} /> : o.after}
+        {after && "id" in after ? (
+          after.id === worktreeId ? (
+            "this branch"
+          ) : (
+            <WorktreeChip id={after.id} title={after.branch} />
+          )
+        ) : (
+          o.after
+        )}
       </span>,
     );
   }

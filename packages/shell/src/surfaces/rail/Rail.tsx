@@ -29,7 +29,6 @@ import { asksSetup, backFace, guestOf, isDrafted, trunkOf } from "../../state/st
 import { Button, IconButton } from "../../ui/Button.tsx";
 import { Icon } from "../../ui/Icon.tsx";
 import { useContextMenu, useMenu } from "../../ui/menu.ts";
-import { Spinner } from "../../ui/Spinner.tsx";
 import { type TipPlacement, tip } from "../../ui/Tooltip.tsx";
 import { endCarry, startCarry } from "../chat/carried.ts";
 import { hasFiles } from "../chat/useIntake.ts";
@@ -445,7 +444,7 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
         ? { title: owned.worktree.title, branch: owned.worktree.branch }
         : null;
     // a landing op out from this row takes the dot's slot, and with it the row's word: the tip
-    // and the line under the name say what the spinner is doing, not the state it covers
+    // and the line under the name say what the op is doing, not the state it covers
     const op = shipShown(w, shipping[id]?.op);
     const row = (
       <button
@@ -492,7 +491,7 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
                       : []),
                     ...cardLines(owned),
                   ],
-              dot: offline ? undefined : op ? "spinner" : dotClass(w),
+              dot: offline ? undefined : op ? "background" : dotClass(w),
             })
           : tip(
               offline ? OFFLINE_LINE : w.locked ? `Held by ${w.lockReason ?? "another tool"}` : FOUND_LINE,
@@ -655,7 +654,11 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
           {onScreen && owned && <span className="rail-at row-dim">{onLead ? "" : ago(sentAt(owned.worktree))}</span>}
         </span>
         {(() => {
-          if (op) return <Spinner size="dot" />;
+          // the background dot: a git op is work going on under the row that is not a turn, the
+          // same thing that dot says of a command the agent sent to the background, and it finishes
+          // on its own the same way. A mark of its own in the seat read as the agent at work; the
+          // tip and the line under the name say which it is.
+          if (op) return <span className="dot background" />;
           // held by another tool: that is its status, so the lock takes the dot's slot rather
           // than adding a column, and the hover on the row says who holds it
           if (w.locked)

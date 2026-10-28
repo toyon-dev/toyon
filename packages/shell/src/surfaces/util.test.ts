@@ -130,11 +130,19 @@ describe("stateLabel", () => {
     expect(stateLabel(status("idle"), true)).toBe("Not set up");
   });
 
-  test("a git op out from the row is its word, unless a person is needed", () => {
-    // the row swapped its dot for a spinner, so a tip saying "Running" named a dot nobody could see
+  test("a git op out from the row is its word, unless a person is needed or a turn is in flight", () => {
+    // the row swapped its dot for the op's, so a tip saying "Running" named a dot nobody could see
     expect(shipShown(status("idle", proc("web", "running")), "land")).toBe("land");
-    expect(shipShown(status("working"), "commit")).toBe("commit");
+    expect(shipShown(status("idle", proc("web", "starting")), "sync-main")).toBe("sync-main");
+    expect(shipShown(status("idle", proc("web", "asleep")), "commit")).toBe("commit");
+    expect(shipShown({ ...status("idle"), background: 1 } as WorktreeStatus, "commit")).toBe("commit");
+    // the op's dot says the agent is idle, so a turn in flight keeps its own pulse
+    expect(shipShown(status("working"), "commit")).toBeNull();
+    expect(shipShown({ ...status("working"), stopping: true } as WorktreeStatus, "land")).toBeNull();
+    // a person being needed outranks an op that finishes on its own
     expect(shipShown(status("waiting"), "land")).toBeNull();
+    expect(shipShown(status("error"), "land")).toBeNull();
+    expect(shipShown(status("idle", proc("web", "crashed")), "land")).toBeNull();
     expect(shipShown(status("idle"), undefined)).toBeNull();
     expect(shipLabel("land")).toBe("Landing");
     expect(shipLabel("sync-main")).toBe("Syncing with main");

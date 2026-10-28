@@ -154,13 +154,20 @@ export function procLabel(status: ProcStatus): string {
   return PROC_LABEL[status];
 }
 
+/** the dot states a git op may stand in for: the row is idle, or something runs under it that
+ * neither needs a person nor is the agent's turn. The op takes the background dot, which says
+ * the same of a row: not mid-turn, something going on underneath, over on its own. */
+const SHIP_OVER: ReadonlySet<DotState> = new Set(["idle", "asleep", "running", "starting", "background", "landed"]);
+
 /** the git op a row is showing in its dot's slot, when one is out: the op was started from this
- * row, and the control that started it may be off screen. `waiting` keeps the slot and the word,
- * since a person being needed outranks a git op that finishes on its own. Every reader of the
- * row's state asks this first, so the tip and the line under the name say what the slot shows and
- * never restate the dot the spinner replaced. */
+ * row, and the control that started it may be off screen. A dot that needs a person (waiting,
+ * crashed, a failed turn) or says a turn is in flight (working, stopping) keeps the slot and the
+ * word: a person being needed outranks a git op that finishes on its own, and the op's dot over a
+ * working row said the agent was idle. The composer's line still says the op is out there. Every
+ * reader of the row's state asks this first, so the tip and the line under the name say what the
+ * slot shows and never restate the dot the op's replaced. */
 export function shipShown(w: WorktreeStatus, op: ShipOp | undefined): ShipOp | null {
-  return op && dotClass(w) !== "waiting" ? op : null;
+  return op && SHIP_OVER.has(dotClass(w)) ? op : null;
 }
 
 /** the op in words, the verb its own button showed in the present tense */

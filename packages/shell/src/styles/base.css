@@ -407,8 +407,9 @@
       animation: pulse 1.2s ease-in-out infinite;
     }
     /* the agent idle with something still going under it: a command it sent to the background, a
-   wakeup it booked. A colour of its own rather than working's green, since the two differ in
-   the one way that matters at the rail: this row takes a message now, and that one is mid-turn.
+   wakeup it booked, or a git op you started from the row (a land, a commit, a sync), which
+   finishes on its own the same way. A colour of its own rather than working's green, since the
+   two differ in the one way that matters at the rail: this row is not mid-turn, and that one is.
    It breathes like working, slower, because something is still happening. Purple is the one
    accent no other mark wears (blue is the archive's), so it is not mistaken for any of them
    from across the rail. */

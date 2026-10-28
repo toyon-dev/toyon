@@ -4,7 +4,6 @@ import { cx } from "./cx.ts";
 import { Float, type FloatHandle } from "./Float.tsx";
 import { Kbd } from "./Kbd.tsx";
 import { type Placement, type Point, pointRect, type Rect } from "./place.ts";
-import { Spinner } from "./Spinner.tsx";
 import "./tooltip.css";
 
 /**
@@ -37,8 +36,7 @@ export type TipOptions = {
   card?: boolean;
   /** a status dot class (`running`, `waiting`, see base.css) drawn just before the text: for a
    * tip that names a dot's state, so the colour and the word sit together even when the dot
-   * itself is at the other end of the row. `spinner` draws the Spinner's dot instead, for a tip
-   * whose row has swapped its dot for one while an op runs. */
+   * itself is at the other end of the row. */
   dot?: string;
   /** the thing the text is about, in the quiet tier at the far end of the text's line: a worktree
    * row's branch beside its state, so every row's tip has the same shape whatever the row itself
@@ -292,11 +290,7 @@ export function Tooltips() {
   if (!anchor) return null;
   const words = (
     <>
-      {anchor.dot === "spinner" ? (
-        <Spinner size="dot" className="tooltip-dot" />
-      ) : (
-        anchor.dot && <span className={`dot ${anchor.dot} tooltip-dot`} />
-      )}
+      {anchor.dot && <span className={`dot ${anchor.dot} tooltip-dot`} />}
       {anchor.text}
     </>
   );

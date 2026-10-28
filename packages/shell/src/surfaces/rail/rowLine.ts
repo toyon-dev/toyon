@@ -86,13 +86,13 @@ export interface RowContext {
    * worktree's page, which has no column for it. A row on the rail keeps the time in a seat of its
    * own, on a screen as on a desk, so the times read down one edge. */
   at?: string;
-  /** the git op the row's dot slot is showing as a spinner (`shipShown`), if one is out */
+  /** the git op the row's dot slot is showing as the background dot (`shipShown`), if one is out */
   op?: ShipOp | null;
 }
 
 export function rowLine(w: WorktreeStatus, ctx: RowContext): string {
   if (!isOwned(w)) return w.locked ? `Held by ${w.lockReason ?? "another tool"}` : ctx.path;
-  // the spinner in the dot's slot is the line's subject; the lead too, since a pull runs there
+  // the op in the dot's slot is the line's subject; the lead too, since a pull runs there
   if (ctx.op) return shipLabel(ctx.op);
   if (isLead(w.worktree)) return LEAD_LINE;
   const state = stateLabel(w, ctx.needsSetup);

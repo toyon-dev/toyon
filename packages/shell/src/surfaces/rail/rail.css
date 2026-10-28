@@ -451,8 +451,6 @@
     }
     & .rail-item .dot,
     & .rail-disc-item .dot,
-    & .rail-item .spinner,
-    & .rail-disc-item .spinner,
     & .rail-glyph {
       margin-left: var(--rail-dot-ml);
       margin-right: var(--rail-dot-mr);
@@ -520,8 +518,6 @@
        reorder the bidi-neutral characters in a name, a +3 or a v2/5. */
     & .rail-item .dot,
     & .rail-disc-item .dot,
-    & .rail-item .spinner,
-    & .rail-disc-item .spinner,
     & .rail-glyph {
       order: -1;
     }

@@ -1525,7 +1525,7 @@ export function whatsNew(s: Pick<State, "version" | "ranBefore" | "notesSeen">):
 /** how long after the list arrives from a worktree a leftward swipe on it is the way back there
  * rather than a row's slide: long enough for a hand to see it went back by mistake, short enough
  * that a row swiped on purpose is never kept waiting for long */
-export const BACK_MS = 1500;
+export const BACK_MS = 800;
 
 /** the worktree face a leftward swipe on the list returns to at `now`, or null once the moment
  * for it has passed and the rows own the gesture again */

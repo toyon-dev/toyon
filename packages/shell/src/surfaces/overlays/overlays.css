@@ -56,8 +56,8 @@
       padding: 12px 24px 12px;
     }
   }
-  /* a chip holding a list (the project's processes) gives way before its column does: the chip
-   shrinks and its label truncates, so a fourth process never widens the card */
+  /* a chip holding a list (the project's processes) gives way before its column does: on a line
+   of its own the chip shrinks and its label truncates, so a sixth process never widens the card */
   .keys-chip {
     min-width: 0;
   }
@@ -68,13 +68,26 @@
     white-space: nowrap;
   }
   /* every row on the list row height, with no vertical padding of its own: a row holding a chip and
-   a row holding only text differ by the chip's box otherwise, and the cards read as unevenly spaced */
+   a row holding only text differ by the chip's box otherwise, and the cards read as unevenly spaced.
+   A row is its name and its value, and neither breaks: the name is read as one word, and the
+   value is what the row is there to show. A pair the column cannot hold side by side (a long
+   login, a long theme name) puts the value under its name instead, at the far side where every
+   other value stands, rather than breaking the name over two lines or running the value past
+   the column. */
   .keys-setting {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
-    gap: 24px;
+    /* the least room between a name and its value; space-between spreads them past this */
+    gap: 2px 12px;
     min-height: var(--row-height);
+    & > .keys-d {
+      white-space: nowrap;
+    }
+    & > .btn {
+      margin-left: auto;
+    }
   }
   /* a shortcut is read, not clicked, so it is drawn the way every other Kbd in the app is, as
    glyphs with no tile, and the rows sit on the dense token: a legend, not a column of buttons.

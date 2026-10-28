@@ -29,7 +29,7 @@ import { landedWhat } from "../recap.ts";
 import { elapsed, spanWords } from "../util.ts";
 import { AskRow } from "./AskRow.tsx";
 import { AttachmentSet } from "./AttachmentSet.tsx";
-import { answeredQuestion, answerLines, decidedPlan } from "./ask.ts";
+import { answeredQuestion, answerLines, decidedPlan, pickedDescriptions } from "./ask.ts";
 import { chatLink, openChatLink } from "./chatLink.ts";
 import { DaemonRow, useAgo } from "./DaemonRow.tsx";
 import { FileChip } from "./FileChip.tsx";
@@ -1128,7 +1128,8 @@ export const ChatItemView = memo(function ChatItemView({
       // tier under the prose it caused.
       const said = answeredQuestion(item);
       if (said) {
-        const answer = answerLines(said.questions, said.answers).join("\n");
+        const lines = answerLines(said.questions, said.answers);
+        const answer = lines.join("\n");
         // the bubble offers copy alone: a pick re-sent as prose is not the choice, so it takes no
         // "edit in composer". The walk lands on it only when a note was typed (recall.ts), with
         // the note alone in the box, and the mark sits on the bubble as on a message's.
@@ -1151,7 +1152,17 @@ export const ChatItemView = memo(function ChatItemView({
               data-state={rowState({ cursor: marked })}
               {...cm.contextMenu(() => messageItems(bubble, worktreeId ?? null, deps))}
             >
-              {answer}
+              {/* each pick on its line, and under it what the option said beneath its label on the
+                  card, in the same ink: the card is gone, and the label was read beside it */}
+              {said.questions.map((qq, i) => (
+                <div key={qq.id}>
+                  {lines[i]}
+                  {pickedDescriptions(qq, said.answers?.[i]).map((d, j) => (
+                    // biome-ignore lint/suspicious/noArrayIndexKey: a fixed list, built whole from the record
+                    <div key={j}>{d}</div>
+                  ))}
+                </div>
+              ))}
             </div>
           </>
         );

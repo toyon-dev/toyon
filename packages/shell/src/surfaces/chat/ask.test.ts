@@ -20,6 +20,7 @@ import {
   openNote,
   ownChosen,
   pageCount,
+  pickedDescriptions,
   recommended,
   rowsOf,
   sendPage,
@@ -261,6 +262,28 @@ describe("answerLines", () => {
       "skipped",
     ]);
     expect(answerLines(headed, undefined)).toEqual(["Fix · skipped", "skipped"]);
+  });
+});
+
+describe("pickedDescriptions", () => {
+  test("is what the picked options said under their labels, in pick order, blanks left out", () => {
+    const described: AskQuestion = {
+      id: "how",
+      text: "how",
+      options: [
+        { value: "keep", label: "Keep as is", description: "nothing changes" },
+        { value: "rerun", label: "Re-run", description: "  with the flag  " },
+        { value: "bare", label: "Bare" },
+      ],
+    };
+    expect(pickedDescriptions(described, { selected: ["rerun", "keep"] })).toEqual([
+      "with the flag",
+      "nothing changes",
+    ]);
+    expect(pickedDescriptions(described, { selected: ["bare"] })).toEqual([]);
+    // a typed answer and a skip picked nothing, so there is nothing to read back
+    expect(pickedDescriptions(described, { selected: [], note: "neither" })).toEqual([]);
+    expect(pickedDescriptions(described, undefined)).toEqual([]);
   });
 });
 

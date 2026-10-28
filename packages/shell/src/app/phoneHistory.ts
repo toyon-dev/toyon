@@ -172,7 +172,7 @@ export function installPhoneHistory(
 
   /** a back the browser spent on the entry below the screen, or on a hidden frame: the box on top
    * goes, or the screen drops to the level the step landed on */
-  const stepDown = (s: State, screens: number, landed: number) => {
+  const stepDown = (s: State, landed: number) => {
     const box = topBox();
     if (box) {
       // back with a box up closes that box alone; the sync that follows its going puts the entry
@@ -210,7 +210,7 @@ export function installPhoneHistory(
     }
     const now = screens + (topBox() ? 1 : 0);
     if (now === at) return;
-    if (now > at) stepDown(s, screens, at);
+    if (now > at) stepDown(s, at);
     else if (now === 0 && s.activeId && !isOver(e.state)) {
       // forward from the list into the row it came back from; a tab or a diff above its chat is
       // not remembered, and neither is a box, so the sync below walks the entry for any back down
@@ -235,7 +235,7 @@ export function installPhoneHistory(
     if (shown || walk.dir === "forward") return;
     // a swipe spent on a frame nobody is looking at: the screen it was meant for drops a level, and
     // the sync that follows walks the shell's entry down to match
-    stepDown(s, screens, screens + (topBox() ? 1 : 0) - 1);
+    stepDown(s, screens + (topBox() ? 1 : 0) - 1);
   };
 
   host.addEventListener("popstate", onPop);

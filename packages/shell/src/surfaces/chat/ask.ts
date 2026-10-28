@@ -137,6 +137,16 @@ export function answerLines(questions: AskQuestion[], answers: AskAnswer[] | und
   });
 }
 
+/** What the picked options said under their labels, read back with the answer once the card is
+ * gone: a label is written to be read beside its description ("Keep as is", "Re-run"), and the
+ * bubble is the only record of the choice. The agent's words, so they stay out of `answerLines`,
+ * which is what goes to the agent and what copy takes from the bubble. */
+export function pickedDescriptions(q: AskQuestion, a: AskAnswer | undefined): string[] {
+  return (a?.selected ?? [])
+    .map((v) => q.options.find((o) => o.value === v)?.description?.trim() ?? "")
+    .filter(Boolean);
+}
+
 /** the ask the transcript shows as a message pair: a question the person answered. A permission is
  * allow or deny, not conversation, and an ask closed without an answer has nothing of theirs to
  * read back; both stay a quiet row. */

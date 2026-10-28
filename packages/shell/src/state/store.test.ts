@@ -1,6 +1,7 @@
 import { describe, expect, setSystemTime, test } from "bun:test";
 import {
   type AgentEvent,
+  type ArchivedWorktree,
   type AttachmentInput,
   MANAGED_NONE,
   nextNumbers,
@@ -3362,6 +3363,58 @@ describe("archiving a worktree", () => {
       { a: "archive-worktrees", ids: ["a"] },
     ]);
     expect(s.activeId).toBe("c");
+  });
+
+  test("the row lands in the archive on the press, as the daemon will list it", () => {
+    const dirty = { ...wt("a"), dirty: 3, transcript: "/x/a.jsonl", usage: { used: 1, size: 2, cost: 0.5 } };
+    const landed = { ...wt("b"), worktree: { ...wt("b").worktree!, landed: true } };
+    const s = run([hello(wt("main", "main"), dirty, landed), { a: "archive-worktrees", ids: ["a", "b"] }]);
+    expect(s.archived.r?.map((a) => a.id)).toEqual(["b", "a"]);
+    expect(s.archived.r?.[1]).toMatchObject({
+      title: "a",
+      branch: "toyon/a",
+      restorable: true,
+      uncommitted: true,
+      dirty: 3,
+      cost: 0.5,
+      transcript: "/x/a.jsonl",
+    });
+    expect(s.archived.r?.[0]).toMatchObject({ title: "b", landed: true });
+    expect(s.archived.r?.[0]?.uncommitted).toBeUndefined();
+  });
+
+  test("the daemon's list takes the row's place; one sent for another change keeps it meanwhile", () => {
+    const listed = (id: string): ArchivedWorktree => ({
+      id,
+      repoId: "r",
+      title: id,
+      branch: `toyon/${id}`,
+      path: `/w/${id}`,
+      createdAt: 0,
+      archivedAt: 5,
+      restorable: true,
+      transcript: `/x/${id}.jsonl`,
+    });
+    let s = run([three(), server({ t: "archived", repoId: "r", items: [listed("old")] })]);
+    s = reducer(s, { a: "archive-worktrees", ids: ["a"] });
+    expect(s.archived.r?.map((a) => a.id)).toEqual(["a", "old"]);
+    // another row's delete re-lists the archive before a's record is written: a stays
+    s = reducer(s, server({ t: "archived", repoId: "r", items: [] }));
+    expect(s.archived.r?.map((a) => a.id)).toEqual(["a"]);
+    // the record is written, and the daemon's row is the one shown from here on
+    s = reducer(s, server({ t: "archived", repoId: "r", items: [listed("a")] }));
+    expect(s.archived.r).toEqual([listed("a")]);
+    s = reducer(s, worktrees(wt("main", "main"), wt("b")));
+    expect(s.archiving).toEqual([]);
+    expect(s.archived.r).toEqual([listed("a")]);
+  });
+
+  test("an error frame takes the row it names back out of the archive", () => {
+    const both = run([three(), { a: "archive-worktrees", ids: ["a", "b"] }]);
+    expect(
+      run([server({ t: "error", message: "held by git", worktreeId: "a" })], both).archived.r?.map((a) => a.id),
+    ).toEqual(["b"]);
+    expect(run([server({ t: "error", message: "held by git" })], both).archived.r).toEqual([]);
   });
 
   test("a snapshot that still lists the row keeps it hidden; one without it retires the pending remove", () => {

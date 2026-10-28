@@ -1531,6 +1531,39 @@ export function backFace(s: Pick<State, "left">, now: number): Screen | null {
   return s.left && now - s.left.at < BACK_MS ? s.left.face : null;
 }
 
+/** The row as the archive will list it, from what the shell already knows of it. The press moves
+ * the row into the archive at once; the daemon kills the agent and the procs and deletes the
+ * directory before it writes the record, and its list replaces this one when it does. Nothing the
+ * shell cannot know is guessed: the first prompt and a session id come with the daemon's row. */
+function asArchived(w: OwnedWorktree, at: number): ArchivedWorktree {
+  return {
+    id: w.id,
+    repoId: w.repoId,
+    title: w.worktree.title,
+    branch: w.worktree.branch,
+    path: w.path,
+    createdAt: w.worktree.createdAt,
+    archivedAt: at,
+    restorable: true,
+    transcript: w.transcript ?? "",
+    ...(w.sessionId ? { sessionId: w.sessionId } : {}),
+    ...(w.dirty ? { uncommitted: true, dirty: w.dirty } : {}),
+    ...(w.worktree.landed ? { landed: true } : {}),
+    ...(w.worktree.lands?.length ? { lands: w.worktree.lands } : {}),
+    ...(w.usage?.cost !== undefined ? { cost: w.usage.cost } : {}),
+  };
+}
+
+/** the archive without these rows, in whichever project listed them */
+function withoutArchived(archived: State["archived"], ids: string[]): State["archived"] {
+  let out = archived;
+  for (const [repoId, list] of Object.entries(archived)) {
+    if (!list.some((a) => ids.includes(a.id))) continue;
+    out = { ...out, [repoId]: list.filter((a) => !ids.includes(a.id)) };
+  }
+  return out;
+}
+
 export function archivedPageOf(s: Pick<State, "archivedPage" | "activeRepoId" | "archived">): ArchivedWorktree | null {
   if (!s.archivedPage || !s.activeRepoId) return null;
   return s.archived[s.activeRepoId]?.find((a) => a.id === s.archivedPage) ?? null;
@@ -2113,7 +2146,15 @@ function reduce(s: State, action: Action): State {
     case "archive-worktrees": {
       const ids = action.ids.filter((id) => !s.archiving.includes(id) && worktreeById(s, id));
       if (ids.length === 0) return s;
-      const hidden = { ...s, archiving: [...s.archiving, ...ids] };
+      // the row leaves the list and lands in the archive in the same press: the daemon's own row
+      // takes its place once the record is written, a second or three later
+      const now = Date.now();
+      let archived = s.archived;
+      for (const id of ids) {
+        const w = worktreeById(s, id);
+        if (w) archived = { ...archived, [w.repoId]: [asArchived(w, now), ...(archived[w.repoId] ?? [])] };
+      }
+      const hidden = { ...s, archiving: [...s.archiving, ...ids], archived };
       if (!s.activeId || !ids.includes(s.activeId)) return hidden;
       // the selection leaves with the row. The rows above it are looked at first, nearest first,
       // and the rows below only when nothing above qualifies: the rail is ordered by last send,
@@ -2968,8 +3009,15 @@ function onServer(s: State, msg: StoreServerMsg): State {
           [msg.repoId]: { query: msg.query, hits: msg.hits, truncated: msg.truncated, asks: msg.asks },
         },
       };
-    case "archived":
-      return { ...s, archived: { ...s.archived, [msg.repoId]: msg.items } };
+    case "archived": {
+      // the daemon lists the archive on any change to it, another row's delete included: a row
+      // this tab moved there itself, whose record is still being written, stays ahead of a list
+      // that is not yet about it
+      const mine = (s.archived[msg.repoId] ?? []).filter(
+        (a) => s.archiving.includes(a.id) && !msg.items.some((i) => i.id === a.id),
+      );
+      return { ...s, archived: { ...s.archived, [msg.repoId]: mine.length ? [...mine, ...msg.items] : msg.items } };
+    }
     case "draft":
       // this tab wrote it and already has it, maybe with keystrokes since; a walk is showing a sent
       // message in the box, which a draft written elsewhere must not replace; another tab's
@@ -3320,15 +3368,12 @@ function onServer(s: State, msg: StoreServerMsg): State {
       const id = msg.worktreeId;
       const page = s.newProject;
       const refused = page?.phase === "creating" && !page.repoId;
+      // a remove that comes back takes its row out of the archive with it
+      const back = id ? (s.archiving.includes(id) ? [id] : []) : s.archiving;
       const next = {
         ...notSending(s, id),
-        archiving: id
-          ? s.archiving.includes(id)
-            ? s.archiving.filter((w) => w !== id)
-            : s.archiving
-          : s.archiving.length
-            ? []
-            : s.archiving,
+        archiving: back.length ? s.archiving.filter((w) => !back.includes(w)) : s.archiving,
+        archived: back.length ? withoutArchived(s.archived, back) : s.archived,
         shipping: retireShipping(s.shipping, (w) => !id || w === id),
         newProject: refused
           ? { ...page, phase: "editing" as const, error: msg.message }

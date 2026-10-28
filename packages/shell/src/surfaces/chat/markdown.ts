@@ -10,22 +10,31 @@ import { assetPath, codePath, outsidePath, worktreeLink } from "./markdownPaths.
 import { table } from "./markdownTable.ts";
 import { type WorktreeNamer, worktreeMention } from "./markdownWorktree.ts";
 import { cutAt, nextPace, type Pace, shownAt } from "./pace.ts";
-import { languageOf, paintCode } from "./syntax.ts";
+import { LINK, languageOf, linkLines, openTail, paintCode, paintPlain } from "./syntax.ts";
 
 // a fenced block the agent wrote in a message is the same code as a fenced block under a tool call,
-// so it is coloured by the same seven. marked hands the block over before it escapes it, and
-// returning false hands one back in a language we have no grammar for.
+// so it is coloured by the same seven, and an address in it is the same link. marked hands the
+// block over before it escapes it, and returning false hands one back that has nothing to paint.
 marked.use({
   // the namer is read as each token renders, so it is the render in progress's (set below)
   extensions: [dunder, worktreeMention(() => rendering?.worktrees)],
   renderer: {
     code({ text, lang }) {
       const language = languageOf((lang ?? "").trim().toLowerCase().split(/\s+/)[0] ?? "", "");
-      if (!language) return false;
-      const body = paintCode(text, language)
+      let lines = language ? linkLines(paintCode(text, language)) : paintPlain(text);
+      if (!lines.length) return false;
+      // a fence still open at the end of a streaming reply: an address at its tail is not whole
+      if (rendering?.streaming && source.trimEnd().endsWith(text.trimEnd())) lines = openTail(lines);
+      const body = lines
         .map((line) =>
           line
-            .map((p) => (p.scope ? `<span class="sy-${p.scope}">${escapeHtml(p.text)}</span>` : escapeHtml(p.text)))
+            .map((p) =>
+              p.scope === LINK
+                ? `<a href="${escapeHtml(p.text)}">${escapeHtml(p.text)}</a>`
+                : p.scope
+                  ? `<span class="sy-${p.scope}">${escapeHtml(p.text)}</span>`
+                  : escapeHtml(p.text),
+            )
             .join(""),
         )
         .join("\n");
@@ -67,6 +76,8 @@ export interface MarkdownOptions {
 const purify = createDOMPurify(window);
 // sanitize is synchronous, so the base of the render in progress can sit here for the hook to read
 let rendering: MarkdownOptions | null = null;
+// the text of the render in progress, for the code renderer to tell the fence at its end
+let source = "";
 purify.addHook("afterSanitizeAttributes", (node) => {
   const href = node.tagName === "A" ? (node.getAttribute("href") ?? "") : "";
   // a link whose url is still streaming: its label sits where the link will, and nothing to open yet
@@ -109,11 +120,12 @@ purify.addHook("afterSanitizeAttributes", (node) => {
 /** markdown as sanitized HTML; with a base, a relative image is served from the worktree */
 export function renderMarkdown(text: string, options?: MarkdownOptions): string {
   rendering = options ?? null;
-  const source = options?.streaming ? closePendingLink(text) : text;
+  source = options?.streaming ? closePendingLink(text) : text;
   try {
     return purify.sanitize(marked.parse(source, { async: false }) as string);
   } finally {
     rendering = null;
+    source = "";
   }
 }
 

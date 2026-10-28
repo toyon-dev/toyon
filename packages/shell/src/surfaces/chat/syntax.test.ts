@@ -1,5 +1,17 @@
 import { describe, expect, test } from "bun:test";
-import { languageOf, paintCode, paintDiff, pathInDiff, pieces, tokenLines } from "./syntax.ts";
+import {
+  languageOf,
+  linkLines,
+  linkPieces,
+  linkRanges,
+  openTail,
+  paintCode,
+  paintDiff,
+  paintPlain,
+  pathInDiff,
+  pieces,
+  tokenLines,
+} from "./syntax.ts";
 import { diffLines } from "./toolCall.ts";
 
 /** the scopes of a line, as `scope:text`, with unscoped runs left bare */
@@ -137,5 +149,69 @@ describe("paintCode", () => {
       "3\t",
       "[|type:File| truncated]",
     ]);
+  });
+});
+
+describe("links in output", () => {
+  const plain = (text: string) => [{ text, changed: false, scope: "" }];
+
+  test("an address printed by a command is one link piece, the words around it left as they were", () => {
+    expect(linkPieces(plain("Created a new row: https://github.com/org/repo/issues/5 (open)"))).toEqual([
+      { text: "Created a new row: ", changed: false, scope: "" },
+      { text: "https://github.com/org/repo/issues/5", changed: false, scope: "link" },
+      { text: " (open)", changed: false, scope: "" },
+    ]);
+  });
+
+  test("the sentence's punctuation and a bracket that opened before it stay outside", () => {
+    const ends = (text: string) => linkRanges(text).map((r) => text.slice(r.start, r.end));
+    expect(ends("see https://x.dev/a.")).toEqual(["https://x.dev/a"]);
+    expect(ends("(see https://x.dev/a)")).toEqual(["https://x.dev/a"]);
+    expect(ends("https://x.dev/a), then https://y.dev?q=1;")).toEqual(["https://x.dev/a", "https://y.dev?q=1"]);
+    // a wiki address carries its own parentheses, which are part of it
+    expect(ends("https://en.wikipedia.org/wiki/Foo_(bar)")).toEqual(["https://en.wikipedia.org/wiki/Foo_(bar)"]);
+    // a quote or a backtick around it is the line's
+    expect(ends('url="https://x.dev/a" and `https://y.dev`')).toEqual(["https://x.dev/a", "https://y.dev"]);
+  });
+
+  test("the grammar's own cuts inside an address go: a link is one anchor", () => {
+    const painted = linkLines(paintCode('const u = "https://x.dev/a?b=1"; // https://y.dev', "typescript"));
+    const line = painted[0] ?? [];
+    expect(line.filter((p) => p.scope === "link").map((p) => p.text)).toEqual(["https://x.dev/a?b=1", "https://y.dev"]);
+    // the quotes keep the string's colour on either side of the link
+    expect(line.find((p) => p.text === '"')?.scope).toBe("string");
+  });
+
+  test("a changed address in a diff is one changed link", () => {
+    const lines = diffLines(["-url: https://x.dev/v1", "+url: https://x.dev/v2"].join("\n"));
+    const painted = linkLines(paintDiff(lines, null));
+    expect(painted[1]?.filter((p) => p.scope === "link")).toEqual([
+      { text: "https://x.dev/v2", changed: true, scope: "link" },
+    ]);
+  });
+
+  test("a line with no address is handed back untouched", () => {
+    const line = plain("INFO  Pushing changes to remote...");
+    expect(linkPieces(line)).toBe(line);
+  });
+
+  test("output with no grammar is lines only when it holds an address", () => {
+    expect(paintPlain("INFO  Creating a new row...\n  done")).toEqual([]);
+    const painted = paintPlain("Created a new row:\n  https://github.com/org/repo/issues/5\n");
+    expect(painted).toHaveLength(3);
+    expect(painted[1]).toEqual([
+      { text: "  ", changed: false, scope: "" },
+      { text: "https://github.com/org/repo/issues/5", changed: false, scope: "link" },
+    ]);
+    expect(painted[2]).toEqual([]);
+  });
+
+  test("an address at the very end of output still arriving waits for the rest of itself", () => {
+    const streaming = paintPlain("see https://github.com/org/re");
+    expect(openTail(streaming)[0]?.at(-1)).toEqual({ text: "https://github.com/org/re", changed: false, scope: "" });
+    // once anything follows it, it is whole
+    const followed = paintPlain("see https://github.com/org/repo\n");
+    expect(openTail(followed)[0]?.at(-1)?.scope).toBe("link");
+    expect(openTail(followed)).toBe(followed);
   });
 });

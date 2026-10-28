@@ -53,7 +53,7 @@ import { PasteChip } from "./PasteChip.tsx";
 import { PickChip } from "./PickChip.tsx";
 import { PieceLandedRow, PieceLaterRow, PiecesRow } from "./PiecesRow.tsx";
 import { ranClean } from "./shellMode.ts";
-import { languageOf, paintCode, paintDiff, pathInDiff } from "./syntax.ts";
+import { languageOf, linkLines, openTail, paintCode, paintDiff, paintPlain, pathInDiff } from "./syntax.ts";
 import { normalizeThoughtMarkdown, thoughtLine, thoughtSteps } from "./thought.ts";
 import {
   callPath,
@@ -157,16 +157,21 @@ const DIFF_LINES = 40;
 type PaintedBlock = ReturnType<typeof paintBlocks>[number];
 
 /** splitting a diff into lines, its lines into words and its words into tokens is more work than a
- * render should redo, so every caller holds the result behind a memo */
-function paintBlocks(blocks: OutputBlock[], path: string) {
-  return blocks.map((b) => {
+ * render should redo, so every caller holds the result behind a memo. An address anywhere in the
+ * output is a link, and while the call is still printing (`live`), one cut off at the very end
+ * waits for the rest of itself. */
+function paintBlocks(blocks: OutputBlock[], path: string, live = false) {
+  return blocks.map((b, i) => {
     // a read's output is a bare fence, so the file the call names is the only word on its language
     const language = languageOf(b.lang, path || (b.diff ? pathInDiff(b.text) : ""));
-    if (b.diff) {
-      const lines = diffLines(b.text);
-      return { ...b, lines, painted: paintDiff(lines, language) };
-    }
-    return { ...b, lines: [], painted: b.code ? paintCode(b.text, language) : [] };
+    const lines = b.diff ? diffLines(b.text) : [];
+    let painted = b.diff
+      ? linkLines(paintDiff(lines, language))
+      : b.code && language
+        ? linkLines(paintCode(b.text, language))
+        : paintPlain(b.text);
+    if (live && i === blocks.length - 1) painted = openTail(painted);
+    return { ...b, lines, painted };
   });
 }
 
@@ -222,7 +227,15 @@ function ToolOut({ blocks, path, worktreeId }: { blocks: PaintedBlock[]; path: s
         ) : (
           // biome-ignore lint/suspicious/noArrayIndexKey: same
           <p key={i} className="tool-note">
-            {b.text}
+            {b.painted.length
+              ? b.painted.map((line, j) => (
+                  // biome-ignore lint/suspicious/noArrayIndexKey: same
+                  <Fragment key={j}>
+                    {j > 0 ? "\n" : null}
+                    <Painted pieces={line} />
+                  </Fragment>
+                ))
+              : b.text}
           </p>
         ),
       )}
@@ -274,7 +287,7 @@ const ToolPart = memo(function ToolPart({
   roots?: string[];
   worktreeId?: string | null;
 }) {
-  const blocks = useMemo(() => paintBlocks(toolBlocks(item, item.output ?? ""), callPath(item)), [item]);
+  const blocks = useMemo(() => paintBlocks(toolBlocks(item, item.output ?? ""), callPath(item), !item.done), [item]);
   const command = toolLabel(item, roots).command;
   const images = worktreeId ? (item.images ?? []) : [];
   if (!command && blocks.length === 0 && images.length === 0) return null;
@@ -760,10 +773,14 @@ export const ToolRow = memo(
         leaf={leaf}
         growing={running}
         label={run && count ? `${what}, ${count}` : tools.length > 1 ? `${what}, ${tools.length} calls` : what}
-        menu={(fold) => {
+        menu={(fold, target) => {
           const w = worktreeById(store.getState(), worktreeId);
           const wt = w ? { id: w.worktree.id } : null;
-          return toolRowItems(tools, roots ?? [], wt, { sock, dispatch: store.dispatch }, fold);
+          // an address the output printed, under the pointer: the row has no checkout root to
+          // read a file link against, and its output links out alone
+          const link = chatLink(target, null);
+          const href = link?.kind === "out" ? link.href : null;
+          return toolRowItems(tools, roots ?? [], wt, { sock, dispatch: store.dispatch }, fold, href);
         }}
         summary={
           <>

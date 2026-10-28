@@ -1,6 +1,7 @@
 import { copyText, type Deps } from "../../state/actions/deps.ts";
 import { daemonHost, revealItems } from "../../state/actions/editor.ts";
 import { openFile } from "../../state/actions/file.ts";
+import { linkItems } from "../../state/actions/message.ts";
 import { openByPath } from "../../state/openOutside.ts";
 import { type EditorView, readingView } from "../../state/store.ts";
 import { grouped, type MenuEntry, type MenuItem } from "../../ui/menu.ts";
@@ -66,10 +67,13 @@ export function toolRowItems(
   wt: { id: string } | null,
   deps: Deps,
   ui: { open: boolean; leaf: boolean; toggle: () => void },
+  /** the address under the pointer, where the row's output printed one: its items lead */
+  href?: string | null,
 ): MenuEntry[] {
   const { sock } = deps;
   const head = tools[0];
   if (!head) return [];
+  const link: MenuItem[] = href ? linkItems(href) : [];
   const open: MenuItem[] = [];
   const rel = relPath(callPath(head), roots);
   const opens = toolRowOpens(tools, roots, wt, deps).map((o) => ({
@@ -105,5 +109,5 @@ export function toolRowItems(
   if (output) copies.push({ id: "copy-output", label: "copy output", onClick: () => copyText(output) });
   // a row with nothing under its line has nothing to expand
   const fold: MenuItem[] = ui.leaf ? [] : [{ id: "fold", label: ui.open ? "collapse" : "expand", onClick: ui.toggle }];
-  return grouped([open, copies, fold]);
+  return grouped([link, open, copies, fold]);
 }

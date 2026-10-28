@@ -897,6 +897,11 @@
       overflow-x: auto;
       color: var(--text1);
     }
+    /* an address a command printed is the link out it reads as, in the blue a reply's links wear */
+    & .tool-out a {
+      color: var(--blue);
+      border-radius: var(--radius);
+    }
     /* the command that produced the output, where the summary line carries the sentence that named
    it instead. It sits in the band's recess with what it printed: a command can run to a screen (a
    heredoc), and a strip with a ground of its own then fills the band with that ground. The reading

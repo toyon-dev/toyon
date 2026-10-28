@@ -277,6 +277,106 @@ function tokenizeHunk(lines: DiffLine[], from: number, to: number, language: str
   }
 }
 
+/** the scope a web address wears: Painted draws it as a link out rather than as a colour */
+export const LINK = "link";
+
+const URL_RUN = /https?:\/\/[^\s<>"'`]+/g;
+const URL_ANY = /https?:\/\//;
+
+/** where the addresses in one line of text start and end. A sentence's punctuation is not part
+ * of the address at its end, and neither is a bracket that opened before it: "(see https://x)"
+ * links x, while a wiki address with its own parentheses keeps them. */
+export function linkRanges(text: string): { start: number; end: number }[] {
+  const out: { start: number; end: number }[] = [];
+  for (const m of text.matchAll(URL_RUN)) {
+    const end = m.index + trimmedUrl(m[0]).length;
+    if (end > m.index) out.push({ start: m.index, end });
+  }
+  return out;
+}
+
+const CLOSERS: Record<string, string> = { ")": "(", "]": "[", "}": "{" };
+
+function trimmedUrl(url: string): string {
+  let end = url.length;
+  while (end > 0) {
+    const ch = url[end - 1] as string;
+    if (".,;:!?".includes(ch)) end--;
+    else if (CLOSERS[ch] && count(url.slice(0, end), CLOSERS[ch] as string) < count(url.slice(0, end), ch)) end--;
+    else break;
+  }
+  return url.slice(0, end);
+}
+
+function count(text: string, ch: string): number {
+  let n = 0;
+  for (const c of text) if (c === ch) n++;
+  return n;
+}
+
+/** one line with its addresses cut out as link pieces. The grammar's own cuts inside an address
+ * (a string's quote, a comment's marker) go: a link is one anchor or it is not a link, and the
+ * change mark holds for the whole address when any character of it changed. A line with no
+ * address is handed back as it was, which is nearly every line. */
+export function linkPieces(line: Piece[]): Piece[] {
+  const text = line.map((p) => p.text).join("");
+  if (!URL_ANY.test(text)) return line;
+  const ranges = linkRanges(text);
+  if (!ranges.length) return line;
+  const out: Piece[] = [];
+  let at = 0;
+  let ri = 0;
+  let link: Piece | null = null;
+  for (const p of line) {
+    let i = 0;
+    while (i < p.text.length) {
+      const range = ranges[ri];
+      const abs = at + i;
+      if (range && abs >= range.start) {
+        const take = Math.min(range.end, at + p.text.length) - abs;
+        if (!link) {
+          link = { text: "", changed: false, scope: LINK };
+          out.push(link);
+        }
+        link.text += p.text.slice(i, i + take);
+        link.changed ||= p.changed;
+        i += take;
+        if (abs + take >= range.end) {
+          link = null;
+          ri++;
+        }
+      } else {
+        const stop = range ? Math.min(range.start - at, p.text.length) : p.text.length;
+        out.push({ text: p.text.slice(i, stop), changed: p.changed, scope: p.scope });
+        i = stop;
+      }
+    }
+    at += p.text.length;
+  }
+  return out;
+}
+
+/** a painted block with its addresses as links, line by line */
+export const linkLines = (lines: Piece[][]): Piece[][] => lines.map(linkPieces);
+
+/** output with no grammar, as lines, so the addresses in it can still be links. Empty when it
+ * holds none: the block is then drawn as the one string it is, which is cheaper than a span per
+ * line down a long read. */
+export function paintPlain(text: string): Piece[][] {
+  if (!URL_ANY.test(text)) return [];
+  return text.split("\n").map((line) => linkPieces(line ? [{ text: line, changed: false, scope: "" }] : []));
+}
+
+/** the same lines while they are still arriving: an address cut off at the end of the text is
+ * not an address yet, so it stays plain until something follows it. Linked as it stood, a press
+ * on it would open half an address. */
+export function openTail(lines: Piece[][]): Piece[][] {
+  const last = lines[lines.length - 1];
+  const tail = last?.[last.length - 1];
+  if (!tail || tail.scope !== LINK) return lines;
+  return [...lines.slice(0, -1), [...last.slice(0, -1), { ...tail, scope: "" }]];
+}
+
 export function pieces(spans: Span[] | undefined, toks: Tok[] | undefined, text: string): Piece[] {
   if (!spans?.length && !toks?.length) return text ? [{ text, changed: false, scope: "" }] : [];
   const out: Piece[] = [];

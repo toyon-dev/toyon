@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { isItem } from "../../ui/menu.ts";
 import type { ToolItem } from "./group.ts";
 import { toolRowOpens } from "./toolRowItems.ts";
 
@@ -37,5 +38,19 @@ describe("tool row opens", () => {
   test("nothing for a call that named no file, or a worktree that is gone", () => {
     expect(labels({ ...call("execute", ""), input: { command: "ls" } })).toEqual([]);
     expect(labels(call("edit", "/w/src/a.ts"), null)).toEqual([]);
+  });
+});
+
+describe("tool row items", () => {
+  test("an address under the pointer leads the menu with its own items", async () => {
+    const { toolRowItems } = await import("./toolRowItems.ts");
+    const fold = { open: true, leaf: false, toggle: () => {} };
+    const item = { ...call("execute", ""), input: { command: "echo hi" }, output: "https://x.dev/issues/1" };
+    const ids = (href?: string) =>
+      toolRowItems([item], roots, wt, deps, fold, href)
+        .filter(isItem)
+        .map((e) => e.id);
+    expect(ids("https://x.dev/issues/1").slice(0, 2)).toEqual(["open-out", "copy-link"]);
+    expect(ids()).toEqual(["copy-output", "fold"]);
   });
 });

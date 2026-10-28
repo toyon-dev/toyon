@@ -70,7 +70,8 @@ export type ChatLink =
   | { kind: "worktree"; id: string; branch: string; archived: boolean };
 
 /** a link out of the chat: the page outside the shell, and its address as text */
-function linkItems(href: string): MenuItem[] {
+/** a link out: opened beside the shell, or the address as text */
+export function linkItems(href: string): MenuItem[] {
   return [openOutItem(href), { id: "copy-link", label: "copy link", onClick: () => copyText(href) }];
 }
 

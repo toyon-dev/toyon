@@ -6,7 +6,7 @@ import type { AgentEvent, PieceOutcome, RepoInfo } from "@toyon/shared";
 import type { FakeAgent } from "../../test/helpers/fakes.ts";
 import { sh } from "../../test/helpers/tmp-repo.ts";
 import { planReader, registered, settle, until, useWorld, w } from "../../test/helpers/world.ts";
-import { listDoc, writePlanDocNow } from "../agent/planDoc.ts";
+import { excludePlans, listDoc, writePlanDocNow } from "../agent/planDoc.ts";
 import { StateStore } from "../core/state.ts";
 import { GIT } from "../git/exec.ts";
 import { listFile, PIECES_MAX, type RawPiece, sectionText } from "./pieces.ts";
@@ -276,6 +276,9 @@ describe("the tool", () => {
     expect(await call(a.id, piece())).toEqual({ text: SHOWN });
     expect(fateOf()).toEqual(["worktree"]);
     await decline();
+    // the shown list's briefs file is excluded without the tool waiting on it; a tree read that
+    // beats the exclude, as on a slow runner, would count that file as work
+    await excludePlans(a.path);
     await w.worktrees.tree.refresh(a.id);
     expect(w.worktrees.tree.counts(a.id)).toMatchObject({ dirty: 0, ahead: 0 });
     expect(await call(a.id, piece())).toEqual({ text: SHOWN_HERE });

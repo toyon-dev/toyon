@@ -59,13 +59,14 @@ export function AgentPage({ agentId }: { agentId: string }) {
           </Button>
         </div>
         {/* said once here rather than under every turn's box: an agent with no quick model gives
-            no verdict, no recap and no commit message, and agents.json is where one is named */}
+            no verdict, no recap and no commit message. Toyon picks the quick model off the list the
+            agent offers; nothing here or in a file names one for a builtin */}
         <div className="keys-setting">
           <span className="keys-d">commit messages</span>
           <span className="keys-d">
             {agent.quick
               ? "its quick model writes one after each turn"
-              : "none: it has no quick model, so you write them in the changes panel; quickModel in agents.json names one"}
+              : "none: it offers no small model, so you write them in the changes panel"}
           </span>
         </div>
 

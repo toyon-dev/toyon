@@ -17,6 +17,7 @@ import { confine } from "./confine.ts";
 import type { SandboxCheck } from "./linuxSandbox.ts";
 import { type HostTraits, hostTraits, nativePackage } from "./native.ts";
 import { opencodeEnv, opencodeQuickModel } from "./opencode.ts";
+import { quickModelNamed } from "./quick.ts";
 import { type Bounds, type Prepared, writeClaudeLocalSettings } from "./sandbox.ts";
 
 /** how shell commands the agent runs are kept inside the worktree */
@@ -115,7 +116,7 @@ export const BUILTIN_AGENTS: AgentSpec[] = [
     // tool preset's definitions, and without `persistSession` each one is saved under
     // ~/.claude/projects and listed by `claude --resume` in the worktree
     sideMeta: { claudeCode: { options: { tools: [], persistSession: false } } },
-    quickModel: "haiku",
+    quickModel: quickModelNamed("haiku"),
     loginHint: "Claude is not logged in",
   },
   {

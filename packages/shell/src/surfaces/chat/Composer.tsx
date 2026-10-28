@@ -26,7 +26,7 @@ import {
   prStanding,
   shipNoun,
 } from "@toyon/shared";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { clipboardOfferDone, useCopied } from "../../app/clipboardOffer.ts";
 import { installOfferDone, installOfferDue, useInstallOffered, useInstallPrompt } from "../../app/installOffer.ts";
 import { previewBus, togglePick } from "../../app/previewBus.ts";
@@ -112,6 +112,7 @@ import { browseCommands, isMode, mergeCommands, ownCommandOf, ownCommands, parse
 import { PermissionCard } from "./PermissionCard.tsx";
 import { PickChip } from "./PickChip.tsx";
 import { PiecesCard } from "./PiecesCard.tsx";
+import { hereWaits, openPieces } from "./pieces.ts";
 import { QuestionCard } from "./QuestionCard.tsx";
 import { type Step, stepWalk, type WalkKey } from "./recall.ts";
 import { shellCommandOf, shellContext } from "./shellMode.ts";
@@ -874,9 +875,33 @@ export function Composer({
   // not named again here
   const lastLand = active?.worktree.lands?.at(-1);
   const landedUnder = lastLand && landedWhat(lastLand);
-  const offeredUnder =
+  // What this worktree's own work waits for, by the list it answered: the siblings its here piece
+  // named that have not landed yet, as the line under the word. A fact where the model's clause
+  // is its reading of the work each turn; the chips are the rows, so the line follows them and
+  // goes when the last of them lands.
+  const waitedOn = useMemo(() => {
+    const list = chat ? openPieces(chat) : null;
+    return (list ? hereWaits(list) : []).filter((w) => {
+      const row = railRows.find((r) => r.worktree.id === w.id);
+      return !!row && !row.worktree.landed;
+    });
+  }, [chat, railRows]);
+  const waitLine: ReactNode =
+    waitedOn.length > 0 ? (
+      <>
+        After{" "}
+        {waitedOn.map((w, i) => (
+          <Fragment key={w.id}>
+            {i > 0 && (i === waitedOn.length - 1 ? " and " : ", ")}
+            <WorktreeChip id={w.id} title={w.title} />
+          </Fragment>
+        ))}{" "}
+        {waitedOn.length === 1 ? "lands" : "land"}.
+      </>
+    ) : null;
+  const offeredUnder: ReactNode =
     (offered?.kind === "ship" || offered?.kind === "check") && landing
-      ? verdictLine(landing, gap)
+      ? (waitLine ?? verdictLine(landing, gap))
       : offered?.word === "archive" && landedUnder
         ? ended(landedUnder)
         : null;
@@ -886,7 +911,7 @@ export function Composer({
   // three times inside a second, under a cursor that had just pressed it. So the box keeps the
   // words it had and only lights them, until the op is over and the next word takes the place.
   // A press from another tab has no line to hold here and reads the live one.
-  const pressed = useRef<{ id: string; verb: Verb; under: string | null } | null>(null);
+  const pressed = useRef<{ id: string; verb: Verb; under: ReactNode } | null>(null);
   if (op !== "land") pressed.current = id && offered?.ships ? { id, verb: offered, under: offeredUnder } : null;
   const kept = op === "land" && blank && pressed.current?.id === id ? pressed.current : null;
   const verb = kept ? kept.verb : offered;

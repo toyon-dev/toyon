@@ -1,15 +1,20 @@
 import { describe, expect, test } from "bun:test";
 import type { Piece } from "@toyon/shared";
 import {
+  defaultTab,
   effectiveFate,
   fateSentence,
   fatesFor,
   fateWord,
+  hereWaits,
   listPage,
   oneRows,
   openPieces,
   type PiecesItem,
   pieceFate,
+  pieceMark,
+  pieceOrder,
+  pieceStanding,
   piecesAnswer,
   piecesCounts,
   piecesLine,
@@ -198,5 +203,110 @@ describe("openPieces", () => {
     expect(openPieces([done, declined])?.id).toBe("l1");
     expect(openPieces([declined])).toBeNull();
     expect(openPieces([list([], {}, { state: "held" })])?.state).toBe("held");
+  });
+});
+
+describe("the strip", () => {
+  const now = piece("p1");
+  const queued = piece("p2", { after });
+  const here = piece("p3", { fate: "here", after: { piece: "p1" } });
+  const sent = piece("p4", { fate: "send", to: after });
+  const outcomes: PiecesItem["outcomes"] = [
+    { pieceId: "p1", fate: "worktree", worktreeId: "w1", title: "Piece p1" },
+    { pieceId: "p2", fate: "worktree", after: "toyon/b" },
+    { pieceId: "p3", fate: "here" },
+    { pieceId: "p4", fate: "send", worktreeId: "b", title: "B" },
+  ];
+
+  test("pieceOrder: the origin's own first, then worktrees now, then queued, then sent; the agent's order within", () => {
+    expect(pieceOrder(list([queued, sent, now, here])).map((p) => p.id)).toEqual(["p3", "p1", "p2", "p4"]);
+    // fixed from what the agent proposed: a press on a fate moves no tab
+    expect(pieceOrder(list([queued, now], { p2: "here" })).map((p) => p.id)).toEqual(["p1", "p2"]);
+  });
+
+  test("pieceMark: the fate as a word while the list is the person's, what became of it after", () => {
+    const l = list([now, queued, here, sent], { p1: "skip" });
+    expect(l.pieces.map((p) => pieceMark(l, p))).toEqual([
+      { word: "skip" },
+      { word: "queued" },
+      { word: "here" },
+      { word: "sent" },
+    ]);
+    const done = list([now, queued, here, sent], {}, { state: "done", outcomes });
+    expect(done.pieces.map((p) => pieceMark(done, p))).toEqual([
+      { worktreeId: "w1", title: "Piece p1" },
+      { word: "queued" },
+      { word: "here" },
+      { worktreeId: "b", title: "B" },
+    ]);
+    expect(pieceMark(list([now], {}, { state: "going" }), now)).toEqual({ word: "starting" });
+    const failed = list(
+      [now],
+      {},
+      { state: "done", outcomes: [{ pieceId: "p1", fate: "worktree", error: "no port" }] },
+    );
+    expect(pieceMark(failed, now)).toEqual({ word: "failed" });
+  });
+
+  test("defaultTab: the plan when the page has one; else the first tab, or the origin's own once answered", () => {
+    expect(defaultTab(list([queued, now]), true)).toBe("plan");
+    expect(defaultTab(list([queued, now]), false)).toBe("p1");
+    expect(defaultTab(list([queued, now], { p2: "here" }), false)).toBe("p1");
+    expect(defaultTab(list([queued, now], { p2: "here" }, { state: "done", outcomes }), false)).toBe("p2");
+    expect(defaultTab(list([], {}), false)).toBe("plan");
+  });
+
+  test("pieceStanding: what became of a piece; a queued one by its wait, until its turn came", () => {
+    const l = list([queued], {}, { state: "done", outcomes });
+    expect(pieceStanding(l, queued)).toEqual({ kind: "queued", after: { kind: "branch", ...after }, said: "toyon/b" });
+    const made = list(
+      [queued],
+      {},
+      { state: "done", outcomes, later: [{ pieceId: "p2", worktreeId: "w2", title: "Piece p2" }] },
+    );
+    expect(pieceStanding(made, queued)).toEqual({ kind: "worktree", worktreeId: "w2", title: "Piece p2" });
+    const dropped = list(
+      [queued],
+      {},
+      { state: "done", outcomes, later: [{ pieceId: "p2", reason: "its branch is gone" }] },
+    );
+    expect(pieceStanding(dropped, queued)).toEqual({ kind: "dropped", reason: "its branch is gone" });
+    expect(pieceStanding(list([sent], {}, { state: "done", outcomes }), sent)).toEqual({
+      kind: "sent",
+      worktreeId: "b",
+      title: "B",
+    });
+  });
+
+  test("hereWaits: the siblings the origin's own piece waits for, once the list is answered", () => {
+    const own = piece("p5", { fate: "here", after });
+    const l = list(
+      [now, queued, here, sent, own],
+      {},
+      { state: "done", outcomes: [...outcomes, { pieceId: "p5", fate: "here" }] },
+    );
+    expect(hereWaits(l)).toEqual([
+      { id: "w1", title: "Piece p1" },
+      { id: "b", title: "B" },
+    ]);
+    // nothing before go
+    expect(hereWaits(list(l.pieces))).toEqual([]);
+    // a wait on a piece that was queued, not made, is nothing to point at yet
+    const l2 = list([queued, piece("p3", { fate: "here", after: { piece: "p2" } })], {}, { state: "done", outcomes });
+    expect(hereWaits(l2)).toEqual([]);
+    // a piece the person moved away from here waits for nothing
+    expect(hereWaits(list([now, here], { p3: "skip" }, { state: "done", outcomes }))).toEqual([]);
+  });
+});
+
+describe("fatesFor with the list", () => {
+  test("a piece that waits for one later on the list is done here or skipped, never made", () => {
+    const first = piece("p1", { fate: "here", after: { piece: "p2" } });
+    const second = piece("p2");
+    expect(fatesFor(first, [first, second])).toEqual(["here", "skip"]);
+    expect(fatesFor(second, [first, second])).toEqual(["here", "worktree", "skip"]);
+    // one that waits for an earlier piece keeps every fate
+    const third = piece("p3", { after: { piece: "p1" } });
+    expect(fatesFor(third, [first, second, third])).toEqual(["here", "worktree", "skip"]);
   });
 });

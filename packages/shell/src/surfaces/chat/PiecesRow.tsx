@@ -131,7 +131,8 @@ export function PieceLaterRow({ item }: { item: Extract<ChatItem, { kind: "piece
 
 /** a worktree made from a piece of this one's work landed, with its pull request when the landing
  * was one: the record of the piece closing, read where it was opened. On the worktree that waited
- * for that branch before it started, the same row says it landed again. */
+ * for that branch before it started, the same row says it landed again; on the origin whose own
+ * work waited for it, that the wait is over. */
 export function PieceLandedRow({ item }: { item: Extract<ChatItem, { kind: "piece-landed" }> }) {
   return (
     <DaemonRow icon="check" word={item.again ? "landed again" : "landed"} tone="aqua" at={item.ts}>
@@ -139,6 +140,7 @@ export function PieceLandedRow({ item }: { item: Extract<ChatItem, { kind: "piec
           pull request follows in the sentence, as the list follows the split row's */}
       <span className="daemon-text">
         {item.same ? <WorktreeChip id={item.worktreeId} title={item.title} /> : `${item.title} in ${item.repoName}`}
+        {item.awaited && ", which the work here waited for"}
         {item.url && (
           <>
             {" "}

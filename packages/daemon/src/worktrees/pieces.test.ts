@@ -121,7 +121,34 @@ describe("the tool", () => {
 
     await refusal(piece({ title: "t".repeat(21) }), "runs to 21 characters; a title is 1 to 3 plain words");
     await refusal(piece({ title: "fix the form on save" }), "runs to 5 words");
-    await refusal(piece({ where: "here", after: "this" }), "only a `worktree` piece takes");
+    await refusal(piece({ where: "here", after: "this" }), "is `here` and waits for its own branch");
+    await refusal(piece({ where: "here", after: "Rail fixes" }), '"Rail fixes" is this piece itself');
+    // the origin's own work waits for a worktree, never for its own other pieces or in a circle
+    expect(
+      await call(
+        a.id,
+        piece({ title: "Mine", plan: "Do it.", where: "here", after: "Theirs" }),
+        piece({ title: "Theirs", plan: "Do that.", where: "here" }),
+      ),
+    ).toMatchObject({ text: expect.stringContaining('waits for "Theirs", which is `here` too'), isError: true });
+    expect(
+      await call(
+        a.id,
+        piece({ title: "Mine", plan: "Do it.", where: "here", after: "Rail fixes" }),
+        piece({ after: "this" }),
+      ),
+    ).toMatchObject({
+      text: expect.stringContaining('waits for "Rail fixes", which waits for this branch'),
+      isError: true,
+    });
+    expect(
+      await call(
+        a.id,
+        piece({ title: "Mine", plan: "Do it.", where: "here", after: "Rail fixes" }),
+        piece({ after: "Mine" }),
+      ),
+    ).toMatchObject({ text: expect.stringContaining("a cycle"), isError: true });
+    await refusal(piece({ where: "send", to: "Composer", after: "this" }), "a `send` piece does not take");
     await refusal(piece({ where: "here", to: "Composer" }), "only a `send` piece takes");
     await refusal(piece({ where: "send" }), "names no worktree in `to`");
     await refusal(piece({ where: "send", to: "nope" }), 'no open worktree of this project is called "nope"');
@@ -140,20 +167,34 @@ describe("the tool", () => {
     const repoId = await registered();
     const planning = await w.worktrees.create(repoId, "task", { title: "Rail", mode: "plan" });
     const other = await w.worktrees.create(repoId, "task", { title: "Composer" });
-    expect(await call(planning.id, piece(), piece({ title: "Here", plan: "Mine.", where: "here" }))).toEqual({
+    // the origin's own piece may wait for any other piece of the list, a later one included: it
+    // is not made in order, only shown as waiting
+    expect(
+      await call(planning.id, piece({ title: "Here", plan: "Mine.", where: "here", after: "Rail fixes" }), piece()),
+    ).toEqual({
       text: HELD,
     });
     const held = lastProposal(planning.id);
     expect(held).toMatchObject({ held: true, mode: "plan" });
     expect(held.plan).toBeUndefined();
     expect(held.pieces.map((p) => [p.id, p.title, p.fate])).toEqual([
-      ["p1", "Rail fixes", "worktree"],
-      ["p2", "Here", "here"],
+      ["p1", "Here", "here"],
+      ["p2", "Rail fixes", "worktree"],
     ]);
+    expect(held.pieces[0]!.after).toEqual({ piece: "p2" });
+    // and cannot be moved to a worktree: go acts in list order and would make it before its wait
+    expect(() => w.pieces.fate(planning.id, held.id, "p1", "worktree")).toThrow(
+      "waits for one later on the list, so it is done here or skipped",
+    );
+    w.pieces.fate(planning.id, held.id, "p1", "skip");
     expect(w.state.worktree(planning.id)?.plan).toBeUndefined();
 
     expect(
-      await call(other.id, piece({ after: "this" }), piece({ title: "Mine", plan: "Do it.", where: "here" })),
+      await call(
+        other.id,
+        piece({ after: "this" }),
+        piece({ title: "Mine", plan: "Do it.", where: "here", after: planning.branch }),
+      ),
     ).toEqual({
       text: SHOWN,
     });
@@ -167,6 +208,9 @@ describe("the tool", () => {
     expect(w.state.worktree(other.id)?.plan).toBeUndefined();
     // "this" is the origin itself, and a sibling is named by its branch or title in any case
     expect(shown.pieces[0]!.after).toEqual({ id: other.id, branch: other.branch, title: "Composer" });
+    // the origin's own work waits for a sibling's branch: the wait rides on the piece, for the
+    // line under the box
+    expect(shown.pieces[1]!.after).toEqual({ id: planning.id, branch: planning.branch, title: "Rail" });
     await w.pieces.answer(other.id, shown.id, false);
     expect(await call(other.id, piece({ where: "send", to: "rail" }))).toEqual({ text: SHOWN });
     expect(lastProposal(other.id).pieces[0]!.to).toEqual({ id: planning.id, branch: planning.branch, title: "Rail" });
@@ -375,13 +419,21 @@ describe("go", () => {
     const repoId = await registered();
     const a = await w.worktrees.create(repoId, "task", { title: "Rail" });
     const b = await w.worktrees.create(repoId, "task", { title: "Composer" });
-    await call(a.id, piece({ after: b.branch }), piece({ title: "Mine own", plan: "Then this.", after: "this" }));
+    await call(
+      a.id,
+      piece({ after: b.branch }),
+      piece({ title: "Mine own", plan: "Then this.", after: "this" }),
+      piece({ title: "Mine", plan: "Meanwhile.", where: "here", after: b.branch }),
+    );
     const proposed = lastProposal(a.id);
     await w.pieces.answer(a.id, proposed.id, true);
     expect(outcomesOf(a.id)).toEqual([
       { pieceId: "p1", fate: "worktree", after: b.branch },
       { pieceId: "p2", fate: "worktree", after: a.branch },
+      { pieceId: "p3", fate: "here", after: b.branch },
     ]);
+    // the origin's own wait is on its record, for the landing to tell it
+    expect(w.state.worktree(a.id)!.awaits).toEqual([{ id: b.id, branch: b.branch, title: "Composer" }]);
     expect(madeTitled("Rail fixes")).toBeUndefined();
     const queued = w.state.worktree(a.id)!.queued!;
     expect(queued.map((q) => [q.pieceId, "id" in q.after ? q.after.id : q.after.piece, q.plan])).toEqual([
@@ -400,6 +452,11 @@ describe("go", () => {
     expect(recorded(a.id, "piece-made")[0]).toMatchObject({ id: proposed.id, pieceId: "p1", worktreeId: made.id });
     expect(made.from).toMatchObject({ origin: { id: a.id } });
     expect(w.state.worktree(a.id)!.queued).toHaveLength(1);
+    // the origin's own work waited for b too: told once, as the wait it named, and the record lets go
+    const landedNotes = recorded(a.id, "piece-landed");
+    expect(landedNotes).toHaveLength(1);
+    expect(landedNotes[0]).toMatchObject({ worktreeId: b.id, awaited: true });
+    expect(w.state.worktree(a.id)!.awaits).toBeUndefined();
     // the origin's own landing releases the one behind it
     w.hub.emit("landed", a.id);
     await until(() => recorded(a.id, "piece-made").length === 2);

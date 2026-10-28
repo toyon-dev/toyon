@@ -21,17 +21,17 @@ import {
 import { Button } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { ErrorBoundary } from "../../ui/ErrorBoundary.tsx";
-import { usePersisted, useSettled } from "../../ui/hooks.ts";
+import { useOnChange, usePersisted, useSettled } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { Pane } from "../../ui/Pane.tsx";
 import { endCarry, startCarry } from "../chat/carried.ts";
-import { listPage, openPieces } from "../chat/pieces.ts";
+import { defaultTab, listPage, openPieces } from "../chat/pieces.ts";
 import { usePlanTitle } from "../chat/usePlanTitle.ts";
 import { splitPath } from "../util.ts";
 import { FileViewer } from "./FileViewer.tsx";
 import { HtmlPreview } from "./HtmlPreview.tsx";
 import { MarkdownPreview } from "./MarkdownPreview.tsx";
-import { Pieces } from "./Pieces.tsx";
+import { PiecePage, usePieceTabs } from "./Pieces.tsx";
 import "./editor.css";
 
 // the grammars come in with the editor, and a file is only shown once they can colour it
@@ -158,6 +158,28 @@ export function EditorPane({
     const on = open.plan ?? planPath;
     return on && path === on ? open : null;
   }, [history, loose, editor.view, planPath, path, open]);
+  // the tab open in the head, with a list on the page: the pane's own state, so a sibling's dot
+  // or age changing redraws no tab. It starts over with a new list or file, and until a tab is
+  // pressed it is the page's own default (chat/pieces.ts), which on the list page moves to the
+  // here piece as go is pressed: the press is the person's, and that piece is what the page is
+  // for once answered.
+  const [tab, setTab] = useState<string | null>(null);
+  useOnChange([pieces?.id, path], () => setTab(null));
+  // the page Toyon wrote for a list holds each piece's text under its heading, which the tabs
+  // already show: no tab for the page itself, or every text would read twice
+  const hasPlan = !!pieces && !listPage(pieces);
+  const current = !pieces
+    ? "plan"
+    : tab !== null && (tab === "plan" ? hasPlan : pieces.pieces.some((p) => p.id === tab))
+      ? tab
+      : defaultTab(pieces, hasPlan);
+  const openPiece = pieces && current !== "plan" ? (pieces.pieces.find((p) => p.id === current) ?? null) : null;
+  // the plan's tab is named as the head names the file: the plan by its heading, else the file
+  const planTab = useMemo(
+    () => (hasPlan ? { label: ownPlan && planTitle ? planTitle : splitPath(path).name, path } : null),
+    [hasPlan, ownPlan, planTitle, path],
+  );
+  const tabs = usePieceTabs(pieces, planTab, current, setTab);
   const sync = useMemo(
     () =>
       loose
@@ -210,6 +232,8 @@ export function EditorPane({
       height={full || onScreen ? undefined : height}
       resizable={!full && !onScreen}
       onDragStart={onDragStart ?? NO_DRAG}
+      // a plan with a list of pieces heads the pane with the strip, the plan's own tab first
+      tabs={tabs}
       title={
         <EditorTitle
           path={path}
@@ -311,6 +335,17 @@ export function EditorPane({
           <div className="empty">not a text file: open it in another editor</div>
         ) : disk.tooLarge ? (
           <div className="empty">too large to open here: open it in another editor</div>
+        ) : view === "preview" && pieces && openPiece ? (
+          <PiecePage
+            item={pieces}
+            piece={openPiece}
+            worktreeId={worktreeId}
+            path={path}
+            version={history || kept || loose ? undefined : disk.version}
+            openSeq={editor.seq}
+            focus={editor.focus}
+            onChat={(selected) => addToChat(store, { worktreeId, text: selected, name: path })}
+          />
         ) : view === "preview" && renderedAs(path) === "html" ? (
           <HtmlPreview
             text={disk.after}
@@ -326,10 +361,6 @@ export function EditorPane({
             text={disk.after}
             path={path}
             worktreeId={worktreeId}
-            lead={pieces ? <Pieces item={pieces} worktreeId={worktreeId} /> : undefined}
-            // the page Toyon wrote for a list holds each piece's text under its heading, which the
-            // rows already unfold: the block alone, or every text would read twice
-            leadOnly={!!pieces && listPage(pieces)}
             // a copy only git holds, or a file from outside, has no bytes on disk for its images to be served from
             version={history || kept || loose ? undefined : disk.version}
             openSeq={editor.seq}

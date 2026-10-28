@@ -1217,7 +1217,9 @@ export class AcpSession implements AgentAdapter {
     for (i--; i >= 0; i--) {
       const e = entries[i]!.event;
       if (isMessage(e)) break;
-      if (e.type === "piece-landed") out.unshift(pieceLandedContext(e.title, e.repoName, e.url, e.same, e.again));
+      if (e.type === "piece-landed") {
+        out.unshift(pieceLandedContext(e.title, e.repoName, e.url, e.same, e.again, e.awaited));
+      }
     }
     return out;
   }

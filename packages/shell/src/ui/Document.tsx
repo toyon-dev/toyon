@@ -41,9 +41,8 @@ const JUMP_AIR = 16;
  * (a pane opened on it), and `focus` says whether it should. `onLink` takes a link inside the page
  * (one to a file beside it, or a section); an http link opens its tab untouched. `onChat` takes
  * what ⌘L selected, as the page draws it. `lead` is drawn at the head of the page, above the
- * markdown and scrolling with it, and stays out of the outline: a section of Toyon's own on a
- * document that is the agent's. `leadOnly` makes the lead the whole page: the markdown is not
- * drawn, for a file that holds in prose what the lead already draws as rows.
+ * markdown and scrolling with it, and stays out of the outline: a line of Toyon's own on a text
+ * that is the agent's.
  */
 export function Document({
   html,
@@ -52,7 +51,6 @@ export function Document({
   onLink,
   onChat,
   lead,
-  leadOnly = false,
 }: {
   html: string;
   openSeq?: number;
@@ -60,7 +58,6 @@ export function Document({
   onLink?: (href: string) => void;
   onChat?: (selected: string) => void;
   lead?: ReactNode;
-  leadOnly?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const body = useRef<HTMLDivElement>(null);
@@ -86,7 +83,7 @@ export function Document({
   // the headings are read off the rendered DOM rather than the markdown, so they are the ones the
   // sanitizer let through, with the text the way it is drawn; off the body alone, so a lead's
   // own heading is not a section of the document
-  useOnChange([html, leadOnly], () => {
+  useOnChange([html], () => {
     setHeads(body.current ? readHeadings(body.current) : []);
   });
   // the section being read: the last heading above the top edge, re-read on every scroll frame
@@ -169,14 +166,12 @@ export function Document({
     <>
       <div ref={ref} className="document" tabIndex={-1} onClick={onClick} onKeyDown={onKeyDown}>
         {lead}
-        {!leadOnly && (
-          <div
-            ref={body}
-            className="md md-preview"
-            // biome-ignore lint/security/noDangerouslySetInnerHtml: html is DOMPurify-sanitized markdown output
-            dangerouslySetInnerHTML={{ __html: html }}
-          />
-        )}
+        <div
+          ref={body}
+          className="md md-preview"
+          // biome-ignore lint/security/noDangerouslySetInnerHtml: html is DOMPurify-sanitized markdown output
+          dangerouslySetInnerHTML={{ __html: html }}
+        />
       </div>
       {find && <DocumentFind root={ref} body={body} seed={find.seed} seq={find.seq} onClose={closeFind} />}
       <Outline heads={heads} at={at} onJump={jump} />

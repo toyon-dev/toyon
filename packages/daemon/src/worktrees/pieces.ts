@@ -328,7 +328,7 @@ export class PiecesService implements ToolProvider {
                 after: {
                   type: "string",
                   description:
-                    'worktree only: what the piece waits for before it starts: a branch, another piece of this list by its title, or "this" for your own branch.',
+                    'worktree: what the piece waits for before it starts: a branch, another piece of this list by its title, or "this" for your own branch. here: what your own work on the piece waits for, a branch or another piece of this list; Toyon shows the wait under the box until it lands.',
                 },
                 to: { type: "string", description: "send only: the open worktree it goes to, by branch or title." },
                 project: {
@@ -431,18 +431,45 @@ export class PiecesService implements ToolProvider {
         if ("refused" in found) return refused(`Piece ${i + 1} ("${title}"): ${found.refused}`);
         piece.project = { id: found.repo.id, name: found.repo.name };
       }
-      if (p.where !== "worktree" && p.after !== undefined) {
-        return refused(`Piece ${i + 1} ("${title}") has \`after\`, which only a \`worktree\` piece takes.`);
+      if (p.where === "send" && p.after !== undefined) {
+        return refused(`Piece ${i + 1} ("${title}") has \`after\`, which a \`send\` piece does not take.`);
       }
       if (p.where !== "send" && p.to !== undefined) {
         return refused(`Piece ${i + 1} ("${title}") has \`to\`, which only a \`send\` piece takes.`);
       }
-      if (p.where === "worktree" && p.after !== undefined) {
+      if (p.after !== undefined) {
         const q = p.after.trim();
         if (!q)
           return refused(`Piece ${i + 1} ("${title}") has a blank \`after\`; name what it waits for, or leave it out.`);
-        const after = this.resolveAfter(wt, raw, i, q);
+        // a worktree piece waits for one made earlier in the same pass; the origin's own work is
+        // not made at all, so it may wait for any other piece of the list, wherever it stands
+        const after = this.resolveAfter(wt, raw, i, q, p.where === "here");
         if ("refused" in after) return refused(`Piece ${i + 1} ("${title}"): ${after.refused}`);
+        if (p.where === "here" && !("piece" in after.after) && after.after.id === wt.id) {
+          return refused(`Piece ${i + 1} ("${title}") is \`here\` and waits for its own branch.`);
+        }
+        if (p.where === "here" && "piece" in after.after) {
+          // the origin's own work waits for a worktree: not for another piece of its own, which
+          // lands with it, and not for a piece that waits for the origin in turn, which is a cycle
+          // nothing would break
+          const on = raw[Number(after.after.piece.slice(1)) - 1]!;
+          const onTitle = sentenceCase(on.title.trim());
+          if (on.where === "here") {
+            return refused(
+              `Piece ${i + 1} ("${title}") waits for "${onTitle}", which is \`here\` too and lands with it.`,
+            );
+          }
+          const back = on.after?.trim() ?? "";
+          const bare = back.startsWith("@") ? back.slice(1) : back;
+          const onOrigin =
+            bare !== "" &&
+            (bare === "this" ||
+              bare === wt.branch ||
+              raw.some((o) => o.where === "here" && matchBy([o], bare, [(x) => x.title.trim()]).length > 0));
+          if (onOrigin) {
+            return refused(`Piece ${i + 1} ("${title}") waits for "${onTitle}", which waits for this branch: a cycle.`);
+          }
+        }
         piece.after = after.after;
       }
       if (p.where === "send") {
@@ -521,25 +548,30 @@ export class PiecesService implements ToolProvider {
     raw: readonly RawPiece[],
     at: number,
     q: string,
+    /** any other piece of the list may be named, not only one earlier on it */
+    anywhere = false,
   ): { after: NonNullable<Piece["after"]> } | { refused: string } {
     const bare = q.startsWith("@") ? q.slice(1) : q;
     const titled = raw.map((p, i) => ({ i, title: p.title.trim() }));
     const onList = matchBy(
-      titled.filter((p) => p.i < at),
+      titled.filter((p) => (anywhere ? p.i !== at : p.i < at)),
       bare,
       [(p) => p.title],
     );
     if (onList.length === 1) return { after: { piece: `p${onList[0]!.i + 1}` } };
     if (onList.length > 1)
       return { refused: `"${q}" names more than one piece on the list; give them different titles.` };
-    if (
-      matchBy(
-        titled.filter((p) => p.i >= at),
-        bare,
-        [(p) => p.title],
-      ).length > 0
-    ) {
-      return { refused: `"${q}" is this piece or a later one; a piece waits only for one earlier on the list.` };
+    const rest = matchBy(
+      titled.filter((p) => (anywhere ? p.i === at : p.i >= at)),
+      bare,
+      [(p) => p.title],
+    );
+    if (rest.length > 0) {
+      return {
+        refused: anywhere
+          ? `"${q}" is this piece itself.`
+          : `"${q}" is this piece or a later one; a piece waits only for one earlier on the list.`,
+      };
     }
     if (bare === "this" || bare === wt.branch) return { after: { id: wt.id, branch: wt.branch, title: wt.title } };
     const found = this.named(this.siblings(wt), bare);
@@ -580,6 +612,15 @@ export class PiecesService implements ToolProvider {
     const piece = proposed.pieces.find((p) => p.id === pieceId);
     if (!piece) throw new UserError("That piece is not on the list");
     if (fate === "send" && !piece.to) throw new UserError("That piece has no worktree to send to");
+    // go acts in list order, so a worktree piece waiting for one later on the list would be made
+    // before its wait exists and start at once, while the row still said queued
+    const after = piece.after;
+    if (fate === "worktree" && after && "piece" in after) {
+      const at = proposed.pieces.findIndex((p) => p.id === pieceId);
+      if (proposed.pieces.findIndex((p) => p.id === after.piece) > at) {
+        throw new UserError("That piece waits for one later on the list, so it is done here or skipped");
+      }
+    }
     if (piece.fate === "send" && (fate === "here" || fate === "worktree")) {
       throw new UserError("A piece for an open worktree is sent there or skipped");
     }
@@ -645,6 +686,7 @@ export class PiecesService implements ToolProvider {
         }
       }
       agent.note({ type: "pieces", id, outcomes, ts: Date.now() });
+      this.recordAwaits(wt.id, entries, proposed, became);
       if (tell && outcomes.some((o) => o.fate !== "here")) {
         // the card's answer must be on the wire before anything is steered into the turn it
         // releases: a steer that lands while the plan tool is still being answered aborts the
@@ -807,7 +849,14 @@ export class PiecesService implements ToolProvider {
     const crossed = piece.project ? { repoName: piece.project.name } : {};
     if (fate === "here" || fate === "skip") {
       became.set(piece.id, { fate });
-      return { pieceId: piece.id, fate };
+      // what the origin's own work waits for, in the row's words: a branch, or a piece of the list
+      const waits = fate === "here" ? piece.after : undefined;
+      const after = !waits
+        ? undefined
+        : "piece" in waits
+          ? (proposed.pieces.find((p) => p.id === waits.piece)?.title ?? waits.piece)
+          : waits.branch;
+      return { pieceId: piece.id, fate, ...(after ? { after } : {}) };
     }
     if (fate === "send") {
       const target = piece.to ? this.d.state.worktree(piece.to.id) : undefined;
@@ -857,6 +906,29 @@ export class PiecesService implements ToolProvider {
     const made = await this.make(wt, origin, piece, note);
     became.set(piece.id, { fate, worktree: { id: made.id, branch: made.branch, title: made.title } });
     return { pieceId: piece.id, fate, worktreeId: made.id, title: made.title, ...crossed };
+  }
+
+  /** The worktrees the origin's own work waits for, by its here pieces, onto its record: a branch
+   * named, or the worktree a piece of the list became in this pass. A piece still queued is
+   * nothing to wait for yet. The landing reads the record to tell the origin (tellAwaiting). */
+  private recordAwaits(
+    originId: string,
+    entries: readonly TranscriptEntry[],
+    proposed: Proposed,
+    became: Map<string, Became>,
+  ): void {
+    const awaits: Named[] = [];
+    for (const piece of proposed.pieces) {
+      const after = piece.after;
+      if (!after || effectiveFate(entries, proposed, piece) !== "here") continue;
+      const w = "piece" in after ? became.get(after.piece)?.worktree : after;
+      if (w && !awaits.some((a) => a.id === w.id)) awaits.push(w);
+    }
+    if (awaits.length === 0) return;
+    const live = this.d.state.requireWorktree(originId);
+    live.awaits = [...(live.awaits ?? []).filter((a) => !awaits.some((b) => b.id === a.id)), ...awaits];
+    this.d.state.save();
+    this.d.hub.emit("worktreesChanged");
   }
 
   /** What a `worktree` piece still has to wait for as go runs, or null to make it now. A branch
@@ -943,7 +1015,9 @@ export class PiecesService implements ToolProvider {
    * could not be made is dropped with the reason, and what waited on it goes too. Then every
    * worktree that waited for this branch before it started hears that it landed again. */
   async landed(landedId: string): Promise<void> {
-    this.tellOrigin(landedId);
+    const told = new Set<string>();
+    const origin = this.tellOrigin(landedId);
+    if (origin) told.add(origin);
     // the worktrees this landing makes waited for it by design: this is their first word, not again
     const madeNow = new Set<string>();
     for (const origin of this.d.state.worktrees) {
@@ -978,7 +1052,38 @@ export class PiecesService implements ToolProvider {
         }
       }
     }
-    this.tellWaiters(landedId, madeNow);
+    for (const id of this.tellWaiters(landedId, madeNow)) told.add(id);
+    this.tellAwaiting(landedId, told);
+  }
+
+  /** every worktree whose own work waited for the landed branch (recordAwaits) hears of it, once:
+   * not again when the landing already told it as its origin or as a waiter. The record lets the
+   * wait go either way, so the line under its box does too. */
+  private tellAwaiting(landedId: string, told: ReadonlySet<string>): void {
+    const landed = this.d.state.worktree(landedId);
+    const repo = landed ? this.d.state.repo(landed.repoId) : undefined;
+    let changed = false;
+    for (const w of this.d.state.worktrees) {
+      if (!w.awaits?.some((a) => a.id === landedId)) continue;
+      w.awaits = w.awaits.filter((a) => a.id !== landedId);
+      if (w.awaits.length === 0) delete w.awaits;
+      changed = true;
+      if (!landed || !repo || w.kind !== "worktree" || told.has(w.id)) continue;
+      this.d.runtime.ensureAgent(w).agent.note({
+        type: "piece-landed",
+        worktreeId: landed.id,
+        repoName: repo.name,
+        title: landed.title,
+        ...(landed.pr?.url ? { url: landed.pr.url } : {}),
+        ...(w.repoId === landed.repoId ? { same: true as const } : {}),
+        awaited: true,
+        ts: Date.now(),
+      });
+    }
+    if (changed) {
+      this.d.state.save();
+      this.d.hub.emit("worktreesChanged");
+    }
   }
 
   /** the queued pieces of the same list that waited for `made`'s piece now wait for its worktree */
@@ -1024,14 +1129,14 @@ export class PiecesService implements ToolProvider {
   }
 
   /** the worktree a landed one came from hears of the landing, on its chat and in its agent's
-   * next prompt. Nothing when the origin is gone or was never a worktree. */
-  private tellOrigin(landedId: string): void {
+   * next prompt, and is named; nothing when the origin is gone or was never a worktree. */
+  private tellOrigin(landedId: string): string | null {
     const wt = this.d.state.worktree(landedId);
-    if (wt?.from?.kind !== "worktree") return;
+    if (wt?.from?.kind !== "worktree") return null;
     const origin = this.d.state.worktree(wt.from.origin.id);
-    if (origin?.kind !== "worktree") return;
+    if (origin?.kind !== "worktree") return null;
     const repo = this.d.state.repo(wt.repoId);
-    if (!repo) return;
+    if (!repo) return null;
     this.d.runtime.ensureAgent(origin).agent.note({
       type: "piece-landed",
       worktreeId: wt.id,
@@ -1042,19 +1147,22 @@ export class PiecesService implements ToolProvider {
       ...(wt.repoId === origin.repoId ? { same: true as const } : {}),
       ts: Date.now(),
     });
+    return origin.id;
   }
 
   /** every live worktree that waited for the landed branch before it started hears that the
    * branch landed again: follow-ups on it may touch the piece, and the agent reads them off main.
-   * Not the ones this landing just made, whose first word it is. */
-  private tellWaiters(landedId: string, madeNow: ReadonlySet<string>): void {
+   * Not the ones this landing just made, whose first word it is. The ones told are named. */
+  private tellWaiters(landedId: string, madeNow: ReadonlySet<string>): string[] {
     const landed = this.d.state.worktree(landedId);
-    if (!landed) return;
+    if (!landed) return [];
     const repo = this.d.state.repo(landed.repoId);
-    if (!repo) return;
+    if (!repo) return [];
+    const told: string[] = [];
     for (const w of this.d.state.worktrees) {
       if (w.kind !== "worktree" || w.landed || w.id === landedId || madeNow.has(w.id)) continue;
       if (w.from?.kind !== "worktree" || w.from.after?.id !== landedId) continue;
+      told.push(w.id);
       this.d.runtime.ensureAgent(w).agent.note({
         type: "piece-landed",
         worktreeId: landed.id,
@@ -1066,6 +1174,7 @@ export class PiecesService implements ToolProvider {
         ts: Date.now(),
       });
     }
+    return told;
   }
 
   /** a queued piece whose awaited worktree is gone will never be made: dropped, and the origin's

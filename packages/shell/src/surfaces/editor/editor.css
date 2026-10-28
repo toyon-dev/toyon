@@ -148,73 +148,32 @@
     inset: 0;
   }
 
-  /* ---- the Worktrees block at the head of a plan ----
-   Toyon's own section on the agent's document (Pieces.tsx): one line per piece, the fate at its
-   end in the quiet tier, and the plan under a rule. It takes the page's measure and side padding
-   (the body's, base.css .md-preview) so its rows sit on the document's text edge, clear of the
-   outline strip, and scrolls with it; the rule parts it from the plan, whose own top air then
-   starts under it. A row is a fold, as a tool row in the chat is: pressed, the piece's text opens
-   under its line and the plan moves down by that much, and nothing is replaced. A list of one has
-   no fold: its line is a plain line, not a .row, so nothing lifts under the pointer, and the
-   text stands open under it. */
-  .editor-pieces {
-    font: var(--type-ui);
+  /* ---- the pieces of a plan as the pane's tabs ----
+   Pieces.tsx: the strip is the pane's head and ui/pane.css paints it, so only what a tab and a
+   piece's page add is here. The small word at a tab's end is a figure beside a name, the rail's
+   age column: the mono's small size in the quiet tier, and it rides the seat's lift with the name
+   under the pointer, as the rail's does. */
+  .editor-tab-mark {
+    font: var(--type-mono-sm);
+    color: var(--text2);
+    margin-left: 4px;
+  }
+  /* the line over a piece's text: the document's measure and side padding (base.css .md-preview),
+     so it sits on the text edge clear of the outline strip, with the document's own top air above
+     it; the text under it starts closer (ui/document.css), since the line is its head */
+  .editor-piece-lead {
     max-width: var(--chat-measure);
     margin: 0 auto;
-    padding: 24px 32px 16px;
-    border-bottom: 1px solid var(--border0);
-  }
-  .editor-pieces-title {
-    margin: 0 0 4px 12px;
-  }
-  .editor-pieces-note {
-    margin: 0 0 8px 12px;
-  }
-  /* the rows bleed past the title's edge by the row inset, so a seat lit under the pointer has
-     air around the words and the words themselves stay on the text edge */
-  .editor-piece {
-    margin: 0 -12px;
-    & > .editor-piece-row {
-      display: flex;
-      min-height: var(--row-height-sm);
-      padding: 0 12px;
-      gap: 12px;
-      align-items: baseline;
-      border-radius: var(--radius);
-    }
-    & > summary.editor-piece-row {
-      cursor: pointer;
-      list-style: none;
-    }
-    & > summary::-webkit-details-marker {
-      display: none;
-    }
-  }
-  .editor-piece-title {
-    color: var(--text0);
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .editor-piece-fate {
-    margin-left: auto;
-    flex-shrink: 0;
-    white-space: nowrap;
-  }
-  .editor-piece-body {
-    padding: 4px 12px 10px;
+    padding: 40px 32px 0;
+    font: var(--type-ui);
   }
   .editor-piece-line {
-    margin: 0 0 8px;
-  }
-  .editor-piece-text {
-    color: var(--text1);
+    margin: 0;
   }
   .editor-piece-chips {
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
-    margin-top: 6px;
+    margin-top: 8px;
   }
 }

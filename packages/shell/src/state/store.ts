@@ -225,6 +225,8 @@ export type ChatItem =
       url?: string;
       same?: true;
       again?: true;
+      /** a branch the work here waited for, named by a here piece of its list */
+      awaited?: true;
       ts: number;
     }
   /** the pieces of the agent's plan, handed to Toyon. `held` while it waits for the plan card it
@@ -3581,6 +3583,7 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
           ...(event.url ? { url: event.url } : {}),
           ...(event.same ? { same: true } : {}),
           ...(event.again ? { again: true } : {}),
+          ...(event.awaited ? { awaited: true } : {}),
           ts: event.ts,
         },
       ];

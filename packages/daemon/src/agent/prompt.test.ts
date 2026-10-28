@@ -109,6 +109,10 @@ describe("prompts for work in another project", () => {
     expect(pieceLandedContext("First", "toyon", undefined, true, true)).toBe(
       'The branch this worktree waited for before it started, "First", landed again on this project\'s main with follow-up commits; Toyon rebases onto main when this lands, and its latest commits are readable now if they touch your piece.',
     );
+    // the branch the origin's own piece waited for
+    expect(pieceLandedContext("First", "toyon", undefined, true, undefined, true)).toBe(
+      'The branch your own piece waited for, "First", has landed on this project\'s main; that piece can go ahead now, and Toyon rebases onto main when this lands.',
+    );
   });
 });
 
@@ -140,6 +144,13 @@ describe("pieces prompts", () => {
     expect(piecesActedPrompt(pieces, [{ pieceId: "p2", fate: "worktree", error: "no port" }])).toContain(
       '"Expiry" (no port) could not start. Nothing on the list is yours here.',
     );
+    // the origin's own piece names what it waits for
+    expect(
+      piecesActedPrompt(pieces, [
+        { pieceId: "p1", fate: "here", after: "toyon/expiry" },
+        { pieceId: "p2", fate: "worktree" },
+      ]),
+    ).toContain('Do "Persist" (once toyon/expiry lands) here, and only that.');
   });
 
   test("the system append hands the pieces of a plan to Toyon through the split tool, and one piece found mid-task", () => {

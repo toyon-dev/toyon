@@ -204,7 +204,119 @@ export function pieceFate(
 /** the fates a piece may take from a press: a piece aimed at an open worktree is sent there or
  * skipped; one for another project goes there or is skipped; any other goes here, to a new
  * worktree, or is skipped */
-export function fatesFor(piece: Piece): PieceFate[] {
+export function fatesFor(piece: Piece, pieces: readonly Piece[] = []): PieceFate[] {
   if (piece.fate === "send") return ["send", "skip"];
+  // a piece that waits for one later on the list is never made in time, since go acts in list
+  // order: the origin's own, or skipped
+  const after = piece.after;
+  const later =
+    !!after &&
+    "piece" in after &&
+    pieces.findIndex((p) => p.id === after.piece) > pieces.findIndex((p) => p.id === piece.id);
+  if (later) return ["here", "skip"];
   return piece.project ? ["worktree", "skip"] : ["here", "worktree", "skip"];
+}
+
+/** whether the list is still the person's to move */
+export const deciding = (item: Pick<PiecesItem, "state">): boolean =>
+  item.state === "held" || item.state === "proposed";
+
+/** The strip's order, fixed from what the agent proposed, so a press on a fate moves no tab: the
+ * origin's own pieces first, beside the plan they are part of, then worktrees made now, then the
+ * queued, then what is sent on. The agent's order within each. */
+export function pieceOrder(item: Pick<PiecesItem, "pieces">): Piece[] {
+  const rank = (p: Piece) => (p.fate === "here" ? 0 : p.fate === "worktree" ? (p.after ? 2 : 1) : 3);
+  return [...item.pieces].sort((a, b) => rank(a) - rank(b));
+}
+
+/** the small word at a tab's end: the fate while the list is the person's, what became of the
+ * piece once answered; a worktree the piece became stands there by its row's dot and age instead */
+export type PieceMark = { word: string } | { worktreeId: string; title?: string };
+
+export function pieceMark(item: PiecesItem, piece: Piece): PieceMark {
+  if (deciding(item)) {
+    const fate = effectiveFate(item, piece);
+    if (fate === "worktree") return { word: piece.after ? "queued" : "worktree" };
+    if (fate === "send") return { word: "sent" };
+    return { word: fate };
+  }
+  const s = pieceStanding(item, piece);
+  if (s.kind === "worktree" || (s.kind === "sent" && s.worktreeId)) {
+    return { worktreeId: s.worktreeId!, ...(s.title ? { title: s.title } : {}) };
+  }
+  return { word: s.kind === "sent" ? "sent" : s.kind };
+}
+
+/** what became of the piece once the list was answered, as a fact the page's line states */
+export type PieceStanding =
+  | { kind: "starting" }
+  | { kind: "failed"; error: string }
+  | { kind: "here" }
+  | { kind: "skipped" }
+  | { kind: "dropped"; reason: string }
+  | { kind: "sent"; worktreeId?: string; title?: string; repoName?: string }
+  | { kind: "worktree"; worktreeId: string; title?: string; repoName?: string }
+  /** waiting for its turn: the branch it waits for, by its open row when there is one */
+  | { kind: "queued"; after: Wait | null; said?: string };
+
+export function pieceStanding(item: PiecesItem, piece: Piece): PieceStanding {
+  if (item.state === "going") return { kind: "starting" };
+  const outcome = item.outcomes.find((o) => o.pieceId === piece.id);
+  const later = item.later.findLast((l) => l.pieceId === piece.id);
+  if (!outcome) return { kind: "skipped" };
+  if (outcome.error) return { kind: "failed", error: outcome.error };
+  if (outcome.fate === "here") return { kind: "here" };
+  if (outcome.fate === "skip") return { kind: "skipped" };
+  const crossed = outcome.repoName ? { repoName: outcome.repoName } : {};
+  if (outcome.fate === "send") {
+    return {
+      kind: "sent",
+      ...(outcome.worktreeId ? { worktreeId: outcome.worktreeId } : {}),
+      ...(outcome.title ? { title: outcome.title } : {}),
+      ...crossed,
+    };
+  }
+  const made = outcome.worktreeId ? outcome : later?.worktreeId ? later : null;
+  if (made?.worktreeId) {
+    return {
+      kind: "worktree",
+      worktreeId: made.worktreeId,
+      ...(made.title ? { title: made.title } : {}),
+      ...("repoName" in made && made.repoName ? { repoName: made.repoName } : {}),
+    };
+  }
+  if (later?.reason) return { kind: "dropped", reason: later.reason };
+  return { kind: "queued", after: waitOf(item, piece), ...(outcome.after ? { said: outcome.after } : {}) };
+}
+
+/** The tab a page opens on: the plan when the page has one, since that is the file opened. On a
+ * page with none, the first piece while the list is the person's; once answered, the origin's own
+ * piece, which is this worktree's plan. */
+export function defaultTab(item: PiecesItem, hasPlan: boolean): string {
+  if (hasPlan) return "plan";
+  const order = pieceOrder(item);
+  const own = deciding(item) ? undefined : order.find((p) => effectiveFate(item, p) === "here");
+  return own?.id ?? order[0]?.id ?? "plan";
+}
+
+/** What the origin's own work waits for, once the list was answered: the worktrees its here
+ * pieces named, a piece of the list by the worktree it became. Nothing before go, and nothing
+ * for a wait that never became a worktree. Each once. */
+export function hereWaits(item: PiecesItem): Array<{ id: string; title: string }> {
+  if (item.state !== "done") return [];
+  const out = new Map<string, string>();
+  for (const piece of item.pieces) {
+    const after = piece.after;
+    if (!after || effectiveFate(item, piece) !== "here") continue;
+    if ("id" in after) {
+      out.set(after.id, after.title);
+      continue;
+    }
+    const on = item.pieces.find((p) => p.id === after.piece);
+    const became = on ? pieceStanding(item, on) : null;
+    if (became?.kind === "worktree" || (became?.kind === "sent" && became.worktreeId)) {
+      out.set(became.worktreeId!, became.title ?? on?.title ?? "the worktree");
+    }
+  }
+  return [...out].map(([id, title]) => ({ id, title }));
 }

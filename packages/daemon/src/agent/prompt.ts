@@ -11,7 +11,7 @@ export const SYSTEM_APPEND = [
   "You are working inside a dedicated git worktree managed by Toyon.",
   "Make every change inside the current working directory and never modify files outside it. Reading files outside it is fine when the user points you there.",
   "When a change belongs in another project Toyon has open rather than in this worktree, do not edit outside it and do not stop at saying so: propose it with the `split` tool when you have one, as one piece with `where` set to `worktree` and `project` naming that project, its `plan` in markdown that project's agent builds from, with what is needed and why, how to reproduce it, and the paths here that depend on it; the user decides on a card, and once it is proposed you finish your turn.",
-  "When the work you are planning splits into pieces that could go on in parallel, hand Toyon the list with the `split` tool when you have one, right before you ask for plan approval, or, outside plan mode, before you start on your own pieces, never at the end of the turn: a sibling's agent then works while you do, and the user sees the card at once. For each piece, a title, a plan in markdown standing on its own, which its agent builds from as an approved plan, the attachments from this chat it needs by their labels (`Image 2`, `Paste 1`), and where it goes: `here` for what you will do yourself in this worktree, `worktree` for a new worktree of this project or, with `project`, of another open one (with `after` naming the branch it must wait for, another piece of the list by its title, or `this` for your own), or `send` for an open worktree already working on that part, named by its branch or title. The user reads the list beside your plan and may move any piece; Toyon acts on their answer, so never start a sibling's piece yourself, and do only the pieces marked `here`.",
+  "When the work you are planning splits into pieces that could go on in parallel, hand Toyon the list with the `split` tool when you have one, right before you ask for plan approval, or, outside plan mode, before you start on your own pieces, never at the end of the turn: a sibling's agent then works while you do, and the user sees the card at once. For each piece, a title, a plan in markdown standing on its own, which its agent builds from as an approved plan, the attachments from this chat it needs by their labels (`Image 2`, `Paste 1`), and where it goes: `here` for what you will do yourself in this worktree (with `after` naming a branch or a piece of the list your own work must wait for, which Toyon then shows under the box until it lands), `worktree` for a new worktree of this project or, with `project`, of another open one (with `after` naming the branch it must wait for, another piece of the list by its title, or `this` for your own), or `send` for an open worktree already working on that part, named by its branch or title. The user reads the list beside your plan and may move any piece; Toyon acts on their answer, so never start a sibling's piece yourself, and do only the pieces marked `here`.",
   "The same tool, with one piece, is how you offer a separate thing you come across mid-task: a feature you would call its own, a follow-up you would otherwise park in a sentence, work the person asks to have done in a new worktree. Offer it once, as `worktree`, with a plan its agent builds from, as soon as you see it rather than when your own work is done; a sentence saying it could be its own branch is not an offer, and a card the person can decline in one press is.",
   "A write Toyon refuses (outside the worktree, or to an agent's settings, hooks or plugin code such as .claude/settings.json, .claude/hooks or opencode.json) was refused by Toyon and not by the user, who was never asked. Report it as the boundary that stopped it, never as the user declining.",
   "Never run `git push`, delete branches, or create pull requests, and never offer to; shipping is handled by the Toyon UI. Never add, remove, move or prune worktrees; Toyon owns them. Listing them with `git worktree list` is fine.",
@@ -247,7 +247,9 @@ export function piecesActedPrompt(
   const started = outcomes.filter((o) => o.fate === "worktree" && !o.after && !o.error).map((o) => titled(o.pieceId));
   const queued = outcomes.filter((o) => o.fate === "worktree" && o.after && !o.error);
   const sent = outcomes.filter((o) => o.fate === "send" && !o.error);
-  const here = outcomes.filter((o) => o.fate === "here").map((o) => titled(o.pieceId));
+  const here = outcomes
+    .filter((o) => o.fate === "here")
+    .map((o) => (o.after ? `${titled(o.pieceId)} (once ${o.after} lands)` : titled(o.pieceId)));
   const skipped = outcomes.filter((o) => o.fate === "skip").map((o) => titled(o.pieceId));
   const failed = outcomes.filter((o) => o.error).map((o) => `${titled(o.pieceId)} (${o.error})`);
   const parts: string[] = [];
@@ -328,8 +330,12 @@ export function pieceLandedContext(
   url?: string,
   same?: boolean,
   again?: boolean,
+  awaited?: boolean,
 ): string {
   const where = url ? ` (${url})` : "";
+  if (awaited) {
+    return `The branch your own piece waited for, "${title}", has landed on this project's main${where}; that piece can go ahead now, and Toyon rebases onto main when this lands.`;
+  }
   if (again) {
     return `The branch this worktree waited for before it started, "${title}", landed again on this project's main${where} with follow-up commits; Toyon rebases onto main when this lands, and its latest commits are readable now if they touch your piece.`;
   }

@@ -65,7 +65,8 @@ export interface Piece {
   /** what the agent proposed; never `skip` */
   fate: Exclude<PieceFate, "skip">;
   /** `worktree`: what it waits for before it starts, resolved when proposed; absent to start at
-   * once. A worktree already open, or another piece of the same list by its id. */
+   * once. `here`: what the origin's own work on it waits for, which the box under the composer
+   * states until it lands. A worktree already open, or another piece of the same list by its id. */
   after?: { id: string; branch: string; title: string } | { piece: string };
   /** `send`: the open worktree the text goes to */
   to?: { id: string; branch: string; title: string };
@@ -83,7 +84,7 @@ export interface PieceOutcome {
   title?: string;
   /** the project the worktree is in, when it is not the origin's */
   repoName?: string;
-  /** queued until this branch lands */
+  /** queued until this branch lands; on a `here` piece, what the origin's own work waits for */
   after?: string;
   /** in the daemon's words, when the piece could not be acted on */
   error?: string;
@@ -428,7 +429,9 @@ export type AgentEvent =
    * the landing was one. Kept on the transcript so the row reads back after a reload, and read by
    * the next prompt so the agent here hears it too. `same`: a sibling of this project, not work in
    * another one. `again`: the branch this worktree waited for before it started landed once more,
-   * with follow-up commits; written on the waiting worktree's own transcript. */
+   * with follow-up commits; written on the waiting worktree's own transcript. `awaited`: a branch
+   * this worktree's own work waited for, named by a here piece of its list, landed; written on
+   * the origin's transcript, where its wait stood under the box. */
   | {
       type: "piece-landed";
       worktreeId: string;
@@ -437,6 +440,7 @@ export type AgentEvent =
       url?: string;
       same?: true;
       again?: true;
+      awaited?: true;
       ts: number;
     }
   /** the agent handed Toyon the pieces of its plan. `held`: proposed in plan mode, so the list

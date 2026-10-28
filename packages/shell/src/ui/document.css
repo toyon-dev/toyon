@@ -10,6 +10,11 @@
     inset: 0;
     overflow-y: auto;
     outline: none;
+    /* under a lead the body is a continuation, not an opening: the lead took the page's top air,
+       and the body keeps only a paragraph's worth from it */
+    & > .md-preview:not(:first-child) {
+      padding-top: 16px;
+    }
   }
   /* the document's outline: a strip of ticks down the left of the body, outside the scroll box so it
    holds still, centred on the body's height the way a page's margin notes are. It sits inside the

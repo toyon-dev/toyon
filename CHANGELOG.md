@@ -2,6 +2,39 @@
 
 What changed in each release of Toyon, newest first.
 
+## 0.20.0 (2026-10-28)
+
+The rail shows work that goes on while the chat is quiet, agents find their sibling worktrees on their own, and the phone moves between the list and a worktree in one swipe.
+
+### New
+- A rail row shows a purple dot while its agent runs a command in the background or has a wakeup booked, and while Toyon commits or lands the worktree, so the row reads as busy with its chat closed.
+- An agent can look up the project's other open worktrees and recently archived ones, by title, branch or the words you wrote in them.
+- Web addresses in code blocks and in a tool's output are links that open in a new tab.
+- A landed card links the PR it merged when the land went through one.
+- The right-click menu on a worktree or archived row offers reveal transcript in Finder, once the chat has its first message.
+- An answered question card shows the description of each option you picked beneath the pick.
+- On a phone, one edge swipe from the chat, the preview or the code returns to the list, and a swipe the other way within a second and a half goes back to the worktree you left. The bar's marker now moves with the screen instead of trailing it.
+
+### Changed
+- Archiving a row with an unsent draft or a busy agent asks first and names the reason. The menu item ends in an ellipsis exactly when it will ask.
+- An archived row shows in the archive list the moment you archive it.
+- A single piece proposed from a worktree that holds no work yet is offered to run here, in that worktree, rather than in a new one. The agent is told why.
+- Agents are asked to split work into worktrees before starting on their own part, so the card shows at once and the sibling agents start alongside.
+- `/split` reads its first word as a project only when it names an open project exactly, or is `here`. Anything else is the whole message for this project.
+- A pieces list with one piece shows as a plain line with its text open beneath it.
+- The pieces card for another project shows that worktree's current mode, not the mode it had when the card was made.
+- When you answer a plan card, the agent hears that its pieces list came back with the plan, instead of taking it as lost.
+- A worktree mention puts its dot after the title, outside the underline.
+
+### Fixed
+- A split piece always gets a worktree of its own. Before, it could take over the new row you were typing in and leave your draft stranded there.
+- Agents can list worktrees with git; only the commands that change worktrees are refused.
+- Claude's quick model is picked from the models Claude offers, so Bedrock and dated model names work without a setting.
+- A Mac with its screen dark no longer goes to sleep in the moment Toyon restarts.
+- On a phone, closing the plan no longer opens it again.
+- A piece queued after the branch you are in says it starts when this branch lands, instead of linking to your own worktree.
+- A settings row keeps its name on one line when the value beside it is long.
+
 ## 0.19.0 (2026-10-26)
 
 A plan can be split into pieces that each get their own worktree, worktrees go by their titles everywhere, and the phone shell becomes a place you can work from: screens you swipe between, chats you can read offline, a share sheet that lands in a chat, and a true black background.

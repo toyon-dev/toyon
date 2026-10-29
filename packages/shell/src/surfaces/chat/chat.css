@@ -897,10 +897,18 @@
       overflow-x: auto;
       color: var(--text1);
     }
-    /* an address a command printed is the link out it reads as, in the blue a reply's links wear */
-    & .tool-out a {
-      color: var(--blue);
+    /* an address a command printed is pressable, but it is still what the command printed: it
+       keeps the output's tier and says it is a link with a quiet underline, the way a file link
+       does, so a push log full of remote URLs is not a column of blue. The pointer lifts it. */
+    & .tool-block a {
+      color: inherit;
+      text-decoration-color: color-mix(in srgb, currentColor 55%, transparent);
+      text-underline-offset: 2px;
       border-radius: var(--radius);
+    }
+    :where([data-hover]) & .tool-block a:hover {
+      color: var(--text0);
+      text-decoration-color: currentColor;
     }
     /* the command that produced the output, where the summary line carries the sentence that named
    it instead. It sits in the band's recess with what it printed: a command can run to a screen (a

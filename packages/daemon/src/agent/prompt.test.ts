@@ -153,6 +153,43 @@ describe("pieces prompts", () => {
     ).toContain('Do "Persist" (once toyon/expiry lands) here, and only that.');
   });
 
+  test("the sentence after go on Toyon's own card says it was the card, and names no siblings when there are none", () => {
+    const pieces = [
+      { id: "p1", title: "Persist" },
+      { id: "p2", title: "Expiry" },
+    ];
+    expect(piecesActedPrompt(pieces, [{ pieceId: "p1", fate: "here" }], "card")).toBe(
+      'The person answered the split card, and Toyon acted on the pieces you handed over. Do "Persist" here, and only that.',
+    );
+    // the note typed with go reaches the agent here as it does every sibling's; a piece skipped
+    // is no sibling, so nobody is said to be reading the list
+    expect(
+      piecesActedPrompt(
+        pieces,
+        [
+          { pieceId: "p1", fate: "here" },
+          { pieceId: "p2", fate: "skip" },
+        ],
+        "card",
+        "use the v2 API",
+      ),
+    ).toBe(
+      'The person answered the split card, and Toyon acted on the pieces you handed over: "Expiry" was skipped by the person. Do "Persist" here, and only that. The person added: use the v2 API',
+    );
+    expect(
+      piecesActedPrompt(
+        pieces,
+        [
+          { pieceId: "p1", fate: "here" },
+          { pieceId: "p2", fate: "worktree", after: "toyon/rail" },
+        ],
+        "card",
+      ),
+    ).toBe(
+      'The person answered the split card, and Toyon acted on the pieces you handed over: "Expiry" waits for toyon/rail to land and then starts in its own worktree. Do "Persist" here, and only that. The siblings read the list at its path in this worktree; never do their pieces yourself.',
+    );
+  });
+
   test("the system append hands the pieces of a plan to Toyon through the split tool, and one piece found mid-task", () => {
     expect(SYSTEM_APPEND).toContain("hand Toyon the list with the `split` tool when you have one");
     expect(SYSTEM_APPEND).toContain(

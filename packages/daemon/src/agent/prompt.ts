@@ -241,6 +241,11 @@ export interface PieceOrigin {
 export function piecesActedPrompt(
   pieces: ReadonlyArray<{ id: string; title: string }>,
   outcomes: ReadonlyArray<{ pieceId: string; fate: string; title?: string; after?: string; error?: string }>,
+  /** what the person answered: the plan card the list rode beside, or Toyon's own card, whose go
+   * is what starts the agent's turn */
+  by: "plan" | "card" = "plan",
+  /** the note typed with go on Toyon's own card: every piece's agent reads it, this one too */
+  note?: string,
 ): string {
   const titled = (id: string) => `"${pieces.find((p) => p.id === id)?.title ?? id}"`;
   const list = (xs: string[]) => xs.join(", ");
@@ -268,6 +273,16 @@ export function piecesActedPrompt(
   if (skipped.length) parts.push(`${list(skipped)} ${skipped.length === 1 ? "was" : "were"} skipped by the person`);
   if (failed.length) parts.push(`${list(failed)} could not start`);
   const own = here.length ? `Do ${list(here)} here, and only that.` : "Nothing on the list is yours here.";
+  if (by === "card") {
+    const acted = parts.length ? `: ${parts.join("; ")}` : "";
+    // a sibling is a piece that went somewhere; one skipped or failed has no agent reading the list
+    const siblings =
+      started.length || queued.length || sent.length
+        ? " The siblings read the list at its path in this worktree; never do their pieces yourself."
+        : "";
+    const said = note ? ` The person added: ${note}` : "";
+    return `The person answered the split card, and Toyon acted on the pieces you handed over${acted}. ${own}${said}${siblings}`;
+  }
   return `Toyon acted on the pieces you handed over with the plan's approval: ${parts.join("; ")}. ${own} The siblings read the plan at its path in this worktree; never do their pieces yourself.`;
 }
 

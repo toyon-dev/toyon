@@ -470,8 +470,9 @@ export type AgentEvent =
   | { type: "pieces-stale"; id: string; ts: number }
   /** the person moved a piece; the last one per piece stands when go is pressed */
   | { type: "pieces-fate"; id: string; pieceId: string; fate: PieceFate; ts: number }
-  /** the plan was approved, or go pressed: the card closes here and Toyon acts */
-  | { type: "pieces-go"; id: string; ts: number }
+  /** the plan was approved, or go pressed: the card closes here and Toyon acts. `note` is what
+   * the person typed with go on Toyon's own card, read back in their bubble */
+  | { type: "pieces-go"; id: string; note?: string; ts: number }
   /** what became of each piece */
   | { type: "pieces"; id: string; outcomes: PieceOutcome[]; ts: number }
   /** the card closed with nothing done: the plan was sent back, or `outcome` says what failed */

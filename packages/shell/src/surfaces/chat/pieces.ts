@@ -180,6 +180,19 @@ export function fateSentence(piece: Piece, fate: PieceFate, wait: Wait | null): 
   return "Skipped: nothing happens to this piece.";
 }
 
+/** Toyon's own card as the person answered it, for their bubble: the row they picked, by its
+ * label on the card, and the note under it. One piece reads back the fate it went with, since
+ * that row is what was pressed; a list's row was go. Null for a list no card asked about. */
+export function piecesSaid(item: Pick<PiecesItem, "pieces" | "fates" | "answered">): string | null {
+  const a = item.answered;
+  if (!a) return null;
+  if (!a.go) return "not now";
+  const only = item.pieces.length === 1 ? item.pieces[0] : undefined;
+  const picked = only ? oneRows(item, only).find((r) => r.fate === effectiveFate(item, only))?.label : undefined;
+  const label = picked ?? "go";
+  return a.note ? `${label}\n${a.note}` : label;
+}
+
 /** the answer to Toyon's own card: `note` rides with go alone, trimmed, and a blank one is left off */
 export function piecesAnswer(
   item: Pick<PiecesItem, "id">,

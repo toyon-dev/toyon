@@ -688,6 +688,53 @@ describe("read off the plan", () => {
     expect(recorded(a.id, "pieces-declined")).toHaveLength(0);
   });
 
+  test("go on Toyon's own card starts the agent on a piece kept here, with the note on the go", async () => {
+    const repoId = await registered();
+    const a = await w.worktrees.create(repoId, "task", { title: "Rail" });
+    await call(
+      a.id,
+      piece({ title: "Mine", plan: "I do this.", where: "here" }),
+      piece({ title: "After mine", after: "this" }),
+    );
+    const id = lastProposal(a.id).id;
+    const before = agentOf(a.id).sent.length;
+    // the card goes up as the split call answers, so the agent may still be on that turn: the
+    // message waits for it to end rather than steer into it
+    agentOf(a.id).status = "working";
+    await w.pieces.answer(a.id, id, true, "  carefully ");
+    expect(recorded(a.id, "pieces-go").at(-1)).toMatchObject({ id, note: "carefully" });
+    await settle();
+    expect(agentOf(a.id).sent).toHaveLength(before);
+    agentOf(a.id).status = "idle";
+    w.hub.emit("agentStatus", a.id, "idle");
+    await until(() => agentOf(a.id).sent.length === before + 1);
+    const told = agentOf(a.id).sent.at(-1)!;
+    expect(told.asked?.kind).toBe("pieces");
+    expect(told.keepCards).toBe(true);
+    expect(told.text).toContain('Do "Mine" here, and only that.');
+    expect(told.text).toContain("The person added: carefully");
+    expect(told.text).toContain('"After mine" waits for');
+    // a piece here that waits for a sibling waits for its landing, not for this go
+    const b = await w.worktrees.create(repoId, "task", { title: "Other" });
+    await call(b.id, piece({ title: "Theirs" }), piece({ title: "Mine later", where: "here", after: "Theirs" }));
+    const sentBefore = agentOf(b.id).sent.length;
+    await w.pieces.answer(b.id, lastProposal(b.id).id, true);
+    await settle();
+    expect(agentOf(b.id).sent).toHaveLength(sentBefore);
+    expect(outcomesOf(b.id)[1]).toEqual({ pieceId: "p2", fate: "here", after: "Theirs" });
+    expect(w.state.worktree(b.id)!.awaits).toHaveLength(1);
+    // the sibling it waited for was skipped: nothing to wait for, so the piece here starts now
+    const c = await w.worktrees.create(repoId, "task", { title: "Third" });
+    await call(c.id, piece({ title: "Theirs" }), piece({ title: "Mine later", where: "here", after: "Theirs" }));
+    const skipped = lastProposal(c.id).id;
+    w.pieces.fate(c.id, skipped, "p1", "skip");
+    await w.pieces.answer(c.id, skipped, true);
+    await settle();
+    expect(outcomesOf(c.id)[1]).toEqual({ pieceId: "p2", fate: "here" });
+    expect(w.state.worktree(c.id)!.awaits).toBeUndefined();
+    expect(agentOf(c.id).sent.at(-1)?.text).toContain('Do "Mine later" here, and only that.');
+  });
+
   test("the plan's yes tells the agent what the list started, steered into its turn; Toyon's own card does not", async () => {
     const repoId = await registered();
     const a = await w.worktrees.create(repoId, "task", { title: "Rail", mode: "plan" });

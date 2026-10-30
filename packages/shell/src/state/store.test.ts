@@ -4426,6 +4426,30 @@ describe("a pieces list", () => {
     expect(reducer(noted, agent("a", { type: "pieces-declined", id: "l1", ts: 3 })).local.a?.card).toBeUndefined();
   });
 
+  test("Toyon's own card, answered, moves to where it was answered with the answer on it; a held list stays", () => {
+    const reply: AgentEvent = { type: "text-delta", messageId: "m1", text: "Nothing has started yet." };
+    const s = run([hello(wt("a")), agent("a", shown), agent("a", reply)]);
+    expect(chatOf(s).map((i) => i.kind)).toEqual(["pieces", "assistant"]);
+    const going = reducer(s, agent("a", { type: "pieces-go", id: "l1", note: "carefully", ts: 9 }));
+    expect(chatOf(going).map((i) => i.kind)).toEqual(["assistant", "pieces"]);
+    expect(chatOf(going)[1]).toMatchObject({ state: "going", answered: { go: true, note: "carefully" }, ts: 9 });
+    // a reply still streaming when go was pressed goes on in its row, over the answer, as it
+    // does over a message of the person's
+    const more = reducer(going, agent("a", { type: "text-delta", messageId: "m1", text: " Ask away." }));
+    expect(chatOf(more).map((i) => i.kind)).toEqual(["assistant", "pieces"]);
+    expect(chatOf(more)[0]).toMatchObject({ kind: "assistant", text: "Nothing has started yet. Ask away." });
+    const notNow = reducer(s, agent("a", { type: "pieces-declined", id: "l1", ts: 9 }));
+    expect(chatOf(notNow)[1]).toMatchObject({ state: "declined", answered: { go: false } });
+    // Toyon closing the list is not the person's answer, and a held list's answer is its plan card's
+    const failed = reducer(s, agent("a", { type: "pieces-declined", id: "l1", reason: "gone", ts: 9 }));
+    expect(chatOf(failed)[0]).toMatchObject({ state: "declined", reason: "gone" });
+    expect(chatOf(failed)[0]).not.toHaveProperty("answered");
+    const h = run([hello(wt("a")), agent("a", held), agent("a", reply)]);
+    const heldGo = reducer(h, agent("a", { type: "pieces-go", id: "l1", ts: 9 }));
+    expect(chatOf(heldGo)[0]).toMatchObject({ kind: "pieces", state: "going" });
+    expect(chatOf(heldGo)[0]).not.toHaveProperty("answered");
+  });
+
   test("a fate pressed is the last word per piece, and what came later rides on the list and as a row of its own", () => {
     const s = run([
       hello(wt("a")),

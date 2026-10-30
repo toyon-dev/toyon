@@ -254,6 +254,10 @@ export type ChatItem =
       outcomes: PieceOutcome[];
       later: Array<{ pieceId: string; worktreeId?: string; title?: string; reason?: string }>;
       reason?: string;
+      /** Toyon's own card was answered: go or not now, and the note typed with go. The list moves
+       * to where it was answered, below the turn that proposed it, with the answer as the person's
+       * bubble */
+      answered?: { go: boolean; note?: string };
       ts: number;
     }
   /** a queued piece's turn came, long after its list: its worktree is made, or it never will be */
@@ -3634,7 +3638,12 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
     case "pieces-go": {
       const idx = piecesIndex(items, event.id, ["held", "proposed"]);
       if (idx === -1) return items;
-      return items.with(idx, { ...(items[idx] as PiecesCard), state: "going" });
+      const card = items[idx] as PiecesCard;
+      // a held list was answered with its plan card, whose bubble says so; Toyon's own card was
+      // answered in the box, after the turn that proposed it
+      if (card.state !== "proposed") return items.with(idx, { ...card, state: "going" });
+      const answered = { go: true, ...(event.note ? { note: event.note } : {}) };
+      return answeredAtEnd(items, idx, { ...card, state: "going", answered, ts: event.ts });
     }
     case "pieces": {
       const idx = piecesIndex(items, event.id, ["held", "proposed", "going"]);
@@ -3662,6 +3671,11 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
       const idx = piecesIndex(items, event.id, ["held", "proposed", "going"]);
       if (idx === -1) return items;
       const card = items[idx] as PiecesCard;
+      // not now on Toyon's own card is the person's answer, read where they gave it; a reason is
+      // Toyon closing the list, which stays where it stood
+      if (card.state === "proposed" && !event.reason) {
+        return answeredAtEnd(items, idx, { ...card, state: "declined", answered: { go: false }, ts: event.ts });
+      }
       return items.with(idx, { ...card, state: "declined", ...(event.reason ? { reason: event.reason } : {}) });
     }
     case "piece-made":
@@ -3788,11 +3802,13 @@ function closeOpenCalls(items: ChatItem[]): ChatItem[] {
   return items.some(cut) ? items.map((i) => (cut(i) ? { ...i, done: true } : i)) : items;
 }
 
-/** the prose row a chunk of `messageId` continues, when only the person's bubbles separate them;
- * anything else between (a call, an error) means the message moved on */
+/** the prose row a chunk of `messageId` continues, when only the person's bubbles separate them
+ * (a message, or the answer to Toyon's own pieces card, which moves to the end as one); anything
+ * else between (a call, an error) means the message moved on */
 function cutRow(items: ChatItem[], messageId: string): number {
+  const said = (i: ChatItem) => startsTurn(i) || (i.kind === "pieces" && !!i.answered);
   let at = items.length - 1;
-  while (at >= 0 && startsTurn(items[at]!)) at--;
+  while (at >= 0 && said(items[at]!)) at--;
   const row = items[at];
   return row?.kind === "assistant" && row.messageId === messageId ? at : -1;
 }
@@ -3803,6 +3819,12 @@ type PiecesCard = Extract<ChatItem, { kind: "pieces" }>;
 /** the pieces list `id` names while it is in one of `states` */
 function piecesIndex(items: ChatItem[], id: string, states: PiecesCard["state"][]): number {
   return items.findLastIndex((i) => i.kind === "pieces" && i.id === id && states.includes(i.state));
+}
+
+/** Toyon's own card, answered: the list leaves the place the split call stood, turns up the log,
+ * and stands at the end, where the box asked and the person answered */
+function answeredAtEnd(items: ChatItem[], idx: number, card: PiecesCard): ChatItem[] {
+  return [...items.slice(0, idx), ...items.slice(idx + 1), card];
 }
 
 function allowed(card: AskCard, choiceId: string | undefined): boolean {

@@ -19,8 +19,22 @@ import {
   piecesCounts,
   piecesLine,
   piecesQuestion,
+  piecesSaid,
   waitOf,
 } from "./pieces.ts";
+
+describe("piecesSaid", () => {
+  test("the person's bubble reads back the row they pressed, with the note under it", () => {
+    const one = [piece("p1")];
+    expect(piecesSaid(list(one))).toBeNull();
+    expect(piecesSaid(list(one, {}, { answered: { go: true } }))).toBe("start a worktree");
+    expect(piecesSaid(list(one, { p1: "here" }, { answered: { go: true, note: "carefully" } }))).toBe(
+      "do it here\ncarefully",
+    );
+    expect(piecesSaid(list([piece("p1"), piece("p2")], {}, { answered: { go: true } }))).toBe("go");
+    expect(piecesSaid(list(one, {}, { answered: { go: false } }))).toBe("not now");
+  });
+});
 
 const piece = (id: string, over: Partial<Piece> = {}): Piece => ({
   id,

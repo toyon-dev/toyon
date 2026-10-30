@@ -24,7 +24,8 @@ import type {
   RepoInfo,
   WorktreeInfo,
 } from "@toyon/shared";
-import { DEFAULT_PERMISSION_MODE, SPLIT_TOOL } from "@toyon/shared";
+import { DEFAULT_PERMISSION_MODE, isBusy, SPLIT_TOOL } from "@toyon/shared";
+import type { AgentAdapter } from "../agent/adapter.ts";
 import type { AttachmentStore } from "../agent/attachments.ts";
 import type { McpTool, McpToolResult, ToolProvider } from "../agent/mcp.ts";
 import { listDoc, planEdited, writePlanDocNow } from "../agent/planDoc.ts";
@@ -658,8 +659,8 @@ export class PiecesService implements ToolProvider {
    * piece that waits for another on the list waits for that one's worktree, made or queued
    * earlier in the same pass, which is why the order matters. `tell`: the list went with a plan's
    * yes, so the agent is about to build and is told what the list started elsewhere, steered into
-   * that turn once the card's answer is on the wire; Toyon's own card is answered between turns,
-   * and a message there would start one. */
+   * that turn once the card's answer is on the wire. Toyon's own card is answered between turns,
+   * so the message starts one, and only when a piece is the agent's own to build now. */
   async act(worktreeId: string, id: string, note?: string, tell = false): Promise<void> {
     const wt = this.d.state.worktree(worktreeId);
     if (!wt) return;
@@ -667,7 +668,7 @@ export class PiecesService implements ToolProvider {
     const entries = agent.transcript();
     const proposed = openPieces(entries).find((p) => p.id === id);
     if (!proposed) return log.debug(worktreeId, `go for a pieces list that already closed (${id})`);
-    agent.note({ type: "pieces-go", id, ts: Date.now() });
+    agent.note({ type: "pieces-go", id, ...(note ? { note } : {}), ts: Date.now() });
     try {
       const repo = this.d.state.repo(wt.repoId);
       if (!repo) throw new UserError(`${wt.title}'s project is no longer open in Toyon`);
@@ -685,8 +686,19 @@ export class PiecesService implements ToolProvider {
           outcomes.push({ pieceId: piece.id, fate, error });
         }
       }
+      // the origin's own pieces wait for what the rest of the list became, which is known only
+      // once the whole list was acted on: a here piece may name any other piece, later ones too
+      const awaits: Named[] = [];
+      for (const o of outcomes) {
+        if (o.fate !== "here") continue;
+        const piece = proposed.pieces.find((p) => p.id === o.pieceId);
+        const wait = piece ? this.hereWait(proposed, piece, became) : null;
+        if (!wait) continue;
+        o.after = wait.said;
+        if (wait.worktree && !awaits.some((a) => a.id === wait.worktree?.id)) awaits.push(wait.worktree);
+      }
       agent.note({ type: "pieces", id, outcomes, ts: Date.now() });
-      this.recordAwaits(wt.id, entries, proposed, became);
+      this.recordAwaits(wt.id, awaits);
       if (tell && outcomes.some((o) => o.fate !== "here")) {
         // the card's answer must be on the wire before anything is steered into the turn it
         // releases: a steer that lands while the plan tool is still being answered aborts the
@@ -698,6 +710,24 @@ export class PiecesService implements ToolProvider {
           asked: { kind: "pieces", why: "what the split started, so the agent builds only its own piece" },
           keepCards: true,
         });
+      } else if (!tell && outcomes.some((o) => o.fate === "here" && !o.after)) {
+        // Toyon's own card is not a turn's, so a piece kept here starts one: the agent was told
+        // to finish its turn when it split, and until it builds its piece nothing queued behind
+        // this branch can start. A piece here that waits for a sibling waits for its word. The
+        // card goes up as the split call answers, so the agent may still be on that turn, and a
+        // message steered into it would abort the call in flight: the message waits for the
+        // turn to end, off this call, which answers the card now.
+        const text = piecesActedPrompt(proposed.pieces, outcomes, "card", note);
+        fireAndForget(
+          wt.id,
+          this.idle(wt.id, agent).then(() =>
+            agent.send(text, {
+              asked: { kind: "pieces", why: "the piece kept here, so the agent starts on it" },
+              keepCards: true,
+            }),
+          ),
+          "pieces here",
+        );
       }
     } catch (e) {
       const reason = e instanceof Error ? e.message : String(e);
@@ -849,14 +879,8 @@ export class PiecesService implements ToolProvider {
     const crossed = piece.project ? { repoName: piece.project.name } : {};
     if (fate === "here" || fate === "skip") {
       became.set(piece.id, { fate });
-      // what the origin's own work waits for, in the row's words: a branch, or a piece of the list
-      const waits = fate === "here" ? piece.after : undefined;
-      const after = !waits
-        ? undefined
-        : "piece" in waits
-          ? (proposed.pieces.find((p) => p.id === waits.piece)?.title ?? waits.piece)
-          : waits.branch;
-      return { pieceId: piece.id, fate, ...(after ? { after } : {}) };
+      // what a here piece waits for is filled in once the whole list was acted on (act)
+      return { pieceId: piece.id, fate };
     }
     if (fate === "send") {
       const target = piece.to ? this.d.state.worktree(piece.to.id) : undefined;
@@ -908,22 +932,46 @@ export class PiecesService implements ToolProvider {
     return { pieceId: piece.id, fate, worktreeId: made.id, title: made.title, ...crossed };
   }
 
-  /** The worktrees the origin's own work waits for, by its here pieces, onto its record: a branch
-   * named, or the worktree a piece of the list became in this pass. A piece still queued is
-   * nothing to wait for yet. The landing reads the record to tell the origin (tellAwaiting). */
-  private recordAwaits(
-    originId: string,
-    entries: readonly TranscriptEntry[],
+  /** What the origin's own work on a here piece still waits for as go runs, or null to start it
+   * now: a branch it named that is open and has not landed; a piece of the list by the worktree
+   * it became in this pass, made or sent on; a piece itself queued, by the piece, until it is
+   * made. A piece skipped or failed, or a branch landed or gone, is nothing to wait for. `said`
+   * is the wait in the row's words, a branch or a piece's title; `worktree` the one to record. */
+  private hereWait(
     proposed: Proposed,
+    piece: Piece,
     became: Map<string, Became>,
-  ): void {
-    const awaits: Named[] = [];
-    for (const piece of proposed.pieces) {
-      const after = piece.after;
-      if (!after || effectiveFate(entries, proposed, piece) !== "here") continue;
-      const w = "piece" in after ? became.get(after.piece)?.worktree : after;
-      if (w && !awaits.some((a) => a.id === w.id)) awaits.push(w);
+  ): { said: string; worktree?: Named } | null {
+    const after = piece.after;
+    if (!after) return null;
+    if (!("piece" in after)) {
+      const w = this.d.state.worktree(after.id);
+      return w?.kind === "worktree" && !w.landed ? { said: after.branch, worktree: after } : null;
     }
+    const on = became.get(after.piece);
+    const said = proposed.pieces.find((p) => p.id === after.piece)?.title ?? after.piece;
+    if (on?.worktree) return { said, worktree: on.worktree };
+    if (on?.queued) return { said };
+    return null;
+  }
+
+  /** resolves once the worktree's agent is between turns: at once when it is, else on the first
+   * status that says so. A worktree removed meanwhile never says so, and the listener stays; one
+   * closure, once per go, which is nothing. */
+  private idle(worktreeId: string, agent: Pick<AgentAdapter, "status">): Promise<void> {
+    if (!isBusy(agent.status)) return Promise.resolve();
+    return new Promise((resolve) => {
+      const off = this.d.hub.on("agentStatus", (id, status) => {
+        if (id !== worktreeId || isBusy(status)) return;
+        off();
+        resolve();
+      });
+    });
+  }
+
+  /** The worktrees the origin's own work waits for, by its here pieces, onto its record (hereWait).
+   * The landing reads the record to tell the origin (tellAwaiting). */
+  private recordAwaits(originId: string, awaits: readonly Named[]): void {
     if (awaits.length === 0) return;
     const live = this.d.state.requireWorktree(originId);
     live.awaits = [...(live.awaits ?? []).filter((a) => !awaits.some((b) => b.id === a.id)), ...awaits];

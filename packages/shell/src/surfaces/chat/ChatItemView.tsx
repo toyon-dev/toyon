@@ -52,6 +52,7 @@ import { Painted } from "./Painted.tsx";
 import { PasteChip } from "./PasteChip.tsx";
 import { PickChip } from "./PickChip.tsx";
 import { PieceLandedRow, PieceLaterRow, PiecesRow } from "./PiecesRow.tsx";
+import { piecesSaid } from "./pieces.ts";
 import { ranClean } from "./shellMode.ts";
 import { languageOf, linkLines, openTail, paintCode, paintDiff, paintPlain, pathInDiff } from "./syntax.ts";
 import { normalizeThoughtMarkdown, thoughtLine, thoughtSteps } from "./thought.ts";
@@ -1276,8 +1277,21 @@ export const ChatItemView = memo(function ChatItemView({
       );
     case "piece-landed":
       return <PieceLandedRow item={item} />;
-    case "pieces":
-      return <PiecesRow item={item} worktreeId={worktreeId} />;
+    case "pieces": {
+      // Toyon's own card, answered: the row picked is the person's word, as a question's answer
+      // is, and the split row under it says what that started
+      const said = piecesSaid(item);
+      if (!said) return <PiecesRow item={item} worktreeId={worktreeId} />;
+      const bubble = { kind: "assistant" as const, text: said };
+      return (
+        <>
+          <div className="msg-user" {...cm.contextMenu(() => messageItems(bubble, worktreeId ?? null, deps))}>
+            {said}
+          </div>
+          <PiecesRow item={item} worktreeId={worktreeId} />
+        </>
+      );
+    }
     case "piece-later":
       return <PieceLaterRow item={item} />;
     case "restored":

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { PERMISSION_MODES, type RepoInfo } from "@toyon/shared";
 import {
+  argHintOf,
   browseCommands,
   commandTiers,
   mergeCommands,
@@ -93,6 +94,24 @@ describe("browseCommands", () => {
 
   test("before the agent has advertised anything, toyon's rows alone and nothing to find", () => {
     expect(browseCommands(own, [])).toEqual({ rows: own, more: 0 });
+  });
+});
+
+describe("argHintOf", () => {
+  const rows = mergeCommands(own, [{ name: "review", description: "review a PR", hint: "<pr>" }]);
+
+  test("a name and its space, typed or picked, shows what the command still expects", () => {
+    expect(argHintOf("/split ", rows)).toBe("[<project>] [<message>]");
+    expect(argHintOf("/review ", rows)).toBe("<pr>");
+  });
+
+  test("nothing before the space, after the first argument, or for a command with no hint", () => {
+    expect(argHintOf("/split", rows)).toBeNull();
+    expect(argHintOf("/split w", rows)).toBeNull();
+    expect(argHintOf("/split  ", rows)).toBeNull();
+    expect(argHintOf("/archive ", rows)).toBeNull();
+    expect(argHintOf("/nope ", rows)).toBeNull();
+    expect(argHintOf("say /split ", rows)).toBeNull();
   });
 });
 

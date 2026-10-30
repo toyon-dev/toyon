@@ -87,6 +87,16 @@ export function browseCommands(own: AgentCommand[], agent: AgentCommand[]): { ro
   return { rows: [...t.yours, ...t.own], more: t.rest.length };
 }
 
+/** what a command still expects, while the draft is its name and the one space after it: read off
+ * the text and not off a pick from the menu, because a name typed out with its space, recalled or
+ * pasted closes the menu without picking and wants the same reminder. Once anything follows the
+ * space the arguments are being written, and the hint would be in the way. */
+export function argHintOf(text: string, rows: AgentCommand[]): string | null {
+  const m = /^\/(\S+) $/.exec(text);
+  if (!m) return null;
+  return rows.find((c) => c.name === m[1])?.hint ?? null;
+}
+
 /** the command a draft leads with, when it is one of toyon's; null for a message, a `!` command or
  * an agent's command. The name is everything up to the first space, the way triggerAt reads it;
  * the rest, trimmed, is the arguments. */

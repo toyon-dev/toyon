@@ -108,7 +108,15 @@ import {
   triggerAt,
 } from "./mentions.ts";
 import { dismissOffer, offerOf, useDismissedOffers } from "./offer.ts";
-import { browseCommands, isMode, mergeCommands, ownCommandOf, ownCommands, parseSplitArgs } from "./ownCommands.ts";
+import {
+  argHintOf,
+  browseCommands,
+  isMode,
+  mergeCommands,
+  ownCommandOf,
+  ownCommands,
+  parseSplitArgs,
+} from "./ownCommands.ts";
 import { PermissionCard } from "./PermissionCard.tsx";
 import { PickChip } from "./PickChip.tsx";
 import { PiecesCard } from "./PiecesCard.tsx";
@@ -557,8 +565,6 @@ export function Composer({
   const [caret, setCaret] = useState(0);
   /** the mention the user dismissed with esc, so it does not reopen on the next keystroke */
   const [dismissed, setDismissed] = useState<number | null>(null);
-  /** the command just inserted, so the draft can show what it still expects */
-  const [inserted, setInserted] = useState<{ name: string; hint: string } | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
   // a chat toyon is not running has no session to take a command and no listing to name a file
@@ -715,7 +721,6 @@ export function Composer({
       const { text: next, caret: at } = insertAt(text, trigger, insertionFor(r));
       setText(next);
       setDismissed(trigger.from);
-      setInserted(r.kind === "cmd" && r.c.hint ? { name: r.c.name, hint: r.c.hint } : null);
       // the draft round-trips through the store, so the caret has to be placed after that render
       requestAnimationFrame(() => {
         const el = composerRef.current;
@@ -731,9 +736,9 @@ export function Composer({
   // mono face while it is one, so the change of contract shows before anything runs.
   const shellCmd = id || outside ? shellCommandOf(text) : null;
 
-  // what the inserted command still expects, drawn after the caret. Only while nothing has been
-  // typed after it: once the arguments are being written, the hint is in the way rather than help.
-  const argGhost = inserted && text === `/${inserted.name} ` ? inserted.hint : null;
+  // what the command still expects, drawn after the caret, whether it was picked or typed out
+  const allCommands = useMemo(() => mergeCommands(ownRows, commands), [ownRows, commands]);
+  const argGhost = argHintOf(text, allCommands);
   // the same idea for a bare `!`: what the mode is, told once, at the moment someone finds it. Both
   // halves, because the run wakes nobody: the output lands on the transcript, and the agent reads
   // it with the next message, so a person waiting for a reply knows to send one.

@@ -20,7 +20,11 @@ export function PiecesRow({ item, worktreeId }: { item: PiecesItem; worktreeId?:
   if (item.state === "going") {
     return (
       <DaemonRow icon="spawn" word="split" tone="accent" at={item.ts}>
-        <span className="daemon-text live-text">starting the worktrees</span>
+        {/* the shine rides an inline span: the text column fills the row, and a band sized to
+            that is wider than the words, so they lit all at once rather than sweeping */}
+        <span className="daemon-text">
+          <span className="live-text">starting the worktrees</span>
+        </span>
       </DaemonRow>
     );
   }

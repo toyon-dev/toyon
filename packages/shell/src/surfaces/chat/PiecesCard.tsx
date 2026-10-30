@@ -25,6 +25,8 @@ import {
   oneRows,
   type PiecesItem,
   pieceFate,
+  pieceMark,
+  pieceOrder,
   piecesAnswer,
   piecesQuestion,
 } from "./pieces.ts";
@@ -67,9 +69,9 @@ export function PiecesCard({
   const starting = pressed !== null;
   const only = item.pieces.length === 1 ? item.pieces[0] : undefined;
   const plan = item.plan;
-  // the page the list sits on, beside the box
-  const read = () => {
-    if (plan) openFile({ sock, dispatch }, { worktreeId, path: plan, view: "preview" });
+  // the page the list sits on, beside the box, on one piece's tab when a title was pressed
+  const read = (piece?: string) => {
+    if (plan) openFile({ sock, dispatch }, { worktreeId, path: plan, view: "preview", ...(piece ? { piece } : {}) });
   };
   const html = useMemo(() => (only ? renderMarkdown(only.plan) : ""), [only]);
 
@@ -190,17 +192,42 @@ export function PiecesCard({
       </Card>
     );
   }
-  // a list: the way to it is a press, in words that say rows whose fates can be changed before go
+  // a list: the pieces by title in the strip's order, each with the small word its tab wears, and
+  // a title is a press on that tab, so the question says what the number counts and the way to
+  // any one piece is one press; the whole list stays a press too, in words that say rows whose
+  // fates can be changed before go
   const open = plan ? (
-    <Button variant="inline" data-tip="Open it beside the box (r)" onClick={read}>
+    <Button variant="inline" data-tip="Open it beside the box (r)" onClick={() => read()}>
       Read the list
     </Button>
   ) : (
     "The list is the agent's"
   );
+  const listed = pieceOrder(item).map((p) => {
+    const mark = pieceMark(item, p);
+    return (
+      <div key={p.id} className="card-piece">
+        {plan ? (
+          <Button variant="inline" data-tip="Open it beside the box" onClick={() => read(p.id)}>
+            {p.title}
+          </Button>
+        ) : (
+          p.title
+        )}
+        {"word" in mark && <span className="hint">{mark.word}</span>}
+      </div>
+    );
+  });
   return (
     <Card root={root} id={item.id} onKeyDown={onKeyDown}>
-      <CardHead sub={<>{open} and change any row's fate there. Nothing has started yet.</>}>
+      <CardHead
+        sub={
+          <>
+            <div className="card-pieces">{listed}</div>
+            {open} and change any row's fate there. Nothing has started yet.
+          </>
+        }
+      >
         {piecesQuestion(item)}
       </CardHead>
       <Choices

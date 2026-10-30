@@ -150,9 +150,15 @@
 
   /* ---- the pieces of a plan as the pane's tabs ----
    Pieces.tsx: the strip is the pane's head and ui/pane.css paints it, so only what a tab and a
-   piece's page add is here. The small word at a tab's end is a figure beside a name, the rail's
+   piece's page add is here. The strip heads a document that is read whole to decide on it, most
+   often with the pane filling the centre: the dock's full row, as the changes panel's strip takes
+   it, rather than the dense row a file's title sits in, where two titles and their marks read as
+   a caption over the text. The small word at a tab's end is a figure beside a name, the rail's
    age column: the mono's small size in the quiet tier, and it rides the seat's lift with the name
    under the pointer, as the rail's does. */
+  .editor-pane-pieces {
+    --tabs-height: var(--row-height);
+  }
   .editor-tab-mark {
     font: var(--type-mono-sm);
     color: var(--text2);

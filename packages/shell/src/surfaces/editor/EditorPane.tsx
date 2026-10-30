@@ -165,6 +165,12 @@ export function EditorPane({
   // for once answered.
   const [tab, setTab] = useState<string | null>(null);
   useOnChange([pieces?.id, path], () => setTab(null));
+  // an open that names a piece lands on its tab, once per open: the card lists the pieces and a
+  // press on one is a press on its tab. After the reset above, so a new file opened on a piece
+  // keeps the piece.
+  useOnChange([editor.seq], () => {
+    if (editor.piece) setTab(editor.piece);
+  });
   // the page Toyon wrote for a list holds each piece's text under its heading, which the tabs
   // already show: no tab for the page itself, or every text would read twice
   const hasPlan = !!pieces && !listPage(pieces);
@@ -228,7 +234,7 @@ export function EditorPane({
     // full mode takes whatever the terminal pane leaves rather than a fixed 100%
     <Pane
       kind="editor"
-      className={cx("editor-pane", full && "full")}
+      className={cx("editor-pane", full && "full", tabs && "editor-pane-pieces")}
       height={full || onScreen ? undefined : height}
       resizable={!full && !onScreen}
       onDragStart={onDragStart ?? NO_DRAG}

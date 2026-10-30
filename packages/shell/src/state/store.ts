@@ -619,6 +619,8 @@ export interface OpenFile {
   since?: string;
   view?: EditorView;
   line?: EditorLine;
+  /** the tab the pane opens on when the file heads a list of pieces: that piece's, by its id */
+  piece?: string;
   /** the keyboard follows the file into the editor */
   focus: boolean;
   /** names this open: a line to reveal and the keyboard are handed over once per open */
@@ -2258,6 +2260,7 @@ function reduce(s: State, action: Action): State {
           seq: v.seq,
           disk: same?.disk ?? null,
           ...(line ? { line } : {}),
+          ...(v.piece ? { piece: v.piece } : {}),
           focus: v.focus,
           conflict: same?.conflict ?? null,
           blame: same?.blame ?? null,

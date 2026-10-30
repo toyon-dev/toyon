@@ -41,6 +41,8 @@ export function heldBy(w: WorktreeInfo, f: KeepFacts): string | null {
   if (c.ahead > 0) return "it has commits not on main";
   if (f.drafted(w.id)) return "unsent text waits in its composer";
   if (f.pending(w.id)) return "its agent is still busy";
+  // landed settles the rest: the work is on main, and archiving keeps the chat and its plans
+  if (w.landed) return null;
   // finished cleanly and read: a stop, a failure or a question is a row someone has to come back to
   const end = w.lastTurn?.end;
   if (!end) return "its agent has not run yet";

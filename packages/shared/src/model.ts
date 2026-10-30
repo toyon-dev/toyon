@@ -448,8 +448,8 @@ export interface WorktreeInfo {
   parked?: boolean;
   /** the person marked it unread to come back to; rings the row until it is next seen */
   unread?: boolean;
-  /** its agent showed a plan here, approved or not: a plan is worth keeping, so the row never
-   * archives itself. Stamped when the card is shown, since a transcript cannot tell one apart. */
+  /** its agent showed a plan here, approved or not: a plan is worth keeping, so the row does not
+   * archive itself until it lands. Stamped when the card is shown, since a transcript cannot tell one apart. */
   planned?: boolean;
   /** the latest plan its agent showed, relative to the worktree, and the file the agent goes on
    * editing when it keeps one: the composer keeps a way to it from the moment the card shows until

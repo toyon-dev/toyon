@@ -45,6 +45,8 @@ describe("archiveReason", () => {
     expect(archiveReason(old, facts(rail(old)))).toBe("no changes, not opened in 2h");
     const landed = task("old", 1, { landed: true });
     expect(archiveReason(landed, facts(rail(landed)))).toBe("landed, not opened in 2h");
+    const planned = task("old", 1, { landed: true, planned: true });
+    expect(archiveReason(planned, facts(rail(planned)))).toBe("landed, not opened in 2h");
   });
 
   test("the five rows sent to most recently stay, main aside", () => {
@@ -107,6 +109,16 @@ describe("what a row holds", () => {
     expect(heldBy(task("t", 1, { planned: true }), facts([]))).toBe("it showed a plan");
     expect(heldBy(task("t", 1, { pr: { number: 1, url: "u", state: "open", at: 0 } }), facts([]))).toBe(
       "its pull request is still open",
+    );
+    // landed, what is left is only what archiving would lose
+    const landed = (w: Partial<WorktreeInfo>) => task("t", 1, { landed: true, ...w });
+    expect(heldBy(landed({ planned: true }), facts([]))).toBeNull();
+    expect(heldBy(landed({ seenAt: 0 }), facts([]))).toBeNull();
+    expect(heldBy(landed({ lastTurn: undefined }), facts([]))).toBeNull();
+    expect(heldBy(landed({}), facts([], { drafted: () => true }))).toBe("unsent text waits in its composer");
+    expect(heldBy(landed({}), facts([], { pending: () => true }))).toBe("its agent is still busy");
+    expect(heldBy(landed({}), facts([], { counts: () => ({ dirty: 1, ahead: 0 }) }))).toBe(
+      "it has uncommitted changes",
     );
     // git work outranks the rest: it is the one thing the question used to be about
     expect(heldBy(ended("failed"), facts([], { counts: () => ({ dirty: 1, ahead: 0 }) }))).toBe(

@@ -46,7 +46,6 @@ export function SplitPicker({ worktreeId }: { worktreeId: string }) {
       onBack={() => dispatch({ a: "close", back: true })}
       placeholder="continue where?"
       empty="no project is open"
-      keys={{ pick: "continues there", back: "closes" }}
       // the words in the box go with the pick, so the picker says so before they do
       footer={text ? () => <div className="empty">with your message: {text.split("\n")[0]}</div> : undefined}
     />

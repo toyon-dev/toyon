@@ -39,7 +39,6 @@ export function CommandPalette({ anchored, trailing }: { anchored?: Anchored; tr
       }}
       onBack={() => dispatch({ a: "close" })}
       placeholder="run a command…"
-      keys={{ pick: "runs", back: "closes" }}
       initialQuery={initialQuery}
       empty="no matching command"
       row={(c, _active, q) => commandRow(c, q)}

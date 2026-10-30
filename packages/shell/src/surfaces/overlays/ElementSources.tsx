@@ -34,7 +34,6 @@ export function ElementSources({ worktreeId, hits }: { worktreeId: string; hits:
       onBack={() => dispatch({ a: "close" })}
       rowMenu={(h) => (dir ? fileItems({ id: worktreeId, dir }, h.path, {}, { sock, dispatch }) : [])}
       placeholder="lines that could write this element"
-      keys={{ pick: "opens the file", back: "closes" }}
       row={(h) => (
         <>
           <span className="search-loc">

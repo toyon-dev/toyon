@@ -31,7 +31,6 @@ export function AgentPicker() {
       // a dimmed row is an agent that is not installed, and installing it is the verb it wants
       rowMenu={(a) => agentItems(a, { sock, dispatch })}
       placeholder="default agent for new worktrees"
-      keys={{ pick: "sets", back: "closes" }}
       row={(a) => (
         <PaletteRow
           label={a.name}

@@ -4,11 +4,27 @@ import { fileItems, openFile } from "../../state/actions/file.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { useLocal } from "../../state/selectors.ts";
 import { worktreeById } from "../../state/store.ts";
+import { markHits } from "../../ui/highlight.tsx";
 import { ListPicker } from "../../ui/ListPicker.tsx";
 
 const NONE: SearchHit[] = [];
 /** short queries would match everything */
 const MIN = 2;
+
+/** every character of the line the query matched, as the daemon matched it: a fixed string,
+ * case-insensitive, and every occurrence on the line. Null when lowercasing moved the columns
+ * (a dotted capital I lowers to two code units), since the marks would then land beside the
+ * match rather than on it. */
+export function searchHits(text: string, query: string): number[] | null {
+  const q = query.trim().toLowerCase();
+  const t = text.toLowerCase();
+  if (!q || t.length !== text.length) return null;
+  const out: number[] = [];
+  for (let at = t.indexOf(q); at !== -1; at = t.indexOf(q, at + q.length)) {
+    for (let i = 0; i < q.length; i++) out.push(at + i);
+  }
+  return out.length ? out : null;
+}
 
 /** ⌘⇧F: content search across the active worktree (git grep in the daemon, debounced) */
 export function SearchPalette({ worktreeId }: { worktreeId: string }) {
@@ -51,7 +67,6 @@ export function SearchPalette({ worktreeId }: { worktreeId: string }) {
       onBack={() => dispatch({ a: "close" })}
       rowMenu={(h) => (dir ? fileItems({ id: worktreeId, dir }, h.path, {}, { sock, dispatch }) : [])}
       placeholder="search in files…"
-      keys={{ pick: "opens the file", back: "closes" }}
       empty={(q) =>
         q.trim().length < MIN ? (
           "type at least two characters"
@@ -66,12 +81,12 @@ export function SearchPalette({ worktreeId }: { worktreeId: string }) {
           <div className="empty">not every match is shown; narrow the search</div>
         ) : null
       }
-      row={(h) => (
+      row={(h, _active, q) => (
         <>
           <span className="search-loc">
             {h.path}:{h.line}
           </span>
-          <span className="search-text">{h.text}</span>
+          <span className="search-text">{markHits(h.text, searchHits(h.text, q), 0)}</span>
         </>
       )}
     />

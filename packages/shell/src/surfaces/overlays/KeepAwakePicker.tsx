@@ -30,7 +30,6 @@ export function KeepAwakePicker() {
       }}
       onBack={() => dispatch({ a: "close", back: true })}
       placeholder="keep awake"
-      keys={{ pick: "sets", back: "closes" }}
       row={(m) => <PaletteRow label={keepAwakeLabel[m]} current={m === current} hint={HINT[m]} />}
     />
   );

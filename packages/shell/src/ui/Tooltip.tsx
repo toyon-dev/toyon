@@ -288,11 +288,14 @@ export function Tooltips() {
   }, [anchor]);
 
   if (!anchor) return null;
-  const words = (
-    <>
-      {anchor.dot && <span className={`dot ${anchor.dot} tooltip-dot`} />}
+  // the dot and its word in one box, so the dot is centred on the word's line (tooltip.css)
+  const words = anchor.dot ? (
+    <span className="tooltip-words">
+      <span className={`dot ${anchor.dot} tooltip-dot`} />
       {anchor.text}
-    </>
+    </span>
+  ) : (
+    anchor.text
   );
   const head = (
     <>

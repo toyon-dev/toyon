@@ -54,11 +54,7 @@
      flex box below, and it is the state's box that has no text baseline of its own */
     align-items: flex-start;
     gap: 8px;
-    /* the dot centred on the state's line, as the row centres its own: `middle` sat it on the
-     x-height, a pixel under the row's dot in this face, and the tip's dot restates the row's */
     & > :first-child {
-      display: inline-flex;
-      align-items: center;
       flex: none;
     }
     & > .tooltip-name {
@@ -148,11 +144,17 @@
   .tooltip-detail {
     color: var(--text1);
   }
-  /* the row's dot, restated beside the word for it; middle puts an 8px dot on the x-height */
+  /* the row's dot, restated beside the word for it and centred on the word's line, as the row
+   centres its own: `vertical-align: middle` sat it on the x-height, a pixel under the row's dot in
+   this face. The inset is the line's spare height halved and rounded, so the dot starts on a whole
+   pixel (a centred 8px dot on a 19.5px line starts on a quarter) and stays as crisp as the row's. */
+  .tooltip-words {
+    display: inline-flex;
+    align-items: flex-start;
+    gap: 6px;
+  }
   .tooltip-dot {
-    display: inline-block;
-    vertical-align: middle;
-    margin-right: 6px;
+    margin-top: round(calc((1lh - 8px) / 2), 1px);
   }
   @keyframes tooltip-in-bottom {
     from {

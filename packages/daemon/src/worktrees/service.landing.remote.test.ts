@@ -253,9 +253,12 @@ describe("landing", () => {
     sh(other, "git", "commit", "-q", "--allow-empty", "-m", "elsewhere");
     squashedOnOrigin(other, wt.path, wt.branch);
     const before = (await git(w.repo, "rev-parse", "main")).out;
+    const sentAt = w.state.worktree(wt.id)?.promptedAt;
     const { result } = await w.worktrees.land(wt.id);
     expect(result.ok).toBe(true);
     expect(result.message).toContain("origin's main has this work already");
+    // a landing leaves the row where it was on the rail: only a send moves it
+    expect(w.state.worktree(wt.id)?.promptedAt).toBe(sentAt);
     // main here followed origin, the branch restarted from it, the landing is on the record, and
     // nothing went up: no branch on origin, so no PR could have been opened on it
     const main = (await git(w.repo, "rev-parse", "main")).out;
@@ -441,6 +444,7 @@ describe("landing", () => {
     sh(wt.path, "git", "commit", "-q", "--allow-empty", "-m", "by hand");
     writeFileSync(join(wt.path, "more.txt"), "y\n");
     expect(await w.worktrees.gitStatus(wt.id)).toMatchObject({ unpushed: 1 });
+    w.state.worktree(wt.id)!.promptedAt = 1;
     const { result } = await w.worktrees.land(wt.id, "add more");
     expect(result.ok).toBe(true);
     expect(result.message).toBe("committed and pushed; PR #7 has the new commits");
@@ -449,5 +453,31 @@ describe("landing", () => {
     expect(pushed).toEqual(["add more", "by hand", "add feature"]);
     expect(w.state.worktree(wt.id)?.pr).toMatchObject({ number: 7, state: "open" });
     expect(await w.worktrees.gitStatus(wt.id)).toMatchObject({ unpushed: 0 });
+    // the push sent work out and landed nothing, so the row moves up the rail like a send's
+    expect(w.state.worktree(wt.id)?.promptedAt).toBeGreaterThan(1);
+  });
+
+  test("creating a PR moves the row up the rail like a send: the work went out and the row stays open", async () => {
+    const repoId = await registered();
+    await withOrigin(repoId);
+    // gh as GitHub would answer it: the PR's page, on whatever it is asked
+    const bin = join(w.repo, "..", "bin");
+    mkdirSync(bin, { recursive: true });
+    writeFileSync(join(bin, "gh"), "#!/bin/sh\necho https://x/pull/9\n", { mode: 0o755 });
+    const path = process.env.PATH;
+    process.env.PATH = `${bin}:${path}`;
+    try {
+      const wt = await w.worktrees.create(repoId, "feature");
+      writeFileSync(join(wt.path, "feature.txt"), "x\n");
+      w.state.worktree(wt.id)!.promptedAt = 1;
+      const { result } = await w.worktrees.land(wt.id, "add feature");
+      expect(result.ok).toBe(true);
+      expect(result.url).toBe("https://x/pull/9");
+      expect(w.state.worktree(wt.id)).toMatchObject({ pr: { number: 9, state: "open" } });
+      expect(w.state.worktree(wt.id)?.landed).toBeUndefined();
+      expect(w.state.worktree(wt.id)?.promptedAt).toBeGreaterThan(1);
+    } finally {
+      process.env.PATH = path;
+    }
   });
 });

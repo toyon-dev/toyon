@@ -12,8 +12,10 @@ const tierOf = (w: WorktreeInfo) => (isLead(w) ? 0 : 1);
 /** The rail's order: the lead, then the rows most recently sent to. Only a send moves a row, never
  * an agent finishing or asking, and never a landing: a row does not slide out from under the
  * pointer while agents run, and a landed row stays where you were working in it, where its dot and
- * kebab are the archive affordance, and drifts down as other rows are sent to. What needs you is
- * the dot's and the jump chord's to say. Rows that tie keep the daemon's order. */
+ * kebab are the archive affordance, and drifts down as other rows are sent to. A press that sends
+ * work out and lands nothing (creating a PR, pushing to one) counts as a send: the row is still
+ * open and is where the review comes back. What needs you is the dot's and the jump chord's to
+ * say. Rows that tie keep the daemon's order. */
 export function railOrder<T extends { worktree: WorktreeInfo }>(rows: readonly T[]): T[] {
   // stable, so a tie is the daemon's order
   return [...rows].sort((a, b) => tierOf(a.worktree) - tierOf(b.worktree) || sentAt(b.worktree) - sentAt(a.worktree));

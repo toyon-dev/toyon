@@ -2205,6 +2205,9 @@ export class WorktreeService {
         if (!pushed.ok) return { result: pushed };
         await this.headMoved(wt.id);
         this.setLanding(wt.id, undefined);
+        // the press sent work out and landed nothing, so its row moves up the rail like a send's;
+        // only a landing leaves the row where it was
+        this.markPrompted(wt.id);
         const did = committed ? "committed and pushed" : "pushed";
         return { result: { ok: true, url: wt.pr.url, message: `${did}; PR #${wt.pr.number} has the new commits` } };
       }
@@ -2245,6 +2248,9 @@ export class WorktreeService {
       if (result.ok) {
         this.setLanding(wt.id, undefined);
         if (result.pr) this.setPr(wt.id, { ...result.pr, at: Date.now() });
+        // creating the PR sent the work out for review and landed nothing: the row is still
+        // open, so it moves up the rail like a send's
+        this.markPrompted(wt.id);
       }
       return { result };
     }

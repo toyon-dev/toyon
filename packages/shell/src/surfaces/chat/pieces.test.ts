@@ -166,12 +166,12 @@ describe("the words", () => {
 });
 
 describe("oneRows", () => {
-  test("the agent's proposal first, the alternative, then not now; a note where an agent elsewhere reads it", () => {
+  test("the agent's proposal first, the alternative, then not now", () => {
     const l = list([piece("p1")]);
-    expect(oneRows(l, l.pieces[0]!).map((r) => [r.fate, r.label, r.notes])).toEqual([
-      ["worktree", "start a worktree", true],
-      ["here", "do it here", false],
-      [null, "not now", false],
+    expect(oneRows(l, l.pieces[0]!).map((r) => [r.fate, r.label])).toEqual([
+      ["worktree", "start a worktree"],
+      ["here", "do it here"],
+      [null, "not now"],
     ]);
     const here = list([piece("p1", { fate: "here" })]);
     expect(oneRows(here, here.pieces[0]!).map((r) => r.fate)).toEqual(["here", "worktree", null]);
@@ -183,7 +183,6 @@ describe("oneRows", () => {
       fate: "worktree",
       label: "queue a worktree",
       description: "a copy of this project, with this text as its plan once Layer 1 lands",
-      notes: true,
     });
   });
   test("a send piece is sent or not; one for another project goes there or not, never here", () => {

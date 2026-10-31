@@ -111,12 +111,12 @@ export function piecesQuestion(item: Pick<PiecesItem, "pieces" | "fates">): stri
 }
 
 /** one row of Toyon's card for a single piece: the fate it answers with (null for not now), its
- * label, a line under it, and whether a note makes sense on it (an agent elsewhere reads it) */
+ * label and a line under it. Any fate takes a note, since an agent is sent the piece; not now
+ * sends nothing to anyone. */
 export interface OneRow {
   fate: PieceFate | null;
   label: string;
   description?: string;
-  notes: boolean;
 }
 
 /** the rows for one piece, in digit order: what the agent proposed first, so enter on an
@@ -130,28 +130,24 @@ export function oneRows(item: Pick<PiecesItem, "pieces">, piece: Piece): OneRow[
         fate: "worktree",
         label: `start a worktree in ${piece.project.name}`,
         description: `a copy of that project, with this text as its plan${where}`,
-        notes: true,
       }
     : {
         fate: "worktree",
         label: wait ? "queue a worktree" : "start a worktree",
         description: `a copy of this project, with this text as its plan${where}`,
-        notes: true,
       };
   const here: OneRow = {
     fate: "here",
     label: "do it here",
     description: "this worktree's agent, after its turn",
-    notes: false,
   };
-  const notNow: OneRow = { fate: null, label: "not now", notes: false };
+  const notNow: OneRow = { fate: null, label: "not now" };
   if (piece.fate === "send") {
     return [
       {
         fate: "send",
         label: `send to ${piece.to?.title ?? "the worktree"}`,
         description: "that worktree's agent, as a message",
-        notes: true,
       },
       notNow,
     ];

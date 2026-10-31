@@ -5,7 +5,8 @@
 // several is read and moved in the document on the right, which the card opens on a press and
 // never on its own: a pane that opens itself is one the person has to close, and on the phone it
 // took the screen with the card behind it. A note is the plan card's note: `n` opens the field
-// under the row it is on, and it is added to every piece an agent elsewhere reads.
+// under the row it is on, and it goes to every agent a piece is sent to, this one's for a piece
+// kept here.
 
 import type { AskAnswer } from "@toyon/shared";
 import { useMemo, useRef, useState } from "react";
@@ -81,8 +82,8 @@ export function PiecesCard({
       only
         ? oneRows(item, only)
         : [
-            { fate: "worktree", label: "go", notes: true },
-            { fate: null, label: "not now", notes: false },
+            { fate: "worktree", label: "go" },
+            { fate: null, label: "not now" },
           ],
     [item, only],
   );
@@ -103,10 +104,11 @@ export function PiecesCard({
     }
     dispatch({ a: "answered", id: worktreeId });
   };
-  /** `n`: the field opens under the cursor's row when a note means something there (an agent
-   * elsewhere reads it), else under the first row that takes one; the row becomes the pick */
+  /** `n`: the field opens under the cursor's row when it is a fate (an agent is sent the piece),
+   * else under the first fate, since not now sends nothing; the row becomes the pick */
   const openNote = () => {
-    const at = shape[cursor]?.notes ? cursor : shape.findIndex((r) => r.notes);
+    const under = shape[cursor];
+    const at = under && under.fate !== null ? cursor : shape.findIndex((r) => r.fate !== null);
     if (at === -1) return;
     if (!noting || noted !== at) write(setNote(draft, 0, note ?? ""), at);
     setCursor(at);
@@ -143,7 +145,7 @@ export function PiecesCard({
   const rows: Choice[] = shape.map((r, i) => ({
     label: r.label,
     ...(pressed === i ? { description: "starting" } : r.description ? { description: r.description } : {}),
-    ...(r.notes ? { hint: { k: "n", label: "add context", icon: "edit", on: !noting } } : {}),
+    ...(r.fate !== null ? { hint: { k: "n", label: "add context", icon: "edit", on: !noting } } : {}),
     tone: r.fate === null ? "deny" : undefined,
     checked: noting && i === noted,
     field:
@@ -151,9 +153,11 @@ export function PiecesCard({
         ? {
             ref: field,
             value: note ?? "",
-            placeholder: only
-              ? "a note for the agent there, sent with it"
-              : "a note for every piece's agent, sent with go",
+            placeholder: !only
+              ? "a note for every piece's agent, sent with go"
+              : r.fate === "here"
+                ? "a note for this worktree's agent, sent with it"
+                : "a note for the agent there, sent with it",
             enterKeyHint: "send",
             onChange: (value) => write(setNote(draft, 0, value), noted),
             onSend: () => answer(noted),

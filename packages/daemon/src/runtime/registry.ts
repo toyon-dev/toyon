@@ -322,12 +322,10 @@ function defaultAgent(
     },
     planEdited: async (path, proposed) => planEdited(wt.path, path, proposed),
     option: (category) => d.state.requireWorktree(wt.id)[OPTION_FIELDS[category]],
-    // kept per agent, not per worktree: the picker on a worktree whose session has not opened
-    // yet shows what this agent offered last time
-    onOptionsLearned: (category, choices, runs) => {
-      const agentId = d.state.requireWorktree(wt.id).agent ?? "";
-      if (d.state.setCachedOptions(agentId, category, choices, runs)) d.hub.emit("agentsChanged");
-    },
+    // kept per agent, not per worktree, by the worktree service: the picker on a worktree whose
+    // session has not opened yet shows what this agent offered last time
+    onOptionsLearned: (category, choices, runs) =>
+      d.hub.emit("optionsLearned", d.state.requireWorktree(wt.id).agent ?? "", category, choices, runs),
     // the chat's choice becomes the record's, so the picker shows what runs and the next turn
     // keeps it rather than putting the picker's old value back
     onOptionChanged: (category, value) => {

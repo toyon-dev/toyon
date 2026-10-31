@@ -1,6 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentInfo } from "@toyon/shared";
-import { agentModelKey, agentModelRows, choiceRows, modelWords, splitAgentModel } from "./choiceRows.ts";
+import {
+  agentModelKey,
+  agentModelRows,
+  choiceRows,
+  modelWords,
+  rememberedChoice,
+  splitAgentModel,
+} from "./choiceRows.ts";
 
 const empty = { label: "default model", description: "whatever the agent runs" };
 const claudeModels = [
@@ -271,5 +278,29 @@ describe("agentModelRows", () => {
   test("one agent: no row takes its name", () => {
     const { rows } = agentModelRows([agent({ id: "claude", short: "Claude", models: claudeModels })], "claude", "");
     expect(rows.every((r) => r.prefix === undefined)).toBe(true);
+  });
+});
+
+// The memory for a new worktree holds the adapter's id, and the adapter renames them between
+// its versions: the chip reads the row the list carries for it now, never the stale id raw.
+describe("rememberedChoice", () => {
+  const now = [
+    { id: "default", name: "Default (recommended)", description: "Opus 5.5" },
+    { id: "opus", name: "Opus 5.5" },
+    { id: "fable", name: "Fable 5.1" },
+  ];
+  test("a listed id, and the default, are kept", () => {
+    expect(rememberedChoice("fable", now)).toBe("fable");
+    expect(rememberedChoice("", now)).toBe("");
+  });
+  test("an earlier spelling reads as the row the list carries for it, else as the default", () => {
+    expect(rememberedChoice("claude-fable-5-1[1m]", now)).toBe("fable");
+    expect(rememberedChoice("haiku", now)).toBe("");
+    const agents = [agent({ id: "claude", models: now, defaultModel: "default" }), agent({ id: "codex" })];
+    const { rows, shown } = agentModelRows(agents, "claude", rememberedChoice("claude-fable-5-1[1m]", now));
+    expect(rows.find((r) => r.id === shown)?.label).toBe("Fable 5.1");
+  });
+  test("left as remembered while the agent has listed nothing", () => {
+    expect(rememberedChoice("fable", [])).toBe("fable");
   });
 });

@@ -62,6 +62,7 @@ import { Ring } from "../../ui/Ring.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
 import { greenfieldContext } from "../center/greenfield.ts";
 import { canPull, originNote } from "../chips/baseNote.ts";
+import { rememberedChoice } from "../chips/choiceRows.ts";
 import { EffortChip, useNewWorktreeEffort } from "../chips/EffortChip.tsx";
 import { ModeChip, useNewWorktreeMode } from "../chips/ModeChip.tsx";
 import { AgentModelChip, ModelChip, rememberNewWorktreeModel, useNewWorktreeModel } from "../chips/ModelChip.tsx";
@@ -374,8 +375,11 @@ export function Composer({
   // what its default rows stand for: the chips read these before a session has reported anything
   const agentDefaultModel = agentInfo?.defaultModel;
   const agentDefaultEffort = agentInfo?.defaultEffort;
-  const [newModel, setNewModel] = useNewWorktreeModel(spawnAgent);
+  const [storedModel, setNewModel] = useNewWorktreeModel(spawnAgent);
   const [newEffort, setNewEffort] = useNewWorktreeEffort(spawnAgent);
+  // as the agent lists it now: an id it stopped listing since it was remembered is never sent.
+  // The effort is left as remembered: its choices follow the model, and the list here is one model's
+  const newModel = rememberedChoice(storedModel, agentModels);
   // A new worktree lists every agent's models, and picking another agent's model switches the
   // agent with it: on the draft, or as the daemon's default for a project's first message, which
   // is what the send would have remembered anyway.

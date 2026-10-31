@@ -1,9 +1,19 @@
-import { type AgentInfo, agentDefault, defaultStandsFor, type ModelChoice } from "@toyon/shared";
+import { type AgentInfo, agentDefault, defaultStandsFor, type ModelChoice, relistChoice } from "@toyon/shared";
 import { notReady } from "../../state/actions/agent.ts";
 import type { ChipOption } from "../../ui/ChipPicker.tsx";
 
 /** the empty id: the agent's own default, which is what a worktree runs until a value is named */
 export const DEFAULT_OPTION = "";
+
+/** The choice remembered for a worktree that does not exist yet, as the agent lists it now: the id
+ * itself, the id the list carries for it since (`relistChoice`), or the default when it carries
+ * nothing for it. Nothing has run with a remembered id, so there is no truth to show in its place,
+ * unlike a session's reported value, which the rows keep. Left as remembered while the agent has
+ * listed nothing yet. */
+export function rememberedChoice(stored: string, choices: ModelChoice[]): string {
+  if (!stored || choices.length === 0) return stored;
+  return relistChoice(stored, choices) ?? DEFAULT_OPTION;
+}
 
 /** A choice's words, split the way the picker draws them: a label, a version a tier quieter after
  * it, and a line under it keeping only what the name does not say. The two builtin agents spell a

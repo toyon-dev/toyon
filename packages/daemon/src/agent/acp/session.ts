@@ -1428,7 +1428,10 @@ export class AcpSession implements AgentAdapter {
     const wanted = this.d.option?.(category);
     if (!opt || !wanted || wanted === opt.current) return;
     if (!opt.ids.includes(wanted)) {
-      log.debug(this.d.worktreeId, `acp: ${category} ${wanted} is not offered; left on ${opt.current}`);
+      // the record was reconciled with the list as it was learned, so this is an effort the model
+      // has not got, or a list that moved under a session: said out loud, since the chip then reads
+      // the record and not what answers
+      log.info(this.d.worktreeId, `acp: ${category} ${wanted} is not offered; ${opt.current} answers`);
       return;
     }
     const r = await live.conn.ctx.request(acp.methods.agent.session.setConfigOption, {

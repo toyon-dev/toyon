@@ -8,9 +8,11 @@ import type {
   AgentStatus,
   AttachmentInput,
   LastTurn,
+  ModelChoice,
   ProcState,
   QueuedMessage,
 } from "@toyon/shared";
+import type { OptionCategory } from "../agent/acp/options.ts";
 import type { OpenedFile } from "../files/open.ts";
 import { log } from "./log.ts";
 
@@ -68,6 +70,10 @@ export interface HubEvents {
   themesChanged: () => void;
   /** the default agent (or the registry) changed */
   agentsChanged: () => void;
+  /** an agent listed its choices in a category (a worktree's session opening, or a check's
+   * throwaway one); `runs` is the value a fresh session that asked for nothing reported, when it
+   * was one. The worktree service caches the list and keeps the records level with it. */
+  optionsLearned: (agentId: string, category: OptionCategory, choices: ModelChoice[], runs?: string) => void;
   /** the keep-awake switch in settings was flipped */
   keepAwakeChanged: () => void;
   /** the public name was set or cleared while running: `toyon remote`, or the card's "turn on" */

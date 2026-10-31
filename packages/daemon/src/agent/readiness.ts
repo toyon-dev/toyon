@@ -16,7 +16,7 @@ import {
   parseAuthStatus,
   supportsLogout,
 } from "./acp/authstatus.ts";
-import { readOptions } from "./acp/options.ts";
+import { type OptionCategory, readOptions } from "./acp/options.ts";
 import type { AcpLink } from "./acp/transport.ts";
 import type { AgentSpec } from "./registry.ts";
 
@@ -34,7 +34,7 @@ export interface AgentReadinessDeps {
   /** what a fresh session that asked for nothing ran in the category: the agent's own default */
   runs: (agentId: string, category: string) => string | undefined;
   /** `runs` is the category's value on the fresh session the look opened: the agent's own default */
-  learned: (agentId: string, category: string, choices: ModelChoice[], runs: string) => void;
+  learned: (agentId: string, category: OptionCategory, choices: ModelChoice[], runs: string) => void;
   /** whether the side questions can be put to it (it has a quick model) */
   quick: (agentId: string) => boolean;
   now?: () => number;

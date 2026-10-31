@@ -1,5 +1,43 @@
 import { describe, expect, test } from "bun:test";
-import { agentDefault, applyLog, defaultStandsFor } from "./model.ts";
+import { agentDefault, applyLog, defaultStandsFor, relistChoice } from "./model.ts";
+
+// The adapter's ids move between its versions; a remembered one is followed by its family word
+// when the agent lists that as an id, and otherwise dropped rather than guessed.
+describe("relistChoice", () => {
+  const now = [
+    { id: "default", name: "Default (recommended)", description: "Opus 5.5" },
+    { id: "opus", name: "Opus 5.5" },
+    { id: "fable", name: "Fable 5.1" },
+    { id: "claude-fable-5", name: "Fable 5" },
+    { id: "claude-opus-4-8", name: "Opus 4.8" },
+    { id: "claude-opus-4-6", name: "Opus 4.6" },
+  ];
+  test("an id the list still carries is itself", () => {
+    expect(relistChoice("fable", now)).toBe("fable");
+    expect(relistChoice("claude-opus-4-6", now)).toBe("claude-opus-4-6");
+    expect(relistChoice("default", now)).toBe("default");
+  });
+  test("an earlier spelling follows its family word to the alias the list carries", () => {
+    expect(relistChoice("claude-fable-5-1[1m]", now)).toBe("fable");
+    expect(relistChoice("opus[1m]", now)).toBe("opus");
+    expect(relistChoice("us.anthropic.claude-opus-4-7-v1:0", now)).toBe("opus");
+    expect(relistChoice("anthropic.claude-3-5-sonnet-20241022-v2:0", [...now, { id: "sonnet", name: "Sonnet" }])).toBe(
+      "sonnet",
+    );
+  });
+  test("nothing when the list has no alias for the family, or the shape is not known", () => {
+    // "claude-opus-4-7" could be 4.8 or 4.6 as easily: no guess
+    expect(
+      relistChoice(
+        "claude-opus-4-7",
+        now.filter((c) => c.id !== "opus"),
+      ),
+    ).toBeUndefined();
+    expect(relistChoice("haiku", now)).toBeUndefined();
+    expect(relistChoice("gpt-5.6-sol", [{ id: "gpt-6-sol", name: "Sol" }])).toBeUndefined();
+    expect(relistChoice("", now)).toBeUndefined();
+  });
+});
 
 describe("defaultStandsFor", () => {
   const claude = [

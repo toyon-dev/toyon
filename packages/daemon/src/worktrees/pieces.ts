@@ -1,5 +1,5 @@
 // Pieces: a plan's work across worktrees. The agent hands Toyon a list of pieces through its own
-// tool (`split`), beside its plan or during a reply, and each piece goes on this worktree, a new
+// tool (`handoff`), beside its plan or during a reply, and each piece goes on this worktree, a new
 // worktree of this project or of another open one, or an open worktree already working on that
 // part. Nothing starts until the person says so: in plan mode the list rides beside the next plan
 // card and the plan's yes is its yes; otherwise it is a card of Toyon's own. A piece's text is the
@@ -24,7 +24,7 @@ import type {
   RepoInfo,
   WorktreeInfo,
 } from "@toyon/shared";
-import { DEFAULT_PERMISSION_MODE, isBusy, SPLIT_TOOL } from "@toyon/shared";
+import { DEFAULT_PERMISSION_MODE, HANDOFF_TOOL, isBusy } from "@toyon/shared";
 import type { AgentAdapter } from "../agent/adapter.ts";
 import type { AttachmentStore } from "../agent/attachments.ts";
 import type { McpTool, McpToolResult, ToolProvider } from "../agent/mcp.ts";
@@ -293,7 +293,7 @@ export class PiecesService implements ToolProvider {
       ? ` Other projects open in Toyon you can name in \`project\`: ${projects.join(", ")}.`
       : "";
     return {
-      name: SPLIT_TOOL,
+      name: HANDOFF_TOOL,
       description: `Hand Toyon the pieces of the work you are planning, or one piece you came across: each goes on this worktree, a new worktree of this project or of another open one, or an open worktree already on that part; the person decides on the list beside your plan. Nothing starts. ${open}${elsewhere}`,
       inputSchema: {
         type: "object",
@@ -352,7 +352,7 @@ export class PiecesService implements ToolProvider {
   /** a call from the agent, over MCP: the shape is checked here, since the client's own check
    * cannot be relied on, and then it is a proposal like the person's */
   async call(worktreeId: string, args: unknown): Promise<McpToolResult> {
-    const shape = `split takes { pieces: [{ title: string, plan: string, where: "here" | "worktree" | "send", attachments?: string[], after?: string, to?: string, project?: string }] }, 1 to ${PIECES_MAX} pieces.`;
+    const shape = `handoff takes { pieces: [{ title: string, plan: string, where: "here" | "worktree" | "send", attachments?: string[], after?: string, to?: string, project?: string }] }, 1 to ${PIECES_MAX} pieces.`;
     const a = args && typeof args === "object" && !Array.isArray(args) ? (args as Record<string, unknown>) : null;
     const list = a && Array.isArray(a.pieces) ? (a.pieces as unknown[]) : null;
     if (!list || list.length === 0) return refused(shape);
@@ -707,14 +707,14 @@ export class PiecesService implements ToolProvider {
         for (let i = 0; i < 30 && openPlanCard(agent.transcript()); i++) await Bun.sleep(100);
         await Bun.sleep(100);
         agent.send(piecesActedPrompt(proposed.pieces, outcomes), {
-          asked: { kind: "pieces", why: "what the split started, so the agent builds only its own piece" },
+          asked: { kind: "pieces", why: "what the handoff started, so the agent builds only its own piece" },
           keepCards: true,
         });
       } else if (!tell && outcomes.some((o) => o.fate === "here" && !o.after)) {
         // Toyon's own card is not a turn's, so a piece kept here starts one: the agent was told
-        // to finish its turn when it split, and until it builds its piece nothing queued behind
+        // to finish its turn when it handed off, and until it builds its piece nothing queued behind
         // this branch can start. A piece here that waits for a sibling waits for its word. The
-        // card goes up as the split call answers, so the agent may still be on that turn, and a
+        // card goes up as the handoff call answers, so the agent may still be on that turn, and a
         // message steered into it would abort the call in flight: the message waits for the
         // turn to end, off this call, which answers the card now.
         const text = piecesActedPrompt(proposed.pieces, outcomes, "card", note);

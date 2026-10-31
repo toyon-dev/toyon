@@ -8,7 +8,7 @@ import { type AgentCommand, PERMISSION_MODES, type PermissionMode, type RepoInfo
 
 /** the names toyon answers itself: a mode, the seat's verb, or a new worktree for part of the
  * work, here or in another open project */
-export type OwnName = PermissionMode | "check" | "land" | "archive" | "split";
+export type OwnName = PermissionMode | "check" | "land" | "archive" | "handoff";
 
 /** a draft that leads with one of toyon's own commands: the name, and whatever followed it */
 export type OwnInvocation = { name: OwnName; args: string };
@@ -28,23 +28,23 @@ export function ownCommands(landLine: string): AgentCommand[] {
     { name: "land", description: landLine },
     { name: "archive", description: "archive this worktree once its work has landed" },
     {
-      name: "split",
+      name: "handoff",
       description: "a new worktree for part of this work, here or in another project, born with a plan for it",
       hint: "[<project>] [<message>]",
     },
   ];
 }
 
-/** what `/split [project] [text]` means: the project the new worktree goes in and the person's
+/** what `/handoff [project] [text]` means: the project the new worktree goes in and the person's
  * own words, or the picker when nothing at all was typed */
-export type SplitArgs = { repo: RepoInfo; text?: string } | { pick: true };
+export type HandoffArgs = { repo: RepoInfo; text?: string } | { pick: true };
 
 /** The project is this worktree's own unless the first word names another: a project's name as
  * listed, whole (case does not matter), or `here` for this one. Only a whole name picks, because
  * the first word of a message is a plain word (fix, add, the) and a prefix would silently route
  * it to a project that starts the same way. Everything after a name, or everything typed when
  * there is none, is the person's own words for what the new worktree should do. */
-export function parseSplitArgs(args: string, repos: readonly RepoInfo[], hereRepoId: string): SplitArgs {
+export function parseHandoffArgs(args: string, repos: readonly RepoInfo[], hereRepoId: string): HandoffArgs {
   const trimmed = args.trim();
   if (!trimmed) return { pick: true };
   const own = repos.find((r) => r.id === hereRepoId);

@@ -57,8 +57,8 @@ const picked = "An element the user picked in the preview:";
 const heads = (blocks: ContentBlock[]) => blocks.map((b) => (b.type === "text" ? b.text.split("\n")[0] : b.type));
 
 describe("prompts for work in another project", () => {
-  test("the system append sends a change that belongs elsewhere through the split tool with a project, and ends the turn on it", () => {
-    expect(SYSTEM_APPEND).toContain("propose it with the `split` tool when you have one, as one piece");
+  test("the system append sends a change that belongs elsewhere through the handoff tool with a project, and ends the turn on it", () => {
+    expect(SYSTEM_APPEND).toContain("propose it with the `handoff` tool when you have one, as one piece");
     expect(SYSTEM_APPEND).toContain("`project` naming that project");
     expect(SYSTEM_APPEND).toContain("do not edit outside it and do not stop at saying so");
     expect(SYSTEM_APPEND).toContain("once it is proposed you finish your turn");
@@ -159,7 +159,7 @@ describe("pieces prompts", () => {
       { id: "p2", title: "Expiry" },
     ];
     expect(piecesActedPrompt(pieces, [{ pieceId: "p1", fate: "here" }], "card")).toBe(
-      'The person answered the split card, and Toyon acted on the pieces you handed over. Do "Persist" here, and only that.',
+      'The person answered the handoff card, and Toyon acted on the pieces you handed over. Do "Persist" here, and only that.',
     );
     // the note typed with go reaches the agent here as it does every sibling's; a piece skipped
     // is no sibling, so nobody is said to be reading the list
@@ -174,7 +174,7 @@ describe("pieces prompts", () => {
         "use the v2 API",
       ),
     ).toBe(
-      'The person answered the split card, and Toyon acted on the pieces you handed over: "Expiry" was skipped by the person. Do "Persist" here, and only that. The person added: use the v2 API',
+      'The person answered the handoff card, and Toyon acted on the pieces you handed over: "Expiry" was skipped by the person. Do "Persist" here, and only that. The person added: use the v2 API',
     );
     expect(
       piecesActedPrompt(
@@ -186,12 +186,12 @@ describe("pieces prompts", () => {
         "card",
       ),
     ).toBe(
-      'The person answered the split card, and Toyon acted on the pieces you handed over: "Expiry" waits for toyon/rail to land and then starts in its own worktree. Do "Persist" here, and only that. The siblings read the list at its path in this worktree; never do their pieces yourself.',
+      'The person answered the handoff card, and Toyon acted on the pieces you handed over: "Expiry" waits for toyon/rail to land and then starts in its own worktree. Do "Persist" here, and only that. The siblings read the list at its path in this worktree; never do their pieces yourself.',
     );
   });
 
-  test("the system append hands the pieces of a plan to Toyon through the split tool, and one piece found mid-task", () => {
-    expect(SYSTEM_APPEND).toContain("hand Toyon the list with the `split` tool when you have one");
+  test("the system append hands the pieces of a plan to Toyon through the handoff tool, and one piece found mid-task", () => {
+    expect(SYSTEM_APPEND).toContain("hand Toyon the list with the `handoff` tool when you have one");
     expect(SYSTEM_APPEND).toContain(
       "or, outside plan mode, before you start on your own pieces, never at the end of the turn",
     );
@@ -228,7 +228,7 @@ describe("pieces prompts", () => {
   test("the verb's ask for a new worktree here asks for one piece through the tool, with the person's words", () => {
     const bare = pieceAskPrompt();
     expect(bare).toContain(
-      "in a new worktree of this project. Propose it with the `split` tool: one piece, `where` set to `worktree`",
+      "in a new worktree of this project. Propose it with the `handoff` tool: one piece, `where` set to `worktree`",
     );
     expect(bare).not.toContain("`project`");
     expect(bare).not.toContain("own words");

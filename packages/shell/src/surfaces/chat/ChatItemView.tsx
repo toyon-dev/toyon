@@ -1279,7 +1279,7 @@ export const ChatItemView = memo(function ChatItemView({
       return <PieceLandedRow item={item} />;
     case "pieces": {
       // Toyon's own card, answered: the row picked is the person's word, as a question's answer
-      // is, and the split row under it says what that started
+      // is, and the handoff row under it says what that started
       const said = piecesSaid(item);
       if (!said) return <PiecesRow item={item} worktreeId={worktreeId} />;
       const bubble = { kind: "assistant" as const, text: said };
@@ -1365,7 +1365,7 @@ function LandedRow({ item }: { item: Extract<ChatItem, { kind: "landed" }> }) {
   // sentence.
   const what = item.mark && landedWhat(item.mark);
   const how = `${item.text}, ${ago}`;
-  // the pull request it went through, offered the way the split row offers its list: in the
+  // the pull request it went through, offered the way the handoff row offers its list: in the
   // sentence, after the thing it belongs to
   const pr = item.url && (
     <Button variant="inline" onClick={() => window.open(item.url, "_blank")}>

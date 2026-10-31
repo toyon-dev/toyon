@@ -1013,13 +1013,13 @@ describe("tool searches", () => {
   });
 });
 
-describe("split", () => {
+describe("handoff", () => {
   test("Toyon's own tool folds to its bare name in every spelling, and another server's is left alone", () => {
     const named = (name: string) =>
       run([{ sessionUpdate: "tool_call", toolCallId: "x", name, title: name, kind: "other", status: "pending" }])[0];
-    expect(named("toyon/split")).toMatchObject({ name: "split", title: "split" });
-    expect(named("mcp__toyon__split")).toMatchObject({ name: "split" });
-    expect(named("mcp__other__split")).toMatchObject({ name: "mcp__other__split" });
+    expect(named("toyon/handoff")).toMatchObject({ name: "handoff", title: "handoff" });
+    expect(named("mcp__toyon__handoff")).toMatchObject({ name: "handoff" });
+    expect(named("mcp__other__handoff")).toMatchObject({ name: "mcp__other__handoff" });
   });
 
   test("any tool of Toyon's folds to its bare name: titled as the adapter did, else as the name", () => {

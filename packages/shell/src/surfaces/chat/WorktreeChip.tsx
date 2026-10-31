@@ -1,4 +1,4 @@
-// A worktree of the project named on a row Toyon draws (a split row, the plan's worktrees
+// A worktree of the project named on a row Toyon draws (a handoff row, the plan's worktrees
 // section, the line under the box, a sibling's landing), as the mention a message draws it: the
 // chip with the row's dot and tip, a press opening the row, an archived one its page. One drawing
 // for every place a worktree is named, so the agent's prose, the person's mentions and Toyon's

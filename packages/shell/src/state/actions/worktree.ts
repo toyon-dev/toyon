@@ -263,10 +263,10 @@ export function worktreeItems(
   // next. Only a task has work to hand on; the lead has no chat to propose it from.
   if (w.worktree.kind === "worktree") {
     ship.push({
-      id: "split",
+      id: "handoff",
       label: "continue elsewhere…",
       sub: true,
-      onClick: () => dispatch({ a: "open", overlay: { kind: "split", worktreeId: id } }),
+      onClick: () => dispatch({ a: "open", overlay: { kind: "handoff", worktreeId: id } }),
     });
   }
   // the ellipsis is the promise of a question, so an archive that asks nothing drops it

@@ -1678,13 +1678,13 @@ export class AcpSession implements AgentAdapter {
   }
 
   /** A plan sent back with the agent's own list beside it. The rejection is an option id, and the
-   * split tool's result still reads as a hand-over that stands, so the agent would send the next
+   * handoff tool's result still reads as a hand-over that stands, so the agent would send the next
    * plan up without a list; the word that the list went too goes in as a message, awaited ahead
    * of the answer as `sayPlanEdited` is. */
   private async sayPiecesDeclined() {
     try {
       await this.deliver(
-        "The pieces list you handed over went back with the plan. Hand over a list again with `split` before you ask for approval.",
+        "The pieces list you handed over went back with the plan. Hand over a list again with `handoff` before you ask for approval.",
       );
     } catch (e) {
       // the no still goes back; a reply that fails would read to the agent as a refusal

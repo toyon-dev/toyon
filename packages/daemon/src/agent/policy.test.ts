@@ -166,8 +166,8 @@ describe("policy.decide", () => {
 });
 
 describe("policy.decide, Toyon's own tool", () => {
-  test("a pathless call to the split tool is allowed in every mode: its card is the gate", () => {
-    const call = req({ kind: "other", name: "mcp__toyon__split", rawInput: { pieces: [] } });
+  test("a pathless call to the handoff tool is allowed in every mode: its card is the gate", () => {
+    const call = req({ kind: "other", name: "mcp__toyon__handoff", rawInput: { pieces: [] } });
     for (const mode of ["auto", "ask", "plan"] as const) {
       expect(decide(call, bounds, wt, mode).kind).toBe("allow");
       expect(decide(call, bounds, wt, mode, false).kind).toBe("allow");
@@ -176,13 +176,13 @@ describe("policy.decide, Toyon's own tool", () => {
 
   test("the tool is known under every spelling an adapter gives it", () => {
     const input = { pieces: [] };
-    expect(decide(req({ kind: "other", name: "toyon/split", rawInput: input }), bounds, wt).kind).toBe("allow");
+    expect(decide(req({ kind: "other", name: "toyon/handoff", rawInput: input }), bounds, wt).kind).toBe("allow");
     // the bare name with the server in the meta, as some adapters spell it
     const meta = req({
       kind: "other",
-      name: "split",
+      name: "handoff",
       rawInput: input,
-      _meta: { claudeCode: { toolName: "mcp__toyon__split" } },
+      _meta: { claudeCode: { toolName: "mcp__toyon__handoff" } },
     });
     expect(decide(meta, bounds, wt).kind).toBe("allow");
   });

@@ -7,7 +7,7 @@ import {
   mergeCommands,
   ownCommandOf,
   ownCommands,
-  parseSplitArgs,
+  parseHandoffArgs,
 } from "./ownCommands.ts";
 
 const own = ownCommands("Commit and merge into main here");
@@ -15,7 +15,7 @@ const planLine = PERMISSION_MODES.find((m) => m.id === "plan")?.description;
 
 describe("ownCommands", () => {
   test("one row per mode with the chip's line, then the seat's verbs", () => {
-    expect(own.map((c) => c.name)).toEqual(["auto", "ask", "plan", "check", "land", "archive", "split"]);
+    expect(own.map((c) => c.name)).toEqual(["auto", "ask", "plan", "check", "land", "archive", "handoff"]);
     for (const m of PERMISSION_MODES) expect(own.find((c) => c.name === m.id)?.description).toBe(m.description);
     expect(own.find((c) => c.name === "land")?.description).toBe("Commit and merge into main here");
   });
@@ -25,12 +25,12 @@ describe("ownCommands", () => {
     expect(own.find((c) => c.name === "archive")?.hint).toBeUndefined();
   });
 
-  test("split takes a project, when one leads, and the message after it", () => {
-    const row = own.find((c) => c.name === "split");
+  test("handoff takes a project, when one leads, and the message after it", () => {
+    const row = own.find((c) => c.name === "handoff");
     expect(row?.hint).toBe("[<project>] [<message>]");
     expect(row?.description).toContain("another project");
-    expect(ownCommandOf("/split acp bump the pin", own)).toEqual({ name: "split", args: "acp bump the pin" });
-    expect(ownCommandOf("/split", own)).toEqual({ name: "split", args: "" });
+    expect(ownCommandOf("/handoff acp bump the pin", own)).toEqual({ name: "handoff", args: "acp bump the pin" });
+    expect(ownCommandOf("/handoff", own)).toEqual({ name: "handoff", args: "" });
   });
 
   test("check takes a note for the commit message; land and archive take nothing", () => {
@@ -101,17 +101,17 @@ describe("argHintOf", () => {
   const rows = mergeCommands(own, [{ name: "review", description: "review a PR", hint: "<pr>" }]);
 
   test("a name and its space, typed or picked, shows what the command still expects", () => {
-    expect(argHintOf("/split ", rows)).toBe("[<project>] [<message>]");
+    expect(argHintOf("/handoff ", rows)).toBe("[<project>] [<message>]");
     expect(argHintOf("/review ", rows)).toBe("<pr>");
   });
 
   test("nothing before the space, after the first argument, or for a command with no hint", () => {
-    expect(argHintOf("/split", rows)).toBeNull();
-    expect(argHintOf("/split w", rows)).toBeNull();
-    expect(argHintOf("/split  ", rows)).toBeNull();
+    expect(argHintOf("/handoff", rows)).toBeNull();
+    expect(argHintOf("/handoff w", rows)).toBeNull();
+    expect(argHintOf("/handoff  ", rows)).toBeNull();
     expect(argHintOf("/archive ", rows)).toBeNull();
     expect(argHintOf("/nope ", rows)).toBeNull();
-    expect(argHintOf("say /split ", rows)).toBeNull();
+    expect(argHintOf("say /handoff ", rows)).toBeNull();
   });
 });
 
@@ -135,7 +135,7 @@ describe("ownCommandOf", () => {
   });
 });
 
-describe("parseSplitArgs", () => {
+describe("parseHandoffArgs", () => {
   const repo = (id: string, name = id): RepoInfo => ({
     id,
     path: `/p/${id}`,
@@ -147,32 +147,32 @@ describe("parseSplitArgs", () => {
   });
   const repos = [repo("r1", "toyon"), repo("r2", "claude-agent-acp"), repo("r3", "Toyon-Mono")];
   test("nothing named opens the picker", () => {
-    expect(parseSplitArgs("", repos, "r1")).toEqual({ pick: true });
-    expect(parseSplitArgs("   ", repos, "r1")).toEqual({ pick: true });
+    expect(parseHandoffArgs("", repos, "r1")).toEqual({ pick: true });
+    expect(parseHandoffArgs("   ", repos, "r1")).toEqual({ pick: true });
   });
   test("a whole name leads, whatever its case; a name that is also a prefix wins as the name", () => {
-    expect(parseSplitArgs("claude-agent-acp", repos, "r1")).toEqual({ repo: repos[1]! });
-    expect(parseSplitArgs("CLAUDE-AGENT-ACP", repos, "r1")).toEqual({ repo: repos[1]! });
-    expect(parseSplitArgs("toyon", repos, "r2")).toEqual({ repo: repos[0]! });
+    expect(parseHandoffArgs("claude-agent-acp", repos, "r1")).toEqual({ repo: repos[1]! });
+    expect(parseHandoffArgs("CLAUDE-AGENT-ACP", repos, "r1")).toEqual({ repo: repos[1]! });
+    expect(parseHandoffArgs("toyon", repos, "r2")).toEqual({ repo: repos[0]! });
   });
   test("the rest after a name is the person's own words", () => {
-    expect(parseSplitArgs("claude-agent-acp bump the pin  to 0.85", repos, "r1")).toEqual({
+    expect(parseHandoffArgs("claude-agent-acp bump the pin  to 0.85", repos, "r1")).toEqual({
       repo: repos[1]!,
       text: "bump the pin  to 0.85",
     });
   });
   test("here, or this worktree's own project, is a new worktree here", () => {
-    expect(parseSplitArgs("here", repos, "r1")).toEqual({ repo: repos[0]! });
-    expect(parseSplitArgs("HERE the badge", repos, "r1")).toEqual({ repo: repos[0]!, text: "the badge" });
-    expect(parseSplitArgs("toyon", repos, "r1")).toEqual({ repo: repos[0]! });
-    expect(parseSplitArgs("here", [repos[0]!], "r1")).toEqual({ repo: repos[0]! });
+    expect(parseHandoffArgs("here", repos, "r1")).toEqual({ repo: repos[0]! });
+    expect(parseHandoffArgs("HERE the badge", repos, "r1")).toEqual({ repo: repos[0]!, text: "the badge" });
+    expect(parseHandoffArgs("toyon", repos, "r1")).toEqual({ repo: repos[0]! });
+    expect(parseHandoffArgs("here", [repos[0]!], "r1")).toEqual({ repo: repos[0]! });
   });
   test("no name leading means here, and every word typed is the message", () => {
-    expect(parseSplitArgs("fix the footer", repos, "r2")).toEqual({ repo: repos[1]!, text: "fix the footer" });
+    expect(parseHandoffArgs("fix the footer", repos, "r2")).toEqual({ repo: repos[1]!, text: "fix the footer" });
     // a prefix is a word, not a name: "toy" could open a message as easily as shorten a project
-    expect(parseSplitArgs("toy the badge", repos, "r2")).toEqual({ repo: repos[1]!, text: "toy the badge" });
-    expect(parseSplitArgs("cla", repos, "r1")).toEqual({ repo: repos[0]!, text: "cla" });
+    expect(parseHandoffArgs("toy the badge", repos, "r2")).toEqual({ repo: repos[1]!, text: "toy the badge" });
+    expect(parseHandoffArgs("cla", repos, "r1")).toEqual({ repo: repos[0]!, text: "cla" });
     // this chat's project is always listed; were it not, the picker is the only honest answer
-    expect(parseSplitArgs("fix the footer", repos, "r9")).toEqual({ pick: true });
+    expect(parseHandoffArgs("fix the footer", repos, "r9")).toEqual({ pick: true });
   });
 });

@@ -34,14 +34,14 @@ export const TOOL_SEARCH = "ToolSearch";
 export const ASK_TOOL = "AskUserQuestion";
 
 /** The MCP server the daemon serves each agent, carrying Toyon's own tools. Adapters prefix a
- * tool's name with it (Claude: `mcp__toyon__split`), so the daemon folds every spelling back to
+ * tool's name with it (Claude: `mcp__toyon__handoff`), so the daemon folds every spelling back to
  * the bare name and the shell keys rows on that. */
 export const TOYON_MCP_SERVER = "toyon";
 
 /** The agent hands Toyon the pieces of the work it is planning, or one piece it came across.
  * Each goes on this worktree, a new one here or in another open project, or an open worktree
  * already on that part, and the person decides on the list. */
-export const SPLIT_TOOL = "split";
+export const HANDOFF_TOOL = "handoff";
 
 /** The agent asks Toyon which worktrees of this project exist, open and archived, by title and
  * branch with where each chat is on disk, with a query to find the one that worked on a topic:

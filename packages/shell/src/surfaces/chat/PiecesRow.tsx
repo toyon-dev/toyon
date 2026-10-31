@@ -19,7 +19,7 @@ export function PiecesRow({ item, worktreeId }: { item: PiecesItem; worktreeId?:
   if (item.state === "held" || item.state === "proposed") return null;
   if (item.state === "going") {
     return (
-      <DaemonRow icon="spawn" word="split" tone="accent" at={item.ts}>
+      <DaemonRow icon="spawn" word="handed off" tone="accent" at={item.ts}>
         {/* the shine rides an inline span: the text column fills the row, and a band sized to
             that is wider than the words, so they lit all at once rather than sweeping */}
         <span className="daemon-text">
@@ -30,7 +30,7 @@ export function PiecesRow({ item, worktreeId }: { item: PiecesItem; worktreeId?:
   }
   if (item.state === "declined") {
     return (
-      <DaemonRow icon="close" word="not split" tone="quiet" at={item.ts} below={item.reason}>
+      <DaemonRow icon="close" word="not handed off" tone="quiet" at={item.ts} below={item.reason}>
         <span className="daemon-text">nothing started</span>
       </DaemonRow>
     );
@@ -94,7 +94,7 @@ export function PiecesRow({ item, worktreeId }: { item: PiecesItem; worktreeId?:
   return (
     <DaemonRow
       icon="spawn"
-      word="split"
+      word="handed off"
       tone="accent"
       at={item.ts}
       below={errors.length ? errors.map((o) => `${titled(o.pieceId)}: ${o.error}`).join("; ") : undefined}
@@ -119,7 +119,7 @@ export function PiecesRow({ item, worktreeId }: { item: PiecesItem; worktreeId?:
 export function PieceLaterRow({ item }: { item: Extract<ChatItem, { kind: "piece-later" }> }) {
   if (item.worktreeId) {
     return (
-      <DaemonRow icon="spawn" word="split" tone="accent" at={item.ts}>
+      <DaemonRow icon="spawn" word="handed off" tone="accent" at={item.ts}>
         <span className="daemon-text">
           <WorktreeChip id={item.worktreeId} title={item.title ?? "the worktree"} /> started, its branch having landed
         </span>
@@ -141,7 +141,7 @@ export function PieceLandedRow({ item }: { item: Extract<ChatItem, { kind: "piec
   return (
     <DaemonRow icon="check" word={item.again ? "landed again" : "landed"} tone="aqua" at={item.ts}>
       {/* a sibling of this project is its chip; work in another project is named with where. Its
-          pull request follows in the sentence, as the list follows the split row's */}
+          pull request follows in the sentence, as the list follows the handoff row's */}
       <span className="daemon-text">
         {item.same ? <WorktreeChip id={item.worktreeId} title={item.title} /> : `${item.title} in ${item.repoName}`}
         {item.awaited && ", which the work here waited for"}

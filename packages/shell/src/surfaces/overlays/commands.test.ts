@@ -92,9 +92,9 @@ describe("buildCommands", () => {
     );
     expect(asked?.label).toBe("let a device in (1)");
   });
-  test("the split is on the palette with one project open: a new worktree here is always a target", () => {
+  test("the handoff is on the palette with one project open: a new worktree here is always a target", () => {
     const ids = (s: CommandState) => buildCommands(s, () => {}, null, wt, repo).map((c) => c.id);
-    expect(ids(state)).toContain("wt:split");
+    expect(ids(state)).toContain("wt:handoff");
   });
   test("a guest's switch row names its project, since the rail's mark does", () => {
     const other = { ...repo, id: "r2", name: "acp", path: "/acp" } as RepoInfo;

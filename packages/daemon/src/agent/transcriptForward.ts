@@ -25,7 +25,7 @@ const MARKS = ['"page', '"brief"', '"handoff'];
  * person pressed for it. Step 2: a message that carried another agent's brief becomes the
  * `handed` row that says so, with the brief as the text the row opens, since the brief no longer
  * rides on a bubble; a handoff's card events become a pieces list of one and its landing word a
- * piece's, since the handoff tool folded into split; a piece's text is its `plan`, not a brief.
+ * piece's, since the handoff tool folded into the pieces list; a piece's text is its `plan`, not a brief.
  * A torn line, or a line of another type that carries a word, is left. */
 export function forwardLine(line: string): { drop: true } | { line: string } | null {
   if (!MARKS.some((m) => line.includes(m))) return null;

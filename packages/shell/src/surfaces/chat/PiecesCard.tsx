@@ -1,6 +1,6 @@
 // Toyon's own pieces card: the agent handed over the pieces of its work outside plan mode, so
 // there is no plan card for the list to ride beside, and the box asks instead. One piece, which
-// is most splits, is answered here whole: the text in the band where it is read, and the fates as
+// is most lists, is answered here whole: the text in the band where it is read, and the fates as
 // the rows, the agent's proposal first so enter on an untouched card is the proposal. A list of
 // several is read and moved in the document on the right, which the card opens on a press and
 // never on its own: a pane that opens itself is one the person has to close, and on the phone it

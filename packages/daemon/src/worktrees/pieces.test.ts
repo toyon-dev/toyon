@@ -95,13 +95,13 @@ describe("the tool", () => {
     const a = await w.worktrees.create(repoId, "task", { title: "Rail" });
     const b = await w.worktrees.create(repoId, "task", { title: "Composer" });
     const tool = w.pieces.tool(a.id);
-    expect(tool.name).toBe("split");
+    expect(tool.name).toBe("handoff");
     expect(tool.description).toContain(`${b.branch}, "Composer"`);
     expect(tool.description).not.toContain('"Rail"');
     expect(tool.inputSchema).toMatchObject({ required: ["pieces"], additionalProperties: false });
     for (const bad of [{}, { pieces: [] }, { pieces: [{ title: 1, plan: "b", where: "here" }] }, { pieces: "x" }]) {
       expect(await w.pieces.call(a.id, bad)).toMatchObject({
-        text: expect.stringContaining("split takes"),
+        text: expect.stringContaining("handoff takes"),
         isError: true,
       });
     }
@@ -528,7 +528,7 @@ describe("go", () => {
     await w.pieces.ask(a.id, repoId, "fix the rail badge");
     const asked = agentOf(a.id).sent.at(-1)!;
     expect(asked.asked).toEqual({ kind: "pieces", why: "a new worktree here" });
-    expect(asked.text).toContain("Propose it with the `split` tool: one piece, `where` set to `worktree`");
+    expect(asked.text).toContain("Propose it with the `handoff` tool: one piece, `where` set to `worktree`");
     expect(asked.text).toContain("The user's own words for what it should do: fix the rail badge");
     agentOf(a.id).mcpTools = false;
     await expect(w.pieces.ask(a.id, repoId)).rejects.toThrow("Write what the new worktree should do first");
@@ -698,7 +698,7 @@ describe("read off the plan", () => {
     );
     const id = lastProposal(a.id).id;
     const before = agentOf(a.id).sent.length;
-    // the card goes up as the split call answers, so the agent may still be on that turn: the
+    // the card goes up as the handoff call answers, so the agent may still be on that turn: the
     // message waits for it to end rather than steer into it
     agentOf(a.id).status = "working";
     await w.pieces.answer(a.id, id, true, "  carefully ");

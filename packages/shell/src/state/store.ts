@@ -479,7 +479,7 @@ export type Overlay =
   /** the lines a picked element with no recorded source may be written on, when none is clearly it */
   | { kind: "element-sources"; worktreeId: string; hits: SearchHit[] }
   /** the other open projects, one of which this worktree's work continues in */
-  | { kind: "split"; worktreeId: string };
+  | { kind: "handoff"; worktreeId: string };
 
 /** the project switcher: pick a registered repo, or type a path to open another. `pill` hangs off
  * the pill in the bar, for a click on it; `center` is the same switcher over the preview, for a key
@@ -1591,7 +1591,7 @@ export const isSubPicker = (o: Overlay) =>
   o.kind === "agent" ||
   o.kind === "agent-page" ||
   o.kind === "choose-folder" ||
-  o.kind === "split";
+  o.kind === "handoff";
 
 /** what reaches the reducer: terminal frames are routed to the pane, file answers to fileSync, and
  * a file opened from outside the shell, or refused to a link that asked, to its opener, before
@@ -3824,7 +3824,7 @@ function piecesIndex(items: ChatItem[], id: string, states: PiecesCard["state"][
   return items.findLastIndex((i) => i.kind === "pieces" && i.id === id && states.includes(i.state));
 }
 
-/** Toyon's own card, answered: the list leaves the place the split call stood, turns up the log,
+/** Toyon's own card, answered: the list leaves the place the handoff call stood, turns up the log,
  * and stands at the end, where the box asked and the person answered */
 function answeredAtEnd(items: ChatItem[], idx: number, card: PiecesCard): ChatItem[] {
   return [...items.slice(0, idx), ...items.slice(idx + 1), card];

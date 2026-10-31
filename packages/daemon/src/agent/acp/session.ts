@@ -1004,6 +1004,7 @@ export class AcpSession implements AgentAdapter {
         prompt,
         spec: conn.spec,
         ...(opts.quick ? { quick: opts.quick } : {}),
+        ...(opts.timeoutMs !== undefined ? { timeoutMs: opts.timeoutMs } : {}),
         route: (id, onText) => {
           conn.side.set(id, onText);
           return () => {

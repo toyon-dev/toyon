@@ -368,8 +368,8 @@ export interface WorktreeInfo {
   title: string;
   /** the title is the prompt's first words, standing in until the agent or the person names it:
    * the rail shows it a tier down so its changing is no surprise. The agent is asked at birth and
-   * again after each finished turn while this stands, so an ask lost to an outage is not the last
-   * word; one never named stays this way as the cue to rename it */
+   * again after each turn that settles on a live agent while this stands, so an ask lost to an
+   * outage is not the last word; one never named stays this way as the cue to rename it */
   unnamed?: true;
   createdAt: number;
   /** merged into main and no new work since */

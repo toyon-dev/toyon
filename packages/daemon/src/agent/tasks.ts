@@ -49,10 +49,19 @@ export function parseName(text: string | null): string | null {
   return sentenceCase(name);
 }
 
+/** A two-word answer from the quick model is back in seconds; one not back in this long is a side
+ * session that hung, and waiting on it would hold the row's one naming slot until the daemon
+ * restarts, with every retry a no-op. */
+export const NAME_TIMEOUT_MS = 60_000;
+
 /** names a task on the worktree's own agent (the adapter it already runs, a side session) */
 export function makeNamer(runtime: RuntimeRegistry) {
   return async (task: string, wt: WorktreeInfo): Promise<string | null> =>
-    parseName(await runtime.ensureAgent(wt).agent.ask(NAME_SYSTEM, namePrompt(task), { quick: "prefer" }));
+    parseName(
+      await runtime
+        .ensureAgent(wt)
+        .agent.ask(NAME_SYSTEM, namePrompt(task), { quick: "prefer", timeoutMs: NAME_TIMEOUT_MS }),
+    );
 }
 
 /** Whether what is already known of the agent rules its quick model out, so a question that requires

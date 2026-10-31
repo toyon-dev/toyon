@@ -128,6 +128,8 @@ function fakeAgent(
     failInit?: boolean;
     /** advertise HTTP MCP servers the way the bundled adapters do, as a boolean */
     mcpHttp?: boolean;
+    /** answer session/new only after this long, as an adapter still starting its SDK does */
+    slowNew?: number;
   } = {},
 ): FakeAgent {
   const f: FakeAgent = {
@@ -254,6 +256,7 @@ function fakeAgent(
     )
     .onRequest(acp.methods.agent.session.new, async (c) => {
       f.newSessions.push(c.params);
+      if (opts.slowNew) await Bun.sleep(opts.slowNew);
       const id = `s${++n}`;
       const pushed = opts.commands?.[id];
       if (pushed) {
@@ -2280,6 +2283,36 @@ describe("AcpSession", () => {
     expect(fake.calls).toEqual([]);
     // a prompt-prefix agent with no side _meta sends none at all
     expect(fake.newSessions[0]!._meta).toBeUndefined();
+    await w.session.close();
+  });
+
+  test("ask() with a deadline gives up on an answer that never comes: null, the side session cancelled, the next ask free", async () => {
+    let hung = 0;
+    const fake = fakeAgent(async (p, client) => {
+      if (p.sessionId === "s1") {
+        hung++;
+        return new Promise(() => {});
+      }
+      return say("ok")(p, client);
+    });
+    const w = world(fake);
+    expect(await w.session.ask("sys", "name this", { timeoutMs: 30 })).toBeNull();
+    expect(hung).toBe(1);
+    for (let i = 0; i < 100 && fake.cancels < 1; i++) await Bun.sleep(5);
+    expect(fake.cancels).toBe(1);
+    // the connection is not stuck behind the hung question: a second ask runs and answers
+    expect(await w.session.ask("sys", "name this", { timeoutMs: 1000 })).toBe("ok");
+    await w.session.close();
+  });
+
+  test("a side session that opens after the deadline is closed without the question being put", async () => {
+    const fake = fakeAgent(say("ok"), { slowNew: 60, caps: { close: true, delete: true } });
+    const w = world(fake);
+    expect(await w.session.ask("sys", "name this", { timeoutMs: 20 })).toBeNull();
+    for (let i = 0; i < 100 && fake.calls.length < 2; i++) await Bun.sleep(5);
+    expect(fake.calls).toEqual(["close s1", "delete s1"]);
+    expect(fake.prompts).toEqual([]);
+    expect(fake.cancels).toBe(0);
     await w.session.close();
   });
 

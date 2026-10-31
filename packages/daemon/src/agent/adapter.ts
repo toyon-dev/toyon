@@ -49,6 +49,9 @@ export type Quick = "require" | "prefer";
 
 export interface AskOpts {
   quick?: Quick;
+  /** how long to wait for the answer; past it the question is withdrawn and the answer is null.
+   * Unset waits as long as the adapter takes. */
+  timeoutMs?: number;
 }
 
 /** everything a message carries besides its text */

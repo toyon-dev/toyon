@@ -454,10 +454,12 @@ export class WorktreeService {
     // on that event, so what is dropped here is gone before the status frame goes out
     d.hub.on("turnSettled", (worktreeId, turn) => {
       // The name asked for at birth can come back empty: the ask went out on an agent that could
-      // not reach its API, or the answer was not a name. The turn that just finished ran on a live
-      // agent, so a row still on its placeholder is asked again, from the words the task started
-      // with. A turn that stopped short gets no ask; the next one that finishes does.
-      if (turn.end === "done") {
+      // not reach its API, or the answer was not a name. A turn that finished, or was stopped by
+      // hand, ran on a live agent, so a row still on its placeholder is asked again, from the
+      // words the task started with. A failed turn gets no ask, and neither does a turn waiting
+      // on a card: that end comes once per card, and the finish after the answer asks. A worktree
+      // on its way out stops its agent too; the ask would spawn another into a directory going.
+      if ((turn.end === "done" || turn.end === "stopped") && !this.going.has(worktreeId)) {
         const wt = d.state.worktree(worktreeId);
         const prompt = wt?.unnamed ? firstAskOf(d.runtime.agentFor(worktreeId)?.transcript() ?? []) : undefined;
         if (wt && prompt) this.scheduleNaming(wt, prompt);
@@ -1639,24 +1641,31 @@ export class WorktreeService {
     if (!clean) return;
     // The title is read and the branch is spelled: "Sticky header" on toyon/sticky-header. They are
     // set together so the two never drift, and a title git cannot spell (one written in another
-    // script) is kept as the title with the branch left where it is.
+    // script) is kept as the title with the branch left where it is. So is one whose branch git
+    // would not move: the title is the row's name either way, and a row refused its name here
+    // would keep the placeholder for the rest of the task.
     const slug = branchSlug(clean);
+    let stayed: string | undefined;
     await withRepoLock(repo.path, async () => {
       let branch = `toyon/${slug}`;
       if (slug && branch !== wt.branch) {
         // avoid collisions with an existing branch
         let n = 2;
-        while (!(await git(wt.path, "branch", "-m", wt.branch, branch)).ok) {
-          if (n > 5) return;
+        let r = await git(wt.path, "branch", "-m", wt.branch, branch);
+        while (!r.ok && n <= 5) {
           branch = `toyon/${slug}-${n++}`;
+          r = await git(wt.path, "branch", "-m", wt.branch, branch);
         }
-        wt.branch = branch;
+        if (r.ok) wt.branch = branch;
+        else stayed = r.err.trim() || `git branch -m ${branch} failed`;
       }
       wt.title = clean;
       delete wt.unnamed;
     });
     this.d.state.save();
     this.d.hub.emit("worktreesChanged");
+    // after the name is on the row: the namer reads this as a warning, the person as a toast
+    if (stayed) throw new UserError(`${clean} keeps the branch ${wt.branch}: ${stayed}`);
   }
 
   /** Merge other worktrees' branches into one and remove them. A local merge, nothing pushed: the

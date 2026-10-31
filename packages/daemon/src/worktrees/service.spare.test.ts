@@ -428,6 +428,43 @@ describe("spare pool", () => {
     expect(wt.title).toBe("sticky header");
   });
 
+  test("a turn stopped by hand asks for the name too; a turn waiting on a card does not, nor one on a worktree going", async () => {
+    const repoId = await registered();
+    const wt = await w.worktrees.create(repoId, "ask me about metrics");
+    await until(() => w.naming.calls === 1);
+    await settle();
+    expect(wt.unnamed).toBe(true);
+    w.naming.reply = "metrics";
+    const agent = w.agents.get(wt.id)!;
+    agent.note({ type: "user-message", text: "ask me about metrics", ts: 1 });
+    // a card opening is a stop of its own, once per card: not the moment to ask
+    w.hub.emit("agentStatus", wt.id, "working");
+    w.hub.emit("agentStatus", wt.id, "waiting");
+    await settle();
+    expect(w.naming.calls).toBe(1);
+    expect(wt.unnamed).toBe(true);
+    // the person stopped it: the agent is live, and the row is asked for its name
+    agent.note({ type: "turn-end", stopReason: "interrupted", ts: 2 });
+    w.hub.emit("agentStatus", wt.id, "working");
+    w.hub.emit("agentStatus", wt.id, "idle");
+    await until(() => !wt.unnamed);
+    expect(w.naming.calls).toBe(2);
+    expect(wt.title).toBe("metrics");
+    // the stop that is the worktree's own removal asks nothing: there is no row to name
+    w.naming.reply = null;
+    const going = await w.worktrees.create(repoId, "tidy the footer");
+    await until(() => w.naming.calls === 3);
+    await settle();
+    expect(going.unnamed).toBe(true);
+    w.agents.get(going.id)!.note({ type: "user-message", text: "tidy the footer", ts: 1 });
+    w.hub.emit("agentStatus", going.id, "working");
+    const archived = w.worktrees.archiveWorktree(going.id);
+    w.hub.emit("agentStatus", going.id, "idle");
+    await archived;
+    await settle();
+    expect(w.naming.calls).toBe(3);
+  });
+
   test("a turn that ends while the birth ask is still out does not ask twice, and a failed turn asks nothing", async () => {
     const repoId = await registered();
     let answer!: () => void;
@@ -473,6 +510,20 @@ describe("spare pool", () => {
     expect([a.title, b.title]).toEqual(["same", "same"]);
     expect(a.branch).toBe("toyon/same");
     expect(b.branch).toBe("toyon/same-2");
+  });
+
+  test("a name whose slug and its numbered forms are all taken is still the title: the branch stays, the placeholder goes", async () => {
+    const repoId = await registered();
+    for (const name of ["task", "task-2", "task-3", "task-4", "task-5"]) sh(w.repo, "git", "branch", `toyon/${name}`);
+    const wt = await w.worktrees.create(repoId, "some task");
+    await until(() => w.naming.calls === 1);
+    const born = wt.branch;
+    // the name lands first; the refusal is the toast, with git's reason on it
+    await expect(w.worktrees.rename(wt.id, "task")).rejects.toThrow(`task keeps the branch ${born}: `);
+    expect(wt.title).toBe("task");
+    expect(wt.unnamed).toBeUndefined();
+    expect(wt.branch).toBe(born);
+    expect((await git(wt.path, "branch", "--show-current")).out).toBe(born);
   });
 
   test("a renamed worktree keeps the title as words and gives its branch the slug", async () => {

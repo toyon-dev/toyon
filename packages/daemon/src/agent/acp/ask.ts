@@ -23,10 +23,58 @@ export interface Ask {
   caps: { close: boolean; delete: boolean };
   /** absent asks on whatever model the agent opens a session on */
   quick?: Quick;
+  /** the answer is null once this has passed, and the side session is told to stop; absent waits
+   * as long as the adapter takes */
+  timeoutMs?: number;
   tag: string;
 }
 
+/** the deadline's answer, told apart from an agent that answered with nothing */
+const LATE = Symbol("late");
+
+/** what the run hands over once its side session is open; whether to go on with the question */
+type Opened = (sessionId: string, unroute: () => void) => boolean;
+
 export async function askOnce(ctx: acp.ClientContext, a: Ask): Promise<string | null> {
+  if (a.timeoutMs === undefined) return askRun(ctx, a, () => true);
+  // The run is not stopped at the deadline: its own finally closes the side session, whenever it
+  // gets there. The caller is let go, the session's updates stop being read, and the adapter is
+  // asked to stop the session. A session that only opens after the deadline is closed unasked.
+  let late = false;
+  let open: { sessionId: string; unroute: () => void } | undefined;
+  const cancel = (sessionId: string) =>
+    fireAndForget(a.tag, ctx.notify(acp.methods.agent.session.cancel, { sessionId }), "ask: cancel side session");
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<typeof LATE>((r) => {
+    timer = setTimeout(() => r(LATE), a.timeoutMs);
+    // a deadline on a question nobody is waiting for must not keep a shutdown (or a test) alive
+    timer.unref?.();
+  });
+  const run = askRun(ctx, a, (sessionId, unroute) => {
+    if (!late) open = { sessionId, unroute };
+    return !late;
+  });
+  try {
+    const out = await Promise.race([run, deadline]);
+    if (out !== LATE) return out;
+  } finally {
+    clearTimeout(timer);
+  }
+  late = true;
+  log.warn(a.tag, `ask: no answer in ${Math.round(a.timeoutMs / 1000)} s; given up`);
+  // the run's own failures are logged inside it; the one before its try, session/new, is not,
+  // and a run nobody awaits any more must not reject into the void
+  run.catch((e) => log.warn(a.tag, "ask failed after the deadline", e));
+  if (open) {
+    open.unroute();
+    cancel(open.sessionId);
+  }
+  return null;
+}
+
+/** the question, start to finish: `opened` gets the side session as soon as there is one, and
+ * says whether the question is still wanted */
+async function askRun(ctx: acp.ClientContext, a: Ask, opened: Opened): Promise<string | null> {
   const meta = a.spec.systemPrompt === "meta-append";
   const _meta = { ...a.spec.sideMeta, ...(meta ? { systemPrompt: a.system } : {}) };
   const s = await ctx.request(acp.methods.agent.session.new, {
@@ -39,6 +87,7 @@ export async function askOnce(ctx: acp.ClientContext, a: Ask): Promise<string | 
     text += t;
   });
   try {
+    if (!opened(s.sessionId, unroute)) return null;
     if (a.quick) {
       const model = readOptions(s.configOptions).get("model");
       const quick = model && quickModelFor(a.spec, model.ids, model.current);

@@ -445,6 +445,14 @@ describe("standingContext", () => {
       standingContext({
         main: false,
         base: "main",
+        // the queue's word over auto-merge's, since auto-merge is what put it in the queue
+        pr: { number: 7, url: "https://x/pull/7", state: "open", queued: "checking", automerge: true },
+      }),
+    ).toBe("Pull request #7 is open at https://x/pull/7, in the merge queue (its checks running).");
+    expect(
+      standingContext({
+        main: false,
+        base: "main",
         unpushed: 2,
         pr: { number: 7, url: "https://x/pull/7", state: "open", checks: "fail", review: "changes_requested" },
       }),

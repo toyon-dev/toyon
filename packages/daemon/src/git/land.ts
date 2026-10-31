@@ -14,7 +14,7 @@ import {
   type TrunkStatus,
 } from "@toyon/shared";
 import { GIT, git, NO_PROMPT, RUN_CEILING_MS, run, runWatched, type Watched } from "./exec.ts";
-import { gh, ghMethod, prNumberOf } from "./gh.ts";
+import { enqueuePr, gh, ghMethod, prNumberOf, viewQueue } from "./gh.ts";
 import { aheadBehind, behindUpstream, statusFiles } from "./status.ts";
 
 export interface ShipResult {
@@ -35,6 +35,9 @@ export interface ShipResult {
   hook?: StepRow & { name: string };
   /** the PR the route opened or found, for the record */
   pr?: Omit<PrState, "at">;
+  /** the PR went into its base's merge queue rather than merging: the row reads as queued until
+   * the poll reads the queue's own word */
+  queued?: boolean;
 }
 
 /** no step of a landing runs longer than this, the ceiling every plain git call has: a hook that
@@ -703,11 +706,23 @@ export async function openPr(o: OpenPr, w: LandWatch = UNWATCHED): Promise<ShipR
   const number = url ? prNumberOf(url) : null;
   if (!url || number === null) return { ok: true, message: `pushed ${o.branch}; PR created but its URL was not read` };
 
+  // whether the base merges through a queue is read now rather than left to the poll: the land
+  // word's tip and the auto-merge note say "queues" or "merges" by it
+  const queue = (await viewQueue(o.worktreePath, number))?.queue === true;
   let note = "";
+  let automerge = false;
   if (o.automerge) {
     const method = await ghMethod(o.worktreePath, o.method);
     const auto = method ? await gh(["pr", "merge", String(number), "--auto", `--${method}`], o.worktreePath) : null;
-    note = auto?.ok ? "; GitHub merges it when its rules allow" : "; auto-merge could not be turned on";
+    // the record says auto-merge only when GitHub took it: a PR marked so offers no land word,
+    // and a repo that forbids auto-merge (one running a merge queue often does) would leave the
+    // row waiting on a merge nobody is going to make
+    automerge = !!auto?.ok;
+    note = automerge
+      ? `; GitHub ${queue ? "queues" : "merges"} it when its rules allow`
+      : /not allowed for this repository/i.test(auto?.err ?? "")
+        ? "; auto-merge is off for this repo on GitHub, so land it once it is ready"
+        : "; auto-merge could not be turned on";
   }
   return {
     ok: true,
@@ -718,23 +733,40 @@ export async function openPr(o: OpenPr, w: LandWatch = UNWATCHED): Promise<ShipR
       url,
       state: "open",
       ...(o.subject ? { title: o.subject } : {}),
-      ...(o.automerge ? { automerge: true } : {}),
+      ...(automerge ? { automerge: true } : {}),
+      ...(queue ? { queue } : {}),
     },
   };
 }
 
-/** merge an open PR through gh, by the method the settings ask for or the repo allows */
+/** Merge an open PR through gh, by the method the settings ask for or the repo allows. A base
+ * branch with a merge queue takes a merge from no one: the PR joins the queue, which merges it in
+ * turn by the queue's method. */
 export async function mergePr(
   worktreePath: string,
   number: number,
   wanted?: MergeMethod,
   w: LandWatch = UNWATCHED,
 ): Promise<ShipResult> {
+  const q = await viewQueue(worktreePath, number);
+  if (q?.queue) {
+    // a failed entry is on its way out of the queue, not in it: the press queues it again, and
+    // GitHub refuses if it has not dropped the old entry yet
+    if (q.queued && q.queued !== "failed") return { ok: true, message: `PR #${number} is in the merge queue already` };
+    w.step("queueing the PR");
+    const r = await enqueuePr(worktreePath, q.id);
+    if (!r.ok) return { ok: false, message: `could not add PR #${number} to the merge queue: ${r.err.slice(0, 300)}` };
+    return { ok: true, message: `PR #${number} added to the merge queue; GitHub merges it in turn`, queued: true };
+  }
   w.step("merging the PR");
   const method = await ghMethod(worktreePath, wanted);
   if (!method) return { ok: false, message: "the repo allows no merge method gh can use" };
   const r = await gh(["pr", "merge", String(number), `--${method}`], worktreePath);
   if (!r.ok) return { ok: false, message: `gh pr merge failed: ${r.err.slice(0, 300)}` };
+  // the queue read failed and the base has one after all: gh turned the merge into auto-merge
+  // and says so, and the PR is still open
+  if (/merge queue/i.test(`${r.out}\n${r.err}`))
+    return { ok: true, message: `PR #${number} joins the merge queue once GitHub's rules allow` };
   return { ok: true, message: `PR #${number} merged` };
 }
 

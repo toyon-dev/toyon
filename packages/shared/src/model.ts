@@ -480,6 +480,12 @@ export interface PrState {
   mergeable?: boolean;
   /** auto-merge is on: GitHub merges it once its rules allow */
   automerge?: boolean;
+  /** the base branch merges through a merge queue: landing the PR is adding it to the queue,
+   * which merges it in turn by the queue's own method */
+  queue?: boolean;
+  /** what the queue is doing with the PR while it is in it: waiting its turn, running the
+   * queue's checks, merging, or failed (GitHub drops it from the queue next) */
+  queued?: "waiting" | "checking" | "merging" | "failed";
   /** the branch running on the team's own host, as GitHub records it: the link of a status the
    * host named a preview, else the environment of a deployment on the head commit. Absent until
    * the host has built it, and for a repo whose host records nothing. */

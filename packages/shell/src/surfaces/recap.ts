@@ -116,9 +116,17 @@ export function prLine(pr: PrState): string {
   if (pr.state === "closed") return `${n} was closed without merging.`;
   // the branch running on the team's host is a fact beside what GitHub waits on, said last
   const up = pr.preview ? `; ${PREVIEW_UP}.` : ".";
+  // in the queue, what GitHub waits on is the queue's own business: the PR's checks and review
+  // are behind it. "the queue's checks": the PR's checks tab does not show them, so the words
+  // are not the ones the line links.
+  if (pr.queued) {
+    if (pr.queued === "failed") return `${n} failed in the merge queue${up}`;
+    const doing = { waiting: "", checking: "; the queue's checks are running", merging: "; merging now" }[pr.queued];
+    return `${n} in the merge queue${doing}${up}`;
+  }
   if (pr.automerge) {
     const on = pr.review === "review_required" ? "it is approved and checks pass" : "checks pass";
-    return `${n} open; GitHub merges it when ${on}${up}`;
+    return `${n} open; GitHub ${pr.queue ? "queues" : "merges"} it when ${on}${up}`;
   }
   if (pr.mergeable === false) return `${n} open; it conflicts with main${up}`;
   if (pr.review === "changes_requested") return `${n} open; changes requested${up}`;
@@ -129,11 +137,21 @@ export function prLine(pr: PrState): string {
   return `${n} open and ready to merge${up}`;
 }
 
-/** GitHub would take the merge now: nothing waiting, nothing failed, nothing conflicting */
+/** what the land press does to an open PR, for the word's tip: a merge, or on a base branch that
+ * merges through a queue, a place in the queue */
+export function mergeTip(pr: Pick<PrState, "queue">): string {
+  return pr.queue
+    ? "Add the PR to the merge queue; GitHub merges it in turn"
+    : "Merge the PR now, by the method the repo allows";
+}
+
+/** GitHub would take the merge now: nothing waiting, nothing failed, nothing conflicting, and
+ * not in a merge queue already, which is a merge under way */
 export function prCanMerge(pr: PrState): boolean {
   return (
     pr.state === "open" &&
     !pr.automerge &&
+    !pr.queued &&
     pr.mergeable !== false &&
     pr.review !== "changes_requested" &&
     pr.review !== "review_required" &&

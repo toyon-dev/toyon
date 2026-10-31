@@ -503,7 +503,7 @@ export interface WorkStanding {
    * subjects, and the PR it went through when it was one */
   landed?: { subjects: string[]; pr?: number };
   /** the PR the row still shows and acts on */
-  pr?: Pick<PrState, "number" | "url" | "state" | "checks" | "review" | "automerge">;
+  pr?: Pick<PrState, "number" | "url" | "state" | "checks" | "review" | "automerge" | "queued">;
 }
 
 /** how many of a landing's subjects the paragraph names before folding the rest into a count */
@@ -558,7 +558,12 @@ export function standingContext(s: WorkStanding | null): string | undefined {
         const review = pr.review
           ? `, review ${{ approved: "approved", changes_requested: "changes requested", review_required: "required" }[pr.review]}`
           : "";
-        const auto = pr.automerge ? ", auto-merge on" : "";
+        // in the queue, the queue's word is the one that stands, as on the composer's line
+        const auto = pr.queued
+          ? `, in the merge queue${{ waiting: "", checking: " (its checks running)", merging: " (merging)", failed: " (failed there)" }[pr.queued]}`
+          : pr.automerge
+            ? ", auto-merge on"
+            : "";
         const unpushed = s.unpushed
           ? `; ${plural(s.unpushed, "commit")} here ${s.unpushed === 1 ? "is" : "are"} not on it yet`
           : "";

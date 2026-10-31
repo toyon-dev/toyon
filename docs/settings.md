@@ -30,7 +30,7 @@ The first open guesses a file from `package.json` and asks you to confirm it. Ot
 - **`preview`**: which of them the preview shows. `web` when there is one, otherwise the first.
 - **`check`**: a command that must exit 0 before a copy is offered to land. It runs in the copy after every finished turn, and its output shows in the chat. A pass stands through a turn that leaves the files as they were checked, so it does not run again for a message that changed nothing.
 - **`land`**: how work lands.
-  - `route`: `merge` merges into main on your machine and pushes nothing (the default), `push` merges and then pushes main, and `pr` pushes the branch and creates a pull request on GitHub.
+  - `route`: `merge` merges into main on your machine and pushes nothing (the default), `push` merges and then pushes main, and `pr` pushes the branch and creates a pull request on GitHub. Where the base branch merges through a merge queue, landing the pull request adds it to the queue, and the copy reads as landed once the queue merges it.
   - `method`: `merge` for a merge commit, `squash` for one commit, `rebase` for the commits as they are. Locally it defaults to a merge commit; on the `pr` route it follows what the repository allows, squash first.
   - `automerge`: `pr` only. GitHub merges the pull request itself once its rules allow.
 - **`afterLand`**: commands run in the main checkout, in order, once work has landed: the build, the migration, the install you would otherwise remember to run. Nothing waits on them, and a failure stops the rest: the line that stopped it reads on the chat. Work that lands while they are running gets one more run once they finish.

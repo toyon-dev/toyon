@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { parseAllowed, parseDeployments, parsePrView, pickMethod, prNumberOf } from "./gh.ts";
+import { parseAllowed, parseDeployments, parsePrView, parseQueue, pickMethod, prNumberOf } from "./gh.ts";
 
 describe("parsePrView", () => {
   test("folds GitHub's words into the box's: open, waiting on review, checks running", () => {
@@ -142,6 +142,30 @@ describe("parseDeployments", () => {
     expect(parseDeployments(answer([]))).toBeNull();
     expect(parseDeployments(JSON.stringify({ data: { repository: { object: null } } }))).toBeNull();
     expect(parseDeployments("nope")).toBeNull();
+  });
+});
+
+describe("parseQueue", () => {
+  const answer = (pr: Record<string, unknown> | null) => JSON.stringify({ data: { repository: { pullRequest: pr } } });
+  const base = { id: "PR_1", isMergeQueueEnabled: true, isInMergeQueue: false, mergeQueueEntry: null };
+
+  test("whether the base runs a queue, and the PR's standing in it folded to one word", () => {
+    expect(parseQueue(answer(base))).toEqual({ id: "PR_1", queue: true });
+    expect(parseQueue(answer({ ...base, isMergeQueueEnabled: false }))).toEqual({ id: "PR_1", queue: false });
+    const entry = (state: string) => answer({ ...base, isInMergeQueue: true, mergeQueueEntry: { state } });
+    expect(parseQueue(entry("QUEUED"))).toMatchObject({ queued: "waiting" });
+    expect(parseQueue(entry("AWAITING_CHECKS"))).toMatchObject({ queued: "checking" });
+    expect(parseQueue(entry("MERGEABLE"))).toMatchObject({ queued: "merging" });
+    expect(parseQueue(entry("LOCKED"))).toMatchObject({ queued: "merging" });
+    expect(parseQueue(entry("UNMERGEABLE"))).toMatchObject({ queued: "failed" });
+    // in the queue with no entry read: in it is what counts
+    expect(parseQueue(answer({ ...base, isInMergeQueue: true }))).toMatchObject({ queued: "waiting" });
+  });
+
+  test("no PR, or no JSON, is no answer", () => {
+    expect(parseQueue(answer(null))).toBeNull();
+    expect(parseQueue(JSON.stringify({ data: { repository: null } }))).toBeNull();
+    expect(parseQueue("nope")).toBeNull();
   });
 });
 

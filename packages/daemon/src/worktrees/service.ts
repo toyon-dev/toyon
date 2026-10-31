@@ -2192,7 +2192,13 @@ export class WorktreeService {
         // PR as GitHub has it and strand what is here
         const dirty = (await statusFiles(wt.path)).length > 0;
         const missing = dirty || ((await aheadUpstream(wt.path, wt.branch)) ?? 0) > 0;
-        if (!missing) return { result: await mergePr(wt.path, wt.pr.number, policy.merge, w) };
+        if (!missing) {
+          const result = await mergePr(wt.path, wt.pr.number, policy.merge, w);
+          // queued rather than merged: the row says so now, not on the poll's next pass
+          if (result.ok && result.queued)
+            this.setPr(wt.id, { ...wt.pr, queue: true, queued: "waiting", at: Date.now() });
+          return { result };
+        }
         const committed = await this.commitIfDirty(wt, message);
         if (committed && !committed.ok) return { result: committed };
         // marked before each move: a read out across it answers for the tree before, and is dropped
@@ -2209,6 +2215,19 @@ export class WorktreeService {
         // only a landing leaves the row where it was
         this.markPrompted(wt.id);
         const did = committed ? "committed and pushed" : "pushed";
+        // GitHub drops a PR from the merge queue when its head moves: the row says so now rather
+        // than "in the merge queue" until the poll, and the land word comes back with it
+        if (wt.pr.queued) {
+          const { queued: _, ...left } = wt.pr;
+          this.setPr(wt.id, { ...left, at: Date.now() });
+          return {
+            result: {
+              ok: true,
+              url: wt.pr.url,
+              message: `${did}; PR #${wt.pr.number} has the new commits and left the merge queue: land it again once it is ready`,
+            },
+          };
+        }
         return { result: { ok: true, url: wt.pr.url, message: `${did}; PR #${wt.pr.number} has the new commits` } };
       }
       const committed = await this.commitIfDirty(wt, message);
@@ -2867,6 +2886,7 @@ export class WorktreeService {
               ...(pr.checks ? { checks: pr.checks } : {}),
               ...(pr.review ? { review: pr.review } : {}),
               ...(pr.automerge ? { automerge: pr.automerge } : {}),
+              ...(pr.queued ? { queued: pr.queued } : {}),
             },
           }
         : {}),

@@ -21,7 +21,7 @@ import { Icon } from "../../ui/Icon.tsx";
 import { useContextMenu } from "../../ui/menu.ts";
 import { tip } from "../../ui/Tooltip.tsx";
 import { behindNote } from "../chips/baseNote.ts";
-import { checkTip, messageGap, prCanMerge } from "../recap.ts";
+import { checkTip, mergeTip, messageGap, prCanMerge } from "../recap.ts";
 import { RUN_STATUS_TIP, runFacts, runLine, runOf, runStopTip, runTicking, useLastingRun } from "../runs.ts";
 
 /** The foot of the changes panel, built like the chat composer: a message box over a row that says
@@ -338,12 +338,7 @@ export function CommitBox({
                 </Button>
               )}
               {canMerge && (
-                <Button
-                  tone="primary"
-                  disabled={!!op}
-                  data-tip="Merge the PR now, by the method the repo allows"
-                  onClick={land}
-                >
+                <Button tone="primary" disabled={!!op} data-tip={mergeTip(pr)} onClick={land}>
                   land
                 </Button>
               )}

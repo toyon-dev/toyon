@@ -34,7 +34,8 @@ export const PR_MERGERS: ReadonlyArray<{ id: "you" | "github"; name: string; des
   {
     id: "github",
     name: "GitHub merges it",
-    description: "auto-merge: GitHub merges the PR itself once its rules allow (checks, reviewers, or nothing)",
+    description:
+      "auto-merge: GitHub merges the PR itself once its rules allow (checks, reviewers, or nothing); where main has a merge queue, it queues the PR instead",
   },
 ];
 

@@ -12,6 +12,7 @@ import {
   landingLine,
   lastStopLine,
   lineParts,
+  mergeTip,
   messageGap,
   prCanMerge,
   prLine,
@@ -280,6 +281,31 @@ describe("prLine", () => {
     expect(prLine(pr({ state: "closed" }))).toBe("PR #12 was closed without merging.");
   });
 
+  test("in a merge queue the line is the queue's, and auto-merge on a queued base says queues", () => {
+    expect(prLine(pr({ queued: "waiting", review: "review_required" }))).toBe("PR #12 in the merge queue.");
+    expect(prLine(pr({ queued: "checking" }))).toBe("PR #12 in the merge queue; the queue's checks are running.");
+    expect(prLine(pr({ queued: "merging" }))).toBe("PR #12 in the merge queue; merging now.");
+    expect(prLine(pr({ queued: "failed" }))).toBe("PR #12 failed in the merge queue.");
+    expect(prLine(pr({ queued: "waiting", preview: "https://pr-12.d1.amplifyapp.com" }))).toBe(
+      "PR #12 in the merge queue; preview up.",
+    );
+    expect(prLine(pr({ queue: true, automerge: true }))).toBe("PR #12 open; GitHub queues it when checks pass.");
+    // the queue's checks are not the PR's, so the clause is not the one the line links
+    expect(prLinks(pr({ url: "https://github.com/o/r/pull/12", queued: "checking", checks: "pending" }))).toEqual([
+      {
+        text: "checks running",
+        url: "https://github.com/o/r/pull/12/checks",
+        tip: expect.any(String),
+        open: expect.any(String),
+      },
+    ]);
+    expect(
+      lineParts(prLine(pr({ queued: "checking", checks: "pending" })), prLinks(pr({ checks: "pending" }))),
+    ).toEqual(["PR #12 in the merge queue; the queue's checks are running."]);
+    expect(mergeTip(pr({ queue: true }))).toBe("Add the PR to the merge queue; GitHub merges it in turn");
+    expect(mergeTip(pr({}))).toBe("Merge the PR now, by the method the repo allows");
+  });
+
   test("the branch running on the team's host is said after what GitHub waits on", () => {
     const preview = "https://pr-12.d1.amplifyapp.com";
     expect(prLine(pr({ preview, checks: "pending" }))).toBe("PR #12 open; checks running; preview up.");
@@ -341,6 +367,7 @@ describe("prLine", () => {
       { checks: "fail" as const },
       { mergeable: false },
       { automerge: true },
+      { queued: "waiting" as const },
       { state: "merged" as const },
     ])
       expect(prCanMerge(pr(over))).toBe(false);

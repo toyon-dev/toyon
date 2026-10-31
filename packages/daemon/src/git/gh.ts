@@ -61,14 +61,100 @@ export async function viewPr(repoPath: string, number: number): Promise<PrState 
   if (!r.ok || !r.out) return null;
   const parsed = parsePrView(r.out);
   if (!parsed) return null;
-  // a host that registers a deployment instead of a status is asked for separately, and only
-  // while the PR is open: a merged or closed PR's preview is torn down with it
-  if (parsed.state === "open" && !parsed.preview) {
+  // Two more reads while the PR is open, side by side, since each is a gh process bounded at 20s
+  // and a poll over several PRs runs them all. `pr view` says nothing about merge queues, and the
+  // queue decides whether the land press merges or queues; a host that registers a deployment
+  // instead of a status is asked for separately. A merged or closed PR is past both: the queue
+  // is behind it and its preview is torn down.
+  if (parsed.state === "open") {
     const head = headOf(r.out);
-    const preview = head ? await viewDeploymentPreview(repoPath, head) : null;
+    const [q, preview] = await Promise.all([
+      viewQueue(repoPath, number),
+      parsed.preview || !head ? null : viewDeploymentPreview(repoPath, head),
+    ]);
+    if (q?.queue) parsed.queue = true;
+    if (q?.queued) parsed.queued = q.queued;
     if (preview) parsed.preview = preview;
   }
   return { ...parsed, at: Date.now() };
+}
+
+/** the merge queue of the PR's base branch: whether the branch has one, and the PR's standing in
+ * it when it is in. The node id rides along, since the enqueue mutation takes that, not the number. */
+const QUEUE_QUERY = `query($owner: String!, $name: String!, $number: Int!) {
+  repository(owner: $owner, name: $name) {
+    pullRequest(number: $number) { id isMergeQueueEnabled isInMergeQueue mergeQueueEntry { state } }
+  }
+}`;
+
+export interface QueueFacts {
+  /** the PR's node id, which the enqueue mutation takes */
+  id: string;
+  queue: boolean;
+  queued?: PrState["queued"];
+}
+
+export async function viewQueue(repoPath: string, number: number): Promise<QueueFacts | null> {
+  const r = await gh(
+    [
+      "api",
+      "graphql",
+      "-F",
+      "owner={owner}",
+      "-F",
+      "name={repo}",
+      "-F",
+      `number=${number}`,
+      "-f",
+      `query=${QUEUE_QUERY}`,
+    ],
+    repoPath,
+    20_000,
+  );
+  if (!r.ok || !r.out) return null;
+  return parseQueue(r.out);
+}
+
+/** the queue facts out of gh's GraphQL answer; null when the PR is not in it or the JSON is not */
+export function parseQueue(json: string): QueueFacts | null {
+  let pr: Record<string, unknown> | null | undefined;
+  try {
+    const o = JSON.parse(json) as { data?: { repository?: { pullRequest?: Record<string, unknown> | null } } };
+    pr = o.data?.repository?.pullRequest;
+  } catch {
+    return null;
+  }
+  if (!pr || typeof pr.id !== "string") return null;
+  const entry = pr.mergeQueueEntry as Record<string, unknown> | null | undefined;
+  const queued = pr.isInMergeQueue === true ? foldQueueState(entry?.state) : undefined;
+  return { id: pr.id, queue: pr.isMergeQueueEnabled === true, ...(queued ? { queued } : {}) };
+}
+
+/** GitHub's entry states folded to what the line says. MERGEABLE and LOCKED are both the queue
+ * merging it: its checks passed and it waits on the entries ahead, or the merge is under way. */
+function foldQueueState(state: unknown): NonNullable<PrState["queued"]> {
+  switch (state) {
+    case "AWAITING_CHECKS":
+      return "checking";
+    case "MERGEABLE":
+    case "LOCKED":
+      return "merging";
+    case "UNMERGEABLE":
+      return "failed";
+    default:
+      return "waiting";
+  }
+}
+
+const ENQUEUE_MUTATION = `mutation($id: ID!) {
+  enqueuePullRequest(input: { pullRequestId: $id }) { mergeQueueEntry { id } }
+}`;
+
+/** Add the PR to its base branch's merge queue: what the button on GitHub presses. `gh pr merge`
+ * on a queued branch turns to auto-merge instead, which a repo can forbid while still running a
+ * queue; the mutation needs no auto-merge. */
+export function enqueuePr(repoPath: string, id: string): Promise<GitResult> {
+  return gh(["api", "graphql", "-f", `id=${id}`, "-f", `query=${ENQUEUE_MUTATION}`], repoPath);
 }
 
 function headOf(json: string): string | null {

@@ -1,5 +1,8 @@
 // What GitHub says about the PRs toyon opened: read after a PR opens or is merged, when the window
-// comes back (repoTick), and every few minutes while any PR of a repo is open. A merged PR is the
+// comes back (repoTick), and every few minutes while any PR of a repo is open. A PR GitHub itself
+// is about to merge (in the merge queue, or on auto-merge with its checks still running) is asked
+// about every half minute instead, while a shell is connected to see the answer: nobody presses
+// anything for that merge, so the poll is the only way the row hears of it. A merged PR is the
 // landing on the PR route, wherever it was merged from: the row is marked landed and main here
 // follows origin as far as it can, the same ending as the local routes. While a PR is open the same
 // read brings in what reviewers wrote on it, for the page the line over the box opens; a remark
@@ -23,12 +26,27 @@ export interface PrServiceDeps {
   login?: (repoPath: string, host: string) => Promise<string | null>;
   /** how often an open PR is asked about on its own; the window coming back asks sooner */
   everyMs?: number;
+  /** how often a PR GitHub is about to merge is asked about, while someone is looking */
+  fastMs?: number;
+  /** whether any shell is connected to see the answer; the fast poll runs for no one otherwise */
+  looking?: () => boolean;
 }
 
 const POLL_MS = 3 * 60_000;
+const FAST_MS = 30_000;
+
+/** GitHub holds the PR and will merge it without anyone pressing: it is in the merge queue, or
+ * auto-merge is on and the checks it waits for are still running. Auto-merge waiting on a review
+ * is not this: a person has to act, and the slow poll is enough until they do. */
+export function heldByGitHub(pr: PrState): boolean {
+  if (pr.state !== "open") return false;
+  if (pr.queued === "waiting" || pr.queued === "checking" || pr.queued === "merging") return true;
+  return !!pr.automerge && pr.checks === "pending";
+}
 
 export class PrService {
   private timer: ReturnType<typeof setInterval> | null = null;
+  private fast: ReturnType<typeof setInterval> | null = null;
   /** worktrees whose PR is being read now, so a focus during a poll does not ask twice */
   private reading = new Set<string>();
   /** worktrees whose PR remarks are being read now, apart from the PR itself, which waits on nothing */
@@ -42,15 +60,27 @@ export class PrService {
     // someone is looking anyway (the frame they push reaches no one otherwise)
     this.timer = setInterval(() => this.refreshAll(), d.everyMs ?? POLL_MS);
     this.timer.unref?.();
+    this.fast = setInterval(() => this.refreshHeld(), d.fastMs ?? FAST_MS);
+    this.fast.unref?.();
   }
 
   stop() {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
+    if (this.fast) clearInterval(this.fast);
+    this.fast = null;
   }
 
   refreshAll() {
     for (const repo of this.d.state.repos) this.refreshRepo(repo.id);
+  }
+
+  /** the PRs GitHub is about to merge, asked about again; nothing when no shell would see it */
+  refreshHeld() {
+    if (this.d.looking && !this.d.looking()) return;
+    for (const wt of this.d.state.worktrees) {
+      if (wt.pr && heldByGitHub(wt.pr)) fireAndForget(wt.id, this.refresh(wt.id), "pr refresh");
+    }
   }
 
   refreshRepo(repoId: string) {

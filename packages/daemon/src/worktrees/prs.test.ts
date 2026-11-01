@@ -6,7 +6,7 @@ import type { PrComment, PrState, RepoInfo, WorktreeInfo } from "@toyon/shared";
 import { Hub } from "../core/hub.ts";
 import { ensureDirs, makePaths, type Paths } from "../core/paths.ts";
 import { StateStore } from "../core/state.ts";
-import { PrService, type PrServiceDeps } from "./prs.ts";
+import { heldByGitHub, PrService, type PrServiceDeps } from "./prs.ts";
 
 // GitHub is a stub that answers what the test says; the worktree service is two recorded calls.
 
@@ -21,7 +21,11 @@ const open = (over: Partial<PrState> = {}): PrState => ({
   ...over,
 });
 
-function world(answers: Array<PrState | null>, rows: Partial<WorktreeInfo>[] = [{}]) {
+function world(
+  answers: Array<PrState | null>,
+  rows: Partial<WorktreeInfo>[] = [{}],
+  opts: { fastMs?: number; looking?: () => boolean } = {},
+) {
   const paths = makePaths(mkdtempSync(join(home, "w-")));
   ensureDirs(paths);
   const repo: RepoInfo = {
@@ -54,6 +58,8 @@ function world(answers: Array<PrState | null>, rows: Partial<WorktreeInfo>[] = [
     state,
     hub,
     everyMs: 60 * 60_000,
+    fastMs: opts.fastMs ?? 60 * 60_000,
+    ...(opts.looking ? { looking: opts.looking } : {}),
     view: async (_path, number) => {
       asked.push(number);
       return answers.shift() ?? null;
@@ -126,6 +132,47 @@ describe("PrService", () => {
     expect(w.asked.sort()).toEqual([12, 14]);
     expect(w.merged).toEqual(["w2"]);
     w.prs.stop();
+  });
+});
+
+describe("PrService queue poll", () => {
+  test("GitHub holds a PR in the merge queue or on auto-merge with checks running, not otherwise", () => {
+    expect(heldByGitHub(open({ queue: true, queued: "waiting" }))).toBe(true);
+    expect(heldByGitHub(open({ queue: true, queued: "checking" }))).toBe(true);
+    expect(heldByGitHub(open({ queue: true, queued: "merging" }))).toBe(true);
+    // dropped from the queue: the next press puts it back, nothing to wait on
+    expect(heldByGitHub(open({ queue: true, queued: "failed" }))).toBe(false);
+    expect(heldByGitHub(open({ queue: true }))).toBe(false);
+    expect(heldByGitHub(open({ automerge: true, checks: "pending" }))).toBe(true);
+    // auto-merge waiting on a review, or with checks done, is a person's move or GitHub's next tick
+    expect(heldByGitHub(open({ automerge: true, checks: "pass" }))).toBe(false);
+    expect(heldByGitHub(open({ automerge: true }))).toBe(false);
+    expect(heldByGitHub(open())).toBe(false);
+    expect(heldByGitHub(open({ state: "merged", queued: "merging" }))).toBe(false);
+  });
+
+  test("a queued PR is asked about on the fast tick until it merges, and lands when it does", async () => {
+    const queued = open({ queue: true, queued: "waiting" });
+    const w = world([queued, open({ queue: true, queued: "merging" }), open({ state: "merged" })], [{ pr: queued }], {
+      fastMs: 10,
+    });
+    await Bun.sleep(120);
+    // three answers, then merged: the fast tick stops asking once the PR is no longer open
+    expect(w.asked).toEqual([12, 12, 12]);
+    expect(w.merged).toEqual(["w1"]);
+    w.prs.stop();
+  });
+
+  test("the fast tick asks about nothing while no shell is connected, and about no plain open PR", async () => {
+    const queued = open({ queue: true, queued: "waiting" });
+    const dark = world([queued], [{ pr: queued }], { fastMs: 10, looking: () => false });
+    await Bun.sleep(60);
+    expect(dark.asked).toEqual([]);
+    dark.prs.stop();
+    const plain = world([open()], [{}], { fastMs: 10 });
+    await Bun.sleep(60);
+    expect(plain.asked).toEqual([]);
+    plain.prs.stop();
   });
 });
 

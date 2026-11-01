@@ -333,6 +333,8 @@ const prs = new PrService({
   view: viewPr,
   comments: readPrComments,
   login: ghLogin,
+  // read on the timer's ticks, long after boot has built the exit watch below
+  looking: () => idleExit.anyone(),
 });
 // toyon opened on its own checkout: what landing there leaves behind for the process serving it
 const self = new SelfWatch(SOURCE_ROOT);

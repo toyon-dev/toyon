@@ -86,6 +86,12 @@ export class IdleExit {
     this.stamp();
   }
 
+  /** whether any socket is open: the answer to "is anyone looking" for work that is only worth
+   * doing while someone would see it */
+  anyone(): boolean {
+    return this.connected > 0;
+  }
+
   /** the daemon is going down some other way: nothing to arm any more */
   stop(): void {
     this.gone = true;

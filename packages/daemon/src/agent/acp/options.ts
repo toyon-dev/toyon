@@ -4,7 +4,7 @@
 // protocol's. Pure functions, so the session and the update mapper read a list the same way.
 
 import type * as acp from "@agentclientprotocol/sdk";
-import type { ModelChoice, WorktreeInfo } from "@toyon/shared";
+import { agentDefault, defaultStandsFor, type ModelChoice, type WorktreeInfo } from "@toyon/shared";
 
 /** the categories toyon drives, and the worktree field each one is asked from */
 export const OPTION_FIELDS = { model: "model", thought_level: "effort" } as const;
@@ -68,6 +68,14 @@ export function readModeOption(configOptions: acp.SessionConfigOption[] | null |
     current: String(opt.currentValue),
     choices: flat.map((o) => ({ id: String(o.value), name: o.name })),
   };
+}
+
+/** the model an option's current value runs, as a person reads it: the agent's own default row
+ * says "Default (recommended)", so it reads as the row it stands for */
+export function currentName(opt: LiveOption): string {
+  const row = opt.choices.find((c) => c.id === opt.current);
+  if (!row) return opt.current;
+  return (agentDefault(opt.choices) === row ? defaultStandsFor(opt.choices)?.name : undefined) ?? row.name;
 }
 
 /** what is currently selected, in the session-info event's fields */

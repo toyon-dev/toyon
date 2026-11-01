@@ -5,11 +5,11 @@ import type { ChipOption } from "../../ui/ChipPicker.tsx";
 /** the empty id: the agent's own default, which is what a worktree runs until a value is named */
 export const DEFAULT_OPTION = "";
 
-/** The choice remembered for a worktree that does not exist yet, as the agent lists it now: the id
- * itself, the id the list carries for it since (`relistChoice`), or the default when it carries
- * nothing for it. Nothing has run with a remembered id, so there is no truth to show in its place,
- * unlike a session's reported value, which the rows keep. Left as remembered while the agent has
- * listed nothing yet. */
+/** A request as the agent lists it now: the id itself, the id the list carries for it since
+ * (`relistChoice`), or the default when it carries nothing for it, since the session never sends
+ * such an id and the agent's default answers. For the choice remembered for a worktree that does
+ * not exist yet and for a record's own; a session's reported value is the truth and the rows keep
+ * it as is. Left as asked while the agent has listed nothing yet. */
 export function rememberedChoice(stored: string, choices: ModelChoice[]): string {
   if (!stored || choices.length === 0) return stored;
   return relistChoice(stored, choices) ?? DEFAULT_OPTION;
@@ -103,8 +103,9 @@ export function choiceRows(
   // the default's id (what the session reports when nothing is asked, or a record that asked for
   // it) reads as the row it names
   const asNamed = (id: string) => (named && id === own?.id ? named.id : id);
-  const shown = asNamed(value || current || own?.id || DEFAULT_OPTION);
-  const picked = asNamed(value || own?.id || DEFAULT_OPTION);
+  const asked = rememberedChoice(value, choices);
+  const shown = asNamed(asked || current || own?.id || DEFAULT_OPTION);
+  const picked = asNamed(asked || own?.id || DEFAULT_OPTION);
   const listed = named ? choices.filter((c) => c !== own) : choices;
   const known = listed.some((c) => c.id === shown);
   const split = listed.map((c) => ({ c, words: modelWords(c) }));

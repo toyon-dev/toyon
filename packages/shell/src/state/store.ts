@@ -167,6 +167,9 @@ export type ChatItem =
   | { kind: "blocked"; tool: string; path: string; reason: string }
   /** a divider: what follows was said in another worktree, grafted in here */
   | { kind: "grafted"; title: string; branch: string }
+  /** the chat runs another model than the chip asked for, from here on; `asked` is a model the
+   * agent does not list */
+  | { kind: "switched"; name: string; asked?: string }
   /** the daemon's word on a land that merged, kept for the record */
   | { kind: "landed"; text: string; mark?: LandMark; url?: string; ts: number }
   /** the daemon's word on a restore from the archive: when it went, what branch it came back on,
@@ -3569,6 +3572,8 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
       return [...items, { kind: "blocked", tool: event.tool, path: event.path, reason: event.reason }];
     case "grafted":
       return [...items, { kind: "grafted", title: event.title, branch: event.branch }];
+    case "model-switched":
+      return [...items, { kind: "switched", name: event.name, ...(event.asked ? { asked: event.asked } : {}) }];
     case "landed":
       return [
         ...items,

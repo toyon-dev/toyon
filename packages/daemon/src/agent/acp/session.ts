@@ -25,7 +25,7 @@ import type {
   Piece,
   QueuedMessage,
 } from "@toyon/shared";
-import { DEFAULT_PERMISSION_MODE, nextNumbers } from "@toyon/shared";
+import { DEFAULT_PERMISSION_MODE, nextNumbers, relistChoice } from "@toyon/shared";
 import { UserError } from "../../core/errors.ts";
 import { fireAndForget, log } from "../../core/log.ts";
 import type { AgentAdapter, AskOpts, AskReply, AuthOutcome, FollowUp, Handed, SendOpts } from "../adapter.ts";
@@ -60,7 +60,14 @@ import {
 import { BackgroundTasks, claudeConfigDir } from "./background.ts";
 import { parseForm, toContent } from "./elicit.ts";
 import { endOfAsk, mapCommands, mapStopReason, mapUpdate, preempted, release, type ToolMemos } from "./map.ts";
-import { currentValues, type LiveOptions, type OptionCategory, readModeOption, readOptions } from "./options.ts";
+import {
+  currentName,
+  currentValues,
+  type LiveOptions,
+  type OptionCategory,
+  readModeOption,
+  readOptions,
+} from "./options.ts";
 import { parseRateLimit } from "./ratelimit.ts";
 import { STEER_METHOD, type SteerOutcome, steerOutcome, supportsSteering } from "./steering.ts";
 import type { AcpLink } from "./transport.ts";
@@ -158,8 +165,9 @@ export interface AcpSessionDeps {
    * value is the transcript's) and on a list re-read after a switch (that value is the switch). */
   onOptionsLearned?: (category: OptionCategory, choices: ModelChoice[], runs?: string) => void;
   /** the agent moved to another value in the category on its own (a slash command in the chat
-   * does). The record is expected to follow: the next turn re-applies the record before its
-   * prompt, so one that still named the old value would put it back. */
+   * does), or the record's value is one it will not take and the empty value, its own choice, is
+   * what stands. The record is expected to follow: the next turn re-applies the record before
+   * its prompt, so one that still named the old value would put it back. */
   onOptionChanged?: (category: OptionCategory, value: string) => void;
   /** the worktree's own title and branch, as a sentence after every message; read as each goes
    * out, since the agent names the row after its first turn and the person renames it at will */
@@ -1434,18 +1442,31 @@ export class AcpSession implements AgentAdapter {
     const opt = live.options.get(category);
     const wanted = this.d.option?.(category);
     if (!opt || !wanted || wanted === opt.current) return;
-    // an id the list lacks is refused by an adapter that checks values against it (wire.ts). The
-    // record was reconciled with the list as it was learned, so this is an effort the model has not
-    // got, or a list that moved under a session: said out loud, since the chip then reads the
-    // record and not what answers
-    if (!opt.ids.includes(wanted) && (category !== "model" || wireFlags(live.conn.spec.id).modelIdOffList)) {
+    // the record's id as this agent lists it now: the adapter renames its ids between versions,
+    // and the record follows the rename so the next turn finds it listed. An id off the list goes
+    // through to an adapter that takes one (wire.ts); one that checks values would refuse it.
+    const listed =
+      category === "model" ? relistChoice(wanted, opt.choices) : opt.ids.includes(wanted) ? wanted : undefined;
+    const target =
+      listed ?? (category === "model" && !wireFlags(live.conn.spec.id).modelIdOffList ? wanted : undefined);
+    if (target === undefined) {
       log.info(this.d.worktreeId, `acp: ${category} ${wanted} is not offered; ${opt.current} answers`);
+      // a model the agent does not list (one the account can no longer pay for) would otherwise
+      // read on the chip while another answers. The record is cleared to the agent's own choice,
+      // which is what answers, so the chat says so once and not on every turn. An effort is left
+      // alone: its list follows the model, and the next model may have it again.
+      if (category === "model") {
+        this.emit({ type: "model-switched", name: currentName(opt), asked: wanted, ts: Date.now() });
+        this.d.onOptionChanged?.(category, "");
+      }
       return;
     }
+    if (target !== wanted) this.d.onOptionChanged?.(category, target);
+    if (target === opt.current) return;
     const r = await live.conn.ctx.request(acp.methods.agent.session.setConfigOption, {
       sessionId: live.sessionId,
       configId: opt.id,
-      value: wanted,
+      value: target,
     });
     this.absorb(live, r.configOptions);
     this.emit({ type: "session-info", sessionId: live.sessionId, ...currentValues(live.options) });
@@ -1520,7 +1541,13 @@ export class AcpSession implements AgentAdapter {
       const before = live.options;
       this.absorb(live, params.update.configOptions);
       for (const [category, opt] of live.options) {
-        if (before.get(category)?.current !== opt.current) this.d.onOptionChanged?.(category, opt.current);
+        const was = before.get(category)?.current;
+        if (was === opt.current) continue;
+        this.d.onOptionChanged?.(category, opt.current);
+        // a model the person did not pick is news: the chip follows it, but nobody looks there
+        if (category === "model" && was !== undefined) {
+          this.emit({ type: "model-switched", name: currentName(opt), ts: Date.now() });
+        }
       }
     }
     // a picture a call returned is written as the tool-end that names it goes out; the http side

@@ -136,8 +136,8 @@ const CLAUDE: AdapterWire = {
         "reaches the SDK's setModel, which takes any id. Aliases resolve and the current value passes since " +
         "0.95.0; a free id still does not.",
       here:
-        "session.ts applyOption leaves a wanted id the list lacks unsent, and the hub moves a saved id onto " +
-        "the listed one or clears it as the list is learned (`listedModel`). Flag: the unsent check.",
+        "session.ts applyOption follows a wanted id to the one the list carries for it now (`relistChoice`) " +
+        "and leaves one the list lacks unsent, saying so in the chat. Flag: the unsent check.",
       upstream: "Owed: let a value off the list through for the model option. Then the picker offers what was typed.",
       open: true,
     },

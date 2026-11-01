@@ -420,6 +420,11 @@ export type AgentEvent =
   /** a graft appended another worktree's transcript here: what follows, up to the next marker or
    * the next message someone types, was said in that worktree before it was merged in and removed */
   | { type: "grafted"; title: string; branch: string; ts: number }
+  /** the chat runs another model than the one the chip asked for: the agent moved on its own
+   * (Claude does when the account cannot pay for the model, and on a `/model` typed in the chat),
+   * or the record asked for one the agent does not list (`asked`), which is left unsent. `name`
+   * is the model now running, in the agent's words. */
+  | { type: "model-switched"; name: string; asked?: string; ts: number }
   /** a land put this worktree's work on main: the daemon's word on it, kept on the transcript so
    * the row reads back after a reload. `mark` is the landing as the record keeps it, what landed
    * included; absent on a row written before marks said so. `url` is the pull request when the

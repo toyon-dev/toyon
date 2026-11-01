@@ -130,6 +130,8 @@ function fakeAgent(
     mcpHttp?: boolean;
     /** answer session/new only after this long, as an adapter still starting its SDK does */
     slowNew?: number;
+    /** more model rows after the two every fake lists */
+    models?: Array<{ value: string; name: string; description?: string }>;
   } = {},
 ): FakeAgent {
   const f: FakeAgent = {
@@ -180,6 +182,7 @@ function fakeAgent(
       options: [
         { value: "test-model", name: "Test Model" },
         { value: "big-model", name: "Big Model", description: "slower" },
+        ...(opts.models ?? []),
       ],
     },
     ...(opts.effort?.for.includes(f.model)
@@ -3397,6 +3400,7 @@ describe("AcpSession options", () => {
     let learned: Array<{ id: string; name: string }> = [];
     const runs: Array<string | undefined> = [];
     let model: string | undefined = "big-model";
+    const changed: string[] = [];
     const fake = fakeAgent(say("ok"));
     const w = world(fake, claudeSpec, 60_000, undefined, {
       option: (c) => (c === "model" ? model : undefined),
@@ -3405,6 +3409,7 @@ describe("AcpSession options", () => {
         learned = m;
         runs.push(r);
       },
+      onOptionChanged: (c, v) => changed.push(`${c}=${v}`),
     });
     w.session.send("one");
     await w.idle();
@@ -3423,11 +3428,41 @@ describe("AcpSession options", () => {
     w.session.send("three");
     await w.idle();
     expect(fake.configs).toEqual(["model=big-model"]);
-    // a model the agent does not offer is ignored rather than sent
+    expect(w.types()).not.toContain("model-switched");
+    // a model the agent does not offer is ignored rather than sent, the chat says what answers,
+    // and the record is cleared to the agent's choice so it is said once
     model = "nope";
     w.session.send("four");
     await w.idle();
     expect(fake.configs).toEqual(["model=big-model"]);
+    expect(w.events.filter((e) => e.type === "model-switched")).toEqual([
+      { type: "model-switched", name: "Big Model", asked: "nope", ts: expect.any(Number) },
+    ]);
+    expect(changed).toEqual(["model="]);
+    await w.session.close();
+  });
+
+  test("a model the list spells under another id is set by that id, and the record follows", async () => {
+    let model: string | undefined = "claude-fable-5-1[1m]";
+    const changed: string[] = [];
+    const fake = fakeAgent(say("ok"), { models: [{ value: "fable", name: "Fable 5.1" }] });
+    const w = world(fake, claudeSpec, 60_000, undefined, {
+      option: (c) => (c === "model" ? model : undefined),
+      onOptionChanged: (c, v) => {
+        changed.push(`${c}=${v}`);
+        if (c === "model") model = v;
+      },
+    });
+    w.session.send("one");
+    await w.idle();
+    expect(fake.configs).toEqual(["model=fable"]);
+    expect(changed).toEqual(["model=fable"]);
+    // the same model under a new name is not a switch
+    expect(w.types()).not.toContain("model-switched");
+    expect(infos(w.events).at(-1)).toEqual({ model: "fable" });
+    w.session.send("two");
+    await w.idle();
+    expect(fake.configs).toEqual(["model=fable"]);
     await w.session.close();
   });
 
@@ -3545,12 +3580,16 @@ describe("AcpSession options", () => {
     expect(fake.configs).toEqual(["model=big-model"]);
     expect(changed).toEqual(["model=test-model"]);
     expect(infos(w.events).at(-1)).toEqual({ model: "test-model" });
+    expect(w.events.filter((e) => e.type === "model-switched")).toEqual([
+      { type: "model-switched", name: "Test Model", ts: expect.any(Number) },
+    ]);
     // the next turn finds the record and the agent agreeing: nothing is put back, and the
     // re-listed choices with nothing moved report nothing
     w.session.send("two");
     await w.idle();
     expect(fake.configs).toEqual(["model=big-model"]);
     expect(changed).toEqual(["model=test-model"]);
+    expect(w.events.filter((e) => e.type === "model-switched")).toHaveLength(1);
     await w.session.close();
   });
 });

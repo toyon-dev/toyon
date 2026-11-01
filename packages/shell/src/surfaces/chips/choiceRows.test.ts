@@ -300,6 +300,15 @@ describe("rememberedChoice", () => {
     const { rows, shown } = agentModelRows(agents, "claude", rememberedChoice("claude-fable-5-1[1m]", now));
     expect(rows.find((r) => r.id === shown)?.label).toBe("Fable 5.1");
   });
+  test("a record's own request reads the same way on the chip", () => {
+    expect(choiceRows(now, "claude-fable-5-1[1m]", undefined, empty)).toMatchObject({
+      shown: "fable",
+      picked: "fable",
+    });
+    // a model the list lacks: the session will not send it, so the chip reads what answers
+    expect(choiceRows(now, "haiku", "opus", empty)).toMatchObject({ shown: "opus", picked: "opus" });
+    expect(choiceRows(now, "haiku", undefined, empty)).toMatchObject({ shown: "opus", picked: "opus" });
+  });
   test("left as remembered while the agent has listed nothing", () => {
     expect(rememberedChoice("fable", [])).toBe("fable");
   });

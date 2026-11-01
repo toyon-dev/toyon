@@ -331,8 +331,10 @@ function defaultAgent(
     onOptionChanged: (category, value) => {
       const w = d.state.requireWorktree(wt.id);
       const field = OPTION_FIELDS[category];
-      if (w[field] === value) return;
-      w[field] = value;
+      if ((w[field] ?? "") === value) return;
+      // empty is the agent's own choice: the field goes, as the empty option's set does
+      if (value) w[field] = value;
+      else delete w[field];
       d.state.save();
       d.hub.emit("worktreesChanged");
     },

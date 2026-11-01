@@ -2,7 +2,7 @@ import type { ModelChoice } from "@toyon/shared";
 import { useMemo } from "react";
 import { ChipPicker } from "../../ui/ChipPicker.tsx";
 import "./chips.css";
-import { choiceRows } from "./choiceRows.ts";
+import { choiceRows, rememberedChoice } from "./choiceRows.ts";
 
 /** One of an agent's advertised select options (its model, its effort level), shown where the
  * prompt is typed so what will answer is never hidden. The list is what the agent advertised the
@@ -57,7 +57,11 @@ export function OptionChip({
       onChange={onChange}
       onClose={onClose}
       className={className}
-      hint={value ? `asked for ${label}; click to change` : `${label}, the agent's choice; click to pick ${what}`}
+      hint={
+        rememberedChoice(value, choices)
+          ? `asked for ${label}; click to change`
+          : `${label}, the agent's choice; click to pick ${what}`
+      }
       placeholder={placeholder}
     />
   );

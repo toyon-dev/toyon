@@ -42,7 +42,6 @@ import {
   prTaken,
   type RefKind,
   type RepoInfo,
-  relistChoice,
   type ShipOp,
   type Shipping,
   sentAt,
@@ -512,16 +511,12 @@ export class WorktreeService {
     const restart = !!spare && profile !== undefined && profile !== resolveRun(repo, spare).profile;
     let carriedIn: Carried | undefined;
     let release: (() => void) | undefined;
-    // an id the agent stopped listing since the page remembered it is not what runs: dropped here,
-    // since a worktree is not refused over its model
-    const model = opts.model ? this.listedModel(agent, opts.model) : undefined;
-    if (opts.model && !model) log.info(agent, `does not list model ${opts.model}; the new worktree runs its default`);
     const stamps: ClaimStamps = {
       createdBy: opts.createdBy,
       // the spare's agent has no process yet; it reads the stamps on its first prompt
       agent,
       mode: opts.mode,
-      model,
+      model: opts.model,
       effort: opts.effort,
       from: opts.from,
       profile,
@@ -612,7 +607,7 @@ export class WorktreeService {
       ...(opts.createdBy ? { createdBy: opts.createdBy } : {}),
       ...(profile !== undefined ? { profile } : {}),
       ...(opts.mode ? { mode: opts.mode } : {}),
-      ...(model ? { model } : {}),
+      ...(opts.model ? { model: opts.model } : {}),
       ...(opts.effort ? { effort: opts.effort } : {}),
     };
     // before the setup reads the tree and before the agent's first look at it
@@ -978,48 +973,19 @@ export class WorktreeService {
   }
 
   /** which of its models the agent runs here, from the next turn on. An empty id means its own
-   * default. Held to the agent's list (`listedModel`): the agent ignores an id it has not got, so
-   * a record carrying one would have the default answering under a chip claiming otherwise. */
+   * default. Not checked against a list here: a record is a request, and the session applies it
+   * against the list of the agent that actually runs, following an id the adapter has since
+   * renamed and saying so in the chat when the model is gone. */
   setModel(worktreeId: string, model: string) {
-    const agent = this.d.state.requireWorktree(worktreeId).agent;
-    const listed = model ? this.listedModel(agent, model) : model;
-    if (listed === undefined) throw new UserError(`${agent} does not list model ${model}`);
-    this.setOption(worktreeId, "model", listed);
-  }
-
-  /** A model id as the agent lists it now: the id, the id the list carries for it since
-   * (`relistChoice`: the adapter's ids move between its versions), or nothing for one it does not
-   * list. Taken as given while the agent has listed nothing yet. */
-  private listedModel(agentId: string | undefined, model: string): string | undefined {
-    const choices = agentId ? this.d.state.cachedOptions(agentId, "model") : [];
-    return choices.length === 0 ? model : relistChoice(model, choices);
+    this.setOption(worktreeId, "model", model);
   }
 
   /** An agent's list for a category as a session or a check just read it (the hub's
-   * `optionsLearned`): cached per agent, and, for the model, every record of that agent asking for
-   * an id the list no longer carries moved to the id it carries for it now. One the list has no
-   * id for is kept as asked: the list is one process's answer, and two builds of the same agent
-   * spell their ids differently, so a record cleared against one list would lose the choice for
-   * good while the other build still honours it. An id the running agent has not got is harmless
-   * meanwhile (the session says so and lets the default answer). Effort is left to the session:
-   * its choices follow the model, and the list learned last is one model's. */
+   * `optionsLearned`): cached per agent, so the picker on a worktree whose session has not opened
+   * yet shows what the agent offered last time. No record is held to it: the list is one process's
+   * answer, and two builds of the same agent spell their ids differently. */
   learnOptions(agentId: string, category: OptionCategory, choices: ModelChoice[], runs?: string) {
-    if (!this.d.state.setCachedOptions(agentId, category, choices, runs)) return;
-    this.d.hub.emit("agentsChanged");
-    if (category !== "model") return;
-    let moved = false;
-    for (const wt of this.d.state.worktrees) {
-      const asked = wt.model;
-      if (wt.agent !== agentId || !asked) continue;
-      const now = relistChoice(asked, choices);
-      if (!now || now === asked) continue;
-      wt.model = now;
-      log.info(wt.id, `${agentId} lists model ${asked} as ${now} now`);
-      moved = true;
-    }
-    if (!moved) return;
-    this.d.state.save();
-    this.d.hub.emit("worktreesChanged");
+    if (this.d.state.setCachedOptions(agentId, category, choices, runs)) this.d.hub.emit("agentsChanged");
   }
 
   /** the effort level, the same way; its choices depend on the model, and one the model has not

@@ -1254,6 +1254,19 @@ export const ChatItemView = memo(function ChatItemView({
           <span className="daemon-text">{item.title}</span>
         </DaemonRow>
       );
+    case "switched":
+      // the chip follows the switch too, but nobody watches the chip mid-turn: the transcript is
+      // where a reply from another model than the one picked has to be explained
+      return (
+        <DaemonRow
+          icon="swap"
+          word="model"
+          tone="quiet"
+          below={item.asked ? `${item.asked} is not on the agent's list` : "the agent switched to it"}
+        >
+          <span className="daemon-text">{item.name}</span>
+        </DaemonRow>
+      );
     case "asked":
       // the row is Toyon's message to the agent, not the agent's: the glyph is the one the composer
       // sends with, and the word says the ask happened, since this row stands in for the offer

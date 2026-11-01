@@ -16,7 +16,7 @@ import { cssRules, declsOf, shellCss } from "./cssRules.ts";
  */
 
 const MIRROR = '.app[data-chat-side="left"]';
-const PINS = [".rail-panel", ".rail-list", ".rail-foot", ".rail-gut", ".rail .rail-main-strip"];
+const PINS = [".rail-panel", ".rail-list", ".rail-gut", ".rail .rail-main-strip"];
 
 describe("the rail's side is one switch", () => {
   test("every pin is written through a near or far pair", async () => {

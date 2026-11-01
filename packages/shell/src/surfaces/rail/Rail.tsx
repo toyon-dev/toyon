@@ -34,7 +34,7 @@ import { tip } from "../../ui/Tooltip.tsx";
 import { endCarry, startCarry } from "../chat/carried.ts";
 import { hasFiles } from "../chat/useIntake.ts";
 import { hhmm } from "../chips/baseNote.ts";
-import { ago, chord, dotClass, procTrouble, rowLabel, shipLabel, shipShown, stateLabel } from "../util.ts";
+import { ago, dotClass, procTrouble, rowLabel, shipLabel, shipShown, stateLabel } from "../util.ts";
 import "./rail.css";
 import { cx } from "../../ui/cx.ts";
 import { useOnChange } from "../../ui/hooks.ts";
@@ -83,7 +83,7 @@ export type RailPlacement = "strip" | "screen";
 export function Rail({ width, placement = "strip" }: { width?: number; placement?: RailPlacement }) {
   const onScreen = placement === "screen";
   // no hover: the kebab that shows on it never shows, so the seat it shares with the time takes a
-  // tap for the row's menu, and the strip takes a tap for the pin it would have peeked on
+  // tap for the row's menu, and the strip takes a tap to open the drawer it would have peeked
   const touch = useTouch();
   // a row's tip stands off the rail toward the centre, whichever edge the rail is at
   const tipSide = useTowardCentre("chat");
@@ -745,7 +745,7 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
   // opens into the layout and its own pin button closes it. A tap that lands on a row or a seat is
   // theirs and does not count; the ground between and under the rows is the strip's.
   return (
-    // biome-ignore lint/a11y/useKeyWithClickEvents: the keyboard's way to the pin is its chord, and the rows inside are buttons of their own
+    // biome-ignore lint/a11y/useKeyWithClickEvents: the keyboard's way to open the rail is its chord, and the rows inside are buttons of their own
     <div
       ref={railRef}
       className={cx(
@@ -939,19 +939,6 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
             </>
           )}
         </div>
-        {/* the pin is the strip's: on a screen there is nothing to pin open */}
-        {!onScreen && (
-          <div className="rail-foot">
-            <IconButton
-              icon="worktrees"
-              label="Worktree panel"
-              hint={chord("rail")}
-              tone="chrome"
-              on={railOpen}
-              onClick={() => dispatch({ a: "toggle-rail" })}
-            />
-          </div>
-        )}
       </div>
     </div>
   );

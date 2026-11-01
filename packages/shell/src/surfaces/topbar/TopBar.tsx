@@ -70,9 +70,10 @@ export function TopBar({ center }: { center: HTMLDivElement | null }) {
   // has no page to steer
   const paged = useStore((s) => s.archivedPage !== null || s.notesPage);
   const ready = !!active && previewUp(active) && !paged;
-  // each panel's toggle sits at its panel's end of the bar, so the two trade places with the chat's
-  // side; everything else in the bar stays where it is, zen at the far right included. The lead and
-  // the tools keep their places, so the cluster between them measures the same either way.
+  // each panel's toggle sits at its panel's end of the bar, so they trade places with the chat's
+  // side: the rail stands outside the chat dock, so its toggle is the outer of the pair at the
+  // chat's end. Everything else in the bar stays where it is, zen at the far right included. The
+  // lead and the tools keep their places, so the cluster between them measures the same either way.
   const chatLeft = useStore((s) => s.chatSide) === "left";
   // the panel toggles leave the bar on a first-run screen: their panes are hidden there, and a
   // disabled button still lights and explains itself on hover as if it might do something
@@ -96,12 +97,27 @@ export function TopBar({ center }: { center: HTMLDivElement | null }) {
       onClick={() => dispatch({ a: "toggle-chat" })}
     />
   );
+  // lit while the rail is kept open as a column; a hover peek is not that, so it stays unlit. The
+  // strip is always there, but with the rail collapsed this is the one control in view that says
+  // there is a panel to open
+  const railOpen = useStore((s) => s.railOpen);
+  const railToggle = !bare && (
+    <IconButton
+      icon="worktrees"
+      label="Worktree panel"
+      hint={chord("rail")}
+      tone="chrome"
+      on={railOpen}
+      onClick={() => dispatch({ a: "toggle-rail" })}
+    />
+  );
   return (
     <div className="top-bar" ref={barRef} data-float-up={floatUp || undefined}>
       {zen && <span className="bar-zen-title">{active?.worktree.title ?? "Toyon"}</span>}
       {/* the lead: what stands at the bar's start in flow, measured so the cluster clears it */}
       <span className="bar-lead" ref={leadRef}>
-        {chatLeft ? chatToggle : changesToggle}
+        {chatLeft ? railToggle : changesToggle}
+        {chatLeft && chatToggle}
         <ProjectPill />
         {/* what Toyon offers about itself, after the project it is scoped to */}
         {installEvt && (
@@ -121,7 +137,7 @@ export function TopBar({ center }: { center: HTMLDivElement | null }) {
         <RouteBar worktreeId={id} repoId={active?.repoId ?? null} ready={ready} left={nav.left} width={nav.width} />
       )}
       <span className="bar-grow" />
-      {/* right cluster: phone · settings · design · the panel toggle this edge holds · zen (zen last:
+      {/* right cluster: phone · settings · design · the panel toggles this edge holds · zen (zen last:
           it hides everything, so it sits at the edge). The terminal toggle lives in the composer: one
           shell per worktree, not app chrome. */}
       <span className="bar-tools" ref={toolsRef}>
@@ -150,6 +166,7 @@ export function TopBar({ center }: { center: HTMLDivElement | null }) {
           />
         )}
         {chatLeft ? changesToggle : chatToggle}
+        {!chatLeft && railToggle}
         {/* the one control the installed app's zen strip keeps: the strip is the window's title bar
             and stays anyway, and with no browser chrome around it, a lit toggle at the edge is the
             standing sign that this is a mode with a way out */}

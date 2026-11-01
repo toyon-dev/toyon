@@ -255,7 +255,8 @@
     }
     /* kept open: the rail is a column of its own, so it takes the width out of the layout and drops the
    shadow with it. Nothing overlaps, nothing to lift off the page. A screen is a drawer kept open
-   too, in every list below that draws one: the fourth reason beside hover, hold and the pin. */
+   too, in every list below that draws one: the fourth reason beside hover, hold and the toggle
+   in the top bar. */
     &.pinned,
     &.rail-screen {
       width: var(--rail-width);
@@ -276,39 +277,10 @@
     top: 0;
     right: var(--rail-near-r);
     left: var(--rail-near-l);
-    bottom: var(--row-height);
+    bottom: 0;
     width: var(--rail-inner);
     overflow-y: auto;
     background: var(--surface1);
-  }
-  /* the pin sits at the foot of the drawer, so a long list scrolls under it. It is the drawer's own
-   control, so it only exists while the drawer is open: in the strip there is nothing to pin yet. */
-  .rail-foot {
-    position: absolute;
-    right: var(--rail-near-r);
-    left: var(--rail-near-l);
-    bottom: 0;
-    width: var(--rail-inner);
-    /* the pin is a row of the drawer, so it takes the row height rather than a number of its own */
-    height: var(--row-height);
-    display: flex;
-    align-items: center;
-    /* at the dots' end: the 16px glyph sits in a 20px box, so 10px in puts it on their centre line */
-    justify-content: flex-end;
-    padding: 0 10px;
-    background: var(--surface1);
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity var(--rail-slide) ease var(--rail-wait);
-  }
-  .rail {
-    :where([data-hover]) &:hover .rail-foot,
-    &.hold .rail-foot,
-    &.pinned .rail-foot,
-    &.rail-screen .rail-foot {
-      opacity: 1;
-      pointer-events: auto;
-    }
   }
   /* Main's seat in the strip is a plus, drawn over the dot column out of the flow; as the panel
    opens it hands off to the plus in the row's own label and the dot underneath shows through, so
@@ -521,10 +493,6 @@
     & .rail-glyph {
       order: -1;
     }
-    /* the pin keeps the dots' end */
-    & .rail-foot {
-      flex-direction: row-reverse;
-    }
     /* the marker rides the panel's far edge, which is now the row's right */
     & .rail-item::before,
     & .rail-disc-item::before {
@@ -576,9 +544,7 @@
     box-shadow: inset 0 0 0 1.5px var(--ink2);
   }
   .rail-screen .rail-list {
-    /* the list runs to the bottom: the room at the foot was for the pin, which a screen has none of.
-       The last row clears the gesture bar a notched phone draws over the window. */
-    bottom: 0;
+    /* the last row clears the gesture bar a notched phone draws over the window */
     padding-bottom: env(safe-area-inset-bottom, 0px);
   }
   /* Two lines: the row's own, and under it what its tip says on a desk (rowLine in Rail.tsx). The
@@ -673,8 +639,8 @@
   [data-touch] .rail {
     /* the control column is the seat a tap opens the row's menu from (Rail.tsx), so it is a
        thumb's width rather than a pointer's */
-    /* the peek is a hover, which touch has none of (base.css), so the drawer opens by the pin,
-       which a tap on the strip toggles (Rail.tsx), or by the hold */
+    /* the peek is a hover, which touch has none of (base.css), so the drawer opens by the top
+       bar's toggle, which a tap on the strip stands in for (Rail.tsx), or by the hold */
     --rail-gut: 44px;
   }
   /* on a screen the control column holds nothing (see .rail-say), so it is a margin, not a seat;

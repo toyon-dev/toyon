@@ -423,6 +423,15 @@ describe("toolLabel", () => {
     expect(toolLabel({ name: "mcp__x__y", input: { command: "ls" } }).icon).toBe("folder");
     expect(toolLabel({ name: "unlisted", input: {} }).icon).toBe("dot");
     expect(toolLabel({ name: "constructor", input: {} }).icon).toBe("dot");
+    // Toyon's own tools arrive with the MCP prefix folded off: the handoff wears the glyph of the
+    // row it becomes and the worktrees tool the rail's, never the cube; entering plan mode wears
+    // the same swap as leaving it
+    expect(toolLabel({ name: "handoff", title: "handoff", input: { pieces: [] } })).toMatchObject({
+      name: "handoff",
+      icon: "spawn",
+    });
+    expect(toolLabel({ name: "worktrees", title: "worktrees", input: {} }).icon).toBe("worktrees");
+    expect(toolLabel({ name: "EnterPlanMode", title: "EnterPlanMode", input: {} }).icon).toBe("swap");
   });
 
   test("the glyph follows the command's verb where the kind only says `run`", () => {

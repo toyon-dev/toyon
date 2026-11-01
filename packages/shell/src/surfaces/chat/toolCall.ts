@@ -2,6 +2,7 @@ import {
   ASK_TOOL,
   CHECK_TOOL,
   emptyInput,
+  HANDOFF_TOOL,
   isWrittenKind,
   mcpTool,
   SHELL_TOOL,
@@ -9,6 +10,7 @@ import {
   splitSpanLines,
   TOOL_SEARCH,
   type ToolKind,
+  WORKTREES_TOOL,
   type WrittenKind,
   wordSpans,
   writingCall,
@@ -85,6 +87,14 @@ const NAME_ICON = new Map<string, IconName>([
   ["TaskOutput", "terminal"],
   // a packaged set of instructions loaded over the agent's own
   [SKILL_TOOL, "layers"],
+  // Toyon's own tools reach the shell under their bare names (the daemon folds the MCP prefix
+  // off), so the cube, which says a call went to a service of its own, would be wrong for a call
+  // that went to the thing the person is sitting in. The handoff wears the glyph of the "handed
+  // off" row it becomes; the worktrees tool lists the rail's rows and wears the rail's glyph.
+  [HANDOFF_TOOL, "spawn"],
+  [WORKTREES_TOOL, "worktrees"],
+  // the other half of ExitPlanMode, which the adapter kinds as a mode switch
+  ["EnterPlanMode", "swap"],
 ]);
 
 /** Claude loading a skill, the packaged instructions a person runs as a slash command. The adapter

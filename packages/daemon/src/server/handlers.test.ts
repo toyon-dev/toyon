@@ -1762,7 +1762,7 @@ describe("handlers", () => {
     expect(end.output).toMatch(/^```\nstarted\n```\n(killed \(SIGTERM\)|exit 143)$/);
   });
 
-  test("register-repo opens a repo without a word back; forget-repo refuses while task worktrees remain", async () => {
+  test("register-repo opens a repo without a word back; forget-repo archives its task worktrees first", async () => {
     const { services, ctx, replies, repo } = make();
     const hubEvents: string[] = [];
     services.hub.on("reposChanged", () => hubEvents.push("repos"));
@@ -1781,13 +1781,14 @@ describe("handlers", () => {
     r.needsSetup = false;
     await dispatch({ t: "create-worktree", repoId: r.id, prompt: "x" }, ctx, services);
     const task = services.state.worktrees.find((x) => x.kind === "worktree")!;
-    await expect(dispatch({ t: "forget-repo", repoId: r.id }, ctx, services)).rejects.toBeInstanceOf(UserError);
-    expect(services.state.repos.length).toBe(1);
-
-    await dispatch({ t: "archive-worktree", worktreeId: task.id }, ctx, services);
     await dispatch({ t: "forget-repo", repoId: r.id }, ctx, services);
     expect(services.state.repos).toEqual([]);
     expect(services.state.worktrees).toEqual([]);
+    // the task went to the archive, not away: it is listed again once the project is
+    await dispatch({ t: "register-repo", path: repo }, ctx, services);
+    expect(services.worktrees.archived(services.state.repos[0]!.id)).toMatchObject([{ id: task.id }]);
+    await dispatch({ t: "forget-repo", repoId: services.state.repos[0]!.id }, ctx, services);
+    expect(services.state.repos).toEqual([]);
     expect(replies.some((m) => m.t === "shipped")).toBe(false);
     // the checkout itself is untouched
     expect(existsSync(join(repo, "README.md"))).toBe(true);

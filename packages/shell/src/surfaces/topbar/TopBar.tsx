@@ -208,6 +208,7 @@ function ProjectPill() {
   const repo = useActiveWorktreeRepo();
   // the menu's verbs act on the project named, and on a guest offer the switch to its own rail
   const railRepoId = useStore((s) => s.activeRepoId);
+  const rows = useStore((s) => s.rows);
   const repos = useStore((s) => s.repos);
   // the pill opens the switcher, so one level in is the switch itself, the roomier form the
   // switcher's folder button opens, and the open project's own verbs, the ones its row carries
@@ -227,7 +228,7 @@ function ProjectPill() {
           onClick: () => dispatch({ a: "open", overlay: { kind: "projects", form: "disk" } }),
         },
       ],
-      repo ? projectItems(repo, railRepoId, { sock, dispatch }) : [],
+      repo ? projectItems(repo, railRepoId, { sock, dispatch }, rows) : [],
     ]);
   // the other forms draw over the preview instead; this is only the panel that drops out of here
   const open = useStore((s) => s.overlay?.kind === "projects" && s.overlay.form === "pill");

@@ -266,7 +266,7 @@ export function ProjectPicker({
           : r.kind === "repo" && r.machine
             ? machineItems(machines, r.machine.origin)
             : r.kind === "repo"
-              ? projectItems(r.repo, current, deps)
+              ? projectItems(r.repo, current, deps, rows)
               : r.kind === "pending"
                 ? importItems(r.pending, deps)
                 : []

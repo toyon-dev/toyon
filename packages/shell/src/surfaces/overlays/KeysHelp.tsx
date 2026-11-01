@@ -44,6 +44,7 @@ export function KeysHelp() {
   const agents = useStore((s) => s.agents);
   // the worktree's project, not the rail's: a guest row's settings are its own project's
   const repo = useActiveWorktreeRepo();
+  const rows = useStore((s) => s.rows);
   const open = (a: Action) => {
     dispatch({ a: "palette-return", v: { mode: "keys", q: "" } });
     dispatch(a);
@@ -67,7 +68,7 @@ export function KeysHelp() {
                   className="keys-chip"
                   data-tip={`edit the install + start commands in ${repo.configFile}`}
                   onClick={() => dispatch({ a: "open", overlay: { kind: "setup", repoId: repo.id } })}
-                  {...cm.contextMenu(() => projectItems(repo, repo.id, { sock, dispatch }))}
+                  {...cm.contextMenu(() => projectItems(repo, repo.id, { sock, dispatch }, rows))}
                 >
                   <span className="keys-v">{Object.keys(repo.config.run).join(" + ") || "not set up"}</span>
                 </Button>

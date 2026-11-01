@@ -7,6 +7,7 @@ import { basename, dirname, join } from "node:path";
 import {
   baseIsRemote,
   type ConfigFileKind,
+  canArchive,
   configSibling,
   isLocalConfigFile,
   landPolicy,
@@ -326,18 +327,13 @@ export class RepoRegistry {
   }
 
   /** drop a repo from the daemon: its main runtime and spare stop, their records go, the checkout
-   * stays untouched. Task worktrees are the person's work in progress, so a repo that still has
-   * any is refused rather than silently removed with them. */
+   * stays untouched. Task worktrees are the person's work in progress, so they are archived first,
+   * chats and work kept, and the archive lists them again when the project is opened again. */
   async forget(repoId: string): Promise<void> {
-    const repo = this.d.state.requireRepo(repoId);
+    this.d.state.requireRepo(repoId);
     const mine = this.d.state.worktrees.filter((w) => w.repoId === repoId);
-    const tasks = mine.filter((w) => w.kind !== "main" && w.kind !== "spare");
-    if (tasks.length > 0) {
-      throw new UserError(
-        `${repo.name} still has ${tasks.length} worktree${tasks.length === 1 ? "" : "s"}; archive them first`,
-      );
-    }
     this.stopWatcher(repoId);
+    for (const wt of mine.filter((w) => canArchive(w))) await this.d.worktrees.archiveWorktree(wt.id);
     for (const wt of mine.filter((w) => w.kind === "spare")) await this.d.worktrees.discardWorktree(wt.id);
     for (const wt of mine.filter((w) => w.kind === "main")) {
       await this.d.runtime.stop(wt.id);

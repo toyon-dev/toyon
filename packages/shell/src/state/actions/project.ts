@@ -1,4 +1,11 @@
-import type { ClientMsg, PendingRepo, RepoInfo } from "@toyon/shared";
+import {
+  type ClientMsg,
+  canArchive,
+  isOwned,
+  type PendingRepo,
+  type RepoInfo,
+  type WorktreeStatus,
+} from "@toyon/shared";
 import { splitTypedPath } from "../../surfaces/overlays/projectPicker.ts";
 import { grouped, type MenuEntry, type MenuItem } from "../../ui/menu.ts";
 import type { Deps } from "./deps.ts";
@@ -39,8 +46,15 @@ export function importItems(p: PendingRepo, { sock, dispatch }: Deps): MenuEntry
 /** a project: switch to it, then change how it runs or take it off the list. The menu is always
  * about one project (its row, the pill), so the lines do not repeat its name; the palette appends
  * it. The setup pane is the form over the project's settings file, and the detail names that file,
- * since it is the thing a person would otherwise go looking for. */
-export function projectItems(r: RepoInfo, activeRepoId: string | null, { sock, dispatch }: Deps): MenuEntry[] {
+ * since it is the thing a person would otherwise go looking for. A forget archives the project's
+ * worktrees first, so the question names how many, since that is what the press costs. */
+export function projectItems(
+  r: RepoInfo,
+  activeRepoId: string | null,
+  { sock, dispatch }: Deps,
+  rows: readonly WorktreeStatus[],
+): MenuEntry[] {
+  const tasks = rows.filter((w) => isOwned(w) && w.worktree.repoId === r.id && canArchive(w.worktree)).length;
   const go: MenuItem[] = [];
   if (r.id !== activeRepoId) {
     go.push({
@@ -61,14 +75,18 @@ export function projectItems(r: RepoInfo, activeRepoId: string | null, { sock, d
       label: "forget project…",
       danger: true,
       onClick: () => {
-        if (
-          window.confirm(
-            `Forget ${r.name}?\n\nIts procs stop, it leaves the project list, and the chat on main is deleted. The checkout is not touched, and archived worktrees come back when you open it again.`,
-          )
-        )
-          sock?.send({ t: "forget-repo", repoId: r.id });
+        if (window.confirm(forgetQuestion(r.name, tasks))) sock?.send({ t: "forget-repo", repoId: r.id });
       },
     },
   ];
   return grouped([go, manage]);
+}
+
+/** what forgetting costs, with the worktrees it archives on the way when there are any */
+export function forgetQuestion(name: string, tasks: number): string {
+  const archived =
+    tasks === 0
+      ? ""
+      : `Its ${tasks === 1 ? "worktree is" : `${tasks} worktrees are`} archived first, with the chats, commits and uncommitted changes kept. `;
+  return `Forget ${name}?\n\n${archived}Its procs stop, it leaves the project list, and the chat on main is deleted. The checkout is not touched, and archived worktrees come back when you open it again.`;
 }

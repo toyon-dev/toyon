@@ -368,6 +368,21 @@ describe("archive", () => {
     await w.repos.forget(repoId);
     expect(existsSync(transcriptPathFor(w.paths.transcriptsDir, main.id))).toBe(false);
   });
+
+  test("forgetting a project archives its worktrees first, work kept for when it is opened again", async () => {
+    const repoId = await registered();
+    const { wt, head } = await workedOn(repoId);
+    await w.repos.forget(repoId);
+    expect(w.state.repos.find((r) => r.id === repoId)).toBeUndefined();
+    expect(w.state.worktree(wt.id)).toBeUndefined();
+    expect(existsSync(wt.path)).toBe(false);
+    expect(await refExists(wt.id)).toBe(true);
+    // the archive is listed by project, so it is back once the project is
+    const again = await registered();
+    expect(w.worktrees.archived(again)).toMatchObject([{ id: wt.id, restorable: true }]);
+    const back = await w.worktrees.restore(wt.id);
+    expect(sh(back.path, "git", "rev-parse", "HEAD")).toBe(head);
+  });
 });
 
 // An archived worktree's page shows the changes panel from what git kept: every commit the worktree

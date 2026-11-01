@@ -90,7 +90,7 @@ export function buildCommands(
   addItems(appItems(state, deps).filter((it) => !isItem(it) || it.id !== "commands"));
   // the open project's own verbs (its settings, forget), each saying which project; the others
   // are listed by name below
-  if (repo) addItems(projectItems(repo, repo.id, deps), { scope: "project", name: repo.name });
+  if (repo) addItems(projectItems(repo, repo.id, deps, state.rows), { scope: "project", name: repo.name });
   // the page's own verbs, for a worktree that has a page: a project with nothing to run has none
   if (id && !isChatCentred(state)) {
     add(

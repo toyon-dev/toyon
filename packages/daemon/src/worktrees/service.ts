@@ -575,7 +575,7 @@ export class WorktreeService {
       }
       release?.();
       if (restart) this.restartProcs(wt);
-      this.nameOrAsk(wt, task, given);
+      await this.nameOrAsk(wt, task, given);
       if (carriedIn?.unmoved) throw new UserError(carriedIn.unmoved, { delivered: true });
       return wt;
     }
@@ -629,7 +629,7 @@ export class WorktreeService {
       attachments,
       ...(born ? { handed: born.handed } : {}),
     });
-    this.nameOrAsk(wt, task, given);
+    await this.nameOrAsk(wt, task, given);
     if (carried.unmoved) throw new UserError(carried.unmoved, { delivered: true });
     return wt;
   }
@@ -652,13 +652,20 @@ export class WorktreeService {
   }
 
   /** the branch follows the title: a title given at birth moves it now, as the namer's answer
-   * would have, and the namer is never asked; without one the namer is */
-  private nameOrAsk(wt: WorktreeInfo, task: string, given: string | undefined) {
+   * would have, and the namer is never asked; without one the namer is. The move is awaited, so
+   * the branch create returns is the one the worktree keeps: a handoff copies it onto its origin
+   * and siblings at once, and a copy made before the move names a branch that is gone. */
+  private async nameOrAsk(wt: WorktreeInfo, task: string, given: string | undefined) {
     if (given === undefined) {
       this.scheduleNaming(wt, task);
       return;
     }
-    fireAndForget(wt.id, this.rename(wt.id, given), "branch for the given title");
+    try {
+      await this.rename(wt.id, given);
+    } catch (e) {
+      // the title is on the row either way; a branch git would not move stays where it is
+      log.warn(wt.id, "branch for the given title", e);
+    }
   }
 
   /** What became of main's uncommitted work when a worktree was made from it. Asked to `move`, the

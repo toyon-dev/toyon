@@ -890,12 +890,15 @@ describe("read off the plan", () => {
     ]);
     const before = agentOf(a.id).sent.length;
     w.hub.emit("landed", x.id);
-    await until(() => madeTitled("First") !== undefined);
+    // the row is in before its branch has moved to the title; the queue is pointed at it after
+    await until(() => w.state.worktree(a.id)!.queued?.some((q) => "id" in q.after) === true);
+    expect(madeTitled("First")!.branch).toBe("toyon/first");
     w.hub.emit("landed", madeTitled("First")!.id);
     await until(() => madeTitled("Second") !== undefined);
     const second = madeTitled("Second")!;
+    await until(() => w.state.worktree(a.id)!.awaits !== undefined);
     expect(w.state.worktree(a.id)!.awaits).toEqual([
-      { id: second.id, branch: second.branch, title: "Second", pieces: ["Mine"] },
+      { id: second.id, branch: "toyon/second", title: "Second", pieces: ["Mine"] },
     ]);
     await settle();
     expect(agentOf(a.id).sent).toHaveLength(before);

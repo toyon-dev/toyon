@@ -1,7 +1,7 @@
 import { emptyInput, isEditTool, isWrittenKind, SHELL_TOOL, TOOL_SEARCH, writingCall } from "@toyon/shared";
 import { type ChatItem, startsTurn } from "../../state/store.ts";
 import { thoughtLine } from "./thought.ts";
-import { isBackgroundSpawn, isGuardian, toolLabel } from "./toolCall.ts";
+import { isBackgroundSpawn, isGuardian, loadedTool, toolLabel } from "./toolCall.ts";
 
 /** An agent working through one file writes it in several calls, one hunk each, and the transcript
  * printed a line per call: four rows reading "edit menu.ts" with nothing to tell them apart. A run
@@ -136,31 +136,66 @@ function cutOff(item: ToolItem): boolean {
   return !!item.cut || (!item.output && writingCall({ name: item.name, kind: item.toolKind }, item.input));
 }
 
-/** A tool load that has done its work and been followed by something. Claude keeps the schema of
- * a seldom-used tool out of its prompt and loads it with a ToolSearch the moment before the call,
- * so the row ("loaded WebFetch") is the call under it said once more, a beat early, and a
- * transcript that flips to plan mode or fetches a page prints two rows for the one thing. The row
- * stays while the load runs, where its shine is what says the agent is busy, and until the next
- * thing lands, which takes its place rather than leaving a hole: a transcript's last item is kept,
- * since a load nothing followed is the one case the row says something the next row does not. */
-function settledLoad(item: ToolItem, last: boolean): boolean {
-  return item.name === TOOL_SEARCH && item.done && !item.isError && !last;
+/** the opening each load stands in as, kept per load so the row's memo sees the same call again */
+const openings = new WeakMap<ToolItem, ToolItem>();
+
+/** A tool load, as the row it leaves, or null for none. Claude keeps the schema of a seldom-used
+ * tool out of its prompt and loads it with a ToolSearch the moment before the call, so a row for
+ * the load ("loaded WebFetch") is the call under it said once more, a beat early, and a transcript
+ * that fetched a page printed two rows for the one thing. While the load runs nothing prints: the
+ * mark under the log says busy, and a dot with no words beside it said less. Once it returns, and
+ * until the call lands, the row is that call's opening, the loaded tool's glyph shining as it does
+ * for a call of its own whose input is not in, so the fetch takes the slot it was already in. A load
+ * with anything after it is gone, and so is one the turn ended on: the call it was for is the
+ * record, and a load nothing followed was preparation for nothing. A load by keywords found a list
+ * rather than a tool and keeps its own row ("looked for a tool"), until the next thing lands; one
+ * that failed ran into something worth reading, and stays. */
+function loadRow(item: ToolItem, last: boolean, busy: boolean): ToolItem | null {
+  if (item.name !== TOOL_SEARCH || item.isError) return item;
+  if (!item.done) return null;
+  if (!loadedTool(item)) return last ? item : null;
+  if (!last || !busy) return null;
+  let opening = openings.get(item);
+  if (!opening) {
+    const loaded = loadedTool(item)!;
+    const { output: _output, title: _title, toolKind: _kind, ...rest } = item;
+    opening = { ...rest, name: loaded.name, input: {}, done: false, ...(loaded.kind ? { toolKind: loaded.kind } : {}) };
+    openings.set(item, opening);
+  }
+  return opening;
 }
 
-export function groupTools(items: ChatItem[], roots: string[]): ChatEntry[] {
+/** a tool load that has returned and whose call is still to come: the agent is writing it, as
+ * it writes a call of its own whose input is not in, and its row at the foot says so (loadRow) */
+function writingLoadedCall(item: ChatItem | undefined, busy: boolean): boolean {
+  return (
+    busy &&
+    item?.kind === "tool" &&
+    item.name === TOOL_SEARCH &&
+    item.done &&
+    !item.isError &&
+    loadedTool(item) !== null
+  );
+}
+
+/** `busy` is whether the agent is in a turn: what says a load with nothing after it yet is one
+ * whose call is still being written, rather than one the turn ended on */
+export function groupTools(items: ChatItem[], roots: string[], busy = false): ChatEntry[] {
   const spawns = spawnIds(items);
   const out: ChatEntry[] = [];
   // the run each spawn is filling, and the key its newest row groups on: a subagent's calls
   // interleave with the main agent's and with another subagent's, and each run groups on its own
   const runs = new Map<string, { entry: SpawnEntry; key: string }>();
   let key = "";
-  for (const [at, item] of items.entries()) {
-    if (item.kind !== "tool") {
+  for (const [at, raw] of items.entries()) {
+    if (raw.kind !== "tool") {
       key = "";
-      out.push({ at, item });
+      out.push({ at, item: raw });
       continue;
     }
-    if (cutOff(item) || settledLoad(item, at === items.length - 1)) continue;
+    if (cutOff(raw)) continue;
+    const item = loadRow(raw, at === items.length - 1, busy);
+    if (!item) continue;
     if (spawns.has(item.id)) {
       key = "";
       const entry: SpawnEntry = { at, spawn: item, run: [], end: at };
@@ -283,13 +318,21 @@ export function placeSpawns(
  * row is open with the subagent's rows stacked under it, so the shine on its line is the first
  * thing the tailing log scrolls off the top, and the work in that window is counted by
  * subagentsAtWork instead. A spawn whose brief has not arrived is the exception: the agent is
- * writing it, which is its own work. */
-export function ownCallRunning(items: ChatItem[]): boolean {
+ * writing it, which is its own work. A tool load has no row while it runs (loadRow), so it is not
+ * in flight here either, or the foot would show nothing for it; once it has returned, the call it
+ * was for is being written, on the row at the foot that shines for it, and that is in flight. */
+export function ownCallRunning(items: ChatItem[], busy = false): boolean {
   const spawns = spawnIds(items);
+  if (writingLoadedCall(items.at(-1), busy)) return true;
   // a command running in the background is not waited on either: its row floats and shines for it
   return items.some(
     (i) =>
-      i.kind === "tool" && !i.done && !i.parentToolId && !i.background && (!spawns.has(i.id) || emptyInput(i.input)),
+      i.kind === "tool" &&
+      !i.done &&
+      !i.parentToolId &&
+      !i.background &&
+      i.name !== TOOL_SEARCH &&
+      (!spawns.has(i.id) || emptyInput(i.input)),
   );
 }
 

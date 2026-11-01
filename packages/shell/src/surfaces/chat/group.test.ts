@@ -13,6 +13,7 @@ import {
   runCalls,
   runningInRun,
   spawnsAtWork,
+  type ToolEntry,
   type ToolItem,
 } from "./group.ts";
 
@@ -446,7 +447,7 @@ describe("groupTools", () => {
     expect(shape([tool("edit", "/wt/b.ts")], ["/wt"])).toEqual([{ at: 0, n: 1 }]);
   });
 
-  test("a tool load is a row only while it runs or until something follows it", () => {
+  test("a tool load is the opening of the call it was for, and no row of its own", () => {
     // Claude's ToolSearch, as the daemon sends it: no kind of its own, the sentence as its title
     const load = (extra: Partial<ChatItem> = {}) =>
       tool("other", "", {
@@ -456,25 +457,45 @@ describe("groupTools", () => {
         ...extra,
       });
     const fetch = tool("fetch", "", { name: "WebFetch", title: "Fetch", input: { url: "https://x.y" } });
-    // settled and followed by the call it loaded: the call is the row
-    expect(shape([text("a"), load(), fetch])).toEqual([
-      { at: 0, n: 0 },
-      { at: 2, n: 1 },
-    ]);
-    // still running: the row shines for it
-    expect(shape([load({ done: false })])).toEqual([{ at: 0, n: 1 }]);
-    // settled with nothing after it yet: the row holds its place until the next thing lands
-    expect(shape([text("a"), load()])).toEqual([
+    const busy = (items: ChatItem[]) => groupTools(items, [], true);
+    // running: nothing prints, the mark under the log says busy
+    expect(busy([text("a"), load({ done: false })]).map(shapeOf)).toEqual([{ at: 0, n: 0 }]);
+    // returned, with the agent writing the call: the call's own row, open, under the loaded
+    // tool's glyph, in the slot the call takes when it lands
+    const returned = load() as ToolItem;
+    const opening = busy([text("a"), returned]);
+    expect(opening.map(shapeOf)).toEqual([
       { at: 0, n: 0 },
       { at: 1, n: 1 },
     ]);
+    const row = (opening[1] as ToolEntry).tools[0]!;
+    expect(row).toMatchObject({ id: returned.id, name: "WebFetch", toolKind: "fetch", input: {}, done: false });
+    expect(row).not.toHaveProperty("title");
+    // the same call again on the next pass, so the row's memo holds
+    expect((busy([text("a"), returned])[1] as ToolEntry).tools[0]).toBe(row);
+    // the call landed: it is the row
+    expect(busy([text("a"), returned, fetch]).map(shapeOf)).toEqual([
+      { at: 0, n: 0 },
+      { at: 2, n: 1 },
+    ]);
+    // the turn ended on it: nothing ran, so there is nothing to show
+    expect(shape([text("a"), load()])).toEqual([{ at: 0, n: 0 }]);
+    // a thought landing after it is the next thing, the same as a call
+    expect(busy([load(), thought("Now the fetch.")]).map(shapeOf)).toEqual([{ at: 1, n: 0 }]);
     // one that failed ran into something worth reading, and stays
     expect(shape([load({ isError: true }), fetch])).toEqual([
       { at: 0, n: 1 },
       { at: 1, n: 1 },
     ]);
-    // a thought landing after it is the next thing, the same as a call
-    expect(shape([load(), thought("Now the fetch.")])).toEqual([{ at: 1, n: 0 }]);
+    // several loaded at once: the first is the one the call is read as
+    const two = busy([load({ input: { query: "select:mcp__toyon__worktrees,WebFetch" } })]);
+    expect((two[0] as ToolEntry).tools[0]).toMatchObject({ name: "mcp__toyon__worktrees", done: false });
+    expect((two[0] as ToolEntry).tools[0]).not.toHaveProperty("toolKind");
+    // by keywords: a list was found, not a tool, and the row says so until the next thing lands
+    const search = load({ title: "looked for a tool: notebook", input: { query: "notebook jupyter" } });
+    expect(busy([search]).map(shapeOf)).toEqual([{ at: 0, n: 1 }]);
+    expect(shape([search])).toEqual([{ at: 0, n: 1 }]);
+    expect(shape([search, fetch])).toEqual([{ at: 1, n: 1 }]);
   });
 
   test("two subagents reading one file do not fold into each other's row", () => {
@@ -704,6 +725,25 @@ describe("ownCallRunning", () => {
   test("a call the main agent runs itself is its own motion, until it lands", () => {
     expect(ownCallRunning([text("Hi"), tool("execute", "", { done: false })])).toBe(true);
     expect(ownCallRunning([text("Hi"), tool("execute", "")])).toBe(false);
+  });
+
+  test("a tool load is not in flight while it runs, and its call is once it has returned", () => {
+    const load = (extra: Partial<ChatItem> = {}) =>
+      tool("other", "", {
+        name: "ToolSearch",
+        title: "loaded WebFetch",
+        input: { query: "select:WebFetch" },
+        ...extra,
+      });
+    // no row for the running load, so the foot's mark is what says busy
+    expect(ownCallRunning([text("Hi"), load({ done: false })], true)).toBe(false);
+    // returned, in a turn: the row at the foot shines for the call being written
+    expect(ownCallRunning([text("Hi"), load()], true)).toBe(true);
+    // the turn ended on it, or something came after it: nothing is being written on it
+    expect(ownCallRunning([text("Hi"), load()])).toBe(false);
+    expect(ownCallRunning([load(), text("Hi")], true)).toBe(false);
+    // by keywords: a row of its own, done, and nothing is written on it
+    expect(ownCallRunning([load({ input: { query: "notebook" } })], true)).toBe(false);
   });
 
   test("a spawn waiting on its subagent is not the main agent moving, whichever way it is marked", () => {

@@ -97,6 +97,37 @@ const NAME_ICON = new Map<string, IconName>([
   ["EnterPlanMode", "swap"],
 ]);
 
+/** The kind Claude's adapter gives each of its own tools, for the one call the shell shapes before
+ * the adapter has sent it: the opening of the call a tool load is for (loadedTool). A name not here
+ * has no kind, and its row wears the dot, or the glyph its name picks (NAME_ICON, the cube). */
+const CLAUDE_TOOL_KIND = new Map<string, ToolKind>([
+  ["Read", "read"],
+  ["Edit", "edit"],
+  ["Write", "edit"],
+  ["MultiEdit", "edit"],
+  ["NotebookEdit", "edit"],
+  ["Bash", "execute"],
+  ["Grep", "search"],
+  ["Glob", "search"],
+  ["WebSearch", "search"],
+  ["WebFetch", "fetch"],
+  ["EnterPlanMode", "switch_mode"],
+  ["ExitPlanMode", "switch_mode"],
+]);
+
+/** The tool a load fetched the schema of, which is the call that most likely comes next: Claude
+ * keeps a seldom-used tool out of its prompt and loads it the moment before calling it. The first
+ * name where several were loaded at once. Null for a load by keywords, which found a list rather
+ * than a tool, and until the query is in. */
+export function loadedTool(call: ToolCall): { name: string; kind?: ToolKind } | null {
+  if (call.name !== TOOL_SEARCH) return null;
+  const names = /^select:(.*)$/.exec(field(call, "query").trim());
+  const name = names?.[1]?.split(",")[0]?.trim();
+  if (!name) return null;
+  const kind = CLAUDE_TOOL_KIND.get(name);
+  return kind ? { name, kind } : { name };
+}
+
 /** Claude loading a skill, the packaged instructions a person runs as a slash command. The adapter
  * titles every such call "Load skill: x", whether the skill only loaded or ran forked for a minute
  * across twenty calls (its calls then nest under the row, which wears the fork glyph), so the row

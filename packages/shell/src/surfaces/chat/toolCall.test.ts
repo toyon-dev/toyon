@@ -6,6 +6,7 @@ import {
   diffLines,
   guardianHint,
   isGuardian,
+  loadedTool,
   parseToolOutput,
   relPath,
   toolBlocks,
@@ -260,6 +261,19 @@ describe("toolLabel", () => {
       input: { query: "select:WebSearch,WebFetch" },
     };
     expect(toolLabel(loader)).toMatchObject({ name: "", icon: "dot", hint: "loaded WebSearch, WebFetch" });
+  });
+
+  test("a load names the tool its call is for, the first where several came at once", () => {
+    const load = (query: string) => ({ name: "ToolSearch", toolKind: "other" as const, input: { query } });
+    expect(loadedTool(load("select:WebFetch"))).toEqual({ name: "WebFetch", kind: "fetch" });
+    expect(loadedTool(load("select:WebSearch,WebFetch"))).toEqual({ name: "WebSearch", kind: "search" });
+    // a tool the adapter kinds for itself: the row wears the glyph its name picks, or the cube
+    expect(loadedTool(load("select:Monitor"))).toEqual({ name: "Monitor" });
+    expect(loadedTool(load("select:mcp__toyon__worktrees"))).toEqual({ name: "mcp__toyon__worktrees" });
+    // by keywords, or before the query is in: no one tool
+    expect(loadedTool(load("notebook jupyter"))).toBeNull();
+    expect(loadedTool({ name: "ToolSearch", input: {} })).toBeNull();
+    expect(loadedTool({ name: "WebFetch", input: { query: "select:WebFetch" } })).toBeNull();
   });
 
   test("the name stays where the glyph does not say the tool", () => {

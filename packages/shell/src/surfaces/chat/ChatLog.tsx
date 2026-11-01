@@ -397,8 +397,10 @@ export function ChatLog({
   const root = wt?.path ?? archived?.path ?? found?.path;
   const roots = useMemo(() => (root ? [root] : []), [root]);
   // calls that did the same thing to the same file, back to back, are one row carrying a count,
-  // and a subagent's calls are the run under the row that started it
-  const grouped = useMemo(() => groupTools(items, roots), [items, roots]);
+  // and a subagent's calls are the run under the row that started it. The turn's state is in it
+  // for one row: a tool load at the foot is the next call's opening while the agent is in a turn
+  // and nothing once the turn ended on it (loadRow in group.ts)
+  const grouped = useMemo(() => groupTools(items, roots, busy), [items, roots, busy]);
   // A subagent at work is not in the transcript yet: its row floats at the foot of the log, under
   // everything the main agent has done since, shining with its count ticking, and joins the flow
   // where its work ended once it is done (placeSpawns in group.ts). Each floating row carries its
@@ -470,7 +472,7 @@ export function ChatLog({
   // says who is working is where the reader looks for how long (ToolRow hands the stamp on to the
   // subagent's executing call once the fold is open). A stalled thought has no row to count on,
   // so its silence alone is still said here.
-  const calling = ownCallRunning(items);
+  const calling = ownCallRunning(items, busy);
   const fanned = floating.length > 0;
   const moving = streaming >= 0 || calling || fanned;
   // The gap between an edit returning and the next call: the edit row keeps its shine for the

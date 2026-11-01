@@ -2,7 +2,7 @@ import type { PickMeta } from "@toyon/shared";
 import { grouped, type MenuEntry, type MenuItem } from "../../ui/menu.ts";
 import { openByPath } from "../openOutside.ts";
 import { copyImage, copyText, copyTextFrom, type Deps, openOutItem } from "./deps.ts";
-import { daemonHost, revealItems } from "./editor.ts";
+import { daemonHost, openedOnDaemonMachine, revealItems } from "./editor.ts";
 import { openFile, openFolder } from "./file.ts";
 
 /** what a chip can do besides what it is: opened at full size when the menu is on the chip and
@@ -65,7 +65,7 @@ export function fileItems(file: { href?: string }, ui: ChipUi = {}, kept?: Kept)
 export type ChatLink =
   | { kind: "out"; href: string }
   | { kind: "file"; file: { path: string; line?: number; folder?: true } }
-  | { kind: "outside"; href: string; path: string; line?: number }
+  | { kind: "outside"; href: string; path: string; line?: number; folder?: true }
   | { kind: "path"; path: string }
   | { kind: "worktree"; id: string; branch: string; archived: boolean };
 
@@ -85,6 +85,10 @@ export function linkOpener(link: ChatLink, worktreeId: string | null | undefined
     const { id, archived } = link;
     return () => deps.dispatch(archived ? { a: "open-archived", id } : { a: "activate", id });
   }
+  // a folder outside the worktree has no place in Toyon, which shows only a worktree's folders,
+  // so the press shows it where it sits; Finder opens on the daemon's screen, so from another
+  // device nothing opens
+  if (link.kind === "outside" && link.folder) return revealPathOpener(link.path, deps);
   if (!worktreeId) return null;
   if (link.kind === "outside") return () => openByPath(deps, worktreeId, link);
   if (link.kind === "path") return () => openByPath(deps, worktreeId, { href: link.path, path: link.path });
@@ -97,15 +101,22 @@ export function linkOpener(link: ChatLink, worktreeId: string | null | undefined
   return () => openFile(deps, { worktreeId, path: target.path, ...(target.line ? { line: { n: target.line } } : {}) });
 }
 
+/** the Finder reveal of a path on the daemon's disk, when the page is open on that machine */
+function revealPathOpener(path: string, { sock }: Deps): (() => void) | null {
+  if (!sock || !openedOnDaemonMachine(daemonHost(sock))) return null;
+  return () => sock.send({ t: "reveal-path", path });
+}
+
 /** a link to a file: the open the press makes, where it sits in Finder, then the path as text.
  * A file of this worktree is revealed through its row; any other path is revealed by where it is
- * on the daemon's disk. */
+ * on the daemon's disk. A folder outside the worktree has no open of its own: the reveal is what
+ * its press does, so it leads alone. */
 function fileLinkGroups(
   link: Exclude<ChatLink, { kind: "out" | "worktree" }>,
   worktreeId: string | null,
   deps: Deps,
 ): MenuItem[][] {
-  const open = linkOpener(link, worktreeId, deps);
+  const open = link.kind === "outside" && link.folder ? null : linkOpener(link, worktreeId, deps);
   const { sock } = deps;
   const reveal =
     link.kind === "file"

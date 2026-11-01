@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { isItem } from "../../ui/menu.ts";
 import type { Deps } from "./deps.ts";
-import { fileItems, imageItems, messageItems, pasteItems } from "./message.ts";
+import { fileItems, imageItems, linkOpener, messageItems, pasteItems } from "./message.ts";
 
 // A chip's menu is about the chip: what it holds goes onto the clipboard first, then the ways
 // to act on the chip itself, which depend on where it stands. A message's menu is about the
@@ -89,6 +89,28 @@ describe("message menus", () => {
       { t: "open-by-path", path: "/Users/me/.cache/out.csv", seq: expect.any(Number) },
       { t: "reveal-path", path: "/Users/me/.cache/out.csv" },
     ]);
+  });
+
+  test("a link to a folder outside the worktree is shown in Finder: by its press, and by its menu alone", () => {
+    onThisMachine();
+    const sent: unknown[] = [];
+    const sock = sockTo("localhost", sent);
+    const d = { sock, dispatch: () => {} };
+    const link = {
+      kind: "outside",
+      href: "/Users/me/notes/mocks/",
+      path: "/Users/me/notes/mocks",
+      folder: true,
+    } as const;
+    const items = messageItems({ kind: "assistant", text: "see" }, "w", d, { link });
+    expect(ids(items)).toEqual(["reveal", "copy-path", "copy"]);
+    linkOpener(link, "w", d)?.();
+    expect(sent).toEqual([{ t: "reveal-path", path: "/Users/me/notes/mocks" }]);
+    // the reveal needs no worktree to stand in, only the daemon's own screen
+    expect(linkOpener(link, null, d)).not.toBeNull();
+    const away = { sock: sockTo("toyon.example.com", []), dispatch: () => {} };
+    expect(linkOpener(link, "w", away)).toBeNull();
+    expect(ids(messageItems({ kind: "assistant", text: "see" }, "w", away, { link }))).toEqual(["copy-path", "copy"]);
   });
 
   test("a backticked path has the file's menu: opened by the path itself, which a refusal comes back to", () => {

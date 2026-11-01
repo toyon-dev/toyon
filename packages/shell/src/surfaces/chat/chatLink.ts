@@ -31,7 +31,7 @@ export function chatLink(target: Element, root: string | undefined | null): Chat
 }
 
 /** a press on a message: a worktree named in it opens its row (an archived one its page), the
- * file link under it opens in Toyon, and anything else is left to the browser. The markup is the
+ * file link under it opens in Toyon, and a link out is left to the browser. The markup is the
  * row's, so the row routes the press rather than each link. The open itself is the link menu's
  * "open" row, so the two never drift. */
 export function openChatLink(
@@ -42,8 +42,9 @@ export function openChatLink(
 ) {
   const link = chatLink(e.target as Element, root);
   // a backticked path is prose: a press on it selects text, and its open is its menu's alone
-  const open = link && link.kind !== "path" ? linkOpener(link, worktreeId, deps) : null;
-  if (!open) return;
+  if (!link || link.kind === "path" || link.kind === "out") return;
+  // a path is never followed, whether or not anything opens: the browser would resolve it against
+  // the page and ask the daemon for a page it does not serve
   e.preventDefault();
-  open();
+  linkOpener(link, worktreeId, deps)?.();
 }

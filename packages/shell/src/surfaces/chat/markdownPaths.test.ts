@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { assetPath, codePath, dirOf, outsidePath, worktreeLink } from "./markdownPaths.ts";
+import { assetPath, codePath, dirOf, fromFileUrl, outsidePath, worktreeLink } from "./markdownPaths.ts";
 
 describe("a markdown file's relative references", () => {
   test("resolve against the file's folder", () => {
@@ -59,12 +59,33 @@ describe("a path outside the worktree", () => {
     expect(outsidePath("/tmp/a.ts:3:7")).toEqual({ path: "/tmp/a.ts", line: 3 });
   });
 
+  test("names a folder by its trailing slash, which nothing in Toyon opens", () => {
+    expect(outsidePath("/Users/me/notes/mocks/")).toEqual({ path: "/Users/me/notes/mocks", folder: true });
+    expect(outsidePath("/Users/me/my%20notes/")).toEqual({ path: "/Users/me/my notes", folder: true });
+    expect(outsidePath("/")).toEqual({ path: "/" });
+  });
+
   test("is not a URL, an anchor, a relative reference or a protocol-relative address", () => {
     expect(outsidePath("https://example.com/a")).toBeNull();
     expect(outsidePath("#top")).toBeNull();
     expect(outsidePath("src/App.tsx")).toBeNull();
     expect(outsidePath("//example.com/a")).toBeNull();
     expect(outsidePath("/bad%")).toBeNull();
+  });
+});
+
+describe("a file:// link", () => {
+  test("is the path it names, with or without a localhost", () => {
+    expect(fromFileUrl("file:///Users/me/notes/mocks/")).toBe("/Users/me/notes/mocks/");
+    expect(fromFileUrl("file://localhost/Users/me/a.md:3")).toBe("/Users/me/a.md:3");
+    expect(fromFileUrl("FILE:///tmp/a.ts")).toBe("/tmp/a.ts");
+  });
+
+  test("leaves every other reference as it came", () => {
+    expect(fromFileUrl("https://example.com/a")).toBe("https://example.com/a");
+    expect(fromFileUrl("file://nas.local/share/a.md")).toBe("file://nas.local/share/a.md");
+    expect(fromFileUrl("/Users/me/a.md")).toBe("/Users/me/a.md");
+    expect(fromFileUrl("file:a.md")).toBe("file:a.md");
   });
 });
 

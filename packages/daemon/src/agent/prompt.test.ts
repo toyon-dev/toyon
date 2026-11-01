@@ -254,8 +254,10 @@ describe("SYSTEM_APPEND", () => {
     expect(SYSTEM_APPEND).toContain("Markdown link");
     expect(SYSTEM_APPEND).toContain("absolute path");
     expect(SYSTEM_APPEND).toContain("built-in editor");
-    // a file outside the worktree opens too, so it is linked and not backticked; a route is not a file
+    // a file outside the worktree opens too, so it is linked and not backticked; a folder links
+    // as well (the files tab here, Finder elsewhere), told apart by its slash; a route is not a file
     expect(SYSTEM_APPEND).toContain("anywhere else on this machine");
+    expect(SYSTEM_APPEND).toContain("A folder links the same way, with a trailing slash");
     expect(SYSTEM_APPEND).toContain("never as a link");
   });
   test("sends an offer that waits on a yes through the question tool, and a suggestion through prose", () => {

@@ -61,6 +61,17 @@ export interface OutsideLink {
   /** the path on the daemon's disk, with any line suffix taken off */
   path: string;
   line?: number;
+  /** the link named a folder, with a trailing slash: nothing in Toyon opens one outside the
+   * worktree, so a press shows it where it sits instead */
+  folder?: true;
+}
+
+/** A `file://` URL as the path it names. An agent asked for a link to a folder reaches for the
+ * scheme, and so does a browser's address bar; the sanitizer would drop the href as one it does not
+ * know, leaving a word that looks like a link and is not. The host is dropped, bare or
+ * "localhost": every path link names the daemon's disk. Anything else is returned as it came. */
+export function fromFileUrl(ref: string): string {
+  return ref.match(/^file:\/\/(?:localhost)?(\/.*)$/i)?.[1] ?? ref;
 }
 
 /** A root-absolute link that is not a worktree file: a path on the daemon's disk, which the daemon
@@ -75,6 +86,8 @@ export function outsidePath(ref: string): OutsideLink | null {
   } catch {
     return null;
   }
+  // a folder carries no line: the slash is the whole of what it says
+  if (decoded.length > 1 && decoded.endsWith("/")) return { path: decoded.replace(/\/+$/, ""), folder: true };
   const suffix = decoded.match(/:(\d+)(?::\d+)?$/);
   if (!suffix) return { path: decoded };
   const line = Number.parseInt(suffix[1] ?? "", 10);

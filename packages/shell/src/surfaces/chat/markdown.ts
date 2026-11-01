@@ -6,7 +6,7 @@ import type { DaemonUrls } from "../../ws.ts";
 import { closePendingLink, PENDING_LINK } from "./linkTail.ts";
 import { dunder } from "./markdownDunder.ts";
 import { escapeHtml, htmlAsText } from "./markdownHtml.ts";
-import { assetPath, codePath, outsidePath, worktreeLink } from "./markdownPaths.ts";
+import { assetPath, codePath, fromFileUrl, outsidePath, worktreeLink } from "./markdownPaths.ts";
 import { table } from "./markdownTable.ts";
 import { type WorktreeNamer, worktreeMention } from "./markdownWorktree.ts";
 import { cutAt, nextPace, type Pace, shownAt } from "./pace.ts";
@@ -78,6 +78,11 @@ const purify = createDOMPurify(window);
 let rendering: MarkdownOptions | null = null;
 // the text of the render in progress, for the code renderer to tell the fence at its end
 let source = "";
+// a `file://` link is read as the path it names, before the sanitizer measures the href against
+// the schemes it allows (file: is not one) and drops it
+purify.addHook("uponSanitizeAttribute", (node, data) => {
+  if (node.tagName === "A" && data.attrName === "href") data.attrValue = fromFileUrl(data.attrValue);
+});
 purify.addHook("afterSanitizeAttributes", (node) => {
   const href = node.tagName === "A" ? (node.getAttribute("href") ?? "") : "";
   // a link whose url is still streaming: its label sits where the link will, and nothing to open yet
@@ -101,7 +106,10 @@ purify.addHook("afterSanitizeAttributes", (node) => {
     node.setAttribute("data-tip-placement", "follow");
   } else if (outside) {
     node.classList.add("file-link");
-    node.setAttribute("data-tip", `${outside.path}${outside.line ? `:${outside.line}` : ""}`);
+    node.setAttribute(
+      "data-tip",
+      outside.folder ? `${outside.path}/` : `${outside.path}${outside.line ? `:${outside.line}` : ""}`,
+    );
     node.setAttribute("data-tip-placement", "follow");
   }
   // a backticked absolute path takes the path menu a link gets, though never its click. A fenced

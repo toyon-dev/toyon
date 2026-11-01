@@ -59,8 +59,10 @@ const heads = (blocks: ContentBlock[]) => blocks.map((b) => (b.type === "text" ?
 
 describe("prompts for work in another project", () => {
   test("the system append sends a change that belongs elsewhere through the handoff tool with a project, and ends the turn on it", () => {
-    expect(SYSTEM_APPEND).toContain("propose it with the `handoff` tool when you have one, as one piece");
-    expect(SYSTEM_APPEND).toContain("`project` naming that project");
+    // the tool's schema says how a piece names a project; the prompt says only that it is one
+    expect(SYSTEM_APPEND).toContain(
+      "propose it with the `handoff` tool when you have one, as a piece for that project",
+    );
     expect(SYSTEM_APPEND).toContain("do not edit outside it and do not stop at saying so");
     expect(SYSTEM_APPEND).toContain("once it is proposed you finish your turn");
   });
@@ -225,7 +227,12 @@ describe("handoff prompts", () => {
     expect(SYSTEM_APPEND).toContain(
       "The same tool, with one piece, is how you offer a separate thing you come across mid-task",
     );
-    expect(SYSTEM_APPEND).toContain("as soon as you see it rather than when your own work is done");
+    expect(SYSTEM_APPEND).toContain("Offer it as soon as you see it, as a card the person can decline in one press");
+    // the fields' meanings live on the tool (handoff.ts `handoffTool`), where the agent reads them
+    // as it fills the call; the eval in acp/handoff.eval.test.ts showed this wording ties the
+    // field-by-field one, so the prompt points at them and stops
+    expect(SYSTEM_APPEND).toContain("The tool's fields say where each piece goes and what it waits for");
+    expect(SYSTEM_APPEND).not.toContain("`after` naming");
   });
 
   test("a sibling's first message: its plan's path, who wrote it, the whole picture, and the note", () => {

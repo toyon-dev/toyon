@@ -108,7 +108,110 @@ const PROJECT_MAX = 200;
 
 const refused = (text: string): McpToolResult => ({ text, isError: true });
 
-const HELD =
+/** The tool as the agent reads it, with the worktrees (`branch, "title"`) and projects it can name
+ * right now. The one description of the tool's fields: the handoff eval serves this same tool to
+ * a real agent, so what it measures is what the daemon says. */
+export function handoffTool(worktrees: readonly string[], projects: readonly string[]): McpTool {
+  const open = worktrees.length
+    ? `Open worktrees of this project you can name in \`after\` or \`to\`: ${worktrees.join("; ")}.`
+    : "No other worktree of this project is open right now.";
+  const elsewhere = projects.length
+    ? ` Other projects open in Toyon you can name in \`project\`: ${projects.join(", ")}.`
+    : "";
+  return {
+    name: HANDOFF_TOOL,
+    description: `Hand Toyon the pieces of the work you are planning, or one piece you came across: each goes on this worktree, a new worktree of this project or of another open one, or an open worktree already on that part; the person decides on the list beside your plan. Nothing starts. ${open}${elsewhere}`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        pieces: {
+          type: "array",
+          minItems: 1,
+          maxItems: PIECES_MAX,
+          items: {
+            type: "object",
+            properties: {
+              title: {
+                type: "string",
+                description: `A name for the piece, the way a teammate would say it: ${NAME_SHAPE}. It titles the worktree.`,
+              },
+              plan: {
+                type: "string",
+                description:
+                  "The plan its agent builds from, in markdown that stands on its own: what is needed and why, the paths that depend on it, and what done looks like.",
+              },
+              attachments: {
+                type: "array",
+                items: { type: "string" },
+                description:
+                  'The attachments from this chat the piece needs, by their labels as captioned: "Image 2", "Paste 1".',
+              },
+              where: {
+                type: "string",
+                enum: ["here", "worktree", "send"],
+                description:
+                  "here: you do it in this worktree. worktree: a new worktree, of this project or of the one `project` names. send: an open worktree already working on that part.",
+              },
+              after: {
+                type: "string",
+                description:
+                  'worktree: what the piece waits for before it starts: a branch, another piece of this list by its title, or "this" for your own branch. here: what your own work on the piece waits for, a branch or another piece of this list; Toyon shows the wait under the box until it lands.',
+              },
+              to: { type: "string", description: "send only: the open worktree it goes to, by branch or title." },
+              project: {
+                type: "string",
+                description:
+                  "Another project open in Toyon, by its name as listed or its path: the worktree is made there, or `to` is one of its worktrees. Leave out for this project.",
+              },
+            },
+            required: ["title", "plan", "where"],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ["pieces"],
+      additionalProperties: false,
+    },
+  };
+}
+
+/** The call's arguments as pieces, or why they are refused: the shape alone, since the client's
+ * own check cannot be relied on. What the pieces name (a sibling, a project, an attachment) is
+ * checked against the chat by `propose`. */
+export function parsePieces(args: unknown): { pieces: RawPiece[] } | { refused: string } {
+  const shape = `handoff takes { pieces: [{ title: string, plan: string, where: "here" | "worktree" | "send", attachments?: string[], after?: string, to?: string, project?: string }] }, 1 to ${PIECES_MAX} pieces.`;
+  const a = args && typeof args === "object" && !Array.isArray(args) ? (args as Record<string, unknown>) : null;
+  const list = a && Array.isArray(a.pieces) ? (a.pieces as unknown[]) : null;
+  if (!list || list.length === 0) return { refused: shape };
+  const pieces: RawPiece[] = [];
+  for (const raw of list) {
+    const p = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : null;
+    const shaped =
+      p &&
+      typeof p.title === "string" &&
+      typeof p.plan === "string" &&
+      (p.where === "here" || p.where === "worktree" || p.where === "send") &&
+      (p.attachments === undefined ||
+        (Array.isArray(p.attachments) && p.attachments.every((l) => typeof l === "string"))) &&
+      (p.after === undefined || typeof p.after === "string") &&
+      (p.to === undefined || typeof p.to === "string") &&
+      (p.project === undefined || typeof p.project === "string");
+    if (!shaped) return { refused: shape };
+    pieces.push({
+      title: p.title as string,
+      plan: p.plan as string,
+      where: p.where as RawPiece["where"],
+      ...(p.attachments ? { attachments: p.attachments as string[] } : {}),
+      ...(p.after !== undefined ? { after: p.after as string } : {}),
+      ...(p.to !== undefined ? { to: p.to as string } : {}),
+      ...(p.project !== undefined ? { project: p.project as string } : {}),
+    });
+  }
+  return { pieces };
+}
+
+/** the tool's reply in plan mode; exported for the eval, which answers a real agent with it */
+export const HELD =
   "Handed to the person; the list shows beside your plan and they decide where each piece goes. Ask for plan approval now.";
 const SHOWN = "Handed to the person as a card; they decide. Finish your turn.";
 const SHOWN_HERE =
@@ -342,102 +445,16 @@ export class HandoffService implements ToolProvider {
   tool(worktreeId: string): McpTool {
     const wt = this.d.state.worktree(worktreeId);
     const names = wt ? this.siblings(wt).map((w) => `${w.branch}, "${w.title}"`) : [];
-    const open = names.length
-      ? `Open worktrees of this project you can name in \`after\` or \`to\`: ${names.join("; ")}.`
-      : "No other worktree of this project is open right now.";
     const projects = wt ? this.otherProjects(wt).map((r) => r.name) : [];
-    const elsewhere = projects.length
-      ? ` Other projects open in Toyon you can name in \`project\`: ${projects.join(", ")}.`
-      : "";
-    return {
-      name: HANDOFF_TOOL,
-      description: `Hand Toyon the pieces of the work you are planning, or one piece you came across: each goes on this worktree, a new worktree of this project or of another open one, or an open worktree already on that part; the person decides on the list beside your plan. Nothing starts. ${open}${elsewhere}`,
-      inputSchema: {
-        type: "object",
-        properties: {
-          pieces: {
-            type: "array",
-            minItems: 1,
-            maxItems: PIECES_MAX,
-            items: {
-              type: "object",
-              properties: {
-                title: {
-                  type: "string",
-                  description: `A name for the piece, the way a teammate would say it: ${NAME_SHAPE}. It titles the worktree.`,
-                },
-                plan: {
-                  type: "string",
-                  description:
-                    "The plan its agent builds from, in markdown that stands on its own: what is needed and why, the paths that depend on it, and what done looks like.",
-                },
-                attachments: {
-                  type: "array",
-                  items: { type: "string" },
-                  description:
-                    'The attachments from this chat the piece needs, by their labels as captioned: "Image 2", "Paste 1".',
-                },
-                where: {
-                  type: "string",
-                  enum: ["here", "worktree", "send"],
-                  description:
-                    "here: you do it in this worktree. worktree: a new worktree, of this project or of the one `project` names. send: an open worktree already working on that part.",
-                },
-                after: {
-                  type: "string",
-                  description:
-                    'worktree: what the piece waits for before it starts: a branch, another piece of this list by its title, or "this" for your own branch. here: what your own work on the piece waits for, a branch or another piece of this list; Toyon shows the wait under the box until it lands.',
-                },
-                to: { type: "string", description: "send only: the open worktree it goes to, by branch or title." },
-                project: {
-                  type: "string",
-                  description:
-                    "Another project open in Toyon, by its name as listed or its path: the worktree is made there, or `to` is one of its worktrees. Leave out for this project.",
-                },
-              },
-              required: ["title", "plan", "where"],
-              additionalProperties: false,
-            },
-          },
-        },
-        required: ["pieces"],
-        additionalProperties: false,
-      },
-    };
+    return handoffTool(names, projects);
   }
 
   /** a call from the agent, over MCP: the shape is checked here, since the client's own check
    * cannot be relied on, and then it is a proposal like the person's */
   async call(worktreeId: string, args: unknown): Promise<McpToolResult> {
-    const shape = `handoff takes { pieces: [{ title: string, plan: string, where: "here" | "worktree" | "send", attachments?: string[], after?: string, to?: string, project?: string }] }, 1 to ${PIECES_MAX} pieces.`;
-    const a = args && typeof args === "object" && !Array.isArray(args) ? (args as Record<string, unknown>) : null;
-    const list = a && Array.isArray(a.pieces) ? (a.pieces as unknown[]) : null;
-    if (!list || list.length === 0) return refused(shape);
-    const pieces: RawPiece[] = [];
-    for (const raw of list) {
-      const p = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : null;
-      const shaped =
-        p &&
-        typeof p.title === "string" &&
-        typeof p.plan === "string" &&
-        (p.where === "here" || p.where === "worktree" || p.where === "send") &&
-        (p.attachments === undefined ||
-          (Array.isArray(p.attachments) && p.attachments.every((l) => typeof l === "string"))) &&
-        (p.after === undefined || typeof p.after === "string") &&
-        (p.to === undefined || typeof p.to === "string") &&
-        (p.project === undefined || typeof p.project === "string");
-      if (!shaped) return refused(shape);
-      pieces.push({
-        title: p.title as string,
-        plan: p.plan as string,
-        where: p.where as RawPiece["where"],
-        ...(p.attachments ? { attachments: p.attachments as string[] } : {}),
-        ...(p.after !== undefined ? { after: p.after as string } : {}),
-        ...(p.to !== undefined ? { to: p.to as string } : {}),
-        ...(p.project !== undefined ? { project: p.project as string } : {}),
-      });
-    }
-    return this.propose(worktreeId, pieces, "agent");
+    const pieces = parsePieces(args);
+    if ("refused" in pieces) return refused(pieces.refused);
+    return this.propose(worktreeId, pieces.pieces, "agent");
   }
 
   /** A proposal onto the chat. Held beside the next plan card in plan mode, Toyon's own card

@@ -192,6 +192,9 @@ export interface AcpSessionDeps {
    * the bearer in it) for a process that takes HTTP servers, `close` retires it with the process.
    * Absent where there is nothing to hand them to (tests, a probe). */
   mcp?: { open: () => acp.McpServer; close: () => void };
+  /** what every agent is told about working in a Toyon worktree, in place of SYSTEM_APPEND: a
+   * candidate wording under the handoff eval (acp/handoff.eval.test.ts). The daemon leaves it unset. */
+  systemAppend?: () => string;
 }
 
 const DEFAULT_IDLE_MS = Number(process.env.TOYON_AGENT_IDLE_MS) || 5 * 60_000;
@@ -1194,7 +1197,7 @@ export class AcpSession implements AgentAdapter {
     }
     const carried = this.carried(live, item.recorded.attachments);
     const standing = await this.d.standing?.();
-    const prefix = live.prefixPending ? SYSTEM_APPEND : undefined;
+    const prefix = live.prefixPending ? (this.d.systemAppend?.() ?? SYSTEM_APPEND) : undefined;
     live.prefixPending = false;
     const res = await live.conn.ctx.request(acp.methods.agent.session.prompt, {
       sessionId: live.sessionId,
@@ -1341,7 +1344,7 @@ export class AcpSession implements AgentAdapter {
   /** resumed when the agent remembers the session, else new */
   private async openLive(conn: Conn): Promise<Live> {
     const additionalDirectories = conn.bounds.gitDir ? [conn.bounds.gitDir] : [];
-    const meta = sessionMeta(conn.spec);
+    const meta = sessionMeta(conn.spec, this.d.systemAppend?.());
     let sessionId = this.d.getSessionId();
     let modes: acp.SessionModeState | null | undefined;
     let configOptions: acp.SessionConfigOption[] | null | undefined;
@@ -2036,10 +2039,10 @@ const REJECTED_CREDENTIAL_RE =
 /** `_meta` on the chat's session/new and resume: the person's tuning from agents.json under
  * toyon's own keys, so the rules ride every session and a tuning that names the same key does not
  * take them away. A resumed query is built from this request alone, so both carry the same one. */
-export function sessionMeta(spec: AgentSpec): Record<string, unknown> | undefined {
+export function sessionMeta(spec: AgentSpec, append = SYSTEM_APPEND): Record<string, unknown> | undefined {
   const meta = {
     ...spec.meta,
-    ...(spec.systemPrompt === "meta-append" ? { systemPrompt: { append: SYSTEM_APPEND } } : {}),
+    ...(spec.systemPrompt === "meta-append" ? { systemPrompt: { append } } : {}),
   };
   return Object.keys(meta).length > 0 ? meta : undefined;
 }

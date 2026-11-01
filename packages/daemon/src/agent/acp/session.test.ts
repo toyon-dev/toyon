@@ -1463,6 +1463,22 @@ describe("AcpSession", () => {
     await w.session.close();
   });
 
+  test("a wording given through `systemAppend` stands in for SYSTEM_APPEND on both paths, for the eval", async () => {
+    const systemAppend = () => "You are under test.";
+    const metaFake = fakeAgent(say("ok"));
+    const meta = world(metaFake, claudeSpec, 60_000, undefined, { systemAppend });
+    meta.session.send("a");
+    await meta.idle();
+    expect(metaFake.newSessions[0]!._meta).toEqual({ systemPrompt: { append: "You are under test." } });
+    await meta.session.close();
+    const prefixFake = fakeAgent(say("ok"), { withModes: true });
+    const prefix = world(prefixFake, codexSpec, 60_000, undefined, { systemAppend });
+    prefix.session.send("a");
+    await prefix.idle();
+    expect((prefixFake.prompts[0]!.prompt[0] as { text: string }).text).toBe("You are under test.\n\na");
+    await prefix.session.close();
+  });
+
   test("the command list pushed from inside session/new still lands: `live` is null when it arrives", async () => {
     const review = { name: "review", description: "review a PR", input: { hint: "<pr>" } };
     const fake = fakeAgent(say("ok"), { commands: { s1: [review] } });

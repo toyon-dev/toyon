@@ -11,6 +11,7 @@ import {
   pieceAskPrompt,
   pieceLandedContext,
   pieceSendPrompt,
+  pieceWakePrompt,
   previewContext,
   procFixPrompt,
   SYSTEM_APPEND,
@@ -112,6 +113,31 @@ describe("prompts for work in another project", () => {
     // the branch the origin's own piece waited for
     expect(pieceLandedContext("First", "toyon", undefined, true, undefined, true)).toBe(
       'The branch your own piece waited for, "First", has landed on this project\'s main; that piece can go ahead now, and Toyon rebases onto main when this lands.',
+    );
+  });
+
+  test("the wake names the pieces that waited and the branch, and says to build them now", () => {
+    expect(
+      pieceWakePrompt([{ title: "First", branch: "toyon/first", url: "https://x/pull/7", pieces: ["Mine"] }]),
+    ).toBe(
+      'The branch your own piece "Mine" waited for, "First" (toyon/first), has landed on this project\'s main (https://x/pull/7). Do "Mine" here now, and only that. What "First" landed is readable on main now, and Toyon rebases onto main when this lands.',
+    );
+    // two landings in one turn: a sentence each, the pieces of both, named once
+    expect(
+      pieceWakePrompt([
+        { title: "First", branch: "toyon/first", pieces: ["Mine", "Mine too"] },
+        { title: "Second", branch: "toyon/second", pieces: ["Mine too"] },
+      ]),
+    ).toBe(
+      'The branch your own pieces "Mine", "Mine too" waited for, "First" (toyon/first), has landed on this project\'s main. The branch your own piece "Mine too" waited for, "Second" (toyon/second), has landed on this project\'s main. Do "Mine", "Mine too" here now, and only those. What "First", "Second" landed is readable on main now, and Toyon rebases onto main when this lands.',
+    );
+    // a branch of another project: its main, and no rebase here
+    expect(pieceWakePrompt([{ title: "First", branch: "acp/first", project: "acp", pieces: ["Mine"] }])).toBe(
+      'The branch your own piece "Mine" waited for, "First" (acp/first), has landed on main in the project acp. Do "Mine" here now, and only that. What "First" landed is readable on main now.',
+    );
+    // a wait recorded without its pieces still says what to do
+    expect(pieceWakePrompt([{ title: "First", branch: "toyon/first", pieces: [] }])).toContain(
+      'your own piece waited for, "First" (toyon/first), has landed on this project\'s main. Do the piece that waited here now, and only that.',
     );
   });
 });

@@ -361,6 +361,35 @@ export function pieceLandedContext(
   return `The work this worktree handed off to ${project}, "${title}", has landed there${where}; anything here that waited on it, such as a pinned version or a hand-patched copy, can take the real change now.`;
 }
 
+/** What starts the agent once the branches its own pieces waited for have landed and it is
+ * between turns: each landing is also an ambient sentence on this prompt (pieceLandedContext),
+ * so this names the pieces and says to build them. A landing in another project says so, and
+ * then nothing of it is on this project's main. `pieces` may be empty for a wait recorded
+ * without them. */
+export function pieceWakePrompt(
+  landed: ReadonlyArray<{ title: string; branch: string; url?: string; project?: string; pieces: readonly string[] }>,
+): string {
+  const quoted = (xs: readonly string[]) => xs.map((x) => `"${x}"`).join(", ");
+  const sentences = landed.map((l) => {
+    const where = l.url ? ` (${l.url})` : "";
+    const main = l.project ? `main in the project ${l.project}` : "this project's main";
+    const own =
+      l.pieces.length === 0
+        ? "your own piece"
+        : `your own ${l.pieces.length === 1 ? "piece" : "pieces"} ${quoted(l.pieces)}`;
+    return `The branch ${own} waited for, "${l.title}" (${l.branch}), has landed on ${main}${where}.`;
+  });
+  const pieces = [...new Set(landed.flatMap((l) => l.pieces))];
+  const build =
+    pieces.length === 0
+      ? "Do the piece that waited here now, and only that."
+      : `Do ${quoted(pieces)} here now, and only ${pieces.length === 1 ? "that" : "those"}.`;
+  const titles = quoted(landed.map((l) => l.title));
+  const here = landed.some((l) => !l.project);
+  const commits = `What ${titles} landed is readable on main now${here ? ", and Toyon rebases onto main when this lands" : ""}.`;
+  return `${sentences.join(" ")} ${build} ${commits}`;
+}
+
 /** where the project's preview stands as a message goes out, for the block that tells the agent */
 export interface PreviewStanding {
   /** the preview proc's status, "setup" while the worktree is still being made and has no procs,

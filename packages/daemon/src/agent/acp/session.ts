@@ -47,7 +47,7 @@ import { decide, decideUnattended, pickOption } from "../policy.ts";
 import { ambientBlock, buildPrompt, pieceLandedContext, SYSTEM_APPEND } from "../prompt.ts";
 import type { AgentSpec } from "../registry.ts";
 import { type Bounds, type Prepared, prepareLaunch } from "../sandbox.ts";
-import { sealOpenTurn, Transcript, type TranscriptEntry, transcriptPathFor } from "../transcript.ts";
+import { isMessage, sealOpenTurn, Transcript, type TranscriptEntry, transcriptPathFor } from "../transcript.ts";
 import { uploadIds } from "../uploads.ts";
 import { askOnce } from "./ask.ts";
 import {
@@ -1225,7 +1225,6 @@ export class AcpSession implements AgentAdapter {
    * carry, and the next prompt starts past them. */
   private landedSince(): string[] {
     const entries = this.log.entries;
-    const isMessage = (e: AgentEvent) => e.type === "user-message" || e.type === "fix-asked" || e.type === "handed";
     let i = entries.length - 1;
     while (i >= 0 && !isMessage(entries[i]!.event)) i--;
     const out: string[] = [];

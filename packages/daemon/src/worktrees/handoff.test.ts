@@ -486,9 +486,12 @@ describe("go", () => {
       { pieceId: "p2", fate: "worktree", after: a.branch },
       { pieceId: "p3", fate: "here", after: b.branch },
     ]);
-    // the origin's own wait is on its record, for the landing to tell it
-    expect(w.state.worktree(a.id)!.awaits).toEqual([{ id: b.id, branch: b.branch, title: "Composer" }]);
+    // the origin's own wait is on its record, with the piece that waits, for the landing to tell it
+    expect(w.state.worktree(a.id)!.awaits).toEqual([
+      { id: b.id, branch: b.branch, title: "Composer", pieces: ["Mine"] },
+    ]);
     expect(madeTitled("Rail fixes")).toBeUndefined();
+    const before = agentOf(a.id).sent.length;
     const queued = w.state.worktree(a.id)!.queued!;
     expect(queued.map((q) => [q.pieceId, "id" in q.after ? q.after.id : q.after.piece, q.plan])).toEqual([
       ["p1", b.id, "Fix the rail."],
@@ -511,6 +514,16 @@ describe("go", () => {
     expect(landedNotes).toHaveLength(1);
     expect(landedNotes[0]).toMatchObject({ worktreeId: b.id, awaited: true });
     expect(w.state.worktree(a.id)!.awaits).toBeUndefined();
+    // the agent sat idle, with no prompt coming to carry the note: the landing starts it on the piece
+    await until(() => agentOf(a.id).sent.length === before + 1);
+    const woke = agentOf(a.id).sent.at(-1)!;
+    expect(woke.asked).toEqual({
+      kind: "handoff",
+      why: '"Composer" landed, so the agent starts the piece that waited',
+    });
+    expect(woke.keepCards).toBe(true);
+    expect(woke.text).toContain(`The branch your own piece "Mine" waited for, "Composer" (${b.branch}), has landed`);
+    expect(woke.text).toContain('Do "Mine" here now, and only that');
     // the origin's own landing releases the one behind it
     w.hub.emit("landed", a.id);
     await until(() => recorded(a.id, "piece-made").length === 2);
@@ -786,6 +799,109 @@ describe("read off the plan", () => {
     expect(outcomesOf(c.id)[1]).toEqual({ pieceId: "p2", fate: "here" });
     expect(w.state.worktree(c.id)!.awaits).toBeUndefined();
     expect(agentOf(c.id).sent.at(-1)?.text).toContain('Do "Mine later" here, and only that.');
+  });
+
+  test("siblings landing during a turn make one wake once it ends, unless a prompt carried the news or the origin landed", async () => {
+    const repoId = await registered();
+    const a = await w.worktrees.create(repoId, "task", { title: "Rail" });
+    await call(
+      a.id,
+      piece({ title: "Theirs" }),
+      piece({ title: "Also theirs" }),
+      piece({ title: "Mine later", plan: "After.", where: "here", after: "Theirs" }),
+      piece({ title: "Mine last", plan: "Last.", where: "here", after: "Also theirs" }),
+    );
+    await w.handoff.answer(a.id, lastProposal(a.id).id, true);
+    const theirs = madeTitled("Theirs")!;
+    const also = madeTitled("Also theirs")!;
+    expect(w.state.worktree(a.id)!.awaits).toMatchObject([
+      { id: theirs.id, title: "Theirs", pieces: ["Mine later"] },
+      { id: also.id, title: "Also theirs", pieces: ["Mine last"] },
+    ]);
+    const before = agentOf(a.id).sent.length;
+    agentOf(a.id).status = "working";
+    // the branches settle a moment after the create, and the wake names them
+    await until(() => theirs.branch === "toyon/theirs" && also.branch === "toyon/also-theirs");
+    w.hub.emit("landed", theirs.id);
+    w.hub.emit("landed", also.id);
+    await until(() => w.state.worktree(a.id)!.awaits === undefined);
+    await settle();
+    // the origin made the siblings, so it is told once each as their origin; the wake waits for the turn to end
+    expect(recorded(a.id, "piece-landed")).toHaveLength(2);
+    expect(recorded(a.id, "piece-landed")[0]).toMatchObject({ worktreeId: theirs.id, same: true });
+    expect(recorded(a.id, "piece-landed")[0]).not.toHaveProperty("awaited");
+    expect(agentOf(a.id).sent).toHaveLength(before);
+    agentOf(a.id).status = "idle";
+    w.hub.emit("agentStatus", a.id, "idle");
+    await until(() => agentOf(a.id).sent.length === before + 1);
+    // both landings in the one message, since the first wake's message would make the second read as told
+    const woke = agentOf(a.id).sent.at(-1)!;
+    expect(woke.text).toContain(`"Theirs" (${theirs.branch}), has landed`);
+    expect(woke.text).toContain(`"Also theirs" (${also.branch}), has landed`);
+    expect(woke.text).toContain('Do "Mine later", "Mine last" here now, and only those.');
+    expect(woke.asked?.why).toBe('"Theirs", "Also theirs" landed, so the agent starts the pieces that waited');
+    await settle();
+    expect(agentOf(a.id).sent).toHaveLength(before + 1);
+    // a message sent during the turn carried the note on its prompt: nothing more goes
+    const b = await w.worktrees.create(repoId, "task", { title: "Other" });
+    await call(b.id, piece({ title: "Theirs too" }), piece({ title: "Mine", where: "here", after: "Theirs too" }));
+    await w.handoff.answer(b.id, lastProposal(b.id).id, true);
+    const sentBefore = agentOf(b.id).sent.length;
+    agentOf(b.id).status = "working";
+    w.hub.emit("landed", madeTitled("Theirs too")!.id);
+    await until(() => w.state.worktree(b.id)!.awaits === undefined);
+    agentOf(b.id).note({ type: "user-message", text: "go on", ts: Date.now() });
+    agentOf(b.id).status = "idle";
+    w.hub.emit("agentStatus", b.id, "idle");
+    await settle();
+    expect(agentOf(b.id).sent).toHaveLength(sentBefore);
+    // the origin landed while its turn ran: nothing to start
+    const c = await w.worktrees.create(repoId, "task", { title: "Third" });
+    await call(c.id, piece({ title: "Theirs three" }), piece({ title: "Mine", where: "here", after: "Theirs three" }));
+    await w.handoff.answer(c.id, lastProposal(c.id).id, true);
+    const sentC = agentOf(c.id).sent.length;
+    agentOf(c.id).status = "working";
+    w.hub.emit("landed", madeTitled("Theirs three")!.id);
+    await until(() => w.state.worktree(c.id)!.awaits === undefined);
+    w.state.worktree(c.id)!.landed = true;
+    agentOf(c.id).status = "idle";
+    w.hub.emit("agentStatus", c.id, "idle");
+    await settle();
+    expect(agentOf(c.id).sent).toHaveLength(sentC);
+  });
+
+  test("a here piece behind a piece still queued is recorded on it, and waits for the worktree it becomes", async () => {
+    const repoId = await registered();
+    const a = await w.worktrees.create(repoId, "task", { title: "Rail" });
+    const x = await w.worktrees.create(repoId, "task", { title: "Composer" });
+    await call(
+      a.id,
+      piece({ title: "First", after: x.branch }),
+      piece({ title: "Second", after: "First" }),
+      piece({ title: "Mine", plan: "Then this.", where: "here", after: "Second" }),
+    );
+    await w.handoff.answer(a.id, lastProposal(a.id).id, true);
+    expect(outcomesOf(a.id)[2]).toEqual({ pieceId: "p3", fate: "here", after: "Second" });
+    // nothing to await yet: the wait sits on the queued piece until it is a worktree
+    expect(w.state.worktree(a.id)!.awaits).toBeUndefined();
+    expect(w.state.worktree(a.id)!.queued!.map((q) => [q.title, q.heres])).toEqual([
+      ["First", undefined],
+      ["Second", ["Mine"]],
+    ]);
+    const before = agentOf(a.id).sent.length;
+    w.hub.emit("landed", x.id);
+    await until(() => madeTitled("First") !== undefined);
+    w.hub.emit("landed", madeTitled("First")!.id);
+    await until(() => madeTitled("Second") !== undefined);
+    const second = madeTitled("Second")!;
+    expect(w.state.worktree(a.id)!.awaits).toEqual([
+      { id: second.id, branch: second.branch, title: "Second", pieces: ["Mine"] },
+    ]);
+    await settle();
+    expect(agentOf(a.id).sent).toHaveLength(before);
+    w.hub.emit("landed", second.id);
+    await until(() => agentOf(a.id).sent.length === before + 1);
+    expect(agentOf(a.id).sent.at(-1)!.text).toContain('Do "Mine" here now, and only that.');
   });
 
   test("the plan's yes tells the agent what the list started, steered into its turn; Toyon's own card does not", async () => {

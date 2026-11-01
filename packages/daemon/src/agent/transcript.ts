@@ -13,6 +13,11 @@ export function transcriptPathFor(transcriptsDir: string, worktreeId: string): s
   return join(transcriptsDir, `${worktreeId}.jsonl`);
 }
 
+/** a message the agent was sent: the person's, Toyon's own, or one handed on from another chat.
+ * The prompt it went out as carried every note before it, and the next prompt starts past them */
+export const isMessage = (e: AgentEvent): boolean =>
+  e.type === "user-message" || e.type === "fix-asked" || e.type === "handed";
+
 /** events that are not the agent's own doing, read past when asking what a turn said last: the
  * figures it left, and a message queued behind it that no turn has picked up yet */
 const NOT_THE_TURNS = new Set<AgentEvent["type"]>(["usage", "session-info", "user-message", "fix-asked", "handed"]);

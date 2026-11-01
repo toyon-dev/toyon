@@ -35,9 +35,10 @@ import {
   type PieceOrigin,
   pieceAskPrompt,
   pieceSendPrompt,
+  pieceWakePrompt,
 } from "../agent/prompt.ts";
 import type { ReadPiece } from "../agent/tasks.ts";
-import type { TranscriptEntry } from "../agent/transcript.ts";
+import { isMessage, type TranscriptEntry } from "../agent/transcript.ts";
 import { UserError } from "../core/errors.ts";
 import type { Hub } from "../core/hub.ts";
 import { fireAndForget, log } from "../core/log.ts";
@@ -273,11 +274,19 @@ const KIND_OF: Record<string, AttachmentRef["kind"]> = {
 
 /** a worktree as a piece names it, on the list and on the record */
 type Named = { id: string; branch: string; title: string };
+/** one entry of a worktree's `awaits`, with the pieces always on it when written here */
+type Awaits = Named & { pieces: string[] };
+
+/** a landing a wake tells of: the branch and, when it is not this project's, its project */
+type Woke = { title: string; branch: string; url?: string; project?: string; pieces: string[] };
 
 /** what a piece became in one pass of go, for the pieces of the list that wait on it */
 type Became = { fate: PieceFate; worktree?: Named; queued?: true };
 
 export class HandoffService implements ToolProvider {
+  /** the landings each worktree is to be woken for once its turn ends, by worktree (wake) */
+  private wakes = new Map<string, Woke[]>();
+
   constructor(private d: HandoffDeps) {
     d.hub.on("handoffDecided", (worktreeId, id, approved) =>
       fireAndForget(
@@ -739,14 +748,19 @@ export class HandoffService implements ToolProvider {
       }
       // the origin's own pieces wait for what the rest of the list became, which is known only
       // once the whole list was acted on: a here piece may name any other piece, later ones too
-      const awaits: Named[] = [];
+      const awaits: Awaits[] = [];
       for (const o of outcomes) {
         if (o.fate !== "here") continue;
         const piece = proposed.pieces.find((p) => p.id === o.pieceId);
-        const wait = piece ? this.hereWait(proposed, piece, became) : null;
+        if (!piece) continue;
+        const wait = this.hereWait(proposed, piece, became);
         if (!wait) continue;
         o.after = wait.said;
-        if (wait.worktree && !awaits.some((a) => a.id === wait.worktree?.id)) awaits.push(wait.worktree);
+        if (wait.queued) this.waitOnQueued(wt.id, proposed.id, wait.queued, piece.title);
+        if (!wait.worktree) continue;
+        const known = awaits.find((a) => a.id === wait.worktree?.id);
+        if (known) known.pieces.push(piece.title);
+        else awaits.push({ ...wait.worktree, pieces: [piece.title] });
       }
       agent.note({ type: "handoff", id, outcomes, ts: Date.now() });
       this.recordAwaits(wt.id, awaits);
@@ -975,12 +989,13 @@ export class HandoffService implements ToolProvider {
    * now: a branch it named that is open and has not landed; a piece of the list by the worktree
    * it became in this pass, made or sent on; a piece itself queued, by the piece, until it is
    * made. A piece skipped or failed, or a branch landed or gone, is nothing to wait for. `said`
-   * is the wait in the row's words, a branch or a piece's title; `worktree` the one to record. */
+   * is the wait in the row's words, a branch or a piece's title; `worktree` the one to record,
+   * `queued` the piece to record it on once it is made (waitOnQueued). */
   private hereWait(
     proposed: Proposed,
     piece: Piece,
     became: Map<string, Became>,
-  ): { said: string; worktree?: Named } | null {
+  ): { said: string; worktree?: Named; queued?: string } | null {
     const after = piece.after;
     if (!after) return null;
     if (!("piece" in after)) {
@@ -990,8 +1005,19 @@ export class HandoffService implements ToolProvider {
     const on = became.get(after.piece);
     const said = proposed.pieces.find((p) => p.id === after.piece)?.title ?? after.piece;
     if (on?.worktree) return { said, worktree: on.worktree };
-    if (on?.queued) return { said };
+    if (on?.queued) return { said, queued: after.piece };
     return null;
+  }
+
+  /** a here piece that waits for a piece still queued is named on that piece's record: there is
+   * no worktree to await yet, and the landing that makes one moves the wait onto `awaits` */
+  private waitOnQueued(originId: string, proposalId: string, pieceId: string, here: string): void {
+    const q = this.d.state
+      .worktree(originId)
+      ?.queued?.find((q) => q.proposalId === proposalId && q.pieceId === pieceId);
+    if (!q) return;
+    q.heres = [...new Set([...(q.heres ?? []), here])];
+    this.d.state.save();
   }
 
   /** resolves once the worktree's agent is between turns: at once when it is, else on the first
@@ -1009,11 +1035,19 @@ export class HandoffService implements ToolProvider {
   }
 
   /** The worktrees the origin's own work waits for, by its here pieces, onto its record (hereWait).
-   * The landing reads the record to tell the origin (tellAwaiting). */
-  private recordAwaits(originId: string, awaits: readonly Named[]): void {
+   * The landing reads the record to tell the origin and start it (tellAwaiting). A worktree
+   * already waited for keeps the pieces that waited, with the new ones. */
+  private recordAwaits(originId: string, awaits: readonly Awaits[]): void {
     if (awaits.length === 0) return;
     const live = this.d.state.requireWorktree(originId);
-    live.awaits = [...(live.awaits ?? []).filter((a) => !awaits.some((b) => b.id === a.id)), ...awaits];
+    const kept = live.awaits ?? [];
+    live.awaits = [
+      ...kept.filter((a) => !awaits.some((b) => b.id === a.id)),
+      ...awaits.map((b) => {
+        const had = kept.find((a) => a.id === b.id)?.pieces ?? [];
+        return { ...b, pieces: [...new Set([...had, ...b.pieces])] };
+      }),
+    ];
     this.d.state.save();
     this.d.hub.emit("worktreesChanged");
   }
@@ -1131,6 +1165,8 @@ export class HandoffService implements ToolProvider {
           });
           madeNow.add(made.id);
           this.repoint(origin, q, { id: made.id, branch: made.branch, title: made.title });
+          if (q.heres?.length)
+            this.recordAwaits(origin.id, [{ id: made.id, branch: made.branch, title: made.title, pieces: q.heres }]);
         } catch (e) {
           const reason = e instanceof Error ? e.message : String(e);
           log.warn(origin.id, `queued piece "${q.title}" could not be made`, e);
@@ -1145,32 +1181,85 @@ export class HandoffService implements ToolProvider {
 
   /** every worktree whose own work waited for the landed branch (recordAwaits) hears of it, once:
    * not again when the landing already told it as its origin or as a waiter. The record lets the
-   * wait go either way, so the line under its box does too. */
+   * wait go either way, so the line under its box does too. Then its agent is started on the
+   * piece, unless the worktree itself has landed. */
   private tellAwaiting(landedId: string, told: ReadonlySet<string>): void {
     const landed = this.d.state.worktree(landedId);
     const repo = landed ? this.d.state.repo(landed.repoId) : undefined;
     let changed = false;
     for (const w of this.d.state.worktrees) {
       if (!w.awaits?.some((a) => a.id === landedId)) continue;
+      const pieces = w.awaits.filter((a) => a.id === landedId).flatMap((a) => a.pieces ?? []);
       w.awaits = w.awaits.filter((a) => a.id !== landedId);
       if (w.awaits.length === 0) delete w.awaits;
       changed = true;
-      if (!landed || !repo || w.kind !== "worktree" || told.has(w.id)) continue;
-      this.d.runtime.ensureAgent(w).agent.note({
-        type: "piece-landed",
-        worktreeId: landed.id,
-        repoName: repo.name,
-        title: landed.title,
-        ...(landed.pr?.url ? { url: landed.pr.url } : {}),
-        ...(w.repoId === landed.repoId ? { same: true as const } : {}),
-        awaited: true,
-        ts: Date.now(),
-      });
+      if (!landed || !repo || w.kind !== "worktree") continue;
+      const agent = this.d.runtime.ensureAgent(w).agent;
+      if (!told.has(w.id)) {
+        agent.note({
+          type: "piece-landed",
+          worktreeId: landed.id,
+          repoName: repo.name,
+          title: landed.title,
+          ...(landed.pr?.url ? { url: landed.pr.url } : {}),
+          ...(w.repoId === landed.repoId ? { same: true as const } : {}),
+          awaited: true,
+          ts: Date.now(),
+        });
+      }
+      if (!w.landed) {
+        this.wake(w, agent, {
+          title: landed.title,
+          branch: landed.branch,
+          ...(landed.pr?.url ? { url: landed.pr.url } : {}),
+          ...(w.repoId === landed.repoId ? {} : { project: repo.name }),
+          pieces,
+        });
+      }
     }
     if (changed) {
       this.d.state.save();
       this.d.hub.emit("worktreesChanged");
     }
+  }
+
+  /** The agent whose own piece waited for the landed branch is started on it, between turns: the
+   * landing's note rides the next prompt, but an agent with nothing else to do sends none, and
+   * what is queued behind this branch waits on that piece. Landings during one turn make one
+   * wake naming them all, since the first wake's own message would make a second read as told.
+   * Nothing is sent when a message went out meanwhile, the person's or Toyon's, which carried the
+   * note already, or when the worktree has landed or gone while the turn ran. */
+  private wake(w: WorktreeInfo, agent: AgentAdapter, woke: Woke): void {
+    const pending = this.wakes.get(w.id);
+    if (pending) return void pending.push(woke);
+    this.wakes.set(w.id, [woke]);
+    const mark = agent.transcript().length;
+    fireAndForget(
+      w.id,
+      this.idle(w.id, agent).then(() => {
+        const landed = this.wakes.get(w.id) ?? [];
+        this.wakes.delete(w.id);
+        const live = this.d.state.worktree(w.id);
+        if (live?.kind !== "worktree" || live.landed) return;
+        if (
+          agent
+            .transcript()
+            .slice(mark)
+            .some((e) => isMessage(e.event))
+        )
+          return;
+        const titles = landed.map((l) => `"${l.title}"`).join(", ");
+        const pieces = new Set(landed.flatMap((l) => l.pieces));
+        agent.send(pieceWakePrompt(landed), {
+          asked: {
+            kind: "handoff",
+            why: `${titles} landed, so the agent starts the ${pieces.size === 1 ? "piece" : "pieces"} that waited`,
+          },
+          keepCards: true,
+        });
+      }),
+      "piece woken",
+    );
   }
 
   /** the queued pieces of the same list that waited for `made`'s piece now wait for its worktree */

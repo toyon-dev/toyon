@@ -337,6 +337,9 @@ export interface QueuedPiece {
   attachments: AttachmentRef[];
   /** what the person added when they approved */
   note?: string;
+  /** the origin's own here pieces that wait for this one, by title: they go onto the origin's
+   * `awaits` once this is made into a worktree, since until then there is nothing to name */
+  heres?: string[];
   queuedAt: number;
 }
 
@@ -380,8 +383,9 @@ export interface WorktreeInfo {
   /** pieces of a plan waiting for a sibling to land before their worktree is made */
   queued?: QueuedPiece[];
   /** the worktrees this one's own work waits for, named by the here pieces of its list; each is
-   * told on this chat when it lands, and goes from here with that */
-  awaits?: Array<{ id: string; branch: string; title: string }>;
+   * told on this chat when it lands, and goes from here with that. `pieces` are those here
+   * pieces by title, what the agent is started on; a wait without them still releases */
+  awaits?: Array<{ id: string; branch: string; title: string; pieces?: string[] }>;
   /** the pull request this worktree opened, and what GitHub last said about it; absent until the
    * PR route has run here. Gone with new work after it merged. */
   pr?: PrState;

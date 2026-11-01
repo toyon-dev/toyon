@@ -23,9 +23,17 @@ import "./tooltip.css";
  */
 
 export type TipPlacement = "follow" | "top" | "bottom" | "left" | "right";
+/** how the box lines up with its control across the side it is on: the box's start edge on the
+ * control's, its middle on the control's, or its end edge on the control's */
+export type TipAlign = "start" | "center" | "end";
 
 export type TipOptions = {
   placement?: TipPlacement;
+  /** Across the placement's axis. Below or above, a box is centred unless said: a control at the
+   * window's edge wants the box hung from its own edge, so it grows inward from the control and
+   * does not stand centred over the panel under it. Beside, a box starts level with its control's
+   * top unless said, since one of several lines centred on a row stands over the rows beside it. */
+  align?: TipAlign;
   /** a line or more under the text in the quiet tier, for the where or the which under the what:
    * a worktree's state, then its path. The text is what you asked, so it comes first; a middot
    * between the two on one line read as a phrase, and the path ahead of the state put the answer
@@ -56,7 +64,11 @@ export type TipOptions = {
 
 export type TipAlso = { text: string; key: string };
 
-export function tip(text: string, key?: string, { placement, detail, card, dot, name, aside, also }: TipOptions = {}) {
+export function tip(
+  text: string,
+  key?: string,
+  { placement, align, detail, card, dot, name, aside, also }: TipOptions = {},
+) {
   const named = name ? `${text}: ${name}` : text;
   const details = (Array.isArray(detail) ? detail : [detail]).filter((d): d is string => !!d);
   const label = [named, ...details, ...(aside ?? [])].join(", ");
@@ -64,6 +76,7 @@ export function tip(text: string, key?: string, { placement, detail, card, dot, 
     "data-tip": text,
     "data-tip-key": key,
     "data-tip-placement": placement,
+    "data-tip-align": align,
     // the detail lines and the figures each ride one attribute, a line each: none of them is ever
     // more than one line
     "data-tip-detail": details.length ? details.join("\n") : undefined,
@@ -106,6 +119,7 @@ export type Anchor = {
   aside?: string[];
   also?: TipAlso;
   placement: TipPlacement;
+  align?: TipAlign;
 };
 
 /** The element's own placement; below when it names none. Nothing is guessed from the anchor's
@@ -116,15 +130,21 @@ function placementOf(el: HTMLElement): TipPlacement {
   return "bottom";
 }
 
+function alignOf(el: HTMLElement): TipAlign | undefined {
+  const a = el.dataset.tipAlign;
+  return a === "start" || a === "center" || a === "end" ? a : undefined;
+}
+
 /** Where a tip goes: beside its element on the side the markup asked for, or off the pointer for a
  * following one. A following tip hangs off the pointer's lower right, the way a cursor tip always
  * has, and swaps to its left when the right runs out; centring it on the pointer put the arrow over
  * the middle of a box that can be three hundred pixels wide, with the text going both ways from it.
- * A tip above or below centres on its control and never swaps ends, so only the side it grows on
- * can turn. One beside its anchor tops out level with it: a rail row's tip is several lines, and
- * centred on a row it stood over the rows on either side with its first line, the state, away
- * from the row it names. It drops to the row's foot when the window's does not leave room. */
-export function tipPlacement(p: TipPlacement): Placement {
+ * A tip above or below centres on its control, so only the side it grows on can turn; one hung
+ * from the control's edge (TipOptions.align) swaps to the other edge when that one runs out. One
+ * beside its anchor tops out level with it: a rail row's tip is several lines, and centred on a
+ * row it stood over the rows on either side with its first line, the state, away from the row it
+ * names. It drops to the row's foot when the window's does not leave room. */
+export function tipPlacement(p: TipPlacement, align?: TipAlign): Placement {
   if (p === "follow") {
     return {
       side: "bottom",
@@ -135,8 +155,10 @@ export function tipPlacement(p: TipPlacement): Placement {
       margin: MARGIN,
     };
   }
-  if (p === "left" || p === "right") return { side: p, align: "start", offset: GAP, flip: "both", margin: MARGIN };
-  return { side: p, align: "center", offset: GAP, flip: "side", margin: MARGIN };
+  if (p === "left" || p === "right") {
+    return { side: p, align: align ?? "start", offset: GAP, flip: "both", margin: MARGIN };
+  }
+  return { side: p, align: align ?? "center", offset: GAP, flip: "both", margin: MARGIN };
 }
 
 /** what the tip is placed against: its control, or the pointer it trails */
@@ -193,6 +215,7 @@ export function Tooltips() {
             ? { text: el.dataset.tipAlso, key: el.dataset.tipAlsoKey }
             : undefined,
         placement,
+        align: alignOf(el),
       });
     };
     /** The tipped element under the pointer. A float stays in the DOM where React rendered it,
@@ -314,7 +337,7 @@ export function Tooltips() {
       boxRef={box}
       handle={handle}
       anchor={() => tipRect(anchor, pointer.current)}
-      placement={tipPlacement(anchor.placement)}
+      placement={tipPlacement(anchor.placement, anchor.align)}
       track={false}
       raiseKey={anchor}
     >

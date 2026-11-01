@@ -75,6 +75,11 @@ export function TopBar({ center }: { center: HTMLDivElement | null }) {
   // chat's end. Everything else in the bar stays where it is, zen at the far right included. The
   // lead and the tools keep their places, so the cluster between them measures the same either way.
   const chatLeft = useStore((s) => s.chatSide) === "left";
+  // A control at either end of the bar hangs its tip from its own outer edge, so the box grows
+  // toward the bar's middle: centred, a box wider than the control stood out past it over the
+  // first row of the panel the toggle is about, and at the bar's end ran into the window's edge
+  const fromStart = { tipAlign: "start" } as const;
+  const fromEnd = { tipAlign: "end" } as const;
   // the panel toggles leave the bar on a first-run screen: their panes are hidden there, and a
   // disabled button still lights and explains itself on hover as if it might do something
   const changesToggle = !bare && (
@@ -84,6 +89,7 @@ export function TopBar({ center }: { center: HTMLDivElement | null }) {
       hint={chord("changes")}
       tone="chrome"
       on={changesOpen}
+      {...(chatLeft ? fromEnd : fromStart)}
       onClick={() => dispatch({ a: "toggle-changes" })}
     />
   );
@@ -94,6 +100,7 @@ export function TopBar({ center }: { center: HTMLDivElement | null }) {
       hint={chord("composer")}
       tone="chrome"
       on={chatOpen}
+      {...(chatLeft ? fromStart : fromEnd)}
       onClick={() => dispatch({ a: "toggle-chat" })}
     />
   );
@@ -108,6 +115,7 @@ export function TopBar({ center }: { center: HTMLDivElement | null }) {
       hint={chord("rail")}
       tone="chrome"
       on={railOpen}
+      {...(chatLeft ? fromStart : fromEnd)}
       onClick={() => dispatch({ a: "toggle-rail" })}
     />
   );
@@ -148,6 +156,7 @@ export function TopBar({ center }: { center: HTMLDivElement | null }) {
           hint={chord("keys")}
           tone="chrome"
           on={keysOpen}
+          {...fromEnd}
           // the card this opens, so a press on the lit gear closes it rather than counting as a
           // press outside: the gesture that opened it may have been the chord, not this button
           aria-controls="keys-help"
@@ -162,6 +171,7 @@ export function TopBar({ center }: { center: HTMLDivElement | null }) {
             hint={chord("design")}
             tone="chrome"
             on={designOpen}
+            {...fromEnd}
             onClick={() => dispatch({ a: "toggle-design" })}
           />
         )}
@@ -178,6 +188,7 @@ export function TopBar({ center }: { center: HTMLDivElement | null }) {
             hint={chord("zen")}
             tone="chrome"
             on={zen}
+            {...fromEnd}
             onClick={() => dispatch({ a: "toggle-zen" })}
           />
         )}
@@ -446,7 +457,15 @@ function PhoneButton() {
   const toggle = () => dispatch({ a: "toggle", overlay: { kind: "devices" } });
   if (letIn) {
     return (
-      <IconButton icon="devices" label="Your devices" tone="chrome" on={open} aria-expanded={open} onClick={toggle} />
+      <IconButton
+        icon="devices"
+        label="Your devices"
+        tone="chrome"
+        on={open}
+        tipAlign="end"
+        aria-expanded={open}
+        onClick={toggle}
+      />
     );
   }
   return (

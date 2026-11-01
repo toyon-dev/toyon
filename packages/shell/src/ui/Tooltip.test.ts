@@ -23,6 +23,22 @@ describe("tooltip placement", () => {
     expect(r.top).toBe(100);
   });
 
+  test("a placement below hung from the control's edge shares that edge", () => {
+    const el: Rect = { left: 10, top: 9, right: 30, bottom: 29 };
+    const start = place(el, BOX, VP, tipPlacement("bottom", "start"));
+    expect(start.side).toBe("bottom");
+    expect(start.x).toBe(10);
+    const end = place({ ...el, left: 970, right: 990 }, BOX, VP, tipPlacement("bottom", "end"));
+    expect(end.x + BOX.w).toBe(990);
+  });
+
+  test("a placement below hung from an edge swaps edges when that side runs out", () => {
+    const el: Rect = { left: 970, top: 9, right: 990, bottom: 29 };
+    const { x, align } = place(el, BOX, VP, tipPlacement("bottom", "start"));
+    expect(align).toBe("end");
+    expect(x + BOX.w).toBe(990);
+  });
+
   test("a side placement drops to the anchor's foot when the window leaves no room below", () => {
     const r = at({ left: 700, top: VP.h - 30, width: 300, height: 20 }, "left");
     expect(r.side).toBe("left");

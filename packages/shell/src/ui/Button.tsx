@@ -2,7 +2,7 @@ import type { ButtonHTMLAttributes, ReactElement, ReactNode } from "react";
 import { cx } from "./cx.ts";
 import { Icon, type IconName } from "./Icon.tsx";
 import { Spinner } from "./Spinner.tsx";
-import { type TipAlso, tip } from "./Tooltip.tsx";
+import { type TipAlign, type TipAlso, type TipPlacement, tip } from "./Tooltip.tsx";
 import "./button.css";
 
 /**
@@ -122,6 +122,10 @@ type IconProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, "children" | "ari
     detail?: string | string[];
     /** the sibling verb and its key, a row under the tooltip's text */
     also?: TipAlso;
+    /** which side of the control the tooltip stands on; below unless said */
+    placement?: TipPlacement;
+    /** how the tooltip lines up with the control across that side: centred, or hung from an edge */
+    tipAlign?: TipAlign;
     /** the name is the screen reader's alone: the control shows a box of its own on hover (the
      * composer's ring opens its figures), and a tooltip over that box would be a second one */
     silent?: boolean;
@@ -138,6 +142,8 @@ export function IconButton({
   hint,
   detail,
   also,
+  placement,
+  tipAlign,
   silent,
   badge,
   tone,
@@ -147,7 +153,7 @@ export function IconButton({
   ...rest
 }: IconProps) {
   const cls = cx("btn-icon", tone && TONE[tone], on && "on", className);
-  const named = tip(label, hint, { detail, also });
+  const named = tip(label, hint, { detail, also, placement, align: tipAlign });
   return (
     <button className={cls} type={type} {...(silent ? { "aria-label": named["aria-label"] } : named)} {...rest}>
       {typeof icon === "string" ? <Icon name={icon} /> : icon}

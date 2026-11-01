@@ -65,6 +65,7 @@ import { parseRateLimit } from "./ratelimit.ts";
 import { STEER_METHOD, type SteerOutcome, steerOutcome, supportsSteering } from "./steering.ts";
 import type { AcpLink } from "./transport.ts";
 import { Wakeups } from "./wakeup.ts";
+import { wireFlags } from "./wire.ts";
 
 export type AgentEventListener = (event: AgentEvent, seq: number) => void;
 export type AgentStatusListener = (status: AgentStatus) => void;
@@ -823,7 +824,8 @@ export class AcpSession implements AgentAdapter {
       log.warn(this.d.worktreeId, "steered message started a turn of the agent's own");
       return;
     }
-    if (this.live === live) preempted(live.tools);
+    // an adapter that reports the calls a steer dropped needs no marking (wire.ts)
+    if (this.live === live && wireFlags(live.conn.spec.id).cutCallUnreported) preempted(live.tools);
   }
 
   /** Words or a call from the agent while a steer is unanswered: it is answering. Past a stop the
@@ -1432,10 +1434,11 @@ export class AcpSession implements AgentAdapter {
     const opt = live.options.get(category);
     const wanted = this.d.option?.(category);
     if (!opt || !wanted || wanted === opt.current) return;
-    if (!opt.ids.includes(wanted)) {
-      // the record was reconciled with the list as it was learned, so this is an effort the model
-      // has not got, or a list that moved under a session: said out loud, since the chip then reads
-      // the record and not what answers
+    // an id the list lacks is refused by an adapter that checks values against it (wire.ts). The
+    // record was reconciled with the list as it was learned, so this is an effort the model has not
+    // got, or a list that moved under a session: said out loud, since the chip then reads the
+    // record and not what answers
+    if (!opt.ids.includes(wanted) && (category !== "model" || wireFlags(live.conn.spec.id).modelIdOffList)) {
       log.info(this.d.worktreeId, `acp: ${category} ${wanted} is not offered; ${opt.current} answers`);
       return;
     }
@@ -1528,11 +1531,14 @@ export class AcpSession implements AgentAdapter {
       this.d.worktreeId,
       (file, bytes) =>
         fireAndForget(this.d.worktreeId, this.d.attachments.putToolImage(this.d.worktreeId, file, bytes), "tool image"),
-      (toolId, start, input) => {
-        const taken = this.tasks.start(toolId, start, input);
-        if (taken) this.holdingChanged();
-        return taken;
-      },
+      // an adapter that reports a backgrounded command's finish itself needs no tail (wire.ts)
+      wireFlags(live.conn.spec.id).backgroundFinish
+        ? (toolId, start, input) => {
+            const taken = this.tasks.start(toolId, start, input);
+            if (taken) this.holdingChanged();
+            return taken;
+          }
+        : undefined,
       (toolId, until) => this.wakeups.start(toolId, until),
     );
     this.forward(live, events);
@@ -1563,6 +1569,8 @@ export class AcpSession implements AgentAdapter {
    * until it is done; the row would say the command was still being written the whole time. */
   private holdInput(live: Live, update: acp.SessionUpdate) {
     if (update.sessionUpdate !== "tool_call_update") return;
+    // an adapter that says when a call starts releases the input itself, by that status (wire.ts)
+    if (!wireFlags(live.conn.spec.id).noStartSignal) return;
     const toolId = update.toolCallId;
     const memo = live.tools.get(toolId);
     const held = memo?.held;

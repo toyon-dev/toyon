@@ -87,7 +87,7 @@ function Chips({ refs, worktreeId }: { refs: AttachmentRef[]; worktreeId: string
   );
 }
 
-/** what the piece became, as the tab's tip says it */
+/** what the piece became, as the line over its text says it where there is no row to open */
 function standingWords(s: PieceStanding): string {
   const where = "repoName" in s && s.repoName ? ` in ${s.repoName}` : "";
   switch (s.kind) {
@@ -111,43 +111,36 @@ function standingWords(s: PieceStanding): string {
 }
 
 /**
- * The track's pills: the plan's when the page has one (`plan` is its label and the path its tip
- * names), then the pieces. A pill is a title, with the row's dot once the piece became a
- * worktree; its fate is the line under the open page's title, and the pill's tip for the rest.
- * `current` and `onPick` are the pane's, since the open pill is the pane's state and not the
- * list's. Nothing for a page with no list, and nothing for one pill, which has nothing to switch
- * to.
+ * The track's pills: the plan's when the page has one (`plan` is its label), then the pieces. A
+ * pill is a title, with the row's dot once the piece became a worktree; its fate is the line under
+ * the open page's title, one press away, so a pill carries no tip. `current` and `onPick` are the
+ * pane's, since the open pill is the pane's state and not the list's. Nothing for a page with no
+ * list, and nothing for one pill, which has nothing to switch to.
  */
 export function usePieceTabs(
   item: HandoffItem | null,
-  plan: { label: string; path: string } | null,
+  plan: string | null,
   current: string,
   onPick: (id: string) => void,
 ): Omit<TabsProps<string>, "end"> | undefined {
   const rows = useStore((s) => s.visible);
-  const label = plan?.label;
-  const path = plan?.path;
   return useMemo(() => {
     if (!item) return undefined;
     const items: TabItem<string>[] = [];
-    if (label !== undefined && path !== undefined) items.push({ id: "plan", label, tip: tip(path) });
+    if (plan !== null) items.push({ id: "plan", label: plan });
     for (const piece of pieceOrder(item)) {
       const mark = pieceMark(item, piece);
       // the row's own dot, so the track reads as the rail does; a row gone from the rail has none
       const row = "worktreeId" in mark ? rows.find((r) => r.worktree.id === mark.worktreeId) : undefined;
-      const words = deciding(item)
-        ? fateSentence(piece, effectiveFate(item, piece), waitOf(item, piece))
-        : standingWords(pieceStanding(item, piece));
       items.push({
         id: piece.id,
         lead: row ? <span className={`dot ${dotClass(row)}`} /> : null,
         label: piece.title,
-        tip: tip(words),
       });
     }
     if (items.length < 2) return undefined;
     return { items, current, onPick, owner: "handoff", label: "the plan and what it hands off", segmented: true };
-  }, [item, label, path, current, onPick, rows]);
+  }, [item, plan, current, onPick, rows]);
 }
 
 /** The track under the pane's head: the handed-off mark, then the pills on one line. Pills past
@@ -195,8 +188,8 @@ export function HandoffTrack({ tabs }: { tabs: Omit<TabsProps<string>, "end"> })
   );
 }
 
-/** what became of the open piece, as the line over its text states it: the tip's words, with
- * the row's chip in place of its name where there is a row to open */
+/** what became of the open piece, as the line over its text states it: standingWords, with the
+ * row's chip in place of its name where there is a row to open */
 function Standing({ item, piece }: { item: HandoffItem; piece: Piece }) {
   const s = pieceStanding(item, piece);
   const where = "repoName" in s && s.repoName ? ` in ${s.repoName}` : "";

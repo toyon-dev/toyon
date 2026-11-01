@@ -185,10 +185,9 @@ export function EditorPane({
       : defaultTab(pieces, hasPlan);
   const openPiece = pieces && current !== "plan" ? (pieces.pieces.find((p) => p.id === current) ?? null) : null;
   // the head names the plan by its title, so its pill under it is only "Plan"
-  const planTab = useMemo(() => (hasPlan ? { label: "Plan", path } : null), [hasPlan, path]);
   // nothing for a list of one with no plan of its own: there is nothing to switch to, and the
   // piece is the page
-  const tabs = usePieceTabs(pieces, planTab, current, setTab);
+  const tabs = usePieceTabs(pieces, hasPlan ? "Plan" : null, current, setTab);
   const sync = useMemo(
     () =>
       loose

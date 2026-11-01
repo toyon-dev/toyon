@@ -17,6 +17,18 @@ export function HandoffRow({ item, worktreeId }: { item: HandoffItem; worktreeId
   const sock = useSock();
   const dispatch = useDispatch();
   if (item.state === "held" || item.state === "proposed") return null;
+  // the file the list sat on: the agent's plan when the list rode beside a plan card, else the
+  // page Toyon wrote for it, each with the section drawn at its head
+  const plan = item.plan;
+  const file =
+    plan && worktreeId ? (
+      <Button
+        variant="inline"
+        onClick={() => openFile({ sock, dispatch }, { worktreeId, path: plan, view: "preview" })}
+      >
+        {item.companion ? "the plan" : "the list"}
+      </Button>
+    ) : null;
   if (item.state === "going") {
     return (
       <DaemonRow icon="spawn" word="handed off" tone="accent" at={item.ts}>
@@ -31,7 +43,10 @@ export function HandoffRow({ item, worktreeId }: { item: HandoffItem; worktreeId
   if (item.state === "declined") {
     return (
       <DaemonRow icon="close" word="not handed off" tone="quiet" at={item.ts} below={item.reason}>
-        <span className="daemon-text">nothing started</span>
+        <span className="daemon-text">
+          nothing started
+          {file && <> · {file}</>}
+        </span>
       </DaemonRow>
     );
   }
@@ -79,18 +94,6 @@ export function HandoffRow({ item, worktreeId }: { item: HandoffItem; worktreeId
       </span>,
     );
   if (here) parts.push(<span key="here">{`${here} here`}</span>);
-  // the file the list sat on: the agent's plan when the list rode beside a plan card, else the
-  // page Toyon wrote for it, each with the section drawn at its head
-  const plan = item.plan;
-  const file =
-    plan && worktreeId ? (
-      <Button
-        variant="inline"
-        onClick={() => openFile({ sock, dispatch }, { worktreeId, path: plan, view: "preview" })}
-      >
-        {item.companion ? "the plan" : "the list"}
-      </Button>
-    ) : null;
   return (
     <DaemonRow
       icon="spawn"

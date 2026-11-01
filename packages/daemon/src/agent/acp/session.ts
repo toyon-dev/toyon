@@ -1727,7 +1727,7 @@ export class AcpSession implements AgentAdapter {
   private async sayHandoffDeclined() {
     try {
       await this.deliver(
-        "The pieces list you handed over went back with the plan. Hand over a list again with `handoff` before you ask for approval.",
+        "The pieces list you handed over went back with the plan. Hand over a list again with `handoff` before you ask for approval. Where the person put each piece carries over to the new list by piece title, so keep the title of a piece that stands.",
       );
     } catch (e) {
       // the no still goes back; a reply that fails would read to the agent as a refusal

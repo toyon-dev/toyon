@@ -351,6 +351,57 @@ describe("fates", () => {
     // the last press per piece is what go reads: p1 here, p2 skipped
     expect(recorded(a.id, "handoff-declined")).toHaveLength(1);
   });
+
+  test("a held list sent back keeps a page, and the presses on it follow the titles onto the list handed over again", async () => {
+    const repoId = await registered();
+    const a = await w.worktrees.create(repoId, "task", { title: "Rail", mode: "plan" });
+    const b = await w.worktrees.create(repoId, "task", { title: "Composer" });
+    const notes = piece({ title: "Notes", plan: "Add notes.", where: "worktree" });
+    expect(await call(a.id, piece(), notes)).toEqual({ text: HELD });
+    const first = lastProposal(a.id);
+    w.handoff.fate(a.id, first.id, "p1", "here");
+    w.handoff.fate(a.id, first.id, "p2", "skip");
+    // the no on the plan card: the list had no file, so its pieces are written as a page
+    w.hub.emit("handoffDecided", a.id, first.id, false);
+    await until(() => recorded(a.id, "handoff-declined").length === 1);
+    const back = recorded(a.id, "handoff-declined")[0] as Extract<AgentEvent, { type: "handoff-declined" }>;
+    expect(back.id).toBe(first.id);
+    const page = back.plan ?? "";
+    expect(page).toMatch(/^\.toyon\/plans\/\d+\.md$/);
+    expect(readFileSync(join(a.path, page), "utf8")).toBe(listDoc(first.pieces));
+    // handed over again: the same title takes the press, a new title has nothing to take, and a
+    // press the piece as re-proposed cannot take is left to the agent's word
+    agentOf(a.id).note({ type: "turn-start", ts: Date.now() });
+    const docs = piece({ title: "Docs", plan: "Write docs.", where: "worktree" });
+    await call(a.id, piece({ where: "send", to: b.branch }), notes, docs);
+    const again = lastProposal(a.id);
+    const carried = recorded(a.id, "handoff-fate").filter((e) => (e as { id: string }).id === again.id);
+    expect(carried).toMatchObject([{ pieceId: "p2", fate: "skip" }]);
+    // the list handed over again, with the presses on it, is itself the one the next carries from
+    w.hub.emit("handoffDecided", a.id, again.id, false);
+    await until(() => recorded(a.id, "handoff-declined").length === 2);
+    agentOf(a.id).note({ type: "turn-start", ts: Date.now() });
+    await call(a.id, piece(), notes);
+    const third = lastProposal(a.id);
+    expect(recorded(a.id, "handoff-fate").filter((e) => (e as { id: string }).id === third.id)).toMatchObject([
+      { pieceId: "p2", fate: "skip" },
+    ]);
+  });
+
+  test("not now on Toyon's own card is an answer: the next list starts from the agent's word", async () => {
+    const repoId = await registered();
+    const a = await w.worktrees.create(repoId, "task", { title: "Rail" });
+    expect(await call(a.id, piece())).toEqual({ text: SHOWN });
+    const first = lastProposal(a.id);
+    w.handoff.fate(a.id, first.id, "p1", "skip");
+    await w.handoff.answer(a.id, first.id, false);
+    // the card's list already had its page: the no writes none
+    expect(recorded(a.id, "handoff-declined")[0]).not.toHaveProperty("plan");
+    agentOf(a.id).note({ type: "turn-start", ts: Date.now() });
+    await call(a.id, piece());
+    const again = lastProposal(a.id);
+    expect(recorded(a.id, "handoff-fate").filter((e) => (e as { id: string }).id === again.id)).toEqual([]);
+  });
 });
 
 describe("go", () => {

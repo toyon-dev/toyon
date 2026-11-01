@@ -3690,7 +3690,11 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
     case "handoff-declined": {
       const idx = handoffIndex(items, event.id, ["held", "proposed", "going"]);
       if (idx === -1) return items;
-      const card = items[idx] as HandoffCard;
+      const was = items[idx] as HandoffCard;
+      // a held list sent back gets a page of its own: the plan it sat on is the agent's to
+      // rewrite, so the row no longer names it
+      const { companion: _rode, ...bare } = was;
+      const card: HandoffCard = event.plan ? { ...bare, plan: event.plan } : was;
       // not now on Toyon's own card is the person's answer, read where they gave it; a reason is
       // Toyon closing the list, which stays where it stood
       if (card.state === "proposed" && !event.reason) {

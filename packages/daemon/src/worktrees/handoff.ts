@@ -218,6 +218,48 @@ export function effectiveFate(entries: readonly TranscriptEntry[], proposal: Pro
   return fate;
 }
 
+/** The fates the person pressed on the last list, by piece title, when that list went back with
+ * its plan: a held list the no took with it, or one Toyon read again because the plan moved.
+ * The next list is that plan's next draft, so a piece with the same title is the same piece and
+ * the person's word on it stands; a list they answered as a card (not now) was an answer, and
+ * nothing carries from it. */
+export function pressedOnSentBack(entries: readonly TranscriptEntry[]): Map<string, PieceFate> {
+  const pressed = new Map<string, PieceFate>();
+  const last = entries.findLast(({ event }) => event.type === "handoff-proposed")?.event;
+  if (last?.type !== "handoff-proposed" || !last.held) return pressed;
+  let back = false;
+  for (const { event } of entries) {
+    if (event.type === "handoff-shown" && event.id === last.id) return pressed;
+    if (event.type === "handoff-declined" && event.id === last.id) back = !event.outcome;
+  }
+  if (!back) return pressed;
+  for (const { event } of entries) {
+    if (event.type === "handoff-fate" && event.id === last.id) {
+      const title = last.pieces.find((p) => p.id === event.pieceId)?.title;
+      if (title) pressed.set(title.toLowerCase(), event.fate);
+    }
+  }
+  return pressed;
+}
+
+/** why a piece cannot become `fate` as proposed, or null when it can */
+export function fateRefused(proposed: Proposed, piece: Piece, fate: PieceFate): string | null {
+  if (fate === "send" && !piece.to) return "That piece has no worktree to send to";
+  // go acts in list order, so a worktree piece waiting for one later on the list would be made
+  // before its wait exists and start at once, while the row still said queued
+  const after = piece.after;
+  if (fate === "worktree" && after && "piece" in after) {
+    const at = proposed.pieces.findIndex((p) => p.id === piece.id);
+    if (proposed.pieces.findIndex((p) => p.id === after.piece) > at) {
+      return "That piece waits for one later on the list, so it is done here or skipped";
+    }
+  }
+  if (piece.fate === "send" && (fate === "here" || fate === "worktree")) {
+    return "A piece for an open worktree is sent there or skipped";
+  }
+  return null;
+}
+
 /** the attachment a label in the prompt names: the kind's word and its number per kind, as
  * the prompt captions them */
 const LABEL = /^(image|paste|pasted text|file|element)\s+(\d+)$/i;
@@ -516,7 +558,9 @@ export class HandoffService implements ToolProvider {
     const here = by === "agent" && !held && this.offerHere(wt, pieces);
     if (here) pieces[0]!.fate = "here";
     const plan = held ? null : writePlanDocNow(wt.path, listDoc(pieces));
-    agent.note({
+    // read before the note, so the list sent back is still the last one on the transcript
+    const pressed = by === "person" ? new Map<string, PieceFate>() : pressedOnSentBack(entries);
+    const proposal: Proposed = {
       type: "handoff-proposed",
       id: randomUUID(),
       pieces,
@@ -526,7 +570,16 @@ export class HandoffService implements ToolProvider {
       ...(by === "toyon" ? { by: "toyon" as const } : {}),
       ...(by === "toyon" && read ? { read } : {}),
       ts: Date.now(),
-    });
+    };
+    agent.note(proposal);
+    // the person's presses on the list sent back follow the titles onto this one; a press the
+    // piece as re-proposed cannot take is left to the agent's word
+    for (const piece of pressed.size ? pieces : []) {
+      const fate = pressed.get(piece.title.toLowerCase());
+      if (fate && fate !== piece.fate && !fateRefused(proposal, piece, fate)) {
+        agent.note({ type: "handoff-fate", id: proposal.id, pieceId: piece.id, fate, ts: Date.now() });
+      }
+    }
     return { text: held ? HELD : here ? SHOWN_HERE : SHOWN };
   }
 
@@ -618,19 +671,8 @@ export class HandoffService implements ToolProvider {
     if (!proposed) throw new UserError("That list is not open in this chat");
     const piece = proposed.pieces.find((p) => p.id === pieceId);
     if (!piece) throw new UserError("That piece is not on the list");
-    if (fate === "send" && !piece.to) throw new UserError("That piece has no worktree to send to");
-    // go acts in list order, so a worktree piece waiting for one later on the list would be made
-    // before its wait exists and start at once, while the row still said queued
-    const after = piece.after;
-    if (fate === "worktree" && after && "piece" in after) {
-      const at = proposed.pieces.findIndex((p) => p.id === pieceId);
-      if (proposed.pieces.findIndex((p) => p.id === after.piece) > at) {
-        throw new UserError("That piece waits for one later on the list, so it is done here or skipped");
-      }
-    }
-    if (piece.fate === "send" && (fate === "here" || fate === "worktree")) {
-      throw new UserError("A piece for an open worktree is sent there or skipped");
-    }
+    const refusedWhy = fateRefused(proposed, piece, fate);
+    if (refusedWhy) throw new UserError(refusedWhy);
     agent.note({ type: "handoff-fate", id, pieceId, fate, ts: Date.now() });
   }
 
@@ -642,18 +684,21 @@ export class HandoffService implements ToolProvider {
   }
 
   /** the list closes with nothing done: the plan was sent back, the card was pressed not go, or
-   * `reason` says what stopped the go */
+   * `reason` says what stopped the go. A held list has no file of its own, and the plan it sat on
+   * is the agent's to rewrite now, so its pieces are written as a page the row keeps. */
   async decline(worktreeId: string, id: string, reason?: string): Promise<void> {
     const wt = this.d.state.worktree(worktreeId);
     if (!wt) return;
     const agent = this.d.runtime.ensureAgent(wt).agent;
-    if (!openHandoff(agent.transcript()).some((p) => p.id === id)) {
-      return log.debug(worktreeId, `decline for a pieces list that already closed (${id})`);
-    }
+    const entries = agent.transcript();
+    const proposed = openHandoff(entries).find((p) => p.id === id);
+    if (!proposed) return log.debug(worktreeId, `decline for a pieces list that already closed (${id})`);
+    const plan = listFile(entries, id) ? null : writePlanDocNow(wt.path, listDoc(proposed.pieces));
     agent.note({
       type: "handoff-declined",
       id,
       ...(reason ? { outcome: "failed" as const, reason } : {}),
+      ...(plan ? { plan } : {}),
       ts: Date.now(),
     });
   }
@@ -787,8 +832,8 @@ export class HandoffService implements ToolProvider {
   }
 
   /** The plan file moved under an open held list: mark the list stale, and a list Toyon read is
-   * read again from the file as it stands, the fates pressed carried over by title. The agent's
-   * own list is only marked, since the agent hands over again when it re-plans. Run on every tree
+   * read again from the file as it stands. The agent's own list is only marked, since the agent
+   * hands over again when it re-plans. Run on every tree
    * change of a watched worktree, so the gates come first: a held list exists only in plan mode,
    * and one already shown as Toyon's own card belongs to no plan card. Everything it needs is on
    * the transcript, so a restart changes nothing. */
@@ -819,22 +864,10 @@ export class HandoffService implements ToolProvider {
     const found = await this.d.reader(wt, markdown);
     if (!found || found.length < 2) return;
     if (openPlanCard(agent.transcript())?.id !== card.id) return;
-    const pressed = new Map<string, PieceFate>();
-    for (const { event } of agent.transcript()) {
-      if (event.type === "handoff-fate" && event.id === open.id) {
-        const title = open.pieces.find((p) => p.id === event.pieceId)?.title;
-        if (title) pressed.set(title.toLowerCase(), event.fate);
-      }
-    }
+    // the fates pressed follow the titles onto the list read again, as onto any list after one
+    // sent back (propose)
     agent.note({ type: "handoff-declined", id: open.id, reason: "the plan changed; read again", ts: Date.now() });
-    const fresh = await this.proposeRead(wt, markdown, found);
-    if (!fresh) return;
-    for (const piece of fresh.pieces) {
-      const fate = pressed.get(piece.title.toLowerCase());
-      if (fate && fate !== piece.fate && !(fate === "send" && !piece.to)) {
-        agent.note({ type: "handoff-fate", id: fresh.id, pieceId: piece.id, fate, ts: Date.now() });
-      }
-    }
+    await this.proposeRead(wt, markdown, found);
   }
 
   /** The verb: the person wants part of this work done in a new worktree of project `repoId`,

@@ -4408,6 +4408,10 @@ describe("a pieces list", () => {
     const back = reducer(asked, agent("a", { type: "handoff-declined", id: "l1", ts: 3 }));
     expect(chatOf(back)[0]).toMatchObject({ state: "declined" });
     expect(openHandoff(chatOf(back))).toBeNull();
+    // sent back with a page of its own, the list leaves the plan it rode beside
+    const paged = reducer(asked, agent("a", { type: "handoff-declined", id: "l1", plan: ".toyon/plans/2.md", ts: 3 }));
+    expect(chatOf(paged)[0]).toMatchObject({ state: "declined", plan: ".toyon/plans/2.md" });
+    expect(chatOf(paged)[0]).not.toHaveProperty("companion");
   });
 
   test("an unheld list is Toyon's own card at once, and a held one becomes it when shown", () => {

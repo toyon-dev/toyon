@@ -482,8 +482,10 @@ export type AgentEvent =
   | { type: "handoff-go"; id: string; note?: string; ts: number }
   /** what became of each piece */
   | { type: "handoff"; id: string; outcomes: PieceOutcome[]; ts: number }
-  /** the card closed with nothing done: the plan was sent back, or `outcome` says what failed */
-  | { type: "handoff-declined"; id: string; outcome?: "failed"; reason?: string; ts: number }
+  /** the card closed with nothing done: the plan was sent back, or `outcome` says what failed.
+   * `plan` is the page Toyon wrote for a list that had no file of its own: a held list sat on
+   * the plan that went back, which the agent rewrites, and the pieces stay readable here */
+  | { type: "handoff-declined"; id: string; outcome?: "failed"; reason?: string; plan?: string; ts: number }
   /** a queued piece's sibling landed and its worktree was made */
   | { type: "piece-made"; id: string; pieceId: string; worktreeId: string; title: string; ts: number }
   /** a queued piece will never be made: the sibling it waited for is gone */

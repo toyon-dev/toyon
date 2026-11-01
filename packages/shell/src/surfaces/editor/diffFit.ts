@@ -42,17 +42,6 @@ export const FOLD_MIN = 10;
 /** the fold band is a fixed zone, not a row */
 const BAND_PX = 24;
 
-/** A review section's height before its editor has said: what its counts suggest, folded the way a
- * section folds, a few lines of context around a hunk for every few lines changed. A guess that
- * keeps the scroll's length near what it will be; the editor's own figure replaces it. Counts are
- * absent until the slower tier of the git state lands, and the guess is a short file's then. */
-export function estimateHeight(add: number | undefined, del: number | undefined, lineHeight: number): number {
-  if (add === undefined && del === undefined) return 8 * lineHeight + 2 * BAND_PX;
-  const changed = (add ?? 0) + (del ?? 0);
-  const hunks = Math.max(1, Math.ceil(changed / 8));
-  return (changed + 2 * CONTEXT_FLOOR * hunks) * lineHeight + 2 * BAND_PX;
-}
-
 /** the height of the diff of `hunks` over a file `modifiedLines` long, folded with `context` lines
  * around each hunk, or unfolded for a context of Infinity. Monaco's own rule: a stretch at either
  * end of the file folds once it holds a context and the minimum; one between hunks needs a context

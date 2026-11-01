@@ -2,7 +2,7 @@ import { baseOf, type CommitEntry, canSync, type GitFileStatus } from "@toyon/sh
 import { type DragEvent, Fragment, useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { previewBus } from "../../app/previewBus.ts";
 import { commitItems } from "../../state/actions/commit.ts";
-import { discardQuestion, fileItems, openFile, openReview } from "../../state/actions/file.ts";
+import { discardQuestion, fileItems, openFile } from "../../state/actions/file.ts";
 import { mentionFilesInChat } from "../../state/attach.ts";
 import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
 import {
@@ -15,7 +15,7 @@ import {
   useLocalField,
   useTurnOpen,
 } from "../../state/selectors.ts";
-import { type ChangesTab, changesTabShown, repoById, reviewKey } from "../../state/store.ts";
+import { type ChangesTab, changesTabShown, repoById } from "../../state/store.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
 import { Icon } from "../../ui/Icon.tsx";
 import { step } from "../../ui/listNav.ts";
@@ -84,30 +84,17 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
   const bare = useBare();
   const focusReq = useStore((s) => s.focusChanges);
   const gitInfo = useLocalField(shownId, "git");
-  // the row whose file is open in the editor, or that a review stands at; plain strings so the
-  // selectors stay identity-stable
-  const openPath = useStore((s) => {
-    const e = s.editor;
-    if (e?.worktreeId !== shownId) return null;
-    return e.kind === "review" ? (e.at?.path ?? null) : e.path;
-  });
-  const openRef = useStore((s) =>
-    s.editor?.kind === "file" && s.editor.worktreeId === shownId ? (s.editor.ref ?? null) : null,
-  );
-  const openSince = useStore((s) => {
-    const e = s.editor;
-    if (e?.worktreeId !== shownId) return null;
-    return (e.kind === "review" ? e.at?.since : e.since) ?? null;
-  });
-  // anything open over this worktree's list, which Escape here closes
-  const paneOpen = useStore((s) => s.editor?.worktreeId === shownId);
+  // the row whose file is open in the editor; plain strings so the selectors stay identity-stable
+  const openPath = useStore((s) => (s.editor && s.editor.worktreeId === shownId ? s.editor.path : null));
+  const openRef = useStore((s) => (s.editor && s.editor.worktreeId === shownId ? (s.editor.ref ?? null) : null));
+  const openSince = useStore((s) => (s.editor && s.editor.worktreeId === shownId ? (s.editor.since ?? null) : null));
   // each list reads the change first and its tests after: the order every index below is in, so
   // the arrows, the pick and the titles agree with what is drawn. A folded committed section
   // leaves the list altogether, so the cursor, the row ids and the menus count only what is drawn;
   // the heading stays for as long as the branch holds anything. What the last turn changed, when
   // that is less than everything uncommitted, is a section of its own, shut until asked for, since
   // the list above already holds these files; its rows carry the turn's own counts and open the
-  // file against the tree the turn started from. The review reads the same sections (rows.ts).
+  // file against the tree the turn started from. The sections are read in rows.ts.
   const hasCommitted = (gitInfo?.extras?.committed ?? NO_FILES).length > 0;
   const committedOpen = useCommittedOpen();
   const turn = gitInfo?.extras?.turn;
@@ -123,11 +110,7 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
   // a title splits a list only when it holds both kinds: a list of tests alone is just the list
   // A test file is one row until it is opened: then the tests its change touched are listed under
   // it, read from the two sides the editor holds. One file's names at a time, as one commit's files.
-  const openDisk = useStore((s) => {
-    const e = s.editor;
-    if (e?.worktreeId !== shownId) return null;
-    return e.kind === "review" ? (e.at ? (e.files[reviewKey(e.at)]?.disk ?? null) : null) : e.disk;
-  });
+  const openDisk = useStore((s) => (s.editor && s.editor.worktreeId === shownId ? s.editor.disk : null));
   const openTests = useMemo(
     () =>
       openPath !== null && openDisk && isTestPath(openPath)
@@ -215,16 +198,10 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
   const snapRef = archived && files.length > 0 ? (gitInfo?.head ?? null) : null;
   // walking the list opens each file as it arrives, and the keyboard stays here for the next arrow;
   // Enter is the one that takes it into the file
-  // On the desk a row brings the review of every change to its file; an archived page's rows and
-  // the phone's open the file on its own, since the one reads git's kept copy and the other has no
-  // room for a scroll of files.
   const open = useCallback(
-    (path: string, focus = false, since?: string) => {
-      if (!shownId) return;
-      if (!onScreen && !archived) openReview({ sock, dispatch }, shownId, since ? { path, since } : { path }, focus);
-      else openFile({ sock, dispatch }, { worktreeId: shownId, path, focus, ref: snapRef ?? undefined, since });
-    },
-    [shownId, snapRef, sock, dispatch, onScreen, archived],
+    (path: string, focus = false, since?: string) =>
+      shownId && openFile({ sock, dispatch }, { worktreeId: shownId, path, focus, ref: snapRef ?? undefined, since }),
+    [shownId, snapRef, sock, dispatch],
   );
 
   // one flat order across both sections, so ↑↓ crosses the section titles the way the eye does. An
@@ -370,12 +347,6 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
     (openSince ?? undefined) === sinceAt(i) &&
     (i < turnAt ? openRef === snapRef : !openRef);
   atOpen.current = showChanges ? rows.findIndex((_, i) => opensAt(i)) : -1;
-  // A review scrolled by hand stands at another file: the cursor goes with it, so the next arrow
-  // steps on from the file being read rather than from the row last pressed.
-  const reviewing = useStore((s) => s.editor?.kind === "review" && s.editor.worktreeId === shownId);
-  useOnChange([openPath, openSince], () => {
-    if (reviewing && atOpen.current >= 0) setSel(atOpen.current);
-  });
   useEffect(() => {
     if (!focusReq) return;
     // on the files tab the tree takes it, and picks up at the open file itself
@@ -556,7 +527,7 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
       // next file straight away. Only a list with nothing open hands the keyboard back. It never
       // reaches the app-wide ladder, which would close the terminal ahead of the diff.
       e.stopPropagation();
-      if (paneOpen) dispatch({ a: "close-editor" });
+      if (openPath !== null) dispatch({ a: "close-editor" });
       else (document.activeElement as HTMLElement | null)?.blur();
     }
   };

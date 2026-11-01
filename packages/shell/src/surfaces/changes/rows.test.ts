@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { GitInfo } from "@toyon/shared";
-import { changeSections, reviewSections } from "./rows.ts";
+import { changeSections } from "./rows.ts";
 
 const git: GitInfo = {
   version: 1,
@@ -38,23 +38,5 @@ describe("changeSections", () => {
   test("no git state yet is three empty sections", () => {
     const c = changeSections(null, { turn: true, committed: true });
     expect([c.files.length, c.turned.length, c.committed.length]).toEqual([0, 0, 0]);
-  });
-});
-
-describe("reviewSections", () => {
-  test("in the list's order, a path read against the turn's tree is its own section", () => {
-    const at = reviewSections(changeSections(git, { turn: true, committed: true })).map((s) => s.at);
-    expect(at).toEqual([
-      { path: "src/a.ts" },
-      { path: "src/b.ts" },
-      { path: "src/a.test.ts" },
-      { path: "src/a.ts", since: "t0" },
-      { path: "README.md" },
-    ]);
-  });
-
-  test("a committed file that is also uncommitted is the same diff, so one section", () => {
-    const paths = reviewSections(changeSections(git, { turn: false, committed: true })).map((s) => s.at.path);
-    expect(paths.filter((p) => p === "src/b.ts")).toHaveLength(1);
   });
 });

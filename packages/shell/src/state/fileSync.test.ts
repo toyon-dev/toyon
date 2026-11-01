@@ -11,7 +11,7 @@ import { openFile } from "./actions/file.ts";
 import { createStore } from "./context.tsx";
 import { decide, FileSync } from "./fileSync.ts";
 import { NO_STAMPS } from "./snapshot.ts";
-import { editorFile, initialState } from "./store.ts";
+import { initialState } from "./store.ts";
 
 describe("what a fresh read means for the editor's text", () => {
   const base = { text: "a", version: "v1" };
@@ -294,14 +294,14 @@ describe("the open file and the disk", () => {
     h.edit("x.ts", b, "mine");
     h.tick();
     h.read({ after: "theirs", version: "v2" });
-    expect(editorFile(h.store.getState())?.conflict).toEqual({ after: "theirs", version: "v2" });
+    expect(h.store.getState().editor?.conflict).toEqual({ after: "theirs", version: "v2" });
     expect(b.value).toBe("mine");
     h.timers.pass();
     expect(h.count("write-file")).toBe(0);
 
     h.sync.reload({ worktreeId: "a", path: "x.ts" });
     expect(b.value).toBe("theirs");
-    expect(editorFile(h.store.getState())?.conflict).toBeNull();
+    expect(h.store.getState().editor?.conflict).toBeNull();
     expect(h.count("write-file")).toBe(0);
   });
 
@@ -315,7 +315,7 @@ describe("the open file and the disk", () => {
     h.read({ after: "theirs", version: "v2" });
     h.sync.keepMine({ worktreeId: "a", path: "x.ts" });
     expect(h.last("write-file")).toMatchObject({ content: "mine", base: "v2" });
-    expect(editorFile(h.store.getState())?.conflict).toBeNull();
+    expect(h.store.getState().editor?.conflict).toBeNull();
   });
 
   test("a save refused because the file moved reads it again and keeps the text", () => {
@@ -328,7 +328,7 @@ describe("the open file and the disk", () => {
     h.written({ ok: false, reason: "changed", version: "v9" });
     expect(h.count("read-file")).toBe(2);
     h.read({ after: "agent", version: "v9" });
-    expect(editorFile(h.store.getState())?.conflict).toEqual({ after: "agent", version: "v9" });
+    expect(h.store.getState().editor?.conflict).toEqual({ after: "agent", version: "v9" });
     h.sync.keepMine({ worktreeId: "a", path: "x.ts" });
     expect(h.last("write-file")).toMatchObject({ content: "mine", base: "v9" });
   });
@@ -345,7 +345,7 @@ describe("the open file and the disk", () => {
     expect(landed.count("read-file")).toBe(2);
     landed.read({ after: "mine", version: "v2" });
     expect(landed.count("write-file")).toBe(1);
-    expect(editorFile(landed.store.getState())?.conflict).toBeNull();
+    expect(landed.store.getState().editor?.conflict).toBeNull();
 
     const lost = harness();
     lost.open("x.ts");
@@ -397,7 +397,7 @@ describe("the open file and the disk", () => {
       version: null,
       message: "take it over to edit files here",
     });
-    expect(editorFile(h.store.getState())?.refused).toBe("take it over to edit files here");
+    expect(h.store.getState().editor?.refused).toBe("take it over to edit files here");
     h.edit("x.ts", b, "abc");
     h.timers.pass();
     expect(h.count("write-file")).toBe(1);
@@ -429,7 +429,7 @@ describe("the open file and the disk", () => {
 
     h.open("x.ts");
     h.read({ after: "agent", version: "v9" });
-    expect(editorFile(h.store.getState())?.conflict).toEqual({ after: "agent", version: "v9" });
+    expect(h.store.getState().editor?.conflict).toEqual({ after: "agent", version: "v9" });
     const again = h.attach("x.ts", "agent");
     expect(again.value).toBe("mine");
   });
@@ -464,7 +464,7 @@ describe("who last touched each line", () => {
     const q = h.last("blame-file");
     expect(q).toMatchObject({ worktreeId: "a", path: "x.ts" });
     h.sync.receive({ t: "file-blame", worktreeId: "a", path: "x.ts", seq: q?.seq ?? -1, commits: [], lines: [-1] });
-    expect(editorFile(h.store.getState())?.blame).toEqual({ commits: [], lines: [-1], version: "v1" });
+    expect(h.store.getState().editor?.blame).toEqual({ commits: [], lines: [-1], version: "v1" });
   });
 
   test("only the newest ask is heard, and none is made for a file with no text", () => {
@@ -477,9 +477,9 @@ describe("who last touched each line", () => {
     const fresh = h.last("blame-file");
     expect(fresh?.seq).not.toBe(stale?.seq);
     h.sync.receive({ t: "file-blame", worktreeId: "a", path: "x.ts", seq: stale?.seq ?? -1, commits: [], lines: [0] });
-    expect(editorFile(h.store.getState())?.blame).toBeNull();
+    expect(h.store.getState().editor?.blame).toBeNull();
     h.sync.receive({ t: "file-blame", worktreeId: "a", path: "x.ts", seq: fresh?.seq ?? -1, commits: [], lines: [-1] });
-    expect(editorFile(h.store.getState())?.blame).toMatchObject({ version: "v2" });
+    expect(h.store.getState().editor?.blame).toMatchObject({ version: "v2" });
     h.tick();
     h.read({ after: "", version: "v3", binary: true });
     expect(h.count("blame-file")).toBe(2);
@@ -509,77 +509,5 @@ describe("a look at a file nobody has open", () => {
     const text = h.sync.look("a", "src/App.tsx");
     h.store.dispatch({ a: "connected", v: false });
     expect(await text).toBeNull();
-  });
-});
-
-describe("a review's sections and the disk", () => {
-  const review = (h: ReturnType<typeof harness>, path: string) =>
-    h.store.dispatch({ a: "open-review", worktreeId: "a", at: { path }, seq: 1, focus: false });
-  const section = (h: ReturnType<typeof harness>, path: string) => {
-    const e = h.store.getState().editor;
-    return e?.kind === "review" ? e.files[`\n${path}`] : undefined;
-  };
-
-  test("a section near the screen reads its file, and its read lands in the review", () => {
-    const h = harness();
-    review(h, "x.ts");
-    // the review itself reads nothing: its sections do, as they come near
-    expect(h.count("read-file")).toBe(0);
-    h.sync.hold({ worktreeId: "a", path: "x.ts" });
-    expect(h.last("read-file")).toMatchObject({ path: "x.ts" });
-    h.read({ before: "a", after: "b" });
-    expect(section(h, "x.ts")?.disk).toMatchObject({ before: "a", after: "b" });
-  });
-
-  test("a file held twice is read once, and kept while either still holds it", () => {
-    const h = harness();
-    review(h, "x.ts");
-    const first = h.sync.hold({ worktreeId: "a", path: "x.ts" });
-    const second = h.sync.hold({ worktreeId: "a", path: "x.ts" });
-    expect(h.count("read-file")).toBe(1);
-    h.read({ after: "b" });
-    first();
-    first();
-    h.tick();
-    // still held by the second: the new tree state reads it again
-    expect(h.count("read-file")).toBe(2);
-    second();
-    h.read({ after: "c" });
-    h.tick();
-    expect(h.count("read-file")).toBe(2);
-  });
-
-  test("a reply that lands after the section let go fills nothing", () => {
-    const h = harness();
-    review(h, "x.ts");
-    const release = h.sync.hold({ worktreeId: "a", path: "x.ts" });
-    release();
-    h.read({ after: "late" });
-    expect(section(h, "x.ts")).toBeUndefined();
-  });
-
-  test("the file handed from a section to the pane on its own stays held through the handover", () => {
-    const h = harness();
-    review(h, "x.ts");
-    const release = h.sync.hold({ worktreeId: "a", path: "x.ts" });
-    h.read({ before: "a", after: "b" });
-    h.open("x.ts");
-    // the pane's open reads, then the section scrolls away behind it
-    release();
-    h.read({ before: "a", after: "c" });
-    expect(editorFile(h.store.getState())?.disk?.after).toBe("c");
-  });
-
-  test("a held file that leaves the disk stays in the review as a deletion", () => {
-    const h = harness();
-    review(h, "x.ts");
-    h.sync.hold({ worktreeId: "a", path: "x.ts" });
-    h.read({ before: "a", after: "b" });
-    const text = h.attach("x.ts", "b");
-    h.tick();
-    h.read({ before: "a", after: "", version: null });
-    expect(h.store.getState().editor?.kind).toBe("review");
-    expect(section(h, "x.ts")?.disk).toMatchObject({ before: "a", after: "", version: null });
-    expect(text.value).toBe("");
   });
 });

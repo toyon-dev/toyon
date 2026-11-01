@@ -79,7 +79,6 @@ import { ChatPanel } from "../chat/ChatPanel.tsx";
 import { fadeFileDrag, fileDrop, noteFileDrag, plainDrop } from "../chat/useIntake.ts";
 import { DesignPane } from "../design/DesignPane.tsx";
 import { EditorPane } from "../editor/EditorPane.tsx";
-import { ReviewPane } from "../editor/ReviewPane.tsx";
 import { Overlays } from "../overlays/Overlays.tsx";
 import { TerminalPane } from "../terminal/TerminalPane.tsx";
 import { chord, pageErrorText, previewUrl, relFile } from "../util.ts";
@@ -697,15 +696,7 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
           )}
         </div>
       </div>
-      {editor?.kind === "review" ? (
-        <ReviewPane
-          review={editor}
-          height={editorFull ? "100%" : editorH > 0 ? editorH : "45%"}
-          full={editorFull}
-          onToggleFull={() => setEditorFull(!editorFull)}
-          onDragStart={startEditorDrag}
-        />
-      ) : editor ? (
+      {editor && (
         <EditorPane
           editor={editor}
           height={editorFull ? "100%" : editorH > 0 ? editorH : "45%"}
@@ -713,7 +704,7 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
           onToggleFull={() => setEditorFull(!editorFull)}
           onDragStart={startEditorDrag}
         />
-      ) : null}
+      )}
       {/* the panes remount per worktree, and they are siblings in one children array: a key both
           share is a duplicate key to React, which then paints a second copy of one on an update
           (the design pane, on the first pointer move of its resize) that no close removes */}

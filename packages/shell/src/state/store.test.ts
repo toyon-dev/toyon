@@ -32,7 +32,6 @@ import {
   type EditorDisk,
   type EditorView,
   EMPTY_LOCAL,
-  editorFile,
   guestOf,
   initialState,
   isBare,
@@ -51,7 +50,6 @@ import {
   previewIdOf,
   previewReload,
   reducer,
-  reviewKey,
   routeTarget,
   type State,
   type StoreServerMsg,
@@ -2343,15 +2341,15 @@ describe("the editor's open file", () => {
     });
     // a handle writes; more than the pane shows opens empty and locked whatever came with it
     const handle = { kind: "file" } as unknown as FileSystemFileHandle;
-    expect(editorFile(run([hello(wt("a")), loose({ source: { kind: "handle", handle } })]))?.disk?.writable).toBe(true);
+    expect(run([hello(wt("a")), loose({ source: { kind: "handle", handle } })]).editor?.disk?.writable).toBe(true);
     // the daemon's grant writes too
     const granted = run([
       hello(wt("a")),
       loose({ source: { kind: "grant", id: "g1", path: "/h/notes.md", version: "v1" } }),
     ]);
-    expect(editorFile(granted)?.disk?.writable).toBe(true);
+    expect(granted.editor?.disk?.writable).toBe(true);
     const big = run([hello(wt("a")), loose({ text: "", tooLarge: true, source: { kind: "handle", handle } })]);
-    expect(editorFile(big)?.disk).toMatchObject({ writable: false, tooLarge: true });
+    expect(big.editor?.disk).toMatchObject({ writable: false, tooLarge: true });
     // a save the browser refused locks the text, since no fresh read will come to unlock it
     const refused = reducer(run([hello(wt("a")), loose({ source: { kind: "handle", handle } })]), {
       a: "editor-refused",
@@ -2374,8 +2372,7 @@ describe("the editor's open file", () => {
 
   test("with no view asked for, a changed file opens on its diff and an unchanged one as the file", () => {
     const viewOf = (before: string, after: string, view?: EditorView) =>
-      editorFile(run([hello(wt("a")), opening({ path: "x.ts", seq: 1, view }), readInto("x.ts", { before, after })]))
-        ?.view;
+      run([hello(wt("a")), opening({ path: "x.ts", seq: 1, view }), readInto("x.ts", { before, after })]).editor?.view;
     expect(viewOf("a", "b")).toBe("diff");
     expect(viewOf("a", "a")).toBe("file");
     expect(viewOf("a", "b", "file")).toBe("file");
@@ -2386,9 +2383,8 @@ describe("the editor's open file", () => {
 
   test("a markdown file opens to be read rendered, unless its diff or its text was asked for", () => {
     const viewOf = (before: string, after: string, view?: EditorView) =>
-      editorFile(
-        run([hello(wt("a")), opening({ path: "docs/x.md", seq: 1, view }), readInto("docs/x.md", { before, after })]),
-      )?.view;
+      run([hello(wt("a")), opening({ path: "docs/x.md", seq: 1, view }), readInto("docs/x.md", { before, after })])
+        .editor?.view;
     expect(viewOf("a", "a")).toBe("preview");
     expect(viewOf("a", "b")).toBe("diff");
     expect(viewOf("a", "b", "file")).toBe("file");
@@ -2411,7 +2407,7 @@ describe("the editor's open file", () => {
       disk: null,
     });
     // a commit's copy of the same path is a different file
-    expect(editorFile(reducer(s, opening({ path: "x.ts", ref: "abc1234", seq: 4 })))?.disk).toBeNull();
+    expect(reducer(s, opening({ path: "x.ts", ref: "abc1234", seq: 4 })).editor?.disk).toBeNull();
   });
 
   test("a line the page reported waits for the offset that maps it back to the file", () => {
@@ -2419,12 +2415,12 @@ describe("the editor's open file", () => {
     const ranges = server({ t: "changed-ranges", worktreeId: "a", path: "x.tsx", ranges: [], lineOffset: 3 });
     // revealing 55 before the offset is known would land three lines past the element
     const waiting = run([hello(wt("a")), opening({ path: "x.tsx", seq: 1, view: "file", line })]);
-    expect(editorFile(waiting)?.line).toEqual(line);
-    expect(editorFile(reducer(waiting, ranges))?.line).toEqual({ n: 52 });
+    expect(waiting.editor?.line).toEqual(line);
+    expect(reducer(waiting, ranges).editor?.line).toEqual({ n: 52 });
     // an offset already known places it as the file opens; a search hit is a file line already
     const known = run([hello(wt("a")), ranges, opening({ path: "x.tsx", seq: 1, line })]);
-    expect(editorFile(known)?.line).toEqual({ n: 52 });
-    expect(editorFile(reducer(known, opening({ path: "x.tsx", seq: 2, line: { n: 55 } })))?.line).toEqual({ n: 55 });
+    expect(known.editor?.line).toEqual({ n: 52 });
+    expect(reducer(known, opening({ path: "x.tsx", seq: 2, line: { n: 55 } })).editor?.line).toEqual({ n: 55 });
   });
 
   test("switching view keeps the file and spends the line it jumped to", () => {
@@ -2435,7 +2431,7 @@ describe("the editor's open file", () => {
     ]);
     const diff = reducer(s, { a: "editor-view", v: "diff" });
     expect(diff.editor).toMatchObject({ path: "x.tsx", view: "diff", disk: { after: "b" } });
-    expect(editorFile(diff)?.line).toBeUndefined();
+    expect(diff.editor?.line).toBeUndefined();
     expect(reducer(initial, { a: "editor-view", v: "file" }).editor).toBeNull();
   });
 
@@ -2454,7 +2450,7 @@ describe("the editor's open file", () => {
       readInto("x.ts", { after: "a" }),
       readInto("x.ts", {}, { error: "not a file" }),
     ]);
-    expect(editorFile(shown)?.disk?.after).toBe("a");
+    expect(shown.editor?.disk?.after).toBe("a");
     expect(localOf(shown, "a").chat.at(-1)).toEqual({ kind: "error", text: "not a file" });
   });
   test("a save refused for good is said on the pane, over the text", () => {
@@ -2464,10 +2460,10 @@ describe("the editor's open file", () => {
       opening({ path: "x.ts", seq: 1 }),
       { a: "editor-refused", file: x, message: "not text" },
     ]);
-    expect(editorFile(s)?.refused).toBe("not text");
+    expect(s.editor?.refused).toBe("not text");
     // another file's refusal is not this pane's
     const other = run([{ a: "editor-refused", file: { worktreeId: "a", path: "y.ts" }, message: "no" }], s);
-    expect(editorFile(other)?.refused).toBe("not text");
+    expect(other.editor?.refused).toBe("not text");
   });
 
   test("a conflict lands on its own file, survives opening it again, and clears", () => {
@@ -2475,10 +2471,10 @@ describe("the editor's open file", () => {
     const theirs = { after: "agent", version: "v2" };
     const x = { worktreeId: "a", path: "x.ts" };
     const conflicted = reducer(s, { a: "editor-conflict", file: x, theirs });
-    expect(editorFile(conflicted)?.conflict).toEqual(theirs);
+    expect(conflicted.editor?.conflict).toEqual(theirs);
     expect(reducer(s, { a: "editor-conflict", file: { ...x, path: "y.ts" }, theirs })).toBe(s);
-    expect(editorFile(reducer(conflicted, opening({ path: "x.ts", seq: 2 })))?.conflict).toEqual(theirs);
-    expect(editorFile(reducer(conflicted, { a: "editor-conflict", file: x, theirs: null }))?.conflict).toBeNull();
+    expect(reducer(conflicted, opening({ path: "x.ts", seq: 2 })).editor?.conflict).toEqual(theirs);
+    expect(reducer(conflicted, { a: "editor-conflict", file: x, theirs: null }).editor?.conflict).toBeNull();
   });
 
   test("a worktrees frame that keeps the selection keeps the open file; one that moves it closes it", () => {
@@ -3114,13 +3110,13 @@ describe("an archived worktree's page", () => {
 
   test("a file of its worktree open in the editor closes with the page; the row's own file stays", () => {
     const onPage = run([{ a: "open-archived", id: "x" }, opening({ worktreeId: "x", path: "a.ts", seq: 1 })], listed());
-    expect(editorFile(onPage)?.worktreeId).toBe("x");
+    expect(onPage.editor?.worktreeId).toBe("x");
     expect(run([{ a: "close-archived" }], onPage).editor).toBeNull();
     expect(run([archived("r", "y")], onPage).editor).toBeNull();
     const rowFile = run([opening({ path: "b.ts", seq: 1 }), { a: "open-archived", id: "x" }], listed());
     // opening the page put the row's file away already; one opened on the row after the page closes stays
     const reopened = run([{ a: "close-archived" }, opening({ path: "b.ts", seq: 2 })], rowFile);
-    expect(editorFile(reopened)?.worktreeId).toBe("a");
+    expect(reopened.editor?.worktreeId).toBe("a");
   });
 
   test("the item leaving the list ends it: restored or deleted", () => {
@@ -4635,97 +4631,6 @@ describe("PR comments", () => {
       },
     ]);
     expect(s.editor).toMatchObject({ worktreeId: "a", loose: { source: { kind: "pr-comments" } } });
-    expect(editorFile(s)?.disk?.writable).toBe(false);
-  });
-});
-
-describe("the review", () => {
-  const reviewing = (path: string, seq: number, more: { since?: string; focus?: boolean } = {}): Action => ({
-    a: "open-review",
-    worktreeId: "a",
-    at: more.since ? { path, since: more.since } : { path },
-    seq,
-    focus: more.focus ?? false,
-  });
-  const reviewOf = (s: State) => (s.editor?.kind === "review" ? s.editor : null);
-  const sectionOf = (s: State, path: string, since?: string) => reviewOf(s)?.files[reviewKey({ path, since })];
-
-  test("a row's press opens the review at that file, and the next press only moves it", () => {
-    const s = run([
-      hello(wt("a")),
-      reviewing("a.ts", 1),
-      readInto("a.ts", { before: "x", after: "y" }),
-      reviewing("b.ts", 2),
-    ]);
-    expect(reviewOf(s)).toMatchObject({ worktreeId: "a", at: { path: "b.ts" }, seq: 2 });
-    expect(sectionOf(s, "a.ts")?.disk?.after).toBe("y");
-  });
-
-  test("the scroll moves where the review stands, and names no jump", () => {
-    const s = run([hello(wt("a")), reviewing("a.ts", 1)]);
-    const moved = reducer(s, { a: "review-at", worktreeId: "a", at: { path: "b.ts" } });
-    expect(reviewOf(moved)).toMatchObject({ at: { path: "b.ts" }, seq: 1 });
-    expect(reducer(moved, { a: "review-at", worktreeId: "a", at: { path: "b.ts" } })).toBe(moved);
-    expect(reducer(moved, { a: "review-at", worktreeId: "b", at: { path: "c.ts" } })).toBe(moved);
-  });
-
-  test("a read lands in its section; a commit's copy and another worktree's file are no section", () => {
-    const s = run([hello(wt("a")), reviewing("a.ts", 1)]);
-    expect(reducer(s, readInto("a.ts", { after: "y" }, { ref: "abc1234" }))).toBe(s);
-    const other: Action = {
-      ...(readInto("a.ts") as Extract<Action, { a: "editor-read" }>),
-      file: { worktreeId: "b", path: "a.ts" },
-    };
-    expect(reducer(s, other)).toBe(s);
-    expect(sectionOf(reducer(s, readInto("a.ts", { after: "y" })), "a.ts")?.disk?.after).toBe("y");
-  });
-
-  test("a last turn row is a section of its own, read against the turn's tree", () => {
-    const s = run([
-      hello(wt("a")),
-      reviewing("a.ts", 1, { since: "t0" }),
-      {
-        ...(readInto("a.ts", { after: "turn" }) as Extract<Action, { a: "editor-read" }>),
-        file: { worktreeId: "a", path: "a.ts", since: "t0" },
-      },
-      readInto("a.ts", { after: "branch" }),
-    ]);
-    expect(sectionOf(s, "a.ts", "t0")?.disk?.after).toBe("turn");
-    expect(sectionOf(s, "a.ts")?.disk?.after).toBe("branch");
-  });
-
-  test("a section that cannot be read says why, and the review stays", () => {
-    const s = run([hello(wt("a")), reviewing("a.ts", 1), readInto("a.ts", {}, { error: "deleted on disk" })]);
-    expect(reviewOf(s)).not.toBeNull();
-    expect(sectionOf(s, "a.ts")).toMatchObject({ disk: null, error: "deleted on disk" });
-    expect(sectionOf(reducer(s, readInto("a.ts", { after: "back" })), "a.ts")).toMatchObject({ error: undefined });
-  });
-
-  test("a file opened out of the review shows what the review read, and closing it goes back there", () => {
-    const s = run([
-      hello(wt("a")),
-      reviewing("a.ts", 1),
-      readInto("b.ts", { before: "1", after: "2" }),
-      opening({ path: "b.ts", seq: 2 }),
-    ]);
-    const file = editorFile(s);
-    expect(file).toMatchObject({ path: "b.ts", disk: { after: "2" } });
-    expect(file?.back?.kind).toBe("review");
-    const back = reviewOf(reducer(s, { a: "close-editor" }));
-    expect(back).toMatchObject({ at: { path: "b.ts" }, seq: 2, focus: true });
-    expect(back?.files[reviewKey({ path: "b.ts" })]?.disk?.after).toBe("2");
-    expect(reducer(reducer(s, { a: "close-editor" }), { a: "close-editor" }).editor).toBeNull();
-  });
-
-  test("a commit's copy or another worktree's file opened over the review does not come back to it", () => {
-    const s = run([hello(wt("a"), wt("b")), reviewing("a.ts", 1)]);
-    expect(editorFile(reducer(s, opening({ path: "a.ts", ref: "abc1234", seq: 2 })))?.back).toBeUndefined();
-    expect(editorFile(reducer(s, opening({ worktreeId: "b", path: "a.ts", seq: 2 })))?.back).toBeUndefined();
-  });
-
-  test("the review takes the pane from a file open on its own, and the phone's frame closes it", () => {
-    const s = run([hello(wt("a")), opening({ path: "x.ts", seq: 1 }), reviewing("a.ts", 2)]);
-    expect(reviewOf(s)).toMatchObject({ files: {} });
-    expect(reducer(s, { a: "frame", v: "phone" }).editor).toBeNull();
+    expect(s.editor?.disk?.writable).toBe(false);
   });
 });

@@ -140,12 +140,13 @@ const ICON_PATHS: Record<IconName, string> = {
   // make them commits), and no diagonal joining them, which at 16px is `search`'s handle. It
   // carries no bulb because ACP files the call under "think" and the row is not a thought.
   spawn: "M2.3 5.8a3 3 0 1 0 6 0a3 3 0 1 0-6 0z M9.4 11.4a1.9 1.9 0 1 0 3.8 0a1.9 1.9 0 1 0-3.8 0z",
-  // work leaving this chat for a sibling worktree: one line in from the conversation (not from a
-  // commit, so no ring at the start) forking into two: one branch stops in a ring at the size of
-  // `branch`'s nodes (this chat stays) while the other runs 3px past it and leaves as an arrow
-  // (the work goes on elsewhere). `pr`'s arrow comes in; this one goes out
+  // work leaving this chat for a sibling worktree: `branch` on its side. The rail lies flat with
+  // its ring at each end (the line this chat is on, which goes on), and the same diverging curve
+  // ends in an arrowhead where branch's third ring sits, run 3px past the end ring: the piece
+  // leaves rather than stopping in a node of its own. One mark differs from branch, the way one
+  // differs for `pr`; pr's arrow comes in, this one goes out
   handoff:
-    "M2.5 8h2.3 M4.8 8c2.2 0 2.2-3.6 4.4-3.6 M4.8 8c2.2 0 2.2 3.6 4.4 3.6h4.9 M12.3 9.8l1.8 1.8-1.8 1.8 M9.2 4.4a1.6 1.6 0 1 0 3.2 0a1.6 1.6 0 1 0-3.2 0z",
+    "M1.7 4.5a1.6 1.6 0 1 0 3.2 0a1.6 1.6 0 1 0-3.2 0z M4.9 4.5h4.6 M9.4 4.5a1.6 1.6 0 1 0 3.2 0a1.6 1.6 0 1 0-3.2 0z M4.9 4.5c2.6 0 1.6 7 4.3 7h4 M12.1 9.7l1.8 1.8-1.8 1.8",
   // one equator and one meridian: a second latitude line filled the circle in at 13px
   globe: "M8 2.2a5.8 5.8 0 1 0 0 11.6 5.8 5.8 0 1 0 0-11.6z M2.2 8h11.6 M8 2.2c-3 3.4-3 8.2 0 11.6 3-3.4 3-8.2 0-11.6z",
   // the rail's own rows: a status dot and a name, three deep. The dots are solid like the rail's,

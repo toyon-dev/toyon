@@ -7,6 +7,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import {
   acceptRemote,
   addressedByPort,
+  FRAME_PORT,
   hostPreviews,
   PREVIEW_PORTS,
   parseRemote,
@@ -26,7 +27,7 @@ function saved(): RemoteView | null {
   return parseRemote(readFileSync(remoteFile, "utf8"));
 }
 
-const ports = `${PREVIEW_PORTS.from}-${PREVIEW_PORTS.to}`;
+const ports = `${FRAME_PORT} and ${PREVIEW_PORTS.from}-${PREVIEW_PORTS.to}`;
 
 const describe = (r: RemoteView): string => `remote access: https://${r.host}/, ${previewsLine(r)}`;
 

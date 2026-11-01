@@ -15,7 +15,7 @@ describe("flyToml", () => {
     ]) {
       expect(toml).toContain(line);
     }
-    for (let p = 10001; p <= 10008; p++) expect(toml).toContain(`internal_port = ${p}`);
+    for (let p = 10000; p <= 10008; p++) expect(toml).toContain(`internal_port = ${p}`);
   });
 });
 

@@ -205,6 +205,11 @@ export class OpenService {
     return path && viewerOf(path) ? path : null;
   }
 
+  /** where a granted file sits, whatever it is, for the frame that renders a granted page */
+  granted(id: string): string | null {
+    return this.grants.get(id) ?? null;
+  }
+
   /** save over a granted file, only over the version the shell last saw (as a worktree write is) */
   async write(id: string, content: string, base: string | null): Promise<FileWrite> {
     const path = this.grants.get(id);

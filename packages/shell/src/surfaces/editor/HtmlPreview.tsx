@@ -1,41 +1,8 @@
-import { useMemo, useRef } from "react";
+import type { FrameSource } from "@toyon/shared";
+import { useEffect, useRef, useState } from "react";
 import { useUrls } from "../../state/context.tsx";
 import { useOnChange } from "../../ui/hooks.ts";
-import type { DaemonUrls } from "../../ws.ts";
-import { assetPath, dirOf } from "../chat/markdownPaths.ts";
-
-/** where a page's relative assets are read from: the folder it sits in, in the worktree it is in */
-interface HtmlBase {
-  worktreeId: string;
-  dir: string;
-  version: string | null;
-  /** the daemon the page is on, which serves what sits beside it */
-  urls: DaemonUrls;
-}
-
-/** the attributes a page reaches beside itself through: a picture, a stylesheet, a poster, a
- * clip's source. A script is not here, since none runs in the frame. */
-const REFS = "img[src], source[src], video[src], audio[src], video[poster], link[href], object[data]";
-
-/** The page's text with each relative asset pointed at the daemon, so a picture or stylesheet
- * beside the file draws inside the frame. A page that reaches for nothing beside it is returned as
- * written: parsing and serialising again is a change to the bytes for no gain. */
-export function rebaseHtml(text: string, base: HtmlBase | null): string {
-  if (!base) return text;
-  const doc = new DOMParser().parseFromString(text, "text/html");
-  let moved = false;
-  for (const el of doc.querySelectorAll(REFS)) {
-    for (const attr of ["src", "href", "poster", "data"]) {
-      const ref = el.getAttribute(attr);
-      const path = ref === null ? null : assetPath(base.dir, ref);
-      if (!path) continue;
-      el.setAttribute(attr, base.urls.worktreeFile(base.worktreeId, path, base.version));
-      moved = true;
-    }
-  }
-  if (!moved) return text;
-  return `${doc.doctype ? "<!doctype html>\n" : ""}${doc.documentElement.outerHTML}`;
-}
+import { mintFrame } from "../../ws.ts";
 
 /** where the preview would serve a page: its path under the worktree, taken as the served root,
  * which is the best guess the shell can make without reading the run command; `index.html` is its
@@ -46,22 +13,30 @@ export function servedPath(path: string): string {
   return `/${rel.split("/").map(encodeURIComponent).join("/")}`;
 }
 
-/** an html file read rendered: the text the editor holds, drawn in a frame of its own, so an agent
- * writing it is seen as it writes. The frame is fully sandboxed: a reading of the page, not a run
- * of it. Its scripts stay off, so the page can reach neither the shell around it nor the token in
- * its asset addresses; running it is what the preview is for. `version` is the bytes on disk its
- * relative assets are served from; without one they are left as written. */
+/** how long before a ticket runs out the next one is asked for, and how long after a daemon that
+ * did not answer before it is asked again */
+const RENEW_MS = 60_000;
+const RETRY_MS = 3000;
+
+/** what one source is, as a string, so a render that rebuilds the object asks for nothing new */
+const sourceKey = (s: FrameSource) =>
+  s.kind === "worktree" ? `w:${s.worktreeId}:${s.path}` : s.kind === "loose" ? `g:${s.grantId}` : `t:${s.text}`;
+
+/** An html file read rendered: the saved file, drawn in a frame on the daemon's frame origin, so
+ * an agent writing it is seen as it writes. Its scripts run, since a scratch page often draws
+ * itself with one, but on an origin that holds no token and no shell, under a policy the daemon
+ * sends: the page can reach neither the shell around it nor anything a script could carry off. A
+ * page that needs its own server is what the preview is for. `version` is the bytes on disk; a
+ * new one asks for the page again. */
 export function HtmlPreview({
-  text,
+  source,
   path,
-  worktreeId,
   version,
   openSeq,
   focus,
 }: {
-  text: string;
+  source: FrameSource;
   path: string;
-  worktreeId: string;
   version: string | null | undefined;
   openSeq: number;
   focus: boolean;
@@ -73,14 +48,55 @@ export function HtmlPreview({
     if (focus) ref.current?.focus();
   });
   const urls = useUrls();
-  const dir = dirOf(path);
-  const doc = useMemo(
-    () => rebaseHtml(text, version === undefined ? null : { worktreeId, dir, version, urls }),
-    [text, worktreeId, dir, version, urls],
-  );
+  const [url, setUrl] = useState<string | null>(null);
+  const [refused, setRefused] = useState<string | null>(null);
+  const latest = useRef(source);
+  latest.current = source;
+  const key = sourceKey(source);
+  // the ticket lasts a fixed while and is never extended, so the next one is asked for before it
+  // runs out, and a daemon that did not answer is asked again shortly
+  // biome-ignore lint/correctness/useExhaustiveDependencies: keyed on the source and the bytes, which is when a new ticket is wanted
+  useEffect(() => {
+    let gone = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const ask = () => {
+      void mintFrame(urls, latest.current).then((m) => {
+        if (gone) return;
+        if (m === null) {
+          timer = setTimeout(ask, RETRY_MS);
+          return;
+        }
+        if (typeof m === "string") {
+          setRefused(m);
+          setUrl(null);
+          return;
+        }
+        setRefused(null);
+        setUrl(m.url);
+        timer = setTimeout(ask, Math.max(m.ms - RENEW_MS, RENEW_MS));
+      });
+    };
+    ask();
+    return () => {
+      gone = true;
+      clearTimeout(timer);
+    };
+  }, [urls, key, version]);
   return (
     <div ref={ref} className="editor-viewer" tabIndex={-1}>
-      <iframe className="editor-frame" title={path} sandbox="" srcDoc={doc} />
+      {refused !== null ? (
+        <p className="hint">{refused}</p>
+      ) : (
+        url !== null && (
+          <iframe
+            className="editor-frame"
+            title={path}
+            sandbox="allow-scripts"
+            referrerPolicy="no-referrer"
+            src={url}
+          />
+        )
+      )}
     </div>
   );
 }

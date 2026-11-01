@@ -157,6 +157,31 @@ export interface PreviewGrantMint {
  * declared to the front up front, so they cannot be ephemeral */
 export const PREVIEW_PORTS = { from: 10001, to: 10008 } as const;
 
+/** The frame origin: where the editor pane's rendered html page is served from, apart from the
+ * shell and the token, since the page's scripts run (the daemon's server/frames.ts). Under a public
+ * name it is a label under the name when previews are routed by name, and the port before the
+ * previews' when they have their own: one forwarded port more than the previews take. */
+export const FRAME_PORT = 10000;
+export const FRAME_LABEL = "frames";
+
+/** the authority (`host`, or `host:port`) the frame origin answers for under a public name */
+export function frameAuthority(r: RemoteView): string {
+  return addressedByPort(r.previews) ? `${r.host}:${FRAME_PORT}` : `${FRAME_LABEL}.${r.host}`;
+}
+
+/** what `POST /frame` answers: the address a page is framed at, and how long the address lasts */
+export interface FrameMint {
+  url: string;
+  ms: number;
+}
+
+/** what the shell asks to frame: a page in a worktree, a file granted from outside one, or text
+ * nothing on disk holds (a commit's copy) */
+export type FrameSource =
+  | { kind: "worktree"; worktreeId: string; path: string }
+  | { kind: "loose"; grantId: string }
+  | { kind: "text"; text: string };
+
 const DNS_NAME = /^(?=.{1,253}$)[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$/;
 
 /** A host name that can only mean this machine: the loopback addresses (an IPv6 one as a URL's
@@ -202,6 +227,13 @@ export function checkPreviews(previews: string, host: string): string | null {
   }
   if (hostname !== host && !hostname.endsWith(`.${host}`)) {
     return `previews at ${hostname} are not ${host} or under it, so the preview cookie cannot reach them`;
+  }
+  // the frame origin is a label under the name too, and a preview must never be read as it
+  if (
+    previews.includes("{id}") &&
+    new URL(previewOrigin(previews, FRAME_LABEL, 1)).hostname === `${FRAME_LABEL}.${host}`
+  ) {
+    return `${previews} would put a preview at ${FRAME_LABEL}.${host}, which is where rendered pages live`;
   }
   return null;
 }

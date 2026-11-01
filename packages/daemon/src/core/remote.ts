@@ -8,7 +8,9 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import {
   acceptRemote,
+  addressedByPort,
   checkPreviews,
+  frameAuthority,
   isLoopbackHost,
   isRemoteHost,
   MANAGED_DEFAULTS,
@@ -91,7 +93,9 @@ export type Door =
    * address as the front reports it, since the peer is the front. */
   | { kind: "shell"; client: string }
   /** a preview under the public name: its worktree when routed by name, null on its own port */
-  | { kind: "preview"; worktreeId: string | null };
+  | { kind: "preview"; worktreeId: string | null }
+  /** the frame authority under the public name: rendered pages (server/frames.ts) */
+  | { kind: "frame" };
 
 /** The name and port the browser asked for. A front may drop the port from Host and state it in
  * x-forwarded-port instead: Fly's proxy does, on every service port, so a preview at
@@ -123,9 +127,16 @@ function toHttps(req: Request, host: string): Door {
   };
 }
 
-/** Who comes in. `listener` is the daemon's own port, or a worktree's preview port. With no public
- * name a preview port answers as it always has: it binds loopback and serves the local shell. */
-export function door(req: Request, peer: string, remote: Remote | null, listener: "daemon" | "preview"): Door {
+/** Who comes in. `listener` is the daemon's own port, a worktree's preview port, or the frame
+ * listener's. With no public name a preview port answers as it always has: it binds loopback and
+ * serves the local shell. The frame listener keeps the Host rule even then: a page from the web
+ * that resolves a name of its own to this machine would otherwise read a ticket's files. */
+export function door(
+  req: Request,
+  peer: string,
+  remote: Remote | null,
+  listener: "daemon" | "preview" | "frame",
+): Door {
   if (remote === null && listener === "preview") return { kind: "local" };
   // the port-80 listener binds wildcard (macOS allows low ports unprivileged only on 0.0.0.0), and
   // a local front connects from loopback, so the peer check holds everywhere but behind an edge
@@ -146,11 +157,20 @@ export function door(req: Request, peer: string, remote: Remote | null, listener
   }
   if (remote === null) return forbidden();
 
+  // The frame authority is read before the preview pattern, which could otherwise claim it. By
+  // name it comes in on the daemon's listener; by port, only on the frame listener's own.
+  const frame = authority === frameAuthority(remote);
+  if (listener === "frame" && !frame) return forbidden();
+  if (frame && (listener === "preview" || (listener === "daemon" && addressedByPort(remote.previews)))) {
+    return forbidden();
+  }
   // A preview routed by name comes in on the daemon's listener, one on its own port on that port;
   // the shell is the bare public name on the daemon's. Anything else names nothing toyon serves.
-  const preview = matchPreview(remote.previews, authority);
+  const preview = frame ? null : matchPreview(remote.previews, authority);
   let worktreeId: string | null = null;
-  if (listener === "daemon") {
+  if (frame) {
+    // nothing more to match
+  } else if (listener === "daemon") {
     if (preview !== null && "id" in preview) worktreeId = preview.id;
     else if (preview !== null || host !== remote.host) return forbidden();
   } else if (preview === null || "id" in preview) {
@@ -161,6 +181,7 @@ export function door(req: Request, peer: string, remote: Remote | null, listener
   if (req.headers.get("x-forwarded-proto") !== "https") {
     return forbidden(`${host} reaches Toyon over https only; the front must terminate TLS`);
   }
+  if (frame) return { kind: "frame" };
   if (listener === "preview") return { kind: "preview", worktreeId: null };
   return worktreeId === null ? { kind: "shell", client: clientAddress(req) ?? peer } : { kind: "preview", worktreeId };
 }

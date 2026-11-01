@@ -38,6 +38,7 @@ import { locateAssets, pruneAssets } from "./core/assets.ts";
 import { CARRIED_ENV, carryEnv, idleSleepAssertion, idleSleepBridge, KeepAwake } from "./core/awake.ts";
 import { cloud } from "./core/cloud.ts";
 import { folderDialog } from "./core/dialog.ts";
+import { FrameTickets } from "./core/frames.ts";
 import { GrantCodes } from "./core/grants.ts";
 import { Helper, helperWanted } from "./core/helper.ts";
 import { Hub } from "./core/hub.ts";
@@ -69,6 +70,7 @@ import { RunService } from "./runs/service.ts";
 import { BridgeScript } from "./runtime/bridge-script.ts";
 import { IdlePolicy } from "./runtime/idle.ts";
 import { RuntimeRegistry } from "./runtime/registry.ts";
+import { FrameListener, frameHandler, frameOriginFor } from "./server/frames.ts";
 import { Interest } from "./server/interest.ts";
 import { startServer } from "./server/ws.ts";
 import { ThemeStore } from "./themes/store.ts";
@@ -349,21 +351,37 @@ const repos = new RepoRegistry({ state, hub, runtime, worktrees, afterLand, self
 // the door for a path from outside the shell. The rest of the daemon's home (transcripts, the log,
 // themes) opens as any file; what it holds in memory and writes out whole does not, since an edit
 // on disk would be lost to its next save, and the credentials it holds are nobody's to edit.
+const refusedPaths = [
+  paths.stateFile,
+  paths.draftsFile,
+  paths.draftAttachmentsFile,
+  paths.remoteFile,
+  paths.pidFile,
+  paths.tokenFile,
+  paths.gitCredentialsFile,
+];
 const opens = new OpenService({
   state,
   hub,
   register: (path) => repos.register(path),
   found: () => worktrees.discovered(),
-  refused: [
-    paths.stateFile,
-    paths.draftsFile,
-    paths.draftAttachmentsFile,
-    paths.remoteFile,
-    paths.pidFile,
-    paths.tokenFile,
-    paths.gitCredentialsFile,
-  ],
+  refused: refusedPaths,
 });
+// rendered pages on an origin of their own: the tickets, and the listener that answers them
+const frameTickets = new FrameTickets({
+  worktreeRoot: (id) => worktrees.readable(id)?.path ?? null,
+  grantPath: (id) => opens.granted(id),
+  refused: refusedPaths,
+});
+const frameListener = new FrameListener({
+  handler: frameHandler({
+    tickets: frameTickets,
+    shells: () => ({ own: [...origins.own(), ...state.trustedOrigins], learned: bridge.learnedOrigins() }),
+  }),
+  remote: () => setting.get(),
+});
+await frameListener.follow();
+hub.on("remoteChanged", () => fireAndForget("frames", frameListener.follow(), "move the frame listener"));
 // which worktrees run: the ones being looked at, plus what a turn or a command holds; the rest
 // sleep on the clock, or sooner when the OS says memory is short
 const idle = new IdlePolicy({
@@ -495,6 +513,12 @@ const {
     }
   },
   managed,
+  frames: {
+    mint: (source) => frameTickets.mint(source),
+    handler: frameListener.handler,
+    origin: (kind) => frameOriginFor(kind, setting.get(), frameListener.origin()),
+    reason: () => frameListener.reason(),
+  },
   services: {
     state,
     hub,

@@ -5,6 +5,10 @@ import { existsSync } from "node:fs";
 import { hostname } from "node:os";
 import { join } from "node:path";
 import {
+  type FrameMint,
+  type FrameSource,
+  frameAuthority,
+  isLoopbackHost,
   machineLabel,
   OFFLINE_SLOTS,
   type PreviewGrantMint,
@@ -37,6 +41,7 @@ import type { RepoRegistry } from "../repos/registry.ts";
 import type { PreviewData, PreviewHandler } from "../runtime/proxy.ts";
 import { preflight, withCors } from "./cors.ts";
 import { acceptedEncodings, encoded, pickSibling } from "./encoding.ts";
+import { type FrameHandler, harden } from "./frames.ts";
 import { openToAnyOrigin } from "./pairing.ts";
 
 export interface WsData {
@@ -97,6 +102,15 @@ export interface HttpOpts {
   managed: { source: string | null; hash: string | null };
   /** a worktree's preview handler, for `w<id>.<remote host>`; null when its proxy is not up */
   preview: (worktreeId: string) => PreviewHandler | null;
+  /** rendered pages on their own origin (server/frames.ts): the tickets `POST /frame` mints, the
+   * handler that answers for the frame authority routed by name, and where a shell that came in
+   * as `kind` frames at, or why it cannot */
+  frames: {
+    mint: (source: FrameSource) => Promise<{ code: string; page: string; ms: number }>;
+    handler: FrameHandler;
+    origin: (kind: "local" | "shell") => string | null;
+    reason: () => string;
+  };
   /** the hello frame, for a page that asks before its socket exists */
   bootstrap: () => Promise<unknown>;
   /** a path from outside the shell (the Dock icon, `toyon <path>`): a repo registers, a file
@@ -228,6 +242,18 @@ export function createFetch(opts: HttpOpts) {
       );
     }
 
+    // the frame authority routed by name: a rendered page and its files, by ticket, and nothing of
+    // toyon's own, as a preview name is the app whole
+    if (d.kind === "frame") {
+      try {
+        return await opts.frames.handler.fetch(req, `https://${remote ? frameAuthority(remote) : ""}`);
+      } catch (e) {
+        // never Bun's own error page on the frame origin: that would be a document there without the sandbox
+        log.warn("frames", "a frame request failed", e);
+        return harden(new Response("error", { status: 500 }));
+      }
+    }
+
     if (url.pathname === "/ws") {
       const authed = sameSecret(url.searchParams.get("token"), opts.token);
       // after the token, never before: this is what teaches the daemon it is being framed
@@ -319,6 +345,26 @@ export function createFetch(opts: HttpOpts) {
       if (!remote) return new Response("previews here are not reached by name", { status: 400 });
       const body: PreviewGrantMint = opts.grants.mint();
       return Response.json(body, { headers: { "cache-control": NO_STORE } });
+    }
+
+    // A ticket to frame a page on the frame origin (core/frames.ts): the whole address is built
+    // here, so the shell never learns the origin's shape, and which origin depends on how this shell
+    // came in, since a local and a remote one can both be open at once.
+    if (url.pathname === "/frame" && req.method === "POST") {
+      if (!authed(req)) return unauthorized();
+      const source = frameSource(await req.json().catch(() => null));
+      if (!source) return new Response("not a page to frame", { status: 400 });
+      const origin = opts.frames.origin(d.kind === "shell" ? "shell" : "local");
+      if (!origin) return new Response(opts.frames.reason(), { status: 503 });
+      try {
+        const t = await opts.frames.mint(source);
+        const page = t.page.split("/").map(encodeURIComponent).join("/");
+        const body: FrameMint = { url: `${origin}/${t.code}/${page}`, ms: t.ms };
+        return Response.json(body, { headers: { "cache-control": NO_STORE } });
+      } catch (e) {
+        if (e instanceof UserError) return new Response(e.message, { status: 400 });
+        throw e;
+      }
     }
 
     if (url.pathname === "/register" && req.method === "POST") {
@@ -521,7 +567,10 @@ export function createFetch(opts: HttpOpts) {
     // address in every mode, and behind an edge the door refuses a loopback name as someone
     // guessing, so this route sits in front of it with a guard of its own: a loopback peer, and
     // the per-worktree bearer checked inside.
-    if (url.pathname.startsWith("/mcp/")) {
+    // Only under a loopback name: the frame authority routed by name passes this listener too,
+    // and nothing may answer there without the frame's own headers.
+    const askedHost = (req.headers.get("host") ?? "").toLowerCase().replace(/:\d+$/, "");
+    if (url.pathname.startsWith("/mcp/") && isLoopbackHost(askedHost)) {
       const peer = srv.requestIP(req)?.address ?? "";
       if (!isLoopbackPeer(peer)) return new Response("forbidden", { status: 403 });
       const worktreeId = url.pathname.slice("/mcp/".length);
@@ -537,4 +586,16 @@ export function createFetch(opts: HttpOpts) {
     const res = await route(req, srv, url, d);
     return res && allow ? withCors(res, allow) : res;
   };
+}
+
+/** the body of `POST /frame` as one of the sources, or null for anything else */
+function frameSource(body: unknown): FrameSource | null {
+  if (!body || typeof body !== "object") return null;
+  const b = body as Record<string, unknown>;
+  if (typeof b.text === "string") return { kind: "text", text: b.text };
+  if (typeof b.grantId === "string" && b.grantId) return { kind: "loose", grantId: b.grantId };
+  if (typeof b.worktreeId === "string" && b.worktreeId && typeof b.path === "string" && b.path) {
+    return { kind: "worktree", worktreeId: b.worktreeId, path: b.path };
+  }
+  return null;
 }

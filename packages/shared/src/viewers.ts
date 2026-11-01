@@ -35,8 +35,8 @@ export function renderedAs(path: string): Rendering | null {
 const PAGE_ASSETS = /\.(css|svg|woff2?|ttf|otf|mp4|webm|mp3|ogg|wav)$/i;
 
 /** a file the daemon serves at /files for a rendered page beside it to draw: a stylesheet, a font, a
- * sound. An image or a clip is served already, for its own viewer; a script is not, since none
- * runs in the frame the page is read in. */
+ * sound. An image or a clip is served already, for its own viewer. A script is not: a page's scripts
+ * run on the frame origin, and a .js reachable from there would be a page reading the worktree's source. */
 export function isPageAsset(path: string): boolean {
   return PAGE_ASSETS.test(path);
 }

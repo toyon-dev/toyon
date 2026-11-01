@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   checkPreviews,
+  frameAuthority,
   isLoopbackHost,
   isRemoteHost,
   machineLabel,
@@ -96,6 +97,16 @@ describe("previews", () => {
   test("hosts on another site are refused: the preview cookie cannot reach them", () => {
     expect(checkPreviews("https://cs-{port}.app.github.dev", "cs-4141.app.github.dev")).toContain("cookie");
     expect(checkPreviews("https://w{id}.elsewhere.example", "toyon.example.com")).toContain("cookie");
+  });
+  test("a pattern that could put a preview at the frame label is refused", () => {
+    expect(checkPreviews("https://{id}.toyon.example.com", "toyon.example.com")).toContain("frames.toyon.example.com");
+    expect(checkPreviews("https://w{id}.toyon.example.com", "toyon.example.com")).toBeNull();
+  });
+  test("the frame authority: a label under a name that routes by name, the port before the previews by port", () => {
+    expect(frameAuthority({ host: "toyon.example.com", previews: "https://w{id}.toyon.example.com" })).toBe(
+      "frames.toyon.example.com",
+    );
+    expect(frameAuthority({ host: "app.fly.dev", previews: "https://app.fly.dev:{port}" })).toBe("app.fly.dev:10000");
   });
   test("a pattern with no placeholder, two, a path, plain http, or {id} as the port is refused", () => {
     for (const bad of [

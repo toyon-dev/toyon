@@ -20,6 +20,16 @@ export class BridgeScript {
     this.cache = null;
   }
 
+  /** every origin a shell is at, as the bridge is told: the ones set, and the ones learned */
+  shellOrigins(): string[] {
+    return [...this.origins, ...this.learned];
+  }
+
+  /** the origins shells have actually come from, apart from the ones set */
+  learnedOrigins(): string[] {
+    return [...this.learned];
+  }
+
   /** An origin a shell actually reached us from, taken off an authenticated /ws handshake. The
    * daemon can work out the origins it serves itself, but not one it is framed at: a shell running
    * as someone else's preview (toyon inside toyon) arrives through that proxy's port, and the
@@ -45,8 +55,7 @@ export class BridgeScript {
     const stamp = `${s.mtimeMs}:${s.size}`;
     if (this.cache && stamp === this.stamp) return this.cache;
     this.stamp = stamp;
-    const origins = [...this.origins, ...this.learned];
-    this.cache = `window.__toyonShellOrigins=${JSON.stringify(origins)};\n${readFileSync(this.path, "utf8")}`;
+    this.cache = `window.__toyonShellOrigins=${JSON.stringify(this.shellOrigins())};\n${readFileSync(this.path, "utf8")}`;
     return this.cache;
   }
 }

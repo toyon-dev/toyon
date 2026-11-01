@@ -365,11 +365,17 @@ export function EditorPane({
           />
         ) : view === "preview" && renderedAs(path) === "html" ? (
           <HtmlPreview
-            text={disk.after}
+            // the file on disk when there is one, so the files beside it draw: a copy only git
+            // holds, or a file from outside with nothing of the daemon's behind it, goes as text
+            source={
+              grant
+                ? { kind: "loose", grantId: grant.id }
+                : history || kept || loose
+                  ? { kind: "text", text: disk.after }
+                  : { kind: "worktree", worktreeId, path }
+            }
             path={path}
-            worktreeId={worktreeId}
-            // a copy only git holds, or a file from outside, has no bytes on disk for its assets to be served from
-            version={history || kept || loose ? undefined : disk.version}
+            version={disk.version}
             openSeq={editor.seq}
             focus={editor.focus}
           />

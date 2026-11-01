@@ -51,6 +51,19 @@ let restartsAsked = 0;
 let restartNow = false;
 let restartWaiting: string[] | null = null;
 let changelogText: string | null = "# Changelog\n\n## 0.2.0 (2026-01-02)\n\n### New\n- a thing\n";
+/** the frame routes as the daemon wires them: one ticket for any page, framed at a fixed origin
+ * by how the shell came in; `x.bin` is what the tickets refuse */
+const framed: unknown[] = [];
+const frames: HttpOpts["frames"] = {
+  mint: async (source) => {
+    framed.push(source);
+    if (source.kind === "worktree" && source.path === "x.bin") throw new UserError("only an html page is rendered");
+    return { code: "c".repeat(22), page: source.kind === "text" ? "page.html" : "docs/a b.html", ms: 1000 };
+  },
+  handler: { fetch: async (_req, origin) => new Response(`frame at ${origin}`) },
+  origin: (kind) => (kind === "local" ? "http://127.0.0.1:5555" : "https://frames.toyon.example.com"),
+  reason: () => "no frame origin is up",
+};
 const opts: HttpOpts = {
   token: "secret",
   shellDist: "/nonexistent",
@@ -71,6 +84,7 @@ const opts: HttpOpts = {
   remote: () => null,
   managed: { source: null, hash: null },
   preview: () => null,
+  frames,
   bootstrap: async () => ({ t: "hello", repos: [{ id: "r1" }] }),
   manifestGround: () => "#222222",
   offline: () => ({ start: null, port: 4141 }),
@@ -1231,6 +1245,7 @@ describe("static shell", () => {
     pairing: opts.pairing,
     managed: { source: null, hash: null },
     preview: () => null,
+    frames,
     metrics: () => ({ lag: 0 }),
     bootstrap: async () => ({}),
     manifestGround: () => "#222222",
@@ -1297,5 +1312,92 @@ describe("static shell", () => {
     const r = await serve(req("/sw.js"), srv());
     expect(r?.status).toBe(200);
     expect(r?.headers.get("cache-control")).toBe("no-store");
+  });
+});
+
+describe("/frame", () => {
+  const https = { "x-forwarded-proto": "https" };
+  const mint = (
+    body: unknown,
+    auth = "Bearer secret",
+    f = fetch,
+    host?: string,
+    headers: Record<string, string> = {},
+  ) =>
+    f(
+      req("/frame", {
+        method: "POST",
+        host,
+        headers: { authorization: auth, "content-type": "application/json", ...headers },
+        body: JSON.stringify(body),
+      }),
+      srv(),
+    );
+
+  test("no bearer is 401, and nothing is minted", async () => {
+    const before = framed.length;
+    expect((await mint({ worktreeId: "wt1", path: "docs/a b.html" }, "Bearer wrong"))?.status).toBe(401);
+    expect(framed.length).toBe(before);
+  });
+  test("a worktree page is framed at the local origin, its path escaped, and the token nowhere in it", async () => {
+    const r = await mint({ worktreeId: "wt1", path: "docs/a b.html" });
+    expect(r?.status).toBe(200);
+    expect(r?.headers.get("cache-control")).toBe("no-store");
+    const body = (await r?.json()) as { url: string; ms: number };
+    expect(body).toEqual({ url: `http://127.0.0.1:5555/${"c".repeat(22)}/docs/a%20b.html`, ms: 1000 });
+    expect(body.url).not.toContain("secret");
+    expect(framed.at(-1)).toEqual({ kind: "worktree", worktreeId: "wt1", path: "docs/a b.html" });
+  });
+  test("a granted file and text are sources too; anything else is 400", async () => {
+    expect((await mint({ grantId: "g1" }))?.status).toBe(200);
+    expect(framed.at(-1)).toEqual({ kind: "loose", grantId: "g1" });
+    expect((await mint({ text: "<p>hi</p>" }))?.status).toBe(200);
+    expect(framed.at(-1)).toEqual({ kind: "text", text: "<p>hi</p>" });
+    expect((await mint({ worktreeId: "wt1" }))?.status).toBe(400);
+    expect((await mint("nope"))?.status).toBe(400);
+  });
+  test("what the tickets refuse is 400 with their words", async () => {
+    const r = await mint({ worktreeId: "wt1", path: "x.bin" });
+    expect(r?.status).toBe(400);
+    expect(await r?.text()).toBe("only an html page is rendered");
+  });
+  test("no frame origin is 503 with the reason", async () => {
+    const f = createFetch({ ...opts, frames: { ...frames, origin: () => null } });
+    const r = await mint({ text: "x" }, "Bearer secret", f);
+    expect(r?.status).toBe(503);
+    expect(await r?.text()).toBe("no frame origin is up");
+  });
+  test("a shell on the public name frames at the frame authority", async () => {
+    const name = "toyon.example.com";
+    const r = await mint({ text: "x" }, "Bearer secret", withRemote(name), name, https);
+    expect(r?.status).toBe(200);
+    expect(await r?.json()).toEqual({ url: `https://frames.${name}/${"c".repeat(22)}/page.html`, ms: 1000 });
+  });
+  test("the frame authority on the daemon's listener is the frame handler's, and nothing of toyon's, the agents' route included", async () => {
+    const remote = withRemote("toyon.example.com");
+    const r = await remote(req("/ws?token=secret", { host: "frames.toyon.example.com", headers: https }), srv());
+    expect(r?.status).toBe(200);
+    expect(await r?.text()).toBe("frame at https://frames.toyon.example.com");
+    const before = mcpHits.length;
+    const m = await remote(req("/mcp/wt1", { host: "frames.toyon.example.com", headers: https }), srv());
+    expect(await m?.text()).toBe("frame at https://frames.toyon.example.com");
+    expect(mcpHits.length).toBe(before);
+  });
+  test("a frame request that throws is a sandboxed 500, never the server's own error page", async () => {
+    const f = createFetch({
+      ...opts,
+      remote: () => ({ host: "toyon.example.com", previews: "https://w{id}.toyon.example.com", front: "local" }),
+      frames: {
+        ...frames,
+        handler: {
+          fetch: async () => {
+            throw new Error("disk on fire");
+          },
+        },
+      },
+    });
+    const r = await f(req("/x", { host: "frames.toyon.example.com", headers: https }), srv());
+    expect(r?.status).toBe(500);
+    expect(r?.headers.get("content-security-policy")).toBe("sandbox");
   });
 });

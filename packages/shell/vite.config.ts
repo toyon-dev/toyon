@@ -82,6 +82,8 @@ export default defineConfig({
       "/tailnet": target,
       "/tailscale": target,
       "/remote": target,
+      // a ticket to render an html page on the daemon's frame origin
+      "/frame": target,
       // the release notes, for the view after an update
       "/changelog": target,
       // a share into the installed app that the worker did not take: the daemon sends it on

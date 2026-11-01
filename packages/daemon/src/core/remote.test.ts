@@ -245,3 +245,44 @@ describe("door", () => {
     expect(post.kind === "refused" && post.response.status).toBe(403);
   });
 });
+
+describe("door, for the frame origin", () => {
+  const at = (host: string, headers: Record<string, string> = {}) =>
+    new Request(`http://${host}/`, { headers: { host, ...headers } });
+  const https = { "x-forwarded-proto": "https" };
+  const byHost: Remote = { host: "toyon.example.com", previews: "https://w{id}.toyon.example.com", front: "local" };
+  const byPort: Remote = {
+    host: "box.tail1234.ts.net",
+    previews: "https://box.tail1234.ts.net:{port}",
+    front: "local",
+  };
+  const edge: Remote = { host: "app.fly.dev", previews: "https://app.fly.dev:{port}", front: "edge" };
+
+  test("with no public name the frame listener admits a loopback name from a loopback peer, and nothing else", () => {
+    expect(door(at("127.0.0.1:5555"), "127.0.0.1", null, "frame").kind).toBe("local");
+    // a name of someone's own that resolves here would otherwise read a ticket's files
+    expect(door(at("evil.example:5555"), "127.0.0.1", null, "frame").kind).toBe("refused");
+    expect(door(at("127.0.0.1:5555"), "10.0.0.5", null, "frame").kind).toBe("refused");
+  });
+  test("by name, frames.<host> is the frame on the daemon's listener, over https only, and never a preview", () => {
+    expect(door(at("frames.toyon.example.com", https), "127.0.0.1", byHost, "daemon")).toEqual({ kind: "frame" });
+    expect(door(at("frames.toyon.example.com"), "127.0.0.1", byHost, "daemon").kind).toBe("refused");
+    expect(door(at("frames.toyon.example.com", https), "127.0.0.1", byHost, "preview").kind).toBe("refused");
+    // the shell and the previews are not it
+    expect(door(at("toyon.example.com", https), "127.0.0.1", byHost, "frame").kind).toBe("refused");
+    expect(door(at("wab12.toyon.example.com", https), "127.0.0.1", byHost, "frame").kind).toBe("refused");
+  });
+  test("by port, the frame port is the frame on its own listener alone", () => {
+    expect(door(at("box.tail1234.ts.net:10000", https), "127.0.0.1", byPort, "frame")).toEqual({ kind: "frame" });
+    expect(door(at("box.tail1234.ts.net:10000", https), "127.0.0.1", byPort, "daemon").kind).toBe("refused");
+    expect(door(at("box.tail1234.ts.net:10000", https), "127.0.0.1", byPort, "preview").kind).toBe("refused");
+    expect(door(at("box.tail1234.ts.net:10001", https), "127.0.0.1", byPort, "frame").kind).toBe("refused");
+    expect(door(at("box.tail1234.ts.net", https), "127.0.0.1", byPort, "frame").kind).toBe("refused");
+  });
+  test("behind an edge the port arrives forwarded, and a loopback name is someone guessing", () => {
+    expect(door(at("app.fly.dev", { ...https, "x-forwarded-port": "10000" }), "172.19.0.2", edge, "frame")).toEqual({
+      kind: "frame",
+    });
+    expect(door(at("127.0.0.1:10000"), "172.19.0.2", edge, "frame").kind).toBe("refused");
+  });
+});

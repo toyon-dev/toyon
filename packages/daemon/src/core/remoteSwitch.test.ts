@@ -52,7 +52,7 @@ describe("RemoteSwitch", () => {
       expect(r).toEqual({ host: NAME, previews: `https://${NAME}:{port}`, front: "local" });
       expect(m.setting.get()).toEqual(r);
       expect(JSON.parse(readFileSync(m.file, "utf8"))).toEqual({ host: NAME, previews: `https://${NAME}:{port}` });
-      expect(m.changes().length).toBe(9);
+      expect(m.changes().length).toBe(10);
       expect(m.seen).toEqual([NAME]);
 
       await m.sw.turnOff();

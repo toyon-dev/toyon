@@ -32,7 +32,7 @@ import type { Tailnet } from "../core/tailnet.ts";
 import type { DraftStore } from "../drafts/store.ts";
 import { setWaitingColors } from "../runtime/proxy.ts";
 import { dispatch, openedFrame, type Services } from "./handlers.ts";
-import { createFetch, type WsData } from "./http.ts";
+import { createFetch, type HttpOpts, type WsData } from "./http.ts";
 import { pairingRoutes } from "./pairing.ts";
 import { Published, type RowsFrame } from "./rows.ts";
 import { shapeHello, stampOf, stampsOf, visitsStamp } from "./stamps.ts";
@@ -98,6 +98,8 @@ export interface ServerOpts {
   knocks: Knocks;
   /** a knock was just let in, from a page on `from` (null for a page this machine served) */
   onLetIn: (from: string | null) => void;
+  /** rendered pages on their own origin, as the http routes take them */
+  frames: HttpOpts["frames"];
   /** the managed policy as read at boot: hello carries it, /health names its source and hash,
    * and the branded listener binds only where it allows */
   managed: ManagedResolved;
@@ -453,6 +455,7 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
       }),
       managed: { source: opts.managed.source, hash: opts.managed.hash },
       preview: (id) => s.runtime.get(id)?.proxy?.handler ?? null,
+      frames: opts.frames,
       bootstrap: async () => helloNow(await helloReads(), null),
       // the launch screen and the status bar over it are the list's ground, which is the screen an
       // installed app opens on and what the page then paints under the inset (theme.ts); a bar

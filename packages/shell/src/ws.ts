@@ -1,6 +1,8 @@
 import {
   type ClientMsg,
   type ConnectFailure,
+  type FrameMint,
+  type FrameSource,
   type Knocked,
   type KnockState,
   type PreviewGrantMint,
@@ -78,6 +80,8 @@ export interface DaemonUrls {
   /** a knock's answer, from the page that holds this machine's token */
   knockAnswer(id: string): string;
   previewGrant: string;
+  /** a ticket to render an html page on the frame origin */
+  frame: string;
   /** the release notes shipped with that daemon's Toyon */
   changelog: string;
 }
@@ -106,6 +110,7 @@ export function daemonUrls(origin: string, token: string): DaemonUrls {
     machines: `${u.origin}/machines`,
     knockAnswer: (id) => `${u.origin}/knock/${id}/answer`,
     previewGrant: `${u.origin}/preview-grant`,
+    frame: `${u.origin}/frame`,
     changelog: `${u.origin}/changelog`,
   };
 }
@@ -277,6 +282,22 @@ export async function mintPreviewGrant(urls: DaemonUrls): Promise<PreviewGrantMi
   try {
     const r = await fetch(urls.previewGrant, { method: "POST", headers: bearer(urls) });
     return r.ok ? ((await r.json()) as PreviewGrantMint) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The address a page is framed at on the daemon's frame origin, and for how long; a string is
+ * the daemon's refusal, to read in the pane, and null is a daemon that did not answer. */
+export async function mintFrame(urls: DaemonUrls, source: FrameSource): Promise<FrameMint | string | null> {
+  try {
+    const r = await fetch(urls.frame, {
+      method: "POST",
+      headers: { ...bearer(urls), "content-type": "application/json" },
+      body: JSON.stringify(source),
+    });
+    if (r.ok) return (await r.json()) as FrameMint;
+    return r.status === 400 || r.status === 503 ? await r.text() : null;
   } catch {
     return null;
   }

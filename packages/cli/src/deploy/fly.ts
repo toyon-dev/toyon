@@ -8,7 +8,7 @@ import { Resolver } from "node:dns/promises";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { PREVIEW_PORTS, portPreviews } from "@toyon/shared";
+import { FRAME_PORT, PREVIEW_PORTS, portPreviews } from "@toyon/shared";
 import { loadManaged } from "@toyon/shared/managed-load";
 import type { Command } from "../args.ts";
 import { daemonFetch, home } from "../daemon.ts";
@@ -68,8 +68,11 @@ export function flyToml(app: string, region: string): string {
     '    method = "get"',
     '    path = "/health"',
   ];
-  // fly.dev holds no wildcard certificate, so each preview is the public name at its own TLS port
-  for (let p = PREVIEW_PORTS.from; p <= PREVIEW_PORTS.to; p++) {
+  // fly.dev holds no wildcard certificate, so each preview is the public name at its own TLS port,
+  // and the frame origin for rendered pages is the port before them
+  const ports = [FRAME_PORT];
+  for (let p = PREVIEW_PORTS.from; p <= PREVIEW_PORTS.to; p++) ports.push(p);
+  for (const p of ports) {
     lines.push(
       "",
       "[[services]]",

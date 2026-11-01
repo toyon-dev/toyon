@@ -100,10 +100,10 @@ describe("tailnetName", () => {
 });
 
 describe("entries", () => {
-  test("the daemon on 443 and every preview port to itself on loopback", () => {
+  test("the daemon on 443, then the frame port and every preview port to itself on loopback", () => {
     expect(entries(4141)).toEqual([
       { port: 443, target: "http://127.0.0.1:4141" },
-      ...[10001, 10002, 10003, 10004, 10005, 10006, 10007, 10008].map((p) => ({
+      ...[10000, 10001, 10002, 10003, 10004, 10005, 10006, 10007, 10008].map((p) => ({
         port: p,
         target: `http://127.0.0.1:${p}`,
       })),
@@ -140,12 +140,12 @@ describe("holder", () => {
 });
 
 describe("serveTailnet", () => {
-  test("sets the exact serve lines for 443 and ports 10001-10008", async () => {
+  test("sets the exact serve lines for 443 and ports 10000-10008", async () => {
     const f = fake();
     expect(await serveTailnet(f.ts, 4141)).toBe(NAME);
     expect(f.changes()).toEqual([
       ["serve", "--bg", "--https=443", "http://127.0.0.1:4141"],
-      ...[10001, 10002, 10003, 10004, 10005, 10006, 10007, 10008].map((p) => [
+      ...[10000, 10001, 10002, 10003, 10004, 10005, 10006, 10007, 10008].map((p) => [
         "serve",
         "--bg",
         `--https=${p}`,
@@ -162,7 +162,7 @@ describe("serveTailnet", () => {
     const f = fake({ serve: config({ 443: "http://127.0.0.1:4141", 10001: "http://127.0.0.1:10001" }) });
     await serveTailnet(f.ts, 4141);
     expect(f.changes().map((c) => c[2])).toEqual(
-      [10002, 10003, 10004, 10005, 10006, 10007, 10008].map((p) => `--https=${p}`),
+      [10000, 10002, 10003, 10004, 10005, 10006, 10007, 10008].map((p) => `--https=${p}`),
     );
   });
   test("changes nothing when a port already serves something else", async () => {
@@ -203,9 +203,9 @@ describe("unserveTailnet", () => {
   test("removes toyon's entries and leaves the person's own", async () => {
     const serve = config({ ...allToyon(), 8443: "http://127.0.0.1:3000", 10005: "http://127.0.0.1:9999" });
     const f = fake({ serve });
-    expect(await unserveTailnet(f.ts, 4141)).toBe(8);
+    expect(await unserveTailnet(f.ts, 4141)).toBe(9);
     expect(f.changes()).toEqual(
-      [443, 10001, 10002, 10003, 10004, 10006, 10007, 10008].map((p) => ["serve", `--https=${p}`, "off"]),
+      [443, 10000, 10001, 10002, 10003, 10004, 10006, 10007, 10008].map((p) => ["serve", `--https=${p}`, "off"]),
     );
     // never asks for status: the name is not needed, and a signed-out machine still cleans up
     expect(f.calls.some((c) => c[0] === "status")).toBe(false);

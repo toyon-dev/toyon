@@ -6,7 +6,7 @@
 // in the terminal say the same thing.
 
 import { existsSync, rmSync, writeFileSync } from "node:fs";
-import { PREVIEW_PORTS, portPreviews, type RemoteView, type TailscaleReadiness } from "./daemon.ts";
+import { FRAME_PORT, PREVIEW_PORTS, portPreviews, type RemoteView, type TailscaleReadiness } from "./daemon.ts";
 import { isTailnetName } from "./knock.ts";
 
 /** a MagicDNS name as Tailscale prints it, trailing dot and case dropped; empty for none */
@@ -53,12 +53,15 @@ export interface Entry {
   target: string;
 }
 
-/** the daemon on 443, and each preview port to the same port on loopback */
+/** the daemon on 443, then the frame port and each preview port to the same port on loopback */
 export function entries(daemonPort: number): Entry[] {
   const list: Entry[] = [{ port: 443, target: `http://127.0.0.1:${daemonPort}` }];
-  for (let p = PREVIEW_PORTS.from; p <= PREVIEW_PORTS.to; p++) list.push({ port: p, target: `http://127.0.0.1:${p}` });
+  for (const p of [FRAME_PORT, ...previewPorts()]) list.push({ port: p, target: `http://127.0.0.1:${p}` });
   return list;
 }
+
+const previewPorts = () =>
+  Array.from({ length: PREVIEW_PORTS.to - PREVIEW_PORTS.from + 1 }, (_, i) => PREVIEW_PORTS.from + i);
 
 export const serveOn = (e: Entry) => ["serve", "--bg", `--https=${e.port}`, e.target];
 export const serveOff = (e: Entry) => ["serve", `--https=${e.port}`, "off"];

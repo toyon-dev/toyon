@@ -30,6 +30,7 @@ import {
   cursorFor,
   dropBlankNote,
   emptyDraft,
+  enterMovesOn,
   isOwnRow,
   openNote,
   ownChosen,
@@ -158,6 +159,13 @@ export function QuestionCard({
     requestAnimationFrame(() => own.current?.focus());
   };
   const note = () => noteAt(cursor);
+  /** the question is answered: on to what is still open, or the send when nothing is */
+  const moveOn = (next: AskAnswer[]) => {
+    const to = advance(questions, next, current);
+    setCursor(to.cursor);
+    write(next, to.current);
+    if (to.send && canSubmit(questions, next)) send(next);
+  };
   const pick = (oi: number) => {
     if (isOwnRow(q, oi)) {
       setCursor(oi);
@@ -172,10 +180,17 @@ export function QuestionCard({
       write(next, current);
       return;
     }
-    const to = advance(questions, next, current);
-    setCursor(to.cursor);
-    write(next, to.current);
-    if (to.send && canSubmit(questions, next)) send(next);
+    moveOn(next);
+  };
+  /** enter on a row: the pick, except on a multi-select with something ticked, where the ticks
+   * are the answer and enter is what it is in the composer, the send. A multi-select card looks
+   * like every other, and with enter only ticking, the first row ticked and the next enter
+   * unticked it, with nothing on screen saying the send was ⌘⏎. With nothing ticked enter ticks
+   * the cursor's row, so enter twice on one row is "this one, go"; the skip has its own key. The
+   * "other" row is walked to for its field, so enter there opens it whatever is ticked. */
+  const enter = (oi: number) => {
+    if (!multi || isOwnRow(q, oi) || !enterMovesOn(q, draft[current])) return pick(oi);
+    moveOn(dropBlankNote(draft, current));
   };
   /** back to the rows from the typed answer's field, a field left blank going with it */
   const leaveField = () => {
@@ -200,10 +215,7 @@ export function QuestionCard({
       }
       return;
     }
-    const to = advance(questions, next, current);
-    setCursor(to.cursor);
-    write(next, to.current);
-    if (to.send && canSubmit(questions, next)) send(next);
+    moveOn(next);
   };
 
   const onKeyDown = (e: React.KeyboardEvent) => {
@@ -217,7 +229,7 @@ export function QuestionCard({
         cursor: review ? undefined : cursor,
         spacePicks: multi,
         onCursor: setCursor,
-        onPick: (at) => (review ? go(at) : pick(at)),
+        onPick: (at, by) => (review ? go(at) : by === "enter" ? enter(at) : pick(at)),
         onSubmit: submit,
         onEscape: park,
         onFieldEnter: fieldEnter,

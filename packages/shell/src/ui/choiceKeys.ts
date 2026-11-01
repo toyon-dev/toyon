@@ -1,6 +1,8 @@
 // The keyboard of a numbered list in a card that holds the keyboard: a digit picks its row, the
 // arrows walk the cursor, enter picks the cursor's row, ⌘⏎ is the card's send and escape gives the
-// box back. A field open on a row reads its own keys: enter is the row's answer, ⌘⏎ the send,
+// box back. The pick says which key made it, since on a multi-select a digit or space is a tick
+// and enter means the question is answered (QuestionCard reads it as the pick only while nothing
+// is ticked). A field open on a row reads its own keys: enter is the row's answer, ⌘⏎ the send,
 // escape and tab the way back to the rows, and everything else is typing. The reading is pure over
 // the event's shape, so each card's keyboard is tested without a DOM; `handleChoiceKey` is the
 // React handler over it, and a card runs it before its own keys.
@@ -30,12 +32,14 @@ export type ChoiceList = {
   spacePicks?: boolean;
 };
 
+export type PickBy = "digit" | "enter" | "space";
+
 export type ChoiceKey =
   /** the shell's chord: leave it be */
   | { kind: "chord" }
   | { kind: "escape" }
   | { kind: "submit" }
-  | { kind: "pick"; at: number; by: "digit" | "enter" }
+  | { kind: "pick"; at: number; by: PickBy }
   | { kind: "cursor"; to: number }
   | { kind: "field-enter" }
   | { kind: "field-leave" }
@@ -54,7 +58,8 @@ export function choiceKey(e: KeyLike, inField: boolean, list: ChoiceList): Choic
   if (e.key === "Escape") return { kind: "escape" };
   if (send) return { kind: "submit" };
   if (isEnter(e.key) || (e.key === " " && list.spacePicks)) {
-    return list.cursor === undefined ? { kind: "submit" } : { kind: "pick", at: list.cursor, by: "enter" };
+    if (list.cursor === undefined) return { kind: "submit" };
+    return { kind: "pick", at: list.cursor, by: isEnter(e.key) ? "enter" : "space" };
   }
   if (e.key === "ArrowUp" || e.key === "ArrowDown") {
     if (list.cursor === undefined) return null;
@@ -66,7 +71,7 @@ export function choiceKey(e: KeyLike, inField: boolean, list: ChoiceList): Choic
 
 export type ChoiceKeyHandlers = ChoiceList & {
   onCursor?: (to: number) => void;
-  onPick: (at: number, by: "digit" | "enter") => void;
+  onPick: (at: number, by: PickBy) => void;
   /** the card's send: ⌘⏎ anywhere, and plain enter on a list with no cursor. A card with no send
    * of its own (a permission, a handoff card) reads ⌘⏎ as enter. */
   onSubmit?: () => void;

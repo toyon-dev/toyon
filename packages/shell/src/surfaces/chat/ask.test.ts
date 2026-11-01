@@ -14,6 +14,7 @@ import {
   decidedPlan,
   dropBlankNote,
   emptyDraft,
+  enterMovesOn,
   isOwnRow,
   nextUnanswered,
   openAsk,
@@ -223,6 +224,18 @@ describe("the keyboard's view of the ask", () => {
       cursor: 0,
       send: true,
     });
+  });
+
+  test("enter on a multi-select moves on once something is ticked or typed, and ticks until then", () => {
+    const multi = q("stack", ["Redis", "Postgres"], { multi: true, note: { label: "Other" } });
+    expect(enterMovesOn(multi, { selected: [] })).toBe(false);
+    expect(enterMovesOn(multi, { selected: ["redis"] })).toBe(true);
+    expect(enterMovesOn(multi, { selected: [], note: "neither" })).toBe(true);
+    // a field opened and left blank is no answer
+    expect(enterMovesOn(multi, { selected: [], note: "" })).toBe(false);
+    // a single-select's enter is the pick, which moves on by itself
+    expect(enterMovesOn(one[0], { selected: ["cookies"] })).toBe(false);
+    expect(enterMovesOn(undefined, { selected: ["cookies"] })).toBe(false);
   });
 
   test("the send page follows the questions when there is more than one", () => {

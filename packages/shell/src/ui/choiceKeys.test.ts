@@ -42,11 +42,11 @@ describe("the list's keys on the rows", () => {
     expect(choiceKey(key("ArrowDown"), false, { count: 3, cursor: 2 })).toEqual({ kind: "cursor", to: 0 });
     expect(choiceKey(key("ArrowUp"), false, { count: 3, cursor: 0 })).toEqual({ kind: "cursor", to: 2 });
   });
-  test("enter picks the cursor's row; space only when the list says so", () => {
+  test("enter picks the cursor's row; space only when the list says so, and says it was space", () => {
     expect(choiceKey(key("Enter"), false, three)).toEqual({ kind: "pick", at: 1, by: "enter" });
     expect(choiceKey(key("NumpadEnter"), false, three)).toEqual({ kind: "pick", at: 1, by: "enter" });
     expect(choiceKey(key(" "), false, three)).toBeNull();
-    expect(choiceKey(key(" "), false, { ...three, spacePicks: true })).toEqual({ kind: "pick", at: 1, by: "enter" });
+    expect(choiceKey(key(" "), false, { ...three, spacePicks: true })).toEqual({ kind: "pick", at: 1, by: "space" });
   });
   test("a list with no cursor has nothing for enter to pick, so enter is the send and the arrows walk nothing", () => {
     expect(choiceKey(key("Enter"), false, { count: 3 })).toEqual({ kind: "submit" });

@@ -99,6 +99,14 @@ export function answered(a: AskAnswer | undefined): boolean {
   return !!a && (a.selected.length > 0 || !!a.note?.trim());
 }
 
+/** enter on a multi-select's row with the question answered (a tick or a typed answer) moves on
+ * rather than toggling the row: the ticks are the answer and enter is the send, as in the
+ * composer. With nothing ticked it is the tick. A single-select's enter is always the pick, since
+ * there the pick moves on by itself. */
+export function enterMovesOn(q: AskQuestion | undefined, a: AskAnswer | undefined): boolean {
+  return !!q?.multi && answered(a);
+}
+
 /** a question the agent marked required needs a pick or a note before the ask can go back */
 export function canSubmit(questions: AskQuestion[], draft: AskAnswer[]): boolean {
   return questions.every((q, i) => !q.required || answered(draft[i]));

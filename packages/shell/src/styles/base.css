@@ -778,7 +778,7 @@
       line-height: inherit;
     }
     & a {
-      color: var(--blue);
+      color: var(--link);
       /* a link is a word, and its focus ring takes the corner a button's has; the word itself
          draws no box for the radius to touch */
       border-radius: var(--radius);

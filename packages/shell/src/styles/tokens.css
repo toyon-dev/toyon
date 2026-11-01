@@ -82,6 +82,12 @@
      overwrites this too (faultOf): orange unless the theme selects in its orange, then red, which
      is Toyon's case. Red doubles as a crashed proc there; both say something is down. */
     --fault: var(--red);
+    /* what a trip out to the web is painted in: a link in the agent's prose, and the deep link's
+     hover. The theme's blue unless it names one (Theme.link; a VS Code import brings its
+     textLink.foreground), and applyTheme overwrites this. Toyon names a quieter blue: its own is
+     at the weight a status letter carries alone, and a reply ends in a line of sources, which is
+     colour on half the words, where that weight shouts against the warm ground. */
+    --link: #83a9cf;
     /* overlay backdrop + box-shadow color: alpha hex so light themes can soften them */
     /* where you type: four L* under the chrome it sits in, darker in both halves. Not a ramp
      position, because the surface ramp reverses direction between them and a recess does not. */

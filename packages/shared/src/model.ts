@@ -1222,6 +1222,12 @@ export interface Theme {
    * a crash and green is working, so a selection painted in either reads as that status. A theme
    * that names none selects in its orange; Toyon and the other built-ins name none. */
   accent?: ThemeColor;
+  /** The colour a link in prose wears: a trip out to the web, as against a file link, which stays
+   * in the text's tier. A theme that names none links in its blue. Toyon names a quieter one: its
+   * blue carries alone as a status letter, but a reply ends in a line of sources, and at that
+   * weight a line of them shouts against the warm ground. A VS Code import brings its
+   * textLink.foreground. */
+  link?: ThemeColor;
   /** id of this theme's opposite-kind sibling (Gruvbox Dark ↔ Gruvbox Light); guessed by name when absent */
   pair?: string;
   /** picker row label shared by a dark/light pair ("Gruvbox"); derived from the name when absent */

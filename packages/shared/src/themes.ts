@@ -77,6 +77,9 @@ export const toyonDark: Theme = {
     function: "#6bc198",
     variable: "#81a99d",
   },
+  // the same move for a link: the blue at its accent weight, in a line of sources, is colour on
+  // half the words. Same hue at C7 keeps it a blue and keeps 5:1 on the ground.
+  link: "#83a9cf",
 };
 
 // The same hillside at noon: bone paper instead of understory floor, and every accent taken down
@@ -120,6 +123,7 @@ export const toyonLight: Theme = {
     function: "#397f5f",
     variable: "#57796f",
   },
+  link: "#3e6888",
 };
 
 export const gruvboxDarkSoft: Theme = {
@@ -975,6 +979,7 @@ export function themeToCssVars(theme: Theme): Record<string, string> {
   for (const [token, color] of Object.entries(syntaxOf(theme))) out[`--syntax-${token}`] = color;
   out["--accent"] = accentOf(theme);
   out["--fault"] = faultOf(theme);
+  out["--link"] = linkOf(theme);
   out["--sunken"] = sunkenOf(theme);
   out["--sunken-floor"] = sunkenFloorOf(theme);
   out["--scrim"] = hex8(theme.colors.surface0, 0.7);
@@ -998,6 +1003,13 @@ export function accentOf(theme: Theme): string {
  * is not shown while offline. */
 export function faultOf(theme: Theme): string {
   return accentOf(theme) === normalizeHex(theme.colors.orange) ? theme.colors.red : theme.colors.orange;
+}
+
+/** The colour a link in prose wears: the theme's own when it names a usable hex, its blue
+ * otherwise. Checked for the same reason the accent is: a hand-written word would reach the
+ * stylesheet as-is and paint every link in it. */
+export function linkOf(theme: Theme): string {
+  return normalizeHex(theme.link ?? "") ?? theme.colors.blue;
 }
 
 /** A mode that follows something rather than naming a slot, and so survives picking a theme that

@@ -70,6 +70,18 @@ describe("vscodeToTheme", () => {
     expect(t.syntax).toBeUndefined();
   });
 
+  test("a link is the editor's own link colour, else the blue", () => {
+    const t = vscodeToTheme(fixture("full-dark.json"), { id: "x" });
+    expect(t.link).toBeUndefined(); // names none: links in its blue
+    expect(themeToCssVars(t)["--link"]).toBe(t.colors.blue);
+    const linked = vscodeToTheme(
+      { colors: { "editor.background": "#101418", "editor.foreground": "#cccccc", "textLink.foreground": "#4DAAFC" } },
+      { id: "l" },
+    );
+    expect(linked.link).toBe("#4daafc");
+    expect(themeToCssVars(linked)["--link"]).toBe("#4daafc");
+  });
+
   test("rejects non-themes", () => {
     expect(() => vscodeToTheme({ colors: {} }, { id: "z" })).toThrow(ThemeImportError);
     expect(() => vscodeToTheme(null, { id: "z" })).toThrow(ThemeImportError);
@@ -107,9 +119,13 @@ describe("color helpers", () => {
     const words = { ...gruvboxDarkSoft, accent: "rebeccapurple" };
     expect(themeToCssVars(words)["--accent"]).toBe(gruvboxDarkSoft.colors.orange);
     expect(themeToCssVars(words)["--fault"]).toBe(gruvboxDarkSoft.colors.red);
-    // + accent, fault, the two sunken tones, scrim, shadow, a word weight per diff tint, the three
-    // inks (the text ladder held still), and the seven syntax colours
-    expect(Object.keys(v).length).toBe(themeColorKeys.length + 18);
+    // a link is the theme's blue unless it names a quieter one, as Toyon does; a word is no colour
+    expect(v["--link"]).toBe(gruvboxDarkSoft.colors.blue);
+    expect(themeToCssVars(toyonDark)["--link"]).toBe("#83a9cf");
+    expect(themeToCssVars({ ...gruvboxDarkSoft, link: "steelblue" })["--link"]).toBe(gruvboxDarkSoft.colors.blue);
+    // + accent, fault, link, the two sunken tones, scrim, shadow, a word weight per diff tint, the
+    // three inks (the text ladder held still), and the seven syntax colours
+    expect(Object.keys(v).length).toBe(themeColorKeys.length + 19);
   });
 });
 

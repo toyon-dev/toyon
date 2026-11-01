@@ -190,6 +190,9 @@ export function vscodeToTheme(json: unknown, opts: { id: string; name?: string; 
     },
   };
   if (brand) theme.accent = brand;
+  // a link keeps the colour the editor's own links wear; a theme that names none links in its blue
+  const link = typeof colors["textLink.foreground"] === "string" ? normalizeHex(colors["textLink.foreground"]) : null;
+  if (link) theme.link = opaque(link, surface0);
 
   const syntax = pickSyntax(t.tokenColors);
   if (syntax) theme.syntax = syntax;

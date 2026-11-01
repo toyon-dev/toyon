@@ -58,10 +58,13 @@ export function storedName(name: string): string {
  * hash: long enough that two pictures never share it, and the same picture read twice (the agent
  * looks at its screenshot again after a re-render) is one file. */
 export function toolImage(data: string, mimeType: string): { ref: ToolImage; bytes: Buffer } | null {
+  return toolImageBytes(Buffer.from(data, "base64"), mimeType);
+}
+
+/** the same, for bytes already in hand: a picture the reply named by a path on this machine */
+export function toolImageBytes(bytes: Buffer, mimeType: string): { ref: ToolImage; bytes: Buffer } | null {
   const ext = (EXT as Record<string, string | undefined>)[mimeType];
-  if (!ext) return null;
-  const bytes = Buffer.from(data, "base64");
-  if (bytes.length === 0) return null;
+  if (!ext || bytes.length === 0) return null;
   const file = `${createHash("sha256").update(bytes).digest("hex").slice(0, 16)}.${ext}`;
   return { ref: { file, mimeType, bytes: bytes.length }, bytes };
 }

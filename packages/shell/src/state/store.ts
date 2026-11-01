@@ -51,6 +51,7 @@ import type {
   QueuedMessage,
   RefHit,
   Remote,
+  ReplyPicture,
   RepoInfo,
   SearchHit,
   SelfState,
@@ -127,8 +128,9 @@ export type ChatItem =
       seq?: number;
       ts: number;
     }
-  /** `messageId` is the agent's message the row's latest chunk came from, when the agent says */
-  | { kind: "assistant"; text: string; seq?: number; messageId?: string }
+  /** `messageId` is the agent's message the row's latest chunk came from, when the agent says;
+   * `pictures` the daemon's copies of the pictures the text names by path, as they land */
+  | { kind: "assistant"; text: string; seq?: number; messageId?: string; pictures?: ReplyPicture[] }
   | { kind: "thinking"; text: string }
   | {
       kind: "tool";
@@ -3532,6 +3534,19 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
         return next;
       }
       return [...items, { kind: "assistant", text: event.text, ...stamp, ...named }];
+    }
+    case "picture": {
+      // onto the row whose prose names the path, which is the last reply but for one a message
+      // cut (the rest of the reply went back to its row above the bubble); the last reply when
+      // none does, since the copy is better drawn there than dropped
+      const { type: _type, ...picture } = event;
+      let at = items.findLastIndex((i) => i.kind === "assistant" && i.text.includes(picture.path));
+      if (at === -1) at = items.findLastIndex((i) => i.kind === "assistant");
+      if (at === -1) return items;
+      const next = items.slice();
+      const row = next[at] as Extract<ChatItem, { kind: "assistant" }>;
+      next[at] = { ...row, pictures: [...(row.pictures ?? []).filter((p) => p.path !== picture.path), picture] };
+      return next;
     }
     case "thinking-delta":
       if (last?.kind === "thinking") return [...items.slice(0, -1), { ...last, text: last.text + event.text }];

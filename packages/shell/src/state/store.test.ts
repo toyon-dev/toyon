@@ -4651,3 +4651,56 @@ describe("PR comments", () => {
     expect(s.editor?.disk?.writable).toBe(false);
   });
 });
+
+describe("a picture the reply names", () => {
+  const picture = (path: string, file = "ab12.png"): AgentEvent => ({
+    type: "picture",
+    path,
+    file,
+    mimeType: "image/png",
+    bytes: 4,
+  });
+
+  test("lands on the reply whose prose names it, once, and the latest copy wins", () => {
+    const s = run([
+      hello(wt("a")),
+      agent("a", { type: "text-delta", text: "before ![offer](/tmp/a.png)", messageId: "m1" }),
+      agent("a", { type: "user-message", text: "and?", ts: 1 }),
+      agent("a", { type: "text-delta", text: "after ![done](/tmp/b.png)", messageId: "m2" }),
+      agent("a", picture("/tmp/a.png")),
+      agent("a", picture("/tmp/b.png", "cd34.png")),
+      agent("a", picture("/tmp/b.png", "ef56.png")),
+    ]);
+    const chat = s.local.a?.chat ?? [];
+    expect(chat[0]).toMatchObject({ kind: "assistant", pictures: [{ path: "/tmp/a.png", file: "ab12.png" }] });
+    expect(chat[2]).toMatchObject({ kind: "assistant", pictures: [{ path: "/tmp/b.png", file: "ef56.png" }] });
+    expect((chat[2] as { pictures?: unknown[] }).pictures).toHaveLength(1);
+  });
+
+  test("goes to the last reply when none names the path, and nowhere with no reply", () => {
+    const s = run([
+      hello(wt("a")),
+      agent("a", { type: "text-delta", text: "a word" }),
+      agent("a", picture("/tmp/elsewhere.png")),
+    ]);
+    expect(s.local.a?.chat[0]).toMatchObject({ pictures: [{ path: "/tmp/elsewhere.png" }] });
+    const none = run([hello(wt("a")), agent("a", picture("/tmp/a.png"))]);
+    expect(none.local.a?.chat).toEqual([]);
+  });
+
+  test("reads back from a backfill the same way", () => {
+    const s = run([
+      hello(wt("a")),
+      server({
+        t: "backfill",
+        worktreeId: "a",
+        last: 2,
+        events: [
+          { seq: 1, event: { type: "text-delta", text: "see ![x](/tmp/a.png)" } },
+          { seq: 2, event: picture("/tmp/a.png") },
+        ],
+      }),
+    ]);
+    expect(s.local.a?.chat[0]).toMatchObject({ kind: "assistant", pictures: [{ file: "ab12.png" }] });
+  });
+});

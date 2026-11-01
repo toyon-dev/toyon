@@ -43,6 +43,7 @@ import {
 import { agentModeFor, modeAfterPlan, orderPlanOptions } from "../modes.ts";
 import { markOrigins } from "../origins.ts";
 import { formatOutput } from "../output.ts";
+import { adoptPicture, PICTURES_MAX, pictureLinks } from "../pictures.ts";
 import { decide, decideUnattended, pickOption } from "../policy.ts";
 import { ambientBlock, buildPrompt, pieceLandedContext, SYSTEM_APPEND } from "../prompt.ts";
 import type { AgentSpec } from "../registry.ts";
@@ -370,6 +371,10 @@ export class AcpSession implements AgentAdapter {
   /** the plan card a held list rode onto, while that card is open: a card that closes with no
    * answer gives the list back to `heldHandoff`, to be shown as Toyon's own */
   private adopted: { ask: string; handoff: string } | null = null;
+  /** the turn's reply so far, scanned for the pictures it names (scanPictures), and the targets
+   * already copied */
+  private replyText = "";
+  private pictured = new Set<string>();
   /** the plan card open right now, so a list held after it went up (read off the plan by Toyon,
    * or handed over late) is the card's to answer too */
   private openPlanAsk: string | null = null;
@@ -668,6 +673,11 @@ export class AcpSession implements AgentAdapter {
    * closing live (an ask ending, cancelled or answered) moves the held list the same way its
    * replay does on a restart. The restore walks the transcript itself, so it tracks nothing here. */
   private emit(event: AgentEvent) {
+    // a turn's reply is scanned from its start (scanPictures)
+    if (event.type === "turn-start") {
+      this.replyText = "";
+      this.pictured.clear();
+    }
     const entry = this.log.append(event);
     this.d.onEvent(event, entry.seq);
     if (this.restored && this.trackCards(event)) this.syncStatus();
@@ -1590,6 +1600,26 @@ export class AcpSession implements AgentAdapter {
       }
       // the mapper does not know the session id; the transcript wants the real one
       this.emit(ev.type === "session-info" ? { ...ev, sessionId: live.sessionId } : ev);
+      if (ev.type === "text-delta") this.scanPictures(ev.text);
+    }
+  }
+
+  /** A picture the reply names by a path (pictures.ts) is copied into the store as soon as the
+   * markdown naming it is whole, and the chat is told by an event behind the delta; the event can
+   * trail the turn, since the copy is a read of the disk. The whole reply is scanned each time,
+   * so a link split across chunks is seen once it closes; a path seen is not copied twice. */
+  private scanPictures(chunk: string) {
+    this.replyText += chunk;
+    for (const href of pictureLinks(this.replyText)) {
+      if (this.pictured.has(href) || this.pictured.size >= PICTURES_MAX) continue;
+      this.pictured.add(href);
+      fireAndForget(
+        this.d.worktreeId,
+        adoptPicture(this.d.attachments, this.d.worktreeId, this.d.cwd, href).then((picture) => {
+          if (picture) this.emit({ type: "picture", ...picture });
+        }),
+        "reply picture",
+      );
     }
   }
 

@@ -413,6 +413,30 @@
       white-space: normal;
       line-height: 1.6;
     }
+    /* a picture the reply named by its path (markdown.ts, .md-still), drawn as a still: short
+       enough that a walkthrough of five reads as prose with pictures (a tool's picture is as tall
+       as the band and one to a row; five of those in a reply were three screens), as wide as its
+       shape says, and inline, so stills written side by side flow as a strip and wrap as words
+       do. The whole still is the control, pressed for the full size. */
+    & .md-still {
+      display: inline-block;
+      vertical-align: top;
+      max-width: 100%;
+      margin: 0 6px 4px 0;
+      padding: 0;
+      border: 0;
+      background: none;
+      cursor: pointer;
+      & img {
+        display: block;
+        max-width: 100%;
+        max-height: 160px;
+        width: auto;
+        height: auto;
+        border-radius: var(--radius);
+        background: var(--surface2);
+      }
+    }
   }
   /* the copy for a fenced block, in the block's top-right corner while the pointer is on the block.
      useCodeCopy measures the corner and sets top and right; the box it is placed in is the message,

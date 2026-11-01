@@ -1,3 +1,4 @@
+import type { ReplyPicture } from "@toyon/shared";
 import createDOMPurify from "dompurify";
 import { marked } from "marked";
 import { useEffect, useRef, useState } from "react";
@@ -44,9 +45,31 @@ marked.use({
     html(token) {
       return rendering?.keepHtml ? false : htmlAsText(token);
     },
+    // A picture a reply names by a path: the browser cannot read one, so the daemon copies the
+    // file into the store (pictures.ts) and the still is drawn from the copy, pressed for the full
+    // size. Until the copy is named, and for a path that is not a picture it could copy, the
+    // caption stands as the file link `[caption](path)` would be: never the browser's broken
+    // image. A web image is the browser's own; a document's images resolve on the img (below).
+    image({ href, text }) {
+      if (rendering?.base || /^(https?:|data:)/i.test(href)) return false;
+      const stills = rendering?.stills;
+      const kept = stills?.pictures.find((p) => p.path === href);
+      const caption = escapeHtml(text);
+      if (kept && stills) {
+        const src = stills.urls.attachment(stills.worktreeId, kept.file);
+        return `<button type="button" class="md-still" data-file="${attr(kept.file)}" data-tip="Open full size" data-tip-placement="follow"><img src="${attr(src)}" alt="${attr(text)}"></button>`;
+      }
+      const path = fromFileUrl(href);
+      const root = rendering?.fileRoot;
+      const link = path.startsWith("/") ? path : root ? `${root}/${path}` : null;
+      return link ? `<a href="${attr(link)}">${caption}</a>` : caption;
+    },
     table,
   },
 });
+
+/** text as an attribute's value, in double quotes */
+const attr = (s: string) => escapeHtml(s).replace(/"/g, "&quot;");
 
 /** where a file's relative images are read from: the folder it sits in, in the worktree it is in */
 export interface MarkdownBase {
@@ -62,6 +85,8 @@ export interface MarkdownOptions {
   base?: MarkdownBase;
   /** the absolute checkout root: links beneath it open in Toyon's editor */
   fileRoot?: string;
+  /** the daemon's copies of the pictures a reply names by path, drawn in its place */
+  stills?: { worktreeId: string; urls: DaemonUrls; pictures: readonly ReplyPicture[] };
   /** the project's worktrees by directory: a `wt-xxxx` in the prose reads as the row's title */
   worktrees?: WorktreeNamer;
   /** the text is a document written as markdown, whose raw HTML is part of it and is kept; a
@@ -177,6 +202,7 @@ export function useMarkdown(text: string, options?: MarkdownOptions): string {
   const urls = options?.base?.urls;
   const fileRoot = options?.fileRoot;
   const worktrees = options?.worktrees;
+  const stills = options?.stills;
   const keepHtml = !!options?.keepHtml;
   const streaming = !!options?.streaming;
   const shown = usePaced(text, streaming);
@@ -186,8 +212,8 @@ export function useMarkdown(text: string, options?: MarkdownOptions): string {
         ? { worktreeId, dir, version: version ?? null, urls }
         : undefined;
     const at =
-      base || fileRoot || worktrees || keepHtml || streaming
-        ? { base, fileRoot, worktrees, keepHtml, streaming }
+      base || fileRoot || worktrees || stills || keepHtml || streaming
+        ? { base, fileRoot, worktrees, stills, keepHtml, streaming }
         : undefined;
     const since = performance.now() - lastAt.current;
     if (streaming || since >= STREAM_TICK_MS) {
@@ -200,6 +226,6 @@ export function useMarkdown(text: string, options?: MarkdownOptions): string {
       setHtml(renderMarkdown(shown, at));
     }, STREAM_TICK_MS - since);
     return () => clearTimeout(t);
-  }, [shown, worktreeId, dir, version, urls, fileRoot, worktrees, keepHtml, streaming]);
+  }, [shown, worktreeId, dir, version, urls, fileRoot, worktrees, stills, keepHtml, streaming]);
   return html;
 }

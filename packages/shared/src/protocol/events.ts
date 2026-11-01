@@ -146,6 +146,13 @@ export interface ToolImage {
   bytes: number;
 }
 
+/** a picture the agent's prose named by a path on the daemon's machine (`![caption](/path.png)`),
+ * copied into the store the way a tool's picture is: `path` is the target as the prose wrote it,
+ * which is how the chat finds the copy for the image it draws */
+export interface ReplyPicture extends ToolImage {
+  path: string;
+}
+
 /** where a paste was copied from, when the shell's own editor copied it: the lines as they were
  * numbered at the moment of the copy, which later edits to the file do not move */
 export interface PasteSource {
@@ -333,6 +340,9 @@ export type AgentEvent =
    * mid-reply lands in the transcript between that reply's chunks, and the id is what tells the
    * rest of the reply apart from the answer to the message. */
   | { type: "text-delta"; text: string; messageId?: string }
+  /** the daemon's copy of a picture a reply named by path, once the markdown naming it was whole
+   * and the bytes were on disk: follows the delta that finished the link, and may trail the turn */
+  | ({ type: "picture" } & ReplyPicture)
   | { type: "thinking-delta"; text: string }
   /** `parentToolId` is the call that spawned this one: a subagent's own tools arrive in the same
    * session as everything else, and only the id ties them to the row that started them. `subagent`

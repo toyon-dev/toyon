@@ -2,6 +2,7 @@ import {
   type AttachmentRef,
   LOGIN_STREAM,
   type PickMeta,
+  type ReplyPicture,
   SHELL_TOOL,
   type ShipOp,
   type ToolImage,
@@ -79,6 +80,7 @@ function Markdown({
   worktreeId,
   fileRoot,
   streaming,
+  pictures,
 }: {
   text: string;
   /** the row's menu, told which link the pointer was on, if any, and the text of the fenced block
@@ -89,12 +91,34 @@ function Markdown({
   worktreeId?: string | null;
   fileRoot?: string;
   streaming?: boolean;
+  /** the daemon's copies of the pictures the text names by path, drawn as stills in its place */
+  pictures?: readonly ReplyPicture[];
 }) {
   const worktrees = useWorktreeNamer(worktreeId);
-  const html = useMarkdown(text, { fileRoot, streaming, worktrees });
+  const urls = useUrls();
+  const stills = useMemo(
+    () => (worktreeId && pictures?.length ? { worktreeId, urls, pictures } : undefined),
+    [worktreeId, urls, pictures],
+  );
+  const html = useMarkdown(text, { fileRoot, streaming, worktrees, stills });
   const sock = useSock();
   const dispatch = useDispatch();
   const cm = useContextMenu("chat");
+  // a still is the row's markup like a link, and its press is routed the same way: it opens at
+  // the window's size, as a tool's picture does; its menu is the picture's
+  const [full, setFull] = useState<{ src: string; alt: string; file: string } | null>(null);
+  const stillAt = (target: Element) => {
+    const still = target.closest<HTMLElement>("button.md-still");
+    const img = still?.querySelector("img");
+    return still && img && worktreeId
+      ? {
+          src: img.src,
+          alt: img.alt,
+          file: still.dataset.file ?? "",
+          kept: { worktreeId, file: still.dataset.file ?? "", sock },
+        }
+      : null;
+  };
   // the DOMPurify-sanitized markup goes in through the hook, which keeps a selection through the
   // re-renders of a message still streaming
   const body = useRef<HTMLDivElement>(null);
@@ -141,11 +165,29 @@ function Markdown({
       ref={root}
       className="msg-assistant md row-edge"
       data-state={rowState({ cursor: marked })}
-      {...cm.contextMenu((_from, target) => menu(chatLink(target, fileRoot), codeAt(target)))}
-      onClick={(e) => openChatLink(e, fileRoot, worktreeId, { sock, dispatch })}
+      {...cm.contextMenu((_from, target) => {
+        const still = stillAt(target);
+        return still
+          ? imageItems(still.src, { open: () => setFull(still) }, still.kept)
+          : menu(chatLink(target, fileRoot), codeAt(target));
+      })}
+      onClick={(e) => {
+        const still = stillAt(e.target as Element);
+        if (still) setFull(still);
+        else openChatLink(e, fileRoot, worktreeId, { sock, dispatch });
+      }}
     >
       <div ref={body} />
       {codeCopy}
+      {full && worktreeId && (
+        <FullAttachment
+          owner="chat"
+          onClose={() => setFull(null)}
+          menu={() => imageItems(full.src, {}, { worktreeId, file: full.file, sock })}
+        >
+          <img src={full.src} alt={full.alt} />
+        </FullAttachment>
+      )}
     </div>
   );
 }
@@ -1129,6 +1171,7 @@ export const ChatItemView = memo(function ChatItemView({
           worktreeId={worktreeId}
           fileRoot={fileRoot()}
           streaming={streaming}
+          pictures={item.pictures}
         />
       );
     case "error":

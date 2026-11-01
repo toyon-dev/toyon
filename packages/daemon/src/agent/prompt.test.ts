@@ -409,9 +409,15 @@ describe("standingContext", () => {
     ).toBe(
       'This worktree\'s work has landed on main as "one"; "two"; "three" (and 1 more), through PR #12. The branch restarted from main, so there is nothing here to commit or land until new work is written.',
     );
-    // a landing with nothing to say, and no PR
+    // a landing with nothing to say, no PR, and a tree not read yet: nothing claimed about it
     expect(standingContext({ main: false, base: "main", landed: { subjects: [] } })).toBe(
-      "This worktree's work has landed on main. The branch restarted from main, so there is nothing here to commit or land until new work is written.",
+      "This worktree's work has landed on main. The branch restarted from main.",
+    );
+    // files left in the tree after the landing are the row's own, and the agent hears of them
+    expect(
+      standingContext({ main: false, base: "origin/main", dirty: 2, ahead: 0, landed: { subjects: ["x"], pr: 7 } }),
+    ).toBe(
+      'This worktree\'s work has landed on origin/main as "x", through PR #7. The branch restarted from origin/main. The tree has 2 uncommitted files, which the user commits from the commit box.',
     );
   });
   test("an unlanded row says what is uncommitted and how far the branch stands from its base", () => {
@@ -474,6 +480,7 @@ describe("standingContext", () => {
       standingContext({
         main: false,
         base: "main",
+        dirty: 0,
         landed: { subjects: ["x"], pr: 7 },
         pr: { ...pr, state: "merged" },
       }),

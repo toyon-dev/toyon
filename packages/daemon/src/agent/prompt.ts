@@ -534,8 +534,17 @@ export function standingContext(s: WorkStanding | null): string | undefined {
     const more = s.landed.subjects.length - named.length;
     const as = named.length ? ` as ${named.join("; ")}${more > 0 ? ` (and ${more} more)` : ""}` : "";
     const through = s.landed.pr === undefined ? "" : `, through PR #${s.landed.pr}`;
+    // files left in the tree ride over a landing and stay the row's own: the agent hears of them
+    // the way it does on any row, rather than that there is nothing here; a tree not read yet
+    // says nothing either way
+    const left =
+      s.dirty === undefined
+        ? "."
+        : s.dirty
+          ? `. ${tree}`
+          : ", so there is nothing here to commit or land until new work is written.";
     parts.push(
-      `This worktree's work has landed on ${s.base}${as}${through}. The branch restarted from ${s.base}, so there is nothing here to commit or land until new work is written.`,
+      `This worktree's work has landed on ${s.base}${as}${through}. The branch restarted from ${s.base}${left}`,
     );
   } else {
     if (tree) parts.push(tree);

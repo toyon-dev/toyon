@@ -21,7 +21,7 @@ describe("landing", () => {
   /** how many parents main's tip has: two for a merge commit, one otherwise */
   const parents = async () => (await git(w.repo, "log", "-1", "--format=%P")).out.split(" ").filter(Boolean).length;
 
-  test("a committed branch lands under a merge commit, marks landed, and restarts from main; an edit unmarks it until discarded", async () => {
+  test("a committed branch lands under a merge commit, marks landed, and restarts from main; an edit keeps the mark, a commit ends it", async () => {
     const repoId = await registered();
     const wt = await w.worktrees.create(repoId, "feature");
     writeFileSync(join(wt.path, "feature.txt"), "x\n");
@@ -45,11 +45,11 @@ describe("landing", () => {
     expect(w.state.worktree(wt.id)?.landed).toBe(true);
     // the branch now equals main: nothing ahead, nothing behind, a clean base for what comes next
     expect((await git(wt.path, "rev-parse", "HEAD")).out).toBe((await git(w.repo, "rev-parse", "main")).out);
-    // an edit clears the mark through gitStatus, and discarding it brings the mark back: the
-    // base has the work either way, and only what is here says whether there is more
+    // an edit leaves the mark: the base has the work either way, and the file is the row's own
+    // change to land or discard, counted beside the mark
     writeFileSync(join(wt.path, "more.txt"), "y\n");
-    await w.worktrees.gitStatus(wt.id);
-    expect(w.state.worktree(wt.id)?.landed).toBeUndefined();
+    expect(await w.worktrees.gitStatus(wt.id)).toMatchObject({ files: [{ path: "more.txt" }] });
+    expect(w.state.worktree(wt.id)?.landed).toBe(true);
     rmSync(join(wt.path, "more.txt"));
     await w.worktrees.gitStatus(wt.id);
     expect(w.state.worktree(wt.id)?.landed).toBe(true);
@@ -76,11 +76,10 @@ describe("landing", () => {
       landed: { subjects: ["add feature"] },
     });
     // an edit by hand, with nothing to signal it: the read at send time is what makes it known,
-    // and the landed mark goes with it
+    // counted beside the landed mark, which the edit leaves standing
     writeFileSync(join(wt.path, "more.txt"), "y\n");
     const edited = await w.worktrees.standing(wt.id);
-    expect(edited).toMatchObject({ dirty: 1 });
-    expect(edited?.landed).toBeUndefined();
+    expect(edited).toMatchObject({ dirty: 1, landed: { subjects: ["add feature"] } });
     const main = w.state.worktrees.find((x) => x.repoId === repoId && x.kind === "main")!;
     expect(await w.worktrees.standing(main.id)).toMatchObject({ main: true, dirty: 0 });
   });

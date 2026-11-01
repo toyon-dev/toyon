@@ -25,7 +25,7 @@ import { rowState } from "../../ui/rowState.ts";
 import { Spinner } from "../../ui/Spinner.tsx";
 import { treeKey } from "../../ui/treeNav.ts";
 import { hhmm } from "../chips/baseNote.ts";
-import { landedWhat } from "../recap.ts";
+import { ended, landedWhat } from "../recap.ts";
 import { elapsed, spanWords } from "../util.ts";
 import { AskRow } from "./AskRow.tsx";
 import { AttachmentSet } from "./AttachmentSet.tsx";
@@ -1385,8 +1385,11 @@ function LandedRow({ item }: { item: Extract<ChatItem, { kind: "landed" }> }) {
       the PR
     </Button>
   );
+  // the work is on the base and yet the row was not marked landed: the rail cannot say why, so
+  // this row does, as of the landing. The mark comes back on its own once the fact clears.
+  const held = item.held && `Not marked landed: ${ended(item.held)}`;
   return (
-    <DaemonRow icon="check" word="landed" tone="aqua" at={item.ts} below={what ? how : undefined}>
+    <DaemonRow icon="check" word="landed" tone="aqua" at={item.ts} below={[what ? how : undefined, held]}>
       <span className="daemon-text">
         {what ?? how}
         {pr && <> · {pr}</>}

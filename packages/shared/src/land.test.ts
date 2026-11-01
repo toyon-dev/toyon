@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { landedNow, landWord, movedPastLand, prStanding, prTaken } from "./land.ts";
+import { landedNow, landWord, movedPastLand, notLandedWhy, prStanding, prTaken } from "./land.ts";
 
 // The one rule every landing path shares: a row is landed when the base has its work, read
 // from the recorded landings and the tree, never from an ahead count alone.
@@ -9,25 +9,25 @@ const merged = { number: 7, url: "u", state: "merged" as const, at: 2 };
 
 describe("landedNow", () => {
   test.each([
-    ["never landed, level and clean", {}, { clean: true, head: "x", ahead: 0 }, false],
-    ["restarted from the base after a land", { lands: [land] }, { clean: true, head: "b1", ahead: 0 }, true],
+    ["never landed, level with the base", {}, { head: "x", ahead: 0 }, false],
+    ["restarted from the base after a land", { lands: [land] }, { head: "b1", ahead: 0 }, true],
     [
       "an adopted branch sitting on its landed tip, ahead by hashes only",
       { lands: [land] },
-      { clean: true, head: "t1", ahead: 3 },
+      { head: "t1", ahead: 3 },
       true,
     ],
     [
-      "an edit since: not landed until it is discarded",
+      "an edit since does not unland the row: the work is on the base, and the edit is new work or a discard",
       { lands: [land] },
-      { clean: false, head: "t1", ahead: 3 },
-      false,
+      { head: "t1", ahead: 3 },
+      true,
     ],
-    ["a commit past the landed tip", { lands: [land] }, { clean: true, head: "t2", ahead: 1 }, false],
+    ["a commit past the landed tip", { lands: [land] }, { head: "t2", ahead: 1 }, false],
     [
       "the latest landing decides, not an earlier one",
       { lands: [{ ...land, tip: "old" }, land] },
-      { clean: true, head: "t1", ahead: 3 },
+      { head: "t1", ahead: 3 },
       true,
     ],
   ])("%s", (_name, wt, facts, want) => {
@@ -35,12 +35,30 @@ describe("landedNow", () => {
   });
 });
 
+describe("notLandedWhy", () => {
+  const level = { head: "b1", ahead: 0 };
+  test("nothing to say on a landed row", () => {
+    expect(notLandedWhy({ lands: [land] }, level, "origin/main")).toBeUndefined();
+  });
+  test("a landing that never went on the record", () => {
+    expect(notLandedWhy({}, level, "origin/main")).toBe("no landing went on the record");
+  });
+  test("a commit that moved HEAD past the landed tip while it landed", () => {
+    expect(notLandedWhy({ lands: [land] }, { head: "t9", ahead: 2 }, "origin/main")).toBe(
+      "the branch holds 2 commits origin/main lacks",
+    );
+    expect(notLandedWhy({ lands: [land] }, { head: "t9", ahead: 1 }, "origin/main")).toBe(
+      "the branch holds a commit origin/main lacks",
+    );
+  });
+});
+
 describe("movedPastLand", () => {
   test("new commits over the landed tip, and only those, move the row past its landing", () => {
-    expect(movedPastLand({ lands: [land] }, { clean: true, head: "t2", ahead: 1 })).toBe(true);
-    expect(movedPastLand({ lands: [land] }, { clean: false, head: "t1", ahead: 3 })).toBe(false);
-    expect(movedPastLand({ lands: [land] }, { clean: true, head: "b1", ahead: 0 })).toBe(false);
-    expect(movedPastLand({}, { clean: true, head: "t2", ahead: 1 })).toBe(false);
+    expect(movedPastLand({ lands: [land] }, { head: "t2", ahead: 1 })).toBe(true);
+    expect(movedPastLand({ lands: [land] }, { head: "t1", ahead: 3 })).toBe(false);
+    expect(movedPastLand({ lands: [land] }, { head: "b1", ahead: 0 })).toBe(false);
+    expect(movedPastLand({}, { head: "t2", ahead: 1 })).toBe(false);
   });
 });
 

@@ -327,6 +327,34 @@ describe("landing", () => {
     expect(w.state.worktree(wt.id)?.landed).toBe(true);
   });
 
+  test("a PR merged over a stray file is landed at once; the file stays as the row's own change", async () => {
+    const repoId = await registered();
+    const { origin, other } = await withOrigin(repoId);
+    const wt = await w.worktrees.create(repoId, "feature");
+    writeFileSync(join(wt.path, "feature.txt"), "x\n");
+    sh(wt.path, "git", "add", "-A");
+    sh(wt.path, "git", "commit", "-q", "-m", "add feature");
+    sh(wt.path, "git", "push", "-q", "-u", "origin", wt.branch);
+    w.worktrees.setPr(wt.id, { number: 7, url: "https://x/pull/7", state: "open", at: 1 });
+    squashedOnOrigin(other, origin, wt.branch);
+    // a file the agent left behind, never committed and not ignored
+    writeFileSync(join(wt.path, "scratch.log"), "y\n");
+    w.worktrees.setPr(wt.id, { number: 7, url: "https://x/pull/7", state: "merged", at: 2 });
+    expect((await w.worktrees.prMerged(wt.id)).ok).toBe(true);
+    // the work is on origin, so the row is landed whatever the tree holds: the file rode over
+    // the restart and counts as the row's own change, for the box to land or discard
+    expect(w.state.worktree(wt.id)?.lands).toHaveLength(1);
+    expect(w.state.worktree(wt.id)).toMatchObject({ landed: true });
+    expect(w.agents.get(wt.id)!.recorded.at(-1)).toMatchObject({ type: "landed", url: "https://x/pull/7" });
+    expect(w.agents.get(wt.id)!.recorded.at(-1)).not.toHaveProperty("held");
+    expect((await git(wt.path, "rev-parse", "HEAD")).out).toBe((await git(origin, "rev-parse", "main")).out);
+    expect(await w.worktrees.gitStatus(wt.id)).toMatchObject({ ahead: 0, files: [{ path: "scratch.log" }] });
+    // the file gone, the row stays landed and reads clean
+    rmSync(join(wt.path, "scratch.log"));
+    expect(await w.worktrees.gitStatus(wt.id)).toMatchObject({ files: [] });
+    expect(w.state.worktree(wt.id)?.landed).toBe(true);
+  });
+
   test("an adopted branch squashed on GitHub stays landed, PR and all, until a new commit", async () => {
     const repoId = await registered();
     const { origin, other } = await withOrigin(repoId);
@@ -417,12 +445,13 @@ describe("landing", () => {
     writeFileSync(join(wt.path, "README.md"), "half a thought\n");
     w.worktrees.setPr(wt.id, { number: 7, url: "https://x/pull/7", state: "merged", at: 2 });
     expect((await w.worktrees.prMerged(wt.id)).ok).toBe(true);
-    // the branch restarted from origin's main with the edit still in the tree, and the row
-    // waits on the edit before it reads as landed
+    // the branch restarted from origin's main with the edit still in the tree, and the row reads
+    // as landed at once: the edit is its own change, counted beside the mark
     expect((await git(wt.path, "rev-parse", "HEAD")).out).toBe((await git(origin, "rev-parse", "main")).out);
     expect(readFileSync(join(wt.path, "README.md"), "utf8")).toBe("half a thought\n");
     expect(w.state.worktree(wt.id)?.lands).toHaveLength(1);
-    expect(w.state.worktree(wt.id)?.landed).toBeUndefined();
+    expect(w.state.worktree(wt.id)).toMatchObject({ landed: true, pr: { number: 7, state: "merged" } });
+    expect(await w.worktrees.gitStatus(wt.id)).toMatchObject({ files: [{ path: "README.md" }] });
     sh(wt.path, "git", "checkout", "-q", "--", "README.md");
     await w.worktrees.gitStatus(wt.id);
     expect(w.state.worktree(wt.id)).toMatchObject({ landed: true, pr: { number: 7, state: "merged" } });

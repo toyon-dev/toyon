@@ -63,7 +63,7 @@ describe("a worktree's actions", () => {
     const word = (items: MenuEntry[]) => items.filter(isItem).find((i) => i.id === "land")?.label;
     const landed = owned({ ahead: 1, worktree: { ...info, landed: true } });
     expect(word(worktreeItems(landed, null, state, deps, here))).toBeUndefined();
-    // an edit since: the row is not landed until it is discarded, and the press is back
+    // an edit since: the row stays landed, and the edit is work to land, so the press is back
     expect(
       word(worktreeItems(owned({ ahead: 1, dirty: 1, worktree: { ...info, landed: true } }), null, state, deps, here)),
     ).toBe("land");

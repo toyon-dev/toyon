@@ -496,8 +496,8 @@ export function Composer({
   // closing the worktree; the conversation stays until then, so a follow-up is a message like any
   // other), then a PR standing between the work and main, then a verdict on work to land
   const atRest = !drafting && !greenfield && blank && !midTurn && !!active;
-  // the daemon's rule decides landed; the live status only withholds it while an edit is in
-  // the box's own frame ahead of the daemon's next read
+  // the daemon's rule decides landed, and uncommitted files do not unland a row; the box withholds
+  // the archive word while any are counted, since they are work to land or discard first
   const hasLanded = !!active?.worktree.landed && dirty === 0;
   const landed = atRest && hasLanded;
   // the PR still standing between the work and main; a merged one left behind by new work is

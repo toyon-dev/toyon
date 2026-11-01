@@ -129,8 +129,8 @@ export function CommitBox({
   // a commit needs a message; a land can take the suggested one. A failed check holds land back,
   // the way it holds the composer's word back, until the check passes again.
   const checkFailed = owned?.landing?.check === "fail";
-  // the daemon's rule decides landed; the live dirty count only withholds it while an edit is in
-  // the box's own frame ahead of the daemon's next read, as the composer reads it
+  // the daemon's rule decides landed, and uncommitted files do not unland a row; the foot withholds
+  // the archive word while any are counted, as the composer does: they are work to land or discard
   const hasLanded = !!owned?.landed && !dirty;
   // the PR the row still shows: a merged one left behind by new work is history, and the foot
   // reads as a fresh row with it gone

@@ -75,24 +75,36 @@ export function baseIsRemote(repo: Pick<RepoInfo, "defaultBranch" | "base">): bo
   return repo.base !== undefined && repo.base !== repo.defaultBranch;
 }
 
-/** what a row's git says, for the landed rule: whether the tree is clean, where HEAD is, and how
- * many commits it holds that the base lacks */
+/** what a row's git says, for the landed rule: where HEAD is, and how many commits it holds that
+ * the base lacks */
 export interface LandedFacts {
-  clean: boolean;
   head: string;
   ahead: number;
 }
 
 type Landed = Pick<WorktreeInfo, "lands" | "pr">;
 
-/** A row is landed when the base has its work: a recorded landing, a clean tree, and nothing
- * since that landing's tip. HEAD is the tip itself (an adopted branch after a squash on GitHub
- * keeps its commits and reads as ahead for good) or sits on the base (a branch toyon owns,
- * restarted from it). One rule for every path that lands, and never inferred from an ahead
- * count alone. */
+/** A row is landed when the base has its work: a recorded landing and no commit since that
+ * landing's tip. HEAD is the tip itself (an adopted branch after a squash on GitHub keeps its
+ * commits and reads as ahead for good; a branch whose restart from the base git refused stays on
+ * it) or sits on the base (a branch toyon owns, restarted from it). Uncommitted files do not
+ * count: the work is on the base whatever is left in the tree, and what is left is either new work
+ * (the counts say so, and the box offers to land it) or something to discard; neither takes the
+ * landed work back off the base. One rule for every path that lands, and never inferred from an
+ * ahead count alone. */
 export function landedNow(wt: Landed, f: LandedFacts): boolean {
   const last = wt.lands?.at(-1);
-  return !!last && f.clean && (f.head === last.tip || f.ahead === 0);
+  return !!last && (f.head === last.tip || f.ahead === 0);
+}
+
+/** The fact that held the landed mark back, as the landed row says it, or nothing when the row is
+ * landed. Read right after a landing, where the work is on the base and the mark is expected, so
+ * whatever stood in the way is worth saying: the landing succeeded and the row would not show it.
+ * Each clause names one of the rule's terms, so the two cannot part. */
+export function notLandedWhy(wt: Landed, f: LandedFacts, base: string): string | undefined {
+  if (landedNow(wt, f)) return undefined;
+  if (!wt.lands?.at(-1)) return "no landing went on the record";
+  return `the branch holds ${f.ahead === 1 ? "a commit" : `${f.ahead} commits`} ${base} lacks`;
 }
 
 /** the row went on past its last landing: commits over the tip that the base lacks, which is

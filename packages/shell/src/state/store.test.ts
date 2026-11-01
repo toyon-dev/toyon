@@ -2081,7 +2081,10 @@ describe("git status", () => {
     const s = run([hello(wt("main", "main"), wt("a")), dirty]);
     expect(s.local.a?.git?.files).toHaveLength(1);
     const row = wt("a");
-    const landed: WorktreeStatus = { ...row, worktree: row.worktree && { ...row.worktree, landed: true } };
+    const landed: WorktreeStatus = { ...row, dirty: 0, worktree: row.worktree && { ...row.worktree, landed: true } };
+    // a row marked landed with a file still counted keeps its list: the file rode over the landing
+    const kept = reducer(s, worktrees(wt("main", "main"), { ...landed, dirty: 1 }));
+    expect(kept.local.a?.git?.files).toHaveLength(1);
     const on = reducer(s, worktrees(wt("main", "main"), landed));
     expect(on.local.a?.git?.files).toEqual([]);
     // a frame from before the land, the state the mark retired, is dropped; one after it stands

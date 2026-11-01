@@ -977,7 +977,9 @@ describe("AcpSession", () => {
       },
       { steering: true },
     );
-    const w = world(fake, claudeSpec, 60_000, undefined, { inputHoldMs: 20 });
+    // an adapter with no row saying it reports a cut call keeps the marking (wire.ts); the Claude
+    // pin has one, since its steers ride `next` and cut nothing
+    const w = world(fake, codexSpec, 60_000, undefined, { inputHoldMs: 20 });
     w.session.send("one");
     await Bun.sleep(20);
     w.session.send("two");
@@ -986,6 +988,44 @@ describe("AcpSession", () => {
     await w.idle();
     const tools = w.events.flatMap((e) => ("toolId" in e ? [`${e.type} ${e.toolId}`] : []));
     expect(tools).toEqual(["tool-start c1", "tool-end c1", "tool-start c2", "tool-end c2"]);
+    await w.session.close();
+  });
+
+  test("a command open when a steer lands is left to run where the adapter delivers between steps", async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    const fake = fakeAgent(
+      async (p, client) => {
+        const update = (u: acp.SessionUpdate) =>
+          client.notify(acp.methods.client.session.update, { sessionId: p.sessionId, update: u });
+        const open = (toolCallId: string) =>
+          update({ sessionUpdate: "tool_call", toolCallId, title: "Terminal", kind: "execute", rawInput: {} });
+        await open("c1");
+        await gate;
+        // the steer waits for the command: its input closes, the next call opens while it runs, and
+        // then it returns. Marked as cut it would have ended as never written when c2 opened.
+        await update({ sessionUpdate: "tool_call_update", toolCallId: "c1", title: "ls", rawInput: { command: "ls" } });
+        await Bun.sleep(60);
+        await open("c2");
+        await update({ sessionUpdate: "tool_call_update", toolCallId: "c1", status: "completed" });
+        await update({ sessionUpdate: "tool_call_update", toolCallId: "c2", status: "completed" });
+        return { stopReason: "end_turn" };
+      },
+      { steering: true },
+    );
+    const w = world(fake, claudeSpec, 60_000, undefined, { inputHoldMs: 20 });
+    w.session.send("one");
+    await Bun.sleep(20);
+    w.session.send("two");
+    await Bun.sleep(20);
+    release();
+    await w.idle();
+    const tools = w.events.flatMap((e) => ("toolId" in e ? [`${e.type} ${e.toolId}`] : []));
+    expect(tools).toEqual(["tool-start c1", "tool-update c1", "tool-start c2", "tool-end c1", "tool-end c2"]);
+    const end = w.events.find((e) => e.type === "tool-end" && e.toolId === "c1") as { cut?: true };
+    expect(end.cut).toBeUndefined();
     await w.session.close();
   });
 

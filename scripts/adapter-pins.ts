@@ -15,10 +15,15 @@ interface Pin {
 }
 
 // a native adapter is one npm package per platform; this machine's is the one asked about, since
-// every build of a version is published together
+// every build of a version is published together. A fork is asked about as its upstream: the pin
+// `X.Y.Z-toyon.N` is upstream X.Y.Z plus the queued patches, so the question is whether upstream
+// has moved past X.Y.Z, which is when the fork is rebased and republished
 const host = hostTraits();
 const pins: Pin[] = BUILTIN_AGENTS.flatMap((a) => {
   if (a.run.kind === "command") return [];
+  if (a.run.kind === "npm-bin" && a.run.forkOf) {
+    return [{ id: a.id, pkg: a.run.forkOf, pinned: a.run.version.replace(/-toyon\.\d+$/, "") }];
+  }
   const pkg = a.run.kind === "npm-native" ? nativePackage(a.run.pkg, host) : a.run.pkg;
   return pkg ? [{ id: a.id, pkg, pinned: a.run.version }] : [];
 });

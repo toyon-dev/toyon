@@ -40,8 +40,10 @@ export interface WireFlags {
 
 const FLAG_NAMES = ["noStartSignal", "cutCallUnreported", "backgroundFinish", "modelIdOffList"] as const;
 
+// The pin is toyon's fork of the adapter: upstream 0.99.1 plus the queued PRs named in the rows
+// they close. A row upstream has not shipped is read against the fork's base.
 const CLAUDE: AdapterWire = {
-  at: "0.95.0",
+  at: "0.99.1-toyon.1",
   gaps: {
     partialInput: {
       gap:
@@ -75,11 +77,13 @@ const CLAUDE: AdapterWire = {
       here:
         "map.ts marks every open call of the main agent's when a steer is injected (`preempted`) and ends a " +
         "marked or still-writing call when the agent's next word or call arrives (`abandoned`, `cut: true` " +
-        "on the tool-end). Flag: the marking; the writing check stays as the fallback.",
+        "on the tool-end). Flag: the marking; the writing check stays as the fallback. Closed with " +
+        "steerPriority: a steer at `next` joins between steps, so no call is dropped and the marking would " +
+        "end a running call as never written when the next one opens.",
       upstream:
-        "Owed: the report cancel sends, for each tool_use the interrupt dropped. The cancel path shipped it; " +
-        "the steer path has not.",
-      open: true,
+        "Moot while steers ride `next` (the fork pin). For `now`, still owed: the report cancel sends, for " +
+        "each tool_use the interrupt dropped.",
+      open: false,
     },
     steerPriority: {
       gap:
@@ -88,17 +92,16 @@ const CLAUDE: AdapterWire = {
         "card is open, which waits for the generation after the tool result. Toyon cannot ask for `next`, " +
         "between steps, which is what a message sent mid-turn means.",
       here:
-        'session.ts asks for `priority: "next"` under `_meta.steering` on every steer, which 0.95.0 ignores, ' +
-        "and sends a card's follow-up (an image, a note, the edited plan) before the card's reply resolves so " +
-        "it lands on `later`; until an adapter reads the priority, a message sent mid-turn can still cut a " +
-        "running tool call and the agent reads a follow-up in a second reply. No flag: the ask and the " +
-        "ordering are harmless once honoured.",
+        'session.ts asks for `priority: "next"` under `_meta.steering` on every steer, which the fork honours ' +
+        "(upstream ignores the key and keeps `now`), and sends a card's follow-up (an image, a note, the " +
+        "edited plan) before the card's reply resolves so it lands on `later`. No flag: the ask and the " +
+        "ordering are harmless either way.",
       upstream:
         "Asked upstream twice, agentclientprotocol/claude-agent-acp#1175 and #1350 (the better shape, " +
-        "`_meta.steering.priority`), both unreviewed; still `now` at 0.99.1. Back #1350 rather than open a " +
-        "third; the toyon fork pin carries its patch until one lands. The steering extension itself says " +
-        "nothing about the running step.",
-      open: true,
+        "`_meta.steering.priority`), both unreviewed; still `now` at 0.99.1. The fork pin carries #1350 " +
+        "(`pr/1350-steer-priority`) until one lands; back #1350 rather than open a third. The steering " +
+        "extension itself says nothing about the running step.",
+      open: false,
     },
     backgroundFinish: {
       gap:

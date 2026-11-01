@@ -30,6 +30,11 @@ const creds =
   keychain();
 const enabled = process.env.TOYON_TEST_CLAUDE === "1" && creds;
 
+// The adapter's own install beside the machine's, kept across runs. Not the daemon's directory: the
+// daemon running on this machine may pin another version, and two pins sharing one directory each
+// read the other's install as missing and reinstall over it, every minute, for as long as this runs.
+const agentsDir = join(makePaths().agentsDir, "..", "agents-test");
+
 type Deps = ConstructorParameters<typeof AcpSession>[0];
 
 /** `extra` goes over the session's dependencies: a mode, a plan hook, Toyon's MCP server */
@@ -37,8 +42,8 @@ function world(specs: AgentSpec[] = BUILTIN_AGENTS, extra: Partial<Deps> = {}) {
   const t = tmpRepo();
   const wt = join(t.repo, "..", "wt");
   sh(t.repo, GIT, "worktree", "add", "-q", "-b", "feat", wt, "main");
-  // the real adapter, installed into the machine's ~/.toyon/agents once and reused across runs
-  const registry = new AgentRegistry(specs, makePaths().agentsDir);
+  // the real adapter, installed once by the first test and reused across runs
+  const registry = new AgentRegistry(specs, agentsDir);
   const events: AgentEvent[] = [];
   let commands: AgentCommand[] = [];
   let sessionId: string | undefined;
@@ -76,7 +81,7 @@ function world(specs: AgentSpec[] = BUILTIN_AGENTS, extra: Partial<Deps> = {}) {
 
 describe.skipIf(!enabled)("claude via ACP (integration)", () => {
   test("the adapter installs on demand", async () => {
-    await new AgentRegistry(BUILTIN_AGENTS, makePaths().agentsDir).install("claude");
+    await new AgentRegistry(BUILTIN_AGENTS, agentsDir).install("claude");
   }, 300_000);
 
   test("edits inside the worktree land; the sandbox file is written and ignored by git", async () => {
@@ -141,6 +146,44 @@ describe.skipIf(!enabled)("claude via ACP (integration)", () => {
       expect(events.filter((e) => e.type === "turn-start")).toHaveLength(1);
       expect(events.filter((e) => e.type === "turn-end")).toHaveLength(1);
       expect(events.filter((e) => e.type === "user-message")).toHaveLength(2);
+    } finally {
+      await session.close();
+      t.cleanup();
+    }
+  }, 300_000);
+
+  test("a message sent during a long command waits for the command rather than cutting it", async () => {
+    const { t, events, session, settle, said } = world(BUILTIN_AGENTS, { mode: () => "auto" });
+    try {
+      session.send(
+        "Run exactly this shell command with the Bash tool and nothing else, then report its output: sleep 15; echo finished",
+      );
+      for (let i = 0; i < 900 && !events.some((e) => e.type === "tool-start" && e.kind === "execute"); i++)
+        await Bun.sleep(100);
+      const start = events.find((e) => e.type === "tool-start" && e.kind === "execute");
+      expect(start, "no command started").toBeDefined();
+      // the message lands on a command in flight: the fork delivers it at `next`, after the command
+      // returns, where upstream's `now` would interrupt the call and the turn would end on the answer
+      await Bun.sleep(3000);
+      expect(session.status).toBe("working");
+      session.send("After that command, also reply with the word steered.");
+      await settle();
+      expect(session.status).toBe("idle");
+      const toolId = (start as { toolId: string }).toolId;
+      const ends = events.filter((e) => e.type === "tool-end" && e.toolId === toolId) as Array<{
+        output?: string;
+        cut?: true;
+        isError?: boolean;
+      }>;
+      expect(ends).toHaveLength(1);
+      expect(ends[0]!.cut).toBeUndefined();
+      expect(ends[0]!.isError).not.toBe(true);
+      expect(ends[0]!.output ?? "").toContain("finished");
+      expect(said().toLowerCase(), `the agent said: ${said()}`).toContain("steered");
+      expect(events.filter((e) => e.type === "turn-start")).toHaveLength(1);
+      expect(events.filter((e) => e.type === "turn-end")).toHaveLength(1);
+      expect(events.filter((e) => e.type === "user-message")).toHaveLength(2);
+      expect(events.some((e) => e.type === "agent-error")).toBe(false);
     } finally {
       await session.close();
       t.cleanup();

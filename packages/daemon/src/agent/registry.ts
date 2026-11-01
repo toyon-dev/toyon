@@ -43,8 +43,10 @@ export interface AgentSpec {
    * rather than "Claude Code Fable"); `name` when absent */
   short?: string;
   builtin: boolean;
+  // an npm adapter's `forkOf` names the upstream package a fork is cut from; `version` is then the
+  // upstream version with a `-toyon.N` suffix, and the pins script compares that base with upstream
   run:
-    | { kind: "npm-bin"; pkg: string; version: string; bin: string; args?: string[] }
+    | { kind: "npm-bin"; pkg: string; version: string; bin: string; args?: string[]; forkOf?: string }
     /** a native binary shipped as one npm package per platform, `<pkg>-<os>-<arch>…` (native.ts),
      * run directly with no JS runtime; `bin` is its path inside that package */
     | { kind: "npm-native"; pkg: string; version: string; bin: string; args?: string[] }
@@ -93,7 +95,16 @@ export const BUILTIN_AGENTS: AgentSpec[] = [
     name: "Claude Code",
     short: "Claude",
     builtin: true,
-    run: { kind: "npm-bin", pkg: "@agentclientprotocol/claude-agent-acp", version: "0.95.0", bin: "claude-agent-acp" },
+    // Toyon's fork of claude-agent-acp: upstream 0.99.1 plus the upstream PRs it is waiting on (#1350,
+    // a client-chosen steer priority). The fork's TOYON.md holds the queue and the per-release
+    // routine; the pin goes back to `forkOf` once every queued PR has landed there.
+    run: {
+      kind: "npm-bin",
+      pkg: "@toyon-dev/claude-agent-acp",
+      version: "0.99.1-toyon.1",
+      forkOf: "@agentclientprotocol/claude-agent-acp",
+      bin: "claude-agent-acp",
+    },
     env: {
       // The adapter reads NO_BROWSER to choose its login: set, it offers the TUI's /login, which
       // prints a link and takes the pasted code; unset, `auth login` opens a browser the cloud lacks.

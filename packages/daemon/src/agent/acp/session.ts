@@ -6,7 +6,7 @@
 // need, and a Live session on top of it that the chat turns use.
 
 import { randomUUID } from "node:crypto";
-import * as acp from "@agentclientprotocol/sdk";
+import * as acp from "@agentclientprotocol/sdk/unstable";
 import type {
   AgentCommand,
   AgentEvent,

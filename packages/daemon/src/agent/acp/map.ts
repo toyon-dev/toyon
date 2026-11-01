@@ -10,7 +10,7 @@ import type {
   StopReason,
   ToolCallContent,
   ToolKind,
-} from "@agentclientprotocol/sdk";
+} from "@agentclientprotocol/sdk/unstable";
 import {
   type AgentCommand,
   type AgentEvent,
@@ -565,7 +565,7 @@ export function mapCommands(cmds: AvailableCommand[]): AgentCommand[] {
     .map((c) => ({
       name: c.name,
       description: c.description ?? "",
-      // SDK 1.4.0: AvailableCommandInput is the unstructured variant, so the hint is always here.
+      // ACP v1: AvailableCommandInput is the unstructured variant, so the hint is always here.
       // The v2 schema widens it to a union and this will need a `c.input.type` check first.
       ...(c.input?.hint ? { hint: c.input.hint } : {}),
     }));

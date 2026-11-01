@@ -2,7 +2,7 @@
 // reply text and nothing else. Naming a worktree and the landing questions ride on this, on the
 // worktree's already-running adapter.
 
-import * as acp from "@agentclientprotocol/sdk";
+import * as acp from "@agentclientprotocol/sdk/unstable";
 import { fireAndForget, log } from "../../core/log.ts";
 import type { Quick } from "../adapter.ts";
 import { agentModeFor } from "../modes.ts";

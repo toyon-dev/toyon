@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
-import * as acp from "@agentclientprotocol/sdk";
+import * as acp from "@agentclientprotocol/sdk/unstable";
 import { spawnAcp } from "./transport.ts";
 
 const FIXTURE = join(import.meta.dir, "../../../test/fixtures/acp-echo-agent.ts");

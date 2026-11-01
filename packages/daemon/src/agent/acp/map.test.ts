@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import type { RequestPermissionRequest, RequestPermissionResponse, SessionUpdate } from "@agentclientprotocol/sdk";
+import type {
+  RequestPermissionRequest,
+  RequestPermissionResponse,
+  SessionUpdate,
+} from "@agentclientprotocol/sdk/unstable";
 import type { AgentEvent } from "@toyon/shared";
 import {
   endOfAsk,

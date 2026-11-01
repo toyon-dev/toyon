@@ -11,7 +11,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import * as acp from "@agentclientprotocol/sdk";
+import * as acp from "@agentclientprotocol/sdk/unstable";
 import type { AgentCommand, AgentEvent, AgentLimits, AgentStatus, AuthStatus, PermissionMode } from "@toyon/shared";
 import { AttachmentStore } from "../attachments.ts";
 import { ownPlanPath, PLANS_DIR, planEdited, writePlanDoc } from "../planDoc.ts";

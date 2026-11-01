@@ -3,7 +3,7 @@
 // adapter's (Claude says `effort`, Codex says `reasoning_effort`) and the category is the
 // protocol's. Pure functions, so the session and the update mapper read a list the same way.
 
-import type * as acp from "@agentclientprotocol/sdk";
+import type * as acp from "@agentclientprotocol/sdk/unstable";
 import { agentDefault, defaultStandsFor, type ModelChoice, type WorktreeInfo } from "@toyon/shared";
 
 /** the categories toyon drives, and the worktree field each one is asked from */

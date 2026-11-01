@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type * as acp from "@agentclientprotocol/sdk";
+import type * as acp from "@agentclientprotocol/sdk/unstable";
 import { UserError } from "../core/errors.ts";
 import { type McpTool, type McpToolResult, type ToolProvider, ToolSet, ToyonMcp } from "./mcp.ts";
 

@@ -134,13 +134,13 @@ export const BUILTIN_AGENTS: AgentSpec[] = [
     id: "codex",
     name: "Codex",
     builtin: true,
-    run: { kind: "npm-bin", pkg: "@agentclientprotocol/codex-acp", version: "2.0.1", bin: "codex-acp" },
+    run: { kind: "npm-bin", pkg: "@agentclientprotocol/codex-acp", version: "2.5.0", bin: "codex-acp" },
     // "agent" is Codex's workspace-write mode: its own OS sandbox around every shell command.
     // No browser in the cloud: the login method that opens one would hang there.
     // CODEX_CONFIG is merged into every thread's config by the adapter. Codex lists its
     // request_user_input tool outside plan mode only behind this feature, and without the tool a
     // question that needs a yes ends the turn as prose; with it the ask comes over ACP as a form
-    // and blocks until answered (autoResolutionMs null, adapter 2.0.1).
+    // and blocks until answered (autoResolutionMs null, adapter 2.5.0).
     env: {
       INITIAL_AGENT_MODE: "agent",
       CODEX_CONFIG: JSON.stringify({ features: { default_mode_request_user_input: true } }),
@@ -157,7 +157,7 @@ export const BUILTIN_AGENTS: AgentSpec[] = [
     id: "opencode",
     name: "OpenCode",
     builtin: true,
-    run: { kind: "npm-native", pkg: "opencode", version: "1.18.33", bin: "bin/opencode", args: ["acp"] },
+    run: { kind: "npm-native", pkg: "opencode", version: "1.19.5", bin: "bin/opencode", args: ["acp"] },
     onDemand: true,
     // OpenCode brings no OS sandbox, so it runs inside toyon's, writing only the worktree and its own state
     confinement: "toyon-sandbox",

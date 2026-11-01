@@ -2,7 +2,7 @@
 // an ACP prompt. Agents whose adapter takes a system-prompt override get SYSTEM_APPEND through
 // it; the others get it prepended to the first prompt of a session.
 
-import type { ContentBlock } from "@agentclientprotocol/sdk";
+import type { ContentBlock } from "@agentclientprotocol/sdk/unstable";
 import type { FileRef, ImageRef, LogLine, PasteRef, PickRef, ProcState, ProcStatus, PrState } from "@toyon/shared";
 import { attachmentLabel, clipOutput, fmtBytes, lineSpan } from "@toyon/shared";
 import type { Stored } from "./attachments.ts";

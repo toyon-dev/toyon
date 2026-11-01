@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import * as acp from "@agentclientprotocol/sdk";
+import * as acp from "@agentclientprotocol/sdk/unstable";
 import type { AgentEvent } from "@toyon/shared";
 import { sh, tmpRepo } from "../../../test/helpers/tmp-repo.ts";
 import { makePaths } from "../../core/paths.ts";
@@ -20,8 +20,11 @@ import { spawnAcp } from "./transport.ts";
 //
 // The handshake test needs no credentials. The turn below does: a Codex login, not just the file at
 // ~/.codex/auth.json, which happily holds a placeholder key that only fails at the first request.
+// TOYON_TEST_CODEX_MODEL=gpt-5.6-luna picks the model; the one ~/.codex/config.toml names otherwise,
+// and a ChatGPT account that has lost that model ends the turn as prose before any tool call.
 
 const enabled = process.env.TOYON_TEST_CODEX === "1";
+const model = process.env.TOYON_TEST_CODEX_MODEL;
 
 function registry() {
   return new AgentRegistry(BUILTIN_AGENTS, makePaths().agentsDir);
@@ -49,6 +52,7 @@ function world() {
     onEvent: (e) => events.push(e),
     onStatus: () => {},
     idleMs: 60_000,
+    ...(model ? { option: (c: string) => (c === "model" ? model : undefined) } : {}),
   });
   const settle = async () => {
     for (let i = 0; i < 1200 && (session.status === "working" || session.queueLength > 0); i++) await Bun.sleep(100);

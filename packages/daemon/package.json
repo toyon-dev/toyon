@@ -8,7 +8,7 @@
     "dev": "bun run --watch src/index.ts"
   },
   "dependencies": {
-    "@agentclientprotocol/sdk": "1.4.0",
+    "@agentclientprotocol/sdk": "2.2.0",
     "@toyon/shared": "workspace:*",
     "bun-pty": "0.4.10",
     "hono": "^4.6.0",

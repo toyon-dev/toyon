@@ -10,7 +10,11 @@
 // names, not files, and the daemon checks them when the call lands.
 
 import { isAbsolute, resolve } from "node:path";
-import type { PermissionOption, RequestPermissionRequest, RequestPermissionResponse } from "@agentclientprotocol/sdk";
+import type {
+  PermissionOption,
+  RequestPermissionRequest,
+  RequestPermissionResponse,
+} from "@agentclientprotocol/sdk/unstable";
 import type { PermissionMode } from "@toyon/shared";
 import { toyonTool } from "./acp/map.ts";
 import { canonical, within } from "./bounds.ts";

@@ -82,7 +82,7 @@ describe("agent registry", () => {
     ]);
     expect(() => reg.require("claude")).toThrow(/not ready/);
     await reg.installMissing();
-    expect(calls).toEqual(["@toyon-dev/claude-agent-acp@0.99.1-toyon.1", "@agentclientprotocol/codex-acp@2.0.1"]);
+    expect(calls).toEqual(["@toyon-dev/claude-agent-acp@0.99.1-toyon.1", "@agentclientprotocol/codex-acp@2.5.0"]);
     expect(changes[0]).toEqual(["claude:installing", "codex:not installed yet", "opencode:not installed"]);
     expect(changes.at(-1)).toEqual(["claude:ok", "codex:ok", "opencode:not installed"]);
     const l = reg.launch(reg.require("claude"), prepared);
@@ -108,7 +108,7 @@ describe("agent registry", () => {
       sandboxed: true,
     });
     await reg.install("opencode");
-    expect(calls.at(-1)).toBe("opencode-linux-x64-baseline-musl@1.18.33");
+    expect(calls.at(-1)).toBe("opencode-linux-x64-baseline-musl@1.19.5");
     const spec = reg.require("opencode");
     expect(reg.command(spec)).toEqual({
       command: expect.stringMatching(/opencode-linux-x64-baseline-musl\/bin\/opencode$/),
@@ -163,7 +163,7 @@ describe("agent registry", () => {
     // OpenCode is fetched on demand and nobody asked, so it is not listed
     expect(reg.adapters()).toEqual([
       { id: "claude", installed: "0.75.1", pinned: "0.99.1-toyon.1", error: "install failed: registry unreachable" },
-      { id: "codex", installed: "2.0.1", pinned: "2.0.1" },
+      { id: "codex", installed: "2.5.0", pinned: "2.5.0" },
     ]);
   });
 
@@ -331,7 +331,7 @@ describe("agent registry", () => {
     const { installer, calls } = fakeInstaller(fail);
     const reg = new AgentRegistry(BUILTIN_AGENTS, tmp(), installer, undefined, undefined, () => now);
     await reg.installMissing();
-    expect(calls).toEqual(["@toyon-dev/claude-agent-acp@0.99.1-toyon.1", "@agentclientprotocol/codex-acp@2.0.1"]);
+    expect(calls).toEqual(["@toyon-dev/claude-agent-acp@0.99.1-toyon.1", "@agentclientprotocol/codex-acp@2.5.0"]);
     // a tab reloaded right after: too soon to download again
     await reg.retryFailed();
     expect(calls).toHaveLength(2);

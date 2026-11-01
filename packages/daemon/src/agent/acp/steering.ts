@@ -12,7 +12,7 @@
 // Interim extension, hence the `_` prefix. Both builtin adapters implement it; an agent that
 // advertises nothing keeps the visible queue instead.
 
-import type * as acp from "@agentclientprotocol/sdk";
+import type * as acp from "@agentclientprotocol/sdk/unstable";
 
 export const STEER_METHOD = "_session/steering";
 

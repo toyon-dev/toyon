@@ -4,7 +4,7 @@
 // restart under a running agent costs nothing: the next call carries everything it needs.
 
 import { randomBytes } from "node:crypto";
-import type * as acp from "@agentclientprotocol/sdk";
+import type * as acp from "@agentclientprotocol/sdk/unstable";
 import { TOYON_MCP_SERVER } from "@toyon/shared";
 import { UserError } from "../core/errors.ts";
 import { log } from "../core/log.ts";

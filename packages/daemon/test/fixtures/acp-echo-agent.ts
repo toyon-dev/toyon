@@ -1,7 +1,7 @@
 // A minimal ACP agent over stdio for the transport test: echoes each prompt as one text chunk.
 // ACP_ECHO_IGNORE_TERM=1 makes it shrug off SIGTERM so the SIGKILL path can be exercised.
 import { Readable, Writable } from "node:stream";
-import * as acp from "@agentclientprotocol/sdk";
+import * as acp from "@agentclientprotocol/sdk/unstable";
 
 if (process.env.ACP_ECHO_IGNORE_TERM === "1") process.on("SIGTERM", () => {});
 if (process.env.ACP_ECHO_STDERR) console.error(process.env.ACP_ECHO_STDERR);

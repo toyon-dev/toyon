@@ -5,7 +5,7 @@
 // is looking at it, at most once per cooldown, so a login or a provider set up outside Toyon
 // shows up here without a restart. Live sessions report what they learn into the same place.
 
-import * as acp from "@agentclientprotocol/sdk";
+import * as acp from "@agentclientprotocol/sdk/unstable";
 import type { AgentInfo, AgentLimits, AuthStatus, LimitWindow, ModelChoice } from "@toyon/shared";
 import { UserError } from "../core/errors.ts";
 import { log } from "../core/log.ts";

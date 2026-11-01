@@ -2,7 +2,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { PermissionOption, RequestPermissionRequest } from "@agentclientprotocol/sdk";
+import type { PermissionOption, RequestPermissionRequest } from "@agentclientprotocol/sdk/unstable";
 import { decide, pickOption, requestedPaths } from "./policy.ts";
 import type { Bounds } from "./sandbox.ts";
 

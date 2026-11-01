@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import * as acp from "@agentclientprotocol/sdk";
+import * as acp from "@agentclientprotocol/sdk/unstable";
 import type { AgentInfo, AgentLimits, AuthStatus, ModelChoice } from "@toyon/shared";
 import { fakeAgents } from "../../test/helpers/fakes.ts";
 import { AUTH_STATUS_UPDATE_METHOD } from "./acp/authstatus.ts";

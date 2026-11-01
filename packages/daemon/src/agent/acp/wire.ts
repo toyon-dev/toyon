@@ -248,7 +248,7 @@ const CLAUDE: AdapterWire = {
 };
 
 const CODEX: AdapterWire = {
-  at: "2.0.1",
+  at: "2.5.0",
   gaps: {
     askBehindFlag: {
       gap:
@@ -265,9 +265,17 @@ const CODEX: AdapterWire = {
       open: true,
     },
     subagentFlat: {
-      gap: "Subagents arrive as lifecycle markers only ('Start subagent x'); no child call is ever tagged.",
-      here: "map.ts spawnOf reads the marker as a flag and draws the rows flat. No flag.",
-      upstream: "The same subagent sessions draft as Claude's.",
+      gap:
+        "Subagents arrive as lifecycle calls only ('Start subagent x', 'Complete subagent x'); no child call is " +
+        "ever tagged. The spawn mark rides `_meta.jetbrains.air.subagent` for an AIR client alone, and " +
+        "`subagent_update` (child sessions, since 2.5.0) only behind the `subagents` capability; toyon declares " +
+        "neither, so the standard meta carries no mark at all.",
+      here:
+        "map.ts spawnOf reads a `_meta.codex.subagent` object that no release since 2.0.1 sends a standard " +
+        "client, so the rows draw as plain calls, flat under the agent. No flag.",
+      upstream:
+        "The same subagent sessions draft as Claude's; declaring `subagents` at initialize would bring the " +
+        "child sessions, and then a reader for them.",
       open: true,
     },
     deviceCodeLogin: {
@@ -300,8 +308,9 @@ const CODEX: AdapterWire = {
     },
     hollowLoad: {
       gap:
-        "`session/load` returns a minimal response, so whether the model still holds the conversation after " +
-        "the five-minute reaper is unverified.",
+        "`session/load` replays the retained history since 2.5.0, where 2.0.1 answered with a minimal " +
+        "response; `session/resume`, the one toyon uses, replays nothing either way, so whether the model " +
+        "still holds the conversation after the five-minute reaper is unverified.",
       here: "Nothing yet; the reaper treats Codex like the others. No flag.",
       upstream:
         "Probe first: prompt, wait past the reaper, ask about the first turn. If the context is gone, the " +
@@ -309,16 +318,21 @@ const CODEX: AdapterWire = {
       open: true,
     },
     rejectEndsTurn: {
-      gap: "The only reject option on a permission request cancels the turn, so a refused out-of-tree edit ends it.",
-      here: "The shell shows the turn as blocked by the agent (`agent-blocked`). No flag.",
-      upstream: "Not asked; a reject that returns to the model, as Claude's does, is the ask.",
+      gap:
+        "A file change's permission request offers one reject, `cancel`, which ends the turn, so a refused " +
+        "out-of-tree edit ends it. A command's request carries a second reject since 2.5.0, `decline` " +
+        '("No, continue without running it"), which returns to the model.',
+      here:
+        "policy.ts pickOption prefers a reject whose id is not `cancel`, so a refused command now continues; " +
+        "a refused edit still shows the turn as blocked by the agent (`agent-blocked`). No flag.",
+      upstream: "Not asked; the same decline on file changes is the ask.",
       open: true,
     },
   },
 };
 
 const OPENCODE: AdapterWire = {
-  at: "1.18.33",
+  at: "1.19.5",
   gaps: {
     exitInMetadata: {
       gap:
@@ -340,13 +354,24 @@ const OPENCODE: AdapterWire = {
       upstream: "Probe before asking.",
       open: true,
     },
+    providerErrorHangs: {
+      gap:
+        "A provider that refuses the stream (the free tier's usage limit, at 1.19.5) is logged in OpenCode's own " +
+        "log and nothing reaches the wire: no update, no error, and `session/prompt` never answers, so the turn " +
+        "stays working until a stop.",
+      here: "Nothing yet: the row spins and the person presses stop. No flag.",
+      upstream:
+        "Not asked; the prompt should fail with the provider's words, as Claude's and Codex's do. Probe whether " +
+        "a keyed provider's refusal behaves the same before asking.",
+      open: true,
+    },
   },
 };
 
 /** What the protocol itself lacks, at the SDK version the daemon speaks (`@agentclientprotocol/sdk`
  * in the daemon's package.json), as opposed to what one adapter does with it. */
 export const PROTOCOL: AdapterWire = {
-  at: "1.4.0",
+  at: "2.2.0",
   gaps: {
     noUpdatedInput: {
       gap:
@@ -375,13 +400,15 @@ export const PROTOCOL: AdapterWire = {
     v2Blocked: {
       gap:
         "The v2 wire changes the turn model (the prompt answers at once, the end comes as a state update) and " +
-        "the Claude adapter's v2 path strips the steering extension; codex-acp speaks v1 only.",
+        "the Claude adapter's v2 path strips the steering extension, the fork pin included. codex-acp " +
+        "routes v2 since 2.5.0 (SDK 2.1), so Codex alone could take it.",
       here:
-        "The daemon stays on the stable v1 import, and SDK 2.x still defaults to it. The session's turn " +
-        "lifecycle and its tests are written against v1. No flag.",
+        "The daemon imports the full v1 draft (`@agentclientprotocol/sdk/unstable`), which the SDK keeps " +
+        "beside the v2 entrypoints it still labels experimental. The session's turn lifecycle and its tests " +
+        "are written against v1. No flag.",
       upstream:
-        "Revisit when the Claude adapter serves steering, or a native equivalent, on v2 and codex-acp is on " +
-        "SDK 2.x; then it is a turn-model redesign, not a type migration.",
+        "Revisit when the Claude adapter serves steering, or a native equivalent, on v2; then it is a " +
+        "turn-model redesign, not a type migration.",
       open: true,
     },
     commandInputShape: {

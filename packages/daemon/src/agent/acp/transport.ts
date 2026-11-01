@@ -4,7 +4,7 @@
 
 import { spawn } from "node:child_process";
 import { Readable, Writable } from "node:stream";
-import * as acp from "@agentclientprotocol/sdk";
+import * as acp from "@agentclientprotocol/sdk/unstable";
 import { log } from "../../core/log.ts";
 import { killProcessGroup } from "../../runtime/kill.ts";
 import type { Launch } from "../registry.ts";

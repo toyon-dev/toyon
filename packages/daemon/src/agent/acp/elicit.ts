@@ -14,7 +14,7 @@ import {
   type EnumOption,
   MultiSelectItems,
   ElicitationPropertySchema as PropertyGuards,
-} from "@agentclientprotocol/sdk";
+} from "@agentclientprotocol/sdk/unstable";
 import type { AskAnswer, AskOption, AskQuestion } from "@toyon/shared";
 
 /** the Codex bridge marks its request_user_input note field `{ questionId, role: "user_note" }`

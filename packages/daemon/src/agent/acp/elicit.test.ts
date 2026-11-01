@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { CreateElicitationRequest, ElicitationPropertySchema } from "@agentclientprotocol/sdk";
+import type { CreateElicitationRequest, ElicitationPropertySchema } from "@agentclientprotocol/sdk/unstable";
 import { parseForm, toContent } from "./elicit.ts";
 
 // The fixtures below are shaped exactly like `askUserQuestionsToCreateRequest` in

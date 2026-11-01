@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { ContentBlock } from "@agentclientprotocol/sdk";
+import type { ContentBlock } from "@agentclientprotocol/sdk/unstable";
 import {
   ambientBlock,
   buildPrompt,

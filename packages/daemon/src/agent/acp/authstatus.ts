@@ -8,7 +8,7 @@
 //
 // Interim extension: when the upstream RFD lands these move from `_meta` to first-class fields.
 
-import * as acp from "@agentclientprotocol/sdk";
+import * as acp from "@agentclientprotocol/sdk/unstable";
 import type { AuthStatus } from "@toyon/shared";
 
 export const AUTH_STATUS_UPDATE_METHOD = "_auth/status_update";

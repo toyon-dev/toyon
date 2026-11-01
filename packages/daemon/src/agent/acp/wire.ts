@@ -88,12 +88,16 @@ const CLAUDE: AdapterWire = {
         "card is open, which waits for the generation after the tool result. Toyon cannot ask for `next`, " +
         "between steps, which is what a message sent mid-turn means.",
       here:
-        "session.ts sends a card's follow-up (an image, a note, the edited plan) before the card's reply " +
-        "resolves so it lands on `later`; a message sent mid-turn can still cut a running tool call, and the " +
-        "agent reads a follow-up in a second reply. No flag: the ordering is harmless once fixed.",
+        'session.ts asks for `priority: "next"` under `_meta.steering` on every steer, which 0.95.0 ignores, ' +
+        "and sends a card's follow-up (an image, a note, the edited plan) before the card's reply resolves so " +
+        "it lands on `later`; until an adapter reads the priority, a message sent mid-turn can still cut a " +
+        "running tool call and the agent reads a follow-up in a second reply. No flag: the ask and the " +
+        "ordering are harmless once honoured.",
       upstream:
-        "PR owed to agentclientprotocol/claude-agent-acp: read a priority off `_meta.steering` beside " +
-        "`idleBehavior`, defaulting as today. The steering extension itself says nothing about the running step.",
+        "Asked upstream twice, agentclientprotocol/claude-agent-acp#1175 and #1350 (the better shape, " +
+        "`_meta.steering.priority`), both unreviewed; still `now` at 0.99.1. Back #1350 rather than open a " +
+        "third; the toyon fork pin carries its patch until one lands. The steering extension itself says " +
+        "nothing about the running step.",
       open: true,
     },
     backgroundFinish: {
@@ -110,12 +114,27 @@ const CLAUDE: AdapterWire = {
         "or declare that meta.",
       open: true,
     },
+    wakeupUnreported: {
+      gap:
+        "A wakeup the agent books for itself (ScheduleWakeup) returns at once with the delay taken, the turn " +
+        "ends, and the wire says nothing about the agent being due back, or when; the turn that fires is an " +
+        "autonomous one with no link to the call.",
+      here:
+        "wakeup.ts reads the delay off the call's input, holds the row until the next turn, and lets go a " +
+        "grace past the booked time when none came. No flag.",
+      upstream:
+        "Not asked. The AIR async-task lifecycle is the nearest shape; a booked wakeup as a task with its " +
+        "due time would retire the hold.",
+      open: true,
+    },
     modelIdOffList: {
       gap:
         "`session/set_config_option` throws Invalid value for a model id the picker did not list, before it " +
         "reaches the SDK's setModel, which takes any id. Aliases resolve and the current value passes since " +
         "0.95.0; a free id still does not.",
-      here: "session.ts applyOption leaves a wanted id the list lacks unsent. Flag: that check.",
+      here:
+        "session.ts applyOption leaves a wanted id the list lacks unsent, and the hub moves a saved id onto " +
+        "the listed one or clears it as the list is learned (`listedModel`). Flag: the unsent check.",
       upstream: "Owed: let a value off the list through for the model option. Then the picker offers what was typed.",
       open: true,
     },

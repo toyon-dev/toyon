@@ -353,6 +353,7 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
   // row by now, and the shell reads a main worktree's error under whichever composer is on screen
   s.hub.on("failed", (worktreeId, message) => broadcast({ t: "error", message, worktreeId }));
   s.hub.on("updateChanged", () => broadcast({ t: "update", update: s.update.get() }));
+  s.hub.on("globalInstallChanged", () => broadcast({ t: "global-install", globalInstall: s.update.globalInstall() }));
   s.hub.on("visitsChanged", (repoId) =>
     broadcast({ t: "visits", repoId, pages: s.routes.history(repoId), stamp: visitsStamp(s.routes.historyAll()) }),
   );
@@ -405,6 +406,7 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
       pending: s.repos.pending,
       self: s.self.get(),
       update: s.update.get(),
+      globalInstall: s.update.globalInstall(),
       drafts: s.drafts.all(),
       attachments: s.drafts.allAttachments(),
       managed: managedView(opts.managed),

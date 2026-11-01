@@ -76,6 +76,7 @@ const hello = (rows: WorktreeStatus[]): HelloFull => ({
   visits: {},
   self: { building: true } as never,
   update: { restarting: 1 } as never,
+  globalInstall: { state: "offered" },
   drafts: { b: "typed" },
   attachments: { b: [] },
   managed: MANAGED_NONE,
@@ -89,7 +90,18 @@ describe("snapshotOf", () => {
     expect(s?.machines).toEqual([{ origin: "https://work.tail1234.ts.net", token: "w" }]);
     expect(s?.install).toBe("npm");
     expect(s?.gitIdentity).toBe(true);
-    for (const k of ["t", "themes", "drafts", "attachments", "knocks", "letIn", "self", "update", "pending"]) {
+    for (const k of [
+      "t",
+      "themes",
+      "drafts",
+      "attachments",
+      "knocks",
+      "letIn",
+      "self",
+      "update",
+      "globalInstall",
+      "pending",
+    ]) {
       expect(k in (s as object)).toBe(false);
     }
   });

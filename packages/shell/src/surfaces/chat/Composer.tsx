@@ -28,10 +28,11 @@ import {
 } from "@toyon/shared";
 import { Fragment, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { clipboardOfferDone, useCopied } from "../../app/clipboardOffer.ts";
+import { globalOfferDue } from "../../app/globalInstall.ts";
 import { installOfferDone, installOfferDue, useInstallOffered, useInstallPrompt } from "../../app/installOffer.ts";
 import { previewBus, togglePick } from "../../app/previewBus.ts";
 import { copyText } from "../../state/actions/deps.ts";
-import { daemonHost } from "../../state/actions/editor.ts";
+import { daemonHost, openedOnDaemonMachine } from "../../state/actions/editor.ts";
 import { listFiles, openFile, openPrComments } from "../../state/actions/file.ts";
 import { pathItems } from "../../state/actions/message.ts";
 import { terminalItems } from "../../state/actions/proc.ts";
@@ -100,6 +101,7 @@ import { ComposerOffer } from "./ComposerOffer.tsx";
 import { cardLine, openCard } from "./cards.ts";
 import { caretAtPoint, takeCarried } from "./carried.ts";
 import { DraftChip } from "./DraftChip.tsx";
+import { GlobalInstallOffer } from "./GlobalInstallOffer.tsx";
 import { HandoffCard } from "./HandoffCard.tsx";
 import { hereWaits, openHandoff } from "./handoff.ts";
 import { MentionText, openMention } from "./Mentions.tsx";
@@ -332,6 +334,13 @@ export function Composer({
   const copied = useCopied();
   const installPrompt = useInstallPrompt();
   const installOffered = useInstallOffered();
+  const globalInstall = useStore((s) => s.globalInstall);
+  const appOffer =
+    !!installPrompt &&
+    !!id &&
+    !drafting &&
+    !cardUp &&
+    installOfferDue({ prompt: installPrompt, offered: installOffered, agent: active?.agent, chat });
   // a failure, a stop or an error waiting for a press, read off the chat: its last row
   const dismissedOffers = useDismissedOffers();
   const offer = useMemo(
@@ -1532,23 +1541,36 @@ export function Composer({
       {/* Toyon as an app, offered once, after the first reply: the same shape, the word that opens
           the browser's own install dialog and then what it gives. The chip in the bar keeps
           offering it after this line is answered. */}
-      {installPrompt &&
+      {appOffer && (
+        <ComposerOffer
+          icon="download"
+          verb="install"
+          tip="Install Toyon as an app: a window of its own, with a Dock icon and no browser bar"
+          onPress={() => {
+            installOfferDone();
+            void installPrompt?.prompt();
+          }}
+          onDismiss={installOfferDone}
+        >
+          Toyon as a window of its own, with a Dock icon and no browser bar
+        </ComposerOffer>
+      )}
+      {/* Toyon started with npx, offered the global install once, after the first reply, and not
+          over the app install: one offer about Toyon itself at a time. A press stays here and
+          says how it went, since npm can take a while and can refuse. Only on the daemon's own
+          machine: the install, and the `toyon .` the line promises, are that machine's. */}
+      {globalInstall &&
         id &&
         !drafting &&
         !cardUp &&
-        installOfferDue({ prompt: installPrompt, offered: installOffered, agent: active?.agent, chat }) && (
-          <ComposerOffer
-            icon="download"
-            verb="install"
-            tip="Install Toyon as an app: a window of its own, with a Dock icon and no browser bar"
-            onPress={() => {
-              installOfferDone();
-              void installPrompt.prompt();
-            }}
-            onDismiss={installOfferDone}
-          >
-            Toyon as a window of its own, with a Dock icon and no browser bar
-          </ComposerOffer>
+        !appOffer &&
+        openedOnDaemonMachine(daemonHost(sock)) &&
+        globalOfferDue({ offer: globalInstall, agent: active?.agent, chat }) && (
+          <GlobalInstallOffer
+            offer={globalInstall}
+            onInstall={() => sock?.send({ t: "install-global" })}
+            onDismiss={() => sock?.send({ t: "dismiss-global-install" })}
+          />
         )}
       {/* the chips are the draft's, like the text: an ask card takes the box whole, its answer
           carries no attachment, and chips left in view over it read as part of the answer. Nor in

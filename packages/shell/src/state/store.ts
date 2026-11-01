@@ -27,6 +27,7 @@ import type {
   Fixable,
   GitFileStatus,
   GitInfo,
+  GlobalInstall,
   HandedOrigin,
   InstallMethod,
   KeepAwakeMode,
@@ -956,6 +957,9 @@ export interface State {
   /** the Toyon installed on this machine is not the one running, or a restart someone asked for is
    * waiting on a chat to finish. Null the rest of the time. */
   update: UpdateState | null;
+  /** an npx start offering the global install, and how a press on it is going; null where there
+   * is nothing to offer */
+  globalInstall: GlobalInstall | null;
   /** a check asked from the version chip: on its way, or what the registry said. The chip reads
    * it, since the answer belongs where the press was. */
   updateCheck: UpdateCheck | "asking" | null;
@@ -1144,6 +1148,7 @@ export function initialState(opts: InitialOpts): State {
     self: null,
     rebuilt: false,
     update: null,
+    globalInstall: null,
     updateCheck: null,
     version: "",
     install: "none",
@@ -2915,6 +2920,7 @@ function onHello(s: State, msg: Extract<StoreServerMsg, { t: "hello" }>, recall:
     visits,
     self: recall ? s.self : msg.self,
     update: recall ? s.update : msg.update,
+    globalInstall: recall ? s.globalInstall : msg.globalInstall,
     // a check asked of the daemon that went away is never answered
     updateCheck: !recall && s.updateCheck === "asking" ? null : s.updateCheck,
     version: recall ? s.version : msg.version,
@@ -2995,6 +3001,8 @@ function onServer(s: State, msg: StoreServerMsg): State {
       return withKnocks(s, msg.knocks, msg.letIn);
     case "update":
       return { ...s, update: msg.update };
+    case "global-install":
+      return { ...s, globalInstall: msg.globalInstall };
     case "update-checked":
       return { ...s, updateCheck: msg.check };
     case "visits":

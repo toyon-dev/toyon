@@ -7,20 +7,23 @@ import { Icon, type IconName } from "../../ui/Icon.tsx";
  * what the word is about, a tier under it. The box's offers all wear it (the question set aside,
  * what is on the clipboard, a failure to hand to the agent), so they stack as one column. An
  * offer that can be turned down gets its way out at the row's end. `className` is how an offer
- * whose line holds more than words (the piece offer's title) says so to the stylesheet. */
+ * whose line holds more than words (the piece offer's title) says so to the stylesheet. A line
+ * with no `verb` is an offer already pressed, saying how it went; `busy` while it is still going. */
 export function ComposerOffer({
   icon,
   verb,
   tip,
   onPress,
+  busy,
   onDismiss,
   className,
   children,
 }: {
   icon: IconName;
-  verb: string;
-  tip: string;
-  onPress: () => void;
+  verb?: string;
+  tip?: string;
+  onPress?: () => void;
+  busy?: boolean;
   onDismiss?: () => void;
   className?: string;
   children: ReactNode;
@@ -28,10 +31,14 @@ export function ComposerOffer({
   return (
     <div className={cx("composer-offer", className)}>
       <Icon name={icon} className="icon-inline" />
-      <span className="composer-offer-line">
-        <Button variant="inline" tone="strong" data-tip={tip} onClick={onPress}>
-          {verb}
-        </Button>{" "}
+      <span className={cx("composer-offer-line", busy && "live-text")}>
+        {verb && (
+          <>
+            <Button variant="inline" tone="strong" data-tip={tip} onClick={onPress}>
+              {verb}
+            </Button>{" "}
+          </>
+        )}
         {children}
       </span>
       {onDismiss && (

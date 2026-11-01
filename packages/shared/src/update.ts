@@ -23,6 +23,14 @@ export function installCommand(method: InstallMethod, version: string): string[]
   return null;
 }
 
+/** The command an npx start runs to install itself globally: npm, since npx is npm's, from the
+ * registry npx was given when it was given one, as the machine's own may not list the version. */
+export function globalInstallCommand(version: string, registry: string | null = null): string[] {
+  const command = ["npm", "install", "-g", `toyon@${version}`];
+  if (registry) command.push(`--registry=${registry}`);
+  return command;
+}
+
 /** What a person types to restart the daemon onto `version`. A bare `toyon` is whatever is on
  * PATH, which under npx is an older global install or nothing at all. Beside a global install
  * (`onPath`) the command moves that install first, from the registry npx was given, since the

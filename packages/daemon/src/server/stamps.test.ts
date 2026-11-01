@@ -43,6 +43,7 @@ const hello = (rows: WorktreeStatus[], themes: Theme[] = [theme]): HelloFull => 
     pending: [],
     self: null,
     update: null,
+    globalInstall: null,
     drafts: {},
     attachments: {},
     managed: MANAGED_NONE,

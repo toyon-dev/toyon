@@ -19,14 +19,25 @@ import {
 
 /** The hello less what is heavy or the daemon's alone. Left out: themes (the painted one is cached
  * by theme.ts and the store starts with the built-in list; the rest come with the next hello),
- * drafts and attachments (the daemon owns those), knocks and letIn, self, update, pending, and the
+ * drafts and attachments (the daemon owns those), knocks and letIn, self, update, globalInstall, pending, and the
  * stamps: the rows come back stilled (below), so the page cannot vouch for them as the daemon sent
  * them, and a stamp it cannot send is not worth keeping. Everything cheap stays, since a recalled
  * hello that invents `install` or `gitIdentity` drives the settings card and the new-project view
  * into the wrong branch. */
 export type HelloSnapshot = Omit<
   HelloFull,
-  "t" | "same" | "themes" | "drafts" | "attachments" | "knocks" | "letIn" | "self" | "update" | "pending" | "stamps"
+  | "t"
+  | "same"
+  | "themes"
+  | "drafts"
+  | "attachments"
+  | "knocks"
+  | "letIn"
+  | "self"
+  | "update"
+  | "globalInstall"
+  | "pending"
+  | "stamps"
 > & {
   /** when this was heard, epoch ms: what the bar's line says the age from */
   at: number;
@@ -115,6 +126,7 @@ export function recalledHello(s: HelloSnapshot): HelloFull {
     letIn: false,
     self: null,
     update: null,
+    globalInstall: null,
     pending: [],
   };
 }

@@ -1192,6 +1192,28 @@
       white-space: nowrap;
     }
   }
+  /* a line that is the answer itself (an install done, or why it stopped and what to run): there
+     is no press that shows the rest, so it wraps instead of ending in an ellipsis. The ring's
+     margin goes with the clip. */
+  .composer-offer-long {
+    align-items: flex-start;
+    /* the glyph sits on the first line as it does on a one-line offer: centred in that line's
+       box, which is the line-height, not in the block the row has become. The close button is
+       as tall as a line and needs no shift. */
+    & > .icon-inline {
+      margin-top: calc((1lh - var(--icon-inline-size)) / 2);
+    }
+    & .composer-offer-line {
+      overflow: visible;
+      text-overflow: clip;
+      white-space: normal;
+    }
+    /* a command, or a word of one, stays whole across the wrap: a `--registry` split at its
+       hyphens is two things, not one flag */
+    & .composer-offer-whole {
+      white-space: nowrap;
+    }
+  }
   /* an offer that can be turned down has its way out at the row's end */
   .composer-offer-close {
     margin-left: auto;

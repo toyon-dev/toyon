@@ -18,6 +18,7 @@ import {
   previewsLine,
   type Shipping,
 } from "@toyon/shared";
+import { installOnPath } from "@toyon/shared/install-path";
 import { loadManaged } from "@toyon/shared/managed-load";
 import { findTailscale, tailscaleCli } from "@toyon/shared/tailscale";
 import pkg from "../package.json" with { type: "json" };
@@ -406,6 +407,9 @@ const update = new UpdateService({
   state,
   running: pkg.version,
   method,
+  onPath: () => (method === "npx" ? installOnPath() : "none"),
+  // the daemon inherits the CLI's environment, and npx sets this when it was given a registry
+  npxRegistry: process.env.npm_config_registry ?? null,
   restarter,
   installed: async () => (installedPackage ? readVersion(installedPackage) : null),
   latest: latestVersion,
@@ -426,7 +430,12 @@ const stopAfter = () =>
   stopAfterFrom(process.env.TOYON_STOP_AFTER_MS, { remote: setting.get() !== null, terminal: attached });
 const idleExit = new IdleExit({
   hub,
-  busy: () => runtime.anyBusy() || repos.pending.length > 0 || afterLand.anyBusy() || update.get()?.installing === true,
+  busy: () =>
+    runtime.anyBusy() ||
+    repos.pending.length > 0 ||
+    afterLand.anyBusy() ||
+    update.get()?.installing === true ||
+    update.globalInstall()?.state === "installing",
   // a beat later, for the same reason as a restart: the log line has to leave first
   exit: () => {
     setTimeout(() => fireAndForget("daemon", shutdown("idle"), "idle stop"), 100);

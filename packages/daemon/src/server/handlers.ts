@@ -483,6 +483,14 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
   async "check-update"(_msg, ctx, s) {
     ctx.reply({ t: "update-checked", check: await s.update.checkNow() });
   },
+
+  "install-global"(_msg, _ctx, s) {
+    return s.update.installGlobal();
+  },
+
+  "dismiss-global-install"(_msg, _ctx, s) {
+    s.update.dismissGlobal();
+  },
   async commit(msg, ctx, s) {
     const result = await s.worktrees.commit(msg.worktreeId, msg.message);
     await notify(

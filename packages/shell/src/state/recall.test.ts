@@ -60,6 +60,7 @@ const hello = (...rows: WorktreeStatus[]): HelloFull => ({
   visits: {},
   self: null,
   update: null,
+  globalInstall: null,
   drafts: {},
   attachments: {},
   managed: MANAGED_NONE,

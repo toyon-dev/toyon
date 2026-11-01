@@ -23,6 +23,7 @@ import type {
   FileBlame,
   GitFileStatus,
   GitInfo,
+  GlobalInstall,
   InstallMethod,
   KeepAwakeMode,
   LogLine,
@@ -118,6 +119,8 @@ export interface HelloBase {
   self: SelfState | null;
   /** the installed Toyon is not the one running, or a restart is waiting; null the rest of the time */
   update: UpdateState | null;
+  /** an npx start offering the global install; null where there is nothing to offer */
+  globalInstall: GlobalInstall | null;
   /** the unsent text in every composer box that has some, by box id */
   drafts: Record<string, string>;
   /** what is attached and unsent in every composer box that has some, by box id */
@@ -179,6 +182,8 @@ export type ServerMsg =
   | { t: "update"; update: UpdateState | null }
   /** the answer to a `check-update`, to the tab that asked */
   | { t: "update-checked"; check: UpdateCheck }
+  /** the offer of a global install moved: pressed, finished, failed or turned down */
+  | { t: "global-install"; globalInstall: GlobalInstall | null }
   /** the answer to a `zone`: whether the sun is down where that browser is, and when that changes.
    * Only the appearance mode that follows daylight reads it, and the shell asks again at `until`. */
   | { t: "daylight"; dark: boolean; until: number }
@@ -730,6 +735,11 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
    * `update`, and whatever the check found comes back as `update-checked`, since a check that
    * finds nothing would otherwise say nothing. */
   z.object({ t: z.literal("check-update") }),
+  /** an npx start: install Toyon globally, so `toyon` is a command and updates itself. How it
+   * goes is announced in `global-install`. */
+  z.object({ t: z.literal("install-global") }),
+  /** turn the global install down, on this machine for good */
+  z.object({ t: z.literal("dismiss-global-install") }),
   /** fast-forward the main checkout (`worktreeId` is main's row) to its upstream */
   z.object({ t: z.literal("pull-main"), worktreeId: id }),
   /** save the editor's text only over `base`, the version it was read or last saved as (null: no

@@ -65,6 +65,8 @@ export interface HubEvents {
   selfChanged: () => void;
   /** the installed version moved against the running one, or a requested restart's wait changed */
   updateChanged: () => void;
+  /** an npx start's offer of a global install was pressed, finished, failed or turned down */
+  globalInstallChanged: () => void;
   /** a clone started, moved, finished or failed */
   pendingChanged: () => void;
   themesChanged: () => void;

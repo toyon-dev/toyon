@@ -21,6 +21,11 @@ function make(
     refuse?: string | null;
     /** how many asks of npm for the registry's name throw before one answers */
     nameFails?: number;
+    /** the install a bare `toyon` reaches */
+    onPath?: InstallMethod;
+    npxRegistry?: string | null;
+    /** the global install was answered on an earlier run */
+    globalAnswered?: boolean;
   } = {},
 ) {
   const hub = new Hub();
@@ -33,6 +38,7 @@ function make(
   let requests = 0;
   let registryAsks = 0;
   let nameAsks = 0;
+  let onPath: InstallMethod = start.onPath ?? "none";
   const working: string[] = [];
   const installs: string[][] = [];
   const state = {
@@ -40,12 +46,18 @@ function make(
     setUpdateFailed(f: { version: string; at: number } | undefined) {
       state.updateFailed = f;
     },
+    globalInstallAnswered: start.globalAnswered ?? false,
+    answerGlobalInstall() {
+      state.globalInstallAnswered = true;
+    },
   };
   const update = new UpdateService({
     hub,
     state,
     running: "0.2.0",
     method,
+    onPath: () => onPath,
+    npxRegistry: start.npxRegistry ?? null,
     managedBy: start.managedBy ?? null,
     installed: async () => installed,
     latest: async () => {
@@ -87,6 +99,9 @@ function make(
     installs,
     install: (v: string | null) => {
       installed = v;
+    },
+    putOnPath: (m: InstallMethod) => {
+      onPath = m;
     },
     publish: (v: string | null) => {
       latest = v;
@@ -419,6 +434,71 @@ describe("UpdateService: updates off for the machine", () => {
     expect(update.status().managedBy).toBe("policy");
     await expect(update.updateNow()).rejects.toThrow("turned off by your organization's policy");
     await expect(update.checkNow()).rejects.toThrow("turned off by your organization's policy");
+  });
+});
+
+describe("UpdateService: an npx start offered the global install", () => {
+  test("offered to npx alone, and never beside a global install, with updates off, or once answered", () => {
+    expect(make({ method: "npx" }).update.globalInstall()).toEqual({ state: "offered" });
+    expect(make({ method: "npm" }).update.globalInstall()).toBeNull();
+    expect(make({ method: "npx", onPath: "npm" }).update.globalInstall()).toBeNull();
+    expect(make({ method: "npx", managedBy: "env" }).update.globalInstall()).toBeNull();
+    expect(make({ method: "npx", managedBy: "policy" }).update.globalInstall()).toBeNull();
+    expect(make({ method: "npx", globalAnswered: true }).update.globalInstall()).toBeNull();
+  });
+
+  test("a press installs the version running with npm, says so, and is answered for good", async () => {
+    const { hub, update, installs, state } = make({ method: "npx" });
+    let told = 0;
+    hub.on("globalInstallChanged", () => told++);
+    await update.installGlobal();
+    expect(installs).toEqual([["npm", "install", "-g", "toyon@0.2.0"]]);
+    expect(update.globalInstall()).toEqual({ state: "installed" });
+    expect(state.globalInstallAnswered).toBe(true);
+    expect(told).toBe(2);
+    update.dismissGlobal();
+    expect(update.globalInstall()).toBeNull();
+  });
+
+  test("a failed install keeps the offer with npm's line and the command, and is not answered", async () => {
+    const { update, state } = make({ method: "npx", installFails: true });
+    await update.installGlobal();
+    expect(update.globalInstall()).toEqual({
+      state: "failed",
+      line: "npm error code EACCES",
+      command: "npm install -g toyon@0.2.0",
+    });
+    expect(state.globalInstallAnswered).toBe(false);
+  });
+
+  test("turned down: gone, and remembered", () => {
+    const { update, state } = make({ method: "npx" });
+    update.dismissGlobal();
+    expect(update.globalInstall()).toBeNull();
+    expect(state.globalInstallAnswered).toBe(true);
+  });
+
+  test("a dismiss where nothing was offered remembers nothing", () => {
+    const { update, state } = make({ method: "npm" });
+    update.dismissGlobal();
+    expect(state.globalInstallAnswered).toBe(false);
+  });
+
+  test("the registry npx was given rides on the install", async () => {
+    const { update, installs } = make({ method: "npx", npxRegistry: "https://mirror.example/npm/" });
+    await update.installGlobal();
+    expect(installs[0]?.at(-1)).toBe("--registry=https://mirror.example/npm/");
+  });
+
+  test("an install done by hand in a terminal answers the offer on the next tick", async () => {
+    const { update, state, putOnPath, installs } = make({ method: "npx", installFails: true });
+    await update.installGlobal();
+    expect(update.globalInstall()?.state).toBe("failed");
+    putOnPath("npm");
+    await update.tick();
+    expect(update.globalInstall()).toEqual({ state: "installed" });
+    expect(state.globalInstallAnswered).toBe(true);
+    expect(installs).toHaveLength(1);
   });
 });
 

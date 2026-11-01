@@ -10,8 +10,18 @@
 //
 // Only the registry npm is set up for is ever asked or installed from. TOYON_UPDATES=off, or the
 // managed policy, turns all of it off for the machine.
+//
+// A copy started with npx is the one that cannot do any of this: npx runs what it was handed and
+// leaves no `toyon` behind. It is offered the global install instead, through the same install.
 
-import { type InstallMethod, newer, type UpdateCheck, type UpdateState } from "@toyon/shared";
+import {
+  type GlobalInstall,
+  globalInstallCommand,
+  type InstallMethod,
+  newer,
+  type UpdateCheck,
+  type UpdateState,
+} from "@toyon/shared";
 import { UserError } from "../core/errors.ts";
 import type { Hub } from "../core/hub.ts";
 import { fireAndForget, log } from "../core/log.ts";
@@ -34,10 +44,16 @@ const INSTALL_SETTLE_MS = 60_000;
 
 export interface UpdateDeps {
   hub: Hub;
-  state: Pick<StateStore, "updateFailed" | "setUpdateFailed">;
+  state: Pick<StateStore, "updateFailed" | "setUpdateFailed" | "globalInstallAnswered" | "answerGlobalInstall">;
   /** the version this process started as */
   running: string;
   method: InstallMethod;
+  /** the install a bare `toyon` reaches: an npx start beside a global install has nothing to
+   * offer. Asked again each tick while the offer stands, since the install the failed line says
+   * to run by hand is done in a terminal and answers the offer the same as a press. */
+  onPath: () => InstallMethod;
+  /** the registry npx was given, for the global install: the machine's own may not list this version */
+  npxRegistry: string | null;
   /** never check, never install, and who said so: the managed policy file, or TOYON_UPDATES=off */
   managedBy: "policy" | "env" | null;
   /** the version installed on disk; null when it cannot be read, or there is no install to read */
@@ -90,12 +106,18 @@ export class UpdateService {
   private busyAt: number;
   /** what tabs were last told; they start from hello */
   private announced: string;
+  /** an npx start's offer of a global install; null where there is none */
+  private global: GlobalInstall | null;
   private readonly now: () => number;
 
   constructor(private d: UpdateDeps) {
     this.now = d.now ?? Date.now;
     this.busyAt = this.now();
     this.announced = JSON.stringify(this.get());
+    this.global =
+      d.method === "npx" && d.onPath() === "none" && !d.managedBy && !d.state.globalInstallAnswered
+        ? { state: "offered" }
+        : null;
     const every =
       d.setInterval ??
       ((fn, ms) => {
@@ -127,6 +149,16 @@ export class UpdateService {
   async tick(): Promise<void> {
     await this.refresh();
     await this.auto();
+    this.refreshGlobal();
+  }
+
+  /** a global install done in a terminal, while the offer or its failure stood: the offer is
+   * answered as if pressed, and the line says it is done */
+  private refreshGlobal(): void {
+    if (this.global === null || this.global.state === "installing" || this.global.state === "installed") return;
+    if (this.d.onPath() === "none") return;
+    this.d.state.answerGlobalInstall();
+    this.setGlobal({ state: "installed" });
   }
 
   /** What is on disk. A version that appeared there without this daemon installing it counts once
@@ -226,6 +258,43 @@ export class UpdateService {
   /** how this Toyon was installed, for hello: the settings card reads it under the version */
   install(): InstallMethod {
     return this.d.method;
+  }
+
+  globalInstall(): GlobalInstall | null {
+    return this.global;
+  }
+
+  /** The offer pressed: install the version running, so the global copy is this one. The daemon
+   * keeps running out of npx's cache until `toyon restart` from the new install moves it, which
+   * the installed line says. Answered in `globalInstallChanged`; a failure keeps the offer, with
+   * npm's line and the command by hand. */
+  async installGlobal(): Promise<void> {
+    this.refuseManaged();
+    if (this.global === null || this.global.state === "installing" || this.global.state === "installed") return;
+    const command = globalInstallCommand(this.d.running, this.d.npxRegistry);
+    this.setGlobal({ state: "installing" });
+    log.info("update", `installing globally: ${command.join(" ")}`);
+    const r = await this.d.install(command);
+    if (!r.ok) {
+      log.warn("update", `installing globally failed: ${r.line}`);
+      this.setGlobal({ state: "failed", line: r.line, command: command.join(" ") });
+      return;
+    }
+    this.d.state.answerGlobalInstall();
+    this.setGlobal({ state: "installed" });
+  }
+
+  /** the offer turned down, or its "installed" line closed: not made again on this machine */
+  dismissGlobal(): void {
+    // nothing offered (another install, or an older tab's press) is nothing to remember
+    if (this.global === null || this.global.state === "installing") return;
+    if (!this.d.state.globalInstallAnswered) this.d.state.answerGlobalInstall();
+    this.setGlobal(null);
+  }
+
+  private setGlobal(next: GlobalInstall | null): void {
+    this.global = next;
+    this.d.hub.emit("globalInstallChanged");
   }
 
   get(): UpdateState | null {

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { installCommand, installMethod, newer, registryHost, restartCommand } from "./update.ts";
+import { globalInstallCommand, installCommand, installMethod, newer, registryHost, restartCommand } from "./update.ts";
 
 describe("installMethod", () => {
   test("reads the install from where the package sits", () => {
@@ -22,6 +22,19 @@ describe("installCommand", () => {
     expect(installCommand("bun", "0.3.0")).toEqual(["bun", "add", "-g", "toyon@0.3.0"]);
     expect(installCommand("npx", "0.3.0")).toBeNull();
     expect(installCommand("none", "0.3.0")).toBeNull();
+  });
+});
+
+describe("globalInstallCommand", () => {
+  test("installs the version named with npm, from the registry npx was given when there was one", () => {
+    expect(globalInstallCommand("0.9.0")).toEqual(["npm", "install", "-g", "toyon@0.9.0"]);
+    expect(globalInstallCommand("0.9.0", "https://mirror.example/npm/")).toEqual([
+      "npm",
+      "install",
+      "-g",
+      "toyon@0.9.0",
+      "--registry=https://mirror.example/npm/",
+    ]);
   });
 });
 

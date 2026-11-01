@@ -223,6 +223,17 @@ export interface UpdateState {
   restarting: string[] | null;
 }
 
+/** A Toyon started with npx offering to install itself globally: an npx copy never updates and
+ * leaves no `toyon` command behind. Offered only where nothing global answers to `toyon` already
+ * and updates are on, and gone for good once installed or turned down. `installed` stays until the
+ * person dismisses it, so the press is answered where it was made. */
+export type GlobalInstall =
+  | { state: "offered" }
+  | { state: "installing" }
+  | { state: "installed" }
+  /** npm's last line worth reading, and the command to run by hand */
+  | { state: "failed"; line: string; command: string };
+
 /** What the registry said to a check a person asked for. It answers the one who asked, whatever
  * it found, since a check that finds nothing changes no state and the press would land in silence. */
 export interface UpdateCheck {

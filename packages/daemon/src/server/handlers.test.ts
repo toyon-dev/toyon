@@ -200,6 +200,8 @@ function make() {
     state,
     running: "0.0.0",
     method: "none",
+    onPath: () => "none",
+    npxRegistry: null,
     installed: async () => null,
     latest: async () => ({ version: null, registry: "" }),
     registry: async () => "",

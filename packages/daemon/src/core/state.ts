@@ -60,6 +60,8 @@ export interface PersistedState {
   prCommentsFrom?: number;
   /** the last update whose install failed, so the automatic path does not retry it every minute */
   updateFailed?: { version: string; at: number };
+  /** when an npx start's offer of a global install was answered, by installing or turning it down */
+  globalInstallAt?: number;
   /** when a device opening this machine's own address was first let in; the desk's bar stops
    * offering the address in words after that */
   letInAt?: number;
@@ -488,6 +490,14 @@ export class StateStore {
   }
   setUpdateFailed(failed: { version: string; at: number } | undefined) {
     this.state.updateFailed = failed;
+    this.save();
+  }
+
+  get globalInstallAnswered(): boolean {
+    return this.state.globalInstallAt !== undefined;
+  }
+  answerGlobalInstall() {
+    this.state.globalInstallAt = Date.now();
     this.save();
   }
 

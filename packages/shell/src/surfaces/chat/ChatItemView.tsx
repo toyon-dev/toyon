@@ -685,7 +685,10 @@ export const ToolRow = memo(
     // it, and ChatLog hands the stamp to the row holding that call's id). The store keeps the
     // stamp, since this row is rebuilt on every switch of worktree. A
     // background spawn's own call returned at once, so its row counts while it is at work instead.
-    const age = useSecondsSince(streaming || working ? since : undefined);
+    // A row held for a wakeup the agent booked has its end on the line already ("wakes 13:37"):
+    // nothing on it can wedge, so a count of the silence beside it would say nothing the time
+    // does not, and a number ticking every second reads as a wait on something.
+    const age = useSecondsSince((streaming || working) && !last.until ? since : undefined);
     // A spawn row's seconds are the subagent's silence, and beside "42 calls" a bare number read
     // as the run's length. The wait belongs to the subagent's call that is executing, so that row
     // counts it, as the main agent's own running call does, and the spawn row's line keeps the

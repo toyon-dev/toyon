@@ -26,7 +26,7 @@ import { toolImage } from "../attachments.ts";
 import { type BackgroundStart, backgroundStart, spawnDetached } from "./background.ts";
 import { unifiedDiff } from "./diff.ts";
 import { currentValues, readOptions } from "./options.ts";
-import { wakeupAt } from "./wakeup.ts";
+import { loopEnds, wakeupAt } from "./wakeup.ts";
 
 export interface ToolMemo {
   name: string;
@@ -67,8 +67,9 @@ export type ImageSink = (file: string, bytes: Buffer) => void;
 /** a command Claude Code sent to the background has returned (background.ts): whether the session
  * has taken it on, in which case the row stays open and the session ends it when the command ends */
 export type BackgroundSink = (toolId: string, start: BackgroundStart, input: unknown) => boolean;
-/** the session takes a wakeup's row on, to end it when the agent is back; `until` is the booked time */
-export type WakeupSink = (toolId: string, until: number) => void;
+/** the session takes a wakeup's row on, to end it when the agent is back; `until` is the booked
+ * time, or null when the call ended the loop instead, which ends the row booked before it */
+export type WakeupSink = (toolId: string, until: number | null) => void;
 
 /** Which call spawned this one, out of the `_meta` each adapter stamps on its own updates.
  *
@@ -458,11 +459,15 @@ function endOf(
   // session ends it when the agent is back (wakeup.ts). The adapter names the call by its title
   // where it sends no name.
   if (status === "completed" && wakeup) {
-    const until = wakeupAt(memo.name || memo.title, memo.input);
+    const name = memo.name || memo.title;
+    const until = wakeupAt(name, memo.input);
     if (until !== null) {
       wakeup(toolId, until);
       return { type: "tool-update", toolId, background: true, until };
     }
+    // the loop's end books nothing and closes like any call, and the row held for the booking
+    // before it has nothing left to wait for
+    if (loopEnds(name, memo.input)) wakeup(toolId, null);
   }
   const images = sink ? toolImages(memo.content, sink) : [];
   // read off the whole of what the call returned: the output above is cut to length, and a spawn's

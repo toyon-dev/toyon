@@ -601,10 +601,20 @@ describe("mapUpdate", () => {
     expect(update.until).toBeGreaterThanOrEqual(before + 600_000);
     expect(taken).toEqual([["k1", update.until]]);
     expect(memos.get("k1")?.ended).toBe(true);
-    // the loop's end books nothing: the row ends the way any call does
+    // the loop's end books nothing: the row ends the way any call does, and the session hears
+    // that the booking before it is off
     const stopping: ToolMemos = new Map();
-    const stopped = booking({ stop: true }).flatMap((u) => mapUpdate(u, stopping, "t", undefined, undefined, () => {}));
+    const ended: unknown[] = [];
+    const stopped = booking({ stop: true }).flatMap((u) =>
+      mapUpdate(u, stopping, "t", undefined, undefined, (toolId, until) => ended.push([toolId, until])),
+    );
     expect(stopped.map((e) => e.type)).toEqual(["tool-start", "tool-end"]);
+    expect(ended).toEqual([["k1", null]]);
+    // a call with no delay to book is neither: nothing is said to the session
+    const malformed: ToolMemos = new Map();
+    const said: unknown[] = [];
+    booking({ reason: "x" }).flatMap((u) => mapUpdate(u, malformed, "t", undefined, undefined, (...a) => said.push(a)));
+    expect(said).toEqual([]);
   });
 
   test("a command reported completed that exited non-zero is an error (OpenCode marks every call completed)", () => {

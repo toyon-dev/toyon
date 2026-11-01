@@ -592,6 +592,12 @@ describe("AcpSession", () => {
     // the rail reads the booking off the session, and when the agent is due
     expect(w.session.holding).toBe(1);
     expect(w.session.wakes).toBe(booked.until!);
+    // a message sent meanwhile does not unbook it: the runtime fires the wakeup after that turn
+    // all the same, so the row waits on through the turn
+    w.session.send("more");
+    await w.idle();
+    expect(w.session.holding).toBe(1);
+    expect(w.session.wakes).toBe(booked.until!);
     // the agent back on its own is the wakeup: the row ends ahead of the turn it opens
     const m = w.events.length;
     await update({ sessionUpdate: "agent_message_chunk", content: { type: "text", text: "back" } });

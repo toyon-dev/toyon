@@ -908,8 +908,8 @@ export class AcpSession implements AgentAdapter {
   private async drain() {
     // the prompt going out is the next turn, so the one the agent was on alone is over
     this.endOwn("end_turn");
-    // and a wakeup it booked is not waited for: the message is what brought it back
-    this.wakeups.wake("a message came first");
+    // A wakeup it booked stays booked: the runtime fires it after this turn all the same, so the
+    // row waits on through the turn, and the turn the fire starts is what ends it (trackOwn).
     this.turn = { open: false, stopping: false };
     this.clearReaper();
     this.setStatus("working");
@@ -1566,7 +1566,7 @@ export class AcpSession implements AgentAdapter {
             return taken;
           }
         : undefined,
-      (toolId, until) => this.wakeups.start(toolId, until),
+      (toolId, until) => (until === null ? this.wakeups.stop() : this.wakeups.start(toolId, until)),
     );
     this.forward(live, events);
     this.holdInput(live, params.update);

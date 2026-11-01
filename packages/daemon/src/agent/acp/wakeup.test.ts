@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentEvent } from "@toyon/shared";
-import { WAKEUP_TOOL, Wakeups, wakeupAt } from "./wakeup.ts";
+import { loopEnds, WAKEUP_TOOL, Wakeups, wakeupAt } from "./wakeup.ts";
 
 const until = async (ok: () => boolean) => {
   for (let i = 0; i < 200 && !ok(); i++) await Bun.sleep(5);
@@ -20,6 +20,13 @@ describe("wakeupAt", () => {
     expect(wakeupAt(WAKEUP_TOOL, { delaySeconds: "600" })).toBeNull();
     expect(wakeupAt(WAKEUP_TOOL, null)).toBeNull();
   });
+  test("the loop's end is the wakeup call with stop, and nothing else", () => {
+    expect(loopEnds(WAKEUP_TOOL, { stop: true })).toBe(true);
+    expect(loopEnds(WAKEUP_TOOL, { delaySeconds: 600 })).toBe(false);
+    expect(loopEnds(WAKEUP_TOOL, { stop: "yes" })).toBe(false);
+    expect(loopEnds("Bash", { stop: true })).toBe(false);
+    expect(loopEnds(WAKEUP_TOOL, null)).toBe(false);
+  });
 });
 
 describe("Wakeups", () => {
@@ -34,25 +41,32 @@ describe("Wakeups", () => {
     return { wakeups, events, changes: () => changes };
   }
 
-  test("a turn beginning ends every row held, with the word for how the agent came back", () => {
+  test("a booking replaces the one before it, and a turn beginning ends the row with the word for how the agent came back", () => {
     const { wakeups, events, changes } = held();
     wakeups.start("w1", 5000);
+    expect(changes()).toBe(1);
+    // the runtime keeps one wakeup: a second booking is the loop re-paced, and the first row ends
     wakeups.start("w2", 3000);
-    expect(wakeups.size).toBe(2);
-    // the earliest booking is the one the rail says
+    expect(events).toEqual([{ type: "tool-end", toolId: "w1", output: "rebooked", isError: false }]);
+    expect(wakeups.size).toBe(1);
     expect(wakeups.next).toBe(3000);
-    expect(changes()).toBe(2);
+    expect(changes()).toBe(3);
     wakeups.wake("woke");
-    expect(events).toEqual([
-      { type: "tool-end", toolId: "w1", output: "woke", isError: false },
-      { type: "tool-end", toolId: "w2", output: "woke", isError: false },
-    ]);
+    expect(events.at(-1)).toEqual({ type: "tool-end", toolId: "w2", output: "woke", isError: false });
     expect(wakeups.size).toBe(0);
     expect(wakeups.next).toBeNull();
     expect(changes()).toBe(4);
     // nothing held: nothing said
     wakeups.wake("woke");
     expect(events.length).toBe(2);
+  });
+
+  test("the agent ending the loop ends the row it booked, not as an error", () => {
+    const { wakeups, events } = held();
+    wakeups.start("w1", Date.now() + 60_000);
+    wakeups.stop();
+    expect(events).toEqual([{ type: "tool-end", toolId: "w1", output: "the loop was ended", isError: false }]);
+    expect(wakeups.size).toBe(0);
   });
 
   test("the agent stopping ends the row as an error, since the booking went with the process", () => {

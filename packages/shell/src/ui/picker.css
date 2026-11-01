@@ -242,14 +242,22 @@
     align-items: center;
     gap: 12px;
   }
+  /* The same rule as the command row: the label is what is being chosen, so it holds its width
+     and the hint gives way. On a phone the counts beside a project ("80 worktrees · 1 working ·
+     13 discovered") are wider than the row, and a hint that could not shrink cut the name to its
+     first letter. The label stops at the row's edge so a long name still ellipsises on its own. */
   .picker-label {
-    flex: 1;
+    flex: 1 0 auto;
     min-width: 0;
+    max-width: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
   }
   .picker-hint {
-    flex-shrink: 0;
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .picker-item {
     /* the matched characters take the accent, the same colour as the bar marking the row you are

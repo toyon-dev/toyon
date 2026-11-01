@@ -1,4 +1,4 @@
-import { isBusy, isOwned, projectOrder, type RepoInfo, type WorktreeStatus } from "@toyon/shared";
+import { isOwned, projectOrder } from "@toyon/shared";
 import { useCallback, useMemo, useRef } from "react";
 import { machineLine } from "../../app/machineLine.ts";
 import { machineItems } from "../../state/actions/machine.ts";
@@ -101,8 +101,6 @@ export function ProjectPicker({
       }),
     [ordered, paths, pending, home, others, current],
   );
-
-  const hintFor = (r: RepoInfo) => hintOf(rows, r);
 
   const finish = () => dispatch({ a: "close" });
   const goBack = () => dispatch({ a: "close", back: true });
@@ -289,10 +287,9 @@ export function ProjectPicker({
       // an empty query always has the standing rows, so there is always something typed here
       empty="nothing here; keep typing a path (~/… or /…)"
       row={(r) =>
-        r.kind === "repo" && r.machine ? (
-          <PaletteRow label={r.repo.name} hint={<MachineRepoHint origin={r.machine.origin} repo={r.repo} />} />
-        ) : r.kind === "repo" ? (
-          <PaletteRow label={r.repo.name} current={r.repo.id === current} hint={hintFor(r.repo)} />
+        // the name alone: the worktree counts are the rail's, and on a phone they crowded the name out
+        r.kind === "repo" ? (
+          <PaletteRow label={r.repo.name} current={!r.machine && r.repo.id === current} />
         ) : r.kind === "pending" ? (
           <PaletteRow
             label={r.pending.name}
@@ -346,23 +343,6 @@ export function ProjectPicker({
   );
 }
 
-/** the worktree counts a project on this machine shows, read from `rows` */
-function hintOf(rows: readonly WorktreeStatus[], r: RepoInfo): string | undefined {
-  const here = rows.filter((w) => w.repoId === r.id);
-  const mine = here.filter(isOwned).filter((w) => w.worktree.kind !== "spare");
-  const working = mine.filter((w) => isBusy(w.agent)).length;
-  const n = mine.length - 1; // main is not a task
-  // "where's my stuff" is asked here, before the rail is on screen: a project with worktrees
-  // toyon did not make should say so at the point you are choosing it
-  const found = here.length - here.filter(isOwned).length;
-  const parts = [
-    n > 0 ? `${n} worktree${n === 1 ? "" : "s"}` : null,
-    working > 0 ? `${working} working` : null,
-    found > 0 ? `${found} discovered` : null,
-  ];
-  return parts.filter(Boolean).join(" · ") || undefined;
-}
-
 /** another machine's head over its projects: its name, and what it needs of you (or why it cannot
  * say), read off its own store. A count that owes something is the accent, as the bar's is. */
 function MachineHead({ origin }: { origin: string }) {
@@ -388,14 +368,6 @@ function MachineHead({ origin }: { origin: string }) {
       <span className={cx("picker-group-tail", owed && "picker-group-owed")}>{line}</span>
     </>
   );
-}
-
-/** the same counts for a project on another machine, read off that machine's store */
-function MachineRepoHint({ origin, repo }: { origin: string; repo: RepoInfo }) {
-  const machines = useMachines();
-  const machine = machines.get(origin);
-  const rows = useMachineStore(machine ?? machines.active(), (s) => s.rows);
-  return <>{machine ? hintOf(rows, repo) : null}</>;
 }
 
 /** "github.com" out of a URL, for the hint on a clone row. Best effort: a hint is not worth a throw */

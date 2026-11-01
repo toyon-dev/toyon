@@ -24,6 +24,8 @@ In Toyon you point at a button in the page and ask for it to be bigger, watch it
 
 Each copy is a branch and a git worktree with your dependencies and `.env` files; one spare per project is kept warm.
 
+One rule sits under all of it: no work happens on main. Main has no chat; your first message in a project starts a copy, and the files you have uncommitted in your checkout can move into that copy with it. Your checkout stays where your editor and terminal already are, runs the servers the copies share, and changes only when you press land. Most of what Toyon does without asking follows from that rule: the spare it keeps warm, the copy it starts for a message, the files it carries over, the servers it stops when nobody is looking, and the push it refuses to let an agent make.
+
 Point at anything on the page to talk about it or open the line that draws it, and the design pane maps it to your tokens and components. What the agent is told about the page, and the keys, are in [docs/preview.md](https://github.com/toyon-dev/toyon/blob/main/docs/preview.md).
 
 One Toyon holds every project you open, and the list of chats shows which one needs you.

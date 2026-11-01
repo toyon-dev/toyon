@@ -168,7 +168,9 @@
     max-width: var(--chat-measure);
     box-sizing: border-box;
     margin: 0 auto;
-    padding: 12px 32px 0;
+    /* a foot as well as a head: the page scrolls under the track, and text cut off flush under
+       the pills read as pinned to them; the foot is ground the text stops short of */
+    padding: 12px 32px 12px;
     --tabs-strip: var(--sunken-floor);
     --tabs-ground: var(--element0);
     --track-fade: 32px;
@@ -215,10 +217,10 @@
   }
   /* The track stands inside the page's opening (base.css .md-preview, 92 above the title) and the
      page gives up the track's height, so the title sits where it sits with no track and a handoff
-     moves nothing. The track is 38 tall: its 12 over the strip, the strip's 3 and 3, and the
-     dense row less 6 for the pills. */
+     moves nothing. The track is 50 tall: its 12 over the strip and 12 under, the strip's 3 and
+     3, and the dense row less 6 for the pills. */
   .editor-handoff-track ~ .editor-body .document > .md-preview:first-child {
-    padding-top: 54px;
+    padding-top: 42px;
   }
   /* A piece's title, its line and its attachments: the document's own h1 and measure
      (base.css .md-preview) with the body's top air, and no foot, since the text under it

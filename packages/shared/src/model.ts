@@ -397,8 +397,10 @@ export interface WorktreeInfo {
   queued?: QueuedPiece[];
   /** the worktrees this one's own work waits for, named by the here pieces of its list; each is
    * told on this chat when it lands, and goes from here with that. `pieces` are those here
-   * pieces by title, what the agent is started on; a wait without them still releases */
-  awaits?: Array<{ id: string; branch: string; title: string; pieces?: string[] }>;
+   * pieces by title, what the agent is started on; a wait without them still releases. By id
+   * alone: a worktree born on a provisional title takes its title's branch a moment after it is
+   * made, so a branch copied here would be the one it was born with. Its record has the live one. */
+  awaits?: Array<{ id: string; pieces?: string[] }>;
   /** the pull request this worktree opened, and what GitHub last said about it; absent until the
    * PR route has run here. Gone with new work after it merged. */
   pr?: PrState;

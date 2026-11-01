@@ -526,9 +526,7 @@ describe("go", () => {
       { pieceId: "p3", fate: "here", after: b.branch },
     ]);
     // the origin's own wait is on its record, with the piece that waits, for the landing to tell it
-    expect(w.state.worktree(a.id)!.awaits).toEqual([
-      { id: b.id, branch: b.branch, title: "Composer", pieces: ["Mine"] },
-    ]);
+    expect(w.state.worktree(a.id)!.awaits).toEqual([{ id: b.id, pieces: ["Mine"] }]);
     expect(madeTitled("Rail fixes")).toBeUndefined();
     const before = agentOf(a.id).sent.length;
     const queued = w.state.worktree(a.id)!.queued!;
@@ -856,9 +854,9 @@ describe("read off the plan", () => {
     await w.handoff.answer(a.id, lastProposal(a.id).id, true);
     const theirs = madeTitled("Theirs")!;
     const also = madeTitled("Also theirs")!;
-    expect(w.state.worktree(a.id)!.awaits).toMatchObject([
-      { id: theirs.id, title: "Theirs", pieces: ["Mine later"] },
-      { id: also.id, title: "Also theirs", pieces: ["Mine last"] },
+    expect(w.state.worktree(a.id)!.awaits).toEqual([
+      { id: theirs.id, pieces: ["Mine later"] },
+      { id: also.id, pieces: ["Mine last"] },
     ]);
     const before = agentOf(a.id).sent.length;
     agentOf(a.id).status = "working";
@@ -939,11 +937,14 @@ describe("read off the plan", () => {
     await until(() => madeTitled("Second") !== undefined);
     const second = madeTitled("Second")!;
     await until(() => w.state.worktree(a.id)!.awaits !== undefined);
-    expect(w.state.worktree(a.id)!.awaits).toEqual([
-      { id: second.id, branch: "toyon/second", title: "Second", pieces: ["Mine"] },
-    ]);
+    // by id alone: the branch is the worktree's own to settle, and the wait holds whenever it does
+    expect(w.state.worktree(a.id)!.awaits).toEqual([{ id: second.id, pieces: ["Mine"] }]);
     await settle();
     expect(agentOf(a.id).sent).toHaveLength(before);
+    // the branch moves after the wait was recorded, as the namer moves a provisional one: the
+    // landing still finds the wait and releases it
+    await w.worktrees.rename(second.id, "Second again");
+    expect(second.branch).toBe("toyon/second-again");
     w.hub.emit("landed", second.id);
     await until(() => agentOf(a.id).sent.length === before + 1);
     expect(agentOf(a.id).sent.at(-1)!.text).toContain('Do "Mine" here now, and only that.');

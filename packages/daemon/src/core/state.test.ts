@@ -146,6 +146,12 @@ describe("state", () => {
     expect("brief" in loaded).toBe(false);
   });
 
+  test("an awaits entry stored with the branch and title it copied reads back by id alone", () => {
+    const awaits = [{ id: "b", branch: "toyon/wt-b", title: "B", pieces: ["Mine"] }];
+    writeFileSync(paths.stateFile, JSON.stringify({ repos: [], worktrees: [{ ...wt("a"), awaits }], sessions: {} }));
+    expect(loadState(paths).worktrees[0]!.awaits).toEqual([{ id: "b", pieces: ["Mine"] }]);
+  });
+
   test("corrupt file is backed up, not silently discarded", () => {
     writeFileSync(paths.stateFile, '{"repos": [');
     const s = loadState(paths);

@@ -165,6 +165,13 @@ export function loadState(paths: Paths): PersistedState {
         delete old.brief;
       }
     }
+    // an `awaits` entry copied the worktree's branch and title until 0.20, and the copy went stale
+    // when the branch moved to its title: the wait is by id alone now, dropped once here
+    for (const a of w.awaits ?? []) {
+      const old = a as { branch?: string; title?: string };
+      delete old.branch;
+      delete old.title;
+    }
   }
   // sessions belong to worktrees; a removed worktree's entry is an orphan
   const ids = new Set(state.worktrees.map((w) => w.id));

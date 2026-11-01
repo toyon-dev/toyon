@@ -376,7 +376,7 @@ const KIND_OF: Record<string, AttachmentRef["kind"]> = {
 /** a worktree as a piece names it, on the list and on the record */
 type Named = { id: string; branch: string; title: string };
 /** one entry of a worktree's `awaits`, with the pieces always on it when written here */
-type Awaits = Named & { pieces: string[] };
+type Awaits = { id: string; pieces: string[] };
 
 /** a landing a wake tells of: the branch and, when it is not this project's, its project */
 type Woke = { title: string; branch: string; url?: string; project?: string; pieces: string[] };
@@ -794,7 +794,7 @@ export class HandoffService implements ToolProvider {
         if (!wait.worktree) continue;
         const known = awaits.find((a) => a.id === wait.worktree?.id);
         if (known) known.pieces.push(piece.title);
-        else awaits.push({ ...wait.worktree, pieces: [piece.title] });
+        else awaits.push({ id: wait.worktree.id, pieces: [piece.title] });
       }
       agent.note({ type: "handoff", id, outcomes, ts: Date.now() });
       this.recordAwaits(wt.id, awaits);
@@ -1211,8 +1211,7 @@ export class HandoffService implements ToolProvider {
           });
           madeNow.add(made.id);
           this.repoint(origin, q, { id: made.id, branch: made.branch, title: made.title });
-          if (q.heres?.length)
-            this.recordAwaits(origin.id, [{ id: made.id, branch: made.branch, title: made.title, pieces: q.heres }]);
+          if (q.heres?.length) this.recordAwaits(origin.id, [{ id: made.id, pieces: q.heres }]);
         } catch (e) {
           const reason = e instanceof Error ? e.message : String(e);
           log.warn(origin.id, `queued piece "${q.title}" could not be made`, e);

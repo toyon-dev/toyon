@@ -653,8 +653,10 @@ export class WorktreeService {
 
   /** the branch follows the title: a title given at birth moves it now, as the namer's answer
    * would have, and the namer is never asked; without one the namer is. The move is awaited, so
-   * the branch create returns is the one the worktree keeps: a handoff copies it onto its origin
-   * and siblings at once, and a copy made before the move names a branch that is gone. */
+   * the branch create returns is the one the worktree keeps: a handoff copies it into the `after`
+   * of the siblings queued behind it, and a copy made before the move would name a branch that is
+   * gone. A provisional title is the namer's to move later, off this call, so a record that has to
+   * hold through that keeps the id alone (`awaits`). */
   private async nameOrAsk(wt: WorktreeInfo, task: string, given: string | undefined) {
     if (given === undefined) {
       this.scheduleNaming(wt, task);

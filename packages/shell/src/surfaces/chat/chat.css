@@ -1894,6 +1894,15 @@
     overflow-y: auto;
     margin-inline: var(--picker-bleed);
     padding-inline: var(--picker-inset);
+    /* on touch the foot's icon button draws its thumb target 10px outside its box (ui/button.css),
+       which at the pages' floor is scrollable overflow: the pages scrolled by those 10px under a
+       swipe that started on the card, and the question slid under the box's top edge. The target
+       gets a floor of the scroller's own to stand in, and the margin gives it back to the box's
+       padding, so nothing moves. */
+    [data-touch] & {
+      padding-bottom: 10px;
+      margin-bottom: -10px;
+    }
   }
   .card-page {
     grid-area: 1 / 1;

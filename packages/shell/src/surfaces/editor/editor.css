@@ -227,7 +227,7 @@
      continues the page (ui/document.css pulls that body's top in) */
   .editor-piece-head {
     padding-bottom: 0;
-    & > h1 {
+    & h1 {
       margin-bottom: 8px;
     }
   }

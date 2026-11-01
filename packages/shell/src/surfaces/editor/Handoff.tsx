@@ -10,7 +10,7 @@
 // then its text at a document's scale. The track stays put while the text scrolls, and a sibling
 // opening the origin's plan sees the same track.
 
-import type { AttachmentRef, Piece, PieceFate } from "@toyon/shared";
+import { type AttachmentRef, leadHeading, type Piece, type PieceFate, pieceDoc } from "@toyon/shared";
 import { useMemo, useRef, useState } from "react";
 import { useSock, useStore, useUrls } from "../../state/context.tsx";
 import { Button } from "../../ui/Button.tsx";
@@ -27,7 +27,6 @@ import {
   fatesFor,
   fateWord,
   type HandoffItem,
-  leadHeading,
   type PieceStanding,
   pieceFate,
   pieceMark,
@@ -36,6 +35,7 @@ import {
   waitOf,
 } from "../chat/handoff.ts";
 import { ImageChip } from "../chat/ImageChip.tsx";
+import { useMarkdown } from "../chat/markdown.ts";
 import { PasteChip } from "../chat/PasteChip.tsx";
 import { PickChip } from "../chat/PickChip.tsx";
 import { WorktreeChip } from "../chat/WorktreeChip.tsx";
@@ -251,12 +251,13 @@ function Standing({ item, piece }: { item: HandoffItem; piece: Piece }) {
   }
 }
 
-/** A piece's page, read as the plan's file is, at a document's scale with its links and images
- * resolved against the file the list sits on. The title first: the text's own opening heading,
- * else the piece's title. Then a line, when it says something the pill does not: while the list
- * is the person's it states the fate and offers the others; once answered, what became of the
- * piece with the row to open. Then the attachments the piece carries, and its text. `alone`: the
- * page has no track over it, so the line is the only place the fate is said. */
+/** A piece's page: the document its worktree is born with (pieceDoc), read as that file is, at a
+ * document's scale with its links and images resolved against the file the list sits on. The
+ * document's title first, drawn by the same renderer as the rest. Then a line, when it says
+ * something the pill does not: while the list is the person's it states the fate and offers the
+ * others; once answered, what became of the piece with the row to open. Then the attachments the
+ * piece carries, and the body. `alone`: the page has no track over it, so the line is the only
+ * place the fate is said. */
 export function PiecePage({
   item,
   piece,
@@ -284,7 +285,9 @@ export function PiecePage({
   const fate = effectiveFate(item, piece);
   const wait = waitOf(item, piece);
   const others = deciding(item) ? fatesFor(piece, item.pieces).filter((f) => f !== fate) : [];
-  const { title, rest } = useMemo(() => leadHeading(piece.plan), [piece.plan]);
+  // the document always opens with a heading, which the line is drawn under
+  const { title, rest } = useMemo(() => leadHeading(pieceDoc(piece)), [piece]);
+  const heading = useMarkdown(`# ${title}`);
   const byline = bylineShown(item, piece, alone) && (
     <p className="editor-piece-line hint">
       {deciding(item) ? (
@@ -313,10 +316,10 @@ export function PiecePage({
       )}
     </p>
   );
-  // the title wears the document's own h1, so the page reads as the plan's file does
   const lead = (
     <div className="md md-preview editor-piece-head">
-      <h1>{title ?? piece.title}</h1>
+      {/* biome-ignore lint/security/noDangerouslySetInnerHtml: html is DOMPurify-sanitized markdown output */}
+      <div dangerouslySetInnerHTML={{ __html: heading }} />
       {byline}
       <Chips refs={piece.attachments} worktreeId={worktreeId} />
     </div>

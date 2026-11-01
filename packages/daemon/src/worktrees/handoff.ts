@@ -24,7 +24,7 @@ import type {
   RepoInfo,
   WorktreeInfo,
 } from "@toyon/shared";
-import { DEFAULT_PERMISSION_MODE, HANDOFF_TOOL, isBusy } from "@toyon/shared";
+import { DEFAULT_PERMISSION_MODE, HANDOFF_TOOL, isBusy, pieceDoc } from "@toyon/shared";
 import type { AgentAdapter } from "../agent/adapter.ts";
 import type { AttachmentStore } from "../agent/attachments.ts";
 import type { McpTool, McpToolResult, ToolProvider } from "../agent/mcp.ts";
@@ -59,11 +59,6 @@ function handedOrigin(origin: WorktreeInfo, project: string | undefined): Handed
     title: origin.title,
     ...(project ? { project } : {}),
   };
-}
-
-/** the plan a piece's worktree is born with: the piece's text under its title */
-export function pieceDoc(piece: Pick<Piece, "title" | "plan">): string {
-  return `# ${piece.title}\n\n${piece.plan.trim()}\n`;
 }
 
 export interface HandoffDeps {

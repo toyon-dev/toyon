@@ -17,6 +17,7 @@ export * from "./managed.ts";
 export * from "./model.ts";
 export * from "./output.ts";
 export * from "./paste.ts";
+export * from "./pieceDoc.ts";
 export * from "./ports.ts";
 export * from "./project.ts";
 export * from "./protocol/bridge.ts";

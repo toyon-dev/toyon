@@ -274,15 +274,6 @@ export function bylineShown(item: HandoffItem, piece: Piece, alone: boolean): bo
   return s.kind !== "skipped" && s.kind !== "starting";
 }
 
-/** A piece's text split at its title: the agent's own first heading when the text opens with one,
- * so the page reads title then line then body and not line over a heading; null when it opens
- * with prose, which then takes the piece's title. */
-export function leadHeading(text: string): { title: string | null; rest: string } {
-  const m = /^\s*#{1,6}[ \t]+(.+?)[ \t#]*(?:\r?\n|$)/.exec(text);
-  if (!m) return { title: null, rest: text };
-  return { title: m[1]!.trim(), rest: text.slice(m[0].length) };
-}
-
 /** what became of the piece once the list was answered, as a fact the page's line states */
 export type PieceStanding =
   | { kind: "starting" }

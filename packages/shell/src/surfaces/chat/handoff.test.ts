@@ -14,7 +14,6 @@ import {
   handoffQuestion,
   handoffSaid,
   hereWaits,
-  leadHeading,
   listPage,
   oneRows,
   openHandoff,
@@ -260,22 +259,6 @@ describe("the strip", () => {
     expect(bylineShown(list([now], {}, { state: "going" }), now, false)).toBe(false);
     // alone there is no tab, so the line is the only place the fate is said
     expect(bylineShown(skipped, now, true)).toBe(true);
-  });
-
-  test("leadHeading: the text's own first heading is the page's title", () => {
-    expect(leadHeading("# Move the pin\n\nOnce it is out.")).toEqual({
-      title: "Move the pin",
-      rest: "\nOnce it is out.",
-    });
-    expect(leadHeading("  ## Fork pin ##\nbody")).toEqual({ title: "Fork pin", rest: "body" });
-    expect(leadHeading("# Only a title")).toEqual({ title: "Only a title", rest: "" });
-    // prose first, or a heading further down, leaves the text whole
-    expect(leadHeading("Point the daemon at it.\n\n# Later")).toEqual({
-      title: null,
-      rest: "Point the daemon at it.\n\n# Later",
-    });
-    // a hash with no space is not a heading
-    expect(leadHeading("#1350 lands first")).toEqual({ title: null, rest: "#1350 lands first" });
   });
 
   test("pieceOrder: the origin's own first, then worktrees now, then queued, then sent; the agent's order within", () => {

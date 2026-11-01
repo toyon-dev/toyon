@@ -91,7 +91,7 @@ const NAME_ICON = new Map<string, IconName>([
   // off), so the cube, which says a call went to a service of its own, would be wrong for a call
   // that went to the thing the person is sitting in. The handoff wears the glyph of the "handed
   // off" row it becomes; the worktrees tool lists the rail's rows and wears the rail's glyph.
-  [HANDOFF_TOOL, "spawn"],
+  [HANDOFF_TOOL, "handoff"],
   [WORKTREES_TOOL, "worktrees"],
   // the other half of ExitPlanMode, which the adapter kinds as a mode switch
   ["EnterPlanMode", "swap"],

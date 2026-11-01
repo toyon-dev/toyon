@@ -428,7 +428,7 @@ describe("toolLabel", () => {
     // the same swap as leaving it
     expect(toolLabel({ name: "handoff", title: "handoff", input: { pieces: [] } })).toMatchObject({
       name: "handoff",
-      icon: "spawn",
+      icon: "handoff",
     });
     expect(toolLabel({ name: "worktrees", title: "worktrees", input: {} }).icon).toBe("worktrees");
     expect(toolLabel({ name: "EnterPlanMode", title: "EnterPlanMode", input: {} }).icon).toBe("swap");

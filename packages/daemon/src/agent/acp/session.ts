@@ -791,8 +791,12 @@ export class AcpSession implements AgentAdapter {
             this.carried(live, item.recorded.attachments),
           ),
           // the turn can also end on the wire: ask for the message back rather than let the agent
-          // prompt itself with it, since nothing here would be tracking a turn it started alone
-          _meta: { steering: { idleBehavior: "promptRequired" } },
+          // prompt itself with it, since nothing here would be tracking a turn it started alone.
+          // `priority: "next"` asks for the message between steps, once the running tool call has
+          // returned, the way the terminal queues a line typed during work. An adapter that reads
+          // it (claude-agent-acp#1350) stops cutting the call; one that does not ignores the key
+          // and keeps pre-empting, which `preempted` below still accounts for.
+          _meta: { steering: { idleBehavior: "promptRequired", priority: "next" } },
         }),
       );
     } catch (e) {

@@ -943,6 +943,8 @@ describe("AcpSession", () => {
     expect(fake.steers).toHaveLength(1);
     expect(fake.steers[0]!.prompt).toEqual([{ type: "text", text: "two" }]);
     expect(fake.steers[0]!.sessionId).toBe("s1");
+    // the message back if the turn ended underneath, and between steps rather than cutting one
+    expect(fake.steers[0]!._meta).toEqual({ steering: { idleBehavior: "promptRequired", priority: "next" } });
     // the message is shown where it was sent; the turn it joined still starts and ends once
     expect(w.types()).toEqual(["user-message", "turn-start", "session-info", "user-message"]);
     release();

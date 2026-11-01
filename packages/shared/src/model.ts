@@ -831,30 +831,59 @@ export function defaultStandsFor(choices: ModelChoice[], runs?: string): ModelCh
 }
 
 /** The id an agent's list carries now for one remembered from an earlier list, or nothing. Ids
- * are the adapter's and move between its versions: Claude's "claude-fable-5-1[1m]" became "fable"
- * and its "opus[1m]" became "opus". The one rule is the family word, the id without its vendor
- * prefix, version, date and context hint, taken when the list carries that word as an id of its
- * own. Nothing otherwise: a guess between "claude-opus-5" and "claude-opus-4-8" would be a lie,
+ * are the adapter's and move between its versions, and between two processes of one version:
+ * Claude's "claude-fable-5-1[1m]" became "fable", its "opus[1m]" became "opus", and one list
+ * spells Fable "claude-fable-5-1" where another spells it "fable". The rule is the family word,
+ * the id without its vendor prefix, version, date and context hint: taken when the list carries
+ * that word as an id of its own, and a bare word asked follows the newest Claude id of its family
+ * the list carries, since that is what the bare alias means. Nothing otherwise: "claude-opus-4-7"
+ * against a list of "claude-opus-5" and "claude-opus-4-8" names neither, a guess would be a lie,
  * and the caller falls back to the agent's default. An id the list still carries is itself. */
 export function relistChoice(id: string, choices: ModelChoice[]): string | undefined {
   if (choices.some((c) => c.id === id)) return id;
   const family = choiceFamily(id);
-  return family !== undefined && choices.some((c) => c.id === family) ? family : undefined;
+  if (family === undefined) return undefined;
+  if (choices.some((c) => c.id === family)) return family;
+  if (family !== bareWord(id)) return undefined;
+  let newest: { id: string; version: number } | undefined;
+  for (const c of choices) {
+    if (choiceFamily(c.id) !== family) continue;
+    const version = claudeVersion(c.id);
+    if (version !== undefined && (newest === undefined || version > newest.version)) newest = { id: c.id, version };
+  }
+  return newest?.id;
 }
 
-/* a Claude model id in any provider's spelling, down to its family word: "claude-opus-5",
+/* a Claude model id in any provider's spelling, down to its family word and version: "claude-opus-5",
  "claude-sonnet-4-5-20250929", Bedrock's "us.anthropic.claude-opus-4-6-v1:0", the older
  "anthropic.claude-3-5-sonnet-20241022-v2:0". A version part is one or two digits, so a date is
- never read as one. */
-const CLAUDE_FAMILY = /(?:^|[./])claude-(?:\d{1,2}(?:-\d{1,2}(?!\d))?-)?([a-z]+)/;
+ never read as one; the version sits before the family in the older spelling and after it since. */
+const CLAUDE_ID =
+  /(?:^|[./])claude-(?:(\d{1,2})(?:-(\d{1,2})(?!\d))?-)?([a-z]+)(?:-(\d{1,2})(?!\d)(?:-(\d{1,2})(?!\d))?)?/;
+
+/** the id without its "[1m]" context hint */
+function bareWord(id: string): string {
+  return id.replace(/\[[^\]]*\]$/, "");
+}
 
 /** the family word of a model id: a bare alias ("opus", with or without its "[1m]" hint) or the
  * family of a Claude id; nothing for a shape this does not know ("gpt-5.6-sol") */
 function choiceFamily(id: string): string | undefined {
-  const bare = id.replace(/\[[^\]]*\]$/, "");
-  const claude = bare.match(CLAUDE_FAMILY)?.[1];
+  const bare = bareWord(id);
+  const claude = bare.match(CLAUDE_ID)?.[3];
   if (claude) return claude;
   return /^[a-z]+$/.test(bare) ? bare : undefined;
+}
+
+/** a Claude id's version as one number to order by (5.1 reads 5.01, 4.8 reads 4.08, a bare
+ * "claude-fable-5" reads 5); nothing for a bare alias or a shape this does not know */
+function claudeVersion(id: string): number | undefined {
+  const m = bareWord(id).match(CLAUDE_ID);
+  if (!m) return undefined;
+  const major = m[1] ?? m[4];
+  if (major === undefined) return undefined;
+  const minor = m[1] !== undefined ? m[2] : m[5];
+  return Number(major) + Number(minor ?? 0) / 100;
 }
 
 /** The state of a repo's default branch checkout, which the plus's row wears and the composer's

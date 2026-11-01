@@ -25,6 +25,22 @@ describe("relistChoice", () => {
       "sonnet",
     );
   });
+  test("a bare word follows the newest Claude id of its family when the list spells it long", () => {
+    const long = [
+      { id: "default", name: "Default (recommended)", description: "Opus 5.5" },
+      { id: "opus", name: "Opus 5.5" },
+      { id: "claude-fable-5-1", name: "Fable 5.1" },
+      { id: "claude-fable-5", name: "Fable 5" },
+      { id: "claude-sonnet-4-6", name: "Sonnet 4.6" },
+      { id: "anthropic.claude-3-5-sonnet-20241022-v2:0", name: "Sonnet 3.5" },
+      { id: "claude-sonnet-5", name: "Sonnet 5" },
+    ];
+    expect(relistChoice("fable", long)).toBe("claude-fable-5-1");
+    expect(relistChoice("fable[1m]", long)).toBe("claude-fable-5-1");
+    expect(relistChoice("sonnet", long)).toBe("claude-sonnet-5");
+    // a long id does not pick between long ids: the version asked for is not on the list
+    expect(relistChoice("claude-fable-5-2", long)).toBeUndefined();
+  });
   test("nothing when the list has no alias for the family, or the shape is not known", () => {
     // "claude-opus-4-7" could be 4.8 or 4.6 as easily: no guess
     expect(

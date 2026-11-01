@@ -851,6 +851,11 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     s.hub.emit("agentsChanged");
   },
 
+  "set-repo-pick"(msg, _ctx, s) {
+    s.state.setRepoPick(msg.repoId, msg.field, msg.value);
+    s.hub.emit("reposChanged");
+  },
+
   "set-keep-awake"(msg, _ctx, s) {
     s.state.setKeepAwake(msg.mode);
     s.hub.emit("keepAwakeChanged");

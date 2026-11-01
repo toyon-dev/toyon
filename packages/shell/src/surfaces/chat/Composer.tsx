@@ -64,9 +64,8 @@ import { tip } from "../../ui/Tooltip.tsx";
 import { greenfieldContext } from "../center/greenfield.ts";
 import { canPull, originNote } from "../chips/baseNote.ts";
 import { EffortChip } from "../chips/EffortChip.tsx";
-import { ModeChip, useNewWorktreeMode } from "../chips/ModeChip.tsx";
+import { ModeChip } from "../chips/ModeChip.tsx";
 import { AgentModelChip, ModelChip } from "../chips/ModelChip.tsx";
-import { useNewWorktreeProfile } from "../chips/ProfileChip.tsx";
 import { commentsLine } from "../editor/prComments.ts";
 import { CommandRow } from "../overlays/CommandRow.tsx";
 import { PaletteRow } from "../overlays/PaletteRow.tsx";
@@ -414,10 +413,13 @@ export function Composer({
   // how full this agent's context is: the stream's last word, else the row's (a cold worktree)
   const usage = useLocalField(id, "usage") ?? active?.usage;
 
-  // the draft's row above the box holds the profile; a first message takes the remembered one
-  const [remembered] = useNewWorktreeProfile(repo);
-  const profile = draft?.profile ?? remembered;
-  const [newMode, setNewMode] = useNewWorktreeMode(repo);
+  // the mode a new worktree starts in is the repo's pick, the daemon's memory per repo (as the
+  // profile picked on the draft's row is, and the model and effort per agent), so every create of
+  // the repo and every shell start from one answer
+  const newMode = repo?.picks?.mode ?? DEFAULT_PERMISSION_MODE;
+  const setNewMode = (mode: PermissionMode) => {
+    if (repo) sock?.send({ t: "set-repo-pick", repoId: repo.id, field: "mode", value: mode });
+  };
   const activeMode = active?.worktree.mode ?? DEFAULT_PERMISSION_MODE;
   const picking = useStore((s) => s.picking);
   const termOpen = useStore((s) => s.layout.term);
@@ -1243,8 +1245,9 @@ export function Composer({
         repoId: active.worktree.repoId,
         context,
         agent: spawnAgent,
-        profile,
-        mode: mode ?? newMode,
+        // what was chosen for this one send rides along; the repo's picks fill the rest daemon side
+        ...(draft?.profile ? { profile: draft.profile } : {}),
+        ...(mode ? { mode } : {}),
         ...(draft?.carry ? { carry: true } : {}),
       };
       // the box remembers what it last started with, the way its mode and model chips do; the

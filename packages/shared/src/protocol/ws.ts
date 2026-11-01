@@ -922,6 +922,14 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
     field: z.enum(["model", "effort"]),
     value: z.string().max(200),
   }),
+  /** what new worktrees of this repo start with, picked in the composer: one of the three modes, or
+   * one of the repo's profiles; the empty value the default again */
+  z.object({
+    t: z.literal("set-repo-pick"),
+    repoId: id,
+    field: z.enum(["mode", "profile"]),
+    value: z.string().max(100),
+  }),
   z.object({ t: z.literal("set-keep-awake"), mode: z.enum(KEEP_AWAKE_MODES) }),
   /** (re)download an agent's adapter; progress arrives as `agents` broadcasts */
   z.object({ t: z.literal("install-agent"), agent: id }),

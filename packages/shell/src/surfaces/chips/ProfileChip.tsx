@@ -1,23 +1,15 @@
 import type { RepoInfo } from "@toyon/shared";
-import { useMachine } from "../../state/context.tsx";
-import { STORAGE } from "../../state/keys.ts";
 import { profileNames } from "../../state/profiles.ts";
 import { ChipPicker } from "../../ui/ChipPicker.tsx";
-import { usePersisted } from "../../ui/hooks.ts";
 
-/** the profile a new worktree of this repo will run: remembered per repo in this browser, the
- * repo's default until chosen. Returns undefined when the repo has no profiles. */
-export function useNewWorktreeProfile(repo: RepoInfo | null): [string | undefined, (p: string) => void] {
+/** the profile a new worktree of this repo runs when nothing is picked for it: the repo's pick,
+ * made on a draft's row and kept by the daemon per repo, while the file still has it; else the
+ * repo's default. Undefined when the repo has no profiles. */
+export function newWorktreeProfile(repo: RepoInfo | null): string | undefined {
   const names = profileNames(repo);
-  const [stored, setStored] = usePersisted<string>(
-    STORAGE.profilePrefix + (repo?.id ?? ""),
-    repo?.config.defaultProfile ?? "",
-    (raw) => raw ?? undefined,
-    useMachine().storage,
-  );
-  // a remembered name the file no longer has falls back to the default
-  const value = names.length === 0 ? undefined : names.includes(stored) ? stored : repo?.config.defaultProfile;
-  return [value, setStored];
+  if (names.length === 0) return undefined;
+  const picked = repo?.picks?.profile;
+  return picked && names.includes(picked) ? picked : repo?.config.defaultProfile;
 }
 
 /** which of the repo's profiles the new worktree runs, each row naming the procs it starts;

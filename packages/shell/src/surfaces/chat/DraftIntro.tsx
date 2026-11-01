@@ -1,8 +1,8 @@
 import type { OwnedWorktree } from "@toyon/shared";
-import { useDispatch, useStore } from "../../state/context.tsx";
+import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { type Draft, repoById, trunkOf } from "../../state/store.ts";
 import { Check } from "../../ui/Check.tsx";
-import { ProfileChip, useNewWorktreeProfile } from "../chips/ProfileChip.tsx";
+import { newWorktreeProfile, ProfileChip } from "../chips/ProfileChip.tsx";
 
 /** What stands between the lead row's empty transcript and its box: what the message will be. The
  * one choice fixed at birth, the profile, on a row of its own, and under a rule whether main's
@@ -13,11 +13,16 @@ import { ProfileChip, useNewWorktreeProfile } from "../chips/ProfileChip.tsx";
  * what to do, and a repo without profiles over a clean main shows nothing here at all. */
 export function DraftIntro({ draft, lead }: { draft: Draft; lead: OwnedWorktree | null }) {
   const dispatch = useDispatch();
+  const sock = useSock();
   const repo = useStore((s) => repoById(s, lead?.repoId));
-  // the per-repo memory the send uses when nothing is picked here; undefined for a repo without
-  // profiles, and then there is no row
-  const [remembered] = useNewWorktreeProfile(repo);
-  const profile = draft.profile ?? remembered;
+  // the repo's pick the send uses when nothing is picked here, else its default; undefined for a
+  // repo without profiles, and then there is no row. A pick here is this draft's, and the repo's
+  // from then on, kept by the daemon the way the mode chip's is.
+  const profile = draft.profile ?? newWorktreeProfile(repo);
+  const pickProfile = (p: string) => {
+    dispatch({ a: "draft-profile", profile: p });
+    if (repo) sock?.send({ t: "set-repo-pick", repoId: repo.id, field: "profile", value: p });
+  };
   // main's uncommitted files, as the daemon last counted them: the lead row's own status is the
   // spare's, which sits on main clean
   const dirty = useStore((s) => trunkOf(s, lead?.repoId)?.dirty ?? 0);
@@ -29,7 +34,7 @@ export function DraftIntro({ draft, lead }: { draft: Draft; lead: OwnedWorktree 
     <div className="draft-intro">
       {profile && (
         <div className="draft-row hint">
-          <ProfileChip repo={repo} value={profile} onChange={(p) => dispatch({ a: "draft-profile", profile: p })} />
+          <ProfileChip repo={repo} value={profile} onChange={pickProfile} />
         </div>
       )}
       {/* What main's uncommitted files do when the box starts a worktree. Default: stay, since main

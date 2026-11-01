@@ -176,6 +176,16 @@ export interface RepoInfo {
    * were all landed and archived would otherwise sink to the bottom the moment the work was
    * tidied away. A record from before the field takes it from the archive at boot. */
   promptedAt?: number;
+  /** what a new worktree of it starts with, as picked in the composer: the permission mode, and
+   * the profile from a draft's row. The defaults where absent. The daemon's memory, so every
+   * create of the repo and every shell read the same one. */
+  picks?: RepoPicks;
+}
+
+/** the mode and profile a new worktree of a repo starts with, where the create names none */
+export interface RepoPicks {
+  mode?: PermissionMode;
+  profile?: string;
 }
 
 /** Toyon running out of a checkout that is also one of its own projects: what landing work on

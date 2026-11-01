@@ -1397,6 +1397,9 @@ describe("handlers", () => {
     await pick("codex", "model", "big");
     await pick("codex", "model", "");
     expect(services.state.picks("codex")).toEqual({ effort: "high" });
+    // the repo's picks the same way, behind what the frame names
+    await dispatch({ t: "set-repo-pick", repoId: r.id, field: "mode", value: "plan" }, ctx, services);
+    expect(services.state.requireRepo(r.id).picks).toEqual({ mode: "plan" });
     await dispatch(
       {
         t: "create-worktree",
@@ -1414,6 +1417,9 @@ describe("handlers", () => {
     expect(made.mode).toBe("ask");
     expect(made.effort).toBe("high");
     expect(made.model).toBeUndefined();
+    await dispatch({ t: "create-worktree", repoId: r.id, prompt: "y" }, ctx, services);
+    const second = services.state.worktrees.find((x) => x.kind === "worktree" && x.id !== made.id)!;
+    expect(second.mode).toBe("plan");
     // the first message's attachments reach the agent like a chat's do
     expect(agents.get(made.id)?.sent[0]?.attachments).toEqual([{ kind: "paste", text: "p" }]);
     await dispatch({ t: "set-worktree-effort", worktreeId: made.id, effort: "" }, ctx, services);

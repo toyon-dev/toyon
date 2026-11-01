@@ -55,10 +55,6 @@ export const STORAGE = {
    * The boot script in index.html paints the page in it before the bundle runs, so a reload comes
    * up in the colour of the screen it returns to */
   ground: "toyon-ground",
-  /** + repo id: the profile the composer last started a worktree with, for that repo */
-  profilePrefix: "toyon-profile-",
-  /** + repo id: the permission mode the composer last started a worktree with, for that repo */
-  modePrefix: "toyon-mode-",
   /** the daemon's version this browser last ran, per machine, so the first page after an update
    * can say what changed */
   version: "toyon-version",
@@ -92,8 +88,7 @@ export const WINDOW_KEYS: readonly Key[] = [
 ];
 
 /** What is about one machine's projects and worktrees, whose ids mean nothing on another machine:
- * kept under that machine's origin, so two machines' selections never read each other's. A prefix
- * key stands for every key that starts with it. */
+ * kept under that machine's origin, so two machines' selections never read each other's. */
 export const MACHINE_KEYS: readonly Key[] = [
   STORAGE.active,
   STORAGE.repo,
@@ -103,14 +98,9 @@ export const MACHINE_KEYS: readonly Key[] = [
   STORAGE.committedShut,
   STORAGE.turnOpen,
   STORAGE.treeOpen,
-  STORAGE.profilePrefix,
-  STORAGE.modePrefix,
   STORAGE.phoneRow,
   STORAGE.version,
 ];
-
-/** the two keys that are prefixes, each completed by a repo id */
-const PREFIXES: readonly string[] = [STORAGE.profilePrefix, STORAGE.modePrefix];
 
 /** the storage a scope reads and writes: localStorage, or a stand-in in a test */
 export interface KeyStore {
@@ -239,19 +229,18 @@ export function migrateStorage(
   ] as const) {
     const bare = keysOf(storage).filter((k) => !k.includes("@"));
     for (const key of held) {
-      const matches = PREFIXES.includes(key) ? bare.filter((k) => k.startsWith(key)) : bare.filter((k) => k === key);
-      for (const k of matches) move(storage, k, scopedKey(k, servingOrigin));
+      for (const k of bare.filter((k) => k === key)) move(storage, k, scopedKey(k, servingOrigin));
     }
   }
-  // the model and effort picks for new worktrees are the daemon's now: what this browser kept
-  // under the old keys, scoped or not, is dead
+  // what a new worktree starts with (mode and profile per repo, model and effort per agent) is the
+  // daemon's memory now: what this browser kept under the old keys, scoped or not, is dead
   for (const k of keysOf(local)) {
     if (DEAD_PREFIXES.some((p) => k.startsWith(p))) remove(local, k);
   }
 }
 
-/** keys that were prefixes once, each completed by an agent id, and read by nothing now */
-const DEAD_PREFIXES = ["toyon-model-", "toyon-effort-"];
+/** keys that were prefixes once, each completed by a repo or agent id, and read by nothing now */
+const DEAD_PREFIXES = ["toyon-profile-", "toyon-mode-", "toyon-model-", "toyon-effort-"];
 
 function remove(store: KeyStore | null, key: string) {
   try {

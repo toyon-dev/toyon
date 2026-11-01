@@ -1,21 +1,7 @@
-import { DEFAULT_PERMISSION_MODE, PERMISSION_MODES, type PermissionMode, type RepoInfo } from "@toyon/shared";
-import { useMachine } from "../../state/context.tsx";
-import { STORAGE } from "../../state/keys.ts";
+import { PERMISSION_MODES, type PermissionMode } from "@toyon/shared";
 import { ChipPicker } from "../../ui/ChipPicker.tsx";
 import { cx } from "../../ui/cx.ts";
-import { usePersisted } from "../../ui/hooks.ts";
 import "./chips.css";
-
-/** the mode a new worktree of this repo starts in: remembered per repo in this browser */
-export function useNewWorktreeMode(repo: RepoInfo | null): [PermissionMode, (m: PermissionMode) => void] {
-  const [stored, setStored] = usePersisted<PermissionMode>(
-    STORAGE.modePrefix + (repo?.id ?? ""),
-    DEFAULT_PERMISSION_MODE,
-    (raw) => (PERMISSION_MODES.some((m) => m.id === raw) ? (raw as PermissionMode) : DEFAULT_PERMISSION_MODE),
-    useMachine().storage,
-  );
-  return [stored, setStored];
-}
 
 const describe = (id: PermissionMode) => PERMISSION_MODES.find((m) => m.id === id)?.description ?? "";
 

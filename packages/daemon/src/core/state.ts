@@ -9,10 +9,11 @@ import type {
   PermissionMode,
   PrComment,
   RepoInfo,
+  RepoPicks,
   ThemePrefs,
   WorktreeInfo,
 } from "@toyon/shared";
-import { isShellOrigin, relistChoice, sentAt } from "@toyon/shared";
+import { isShellOrigin, PERMISSION_MODES, relistChoice, sentAt } from "@toyon/shared";
 import { UserError } from "./errors.ts";
 import { log } from "./log.ts";
 import { ensureDirs, type Paths } from "./paths.ts";
@@ -505,6 +506,24 @@ export class StateStore {
   ): string | undefined {
     if (!id || choices.length === 0) return id;
     return relist(id, choices);
+  }
+  /** What a new worktree of the repo starts with, as picked in the composer: its mode, and its
+   * profile. The empty value is the default again. A mode is one of the three; a profile is one
+   * the settings file has now, and one the file later loses is left out at the create. */
+  setRepoPick(repoId: string, field: keyof RepoPicks, value: string) {
+    const repo = this.requireRepo(repoId);
+    const picks = repo.picks ?? {};
+    if (!value) delete picks[field];
+    else if (field === "mode") {
+      if (!PERMISSION_MODES.some((m) => m.id === value)) throw new UserError(`"${value}" is not a mode`);
+      picks.mode = value as PermissionMode;
+    } else {
+      if (!repo.config.profiles?.[value]) throw new UserError(`no profile "${value}" in ${repo.configFile}`);
+      picks.profile = value;
+    }
+    if (Object.keys(picks).length > 0) repo.picks = picks;
+    else delete repo.picks;
+    this.save();
   }
   /** the empty value is the agent's own default: the field goes, and the entry with its last field */
   setPick(agentId: string, field: keyof AgentPicks, value: string) {

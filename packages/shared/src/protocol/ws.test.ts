@@ -79,6 +79,8 @@ describe("parseClientMsg", () => {
       { t: "set-default-agent", agent: "codex" },
       { t: "set-agent-pick", agent: "codex", field: "model", value: "big" },
       { t: "set-agent-pick", agent: "codex", field: "effort", value: "" },
+      { t: "set-repo-pick", repoId: "r", field: "mode", value: "ask" },
+      { t: "set-repo-pick", repoId: "r", field: "profile", value: "" },
       { t: "install-agent", agent: "codex" },
       { t: "agent-auth", worktreeId: "a", methodId: "api-key", apiKey: "sk-x" },
       { t: "agent-retry", worktreeId: "a" },

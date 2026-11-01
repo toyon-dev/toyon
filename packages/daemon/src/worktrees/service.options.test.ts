@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { WorktreeInfo } from "@toyon/shared";
 import { fakeAgents } from "../../test/helpers/fakes.ts";
 import { world } from "../../test/helpers/world.ts";
+import { UserError } from "../core/errors.ts";
 import { stampAgent } from "../runtime/registry.ts";
 
 // An agent's list is cached as it is learned, for the pickers, and holds no record to it: a record
@@ -97,6 +98,29 @@ describe("the picks for new worktrees", () => {
     expect([named.model, named.effort]).toEqual(["opus", "high"]);
     const other = await w.worktrees.create(repo.id, "task", { title: "Other", agent: "codex" });
     expect([other.agent, other.model, other.effort]).toEqual(["codex", "gpt", undefined]);
+  });
+
+  test("a repo's picks fill the mode and profile a create leaves blank; a profile the file lost is left out", async () => {
+    const repo = await w.repos.register(w.repo);
+    repo.needsSetup = false;
+    repo.config = {
+      run: { web: "true", api: "true" },
+      profiles: { full: { run: ["api", "web"] }, fe: { run: ["web"] } },
+    };
+    w.state.save();
+    expect(() => w.state.setRepoPick(repo.id, "mode", "loud")).toThrow(UserError);
+    expect(() => w.state.setRepoPick(repo.id, "profile", "nope")).toThrow(UserError);
+    w.state.setRepoPick(repo.id, "mode", "ask");
+    w.state.setRepoPick(repo.id, "profile", "fe");
+    const picked = await w.worktrees.create(repo.id, "task", { title: "Picked" });
+    expect([picked.mode, picked.profile]).toEqual(["ask", "fe"]);
+    const named = await w.worktrees.create(repo.id, "task", { title: "Named", mode: "plan", profile: "full" });
+    expect([named.mode, named.profile]).toEqual(["plan", "full"]);
+    delete repo.config.profiles?.fe;
+    const lost = await w.worktrees.create(repo.id, "task", { title: "Lost" });
+    expect([lost.mode, lost.profile]).toEqual(["ask", undefined]);
+    w.state.setRepoPick(repo.id, "mode", "");
+    expect(w.state.requireRepo(repo.id).picks).toEqual({ profile: "fe" });
   });
 
   test("a pick is relisted against the agent's list as last learned: a renamed model is followed, a dropped one is left out", () => {

@@ -504,7 +504,13 @@ export class WorktreeService {
     const agent = this.d.agents.require(opts.agent ?? this.d.state.defaultAgent ?? DEFAULT_AGENT_ID).id;
     // what the create names wins over what the composer picked for new worktrees of the agent
     const { model, effort } = this.d.state.fillPicks(agent, { model: opts.model, effort: opts.effort });
-    const profile = this.checkProfile(repo, opts.profile);
+    // the repo's picks the same way; a picked profile the settings file has since lost is left out
+    const mode = opts.mode ?? repo.picks?.mode;
+    const picked = repo.picks?.profile;
+    const profile = this.checkProfile(
+      repo,
+      opts.profile ?? (picked && repo.config.profiles?.[picked] ? picked : undefined),
+    );
     // a message that is attachments alone is named from what they carry
     const task = taskText(prompt, attachments);
     // the title is the prompt's first words until the agent names it. The branch is born on the
@@ -525,7 +531,7 @@ export class WorktreeService {
       createdBy: opts.createdBy,
       // the spare's agent has no process yet; it reads the stamps on its first prompt
       agent,
-      mode: opts.mode,
+      mode,
       model,
       effort,
       from: opts.from,
@@ -616,7 +622,7 @@ export class WorktreeService {
       ...(opts.from ? { from: opts.from } : {}),
       ...(opts.createdBy ? { createdBy: opts.createdBy } : {}),
       ...(profile !== undefined ? { profile } : {}),
-      ...(opts.mode ? { mode: opts.mode } : {}),
+      ...(mode ? { mode } : {}),
       ...(model ? { model } : {}),
       ...(effort ? { effort } : {}),
     };

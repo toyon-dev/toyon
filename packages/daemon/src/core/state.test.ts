@@ -146,10 +146,23 @@ describe("state", () => {
     expect("brief" in loaded).toBe(false);
   });
 
-  test("an awaits entry stored with the branch and title it copied reads back by id alone", () => {
-    const awaits = [{ id: "b", branch: "toyon/wt-b", title: "B", pieces: ["Mine"] }];
-    writeFileSync(paths.stateFile, JSON.stringify({ repos: [], worktrees: [{ ...wt("a"), awaits }], sessions: {} }));
-    expect(loadState(paths).worktrees[0]!.awaits).toEqual([{ id: "b", pieces: ["Mine"] }]);
+  test("a wait stored with the branch and title it copied reads back by id alone: awaits, a queued after, from.after", () => {
+    const named = { id: "b", branch: "toyon/wt-b", title: "B" };
+    const queued = { proposalId: "l1", pieceId: "p1", title: "Rail", plan: "Fix.", attachments: [], queuedAt: 1 };
+    const a = {
+      ...wt("a"),
+      awaits: [{ ...named, pieces: ["Mine"] }],
+      queued: [
+        { ...queued, after: named },
+        { ...queued, pieceId: "p2", after: { piece: "p1" } },
+      ],
+      from: { kind: "worktree", ref: "toyon/o", origin: { id: "o", repoId: "r" }, after: named },
+    };
+    writeFileSync(paths.stateFile, JSON.stringify({ repos: [], worktrees: [a], sessions: {} }));
+    const loaded = loadState(paths).worktrees[0]!;
+    expect(loaded.awaits).toEqual([{ id: "b", pieces: ["Mine"] }]);
+    expect(loaded.queued!.map((q) => q.after)).toEqual([{ id: "b" }, { piece: "p1" }]);
+    expect(loaded.from).toMatchObject({ after: { id: "b" } });
   });
 
   test("corrupt file is backed up, not silently discarded", () => {

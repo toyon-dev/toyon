@@ -294,6 +294,7 @@ const handoff = new HandoffService({
   prompted: (id) => worktrees.markPrompted(id),
   counts: (id) => worktrees.tree.counts(id),
   reader: makePiecesReader(runtime, agents, state),
+  archivedTitle: (id) => worktrees.archivedTitle(id),
 });
 tools.add(handoff);
 // which worktrees of the project exist and what each was about, for a question asked by topic

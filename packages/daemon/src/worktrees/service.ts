@@ -1363,6 +1363,11 @@ export class WorktreeService {
     return !!this.archive.get(archiveId);
   }
 
+  /** the title an archived worktree ended with, for naming one that is gone from the rail */
+  archivedTitle(archiveId: string): string | undefined {
+    return this.archive.get(archiveId)?.worktree.title;
+  }
+
   /** a project's archived worktrees, newest first */
   archived(repoId: string): ArchivedWorktree[] {
     const repo = this.d.state.repo(repoId);

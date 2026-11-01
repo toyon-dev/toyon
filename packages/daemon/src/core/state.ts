@@ -171,13 +171,17 @@ export function loadState(paths: Paths): PersistedState {
         delete old.brief;
       }
     }
-    // an `awaits` entry copied the worktree's branch and title until 0.20, and the copy went stale
-    // when the branch moved to its title: the wait is by id alone now, dropped once here
-    for (const a of w.awaits ?? []) {
-      const old = a as { branch?: string; title?: string };
+    // an `awaits` entry, a queued piece's `after` and a sibling's `from.after` copied the worktree's
+    // branch and title until 0.20, and the copies went stale when the branch moved to its title:
+    // each names the worktree by id alone now, the rest dropped once here
+    const idOnly = (named: { id: string }) => {
+      const old = named as { branch?: string; title?: string };
       delete old.branch;
       delete old.title;
-    }
+    };
+    for (const a of w.awaits ?? []) idOnly(a);
+    for (const q of w.queued ?? []) if (!("piece" in q.after)) idOnly(q.after);
+    if (w.from?.kind === "worktree" && w.from.after) idOnly(w.from.after);
   }
   // sessions belong to worktrees; a removed worktree's entry is an orphan
   const ids = new Set(state.worktrees.map((w) => w.id));

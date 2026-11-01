@@ -184,10 +184,8 @@ const cmdRow = (c: AgentCommand): Row => ({ kind: "cmd", c });
 
 /** the piece of the same list a queued piece waits for, by its title: not a worktree yet, so no
  * chip to draw; the list's other queued entries are where the title is kept */
-function queuedTitle(q: QueuedPiece, all: readonly QueuedPiece[]): string {
-  const after = q.after;
-  if ("id" in after) return after.branch;
-  return all.find((o) => o.proposalId === q.proposalId && o.pieceId === after.piece)?.title ?? "another piece";
+function queuedTitle(q: QueuedPiece, piece: string, all: readonly QueuedPiece[]): string {
+  return all.find((o) => o.proposalId === q.proposalId && o.pieceId === piece)?.title ?? "another piece";
 }
 
 /** The new-project view's box: a project that does not exist yet, so no worktree stands behind the
@@ -2144,10 +2142,10 @@ export function Composer({
                   q.after.id === active?.worktree.id ? (
                     "this branch"
                   ) : (
-                    <WorktreeChip id={q.after.id} title={q.after.branch} />
+                    <WorktreeChip id={q.after.id} />
                   )
                 ) : (
-                  queuedTitle(q, queuedPieces)
+                  queuedTitle(q, q.after.piece, queuedPieces)
                 )}{" "}
                 lands
               </span>

@@ -352,8 +352,9 @@ export interface QueuedPiece {
   provisional?: true;
   /** the plan its worktree is born with */
   plan: string;
-  /** the worktree it waits for, or a piece of the same list not yet made into one */
-  after: { id: string; branch: string; title: string } | { piece: string };
+  /** the worktree it waits for, by id alone (its record has the branch and title, which move after
+   * a provisional sibling is made), or a piece of the same list not yet made into one */
+  after: { id: string } | { piece: string };
   /** another open project the worktree is made in */
   project?: { id: string; name: string };
   /** what the origin's chat attached, re-attached when the worktree is made */
@@ -425,14 +426,14 @@ export interface WorktreeInfo {
     /** made from a piece of another worktree's work, in this project or another: `ref` is that
      * worktree's branch and `origin` the row it came from. Kept as history once the origin is
      * gone; while the origin is listed, this row shows on its rail too. `plan` is the origin's
-     * file the piece came from, for the whole picture; `after` the branch this one waited for
-     * before it was made, so a later landing of it can be said here. */
+     * file the piece came from, for the whole picture; `after` the worktree this one waited for
+     * before it was made, by id, so a later landing of it can be said here. */
     | {
         kind: "worktree";
         ref: string;
         origin: { id: string; repoId: string };
         plan?: string;
-        after?: { id: string; branch: string; title: string };
+        after?: { id: string };
       };
   /** the shell tab that asked for it (client nonce); that tab focuses it, others don't */
   createdBy?: string;

@@ -78,6 +78,8 @@ export interface HandoffDeps {
   /** the pieces a plan names, read off its text on the quick model (tasks.ts); null where the
    * agent has no quick model, or the plan is one piece of work */
   reader: (wt: WorktreeInfo, markdown: string) => Promise<ReadPiece[] | null>;
+  /** the title of an archived worktree, by its id: how a wait names a worktree that has gone */
+  archivedTitle: (worktreeId: string) => string | undefined;
 }
 
 type Proposed = Extract<AgentEvent, { type: "handoff-proposed" }>;
@@ -1014,7 +1016,9 @@ export class HandoffService implements ToolProvider {
       became.set(piece.id, { fate, queued: true });
       // what the row says it waits for: a branch, or a piece of the list still to be made
       const after =
-        "piece" in waits ? (proposed.pieces.find((p) => p.id === waits.piece)?.title ?? waits.piece) : waits.branch;
+        "piece" in waits
+          ? (proposed.pieces.find((p) => p.id === waits.piece)?.title ?? waits.piece)
+          : (this.d.state.worktree(waits.id)?.branch ?? waits.id);
       return { pieceId: piece.id, fate, after, ...crossed };
     }
     const made = await this.make(wt, origin, piece, note);
@@ -1099,13 +1103,13 @@ export class HandoffService implements ToolProvider {
     if (!after) return null;
     if (!("piece" in after)) {
       const waits = this.d.state.worktree(after.id);
-      return waits && waits.kind === "worktree" && !waits.landed ? after : null;
+      return waits && waits.kind === "worktree" && !waits.landed ? { id: after.id } : null;
     }
     const on = became.get(after.piece);
     if (!on) return null;
     if (on.queued) return { piece: after.piece };
-    if (on.worktree) return on.worktree;
-    if (on.fate === "here") return { id: wt.id, branch: wt.branch, title: wt.title };
+    if (on.worktree) return { id: on.worktree.id };
+    if (on.fate === "here") return { id: wt.id };
     return null;
   }
 
@@ -1119,7 +1123,7 @@ export class HandoffService implements ToolProvider {
     at: PieceOrigin,
     piece: Pick<Piece, "title" | "provisional" | "plan" | "attachments" | "project">,
     note: string | undefined,
-    after?: Named,
+    after?: { id: string },
   ): Promise<WorktreeInfo> {
     const repoId = piece.project?.id ?? origin.repoId;
     if (piece.project && !this.d.state.repo(repoId)) {
@@ -1211,7 +1215,7 @@ export class HandoffService implements ToolProvider {
             ts: Date.now(),
           });
           madeNow.add(made.id);
-          this.repoint(origin, q, { id: made.id, branch: made.branch, title: made.title });
+          this.repoint(origin, q, { id: made.id });
           if (q.heres?.length) this.recordAwaits(origin.id, [{ id: made.id, pieces: q.heres }]);
         } catch (e) {
           const reason = e instanceof Error ? e.message : String(e);
@@ -1309,7 +1313,7 @@ export class HandoffService implements ToolProvider {
   }
 
   /** the queued pieces of the same list that waited for `made`'s piece now wait for its worktree */
-  private repoint(origin: WorktreeInfo, made: QueuedPiece, worktree: Named): void {
+  private repoint(origin: WorktreeInfo, made: QueuedPiece, worktree: { id: string }): void {
     const live = this.d.state.worktree(origin.id);
     if (!live?.queued) return;
     let changed = false;
@@ -1415,12 +1419,14 @@ export class HandoffService implements ToolProvider {
       changed = true;
       const agent = this.d.runtime.ensureAgent(origin).agent;
       for (const q of gone) {
-        const title = "piece" in q.after ? q.after.piece : q.after.title;
+        // named from the archive, which keeps the title a removed worktree ended with; one gone
+        // from there too goes unnamed
+        const title = "piece" in q.after ? undefined : this.d.archivedTitle(q.after.id);
         agent.note({
           type: "piece-dropped",
           id: q.proposalId,
           pieceId: q.pieceId,
-          reason: `the worktree it waited for, "${title}", is gone`,
+          reason: title ? `the worktree it waited for, "${title}", is gone` : "the worktree it waited for is gone",
           ts: Date.now(),
         });
         this.dropDependents(origin, q);

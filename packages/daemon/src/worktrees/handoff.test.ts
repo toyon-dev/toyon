@@ -611,12 +611,14 @@ describe("go", () => {
     const proposed = lastProposal(a.id);
     await w.handoff.answer(a.id, proposed.id, true);
     expect(w.state.worktree(a.id)!.queued).toHaveLength(2);
+    // named as it was last called, not as it was when queued: the wait holds the id alone
+    await w.worktrees.rename(b.id, "Composer again");
     await w.worktrees.archiveWorktree(b.id);
     await until(() => recorded(a.id, "piece-dropped").length === 1);
     expect(recorded(a.id, "piece-dropped")[0]).toMatchObject({
       id: proposed.id,
       pieceId: "p1",
-      reason: 'the worktree it waited for, "Composer", is gone',
+      reason: 'the worktree it waited for, "Composer again", is gone',
     });
     expect(w.state.worktree(a.id)!.queued).toHaveLength(1);
     await w.worktrees.archiveWorktree(a.id);
@@ -1022,21 +1024,16 @@ describe("chains", () => {
       { pieceId: "p2", fate: "worktree", after: expect.any(String) },
       { pieceId: "p3", fate: "worktree", after: "Second" },
     ]);
-    // the branch is read as the sibling is made; the namer moves it to its title a moment later
-    expect(w.state.worktree(a.id)!.queued!.map((q) => q.after)).toEqual([
-      expect.objectContaining({ id: first.id, title: "First" }),
-      { piece: "p2" },
-    ]);
+    // by id alone: the namer moves a provisional sibling's branch to its title a moment later
+    expect(w.state.worktree(a.id)!.queued!.map((q) => q.after)).toEqual([{ id: first.id }, { piece: "p2" }]);
     // the first lands: the second is made, born knowing what it waited for, and the third now
     // waits for the second's worktree. A made worktree's branch settles a moment after the make.
     await until(() => first.branch === "toyon/first");
     await land(first.id, "one.txt");
     await until(() => recorded(a.id, "piece-made").length === 1);
     const second = madeTitled("Second")!;
-    expect(second.from).toMatchObject({ origin: { id: a.id }, after: { id: first.id, title: "First" } });
-    expect(w.state.worktree(a.id)!.queued!.map((q) => [q.pieceId, q.after])).toEqual([
-      ["p3", expect.objectContaining({ id: second.id, title: "Second" })],
-    ]);
+    expect(second.from).toMatchObject({ origin: { id: a.id }, after: { id: first.id } });
+    expect(w.state.worktree(a.id)!.queued!.map((q) => [q.pieceId, q.after])).toEqual([["p3", { id: second.id }]]);
     // the first lands again with a follow-up: the second hears so, and only the second
     expect(recorded(second.id, "piece-landed")).toHaveLength(0);
     await land(first.id, "two.txt");

@@ -997,9 +997,12 @@ export class WorktreeService {
 
   /** An agent's list for a category as a session or a check just read it (the hub's
    * `optionsLearned`): cached per agent, and, for the model, every record of that agent asking for
-   * an id the list no longer carries moved to the id it carries for it now or cleared to the
-   * agent's default, the same rule the writes above hold to. Effort is left to the session: its
-   * choices follow the model, and the list learned last is one model's. */
+   * an id the list no longer carries moved to the id it carries for it now. One the list has no
+   * id for is kept as asked: the list is one process's answer, and two builds of the same agent
+   * spell their ids differently, so a record cleared against one list would lose the choice for
+   * good while the other build still honours it. An id the running agent has not got is harmless
+   * meanwhile (the session says so and lets the default answer). Effort is left to the session:
+   * its choices follow the model, and the list learned last is one model's. */
   learnOptions(agentId: string, category: OptionCategory, choices: ModelChoice[], runs?: string) {
     if (!this.d.state.setCachedOptions(agentId, category, choices, runs)) return;
     this.d.hub.emit("agentsChanged");
@@ -1009,10 +1012,9 @@ export class WorktreeService {
       const asked = wt.model;
       if (wt.agent !== agentId || !asked) continue;
       const now = relistChoice(asked, choices);
-      if (now === asked) continue;
-      if (now) wt.model = now;
-      else delete wt.model;
-      log.info(wt.id, `${agentId} no longer lists model ${asked}; ${now ? `now ${now}` : "back to its default"}`);
+      if (!now || now === asked) continue;
+      wt.model = now;
+      log.info(wt.id, `${agentId} lists model ${asked} as ${now} now`);
       moved = true;
     }
     if (!moved) return;

@@ -4,9 +4,10 @@ import { world } from "../../test/helpers/world.ts";
 import { UserError } from "../core/errors.ts";
 
 // The adapter renames its ids between versions. A record's model is held to the agent's list at
-// every write and whenever the list is learned again: an earlier spelling follows its family word
-// to the id the agent lists now, and one the agent would refuse never sits on a record, where it
-// would have the default answering under a chip that claims otherwise.
+// every write, and whenever the list is learned again an earlier spelling follows its family word
+// to the id the agent lists now. A learned list never clears a record: two builds of the same
+// agent spell their ids differently, and a record cleared against one build's list would lose the
+// choice the other still honours.
 describe("a record's model is held to the agent's list", () => {
   let w: ReturnType<typeof world>;
   beforeEach(() => {
@@ -39,7 +40,7 @@ describe("a record's model is held to the agent's list", () => {
     { id: "fable", name: "Fable 5.1" },
   ];
 
-  test("a relisted model follows the agent's new id, an unlisted one is cleared, other agents' records keep theirs", () => {
+  test("a relisted model follows the agent's new id, an unlisted one is kept, other agents' records keep theirs", () => {
     const heard: string[] = [];
     w.hub.on("agentsChanged", () => heard.push("agents"));
     w.hub.on("worktreesChanged", () => heard.push("worktrees"));
@@ -58,7 +59,7 @@ describe("a record's model is held to the agent's list", () => {
     expect(heard).toEqual(["agents", "agents", "worktrees"]);
     expect(w.state.worktrees.map((wt) => [wt.id, wt.model])).toEqual([
       ["a", "fable"],
-      ["b", undefined],
+      ["b", "haiku"],
       ["c", "opus"],
       ["d", "opus[1m]"],
       ["e", undefined],
@@ -66,6 +67,16 @@ describe("a record's model is held to the agent's list", () => {
     // the same list again moves nothing and says nothing
     w.hub.emit("optionsLearned", "claude", "model", after);
     expect(heard).toEqual(["agents", "agents", "worktrees"]);
+  });
+
+  test("an older build's list, learned after a newer one's, clears nothing", () => {
+    w.state.addWorktree(record("a", "claude", "fable"));
+    w.state.addWorktree(record("b", "claude", "claude-fable-5-1[1m]"));
+    w.hub.emit("optionsLearned", "claude", "model", after, "opus");
+    expect(w.state.worktrees.map((wt) => wt.model)).toEqual(["fable", "fable"]);
+    // a check on a build that still spells the id the old way: nobody's choice goes
+    w.hub.emit("optionsLearned", "claude", "model", before, "opus[1m]");
+    expect(w.state.worktrees.map((wt) => wt.model)).toEqual(["fable", "fable"]);
   });
 
   test("the effort list is cached but moves no record: its choices follow the model", () => {

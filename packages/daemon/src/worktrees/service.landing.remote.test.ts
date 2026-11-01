@@ -253,12 +253,12 @@ describe("landing", () => {
     sh(other, "git", "commit", "-q", "--allow-empty", "-m", "elsewhere");
     squashedOnOrigin(other, wt.path, wt.branch);
     const before = (await git(w.repo, "rev-parse", "main")).out;
-    const sentAt = w.state.worktree(wt.id)?.promptedAt;
+    w.state.worktree(wt.id)!.promptedAt = 1;
     const { result } = await w.worktrees.land(wt.id);
     expect(result.ok).toBe(true);
     expect(result.message).toContain("origin's main has this work already");
-    // a landing leaves the row where it was on the rail: only a send moves it
-    expect(w.state.worktree(wt.id)?.promptedAt).toBe(sentAt);
+    // a landing moves the row to the top of the rail, where it reads as the next thing to archive
+    expect(w.state.worktree(wt.id)?.promptedAt).toBeGreaterThan(1);
     // main here followed origin, the branch restarted from it, the landing is on the record, and
     // nothing went up: no branch on origin, so no PR could have been opened on it
     const main = (await git(w.repo, "rev-parse", "main")).out;
@@ -288,10 +288,13 @@ describe("landing", () => {
     // squash on origin adds, started here too and never committed
     writeFileSync(join(w.repo, "feature.txt"), "started here too\n");
     w.worktrees.setPr(wt.id, { ...pr7, state: "merged", at: 2 });
+    w.state.worktree(wt.id)!.promptedAt = 1;
     const r = await w.worktrees.prMerged(wt.id);
     // the merge on GitHub is the landing: the record has it and the branch restarted from main
     // here, which stayed where it was and says why; the branch on origin is untouched
     expect(r.ok).toBe(true);
+    // nobody pressed anything, so the row stays where it was on the rail
+    expect(w.state.worktree(wt.id)?.promptedAt).toBe(1);
     expect(r.message).toMatch(/^PR #7 merged; main here was left where it is: .*would overwrite \(feature\.txt\)/);
     expect(w.state.worktree(wt.id)).toMatchObject({ landed: true, pr: { number: 7, state: "merged" } });
     // what landed is the PR, by its title: GitHub landed it by its own method and under that name

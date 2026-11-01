@@ -2072,7 +2072,13 @@ export class WorktreeService {
       if (moved) return { result: moved };
       return this.landOp(wt, repo, message);
     });
-    if (out.result.ok && out.landed) this.noteLanded(wt, out.result.message, out.mark, out.url);
+    if (out.result.ok && out.landed) {
+      this.noteLanded(wt, out.result.message, out.mark, out.url);
+      // the press put the row's work on main, so the row goes to the top of the rail like a
+      // send's, where it reads as the next thing to archive. The poll's landing of a PR merged on
+      // GitHub stays put: nobody pressed anything, and a row should not move on its own.
+      this.markPrompted(wt.id);
+    }
     return { result: this.fixShip(wt, out.result, baseOf(repo)) };
   }
 
@@ -2267,8 +2273,7 @@ export class WorktreeService {
         if (!pushed.ok) return { result: pushed };
         await this.headMoved(wt.id);
         this.setLanding(wt.id, undefined);
-        // the press sent work out and landed nothing, so its row moves up the rail like a send's;
-        // only a landing leaves the row where it was
+        // the press sent work out, so its row moves up the rail like a send's
         this.markPrompted(wt.id);
         const did = committed ? "committed and pushed" : "pushed";
         // GitHub drops a PR from the merge queue when its head moves: the row says so now rather
@@ -2323,8 +2328,7 @@ export class WorktreeService {
       if (result.ok) {
         this.setLanding(wt.id, undefined);
         if (result.pr) this.setPr(wt.id, { ...result.pr, at: Date.now() });
-        // creating the PR sent the work out for review and landed nothing: the row is still
-        // open, so it moves up the rail like a send's
+        // creating the PR sent the work out for review, so the row moves up the rail like a send's
         this.markPrompted(wt.id);
       }
       return { result };

@@ -467,9 +467,12 @@ describe("landing", () => {
     sh(wt.path, "git", "commit", "-qam", "theirs");
     writeFileSync(join(w.repo, "README.md"), "ours\n");
     sh(w.repo, "git", "commit", "-qam", "ours");
+    w.state.worktree(wt.id)!.promptedAt = 1;
     const { result } = await w.worktrees.land(wt.id);
     expect(result.ok).toBe(false);
     expect(result.conflict).toBe("rebase");
+    // nothing landed, so the row stays where it was on the rail
+    expect(w.state.worktree(wt.id)?.promptedAt).toBe(1);
     // resolving them is the agent's, so it is sent the turn and the composer is left alone
     expect(result.asked).toBe(true);
     expect(sent(wt.id)).toEqual([
@@ -488,9 +491,12 @@ describe("landing", () => {
     const wt = await w.worktrees.create(repoId, "feature");
     writeFileSync(join(wt.path, "feature.txt"), "x\n");
     w.worktrees.setLanding(wt.id, { at: 1, check: "pass", ready: true, subject: "old words", fingerprint: "f" });
+    w.state.worktree(wt.id)!.promptedAt = 1;
     const { result } = await w.worktrees.land(wt.id, "add feature\n\nOne file.");
     expect(result.ok).toBe(true);
     expect(result.message).toBe("committed and merged into main");
+    // the landed row goes to the top of the rail, where it reads as the next thing to archive
+    expect(w.state.worktree(wt.id)?.promptedAt).toBeGreaterThan(1);
     expect(existsSync(join(w.repo, "feature.txt"))).toBe(true);
     // main had not moved, so the merge fast-forwards onto the commit itself
     expect((await git(w.repo, "log", "-1", "--format=%s", "main^2")).out).toBe("add feature");

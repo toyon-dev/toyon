@@ -31,7 +31,7 @@ const turned = (at: number): WorktreeInfo["lastTurn"] => ({
 });
 
 describe("railOrder", () => {
-  test("main leads, then the most recently sent to; landing does not move a row", () => {
+  test("main leads, then the most recently sent to; a landed row sorts on its stamp like any other", () => {
     const rows = [
       row("old", { promptedAt: 1 }),
       row("done", { promptedAt: 9, landed: true }),

@@ -89,6 +89,10 @@ const opts: HttpOpts = {
       delivered: path === "/shown.md",
     };
   },
+  clone: async (url, parent) => {
+    if (url === "nope") throw new UserError("nope is not a git URL");
+    return { delivered: parent === "/shown" };
+  },
   restart: async (now) => {
     restartsAsked++;
     restartNow = now;
@@ -936,6 +940,27 @@ describe("/open", () => {
   });
 });
 
+describe("/clone", () => {
+  const post = (body: unknown, auth = "Bearer secret") =>
+    req("/clone", { method: "POST", body: JSON.stringify(body), headers: { authorization: auth } });
+  test("needs the bearer token, a url and a parent", async () => {
+    expect((await fetch(post({ url: "https://x/y", parent: "/p" }, "Bearer nope"), srv()))?.status).toBe(401);
+    expect((await fetch(post({ url: "https://x/y" }), srv()))?.status).toBe(400);
+    expect((await fetch(post({ parent: "/p" }), srv()))?.status).toBe(400);
+  });
+  test("a refusal is 400 in the daemon's words; the reply says whether a shell has it", async () => {
+    const bad = await fetch(post({ url: "nope", parent: "/p" }), srv());
+    expect(bad?.status).toBe(400);
+    expect(await bad?.text()).toBe("nope is not a git URL");
+    expect(await (await fetch(post({ url: "https://x/y", parent: "/p" }), srv()))?.json()).toEqual({
+      delivered: false,
+    });
+    expect(await (await fetch(post({ url: "https://x/y", parent: "/shown" }), srv()))?.json()).toEqual({
+      delivered: true,
+    });
+  });
+});
+
 describe("/register", () => {
   const post = (body: unknown, auth = "Bearer secret") =>
     req("/register", { method: "POST", body: JSON.stringify(body), headers: { authorization: auth } });
@@ -1197,6 +1222,7 @@ describe("static shell", () => {
     worktreeFile: async () => null,
     looseFile: () => null,
     open: opts.open,
+    clone: opts.clone,
     branded: () => false,
     noteShellOrigin: () => {},
     remote: () => null,

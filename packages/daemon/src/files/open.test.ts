@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdirSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { WorktreeInfo } from "@toyon/shared";
 import { sh, tmpRepo } from "../../test/helpers/tmp-repo.ts";
@@ -7,7 +7,7 @@ import { UserError } from "../core/errors.ts";
 import { Hub } from "../core/hub.ts";
 import { StateStore } from "../core/state.ts";
 import { GIT } from "../git/exec.ts";
-import { type Opened, type OpenedFile, OpenService, PENDING_MS } from "./open.ts";
+import { type Opened, type OpenedOutside, OpenService, PENDING_MS } from "./open.ts";
 
 let cleanup = () => {};
 afterEach(() => cleanup());
@@ -30,7 +30,7 @@ function setup() {
   state.addWorktree(main);
   const registered: string[] = [];
   const found: { id: string; path: string }[] = [];
-  const emitted: OpenedFile[] = [];
+  const emitted: OpenedOutside[] = [];
   hub.on("opened", (o) => emitted.push(o));
   const refusals: string[] = [];
   hub.on("openRefused", (m) => refusals.push(m));
@@ -255,6 +255,33 @@ describe("an open waiting for a shell", () => {
     // the socket server answers the emit in the same tick when a shell is connected
     hub.on("opened", () => opens.delivered());
     expect((await opens.open(outside("b.md", "b"))).delivered).toBe(true);
+    expect(opens.takePending()).toEqual([]);
+  });
+});
+
+describe("a git URL from outside", () => {
+  test("is held for a shell as the repository to clone into the folder given, nothing cloned", async () => {
+    const { opens, emitted, root } = setup();
+    expect((await opens.clone("https://github.com/x/y/tree/dev", root)).delivered).toBe(false);
+    const want: OpenedOutside = {
+      kind: "clone",
+      url: "https://github.com/x/y",
+      name: "y",
+      branch: "dev",
+      parent: realpathSync(root),
+    };
+    expect(emitted).toEqual([want]);
+    expect(opens.takePending()).toEqual([want]);
+    expect(existsSync(join(root, "y"))).toBe(false);
+  });
+
+  test("refuses now what the view would refuse on return, in words a shell says too", async () => {
+    const { opens, refusals, root } = setup();
+    await expect(opens.clone("not a url", root)).rejects.toBeInstanceOf(UserError);
+    await expect(opens.clone("https://github.com/x/y", join(root, "missing"))).rejects.toBeInstanceOf(UserError);
+    mkdirSync(join(root, "y"));
+    await expect(opens.clone("https://github.com/x/y", root)).rejects.toThrow(/already exists/);
+    expect(refusals).toHaveLength(3);
     expect(opens.takePending()).toEqual([]);
   });
 });

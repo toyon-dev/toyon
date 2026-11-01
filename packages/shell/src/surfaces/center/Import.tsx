@@ -30,7 +30,14 @@ export function Import({ pending }: { pending: PendingRepo }) {
         {failed ? "could not import" : "importing"} {pending.name}
       </p>
       <p>
-        from <code>{pending.url}</code> into <code>{pending.parent}</code>
+        from <code>{pending.url}</code>
+        {pending.branch && (
+          <>
+            {" "}
+            on <code>{pending.branch}</code>
+          </>
+        )}{" "}
+        into <code>{pending.parent}</code>
       </p>
       {failed ? (
         <p className="import-error">{pending.error}</p>

@@ -205,7 +205,7 @@ export class RepoRegistry {
    * daemon holds rather than a promise the calling socket waits on: every tab sees it, a reload
    * does not lose it, and it can be stopped.
    */
-  startImport(opts: { parent: string; name: string; url: string }): PendingRepo {
+  startImport(opts: { parent: string; name: string; url: string; branch?: string }): PendingRepo {
     // validated before anything is announced, so a bad name or a typo'd parent is still a plain
     // error on the socket that asked rather than a pending row that fails a moment later
     const plan = planProject(opts);
@@ -218,6 +218,7 @@ export class RepoRegistry {
       name: opts.name.trim(),
       parent: plan.parent,
       url: opts.url,
+      ...(opts.branch ? { branch: opts.branch } : {}),
       startedAt: Date.now(),
       lines: [],
     };
@@ -246,6 +247,7 @@ export class RepoRegistry {
     };
     try {
       await cloneInto(plan, pending.name, pending.url, {
+        branch: pending.branch,
         signal,
         onLine: (line) => {
           pending.lines.push(line);

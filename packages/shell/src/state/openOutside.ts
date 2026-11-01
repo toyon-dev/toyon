@@ -1,17 +1,20 @@
 // A file the daemon opened on someone's behalf from outside the shell: the Dock icon, `toyon
 // <file>` in a terminal, or a link in the chat to a file outside this worktree. In a worktree, it
 // opens there as any file does; outside every project, it opens loose under the daemon's grant,
-// on whichever worktree is on screen.
+// on whichever worktree is on screen. A git URL from `toyon <url>` opens the new-project view
+// with the repository filled in, as the picker's clone row does.
 
 import type { ServerMsg } from "@toyon/shared";
+import { collapseHome } from "../surfaces/overlays/projectPicker.ts";
 import type { DaemonSocket } from "../ws.ts";
 import { nextSeq, openFile } from "./actions/file.ts";
 import type { Store } from "./context.tsx";
-import { rowById } from "./store.ts";
+import { newProjectState, rowById } from "./store.ts";
 
-export type OpenedMsg = Extract<ServerMsg, { t: "open-path" | "open-loose" }>;
+export type OpenedMsg = Extract<ServerMsg, { t: "open-path" | "open-loose" | "open-clone" }>;
 
-export const isOpenedMsg = (m: ServerMsg): m is OpenedMsg => m.t === "open-path" || m.t === "open-loose";
+export const isOpenedMsg = (m: ServerMsg): m is OpenedMsg =>
+  m.t === "open-path" || m.t === "open-loose" || m.t === "open-clone";
 
 type Dispatch = (a: Parameters<Store["dispatch"]>[0]) => void;
 
@@ -63,6 +66,15 @@ export function refusedFromOutside(store: Store, msg: Extract<ServerMsg, { t: "o
 
 export function openFromOutside(store: Store, sock: DaemonSocket | null, msg: OpenedMsg) {
   const s = store.getState();
+  if (msg.t === "open-clone") {
+    // the terminal's folder, written the way the picker writes a place, so the view reads the same
+    const { t: _t, parent, ...src } = msg;
+    store.dispatch({
+      a: "new-project",
+      v: newProjectState({ mode: "clone", parent: collapseHome(parent, s.home), ...src }),
+    });
+    return;
+  }
   if (msg.t === "open-path") {
     const deps = { sock, dispatch: (a: Parameters<Store["dispatch"]>[0]) => store.dispatch(a) };
     if (rowById(s, msg.worktreeId)) {

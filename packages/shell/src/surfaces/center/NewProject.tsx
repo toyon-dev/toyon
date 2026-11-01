@@ -107,7 +107,7 @@ export function NewProject({ project }: { project: NewProjectState }) {
       mode,
       parent: parent.trim(),
       name: typed,
-      ...(clone && project.url ? { url: project.url } : {}),
+      ...(clone && project.url ? { url: project.url, ...(project.branch ? { branch: project.branch } : {}) } : {}),
       ...(askIdentity ? { identity: { name: identity.name.trim(), email: identity.email.trim() } } : {}),
     });
   };
@@ -188,7 +188,12 @@ export function NewProject({ project }: { project: NewProjectState }) {
         </div>
       }
     >
-      {clone && <p className="new-project-url">{project.url}</p>}
+      {clone && (
+        <p className="new-project-url">
+          {project.url}
+          {project.branch && <span className="hint"> on {project.branch}</span>}
+        </p>
+      )}
 
       <div className="form-head">
         {inPlace ? (

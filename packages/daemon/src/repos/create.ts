@@ -186,14 +186,16 @@ export async function cloneInto(
   plan: Plan,
   name: string,
   url: string,
-  opts: { onLine?: (line: string) => void; signal?: AbortSignal } = {},
+  opts: { branch?: string; onLine?: (line: string) => void; signal?: AbortSignal } = {},
 ): Promise<void> {
   if (!url) throw new UserError("a clone needs a url");
   if (plan.makeParent) await mkdir(plan.parent);
   // No --depth: a shallow clone cannot be branched from usefully, and land, sync and graft all
   // assume real history. NO_PROMPT is what stops a credential-less URL hanging forever.
   // --progress because git only draws it when stderr is a terminal, and here it never is.
-  const r = await runLive(GIT, ["clone", "--progress", "--", url, name], plan.parent, {
+  // --branch checks out the branch the pasted page was on; the whole history still comes.
+  const branch = opts.branch ? ["--branch", opts.branch] : [];
+  const r = await runLive(GIT, ["clone", "--progress", ...branch, "--", url, name], plan.parent, {
     env: NO_PROMPT,
     onLine: opts.onLine,
     signal: opts.signal,

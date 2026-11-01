@@ -296,6 +296,8 @@ export interface PendingRepo {
   /** where it is being cloned into */
   parent: string;
   url: string;
+  /** the branch being checked out, when the URL was a page on one */
+  branch?: string;
   startedAt: number;
   /** git's own progress output, most recent last and capped: enough to see it moving */
   lines: string[];

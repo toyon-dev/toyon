@@ -293,6 +293,9 @@ export type ServerMsg =
       tooLarge: boolean;
       version: string | null;
     }
+  /** a git URL from outside the shell (`toyon <url>`): the new-project view opens with the
+   * repository filled in, to clone into `parent` on return; `branch` when the URL was a page on one */
+  | { t: "open-clone"; url: string; name: string; branch?: string; parent: string }
   /** the answer to an open-by-path the daemon could not do, read at the link that asked */
   | { t: "open-refused"; seq: number; message: string }
   /** the answer to write-loose, exactly one per write, as file-written answers a write-file */
@@ -873,6 +876,8 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
       name: z.string().min(1).max(100),
       /** clone only: what to clone from. Any git remote, not just GitHub */
       url: z.string().min(1).max(2_000).optional(),
+      /** clone only: the branch to check out, when the URL pasted was a page on one */
+      branch: z.string().min(1).max(250).optional(),
       /** git's name and email, written to the global config before the first commit, for someone
        * whose git has none (hello's `gitIdentity`) */
       identity: z
@@ -883,6 +888,8 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
       if (m.mode === "clone" && !m.url) ctx.addIssue({ code: "custom", path: ["url"], message: "a clone needs a url" });
       if (m.mode !== "clone" && m.url)
         ctx.addIssue({ code: "custom", path: ["url"], message: "only a clone takes a url" });
+      if (m.mode !== "clone" && m.branch)
+        ctx.addIssue({ code: "custom", path: ["branch"], message: "only a clone takes a branch" });
     }),
   /** take back a project toyon made (`RepoInfo.made`) that is still exactly as it was made: forget it
    * and remove what was made, so the new-project page can make it again under another name or place */

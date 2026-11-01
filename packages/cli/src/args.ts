@@ -173,6 +173,9 @@ usage
   toyon [path]            start the daemon if it is not running, register the repo at path
                           (or open the file at path: in its project, or on its own)
                           (default: the current directory) and open the shell
+  toyon <git url>         open the shell with that repository ready to clone into the current
+                          directory; a page on GitHub, GitLab or Codeberg is read back to its
+                          repository, and to its branch
   toyon start             start the daemon if it is not running, and open nothing
   toyon stop              stop the daemon and every dev server and agent it runs
   toyon restart           stop the daemon and start it again from what is installed now; every

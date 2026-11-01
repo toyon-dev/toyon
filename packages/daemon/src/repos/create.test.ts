@@ -151,6 +151,22 @@ describe("createRepoDir: clone", () => {
     cleanRepo();
   });
 
+  test("checks out the branch asked for, with the rest of the history still there", async () => {
+    const { repo, cleanup: cleanRepo } = tmpRepo();
+    const { parent, cleanup } = parentDir();
+    sh(repo, GIT, "branch", "feat/thing");
+    const plan = planProject({ parent, name: "copy" });
+    await cloneInto(plan, "copy", repo, { branch: "feat/thing" });
+    expect(sh(plan.dir, GIT, "branch", "--show-current")).toBe("feat/thing");
+    expect(sh(plan.dir, GIT, "branch", "-r")).toContain("origin/main");
+    // a branch the remote does not have fails in git's words, and leaves nothing behind
+    const missing = planProject({ parent, name: "other" });
+    await expect(cloneInto(missing, "other", repo, { branch: "nope" })).rejects.toThrow(/nope/);
+    expect(existsSync(missing.dir)).toBe(false);
+    cleanup();
+    cleanRepo();
+  });
+
   test("a source that is not there fails fast, in git's own words, and leaves nothing behind", async () => {
     const { parent, cleanup } = parentDir();
     // NO_PROMPT is what makes this a failure rather than a wait: without it a URL needing a

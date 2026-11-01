@@ -102,6 +102,9 @@ export interface HttpOpts {
   /** a path from outside the shell (the Dock icon, `toyon <path>`): a repo registers, a file
    * opens in its worktree or is granted; a `UserError` is the person's to read */
   open: (path: string) => Promise<OpenReply>;
+  /** a git URL from outside the shell (`toyon <url>`): the new-project view opens with it, to
+   * clone into `parent`; a `UserError` is the person's to read */
+  clone: (url: string, parent: string) => Promise<{ delivered: boolean }>;
   /** ask for a restart; answers a refusal, or null having restarted or queued behind a reply.
    * `now` does not queue. */
   restart: (now: boolean) => Promise<string | null>;
@@ -345,6 +348,20 @@ export function createFetch(opts: HttpOpts) {
         if (e instanceof UserError) return new Response(e.message, { status: 400 });
         log.error("http", "open failed", e);
         return new Response("open failed; see daemon log", { status: 500 });
+      }
+    }
+
+    // CLI: a git URL to clone into the terminal's folder, delivered or held the way an open is
+    if (url.pathname === "/clone" && req.method === "POST") {
+      if (!authed(req)) return unauthorized();
+      const body = (await req.json().catch(() => ({}))) as { url?: string; parent?: string };
+      if (!body.url || !body.parent) return new Response("missing url or parent", { status: 400 });
+      try {
+        return Response.json(await opts.clone(body.url, body.parent));
+      } catch (e) {
+        if (e instanceof UserError) return new Response(e.message, { status: 400 });
+        log.error("http", "clone failed", e);
+        return new Response("clone failed; see daemon log", { status: 500 });
       }
     }
 

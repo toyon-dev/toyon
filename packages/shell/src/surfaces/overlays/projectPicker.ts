@@ -29,11 +29,14 @@ export type Row =
   | { kind: "init"; path: string }
   /** somewhere a project could be made: one new folder under a parent that is already there */
   | { kind: "create"; name: string; parent: string | null }
-  | { kind: "clone"; url: string; name: string }
+  /** `branch` when the URL was a page on one: the clone checks it out */
+  | { kind: "clone"; url: string; name: string; branch?: string }
   /** the way in for someone who does not know a name can be typed here: the form, with nothing filled */
   | { kind: "new" }
   /** the way to a project already on disk, said in words beside the way to make one */
   | { kind: "disk" }
+  /** the way to a project on a remote, said in words: the form that asks for its URL */
+  | { kind: "from-url" }
   /** another machine's code or link, so its projects are listed here too */
   | { kind: "add-machine" }
   /** another machine with no project to list yet (asleep, down, or not heard from), as the one
@@ -104,8 +107,15 @@ export function rowsFor(input: {
   /** the other machines this page lists, each with its projects; their rows follow this
    * machine's, grouped under the machine's name */
   others?: OtherMachine[];
+  /** the form that asks for a URL: a clone row for one, nothing for anything else, since a
+   * name or a path typed there was not what it asked for */
+  urlOnly?: boolean;
 }): Row[] {
   const q = input.query.trim();
+  if (input.urlOnly) {
+    const url = gitUrl(q);
+    return url ? [{ kind: "clone", ...url }] : [];
+  }
   const dirRows = (): Row[] => input.entries.map((entry): Row => ({ kind: entry.isFile ? "file" : "dir", entry }));
 
   if (!looksLikePath(q)) {
@@ -134,12 +144,21 @@ export function rowsFor(input: {
       // order by send holds for the rest, so switching between two is ↓ enter whichever is open.
       const open = repos.find((r) => r.kind === "repo" && r.repo.id === input.current);
       const led = open ? [open, ...repos.filter((r) => r !== open)] : repos;
-      // opening a folder that already exists is the likelier ask, so it sits right under the projects
-      return [...led, ...pending, { kind: "disk" }, { kind: "new" }, { kind: "add-machine" }, ...elsewhere];
+      // opening a folder that already exists is the likelier ask, so it sits right under the
+      // projects; a clone is said in words too, since nothing else here says a URL can be pasted
+      return [
+        ...led,
+        ...pending,
+        { kind: "disk" },
+        { kind: "new" },
+        { kind: "from-url" },
+        { kind: "add-machine" },
+        ...elsewhere,
+      ];
     }
     // a URL is not a name and not a path: it is the third thing someone pastes in here
     const url = gitUrl(q);
-    if (url) return listed.length > 0 ? listed : [{ kind: "clone", url: url.url, name: url.name }];
+    if (url) return listed.length > 0 ? listed : [{ kind: "clone", ...url }];
     // Matching is by substring of the name or the path, so a new name routinely matches without
     // being taken: `site` finds toyon-site, and `projects` finds everything in ~/Projects. Only a
     // project already called exactly that is the project rather than an offer to make another.

@@ -33,7 +33,8 @@ import { defaultParent, looksLikePath, type Row, rowsFor } from "./projectPicker
  * Three forms, one component: `pill` drops out of the pill and takes the bar over like an address
  * bar; `center` is the same switcher over the preview, where the eyes are when a key opened it;
  * `disk` is the centred form the folder button opens, starting in the home directory, since the
- * anchored one runs out of screen when walking the filesystem. */
+ * anchored one runs out of screen when walking the filesystem; `url` is the centred form that asks
+ * for a git URL, the same clone row as pasting one into the switcher, for someone who did not know. */
 export function ProjectPicker({
   form,
   anchored,
@@ -57,6 +58,7 @@ export function ProjectPicker({
   const pending = useStore((s) => s.pending);
   // the daemon can put a Finder dialog where the person is: a local macOS daemon
   const canAskFinder = useStore((s) => s.folderDialog);
+  const fromUrl = form === "url";
   // what is typed, for the Finder dialog to open in the folder being walked
   const typed = useRef("");
   // projects in the rail's order, the one last sent to first; the daemon lists them as registered
@@ -98,8 +100,9 @@ export function ProjectPicker({
         home,
         others,
         current,
+        urlOnly: fromUrl,
       }),
-    [ordered, paths, pending, home, others, current],
+    [ordered, paths, pending, home, others, current, fromUrl],
   );
 
   const finish = () => dispatch({ a: "close" });
@@ -112,7 +115,7 @@ export function ProjectPicker({
     openProject(deps, { t: "create-repo", mode: "create", parent, name });
 
   /** the new-project view, for the rows where something would otherwise be guessed */
-  const ask = (mode: "create" | "clone", name: string, url?: string) =>
+  const ask = (mode: "create" | "clone", name: string, src?: { url: string; branch?: string }) =>
     dispatch({
       a: "new-project",
       v: newProjectState({
@@ -120,12 +123,14 @@ export function ProjectPicker({
         name,
         // a bare name says nothing about location: offer wherever the other projects already live
         parent: defaultParent(repos, current, home),
-        ...(url ? { url } : {}),
+        ...src,
       }),
     });
 
   /** the disk form: the folder button and the "open folder" row are one way in, said twice */
   const browse = () => dispatch({ a: "open", overlay: { kind: "projects", form: "disk" } });
+  /** the url form: the same switcher asking for one thing, so pasting is the whole of it */
+  const askUrl = () => dispatch({ a: "open", overlay: { kind: "projects", form: "url" } });
   /** a file picked in Finder opens as a typed one does; the dialog starts in the folder being
    * walked, and the picker goes, since the dialog is where the choosing happens now */
   const chooseFile = () => {
@@ -150,14 +155,14 @@ export function ProjectPicker({
       anchored={form === "pill" && (anchored ?? true)}
       initialQuery={form === "disk" ? "~/" : ""}
       // the chip says what you are switching away from, which is true of either switcher: the disk
-      // form is a path browser and nothing in it is scoped to the open project
+      // and url forms ask for one thing each and nothing in them is scoped to the open project
       lead={
-        form === "disk" ? undefined : (
+        form === "disk" || fromUrl ? undefined : (
           <span className="picker-chip">{repos.find((r) => r.id === current)?.name ?? "no project"}</span>
         )
       }
       trailing={
-        form === "disk" ? (
+        fromUrl ? undefined : form === "disk" ? (
           canAskFinder ? (
             <IconButton icon="file" label="Open a file from Finder" onClick={chooseFile} />
           ) : undefined
@@ -200,14 +205,20 @@ export function ProjectPicker({
                         ? "new-project"
                         : r.kind === "disk"
                           ? "open-folder"
-                          : r.kind === "add-machine"
-                            ? "add-machine"
-                            : r.kind === "machine"
-                              ? `machine:${r.machine.origin}`
-                              : `new:${r.parent ?? ""}/${r.name}`
+                          : r.kind === "from-url"
+                            ? "from-url"
+                            : r.kind === "add-machine"
+                              ? "add-machine"
+                              : r.kind === "machine"
+                                ? `machine:${r.machine.origin}`
+                                : `new:${r.parent ?? ""}/${r.name}`
       }
       rowClass={(r) =>
-        cx("picker-row", (r.kind === "new" || r.kind === "disk" || r.kind === "add-machine") && "new-project-row")
+        cx(
+          "picker-row",
+          (r.kind === "new" || r.kind === "disk" || r.kind === "from-url" || r.kind === "add-machine") &&
+            "new-project-row",
+        )
       }
       onQuery={onQuery}
       // a folder completes to itself with a trailing slash, so tab keeps walking down the tree; a
@@ -226,11 +237,12 @@ export function ProjectPicker({
       onPick={(r) => {
         // `ask` opens the page, which closes this overlay itself, so those branches return rather
         // than falling through to the close below
-        if (r.kind === "clone") return ask("clone", r.name, r.url);
+        if (r.kind === "clone") return ask("clone", r.name, { url: r.url, ...(r.branch ? { branch: r.branch } : {}) });
         if (r.kind === "create" && !r.parent) return ask("create", r.name);
         if (r.kind === "new") return ask("create", "");
-        // the disk form replaces this one, so this returns ahead of the close below too
+        // the disk and url forms replace this one, so these return ahead of the close below too
         if (r.kind === "disk") return browse();
+        if (r.kind === "from-url") return askUrl();
         if (r.kind === "add-machine") return addMachine();
 
         if (r.kind === "machine") machines.activate(r.machine.origin);
@@ -259,7 +271,13 @@ export function ProjectPicker({
                 ? importItems(r.pending, deps)
                 : []
       }
-      placeholder={repos.length > 1 ? "switch project, or type a name or path" : "type a name or a path to start"}
+      placeholder={
+        fromUrl
+          ? "paste a git URL, like https://github.com/you/app"
+          : repos.length > 1
+            ? "switch project, or type a name or path"
+            : "type a name or a path to start"
+      }
       keys={(active) => ({
         complete: "completes the path",
         pick:
@@ -277,15 +295,25 @@ export function ProjectPicker({
                     ? "starts one"
                     : active?.kind === "disk"
                       ? "browses"
-                      : active?.kind === "add-machine"
-                        ? "adds one"
-                        : active?.kind === "machine" || (active?.kind === "repo" && active.machine)
-                          ? "switches machine"
-                          : "opens",
+                      : active?.kind === "from-url"
+                        ? "asks for one"
+                        : active?.kind === "add-machine"
+                          ? "adds one"
+                          : active?.kind === "machine" || (active?.kind === "repo" && active.machine)
+                            ? "switches machine"
+                            : "opens",
         back: "closes",
       })}
-      // an empty query always has the standing rows, so there is always something typed here
-      empty="nothing here; keep typing a path (~/… or /…)"
+      // an empty query always has the standing rows, so there is always something typed here; the
+      // url form has nothing until a URL is, and says what it takes
+      empty={
+        fromUrl
+          ? (q) =>
+              q.trim()
+                ? "not a git URL yet; paste the address of a repository, or of a page on GitHub, GitLab or Codeberg"
+                : "the address of a repository, or of a branch, file or pull request on GitHub, GitLab or Codeberg"
+          : "nothing here; keep typing a path (~/… or /…)"
+      }
       row={(r) =>
         // the name alone: the worktree counts are the rail's, and on a phone they crowded the name out
         r.kind === "repo" ? (
@@ -304,7 +332,7 @@ export function ProjectPicker({
         ) : r.kind === "init" ? (
           <PaletteRow label={`open ${r.path}`} hint="no git yet; starts it here with the files in it" />
         ) : r.kind === "clone" ? (
-          <PaletteRow label={`clone ${r.name}`} hint={hostOf(r.url)} />
+          <PaletteRow label={`clone ${r.name}`} hint={r.branch ? `${hostOf(r.url)} · ${r.branch}` : hostOf(r.url)} />
         ) : r.kind === "new" ? (
           <PaletteRow
             label={
@@ -320,6 +348,15 @@ export function ProjectPicker({
               <>
                 <Icon name="folder" className="icon-inline" />
                 open folder or file
+              </>
+            }
+          />
+        ) : r.kind === "from-url" ? (
+          <PaletteRow
+            label={
+              <>
+                <Icon name="globe" className="icon-inline" />
+                clone from a URL
               </>
             }
           />

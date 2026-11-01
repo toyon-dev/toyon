@@ -13,7 +13,7 @@ import type {
   QueuedMessage,
 } from "@toyon/shared";
 import type { OptionCategory } from "../agent/acp/options.ts";
-import type { OpenedFile } from "../files/open.ts";
+import type { OpenedOutside } from "../files/open.ts";
 import { log } from "./log.ts";
 
 export interface HubEvents {
@@ -101,8 +101,9 @@ export interface HubEvents {
   /** the worktree's tree-state record moved to a new version (worktrees/treeState.ts): whoever is
    * subscribed gets the frame, read off the record */
   treeChanged: (worktreeId: string) => void;
-  /** a file was opened from outside the shell (the Dock icon, `toyon <file>`): a shell should show it */
-  opened: (opened: OpenedFile) => void;
+  /** a file, or a git URL to clone, was opened from outside the shell (the Dock icon, `toyon
+   * <file>`, `toyon <url>`): a shell should show it */
+  opened: (opened: OpenedOutside) => void;
   /** a path from outside was refused, in the words the person should read: the Dock icon has no
    * screen of its own, so a shell says it */
   openRefused: (message: string) => void;

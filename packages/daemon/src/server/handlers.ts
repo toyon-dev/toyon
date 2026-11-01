@@ -23,7 +23,7 @@ import type { StateStore } from "../core/state.ts";
 import type { DesignService } from "../design/service.ts";
 import type { DraftStore } from "../drafts/store.ts";
 import type { ExecService } from "../exec/service.ts";
-import type { OpenedFile, OpenService } from "../files/open.ts";
+import type { OpenedOutside, OpenService } from "../files/open.ts";
 import { type FileService, keptRead } from "../files/service.ts";
 import type { PageErrorService } from "../preview/errors.ts";
 import type { AfterLand } from "../repos/afterLand.ts";
@@ -57,7 +57,7 @@ export interface Services {
   turns: TurnService;
   files: FileService;
   /** files opened from outside the shell: the grants on files in no worktree, and their saves */
-  opens: Pick<OpenService, "open" | "file" | "where" | "viewable" | "write" | "takePending" | "delivered">;
+  opens: Pick<OpenService, "open" | "clone" | "file" | "where" | "viewable" | "write" | "takePending" | "delivered">;
   /** the worktree's own design system, scanned from its source */
   design: DesignService;
   /** the route bar's list: which preview pages each repo is used on */
@@ -691,7 +691,7 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     // rather than a promise this socket waits on: startImport validates and returns at once, and
     // the import pane is the feedback from there. A create is fast, so it stays a plain await.
     if (msg.mode === "clone") {
-      s.repos.startImport({ parent: msg.parent, name: msg.name, url: msg.url ?? "" });
+      s.repos.startImport({ parent: msg.parent, name: msg.name, url: msg.url ?? "", branch: msg.branch });
       return;
     }
     await s.repos.create(msg);
@@ -988,20 +988,23 @@ function looseCwd(s: Services, id: string, stream: string): string | null {
 }
 
 /** dispatch one validated message */
-/** the frame a shell shows an outside open as: in its worktree, or loose under the daemon's grant */
-export const openedFrame = (o: OpenedFile): ServerMsg =>
+/** the frame a shell shows an outside open as: in its worktree, loose under the daemon's grant, or
+ * as the new-project view with a repository to clone */
+export const openedFrame = (o: OpenedOutside): ServerMsg =>
   o.kind === "file"
     ? { t: "open-path", worktreeId: o.worktreeId, path: o.path }
-    : {
-        t: "open-loose",
-        id: o.id,
-        name: o.name,
-        path: o.path,
-        text: o.text,
-        binary: o.binary,
-        tooLarge: o.tooLarge,
-        version: o.version,
-      };
+    : o.kind === "clone"
+      ? { t: "open-clone", url: o.url, name: o.name, parent: o.parent, ...(o.branch ? { branch: o.branch } : {}) }
+      : {
+          t: "open-loose",
+          id: o.id,
+          name: o.name,
+          path: o.path,
+          text: o.text,
+          binary: o.binary,
+          tooLarge: o.tooLarge,
+          version: o.version,
+        };
 
 export async function dispatch(msg: ClientMsg, ctx: HandlerCtx, s: Services): Promise<void> {
   const h = handlers[msg.t] as Handler<typeof msg.t>;

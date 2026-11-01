@@ -11,6 +11,8 @@ describe("parseArgs", () => {
   test("a positional is the path to open", () => {
     expect(parseArgs(["~/projects/app"])).toMatchObject({ kind: "open", path: "~/projects/app" });
     expect(parseArgs(["."])).toMatchObject({ kind: "open", path: "." });
+    // a URL is an open too: the command decides it is one to clone, not the grammar
+    expect(parseArgs(["https://github.com/x/y"])).toMatchObject({ kind: "open", path: "https://github.com/x/y" });
   });
   test("the installed app is found on its own, so the old window flags are unknown options", () => {
     expect(parseArgs(["--app"])).toMatchObject({ kind: "error" });

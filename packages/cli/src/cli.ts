@@ -5,6 +5,7 @@
 
 import { existsSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { gitUrl } from "@toyon/shared";
 import pkg from "../package.json" with { type: "json" };
 import { focusShell, openShell } from "./app.ts";
 import { type Command, HELP, parseArgs } from "./args.ts";
@@ -33,8 +34,11 @@ async function open(cmd: Extract<Command, { kind: "open" }>): Promise<number> {
   // `toyon` registers the cwd only when it is one, and otherwise just opens the shell, whose
   // project picker can create or clone from there
   const explicit = cmd.path !== null;
+  // a git URL is a repository to get, not a path to look up: the shell opens on the new-project
+  // view with it filled in, to clone into this directory on return, where `git clone` would put it
+  const clone = cmd.path !== null ? gitUrl(cmd.path) : null;
   const target = resolve(cmd.path ?? process.cwd());
-  const register = explicit || existsSync(join(target, ".git"));
+  const register = !clone && (explicit || existsSync(join(target, ".git")));
 
   // agent sandboxes on Linux need bubblewrap and socat, which a plain install often lacks, and
   // Ubuntu 24.04 and later stop an installed bubblewrap starting until AppArmor allows it
@@ -47,6 +51,19 @@ async function open(cmd: Extract<Command, { kind: "open" }>): Promise<number> {
 
   const daemon = await ensureDaemon();
   if (!daemon) return 1;
+
+  if (clone && cmd.path !== null) {
+    // the daemon reads the URL itself and refuses here what the view would refuse on return
+    const res = await post("/clone", daemon.token, { url: cmd.path, parent: process.cwd() });
+    if (!res.ok) {
+      console.error(`could not open ${cmd.path}: ${await res.text()}`);
+      return 1;
+    }
+    console.log(`toyon: ${clone.name} is ready to clone into ${process.cwd()}; press return in Toyon to start`);
+    if (((await res.json()) as { delivered: boolean }).delivered) focusShell();
+    else openShell(daemon);
+    return 0;
+  }
 
   // a file is opened in the shell: in its worktree when it sits in one, on its own otherwise. A
   // shell up already shows it and is brought forward; with none, the daemon holds the file for the

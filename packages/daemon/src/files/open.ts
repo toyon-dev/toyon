@@ -7,13 +7,14 @@
 import type { Stats } from "node:fs";
 import { stat } from "node:fs/promises";
 import { basename, resolve } from "node:path";
-import { FILE_MAX_CHARS, viewerOf } from "@toyon/shared";
+import { FILE_MAX_CHARS, gitUrl, viewerOf } from "@toyon/shared";
 import { canonical, within } from "../agent/bounds.ts";
 import { UserError } from "../core/errors.ts";
 import type { Hub } from "../core/hub.ts";
 import type { StateStore } from "../core/state.ts";
 import { isGitRepo } from "../git/exec.ts";
 import { expandTilde } from "../repos/browse.ts";
+import { planProject } from "../repos/create.ts";
 import { shortId } from "../worktrees/naming.ts";
 import { decodeText, versionOf } from "./content.ts";
 import { type FileWrite, writeOver } from "./service.ts";
@@ -37,6 +38,13 @@ export type Opened =
 /** what a shell is told to show; a repo opening is the repos frame, as a register always was */
 export type OpenedFile = Exclude<Opened, { kind: "repo" }>;
 
+/** a repository to get, from `toyon <git url>`: the shell opens on the new-project view with it
+ * filled in, to clone into `parent` on return. `branch` when the URL was a page on one. */
+export type OpenClone = { kind: "clone"; url: string; name: string; branch?: string; parent: string };
+
+/** everything an open from outside tells a shell to show */
+export type OpenedOutside = OpenedFile | OpenClone;
+
 /** the answer to an open from outside: what the path became, and whether a shell connected now
  * is showing it already. The launcher that asked opens a window only when none is, rather than
  * putting a second one beside the one that just took the file. A repo is never `delivered`: the
@@ -51,7 +59,7 @@ export const PENDING_MS = 30_000;
 export class OpenService {
   /** id to canonical path, for as long as this daemon runs */
   private grants = new Map<string, string>();
-  private pending: { opened: OpenedFile; at: number }[] = [];
+  private pending: { opened: OpenedOutside; at: number }[] = [];
 
   constructor(
     private d: {
@@ -88,12 +96,36 @@ export class OpenService {
       return { kind: "repo", repoId: (await this.d.register(path)).id, delivered: false };
     }
     const opened = await this.openFile(raw, path, st);
+    return { ...opened, delivered: this.announce(opened) };
+  }
+
+  /** A git URL from outside (`toyon <git url>`): nothing is cloned here. The shell opens on the
+   * new-project view with the repository filled in and `parent` as the place, so the name and the
+   * place are read back before anything is made, as for a URL pasted into the picker. What the
+   * view would refuse on return is refused now instead, where the terminal reads it: a URL that
+   * is none, a parent that is not there, a folder by that name already in it. */
+  async clone(raw: string, parent: string): Promise<{ delivered: boolean }> {
+    try {
+      const src = gitUrl(raw);
+      if (!src) throw new UserError(`${raw} is not a git URL`);
+      const plan = planProject({ parent, name: src.name });
+      const opened: OpenClone = { kind: "clone", url: src.url, name: src.name, parent: plan.parent };
+      if (src.branch) opened.branch = src.branch;
+      return { delivered: this.announce(opened) };
+    } catch (e) {
+      if (e instanceof UserError) this.d.hub.emit("openRefused", e.message);
+      throw e;
+    }
+  }
+
+  /** tell every shell up, or hold it for the next one; whether a shell has it now */
+  private announce(opened: OpenedOutside): boolean {
     const entry = { opened, at: this.now() };
     this.pending.push(entry);
-    // the socket server answers the emit in the same tick: with a shell up it broadcasts the file
+    // the socket server answers the emit in the same tick: with a shell up it broadcasts the open
     // and calls `delivered`, which empties the queue, so the entry still queued means no shell saw it
     this.d.hub.emit("opened", opened);
-    return { ...opened, delivered: !this.pending.includes(entry) };
+    return !this.pending.includes(entry);
   }
 
   /** A file a shell asked for by path, from a link in its chat: answered to that shell alone, so
@@ -182,7 +214,7 @@ export class OpenService {
   }
 
   /** the opens still waiting for a shell, once: a socket that just connected takes them */
-  takePending(): OpenedFile[] {
+  takePending(): OpenedOutside[] {
     const fresh = this.now() - PENDING_MS;
     const out = this.pending.filter((p) => p.at >= fresh).map((p) => p.opened);
     this.pending = [];

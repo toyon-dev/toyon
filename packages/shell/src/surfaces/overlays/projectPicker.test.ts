@@ -129,9 +129,9 @@ describe("rowsFor: a name", () => {
   });
 
   test("an empty query lists the projects, then the ways to start one and to open one", () => {
-    expect(rows("")).toEqual([{ kind: "disk" }, { kind: "new" }, { kind: "add-machine" }]);
+    expect(rows("")).toEqual([{ kind: "disk" }, { kind: "new" }, { kind: "from-url" }, { kind: "add-machine" }]);
     const repos = [repo("cookbook", "/Users/k/Projects/cookbook"), repo("bike", "/Users/k/Projects/bike")];
-    expect(rows("", { repos }).map((r) => r.kind)).toEqual(["repo", "repo", "disk", "new", "add-machine"]);
+    expect(rows("", { repos }).map((r) => r.kind)).toEqual(["repo", "repo", "disk", "new", "from-url", "add-machine"]);
   });
 
   test("the open project leads the standing list, so down from it is always the next project", () => {
@@ -156,6 +156,20 @@ describe("rowsFor: a name", () => {
       { kind: "clone", url: "https://github.com/x/y.git", name: "y" },
     ]);
     expect(rows("git@github.com:x/y.git")[0]?.kind).toBe("clone");
+    // a page copied from the address bar is the repository it is on, and the branch when it was on one
+    expect(rows("github.com/x/y/tree/dev")).toEqual([
+      { kind: "clone", url: "https://github.com/x/y", name: "y", branch: "dev" },
+    ]);
+  });
+
+  test("the standing rows say a clone from a URL is possible, and its form takes nothing else", () => {
+    expect(rows("").map((r) => r.kind)).toEqual(["disk", "new", "from-url", "add-machine"]);
+    expect(rows("", { urlOnly: true })).toEqual([]);
+    expect(rows("my-app", { urlOnly: true })).toEqual([]);
+    expect(rows("~/Projects", { urlOnly: true })).toEqual([]);
+    expect(rows("https://github.com/x/y", { urlOnly: true })).toEqual([
+      { kind: "clone", url: "https://github.com/x/y", name: "y" },
+    ]);
   });
 });
 
@@ -172,7 +186,7 @@ describe("rowsFor: an import in flight", () => {
   test("a clone in flight is listed with the projects, after the ones you can open", () => {
     const repos = [repo("cookbook", "/Users/k/Projects/cookbook")];
     const out = rows("", { repos, pending: [importing] });
-    expect(out.map((r) => r.kind)).toEqual(["repo", "pending", "disk", "new", "add-machine"]);
+    expect(out.map((r) => r.kind)).toEqual(["repo", "pending", "disk", "new", "from-url", "add-machine"]);
   });
 
   test("it is findable by name and by url, since half of one is what you would type", () => {
@@ -354,7 +368,7 @@ describe("rowsFor: other machines", () => {
   };
   test("their projects follow everything about this machine, each row naming its machine", () => {
     const out = rows("", { repos: [repo("cookbook", "/Users/k/Projects/cookbook")], others: [work] });
-    expect(out.map((r) => r.kind)).toEqual(["repo", "disk", "new", "add-machine", "repo", "repo"]);
+    expect(out.map((r) => r.kind)).toEqual(["repo", "disk", "new", "from-url", "add-machine", "repo", "repo"]);
     const far = out.filter((r) => r.kind === "repo" && r.machine);
     expect(far.map((r) => (r.kind === "repo" ? r.repo.name : ""))).toEqual(["site", "api"]);
     expect(far.map((r) => (r.kind === "repo" ? r.machine?.origin : ""))).toEqual([work.origin, work.origin]);
@@ -377,6 +391,7 @@ describe("rowsFor: other machines", () => {
     expect(out.map((r) => (r.kind === "machine" ? `machine:${r.machine.name}` : r.kind))).toEqual([
       "disk",
       "new",
+      "from-url",
       "add-machine",
       "repo",
       "repo",

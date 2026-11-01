@@ -495,7 +495,9 @@ export type Overlay =
  * the pill in the bar, for a click on it; `center` is the same switcher over the preview, for a key
  * or the palette, since the pill is at the far edge of the screen; `disk` is the roomier centered
  * path browser its folder button opens. */
-export type ProjectsOverlay = { kind: "projects"; form: "pill" | "center" | "disk" };
+/** `url` is the centred form that asks for a git URL to clone, for someone who did not know one
+ * could be pasted into the switcher */
+export type ProjectsOverlay = { kind: "projects"; form: "pill" | "center" | "disk" | "url" };
 
 /** The new-project view: a project that does not exist yet, named and placed in the
  * centre rather than in a form over it. Its second step is the first-run composer of the
@@ -509,6 +511,8 @@ export interface NewProjectState {
   parent: string;
   /** clone only: what it is cloned from */
   url?: string;
+  /** clone only: the branch to check out, when the URL was a page on one */
+  branch?: string;
   phase: "editing" | "creating" | "unmaking";
   /** the project the view is waiting on: the one it made, once listed, or the one it is taking back */
   repoId: string | null;
@@ -517,7 +521,9 @@ export interface NewProjectState {
 }
 
 /** the view with what a picker row or a way back already knew filled in */
-export const newProjectState = (v: Pick<NewProjectState, "mode" | "name" | "parent" | "url">): NewProjectState => ({
+export const newProjectState = (
+  v: Pick<NewProjectState, "mode" | "name" | "parent" | "url" | "branch">,
+): NewProjectState => ({
   ...v,
   phase: "editing",
   repoId: null,
@@ -1630,7 +1636,7 @@ export const isSubPicker = (o: Overlay) =>
  * dispatch (main.tsx) */
 export type StoreServerMsg = Exclude<
   ServerMsg,
-  TermServerMsg | FileServerMsg | { t: "open-path" | "open-loose" | "open-refused" | "loose-written" }
+  TermServerMsg | FileServerMsg | { t: "open-path" | "open-loose" | "open-clone" | "open-refused" | "loose-written" }
 >;
 
 export type Action =

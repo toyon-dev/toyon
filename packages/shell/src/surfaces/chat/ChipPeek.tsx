@@ -1,5 +1,5 @@
 import { type ReactNode, type RefObject, useEffect, useState } from "react";
-import { useStore } from "../../state/context.tsx";
+import { useTowardCentre } from "../../state/selectors.ts";
 import { cx } from "../../ui/cx.ts";
 import { Float } from "../../ui/Float.tsx";
 import type { Placement, Rect } from "../../ui/place.ts";
@@ -35,7 +35,7 @@ export function ChipPeek({
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
-  const chatSide = useStore((s) => s.chatSide);
+  const side = useTowardCentre("chat");
 
   useEffect(() => {
     const chip = chipRef.current;
@@ -75,12 +75,7 @@ export function ChipPeek({
   return (
     // tracked: the transcript scrolls under the pointer, and the box has its size only once what
     // it shows is in
-    <Float
-      className={cx("chip-peek", className)}
-      anchor={anchor}
-      placement={peekPlacement(chatSide === "left" ? "right" : "left")}
-      track
-    >
+    <Float className={cx("chip-peek", className)} anchor={anchor} placement={peekPlacement(side)} track>
       {children}
     </Float>
   );

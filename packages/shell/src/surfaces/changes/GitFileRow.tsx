@@ -1,9 +1,9 @@
 import type { GitFileStatus } from "@toyon/shared";
 import { type DragEvent, memo } from "react";
+import { useTowardCentre } from "../../state/selectors.ts";
 import { type MenuEntry, useContextMenu } from "../../ui/menu.ts";
 import { rowState } from "../../ui/rowState.ts";
 import { splitPath, xyClass, xyLetter } from "../util.ts";
-import { useTipSide } from "./tipSide.ts";
 
 export function LineCounts({ f }: { f: GitFileStatus }) {
   if (f.add === undefined && f.del === undefined) return null;
@@ -55,7 +55,7 @@ export const GitFileRow = memo(function GitFileRow({
   onDragEnd?: () => void;
 }) {
   const cm = useContextMenu("changes");
-  const tipSide = useTipSide();
+  const tipSide = useTowardCentre("changes");
   const { name, dir } = splitPath(f.path);
   return (
     <button

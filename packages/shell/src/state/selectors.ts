@@ -121,6 +121,12 @@ export const useNewProject = () => useStore((s) => s.newProject);
  * another way. Read by either frame; where a component *is* comes from its placement prop. */
 export const useTouch = (): boolean => useStore((s) => s.touch);
 
+/** which way the centre is from where a dock stands, for a tip or a float that steps off the dock
+ * toward it: a rail row's tip, the chat's chip peek, a changes row's path. The rail and the chat
+ * dock share the chat's edge, and the changes dock is the one opposite. */
+export const useTowardCentre = (from: "chat" | "changes"): "left" | "right" =>
+  useStore((s) => ((s.chatSide === "left") === (from === "chat") ? "right" : "left"));
+
 /** the worktree whose composer should send what is in its box: the new-project view's description */
 export const useAutoSend = () => useStore((s) => s.autoSend);
 

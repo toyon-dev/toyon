@@ -21,6 +21,7 @@ import {
   useDiscoveredOpen,
   useOffline,
   useTouch,
+  useTowardCentre,
   useVisibleArchived,
   useVisibleDiscovered,
   useVisibleWorktrees,
@@ -29,7 +30,7 @@ import { asksSetup, backFace, guestOf, isDrafted, trunkOf } from "../../state/st
 import { Button, IconButton } from "../../ui/Button.tsx";
 import { Icon } from "../../ui/Icon.tsx";
 import { useContextMenu, useMenu } from "../../ui/menu.ts";
-import { type TipPlacement, tip } from "../../ui/Tooltip.tsx";
+import { tip } from "../../ui/Tooltip.tsx";
 import { endCarry, startCarry } from "../chat/carried.ts";
 import { hasFiles } from "../chat/useIntake.ts";
 import { hhmm } from "../chips/baseNote.ts";
@@ -85,7 +86,7 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
   // tap for the row's menu, and the strip takes a tap for the pin it would have peeked on
   const touch = useTouch();
   // a row's tip stands off the rail toward the centre, whichever edge the rail is at
-  const tipSide: TipPlacement = useStore((s) => s.chatSide) === "left" ? "right" : "left";
+  const tipSide = useTowardCentre("chat");
   const dispatch = useDispatch();
   const sock = useSock();
   const { host } = useUrls();

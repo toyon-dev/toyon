@@ -15,7 +15,7 @@ import { previewBus } from "../../app/previewBus.ts";
 import { createFile, listFiles, openFile } from "../../state/actions/file.ts";
 import { treeItems, treeSpaceItems } from "../../state/actions/fileTree.ts";
 import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
-import { useLocalField } from "../../state/selectors.ts";
+import { useLocalField, useTowardCentre } from "../../state/selectors.ts";
 import { readingView } from "../../state/store.ts";
 import { cx } from "../../ui/cx.ts";
 import { Field } from "../../ui/Field.tsx";
@@ -29,7 +29,6 @@ import { treeKey } from "../../ui/treeNav.ts";
 import { endCarry, startCarry } from "../chat/carried.ts";
 import { ancestors, xyClass, xyLetter } from "../util.ts";
 import { buildTree, marks, newFilePath, parentOf, type TreeRow, visibleRows } from "./fileTree.ts";
-import { useTipSide } from "./tipSide.ts";
 import "./tree.css";
 
 const NO_PATHS: string[] = [];
@@ -470,7 +469,7 @@ const TreeItem = memo(function TreeItem({
   onDragEnd: () => void;
 }) {
   const cm = useContextMenu("tree");
-  const tipSide = useTipSide();
+  const tipSide = useTowardCentre("changes");
   const submodule = row.kind === "submodule";
   // what opens as nothing says why on hover; an ignored file needs no word, it opens as any file
   const why = submodule

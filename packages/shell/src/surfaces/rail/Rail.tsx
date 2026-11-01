@@ -26,7 +26,7 @@ import {
   useVisibleDiscovered,
   useVisibleWorktrees,
 } from "../../state/selectors.ts";
-import { asksSetup, backFace, guestOf, isDrafted, trunkOf } from "../../state/store.ts";
+import { asksSetup, backFace, bornFrom, guestOf, isDrafted, trunkOf } from "../../state/store.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
 import { Icon } from "../../ui/Icon.tsx";
 import { useContextMenu, useMenu } from "../../ui/menu.ts";
@@ -45,6 +45,7 @@ import {
   archivedFigures,
   archivedLines,
   archivedWindow,
+  bornLine,
   cardFigures,
   cardLines,
   FOUND_LINE,
@@ -436,6 +437,9 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
     // started from
     const origin = owned ? originOf(owned) : null;
     const otherRepo = owned ? otherRepoOf(owned) : null;
+    // a row of this project made from a piece of another row here: the one it came from, while
+    // that row is on the rail or in the archive
+    const born = owned && !otherRepo ? bornFrom(owned, rows, archived) : null;
     const showCheck = owned && !otherRepo && graftMode && canGraft(owned.worktree) && id !== activeId;
     // what the row carries when dragged to the chat: itself, for a row the `@` menu lists, which
     // is a worktree of this project. Main and the spare have no chat of their own to point at, and
@@ -483,13 +487,15 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
               aside: cardFigures(w),
               // main has no turn to recap: its lines say whether it is fresh. Another project's
               // first line says whose it is and why it is here, since the row's mark says only
-              // the project
+              // the project; a row made from a piece of one of this project's says which
               detail: isLead(owned.worktree)
                 ? leadLines(worktrees, archived, trunk, base)
                 : [
                     ...(otherRepo
                       ? [origin ? guestLine(otherRepo.name, origin.worktree.title) : owedLine(otherRepo.name)]
-                      : []),
+                      : born
+                        ? [bornLine(born)]
+                        : []),
                     ...cardLines(owned),
                   ],
               dot: offline ? undefined : op ? "background" : dotClass(w),

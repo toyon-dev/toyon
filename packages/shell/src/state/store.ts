@@ -1365,6 +1365,22 @@ export function guestOf(w: OwnedWorktree, repoId: string, rows: readonly Worktre
   return origin && isOwned(origin) && origin.repoId === repoId ? origin : null;
 }
 
+/** The title of the row a worktree was made from a piece of, while that row is still somewhere to
+ * be found: on the rail, or in the archive the shell holds for its project. Null for a worktree
+ * started from a prompt or opened onto a branch, and for one whose origin is gone from both,
+ * since a name with nothing behind it is a word the row cannot act on. */
+export function bornFrom(
+  w: OwnedWorktree,
+  rows: readonly WorktreeStatus[],
+  archived: readonly ArchivedWorktree[],
+): string | null {
+  const from = w.worktree.from;
+  if (from?.kind !== "worktree") return null;
+  const live = rows.find((r) => r.id === from.origin.id);
+  if (live && isOwned(live)) return live.worktree.title;
+  return archived.find((a) => a.id === from.origin.id)?.title ?? null;
+}
+
 /** another project's row that needs you: its agent has stopped on a question, or a turn finished
  * there and nobody has looked. Listed on every rail while it is, the way a guest is, because an
  * agent blocked in a project that is not on screen is otherwise invisible until the switcher is

@@ -1345,6 +1345,11 @@ export function Composer({
   const queued = spawning ? [] : queue.flatMap((q) => q.attachments ?? []);
   const plan = active?.worktree.plan;
   const planLabel = usePlanTitle(active?.worktree.id, plan);
+  // the row this worktree was made from a piece of; its title as the first message kept it, for
+  // the mark on a row gone from the rail and the archive both, with its branch as the last word
+  const born = active?.worktree.from?.kind === "worktree" ? active.worktree.from : null;
+  const handed = born ? chat.find((i) => i.kind === "handed" && i.via === "plan") : undefined;
+  const bornTitle = handed?.kind === "handed" ? handed.origin.title : born?.ref;
   // what reviewers wrote on the open PR: its line stands with the plan's, since the PR is the work
   // here as much as the plan is, and the chat has none of it until a thread is handed over
   const remarks = prOpen && active?.worktree.prComments?.pr === prOpen.number ? active.worktree.prComments : undefined;
@@ -1391,29 +1396,42 @@ export function Composer({
     >
       {/* the plan this worktree runs on, from the card's arrival until a newer one replaces it:
           the card and the row that reads it back scroll away while the work goes on, and this
-          row does not */}
-      {plan && active && (
+          row does not. A worktree made from a piece of another's work carries that row here too,
+          as the mark a message draws, since the row Toyon sent the agent with scrolls away the
+          same; the one it was born from is one row, so the line can hold it, where the senders
+          of later pieces are as many as their rows in the log. */}
+      {(plan || born) && active && (
         <div
           className="composer-plan"
-          {...cm.contextMenu(() =>
-            pathItems(
-              plan,
-              () => sock?.send({ t: "reveal", worktreeId: active.worktree.id, path: plan }),
-              daemonHost(sock),
-            ),
-          )}
+          {...(plan
+            ? cm.contextMenu(() =>
+                pathItems(
+                  plan,
+                  () => sock?.send({ t: "reveal", worktreeId: active.worktree.id, path: plan }),
+                  daemonHost(sock),
+                ),
+              )
+            : {})}
         >
-          <Icon name="text" className="icon-inline" />
-          <Button
-            variant="inline"
-            className="composer-plan-path"
-            data-tip={plan}
-            onClick={() =>
-              openFile({ sock, dispatch }, { worktreeId: active.worktree.id, path: plan, view: "preview" })
-            }
-          >
-            {planLabel}
-          </Button>
+          <Icon name={plan ? "text" : "handoff"} className="icon-inline" />
+          {plan && (
+            <Button
+              variant="inline"
+              className="composer-plan-path"
+              data-tip={plan}
+              onClick={() =>
+                openFile({ sock, dispatch }, { worktreeId: active.worktree.id, path: plan, view: "preview" })
+              }
+            >
+              {planLabel}
+            </Button>
+          )}
+          {born && (
+            <span className="composer-plan-from">
+              {plan ? " from " : "from "}
+              <WorktreeChip id={born.origin.id} title={bornTitle} />
+            </span>
+          )}
         </div>
       )}
       {prOpen && remarksLine && active && (

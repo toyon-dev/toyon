@@ -58,9 +58,13 @@ export const FOUND_LINE = "Not run by Toyon";
 /** what the lead's tap does, the verb the desk shows on hover */
 export const LEAD_LINE = "new worktree";
 
+/** the first line of a row's card when it was made from a piece of another row of this project:
+ * which one, since the row's own name says only what the piece was */
+export const bornLine = (originTitle: string) => `started from ${originTitle}`;
+
 /** the first line of a guest row's card: whose project the row is, and which row on this rail
  * handed the work off to it, since the mark on the row says only the project */
-export const guestLine = (repoName: string, originTitle: string) => `in ${repoName}, started from ${originTitle}`;
+export const guestLine = (repoName: string, originTitle: string) => `in ${repoName}, ${bornLine(originTitle)}`;
 
 /** the first line of a row owed from another project: whose it is, and that it is listed here
  * only while it needs you, so its leaving is not a surprise */

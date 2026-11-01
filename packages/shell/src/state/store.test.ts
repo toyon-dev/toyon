@@ -25,6 +25,7 @@ import {
   asksSetup,
   BACK_MS,
   backFace,
+  bornFrom,
   changesTabShown,
   changesTabStep,
   type Draft,
@@ -3910,6 +3911,21 @@ describe("a sibling's landing, and a guest from another project", () => {
         ts: 4,
       },
     ]);
+  });
+
+  test("a row born from a piece names its origin while it is on the rail or in the archive", () => {
+    const s = run([both(guest("a", "r1"))]);
+    const born = s.visible.find((w) => w.id === "g")!;
+    expect(bornFrom(born, s.rows, [])).toBe("a");
+    // the origin archived: the archive's title stands in for the row's
+    const archived = { id: "a", title: "Branding page" } as ArchivedWorktree;
+    const without = s.rows.filter((w) => w.id !== "a");
+    expect(bornFrom(born, without, [archived])).toBe("Branding page");
+    // gone from both, there is nothing the name would open
+    expect(bornFrom(born, without, [])).toBeNull();
+    // a row started from a prompt was born from nothing
+    const plain = s.visible.find((w) => w.id === "a")!;
+    expect(bornFrom(plain, s.rows, [archived])).toBeNull();
   });
 
   test("a guest is on this rail while its origin is, and leaves with it", () => {

@@ -5,6 +5,7 @@ import {
   archivedFigures,
   archivedLines,
   archivedWindow,
+  bornLine,
   cardFigures,
   cardLines,
   guestLine,
@@ -65,6 +66,9 @@ describe("guestLine", () => {
     expect(guestLine("claude-agent-acp", "Bump the adapter")).toBe(
       "in claude-agent-acp, started from Bump the adapter",
     );
+  });
+  test("a row of this project born from a piece names the row alone, in the guest's words", () => {
+    expect(bornLine("Branding page")).toBe("started from Branding page");
   });
 });
 

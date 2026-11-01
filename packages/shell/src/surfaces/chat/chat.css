@@ -1142,15 +1142,29 @@
   .composer-plan {
     display: flex;
     align-items: center;
-    gap: 6px;
     min-width: 0;
     margin-bottom: 6px;
     color: var(--text1);
+    /* the glyph holds its box while the title gives up width to the origin's mark; the space
+       after it is the glyph's own, so the words after the title can be set apart by spaces of
+       the face and not by a gap that would widen one side of a word */
+    & > .icon-inline {
+      flex: none;
+      margin-right: 6px;
+    }
     & .composer-plan-path {
       min-width: 0;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+    }
+    /* the row it was born from keeps its words whole however short the line: the plan's title is
+       what gives, since the mark is the way back and the title is restated in the pane. "from" is
+       the separator, a word with the face's space either side (pre keeps the leading one); a dot
+       before it said the same thing twice. */
+    & .composer-plan-from {
+      flex: none;
+      white-space: pre;
     }
   }
   /* the question set aside, at the top of the box where it stood, in the plan row's shape so the

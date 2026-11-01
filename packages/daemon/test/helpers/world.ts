@@ -102,6 +102,7 @@ export function world() {
     runtime,
     attachments,
     create: (repoId, prompt, opts) => worktrees.create(repoId, prompt, opts),
+    prompted: (id) => worktrees.markPrompted(id),
     counts: (id) => worktrees.tree.counts(id),
     // a test plants what the quick model would read off a plan; nothing, by default
     reader: async (wt, markdown) => planReader.fn?.(wt, markdown) ?? null,

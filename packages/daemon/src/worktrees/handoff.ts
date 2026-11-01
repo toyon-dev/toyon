@@ -69,6 +69,9 @@ export interface HandoffDeps {
   attachments: Pick<AttachmentStore, "reattach">;
   /** WorktreeService.create, as a closure: the two services must not import each other */
   create: (repoId: string, prompt: string, opts: CreateOpts) => Promise<WorktreeInfo>;
+  /** WorktreeService.markPrompted, as a closure: a piece sent to an open worktree is a hand
+   * putting work into it, and the rail sorts on that stamp */
+  prompted: (worktreeId: string) => void;
   /** the rail's numbers for a worktree as its tree was last read (WorktreeService.tree.counts);
    * nothing for a tree never read */
   counts: (worktreeId: string) => RowCounts | undefined;
@@ -983,6 +986,8 @@ export class HandoffService implements ToolProvider {
           ...(note ? { note } : {}),
         },
       });
+      // the press put work into the target, so its row moves up the rail like a composer send's
+      this.d.prompted(target.id);
       became.set(piece.id, { fate, worktree: { id: target.id, branch: target.branch, title: target.title } });
       return { pieceId: piece.id, fate, worktreeId: target.id, title: target.title, ...crossed };
     }

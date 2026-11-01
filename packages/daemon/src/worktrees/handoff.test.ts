@@ -580,8 +580,11 @@ describe("go", () => {
       piece({ title: "Notes", plan: "Add the notes.", where: "send", to: "Composer", attachments: ["Image 1"] }),
     );
     const proposed = lastProposal(a.id);
+    // a row sent to from long ago: the press is a hand putting work into it, so it moves up the rail
+    w.state.worktree(b.id)!.promptedAt = 1;
     await w.handoff.answer(a.id, proposed.id, true);
     expect(outcomesOf(a.id)).toEqual([{ pieceId: "p1", fate: "send", worktreeId: b.id, title: "Composer" }]);
+    expect(w.state.worktree(b.id)!.promptedAt).toBeGreaterThan(w.state.worktree(a.id)!.promptedAt!);
     const sent = agentOf(b.id).sent.at(-1)!;
     expect(sent.keepCards).toBe(true);
     expect(sent.text).toContain("Add the notes.");

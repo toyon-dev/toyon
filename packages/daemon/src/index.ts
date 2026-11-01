@@ -289,6 +289,7 @@ const handoff = new HandoffService({
   runtime,
   attachments,
   create: (repoId, prompt, opts) => worktrees.create(repoId, prompt, opts),
+  prompted: (id) => worktrees.markPrompted(id),
   counts: (id) => worktrees.tree.counts(id),
   reader: makePiecesReader(runtime, agents, state),
 });

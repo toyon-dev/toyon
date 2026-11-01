@@ -57,15 +57,6 @@ export function projectItems(r: RepoInfo, activeRepoId: string | null, { sock, d
       onClick: () => dispatch({ a: "open", overlay: { kind: "setup", repoId: r.id } }),
     },
     {
-      id: `archived:${r.id}`,
-      label: "archived worktrees…",
-      // the palette lists the open project's chats, so a row for another project goes there first
-      onClick: () => {
-        dispatch({ a: "activate-repo", id: r.id });
-        dispatch({ a: "open", overlay: { kind: "chats", names: true } });
-      },
-    },
-    {
       id: `forget:${r.id}`,
       label: "forget project…",
       danger: true,

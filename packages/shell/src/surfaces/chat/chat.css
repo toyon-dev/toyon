@@ -15,11 +15,13 @@
     /* containing block for the drop wash */
     position: relative;
   }
-  /* the panel is the box the composer's cap is a share of (cqh on the field below): its height is
-     the row's or the centre's to give, never its content's, so containing it costs nothing. The
-     transcript wrap is its own container for the bands inside it, so neither reaches the other. */
+  /* the panel is the box the composer's cap and the bands' cap are shares of (cqh on the field
+     below, --body-cap on the wrap): its height is the row's, the centre's or the phone's to give,
+     never its content's, so containing it costs nothing. The transcript wrap is its own container
+     for what the log holds, so the field's share never reads the wrap. */
   .chat-dock,
-  .chat-centre {
+  .chat-centre,
+  .chat-screen {
     container-type: size;
   }
   .app[data-chat-side="left"] .chat-dock {
@@ -160,21 +162,30 @@
     }
   }
 
+  /* The bands' cap, as a length: registered so the share is taken on the wrap, whose container is
+     the panel, before the bands inherit it. Written where it is used, cqh would be the wrap's own
+     height, since the wrap is the container of everything in the log. */
+  @property --body-cap {
+    syntax: "<length>";
+    inherits: true;
+    initial-value: 0px;
+  }
   .chat-wrap {
     flex: 1;
     min-height: 0;
     position: relative;
     display: flex;
-    /* the box a body's cap is a share of (cqh below): the transcript's own height, which the
-       window's is not once the chat is a dock beside the preview or a screen under the phone's bar.
-       Its size is the column's to give, so containing it costs nothing. */
+    /* the container of what the log holds (the log's inset, the foot's bleed back out of it). Its
+       size is the column's to give, so containing it costs nothing. */
     container-type: size;
     /* the one height a band in the log may have of its own (.tool-body, and the picture inside
-       one). Most of the transcript, but not all of it: what is left is the row's own line above
-       the band and the composer under it, so the thing the band answers and the place to answer
-       it stay on screen for the whole run. The box's share is taken off only on the phone, where
-       it stands in the log (--box-h, useFold); on the desk the wrap ends above it. */
-    --body-cap: calc(60cqh - 0.6 * var(--box-h, 0px));
+       one): half the panel, the field's own cap. What is left is the row's own line above the band
+       and the box at its floor under it, so the thing the band answers and the place to answer it
+       stay on screen for the whole run. The panel's height and not the wrap's: on the desk the
+       wrap gives way to the box as it grows (a note's field opening on a card, a message running
+       to lines), and a cap read off the wrap moved with every keystroke, every picture in the log
+       resizing with it. The panel is the window's share whatever the box does. */
+    --body-cap: 50cqh;
   }
 
   .chat-log {

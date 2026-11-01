@@ -6,9 +6,9 @@ import { foldedAt } from "./fold.ts";
  * the log's last child, sticky at its foot (chat.css): with `--fold` as a negative bottom offset it rides down
  * with the end of the transcript, pixel for pixel in the compositor, and stops with its top rows
  * on screen. Nothing here runs per scroll frame for the ride. This measures the box as its shape
- * changes and writes four lengths on the wrap: `--box-h`, the box as it stands, for the bands'
- * cap; `--fold`, how far it may ride, its height less its folded rows, and zero on the desk or
- * for a box the fold cannot take; `--keep`, what of it stays on screen at the end of the ride,
+ * changes and writes three lengths on the wrap: `--fold`, how far it may ride, its height less
+ * its folded rows, and zero on the desk or for a box the fold cannot take; `--keep`, what of it
+ * stays on screen at the end of the ride,
  * for the pill that stands on it; and `--cover`, what of the scrollport it covers as the reader
  * stands, the whole box or past the ride its folded rows, for what brings a row into view. On
  * the desk the box stands under the log, so none of this is found and nothing is written.
@@ -48,7 +48,6 @@ export function useFold(logRef: RefObject<HTMLElement | null>, on: boolean, setR
         log.scrollTop = top;
       }
       extent = full - kept;
-      wrap.style.setProperty("--box-h", `${full}px`);
       wrap.style.setProperty("--fold", `${extent}px`);
       wrap.style.setProperty("--keep", `${kept}px`);
       cover();
@@ -84,7 +83,7 @@ export function useFold(logRef: RefObject<HTMLElement | null>, on: boolean, setR
       log.removeEventListener("scroll", place);
       ro.disconnect();
       mo.disconnect();
-      for (const v of ["--box-h", "--fold", "--keep", "--cover"]) wrap.style.removeProperty(v);
+      for (const v of ["--fold", "--keep", "--cover"]) wrap.style.removeProperty(v);
       setReading(false);
     };
   }, [logRef, on, setReading]);

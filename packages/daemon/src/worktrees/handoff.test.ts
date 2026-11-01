@@ -442,7 +442,7 @@ describe("fates", () => {
 describe("go", () => {
   test("here and skip do nothing; worktree makes a sibling seeded with the plan, the note, the origin, its plan and the image", async () => {
     const repoId = await registered();
-    const a = await w.worktrees.create(repoId, "task", { title: "Rail", mode: "ask" });
+    const a = await w.worktrees.create(repoId, "task", { title: "Rail", mode: "ask", model: "big", effort: "high" });
     // the branch follows the given title a moment after the create; the pointer names the branch
     // as it stands when the sibling is made
     await until(() => a.branch === "toyon/rail");
@@ -470,8 +470,12 @@ describe("go", () => {
       { pieceId: "p2", fate: "worktree", worktreeId: made.id, title: "Rail fixes" },
       { pieceId: "p3", fate: "skip" },
     ] satisfies PieceOutcome[]);
-    // born with the piece's text as its own plan, on its record and in its plans folder
+    // born with the piece's text as its own plan, on its record and in its plans folder, and on
+    // the origin's agent, model and effort rather than the agent's own defaults
     expect(made).toMatchObject({
+      agent: a.agent,
+      model: "big",
+      effort: "high",
       mode: "ask",
       plan: ".toyon/plans/1.md",
       planned: true,

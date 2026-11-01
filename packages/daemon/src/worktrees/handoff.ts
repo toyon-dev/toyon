@@ -1110,9 +1110,9 @@ export class HandoffService implements ToolProvider {
   }
 
   /** the worktree for a piece, born with the piece's text as its plan, the origin pointer as its
-   * first message, and what the origin's chat attached; in the origin's write mode (a plan it was
-   * given is approved by the go, so never in plan mode), cold until someone looks at it. In the
-   * origin's project, or in the one the piece named. */
+   * first message, and what the origin's chat attached; on the origin's agent, model and effort,
+   * in its write mode (a plan it was given is approved by the go, so never in plan mode), cold
+   * until someone looks at it. In the origin's project, or in the one the piece named. */
   private async make(
     origin: WorktreeInfo,
     at: PieceOrigin,
@@ -1135,6 +1135,11 @@ export class HandoffService implements ToolProvider {
     const task = piece.provisional ? `${piece.title}\n\n${piece.plan}` : piece.title;
     return this.d.create(repoId, task, {
       ...(piece.provisional ? {} : { title: piece.title }),
+      // the person chose these for the origin, and a sibling of it is the same work: without them
+      // the agent would fall back to its own defaults, a different model than the one planning
+      ...(origin.agent ? { agent: origin.agent } : {}),
+      ...(origin.model ? { model: origin.model } : {}),
+      ...(origin.effort ? { effort: origin.effort } : {}),
       ...(mode ? { mode } : {}),
       ...(attachments.length ? { attachments } : {}),
       from: {

@@ -6,7 +6,6 @@ import { fileItems, viewsOf } from "../../state/actions/file.ts";
 import { addToChat } from "../../state/attach.ts";
 import { useDispatch, useFileSync, useSock, useStore, useStoreInstance, useUrls } from "../../state/context.tsx";
 import type { FileSync } from "../../state/fileSync.ts";
-import { STORAGE } from "../../state/keys.ts";
 import { browserEnv, looseSync, NO_SYNC } from "../../state/looseSync.ts";
 import { useTheme } from "../../state/selectors.ts";
 import {
@@ -21,7 +20,7 @@ import {
 import { Button } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { ErrorBoundary } from "../../ui/ErrorBoundary.tsx";
-import { useOnChange, usePersisted, useSettled } from "../../ui/hooks.ts";
+import { useOnChange, useSettled } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { Pane } from "../../ui/Pane.tsx";
 import { endCarry, startCarry } from "../chat/carried.ts";
@@ -33,6 +32,7 @@ import { HandoffTrack, PiecePage, usePieceTabs } from "./Handoff.tsx";
 import { HtmlPreview } from "./HtmlPreview.tsx";
 import { MarkdownPreview } from "./MarkdownPreview.tsx";
 import { PrCommentsPage } from "./PrCommentsPage.tsx";
+import { useWrap, WrapToggle } from "./WrapToggle.tsx";
 import "./editor.css";
 
 // the grammars come in with the editor, and a file is only shown once they can colour it
@@ -225,9 +225,7 @@ export function EditorPane({
   // a picture at the window's size: the header's button and the picture itself both open it, so
   // the pane holds the switch and the viewer draws the float
   const [fullSize, setFullSize] = useState(false);
-  // whether long lines fold at the pane's edge: a choice about this window's panes, not one file,
-  // so it is kept with the pane's height and not the file
-  const [wrap, setWrap] = usePersisted(STORAGE.editorWrap, false, (raw) => (raw === null ? undefined : raw === "1"));
+  const [wrap, setWrap] = useWrap();
   // the toggle is for text in Monaco: a picture, a rendered preview and a file not shown have no lines to fold
   const wrappable = !!disk && !prPage && !viewer && !disk.binary && !disk.tooLarge && view !== "preview";
   // a line the page reported is only placed once its offset is known
@@ -303,23 +301,7 @@ export function EditorPane({
               <Icon name="zen" className="icon-inline" /> full size
             </Button>
           )}
-          {/* names the state it switches to, as the views and the full toggle do */}
-          {wrappable && (
-            <Button
-              variant="outline"
-              tone="quiet"
-              mono
-              className="deep-link"
-              onClick={() => setWrap(!wrap)}
-              data-tip={
-                wrap
-                  ? "Unwrap lines: one line per row, scroll sideways for the rest"
-                  : "Wrap lines: fold a long line at the pane's edge"
-              }
-            >
-              <Icon name="wrap" className="icon-inline" /> {wrap ? "unwrap" : "wrap"}
-            </Button>
-          )}
+          {wrappable && <WrapToggle wrap={wrap} onWrap={setWrap} />}
         </>
       }
     >

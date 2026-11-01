@@ -26,6 +26,10 @@ const LOCAL_LAYERS: Record<string, { root: string; why: string }> = {
     why: "the spawn row's edge over its children's hover fills",
   },
   ".pane-resize": { root: ".pane", why: "the drag strip over the pane's own head" },
+  ".review-head": {
+    root: ".pane",
+    why: "a file's header held at the top of the review, over the code scrolling under it",
+  },
   ".composer-field > textarea": { root: ".composer-field", why: "the caret over the ghosts' prose" },
   ".composer-verb": { root: ".composer-field", why: "the word in the empty box's line, pressed over the textarea" },
   ".composer-verb-tail": { root: ".composer-field", why: "the clause at the line's end, pressed over the textarea" },

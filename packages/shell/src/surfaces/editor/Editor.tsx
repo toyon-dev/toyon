@@ -20,7 +20,7 @@ import { Float } from "../../ui/Float.tsx";
 import { passPinch, useKeepWheel, useOnChange, useWheelAxis } from "../../ui/hooks.ts";
 import type { Placement, Rect } from "../../ui/place.ts";
 import { blameCommit, blameLine } from "./blameLine.ts";
-import { diffFit, FOLD_MIN, type Hunk, type Pane } from "./diffFit.ts";
+import { CONTEXT_FLOOR, diffFit, FOLD_MIN, type Hunk, type Pane } from "./diffFit.ts";
 import { registerGrammars } from "./grammar.ts";
 import { minimalEdit } from "./minimalEdit.ts";
 import { toMonacoTheme } from "./monacoTheme.ts";
@@ -276,6 +276,8 @@ export default function Editor({
   onCopy,
   onChat,
   onNew,
+  fit = "pane",
+  onContentHeight,
 }: {
   file: FileRef;
   /** the file as last read: the text is taken from it once, the diff's other side follows it */
@@ -303,10 +305,22 @@ export default function Editor({
   onChat?: (path: string, taken: { startLine: number; endLine: number; text: string } | null) => void;
   /** ⌘K: a new worktree, the chord the window would answer if Monaco let the key through */
   onNew?: () => void;
+  /** `pane`: the editor fills the pane and folds what the pane has no room for. `content`: a
+   * review's section, as tall as its text (`onContentHeight`), folded to a few lines around each
+   * hunk, and never scrolled to a hunk: the review's own scroll does the moving. */
+  fit?: "pane" | "content";
+  /** the height the text wants, in a section that sizes its box to it */
+  onContentHeight?: (px: number) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   useWheelAxis(ref);
-  useKeepWheel(ref);
+  // a section has no scroll of its own for a wheel to stop at: what Monaco leaves goes on to the
+  // review's scroll, which keeps a sideways gesture from the window itself
+  useKeepWheel(ref, fit === "pane");
+  const fitRef = useRef(fit);
+  fitRef.current = fit;
+  const heightRef = useRef(onContentHeight);
+  heightRef.current = onContentHeight;
   // setTheme is global: every editor follows, including ones created before the change
   useEffect(() => {
     monaco.editor.defineTheme(THEME, toMonacoTheme(theme));
@@ -449,11 +463,19 @@ export default function Editor({
     if (!el || !m) return;
     const restored = m.place;
     const unchanged = m.original.getValue() === m.modified.getValue();
+    const content = fitRef.current === "content";
+    // a section has no scroll of its own, so no bar and no mark where a bar would be
+    const sectionBar = content
+      ? {
+          scrollbar: { ...SCROLLBAR, vertical: "hidden" as const, verticalScrollbarSize: 0 },
+          hideCursorInOverviewRuler: true,
+        }
+      : {};
     const options = editorOptions(readOnlyRef.current, numbers, wrapRef.current);
     let diffEditor: monaco.editor.IStandaloneDiffEditor | null = null;
     let code: monaco.editor.IStandaloneCodeEditor;
     if (view === "file") {
-      code = monaco.editor.create(el, { ...options, model: m.modified });
+      code = monaco.editor.create(el, { ...options, ...sectionBar, model: m.modified });
     } else {
       diffEditor = monaco.editor.createDiffEditor(el, {
         ...options,
@@ -464,13 +486,16 @@ export default function Editor({
         experimental: { useTrueInlineView: true },
         renderGutterMenu: false,
         renderMarginRevertIcon: false,
-        // the strip has nothing to map on a file with no hunks
-        ...overviewStrip(!unchanged),
+        // the strip has nothing to map on a file with no hunks, nor on a section the review scrolls
+        ...overviewStrip(!unchanged && !content),
+        ...sectionBar,
         // a place carried over from the other view, or a line to reveal, may sit in an unchanged
-        // region that folding would hide; and an unchanged file folds to nothing at all
+        // region that folding would hide; and an unchanged file folds to nothing at all. A section
+        // folds to Monaco's few lines around each hunk, with no pane height to fit.
         hideUnchangedRegions: {
           enabled: !unchanged && !restored && lineRef.current === undefined,
           minimumLineCount: FOLD_MIN,
+          ...(content ? { contextLineCount: CONTEXT_FLOOR } : {}),
         },
       });
       diffEditor.setModel({ original: m.original, modified: m.modified });
@@ -520,7 +545,14 @@ export default function Editor({
       safety = setTimeout(show, 400);
     };
     const d = diffEditor;
+    // a section reports how tall its text is, folds and the deleted lines' zones included, each
+    // time that changes; the review sizes the section's box to it
+    const sized = code.onDidContentSizeChange((e) => {
+      if (e.contentHeightChanged) heightRef.current?.(e.contentHeight);
+    });
+    heightRef.current?.(code.getContentHeight());
     if (restored) settle(() => code.restoreViewState(restored));
+    else if (content) settle(() => heightRef.current?.(code.getContentHeight()));
     else if (d && !unchanged && lineRef.current === undefined) {
       settle(() => {
         // the hunks are known now, so the pane's own height can say what is worth folding. The
@@ -668,6 +700,7 @@ export default function Editor({
         clearTimeout(safety);
         cancelAnimationFrame(painted);
         scrolled.dispose();
+        sized.dispose();
         subMove.dispose();
         subLeave.dispose();
         subCursor.dispose();
@@ -679,7 +712,14 @@ export default function Editor({
         el.removeEventListener("cut", tagCopy, true);
         hoverRef.current?.(null);
         // neither editor owns the models (they were handed in), so this leaves the text alone
-        (diffEditor ?? code).dispose();
+        try {
+          (diffEditor ?? code).dispose();
+        } catch {
+          // An editor gone before its first idle moment (a review's section scrolled straight past)
+          // has its suggest widget built by its own disposal, after the services that build it are
+          // gone, and Monaco throws that up once it has disposed everything else in the editor.
+          // Nothing is left undone, so the throw is dropped rather than taking the page down.
+        }
       },
     };
     instance.current = mine;

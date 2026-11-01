@@ -1,6 +1,6 @@
 import { type FileServerMsg, type GitFileStatus, renderedAs } from "@toyon/shared";
 import { grouped, type MenuEntry, type MenuItem } from "../../ui/menu.ts";
-import { type EditorView, EMPTY_LOCAL, type OpenFile, readingView, type State } from "../store.ts";
+import { type EditorView, EMPTY_LOCAL, type OpenFile, type ReviewAt, readingView, type State } from "../store.ts";
 import { copyText, type Deps } from "./deps.ts";
 import { daemonHost, revealItems } from "./editor.ts";
 
@@ -68,6 +68,12 @@ export function openPrComments({ dispatch }: Pick<Deps, "dispatch">, worktreeId:
       seq: nextSeq(),
     },
   });
+}
+
+/** Show every change of a worktree in one scroll, brought to one file. A review already open on
+ * the worktree only moves; the sections near the screen read their files as they come into view. */
+export function openReview({ dispatch }: Deps, worktreeId: string, at: ReviewAt, focus = false) {
+  dispatch({ a: "open-review", worktreeId, at, focus, seq: nextSeq() });
 }
 
 type Written = Extract<FileServerMsg, { t: "file-written" }>;

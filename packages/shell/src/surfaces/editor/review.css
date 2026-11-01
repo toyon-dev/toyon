@@ -1,0 +1,60 @@
+/* The review: every change of a worktree in one scroll, under the preview where one file's diff sits. */
+@layer tokens, base, surfaces;
+@layer surfaces {
+  /* the scroll is the body's whole box; its offsets are its own, so a section's top is where a
+     jump puts the scroll. Anchoring is off: a section above that settles its height moves the
+     scroll by as much itself, which the browser would otherwise do a second time, and one browser
+     does not do at all. A sideways gesture over a section stops here rather than reaching the
+     window's swipe back. */
+  .review-scroll {
+    position: absolute;
+    inset: 0;
+    overflow-y: auto;
+    overflow-anchor: none;
+    overscroll-behavior: contain;
+    container-type: size;
+    outline: none;
+  }
+  .review-section {
+    position: relative;
+  }
+  /* the file's header, held at the top of the scroll while its file is read: the changes row's
+     own parts, on the pane's ground, ruled from the code above and below it */
+  .review-head {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--surface0);
+    border-top: 1px solid var(--border0);
+    border-bottom: 1px solid var(--border0);
+    padding: 0 16px;
+    cursor: default;
+    user-select: none;
+  }
+  .review-section:first-child .review-head {
+    border-top: 0;
+  }
+  /* a folded file is its header alone, a tier down */
+  .review-head[data-folded] {
+    color: var(--text2);
+  }
+  /* Monaco stacks its own layers inside; isolated here, none of them climbs over the header */
+  .review-body {
+    position: relative;
+    isolation: isolate;
+  }
+  /* a file the review cannot draw says why, where its text would be */
+  .review-line {
+    font: var(--type-ui-sm);
+    /* a whole number of pixels, so every section after it starts on one and its header's text is
+       not drawn across two rows of pixels */
+    line-height: 16px;
+    color: var(--text2);
+    padding: 4px 16px 10px;
+  }
+  /* room past the last file, so its end can rise past the middle of the scroll as every other
+     file's does */
+  .review-end {
+    height: 50cqh;
+  }
+}

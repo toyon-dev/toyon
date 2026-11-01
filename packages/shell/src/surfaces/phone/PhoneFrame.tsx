@@ -3,7 +3,7 @@ import { framedNow } from "../../app/phone.ts";
 import { useDispatch, useMachine, useMachines, useStore, useUrls } from "../../state/context.tsx";
 import { openPreview, previewsGated } from "../../state/previewGrant.ts";
 import { useActive, useArchivedPage, useChatCentred, useFoundPage, useTouch } from "../../state/selectors.ts";
-import { backFace, type Screen } from "../../state/store.ts";
+import { backFace, editorFile, type Screen } from "../../state/store.ts";
 import { IconButton } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { useVisibleHeight, useZoomMark } from "../../ui/hooks.ts";
@@ -70,7 +70,8 @@ export function PhoneFrame() {
   const active = useActive();
   const archivedPage = useArchivedPage();
   const foundPage = useFoundPage();
-  const editor = useStore((s) => s.editor);
+  // the phone opens files on their own; a review is the desk's
+  const editor = useStore(editorFile);
   const left = useStore((s) => s.left);
   const remote = useStore((s) => s.remote);
   const chatCentred = useChatCentred();

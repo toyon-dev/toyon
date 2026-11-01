@@ -527,16 +527,16 @@ export function keepsWheel(e: { ctrlKey: boolean; defaultPrevented: boolean }, s
 /** Cancels, on the element, the wheel events `keepsWheel` says to keep. A listener of its own rather
  * than a React handler: React registers wheel as passive, and a passive listener cannot cancel. In
  * the bubble phase, so the widget inside has already taken what it could. */
-export function useKeepWheel(ref: RefObject<HTMLElement | null>): void {
+export function useKeepWheel(ref: RefObject<HTMLElement | null>, on = true): void {
   useEffect(() => {
     const el = ref.current;
-    if (!el) return;
+    if (!el || !on) return;
     const onWheel = (e: WheelEvent) => {
       if (keepsWheel(e, window.visualViewport?.scale ?? 1)) e.preventDefault();
     };
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
-  }, [ref]);
+  }, [ref, on]);
 }
 
 /** a wheel gesture's axis as it stands: settled once the hand has clearly moved along one */

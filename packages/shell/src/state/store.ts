@@ -685,11 +685,9 @@ const sameZone = (a: DropZone | null, b: DropZone | null) =>
 export const sameFile = (a: FileRef, b: FileRef) =>
   a.worktreeId === b.worktreeId && a.path === b.path && a.ref === b.ref && a.since === b.since;
 
-/** The file the editor pane has open. The pane shows it before the daemon has read it; fileSync
- * reads it and keeps what the pane shows in step with the disk. */
-export interface EditorFile extends Omit<OpenFile, "view"> {
-  /** null until the first read decides: a changed file opens on its diff, an unchanged one as the file */
-  view: EditorView | null;
+/** what the editor knows of one file it shows: the one file open on its own, or one section of a
+ * review. fileSync reads it and keeps it in step with the disk. */
+export interface FileState {
   /** null while the first read is out */
   disk: EditorDisk | null;
   /** the file changed on disk under unsaved edits: what is there now, until reload or keep mine settles it */
@@ -700,10 +698,84 @@ export interface EditorFile extends Omit<OpenFile, "view"> {
   /** who last touched each line, for the version of the file it was asked for; null until the
    * first answer. The editor shows it only while `disk` is still that version. */
   blame: EditorBlame | null;
+  /** a review's section that could not be read, or whose file left the disk: the section says so
+   * where its text would be, and the review stays open */
+  error?: string;
+}
+
+/** The file the editor pane has open on its own. The pane shows it before the daemon has read it. */
+export interface EditorFile extends Omit<OpenFile, "view">, FileState {
+  kind: "file";
+  /** null until the first read decides: a changed file opens on its diff, an unchanged one as the file */
+  view: EditorView | null;
   /** a file from outside every worktree, dropped on the centre: `path` is its name, `disk` holds
    * its text from the start, and none of the working-tree wiring applies. It lives while the pane
    * is open on the worktree it was dropped on; a handle cannot be kept across a reload */
   loose?: { source: LooseSource };
+  /** the review this file was opened out of: closing the file goes back to it, at this file */
+  back?: ReviewPane;
+}
+
+/** where a review stands: a file, read against the branch's base or, for a last turn row, against
+ * the tree the turn started from */
+export interface ReviewAt {
+  path: string;
+  since?: string;
+}
+
+/** a review's section, by the file and what it is read against: a path read two ways is two
+ * sections, two editors, two models */
+export const reviewKey = (a: { path: string; since?: string }) => `${a.since ?? ""}\n${a.path}`;
+
+/** Every change of one worktree in one scroll, in the changes list's order. The list drives it: a
+ * row's press scrolls the review to that file, and the file under the review's top edge is the
+ * row the list marks. */
+export interface ReviewPane {
+  kind: "review";
+  worktreeId: string;
+  /** the file under the scroll's top edge, as the list marks it */
+  at: ReviewAt | null;
+  /** names a jump: the scroll brings `at` to its top once per seq, and never when `at` moves
+   * because the scroll did */
+  seq: number;
+  /** the keyboard follows the jump into the review */
+  focus: boolean;
+  /** what the sections near the screen have read, by `reviewKey` */
+  files: Record<string, FileState>;
+}
+
+/** what the editor pane shows: one file, a review, or nothing */
+export type EditorState = EditorFile | ReviewPane | null;
+
+/** the editor's one file, when it has one open on its own */
+export const editorFile = (s: Pick<State, "editor">): EditorFile | null =>
+  s.editor?.kind === "file" ? s.editor : null;
+
+/** the view a file opens in once read, when nothing asked for one. A changed file opens on its
+ * diff and an unchanged one has none to show, so it opens to be read. A file with nothing on the
+ * other side (new to the branch) is never shown as its diff: that would be every line added, which
+ * the changes row already says, over a phantom removed line that Monaco draws for the empty side. */
+export function viewFor(path: string, disk: EditorDisk, asked: EditorView | null = null): EditorView {
+  const reading = readingView(path);
+  if (disk.before === "") return asked && asked !== "diff" ? asked : reading;
+  return asked ?? (disk.before === disk.after ? reading : "diff");
+}
+
+const NO_FILE: FileState = { disk: null, conflict: null, blame: null };
+
+/** a fileSync answer lands on the file it is about: the one file, or the review's section for it.
+ * A review holds working-tree copies only, so a commit's copy is never one of its sections. */
+function withFile(s: State, file: FileRef, fn: (f: FileState) => FileState): State {
+  const e = s.editor;
+  if (!e) return s;
+  if (e.kind === "file") {
+    // a loose file named like a worktree file is another file, and no read is ever out for it
+    if (e.loose || !sameFile(e, file)) return s;
+    return { ...s, editor: { ...e, ...fn(e) } };
+  }
+  if (file.ref || e.worktreeId !== file.worktreeId) return s;
+  const key = reviewKey(file);
+  return { ...s, editor: { ...e, files: { ...e.files, [key]: fn(e.files[key] ?? NO_FILE) } } };
 }
 
 /** a file's blame, named for the read it followed */
@@ -821,8 +893,8 @@ export interface State {
    * never matches an empty one, so this page can never claim a state it does not hold. */
   stamps: Stamps | null;
   local: Record<string, WorktreeLocal>;
-  /** the file the editor pane has open; null when the pane is closed */
-  editor: EditorFile | null;
+  /** what the editor pane shows: a file on its own or a review of every change; null when the pane is closed */
+  editor: EditorState;
   /** a page the daemon's last answer opened, the PR a land made: the tab opens it once (App.tsx) */
   openUrl: string | null;
   /** bumped to request a preview reload for a worktree (the edit/HMR decision lives in this reducer) */
@@ -1669,9 +1741,14 @@ export type Action =
   | { a: "auto-sent" }
   /** show a clone's progress in the centre (null stops watching) */
   | { a: "watch-import"; id: string | null }
+  /** close the pane, or a file opened out of a review back to the review */
   | { a: "close-editor" }
   /** the editor pane opens this file now; fileSync reads it */
   | { a: "open-file"; v: OpenFile }
+  /** the editor pane shows every change of the worktree in one scroll, brought to `at` */
+  | { a: "open-review"; worktreeId: string; at: ReviewAt; seq: number; focus: boolean }
+  /** the scroll moved: the file under its top edge is now `at` */
+  | { a: "review-at"; worktreeId: string; at: ReviewAt }
   /** the editor pane opens a file from outside every worktree, text in hand; fileSync leaves it alone */
   | { a: "open-loose"; v: OpenLoose }
   /** fileSync: what a read of the open file found, or why it could not read it */
@@ -2251,17 +2328,34 @@ function reduce(s: State, action: Action): State {
       return s.autoSend ? { ...s, autoSend: null } : s;
     case "watch-import":
       return { ...s, activeImportId: action.id };
-    case "close-editor":
+    case "close-editor": {
+      const e = s.editor;
+      // a file opened out of a review goes back to it, brought to that file
+      if (e?.kind === "file" && e.back) {
+        const at: ReviewAt = e.since ? { path: e.path, since: e.since } : { path: e.path };
+        return { ...s, editor: { ...e.back, at, seq: e.back.seq + 1, focus: true } };
+      }
       return { ...s, editor: null };
+    }
     case "open-file": {
       const v = action.v;
       const e = s.editor;
+      // opened out of a review on the same worktree: closing goes back to it, and a file the
+      // review already read shows at once rather than waiting on its read
+      const back =
+        e?.kind === "review" && e.worktreeId === v.worktreeId && !v.ref ? e : e?.kind === "file" ? e.back : undefined;
       // the file already open keeps its text and view on screen while its fresh read is out
-      const same = e && sameFile(e, v) ? e : null;
+      const same: (FileState & { view?: EditorView | null }) | null =
+        e?.kind === "file" && sameFile(e, v)
+          ? e
+          : e?.kind === "review" && back === e
+            ? (e.files[reviewKey(v)] ?? null)
+            : null;
       const line = v.line && placeLine(s, v.worktreeId, v.path, v.line);
       return {
         ...s,
         editor: {
+          kind: "file",
           worktreeId: v.worktreeId,
           path: v.path,
           ...(v.ref ? { ref: v.ref } : {}),
@@ -2274,8 +2368,31 @@ function reduce(s: State, action: Action): State {
           focus: v.focus,
           conflict: same?.conflict ?? null,
           blame: same?.blame ?? null,
+          ...(back && back.worktreeId === v.worktreeId ? { back } : {}),
         },
       };
+    }
+    case "open-review": {
+      const e = s.editor;
+      // the review already open keeps what its sections have read and only moves
+      const files = e?.kind === "review" && e.worktreeId === action.worktreeId ? e.files : {};
+      return {
+        ...s,
+        editor: {
+          kind: "review",
+          worktreeId: action.worktreeId,
+          at: action.at,
+          seq: action.seq,
+          focus: action.focus,
+          files,
+        },
+      };
+    }
+    case "review-at": {
+      const e = s.editor;
+      if (e?.kind !== "review" || e.worktreeId !== action.worktreeId) return s;
+      if (e.at && reviewKey(e.at) === reviewKey(action.at)) return s;
+      return { ...s, editor: { ...e, at: action.at } };
     }
     case "open-loose": {
       const v = action.v;
@@ -2292,6 +2409,7 @@ function reduce(s: State, action: Action): State {
       return {
         ...s,
         editor: {
+          kind: "file",
           worktreeId: v.worktreeId,
           path: v.name,
           view: readingView(v.name),
@@ -2307,47 +2425,43 @@ function reduce(s: State, action: Action): State {
     }
     case "editor-read": {
       const e = s.editor;
+      const disk = action.disk;
+      if (e?.kind === "review") {
+        // a section that cannot be read says so where its text would be; the review stays
+        const said = disk ? s : noteError(s, e.worktreeId, action.error ?? `could not read ${action.file.path}`);
+        return withFile(said, action.file, (f) =>
+          disk ? { ...f, disk, error: undefined } : { ...f, disk: null, error: action.error ?? "could not read it" },
+        );
+      }
       // a loose file named like a worktree file is another file, and no read is ever out for it
       if (!e || e.loose || !sameFile(e, action.file)) return s;
-      const disk = action.disk;
       if (!disk) {
         // a pane with nothing in it yet has nothing to show, so it closes; one with text keeps it.
         // Why goes on the worktree's chat either way, since the pane may be the thing that is gone.
         const said = noteError(s, e.worktreeId, action.error ?? `could not read ${e.path}`);
         return e.disk ? said : { ...said, editor: null };
       }
-      // With no view asked for, a changed file opens on its diff and an unchanged one has none to
-      // show, so it opens to be read. A file with nothing on the other side (new to the branch) is
-      // never shown as its diff: that would be every line added, which the changes row already says,
-      // over a phantom removed line that Monaco draws for the empty side.
-      const reading = readingView(e.path);
-      const view =
-        disk.before === ""
-          ? e.view && e.view !== "diff"
-            ? e.view
-            : reading
-          : (e.view ?? (disk.before === disk.after ? reading : "diff"));
-      return { ...s, editor: { ...e, view, disk } };
+      return { ...s, editor: { ...e, view: viewFor(e.path, disk, e.view), disk } };
     }
-    case "editor-conflict": {
-      const e = s.editor;
-      return e && !e.loose && sameFile(e, action.file) ? { ...s, editor: { ...e, conflict: action.theirs } } : s;
-    }
-    case "editor-view":
+    case "editor-conflict":
+      return withFile(s, action.file, (f) => ({ ...f, conflict: action.theirs }));
+    case "editor-view": {
       // the line was a one-time jump; past a switch the editor carries its own place, and a line
       // kept for the diff view would land inside a collapsed region the next time the file is read
-      return s.editor ? { ...s, editor: { ...s.editor, view: action.v, line: undefined } } : s;
+      const e = editorFile(s);
+      return e ? { ...s, editor: { ...e, view: action.v, line: undefined } } : s;
+    }
     case "editor-refused": {
       const e = s.editor;
-      if (!e || !sameFile(e, action.file)) return s;
       // a loose file has no fresh read to come back writable from, so the text locks with the note
-      const disk = e.loose && e.disk ? { ...e.disk, writable: false } : e.disk;
-      return { ...s, editor: { ...e, refused: action.message, disk } };
+      const locks = e?.kind === "file" && !!e.loose && sameFile(e, action.file);
+      if (locks && e.disk)
+        return { ...s, editor: { ...e, refused: action.message, disk: { ...e.disk, writable: false } } };
+      if (e?.kind === "file" && !sameFile(e, action.file)) return s;
+      return withFile(s, action.file, (f) => ({ ...f, refused: action.message }));
     }
-    case "editor-blame": {
-      const e = s.editor;
-      return e && !e.loose && sameFile(e, action.file) ? { ...s, editor: { ...e, blame: action.blame } } : s;
-    }
+    case "editor-blame":
+      return withFile(s, action.file, (f) => ({ ...f, blame: action.blame }));
     case "notice":
       // the answer is under the box, so the box has to be on screen; said of an outgoing box (an
       // upload that failed, the daemon not answering), it is read under the box the message left
@@ -2519,7 +2633,12 @@ function reduce(s: State, action: Action): State {
       };
     case "frame": {
       if (s.frame === action.v) return s;
-      const next = { ...s, frame: action.v };
+      // the phone opens files on their own, so a review open on the desk closes as the frame narrows
+      const next = {
+        ...s,
+        frame: action.v,
+        ...(action.v === "phone" && s.editor?.kind === "review" ? { editor: null } : {}),
+      };
       if (action.v !== "desk" || !next.activeRepoId) return next;
       // back on the desk, the layout is the project's remembered one: while the phone drew none of
       // the docks, the row menu and the palette could still have flipped their flags
@@ -3300,7 +3419,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
         changedRanges: { ...l.changedRanges, [msg.path]: { ranges: msg.ranges, offset: msg.lineOffset } },
       }));
       // the offset this reply carries is what a jump to a line the page reported was waiting for
-      const e = next.editor;
+      const e = editorFile(next);
       if (!e?.line?.fiber || e.worktreeId !== msg.worktreeId || e.path !== msg.path) return next;
       return { ...next, editor: { ...e, line: placeLine(next, e.worktreeId, e.path, e.line) } };
     }

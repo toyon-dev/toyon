@@ -1,4 +1,5 @@
-// The open file kept in step with the disk. The pane shows what the daemon last read; this decides
+// The open files kept in step with the disk: the one file open on its own, and each section of a
+// review near the screen. The pane shows what the daemon last read; this decides
 // what happens to the text in the editor when that changes, and saves the editor's text only over
 // the version it came from.
 //
@@ -10,7 +11,7 @@
 import { type ClientMsg, FILE_MAX_CHARS, type FileServerMsg } from "@toyon/shared";
 import { nextSeq } from "./actions/file.ts";
 import type { Store } from "./context.tsx";
-import { type FileRef, localOf, type State } from "./store.ts";
+import { editorFile, type FileRef, localOf, type State } from "./store.ts";
 
 /** how long typing rests before the text is saved */
 export const SAVE_DELAY = 800;
@@ -66,8 +67,9 @@ export function decide(base: Known, buffer: string, pending: string | null, disk
 
 interface Tracked {
   file: FileRef;
-  /** the pane has this file open; a closed file is kept only while it still owes the disk something */
-  open: boolean;
+  /** how many hold the file open: the pane's one file, a review's section, or both for the moment
+   * one hands it to the other. A file nobody holds is kept only while it still owes the disk something */
+  holders: number;
   base: Known | null;
   /** the one request out for this file; a write carries the text it sent */
   out: { seq: number; write?: string } | null;
@@ -82,6 +84,9 @@ interface Tracked {
    * step with the reads, since nothing waits on it */
   blame: { seq: number; version: string | null } | null;
 }
+
+/** the one file, unless it is loose: a loose file is no file of the daemon's */
+const looseless = <T extends { loose?: unknown }>(e: T | null): T | null => (e?.loose ? null : e);
 
 const keyOf = (f: { worktreeId: string; path: string; ref?: string; since?: string }) =>
   `${f.worktreeId}\n${f.ref ?? ""}\n${f.since ?? ""}\n${f.path}`;
@@ -111,8 +116,7 @@ export class FileSync {
     });
     // edits made in another editor while this window was behind it
     const onFocus = () => {
-      const e = this.d.store.getState().editor;
-      if (e && !e.loose) this.refresh(keyOf(e));
+      for (const [key, t] of this.files) if (t.holders > 0) this.refresh(key);
     };
     this.d.win?.addEventListener("focus", onFocus);
     // the page is going (a reload, a close): an edit still inside the pause is saved now rather
@@ -181,7 +185,7 @@ export class FileSync {
     t.pending = null;
     t.base = { text: theirs.after, version: theirs.version };
     this.setConflict(t, null);
-    if (theirs.version === null) this.d.store.dispatch({ a: "close-editor" });
+    if (theirs.version === null) this.gone(t);
     else t.buffer?.replace(theirs.after);
     this.next(t);
   }
@@ -197,32 +201,52 @@ export class FileSync {
     this.next(t);
   }
 
+  /** A review's section holds its file while it is near the screen: read now, kept in step with the
+   * disk, and its answers sent to the review. The release lets go; a file still owed a save is kept
+   * until the save is out, as the pane's one file is. */
+  hold(file: FileRef): () => void {
+    // a file already held has its read out or answered, and the answer lands in the same slot
+    this.opened(file, true, !this.files.get(keyOf(file))?.holders);
+    let held = true;
+    return () => {
+      if (!held) return;
+      held = false;
+      this.closed(keyOf(file));
+    };
+  }
+
   private follow(was: State, now: State) {
     if (was.connected && !now.connected) this.dropped();
-    // a loose file is no file of the daemon's: to this it is the pane being closed
-    const e = now.editor?.loose ? null : now.editor;
-    const pe = was.editor?.loose ? null : was.editor;
-    if (pe && (!e || keyOf(pe) !== keyOf(e))) this.closed(keyOf(pe));
-    if (e && (!pe || pe.seq !== e.seq)) this.opened(e);
+    // a loose file is no file of the daemon's: to this it is the pane being closed, as a review is
+    const e = looseless(editorFile(now));
+    const pe = looseless(editorFile(was));
+    const moved = !!pe && (!e || keyOf(pe) !== keyOf(e));
+    if (moved) this.closed(keyOf(pe));
+    if (e && (!pe || moved)) this.opened(e, true);
+    else if (e && pe && pe.seq !== e.seq) this.opened(e, false);
     if (!was.connected && now.connected) {
       for (const t of this.files.values()) {
         t.reread = true;
         this.next(t);
       }
-    } else if (
-      e &&
-      pe &&
-      pe.seq === e.seq &&
-      localOf(was, e.worktreeId).git?.version !== localOf(now, e.worktreeId).git?.version
-    ) {
-      // the worktree's tree moved to a new state: an agent's edit, or a save or a discard in any
-      // tab. The state's number, not the record: the panel's tier landing over the same state
-      // changes no file on disk.
-      this.refresh(keyOf(e));
+      return;
+    }
+    // A worktree's tree moved to a new state: an agent's edit, or a save or a discard in any tab.
+    // The state's number, not the record: the panel's tier landing over the same state changes no
+    // file on disk. Every held file of that worktree reads again, but not one this frame just
+    // opened, whose read is already out.
+    const opening = e && (!pe || pe.seq !== e.seq) ? keyOf(e) : null;
+    for (const [key, t] of this.files) {
+      if (t.holders === 0 || key === opening) continue;
+      const id = t.file.worktreeId;
+      if (localOf(was, id).git?.version !== localOf(now, id).git?.version) this.refresh(key);
     }
   }
 
-  private opened(file: FileRef) {
+  /** a file comes into the pane or a section: read it now. `add` counts a new holder; a file opened
+   * again by the one already holding it (a new seq) only reads. The pane reads on every open; a
+   * section joining a file someone already holds does not. */
+  private opened(file: FileRef, add: boolean, read = true) {
     const key = keyOf(file);
     let t = this.files.get(key);
     if (!t) {
@@ -233,7 +257,7 @@ export class FileSync {
           ...(file.ref ? { ref: file.ref } : {}),
           ...(file.since ? { since: file.since } : {}),
         },
-        open: true,
+        holders: 0,
         base: null,
         out: null,
         pending: null,
@@ -246,8 +270,8 @@ export class FileSync {
       };
       this.files.set(key, t);
     }
-    t.open = true;
-    t.reread = true;
+    if (add || t.holders === 0) t.holders += 1;
+    if (read) t.reread = true;
     // a conflict held while the file was closed belongs to the pane again
     if (t.conflict) this.d.store.dispatch({ a: "editor-conflict", file: t.file, theirs: t.conflict });
     this.next(t);
@@ -256,8 +280,17 @@ export class FileSync {
   private closed(key: string) {
     const t = this.files.get(key);
     if (!t) return;
-    t.open = false;
+    t.holders = Math.max(0, t.holders - 1);
     this.next(t);
+  }
+
+  /** The file left the disk. The pane's one file closes with it. A review's section stays, as the
+   * deletion it now is: its read already carries the empty side, and the text goes with it, so the
+   * diff shows every line removed, as the changes list's row says. */
+  private gone(t: Tracked) {
+    const e = editorFile(this.d.store.getState());
+    if (e && !e.loose && keyOf(e) === keyOf(t.file)) this.d.store.dispatch({ a: "close-editor" });
+    else t.buffer?.replace("");
   }
 
   private refresh(key: string) {
@@ -300,18 +333,18 @@ export class FileSync {
       this.d.send({ t: "write-file", worktreeId, path, content, base: t.base?.version ?? null, seq });
       return;
     }
-    if (!t.open && !t.buffer && t.pending === null && !t.conflict) this.files.delete(keyOf(t.file));
+    if (t.holders === 0 && !t.buffer && t.pending === null && !t.conflict) this.files.delete(keyOf(t.file));
   }
 
   private read(t: Tracked, msg: Extract<FileServerMsg, { t: "file-read" }>) {
     const { file } = t;
     if (msg.error) {
-      if (t.open) this.d.store.dispatch({ a: "editor-read", file, disk: null, error: msg.error });
+      if (t.holders > 0) this.d.store.dispatch({ a: "editor-read", file, disk: null, error: msg.error });
       return;
     }
     const { before, after, version, writable, binary, tooLarge } = msg;
     t.writable = writable;
-    if (t.open) {
+    if (t.holders > 0) {
       this.d.store.dispatch({ a: "editor-read", file, disk: { before, after, version, writable, binary, tooLarge } });
       // a file with text has lines to blame; one gone from disk, or with none the editor shows, has not
       if (!binary && !tooLarge && (version !== null || file.ref)) this.askBlame(t, version);
@@ -334,7 +367,7 @@ export class FileSync {
         break;
       case "gone":
         t.base = { text: "", version: null };
-        if (t.open) this.d.store.dispatch({ a: "close-editor" });
+        this.gone(t);
         break;
       case "conflict":
         this.setConflict(t, theirs);
@@ -356,7 +389,7 @@ export class FileSync {
     const asked = t.blame;
     if (!asked || asked.seq !== msg.seq) return;
     t.blame = null;
-    if (!t.open) return;
+    if (t.holders === 0) return;
     const { commits, lines } = msg;
     this.d.store.dispatch({ a: "editor-blame", file: t.file, blame: { commits, lines, version: asked.version } });
   }
@@ -383,7 +416,7 @@ export class FileSync {
     t.conflict = theirs;
     // a pane not open on the file has nothing to say; the conflict waits on the file, and the
     // pane shows it the next time the file is opened
-    if (t.open) this.d.store.dispatch({ a: "editor-conflict", file: t.file, theirs });
+    if (t.holders > 0) this.d.store.dispatch({ a: "editor-conflict", file: t.file, theirs });
   }
 
   private attach(key: string, buffer: SyncBuffer | null) {

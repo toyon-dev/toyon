@@ -31,7 +31,7 @@ export function HandoffRow({ item, worktreeId }: { item: HandoffItem; worktreeId
     ) : null;
   if (item.state === "going") {
     return (
-      <DaemonRow icon="spawn" word="handed off" tone="accent" at={item.ts}>
+      <DaemonRow icon="handoff" word="handed off" tone="accent" at={item.ts}>
         {/* the shine rides an inline span: the text column fills the row, and a band sized to
             that is wider than the words, so they lit all at once rather than sweeping */}
         <span className="daemon-text">
@@ -96,7 +96,7 @@ export function HandoffRow({ item, worktreeId }: { item: HandoffItem; worktreeId
   if (here) parts.push(<span key="here">{`${here} here`}</span>);
   return (
     <DaemonRow
-      icon="spawn"
+      icon="handoff"
       word="handed off"
       tone="accent"
       at={item.ts}
@@ -122,7 +122,7 @@ export function HandoffRow({ item, worktreeId }: { item: HandoffItem; worktreeId
 export function PieceLaterRow({ item }: { item: Extract<ChatItem, { kind: "piece-later" }> }) {
   if (item.worktreeId) {
     return (
-      <DaemonRow icon="spawn" word="handed off" tone="accent" at={item.ts}>
+      <DaemonRow icon="handoff" word="handed off" tone="accent" at={item.ts}>
         <span className="daemon-text">
           <WorktreeChip id={item.worktreeId} title={item.title ?? "the worktree"} /> started, its branch having landed
         </span>

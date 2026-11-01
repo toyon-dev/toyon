@@ -42,6 +42,7 @@ export type IconName =
   | "run"
   | "bulb"
   | "spawn"
+  | "handoff"
   | "globe"
   | "swap"
   | "palette"
@@ -132,17 +133,28 @@ const ICON_PATHS: Record<IconName, string> = {
   // a bulb for a thought: the glass as one arc over two shoulders, the base as one line under
   // it. At 13px a filament or a second base line is a smudge, so there is neither.
   bulb: "M4.8 8.8a4 4 0 1 1 6.4 0L9.5 10.6v1.4H6.5v-1.4z M6.7 13.8h2.6",
-  // a call that starts another agent: one line forking into two, each ending in a ring the way
-  // `more` draws its dots. It is a fork on its side so it never reads as `branch`, which is git's,
-  // and it carries no bulb because ACP files the call under "think" and the row is not a thought.
-  spawn:
-    "M2.5 8h3.3 M5.8 8c2.2 0 2.2-3.6 4.4-3.6h1.5 M5.8 8c2.2 0 2.2 3.6 4.4 3.6h1.5 M12.05 4.4a.45 .45 0 1 0 .9 0a.45 .45 0 1 0-.9 0z M12.05 11.6a.45 .45 0 1 0 .9 0a.45 .45 0 1 0-.9 0z",
+  // a call that starts another agent: a ring, and a smaller ring below and to its right, nothing
+  // between them. A subagent is the same kind of thing as the agent, one size down, hired for a
+  // brief, and it never leaves this chat: its calls fold under this row and its report goes to
+  // the agent. So no line out (that is `handoff`'s arrow), no rail under the rings (that would
+  // make them commits), and no diagonal joining them, which at 16px is `search`'s handle. It
+  // carries no bulb because ACP files the call under "think" and the row is not a thought.
+  spawn: "M2.3 5.8a3 3 0 1 0 6 0a3 3 0 1 0-6 0z M9.4 11.4a1.9 1.9 0 1 0 3.8 0a1.9 1.9 0 1 0-3.8 0z",
+  // work leaving this chat for a sibling worktree: one line in from the conversation (not from a
+  // commit, so no ring at the start) forking into two: one branch stops in a ring at the size of
+  // `branch`'s nodes (this chat stays) while the other runs 3px past it and leaves as an arrow
+  // (the work goes on elsewhere). `pr`'s arrow comes in; this one goes out
+  handoff:
+    "M2.5 8h2.3 M4.8 8c2.2 0 2.2-3.6 4.4-3.6 M4.8 8c2.2 0 2.2 3.6 4.4 3.6h4.9 M12.3 9.8l1.8 1.8-1.8 1.8 M9.2 4.4a1.6 1.6 0 1 0 3.2 0a1.6 1.6 0 1 0-3.2 0z",
   // one equator and one meridian: a second latitude line filled the circle in at 13px
   globe: "M8 2.2a5.8 5.8 0 1 0 0 11.6 5.8 5.8 0 1 0 0-11.6z M2.2 8h11.6 M8 2.2c-3 3.4-3 8.2 0 11.6 3-3.4 3-8.2 0-11.6z",
-  // the rail's own rows: a status dot and a name, three deep. The panel toggles name what is in
-  // the panel (branch for changes, chat for chat), never the shape of the panel itself
+  // the rail's own rows: a status dot and a name, three deep. The dots are solid like the rail's,
+  // closed by the stroke the way `more` draws its own: a ring there was never the rail's mark,
+  // and `branch`'s node size cannot sit three deep on a 4px pitch without the rings fusing. The
+  // panel toggles name what is in the panel (branch for changes, chat for chat), never the shape
+  // of the panel itself
   worktrees:
-    "M3.8 2.95a1.05 1.05 0 1 0 0 2.1 1.05 1.05 0 1 0 0-2.1z M7.4 4h5.4 M3.8 6.95a1.05 1.05 0 1 0 0 2.1 1.05 1.05 0 1 0 0-2.1z M7.4 8h5.4 M3.8 10.95a1.05 1.05 0 1 0 0 2.1 1.05 1.05 0 1 0 0-2.1z M7.4 12h5.4",
+    "M3.15 4a.65 .65 0 1 0 1.3 0a.65 .65 0 1 0-1.3 0z M7.4 4h5.4 M3.15 8a.65 .65 0 1 0 1.3 0a.65 .65 0 1 0-1.3 0z M7.4 8h5.4 M3.15 12a.65 .65 0 1 0 1.3 0a.65 .65 0 1 0-1.3 0z M7.4 12h5.4",
   // two arrows passing: swapping one mode for another
   swap: "M3 6.2h9.2 M9.7 3.7 12.2 6.2 9.7 8.7 M13 10.2H3.8 M6.3 7.7 3.8 10.2l2.5 2.5",
   // A painter's palette: the blob with its thumb notch, and three wells. The wells are small and

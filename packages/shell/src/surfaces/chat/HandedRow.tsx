@@ -59,7 +59,7 @@ export function HandedRow({
   };
   return (
     <DaemonRow
-      icon="spawn"
+      icon="handoff"
       word={plan ? "plan" : "piece"}
       tone="accent"
       at={item.ts}

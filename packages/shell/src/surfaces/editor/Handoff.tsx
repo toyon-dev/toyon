@@ -188,7 +188,7 @@ export function HandoffTrack({ tabs }: { tabs: Omit<TabsProps<string>, "end"> })
       data-more-end={more.end ? "" : undefined}
     >
       <span className="editor-handoff-mark" {...tip("Handed off from this plan")}>
-        <Icon name="spawn" />
+        <Icon name="handoff" />
       </span>
       <Tabs {...tabs} />
     </div>

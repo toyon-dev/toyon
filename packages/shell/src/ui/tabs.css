@@ -141,6 +141,17 @@
       color: var(--text0);
       font-weight: var(--weight-strong);
     }
+    /* The keyboard's ring sits inside the pill, as a row's sits inside its band: the list scrolls
+       (above), so a ring drawn outside the pill is clipped to whichever edges fall inside the
+       list, and what was left of it read as a bar on one side. On the tab and not the button,
+       so the ring follows the pill's own corners. */
+    &:has(> .tab-btn:focus-visible) {
+      outline: 2px solid var(--accent);
+      outline-offset: -2px;
+    }
+    & > .tab-btn:focus-visible {
+      outline: none;
+    }
   }
   /* On a filled track the seats are even, so the pill is one shape of the list's own that moves
    between them, and the open tab paints nothing itself. Its place is arithmetic on the seat's

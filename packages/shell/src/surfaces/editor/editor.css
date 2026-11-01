@@ -154,12 +154,21 @@
    open pill is raised out of it in the element tone, the phone's screen switcher; the pill is a
    lifted seat, so it moves the ladder for its passengers. One line: pills past the edge scroll,
    the list's own bar-less scroll (ui/tabs.css), and an edge with more behind it fades, so the row
-   says it goes on (Handoff.tsx sets which edge). */
+   says it goes on (Handoff.tsx sets which edge).
+   The track takes the page's measure and side padding (base.css .md-preview), so the pills start
+   on the text edge over the title, in the page's own column: at the pane's left they stood
+   stranded, a row away from a centred page. The pane is a flex column, so the width is held, or
+   an auto margin would shrink the track to its pills and centre it. The mark hangs off the text
+   edge into the gutter, a margin note on the page rather than a seat in the row. */
   .editor-handoff-track {
+    position: relative;
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 10px 16px 0;
+    width: 100%;
+    max-width: var(--chat-measure);
+    box-sizing: border-box;
+    margin: 0 auto;
+    padding: 12px 32px 0;
     --tabs-strip: var(--sunken-floor);
     --tabs-ground: var(--element0);
     --track-fade: 32px;
@@ -193,11 +202,23 @@
       --text2: var(--ink1);
     }
   }
-  /* the chat's handed-off mark, in its accent, on the track's line */
+  /* the chat's handed-off mark, in its accent, in the gutter: centred on the pills' row, its own
+     box the row's height so it sits level with them */
   .editor-handoff-mark {
+    position: absolute;
+    left: 6px;
+    top: 12px;
     display: flex;
     align-items: center;
+    height: calc(var(--row-height-sm) + 6px);
     color: var(--accent);
+  }
+  /* The track stands inside the page's opening (base.css .md-preview, 92 above the title) and the
+     page gives up the track's height, so the title sits where it sits with no track and a handoff
+     moves nothing. The track is 38 tall: its 12 over the strip, the strip's 3 and 3, and the
+     dense row less 6 for the pills. */
+  .editor-handoff-track ~ .editor-body .document > .md-preview:first-child {
+    padding-top: 54px;
   }
   /* A piece's title, its line and its attachments: the document's own h1 and measure
      (base.css .md-preview) with the body's top air, and no foot, since the text under it

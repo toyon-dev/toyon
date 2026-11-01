@@ -960,9 +960,11 @@
     color: var(--text0);
     max-width: var(--chat-measure);
     margin-inline: auto;
-    /* a document opens with more air above its title than beside it; under the pane's head, a top
-       pad smaller than the sides read as the title pressed against the head */
-    padding: 40px 32px 48px;
+    /* a document opens with a paper's air above its title, about three times what is beside it:
+       under the pane's head, a top pad near the sides' read as the title pressed against the
+       head, and 40 still read as a form's. One depth for every page, so what stands in the
+       opening (the editor's handoff track) moves the title nowhere. */
+    padding: 92px 32px 48px;
     & p,
     & ul,
     & ol,

@@ -408,9 +408,10 @@ export function createFetch(opts: HttpOpts) {
       });
     }
 
-    // a file in a worktree the browser draws (an image), for the editor pane's viewer. Token in the
-    // query for the same <img> reason. The bytes under a path change as the agent
+    // a file in a worktree the browser draws (a picture, a clip), for the editor pane's viewer.
+    // Token in the query for the same <img> reason. The bytes under a path change as the agent
     // works, so nothing is kept; nosniff holds the type to the extension the service checked.
+    // Bun answers a Range on a file response itself, which is what lets a clip seek.
     if (url.pathname.startsWith("/files/")) {
       if (!sameSecret(url.searchParams.get("token"), opts.token)) return new Response("unauthorized", { status: 401 });
       const [worktreeId, ...rest] = url.pathname.slice("/files/".length).split("/");

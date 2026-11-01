@@ -36,10 +36,23 @@ function ImageView({ src, path, full, onFull }: ViewProps) {
   );
 }
 
+/** a clip fitted to the pane, in the browser's own player: its bar carries play, seek and the
+ * window's size, so the pane offers none of them. Only the first frame is fetched until pressed:
+ * the bytes are the worktree's, and a clip the agent is still writing is not pulled whole on open */
+function VideoView({ src, path }: ViewProps) {
+  return (
+    <div className="editor-video">
+      {/* biome-ignore lint/a11y/useMediaCaption: the clip is whatever the worktree holds, with no captions file to point at */}
+      <video src={src} controls preload="metadata" title={path} />
+    </div>
+  );
+}
+
 /** the editor body for a file the browser draws rather than the text editor: one component per
  * kind, and a new kind is a row in the shared table and an entry here */
 const VIEWERS: Record<Kind, (p: ViewProps) => React.JSX.Element> = {
   image: ImageView,
+  video: VideoView,
 };
 
 export function FileViewer({

@@ -170,7 +170,7 @@ describe("what a path opens as", () => {
     expect(emitted.map((e) => (e.kind === "loose" ? e.id : e.kind))).toEqual([o.id]);
   });
 
-  test("a binary is granted empty and marked; a picture is served by its grant, anything else is not", async () => {
+  test("a binary is granted empty and marked; a picture or clip is served by its grant, anything else is not", async () => {
     const { opens, outside, refusals } = setup();
     const bin = outside("pic.bin", new Uint8Array([0xff, 0xfe, 0x00, 0x01]));
     const o = (await opens.open(bin)) as Extract<Opened, { kind: "loose" }>;
@@ -180,6 +180,10 @@ describe("what a path opens as", () => {
     const p = (await opens.open(png)) as Extract<Opened, { kind: "loose" }>;
     expect(p.binary).toBe(true);
     expect(opens.viewable(p.id)).toBe(realpathSync(png));
+    const mp4 = outside("clip.mp4", new Uint8Array([0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70]));
+    const v = (await opens.open(mp4)) as Extract<Opened, { kind: "loose" }>;
+    expect(v.binary).toBe(true);
+    expect(opens.viewable(v.id)).toBe(realpathSync(mp4));
     const md = outside("plain.md", "# hi\n");
     const m = (await opens.open(md)) as Extract<Opened, { kind: "loose" }>;
     expect(m.binary).toBe(false);

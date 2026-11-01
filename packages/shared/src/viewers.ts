@@ -4,9 +4,14 @@
 // bytes. The route also serves what a rendered page reaches for beside itself.
 
 /** what draws the file; a new kind is a row here and a component in the pane's viewer map */
-export type FileViewer = "image";
+export type FileViewer = "image" | "video";
 
-const VIEWERS: [RegExp, FileViewer][] = [[/\.(png|jpe?g|gif|webp|avif|bmp|ico)$/i, "image"]];
+// a clip is what the browser's own player takes: mov is the same container as mp4 and plays
+// wherever its codec does, so it is a clip and not a refusal
+const VIEWERS: [RegExp, FileViewer][] = [
+  [/\.(png|jpe?g|gif|webp|avif|bmp|ico)$/i, "image"],
+  [/\.(mp4|m4v|webm|mov)$/i, "video"],
+];
 
 /** the viewer for a path, or null for a file the text editor opens (or refuses) */
 export function viewerOf(path: string): FileViewer | null {
@@ -30,8 +35,8 @@ export function renderedAs(path: string): Rendering | null {
 const PAGE_ASSETS = /\.(css|svg|woff2?|ttf|otf|mp4|webm|mp3|ogg|wav)$/i;
 
 /** a file the daemon serves at /files for a rendered page beside it to draw: a stylesheet, a font, a
- * clip. An image is served already, for its own viewer; a script is not, since none runs in the
- * frame the page is read in. */
+ * sound. An image or a clip is served already, for its own viewer; a script is not, since none
+ * runs in the frame the page is read in. */
 export function isPageAsset(path: string): boolean {
   return PAGE_ASSETS.test(path);
 }

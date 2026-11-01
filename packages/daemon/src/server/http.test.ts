@@ -59,7 +59,11 @@ const opts: HttpOpts = {
   attachments,
   archivedAttachment: () => null,
   worktreeFile: async (id, path) =>
-    id === "wt1" && path === "public/a b.png" ? join(attachmentsDir, "wt1", "1.png") : null,
+    id === "wt1" && path === "public/a b.png"
+      ? join(attachmentsDir, "wt1", "1.png")
+      : id === "wt1" && path === "media/ask.mp4"
+        ? join(attachmentsDir, "wt1", "ask.mp4")
+        : null,
   looseFile: (id) => (id === "g1" ? join(attachmentsDir, "wt1", "1.png") : null),
   branded: () => false,
   metrics: () => ({ lag: 0 }),
@@ -1066,6 +1070,15 @@ describe("/files", () => {
     expect(r?.status).toBe(200);
     expect(r?.headers.get("cache-control")).toBe("no-store");
     expect(r?.headers.get("x-content-type-options")).toBe("nosniff");
+  });
+  // the type is the file's own, which nosniff then holds; a Range (what lets the player seek) is
+  // answered by Bun.serve as the file response goes out, not by the handler under test here
+  test("a clip goes out under its own type, for the pane's player", async () => {
+    await Bun.write(join(attachmentsDir, "wt1", "ask.mp4"), new Uint8Array(64));
+    const r = await fetch(req("/files/wt1/media/ask.mp4?token=secret"), srv());
+    expect(r?.status).toBe(200);
+    expect(r?.headers.get("content-type")).toBe("video/mp4");
+    expect(r?.headers.get("cache-control")).toBe("no-store");
   });
   test("serves a granted picture by its grant id, never cached; no token is 401, an unknown id is 404", async () => {
     await attachments.put("wt1", 1, await shot("a.png"));

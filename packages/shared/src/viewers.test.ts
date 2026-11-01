@@ -14,6 +14,9 @@ test("a rendering is a view of the text, never a viewer of the bytes", () => {
   expect(viewerOf("motion.html")).toBeNull();
   expect(viewerOf("README.md")).toBeNull();
   expect(viewerOf("logo.png")).toBe("image");
+  expect(viewerOf("media/ask.mp4")).toBe("video");
+  expect(viewerOf("clip.MOV")).toBe("video");
+  expect(viewerOf("song.mp3")).toBeNull();
 });
 
 test("a page's stylesheet, font and clip are served for its frame; a script never is", () => {

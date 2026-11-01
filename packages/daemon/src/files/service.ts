@@ -200,8 +200,8 @@ export class FileService {
     return blameFile(r.path, path, ref);
   }
 
-  /** where a file the browser draws sits in the working tree: an image for the editor pane's viewer,
-   * or a stylesheet, font or clip a rendered page reaches for beside itself; null when the path
+  /** where a file the browser draws sits in the working tree: a picture or a clip for the editor
+   * pane's viewer, or a stylesheet, font or sound a rendered page reaches for beside itself; null when the path
    * names neither, is not a file, or leaves the worktree */
   async viewableFile(worktreeId: string, path: string): Promise<string | null> {
     const r = this.readable(worktreeId);

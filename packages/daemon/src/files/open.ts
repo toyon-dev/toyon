@@ -167,7 +167,7 @@ export class OpenService {
   }
 
   /** where a granted file the browser draws sits, for the pane's viewer; null for a text file, a
-   * file that is no picture, and an id this daemon never granted */
+   * file that is neither picture nor clip, and an id this daemon never granted */
   viewable(id: string): string | null {
     const path = this.grants.get(id);
     return path && viewerOf(path) ? path : null;

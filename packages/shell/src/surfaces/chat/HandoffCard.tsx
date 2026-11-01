@@ -1,4 +1,4 @@
-// Toyon's own pieces card: the agent handed over the pieces of its work outside plan mode, so
+// Toyon's own handoff card: the agent handed over the pieces of its work outside plan mode, so
 // there is no plan card for the list to ride beside, and the box asks instead. One piece, which
 // is most lists, is answered here whole: the text in the band where it is read, and the fates as
 // the rows, the agent's proposal first so enter on an untouched card is the proposal. A list of
@@ -19,28 +19,28 @@ import { type Choice, Choices } from "../../ui/Choices.tsx";
 import { handleChoiceKey } from "../../ui/choiceKeys.ts";
 import { dropBlankNote, setNote } from "./ask.ts";
 import { Card, CardBand, CardHead, type Root, takeKeyboard } from "./Card.tsx";
-import { renderMarkdown } from "./markdown.ts";
 import {
   effectiveFate,
+  type HandoffItem,
+  handoffAnswer,
+  handoffQuestion,
   type OneRow,
   oneRows,
-  type PiecesItem,
   pieceFate,
   pieceMark,
   pieceOrder,
-  piecesAnswer,
-  piecesQuestion,
-} from "./pieces.ts";
+} from "./handoff.ts";
+import { renderMarkdown } from "./markdown.ts";
 
 /** one slot, no pick: the note is the whole of what the card takes from the person */
 const BLANK: AskAnswer[] = [{ selected: [] }];
 
-export function PiecesCard({
+export function HandoffCard({
   item,
   worktreeId,
   rootRef: root,
 }: {
-  item: PiecesItem;
+  item: HandoffItem;
   worktreeId: string;
   rootRef: Root;
 }) {
@@ -95,11 +95,11 @@ export function PiecesCard({
     const picked = shape[row];
     if (!picked) return;
     if (picked.fate === null) {
-      sock.send(piecesAnswer(item, worktreeId, false, undefined));
+      sock.send(handoffAnswer(item, worktreeId, false, undefined));
     } else {
       if (only && picked.fate !== effectiveFate(item, only))
         sock.send(pieceFate(item, worktreeId, only.id, picked.fate));
-      sock.send(piecesAnswer(item, worktreeId, true, note));
+      sock.send(handoffAnswer(item, worktreeId, true, note));
       setPressed(row);
     }
     dispatch({ a: "answered", id: worktreeId });
@@ -181,7 +181,7 @@ export function PiecesCard({
             </>
           }
         >
-          {piecesQuestion(item)}
+          {handoffQuestion(item)}
         </CardHead>
         <CardBand html={html} />
         <Choices
@@ -227,12 +227,12 @@ export function PiecesCard({
       <CardHead
         sub={
           <>
-            <div className="card-pieces">{listed}</div>
+            <div className="card-handoff">{listed}</div>
             {open} and change any row's fate there. Nothing has started yet.
           </>
         }
       >
-        {piecesQuestion(item)}
+        {handoffQuestion(item)}
       </CardHead>
       <Choices
         rows={rows}

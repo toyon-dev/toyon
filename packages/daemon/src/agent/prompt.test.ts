@@ -5,12 +5,12 @@ import {
   buildPrompt,
   fileCaption,
   handedPrompt,
+  handoffActedPrompt,
   pasteCaption,
   pickCaption,
   pieceAskPrompt,
   pieceLandedContext,
   pieceSendPrompt,
-  piecesActedPrompt,
   previewContext,
   procFixPrompt,
   SYSTEM_APPEND,
@@ -116,7 +116,7 @@ describe("prompts for work in another project", () => {
   });
 });
 
-describe("pieces prompts", () => {
+describe("handoff prompts", () => {
   test("the sentence after the plan's yes says what the list started and what is the agent's own", () => {
     const pieces = [
       { id: "p1", title: "Persist" },
@@ -125,7 +125,7 @@ describe("pieces prompts", () => {
       { id: "p4", title: "Docs" },
     ];
     expect(
-      piecesActedPrompt(pieces, [
+      handoffActedPrompt(pieces, [
         { pieceId: "p1", fate: "here" },
         { pieceId: "p2", fate: "worktree" },
         { pieceId: "p3", fate: "worktree", after: "toyon/persist" },
@@ -135,18 +135,18 @@ describe("pieces prompts", () => {
       'Toyon acted on the pieces you handed over with the plan\'s approval: "Expiry" started in a sibling worktree of this project; "CLI" waits for toyon/persist to land and then starts in its own worktree; "Docs" was skipped by the person. Do "Persist" here, and only that. The siblings read the plan at its path in this worktree; never do their pieces yourself.',
     );
     expect(
-      piecesActedPrompt(pieces, [
+      handoffActedPrompt(pieces, [
         { pieceId: "p2", fate: "send", title: "Composer" },
         { pieceId: "p3", fate: "skip" },
         { pieceId: "p4", fate: "skip" },
       ]),
     ).toContain('"Expiry" went to the open worktree "Composer"; "CLI", "Docs" were skipped by the person.');
-    expect(piecesActedPrompt(pieces, [{ pieceId: "p2", fate: "worktree", error: "no port" }])).toContain(
+    expect(handoffActedPrompt(pieces, [{ pieceId: "p2", fate: "worktree", error: "no port" }])).toContain(
       '"Expiry" (no port) could not start. Nothing on the list is yours here.',
     );
     // the origin's own piece names what it waits for
     expect(
-      piecesActedPrompt(pieces, [
+      handoffActedPrompt(pieces, [
         { pieceId: "p1", fate: "here", after: "toyon/expiry" },
         { pieceId: "p2", fate: "worktree" },
       ]),
@@ -158,13 +158,13 @@ describe("pieces prompts", () => {
       { id: "p1", title: "Persist" },
       { id: "p2", title: "Expiry" },
     ];
-    expect(piecesActedPrompt(pieces, [{ pieceId: "p1", fate: "here" }], "card")).toBe(
+    expect(handoffActedPrompt(pieces, [{ pieceId: "p1", fate: "here" }], "card")).toBe(
       'The person answered the handoff card, and Toyon acted on the pieces you handed over. Do "Persist" here, and only that.',
     );
     // the note typed with go reaches the agent here as it does every sibling's; a piece skipped
     // is no sibling, so nobody is said to be reading the list
     expect(
-      piecesActedPrompt(
+      handoffActedPrompt(
         pieces,
         [
           { pieceId: "p1", fate: "here" },
@@ -177,7 +177,7 @@ describe("pieces prompts", () => {
       'The person answered the handoff card, and Toyon acted on the pieces you handed over: "Expiry" was skipped by the person. Do "Persist" here, and only that. The person added: use the v2 API',
     );
     expect(
-      piecesActedPrompt(
+      handoffActedPrompt(
         pieces,
         [
           { pieceId: "p1", fate: "here" },

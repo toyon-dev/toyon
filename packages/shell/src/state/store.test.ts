@@ -14,7 +14,7 @@ import {
   type WorktreeStatus,
 } from "@toyon/shared";
 import { openCard } from "../surfaces/chat/cards.ts";
-import { openPieces } from "../surfaces/chat/pieces.ts";
+import { openHandoff } from "../surfaces/chat/handoff.ts";
 import { addToChat, attachPick } from "./attach.ts";
 import { createStore } from "./context.tsx";
 import { outBoxId, outBoxOf, readyToGo } from "./outbox.ts";
@@ -4304,12 +4304,12 @@ describe("a list read off the plan", () => {
     choices: [{ id: "yes", name: "Yes", kind: "allow_once" }],
     ts: 1,
   };
-  const late: AgentEvent = { type: "pieces-proposed", id: "l2", pieces, mode: "plan", held: true, by: "toyon", ts: 2 };
+  const late: AgentEvent = { type: "handoff-proposed", id: "l2", pieces, mode: "plan", held: true, by: "toyon", ts: 2 };
 
   test("held after the card went up, it is the card's and sits on the card's file", () => {
     const s = run([hello(wt("a")), agent("a", card), agent("a", late)]);
     expect(s.local.a?.chat.at(-1)).toMatchObject({
-      kind: "pieces",
+      kind: "handoff",
       id: "l2",
       by: "toyon",
       companion: "k1",
@@ -4323,9 +4323,9 @@ describe("a list read off the plan", () => {
       hello(wt("a")),
       agent("a", card),
       agent("a", late),
-      agent("a", { type: "pieces-stale", id: "l2", ts: 3 }),
+      agent("a", { type: "handoff-stale", id: "l2", ts: 3 }),
     ]);
-    expect(s.local.a?.chat.at(-1)).toMatchObject({ kind: "pieces", stale: true });
+    expect(s.local.a?.chat.at(-1)).toMatchObject({ kind: "handoff", stale: true });
   });
 });
 
@@ -4334,9 +4334,9 @@ describe("a pieces list", () => {
     { id: "p1", title: "Rail", plan: "Fix the rail.", attachments: [], fate: "worktree" as const },
     { id: "p2", title: "Notes", plan: "Add notes.", attachments: [], fate: "here" as const },
   ];
-  const held: AgentEvent = { type: "pieces-proposed", id: "l1", pieces, mode: "plan", held: true, ts: 1 };
+  const held: AgentEvent = { type: "handoff-proposed", id: "l1", pieces, mode: "plan", held: true, ts: 1 };
   const shown: AgentEvent = {
-    type: "pieces-proposed",
+    type: "handoff-proposed",
     id: "l1",
     pieces,
     mode: "auto",
@@ -4349,7 +4349,7 @@ describe("a pieces list", () => {
     const s = run([hello(wt("a")), agent("a", held)]);
     expect(chatOf(s)).toEqual([
       {
-        kind: "pieces",
+        kind: "handoff",
         id: "l1",
         pieces,
         fates: { p1: "worktree", p2: "here" },
@@ -4362,29 +4362,29 @@ describe("a pieces list", () => {
       },
     ]);
     expect(openCard(chatOf(s))).toBeNull();
-    expect(openPieces(chatOf(s))?.id).toBe("l1");
+    expect(openHandoff(chatOf(s))?.id).toBe("l1");
     const card: AgentEvent = {
       type: "agent-permission",
       id: "k1",
       title: "Approve Plan",
       plan: ".toyon/plans/1.md",
-      pieces: "l1",
+      handoff: "l1",
       choices: [{ id: "yes", name: "Yes", kind: "allow_once" }],
       ts: 2,
     };
     const asked = reducer(s, agent("a", card));
     // the list learns its card and the card's file, so it sits on that plan and on no later one
-    expect(chatOf(asked)[0]).toMatchObject({ kind: "pieces", companion: "k1", plan: ".toyon/plans/1.md" });
+    expect(chatOf(asked)[0]).toMatchObject({ kind: "handoff", companion: "k1", plan: ".toyon/plans/1.md" });
     expect(chatOf(asked)[1]).toMatchObject({
       kind: "ask",
-      ask: { kind: "permission", plan: ".toyon/plans/1.md", pieces: "l1" },
+      ask: { kind: "permission", plan: ".toyon/plans/1.md", handoff: "l1" },
     });
-    const going = reducer(asked, agent("a", { type: "pieces-go", id: "l1", ts: 3 }));
+    const going = reducer(asked, agent("a", { type: "handoff-go", id: "l1", ts: 3 }));
     expect(chatOf(going)[0]).toMatchObject({ state: "going" });
     const done = reducer(
       going,
       agent("a", {
-        type: "pieces",
+        type: "handoff",
         id: "l1",
         outcomes: [
           { pieceId: "p1", fate: "worktree", worktreeId: "g", title: "Rail" },
@@ -4401,18 +4401,18 @@ describe("a pieces list", () => {
       ],
     });
     // a done list is still what the plan draws, with its outcomes; a sent-back one is not
-    expect(openPieces(chatOf(done))?.state).toBe("done");
-    const back = reducer(asked, agent("a", { type: "pieces-declined", id: "l1", ts: 3 }));
+    expect(openHandoff(chatOf(done))?.state).toBe("done");
+    const back = reducer(asked, agent("a", { type: "handoff-declined", id: "l1", ts: 3 }));
     expect(chatOf(back)[0]).toMatchObject({ state: "declined" });
-    expect(openPieces(chatOf(back))).toBeNull();
+    expect(openHandoff(chatOf(back))).toBeNull();
   });
 
   test("an unheld list is Toyon's own card at once, and a held one becomes it when shown", () => {
     const s = run([hello(wt("a")), agent("a", shown)]);
-    expect(chatOf(s)[0]).toMatchObject({ kind: "pieces", state: "proposed", plan: ".toyon/plans/2.md" });
+    expect(chatOf(s)[0]).toMatchObject({ kind: "handoff", state: "proposed", plan: ".toyon/plans/2.md" });
     expect(openCard(chatOf(s))?.id).toBe("l1");
     const h = run([hello(wt("a")), agent("a", held)]);
-    const later = reducer(h, agent("a", { type: "pieces-shown", id: "l1", ts: 2 }));
+    const later = reducer(h, agent("a", { type: "handoff-shown", id: "l1", ts: 2 }));
     expect(chatOf(later)[0]).toMatchObject({ state: "proposed", held: true });
     expect(openCard(chatOf(later))?.id).toBe("l1");
     // the card's note starts over when the card arrives, and goes with the go or the decline
@@ -4422,31 +4422,31 @@ describe("a pieces list", () => {
       card: { id: "l1", draft: [{ selected: [], note: "n" }], current: 0 },
     });
     expect(noted.local.a?.card?.id).toBe("l1");
-    expect(reducer(noted, agent("a", { type: "pieces-go", id: "l1", ts: 3 })).local.a?.card).toBeUndefined();
-    expect(reducer(noted, agent("a", { type: "pieces-declined", id: "l1", ts: 3 })).local.a?.card).toBeUndefined();
+    expect(reducer(noted, agent("a", { type: "handoff-go", id: "l1", ts: 3 })).local.a?.card).toBeUndefined();
+    expect(reducer(noted, agent("a", { type: "handoff-declined", id: "l1", ts: 3 })).local.a?.card).toBeUndefined();
   });
 
   test("Toyon's own card, answered, moves to where it was answered with the answer on it; a held list stays", () => {
     const reply: AgentEvent = { type: "text-delta", messageId: "m1", text: "Nothing has started yet." };
     const s = run([hello(wt("a")), agent("a", shown), agent("a", reply)]);
-    expect(chatOf(s).map((i) => i.kind)).toEqual(["pieces", "assistant"]);
-    const going = reducer(s, agent("a", { type: "pieces-go", id: "l1", note: "carefully", ts: 9 }));
-    expect(chatOf(going).map((i) => i.kind)).toEqual(["assistant", "pieces"]);
+    expect(chatOf(s).map((i) => i.kind)).toEqual(["handoff", "assistant"]);
+    const going = reducer(s, agent("a", { type: "handoff-go", id: "l1", note: "carefully", ts: 9 }));
+    expect(chatOf(going).map((i) => i.kind)).toEqual(["assistant", "handoff"]);
     expect(chatOf(going)[1]).toMatchObject({ state: "going", answered: { go: true, note: "carefully" }, ts: 9 });
     // a reply still streaming when go was pressed goes on in its row, over the answer, as it
     // does over a message of the person's
     const more = reducer(going, agent("a", { type: "text-delta", messageId: "m1", text: " Ask away." }));
-    expect(chatOf(more).map((i) => i.kind)).toEqual(["assistant", "pieces"]);
+    expect(chatOf(more).map((i) => i.kind)).toEqual(["assistant", "handoff"]);
     expect(chatOf(more)[0]).toMatchObject({ kind: "assistant", text: "Nothing has started yet. Ask away." });
-    const notNow = reducer(s, agent("a", { type: "pieces-declined", id: "l1", ts: 9 }));
+    const notNow = reducer(s, agent("a", { type: "handoff-declined", id: "l1", ts: 9 }));
     expect(chatOf(notNow)[1]).toMatchObject({ state: "declined", answered: { go: false } });
     // Toyon closing the list is not the person's answer, and a held list's answer is its plan card's
-    const failed = reducer(s, agent("a", { type: "pieces-declined", id: "l1", reason: "gone", ts: 9 }));
+    const failed = reducer(s, agent("a", { type: "handoff-declined", id: "l1", reason: "gone", ts: 9 }));
     expect(chatOf(failed)[0]).toMatchObject({ state: "declined", reason: "gone" });
     expect(chatOf(failed)[0]).not.toHaveProperty("answered");
     const h = run([hello(wt("a")), agent("a", held), agent("a", reply)]);
-    const heldGo = reducer(h, agent("a", { type: "pieces-go", id: "l1", ts: 9 }));
-    expect(chatOf(heldGo)[0]).toMatchObject({ kind: "pieces", state: "going" });
+    const heldGo = reducer(h, agent("a", { type: "handoff-go", id: "l1", ts: 9 }));
+    expect(chatOf(heldGo)[0]).toMatchObject({ kind: "handoff", state: "going" });
     expect(chatOf(heldGo)[0]).not.toHaveProperty("answered");
   });
 
@@ -4454,16 +4454,16 @@ describe("a pieces list", () => {
     const s = run([
       hello(wt("a")),
       agent("a", shown),
-      agent("a", { type: "pieces-fate", id: "l1", pieceId: "p1", fate: "skip", ts: 2 }),
+      agent("a", { type: "handoff-fate", id: "l1", pieceId: "p1", fate: "skip", ts: 2 }),
     ]);
     expect(chatOf(s)[0]).toMatchObject({ fates: { p1: "skip", p2: "here" } });
-    const again = reducer(s, agent("a", { type: "pieces-fate", id: "l1", pieceId: "p1", fate: "here", ts: 3 }));
+    const again = reducer(s, agent("a", { type: "handoff-fate", id: "l1", pieceId: "p1", fate: "here", ts: 3 }));
     expect(chatOf(again)[0]).toMatchObject({ fates: { p1: "here", p2: "here" } });
     const done = run(
       [
-        agent("a", { type: "pieces-go", id: "l1", ts: 4 }),
+        agent("a", { type: "handoff-go", id: "l1", ts: 4 }),
         agent("a", {
-          type: "pieces",
+          type: "handoff",
           id: "l1",
           outcomes: [
             { pieceId: "p1", fate: "worktree", after: "toyon/x" },
@@ -4505,14 +4505,14 @@ describe("a pieces list", () => {
     const s = run([
       hello(wt("a")),
       agent("a", {
-        type: "pieces",
+        type: "handoff",
         id: "l1",
         outcomes: [{ pieceId: "p1", fate: "worktree", worktreeId: "g", title: "Rail" }],
         ts: 5,
       }),
     ]);
     expect(chatOf(s)).toHaveLength(1);
-    expect(chatOf(s)[0]).toMatchObject({ kind: "pieces", id: "l1", state: "done", pieces: [] });
+    expect(chatOf(s)[0]).toMatchObject({ kind: "handoff", id: "l1", state: "done", pieces: [] });
   });
 });
 

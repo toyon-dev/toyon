@@ -25,13 +25,13 @@ import { useOnChange, usePersisted, useSettled } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { Pane } from "../../ui/Pane.tsx";
 import { endCarry, startCarry } from "../chat/carried.ts";
-import { defaultTab, listPage, openPieces } from "../chat/pieces.ts";
+import { defaultTab, listPage, openHandoff } from "../chat/handoff.ts";
 import { usePlanTitle } from "../chat/usePlanTitle.ts";
 import { splitPath } from "../util.ts";
 import { FileViewer } from "./FileViewer.tsx";
+import { PiecePage, usePieceTabs } from "./Handoff.tsx";
 import { HtmlPreview } from "./HtmlPreview.tsx";
 import { MarkdownPreview } from "./MarkdownPreview.tsx";
-import { PiecePage, usePieceTabs } from "./Pieces.tsx";
 import "./editor.css";
 
 // the grammars come in with the editor, and a file is only shown once they can colour it
@@ -152,7 +152,7 @@ export function EditorPane({
   // the worktree's own plan is titled by its heading, as the line under the box names it
   const ownPlan = !loose && !history && planPath === path;
   const planTitle = usePlanTitle(ownPlan ? worktreeId : undefined, ownPlan ? path : undefined);
-  const open = useStore((s) => openPieces(localOf(s, worktreeId).chat ?? NO_CHAT));
+  const open = useStore((s) => openHandoff(localOf(s, worktreeId).chat ?? NO_CHAT));
   const pieces = useMemo(() => {
     if (history || loose || editor.view !== "preview" || !open) return null;
     const on = open.plan ?? planPath;
@@ -160,7 +160,7 @@ export function EditorPane({
   }, [history, loose, editor.view, planPath, path, open]);
   // the tab open in the head, with a list on the page: the pane's own state, so a sibling's dot
   // or age changing redraws no tab. It starts over with a new list or file, and until a tab is
-  // pressed it is the page's own default (chat/pieces.ts), which on the list page moves to the
+  // pressed it is the page's own default (chat/handoff.ts), which on the list page moves to the
   // here piece as go is pressed: the press is the person's, and that piece is what the page is
   // for once answered.
   const [tab, setTab] = useState<string | null>(null);
@@ -234,7 +234,7 @@ export function EditorPane({
     // full mode takes whatever the terminal pane leaves rather than a fixed 100%
     <Pane
       kind="editor"
-      className={cx("editor-pane", full && "full", tabs && "editor-pane-pieces")}
+      className={cx("editor-pane", full && "full", tabs && "editor-pane-handoff")}
       height={full || onScreen ? undefined : height}
       resizable={!full && !onScreen}
       onDragStart={onDragStart ?? NO_DRAG}

@@ -941,19 +941,19 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   /** the verb: a new worktree for part of this work, in project `repoId` (this one, or another
    * open one). `text` is the person's own words for what it should do; the agent is asked to
    * propose one piece when it has the tool, and the card is raised from the text alone when not */
-  z.object({ t: z.literal("pieces-ask"), worktreeId: id, repoId: id, text: prompt.optional() }),
+  z.object({ t: z.literal("handoff-ask"), worktreeId: id, repoId: id, text: prompt.optional() }),
   /** move one piece on a pieces list; recorded on the transcript, so every tab sees it */
   z.object({
-    t: z.literal("pieces-fate"),
+    t: z.literal("handoff-fate"),
     worktreeId: id,
     id: z.string().max(64),
     pieceId: z.string().max(16),
     fate: z.enum(["here", "worktree", "send", "skip"]),
   }),
-  /** answer Toyon's own pieces card: go acts on the list as the fates stand, with `note` added to
+  /** answer Toyon's own handoff card: go acts on the list as the fates stand, with `note` added to
    * every piece; not go closes it */
   z.object({
-    t: z.literal("pieces-answer"),
+    t: z.literal("handoff-answer"),
     worktreeId: id,
     id: z.string().max(64),
     go: z.boolean(),

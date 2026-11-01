@@ -5,13 +5,13 @@
 import type { ClientMsg, Piece, PieceFate } from "@toyon/shared";
 import type { ChatItem } from "../../state/store.ts";
 
-export type PiecesItem = Extract<ChatItem, { kind: "pieces" }>;
+export type HandoffItem = Extract<ChatItem, { kind: "handoff" }>;
 
 /** the list the document draws on the plan: the newest one that was not sent back. A done list
  * stays, with its outcomes, for as long as its plan is the one open. */
-export function openPieces(chat: readonly ChatItem[]): PiecesItem | null {
-  const item = chat.findLast((i) => i.kind === "pieces" && i.state !== "declined");
-  return item?.kind === "pieces" ? item : null;
+export function openHandoff(chat: readonly ChatItem[]): HandoffItem | null {
+  const item = chat.findLast((i) => i.kind === "handoff" && i.state !== "declined");
+  return item?.kind === "handoff" ? item : null;
 }
 
 /** Whether the file the list sits on is the page Toyon wrote for it (each piece's text under its
@@ -19,12 +19,12 @@ export function openPieces(chat: readonly ChatItem[]): PiecesItem | null {
  * worktree's plan and takes the plan card's path when the card comes, as its `companion`; a list
  * shown as Toyon's own card names the page. There the block is the whole page, since the rows
  * unfold to the same text the file holds; the file itself stays, for a restart. */
-export function listPage(item: Pick<PiecesItem, "plan" | "companion">): boolean {
+export function listPage(item: Pick<HandoffItem, "plan" | "companion">): boolean {
   return !!item.plan && !item.companion;
 }
 
 /** where the piece stands: the person's last press, else what the agent proposed */
-export function effectiveFate(item: Pick<PiecesItem, "fates">, piece: Piece): PieceFate {
+export function effectiveFate(item: Pick<HandoffItem, "fates">, piece: Piece): PieceFate {
   return item.fates[piece.id] ?? piece.fate;
 }
 
@@ -32,7 +32,7 @@ export function effectiveFate(item: Pick<PiecesItem, "fates">, piece: Piece): Pi
  * the same list, named by its title; null for one that starts at once */
 export type Wait = { kind: "branch"; id: string; branch: string; title: string } | { kind: "piece"; title: string };
 
-export function waitOf(item: Pick<PiecesItem, "pieces">, piece: Piece): Wait | null {
+export function waitOf(item: Pick<HandoffItem, "pieces">, piece: Piece): Wait | null {
   const after = piece.after;
   if (!after) return null;
   if ("piece" in after) {
@@ -43,7 +43,7 @@ export function waitOf(item: Pick<PiecesItem, "pieces">, piece: Piece): Wait | n
 
 /** how the list would act on a yes, by fate: siblings made now, siblings queued behind a branch
  * or a piece, messages sent on, pieces kept here, and pieces skipped */
-export function piecesCounts(item: Pick<PiecesItem, "pieces" | "fates">) {
+export function handoffCounts(item: Pick<HandoffItem, "pieces" | "fates">) {
   const counts = { worktrees: 0, queued: 0, sent: 0, here: 0, skipped: 0 };
   for (const piece of item.pieces) {
     const fate = effectiveFate(item, piece);
@@ -65,8 +65,8 @@ const joinAnd = (parts: string[]): string =>
 
 /** The byline under a plan card that carries a list: what its yes starts, as fact. `selfId` is
  * the worktree the card is in, so a wait on its own branch reads "this branch". */
-export function piecesLine(item: Pick<PiecesItem, "pieces" | "fates">, selfId?: string): string {
-  const c = piecesCounts(item);
+export function handoffLine(item: Pick<HandoffItem, "pieces" | "fates">, selfId?: string): string {
+  const c = handoffCounts(item);
   const acts: string[] = [];
   if (c.here) acts.push("this plan here");
   if (c.worktrees) acts.push(`${plural(c.worktrees, "worktree")} now`);
@@ -90,7 +90,7 @@ export function piecesLine(item: Pick<PiecesItem, "pieces" | "fates">, selfId?: 
 
 /** the question Toyon's own card asks: one piece by what the agent proposed for it, a list by
  * its counts as the fates stand */
-export function piecesQuestion(item: Pick<PiecesItem, "pieces" | "fates">): string {
+export function handoffQuestion(item: Pick<HandoffItem, "pieces" | "fates">): string {
   const only = item.pieces.length === 1 ? item.pieces[0] : undefined;
   if (only) {
     if (only.fate === "send") return `Send ${only.title} to ${only.to?.title ?? "the worktree"}?`;
@@ -98,7 +98,7 @@ export function piecesQuestion(item: Pick<PiecesItem, "pieces" | "fates">): stri
     if (only.project) return `Continue in ${only.project.name}?`;
     return only.after ? `Queue a worktree for ${only.title}?` : `Start a worktree for ${only.title}?`;
   }
-  const c = piecesCounts(item);
+  const c = handoffCounts(item);
   const parts = [
     c.worktrees ? `start ${plural(c.worktrees, "worktree")}` : "",
     c.queued ? `queue ${c.queued}` : "",
@@ -122,7 +122,7 @@ export interface OneRow {
 /** the rows for one piece, in digit order: what the agent proposed first, so enter on an
  * untouched card is the proposal, the alternative, then not now. A piece for another project has
  * no "here": the work does not belong in this worktree. */
-export function oneRows(item: Pick<PiecesItem, "pieces">, piece: Piece): OneRow[] {
+export function oneRows(item: Pick<HandoffItem, "pieces">, piece: Piece): OneRow[] {
   const wait = waitOf(item, piece);
   const where = wait ? ` once ${wait.kind === "branch" ? wait.branch : wait.title} lands` : "";
   const worktree: OneRow = piece.project
@@ -179,7 +179,7 @@ export function fateSentence(piece: Piece, fate: PieceFate, wait: Wait | null): 
 /** Toyon's own card as the person answered it, for their bubble: the row they picked, by its
  * label on the card, and the note under it. One piece reads back the fate it went with, since
  * that row is what was pressed; a list's row was go. Null for a list no card asked about. */
-export function piecesSaid(item: Pick<PiecesItem, "pieces" | "fates" | "answered">): string | null {
+export function handoffSaid(item: Pick<HandoffItem, "pieces" | "fates" | "answered">): string | null {
   const a = item.answered;
   if (!a) return null;
   if (!a.go) return "not now";
@@ -190,24 +190,24 @@ export function piecesSaid(item: Pick<PiecesItem, "pieces" | "fates" | "answered
 }
 
 /** the answer to Toyon's own card: `note` rides with go alone, trimmed, and a blank one is left off */
-export function piecesAnswer(
-  item: Pick<PiecesItem, "id">,
+export function handoffAnswer(
+  item: Pick<HandoffItem, "id">,
   worktreeId: string,
   go: boolean,
   note: string | undefined,
-): Extract<ClientMsg, { t: "pieces-answer" }> {
+): Extract<ClientMsg, { t: "handoff-answer" }> {
   const said = go ? note?.trim() : undefined;
-  return { t: "pieces-answer", worktreeId, id: item.id, go, ...(said ? { note: said } : {}) };
+  return { t: "handoff-answer", worktreeId, id: item.id, go, ...(said ? { note: said } : {}) };
 }
 
 /** a press on a row: the fate goes to the daemon, which records it for every tab */
 export function pieceFate(
-  item: Pick<PiecesItem, "id">,
+  item: Pick<HandoffItem, "id">,
   worktreeId: string,
   pieceId: string,
   fate: PieceFate,
-): Extract<ClientMsg, { t: "pieces-fate" }> {
-  return { t: "pieces-fate", worktreeId, id: item.id, pieceId, fate };
+): Extract<ClientMsg, { t: "handoff-fate" }> {
+  return { t: "handoff-fate", worktreeId, id: item.id, pieceId, fate };
 }
 
 /** the fates a piece may take from a press: a piece aimed at an open worktree is sent there or
@@ -227,13 +227,13 @@ export function fatesFor(piece: Piece, pieces: readonly Piece[] = []): PieceFate
 }
 
 /** whether the list is still the person's to move */
-export const deciding = (item: Pick<PiecesItem, "state">): boolean =>
+export const deciding = (item: Pick<HandoffItem, "state">): boolean =>
   item.state === "held" || item.state === "proposed";
 
 /** The strip's order, fixed from what the agent proposed, so a press on a fate moves no tab: the
  * origin's own pieces first, beside the plan they are part of, then worktrees made now, then the
  * queued, then what is sent on. The agent's order within each. */
-export function pieceOrder(item: Pick<PiecesItem, "pieces">): Piece[] {
+export function pieceOrder(item: Pick<HandoffItem, "pieces">): Piece[] {
   const rank = (p: Piece) => (p.fate === "here" ? 0 : p.fate === "worktree" ? (p.after ? 2 : 1) : 3);
   return [...item.pieces].sort((a, b) => rank(a) - rank(b));
 }
@@ -242,7 +242,7 @@ export function pieceOrder(item: Pick<PiecesItem, "pieces">): Piece[] {
  * piece once answered; a worktree the piece became stands there by its row's dot and age instead */
 export type PieceMark = { word: string } | { worktreeId: string; title?: string };
 
-export function pieceMark(item: PiecesItem, piece: Piece): PieceMark {
+export function pieceMark(item: HandoffItem, piece: Piece): PieceMark {
   if (deciding(item)) {
     const fate = effectiveFate(item, piece);
     if (fate === "worktree") return { word: piece.after ? "queued" : "worktree" };
@@ -268,7 +268,7 @@ export type PieceStanding =
   /** waiting for its turn: the branch it waits for, by its open row when there is one */
   | { kind: "queued"; after: Wait | null; said?: string };
 
-export function pieceStanding(item: PiecesItem, piece: Piece): PieceStanding {
+export function pieceStanding(item: HandoffItem, piece: Piece): PieceStanding {
   if (item.state === "going") return { kind: "starting" };
   const outcome = item.outcomes.find((o) => o.pieceId === piece.id);
   const later = item.later.findLast((l) => l.pieceId === piece.id);
@@ -301,7 +301,7 @@ export function pieceStanding(item: PiecesItem, piece: Piece): PieceStanding {
 /** The tab a page opens on: the plan when the page has one, since that is the file opened. On a
  * page with none, the first piece while the list is the person's; once answered, the origin's own
  * piece, which is this worktree's plan. */
-export function defaultTab(item: PiecesItem, hasPlan: boolean): string {
+export function defaultTab(item: HandoffItem, hasPlan: boolean): string {
   if (hasPlan) return "plan";
   const order = pieceOrder(item);
   const own = deciding(item) ? undefined : order.find((p) => effectiveFate(item, p) === "here");
@@ -311,7 +311,7 @@ export function defaultTab(item: PiecesItem, hasPlan: boolean): string {
 /** What the origin's own work waits for, once the list was answered: the worktrees its here
  * pieces named, a piece of the list by the worktree it became. Nothing before go, and nothing
  * for a wait that never became a worktree. Each once. */
-export function hereWaits(item: PiecesItem): Array<{ id: string; title: string }> {
+export function hereWaits(item: HandoffItem): Array<{ id: string; title: string }> {
   if (item.state !== "done") return [];
   const out = new Map<string, string>();
   for (const piece of item.pieces) {

@@ -6,33 +6,33 @@ import {
   fateSentence,
   fatesFor,
   fateWord,
+  type HandoffItem,
+  handoffAnswer,
+  handoffCounts,
+  handoffLine,
+  handoffQuestion,
+  handoffSaid,
   hereWaits,
   listPage,
   oneRows,
-  openPieces,
-  type PiecesItem,
+  openHandoff,
   pieceFate,
   pieceMark,
   pieceOrder,
   pieceStanding,
-  piecesAnswer,
-  piecesCounts,
-  piecesLine,
-  piecesQuestion,
-  piecesSaid,
   waitOf,
-} from "./pieces.ts";
+} from "./handoff.ts";
 
-describe("piecesSaid", () => {
+describe("handoffSaid", () => {
   test("the person's bubble reads back the row they pressed, with the note under it", () => {
     const one = [piece("p1")];
-    expect(piecesSaid(list(one))).toBeNull();
-    expect(piecesSaid(list(one, {}, { answered: { go: true } }))).toBe("start a worktree");
-    expect(piecesSaid(list(one, { p1: "here" }, { answered: { go: true, note: "carefully" } }))).toBe(
+    expect(handoffSaid(list(one))).toBeNull();
+    expect(handoffSaid(list(one, {}, { answered: { go: true } }))).toBe("start a worktree");
+    expect(handoffSaid(list(one, { p1: "here" }, { answered: { go: true, note: "carefully" } }))).toBe(
       "do it here\ncarefully",
     );
-    expect(piecesSaid(list([piece("p1"), piece("p2")], {}, { answered: { go: true } }))).toBe("go");
-    expect(piecesSaid(list(one, {}, { answered: { go: false } }))).toBe("not now");
+    expect(handoffSaid(list([piece("p1"), piece("p2")], {}, { answered: { go: true } }))).toBe("go");
+    expect(handoffSaid(list(one, {}, { answered: { go: false } }))).toBe("not now");
   });
 });
 
@@ -44,8 +44,8 @@ const piece = (id: string, over: Partial<Piece> = {}): Piece => ({
   fate: "worktree",
   ...over,
 });
-const list = (pieces: Piece[], fates: PiecesItem["fates"] = {}, over: Partial<PiecesItem> = {}): PiecesItem => ({
-  kind: "pieces",
+const list = (pieces: Piece[], fates: HandoffItem["fates"] = {}, over: Partial<HandoffItem> = {}): HandoffItem => ({
+  kind: "handoff",
   id: "l1",
   pieces,
   fates: { ...Object.fromEntries(pieces.map((p) => [p.id, p.fate])), ...fates },
@@ -73,21 +73,21 @@ describe("fates", () => {
   });
   test("a press and an answer are the daemon's frames", () => {
     expect(pieceFate(list([]), "a", "p1", "skip")).toEqual({
-      t: "pieces-fate",
+      t: "handoff-fate",
       worktreeId: "a",
       id: "l1",
       pieceId: "p1",
       fate: "skip",
     });
-    expect(piecesAnswer(list([]), "a", true, "  and tests ")).toEqual({
-      t: "pieces-answer",
+    expect(handoffAnswer(list([]), "a", true, "  and tests ")).toEqual({
+      t: "handoff-answer",
       worktreeId: "a",
       id: "l1",
       go: true,
       note: "and tests",
     });
-    expect(piecesAnswer(list([]), "a", false, "kept")).toEqual({
-      t: "pieces-answer",
+    expect(handoffAnswer(list([]), "a", false, "kept")).toEqual({
+      t: "handoff-answer",
       worktreeId: "a",
       id: "l1",
       go: false,
@@ -105,8 +105,8 @@ describe("fates", () => {
 describe("the words", () => {
   const four = [piece("p1"), piece("p2", { after }), piece("p3", { fate: "send", to }), piece("p4", { fate: "here" })];
   test("counts by what a yes does", () => {
-    expect(piecesCounts(list(four))).toEqual({ worktrees: 1, queued: 1, sent: 1, here: 1, skipped: 0 });
-    expect(piecesCounts(list(four, { p1: "skip", p2: "here" }))).toEqual({
+    expect(handoffCounts(list(four))).toEqual({ worktrees: 1, queued: 1, sent: 1, here: 1, skipped: 0 });
+    expect(handoffCounts(list(four, { p1: "skip", p2: "here" }))).toEqual({
       worktrees: 0,
       queued: 0,
       sent: 1,
@@ -115,34 +115,36 @@ describe("the words", () => {
     });
   });
   test("the byline under the plan card: what its yes starts, as fact", () => {
-    expect(piecesLine(list(four), "a")).toBe(
+    expect(handoffLine(list(four), "a")).toBe(
       "Starts this plan here, 1 worktree now, 1 when toyon/b lands and 1 sent on.",
     );
-    expect(piecesLine(list([piece("p1"), piece("p2"), piece("p3", { fate: "here" })], { p3: "skip" }), "a")).toBe(
+    expect(handoffLine(list([piece("p1"), piece("p2"), piece("p3", { fate: "here" })], { p3: "skip" }), "a")).toBe(
       "Starts 2 worktrees now; 1 skipped.",
     );
     // a wait on this branch reads as this branch, and two waits on it as one count
     const self = { id: "a", branch: "toyon/a", title: "A" };
-    expect(piecesLine(list([piece("p1", { after: self }), piece("p2", { after: self })]), "a")).toBe(
+    expect(handoffLine(list([piece("p1", { after: self }), piece("p2", { after: self })]), "a")).toBe(
       "Starts 2 when this branch lands.",
     );
-    expect(piecesLine(list([piece("p1", { after: { piece: "p2" } }), piece("p2", { after })]), "a")).toBe(
+    expect(handoffLine(list([piece("p1", { after: { piece: "p2" } }), piece("p2", { after })]), "a")).toBe(
       "Starts 2 queued.",
     );
-    expect(piecesLine(list([piece("p1", { fate: "here" })]), "a")).toBe("Starts this plan here.");
-    expect(piecesLine(list([piece("p1")], { p1: "skip" }), "a")).toBe("Starts nothing; 1 skipped.");
+    expect(handoffLine(list([piece("p1", { fate: "here" })]), "a")).toBe("Starts this plan here.");
+    expect(handoffLine(list([piece("p1")], { p1: "skip" }), "a")).toBe("Starts nothing; 1 skipped.");
   });
   test("the card's question: one piece by what the agent proposed, a list by its counts", () => {
-    expect(piecesQuestion(list([piece("p1", { title: "Inbound comments" })]))).toBe(
+    expect(handoffQuestion(list([piece("p1", { title: "Inbound comments" })]))).toBe(
       "Start a worktree for Inbound comments?",
     );
-    expect(piecesQuestion(list([piece("p1", { title: "Later", after })]))).toBe("Queue a worktree for Later?");
-    expect(piecesQuestion(list([piece("p1", { title: "Notes", fate: "send", to })]))).toBe("Send Notes to C?");
-    expect(piecesQuestion(list([piece("p1", { title: "Notes", project })]))).toBe("Continue in acp?");
+    expect(handoffQuestion(list([piece("p1", { title: "Later", after })]))).toBe("Queue a worktree for Later?");
+    expect(handoffQuestion(list([piece("p1", { title: "Notes", fate: "send", to })]))).toBe("Send Notes to C?");
+    expect(handoffQuestion(list([piece("p1", { title: "Notes", project })]))).toBe("Continue in acp?");
     // the rows carry the fates, so a press on the plan page does not move the question
-    expect(piecesQuestion(list([piece("p1", { title: "Notes" })], { p1: "skip" }))).toBe("Start a worktree for Notes?");
-    expect(piecesQuestion(list(four))).toBe("Start 1 worktree, queue 1, send 1, do 1 here?");
-    expect(piecesQuestion(list([piece("p1"), piece("p2"), piece("p3", { fate: "here" })], { p3: "skip" }))).toBe(
+    expect(handoffQuestion(list([piece("p1", { title: "Notes" })], { p1: "skip" }))).toBe(
+      "Start a worktree for Notes?",
+    );
+    expect(handoffQuestion(list(four))).toBe("Start 1 worktree, queue 1, send 1, do 1 here?");
+    expect(handoffQuestion(list([piece("p1"), piece("p2"), piece("p3", { fate: "here" })], { p3: "skip" }))).toBe(
       "Start 2 worktrees, skip 1?",
     );
   });
@@ -208,14 +210,14 @@ describe("listPage", () => {
   });
 });
 
-describe("openPieces", () => {
+describe("openHandoff", () => {
   test("the newest list not sent back, in any state the plan should draw", () => {
     const declined = list([], {}, { id: "l0", state: "declined" });
     const done = list([], {}, { id: "l1", state: "done" });
-    expect(openPieces([declined, done])?.id).toBe("l1");
-    expect(openPieces([done, declined])?.id).toBe("l1");
-    expect(openPieces([declined])).toBeNull();
-    expect(openPieces([list([], {}, { state: "held" })])?.state).toBe("held");
+    expect(openHandoff([declined, done])?.id).toBe("l1");
+    expect(openHandoff([done, declined])?.id).toBe("l1");
+    expect(openHandoff([declined])).toBeNull();
+    expect(openHandoff([list([], {}, { state: "held" })])?.state).toBe("held");
   });
 });
 
@@ -224,7 +226,7 @@ describe("the strip", () => {
   const queued = piece("p2", { after });
   const here = piece("p3", { fate: "here", after: { piece: "p1" } });
   const sent = piece("p4", { fate: "send", to: after });
-  const outcomes: PiecesItem["outcomes"] = [
+  const outcomes: HandoffItem["outcomes"] = [
     { pieceId: "p1", fate: "worktree", worktreeId: "w1", title: "Piece p1" },
     { pieceId: "p2", fate: "worktree", after: "toyon/b" },
     { pieceId: "p3", fate: "here" },

@@ -238,7 +238,7 @@ export interface PieceOrigin {
 /** What the agent is told once its list was acted on with the plan's yes: which pieces started as
  * siblings, which wait, which were sent on, and that the rest are its own. Steered into the turn
  * the approval releases, since the approval itself is an option id and says nothing of the list. */
-export function piecesActedPrompt(
+export function handoffActedPrompt(
   pieces: ReadonlyArray<{ id: string; title: string }>,
   outcomes: ReadonlyArray<{ pieceId: string; fate: string; title?: string; after?: string; error?: string }>,
   /** what the person answered: the plan card the list rode beside, or Toyon's own card, whose go

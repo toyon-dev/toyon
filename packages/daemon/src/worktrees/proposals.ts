@@ -13,7 +13,7 @@ export function proposedThisTurn(entries: readonly TranscriptEntry[]): number {
   for (let i = entries.length - 1; i >= 0; i--) {
     const e = entries[i]!.event;
     if (e.type === "turn-start") break;
-    if (e.type === "pieces-proposed") n++;
+    if (e.type === "handoff-proposed") n++;
   }
   return n;
 }

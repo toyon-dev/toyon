@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import type { ChatItem } from "../../state/store.ts";
 import { cardDropBox, cardLine, openCard } from "./cards.ts";
-import type { PiecesItem } from "./pieces.ts";
+import type { HandoffItem } from "./handoff.ts";
 
-const pieces = (over: Partial<PiecesItem> = {}): PiecesItem => ({
-  kind: "pieces",
+const pieces = (over: Partial<HandoffItem> = {}): HandoffItem => ({
+  kind: "handoff",
   id: "l1",
   pieces: [{ id: "p1", title: "Rail", plan: "Fix the rail.", attachments: [], fate: "worktree" }],
   fates: { p1: "worktree" },

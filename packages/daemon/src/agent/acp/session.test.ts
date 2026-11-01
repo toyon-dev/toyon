@@ -3665,7 +3665,7 @@ describe("AcpSession cards", () => {
   };
   /** a pieces list proposed outside plan mode: Toyon's own card, open until its closers */
   const proposed = (id: string): AgentEvent => ({
-    type: "pieces-proposed",
+    type: "handoff-proposed",
     id,
     pieces: [{ id: "p1", title: "Fix it", plan: "do it there", attachments: [], fate: "worktree" }],
     mode: "auto",
@@ -3706,7 +3706,7 @@ describe("AcpSession cards", () => {
     await w.session.close();
   });
 
-  test("a pieces card holds the row at waiting while idle, and its closers let it go", async () => {
+  test("a handoff card holds the row at waiting while idle, and its closers let it go", async () => {
     const fake = fakeAgent(say("ok"));
     const w = world(fake);
     w.session.send("hi");
@@ -3714,15 +3714,15 @@ describe("AcpSession cards", () => {
     expect(w.session.status).toBe("idle");
     w.session.note(proposed("h1"));
     expect(w.session.status).toBe("waiting");
-    w.session.note({ type: "pieces-declined", id: "h1", ts: 2 });
+    w.session.note({ type: "handoff-declined", id: "h1", ts: 2 });
     expect(w.session.status).toBe("idle");
     w.session.note(proposed("h2"));
     expect(w.session.status).toBe("waiting");
     // the go is the answer: the worktree being made after it is nobody's wait here
-    w.session.note({ type: "pieces-go", id: "h2", ts: 3 });
+    w.session.note({ type: "handoff-go", id: "h2", ts: 3 });
     expect(w.session.status).toBe("idle");
     w.session.note({
-      type: "pieces",
+      type: "handoff",
       id: "h2",
       outcomes: [{ pieceId: "p1", fate: "worktree", worktreeId: "b", title: "Fix it" }],
       ts: 4,
@@ -3740,7 +3740,7 @@ describe("AcpSession cards", () => {
     for (let i = 0; i < 400 && !w.types().includes("turn-end"); i++) await Bun.sleep(5);
     expect(w.types()).toContain("turn-end");
     expect(w.session.status).toBe("waiting");
-    w.session.note({ type: "pieces-declined", id: "h1", ts: 2 });
+    w.session.note({ type: "handoff-declined", id: "h1", ts: 2 });
     expect(w.session.status).toBe("idle");
     await w.session.close();
   });
@@ -3750,12 +3750,12 @@ describe("AcpSession cards", () => {
     const first = world(fake);
     first.session.note(proposed("h1"));
     first.session.note(proposed("h2"));
-    first.session.note({ type: "pieces-declined", id: "h1", ts: 2 });
+    first.session.note({ type: "handoff-declined", id: "h1", ts: 2 });
     await first.session.close();
     const again = world(fake, claudeSpec, 60_000, first.id);
     expect(again.session.status).toBe("waiting");
     expect(again.statuses).toEqual(["waiting"]);
-    again.session.note({ type: "pieces-declined", id: "h2", ts: 3 });
+    again.session.note({ type: "handoff-declined", id: "h2", ts: 3 });
     expect(again.session.status).toBe("idle");
     await again.session.close();
     const settled = world(fake, claudeSpec, 60_000, first.id);
@@ -3768,20 +3768,20 @@ describe("AcpSession cards", () => {
     const fake = fakeAgent(say("ok"));
     const first = world(fake);
     first.session.note(proposed("h1"));
-    first.session.note({ type: "pieces-go", id: "h1", ts: 2 });
+    first.session.note({ type: "handoff-go", id: "h1", ts: 2 });
     await first.session.close();
     const again = world(fake, claudeSpec, 60_000, first.id);
     expect(again.session.status).toBe("idle");
-    expect(again.types().at(-1)).toBe("pieces-declined");
+    expect(again.types().at(-1)).toBe("handoff-declined");
     expect(again.session.transcript().at(-1)?.event).toMatchObject({
-      type: "pieces-declined",
+      type: "handoff-declined",
       id: "h1",
       outcome: "failed",
       reason: "Toyon stopped while the worktrees were being made",
     });
     await again.session.close();
     const third = world(fake, claudeSpec, 60_000, first.id);
-    expect(third.types()).not.toContain("pieces-declined");
+    expect(third.types()).not.toContain("handoff-declined");
     await third.session.close();
   });
 
@@ -3813,12 +3813,12 @@ describe("AcpSession cards", () => {
   });
 });
 
-describe("AcpSession pieces", () => {
+describe("AcpSession handoff", () => {
   const PLAN_OPTIONS = [
     { optionId: "exit_plan_default", name: "Yes, manually approve edits", kind: "allow_once" as const },
     { optionId: "cancel", name: "No, keep planning", kind: "reject_once" as const },
   ];
-  const held: AgentEvent = { type: "pieces-proposed", id: "l1", pieces: [], mode: "plan", held: true, ts: 1 };
+  const held: AgentEvent = { type: "handoff-proposed", id: "l1", pieces: [], mode: "plan", held: true, ts: 1 };
   /** an agent that asks for plan approval once a test lets it, then ends its turn */
   function planner() {
     let release = () => {};
@@ -3849,14 +3849,14 @@ describe("AcpSession pieces", () => {
     const modes: string[] = [];
     const { fake, release } = planner();
     const w = world(fake, claudeSpec, 60_000, undefined, {
-      onPieces: (id, approved) => decided.push([id, approved]),
+      onHandoff: (id, approved) => decided.push([id, approved]),
       setMode: (m) => modes.push(m),
     });
     w.session.send("plan it");
     w.session.note(held);
     release();
     await waitFor(() => !!openAsk(w.events));
-    expect(card(w.events).pieces).toBe("l1");
+    expect(card(w.events).handoff).toBe("l1");
     // held, not open: the card is what the row waits on
     expect(w.session.status).toBe("waiting");
     w.session.answer(card(w.events).id, { kind: "choice", choiceId: "exit_plan_default" });
@@ -3864,7 +3864,7 @@ describe("AcpSession pieces", () => {
     expect(modes).toEqual(["ask"]);
     expect(decided).toEqual([["l1", true]]);
     // decided with the plan: no card of Toyon's at the turn's end
-    expect(w.types()).not.toContain("pieces-shown");
+    expect(w.types()).not.toContain("handoff-shown");
     await w.session.close();
   });
 
@@ -3903,18 +3903,18 @@ describe("AcpSession pieces", () => {
     const { fake, release } = planner();
     const w = world(fake, claudeSpec, 60_000, undefined, {
       onPlan: async () => ".toyon/plans/1.md",
-      onPieces: (id, approved) => decided.push([id, approved]),
+      onHandoff: (id, approved) => decided.push([id, approved]),
     });
     w.session.send("plan it");
     release();
     await waitFor(() => !!openAsk(w.events));
-    expect(card(w.events).pieces).toBeUndefined();
+    expect(card(w.events).handoff).toBeUndefined();
     // read off the plan by Toyon while the card is up
     w.session.note({ ...held, by: "toyon" } as AgentEvent);
     w.session.answer(card(w.events).id, { kind: "choice", choiceId: "exit_plan_default" });
     await w.idle();
     expect(decided).toEqual([["l1", true]]);
-    expect(w.types()).not.toContain("pieces-shown");
+    expect(w.types()).not.toContain("handoff-shown");
     await w.session.close();
   });
 
@@ -3924,7 +3924,7 @@ describe("AcpSession pieces", () => {
     const first = planner();
     const w = world(first.fake, claudeSpec, 60_000, undefined, {
       onPlan: async () => ".toyon/plans/1.md",
-      onPiecesShown: () => null,
+      onHandoffShown: () => null,
     });
     w.session.send("plan it");
     w.session.note(held);
@@ -3932,14 +3932,14 @@ describe("AcpSession pieces", () => {
     await waitFor(() => !!openAsk(w.events));
     w.session.stop();
     await w.idle();
-    expect(w.types()).toContain("pieces-shown");
-    expect(w.types()).not.toContain("pieces-declined");
+    expect(w.types()).toContain("handoff-shown");
+    expect(w.types()).not.toContain("handoff-declined");
     await w.session.close();
     // one Toyon read for the card: nobody asked for it apart from the plan, so it goes with it
     const second = planner();
     const w2 = world(second.fake, claudeSpec, 60_000, undefined, {
       onPlan: async () => ".toyon/plans/1.md",
-      onPiecesShown: () => null,
+      onHandoffShown: () => null,
     });
     w2.session.send("plan it");
     second.release();
@@ -3947,11 +3947,11 @@ describe("AcpSession pieces", () => {
     w2.session.note({ ...held, by: "toyon" } as AgentEvent);
     w2.session.stop();
     await w2.idle();
-    expect(w2.events.findLast((e) => e.type === "pieces-declined")).toMatchObject({
+    expect(w2.events.findLast((e) => e.type === "handoff-declined")).toMatchObject({
       id: "l1",
       reason: "the plan card closed before it was answered",
     });
-    expect(w2.types()).not.toContain("pieces-shown");
+    expect(w2.types()).not.toContain("handoff-shown");
     await w2.session.close();
   });
 
@@ -3961,7 +3961,7 @@ describe("AcpSession pieces", () => {
     // held in plan mode, as a list always is: outside it the list would be Toyon's card
     const w = world(fake, claudeSpec, 60_000, undefined, {
       mode: () => "plan",
-      onPieces: (id, approved) => decided.push([id, approved]),
+      onHandoff: (id, approved) => decided.push([id, approved]),
     });
     w.session.note(held);
     w.session.send("plan it");
@@ -3970,13 +3970,13 @@ describe("AcpSession pieces", () => {
     w.session.answer(card(w.events).id, { kind: "choice", choiceId: "cancel" });
     await w.idle();
     expect(decided).toEqual([["l1", false]]);
-    expect(w.types()).not.toContain("pieces-shown");
+    expect(w.types()).not.toContain("handoff-shown");
     await w.session.close();
   });
 
   test("the plan sent back tells the agent its list went with it, ahead of the no", async () => {
     const { fake, release } = planner();
-    const w = world(fake, claudeSpec, 60_000, undefined, { mode: () => "plan", onPieces: () => {} });
+    const w = world(fake, claudeSpec, 60_000, undefined, { mode: () => "plan", onHandoff: () => {} });
     w.session.note(held);
     w.session.send("plan it");
     release();
@@ -3990,7 +3990,7 @@ describe("AcpSession pieces", () => {
     await w.session.close();
     // a list Toyon read off the plan was never the agent's hand-over: nothing to say about it
     const second = planner();
-    const w2 = world(second.fake, claudeSpec, 60_000, undefined, { mode: () => "plan", onPieces: () => {} });
+    const w2 = world(second.fake, claudeSpec, 60_000, undefined, { mode: () => "plan", onHandoff: () => {} });
     w2.session.note({ ...held, by: "toyon" } as AgentEvent);
     w2.session.send("plan it");
     second.release();
@@ -4004,7 +4004,7 @@ describe("AcpSession pieces", () => {
   test("outside plan mode a held list whose plan card never comes is Toyon's own card from the turn's end, and the row waits on it", async () => {
     const shown: string[] = [];
     const w = world(fakeAgent(say("no plan after all")), claudeSpec, 60_000, undefined, {
-      onPiecesShown: (id) => {
+      onHandoffShown: (id) => {
         shown.push(id);
         return null;
       },
@@ -4012,10 +4012,10 @@ describe("AcpSession pieces", () => {
     w.session.note(held);
     w.session.send("plan it");
     await w.idle();
-    expect(w.events.findLast((e) => e.type === "pieces-shown")).toMatchObject({ id: "l1" });
+    expect(w.events.findLast((e) => e.type === "handoff-shown")).toMatchObject({ id: "l1" });
     expect(shown).toEqual(["l1"]);
     expect(w.session.status).toBe("waiting");
-    w.session.note({ type: "pieces-declined", id: "l1", ts: 2 });
+    w.session.note({ type: "handoff-declined", id: "l1", ts: 2 });
     expect(w.session.status).toBe("idle");
     await w.session.close();
   });
@@ -4026,12 +4026,12 @@ describe("AcpSession pieces", () => {
     const shown: string[] = [];
     const w = world(fakeAgent(say("hi")), claudeSpec, 60_000, id, {
       // the briefs file the callback answers with rides on the event, so the card has its page
-      onPiecesShown: (id) => {
+      onHandoffShown: (id) => {
         shown.push(id);
         return ".toyon/plans/9.md";
       },
     });
-    expect(w.events.at(-1)).toMatchObject({ type: "pieces-shown", id: "l1", plan: ".toyon/plans/9.md" });
+    expect(w.events.at(-1)).toMatchObject({ type: "handoff-shown", id: "l1", plan: ".toyon/plans/9.md" });
     expect(shown).toEqual(["l1"]);
     expect(w.session.status).toBe("waiting");
     await w.session.close();
@@ -4043,7 +4043,7 @@ describe("AcpSession pieces", () => {
       type: "agent-permission",
       id: "ask1",
       title: "Approve Plan",
-      pieces: "l1",
+      handoff: "l1",
       choices: [{ id: "yes", name: "Yes", kind: "allow_once" }],
       ts: 1,
     };
@@ -4057,14 +4057,14 @@ describe("AcpSession pieces", () => {
     );
     const shown: string[] = [];
     const w = world(fakeAgent(say("hi")), claudeSpec, 60_000, id, {
-      onPiecesShown: (id) => {
+      onHandoffShown: (id) => {
         shown.push(id);
         return null;
       },
     });
     // the card is sealed as expired, which hands the list back; the list is then Toyon's card
     expect(w.types()).toContain("agent-ask-end");
-    expect(w.events.at(-1)).toMatchObject({ type: "pieces-shown", id: "l1" });
+    expect(w.events.at(-1)).toMatchObject({ type: "handoff-shown", id: "l1" });
     expect(shown).toEqual(["l1"]);
     expect(w.session.status).toBe("waiting");
     await w.session.close();
@@ -4076,7 +4076,7 @@ describe("AcpSession pieces", () => {
     const w = world(fake, claudeSpec, 60_000, undefined, {
       mode: () => "plan",
       onPlan: async () => ".toyon/plans/1.md",
-      onPiecesShown: (id) => {
+      onHandoffShown: (id) => {
         shown.push(id);
         return null;
       },
@@ -4088,13 +4088,13 @@ describe("AcpSession pieces", () => {
     // the daemon going down under the card, or a stop: the card ends, the list does not
     w.session.stop();
     await w.idle();
-    expect(w.types()).not.toContain("pieces-shown");
-    expect(w.types()).not.toContain("pieces-declined");
+    expect(w.types()).not.toContain("handoff-shown");
+    expect(w.types()).not.toContain("handoff-declined");
     expect(shown).toEqual([]);
     // the agent plans again: the card that comes carries the list it never answered
     w.session.send("plan again");
     await waitFor(() => !!openAsk(w.events));
-    expect(card(w.events).pieces).toBe("l1");
+    expect(card(w.events).handoff).toBe("l1");
     await w.session.close();
   });
 
@@ -4105,18 +4105,18 @@ describe("AcpSession pieces", () => {
     const shown: string[] = [];
     const w = world(fakeAgent(say("hi")), claudeSpec, 60_000, id, {
       mode: () => mode,
-      onPiecesShown: (id) => {
+      onHandoffShown: (id) => {
         shown.push(id);
         return ".toyon/plans/9.md";
       },
     });
-    expect(w.types()).not.toContain("pieces-shown");
+    expect(w.types()).not.toContain("handoff-shown");
     expect(w.session.status).toBe("idle");
     // the mode chip moves to a write mode: no plan card is coming, so the list is Toyon's card
     // from the next message on, ahead of it
     mode = "auto";
     w.session.send("go on");
-    expect(w.events.find((e) => e.type === "pieces-shown")).toMatchObject({ id: "l1", plan: ".toyon/plans/9.md" });
+    expect(w.events.find((e) => e.type === "handoff-shown")).toMatchObject({ id: "l1", plan: ".toyon/plans/9.md" });
     expect(shown).toEqual(["l1"]);
     await w.idle();
     expect(w.session.status).toBe("waiting");

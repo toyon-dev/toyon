@@ -1,11 +1,11 @@
-// Pieces: a plan's work across worktrees. The agent hands Toyon a list of pieces through its own
+// Handoff: a plan's work across worktrees. The agent hands Toyon a list of pieces through its own
 // tool (`handoff`), beside its plan or during a reply, and each piece goes on this worktree, a new
 // worktree of this project or of another open one, or an open worktree already working on that
 // part. Nothing starts until the person says so: in plan mode the list rides beside the next plan
 // card and the plan's yes is its yes; otherwise it is a card of Toyon's own. A piece's text is the
 // plan its worktree is born with. The list's whole state lives on the origin's transcript: a
-// proposal is open from its `pieces-proposed` until a `pieces-go`, `pieces` or `pieces-declined`
-// with the same id, and the fates the person pressed are `pieces-fate` events, the last one per
+// proposal is open from its `handoff-proposed` until a `handoff-go`, `handoff` or `handoff-declined`
+// with the same id, and the fates the person pressed are `handoff-fate` events, the last one per
 // piece standing. A piece that waits for a sibling to land is held on the origin's record, so it
 // survives a restart and leaves with the origin.
 
@@ -29,7 +29,13 @@ import type { AgentAdapter } from "../agent/adapter.ts";
 import type { AttachmentStore } from "../agent/attachments.ts";
 import type { McpTool, McpToolResult, ToolProvider } from "../agent/mcp.ts";
 import { listDoc, planEdited, writePlanDocNow } from "../agent/planDoc.ts";
-import { handedPrompt, type PieceOrigin, pieceAskPrompt, pieceSendPrompt, piecesActedPrompt } from "../agent/prompt.ts";
+import {
+  handedPrompt,
+  handoffActedPrompt,
+  type PieceOrigin,
+  pieceAskPrompt,
+  pieceSendPrompt,
+} from "../agent/prompt.ts";
 import type { ReadPiece } from "../agent/tasks.ts";
 import type { TranscriptEntry } from "../agent/transcript.ts";
 import { UserError } from "../core/errors.ts";
@@ -59,7 +65,7 @@ export function pieceDoc(piece: Pick<Piece, "title" | "plan">): string {
   return `# ${piece.title}\n\n${piece.plan.trim()}\n`;
 }
 
-export interface PiecesDeps {
+export interface HandoffDeps {
   state: StateStore;
   hub: Hub;
   runtime: Pick<RuntimeRegistry, "agentFor" | "ensureAgent">;
@@ -75,7 +81,7 @@ export interface PiecesDeps {
   reader: (wt: WorktreeInfo, markdown: string) => Promise<ReadPiece[] | null>;
 }
 
-type Proposed = Extract<AgentEvent, { type: "pieces-proposed" }>;
+type Proposed = Extract<AgentEvent, { type: "handoff-proposed" }>;
 
 /** one piece as the tool or the verb hands it in, before anything is checked */
 export interface RawPiece {
@@ -174,16 +180,16 @@ export function hashText(text: string): string {
  * event but belongs to no card, so it is not this */
 export function heldUnshown(entries: readonly TranscriptEntry[]): Proposed | null {
   const shown = new Set<string>();
-  for (const { event } of entries) if (event.type === "pieces-shown") shown.add(event.id);
-  return openPieces(entries).find((p) => p.held && !shown.has(p.id)) ?? null;
+  for (const { event } of entries) if (event.type === "handoff-shown") shown.add(event.id);
+  return openHandoff(entries).find((p) => p.held && !shown.has(p.id)) ?? null;
 }
 
 /** the proposals on a transcript nothing has closed, newest last */
-export function openPieces(entries: readonly TranscriptEntry[]): Proposed[] {
+export function openHandoff(entries: readonly TranscriptEntry[]): Proposed[] {
   const open = new Map<string, Proposed>();
   for (const { event } of entries) {
-    if (event.type === "pieces-proposed") open.set(event.id, event);
-    else if (event.type === "pieces-go" || event.type === "pieces" || event.type === "pieces-declined")
+    if (event.type === "handoff-proposed") open.set(event.id, event);
+    else if (event.type === "handoff-go" || event.type === "handoff" || event.type === "handoff-declined")
       open.delete(event.id);
   }
   return [...open.values()];
@@ -196,9 +202,9 @@ export function openPieces(entries: readonly TranscriptEntry[]): Proposed[] {
 export function listFile(entries: readonly TranscriptEntry[], id: string): string | undefined {
   let file: string | undefined;
   for (const { event } of entries) {
-    if ((event.type === "pieces-proposed" || event.type === "pieces-shown") && event.id === id && event.plan) {
+    if ((event.type === "handoff-proposed" || event.type === "handoff-shown") && event.id === id && event.plan) {
       file = event.plan;
-    } else if (event.type === "agent-permission" && event.pieces === id && event.plan) file = event.plan;
+    } else if (event.type === "agent-permission" && event.handoff === id && event.plan) file = event.plan;
   }
   return file;
 }
@@ -207,7 +213,7 @@ export function listFile(entries: readonly TranscriptEntry[], id: string): strin
 export function effectiveFate(entries: readonly TranscriptEntry[], proposal: Proposed, piece: Piece): PieceFate {
   let fate: PieceFate = piece.fate;
   for (const { event } of entries) {
-    if (event.type === "pieces-fate" && event.id === proposal.id && event.pieceId === piece.id) fate = event.fate;
+    if (event.type === "handoff-fate" && event.id === proposal.id && event.pieceId === piece.id) fate = event.fate;
   }
   return fate;
 }
@@ -229,13 +235,13 @@ type Named = { id: string; branch: string; title: string };
 /** what a piece became in one pass of go, for the pieces of the list that wait on it */
 type Became = { fate: PieceFate; worktree?: Named; queued?: true };
 
-export class PiecesService implements ToolProvider {
-  constructor(private d: PiecesDeps) {
-    d.hub.on("piecesDecided", (worktreeId, id, approved) =>
+export class HandoffService implements ToolProvider {
+  constructor(private d: HandoffDeps) {
+    d.hub.on("handoffDecided", (worktreeId, id, approved) =>
       fireAndForget(
         worktreeId,
         approved ? this.act(worktreeId, id, undefined, true) : this.decline(worktreeId, id),
-        "pieces",
+        "handoff",
       ),
     );
     d.hub.on("planUnsplit", (worktreeId, markdown, planPath) =>
@@ -489,8 +495,8 @@ export class PiecesService implements ToolProvider {
     // the agent's own earlier list, still waiting for its plan card, gives way to the new one;
     // any other open list is the person's to answer first
     const waiting = heldUnshown(entries);
-    const replaced = openPieces(entries).filter((o) => by === "agent" && o.id === waiting?.id && o.by !== "toyon");
-    if (openPieces(entries).some((o) => !replaced.includes(o))) {
+    const replaced = openHandoff(entries).filter((o) => by === "agent" && o.id === waiting?.id && o.by !== "toyon");
+    if (openHandoff(entries).some((o) => !replaced.includes(o))) {
       return refused("A pieces list is already waiting for the person on this chat; finish your turn.");
     }
     // the person's own proposals are gated by the open card alone: no turn of theirs to finish.
@@ -501,7 +507,7 @@ export class PiecesService implements ToolProvider {
       );
     }
     for (const o of replaced) {
-      agent.note({ type: "pieces-declined", id: o.id, reason: "handed over again", ts: Date.now() });
+      agent.note({ type: "handoff-declined", id: o.id, reason: "handed over again", ts: Date.now() });
     }
     // the agent's list in plan mode rides the plan card it is about to ask for, and one Toyon read
     // off the plan rides the card that is up; the person's own (the verb) has no card coming and
@@ -511,7 +517,7 @@ export class PiecesService implements ToolProvider {
     if (here) pieces[0]!.fate = "here";
     const plan = held ? null : writePlanDocNow(wt.path, listDoc(pieces));
     agent.note({
-      type: "pieces-proposed",
+      type: "handoff-proposed",
       id: randomUUID(),
       pieces,
       mode: wt.mode ?? DEFAULT_PERMISSION_MODE,
@@ -608,7 +614,7 @@ export class PiecesService implements ToolProvider {
     const wt = this.d.state.worktree(worktreeId);
     if (!wt) throw new UserError("that chat is gone");
     const agent = this.d.runtime.ensureAgent(wt).agent;
-    const proposed = openPieces(agent.transcript()).find((p) => p.id === id);
+    const proposed = openHandoff(agent.transcript()).find((p) => p.id === id);
     if (!proposed) throw new UserError("That list is not open in this chat");
     const piece = proposed.pieces.find((p) => p.id === pieceId);
     if (!piece) throw new UserError("That piece is not on the list");
@@ -625,7 +631,7 @@ export class PiecesService implements ToolProvider {
     if (piece.fate === "send" && (fate === "here" || fate === "worktree")) {
       throw new UserError("A piece for an open worktree is sent there or skipped");
     }
-    agent.note({ type: "pieces-fate", id, pieceId, fate, ts: Date.now() });
+    agent.note({ type: "handoff-fate", id, pieceId, fate, ts: Date.now() });
   }
 
   /** the answer to Toyon's own card: go acts on the list as the fates stand, not go closes it */
@@ -641,11 +647,11 @@ export class PiecesService implements ToolProvider {
     const wt = this.d.state.worktree(worktreeId);
     if (!wt) return;
     const agent = this.d.runtime.ensureAgent(wt).agent;
-    if (!openPieces(agent.transcript()).some((p) => p.id === id)) {
+    if (!openHandoff(agent.transcript()).some((p) => p.id === id)) {
       return log.debug(worktreeId, `decline for a pieces list that already closed (${id})`);
     }
     agent.note({
-      type: "pieces-declined",
+      type: "handoff-declined",
       id,
       ...(reason ? { outcome: "failed" as const, reason } : {}),
       ts: Date.now(),
@@ -666,9 +672,9 @@ export class PiecesService implements ToolProvider {
     if (!wt) return;
     const agent = this.d.runtime.ensureAgent(wt).agent;
     const entries = agent.transcript();
-    const proposed = openPieces(entries).find((p) => p.id === id);
+    const proposed = openHandoff(entries).find((p) => p.id === id);
     if (!proposed) return log.debug(worktreeId, `go for a pieces list that already closed (${id})`);
-    agent.note({ type: "pieces-go", id, ...(note ? { note } : {}), ts: Date.now() });
+    agent.note({ type: "handoff-go", id, ...(note ? { note } : {}), ts: Date.now() });
     try {
       const repo = this.d.state.repo(wt.repoId);
       if (!repo) throw new UserError(`${wt.title}'s project is no longer open in Toyon`);
@@ -697,7 +703,7 @@ export class PiecesService implements ToolProvider {
         o.after = wait.said;
         if (wait.worktree && !awaits.some((a) => a.id === wait.worktree?.id)) awaits.push(wait.worktree);
       }
-      agent.note({ type: "pieces", id, outcomes, ts: Date.now() });
+      agent.note({ type: "handoff", id, outcomes, ts: Date.now() });
       this.recordAwaits(wt.id, awaits);
       if (tell && outcomes.some((o) => o.fate !== "here")) {
         // the card's answer must be on the wire before anything is steered into the turn it
@@ -706,8 +712,8 @@ export class PiecesService implements ToolProvider {
         // transcript as it is answered, so wait for that, then a beat for the write.
         for (let i = 0; i < 30 && openPlanCard(agent.transcript()); i++) await Bun.sleep(100);
         await Bun.sleep(100);
-        agent.send(piecesActedPrompt(proposed.pieces, outcomes), {
-          asked: { kind: "pieces", why: "what the handoff started, so the agent builds only its own piece" },
+        agent.send(handoffActedPrompt(proposed.pieces, outcomes), {
+          asked: { kind: "handoff", why: "what the handoff started, so the agent builds only its own piece" },
           keepCards: true,
         });
       } else if (!tell && outcomes.some((o) => o.fate === "here" && !o.after)) {
@@ -717,12 +723,12 @@ export class PiecesService implements ToolProvider {
         // card goes up as the handoff call answers, so the agent may still be on that turn, and a
         // message steered into it would abort the call in flight: the message waits for the
         // turn to end, off this call, which answers the card now.
-        const text = piecesActedPrompt(proposed.pieces, outcomes, "card", note);
+        const text = handoffActedPrompt(proposed.pieces, outcomes, "card", note);
         fireAndForget(
           wt.id,
           this.idle(wt.id, agent).then(() =>
             agent.send(text, {
-              asked: { kind: "pieces", why: "the piece kept here, so the agent starts on it" },
+              asked: { kind: "handoff", why: "the piece kept here, so the agent starts on it" },
               keepCards: true,
             }),
           ),
@@ -731,7 +737,7 @@ export class PiecesService implements ToolProvider {
       }
     } catch (e) {
       const reason = e instanceof Error ? e.message : String(e);
-      agent.note({ type: "pieces-declined", id, outcome: "failed", reason, ts: Date.now() });
+      agent.note({ type: "handoff-declined", id, outcome: "failed", reason, ts: Date.now() });
       throw e;
     }
   }
@@ -743,13 +749,13 @@ export class PiecesService implements ToolProvider {
     const wt = this.d.state.worktree(worktreeId);
     if (!wt) return;
     const agent = this.d.runtime.ensureAgent(wt).agent;
-    if (openPieces(agent.transcript()).length > 0) return;
+    if (openHandoff(agent.transcript()).length > 0) return;
     const found = await this.d.reader(wt, markdown);
     if (!found || found.length < 2) return;
     // the card may have been answered while the model read: a list held now would wait for a
     // card that is not coming
     const card = openPlanCard(agent.transcript());
-    if (!card || card.plan !== planPath || openPieces(agent.transcript()).length > 0) return;
+    if (!card || card.plan !== planPath || openHandoff(agent.transcript()).length > 0) return;
     await this.proposeRead(wt, markdown, found);
   }
 
@@ -777,7 +783,7 @@ export class PiecesService implements ToolProvider {
       return null;
     }
     const agent = this.d.runtime.agentFor(wt.id);
-    return agent ? (openPieces(agent.transcript()).find((p) => p.by === "toyon") ?? null) : null;
+    return agent ? (openHandoff(agent.transcript()).find((p) => p.by === "toyon") ?? null) : null;
   }
 
   /** The plan file moved under an open held list: mark the list stale, and a list Toyon read is
@@ -794,7 +800,7 @@ export class PiecesService implements ToolProvider {
     const entries = agent.transcript();
     const open = heldUnshown(entries);
     if (!open) return;
-    if (entries.some(({ event }) => event.type === "pieces-stale" && event.id === open.id)) return;
+    if (entries.some(({ event }) => event.type === "handoff-stale" && event.id === open.id)) return;
     const card = openPlanCard(entries);
     if (!card?.plan || !card.detail) return;
     let markdown: string;
@@ -808,25 +814,25 @@ export class PiecesService implements ToolProvider {
     // plan it proposed, which is the card's text
     const moved = open.read ? hashText(markdown) !== open.read : planEdited(wt.path, card.plan, card.detail);
     if (!moved) return;
-    agent.note({ type: "pieces-stale", id: open.id, ts: Date.now() });
+    agent.note({ type: "handoff-stale", id: open.id, ts: Date.now() });
     if (open.by !== "toyon") return;
     const found = await this.d.reader(wt, markdown);
     if (!found || found.length < 2) return;
     if (openPlanCard(agent.transcript())?.id !== card.id) return;
     const pressed = new Map<string, PieceFate>();
     for (const { event } of agent.transcript()) {
-      if (event.type === "pieces-fate" && event.id === open.id) {
+      if (event.type === "handoff-fate" && event.id === open.id) {
         const title = open.pieces.find((p) => p.id === event.pieceId)?.title;
         if (title) pressed.set(title.toLowerCase(), event.fate);
       }
     }
-    agent.note({ type: "pieces-declined", id: open.id, reason: "the plan changed; read again", ts: Date.now() });
+    agent.note({ type: "handoff-declined", id: open.id, reason: "the plan changed; read again", ts: Date.now() });
     const fresh = await this.proposeRead(wt, markdown, found);
     if (!fresh) return;
     for (const piece of fresh.pieces) {
       const fate = pressed.get(piece.title.toLowerCase());
       if (fate && fate !== piece.fate && !(fate === "send" && !piece.to)) {
-        agent.note({ type: "pieces-fate", id: fresh.id, pieceId: piece.id, fate, ts: Date.now() });
+        agent.note({ type: "handoff-fate", id: fresh.id, pieceId: piece.id, fate, ts: Date.now() });
       }
     }
   }
@@ -846,7 +852,7 @@ export class PiecesService implements ToolProvider {
     if (agent.mcpTools === null) await agent.warm();
     if (agent.mcpTools === true) {
       agent.send(pieceAskPrompt(text, here ? undefined : repo), {
-        asked: { kind: "pieces", why: here ? "a new worktree here" : `a new worktree in ${repo.name}` },
+        asked: { kind: "handoff", why: here ? "a new worktree here" : `a new worktree in ${repo.name}` },
       });
       return;
     }

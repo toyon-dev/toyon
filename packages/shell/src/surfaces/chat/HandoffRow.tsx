@@ -10,10 +10,10 @@ import { useDispatch, useSock } from "../../state/context.tsx";
 import type { ChatItem } from "../../state/store.ts";
 import { Button } from "../../ui/Button.tsx";
 import { DaemonRow } from "./DaemonRow.tsx";
-import type { PiecesItem } from "./pieces.ts";
+import type { HandoffItem } from "./handoff.ts";
 import { WorktreeChip } from "./WorktreeChip.tsx";
 
-export function PiecesRow({ item, worktreeId }: { item: PiecesItem; worktreeId?: string | null }) {
+export function HandoffRow({ item, worktreeId }: { item: HandoffItem; worktreeId?: string | null }) {
   const sock = useSock();
   const dispatch = useDispatch();
   if (item.state === "held" || item.state === "proposed") return null;

@@ -112,10 +112,10 @@ export interface HubEvents {
    * each other. */
   landed: (worktreeId: string) => void;
   /** the person answered a pieces list through the plan card it sat beside: approved with the
-   * plan, or sent back with it. The session raises it; the pieces service acts, so the two need
+   * plan, or sent back with it. The session raises it; the handoff service acts, so the two need
    * not know each other. */
-  piecesDecided: (worktreeId: string, id: string, approved: boolean) => void;
-  /** a plan card went up with no pieces list handed over beside it: the pieces service may read
+  handoffDecided: (worktreeId: string, id: string, approved: boolean) => void;
+  /** a plan card went up with no pieces list handed over beside it: the handoff service may read
    * one off the plan on the quick model, for an agent that does not know the tool */
   planUnsplit: (worktreeId: string, markdown: string, planPath: string) => void;
 }

@@ -1,5 +1,5 @@
 // The pieces of a plan as the editor pane's tab strip: the plan first, when the page has one, then
-// one tab per piece in the strip's order (chat/pieces.ts), with the file's actions at the strip's
+// one tab per piece in the strip's order (chat/handoff.ts), with the file's actions at the strip's
 // end, the way the terminal pane heads itself with its streams. A tab's small word is the piece's
 // fate while the list is the person's; once answered it gives way to what the piece became, and a
 // piece that became a worktree wears that row's dot and age, as the rail draws it. A piece's page
@@ -15,23 +15,23 @@ import { Button } from "../../ui/Button.tsx";
 import type { TabItem, TabsProps } from "../../ui/Tabs.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
 import { FileChip } from "../chat/FileChip.tsx";
-import { ImageChip } from "../chat/ImageChip.tsx";
-import { PasteChip } from "../chat/PasteChip.tsx";
-import { PickChip } from "../chat/PickChip.tsx";
 import {
   deciding,
   effectiveFate,
   fateSentence,
   fatesFor,
   fateWord,
+  type HandoffItem,
   type PieceStanding,
-  type PiecesItem,
   pieceFate,
   pieceMark,
   pieceOrder,
   pieceStanding,
   waitOf,
-} from "../chat/pieces.ts";
+} from "../chat/handoff.ts";
+import { ImageChip } from "../chat/ImageChip.tsx";
+import { PasteChip } from "../chat/PasteChip.tsx";
+import { PickChip } from "../chat/PickChip.tsx";
 import { WorktreeChip } from "../chat/WorktreeChip.tsx";
 import { ago, dotClass } from "../util.ts";
 import { MarkdownPreview } from "./MarkdownPreview.tsx";
@@ -110,7 +110,7 @@ function standingWords(s: PieceStanding): string {
  * tab is the pane's state and not the list's. Nothing for a page with no list.
  */
 export function usePieceTabs(
-  item: PiecesItem | null,
+  item: HandoffItem | null,
   plan: { label: string; path: string } | null,
   current: string,
   onPick: (id: string) => void,
@@ -166,13 +166,13 @@ export function usePieceTabs(
         tip: tip(words),
       });
     }
-    return { items, current, onPick, owner: "pieces", label: "the plan and its pieces" };
+    return { items, current, onPick, owner: "handoff", label: "the plan and its pieces" };
   }, [item, label, path, current, onPick, rows, archived, minute]);
 }
 
 /** what became of the open piece, as the line over its text states it: the tip's words, with
  * the row's chip in place of its name where there is a row to open */
-function Standing({ item, piece }: { item: PiecesItem; piece: Piece }) {
+function Standing({ item, piece }: { item: HandoffItem; piece: Piece }) {
   const s = pieceStanding(item, piece);
   const where = "repoName" in s && s.repoName ? ` in ${s.repoName}` : "";
   switch (s.kind) {
@@ -240,7 +240,7 @@ export function PiecePage({
   focus,
   onChat,
 }: {
-  item: PiecesItem;
+  item: HandoffItem;
   piece: Piece;
   worktreeId: string;
   /** the file the list sits on, which the piece's relative links and images are read from */

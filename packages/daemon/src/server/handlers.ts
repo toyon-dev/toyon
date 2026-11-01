@@ -38,8 +38,8 @@ import type { ThemeStore } from "../themes/store.ts";
 import type { UpdateService } from "../update/service.ts";
 import type { ChatSearch } from "../worktrees/chats.ts";
 import type { FixService } from "../worktrees/fix.ts";
+import type { HandoffService } from "../worktrees/handoff.ts";
 import type { LandingService } from "../worktrees/landing.ts";
-import type { PiecesService } from "../worktrees/pieces.ts";
 import type { PrService } from "../worktrees/prs.ts";
 import type { RefSearch } from "../worktrees/refs.ts";
 import type { WorktreeService } from "../worktrees/service.ts";
@@ -90,7 +90,7 @@ export interface Services {
   pageErrors: Pick<PageErrorService, "report" | "loaded">;
   /** a plan's pieces across worktrees: a fate moved on the list, the answer to Toyon's card, and
    * the verb that asks for a new worktree here or in another project */
-  pieces: Pick<PiecesService, "fate" | "answer" | "ask">;
+  handoff: Pick<HandoffService, "fate" | "answer" | "ask">;
   /** Toyon's own tools for the agents, served over MCP by the http layer */
   mcp: Pick<ToyonMcp, "fetch">;
   themes: ThemeStore;
@@ -788,19 +788,19 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
 
   // the card's events are the word on it, on every tab; only a refusal comes back here, as the
   // error frame tagged with the worktree
-  async "pieces-ask"(msg, _ctx, s) {
+  async "handoff-ask"(msg, _ctx, s) {
     requireRun(s, msg.worktreeId);
-    await s.pieces.ask(msg.worktreeId, msg.repoId, msg.text);
+    await s.handoff.ask(msg.worktreeId, msg.repoId, msg.text);
   },
 
-  "pieces-fate"(msg, _ctx, s) {
+  "handoff-fate"(msg, _ctx, s) {
     requireRun(s, msg.worktreeId);
-    s.pieces.fate(msg.worktreeId, msg.id, msg.pieceId, msg.fate);
+    s.handoff.fate(msg.worktreeId, msg.id, msg.pieceId, msg.fate);
   },
 
-  async "pieces-answer"(msg, _ctx, s) {
+  async "handoff-answer"(msg, _ctx, s) {
     requireRun(s, msg.worktreeId);
-    await s.pieces.answer(msg.worktreeId, msg.id, msg.go, msg.note);
+    await s.handoff.answer(msg.worktreeId, msg.id, msg.go, msg.note);
   },
 
   "agent-config"(msg, ctx, s) {

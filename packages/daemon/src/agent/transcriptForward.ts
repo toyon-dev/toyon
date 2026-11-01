@@ -10,23 +10,24 @@ import { log } from "../core/log.ts";
 /** The pass this build makes, written to the stamp once every transcript has had it. Bumped with
  * each new rewrite, so the next upgrade's first boot reads the files again and no boot after
  * does: an archive is read at a restore, and listing hundreds of them must not mean reading them.
- * Step 3 is step 2's rewrites plus the landing word and a piece's `plan`, which a daemon that
- * ran step 2 the same day has not seen. */
-export const FORWARD_STEP = "3";
+ * Step 4 renames the handoff list's events, which a machine stamped at 3 has never had read. */
+export const FORWARD_STEP = "4";
 
 type Stored = { event?: Record<string, unknown> & { type?: unknown; kind?: unknown } };
 
 /** the words a line to touch carries, so the rest are never parsed */
-const MARKS = ['"page', '"brief"', '"handoff'];
+const MARKS = ['"page', '"brief"', '"handoff', '"pieces'];
 
 /** What becomes of a stored line: dropped, rewritten, or left as it is (null). Step 1: the
  * "preview threw" row 0.12.0 to 0.15.0 wrote onto the chat goes; the message its press sent
  * stays, since the agent's reply to it is on the chat, under the one asked kind that still says a
  * person pressed for it. Step 2: a message that carried another agent's brief becomes the
  * `handed` row that says so, with the brief as the text the row opens, since the brief no longer
- * rides on a bubble; a handoff's card events become a pieces list of one and its landing word a
- * piece's, since the handoff tool folded into the pieces list; a piece's text is its `plan`, not a brief.
- * A torn line, or a line of another type that carries a word, is left. */
+ * rides on a bubble. Step 4: the handoff list's events, named `pieces-*` in 0.19 and 0.20, take
+ * the `handoff-*` names, and so do the plan card's reference to its list and the asked kind. Up
+ * to 0.18 a `handoff-proposed` held one piece and a `handoff` one worktree, under the very names
+ * the list carries now, so those shapes become a list of one. A torn line, or a line of another
+ * type that carries a word, is left. */
 export function forwardLine(line: string): { drop: true } | { line: string } | null {
   if (!MARKS.some((m) => line.includes(m))) return null;
   let entry: Stored;
@@ -56,60 +57,52 @@ export function forwardLine(line: string): { drop: true } | { line: string } | n
       }),
     };
   }
-  if (e?.type === "handoff-proposed") {
+  const move = (event: Record<string, unknown>) => ({ line: JSON.stringify({ ...entry, event }) });
+  if (e?.type === "fix-asked" && e.kind === "pieces") return move({ ...e, kind: "handoff" });
+  if (e?.type === "agent-permission" && typeof e.pieces === "string") {
+    const { pieces, ...rest } = e;
+    return move({ ...rest, handoff: pieces });
+  }
+  if (e?.type === "handoff-proposed" && !Array.isArray(e.pieces)) {
     const repo = (e.repo ?? {}) as Record<string, unknown>;
-    return {
-      line: JSON.stringify({
-        ...entry,
-        event: {
-          type: "pieces-proposed",
-          id: e.id,
-          pieces: [
-            {
-              id: "p1",
-              title: e.title ?? "Continue",
-              plan: e.message ?? "",
-              attachments: [],
-              fate: "worktree",
-              project: { id: repo.id, name: repo.name },
-            },
-          ],
-          mode: e.mode,
-          ts: e.ts,
+    return move({
+      type: "handoff-proposed",
+      id: e.id,
+      pieces: [
+        {
+          id: "p1",
+          title: e.title ?? "Continue",
+          plan: e.message ?? "",
+          attachments: [],
+          fate: "worktree",
+          project: { id: repo.id, name: repo.name },
         },
-      }),
-    };
+      ],
+      mode: e.mode,
+      ts: e.ts,
+    });
   }
-  if (e?.type === "handoff-landed")
-    return { line: JSON.stringify({ ...entry, event: { ...e, type: "piece-landed" } }) };
-  if (
-    e?.type === "pieces-proposed" &&
-    Array.isArray(e.pieces) &&
-    e.pieces.some((p) => p && typeof p === "object" && "brief" in p)
-  ) {
-    const pieces = (e.pieces as Array<Record<string, unknown>>).map(({ brief, ...rest }) =>
-      brief === undefined ? rest : { ...rest, plan: brief },
-    );
-    return { line: JSON.stringify({ ...entry, event: { ...e, pieces } }) };
+  if (e?.type === "handoff" && !Array.isArray(e.outcomes)) {
+    return move({
+      type: "handoff",
+      id: e.id,
+      outcomes: [{ pieceId: "p1", fate: "worktree", worktreeId: e.worktreeId, title: e.title, repoName: e.repoName }],
+      ts: e.ts,
+    });
   }
-  if (e?.type === "handoff-go") return { line: JSON.stringify({ ...entry, event: { ...e, type: "pieces-go" } }) };
-  if (e?.type === "handoff") {
-    return {
-      line: JSON.stringify({
-        ...entry,
-        event: {
-          type: "pieces",
-          id: e.id,
-          outcomes: [
-            { pieceId: "p1", fate: "worktree", worktreeId: e.worktreeId, title: e.title, repoName: e.repoName },
-          ],
-          ts: e.ts,
-        },
-      }),
-    };
-  }
-  if (e?.type === "handoff-declined") {
-    return { line: JSON.stringify({ ...entry, event: { ...e, type: "pieces-declined" } }) };
+  if (e?.type === "handoff-landed") return move({ ...e, type: "piece-landed" });
+  if (e?.type === "pieces") return move({ ...e, type: "handoff" });
+  if (typeof e?.type === "string" && e.type.startsWith("pieces-")) {
+    const type = `handoff-${e.type.slice("pieces-".length)}`;
+    // a piece's text was its `brief` before it was its `plan`
+    const pieces = Array.isArray(e.pieces)
+      ? {
+          pieces: (e.pieces as Array<Record<string, unknown>>).map(({ brief, ...rest }) =>
+            brief === undefined ? rest : { ...rest, plan: brief },
+          ),
+        }
+      : {};
+    return move({ ...e, type, ...pieces });
   }
   return null;
 }

@@ -276,7 +276,7 @@ export type AskOutcome = "answered" | "skipped" | "cancelled" | "expired";
  * the person pressed to send it on after a turn that was stopped or that failed */
 export interface Asked {
   /** `preview` is a dev server that will not come up */
-  kind: "hook" | "conflict" | "check" | "command" | "preview" | "stopped" | "failed" | "pieces";
+  kind: "hook" | "conflict" | "check" | "command" | "preview" | "stopped" | "failed" | "handoff";
   why: string;
   /** the row of the command that failed, when the failure was one: what it printed went to the
    * agent with this message, and its row is not offered or attached again */
@@ -446,10 +446,10 @@ export type AgentEvent =
   /** the agent handed Toyon the pieces of its plan. `held`: proposed in plan mode, so the list
    * shows beside the next plan card of the turn (`agent-permission.pieces`) and the person answers
    * it with the plan; without it the proposal is Toyon's own card at once. Open until a
-   * `pieces-go`, `pieces` or `pieces-declined` with the same id. `plan` is the file the section
+   * `handoff-go`, `handoff` or `handoff-declined` with the same id. `plan` is the file the section
    * sits on: the agent's plan when held, else the page Toyon wrote for the list. */
   | {
-      type: "pieces-proposed";
+      type: "handoff-proposed";
       id: string;
       pieces: Piece[];
       mode: PermissionMode;
@@ -464,19 +464,19 @@ export type AgentEvent =
       ts: number;
     }
   /** a held proposal whose turn ended with no plan card: Toyon's own card from here */
-  | { type: "pieces-shown"; id: string; plan?: string; ts: number }
+  | { type: "handoff-shown"; id: string; plan?: string; ts: number }
   /** the plan file moved under an open list: the rows were read off a plan that is no longer
    * the one on disk. A list Toyon read is read again after this; the agent's is only marked. */
-  | { type: "pieces-stale"; id: string; ts: number }
+  | { type: "handoff-stale"; id: string; ts: number }
   /** the person moved a piece; the last one per piece stands when go is pressed */
-  | { type: "pieces-fate"; id: string; pieceId: string; fate: PieceFate; ts: number }
+  | { type: "handoff-fate"; id: string; pieceId: string; fate: PieceFate; ts: number }
   /** the plan was approved, or go pressed: the card closes here and Toyon acts. `note` is what
    * the person typed with go on Toyon's own card, read back in their bubble */
-  | { type: "pieces-go"; id: string; note?: string; ts: number }
+  | { type: "handoff-go"; id: string; note?: string; ts: number }
   /** what became of each piece */
-  | { type: "pieces"; id: string; outcomes: PieceOutcome[]; ts: number }
+  | { type: "handoff"; id: string; outcomes: PieceOutcome[]; ts: number }
   /** the card closed with nothing done: the plan was sent back, or `outcome` says what failed */
-  | { type: "pieces-declined"; id: string; outcome?: "failed"; reason?: string; ts: number }
+  | { type: "handoff-declined"; id: string; outcome?: "failed"; reason?: string; ts: number }
   /** a queued piece's sibling landed and its worktree was made */
   | { type: "piece-made"; id: string; pieceId: string; worktreeId: string; title: string; ts: number }
   /** a queued piece will never be made: the sibling it waited for is gone */
@@ -508,8 +508,8 @@ export type AgentEvent =
       command?: string;
       detail?: string;
       plan?: string;
-      /** the `pieces-proposed` this plan card carries beside it: the list the yes also answers */
-      pieces?: string;
+      /** the `handoff-proposed` this plan card carries beside it: the list the yes also answers */
+      handoff?: string;
       choices: AskChoice[];
       toolId?: string;
       ts: number;

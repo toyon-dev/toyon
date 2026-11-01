@@ -168,17 +168,17 @@ function make() {
       landingCalls.push(`recheck ${id}`);
     },
   };
-  // the pieces service's own behaviour is pieces.test.ts's; here only that the fields reach it
-  const piecesCalls: string[] = [];
-  const pieces = {
+  // the handoff service's own behaviour is handoff.test.ts's; here only that the fields reach it
+  const handoffCalls: string[] = [];
+  const handoff = {
     fate: (id: string, card: string, pieceId: string, fate: string) => {
-      piecesCalls.push(`fate ${id} ${card} ${pieceId} ${fate}`);
+      handoffCalls.push(`fate ${id} ${card} ${pieceId} ${fate}`);
     },
     answer: async (id: string, card: string, go: boolean, note?: string) => {
-      piecesCalls.push(`answer ${id} ${card} ${go}${note ? ` note=${note}` : ""}`);
+      handoffCalls.push(`answer ${id} ${card} ${go}${note ? ` note=${note}` : ""}`);
     },
     ask: async (id: string, repoId: string, text?: string) => {
-      piecesCalls.push(`ask ${id} ${repoId}${text ? ` text=${text}` : ""}`);
+      handoffCalls.push(`ask ${id} ${repoId}${text ? ` text=${text}` : ""}`);
       if (text === "") throw new UserError("Write what it should do first");
     },
   };
@@ -245,7 +245,7 @@ function make() {
     landing,
     fix,
     pageErrors,
-    pieces,
+    handoff,
     mcp,
     themes,
     agents,
@@ -295,7 +295,7 @@ function make() {
     chosen,
     restarts,
     landingCalls,
-    piecesCalls,
+    handoffCalls,
     ...f,
   };
 }
@@ -1526,36 +1526,36 @@ describe("handlers", () => {
   });
 
   test("a pieces list's fate and Toyon's card's answer reach the service with their fields", async () => {
-    const { services, ctx, repo, piecesCalls } = make();
+    const { services, ctx, repo, handoffCalls } = make();
     const r = await services.repos.register(repo);
     const main = services.state.worktrees.find((x) => x.repoId === r.id)!;
-    await dispatch({ t: "pieces-fate", worktreeId: main.id, id: "l1", pieceId: "p2", fate: "skip" }, ctx, services);
-    await dispatch({ t: "pieces-answer", worktreeId: main.id, id: "l1", go: true, note: "and tests" }, ctx, services);
-    await dispatch({ t: "pieces-answer", worktreeId: main.id, id: "l1", go: false }, ctx, services);
-    expect(piecesCalls).toEqual([
+    await dispatch({ t: "handoff-fate", worktreeId: main.id, id: "l1", pieceId: "p2", fate: "skip" }, ctx, services);
+    await dispatch({ t: "handoff-answer", worktreeId: main.id, id: "l1", go: true, note: "and tests" }, ctx, services);
+    await dispatch({ t: "handoff-answer", worktreeId: main.id, id: "l1", go: false }, ctx, services);
+    expect(handoffCalls).toEqual([
       `fate ${main.id} l1 p2 skip`,
       `answer ${main.id} l1 true note=and tests`,
       `answer ${main.id} l1 false`,
     ]);
     await expect(
-      dispatch({ t: "pieces-answer", worktreeId: "nope", id: "l1", go: true }, ctx, services),
+      dispatch({ t: "handoff-answer", worktreeId: "nope", id: "l1", go: true }, ctx, services),
     ).rejects.toBeInstanceOf(UserError);
   });
 
-  test("the verb for a new worktree reaches the pieces service with its fields; a refusal is the error frame", async () => {
-    const { services, ctx, repo, piecesCalls } = make();
+  test("the verb for a new worktree reaches the handoff service with its fields; a refusal is the error frame", async () => {
+    const { services, ctx, repo, handoffCalls } = make();
     const r = await services.repos.register(repo);
     const main = services.state.worktrees.find((x) => x.repoId === r.id)!;
-    await dispatch({ t: "pieces-ask", worktreeId: main.id, repoId: "r2", text: "fix the form" }, ctx, services);
-    expect(piecesCalls.at(-1)).toBe(`ask ${main.id} r2 text=fix the form`);
+    await dispatch({ t: "handoff-ask", worktreeId: main.id, repoId: "r2", text: "fix the form" }, ctx, services);
+    expect(handoffCalls.at(-1)).toBe(`ask ${main.id} r2 text=fix the form`);
     await expect(
-      dispatch({ t: "pieces-ask", worktreeId: main.id, repoId: "r2", text: "" }, ctx, services),
+      dispatch({ t: "handoff-ask", worktreeId: main.id, repoId: "r2", text: "" }, ctx, services),
     ).rejects.toBeInstanceOf(UserError);
     // a worktree Toyon does not run is refused before the service hears of it
     await expect(
-      dispatch({ t: "pieces-ask", worktreeId: "nope", repoId: "r2", text: "x" }, ctx, services),
+      dispatch({ t: "handoff-ask", worktreeId: "nope", repoId: "r2", text: "x" }, ctx, services),
     ).rejects.toBeInstanceOf(UserError);
-    expect(piecesCalls.filter((c) => c.startsWith("ask"))).toHaveLength(2);
+    expect(handoffCalls.filter((c) => c.startsWith("ask"))).toHaveLength(2);
   });
 
   test("an ask answer for a worktree that is gone is a toast, not a crash", async () => {

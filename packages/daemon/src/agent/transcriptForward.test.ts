@@ -20,14 +20,15 @@ const BRIEF =
 /** the same message as the row that says who sent it, the brief the text it opens */
 const HANDED =
   '{"seq":1,"event":{"type":"handed","text":"Fix the rail.\\n\\nThis is one piece","ts":6,"via":"message","body":"Fix the rail.","origin":{"id":"a","repoId":"r","branch":"toyon/rail","title":"Rail"},"note":"and tests"}}';
-const HANDOFF =
+/** up to 0.18 a handoff was one piece: its card, and what it started */
+const HANDOFF_018 =
   '{"seq":2,"event":{"type":"handoff-proposed","id":"h","repo":{"id":"r2","name":"acp","path":"/p/acp"},"message":"Bump the pin.","title":"Bump pin","by":"agent","mode":"auto","ts":7}}';
-const HANDOFF_AS_PIECES =
-  '{"seq":2,"event":{"type":"pieces-proposed","id":"h","pieces":[{"id":"p1","title":"Bump pin","plan":"Bump the pin.","attachments":[],"fate":"worktree","project":{"id":"r2","name":"acp"}}],"mode":"auto","ts":7}}';
-const WENT =
+const HANDOFF_LIST =
+  '{"seq":2,"event":{"type":"handoff-proposed","id":"h","pieces":[{"id":"p1","title":"Bump pin","plan":"Bump the pin.","attachments":[],"fate":"worktree","project":{"id":"r2","name":"acp"}}],"mode":"auto","ts":7}}';
+const WENT_018 =
   '{"seq":3,"event":{"type":"handoff","id":"h","worktreeId":"b","repoId":"r2","repoName":"acp","title":"Bump pin","ts":8}}';
-const WENT_AS_PIECES =
-  '{"seq":3,"event":{"type":"pieces","id":"h","outcomes":[{"pieceId":"p1","fate":"worktree","worktreeId":"b","title":"Bump pin","repoName":"acp"}],"ts":8}}';
+const WENT_LIST =
+  '{"seq":3,"event":{"type":"handoff","id":"h","outcomes":[{"pieceId":"p1","fate":"worktree","worktreeId":"b","title":"Bump pin","repoName":"acp"}],"ts":8}}';
 
 describe("forwardLine", () => {
   test("the page row goes, its press keeps its words under a kind that still exists, the rest stay", () => {
@@ -39,31 +40,71 @@ describe("forwardLine", () => {
     expect(forwardLine("")).toBeNull();
   });
 
-  test("a brief on a bubble becomes the handed row, and a handoff's card events a pieces list of one", () => {
+  test("a brief on a bubble becomes the handed row, and a message that only mentions a brief is left", () => {
     expect(forwardLine(BRIEF)).toEqual({ line: HANDED });
-    expect(forwardLine(HANDOFF)).toEqual({ line: HANDOFF_AS_PIECES });
-    expect(forwardLine(WENT)).toEqual({ line: WENT_AS_PIECES });
-    expect(forwardLine('{"seq":4,"event":{"type":"handoff-go","id":"h","ts":9}}')).toEqual({
-      line: '{"seq":4,"event":{"type":"pieces-go","id":"h","ts":9}}',
-    });
-    expect(forwardLine('{"seq":5,"event":{"type":"handoff-declined","id":"h","ts":9}}')).toEqual({
-      line: '{"seq":5,"event":{"type":"pieces-declined","id":"h","ts":9}}',
-    });
-    // the landing word becomes a piece's, a piece's text is its plan, and a message that only
-    // mentions a brief is left alone
+    expect(forwardLine('{"seq":7,"event":{"type":"user-message","text":"read the brief","ts":9}}')).toBeNull();
+  });
+
+  test("a 0.18 handoff of one piece becomes a list of one under the same names", () => {
+    expect(forwardLine(HANDOFF_018)).toEqual({ line: HANDOFF_LIST });
+    expect(forwardLine(WENT_018)).toEqual({ line: WENT_LIST });
     expect(
       forwardLine('{"seq":6,"event":{"type":"handoff-landed","worktreeId":"b","repoName":"acp","title":"x","ts":9}}'),
     ).toEqual({
       line: '{"seq":6,"event":{"type":"piece-landed","worktreeId":"b","repoName":"acp","title":"x","ts":9}}',
     });
+    // its go and its no already read as the list's, and a line in today's shape is left
+    expect(forwardLine('{"seq":4,"event":{"type":"handoff-go","id":"h","ts":9}}')).toBeNull();
+    expect(forwardLine(HANDOFF_LIST)).toBeNull();
+    expect(forwardLine(WENT_LIST)).toBeNull();
+  });
+
+  test("a 0.20 pieces list takes the handoff names, with its plan card's reference and its asked kind", () => {
     expect(
       forwardLine(
-        '{"seq":8,"event":{"type":"pieces-proposed","id":"l","pieces":[{"id":"p1","title":"Rail","brief":"Fix.","attachments":[],"fate":"here"}],"mode":"auto","ts":9}}',
+        '{"seq":8,"event":{"type":"pieces-proposed","id":"l","pieces":[{"id":"p1","title":"Rail","plan":"Fix.","attachments":[],"fate":"here"}],"mode":"plan","held":true,"ts":9}}',
       ),
     ).toEqual({
-      line: '{"seq":8,"event":{"type":"pieces-proposed","id":"l","pieces":[{"id":"p1","title":"Rail","attachments":[],"fate":"here","plan":"Fix."}],"mode":"auto","ts":9}}',
+      line: '{"seq":8,"event":{"type":"handoff-proposed","id":"l","pieces":[{"id":"p1","title":"Rail","plan":"Fix.","attachments":[],"fate":"here"}],"mode":"plan","held":true,"ts":9}}',
     });
-    expect(forwardLine('{"seq":7,"event":{"type":"user-message","text":"read the brief","ts":9}}')).toBeNull();
+    expect(
+      forwardLine(
+        '{"seq":9,"event":{"type":"pieces-proposed","id":"l","pieces":[{"id":"p1","title":"Rail","brief":"Fix.","attachments":[],"fate":"here"}],"mode":"auto","ts":9}}',
+      ),
+    ).toEqual({
+      line: '{"seq":9,"event":{"type":"handoff-proposed","id":"l","pieces":[{"id":"p1","title":"Rail","attachments":[],"fate":"here","plan":"Fix."}],"mode":"auto","ts":9}}',
+    });
+    for (const word of ["shown", "stale", "go", "declined"]) {
+      expect(forwardLine(`{"seq":10,"event":{"type":"pieces-${word}","id":"l","ts":9}}`)).toEqual({
+        line: `{"seq":10,"event":{"type":"handoff-${word}","id":"l","ts":9}}`,
+      });
+    }
+    expect(
+      forwardLine('{"seq":11,"event":{"type":"pieces-fate","id":"l","pieceId":"p1","fate":"skip","ts":9}}'),
+    ).toEqual({ line: '{"seq":11,"event":{"type":"handoff-fate","id":"l","pieceId":"p1","fate":"skip","ts":9}}' });
+    expect(
+      forwardLine('{"seq":12,"event":{"type":"pieces","id":"l","outcomes":[{"pieceId":"p1","fate":"here"}],"ts":9}}'),
+    ).toEqual({
+      line: '{"seq":12,"event":{"type":"handoff","id":"l","outcomes":[{"pieceId":"p1","fate":"here"}],"ts":9}}',
+    });
+    expect(
+      forwardLine(
+        '{"seq":13,"event":{"type":"agent-permission","id":"k1","title":"Approve Plan","plan":".toyon/plans/1.md","pieces":"l","choices":[],"ts":9}}',
+      ),
+    ).toEqual({
+      line: '{"seq":13,"event":{"type":"agent-permission","id":"k1","title":"Approve Plan","plan":".toyon/plans/1.md","choices":[],"ts":9,"handoff":"l"}}',
+    });
+    expect(
+      forwardLine(
+        '{"seq":14,"event":{"type":"fix-asked","text":"Do it","ts":9,"kind":"pieces","why":"a new worktree here"}}',
+      ),
+    ).toEqual({
+      line: '{"seq":14,"event":{"type":"fix-asked","text":"Do it","ts":9,"kind":"handoff","why":"a new worktree here"}}',
+    });
+    // a message that only says the words is left
+    expect(
+      forwardLine('{"seq":15,"event":{"type":"user-message","text":"the \\"pieces\\" of the handoff","ts":9}}'),
+    ).toBeNull();
   });
 });
 

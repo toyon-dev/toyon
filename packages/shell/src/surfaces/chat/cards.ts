@@ -5,18 +5,18 @@
 import { cardBox } from "@toyon/shared";
 import type { ChatItem, WorktreeLocal } from "../../state/store.ts";
 import { type AskItem, askLine } from "./ask.ts";
-import { type PiecesItem, piecesQuestion } from "./pieces.ts";
+import { type HandoffItem, handoffQuestion } from "./handoff.ts";
 
 /** what can hold the composer box: an open ask, or a pieces list that is Toyon's own card (a held
  * one rides beside a plan card and holds nothing itself) */
-export type CardItem = AskItem | PiecesItem;
+export type CardItem = AskItem | HandoffItem;
 
 /** the card the box shows: the newest one nothing has closed, or none */
 export function openCard(chat: ChatItem[]): CardItem | null {
   const item = chat.findLast(
-    (i) => (i.kind === "ask" && !i.outcome) || (i.kind === "pieces" && i.state === "proposed"),
+    (i) => (i.kind === "ask" && !i.outcome) || (i.kind === "handoff" && i.state === "proposed"),
   );
-  return item?.kind === "ask" || item?.kind === "pieces" ? item : null;
+  return item?.kind === "ask" || item?.kind === "handoff" ? item : null;
 }
 
 /** the box a drop on the chat goes to when a question card has the box: the card's own, since the
@@ -29,7 +29,7 @@ export function cardDropBox(l: Pick<WorktreeLocal, "chat" | "cardParked"> | unde
 }
 
 /** the line that stands for the card once it is set aside: the ask's own, or the question the
- * pieces card asks */
+ * handoff card asks */
 export function cardLine(card: CardItem): string {
-  return card.kind === "ask" ? askLine(card) : piecesQuestion(card);
+  return card.kind === "ask" ? askLine(card) : handoffQuestion(card);
 }

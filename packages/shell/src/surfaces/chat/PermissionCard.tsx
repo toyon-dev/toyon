@@ -2,7 +2,7 @@
 // permission takes the message box as a card (Card): the agent's sentence at the head, the command
 // or the plan it is about in the band, and the agent's own options as the choices, one press each.
 //
-// A row also takes words, the pieces card's way: `n` opens a field under the cursor's row, which
+// A row also takes words, the handoff card's way: `n` opens a field under the cursor's row, which
 // becomes the pick, and enter in the field is that pick. A letter typed on the card opens the
 // field under the no with the letter in it, since words on a plan card are nearly always what to
 // change, and knowing a key should not be the price of saying so. The pick is the answer; the
@@ -22,9 +22,9 @@ import { handleChoiceKey } from "../../ui/choiceKeys.ts";
 import { useOnChange } from "../../ui/hooks.ts";
 import type { AskItem } from "./ask.ts";
 import { Card, CardBand, CardHead, type Root, takeKeyboard } from "./Card.tsx";
+import { handoffLine } from "./handoff.ts";
 import { renderMarkdown } from "./markdown.ts";
 import { rejectRow, typingStart } from "./permissionNote.ts";
-import { piecesLine } from "./pieces.ts";
 import { unwrapShell } from "./toolCall.ts";
 
 /** one slot: the row the words are under is its pick, and the words are its note */
@@ -71,10 +71,12 @@ export function PermissionCard({
   useOnChange([item.id, plan], readPlan);
   // the pieces list the plan carries beside it: the yes is its yes too, so the card says what
   // else the yes starts, under the question, with the list itself a press away on the plan
-  const piecesId = ask.pieces;
+  const handoffId = ask.handoff;
   const pieces = useStore((s) => {
-    const found = piecesId ? localOf(s, worktreeId).chat?.find((i) => i.kind === "pieces" && i.id === piecesId) : null;
-    return found?.kind === "pieces" ? found : null;
+    const found = handoffId
+      ? localOf(s, worktreeId).chat?.find((i) => i.kind === "handoff" && i.id === handoffId)
+      : null;
+    return found?.kind === "handoff" ? found : null;
   });
 
   const write = (next: AskAnswer[]) =>
@@ -170,7 +172,7 @@ export function PermissionCard({
         sub={
           pieces ? (
             <>
-              {piecesLine(pieces, worktreeId)}{" "}
+              {handoffLine(pieces, worktreeId)}{" "}
               <Button
                 variant="inline"
                 data-tip="Read the list at the head of the plan; any row can still be moved"

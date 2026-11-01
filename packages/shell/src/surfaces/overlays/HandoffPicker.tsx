@@ -28,7 +28,7 @@ export function HandoffPicker({ worktreeId }: { worktreeId: string }) {
   const close = () => dispatch({ a: "close" });
   const pick = (r: RepoInfo) => {
     if (!wt) return close();
-    sock?.send({ t: "pieces-ask", worktreeId, repoId: r.id, ...(text ? { text } : {}) });
+    sock?.send({ t: "handoff-ask", worktreeId, repoId: r.id, ...(text ? { text } : {}) });
     if (text) {
       sock?.send({ t: "set-draft", boxId: worktreeId, text: "", clientId });
       dispatch({ a: "set-draft", id: worktreeId, text: "" });

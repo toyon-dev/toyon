@@ -78,9 +78,9 @@ import { BackendShare } from "./worktrees/backend.ts";
 import { ArtifactCache } from "./worktrees/cache.ts";
 import { ChatSearch } from "./worktrees/chats.ts";
 import { FixService } from "./worktrees/fix.ts";
+import { HandoffService } from "./worktrees/handoff.ts";
 import { LandingService } from "./worktrees/landing.ts";
 import { WorktreeLookup } from "./worktrees/lookup.ts";
-import { PiecesService } from "./worktrees/pieces.ts";
 import { PrService } from "./worktrees/prs.ts";
 import { RefSearch } from "./worktrees/refs.ts";
 import { WorktreeService } from "./worktrees/service.ts";
@@ -283,7 +283,7 @@ interest.onLast((id) => worktrees.tree.unwatch(id));
 new BackendShare({ state, hub, runtime, own: (id, names) => worktrees.ownProcs(id, names) });
 // a plan's pieces across worktrees, here and in other open projects, made through the service's
 // own create
-const pieces = new PiecesService({
+const handoff = new HandoffService({
   state,
   hub,
   runtime,
@@ -292,7 +292,7 @@ const pieces = new PiecesService({
   counts: (id) => worktrees.tree.counts(id),
   reader: makePiecesReader(runtime, agents, state),
 });
-tools.add(pieces);
+tools.add(handoff);
 // which worktrees of the project exist and what each was about, for a question asked by topic
 tools.add(
   new WorktreeLookup({ state, transcriptsDir: paths.transcriptsDir, archived: (repoId) => worktrees.archived(repoId) }),
@@ -498,7 +498,7 @@ const {
     landing,
     fix,
     pageErrors,
-    pieces,
+    handoff,
     mcp,
     themes,
     agents,

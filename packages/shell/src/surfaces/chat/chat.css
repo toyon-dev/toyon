@@ -1870,7 +1870,7 @@
   }
   /* the pieces a list's card counts, one to a line between the question and the way to the list:
      the title, a press on its tab, and after it the word the tab wears */
-  .card-pieces {
+  .card-handoff {
     margin: 2px 0 6px;
   }
   .card-piece {

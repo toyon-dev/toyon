@@ -294,11 +294,11 @@ function defaultAgent(
     setMode: (mode) => {
       if (d.state.setMode(wt.id, mode)) d.hub.emit("worktreesChanged");
     },
-    // the pieces service is built after the runtime, so the hub is the seam, as it is for a landing
-    onPieces: (id, approved) => d.hub.emit("piecesDecided", wt.id, id, approved),
+    // the handoff service is built after the runtime, so the hub is the seam, as it is for a landing
+    onHandoff: (id, approved) => d.hub.emit("handoffDecided", wt.id, id, approved),
     onPlanUnsplit: (markdown, planPath) => d.hub.emit("planUnsplit", wt.id, markdown, planPath),
     // the briefs as a file for the card's section; the record's own plan stays the agent's plan
-    onPiecesShown: (_id, pieces) => writePlanDocNow(wt.path, listDoc(pieces)),
+    onHandoffShown: (_id, pieces) => writePlanDocNow(wt.path, listDoc(pieces)),
     onPlan: async (markdown, ownFile) => {
       const w = d.state.worktree(wt.id);
       if (w && !w.planned) {

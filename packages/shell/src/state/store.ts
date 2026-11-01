@@ -206,7 +206,7 @@ export type ChatItem =
             detail?: string;
             plan?: string;
             /** the pieces list this plan card carries beside it, whose yes is the plan's */
-            pieces?: string;
+            handoff?: string;
             choices: AskChoice[];
           };
       /** the row of the call a permission gates, which stays in the log to show what the call did */
@@ -235,7 +235,7 @@ export type ChatItem =
    * what became of each piece, or `declined`. `fates` is the person's last press per piece, read
    * over the agent's; `later` is what the pieces queued behind a sibling became when it landed. */
   | {
-      kind: "pieces";
+      kind: "handoff";
       id: string;
       pieces: Piece[];
       fates: Record<string, PieceFate>;
@@ -1851,15 +1851,16 @@ function runningOf(chat: ChatItem[], was: WorktreeLocal["running"]): WorktreeLoc
  * else leaves them be. A stop closes the ask and keeps its answers, since the question can still
  * be answered as a message. A card that expired was closed by a restart and not by a press, so it
  * comes back revived, open in the box, the way the person left it; a cancelled one was stopped
- * on purpose and waits folded. Toyon's own pieces card is one of these: its note is the box's
+ * on purpose and waits folded. Toyon's own handoff card is one of these: its note is the box's
  * draft, and it closes with the go or the decline that answers it. */
 function askSettled(l: WorktreeLocal, ev: AgentEvent): WorktreeLocal {
   const asked =
     ev.type === "agent-question" ||
     ev.type === "agent-permission" ||
-    (ev.type === "pieces-proposed" && !ev.held) ||
-    ev.type === "pieces-shown";
-  const closed = ev.type === "agent-ask-end" || ev.type === "pieces-go" || ev.type === "pieces-declined" ? ev.id : null;
+    (ev.type === "handoff-proposed" && !ev.held) ||
+    ev.type === "handoff-shown";
+  const closed =
+    ev.type === "agent-ask-end" || ev.type === "handoff-go" || ev.type === "handoff-declined" ? ev.id : null;
   if (!asked && !closed) return l;
   const stopped = ev.type === "agent-ask-end" && stoppedBy(ev.outcome);
   const expired = ev.type === "agent-ask-end" && ev.outcome === "expired" ? ev.id : null;
@@ -3218,12 +3219,12 @@ function onServer(s: State, msg: StoreServerMsg): State {
         if (turn.edits && !turn.hmr) next = { ...next, reloadReq: { id, n: (next.reloadReq?.n ?? 0) + 1 } };
       }
       // the question goes in the box, so the box has to be on screen, the way a notice's does; so
-      // does a pieces card, which is the same box
+      // does a handoff card, which is the same box
       if (
         (ev.type === "agent-question" ||
           ev.type === "agent-permission" ||
-          (ev.type === "pieces-proposed" && !ev.held) ||
-          ev.type === "pieces-shown") &&
+          (ev.type === "handoff-proposed" && !ev.held) ||
+          ev.type === "handoff-shown") &&
         id === s.activeId
       )
         next = revealChat(next);
@@ -3594,7 +3595,7 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
           ts: event.ts,
         },
       ];
-    case "pieces-proposed": {
+    case "handoff-proposed": {
       // a list held while a plan card is already up (read off the plan by Toyon, or handed over
       // late) is that card's, and sits on the card's file
       const card = event.held
@@ -3605,7 +3606,7 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
       return [
         ...items,
         {
-          kind: "pieces",
+          kind: "handoff",
           id: event.id,
           pieces: event.pieces,
           fates: Object.fromEntries(event.pieces.map((p) => [p.id, p.fate])),
@@ -3621,42 +3622,42 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
         },
       ];
     }
-    case "pieces-stale": {
-      const idx = piecesIndex(items, event.id, ["held", "proposed"]);
+    case "handoff-stale": {
+      const idx = handoffIndex(items, event.id, ["held", "proposed"]);
       if (idx === -1) return items;
-      return items.with(idx, { ...(items[idx] as PiecesCard), stale: true });
+      return items.with(idx, { ...(items[idx] as HandoffCard), stale: true });
     }
-    case "pieces-shown": {
-      const idx = piecesIndex(items, event.id, ["held", "proposed"]);
+    case "handoff-shown": {
+      const idx = handoffIndex(items, event.id, ["held", "proposed"]);
       if (idx === -1) return items;
-      const card = items[idx] as PiecesCard;
+      const card = items[idx] as HandoffCard;
       return items.with(idx, { ...card, state: "proposed", ...(event.plan ? { plan: event.plan } : {}) });
     }
-    case "pieces-fate": {
-      const idx = piecesIndex(items, event.id, ["held", "proposed"]);
+    case "handoff-fate": {
+      const idx = handoffIndex(items, event.id, ["held", "proposed"]);
       if (idx === -1) return items;
-      const card = items[idx] as PiecesCard;
+      const card = items[idx] as HandoffCard;
       return items.with(idx, { ...card, fates: { ...card.fates, [event.pieceId]: event.fate } });
     }
-    case "pieces-go": {
-      const idx = piecesIndex(items, event.id, ["held", "proposed"]);
+    case "handoff-go": {
+      const idx = handoffIndex(items, event.id, ["held", "proposed"]);
       if (idx === -1) return items;
-      const card = items[idx] as PiecesCard;
+      const card = items[idx] as HandoffCard;
       // a held list was answered with its plan card, whose bubble says so; Toyon's own card was
       // answered in the box, after the turn that proposed it
       if (card.state !== "proposed") return items.with(idx, { ...card, state: "going" });
       const answered = { go: true, ...(event.note ? { note: event.note } : {}) };
       return answeredAtEnd(items, idx, { ...card, state: "going", answered, ts: event.ts });
     }
-    case "pieces": {
-      const idx = piecesIndex(items, event.id, ["held", "proposed", "going"]);
+    case "handoff": {
+      const idx = handoffIndex(items, event.id, ["held", "proposed", "going"]);
       // what became of the pieces belongs on the chat whether or not the list was seen (a torn
       // transcript line); with no list to close it stands on its own
       if (idx === -1) {
         return [
           ...items,
           {
-            kind: "pieces",
+            kind: "handoff",
             id: event.id,
             pieces: [],
             fates: {},
@@ -3668,12 +3669,12 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
           },
         ];
       }
-      return items.with(idx, { ...(items[idx] as PiecesCard), state: "done", outcomes: event.outcomes });
+      return items.with(idx, { ...(items[idx] as HandoffCard), state: "done", outcomes: event.outcomes });
     }
-    case "pieces-declined": {
-      const idx = piecesIndex(items, event.id, ["held", "proposed", "going"]);
+    case "handoff-declined": {
+      const idx = handoffIndex(items, event.id, ["held", "proposed", "going"]);
       if (idx === -1) return items;
-      const card = items[idx] as PiecesCard;
+      const card = items[idx] as HandoffCard;
       // not now on Toyon's own card is the person's answer, read where they gave it; a reason is
       // Toyon closing the list, which stays where it stood
       if (card.state === "proposed" && !event.reason) {
@@ -3683,8 +3684,8 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
     }
     case "piece-made":
     case "piece-dropped": {
-      const idx = items.findLastIndex((i) => i.kind === "pieces" && i.id === event.id);
-      const card = idx === -1 ? undefined : (items[idx] as PiecesCard);
+      const idx = items.findLastIndex((i) => i.kind === "handoff" && i.id === event.id);
+      const card = idx === -1 ? undefined : (items[idx] as HandoffCard);
       const entry =
         event.type === "piece-made"
           ? { pieceId: event.pieceId, worktreeId: event.worktreeId, title: event.title }
@@ -3746,20 +3747,20 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
           ...(event.command ? { command: event.command } : {}),
           ...(event.detail ? { detail: event.detail } : {}),
           ...(event.plan ? { plan: event.plan } : {}),
-          ...(event.pieces ? { pieces: event.pieces } : {}),
+          ...(event.handoff ? { handoff: event.handoff } : {}),
           choices: event.choices,
         },
       };
       // the held list the card carries learns which card that is, so the document can say so, and
       // which file the card named, so the list sits on that plan and on no later one
-      const list = event.pieces ? items.findLastIndex((i) => i.kind === "pieces" && i.id === event.pieces) : -1;
+      const list = event.handoff ? items.findLastIndex((i) => i.kind === "handoff" && i.id === event.handoff) : -1;
       const held =
         list === -1
           ? items
           : items.with(list, {
-              ...(items[list] as PiecesCard),
+              ...(items[list] as HandoffCard),
               companion: event.id,
-              ...(event.plan && !(items[list] as PiecesCard).plan ? { plan: event.plan } : {}),
+              ...(event.plan && !(items[list] as HandoffCard).plan ? { plan: event.plan } : {}),
             });
       // a plan's call does nothing but ask, so its card takes the row like a question's. A command
       // or an edit runs once it is let through, and its row is where the output lands.
@@ -3806,10 +3807,10 @@ function closeOpenCalls(items: ChatItem[]): ChatItem[] {
 }
 
 /** the prose row a chunk of `messageId` continues, when only the person's bubbles separate them
- * (a message, or the answer to Toyon's own pieces card, which moves to the end as one); anything
+ * (a message, or the answer to Toyon's own handoff card, which moves to the end as one); anything
  * else between (a call, an error) means the message moved on */
 function cutRow(items: ChatItem[], messageId: string): number {
-  const said = (i: ChatItem) => startsTurn(i) || (i.kind === "pieces" && !!i.answered);
+  const said = (i: ChatItem) => startsTurn(i) || (i.kind === "handoff" && !!i.answered);
   let at = items.length - 1;
   while (at >= 0 && said(items[at]!)) at--;
   const row = items[at];
@@ -3817,16 +3818,16 @@ function cutRow(items: ChatItem[], messageId: string): number {
 }
 
 type AskCard = Extract<ChatItem, { kind: "ask" }>;
-type PiecesCard = Extract<ChatItem, { kind: "pieces" }>;
+type HandoffCard = Extract<ChatItem, { kind: "handoff" }>;
 
 /** the pieces list `id` names while it is in one of `states` */
-function piecesIndex(items: ChatItem[], id: string, states: PiecesCard["state"][]): number {
-  return items.findLastIndex((i) => i.kind === "pieces" && i.id === id && states.includes(i.state));
+function handoffIndex(items: ChatItem[], id: string, states: HandoffCard["state"][]): number {
+  return items.findLastIndex((i) => i.kind === "handoff" && i.id === id && states.includes(i.state));
 }
 
 /** Toyon's own card, answered: the list leaves the place the handoff call stood, turns up the log,
  * and stands at the end, where the box asked and the person answered */
-function answeredAtEnd(items: ChatItem[], idx: number, card: PiecesCard): ChatItem[] {
+function answeredAtEnd(items: ChatItem[], idx: number, card: HandoffCard): ChatItem[] {
   return [...items.slice(0, idx), ...items.slice(idx + 1), card];
 }
 

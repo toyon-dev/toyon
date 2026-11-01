@@ -9,19 +9,19 @@ import { planReader, registered, settle, until, useWorld, w } from "../../test/h
 import { excludePlans, listDoc, writePlanDocNow } from "../agent/planDoc.ts";
 import { StateStore } from "../core/state.ts";
 import { GIT } from "../git/exec.ts";
-import { listFile, PIECES_MAX, type RawPiece, sectionText } from "./pieces.ts";
+import { listFile, PIECES_MAX, type RawPiece, sectionText } from "./handoff.ts";
 
 // A plan's pieces across worktrees: the tool's answers to the agent, the list's state on the
 // origin's transcript, what go makes, queues and sends, and the word back when a sibling lands.
 
 useWorld();
 
-type Proposed = Extract<AgentEvent, { type: "pieces-proposed" }>;
+type Proposed = Extract<AgentEvent, { type: "handoff-proposed" }>;
 const agentOf = (id: string) => w.runtime.agentFor(id) as FakeAgent;
 const recorded = (id: string, type: AgentEvent["type"]) => agentOf(id).recorded.filter((e) => e.type === type);
-const lastProposal = (id: string) => agentOf(id).recorded.findLast((e) => e.type === "pieces-proposed") as Proposed;
+const lastProposal = (id: string) => agentOf(id).recorded.findLast((e) => e.type === "handoff-proposed") as Proposed;
 const outcomesOf = (id: string) =>
-  (agentOf(id).recorded.findLast((e) => e.type === "pieces") as Extract<AgentEvent, { type: "pieces" }>).outcomes;
+  (agentOf(id).recorded.findLast((e) => e.type === "handoff") as Extract<AgentEvent, { type: "handoff" }>).outcomes;
 const madeTitled = (title: string) => w.state.worktrees.find((x) => x.kind === "worktree" && x.title === title);
 
 /** other projects made for a test, taken down with it */
@@ -70,7 +70,7 @@ const piece = (over: Partial<RawPiece> = {}): RawPiece => ({
   where: "worktree",
   ...over,
 });
-const call = (id: string, ...pieces: RawPiece[]) => w.pieces.call(id, { pieces });
+const call = (id: string, ...pieces: RawPiece[]) => w.handoff.call(id, { pieces });
 
 /** an image on the origin's chat: in the store, and named on a message the way the prompt
  * captions it, so a piece can ask for "Image 1" */
@@ -94,18 +94,18 @@ describe("the tool", () => {
     const repoId = await registered();
     const a = await w.worktrees.create(repoId, "task", { title: "Rail" });
     const b = await w.worktrees.create(repoId, "task", { title: "Composer" });
-    const tool = w.pieces.tool(a.id);
+    const tool = w.handoff.tool(a.id);
     expect(tool.name).toBe("handoff");
     expect(tool.description).toContain(`${b.branch}, "Composer"`);
     expect(tool.description).not.toContain('"Rail"');
     expect(tool.inputSchema).toMatchObject({ required: ["pieces"], additionalProperties: false });
     for (const bad of [{}, { pieces: [] }, { pieces: [{ title: 1, plan: "b", where: "here" }] }, { pieces: "x" }]) {
-      expect(await w.pieces.call(a.id, bad)).toMatchObject({
+      expect(await w.handoff.call(a.id, bad)).toMatchObject({
         text: expect.stringContaining("handoff takes"),
         isError: true,
       });
     }
-    expect(recorded(a.id, "pieces-proposed")).toHaveLength(0);
+    expect(recorded(a.id, "handoff-proposed")).toHaveLength(0);
   });
 
   test("each piece is checked: caps, a blank plan, where and after and to agree, names resolve", async () => {
@@ -156,11 +156,11 @@ describe("the tool", () => {
     await refusal(piece({ attachments: ["Image 7"] }), 'no attachment "Image 7"');
     await refusal(piece({ attachments: Array(11).fill("Image 1") }), "more than 10 attachments");
     const many = Array.from({ length: PIECES_MAX + 1 }, () => piece({ where: "here" }));
-    expect(await w.pieces.call(a.id, { pieces: many })).toMatchObject({
+    expect(await w.handoff.call(a.id, { pieces: many })).toMatchObject({
       text: expect.stringContaining(`At most ${PIECES_MAX} pieces`),
       isError: true,
     });
-    expect(recorded(a.id, "pieces-proposed")).toHaveLength(0);
+    expect(recorded(a.id, "handoff-proposed")).toHaveLength(0);
   });
 
   test("held beside the plan in plan mode; Toyon's own card otherwise, with the briefs written as the plan file", async () => {
@@ -183,10 +183,10 @@ describe("the tool", () => {
     ]);
     expect(held.pieces[0]!.after).toEqual({ piece: "p2" });
     // and cannot be moved to a worktree: go acts in list order and would make it before its wait
-    expect(() => w.pieces.fate(planning.id, held.id, "p1", "worktree")).toThrow(
+    expect(() => w.handoff.fate(planning.id, held.id, "p1", "worktree")).toThrow(
       "waits for one later on the list, so it is done here or skipped",
     );
-    w.pieces.fate(planning.id, held.id, "p1", "skip");
+    w.handoff.fate(planning.id, held.id, "p1", "skip");
     expect(w.state.worktree(planning.id)?.plan).toBeUndefined();
 
     expect(
@@ -211,7 +211,7 @@ describe("the tool", () => {
     // the origin's own work waits for a sibling's branch: the wait rides on the piece, for the
     // line under the box
     expect(shown.pieces[1]!.after).toEqual({ id: planning.id, branch: planning.branch, title: "Rail" });
-    await w.pieces.answer(other.id, shown.id, false);
+    await w.handoff.answer(other.id, shown.id, false);
     expect(await call(other.id, piece({ where: "send", to: "rail" }))).toEqual({ text: SHOWN });
     expect(lastProposal(other.id).pieces[0]!.to).toEqual({ id: planning.id, branch: planning.branch, title: "Rail" });
   });
@@ -225,16 +225,16 @@ describe("the tool", () => {
       text: "A pieces list is already waiting for the person on this chat; finish your turn.",
       isError: true,
     });
-    await w.pieces.answer(a.id, lastProposal(a.id).id, false);
+    await w.handoff.answer(a.id, lastProposal(a.id).id, false);
     expect(await call(a.id, piece())).toEqual({ text: SHOWN });
-    await w.pieces.answer(a.id, lastProposal(a.id).id, false);
+    await w.handoff.answer(a.id, lastProposal(a.id).id, false);
     expect(await call(a.id, piece())).toEqual({ text: SHOWN });
-    await w.pieces.answer(a.id, lastProposal(a.id).id, false);
+    await w.handoff.answer(a.id, lastProposal(a.id).id, false);
     expect(await call(a.id, piece())).toEqual({
       text: "3 proposals were made this turn already; finish your turn and let the person answer.",
       isError: true,
     });
-    expect(recorded(a.id, "pieces-declined")).toHaveLength(3);
+    expect(recorded(a.id, "handoff-declined")).toHaveLength(3);
   });
 
   test("the briefs file a shown list sits on is written where nothing can be awaited, and a blank after is refused", async () => {
@@ -267,7 +267,7 @@ describe("the tool", () => {
     const b = await w.worktrees.create(repoId, "task", { title: "Composer" });
     // each ask is its own turn, so the turn's allowance is not what refuses one
     const decline = async () => {
-      await w.pieces.answer(a.id, lastProposal(a.id).id, false);
+      await w.handoff.answer(a.id, lastProposal(a.id).id, false);
       agentOf(a.id).note({ type: "turn-start", ts: Date.now() });
     };
     const fateOf = () => lastProposal(a.id).pieces.map((p) => p.fate);
@@ -296,7 +296,7 @@ describe("the tool", () => {
     await decline();
     // the person's own verb asks for a worktree and gets one
     agentOf(a.id).mcpTools = false;
-    await w.pieces.ask(a.id, repoId, "fix the rail badge");
+    await w.handoff.ask(a.id, repoId, "fix the rail badge");
     expect(fateOf()).toEqual(["worktree"]);
     await decline();
     // a tree with work on it, uncommitted or committed, is the branch's: the sibling is right
@@ -321,7 +321,7 @@ describe("the tool", () => {
     const repoId = await registered();
     const a = await w.worktrees.create(repoId, "task", { mode: "plan" });
     agentOf(a.id).mcpTools = false;
-    await w.pieces.ask(a.id, repoId, "move the rail");
+    await w.handoff.ask(a.id, repoId, "move the rail");
     const shown = lastProposal(a.id);
     expect(shown.held).toBeUndefined();
     expect(shown.plan).toMatch(/^\.toyon\/plans\/\d+\.md$/);
@@ -335,21 +335,21 @@ describe("fates", () => {
     const b = await w.worktrees.create(repoId, "task", { title: "Composer" });
     await call(a.id, piece(), piece({ title: "Notes", plan: "Add notes.", where: "send", to: b.branch }));
     const id = lastProposal(a.id).id;
-    w.pieces.fate(a.id, id, "p1", "skip");
-    w.pieces.fate(a.id, id, "p1", "here");
-    w.pieces.fate(a.id, id, "p2", "skip");
-    expect(recorded(a.id, "pieces-fate").map((e) => (e as { pieceId: string; fate: string }).fate)).toEqual([
+    w.handoff.fate(a.id, id, "p1", "skip");
+    w.handoff.fate(a.id, id, "p1", "here");
+    w.handoff.fate(a.id, id, "p2", "skip");
+    expect(recorded(a.id, "handoff-fate").map((e) => (e as { pieceId: string; fate: string }).fate)).toEqual([
       "skip",
       "here",
       "skip",
     ]);
-    expect(() => w.pieces.fate(a.id, id, "p1", "send")).toThrow("no worktree to send to");
-    expect(() => w.pieces.fate(a.id, id, "p2", "worktree")).toThrow("sent there or skipped");
-    expect(() => w.pieces.fate(a.id, id, "p9", "skip")).toThrow("not on the list");
-    await w.pieces.answer(a.id, id, false);
-    expect(() => w.pieces.fate(a.id, id, "p1", "skip")).toThrow("not open");
+    expect(() => w.handoff.fate(a.id, id, "p1", "send")).toThrow("no worktree to send to");
+    expect(() => w.handoff.fate(a.id, id, "p2", "worktree")).toThrow("sent there or skipped");
+    expect(() => w.handoff.fate(a.id, id, "p9", "skip")).toThrow("not on the list");
+    await w.handoff.answer(a.id, id, false);
+    expect(() => w.handoff.fate(a.id, id, "p1", "skip")).toThrow("not open");
     // the last press per piece is what go reads: p1 here, p2 skipped
-    expect(recorded(a.id, "pieces-declined")).toHaveLength(1);
+    expect(recorded(a.id, "handoff-declined")).toHaveLength(1);
   });
 });
 
@@ -374,9 +374,9 @@ describe("go", () => {
     expect(plan).toMatch(/^\.toyon\/plans\/\d+\.md$/);
     w.state.worktree(a.id)!.plan = ".toyon/plans/stale.md";
     w.state.save();
-    w.pieces.fate(a.id, proposed.id, "p3", "skip");
-    await w.pieces.answer(a.id, proposed.id, true, "  and tests  ");
-    expect(recorded(a.id, "pieces-go")).toHaveLength(1);
+    w.handoff.fate(a.id, proposed.id, "p3", "skip");
+    await w.handoff.answer(a.id, proposed.id, true, "  and tests  ");
+    expect(recorded(a.id, "handoff-go")).toHaveLength(1);
     const made = madeTitled("Rail fixes")!;
     expect(made).toBeDefined();
     expect(outcomesOf(a.id)).toEqual([
@@ -429,7 +429,7 @@ describe("go", () => {
       piece({ title: "Mine", plan: "Meanwhile.", where: "here", after: b.branch }),
     );
     const proposed = lastProposal(a.id);
-    await w.pieces.answer(a.id, proposed.id, true);
+    await w.handoff.answer(a.id, proposed.id, true);
     expect(outcomesOf(a.id)).toEqual([
       { pieceId: "p1", fate: "worktree", after: b.branch },
       { pieceId: "p2", fate: "worktree", after: a.branch },
@@ -477,7 +477,7 @@ describe("go", () => {
       piece({ title: "Notes", plan: "Add the notes.", where: "send", to: "Composer", attachments: ["Image 1"] }),
     );
     const proposed = lastProposal(a.id);
-    await w.pieces.answer(a.id, proposed.id, true);
+    await w.handoff.answer(a.id, proposed.id, true);
     expect(outcomesOf(a.id)).toEqual([{ pieceId: "p1", fate: "send", worktreeId: b.id, title: "Composer" }]);
     const sent = agentOf(b.id).sent.at(-1)!;
     expect(sent.keepCards).toBe(true);
@@ -490,7 +490,7 @@ describe("go", () => {
     await call(a.id, piece({ title: "More", plan: "More.", where: "send", to: b.branch }));
     const again = lastProposal(a.id);
     await w.worktrees.archiveWorktree(b.id);
-    await w.pieces.answer(a.id, again.id, true);
+    await w.handoff.answer(a.id, again.id, true);
     expect(outcomesOf(a.id)[0]).toMatchObject({
       pieceId: "p1",
       fate: "send",
@@ -505,7 +505,7 @@ describe("go", () => {
     const c = await w.worktrees.create(repoId, "task", { title: "Notes" });
     await call(a.id, piece({ after: b.branch }), piece({ title: "Other", plan: "Other.", after: c.branch }));
     const proposed = lastProposal(a.id);
-    await w.pieces.answer(a.id, proposed.id, true);
+    await w.handoff.answer(a.id, proposed.id, true);
     expect(w.state.worktree(a.id)!.queued).toHaveLength(2);
     await w.worktrees.archiveWorktree(b.id);
     await until(() => recorded(a.id, "piece-dropped").length === 1);
@@ -525,14 +525,14 @@ describe("go", () => {
   test("the person's verb aimed at this project is one piece: the agent is asked with the tool, else the words are the plan", async () => {
     const repoId = await registered();
     const a = await w.worktrees.create(repoId, "task", { title: "Rail" });
-    await w.pieces.ask(a.id, repoId, "fix the rail badge");
+    await w.handoff.ask(a.id, repoId, "fix the rail badge");
     const asked = agentOf(a.id).sent.at(-1)!;
-    expect(asked.asked).toEqual({ kind: "pieces", why: "a new worktree here" });
+    expect(asked.asked).toEqual({ kind: "handoff", why: "a new worktree here" });
     expect(asked.text).toContain("Propose it with the `handoff` tool: one piece, `where` set to `worktree`");
     expect(asked.text).toContain("The user's own words for what it should do: fix the rail badge");
     agentOf(a.id).mcpTools = false;
-    await expect(w.pieces.ask(a.id, repoId)).rejects.toThrow("Write what the new worktree should do first");
-    await w.pieces.ask(a.id, repoId, "fix the rail badge");
+    await expect(w.handoff.ask(a.id, repoId)).rejects.toThrow("Write what the new worktree should do first");
+    await w.handoff.ask(a.id, repoId, "fix the rail badge");
     expect(lastProposal(a.id).pieces).toEqual([
       { id: "p1", title: "Fix the rail", plan: "fix the rail badge", attachments: [], fate: "worktree" },
     ]);
@@ -597,7 +597,7 @@ describe("read off the plan", () => {
     planReader.fn = () => [TWO[0]!, { ...TWO[1]!, after: "the rail" }];
     cardOn(a.id, ".toyon/plans/1.md");
     w.hub.emit("planUnsplit", a.id, PLAN, ".toyon/plans/1.md");
-    await until(() => recorded(a.id, "pieces-proposed").length === 1);
+    await until(() => recorded(a.id, "handoff-proposed").length === 1);
     expect(lastProposal(a.id).pieces[1]).toMatchObject({ title: "The composer", fate: "worktree" });
     expect(lastProposal(a.id).pieces[1]!.after).toBeUndefined();
     expect(lastProposal(a.id).read).toMatch(/^[0-9a-f]{16}$/);
@@ -609,7 +609,7 @@ describe("read off the plan", () => {
     planReader.fn = () => TWO;
     cardOn(a.id, ".toyon/plans/1.md");
     w.hub.emit("planUnsplit", a.id, PLAN, ".toyon/plans/1.md");
-    await until(() => recorded(a.id, "pieces-proposed").length === 1);
+    await until(() => recorded(a.id, "handoff-proposed").length === 1);
     const read = lastProposal(a.id);
     expect(read).toMatchObject({ by: "toyon", held: true });
     expect(read.pieces.map((p) => [p.title, p.fate, p.plan])).toEqual([
@@ -626,16 +626,16 @@ describe("read off the plan", () => {
     cardOn(a.id, ".toyon/plans/1.md");
     w.hub.emit("planUnsplit", a.id, PLAN, ".toyon/plans/1.md");
     await settle();
-    expect(recorded(a.id, "pieces-proposed")).toHaveLength(0);
+    expect(recorded(a.id, "handoff-proposed")).toHaveLength(0);
     planReader.fn = () => TWO;
     w.hub.emit("planUnsplit", a.id, PLAN, ".toyon/plans/9.md");
     await settle();
-    expect(recorded(a.id, "pieces-proposed")).toHaveLength(0);
+    expect(recorded(a.id, "handoff-proposed")).toHaveLength(0);
     // the agent handed one over meanwhile: Toyon's read is not a second list
     await call(a.id, piece());
     w.hub.emit("planUnsplit", a.id, PLAN, ".toyon/plans/1.md");
     await settle();
-    expect(recorded(a.id, "pieces-proposed")).toHaveLength(1);
+    expect(recorded(a.id, "handoff-proposed")).toHaveLength(1);
     expect(lastProposal(a.id).by).toBeUndefined();
   });
 
@@ -647,29 +647,31 @@ describe("read off the plan", () => {
     planReader.fn = () => TWO;
     cardOn(a.id, ".toyon/plans/1.md");
     w.hub.emit("planUnsplit", a.id, PLAN, ".toyon/plans/1.md");
-    await until(() => recorded(a.id, "pieces-proposed").length === 1);
+    await until(() => recorded(a.id, "handoff-proposed").length === 1);
     const first = lastProposal(a.id);
-    w.pieces.fate(a.id, first.id, "p2", "skip");
+    w.handoff.fate(a.id, first.id, "p2", "skip");
     // the file as it stands is the plan: no mark
     w.hub.emit("treeChanged", a.id);
     await settle();
-    expect(recorded(a.id, "pieces-stale")).toHaveLength(0);
+    expect(recorded(a.id, "handoff-stale")).toHaveLength(0);
     // the plan grows a third part: the mark, then the list read again, the skip carried over
     const grown = `${PLAN}\n## 3. Docs (sibling worktree)\n\nWrite docs.\n`;
     writeFileSync(join(a.path, ".toyon/plans/1.md"), grown);
     planReader.fn = () => [...TWO, { title: "Docs", section: "3. Docs", where: "worktree" as const }];
     w.hub.emit("treeChanged", a.id);
-    await until(() => recorded(a.id, "pieces-proposed").length === 2);
-    expect(recorded(a.id, "pieces-stale")).toMatchObject([{ id: first.id }]);
-    expect(recorded(a.id, "pieces-declined")).toMatchObject([{ id: first.id, reason: "the plan changed; read again" }]);
+    await until(() => recorded(a.id, "handoff-proposed").length === 2);
+    expect(recorded(a.id, "handoff-stale")).toMatchObject([{ id: first.id }]);
+    expect(recorded(a.id, "handoff-declined")).toMatchObject([
+      { id: first.id, reason: "the plan changed; read again" },
+    ]);
     const again = lastProposal(a.id);
     expect(again).toMatchObject({ by: "toyon", held: true });
     expect(again.pieces.map((p) => p.title)).toEqual(["The rail", "The composer", "Docs"]);
-    expect(recorded(a.id, "pieces-fate").at(-1)).toMatchObject({ id: again.id, pieceId: "p2", fate: "skip" });
+    expect(recorded(a.id, "handoff-fate").at(-1)).toMatchObject({ id: again.id, pieceId: "p2", fate: "skip" });
     // marked once: another change to the file is not a second mark on the same list
     w.hub.emit("treeChanged", a.id);
     await settle();
-    expect(recorded(a.id, "pieces-stale")).toHaveLength(1);
+    expect(recorded(a.id, "handoff-stale")).toHaveLength(1);
   });
 
   test("the agent's own list is only marked stale: the agent hands over again if it re-plans", async () => {
@@ -682,10 +684,10 @@ describe("read off the plan", () => {
     writeFileSync(join(a.path, ".toyon/plans/1.md"), `${PLAN}\nmore\n`);
     planReader.fn = () => TWO;
     w.hub.emit("treeChanged", a.id);
-    await until(() => recorded(a.id, "pieces-stale").length === 1);
+    await until(() => recorded(a.id, "handoff-stale").length === 1);
     await settle();
-    expect(recorded(a.id, "pieces-proposed")).toHaveLength(1);
-    expect(recorded(a.id, "pieces-declined")).toHaveLength(0);
+    expect(recorded(a.id, "handoff-proposed")).toHaveLength(1);
+    expect(recorded(a.id, "handoff-declined")).toHaveLength(0);
   });
 
   test("go on Toyon's own card starts the agent on a piece kept here, with the note on the go", async () => {
@@ -701,15 +703,15 @@ describe("read off the plan", () => {
     // the card goes up as the handoff call answers, so the agent may still be on that turn: the
     // message waits for it to end rather than steer into it
     agentOf(a.id).status = "working";
-    await w.pieces.answer(a.id, id, true, "  carefully ");
-    expect(recorded(a.id, "pieces-go").at(-1)).toMatchObject({ id, note: "carefully" });
+    await w.handoff.answer(a.id, id, true, "  carefully ");
+    expect(recorded(a.id, "handoff-go").at(-1)).toMatchObject({ id, note: "carefully" });
     await settle();
     expect(agentOf(a.id).sent).toHaveLength(before);
     agentOf(a.id).status = "idle";
     w.hub.emit("agentStatus", a.id, "idle");
     await until(() => agentOf(a.id).sent.length === before + 1);
     const told = agentOf(a.id).sent.at(-1)!;
-    expect(told.asked?.kind).toBe("pieces");
+    expect(told.asked?.kind).toBe("handoff");
     expect(told.keepCards).toBe(true);
     expect(told.text).toContain('Do "Mine" here, and only that.');
     expect(told.text).toContain("The person added: carefully");
@@ -718,7 +720,7 @@ describe("read off the plan", () => {
     const b = await w.worktrees.create(repoId, "task", { title: "Other" });
     await call(b.id, piece({ title: "Theirs" }), piece({ title: "Mine later", where: "here", after: "Theirs" }));
     const sentBefore = agentOf(b.id).sent.length;
-    await w.pieces.answer(b.id, lastProposal(b.id).id, true);
+    await w.handoff.answer(b.id, lastProposal(b.id).id, true);
     await settle();
     expect(agentOf(b.id).sent).toHaveLength(sentBefore);
     expect(outcomesOf(b.id)[1]).toEqual({ pieceId: "p2", fate: "here", after: "Theirs" });
@@ -727,8 +729,8 @@ describe("read off the plan", () => {
     const c = await w.worktrees.create(repoId, "task", { title: "Third" });
     await call(c.id, piece({ title: "Theirs" }), piece({ title: "Mine later", where: "here", after: "Theirs" }));
     const skipped = lastProposal(c.id).id;
-    w.pieces.fate(c.id, skipped, "p1", "skip");
-    await w.pieces.answer(c.id, skipped, true);
+    w.handoff.fate(c.id, skipped, "p1", "skip");
+    await w.handoff.answer(c.id, skipped, true);
     await settle();
     expect(outcomesOf(c.id)[1]).toEqual({ pieceId: "p2", fate: "here" });
     expect(w.state.worktree(c.id)!.awaits).toBeUndefined();
@@ -741,12 +743,12 @@ describe("read off the plan", () => {
     await call(a.id, piece({ title: "Mine", plan: "I do this.", where: "here" }), piece());
     const id = lastProposal(a.id).id;
     const before = agentOf(a.id).sent.length;
-    w.hub.emit("piecesDecided", a.id, id, true);
-    await until(() => recorded(a.id, "pieces").length === 1);
+    w.hub.emit("handoffDecided", a.id, id, true);
+    await until(() => recorded(a.id, "handoff").length === 1);
     // the steer waits a beat for the card's answer to be on the wire
     await until(() => agentOf(a.id).sent.length === before + 1);
     const told = agentOf(a.id).sent.at(-1)!;
-    expect(told.asked?.kind).toBe("pieces");
+    expect(told.asked?.kind).toBe("handoff");
     expect(told.keepCards).toBe(true);
     expect(told.text).toContain('"Rail fixes" started in a sibling worktree of this project');
     expect(told.text).toContain('Do "Mine" here, and only that.');
@@ -754,7 +756,7 @@ describe("read off the plan", () => {
     const b = await w.worktrees.create(repoId, "task", { title: "Other" });
     await call(b.id, piece({ title: "Theirs" }));
     const sentBefore = agentOf(b.id).sent.length;
-    await w.pieces.answer(b.id, lastProposal(b.id).id, true);
+    await w.handoff.answer(b.id, lastProposal(b.id).id, true);
     await settle();
     expect(agentOf(b.id).sent).toHaveLength(sentBefore);
   });
@@ -764,11 +766,11 @@ describe("listFile", () => {
   const at = (seq: number, event: AgentEvent) => ({ seq, event });
   const pieces: never[] = [];
   test("Toyon's own card names the page it wrote; a held list names the agent's plan until it is shown", () => {
-    const own = at(1, { type: "pieces-proposed", id: "l1", pieces, mode: "ask", plan: ".toyon/plans/1.md", ts: 1 });
+    const own = at(1, { type: "handoff-proposed", id: "l1", pieces, mode: "ask", plan: ".toyon/plans/1.md", ts: 1 });
     expect(listFile([own], "l1")).toBe(".toyon/plans/1.md");
     // read off the plan in plan mode: the file is the plan, which holds no plan of its own
     const read = at(2, {
-      type: "pieces-proposed",
+      type: "handoff-proposed",
       id: "l2",
       pieces,
       mode: "plan",
@@ -779,10 +781,10 @@ describe("listFile", () => {
     });
     expect(listFile([own, read], "l2")).toBe(".toyon/plans/2.md");
     // shown as Toyon's own card after its turn: the page written then is the file from here
-    const shown = at(3, { type: "pieces-shown", id: "l2", plan: ".toyon/plans/3.md", ts: 3 });
+    const shown = at(3, { type: "handoff-shown", id: "l2", plan: ".toyon/plans/3.md", ts: 3 });
     expect(listFile([own, read, shown], "l2")).toBe(".toyon/plans/3.md");
     // the agent's own held list names no file until it is shown
-    const held = at(4, { type: "pieces-proposed", id: "l3", pieces, mode: "plan", held: true, ts: 4 });
+    const held = at(4, { type: "handoff-proposed", id: "l3", pieces, mode: "plan", held: true, ts: 4 });
     expect(listFile([held], "l3")).toBeUndefined();
   });
 });
@@ -800,7 +802,7 @@ describe("chains", () => {
     );
     const proposed = lastProposal(a.id);
     expect(proposed.pieces.map((p) => p.after)).toEqual([undefined, { piece: "p1" }, { piece: "p2" }]);
-    await w.pieces.answer(a.id, proposed.id, true);
+    await w.handoff.answer(a.id, proposed.id, true);
     const first = madeTitled("First")!;
     expect(outcomesOf(a.id)).toEqual([
       { pieceId: "p1", fate: "worktree", worktreeId: first.id, title: "First" },
@@ -847,8 +849,8 @@ describe("chains", () => {
       piece({ title: "Fourth", plan: "Four.", after: "Gone" }),
     );
     const proposed = lastProposal(a.id);
-    w.pieces.fate(a.id, proposed.id, "p3", "skip");
-    await w.pieces.answer(a.id, proposed.id, true);
+    w.handoff.fate(a.id, proposed.id, "p3", "skip");
+    await w.handoff.answer(a.id, proposed.id, true);
     expect(outcomesOf(a.id)).toMatchObject([
       { pieceId: "p1", fate: "here" },
       { pieceId: "p2", fate: "worktree", after: a.branch },
@@ -873,12 +875,12 @@ describe("another project", () => {
     const acp = await otherProject("claude-agent-acp");
     const a = await w.worktrees.create(repoId, "task", { title: "Rail", mode: "ask" });
     await until(() => a.branch === "toyon/rail");
-    expect(w.pieces.tool(a.id).description).toContain("name in `project`: claude-agent-acp");
+    expect(w.handoff.tool(a.id).description).toContain("name in `project`: claude-agent-acp");
     const r = await call(a.id, piece({ title: "Fix form", plan: "Fix the form field.", project: "claude" }));
     expect(r.isError).toBeUndefined();
     const proposed = lastProposal(a.id);
     expect(proposed.pieces[0]!.project).toEqual({ id: acp.id, name: "claude-agent-acp" });
-    await w.pieces.answer(a.id, proposed.id, true, "and add a test");
+    await w.handoff.answer(a.id, proposed.id, true, "and add a test");
     const b = w.state.worktrees.find((x) => x.repoId === acp.id && x.kind === "worktree")!;
     expect(b).toMatchObject({
       title: "Fix form",
@@ -914,13 +916,13 @@ describe("another project", () => {
     const repoId = await registered();
     const acp = await otherProject("claude-agent-acp");
     const a = await w.worktrees.create(repoId, "task", { title: "Rail" });
-    await w.pieces.ask(a.id, acp.id, "fix the form");
+    await w.handoff.ask(a.id, acp.id, "fix the form");
     const asked = agentOf(a.id).sent.at(-1)!;
-    expect(asked.asked).toEqual({ kind: "pieces", why: "a new worktree in claude-agent-acp" });
+    expect(asked.asked).toEqual({ kind: "handoff", why: "a new worktree in claude-agent-acp" });
     expect(asked.text).toContain(`\`project\` to "${acp.path}"`);
     expect(asked.text).toContain("The user's own words for what it should do: fix the form");
     agentOf(a.id).mcpTools = false;
-    await w.pieces.ask(a.id, acp.id, "fix the form");
+    await w.handoff.ask(a.id, acp.id, "fix the form");
     expect(lastProposal(a.id).pieces[0]).toMatchObject({ title: "Fix the form", project: { id: acp.id } });
   });
 });
@@ -928,13 +930,13 @@ describe("another project", () => {
 describe("listFile", () => {
   test("a held list answered with a plan card names the card's plan, since nothing on the list does", () => {
     const entries = [
-      { type: "pieces-proposed", id: "l1", pieces: [], mode: "plan", held: true, ts: 1 },
+      { type: "handoff-proposed", id: "l1", pieces: [], mode: "plan", held: true, ts: 1 },
       {
         type: "agent-permission",
         id: "k1",
         title: "Approve Plan",
         plan: ".toyon/plans/3.md",
-        pieces: "l1",
+        handoff: "l1",
         choices: [],
         ts: 2,
       },

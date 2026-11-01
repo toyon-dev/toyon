@@ -99,6 +99,8 @@ import { ComposerOffer } from "./ComposerOffer.tsx";
 import { cardLine, openCard } from "./cards.ts";
 import { caretAtPoint, takeCarried } from "./carried.ts";
 import { DraftChip } from "./DraftChip.tsx";
+import { HandoffCard } from "./HandoffCard.tsx";
+import { hereWaits, openHandoff } from "./handoff.ts";
 import { MentionText, openMention } from "./Mentions.tsx";
 import {
   asBranches,
@@ -121,8 +123,6 @@ import {
 } from "./ownCommands.ts";
 import { PermissionCard } from "./PermissionCard.tsx";
 import { PickChip } from "./PickChip.tsx";
-import { PiecesCard } from "./PiecesCard.tsx";
-import { hereWaits, openPieces } from "./pieces.ts";
 import { QuestionCard } from "./QuestionCard.tsx";
 import { type Step, stepWalk, type WalkKey } from "./recall.ts";
 import { shellCommandOf, shellContext } from "./shellMode.ts";
@@ -890,7 +890,7 @@ export function Composer({
   // is its reading of the work each turn; the chips are the rows, so the line follows them and
   // goes when the last of them lands.
   const waitedOn = useMemo(() => {
-    const list = chat ? openPieces(chat) : null;
+    const list = chat ? openHandoff(chat) : null;
     return (list ? hereWaits(list) : []).filter((w) => {
       const row = railRows.find((r) => r.worktree.id === w.id);
       return !!row && !row.worktree.landed;
@@ -1058,7 +1058,7 @@ export function Composer({
       if ("pick" in parsed) dispatch({ a: "open", overlay: { kind: "handoff", worktreeId: id } });
       else
         sock?.send({
-          t: "pieces-ask",
+          t: "handoff-ask",
           worktreeId: id,
           repoId: parsed.repo.id,
           ...(parsed.text ? { text: parsed.text } : {}),
@@ -1583,8 +1583,8 @@ export function Composer({
         />
       )}
       {cardUp && id ? (
-        cardUp.kind === "pieces" ? (
-          <PiecesCard key={cardUp.id} item={cardUp} worktreeId={id} rootRef={cardRef} />
+        cardUp.kind === "handoff" ? (
+          <HandoffCard key={cardUp.id} item={cardUp} worktreeId={id} rootRef={cardRef} />
         ) : cardUp.ask.kind === "question" ? (
           <QuestionCard
             key={cardUp.id}

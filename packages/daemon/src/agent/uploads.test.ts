@@ -146,11 +146,13 @@ describe("UploadStore lifetime", () => {
     const from = join(dir, "kept.png");
     await Bun.write(from, "png bytes");
     const img = await store.adopt(from, "image/png");
+    // named before the next await: its wait started in `adopt`, and a loaded run can spend the
+    // whole of it on the read and the second copy below
+    store.keep([img]);
     expect(store.imageType(img)).toBe("image/png");
     expect(await Bun.file(store.path(img)!).text()).toBe("png bytes");
     const file = await store.adopt(from, null);
     expect(store.path(file)).toBe(join(dir, `${file}.bin`));
-    store.keep([img]);
     await waited();
     expect(store.path(img)).not.toBeNull();
     expect(store.path(file)).toBeNull();

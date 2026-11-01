@@ -119,8 +119,6 @@ describe("the tool", () => {
     await refusal(piece({ title: " " }), "has no title");
     await refusal(piece({ plan: "x".repeat(20_001) }), "over 20000 characters");
 
-    await refusal(piece({ title: "t".repeat(21) }), "runs to 21 characters; a title is 1 to 3 plain words");
-    await refusal(piece({ title: "fix the form on save" }), "runs to 5 words");
     await refusal(piece({ where: "here", after: "this" }), "is `here` and waits for its own branch");
     await refusal(piece({ where: "here", after: "Rail fixes" }), '"Rail fixes" is this piece itself');
     // the origin's own work waits for a worktree, never for its own other pieces or in a circle
@@ -161,6 +159,43 @@ describe("the tool", () => {
       isError: true,
     });
     expect(recorded(a.id, "handoff-proposed")).toHaveLength(0);
+  });
+
+  test("a title over the shape is cut to it and marked provisional, and the worktree is named from the plan", async () => {
+    const repoId = await registered();
+    const a = await w.worktrees.create(repoId, "task", { title: "Rail" });
+    // a sibling piece names the first by the title the agent gave, which is the one it knows
+    const r = await call(
+      a.id,
+      piece({ title: "ACP pins to current", plan: "Bump the pins." }),
+      piece({ title: "fix the form on save", plan: "Save it.", after: "ACP pins to current" }),
+      piece({ title: "t".repeat(21), plan: "Long one.", where: "here" }),
+    );
+    expect(r).toEqual({
+      text:
+        'Piece 1 shows as "ACP pins to" until its worktree is named (its title runs to 4 words); ' +
+        'piece 2 shows as "Fix the form" until its worktree is named (its title runs to 5 words); ' +
+        `piece 3 shows as "T${"t".repeat(19)}" until its worktree is named (its title runs to 21 characters). ` +
+        "Handed to the person as a card; they decide. Finish your turn.",
+    });
+    expect(w.naming.calls).toBe(0);
+    const list = lastProposal(a.id);
+    expect(list.pieces.map((p) => [p.title, p.provisional])).toEqual([
+      ["ACP pins to", true],
+      ["Fix the form", true],
+      [`T${"t".repeat(19)}`, true],
+    ]);
+    expect(list.pieces[1]?.after).toEqual({ piece: "p1" });
+    expect(readFileSync(join(a.path, list.plan!), "utf8")).toContain("# ACP pins to");
+    // made on go: born with the cut title, no birth name, and the namer asked with the title
+    // first and the plan behind it; the second piece waits for the first, so it is queued with
+    // the mark and not yet named
+    w.naming.reply = "Pin bump";
+    await w.handoff.answer(a.id, list.id, true);
+    await until(() => madeTitled("Pin bump") !== undefined);
+    expect(w.naming.calls).toBe(1);
+    expect(w.naming.task).toBe("ACP pins to\n\nBump the pins.");
+    expect(w.state.worktree(a.id)!.queued!.map((q) => [q.title, q.provisional])).toEqual([["Fix the form", true]]);
   });
 
   test("held beside the plan in plan mode; Toyon's own card otherwise, with the briefs written as the plan file", async () => {

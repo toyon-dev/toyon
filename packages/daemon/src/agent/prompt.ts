@@ -5,13 +5,14 @@
 import type { ContentBlock } from "@agentclientprotocol/sdk/unstable";
 import type { FileRef, ImageRef, LogLine, PasteRef, PickRef, ProcState, ProcStatus, PrState } from "@toyon/shared";
 import { attachmentLabel, clipOutput, fmtBytes, lineSpan } from "@toyon/shared";
+import { NAME_SHAPE } from "../worktrees/naming.ts";
 import type { Stored } from "./attachments.ts";
 
 export const SYSTEM_APPEND = [
   "You are working inside a dedicated git worktree managed by Toyon.",
   "Make every change inside the current working directory and never modify files outside it. Reading files outside it is fine when the user points you there.",
   "When a change belongs in another project Toyon has open rather than in this worktree, do not edit outside it and do not stop at saying so: propose it with the `handoff` tool when you have one, as a piece for that project; the user decides on a card, and once it is proposed you finish your turn.",
-  "When the work you are planning splits into pieces that could go on in parallel, hand Toyon the list with the `handoff` tool when you have one: right before you ask for plan approval, or, outside plan mode, before you start on your own pieces, never at the end of the turn, so a sibling's agent works while you do and the user sees the card at once. The tool's fields say where each piece goes and what it waits for. The user reads the list beside your plan and may move any piece; never start a sibling's piece yourself, and do only the pieces marked `here`.",
+  `When the work you are planning splits into pieces that could go on in parallel, hand Toyon the list with the \`handoff\` tool when you have one: right before you ask for plan approval, or, outside plan mode, before you start on your own pieces, never at the end of the turn, so a sibling's agent works while you do and the user sees the card at once. The tool's fields say where each piece goes and what it waits for; a piece's title names its worktree (${NAME_SHAPE}). The user reads the list beside your plan and may move any piece; never start a sibling's piece yourself, and do only the pieces marked \`here\`.`,
   "The same tool, with one piece, is how you offer a separate thing you come across mid-task: a feature you would call its own, a follow-up you would otherwise park in a sentence, work the person asks to have done in a new worktree. Offer it as soon as you see it, as a card the person can decline in one press; a sentence saying it could be its own branch is not an offer.",
   "A write Toyon refuses (outside the worktree, or to an agent's settings, hooks or plugin code such as .claude/settings.json, .claude/hooks or opencode.json) was refused by Toyon and not by the user, who was never asked. Report it as the boundary that stopped it, never as the user declining.",
   "Never run `git push`, delete branches, or create pull requests, and never offer to; shipping is handled by the Toyon UI. Never add, remove, move or prune worktrees; Toyon owns them. Listing them with `git worktree list` is fine.",
@@ -330,8 +331,8 @@ export function pieceSendPrompt(text: string, note: string | undefined, origin: 
 export function pieceAskPrompt(text?: string, project?: { name: string; path: string }): string {
   const own = text?.trim();
   const where = project
-    ? `in a new worktree of ${project.name} (${project.path}), another project open in Toyon. Propose it with the \`split\` tool: one piece, \`where\` set to \`worktree\` and \`project\` to "${project.path}", with a title and a plan that project's agent builds from, with what is needed and why, how to reproduce it, and the paths here that depend on it.`
-    : "in a new worktree of this project. Propose it with the `handoff` tool: one piece, `where` set to `worktree`, with a title and a plan its agent builds from, with what is needed and why and the paths here that depend on it.";
+    ? `in a new worktree of ${project.name} (${project.path}), another project open in Toyon. Propose it with the \`handoff\` tool: one piece, \`where\` set to \`worktree\` and \`project\` to "${project.path}", with a title (${NAME_SHAPE}) and a plan that project's agent builds from, with what is needed and why, how to reproduce it, and the paths here that depend on it.`
+    : `in a new worktree of this project. Propose it with the \`handoff\` tool: one piece, \`where\` set to \`worktree\`, with a title (${NAME_SHAPE}) and a plan its agent builds from, with what is needed and why and the paths here that depend on it.`;
   return (
     `The user wants part of this work done ${where}` +
     (own ? ` The user's own words for what it should do: ${own}` : "") +

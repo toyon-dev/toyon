@@ -57,6 +57,9 @@ export interface Piece {
   /** unique within its proposal (`p1`, `p2`, ...) */
   id: string;
   title: string;
+  /** the title is the agent's cut to the name shape, not a name anyone chose: its worktree is
+   * named from the plan by the namer when it is made, as a row born from a prompt is */
+  provisional?: true;
   /** markdown that stands on its own: the plan its worktree is born with, or what is sent */
   plan: string;
   /** what this chat attached that the piece needs: named by the agent as the prompt captions

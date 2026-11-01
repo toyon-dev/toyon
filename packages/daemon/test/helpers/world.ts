@@ -58,7 +58,7 @@ export function world() {
   const exec = new ExecService({ state, runtime });
   // the namer's answer and how many times it was asked; `gate` holds an answer back, for a birth
   // ask still out when a turn ends
-  const naming = { reply: null as string | null, calls: 0, gate: Promise.resolve() };
+  const naming = { reply: null as string | null, calls: 0, task: "", gate: Promise.resolve() };
   // the tree's fingerprint as git reads it, held at `gate` so a test can move the record while a
   // status read is between its git calls; `entered` says the read is inside
   const fingerprinting = { entered: 0, gate: Promise.resolve() };
@@ -79,8 +79,9 @@ export function world() {
     paths: t.paths,
     agents,
     cache,
-    namer: async () => {
+    namer: async (task) => {
       naming.calls++;
+      naming.task = task;
       await naming.gate;
       return naming.reply;
     },

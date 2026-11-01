@@ -327,6 +327,8 @@ export interface QueuedPiece {
   proposalId: string;
   pieceId: string;
   title: string;
+  /** the title was cut to the name shape, so the worktree is named from the plan when made */
+  provisional?: true;
   /** the plan its worktree is born with */
   plan: string;
   /** the worktree it waits for, or a piece of the same list not yet made into one */

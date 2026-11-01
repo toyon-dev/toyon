@@ -67,6 +67,13 @@ describe("prompts for work in another project", () => {
     expect(SYSTEM_APPEND).toContain("once it is proposed you finish your turn");
   });
 
+  test("the system append and the piece ask state the title's shape, where the schema's word alone is missed", () => {
+    const shape = '(1 to 3 plain words, 20 characters at most, like "sticky header")';
+    expect(SYSTEM_APPEND).toContain(`a piece's title names its worktree ${shape}`);
+    expect(pieceAskPrompt()).toContain(`with a title ${shape}`);
+    expect(pieceAskPrompt(undefined, { name: "api", path: "/p/api" })).toContain("Propose it with the `handoff` tool");
+  });
+
   test("the system append points a question by topic or ticket at the worktrees tool, not at git", () => {
     expect(SYSTEM_APPEND).toContain("call the `worktrees` tool when you have one");
     expect(SYSTEM_APPEND).toContain("with a `query` it keeps only those whose title, branch or chat mention it");

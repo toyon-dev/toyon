@@ -476,15 +476,26 @@ export class HandoffService implements ToolProvider {
     const agent = this.d.runtime.ensureAgent(wt).agent;
     const entries = agent.transcript();
     const pieces: Piece[] = [];
+    /** the titles cut to the shape, for the reply: the agent goes on naming its pieces by title */
+    const cut: string[] = [];
     for (const [i, p] of raw.entries()) {
       // the title is a row's name beside the namer's: the same case
-      const title = sentenceCase(p.title.trim());
+      let title = sentenceCase(p.title.trim());
       const plan = p.plan.trim();
       if (!title) return refused(`Piece ${i + 1} has no title.`);
-      // the title is the worktree's: held to the namer's shape rather than cut to it
-      const over = overNameShape(title);
-      if (over) return refused(`Piece ${i + 1}'s title ${over}`);
       if (!plan) return refused(`Piece ${i + 1} ("${title}") has no plan; write the plan its agent builds from.`);
+      // A title over the shape is cut to it as a prompt's first words are, and marked
+      // provisional: the worktree is named from the plan by the namer when it is made, as any
+      // row is. Not refused: a refusal costs the agent a whole new call with every plan typed
+      // again, twenty seconds and more for three words.
+      const over = overNameShape(title);
+      const provisional = over !== null;
+      if (over) {
+        title = titleFrom(title);
+        cut.push(
+          `piece ${i + 1} shows as "${title}" until its worktree is named (its title ${over.slice(0, over.indexOf(";"))})`,
+        );
+      }
       if (plan.length > PLAN_MAX) {
         return refused(`Piece ${i + 1}'s plan is over ${PLAN_MAX} characters; cut it to what its agent needs.`);
       }
@@ -499,7 +510,14 @@ export class HandoffService implements ToolProvider {
           return refused(`This chat has no attachment "${label.trim()}"; name them as the messages caption them.`);
         attachments.push(ref);
       }
-      const piece: Piece = { id: `p${i + 1}`, title, plan, attachments, fate: p.where };
+      const piece: Piece = {
+        id: `p${i + 1}`,
+        title,
+        ...(provisional ? { provisional: true } : {}),
+        plan,
+        attachments,
+        fate: p.where,
+      };
       if (p.project !== undefined) {
         if (p.where === "here") return refused(`Piece ${i + 1} ("${title}") is \`here\` and names a project.`);
         const found = this.resolveProject(wt, p.project);
@@ -606,7 +624,8 @@ export class HandoffService implements ToolProvider {
         agent.note({ type: "handoff-fate", id: proposal.id, pieceId: piece.id, fate, ts: Date.now() });
       }
     }
-    return { text: held ? HELD : here ? SHOWN_HERE : SHOWN };
+    const shown = cut.length ? `${sentenceCase(cut.join("; "))}. ` : "";
+    return { text: shown + (held ? HELD : here ? SHOWN_HERE : SHOWN) };
   }
 
   /** Whether the agent's one offer should open on "do it here". The agent offers what it comes
@@ -980,6 +999,7 @@ export class HandoffService implements ToolProvider {
         proposalId: proposed.id,
         pieceId: piece.id,
         title: piece.title,
+        ...(piece.provisional ? { provisional: true } : {}),
         plan: piece.plan,
         after: waits,
         ...(piece.project ? { project: piece.project } : {}),
@@ -1096,7 +1116,7 @@ export class HandoffService implements ToolProvider {
   private async make(
     origin: WorktreeInfo,
     at: PieceOrigin,
-    piece: Pick<Piece, "title" | "plan" | "attachments" | "project">,
+    piece: Pick<Piece, "title" | "provisional" | "plan" | "attachments" | "project">,
     note: string | undefined,
     after?: Named,
   ): Promise<WorktreeInfo> {
@@ -1108,9 +1128,13 @@ export class HandoffService implements ToolProvider {
     const attachments = await this.reattachAll(origin.id, piece.attachments);
     const mode = origin.mode === "plan" ? "auto" : origin.mode;
     const via = piece.project ? "project" : "piece";
-    // no createdBy: the row is nobody's to jump to, and the person stays put
-    return this.d.create(repoId, piece.title, {
-      title: piece.title,
+    // A provisional title is the agent's cut to the shape, so the row is born as one from a
+    // prompt is: the title stands until the namer answers, from the title and the plan, with
+    // the title first so the row and the card read the same until then. No createdBy: the row
+    // is nobody's to jump to, and the person stays put.
+    const task = piece.provisional ? `${piece.title}\n\n${piece.plan}` : piece.title;
+    return this.d.create(repoId, task, {
+      ...(piece.provisional ? {} : { title: piece.title }),
       ...(mode ? { mode } : {}),
       ...(attachments.length ? { attachments } : {}),
       from: {

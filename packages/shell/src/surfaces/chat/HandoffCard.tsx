@@ -4,7 +4,8 @@
 // the rows, the agent's proposal first so enter on an untouched card is the proposal. A list of
 // several is read and moved in the document on the right, which the card opens on a press and
 // never on its own: a pane that opens itself is one the person has to close, and on the phone it
-// took the screen with the card behind it. A note is the plan card's note: `n` opens the field
+// took the screen with the card behind it. The card does not list the pieces itself: the question
+// carries the count, the page carries the rows, the way the plan card's byline points at the plan. A note is the plan card's note: `n` opens the field
 // under the row it is on, and it goes to every agent a piece is sent to, this one's for a piece
 // kept here.
 
@@ -27,8 +28,6 @@ import {
   type OneRow,
   oneRows,
   pieceFate,
-  pieceMark,
-  pieceOrder,
 } from "./handoff.ts";
 import { renderMarkdown } from "./markdown.ts";
 
@@ -70,9 +69,9 @@ export function HandoffCard({
   const starting = pressed !== null;
   const only = item.pieces.length === 1 ? item.pieces[0] : undefined;
   const plan = item.plan;
-  // the page the list sits on, beside the box, on one piece's tab when a title was pressed
-  const read = (piece?: string) => {
-    if (plan) openFile({ sock, dispatch }, { worktreeId, path: plan, view: "preview", ...(piece ? { piece } : {}) });
+  // the page the list sits on, beside the box
+  const read = () => {
+    if (plan) openFile({ sock, dispatch }, { worktreeId, path: plan, view: "preview" });
   };
   const html = useMemo(() => (only ? renderMarkdown(only.plan) : ""), [only]);
 
@@ -196,44 +195,18 @@ export function HandoffCard({
       </Card>
     );
   }
-  // a list: the pieces by title in the strip's order, each with the small word its tab wears, and
-  // a title is a press on that tab, so the question says what the number counts and the way to
-  // any one piece is one press; the whole list stays a press too, in words that say rows whose
-  // fates can be changed before go
+  // a list reads like the plan card's byline: the question carries the count, and the list itself
+  // is one press away on its page, where each row is read and moved; the card does not repeat it
   const open = plan ? (
-    <Button variant="inline" data-tip="Open it beside the box (r)" onClick={() => read()}>
-      Read the list
+    <Button variant="inline" data-tip="Open it beside the box; any row can still be moved (r)" onClick={() => read()}>
+      The list is on its page
     </Button>
   ) : (
     "The list is the agent's"
   );
-  const listed = pieceOrder(item).map((p) => {
-    const mark = pieceMark(item, p);
-    return (
-      <div key={p.id} className="card-piece">
-        {plan ? (
-          <Button variant="inline" data-tip="Open it beside the box" onClick={() => read(p.id)}>
-            {p.title}
-          </Button>
-        ) : (
-          p.title
-        )}
-        {"word" in mark && <span className="hint">{mark.word}</span>}
-      </div>
-    );
-  });
   return (
     <Card root={root} id={item.id} onKeyDown={onKeyDown}>
-      <CardHead
-        sub={
-          <>
-            <div className="card-handoff">{listed}</div>
-            {open} and change any row's fate there. Nothing has started yet.
-          </>
-        }
-      >
-        {handoffQuestion(item)}
-      </CardHead>
+      <CardHead sub={<>{open}. Nothing has started yet.</>}>{handoffQuestion(item)}</CardHead>
       <Choices
         rows={rows}
         cursor={cursor}

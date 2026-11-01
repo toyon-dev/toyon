@@ -1868,17 +1868,6 @@
   .card-sub {
     color: var(--ink1);
   }
-  /* the pieces a list's card counts, one to a line between the question and the way to the list:
-     the title, a press on its tab, and after it the word the tab wears */
-  .card-handoff {
-    margin: 2px 0 6px;
-  }
-  .card-piece {
-    display: flex;
-    align-items: baseline;
-    gap: 6px;
-    min-width: 0;
-  }
   /* the agent's own convention for the option it would pick, read off the label and worn as a
      badge, so the label itself is the choice and nothing more */
   .choice-label .badge-recommended {

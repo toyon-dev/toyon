@@ -284,7 +284,7 @@ export function CommitBox({
               {ahead} ahead
             </span>
           )}
-          {owned?.landed && (
+          {hasLanded && (
             <span className="badge-landed" data-tip={`Merged into ${base}`}>
               <Icon name="check" className="icon-inline" /> landed
             </span>

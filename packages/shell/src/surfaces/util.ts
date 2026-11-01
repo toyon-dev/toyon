@@ -105,7 +105,9 @@ export function dotClass(w: WorktreeStatus): DotState {
   // command sent to the background, a wakeup booked. Not working: a message sent now starts a
   // turn as usual, and the stop is the row's own. Not idle either: the worktree is not done.
   if (w.background) return "background";
-  if (w.worktree?.landed) return "landed";
+  // edits since the land are work again: the daemon's mark reads commits only, and a landed dot
+  // over uncommitted files read as finished
+  if (w.worktree?.landed && !w.dirty) return "landed";
   // unreachable wears the crashed colour: alive, but nothing to show, and it needs a person
   if (w.procs.some((p) => p.status === "crashed" || p.status === "unreachable")) return "crashed";
   if (w.procs.some((p) => p.status === "running")) return "running";

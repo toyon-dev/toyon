@@ -605,7 +605,9 @@ export const ThoughtRow = memo(function ThoughtRow({
         summary={
           <>
             <Icon name="bulb" className="tool-icon" />
-            <span className={cx("tool-hint thought-line", streaming && "live-text")}>{line}</span>
+            <span className="tool-hint thought-line">
+              {streaming ? <span className="live-text">{line}</span> : line}
+            </span>
           </>
         }
       >
@@ -847,7 +849,10 @@ export const ToolRow = memo(
                 <Spinner />
               </span>
             ) : (
-              hint && <span className={cx("tool-hint", running && "live-text")}>{hint}</span>
+              // the shine rides a span inside the one that truncates: the ellipsis is painted with
+              // the truncating box's fill, and `.live-text` clears that fill to show its band,
+              // which the browser does not paint through the ellipsis, so a long hint ended blank
+              hint && <span className="tool-hint">{running ? <span className="live-text">{hint}</span> : hint}</span>
             )}
             {status && <span className="tool-status">{status}</span>}
             {/* the row is faint and still (chat.css), and the word says what the faintness means */}

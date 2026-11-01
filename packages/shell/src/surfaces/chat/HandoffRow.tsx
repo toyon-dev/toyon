@@ -128,7 +128,7 @@ export function PieceLaterRow({ item }: { item: Extract<ChatItem, { kind: "piece
   }
   return (
     <DaemonRow icon="close" word="dropped" tone="quiet" at={item.ts} below={item.reason}>
-      <span className="daemon-text">{item.title ?? "a queued piece"}</span>
+      <span className="daemon-text">{item.title ?? "a queued worktree"}</span>
     </DaemonRow>
   );
 }

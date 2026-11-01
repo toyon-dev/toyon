@@ -148,33 +148,69 @@
     inset: 0;
   }
 
-  /* ---- the pieces of a plan as the pane's tabs ----
-   Handoff.tsx: the strip is the pane's head and ui/pane.css paints it, so only what a tab and a
-   piece's page add is here. The strip heads a document that is read whole to decide on it, most
-   often with the pane filling the centre: the dock's full row, as the changes panel's strip takes
-   it, rather than the dense row a file's title sits in, where two titles and their marks read as
-   a caption over the text. The small word at a tab's end is a figure beside a name, the rail's
-   age column: the mono's small size in the quiet tier, and it rides the seat's lift with the name
-   under the pointer, as the rail's does. */
-  .editor-pane-handoff {
-    --tabs-height: var(--row-height);
+  /* ---- what a plan hands off, as a track under the pane's head ----
+   Handoff.tsx. A segmented track on a row of its own rather than tabs in the head: tabs in the
+   head read as the file's title and were passed over. The track is the floor's recess and the
+   open pill is raised out of it in the element tone, the phone's screen switcher; the pill is a
+   lifted seat, so it moves the ladder for its passengers. One line: pills past the edge scroll,
+   the list's own bar-less scroll (ui/tabs.css), and an edge with more behind it fades, so the row
+   says it goes on (Handoff.tsx sets which edge). */
+  .editor-handoff-track {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px 0;
+    --tabs-strip: var(--sunken-floor);
+    --tabs-ground: var(--element0);
+    --track-fade: 32px;
+    /* a strip holds its width by default (ui/tabs.css); this one gives it up to the pane, so the
+       list meets the edge and scrolls */
+    & .tabs {
+      min-width: 0;
+      flex-shrink: 1;
+    }
+    /* the fade is the list's own mask, so the recess behind it stays whole and only the pills go;
+       the mask's ink is the alpha and not a colour, so currentColor serves */
+    & .tabs-list {
+      --fade-start: 0px;
+      --fade-end: 0px;
+      mask-image: linear-gradient(
+        to right,
+        transparent,
+        currentColor var(--fade-start),
+        currentColor calc(100% - var(--fade-end)),
+        transparent
+      );
+    }
+    &[data-more-start] .tabs-list {
+      --fade-start: var(--track-fade);
+    }
+    &[data-more-end] .tabs-list {
+      --fade-end: var(--track-fade);
+    }
+    & .tab[data-state~="current"] {
+      --text1: var(--ink0);
+      --text2: var(--ink1);
+    }
   }
-  .editor-tab-mark {
-    font: var(--type-mono-sm);
-    color: var(--text2);
-    margin-left: 4px;
+  /* the chat's handed-off mark, in its accent, on the track's line */
+  .editor-handoff-mark {
+    display: flex;
+    align-items: center;
+    color: var(--accent);
   }
-  /* the line over a piece's text: the document's measure and side padding (base.css .md-preview),
-     so it sits on the text edge clear of the outline strip, with the document's own top air above
-     it; the text under it starts closer (ui/document.css), since the line is its head */
-  .editor-piece-lead {
-    max-width: var(--chat-measure);
-    margin: 0 auto;
-    padding: 40px 32px 0;
-    font: var(--type-ui);
+  /* A piece's title, its line and its attachments: the document's own h1 and measure
+     (base.css .md-preview) with the body's top air, and no foot, since the text under it
+     continues the page (ui/document.css pulls that body's top in) */
+  .editor-piece-head {
+    padding-bottom: 0;
+    & > h1 {
+      margin-bottom: 8px;
+    }
   }
   .editor-piece-line {
     margin: 0;
+    font: var(--type-ui);
   }
   .editor-piece-chips {
     display: flex;

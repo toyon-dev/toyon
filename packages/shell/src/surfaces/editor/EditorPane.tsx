@@ -29,7 +29,7 @@ import { defaultTab, listPage, openHandoff } from "../chat/handoff.ts";
 import { usePlanTitle } from "../chat/usePlanTitle.ts";
 import { splitPath } from "../util.ts";
 import { FileViewer } from "./FileViewer.tsx";
-import { PiecePage, usePieceTabs } from "./Handoff.tsx";
+import { HandoffTrack, PiecePage, usePieceTabs } from "./Handoff.tsx";
 import { HtmlPreview } from "./HtmlPreview.tsx";
 import { MarkdownPreview } from "./MarkdownPreview.tsx";
 import "./editor.css";
@@ -180,11 +180,10 @@ export function EditorPane({
       ? tab
       : defaultTab(pieces, hasPlan);
   const openPiece = pieces && current !== "plan" ? (pieces.pieces.find((p) => p.id === current) ?? null) : null;
-  // the plan's tab is named as the head names the file: the plan by its heading, else the file
-  const planTab = useMemo(
-    () => (hasPlan ? { label: ownPlan && planTitle ? planTitle : splitPath(path).name, path } : null),
-    [hasPlan, ownPlan, planTitle, path],
-  );
+  // the head names the plan by its title, so its pill under it is only "Plan"
+  const planTab = useMemo(() => (hasPlan ? { label: "Plan", path } : null), [hasPlan, path]);
+  // nothing for a list of one with no plan of its own: there is nothing to switch to, and the
+  // piece is the page
   const tabs = usePieceTabs(pieces, planTab, current, setTab);
   const sync = useMemo(
     () =>
@@ -234,12 +233,10 @@ export function EditorPane({
     // full mode takes whatever the terminal pane leaves rather than a fixed 100%
     <Pane
       kind="editor"
-      className={cx("editor-pane", full && "full", tabs && "editor-pane-handoff")}
+      className={cx("editor-pane", full && "full")}
       height={full || onScreen ? undefined : height}
       resizable={!full && !onScreen}
       onDragStart={onDragStart ?? NO_DRAG}
-      // a plan with a list of pieces heads the pane with the strip, the plan's own tab first
-      tabs={tabs}
       title={
         <EditorTitle
           path={path}
@@ -324,6 +321,9 @@ export function EditorPane({
       }
     >
       {disk && <EditorNote editor={editor} disk={disk} files={files} />}
+      {/* what the plan hands off, under the head that names the file, holding still while the
+          text scrolls */}
+      {tabs && <HandoffTrack tabs={tabs} />}
       <div className="editor-body">
         {!disk ? (
           <Loading key={path} what={path} />
@@ -345,6 +345,7 @@ export function EditorPane({
           <PiecePage
             item={pieces}
             piece={openPiece}
+            alone={!tabs}
             worktreeId={worktreeId}
             path={path}
             version={history || kept || loose ? undefined : disk.version}

@@ -173,7 +173,7 @@ export function fateSentence(piece: Piece, fate: PieceFate, wait: Wait | null): 
   }
   if (fate === "here") return "This worktree's agent does it.";
   if (fate === "send") return `Goes to ${piece.to?.title ?? "that worktree"}'s agent as a message.`;
-  return "Skipped: nothing happens to this piece.";
+  return "Skipped: nothing happens to it.";
 }
 
 /** Toyon's own card as the person answered it, for their bubble: the row they picked, by its
@@ -243,17 +243,44 @@ export function pieceOrder(item: Pick<HandoffItem, "pieces">): Piece[] {
 export type PieceMark = { word: string } | { worktreeId: string; title?: string };
 
 export function pieceMark(item: HandoffItem, piece: Piece): PieceMark {
+  // the origin's own work that waits names what it waits for, since that is the one thing about
+  // it the strip should say: "here" alone read as ready to go
+  const wait = waitOf(item, piece);
+  const after = wait ? { word: `after ${wait.title}` } : null;
   if (deciding(item)) {
     const fate = effectiveFate(item, piece);
     if (fate === "worktree") return { word: piece.after ? "queued" : "worktree" };
     if (fate === "send") return { word: "sent" };
+    if (fate === "here" && after) return after;
     return { word: fate };
   }
   const s = pieceStanding(item, piece);
   if (s.kind === "worktree" || (s.kind === "sent" && s.worktreeId)) {
     return { worktreeId: s.worktreeId!, ...(s.title ? { title: s.title } : {}) };
   }
+  if (s.kind === "here" && after) return after;
   return { word: s.kind === "sent" ? "sent" : s.kind };
+}
+
+/** Whether a piece's page carries a line under its title. Only when the line says something the
+ * tab does not: before go it holds the other fates to press, and when the piece stands alone there
+ * is no tab, so the line is the only place its fate is said. After go, only a row to open, a wait,
+ * or a reason; a piece kept here with nothing to wait for, one skipped, and one starting are all
+ * said by the tab's own word. */
+export function bylineShown(item: HandoffItem, piece: Piece, alone: boolean): boolean {
+  if (alone || deciding(item)) return true;
+  const s = pieceStanding(item, piece);
+  if (s.kind === "here") return !!piece.after;
+  return s.kind !== "skipped" && s.kind !== "starting";
+}
+
+/** A piece's text split at its title: the agent's own first heading when the text opens with one,
+ * so the page reads title then line then body and not line over a heading; null when it opens
+ * with prose, which then takes the piece's title. */
+export function leadHeading(text: string): { title: string | null; rest: string } {
+  const m = /^\s*#{1,6}[ \t]+(.+?)[ \t#]*(?:\r?\n|$)/.exec(text);
+  if (!m) return { title: null, rest: text };
+  return { title: m[1]!.trim(), rest: text.slice(m[0].length) };
 }
 
 /** what became of the piece once the list was answered, as a fact the page's line states */

@@ -154,7 +154,7 @@ export function HandoffCard({
             ref: field,
             value: note ?? "",
             placeholder: !only
-              ? "a note for every piece's agent, sent with go"
+              ? "a note for every agent this hands to, sent with go"
               : r.fate === "here"
                 ? "a note for this worktree's agent, sent with it"
                 : "a note for the agent there, sent with it",

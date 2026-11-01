@@ -1,27 +1,33 @@
-// The pieces of a plan as the editor pane's tab strip: the plan first, when the page has one, then
-// one tab per piece in the strip's order (chat/handoff.ts), with the file's actions at the strip's
-// end, the way the terminal pane heads itself with its streams. A tab's small word is the piece's
-// fate while the list is the person's; once answered it gives way to what the piece became, and a
-// piece that became a worktree wears that row's dot and age, as the rail draws it. A piece's page
-// is its text at a document's scale under one line that states its fate and offers the others,
-// or what it became and where to open it. The strip is the head, so it stays put while the text
-// scrolls, and a sibling opening the origin's plan sees the same strip.
+// What a plan hands off, as a track under the editor pane's head: the plan first, when the page
+// has one, then one pill per piece in the track's order (chat/handoff.ts), led by the mark the
+// chat's handed-off row wears. A segmented track and not the pane's own strip, because the strip
+// in the head read as the file's title, a caption over the text, and was passed over. The head
+// keeps the file's title and its actions. A pill is a title, with the row's dot once the piece
+// became a worktree, as the rail draws it: the open piece's fate is the line under its title, so
+// a word on the pill said it twice. The pills keep to one line and scroll, with a fade on the edge
+// that has more. A list of one has no track: there is nothing to switch between. A piece's page
+// is its title, then a line only when the line says something the pill does not (bylineShown),
+// then its text at a document's scale. The track stays put while the text scrolls, and a sibling
+// opening the origin's plan sees the same track.
 
 import type { AttachmentRef, Piece, PieceFate } from "@toyon/shared";
-import { sentAt } from "@toyon/shared";
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useSock, useStore, useUrls } from "../../state/context.tsx";
 import { Button } from "../../ui/Button.tsx";
-import type { TabItem, TabsProps } from "../../ui/Tabs.tsx";
+import { useOnChange } from "../../ui/hooks.ts";
+import { Icon } from "../../ui/Icon.tsx";
+import { type TabItem, Tabs, type TabsProps } from "../../ui/Tabs.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
 import { FileChip } from "../chat/FileChip.tsx";
 import {
+  bylineShown,
   deciding,
   effectiveFate,
   fateSentence,
   fatesFor,
   fateWord,
   type HandoffItem,
+  leadHeading,
   type PieceStanding,
   pieceFate,
   pieceMark,
@@ -33,7 +39,7 @@ import { ImageChip } from "../chat/ImageChip.tsx";
 import { PasteChip } from "../chat/PasteChip.tsx";
 import { PickChip } from "../chat/PickChip.tsx";
 import { WorktreeChip } from "../chat/WorktreeChip.tsx";
-import { ago, dotClass } from "../util.ts";
+import { dotClass } from "../util.ts";
 import { MarkdownPreview } from "./MarkdownPreview.tsx";
 
 function Chips({ refs, worktreeId }: { refs: AttachmentRef[]; worktreeId: string }) {
@@ -92,7 +98,7 @@ function standingWords(s: PieceStanding): string {
     case "here":
       return "This worktree's agent does it.";
     case "skipped":
-      return "Skipped: nothing happened to this piece.";
+      return "Skipped: nothing happened to it.";
     case "dropped":
       return s.reason;
     case "sent":
@@ -105,9 +111,12 @@ function standingWords(s: PieceStanding): string {
 }
 
 /**
- * The strip for the pane's head: the plan's tab when the page has one (`plan` is its label and
- * the path its tip names), then the pieces. `current` and `onPick` are the pane's, since the open
- * tab is the pane's state and not the list's. Nothing for a page with no list.
+ * The track's pills: the plan's when the page has one (`plan` is its label and the path its tip
+ * names), then the pieces. A pill is a title, with the row's dot once the piece became a
+ * worktree; its fate is the line under the open page's title, and the pill's tip for the rest.
+ * `current` and `onPick` are the pane's, since the open pill is the pane's state and not the
+ * list's. Nothing for a page with no list, and nothing for one pill, which has nothing to switch
+ * to.
  */
 export function usePieceTabs(
   item: HandoffItem | null,
@@ -116,58 +125,74 @@ export function usePieceTabs(
   onPick: (id: string) => void,
 ): Omit<TabsProps<string>, "end"> | undefined {
   const rows = useStore((s) => s.visible);
-  const archived = useStore((s) => s.archived);
   const label = plan?.label;
   const path = plan?.path;
-  // the ages read in minutes, and a quiet list can go a long while without a frame: the rail's
-  // own tick
-  const [minute, setMinute] = useState(0);
-  useEffect(() => {
-    const t = setInterval(() => setMinute((n) => n + 1), 60_000);
-    return () => clearInterval(t);
-  }, []);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: `minute` is the tick the ages are re-read on
   return useMemo(() => {
     if (!item) return undefined;
     const items: TabItem<string>[] = [];
     if (label !== undefined && path !== undefined) items.push({ id: "plan", label, tip: tip(path) });
     for (const piece of pieceOrder(item)) {
       const mark = pieceMark(item, piece);
-      let lead: ReactNode = null;
-      let word: string;
-      if ("worktreeId" in mark) {
-        // the row's own dot and age, so the strip reads as the rail does; a row gone to the
-        // archive says so in the word, and nothing else about it is live
-        const row = rows.find((r) => r.worktree.id === mark.worktreeId);
-        if (row) {
-          lead = <span className={`dot ${dotClass(row)}`} />;
-          word = ago(sentAt(row.worktree));
-        } else {
-          const gone = Object.values(archived)
-            .flat()
-            .some((a) => a.id === mark.worktreeId);
-          word = gone ? "archived" : "gone";
-        }
-      } else {
-        word = mark.word;
-      }
+      // the row's own dot, so the track reads as the rail does; a row gone from the rail has none
+      const row = "worktreeId" in mark ? rows.find((r) => r.worktree.id === mark.worktreeId) : undefined;
       const words = deciding(item)
         ? fateSentence(piece, effectiveFate(item, piece), waitOf(item, piece))
         : standingWords(pieceStanding(item, piece));
       items.push({
         id: piece.id,
-        lead,
-        label: (
-          <>
-            {piece.title}
-            <span className="editor-tab-mark">{word}</span>
-          </>
-        ),
+        lead: row ? <span className={`dot ${dotClass(row)}`} /> : null,
+        label: piece.title,
         tip: tip(words),
       });
     }
-    return { items, current, onPick, owner: "handoff", label: "the plan and its pieces" };
-  }, [item, label, path, current, onPick, rows, archived, minute]);
+    if (items.length < 2) return undefined;
+    return { items, current, onPick, owner: "handoff", label: "the plan and what it hands off", segmented: true };
+  }, [item, label, path, current, onPick, rows]);
+}
+
+/** The track under the pane's head: the handed-off mark, then the pills on one line. Pills past
+ * the edge scroll, and the edge they are past fades, so the row says there is more; the open pill
+ * is brought into view whenever it changes, since the default one can sit past the edge. */
+export function HandoffTrack({ tabs }: { tabs: Omit<TabsProps<string>, "end"> }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [more, setMore] = useState({ start: false, end: false });
+  // the fades follow the list: read on its scroll and on its size, and again when the pills change
+  useOnChange([tabs.items], () => {
+    const list = ref.current?.querySelector<HTMLElement>(".tabs-list");
+    if (!list) return;
+    const read = () => {
+      const at = list.scrollLeft;
+      const start = at > 1;
+      const end = at + list.clientWidth < list.scrollWidth - 1;
+      setMore((m) => (m.start === start && m.end === end ? m : { start, end }));
+    };
+    read();
+    list.addEventListener("scroll", read, { passive: true });
+    const seen = new ResizeObserver(read);
+    seen.observe(list);
+    return () => {
+      list.removeEventListener("scroll", read);
+      seen.disconnect();
+    };
+  });
+  useOnChange([tabs.current], () => {
+    ref.current
+      ?.querySelector<HTMLElement>('.tabs-list [data-state~="current"]')
+      ?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  });
+  return (
+    <div
+      ref={ref}
+      className="editor-handoff-track"
+      data-more-start={more.start ? "" : undefined}
+      data-more-end={more.end ? "" : undefined}
+    >
+      <span className="editor-handoff-mark" {...tip("Handed off from this plan")}>
+        <Icon name="spawn" />
+      </span>
+      <Tabs {...tabs} />
+    </div>
+  );
 }
 
 /** what became of the open piece, as the line over its text states it: the tip's words, with
@@ -226,13 +251,16 @@ function Standing({ item, piece }: { item: HandoffItem; piece: Piece }) {
   }
 }
 
-/** A piece's page: its text read as the plan's file is, at a document's scale with its links and
- * images resolved against the file the list sits on, under one line. While the list is the
- * person's the line states the fate and offers the others; once answered it says what became of
- * the piece, with the row to open. The attachments the piece carries sit under the line. */
+/** A piece's page, read as the plan's file is, at a document's scale with its links and images
+ * resolved against the file the list sits on. The title first: the text's own opening heading,
+ * else the piece's title. Then a line, when it says something the pill does not: while the list
+ * is the person's it states the fate and offers the others; once answered, what became of the
+ * piece with the row to open. Then the attachments the piece carries, and its text. `alone`: the
+ * page has no track over it, so the line is the only place the fate is said. */
 export function PiecePage({
   item,
   piece,
+  alone,
   worktreeId,
   path,
   version,
@@ -242,6 +270,7 @@ export function PiecePage({
 }: {
   item: HandoffItem;
   piece: Piece;
+  alone: boolean;
   worktreeId: string;
   /** the file the list sits on, which the piece's relative links and images are read from */
   path: string;
@@ -255,40 +284,46 @@ export function PiecePage({
   const fate = effectiveFate(item, piece);
   const wait = waitOf(item, piece);
   const others = deciding(item) ? fatesFor(piece, item.pieces).filter((f) => f !== fate) : [];
-  const lead = (
-    <div className="editor-piece-lead">
-      <p className="editor-piece-line hint">
-        {deciding(item) ? (
-          <>
-            {/* the rows were read off a plan that is no longer the one on disk: said first, since
+  const { title, rest } = useMemo(() => leadHeading(piece.plan), [piece.plan]);
+  const byline = bylineShown(item, piece, alone) && (
+    <p className="editor-piece-line hint">
+      {deciding(item) ? (
+        <>
+          {/* the rows were read off a plan that is no longer the one on disk: said first, since
                 the sentence after it is about rows that may no longer match the text */}
-            {item.stale && "The plan changed since these were read. "}
-            {fateSentence(piece, fate, wait)}
-            {others.length > 0 && (
-              <>
-                {" "}
-                Instead:{" "}
-                {others.map((f, i) => (
-                  <span key={f}>
-                    {i > 0 && " · "}
-                    <Button variant="inline" onClick={() => press(f)}>
-                      {f === "send" && piece.to ? `send to ${piece.to.title}` : fateWord(piece, f)}
-                    </Button>
-                  </span>
-                ))}
-              </>
-            )}
-          </>
-        ) : (
-          <Standing item={item} piece={piece} />
-        )}
-      </p>
+          {item.stale && "The plan changed since these were read. "}
+          {fateSentence(piece, fate, wait)}
+          {others.length > 0 && (
+            <>
+              {" "}
+              Instead:{" "}
+              {others.map((f, i) => (
+                <span key={f}>
+                  {i > 0 && " · "}
+                  <Button variant="inline" onClick={() => press(f)}>
+                    {f === "send" && piece.to ? `send to ${piece.to.title}` : fateWord(piece, f)}
+                  </Button>
+                </span>
+              ))}
+            </>
+          )}
+        </>
+      ) : (
+        <Standing item={item} piece={piece} />
+      )}
+    </p>
+  );
+  // the title wears the document's own h1, so the page reads as the plan's file does
+  const lead = (
+    <div className="md md-preview editor-piece-head">
+      <h1>{title ?? piece.title}</h1>
+      {byline}
       <Chips refs={piece.attachments} worktreeId={worktreeId} />
     </div>
   );
   return (
     <MarkdownPreview
-      text={piece.plan}
+      text={rest}
       path={path}
       worktreeId={worktreeId}
       version={version}

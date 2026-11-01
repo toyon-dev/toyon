@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { Piece } from "@toyon/shared";
 import {
+  bylineShown,
   defaultTab,
   effectiveFate,
   fateSentence,
@@ -13,6 +14,7 @@ import {
   handoffQuestion,
   handoffSaid,
   hereWaits,
+  leadHeading,
   listPage,
   oneRows,
   openHandoff,
@@ -163,7 +165,7 @@ describe("the words", () => {
     );
     expect(fateSentence(p, "here", null)).toBe("This worktree's agent does it.");
     expect(fateSentence(piece("p1", { fate: "send", to }), "send", null)).toBe("Goes to C's agent as a message.");
-    expect(fateSentence(p, "skip", null)).toBe("Skipped: nothing happens to this piece.");
+    expect(fateSentence(p, "skip", null)).toBe("Skipped: nothing happens to it.");
   });
 });
 
@@ -233,6 +235,49 @@ describe("the strip", () => {
     { pieceId: "p4", fate: "send", worktreeId: "b", title: "B" },
   ];
 
+  test("bylineShown: a line under the title only when it says what the tab does not", () => {
+    const deciding = list([now, queued, here, sent]);
+    // before go the line holds the other fates to press
+    for (const p of deciding.pieces) expect(bylineShown(deciding, p, false)).toBe(true);
+    const done = list(
+      [now, queued, here, sent, piece("p5", { fate: "here" })],
+      { p5: "here" },
+      {
+        state: "done",
+        outcomes: [...outcomes, { pieceId: "p5", fate: "here" }],
+      },
+    );
+    const shown = (id: string) => bylineShown(done, done.pieces.find((p) => p.id === id)!, false);
+    // a row to open, a wait, a wait of its own: said in the line
+    expect(shown("p1")).toBe(true);
+    expect(shown("p2")).toBe(true);
+    expect(shown("p3")).toBe(true);
+    expect(shown("p4")).toBe(true);
+    // kept here with nothing to wait for: the tab already says "here"
+    expect(shown("p5")).toBe(false);
+    const skipped = list([now], { p1: "skip" }, { state: "done", outcomes: [{ pieceId: "p1", fate: "skip" }] });
+    expect(bylineShown(skipped, now, false)).toBe(false);
+    expect(bylineShown(list([now], {}, { state: "going" }), now, false)).toBe(false);
+    // alone there is no tab, so the line is the only place the fate is said
+    expect(bylineShown(skipped, now, true)).toBe(true);
+  });
+
+  test("leadHeading: the text's own first heading is the page's title", () => {
+    expect(leadHeading("# Move the pin\n\nOnce it is out.")).toEqual({
+      title: "Move the pin",
+      rest: "\nOnce it is out.",
+    });
+    expect(leadHeading("  ## Fork pin ##\nbody")).toEqual({ title: "Fork pin", rest: "body" });
+    expect(leadHeading("# Only a title")).toEqual({ title: "Only a title", rest: "" });
+    // prose first, or a heading further down, leaves the text whole
+    expect(leadHeading("Point the daemon at it.\n\n# Later")).toEqual({
+      title: null,
+      rest: "Point the daemon at it.\n\n# Later",
+    });
+    // a hash with no space is not a heading
+    expect(leadHeading("#1350 lands first")).toEqual({ title: null, rest: "#1350 lands first" });
+  });
+
   test("pieceOrder: the origin's own first, then worktrees now, then queued, then sent; the agent's order within", () => {
     expect(pieceOrder(list([queued, sent, now, here])).map((p) => p.id)).toEqual(["p3", "p1", "p2", "p4"]);
     // fixed from what the agent proposed: a press on a fate moves no tab
@@ -244,16 +289,20 @@ describe("the strip", () => {
     expect(l.pieces.map((p) => pieceMark(l, p))).toEqual([
       { word: "skip" },
       { word: "queued" },
-      { word: "here" },
+      // the origin's own piece names what it waits for
+      { word: "after Piece p1" },
       { word: "sent" },
     ]);
     const done = list([now, queued, here, sent], {}, { state: "done", outcomes });
     expect(done.pieces.map((p) => pieceMark(done, p))).toEqual([
       { worktreeId: "w1", title: "Piece p1" },
       { word: "queued" },
-      { word: "here" },
+      { word: "after Piece p1" },
       { worktreeId: "b", title: "B" },
     ]);
+    // a here piece with nothing to wait for is plain "here"
+    const own = piece("p5", { fate: "here" });
+    expect(pieceMark(list([own]), own)).toEqual({ word: "here" });
     expect(pieceMark(list([now], {}, { state: "going" }), now)).toEqual({ word: "starting" });
     const failed = list(
       [now],

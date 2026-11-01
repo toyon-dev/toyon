@@ -115,6 +115,16 @@ describe("adopt", () => {
     expect(w.runtime.get(wt.id)?.procs).toBeNull();
   });
 
+  test("a found worktree is taken over on the default agent with what the composer picked for it", async () => {
+    await registered();
+    await settle();
+    w.state.setPick("claude", "effort", "high");
+    const id = await foundId(foreignWorktree("picked", "pick-me"));
+    const wt = await w.worktrees.adopt(id);
+    expect(wt).toMatchObject({ agent: "claude", effort: "high" });
+    expect(wt.model).toBeUndefined();
+  });
+
   test("an adopted worktree keeps its branch name: rename refuses rather than moving it under toyon/", async () => {
     await registered();
     await settle();

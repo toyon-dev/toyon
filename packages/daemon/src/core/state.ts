@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import type {
   AgentCommand,
+  AgentPicks,
   KeepAwakeMode,
   ModelChoice,
   PairedMachine,
@@ -11,7 +12,7 @@ import type {
   ThemePrefs,
   WorktreeInfo,
 } from "@toyon/shared";
-import { isShellOrigin, sentAt } from "@toyon/shared";
+import { isShellOrigin, relistChoice, sentAt } from "@toyon/shared";
 import { UserError } from "./errors.ts";
 import { log } from "./log.ts";
 import { ensureDirs, type Paths } from "./paths.ts";
@@ -43,6 +44,10 @@ export interface PersistedState {
   theme?: ThemePrefs;
   /** registry id new worktrees get when the prompt does not pick one */
   defaultAgent?: string;
+  /** what a new worktree of each agent is asked to run, as picked in the composer: the model and
+   * effort stamped on the record at birth where the create names none. The agent's own default
+   * where absent. Keyed by registry id. */
+  picks?: Record<string, AgentPicks>;
   /** the keep-awake line in settings, kept only once it is moved off "use" */
   keepAwake?: Exclude<KeepAwakeMode, "use">;
   /** each repo's preview pages and how much they are used (routes/frecency.ts), by repo id then
@@ -472,6 +477,45 @@ export class StateStore {
   clearDefaultAgent() {
     if (this.state.defaultAgent === undefined) return;
     delete this.state.defaultAgent;
+    this.save();
+  }
+
+  /** what a new worktree of the agent is asked to run; empty where nothing was picked */
+  picks(agentId: string): AgentPicks {
+    return this.state.picks?.[agentId] ?? {};
+  }
+  /** The picks for a record being made, behind what its maker named, relisted against the agent's
+   * list as last learned: a picked id the agent has since dropped is left out rather than stamped
+   * on every new worktree (the session would switch off it and say so each time), and a model id
+   * it renamed is followed. Taken as picked while the agent has listed nothing yet. */
+  fillPicks(agentId: string, given: AgentPicks): AgentPicks {
+    const picks = this.picks(agentId);
+    const model = given.model ?? this.relisted(picks.model, this.cachedOptions(agentId, "model"), relistChoice);
+    const effort =
+      given.effort ??
+      this.relisted(picks.effort, this.cachedOptions(agentId, "thought_level"), (id, choices) =>
+        choices.some((c) => c.id === id) ? id : undefined,
+      );
+    return { ...(model ? { model } : {}), ...(effort ? { effort } : {}) };
+  }
+  private relisted(
+    id: string | undefined,
+    choices: ModelChoice[],
+    relist: (id: string, choices: ModelChoice[]) => string | undefined,
+  ): string | undefined {
+    if (!id || choices.length === 0) return id;
+    return relist(id, choices);
+  }
+  /** the empty value is the agent's own default: the field goes, and the entry with its last field */
+  setPick(agentId: string, field: keyof AgentPicks, value: string) {
+    const all = this.state.picks ?? {};
+    const picks = all[agentId] ?? {};
+    if (value) picks[field] = value;
+    else delete picks[field];
+    if (Object.keys(picks).length > 0) all[agentId] = picks;
+    else delete all[agentId];
+    if (Object.keys(all).length > 0) this.state.picks = all;
+    else delete this.state.picks;
     this.save();
   }
 

@@ -636,10 +636,6 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
     profile: z.string().max(100).optional(),
     /** what the agent may do without asking; the default mode when absent */
     mode: permissionModeSchema.optional(),
-    /** one of the agent's advertised model ids; its own default when absent */
-    model: z.string().max(200).optional(),
-    /** one of the agent's advertised effort levels; its own default when absent */
-    effort: z.string().max(100).optional(),
     /** move main's uncommitted changes into the new worktree */
     carry: z.boolean().optional(),
     boxId,
@@ -917,6 +913,15 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
    * cloud daemon sits in whatever zone its VM does. Answered with `daylight`. */
   z.object({ t: z.literal("zone"), tz: z.string().max(100) }),
   z.object({ t: z.literal("set-default-agent"), agent: id }),
+  /** what new worktrees of this agent ask for, picked in the composer: one of its advertised model
+   * ids or effort levels, the empty value its own default. Stamped on the record at birth where
+   * the create names none. */
+  z.object({
+    t: z.literal("set-agent-pick"),
+    agent: id,
+    field: z.enum(["model", "effort"]),
+    value: z.string().max(200),
+  }),
   z.object({ t: z.literal("set-keep-awake"), mode: z.enum(KEEP_AWAKE_MODES) }),
   /** (re)download an agent's adapter; progress arrives as `agents` broadcasts */
   z.object({ t: z.literal("install-agent"), agent: id }),

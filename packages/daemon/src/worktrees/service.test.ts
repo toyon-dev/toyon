@@ -832,6 +832,16 @@ describe("redetect at turn end", () => {
 });
 
 describe("open a ref", () => {
+  test("the row runs the default agent with what the composer picked for new worktrees of it", async () => {
+    const repoId = await registered();
+    sh(w.repo, "git", "branch", "picked", "main");
+    w.state.setPick("claude", "model", "fable");
+    const wt = await w.worktrees.openRef(repoId, "branch", "picked");
+    await settle();
+    expect(wt).toMatchObject({ agent: "claude", model: "fable" });
+    expect(wt.effort).toBeUndefined();
+  });
+
   test("a local branch becomes a worktree toyon owns, on that branch, with no prompt sent", async () => {
     const repoId = await registered();
     sh(w.repo, "git", "branch", "feat", "main");

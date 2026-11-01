@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import * as acp from "@agentclientprotocol/sdk/unstable";
-import type { AgentInfo, AgentLimits, AuthStatus, ModelChoice } from "@toyon/shared";
+import type { AgentInfo, AgentLimits, AgentPicks, AuthStatus, ModelChoice } from "@toyon/shared";
 import { fakeAgents } from "../../test/helpers/fakes.ts";
 import { AUTH_STATUS_UPDATE_METHOD } from "./acp/authstatus.ts";
 import { AgentReadiness, type AgentReadinessDeps, CHECK_COOLDOWN_MS } from "./readiness.ts";
@@ -91,6 +91,8 @@ function world(
   const models = extra.models ?? {};
   /** the model each agent's look opened on, by agent id */
   const ran: Record<string, string> = {};
+  /** what the composer picked for new worktrees, by agent id */
+  const picked: Record<string, AgentPicks> = {};
   let now = 1_000_000;
   const readiness = new AgentReadiness({
     infos: () => extra.infos ?? infos(),
@@ -99,6 +101,7 @@ function world(
     cwd: "/nowhere",
     options: (id, category) => (category === "model" ? (models[id] ?? []) : []),
     runs: (id, category) => (category === "model" ? ran[id] : undefined),
+    picks: (id) => picked[id] ?? {},
     learned: (id, category, choices, runs) => {
       learned.push([id, category, choices]);
       if (category === "model") {
@@ -111,7 +114,16 @@ function world(
   });
   let changes = 0;
   readiness.onChange = () => changes++;
-  return { readiness, adapter, learned, models, ran, changes: () => changes, tick: (ms: number) => (now += ms) };
+  return {
+    readiness,
+    adapter,
+    learned,
+    models,
+    ran,
+    picked,
+    changes: () => changes,
+    tick: (ms: number) => (now += ms),
+  };
 }
 
 const max: AuthStatus = { kind: "account", label: "Claude Max", account: { email: "who@example.com" } };
@@ -130,6 +142,16 @@ describe("AgentReadiness: what sessions report", () => {
     const [claude, codex] = w.readiness.describe();
     expect(claude).toEqual({ ...ready("claude"), auth: max, canLogout: true });
     expect(codex).toEqual(ready("codex"));
+  });
+
+  test("what the composer picked for new worktrees rides the row, and only while something is picked", () => {
+    const w = world();
+    w.picked.claude = { model: "fable", effort: "high" };
+    const [claude, codex] = w.readiness.describe();
+    expect(claude).toEqual({ ...ready("claude"), picks: { model: "fable", effort: "high" } });
+    expect(codex).toEqual(ready("codex"));
+    w.picked.claude = {};
+    expect(w.readiness.describe()[0]).toEqual(ready("claude"));
   });
 
   test("observing the same thing twice is not a change the shell has to hear about", () => {
@@ -243,6 +265,7 @@ describe("AgentReadiness: looking again", () => {
       cwd: "/nowhere",
       options: () => [],
       runs: () => undefined,
+      picks: () => ({}),
       learned: () => {},
       quick: () => false,
     });

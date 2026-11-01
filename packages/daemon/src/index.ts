@@ -194,6 +194,7 @@ const readiness = new AgentReadiness({
   cwd: paths.scratchDir,
   options: (id, category) => state.cachedOptions(id, category),
   runs: (id, category) => state.cachedDefault(id, category),
+  picks: (id) => state.picks(id),
   learned: (id, category, choices, runs) => hub.emit("optionsLearned", id, category, choices, runs),
   // whether the side questions can be put to it, so the shell says once, on its page, that the
   // commit message is the person's to write, instead of every turn under the box

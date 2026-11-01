@@ -33,8 +33,8 @@ export function useFocusOnMount<T extends HTMLElement>(select = false, when = tr
 }
 
 /** useState backed by localStorage (per browser); `parse` validates/clamps what was stored. The
- * value is held with its key, so a key that changes (the model remembered per agent, when the
- * draft's agent does) reads its own entry instead of keeping the last key's value. */
+ * value is held with its key, so a key that changes (the profile remembered per repo, when the
+ * composer's repo does) reads its own entry instead of keeping the last key's value. */
 export function usePersisted<T>(
   key: string,
   fallback: T,

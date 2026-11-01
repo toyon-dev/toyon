@@ -59,10 +59,6 @@ export const STORAGE = {
   profilePrefix: "toyon-profile-",
   /** + repo id: the permission mode the composer last started a worktree with, for that repo */
   modePrefix: "toyon-mode-",
-  /** + agent id: the model the composer last started a worktree with, for that agent */
-  modelPrefix: "toyon-model-",
-  /** + agent id: the effort level the composer last started a worktree with, for that agent */
-  effortPrefix: "toyon-effort-",
   /** the daemon's version this browser last ran, per machine, so the first page after an update
    * can say what changed */
   version: "toyon-version",
@@ -109,19 +105,12 @@ export const MACHINE_KEYS: readonly Key[] = [
   STORAGE.treeOpen,
   STORAGE.profilePrefix,
   STORAGE.modePrefix,
-  STORAGE.modelPrefix,
-  STORAGE.effortPrefix,
   STORAGE.phoneRow,
   STORAGE.version,
 ];
 
-/** the four keys that are prefixes, each completed by a repo or agent id */
-const PREFIXES: readonly string[] = [
-  STORAGE.profilePrefix,
-  STORAGE.modePrefix,
-  STORAGE.modelPrefix,
-  STORAGE.effortPrefix,
-];
+/** the two keys that are prefixes, each completed by a repo id */
+const PREFIXES: readonly string[] = [STORAGE.profilePrefix, STORAGE.modePrefix];
 
 /** the storage a scope reads and writes: localStorage, or a stand-in in a test */
 export interface KeyStore {
@@ -253,6 +242,22 @@ export function migrateStorage(
       const matches = PREFIXES.includes(key) ? bare.filter((k) => k.startsWith(key)) : bare.filter((k) => k === key);
       for (const k of matches) move(storage, k, scopedKey(k, servingOrigin));
     }
+  }
+  // the model and effort picks for new worktrees are the daemon's now: what this browser kept
+  // under the old keys, scoped or not, is dead
+  for (const k of keysOf(local)) {
+    if (DEAD_PREFIXES.some((p) => k.startsWith(p))) remove(local, k);
+  }
+}
+
+/** keys that were prefixes once, each completed by an agent id, and read by nothing now */
+const DEAD_PREFIXES = ["toyon-model-", "toyon-effort-"];
+
+function remove(store: KeyStore | null, key: string) {
+  try {
+    store?.removeItem(key);
+  } catch {
+    // storage blocked: the page starts as a fresh one would
   }
 }
 

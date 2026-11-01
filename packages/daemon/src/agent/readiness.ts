@@ -6,7 +6,7 @@
 // shows up here without a restart. Live sessions report what they learn into the same place.
 
 import * as acp from "@agentclientprotocol/sdk/unstable";
-import type { AgentInfo, AgentLimits, AuthStatus, LimitWindow, ModelChoice } from "@toyon/shared";
+import type { AgentInfo, AgentLimits, AgentPicks, AuthStatus, LimitWindow, ModelChoice } from "@toyon/shared";
 import { UserError } from "../core/errors.ts";
 import { log } from "../core/log.ts";
 import {
@@ -33,6 +33,8 @@ export interface AgentReadinessDeps {
   options: (agentId: string, category: string) => ModelChoice[];
   /** what a fresh session that asked for nothing ran in the category: the agent's own default */
   runs: (agentId: string, category: string) => string | undefined;
+  /** what new worktrees of the agent are asked to run, as picked in the composer */
+  picks: (agentId: string) => AgentPicks;
   /** `runs` is the category's value on the fresh session the look opened: the agent's own default */
   learned: (agentId: string, category: OptionCategory, choices: ModelChoice[], runs: string) => void;
   /** whether the side questions can be put to it (it has a quick model) */
@@ -110,12 +112,14 @@ export class AgentReadiness {
       const efforts = this.d.options(info.id, "thought_level");
       const defaultModel = this.d.runs(info.id, "model");
       const defaultEffort = this.d.runs(info.id, "thought_level");
+      const picks = this.d.picks(info.id);
       return {
         ...info,
         ...(models.length > 0 ? { models } : {}),
         ...(efforts.length > 0 ? { efforts } : {}),
         ...(defaultModel !== undefined ? { defaultModel } : {}),
         ...(defaultEffort !== undefined ? { defaultEffort } : {}),
+        ...(Object.keys(picks).length > 0 ? { picks } : {}),
         ...(this.d.quick(info.id) ? { quick: true as const } : {}),
         ...(e?.status ? { auth: e.status } : {}),
         ...(e?.canLogout ? { canLogout: true } : {}),

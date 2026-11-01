@@ -1385,10 +1385,18 @@ describe("handlers", () => {
     expect(agents.get(next.id)?.sent[0]?.context).toBeUndefined();
   });
 
-  test("create-worktree forwards the agent; set-default-agent validates, persists and broadcasts", async () => {
+  test("create-worktree forwards the agent and takes the agent's picks; set-default-agent and the picks validate and persist", async () => {
     const { services, ctx, broadcasts, repo, agents } = make();
     const r = await services.repos.register(repo);
     r.needsSetup = false;
+    // what the composer picked for new worktrees of the agent is on its record at birth
+    const pick = (agent: string, field: "model" | "effort", value: string) =>
+      dispatch({ t: "set-agent-pick", agent, field, value }, ctx, services);
+    await expect(pick("nope", "model", "big")).rejects.toBeInstanceOf(UserError);
+    await pick("codex", "effort", "high");
+    await pick("codex", "model", "big");
+    await pick("codex", "model", "");
+    expect(services.state.picks("codex")).toEqual({ effort: "high" });
     await dispatch(
       {
         t: "create-worktree",
@@ -1396,7 +1404,6 @@ describe("handlers", () => {
         prompt: "x",
         agent: "codex",
         mode: "ask",
-        effort: "high",
         attachments: [{ kind: "paste", text: "p" }],
       },
       ctx,
@@ -1406,6 +1413,7 @@ describe("handlers", () => {
     expect(made.agent).toBe("codex");
     expect(made.mode).toBe("ask");
     expect(made.effort).toBe("high");
+    expect(made.model).toBeUndefined();
     // the first message's attachments reach the agent like a chat's do
     expect(agents.get(made.id)?.sent[0]?.attachments).toEqual([{ kind: "paste", text: "p" }]);
     await dispatch({ t: "set-worktree-effort", worktreeId: made.id, effort: "" }, ctx, services);

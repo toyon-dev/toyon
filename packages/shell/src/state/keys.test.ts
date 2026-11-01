@@ -63,12 +63,14 @@ describe("storage scoped to a machine", () => {
 });
 
 describe("migrateStorage", () => {
-  test("bare machine keys move once under the serving scope, prefix keys by scan, window keys stay", () => {
+  test("bare machine keys move once under the serving scope, prefix keys by scan, window keys stay, dead keys go", () => {
     const local = fakeStore({
       "toyon-active": "a1",
       "toyon-repo": "r1",
       "toyon-profile-r1": "web",
+      "toyon-mode-r1": "ask",
       "toyon-model-claude": "opus",
+      [`toyon-effort-claude@${HOME}`]: "high",
       "toyon-theme": "dark",
       "toyon-token": "secret",
       "toyon-layouts": "{}",
@@ -79,7 +81,7 @@ describe("migrateStorage", () => {
       [`toyon-active@${HOME}`]: "a1",
       [`toyon-repo@${HOME}`]: "r1",
       [`toyon-profile-r1@${HOME}`]: "web",
-      [`toyon-model-claude@${HOME}`]: "opus",
+      [`toyon-mode-r1@${HOME}`]: "ask",
       "toyon-theme": "dark",
       "toyon-token": "secret",
       "toyon-layouts": "{}",

@@ -502,6 +502,8 @@ export class WorktreeService {
     };
     // validated up front: an unknown or uninstalled agent is a refusal now, not a dead worktree later
     const agent = this.d.agents.require(opts.agent ?? this.d.state.defaultAgent ?? DEFAULT_AGENT_ID).id;
+    // what the create names wins over what the composer picked for new worktrees of the agent
+    const { model, effort } = this.d.state.fillPicks(agent, { model: opts.model, effort: opts.effort });
     const profile = this.checkProfile(repo, opts.profile);
     // a message that is attachments alone is named from what they carry
     const task = taskText(prompt, attachments);
@@ -524,8 +526,8 @@ export class WorktreeService {
       // the spare's agent has no process yet; it reads the stamps on its first prompt
       agent,
       mode: opts.mode,
-      model: opts.model,
-      effort: opts.effort,
+      model,
+      effort,
       from: opts.from,
       profile,
       // the claim stamped the prompt's words as a name still to be found; a given name is final
@@ -615,8 +617,8 @@ export class WorktreeService {
       ...(opts.createdBy ? { createdBy: opts.createdBy } : {}),
       ...(profile !== undefined ? { profile } : {}),
       ...(opts.mode ? { mode: opts.mode } : {}),
-      ...(opts.model ? { model: opts.model } : {}),
-      ...(opts.effort ? { effort: opts.effort } : {}),
+      ...(model ? { model } : {}),
+      ...(effort ? { effort } : {}),
     };
     // before the setup reads the tree and before the agent's first look at it
     const carried = await this.carryMain(repo, wt, !!opts.carry);
@@ -819,6 +821,7 @@ export class WorktreeService {
       title,
       createdAt: Date.now(),
       agent,
+      ...this.d.state.fillPicks(agent, {}),
       from: {
         kind,
         ref,
@@ -881,6 +884,7 @@ export class WorktreeService {
       isInside(target, canonical(w.path)),
     );
     if (enclosing) throw new UserError(`${r.name} sits inside ${enclosing.path}, which Toyon already manages`);
+    const agent = this.d.agents.require(this.d.state.defaultAgent ?? DEFAULT_AGENT_ID).id;
     const wt: WorktreeInfo = {
       id: shortId(),
       repoId,
@@ -890,7 +894,8 @@ export class WorktreeService {
       proxyPort: await allocateProxyPort(),
       title: r.name,
       createdAt: Date.now(),
-      agent: this.d.agents.require(this.d.state.defaultAgent ?? DEFAULT_AGENT_ID).id,
+      agent,
+      ...this.d.state.fillPicks(agent, {}),
       parked: true,
       ...(message ? { promptedAt: Date.now() } : {}),
       ...(createdBy ? { createdBy } : {}),

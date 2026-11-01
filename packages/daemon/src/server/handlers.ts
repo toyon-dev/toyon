@@ -304,8 +304,6 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
       agent: msg.agent,
       profile: msg.profile,
       mode: msg.mode,
-      model: msg.model,
-      effort: msg.effort,
       carry: msg.carry,
     };
     await sending(s, ctx, msg, msg.attachments, async () => {
@@ -843,6 +841,13 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
   "set-default-agent"(msg, _ctx, s) {
     s.agents.require(msg.agent);
     s.state.setDefaultAgent(msg.agent);
+    s.hub.emit("agentsChanged");
+  },
+
+  // the pick rides on the agent's row, so a change is the same broadcast the agent default makes
+  "set-agent-pick"(msg, _ctx, s) {
+    s.agents.require(msg.agent);
+    s.state.setPick(msg.agent, msg.field, msg.value);
     s.hub.emit("agentsChanged");
   },
 

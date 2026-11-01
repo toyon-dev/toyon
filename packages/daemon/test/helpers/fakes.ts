@@ -338,6 +338,7 @@ export function fakeReadiness(agents: AgentRegistry, connect?: AgentReadinessDep
     cwd: "/nowhere",
     options: () => [],
     runs: () => undefined,
+    picks: () => ({}),
     learned: () => {},
     quick: () => false,
   });

@@ -38,7 +38,7 @@ import { pathItems } from "../../state/actions/message.ts";
 import { terminalItems } from "../../state/actions/proc.ts";
 import { archiveWorktrees, shipOp } from "../../state/actions/worktree.ts";
 import { spliceWords, takeBackQueued, toInput } from "../../state/attach.ts";
-import { useDispatch, useMachine, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
+import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
 import { openSource } from "../../state/openSource.ts";
 import { fillFrame, type HeldFrame } from "../../state/outbox.ts";
 import { isUploading } from "../../state/pending.ts";
@@ -63,10 +63,9 @@ import { Ring } from "../../ui/Ring.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
 import { greenfieldContext } from "../center/greenfield.ts";
 import { canPull, originNote } from "../chips/baseNote.ts";
-import { rememberedChoice } from "../chips/choiceRows.ts";
-import { EffortChip, useNewWorktreeEffort } from "../chips/EffortChip.tsx";
+import { EffortChip } from "../chips/EffortChip.tsx";
 import { ModeChip, useNewWorktreeMode } from "../chips/ModeChip.tsx";
-import { AgentModelChip, ModelChip, rememberNewWorktreeModel, useNewWorktreeModel } from "../chips/ModelChip.tsx";
+import { AgentModelChip, ModelChip } from "../chips/ModelChip.tsx";
 import { useNewWorktreeProfile } from "../chips/ProfileChip.tsx";
 import { commentsLine } from "../editor/prComments.ts";
 import { CommandRow } from "../overlays/CommandRow.tsx";
@@ -277,7 +276,6 @@ export function Composer({
   const onScreen = placement === "screen";
   const dispatch = useDispatch();
   const sock = useSock();
-  const { storage } = useMachine();
   const store = useStoreInstance();
   const drafting = !!draft;
   const id = active?.worktree.id ?? null;
@@ -385,24 +383,24 @@ export function Composer({
   // what its default rows stand for: the chips read these before a session has reported anything
   const agentDefaultModel = agentInfo?.defaultModel;
   const agentDefaultEffort = agentInfo?.defaultEffort;
-  const [storedModel, setNewModel] = useNewWorktreeModel(spawnAgent);
-  const [newEffort, setNewEffort] = useNewWorktreeEffort(spawnAgent);
-  // as the agent lists it now: an id it stopped listing since it was remembered is never sent.
-  // The effort is left as remembered: its choices follow the model, and the list here is one model's
-  const newModel = rememberedChoice(storedModel, agentModels);
+  // what a new worktree of the agent asks for: the daemon's memory per agent, stamped on the record
+  // at birth wherever a worktree is made, so a pick here reaches every shell and every create
+  const newModel = agentInfo?.picks?.model ?? "";
+  const newEffort = agentInfo?.picks?.effort ?? "";
+  const pick = (agent: string, field: "model" | "effort", value: string) =>
+    sock?.send({ t: "set-agent-pick", agent, field, value });
+  const setNewModel = (model: string) => pick(spawnAgent, "model", model);
+  const setNewEffort = (effort: string) => pick(spawnAgent, "effort", effort);
   // A new worktree lists every agent's models, and picking another agent's model switches the
   // agent with it: on the draft, or as the daemon's default for a project's first message, which
-  // is what the send would have remembered anyway.
+  // is what the send would have remembered anyway. The pick goes first, so the chip reads it on
+  // the switch.
   const agents = useStore((s) => s.agents);
   const pickAgentModel = (agent: string, model: string) => {
-    if (agent === spawnAgent) {
-      setNewModel(model);
-      return;
-    }
-    rememberNewWorktreeModel(storage, agent, model);
-    pickAgent(agent);
+    pick(agent, "model", model);
+    if (agent !== spawnAgent) pickAgent(agent);
   };
-  // the agent alone: the model the chip then shows is the one remembered for that agent
+  // the agent alone: the model the chip then shows is the one picked for that agent
   const pickAgent = (agent: string) => {
     if (drafting) dispatch({ a: "draft-agent", id: agent });
     else sock?.send({ t: "set-default-agent", agent });
@@ -1247,8 +1245,6 @@ export function Composer({
         agent: spawnAgent,
         profile,
         mode: mode ?? newMode,
-        ...(newModel ? { model: newModel } : {}),
-        ...(newEffort ? { effort: newEffort } : {}),
         ...(draft?.carry ? { carry: true } : {}),
       };
       // the box remembers what it last started with, the way its mode and model chips do; the
@@ -1267,12 +1263,8 @@ export function Composer({
         dispatch({ a: "sent-box", id: boxId });
       }
     } else {
-      // the session reads these when it opens, and the daemon handles frames in order, so they are
-      // on the record before the chat starts it; the agent is already the default the chip set
-      if (fresh) {
-        sock?.send({ t: "set-worktree-model", worktreeId: id, model: newModel });
-        sock?.send({ t: "set-worktree-effort", worktreeId: id, effort: newEffort });
-      }
+      // a first chat into a row with no agent yet: the daemon stamps the default agent and its
+      // picks on the record as the session spawns, so nothing is sent ahead of the message
       const frame: HeldFrame = { t: "chat", worktreeId: id, clientId, context };
       if (uploading) hold(boxId, id, prompt, frame);
       else {

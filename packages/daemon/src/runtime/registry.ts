@@ -211,6 +211,21 @@ const PREVIEW_POLL_MS = 100;
 /** how long a proc a worktree takes over from main may take to answer: the supervisor's own ceiling */
 const PROC_UP_MS = 60_000;
 
+/** The agent a row with none on its record runs, stamped the first time it is used: rows from
+ * before the registry existed, and a main on its first chat. With what the composer picked for new
+ * worktrees of it, except on a spare: the claim stamps the task's own picks and skips a field the
+ * task left empty, so a pick written here would outlive being cleared before the send. */
+export function stampAgent(id: string, d: Pick<RuntimeDeps, "state" | "agents" | "hub">) {
+  const w = d.state.requireWorktree(id);
+  if (!w.agent) {
+    w.agent = d.agents.defaultId(d.state.defaultAgent);
+    if (w.kind !== "spare") Object.assign(w, d.state.fillPicks(w.agent, { model: w.model, effort: w.effort }));
+    d.state.save();
+    d.hub.emit("worktreesChanged");
+  }
+  return d.agents.require(w.agent);
+}
+
 function defaultAgent(
   wt: WorktreeInfo,
   d: RuntimeDeps,
@@ -218,17 +233,8 @@ function defaultAgent(
   onProcess: () => void,
 ): AgentAdapter {
   const mcp = d.mcp;
-  // resolved at spawn time: a spare is stamped with the task's agent when claimed, and rows from
-  // before the registry existed get the default the first time they are used
-  const spec = () => {
-    const w = d.state.requireWorktree(wt.id);
-    if (!w.agent) {
-      w.agent = d.agents.defaultId(d.state.defaultAgent);
-      d.state.save();
-      d.hub.emit("worktreesChanged");
-    }
-    return d.agents.require(w.agent);
-  };
+  // resolved at spawn time: a spare is stamped with the task's agent when claimed
+  const spec = () => stampAgent(wt.id, d);
   const agent = new AcpSession({
     worktreeId: wt.id,
     cwd: wt.path,

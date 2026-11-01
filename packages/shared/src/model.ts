@@ -360,6 +360,9 @@ export interface QueuedPiece {
  * longer one is cut where it is read */
 export const LAND_SUBJECTS_MAX = 8;
 
+/** the model and effort a new worktree of an agent is asked to run, where the create names none */
+export type AgentPicks = Partial<Pick<WorktreeInfo, "model" | "effort">>;
+
 export interface WorktreeInfo {
   id: string;
   repoId: string;
@@ -783,6 +786,9 @@ export interface AgentInfo {
   defaultModel?: string;
   /** the effort level it ran the last time a session opened with none asked for, the same way */
   defaultEffort?: string;
+  /** what new worktrees of it are asked to run, as picked in the composer; its own default where
+   * absent. A request like a worktree record's own: the session applies it against its list. */
+  picks?: AgentPicks;
   /** why its last check failed, in words a person can act on: its login hint when it refused for
    * want of a credential, the process's own first line otherwise. Absent once a check succeeds or a
    * session sees it logged in, and before any check has run. */

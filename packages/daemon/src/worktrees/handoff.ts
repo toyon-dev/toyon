@@ -1110,9 +1110,10 @@ export class HandoffService implements ToolProvider {
   }
 
   /** the worktree for a piece, born with the piece's text as its plan, the origin pointer as its
-   * first message, and what the origin's chat attached; on the origin's agent, model and effort,
-   * in its write mode (a plan it was given is approved by the go, so never in plan mode), cold
-   * until someone looks at it. In the origin's project, or in the one the piece named. */
+   * first message, and what the origin's chat attached; on the origin's agent, model and effort
+   * (the picks for new worktrees of that agent stand in where the origin named none), in its write
+   * mode (a plan it was given is approved by the go, so never in plan mode), cold until someone
+   * looks at it. In the origin's project, or in the one the piece named. */
   private async make(
     origin: WorktreeInfo,
     at: PieceOrigin,

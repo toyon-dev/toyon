@@ -155,15 +155,17 @@
    lifted seat, so it moves the ladder for its passengers. One line: pills past the edge scroll,
    the list's own bar-less scroll (ui/tabs.css), and an edge with more behind it fades, so the row
    says it goes on (Handoff.tsx sets which edge).
-   The track takes the page's measure and side padding (base.css .md-preview), so the pills start
-   on the text edge over the title, in the page's own column: at the pane's left they stood
-   stranded, a row away from a centred page. The pane is a flex column, so the width is held, or
-   an auto margin would shrink the track to its pills and centre it. The mark hangs off the text
-   edge into the gutter, a margin note on the page rather than a seat in the row. */
+   The track takes the page's measure and side padding (base.css .md-preview), so the pills stand
+   in the page's own column: at the pane's left they stood stranded, a row away from a centred
+   page. The pane is a flex column, so the width is held, or an auto margin would shrink the track
+   to its pills. The mark and the pills centre as one group over the page; hung off the text edge
+   the mark sat in the gutter, pressed against the outline's ticks. */
   .editor-handoff-track {
     position: relative;
     display: flex;
     align-items: center;
+    justify-content: center;
+    gap: 8px;
     width: 100%;
     max-width: var(--chat-measure);
     box-sizing: border-box;
@@ -204,12 +206,10 @@
       --text2: var(--ink1);
     }
   }
-  /* the chat's handed-off mark, in its accent, in the gutter: centred on the pills' row, its own
-     box the row's height so it sits level with them */
+  /* the chat's handed-off mark, in its accent, ahead of the pills: its own box the row's height so
+     it sits level with them */
   .editor-handoff-mark {
-    position: absolute;
-    left: 6px;
-    top: 12px;
+    flex: none;
     display: flex;
     align-items: center;
     height: calc(var(--row-height-sm) + 6px);
@@ -224,10 +224,13 @@
   }
   /* A piece's title, its line and its attachments: the document's own h1 and measure
      (base.css .md-preview) with the body's top air, and no foot, since the text under it
-     continues the page (ui/document.css pulls that body's top in) */
+     continues the page (ui/document.css pulls that body's top in). The h1 sits inside the
+     rendered html's wrapper, so the page's first-child rule never reaches it, and its 30 of top
+     margin would drop this title under the plan's. */
   .editor-piece-head {
     padding-bottom: 0;
     & h1 {
+      margin-top: 0;
       margin-bottom: 8px;
     }
   }

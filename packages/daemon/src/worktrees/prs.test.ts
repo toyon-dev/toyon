@@ -2,11 +2,11 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { PrState, RepoInfo, WorktreeInfo } from "@toyon/shared";
+import type { PrComment, PrState, RepoInfo, WorktreeInfo } from "@toyon/shared";
 import { Hub } from "../core/hub.ts";
-import { ensureDirs, makePaths } from "../core/paths.ts";
+import { ensureDirs, makePaths, type Paths } from "../core/paths.ts";
 import { StateStore } from "../core/state.ts";
-import { PrService } from "./prs.ts";
+import { PrService, type PrServiceDeps } from "./prs.ts";
 
 // GitHub is a stub that answers what the test says; the worktree service is two recorded calls.
 
@@ -125,6 +125,153 @@ describe("PrService", () => {
     await Bun.sleep(20);
     expect(w.asked.sort()).toEqual([12, 14]);
     expect(w.merged).toEqual(["w2"]);
+    w.prs.stop();
+  });
+});
+
+describe("PrService comments", () => {
+  const remark = (id: string, over: Partial<PrComment> = {}): PrComment => ({
+    id,
+    author: "pat",
+    body: `remark ${id}`,
+    url: `https://github.com/o/r/pull/12#discussion_r${id}`,
+    at: Date.now() + 60_000,
+    path: "src/a.ts",
+    line: 3,
+    ...over,
+  });
+
+  /** a world whose GitHub lists what `listed` holds at the time of each read; given `paths`, the
+   * daemon's state is read back from there, as a restart reads it */
+  function commented(
+    listed: { now: PrComment[] | null },
+    { paths: from, me = "Me" }: { paths?: Paths; me?: string | null } = {},
+  ) {
+    const paths = from ?? makePaths(mkdtempSync(join(home, "c-")));
+    ensureDirs(paths);
+    const store = from
+      ? new StateStore(paths)
+      : new StateStore(paths, {
+          repos: [
+            {
+              id: "r1",
+              path: "/nowhere",
+              name: "r",
+              defaultBranch: "main",
+              config: { run: {} },
+              configFile: ".toyon/settings.json",
+              needsSetup: false,
+            },
+          ],
+          worktrees: [
+            {
+              id: "w1",
+              repoId: "r1",
+              path: "/nowhere/w1",
+              branch: "toyon/w1",
+              kind: "worktree",
+              proxyPort: 1,
+              title: "w1",
+              createdAt: 0,
+              pr: open(),
+            },
+          ],
+          sessions: {},
+        });
+    const hosts: string[] = [];
+    const hub = new Hub();
+    let frames = 0;
+    hub.on("worktreesChanged", () => frames++);
+    const deps: PrServiceDeps = {
+      state: store,
+      hub,
+      everyMs: 60 * 60_000,
+      view: async () => null,
+      worktrees: { setPr: () => {}, prMerged: async () => ({ ok: true, message: "" }) },
+      comments: async () => listed.now,
+      login: async (_path, host) => {
+        hosts.push(host);
+        return me;
+      },
+    };
+    const prs = new PrService(deps);
+    const wt = () => store.worktree("w1");
+    return { prs, state: store, paths, hosts, wt, frames: () => frames };
+  }
+
+  test("the remarks are kept for the page, summed up on the worktree, and a new one rings it", async () => {
+    const listed = { now: [remark("c1")] as PrComment[] | null };
+    const w = commented(listed);
+    await w.prs.readComments("w1");
+    expect(w.prs.commentsOf("w1")).toEqual([remark("c1", { at: expect.any(Number) })]);
+    expect(w.wt()?.prComments).toEqual({ pr: 12, count: 1, authors: ["pat"], version: 1 });
+    expect(w.wt()?.unread).toBe(true);
+    expect(w.frames()).toBe(1);
+    // the same answer changes nothing and sends nothing
+    await w.prs.readComments("w1");
+    expect(w.wt()?.prComments?.version).toBe(1);
+    expect(w.frames()).toBe(1);
+    // an answer arrives: the summary moves, newest author first, and the login was asked once
+    listed.now = [remark("c1"), remark("c2", { replyTo: "c1", author: "sam" })];
+    await w.prs.readComments("w1");
+    expect(w.wt()?.prComments).toEqual({ pr: 12, count: 2, authors: ["sam", "pat"], version: 2 });
+    expect(w.hosts).toEqual(["github.com"]);
+    w.prs.stop();
+  });
+
+  test("the person's own remarks, and any from before Toyon first read them, are kept and ring nothing", async () => {
+    const w = commented({
+      now: [remark("c1", { author: "me" }), remark("r1", { at: 1, review: "changes_requested", path: undefined })],
+    });
+    await w.prs.readComments("w1");
+    expect(w.wt()?.unread).toBeUndefined();
+    expect(w.prs.commentsOf("w1").map((c) => c.id)).toEqual(["c1", "r1"]);
+    // the person's own login is left out of who wrote them
+    expect(w.wt()?.prComments?.authors).toEqual(["pat"]);
+    w.prs.stop();
+  });
+
+  test("a restart rings nothing twice", async () => {
+    const listed = { now: [remark("c1")] };
+    const w = commented(listed);
+    await w.prs.readComments("w1");
+    w.prs.stop();
+    const again = commented(listed, { paths: w.paths });
+    const seen = again.wt();
+    if (seen) seen.unread = undefined;
+    await again.prs.readComments("w1");
+    expect(again.wt()?.unread).toBeUndefined();
+    expect(again.frames()).toBe(0);
+    again.prs.stop();
+  });
+
+  test("a failed read, or no login to tell the person's own apart, changes nothing", async () => {
+    const listed = { now: [remark("c1")] as PrComment[] | null };
+    const w = commented(listed);
+    await w.prs.readComments("w1");
+    listed.now = null;
+    await w.prs.readComments("w1");
+    expect(w.prs.commentsOf("w1").map((c) => c.id)).toEqual(["c1"]);
+    const anon = commented({ now: [remark("c1")] }, { me: null });
+    await anon.prs.readComments("w1");
+    await anon.prs.readComments("w1");
+    expect(anon.wt()?.prComments).toBeUndefined();
+    // asked again each time, since the login may come back
+    expect(anon.hosts).toHaveLength(2);
+    w.prs.stop();
+    anon.prs.stop();
+  });
+
+  test("the login is asked of the PR's own host; a new PR starts over; a closed one shows nothing", async () => {
+    const listed = { now: [remark("c1")] };
+    const w = commented(listed);
+    const wt = w.wt();
+    if (wt) wt.pr = open({ number: 13, url: "https://git.acme.dev/o/r/pull/13" });
+    await w.prs.readComments("w1");
+    expect(w.hosts).toEqual(["git.acme.dev"]);
+    expect(w.state.prCommentsOf("w1")?.pr).toBe(13);
+    if (wt) wt.pr = open({ number: 13, state: "closed" });
+    expect(w.prs.commentsOf("w1")).toEqual([]);
     w.prs.stop();
   });
 });

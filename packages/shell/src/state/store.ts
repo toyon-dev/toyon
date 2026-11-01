@@ -46,6 +46,7 @@ import type {
   Piece,
   PieceFate,
   PieceOutcome,
+  PrComment,
   QueuedMessage,
   RefHit,
   Remote,
@@ -361,6 +362,9 @@ export interface WorktreeLocal {
   commits?: CommitEntry[];
   /** files by commit sha, filled in as commits are expanded */
   commitFiles: Record<string, GitFileStatus[]>;
+  /** the remarks on the worktree's PR, as the daemon last answered for their page; undefined until
+   * the page has been opened once */
+  prComments?: PrComment[];
   /** ⌘⇧F results */
   search: { query: string; hits: SearchHit[]; truncated: boolean } | null;
   /** the design pane's last scan; null until it has been opened once for this worktree */
@@ -642,7 +646,9 @@ export type LooseSource =
   | { kind: "grant"; id: string; path: string; version: string | null }
   | { kind: "bytes" }
   /** text with nothing behind it (a message's text out of the transcript): read, never saved */
-  | { kind: "text" };
+  | { kind: "text" }
+  /** the remarks on the worktree's PR, drawn as their own page from what the daemon last read */
+  | { kind: "pr-comments" };
 
 /** what a caller opens from outside every worktree: a dropped file, by name, with its text read */
 export interface OpenLoose {
@@ -2279,7 +2285,7 @@ function reduce(s: State, action: Action): State {
         before: v.text,
         after: v.text,
         version: null,
-        writable: v.source.kind !== "bytes" && v.source.kind !== "text" && !v.tooLarge && !v.binary,
+        writable: (v.source.kind === "handle" || v.source.kind === "grant") && !v.tooLarge && !v.binary,
         binary: v.binary,
         tooLarge: v.tooLarge,
       };
@@ -3284,6 +3290,8 @@ function onServer(s: State, msg: StoreServerMsg): State {
       });
       return { ...withLayout(next, { changes }), changesAuto };
     }
+    case "pr-comments":
+      return withLocal(s, msg.worktreeId, (l) => ({ ...l, prComments: msg.comments }));
     case "changed-ranges": {
       const next = withLocal(s, msg.worktreeId, (l) => ({
         ...l,

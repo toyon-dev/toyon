@@ -571,6 +571,10 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     ctx.reply({ t: "changed-ranges", worktreeId: msg.worktreeId, path: msg.path, ranges, lineOffset });
   },
 
+  "pr-comments"(msg, ctx, s) {
+    ctx.reply({ t: "pr-comments", worktreeId: msg.worktreeId, comments: s.prs.commentsOf(msg.worktreeId) });
+  },
+
   reveal(msg, _ctx, s) {
     s.files.reveal(msg.worktreeId, msg.path);
   },

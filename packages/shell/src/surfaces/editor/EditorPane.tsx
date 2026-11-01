@@ -32,6 +32,7 @@ import { FileViewer } from "./FileViewer.tsx";
 import { HandoffTrack, PiecePage, usePieceTabs } from "./Handoff.tsx";
 import { HtmlPreview } from "./HtmlPreview.tsx";
 import { MarkdownPreview } from "./MarkdownPreview.tsx";
+import { PrCommentsPage } from "./PrCommentsPage.tsx";
 import "./editor.css";
 
 // the grammars come in with the editor, and a file is only shown once they can colour it
@@ -136,6 +137,8 @@ export function EditorPane({
   // with it, and the browser saves it through the handle it carried, if one did. None of the
   // working-tree wiring below applies, and the worktree id is only lent to the pane's plumbing.
   const loose = editor.loose;
+  // the remarks on the worktree's PR: a page of Toyon's own, with no text, views or lines of a file
+  const prPage = loose?.source.kind === "pr-comments";
   // a file on an archived worktree's page is only in git: its directory is gone
   const kept = useStore((s) => archivedPageOf(s)?.id === worktreeId);
   const wtPath = useStore((s) => {
@@ -213,7 +216,7 @@ export function EditorPane({
   // disk is read again after every save, so an edit brings the view back. A loose file has no
   // other side at all.
   const noDiff = !!disk && (disk.before === "" || disk.before === disk.after);
-  const others = viewsOf(path, noDiff).filter((v) => v !== view && !(loose && v === "diff"));
+  const others = prPage ? [] : viewsOf(path, noDiff).filter((v) => v !== view && !(loose && v === "diff"));
   // a file the browser draws is drawn from the working tree, or from its grant when it was opened
   // from outside; one only in git (a commit's copy, an archived page) or dropped in from the
   // browser has no bytes the daemon can serve
@@ -226,7 +229,7 @@ export function EditorPane({
   // so it is kept with the pane's height and not the file
   const [wrap, setWrap] = usePersisted(STORAGE.editorWrap, false, (raw) => (raw === null ? undefined : raw === "1"));
   // the toggle is for text in Monaco: a picture, a rendered preview and a file not shown have no lines to fold
-  const wrappable = !!disk && !viewer && !disk.binary && !disk.tooLarge && view !== "preview";
+  const wrappable = !!disk && !prPage && !viewer && !disk.binary && !disk.tooLarge && view !== "preview";
   // a line the page reported is only placed once its offset is known
   const line = editor.line && !editor.line.fiber ? editor.line.n : undefined;
   return (
@@ -325,7 +328,9 @@ export function EditorPane({
           text scrolls */}
       {tabs && <HandoffTrack tabs={tabs} />}
       <div className="editor-body">
-        {!disk ? (
+        {prPage ? (
+          <PrCommentsPage worktreeId={worktreeId} openSeq={editor.seq} focus={editor.focus} />
+        ) : !disk ? (
           <Loading key={path} what={path} />
         ) : viewer ? (
           <FileViewer
@@ -490,6 +495,8 @@ function EditorNote({ editor, disk, files }: { editor: EditorFile; disk: EditorD
       </div>
     );
   }
+  // the PR's remarks are GitHub's, and the page says where they live
+  if (editor.loose?.source.kind === "pr-comments") return null;
   // text out of the chat's transcript, a message another agent sent: nothing on disk to save it to
   if (editor.loose?.source.kind === "text" && !disk.writable) {
     return (

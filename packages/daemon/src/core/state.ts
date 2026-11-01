@@ -6,6 +6,7 @@ import type {
   ModelChoice,
   PairedMachine,
   PermissionMode,
+  PrComment,
   RepoInfo,
   ThemePrefs,
   WorktreeInfo,
@@ -51,6 +52,12 @@ export interface PersistedState {
   /** per worktree, found ones included: the page files last opened there and what they held
    * (routes/seen.ts), so a page the agent changed afterwards can say so */
   seen?: Record<string, SeenRecord>;
+  /** per worktree, the remarks on its open PR as last read (prs.ts): what its page shows, and what a
+   * later read is measured against, so nothing rings twice across a restart. The size of the PR. */
+  prComments?: Record<string, PrCommentsRecord>;
+  /** when this daemon first read PR comments: a remark older than that was written before Toyon
+   * read any, and a PR that already had a long thread does not ring for all of it */
+  prCommentsFrom?: number;
   /** the last update whose install failed, so the automatic path does not retry it every minute */
   updateFailed?: { version: string; at: number };
   /** when a device opening this machine's own address was first let in; the desk's bar stops
@@ -111,6 +118,12 @@ export interface SeenRecord {
   files: Record<string, string>;
 }
 
+/** the remarks on one worktree's PR, for the PR it has now */
+export interface PrCommentsRecord {
+  pr: number;
+  comments: PrComment[];
+}
+
 /** worktrees whose page records are kept: a found worktree removed outside toyon never says so */
 const SEEN_WORKTREES = 50;
 
@@ -154,6 +167,7 @@ export function loadState(paths: Paths): PersistedState {
   // sessions belong to worktrees; a removed worktree's entry is an orphan
   const ids = new Set(state.worktrees.map((w) => w.id));
   for (const id of Object.keys(state.sessions)) if (!ids.has(id)) delete state.sessions[id];
+  for (const id of Object.keys(state.prComments ?? {})) if (!ids.has(id)) delete state.prComments?.[id];
   // page records too, except a found worktree's: it has no record here to be checked against, and
   // its ids start disc- (worktrees/discover.ts)
   for (const id of Object.keys(state.seen ?? {})) {
@@ -279,6 +293,24 @@ export class StateStore {
     return rec;
   }
 
+  /** the remarks on a worktree's PR as last read, live; undefined until the first read */
+  prCommentsOf(worktreeId: string): PrCommentsRecord | undefined {
+    return this.state.prComments?.[worktreeId];
+  }
+  /** No save: the PR service saves with the summary on the worktree that goes with it */
+  setPrComments(worktreeId: string, rec: PrCommentsRecord) {
+    this.state.prComments ??= {};
+    this.state.prComments[worktreeId] = rec;
+  }
+  /** when PR remarks were first read here, stamped on the first ask */
+  prCommentsFrom(now: number): number {
+    if (this.state.prCommentsFrom === undefined) {
+      this.state.prCommentsFrom = now;
+      this.save();
+    }
+    return this.state.prCommentsFrom;
+  }
+
   /** a repo's page list, live like every record here; undefined until its first visit */
   visitsOf(repoId: string): Record<string, PageVisit> | undefined {
     return this.state.visits?.[repoId];
@@ -306,6 +338,7 @@ export class StateStore {
     this.state.worktrees = this.state.worktrees.filter((w) => w.id !== id);
     delete this.state.sessions[id];
     if (this.state.seen) delete this.state.seen[id];
+    if (this.state.prComments) delete this.state.prComments[id];
     if (this.state.groups) {
       const left = this.state.groups[id] ?? [];
       delete this.state.groups[id];

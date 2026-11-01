@@ -4599,3 +4599,31 @@ describe("the last-known machine", () => {
     expect(s.heardAt).not.toBeNull();
   });
 });
+
+describe("PR comments", () => {
+  test("the daemon's answer is kept on the worktree for its page", () => {
+    const comments = [{ id: "c1", author: "pat", body: "b", url: "u", at: 1, path: "a.ts", line: 2 }];
+    const s = run([hello(wt("a")), server({ t: "pr-comments", worktreeId: "a", comments })]);
+    expect(s.local.a?.prComments).toEqual(comments);
+  });
+
+  test("the page opens in the editor pane as no file: nothing to save, no read to wait on", () => {
+    const s = run([
+      hello(wt("a")),
+      {
+        a: "open-loose",
+        v: {
+          worktreeId: "a",
+          name: "PR #12 comments",
+          text: "",
+          binary: false,
+          tooLarge: false,
+          source: { kind: "pr-comments" },
+          seq: 1,
+        },
+      },
+    ]);
+    expect(s.editor).toMatchObject({ worktreeId: "a", loose: { source: { kind: "pr-comments" } } });
+    expect(s.editor?.disk?.writable).toBe(false);
+  });
+});

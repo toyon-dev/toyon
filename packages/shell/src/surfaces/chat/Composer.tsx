@@ -32,7 +32,7 @@ import { installOfferDone, installOfferDue, useInstallOffered, useInstallPrompt 
 import { previewBus, togglePick } from "../../app/previewBus.ts";
 import { copyText } from "../../state/actions/deps.ts";
 import { daemonHost } from "../../state/actions/editor.ts";
-import { listFiles, openFile } from "../../state/actions/file.ts";
+import { listFiles, openFile, openPrComments } from "../../state/actions/file.ts";
 import { pathItems } from "../../state/actions/message.ts";
 import { terminalItems } from "../../state/actions/proc.ts";
 import { archiveWorktrees, shipOp } from "../../state/actions/worktree.ts";
@@ -67,6 +67,7 @@ import { EffortChip, useNewWorktreeEffort } from "../chips/EffortChip.tsx";
 import { ModeChip, useNewWorktreeMode } from "../chips/ModeChip.tsx";
 import { AgentModelChip, ModelChip, rememberNewWorktreeModel, useNewWorktreeModel } from "../chips/ModelChip.tsx";
 import { useNewWorktreeProfile } from "../chips/ProfileChip.tsx";
+import { commentsLine } from "../editor/prComments.ts";
 import { CommandRow } from "../overlays/CommandRow.tsx";
 import { PaletteRow } from "../overlays/PaletteRow.tsx";
 import { fileRow } from "../overlays/QuickOpen.tsx";
@@ -1344,6 +1345,10 @@ export function Composer({
   const queued = spawning ? [] : queue.flatMap((q) => q.attachments ?? []);
   const plan = active?.worktree.plan;
   const planLabel = usePlanTitle(active?.worktree.id, plan);
+  // what reviewers wrote on the open PR: its line stands with the plan's, since the PR is the work
+  // here as much as the plan is, and the chat has none of it until a thread is handed over
+  const remarks = prOpen && active?.worktree.prComments?.pr === prOpen.number ? active.worktree.prComments : undefined;
+  const remarksLine = remarks && remarks.count > 0 ? commentsLine(remarks.count, remarks.authors) : null;
   // pieces of this worktree's plan waiting for a sibling to land, read off the record so a
   // restart keeps the line
   const queuedPieces = active?.worktree.queued ?? [];
@@ -1409,6 +1414,28 @@ export function Composer({
           >
             {planLabel}
           </Button>
+        </div>
+      )}
+      {prOpen && remarksLine && active && (
+        <div className="composer-plan">
+          <Icon name="pr" className="icon-inline" />
+          <Button
+            variant="inline"
+            tone="strong"
+            data-tip="Read them beside the chat"
+            onClick={() => openPrComments({ dispatch }, active.worktree.id, prOpen.number)}
+          >
+            {remarksLine.count}
+          </Button>
+          <span className="row-dim">
+            on PR #{prOpen.number}
+            {remarksLine.rest}
+            {prOpen.review === "changes_requested"
+              ? ", changes requested"
+              : prOpen.review === "approved"
+                ? ", approved"
+                : ""}
+          </span>
         </div>
       )}
       {/* the question set aside with escape, and the way back to it: at the top of the box, where

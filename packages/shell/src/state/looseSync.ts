@@ -59,7 +59,7 @@ export function looseSync(
   refused: (why: string) => void,
   env: LooseEnv,
 ): EditorSync {
-  if (source.kind === "bytes" || source.kind === "text") return NO_SYNC;
+  if (source.kind === "bytes" || source.kind === "text" || source.kind === "pr-comments") return NO_SYNC;
   if (source.kind === "grant") return grantSync(source, name, refused, env);
   const handle = source.handle as WritableHandle;
   let buffer: SyncBuffer | null = null;

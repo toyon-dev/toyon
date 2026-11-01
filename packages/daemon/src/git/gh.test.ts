@@ -1,5 +1,16 @@
 import { describe, expect, test } from "bun:test";
-import { parseAllowed, parseDeployments, parsePrView, parseQueue, pickMethod, prNumberOf } from "./gh.ts";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import {
+  parseAllowed,
+  parseDeployments,
+  parseLineComments,
+  parsePrView,
+  parseQueue,
+  parseReviews,
+  pickMethod,
+  prNumberOf,
+} from "./gh.ts";
 
 describe("parsePrView", () => {
   test("folds GitHub's words into the box's: open, waiting on review, checks running", () => {
@@ -194,5 +205,72 @@ describe("prNumberOf", () => {
     expect(prNumberOf("https://github.com/o/r/pull/12")).toBe(12);
     expect(prNumberOf("https://github.com/o/r/pull/12/files")).toBe(12);
     expect(prNumberOf("https://github.com/o/r/compare/main...x")).toBeNull();
+  });
+});
+
+// what `gh api repos/cli/cli/pulls/11030/{comments,reviews} --paginate --jq '.[]'` printed, a few
+// lines of each, with a comment emptied, a review turned to changes requested and one left pending
+const fixture = (name: string) => readFileSync(join(import.meta.dir, "../../test/fixtures/gh", name), "utf8");
+
+describe("parseLineComments", () => {
+  const comments = parseLineComments(fixture("pr-comments.ndjson"));
+
+  test("a line comment: who, where, the link, its text with plain line ends", () => {
+    expect(comments[0]).toEqual({
+      id: "c2114500714",
+      author: "andyfeller",
+      body: expect.stringMatching(/^\*\*question:\*\* should this also be available via `--json`/),
+      url: "https://github.com/cli/cli/pull/11030#discussion_r2114500714",
+      at: Date.parse("2025-05-29T18:14:55Z"),
+      path: "pkg/cmd/release/shared/fetch.go",
+      line: 74,
+    });
+    expect(comments.some((c) => c.body.includes("\r"))).toBe(false);
+  });
+
+  test("a reply names the comment it answers", () => {
+    expect(comments[1]).toMatchObject({ id: "c2114513386", author: "bdehamer", replyTo: "c2114500714" });
+  });
+
+  test("a comment a later push left behind keeps the line it was written on", () => {
+    expect(comments.find((c) => c.id === "c2114557657")).toMatchObject({ line: 158 });
+  });
+
+  test("an empty body is skipped", () => {
+    expect(comments.map((c) => c.id)).toEqual(["c2114500714", "c2114513386", "c2114557657", "c2114573909"]);
+  });
+
+  test("a plain array reads as the lines do; junk reads as nothing", () => {
+    const lines = fixture("pr-comments.ndjson").trim().split("\n");
+    expect(parseLineComments(`[${lines.join(",")}]`)).toEqual(comments);
+    expect(parseLineComments("not json\n")).toEqual([]);
+    expect(parseLineComments("")).toEqual([]);
+  });
+});
+
+describe("parseReviews", () => {
+  const reviews = parseReviews(fixture("pr-reviews.ndjson"));
+
+  test("a review with text, an approval with none, and changes requested come through", () => {
+    expect(reviews.map((r) => [r.id, r.author, r.review])).toEqual([
+      ["r2872868192", "malancas", "approved"],
+      ["r2879192649", "andyfeller", "commented"],
+      ["r2879322748", "andyfeller", "approved"],
+      ["r2879192650", "andyfeller", "changes_requested"],
+    ]);
+    expect(reviews[3]).toEqual({
+      id: "r2879192650",
+      author: "andyfeller",
+      body: "Please add a test for the empty digest.",
+      url: "https://github.com/cli/cli/pull/11030#pullrequestreview-2879192649",
+      at: Date.parse("2025-05-29T18:15:54Z"),
+      review: "changes_requested",
+    });
+  });
+
+  test("the empty wrapper a line comment came in, and a pending draft, are skipped", () => {
+    const ids = reviews.map((r) => r.id);
+    expect(ids).not.toContain("r2879214278");
+    expect(ids).not.toContain("r2879192651");
   });
 });

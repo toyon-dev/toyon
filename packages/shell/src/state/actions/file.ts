@@ -53,6 +53,23 @@ export function openFile({ dispatch }: Deps, { focus = true, ...target }: OpenRe
   dispatch({ a: "open-file", v: { ...target, focus, seq: nextSeq() } });
 }
 
+/** Open the page of what reviewers wrote on the worktree's PR in the editor pane. It is no file:
+ * the pane draws it from the remarks the daemon holds, and asks for them as it opens. */
+export function openPrComments({ dispatch }: Pick<Deps, "dispatch">, worktreeId: string, pr: number) {
+  dispatch({
+    a: "open-loose",
+    v: {
+      worktreeId,
+      name: `PR #${pr} comments`,
+      text: "",
+      binary: false,
+      tooLarge: false,
+      source: { kind: "pr-comments" },
+      seq: nextSeq(),
+    },
+  });
+}
+
 type Written = Extract<FileServerMsg, { t: "file-written" }>;
 /** the files being made, each waiting on the answer to its write */
 const creates = new Map<number, (msg: Written) => void>();

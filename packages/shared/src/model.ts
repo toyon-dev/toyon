@@ -448,6 +448,8 @@ export interface WorktreeInfo {
   parked?: boolean;
   /** the person marked it unread to come back to; rings the row until it is next seen */
   unread?: boolean;
+  /** what reviewers have written on its PR while the PR is open; absent until any have */
+  prComments?: PrCommentsSummary;
   /** its agent showed a plan here, approved or not: a plan is worth keeping, so the row does not
    * archive itself until it lands. Stamped when the card is shown, since a transcript cannot tell one apart. */
   planned?: boolean;
@@ -492,6 +494,38 @@ export interface PrState {
   preview?: string;
   /** when GitHub was last asked */
   at: number;
+}
+
+/** One remark a reviewer left on a PR, as GitHub has it: a comment on a line of the diff, or a
+ * review's own text. Ids are prefixed by kind (`c` a line comment, `r` a review), since GitHub
+ * numbers the two apart and a number alone could name either. */
+export interface PrComment {
+  id: string;
+  author: string;
+  body: string;
+  url: string;
+  /** when GitHub has it written, ms */
+  at: number;
+  path?: string;
+  /** the line it is on, or was on before a later push moved the diff under it */
+  line?: number;
+  /** the first line of a comment on a range */
+  startLine?: number;
+  /** the line comment this one answers: always its thread's first */
+  replyTo?: string;
+  /** a review's verdict; absent on a line comment */
+  review?: "approved" | "changes_requested" | "commented";
+}
+
+/** what reviewers have written on a worktree's PR, as last read: how many remarks and whose, for
+ * the line over the box. The remarks themselves are asked for (`pr-comments`) when their page
+ * opens; `version` moves each time they change, which is when an open page asks again. */
+export interface PrCommentsSummary {
+  pr: number;
+  count: number;
+  /** who wrote them, newest first, the person's own login left out */
+  authors: string[];
+  version: number;
 }
 
 /** how an agent stopped: it finished, someone stopped it, it failed, or it is blocked asking you */

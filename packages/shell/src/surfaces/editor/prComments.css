@@ -1,0 +1,53 @@
+/* The page of what reviewers wrote on a worktree's PR. See PrCommentsPage.tsx. */
+@layer tokens, base, surfaces;
+@layer surfaces {
+  /* the page is the document's lead; the empty body under it keeps the page's foot */
+  .pr-page {
+    padding-bottom: 0;
+  }
+  .pr-page-byline {
+    color: var(--text2);
+  }
+  /* a file's threads under its path, set in the code face the path is typed in elsewhere */
+  .pr-page-path {
+    font: var(--type-log);
+    color: var(--text1);
+    overflow-wrap: anywhere;
+  }
+  /* each remark is a block of its own: who and where on a line, what they wrote under it, and the
+     answers under that, set in by a rule so the thread reads as one */
+  .pr-page-thread {
+    margin-bottom: 24px;
+  }
+  .pr-page-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: var(--row-height-sm);
+    font: var(--type-ui-sm);
+    color: var(--text2);
+  }
+  .pr-page-author {
+    color: var(--text0);
+  }
+  .pr-page-verb[data-review="changes_requested"] {
+    color: var(--red);
+  }
+  .pr-page-verb[data-review="approved"] {
+    color: var(--aqua);
+  }
+  .pr-page-gap {
+    flex: 1;
+  }
+  .pr-page-body {
+    overflow-wrap: break-word;
+    & > :last-child {
+      margin-bottom: 0;
+    }
+  }
+  .pr-page-reply {
+    margin-top: 12px;
+    padding-left: 12px;
+    border-left: 1px solid var(--border0);
+  }
+}

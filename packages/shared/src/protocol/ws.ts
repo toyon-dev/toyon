@@ -29,6 +29,7 @@ import type {
   PathEntry,
   PathTarget,
   PendingRepo,
+  PrComment,
   RefHit,
   RepoInfo,
   SelfState,
@@ -332,6 +333,8 @@ export type ServerMsg =
    * `queue`. */
   | { t: "agent-commands"; worktreeId: string; commands: AgentCommand[] }
   | { t: "changed-ranges"; worktreeId: string; path: string; ranges: Array<[number, number]>; lineOffset: number }
+  /** the reply to pr-comments: every remark on the worktree's open PR, oldest first */
+  | { t: "pr-comments"; worktreeId: string; comments: PrComment[] }
   /** raw stream output; only to sockets that opened that exact tab (term-open) */
   | { t: "term-data"; worktreeId: string; stream: string; data: string }
   /** reply to term-open: the recent output to replay into a reset terminal */
@@ -837,6 +840,8 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
    * words, and what it carried. `seq` is its place in the transcript. */
   z.object({ t: z.literal("redraft"), worktreeId: id, seq: z.number().int().min(0) }),
   z.object({ t: z.literal("changed-ranges"), worktreeId: id, path: relPath }),
+  /** the remarks on the worktree's PR, for their page */
+  z.object({ t: z.literal("pr-comments"), worktreeId: id }),
   z.object({ t: z.literal("rename-worktree"), worktreeId: id, title: z.string().min(1).max(200) }),
   /** `kind` is the setup pane's answer to committed or kept local: which of the pair the save
    * writes, in the place the settings already are; the sibling it displaces is taken away */

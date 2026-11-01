@@ -3,7 +3,7 @@
 // comes back as a failed result, never a throw: the caller decides whether that is a refusal or
 // "a repo without PRs".
 
-import type { MergeMethod, PrState } from "@toyon/shared";
+import type { MergeMethod, PrComment, PrState } from "@toyon/shared";
 import { type GitResult, NO_PROMPT, runLive } from "./exec.ts";
 
 /** gh's own switches beside git's: no interactive prompts, no update nag on stderr */
@@ -298,6 +298,110 @@ function foldChecks(rollup: unknown): PrState["checks"] | undefined {
     if (["PENDING", "EXPECTED", "QUEUED", "IN_PROGRESS", "WAITING", ""].includes(word)) pending = true;
   }
   return pending ? "pending" : "pass";
+}
+
+/** Every line comment and review on the PR, oldest first; null when either read failed, so a
+ * partial answer is never taken for the whole of what is there. Both through REST, one object a
+ * line (`--jq '.[]'`), which reads the same whichever way gh joins the pages. */
+export async function readPrComments(repoPath: string, number: number): Promise<PrComment[] | null> {
+  const api = (what: string) =>
+    gh(["api", `repos/{owner}/{repo}/pulls/${number}/${what}`, "--paginate", "--jq", ".[]"], repoPath, 20_000);
+  const [lines, reviews] = await Promise.all([api("comments"), api("reviews")]);
+  if (!lines.ok || !reviews.ok) return null;
+  return [...parseLineComments(lines.out), ...parseReviews(reviews.out)].sort((a, b) => a.at - b.at);
+}
+
+/** the login gh is signed in as on `host`, or null when it cannot say. Asked of the PR's own
+ * host: on a machine signed in to GitHub and to an Enterprise server the two are different people. */
+export async function ghLogin(repoPath: string, host: string): Promise<string | null> {
+  const r = await gh(["api", "user", "--hostname", host, "--jq", ".login"], repoPath, 20_000);
+  const login = r.ok ? r.out.trim() : "";
+  return login || null;
+}
+
+/** what `gh api ... --jq '.[]'` prints (one object a line), or a plain array, as objects */
+function objectsOf(out: string): Record<string, unknown>[] {
+  const text = out.trim();
+  if (!text) return [];
+  const lines = text.startsWith("[") ? [text] : text.split("\n");
+  const objects: Record<string, unknown>[] = [];
+  for (const line of lines) {
+    let v: unknown;
+    try {
+      v = JSON.parse(line);
+    } catch {
+      // one bad line is one remark missed, not the rest of the PR's
+      continue;
+    }
+    for (const o of Array.isArray(v) ? v : [v])
+      if (o && typeof o === "object") objects.push(o as Record<string, unknown>);
+  }
+  return objects;
+}
+
+const loginOf = (user: unknown): string | null => {
+  const login = (user as Record<string, unknown> | null | undefined)?.login;
+  return typeof login === "string" && login ? login : null;
+};
+
+const timeOf = (v: unknown): number | null => {
+  const t = typeof v === "string" ? Date.parse(v) : Number.NaN;
+  return Number.isFinite(t) ? t : null;
+};
+
+/** GitHub keeps what a browser's textarea sent, line ends and all */
+const bodyOf = (v: unknown): string => (typeof v === "string" ? v.replace(/\r\n/g, "\n").trim() : "");
+
+const lineOf = (...vs: unknown[]): number | undefined => vs.find((v): v is number => typeof v === "number" && v > 0);
+
+/** GitHub's line comments (`pulls/{n}/comments`), with an empty body skipped. A comment a later
+ * push left behind has no `line`; its `original_line` is where it was written. */
+export function parseLineComments(out: string): PrComment[] {
+  const comments: PrComment[] = [];
+  for (const o of objectsOf(out)) {
+    const author = loginOf(o.user);
+    const at = timeOf(o.created_at);
+    const body = bodyOf(o.body);
+    if (typeof o.id !== "number" || !author || at === null || !body || typeof o.html_url !== "string") continue;
+    const line = lineOf(o.line, o.original_line);
+    const start = lineOf(o.start_line, o.original_start_line);
+    comments.push({
+      id: `c${o.id}`,
+      author,
+      body,
+      url: o.html_url,
+      at,
+      ...(typeof o.path === "string" && o.path ? { path: o.path } : {}),
+      ...(line ? { line } : {}),
+      ...(start && line && start < line ? { startLine: start } : {}),
+      ...(typeof o.in_reply_to_id === "number" ? { replyTo: `c${o.in_reply_to_id}` } : {}),
+    });
+  }
+  return comments;
+}
+
+/** GitHub's reviews (`pulls/{n}/reviews`). A review with no text of its own is the wrapper its
+ * line comments came in, and is skipped, unless it approves or asks for changes, which is news
+ * in itself. A pending review is its author's draft, and a dismissed one was taken back. */
+export function parseReviews(out: string): PrComment[] {
+  const reviews: PrComment[] = [];
+  for (const o of objectsOf(out)) {
+    const author = loginOf(o.user);
+    const at = timeOf(o.submitted_at);
+    const body = bodyOf(o.body);
+    const review =
+      o.state === "APPROVED"
+        ? "approved"
+        : o.state === "CHANGES_REQUESTED"
+          ? "changes_requested"
+          : o.state === "COMMENTED"
+            ? "commented"
+            : null;
+    if (typeof o.id !== "number" || !author || at === null || !review || typeof o.html_url !== "string") continue;
+    if (!body && review === "commented") continue;
+    reviews.push({ id: `r${o.id}`, author, body, url: o.html_url, at, review });
+  }
+  return reviews;
 }
 
 /** the PR number GitHub's URL ends in */

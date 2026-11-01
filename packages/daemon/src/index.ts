@@ -59,7 +59,7 @@ import { ExecService } from "./exec/service.ts";
 import { OpenService } from "./files/open.ts";
 import { FileService } from "./files/service.ts";
 import { run } from "./git/exec.ts";
-import { viewPr } from "./git/gh.ts";
+import { ghLogin, readPrComments, viewPr } from "./git/gh.ts";
 import { PageErrorService } from "./preview/errors.ts";
 import { AfterLand } from "./repos/afterLand.ts";
 import { RepoRegistry } from "./repos/registry.ts";
@@ -326,7 +326,14 @@ const chats = new ChatSearch({
   transcriptPath: (id) => transcriptPathFor(paths.transcriptsDir, id),
   archivedChats: (repoId) => worktrees.archivedChats(repoId),
 });
-const prs = new PrService({ state, hub, worktrees, view: viewPr });
+const prs = new PrService({
+  state,
+  hub,
+  worktrees,
+  view: viewPr,
+  comments: readPrComments,
+  login: ghLogin,
+});
 // toyon opened on its own checkout: what landing there leaves behind for the process serving it
 const self = new SelfWatch(SOURCE_ROOT);
 await self.start();

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { MANAGED_DEFAULTS, MANAGED_STRICTEST, type ManagedResolved } from "@toyon/shared";
-import { agentLines, policyLines } from "./doctor.ts";
+import { agentLines, githubLine, policyLines } from "./doctor.ts";
 
 // The policy line is what a reviewer reads to check the file took, so each state has to read as
 // itself: nothing, applied, broken, and a daemon that has not caught up.
@@ -46,6 +46,35 @@ describe("policyLines", () => {
     expect(lines[1]?.detail).toContain("toyon restart");
     // a daemon that predates the field cannot be compared, and is not blamed
     expect(policyLines(applied, undefined)).toHaveLength(1);
+  });
+});
+
+// gh is optional, so no state fails the run; what the line owes the person is what the pull request
+// route will do without it, and the command that changes that.
+describe("githubLine", () => {
+  test("missing gh is ok, says the route still pushes, and names the platform's install", () => {
+    const mac = githubLine({ kind: "missing" }, "darwin");
+    expect(mac.ok).toBe(true);
+    expect(mac.label).toBe("github");
+    expect(mac.detail).toContain("leaves the pull request to you");
+    expect(mac.detail).toContain("`brew install gh`");
+    expect(mac.detail).toContain("`gh auth login`");
+    expect(githubLine({ kind: "missing" }, "linux").detail).toContain("`sudo apt install gh`");
+  });
+  test("installed but signed out names the version and the login command, not the install", () => {
+    const l = githubLine({ kind: "signedOut", version: "gh version 2.93.0 (2026-05-27)" }, "darwin");
+    expect(l.ok).toBe(true);
+    expect(l.detail).toStartWith("gh version 2.93.0");
+    expect(l.detail).toContain("`gh auth login`");
+    expect(l.detail).not.toContain("brew install");
+  });
+  test("signed in names the version and what the route can do", () => {
+    const l = githubLine({ kind: "ready", version: "gh version 2.93.0 (2026-05-27)" }, "linux");
+    expect(l).toEqual({
+      ok: true,
+      label: "github",
+      detail: "gh version 2.93.0 (2026-05-27), signed in; the pull request land route can open and merge pull requests",
+    });
   });
 });
 

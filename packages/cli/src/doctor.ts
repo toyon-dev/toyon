@@ -33,6 +33,59 @@ async function toolVersion(cmd: string, args: string[]): Promise<string | null> 
   }
 }
 
+/** what the GitHub CLI can do here: missing, installed but with no account, or signed in */
+export type GhStatus =
+  | { kind: "missing" }
+  | { kind: "signedOut"; version: string }
+  | { kind: "ready"; version: string };
+
+/** `gh auth status` validates the token against GitHub, so it is bounded: offline it hangs on a
+ * socket, and a hung doctor is worse than a wrong line */
+const GH_AUTH_TIMEOUT_MS = 8000;
+
+async function ghStatus(): Promise<GhStatus> {
+  const version = await toolVersion("gh", ["--version"]);
+  if (!version) return { kind: "missing" };
+  try {
+    const p = Bun.spawn(["gh", "auth", "status"], {
+      stdout: "ignore",
+      stderr: "ignore",
+      env: { ...process.env, GH_PROMPT_DISABLED: "1", GH_NO_UPDATE_NOTIFIER: "1" },
+      timeout: GH_AUTH_TIMEOUT_MS,
+    });
+    await p.exited;
+    return p.exitCode === 0 ? { kind: "ready", version } : { kind: "signedOut", version };
+  } catch {
+    return { kind: "signedOut", version };
+  }
+}
+
+/** The GitHub CLI, which only the `pr` land route uses: Toyon runs without it, so no state here
+ * fails. Without it, or without an account, that route still pushes the branch and leaves the
+ * pull request to the person, and this line is where that is said before the first landing. */
+export function githubLine(status: GhStatus, platform: NodeJS.Platform = process.platform): Line {
+  const install = platform === "darwin" ? "brew install gh" : "sudo apt install gh";
+  if (status.kind === "missing") {
+    return line(
+      true,
+      "github",
+      `gh is not installed, so the pull request land route pushes and leaves the pull request to you; \`${install}\`, then \`gh auth login\``,
+    );
+  }
+  if (status.kind === "signedOut") {
+    return line(
+      true,
+      "github",
+      `${status.version}, but not signed in or GitHub was out of reach, so the pull request land route pushes and leaves the pull request to you; \`gh auth login\``,
+    );
+  }
+  return line(
+    true,
+    "github",
+    `${status.version}, signed in; the pull request land route can open and merge pull requests`,
+  );
+}
+
 /** the same handshake the shell makes; resolves with what the daemon said about the token. The
  * socket opening proves nothing, since a wrong token is opened and then closed with a code: the
  * daemon's first frame (its hello) is what an accepted token looks like. */
@@ -104,6 +157,7 @@ export async function doctor(): Promise<number> {
 
   const git = await toolVersion("git", ["--version"]);
   lines.push(git ? line(true, "git", git) : line(false, "git", "not found on PATH; Toyon needs git 2.x"));
+  lines.push(githubLine(await ghStatus()));
 
   if (process.platform === "linux") {
     const missing = missingSandboxTools();

@@ -134,7 +134,8 @@ export function rowsFor(input: {
       // order by send holds for the rest, so switching between two is ↓ enter whichever is open.
       const open = repos.find((r) => r.kind === "repo" && r.repo.id === input.current);
       const led = open ? [open, ...repos.filter((r) => r !== open)] : repos;
-      return [...led, ...pending, { kind: "new" }, { kind: "disk" }, { kind: "add-machine" }, ...elsewhere];
+      // opening a folder that already exists is the likelier ask, so it sits right under the projects
+      return [...led, ...pending, { kind: "disk" }, { kind: "new" }, { kind: "add-machine" }, ...elsewhere];
     }
     // a URL is not a name and not a path: it is the third thing someone pastes in here
     const url = gitUrl(q);

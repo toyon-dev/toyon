@@ -129,9 +129,9 @@ describe("rowsFor: a name", () => {
   });
 
   test("an empty query lists the projects, then the ways to start one and to open one", () => {
-    expect(rows("")).toEqual([{ kind: "new" }, { kind: "disk" }, { kind: "add-machine" }]);
+    expect(rows("")).toEqual([{ kind: "disk" }, { kind: "new" }, { kind: "add-machine" }]);
     const repos = [repo("cookbook", "/Users/k/Projects/cookbook"), repo("bike", "/Users/k/Projects/bike")];
-    expect(rows("", { repos }).map((r) => r.kind)).toEqual(["repo", "repo", "new", "disk", "add-machine"]);
+    expect(rows("", { repos }).map((r) => r.kind)).toEqual(["repo", "repo", "disk", "new", "add-machine"]);
   });
 
   test("the open project leads the standing list, so down from it is always the next project", () => {
@@ -172,7 +172,7 @@ describe("rowsFor: an import in flight", () => {
   test("a clone in flight is listed with the projects, after the ones you can open", () => {
     const repos = [repo("cookbook", "/Users/k/Projects/cookbook")];
     const out = rows("", { repos, pending: [importing] });
-    expect(out.map((r) => r.kind)).toEqual(["repo", "pending", "new", "disk", "add-machine"]);
+    expect(out.map((r) => r.kind)).toEqual(["repo", "pending", "disk", "new", "add-machine"]);
   });
 
   test("it is findable by name and by url, since half of one is what you would type", () => {
@@ -354,7 +354,7 @@ describe("rowsFor: other machines", () => {
   };
   test("their projects follow everything about this machine, each row naming its machine", () => {
     const out = rows("", { repos: [repo("cookbook", "/Users/k/Projects/cookbook")], others: [work] });
-    expect(out.map((r) => r.kind)).toEqual(["repo", "new", "disk", "add-machine", "repo", "repo"]);
+    expect(out.map((r) => r.kind)).toEqual(["repo", "disk", "new", "add-machine", "repo", "repo"]);
     const far = out.filter((r) => r.kind === "repo" && r.machine);
     expect(far.map((r) => (r.kind === "repo" ? r.repo.name : ""))).toEqual(["site", "api"]);
     expect(far.map((r) => (r.kind === "repo" ? r.machine?.origin : ""))).toEqual([work.origin, work.origin]);
@@ -375,8 +375,8 @@ describe("rowsFor: other machines", () => {
     const asleep = { origin: "https://box.fly.dev", name: "box", repos: [] };
     const out = rows("", { others: [work, asleep] });
     expect(out.map((r) => (r.kind === "machine" ? `machine:${r.machine.name}` : r.kind))).toEqual([
-      "new",
       "disk",
+      "new",
       "add-machine",
       "repo",
       "repo",

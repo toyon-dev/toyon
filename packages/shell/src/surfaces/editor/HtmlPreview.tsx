@@ -37,6 +37,15 @@ export function rebaseHtml(text: string, base: HtmlBase | null): string {
   return `${doc.doctype ? "<!doctype html>\n" : ""}${doc.documentElement.outerHTML}`;
 }
 
+/** where the preview would serve a page: its path under the worktree, taken as the served root,
+ * which is the best guess the shell can make without reading the run command; `index.html` is its
+ * directory. A server rooted elsewhere answers with its own not-found, in the preview, where it is
+ * read for what it is. */
+export function servedPath(path: string): string {
+  const rel = path.replace(/(^|\/)index\.html?$/i, "$1");
+  return `/${rel.split("/").map(encodeURIComponent).join("/")}`;
+}
+
 /** an html file read rendered: the text the editor holds, drawn in a frame of its own, so an agent
  * writing it is seen as it writes. The frame is fully sandboxed: a reading of the page, not a run
  * of it. Its scripts stay off, so the page can reach neither the shell around it nor the token in

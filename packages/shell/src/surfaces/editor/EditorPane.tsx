@@ -15,6 +15,7 @@ import {
   type EditorFile,
   type EditorView,
   localOf,
+  routeTarget,
   worktreeById,
 } from "../../state/store.ts";
 import { Button } from "../../ui/Button.tsx";
@@ -29,7 +30,7 @@ import { usePlanTitle } from "../chat/usePlanTitle.ts";
 import { splitPath } from "../util.ts";
 import { FileViewer } from "./FileViewer.tsx";
 import { HandoffTrack, PiecePage, usePieceTabs } from "./Handoff.tsx";
-import { HtmlPreview } from "./HtmlPreview.tsx";
+import { HtmlPreview, servedPath } from "./HtmlPreview.tsx";
 import { MarkdownPreview } from "./MarkdownPreview.tsx";
 import { PrCommentsPage } from "./PrCommentsPage.tsx";
 import { useWrap, WrapToggle } from "./WrapToggle.tsx";
@@ -230,6 +231,16 @@ export function EditorPane({
   const wrappable = !!disk && !prPage && !viewer && !disk.binary && !disk.tooLarge && view !== "preview";
   // a line the page reported is only placed once its offset is known
   const line = editor.line && !editor.line.fiber ? editor.line.n : undefined;
+  // an html page on the working tree can be run as well as read: the rendered view keeps its
+  // scripts off, so what a script draws is seen in the preview, while this worktree's is up. A
+  // phone's screen has no preview beside the file to send it to.
+  const live = useStore((s) => routeTarget(s)?.worktreeId === worktreeId);
+  const runnable = live && !onScreen && !history && !kept && !loose && renderedAs(path) === "html";
+  const runPage = () => {
+    previewBus.post(worktreeId, { type: "navigate", path: servedPath(path) });
+    // a full pane covers the preview the page just went to
+    if (full) onToggleFull?.();
+  };
   return (
     // full mode takes whatever the terminal pane leaves rather than a fixed 100%
     <Pane
@@ -302,6 +313,19 @@ export function EditorPane({
             </Button>
           )}
           {wrappable && <WrapToggle wrap={wrap} onWrap={setWrap} />}
+          {/* not a view of the text, so outside the cluster: it sends the page to the preview */}
+          {runnable && (
+            <Button
+              variant="outline"
+              tone="quiet"
+              mono
+              className="deep-link"
+              onClick={runPage}
+              data-tip="Run: open the page in the preview, with its scripts on"
+            >
+              <Icon name="run" className="icon-inline" /> run
+            </Button>
+          )}
         </>
       }
     >

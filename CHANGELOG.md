@@ -2,6 +2,52 @@
 
 What changed in each release of Toyon, newest first.
 
+## 0.21.0 (2026-11-02)
+
+Splitting work is called handoff again and the pieces it starts wake each other as they land, pull request review lands in a page of its own, and the project switcher clones from a URL.
+
+### New
+- Pull request review comments show on a page of their own, grouped by file with replies under their parent and a link to GitHub. An add to chat button puts a thread in the composer as a chip without sending it, and the rail ring still lights when new comments arrive.
+- On the PR route, where main merges through a merge queue, landing adds the pull request to the queue and the copy reads as landed once the queue merges it. While GitHub holds a PR, in the queue or on auto-merge with checks running, Toyon asks about it every half minute as long as a window is open.
+- Pasting a git URL into the project switcher, or giving one to the CLI, clones the repository into a folder and opens it as a project. The switcher has a clone from a URL row.
+- The chat says when the agent runs a different model than the one asked for, whether it fell back on its own or the pick was not in its list, and the model chip reads as the agent's choice.
+- A picture named by path in a reply shows as a still on the reply, several in a strip, and a press opens it full size. Before, it drew as a broken image.
+- A working-tree HTML file has an open in preview button in the editor, since the reading frame runs no scripts and a page drawn by script looks empty there. Video clips open in the file viewer with the browser's own controls.
+- Folder links and file:// links in a reply are file links; an outside folder reveals in Finder when the page is on the daemon's machine.
+- When Toyon was started with npx, an offer above the composer runs the global install and says how it went.
+- `toyon doctor` reports whether the GitHub CLI is installed and signed in, and what that means for the PR route.
+
+### Changed
+- The split tool and the `/split` verb are called handoff and `/handoff` again, in the menu, the palette, the picker and the agent's instructions, and handoff has an icon of its own. Older chats are rewritten on the daemon's first start, so lists from 0.18 to 0.20 keep their shape.
+- An agent whose piece waits on another branch is woken by a message once that branch lands, instead of sitting idle until you type. A handoff sibling inherits the origin's agent, model and effort as well as its mode.
+- Answering a handoff card moves the row to the end of the chat and shows your answer as a bubble with your note. The n key adds a note on any row that takes one. When a plan goes back with no, keep planning, each re-proposed piece keeps the fate you pressed last.
+- The handoff card keeps the count in its question and one press that opens the list, like the plan card. A handoff page opens with its title, a list of one gets no track, and a track that overflows scrolls on one line.
+- A message sent while the agent works goes in between its steps instead of cutting off the command it is on. The Claude Code adapter comes from Toyon's fork for this until the change lands upstream; the daemon is on ACP SDK 2, and the Codex and OpenCode adapters are pinned to current releases.
+- Mode and profile picks are kept per project in the daemon rather than in the browser, so new worktrees and handoffs start with the settings you chose. Model and effort picks follow a renamed model and drop a missing one instead of being stamped forever.
+- Landing or creating a PR moves the row to the top of the rail, as a send does, so a landed row is in view to archive. A landed worktree with new uncommitted changes shows its live colour again until it lands again, and once a worktree has landed, archiving no longer asks about a shown plan or an unread reply.
+- The worktree panel toggle sits in the top bar beside the other panel toggles, and the rail list runs to the bottom.
+- The project picker lists open folder or file right after your projects, shows only the name on a project row, and the row menu holds switch, project settings and forget. Forgetting a project with live worktrees archives them, and they come back as restorable when the project is opened again.
+- Enter on a multi-select question ticks the cursor row when nothing is ticked, and moves on once something is. Pickers no longer restate enter and esc, and the search palette accents the matched letters.
+- A plan document is built the same way everywhere it is read, opens at the same height with or without a track, and a plan with its own heading uses it as the title.
+- Links in Toyon Dark and Toyon Light take a calmer colour of the same hue. Links under a command's output take the text colour with a faint underline. Imported VS Code themes bring their own link colour.
+- The composer shows a born from line naming the row that spawned this one, and the argument hint after a command comes from what is typed.
+- Agents are asked to link folders with a trailing slash and to put routes and commands in backticks, and a long command is steered to the background flag instead of nohup.
+
+### Fixed
+- A hung quick-model session could pin naming until restart, leaving rows unnamed and faint. The ask now times out, and naming is retried after a turn ends.
+- A saved model the agent no longer lists was sent as is, so the picker showed a stale name; it now follows the listed model or clears. A chat's model was reset to the default whenever an older build's list left it out, and a restarted daemon refused a model another process spelled differently.
+- A confirmed landing was hidden by one stray file. The landed mark now shows while leftovers are still reported.
+- A booked wakeup's row ended when you sent a message; it ends only when the wakeup fires, is rebooked or is stopped.
+- A handoff piece with a long title was refused; it is now cut and the worktree named once it opens. A worktree that received a handoff stayed where it was in the rail, and a sibling started on the adapter's default model when none was set.
+- A piece that waited on a skipped or landed sibling was stuck; it starts.
+- Chat pictures shrank while you typed because the cap followed the composer's height.
+- On touch screens a swipe starting on a question card scrolled the card instead of the transcript and pushed the question under the box's edge.
+- Top bar tooltips were cut off below the bar; they sit beside their control and swap sides when the room runs out. The dot in a tooltip sits on a whole pixel.
+- Switching back to a worktree showed another's plan title when two shared a plan path.
+- On a phone, the swipe back to a worktree you just left answers within 800 ms instead of a second and a half.
+- On some mobile browsers the end of a shining path went blank; the ellipsis keeps its colour.
+- Rendered HTML previews load from a separate origin with a ticket per page, so inline images and styles load without weakening the main origin, and saving a page no longer evicts other pages.
+
 ## 0.20.0 (2026-10-28)
 
 The rail shows work that goes on while the chat is quiet, agents find their sibling worktrees on their own, and the phone moves between the list and a worktree in one swipe.

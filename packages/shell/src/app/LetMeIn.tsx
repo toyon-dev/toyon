@@ -1,3 +1,4 @@
+import { isLoopbackHost } from "@toyon/shared";
 import { useState } from "react";
 import { knockFailureLine } from "../surfaces/overlays/devices.ts";
 import { Button } from "../ui/Button.tsx";
@@ -29,6 +30,11 @@ export function LetMeIn({
 }) {
   const [step, setStep] = useState<Step>({ kind: "asking" });
   const [round, setRound] = useState(0);
+  // A loopback name is the machine Toyon runs on, where a second browser reads the ask as being
+  // locked out of its own machine. The daemon cannot let a loopback peer in unasked (an agent's
+  // curl is the same peer), but the command there opens the shell with the token in the link.
+  // An opaque origin ("null", a saved copy of the page) is not a URL and is not here either.
+  const here = URL.canParse(origin) && isLoopbackHost(new URL(origin).hostname);
   // keyed on the round: "ask again" is the one thing that starts the knock over
   useOnChange([round], () => {
     const stop = new AbortController();
@@ -57,6 +63,12 @@ export function LetMeIn({
               ? "Let in. Opening."
               : knockFailureLine(step.failure, origin, "this device")}
       </p>
+      {here && step.kind !== "in" && (
+        <p className="status-line">
+          This is the machine Toyon runs on, so a terminal here can do it too: <code>toyon</code> opens the shell
+          already let in.
+        </p>
+      )}
       {step.kind === "failed" && (
         <div className="status-actions">
           <Button variant="outline" onClick={() => setRound((n) => n + 1)}>

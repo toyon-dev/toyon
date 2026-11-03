@@ -162,8 +162,10 @@ const CLAUDE: AdapterWire = {
         "agent-tools.ts mcpTool reads the server off the wire name and toolCall.ts draws the cube beside it; " +
         "the meta's `name` and `source` go unread. No flag.",
       upstream:
-        "Not asked. First anthropics/claude-code: `serverInfo` and the per-call `mcpServer` carry `icons` " +
-        "and `websiteUrl` from the handshake. Then one adapter PR forwards them under the same meta key " +
+        "anthropics/claude-code#95558 (open, no maintainer reply; five earlier tickets closed by the stale " +
+        "bot) asks the CLI and Desktop to render `serverInfo.icons`; the SDK host side, `serverInfo` and " +
+        "the per-call `mcpServer` carrying `icons` and `websiteUrl` from the handshake, is toyon's comment " +
+        "there. Then one adapter PR forwards them under the same meta key " +
         "(the fork can carry it meanwhile), and map.ts passes the icon that matches the theme to the row. " +
         "A second handshake from toyon or the adapter to fetch them is ruled out: it doubles every " +
         "connection, OAuth included, for a glyph.",

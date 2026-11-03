@@ -1,4 +1,4 @@
-import { type MouseEvent, useEffect, useMemo } from "react";
+import { Fragment, type MouseEvent, useEffect, useMemo } from "react";
 import type { Deps } from "../../state/actions/deps.ts";
 import { listFiles } from "../../state/actions/file.ts";
 import { useSock, useStore, useStoreInstance } from "../../state/context.tsx";
@@ -6,7 +6,30 @@ import { worktreeById } from "../../state/store.ts";
 import { tip } from "../../ui/Tooltip.tsx";
 import { openChatLink } from "./chatLink.ts";
 import { mentionableWorktrees, mentionIndex, mentionSpans, mentionTip } from "./mentions.ts";
+import { Painted } from "./Painted.tsx";
 import { siblingWorktrees } from "./siblings.ts";
+import { languageOf, paintCode } from "./syntax.ts";
+
+/** a fenced block from the person's own words, coloured by the seven the agent's blocks are when
+ * the fence names a language we have a grammar for, and the text as typed when it does not */
+function CodeBlock({ code, lang }: { code: string; lang: string }) {
+  const lines = paintCode(code, languageOf(lang.toLowerCase(), ""));
+  return (
+    <pre>
+      <code>
+        {lines.length
+          ? lines.map((line, i) => (
+              // biome-ignore lint/suspicious/noArrayIndexKey: lines are positional and rebuilt whole with the text
+              <Fragment key={i}>
+                {i > 0 && "\n"}
+                <Painted pieces={line} />
+              </Fragment>
+            ))
+          : code}
+      </code>
+    </pre>
+  );
+}
 
 /** a `@` opening a word: the shape a reference has before the file list says whether it is one */
 const HAS_MENTION = /(^|\s)@\S/;
@@ -54,10 +77,20 @@ export function MentionText({
     <>
       {spans.map((s, i) => {
         if (s.kind === "text") return s.text;
+        // over the field the marks are the draft's characters, backticks included, so every mark
+        // after a span stays on its word; the sent bubble draws the code the backticks named
+        if (s.kind === "code") {
+          // biome-ignore lint/suspicious/noArrayIndexKey: spans are positional and rebuilt whole with the text
+          return inField ? s.text : <code key={i}>{s.code}</code>;
+        }
+        if (s.kind === "block") {
+          // biome-ignore lint/suspicious/noArrayIndexKey: same
+          return inField ? s.text : <CodeBlock key={i} code={s.code} lang={s.lang} />;
+        }
         if (s.kind === "changes") {
           const changesTip = tip("this worktree's uncommitted files", undefined, { placement: "follow" });
           return (
-            // biome-ignore lint/suspicious/noArrayIndexKey: spans are positional and rebuilt whole with the text
+            // biome-ignore lint/suspicious/noArrayIndexKey: same
             <span key={i} className="chat-mention" data-changes="" {...changesTip}>
               {s.text}
             </span>

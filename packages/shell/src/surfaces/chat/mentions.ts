@@ -130,7 +130,82 @@ export type MentionSpan =
   | { kind: "folder"; text: string; path: string }
   | { kind: "changes"; text: string }
   /** `text` is the reference as written, the branch or the title; `branch` is what the agent is sent */
-  | ({ kind: "worktree"; text: string; branch: string } & WorktreeMention);
+  | ({ kind: "worktree"; text: string; branch: string } & WorktreeMention)
+  /** backticked text, a span or a fenced block: `text` is as written, backticks and all, so the
+   * spans still add up to the message; `code` is what the backticks hold */
+  | { kind: "code"; text: string; code: string }
+  | { kind: "block"; text: string; code: string; lang: string };
+
+/** a fence opens on a line of its own: three or more backticks, then at most a word naming the
+ * language, and no backtick after them. ```x``` on one line is a code span, as markdown reads it. */
+const FENCE_OPEN = /^[ \t]*(`{3,})[ \t]*([^`\s]*)[^`\n]*$/;
+
+/** The message cut at its backticks: a fenced block, then a span closed by a run of as many
+ * backticks as opened it, as markdown reads them; a run with no close is the characters typed.
+ * What is backticked is a literal, so a `@` inside one names nothing, and the bubble draws it as
+ * code rather than as the sigils around it. */
+export function codeSegments(
+  text: string,
+): ({ kind: "prose"; text: string } | Extract<MentionSpan, { kind: "code" | "block" }>)[] {
+  const out: ReturnType<typeof codeSegments> = [];
+  const prose = (s: string) => {
+    if (!s) return;
+    const prev = out.at(-1);
+    if (prev?.kind === "prose") prev.text += s;
+    else out.push({ kind: "prose", text: s });
+  };
+  let i = 0;
+  let from = 0;
+  while (i < text.length) {
+    const p = text.indexOf("`", i);
+    if (p === -1) break;
+    const lineStart = text.lastIndexOf("\n", p - 1) + 1;
+    const lineEnd = text.indexOf("\n", p);
+    const line = text.slice(lineStart, lineEnd === -1 ? text.length : lineEnd);
+    const fence = /^[ \t]*`/.test(line) ? FENCE_OPEN.exec(line) : null;
+    if (fence && lineStart >= from) {
+      const ticks = (fence[1] as string).length;
+      const close = new RegExp(`^[ \\t]*\`{${ticks},}[ \\t]*$`, "m");
+      const bodyAt = lineEnd === -1 ? text.length : lineEnd + 1;
+      const closeAt = close.exec(text.slice(bodyAt));
+      // the closing fence's line, and the line break after it, are the block's: the next line of
+      // prose then starts under it rather than a blank line down
+      let end = text.length;
+      let code = text.slice(bodyAt);
+      if (closeAt) {
+        code = text.slice(bodyAt, bodyAt + closeAt.index);
+        end = bodyAt + closeAt.index + closeAt[0].length;
+        if (text[end] === "\n") end++;
+      }
+      prose(text.slice(from, lineStart));
+      out.push({
+        kind: "block",
+        text: text.slice(lineStart, end),
+        code: code.replace(/\n$/, ""),
+        lang: fence[2] ?? "",
+      });
+      from = i = end;
+      continue;
+    }
+    let ticks = 1;
+    while (text[p + ticks] === "`") ticks++;
+    const closer = new RegExp(`(?<!\`)\`{${ticks}}(?!\`)`, "g");
+    closer.lastIndex = p + ticks;
+    const closeAt = closer.exec(text);
+    if (!closeAt) {
+      i = p + ticks;
+      continue;
+    }
+    let code = text.slice(p + ticks, closeAt.index);
+    // one space either side is the backticks' room, not the code's, unless the code is all spaces
+    if (code.length > 2 && code.startsWith(" ") && code.endsWith(" ") && code.trim()) code = code.slice(1, -1);
+    prose(text.slice(from, p));
+    out.push({ kind: "code", text: text.slice(p, closeAt.index + ticks), code });
+    from = i = closeAt.index + ticks;
+  }
+  prose(text.slice(from));
+  return out;
+}
 
 /** the sigil opens a word, as it must for the menu (`triggerAt`), and the word runs to the next space */
 const MENTION = /(^|\s)(@\S+)/g;
@@ -207,6 +282,16 @@ export function settled(text: string, from: number, index: MentionIndex): boolea
  * than that a sigil was typed. */
 export function mentionSpans(text: string, index: MentionIndex): MentionSpan[] {
   const out: MentionSpan[] = [];
+  for (const seg of codeSegments(text)) {
+    if (seg.kind === "prose") proseSpans(seg.text, out.length === 0, index, out);
+    else out.push(seg);
+  }
+  return out;
+}
+
+/** the prose between the backticks, split at its references onto `out`; `opens` says the prose
+ * is the message's start, so a sigil at its first character opens a word there and nowhere else */
+function proseSpans(text: string, opens: boolean, index: MentionIndex, out: MentionSpan[]) {
   let last = 0;
   const push = (s: string) => {
     if (!s) return;
@@ -215,6 +300,7 @@ export function mentionSpans(text: string, index: MentionIndex): MentionSpan[] {
     else out.push({ kind: "text", text: s });
   };
   for (const m of text.matchAll(MENTION)) {
+    if (m.index === 0 && !m[1] && !opens) continue;
     const start = m.index + (m[1] ?? "").length;
     // a reference inside the one before it is that one's words: `@Code review again` is one row
     if (start < last) continue;
@@ -235,7 +321,6 @@ export function mentionSpans(text: string, index: MentionIndex): MentionSpan[] {
     last = start + hit.text.length;
   }
   push(text.slice(last));
-  return out;
 }
 
 /** the message as the agent reads it: every worktree named by its title is named by its branch,

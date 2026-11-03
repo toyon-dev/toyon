@@ -348,6 +348,24 @@
        a path, a URL, a hash. The max-width caps the bubble but not its lines, so one such run
        poured past the bubble's edge and scrolled the whole log sideways. */
     overflow-wrap: anywhere;
+    /* a fenced block in the person's own words is the block the agent's prose draws one as (.md
+       pre): the code wash, read not edited so a long line wraps. The line break that ended the
+       fence is the block's own, so no margin below; the one before it is the prose's. */
+    & pre {
+      background: var(--code);
+      border-radius: var(--radius-md);
+      padding: 8px 10px;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      margin: 0;
+      font: var(--type-mono);
+    }
+    & pre code {
+      background: none;
+      padding: 0;
+      font-size: inherit;
+      line-height: inherit;
+    }
     /* the message the composer has walked back to, marked the one way this app marks where you
      are: the edge and a lifted seat together. The edge is a straight bar, so the bubble squares
      the corners on its side while it carries one; on a rounded corner the bar bends into a smear. */

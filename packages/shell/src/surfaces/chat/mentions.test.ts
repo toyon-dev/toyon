@@ -194,6 +194,50 @@ describe("mentionSpans: the references in a sent message", () => {
     expect(spans("")).toEqual([]);
   });
 
+  test("backticks hold code, as written, and a sigil inside them names nothing", () => {
+    expect(spans("run `bun test` on @src/App.tsx")).toEqual([
+      { kind: "text", text: "run " },
+      { kind: "code", text: "`bun test`", code: "bun test" },
+      { kind: "text", text: " on " },
+      { kind: "file", text: "@src/App.tsx", path: "src/App.tsx" },
+    ]);
+    expect(spans("`@src/App.tsx`")).toEqual([{ kind: "code", text: "`@src/App.tsx`", code: "@src/App.tsx" }]);
+    // a run closes on a run of its own length, so a backtick can sit inside a double one; one
+    // space either side is the backticks' room
+    expect(spans("`` a`b `` and ` x `")).toEqual([
+      { kind: "code", text: "`` a`b ``", code: "a`b" },
+      { kind: "text", text: " and " },
+      { kind: "code", text: "` x `", code: "x" },
+    ]);
+    // a backtick with no close is the character typed, and the sigil after it still opens a word
+    expect(spans("a ` b @README.md")).toEqual([
+      { kind: "text", text: "a ` b " },
+      { kind: "file", text: "@README.md", path: "README.md" },
+    ]);
+    // a sigil right after a span is mid-word, as it is in the text
+    expect(spans("`x`@README.md")).toEqual([
+      { kind: "code", text: "`x`", code: "x" },
+      { kind: "text", text: "@README.md" },
+    ]);
+  });
+
+  test("a fence on a line of its own is a block, whose closing line break is the block's", () => {
+    expect(spans("see:\n```ts\nconst a = 1;\n```\nok @README.md")).toEqual([
+      { kind: "text", text: "see:\n" },
+      { kind: "block", text: "```ts\nconst a = 1;\n```\n", code: "const a = 1;", lang: "ts" },
+      { kind: "text", text: "ok " },
+      { kind: "file", text: "@README.md", path: "README.md" },
+    ]);
+    // left open, the block runs to the end; three backticks round a word on one line are a span,
+    // as markdown reads them, since a fence's info has no backtick in it
+    expect(spans("```\nx")).toEqual([{ kind: "block", text: "```\nx", code: "x", lang: "" }]);
+    expect(spans("```nnada```")).toEqual([{ kind: "code", text: "```nnada```", code: "nnada" }]);
+    // the closing fence may be longer than the opening, never shorter
+    expect(spans("````\n```\nx\n````")).toEqual([
+      { kind: "block", text: "````\n```\nx\n````", code: "```\nx", lang: "" },
+    ]);
+  });
+
   test("one index per list, so every row shares the folder walk", () => {
     const files = ["a/b.ts"];
     expect(mentionIndex(files)).toBe(mentionIndex(files));

@@ -225,6 +225,40 @@ describe("active worktree", () => {
     const s = run([hello(wt("main", "main"), wt("a")), { a: "activate", id: "a" }]);
     expect(run([worktrees(wt("main", "main"))], s).activeId).toBe("main");
   });
+  test("the rows chosen by hand are the viewed walk, and a step back lands on the one before", () => {
+    const s = run([
+      hello(wt("main", "main"), wt("a"), wt("b")),
+      { a: "activate", id: "a" },
+      { a: "activate", id: "b" },
+    ]);
+    expect(s.viewed).toEqual({ ids: ["main", "a", "b"], at: 2 });
+    const back = reducer(s, { a: "viewed-land", at: 1 });
+    expect(back.activeId).toBe("a");
+    expect(back.viewed).toEqual({ ids: ["main", "a", "b"], at: 1 });
+    expect(back.screen).toBe("chat");
+    expect(back.carryTo).toBeNull();
+  });
+  test("a choice made after a step back drops what was ahead, as a browser's does", () => {
+    const s = run([
+      hello(wt("main", "main"), wt("a"), wt("b")),
+      { a: "activate", id: "a" },
+      { a: "activate", id: "b" },
+      { a: "viewed-land", at: 0 },
+      { a: "activate", id: "b" },
+    ]);
+    expect(s.viewed).toEqual({ ids: ["main", "b"], at: 1 });
+  });
+  test("the selection a worktrees frame keeps valid is not a place anyone went", () => {
+    const s = run([hello(wt("main", "main"), wt("a")), { a: "activate", id: "a" }]);
+    const gone = run([worktrees(wt("main", "main"))], s);
+    expect(gone.activeId).toBe("main");
+    expect(gone.viewed).toEqual({ ids: ["main"], at: 0 });
+  });
+  test("a step onto a row that went in the meantime lands nowhere", () => {
+    const s = run([hello(wt("main", "main"), wt("a")), { a: "activate", id: "a" }]);
+    const held = { ...s, viewed: { ids: ["gone", "a"], at: 1 } };
+    expect(reducer(held, { a: "viewed-land", at: 0 })).toBe(held);
+  });
   test("activate closes the open file", () => {
     const s = run([hello(wt("main", "main"), wt("a")), opening({ worktreeId: "main", path: "x", seq: 1 })]);
     expect(s.editor).not.toBeNull();

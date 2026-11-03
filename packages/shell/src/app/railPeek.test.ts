@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { createWalkPeek, modifierHeld, PEEK_HOLD_MS, walkModifier } from "./railPeek.ts";
+import { createHeldRun, createWalkPeek, modifierHeld, PEEK_HOLD_MS, walkModifier } from "./railPeek.ts";
 
 const mods = (m: Partial<{ altKey: boolean; ctrlKey: boolean; metaKey: boolean }>) => ({
   altKey: false,
@@ -124,5 +124,30 @@ describe("createWalkPeek", () => {
     peek.keyup("Shift");
     timers.tick(PEEK_HOLD_MS);
     expect(shown).toEqual([true]);
+  });
+});
+
+describe("createHeldRun", () => {
+  test("a step that landed holds the run while its modifier stays down", () => {
+    const run = createHeldRun();
+    expect(run.holds(mods({ metaKey: true }))).toBe(false);
+    run.press(mods({ metaKey: true }));
+    expect(run.holds(mods({ metaKey: true }))).toBe(true);
+  });
+  test("the modifier's keyup ends it, and so does a later event that reports it up", () => {
+    const run = createHeldRun();
+    run.press(mods({ metaKey: true }));
+    run.keyup("Shift");
+    expect(run.holds(mods({ metaKey: true }))).toBe(true);
+    run.keyup("Meta");
+    expect(run.holds(mods({ metaKey: true }))).toBe(false);
+    run.press(mods({ metaKey: true }));
+    run.mods(mods({}));
+    expect(run.holds(mods({ metaKey: true }))).toBe(false);
+  });
+  test("a keydown without the modifier is not in the run, whatever was pressed before", () => {
+    const run = createHeldRun();
+    run.press(mods({ metaKey: true }));
+    expect(run.holds(mods({}))).toBe(false);
   });
 });

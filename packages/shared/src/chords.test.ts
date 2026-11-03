@@ -9,6 +9,7 @@ import {
   worktreeChord,
   worktreeIndex,
   ZEN_CHORDS,
+  zenChord,
 } from "./chords.ts";
 
 const ev = (
@@ -95,7 +96,7 @@ describe("matchChord", () => {
     expect(matchChord(ev("}", { shift: true }))).toEqual({ id: "wt-next" });
     // not a hostOnly alias: the walk works from inside the terminal and the preview
     expect(matchChord(ev("}", { shift: true }), { guest: true })).toEqual({ id: "wt-next" });
-    expect(matchChord(ev("["))).toBeNull(); // ⌘[ is Monaco's outdent
+    expect(matchChord(ev("["))).toEqual({ id: "back" }); // without ⇧ the bracket is the page's history
     expect(matchChord(ev("[", { meta: false, ctrl: true, shift: true }))).toBeNull();
     expect(matchChord(ev("[", { meta: false, shift: true }))).toBeNull();
   });
@@ -154,17 +155,41 @@ describe("matchChord", () => {
     expect(matchChord(ev("r"), { guest: true })).toEqual({ id: "reload" });
     expect(matchChord(ev("R", { shift: true }))).toBeNull();
   });
-  test("⌘←/→ step the preview's history, from inside it too; a field keeps them as the caret's jumps", () => {
-    expect(matchChord(ev("ArrowLeft"))).toEqual({ id: "back" });
-    expect(matchChord(ev("ArrowRight"))).toEqual({ id: "forward" });
-    expect(matchChord(ev("ArrowLeft"), { guest: true })).toEqual({ id: "back" });
-    expect(matchChord(ev("ArrowLeft", { shift: true }))).toBeNull(); // ⌘⇧← extends a selection
-    expect(matchChord(ev("ArrowLeft", { meta: false, ctrl: true }))).toBeNull(); // ⌃← is a Space switch
-    expect(chordOf("back").textKeeps).toBe(true);
-    expect(chordOf("forward").textKeeps).toBe(true);
+  test("⌘[/] step the preview's history, from inside it too; no field keeps a bracket", () => {
+    expect(matchChord(ev("["))).toEqual({ id: "back" });
+    expect(matchChord(ev("]"))).toEqual({ id: "forward" });
+    expect(matchChord(ev("["), { guest: true })).toEqual({ id: "back" });
+    expect(matchChord(ev("[", { shift: true }))).toEqual({ id: "wt-prev" }); // with ⇧ it is the rail walk
+    expect(matchChord(ev("[", { meta: false, ctrl: true }))).toBeNull();
+    expect(chordOf("back").textKeeps).toBeUndefined();
+    expect(chordOf("forward").textKeeps).toBeUndefined();
     // left to the browser in zen they would walk the tab's history, and out of the shell
     expect(ZEN_CHORDS.has("back")).toBe(true);
     expect(ZEN_CHORDS.has("forward")).toBe(true);
+  });
+  test("⌘←/→ walk the worktrees viewed, from inside the preview too; a field with text keeps them as the caret's jumps", () => {
+    expect(matchChord(ev("ArrowLeft"))).toEqual({ id: "wt-back" });
+    expect(matchChord(ev("ArrowRight"))).toEqual({ id: "wt-forward" });
+    expect(matchChord(ev("ArrowLeft"), { guest: true })).toEqual({ id: "wt-back" });
+    expect(matchChord(ev("ArrowLeft", { shift: true }))).toBeNull(); // ⌘⇧← extends a selection
+    expect(matchChord(ev("ArrowLeft", { meta: false, ctrl: true }))).toBeNull(); // ⌃← is a Space switch
+    const field = (value: string, inside = false) => ({ tagName: "TEXTAREA", value, closest: () => inside });
+    for (const id of ["wt-back", "wt-forward"] as const) {
+      expect(fieldKeeps(id, field("a draft"))).toBe(true);
+      expect(fieldKeeps(id, field(""))).toBe(false); // no line ends to jump to, so the key steps
+      expect(fieldKeeps(id, field("", true))).toBe(true); // Monaco's and xterm's textarea is always empty
+    }
+    // left to the browser in zen they would walk the tab's history, and out of the shell
+    expect(ZEN_CHORDS.has("wt-back")).toBe(true);
+    expect(ZEN_CHORDS.has("wt-forward")).toBe(true);
+  });
+  test("in zen ⌘←/→ are the page's back and forward: the app fills the window and no rail shows a step", () => {
+    expect(zenChord({ id: "wt-back" })).toEqual({ id: "back" });
+    expect(zenChord({ id: "wt-forward" })).toEqual({ id: "forward" });
+    expect(zenChord({ id: "back" })).toEqual({ id: "back" });
+    expect(zenChord({ id: "zen" })).toEqual({ id: "zen" });
+    expect(zenChord({ id: "worktree", digit: 2 })).toEqual({ id: "worktree", digit: 2 });
+    expect(zenChord(null)).toBeNull();
   });
   test("⌥⌫ archives the worktree on screen, the ⌥ family's take-away; a field keeps its word delete", () => {
     expect(matchChord(ev("Backspace", { meta: false, alt: true }))).toEqual({ id: "wt-archive" });
@@ -266,8 +291,10 @@ describe("labels", () => {
     expect(chordLabel("refs")).toBe("⌘⇧G");
     expect(chordLabel("chats")).toBe("⌘G");
     expect(chordLabel("reload")).toBe("⌘R");
-    expect(chordLabel("back")).toBe("⌘←");
-    expect(chordLabel("forward")).toBe("⌘→");
+    expect(chordLabel("back")).toBe("⌘[");
+    expect(chordLabel("wt-back")).toBe("⌘←");
+    expect(chordLabel("forward")).toBe("⌘]");
+    expect(chordLabel("wt-forward")).toBe("⌘→");
     // an installed app window has no tabs, so it lets ⌃Tab through; the ⇧ belongs to the alias
     expect(chordLabel("wt-next", { pwa: true })).toBe("⌃Tab");
     expect(chordLabel("wt-prev", { pwa: true })).toBe("⌃⇧Tab");

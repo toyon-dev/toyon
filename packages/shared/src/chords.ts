@@ -28,6 +28,8 @@ export type ChordId =
   | "wt-next"
   | "wt-unseen-prev"
   | "wt-unseen-next"
+  | "wt-back"
+  | "wt-forward"
   | "wt-archive"
   | "mark-unread"
   | "project"
@@ -163,6 +165,16 @@ export const CHORDS: readonly Chord[] = [
   // that already knows it.
   { id: "wt-unseen-prev", key: "ArrowUp", alt: true, shift: true },
   { id: "wt-unseen-next", key: "ArrowDown", alt: true, shift: true },
+  // ⌘←/→ step back and forward through the worktrees that were viewed, in the order they were
+  // chosen, the way Slack's pair walks the channels you were in; ⌥↑/↓ walk the rail's order, this
+  // walks yours. In a field the pair is the caret's jump to the line's ends and stays so while there
+  // is a line; an empty field has no ends to jump to, and the composer holds the caret whenever a
+  // worktree is on screen, so there the pair steps, as Slack's empty box lets its pair act. A step
+  // lands the caret in that worktree's composer, draft and all, and a run that started keeps
+  // stepping while ⌘ stays held (app/keys.ts), so a draft on the way does not stop it. In zen the
+  // pair is the page's own back and forward instead (ZEN_ALIAS).
+  { id: "wt-back", key: "ArrowLeft", textKeeps: true, emptyGives: true },
+  { id: "wt-forward", key: "ArrowRight", textKeeps: true, emptyGives: true },
   // ⌥⌫ archives the worktree on screen, the one ⌥↑/↓ just walked to: the same modifier, and the
   // key that takes a thing away. It asks first when the row has work, as the menu's line does.
   // Where there is a word to delete it stays the word delete, the way ⌥←/→ stay the word jump. An
@@ -194,13 +206,16 @@ export const CHORDS: readonly Chord[] = [
   // nothing on screen could be a preview (a chat in the centre, an archived page) the shell lets
   // ⌘R through to the browser (app/keys.ts). An installed app always hands ⌘R over; a tab may keep it.
   { id: "reload", key: "r" },
-  // ⌘←/→ are the browser's back and forward, and with a preview up they step that frame, the page
-  // the hand is looking at, the same way ⌘R reloads it. Left to the browser they walk the tab's
-  // joint history, which is the preview's entries and then the shell's own, so a press with nothing
-  // behind the frame would take the tab out of the shell. In a field the pair is the caret's jump
-  // to the line's ends and stays so. With no preview up they are the browser's (app/keys.ts).
-  { id: "back", key: "ArrowLeft", textKeeps: true },
-  { id: "forward", key: "ArrowRight", textKeeps: true },
+  // ⌘[/] are the browser's second back and forward pair (Safari and Chrome both offer it beside
+  // ⌘←/→, which here walk the worktrees), and with a preview up they step that frame, the page the
+  // hand is looking at, the same way ⌘R reloads it. Left to the browser they walk the tab's joint
+  // history, which is the preview's entries and then the shell's own, so a press with nothing
+  // behind the frame would take the tab out of the shell. With no preview up they are the
+  // browser's (app/keys.ts). Next to ⌘⇧[/], the rail walk, the layout is Chrome's own: ⇧ for the
+  // tabs, none for the page. A focused Monaco keeps them as indent and outdent, since it stops the
+  // keys it binds before the window hears them.
+  { id: "back", key: "[" },
+  { id: "forward", key: "]" },
   // ⌘W closes the bottom pane Escape would (app/keys.ts), and keeps the window. In an installed app
   // the browser would close the window on it, and the hand that presses it there was closing a
   // terminal tab or an editor tab the way iTerm and VS Code taught it; the daemon keeps every agent
@@ -213,12 +228,35 @@ export const CHORDS: readonly Chord[] = [
 ];
 
 /** the chords that still act in zen, where the preview owns the keyboard: the one that leaves
- * zen, ⌘W, which with the panes off screen only keeps the app's window where it is, and ⌘←/→,
- * which mean the page's own back and forward there as everywhere and, left to the browser,
- * could walk the tab out of the shell */
-export const ZEN_CHORDS: ReadonlySet<ChordId> = new Set<ChordId>(["zen", "close", "back", "forward"]);
+ * zen, ⌘W, which with the panes off screen only keeps the app's window where it is, and the two
+ * back/forward pairs, which left to the browser could walk the tab out of the shell. Both pairs
+ * mean the page's history there (ZEN_ALIAS). */
+export const ZEN_CHORDS: ReadonlySet<ChordId> = new Set<ChordId>([
+  "zen",
+  "close",
+  "back",
+  "forward",
+  "wt-back",
+  "wt-forward",
+]);
 
 export type ChordMatch = { id: Exclude<ChordId, "worktree"> } | { id: "worktree"; digit: number };
+
+/** What a chord means in zen when it means something else there: ⌘←/→ are the page's own back and
+ * forward, the browser reflex for an app filling the window, rather than the viewed-worktree walk,
+ * whose rail peek and composer are off screen with nothing to show a step. Zen is a mode the hand
+ * chose and the whole screen shows, so unlike a focus the meaning can turn on it. Applied by the
+ * shell once zen is in force (app/keys.ts); the bridge forwards the chord as pressed. */
+const ZEN_ALIAS: Partial<Record<ChordId, Exclude<ChordId, "worktree">>> = {
+  "wt-back": "back",
+  "wt-forward": "forward",
+};
+
+export function zenChord(m: ChordMatch | null): ChordMatch | null {
+  if (!m || m.id === "worktree") return m;
+  const to = ZEN_ALIAS[m.id];
+  return to ? { id: to } : m;
+}
 
 /** Normalised chord detection for a keydown: ⌘ (no ⌃/⌥) for most rows, ⌃ alone for the rows that
  * ask for it and for a row's ⌃ alias, ⌘⇧ for a row's ⌘⇧ alias, ⌥ alone for the ⌥ rows (a lettered

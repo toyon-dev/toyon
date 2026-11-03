@@ -40,6 +40,31 @@ export const realTimers: Timers = {
   clear: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>),
 };
 
+/** A run of steps under one hold: the viewed-worktree walk (⌘←/→) lands the caret in each
+ * worktree's composer, and a composer with a draft keeps the pair as its caret jump, which would
+ * end the walk on the first draft it crossed. While the modifier the first step rode stays down the
+ * run is still on, and the next step is a step. Ended the way the peek is: by the key's own keyup,
+ * or by the first later event that reports it up. */
+export function createHeldRun() {
+  let mod: WalkModifier | null = null;
+  return {
+    /** a step that landed, from the keydown that matched it */
+    press(e: Mods) {
+      mod = walkModifier(e);
+    },
+    /** whether a run is on and the keydown reports its modifier still down */
+    holds(e: Mods): boolean {
+      return mod !== null && modifierHeld(e, mod);
+    },
+    keyup(key: string) {
+      if (mod && key === mod) mod = null;
+    },
+    mods(e: Mods) {
+      if (mod && !modifierHeld(e, mod)) mod = null;
+    },
+  };
+}
+
 /** The peek's state: which modifier the hold rides, and whether the rail has been earned yet.
  * `show` is called with the rail's answer, at most once per change. */
 export function createWalkPeek(show: (on: boolean) => void, timers: Timers = realTimers) {

@@ -62,6 +62,10 @@ export const CHORD_LABELS: Record<ChordId, ChordLabel> = {
   worktree: { label: "switch worktree", section: "Worktrees" },
   "wt-prev": { label: "previous worktree", section: "Worktrees", advertise: { key: "Tab", when: "pwa" } },
   "wt-next": { label: "next worktree", section: "Worktrees", advertise: { key: "Tab", when: "pwa" } },
+  // the walk by order above, the walk back through your own order here; forward is the same pair
+  // read the other way, as it is in every browser, and stays off the card like the panel's ⌥←
+  "wt-back": { label: "back to the last worktree viewed", section: "Worktrees" },
+  "wt-forward": { label: "forward through viewed worktrees", section: "Worktrees", hidden: true },
   "wt-unseen-prev": { label: "previous worktree worth a look", section: "Worktrees", hidden: true },
   "wt-unseen-next": { label: "next worktree worth a look", section: "Worktrees" },
   "wt-archive": { label: "archive worktree", section: "Worktrees" },

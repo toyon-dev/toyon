@@ -7,11 +7,13 @@ import {
   SHELL_STREAM,
   worktreeIndex,
   ZEN_CHORDS,
+  zenChord,
 } from "@toyon/shared";
 import { useEffect } from "react";
 import { markUnread, worktreeActions } from "../state/actions/worktree.ts";
 import { useSock, useStoreInstance } from "../state/context.tsx";
 import {
+  type Action,
   archivedPageOf,
   changesTabShown,
   changesTabStep,
@@ -24,10 +26,11 @@ import {
   previewReload,
   routeTarget,
 } from "../state/store.ts";
+import { viewedStep } from "../state/viewed.ts";
 import { isInstalledApp } from "../surfaces/util.ts";
 import type { PaneKind } from "../ui/Pane.tsx";
 import { previewBus, togglePick } from "./previewBus.ts";
-import { createWalkPeek } from "./railPeek.ts";
+import { createHeldRun, createWalkPeek } from "./railPeek.ts";
 import { railWalk } from "./railWalk.ts";
 import { unseenJump } from "./unseenJump.ts";
 
@@ -36,6 +39,9 @@ const MONACO_OWNS = new Set<ChordId>(["design", "chats"]);
 
 /** the chords that step the previewed page's history, and so mean nothing without one */
 const PAGE_CHORDS = new Set<ChordId>(["back", "forward"]);
+
+/** the chords that walk the worktrees viewed, whose run a held ⌘ keeps going (railPeek.ts) */
+const VIEWED_CHORDS = new Set<ChordId>(["wt-back", "wt-forward"]);
 
 /** the chords that answer on the new-project view: the rest act on a worktree, and the page is about
  * a project that has none yet, over one that is not on screen */
@@ -58,8 +64,18 @@ export function useChords() {
       if (store.getState().railOpen) return;
       walkPeek.press(e);
     };
-    const onKeyUp = (e: KeyboardEvent) => walkPeek.keyup(e.key);
-    const onMods = (e: KeyboardEvent | PointerEvent) => walkPeek.mods(e);
+    // the viewed walk's run (railPeek.ts): a step lands the caret in a composer, and a draft there
+    // would keep the next ⌘←/→ as its caret jump; while the ⌘ the first step rode stays down, the
+    // next press is a step whatever the field holds
+    const heldRun = createHeldRun();
+    const onKeyUp = (e: KeyboardEvent) => {
+      walkPeek.keyup(e.key);
+      heldRun.keyup(e.key);
+    };
+    const onMods = (e: KeyboardEvent | PointerEvent) => {
+      walkPeek.mods(e);
+      heldRun.mods(e);
+    };
     /** the pane holding the keyboard, since a click into a pane says which is meant. With none
      * holding it, terminal first (a full-screen program in it keeps Escape for itself). */
     const closePane = () => {
@@ -91,21 +107,23 @@ export function useChords() {
       // a walk or a digit that lands on a row is there to read and reply, so the composer is offered
       // the caret. Who held it is read now: a carried terminal or editor remounts on the switch, and
       // a frame later the body holds a caret that was theirs.
-      const land = (id: string) => {
+      const land = (id: string, by: Action = { a: "activate", id }) => {
         const held = document.activeElement;
         const offer = !held || held === document.body || !!held.closest(".rail, .chat-input");
-        dispatch({ a: "activate", id });
+        dispatch(by);
         if (offer) dispatch({ a: "walked" });
       };
       // a key xterm let through for the program in it can still bubble here, so a focused terminal
       // is matched as the guest keyboard it is and keeps its ⌃R
-      const chord = matchChord(e, { guest: !!document.activeElement?.closest(".xterm") });
+      const pressed = matchChord(e, { guest: !!document.activeElement?.closest(".xterm") });
       // zen mirrors the bridge: the preview owns the keyboard and only the chord that leaves zen
       // (and ⌘W, which keeps the window) is ours, so a flow under test keeps Escape and its own
       // hotkeys. An overlay or the element picker holds shell focus, so those keep the full ladder
       // or there is no way back out. A zen left on by another project is not in force on one with
-      // nothing to run, which has no page.
-      if (s.zen && !isChatCentred(s) && !s.overlay && !s.picking && !(chord && ZEN_CHORDS.has(chord.id))) return;
+      // nothing to run, which has no page. With zen in force ⌘←/→ are the page's history (zenChord).
+      const inZen = s.zen && !isChatCentred(s);
+      const chord = inZen ? zenChord(pressed) : pressed;
+      if (inZen && !s.overlay && !s.picking && !(chord && ZEN_CHORDS.has(chord.id))) return;
       // ⌘W is only ever swallowed in an installed app, where it would close the window. A browser
       // tab takes it before the page sees it, and one that hands it over is asking about the tab.
       if (chord?.id === "close" && !isInstalledApp()) return;
@@ -116,8 +134,10 @@ export function useChords() {
       // Monaco keeps those two from the window (⌘K is the prefix of its chord family).
       const monaco = !!document.activeElement?.closest(".monaco-editor");
       if (monaco && chord && MONACO_OWNS.has(chord.id)) return;
-      // the terminal and the editor type into a textarea of their own, so this covers them as well
-      if (chord && fieldKeeps(chord.id, document.activeElement)) return;
+      // the terminal and the editor type into a textarea of their own, so this covers them as well.
+      // A viewed-walk step under the ⌘ an earlier step rode is a step, draft or no draft.
+      const inRun = chord && VIEWED_CHORDS.has(chord.id) && heldRun.holds(e);
+      if (chord && !inRun && fieldKeeps(chord.id, document.activeElement)) return;
       // with no page up (setup, a stopped app, an update waiting on a reload, a chat) ⌘←/→ are the
       // browser's again: the shell is the only thing on screen they could mean
       if (chord && PAGE_CHORDS.has(chord.id) && !(previewIdOf(s) && routeTarget(s))) return;
@@ -150,6 +170,20 @@ export function useChords() {
             const to = unseenJump(s.visible, s.activeId, chord.id === "wt-unseen-next" ? 1 : -1);
             if (to) land(to.activate);
             // same hold as the walk: the peek shows which row was worth the look
+            peek(e);
+            break;
+          }
+          case "wt-back":
+          case "wt-forward": {
+            // back and forward through the rows chosen by hand, over any row since gone; the
+            // step moves the stand in the list rather than writing to it
+            const live = new Set(s.rows.map((w) => w.id));
+            const to = viewedStep(s.viewed, live, s.activeId, chord.id === "wt-forward" ? 1 : -1);
+            if (to) {
+              land(to.activate, { a: "viewed-land", at: to.at });
+              heldRun.press(e);
+            }
+            // the peek shows the row landed on, as it does for the rail walk
             peek(e);
             break;
           }

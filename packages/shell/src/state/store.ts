@@ -101,6 +101,7 @@ import { type HeldFrame, type OutboxEntry, type Outgoing, outBoxId, outBoxOf } f
 import { fromInputs, isUploading, type PendingAttachment, settledInputs } from "./pending.ts";
 import { rowsFrom } from "./rows.ts";
 import { type ChatSnapshot, type HelloSnapshot, newestTs, recalledHello } from "./snapshot.ts";
+import { EMPTY_VIEWED, pruneViewed, pushViewed, type Viewed } from "./viewed.ts";
 
 /** `heard` is the shell's own clock when a live figure landed: the agent reports usage as soon as
  * the model accepts a request, before any of the reply, so a figure newer than the last thing in
@@ -803,6 +804,10 @@ export interface State {
   /** an "open project" was sent: the next repo the daemon adds becomes the active one */
   pendingOpen: boolean;
   activeId: string | null;
+  /** the rows chosen by hand, in order, for ⌘←/→ to walk back and forward through (viewed.ts).
+   * Only a hand's choice is written: the selection a worktrees frame keeps valid is not a place
+   * anyone went. Not stored; the walk starts over with the page. */
+  viewed: Viewed;
   /** the row a send moved the selection onto without a hand choosing it: the lead the plus opened,
    * or the worktree this tab's send made. The centre keeps the app that was on screen over that
    * row's frame while it is still blank. A row chosen by hand is wanted at once, blank or not, so
@@ -1089,6 +1094,7 @@ export function initialState(opts: InitialOpts): State {
     lastActive: opts.storedLastActive ?? {},
     pendingOpen: false,
     activeId: null,
+    viewed: EMPTY_VIEWED,
     carryTo: null,
     clientId: opts.clientId,
     storedActive: opts.storedActive ?? null,
@@ -1646,6 +1652,9 @@ export type Action =
   | { a: "recall"; hello: HelloSnapshot; chats: Record<string, ChatSnapshot> }
   | { a: "connected"; v: boolean; failure?: ConnectFailure | null }
   | { a: "activate"; id: string }
+  /** a step of the viewed walk (⌘←/→): the row at `at` in `viewed`, which moves the stand there
+   * rather than writing a new entry, as a browser's back does */
+  | { a: "viewed-land"; at: number }
   /** keep the ring on a row just marked unread for as long as it stays the one on screen */
   | { a: "hold-unread"; id: string }
   /** start a new worktree: select the project's lead row, whose box drafts one, and put the caret there */
@@ -2070,7 +2079,19 @@ function reduce(s: State, action: Action): State {
       // where a row is read and answered; its app is one tab away. Set here and not inside
       // activate(), which every worktrees frame runs to keep the selection valid, and which would
       // pull the phone off the list at the moment it is being read.
-      return { ...activate(s, action.id), carryTo: null, screen: action.id ? "chat" : "home" };
+      return {
+        ...activate(s, action.id),
+        viewed: pushViewed(s.viewed, s.activeId, action.id),
+        carryTo: null,
+        screen: action.id ? "chat" : "home",
+      };
+    }
+    case "viewed-land": {
+      const id = s.viewed.ids[action.at];
+      // a row that went while the walk stood still is stepped over by the key (viewedStep); one
+      // that went between the step and this frame is nowhere to land
+      if (id === undefined || !s.rows.some((w) => w.id === id)) return s;
+      return { ...activate(s, id), viewed: { ...s.viewed, at: action.at }, carryTo: null, screen: "chat" };
     }
     case "open-draft": {
       // not on an empty project: a worktree off the root commit would take the scaffold to a
@@ -2082,6 +2103,7 @@ function reduce(s: State, action: Action): State {
       // pressed over would sit in front of it. The launcher rule in `reducer` makes the draft itself.
       return revealChat({
         ...activate(s, lead),
+        viewed: pushViewed(s.viewed, s.activeId, lead),
         carryTo: lead,
         overlay: null,
         paletteReturn: null,
@@ -2899,6 +2921,7 @@ function onHello(s: State, msg: Extract<StoreServerMsg, { t: "hello" }>, recall:
       pruneLocal(withAttachments(withDrafts(s.local, msg.drafts), msg.attachments), rows, s.archivedPage),
     ),
     lastActive: pruneLastActive(s.lastActive, rows),
+    viewed: pruneViewed(s.viewed, new Set(rows.map((w) => w.id))),
     treeOpen: pruneByRow(s.treeOpen, rows),
     discoveredOpen: pruneByRepo(s.discoveredOpen, repos),
     archivedOpen: pruneByRepo(s.archivedOpen, repos),
@@ -3171,6 +3194,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
               s.archivedPage,
             ),
             treeOpen: pruneByRow(s.treeOpen, rows),
+            viewed: pruneViewed(s.viewed, new Set(rows.map((w) => w.id))),
           },
           activeId,
         ),

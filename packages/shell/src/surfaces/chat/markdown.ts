@@ -89,8 +89,10 @@ export interface MarkdownOptions {
   stills?: { worktreeId: string; urls: DaemonUrls; pictures: readonly ReplyPicture[] };
   /** the project's worktrees by directory: a `wt-xxxx` in the prose reads as the row's title */
   worktrees?: WorktreeNamer;
-  /** the text is a document written as markdown, whose raw HTML is part of it and is kept; a
-   * reply, the default, draws a tag as the text it is */
+  /** the text is a document written as markdown, whose raw HTML is part of it and is kept, and
+   * whose paragraphs are wrapped at a column, so a line break inside one is a space; a reply, the
+   * default, draws a tag as the text it is and keeps every line break, since an agent writing a
+   * line per item (a quoted post, an address) means the lines it wrote */
   keepHtml?: boolean;
   /** the text is still arriving: it is shown at a reading pace, a few characters a frame (pace.ts),
    * and a link cut off at its end is held in place rather than shown raw */
@@ -155,7 +157,7 @@ export function renderMarkdown(text: string, options?: MarkdownOptions): string 
   rendering = options ?? null;
   source = options?.streaming ? closePendingLink(text) : text;
   try {
-    return purify.sanitize(marked.parse(source, { async: false }) as string);
+    return purify.sanitize(marked.parse(source, { async: false, breaks: !options?.keepHtml }) as string);
   } finally {
     rendering = null;
     source = "";

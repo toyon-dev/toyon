@@ -137,18 +137,22 @@ function HeldRow({
   entry,
   next,
   worktreeId,
+  root,
   onOpen,
 }: {
   entry: OutboxEntry;
   next: Readonly<Record<AttachmentKind, number>>;
   worktreeId: string;
+  root: string | undefined;
   onOpen: (path: string, line: number) => void;
 }) {
   const dispatch = useDispatch();
+  const sock = useSock();
   const text = useLocalField(entry.id, "draft");
   const items = useLocalField(entry.id, "attachments");
   return (
-    <div className="msg-user queued-msg">
+    // biome-ignore lint/a11y/useKeyWithClickEvents: the links inside are the controls; the root only routes their clicks
+    <div className="msg-user queued-msg" onClick={(e) => openMention(e, root, worktreeId, { sock, dispatch })}>
       <span className="queued-tag">
         <Icon name="clock" className="icon-inline" />
         {/* the one waiting row with something under way: the bytes are moving, so the word shines
@@ -169,7 +173,7 @@ function HeldRow({
       </span>
       <div className="queued-text">
         {items.length > 0 && <QueuedChips items={items} next={next} worktreeId={worktreeId} onOpen={onOpen} />}
-        {text}
+        <MentionText text={text} worktreeId={worktreeId} root={root} />
       </div>
     </div>
   );
@@ -677,10 +681,12 @@ export function ChatLog({
         {id &&
           queue.map((message, i) =>
             i === echoed ? null : (
+              // biome-ignore lint/a11y/useKeyWithClickEvents: the links inside are the controls; the root only routes their clicks
               <div
                 // biome-ignore lint/suspicious/noArrayIndexKey: the queue is messages in send order; position is the identity, and a removed entry closes the gap
                 key={`q-${i}`}
                 className="msg-user queued-msg"
+                onClick={(e) => openMention(e, root, id, { sock, dispatch })}
               >
                 <span className="queued-tag">
                   <Icon name="clock" className="icon-inline" />
@@ -707,7 +713,7 @@ export function ChatLog({
                       onOpen={(path, line) => openSource(store, sock, id, path, line)}
                     />
                   )}
-                  {message.text}
+                  <MentionText text={message.text} worktreeId={id} root={root} />
                 </div>
               </div>
             ),
@@ -719,6 +725,7 @@ export function ChatLog({
               entry={entry}
               next={next}
               worktreeId={id}
+              root={root}
               onOpen={(path, line) => openSource(store, sock, id, path, line)}
             />
           ))}

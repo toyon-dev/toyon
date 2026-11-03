@@ -138,16 +138,17 @@ export type MentionSpan =
 
 /** a fence opens on a line of its own: three or more backticks, then at most a word naming the
  * language, and no backtick after them. ```x``` on one line is a code span, as markdown reads it. */
-const FENCE_OPEN = /^[ \t]*(`{3,})[ \t]*([^`\s]*)[^`\n]*$/;
+const FENCE_OPEN = /^[ \t]*(?<ticks>`{3,})[ \t]*(?<lang>[^`\s]*)[^`\n]*$/;
+
+/** the message between its backticks, and what they hold */
+export type CodeSegment = { kind: "prose"; text: string } | Extract<MentionSpan, { kind: "code" | "block" }>;
 
 /** The message cut at its backticks: a fenced block, then a span closed by a run of as many
  * backticks as opened it, as markdown reads them; a run with no close is the characters typed.
  * What is backticked is a literal, so a `@` inside one names nothing, and the bubble draws it as
  * code rather than as the sigils around it. */
-export function codeSegments(
-  text: string,
-): ({ kind: "prose"; text: string } | Extract<MentionSpan, { kind: "code" | "block" }>)[] {
-  const out: ReturnType<typeof codeSegments> = [];
+export function codeSegments(text: string): CodeSegment[] {
+  const out: CodeSegment[] = [];
   const prose = (s: string) => {
     if (!s) return;
     const prev = out.at(-1);
@@ -161,10 +162,9 @@ export function codeSegments(
     if (p === -1) break;
     const lineStart = text.lastIndexOf("\n", p - 1) + 1;
     const lineEnd = text.indexOf("\n", p);
-    const line = text.slice(lineStart, lineEnd === -1 ? text.length : lineEnd);
-    const fence = /^[ \t]*`/.test(line) ? FENCE_OPEN.exec(line) : null;
-    if (fence && lineStart >= from) {
-      const ticks = (fence[1] as string).length;
+    const fence = FENCE_OPEN.exec(text.slice(lineStart, lineEnd === -1 ? text.length : lineEnd))?.groups;
+    if (fence?.ticks) {
+      const ticks = fence.ticks.length;
       const close = new RegExp(`^[ \\t]*\`{${ticks},}[ \\t]*$`, "m");
       const bodyAt = lineEnd === -1 ? text.length : lineEnd + 1;
       const closeAt = close.exec(text.slice(bodyAt));
@@ -182,7 +182,7 @@ export function codeSegments(
         kind: "block",
         text: text.slice(lineStart, end),
         code: code.replace(/\n$/, ""),
-        lang: fence[2] ?? "",
+        lang: fence.lang ?? "",
       });
       from = i = end;
       continue;

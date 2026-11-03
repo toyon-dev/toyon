@@ -8,12 +8,13 @@ import { openChatLink } from "./chatLink.ts";
 import { mentionableWorktrees, mentionIndex, mentionSpans, mentionTip } from "./mentions.ts";
 import { Painted } from "./Painted.tsx";
 import { siblingWorktrees } from "./siblings.ts";
-import { languageOf, paintCode } from "./syntax.ts";
+import { languageOf, linkLines, paintCode, paintPlain } from "./syntax.ts";
 
-/** a fenced block from the person's own words, coloured by the seven the agent's blocks are when
- * the fence names a language we have a grammar for, and the text as typed when it does not */
+/** a fenced block from the person's own words, drawn as the agent's are: coloured by the seven
+ * when the fence names a language we have a grammar for, an address in it a link either way */
 function CodeBlock({ code, lang }: { code: string; lang: string }) {
-  const lines = paintCode(code, languageOf(lang.toLowerCase(), ""));
+  const language = languageOf(lang.toLowerCase(), "");
+  const lines = language ? linkLines(paintCode(code, language)) : paintPlain(code);
   return (
     <pre>
       <code>

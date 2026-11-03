@@ -69,11 +69,13 @@ In the app, the update chip does not appear, a greyed menu row reads "managed by
 
 ```
 $ toyon doctor
-ok   cli      toyon 0.4.1, bun 1.4.2, darwin arm64
+ok   cli      toyon 0.21.0, bun 1.4.4, darwin arm64
 ok   home     /Users/kyle/.toyon
-ok   policy   /Library/Application Support/toyon/policy.json: updates off, deploy off, remote tailscale, agents claude, codex, custom agents off, plan sign-in off
 ok   git      git version 2.47.0
-ok   daemon   0.4.1 at http://127.0.0.1:4141, pid 41231
+ok   github   gh version 2.80.0, signed in; the pull request land route can open and merge pull requests
+ok   policy   /Library/Application Support/toyon/policy.json: updates off, deploy off, remote tailscale, agents claude, codex, custom agents off, plan sign-in off
+ok   daemon   0.21.0 at http://127.0.0.1:4141, pid 41231
+ok   running  2 of 5 worktrees started; the rest start when opened
 ok   updates  off by your organization's policy
 ```
 

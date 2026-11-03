@@ -2,7 +2,8 @@
 // The GitHub release body for one version: `bun scripts/release-notes.ts 0.15.0`. CHANGELOG.md is
 // the one place the notes are written, so the body is its section for that version, with the
 // upgrade line the file leaves out because the app shows the same text to people who already have
-// the version. Prints to stdout, for `gh release create vX.Y.Z --notes-file <(...)`.
+// the version. Prints to stdout; write it to a file and pass that to `gh release create vX.Y.Z
+// --notes-file`, since a process substitution is not available in every shell a release is run from.
 
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";

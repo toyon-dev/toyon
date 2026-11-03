@@ -39,7 +39,7 @@ Started with npx there is nothing to keep current: npx runs the version you name
 
 Each project's settings are in `.toyon/settings.json`, or in `toyon.json` at its root; every key, the port rules and the sleep delay are in [settings.md](settings.md).
 
-## Somewhere other than your laptop
+## Your own server
 
 Toyon can also run on a box you open from your phone, or on your own Fly account with the laptop closed. How to set up each route, and what it has been checked with, is in [remote.md](remote.md).
 

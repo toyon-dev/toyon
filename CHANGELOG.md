@@ -2,6 +2,32 @@
 
 What changed in each release of Toyon, newest first.
 
+## 0.22.0 (2026-11-03)
+
+Your own messages and the agent's replies read the same way, with code, links and line breaks drawn as written, and the editor gains a split diff and an SVG preview.
+
+### New
+- The diff view has a split and inline toggle. Split closes the chat to make room and brings it back when you turn split off, unless you moved the chat yourself. It is hidden on a phone and for files with no other side.
+- SVG files open in a preview in the editor, drawn from the file text so nothing runs or loads from outside, from the files tab, cmd+P or a tool row. It can expand to full size on a paper ground.
+- Code spans and fenced blocks in your own messages are drawn as code, in the sent bubble and while the message is queued or uploading, with the same colouring the agent's fences get.
+- A reference such as owner/repo#123 in chat links to the issue or pull request on GitHub, and a bare or backticked web address links in both the agent's rows and your own messages.
+- Clicking a blame note in the editor opens the pull request for that line, or the commit page when the commit came without one. A commit the remote does not have gets no link, so nothing opens a 404.
+- Agent adapters install from a private registry such as Artifactory. When a registry's release-age gate holds a package back, the composer says so and offers install anyway, and a certificate error or a 404 gets one sentence with the way out.
+- In the full view of a picture, a double tap zooms about the tapped point and a second one returns; one finger pans while zoomed.
+
+### Changed
+- A single newline in a reply is a line break, as it is in a GitHub comment or Claude Code's terminal, so multi-line quotes no longer run together. Documents such as the markdown preview and the release notes keep their wrapped paragraphs.
+- An open question card no longer counts as work. The idle clock treats a waiting row as a candidate and expires the card when it fires, and the archive sweep, idle stop, auto update and port eviction no longer wait on an open card.
+- The red failed and blue landed row colours show only while a server is up under the row; an asleep row reads as quiet gray until you open it.
+- In zen, cmd+left and cmd+right step back and forward through the page like cmd+[ and cmd+]. Outside zen they still walk the worktrees you viewed.
+- The let-me-in page, opened on localhost, says that running toyon in a terminal on this machine opens the shell already let in.
+- The version chip's menu has a toyon.dev row, and the README leads its links with the site.
+- The docs gained an install page, and the preview, agents and trust pages were rewritten as references in plainer prose.
+
+### Fixed
+- A long press on a rail, changes or files row on a touch screen started a drag instead of opening the menu. Rows still drag into the composer where there is a pointer.
+- The purple dot for a commit, land or sync in flight showed only in the rail; the @ menu, transcript marks and worktree chip showed green.
+
 ## 0.21.0 (2026-11-02)
 
 Splitting work is called handoff again and the pieces it starts wake each other as they land, pull request review lands in a page of its own, and the project switcher clones from a URL.

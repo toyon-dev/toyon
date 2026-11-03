@@ -19,12 +19,14 @@ export function viewerOf(path: string): FileViewer | null {
 }
 
 /** how the editor pane draws a text file rendered, beside its text and its diff: markdown through
- * the shell's own renderer, an html page as itself in a frame of its own */
-export type Rendering = "markdown" | "html";
+ * the shell's own renderer, an html page as itself in a frame of its own, an svg as the picture it
+ * draws, in an `<img>`, where a script inside it never runs */
+export type Rendering = "markdown" | "html" | "svg";
 
 const RENDERINGS: [RegExp, Rendering][] = [
   [/\.(md|markdown)$/i, "markdown"],
   [/\.html?$/i, "html"],
+  [/\.svg$/i, "svg"],
 ];
 
 /** the rendering a path has, or null for a file only read as text */

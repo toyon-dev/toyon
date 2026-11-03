@@ -1,11 +1,13 @@
 import { expect, test } from "bun:test";
 import { isPageAsset, renderedAs, viewerOf } from "./viewers.ts";
 
-test("markdown and html pages read rendered; other text only as text", () => {
+test("markdown, html and svg read rendered; other text only as text", () => {
   expect(renderedAs("notes/PLAN.md")).toBe("markdown");
   expect(renderedAs("README.markdown")).toBe("markdown");
   expect(renderedAs("packages/shell/public/motion.html")).toBe("html");
   expect(renderedAs("index.HTM")).toBe("html");
+  expect(renderedAs("public/icon.svg")).toBe("svg");
+  expect(renderedAs("logo.SVG")).toBe("svg");
   expect(renderedAs("src/app.tsx")).toBeNull();
   expect(renderedAs("page.html.bak")).toBeNull();
 });
@@ -13,6 +15,7 @@ test("markdown and html pages read rendered; other text only as text", () => {
 test("a rendering is a view of the text, never a viewer of the bytes", () => {
   expect(viewerOf("motion.html")).toBeNull();
   expect(viewerOf("README.md")).toBeNull();
+  expect(viewerOf("icon.svg")).toBeNull();
   expect(viewerOf("logo.png")).toBe("image");
   expect(viewerOf("media/ask.mp4")).toBe("video");
   expect(viewerOf("clip.MOV")).toBe("video");

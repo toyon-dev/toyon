@@ -121,6 +121,13 @@
     border: 0;
     background: var(--page-paper);
   }
+  /* an svg read rendered sits on the same paper, at the window's size too: a drawing with no
+   ground of its own would vanish into whichever theme matches its strokes, and a tab opens the
+   file on white */
+  .editor-svg,
+  .editor-svg-full {
+    background: var(--page-paper);
+  }
   /* an image file, drawn whole: never larger than the body, never scaled past its own size. The
      whole body is the control, pressed for the window's size, and it is the box the picture is
      measured against: a button sized to the picture has no height for the picture's max-height to

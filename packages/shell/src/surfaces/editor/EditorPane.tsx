@@ -35,6 +35,7 @@ import { HtmlPreview, servedPath } from "./HtmlPreview.tsx";
 import { MarkdownPreview } from "./MarkdownPreview.tsx";
 import { PrCommentsPage } from "./PrCommentsPage.tsx";
 import { SPLIT_MIN, SplitToggle, useSplit } from "./SplitToggle.tsx";
+import { SvgPreview } from "./SvgPreview.tsx";
 import { useWrap, WrapToggle } from "./WrapToggle.tsx";
 import "./editor.css";
 
@@ -224,9 +225,13 @@ export function EditorPane({
   // browser has no bytes the daemon can serve
   const grant = loose?.source.kind === "grant" ? loose.source : null;
   const viewer = history || kept || (loose && !grant) ? null : viewerOf(path);
+  const rendering = renderedAs(path);
   // a picture at the window's size: the header's button and the picture itself both open it, so
-  // the pane holds the switch and the viewer draws the float
+  // the pane holds the switch and the viewer draws the float. An svg read rendered is a picture
+  // too, drawn from the text, so a commit's copy has one as well
   const [fullSize, setFullSize] = useState(false);
+  const picture =
+    viewer === "image" || (view === "preview" && rendering === "svg" && !!disk && !disk.binary && !disk.tooLarge);
   const [wrap, setWrap] = useWrap();
   // the toggle is for text in Monaco: a picture, a rendered preview and a file not shown have no lines to fold
   const wrappable = !!disk && !prPage && !viewer && !disk.binary && !disk.tooLarge && view !== "preview";
@@ -271,7 +276,7 @@ export function EditorPane({
   // scripts off, so what a script draws is seen in the preview, while this worktree's is up. A
   // phone's screen has no preview beside the file to send it to.
   const live = useStore((s) => routeTarget(s)?.worktreeId === worktreeId);
-  const runnable = live && !onScreen && !history && !kept && !loose && renderedAs(path) === "html";
+  const runnable = live && !onScreen && !history && !kept && !loose && rendering === "html";
   const runPage = () => {
     previewBus.post(worktreeId, { type: "navigate", path: servedPath(path) });
     // a full pane covers the preview the page just went to
@@ -336,7 +341,7 @@ export function EditorPane({
           )}
           {/* a picture sits where a text file's views do: the pane is a strip of the window, and a
               screenshot is read at its own size */}
-          {viewer === "image" && (
+          {picture && (
             <Button
               variant="outline"
               tone="quiet"
@@ -401,7 +406,16 @@ export function EditorPane({
             focus={editor.focus}
             onChat={(selected) => addToChat(store, { worktreeId, text: selected, name: path })}
           />
-        ) : view === "preview" && renderedAs(path) === "html" ? (
+        ) : view === "preview" && rendering === "svg" ? (
+          <SvgPreview
+            text={disk.after}
+            path={path}
+            openSeq={editor.seq}
+            focus={editor.focus}
+            full={fullSize}
+            onFull={setFullSize}
+          />
+        ) : view === "preview" && rendering === "html" ? (
           <HtmlPreview
             // the file on disk when there is one, so the files beside it draw: a copy only git
             // holds, or a file from outside with nothing of the daemon's behind it, goes as text

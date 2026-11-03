@@ -177,7 +177,7 @@ const origins = new Origins({ setting, port, branded: () => branded });
 // on Linux, whether bubblewrap can start, answered before the first agent listing
 const linuxSandbox = new LinuxSandbox();
 await linuxSandbox.refresh();
-const agents = loadAgentRegistry(paths.agentsFile, paths.agentsDir, linuxSandbox, managed.policy);
+const agents = loadAgentRegistry(paths.agentsFile, paths.agentsDir, linuxSandbox, managed.policy, paths.agentsFrom);
 // a default the policy took away is nobody's choice any more: the first-run screens ask again
 if (state.defaultAgent !== undefined && !agents.get(state.defaultAgent)) state.clearDefaultAgent();
 // What each agent reported about itself (its login, its models), read by running it with no

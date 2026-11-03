@@ -3,9 +3,12 @@
 // installed into ~/.toyon/agents/<id>, so the app's own install stays small: Claude's and Codex's
 // adapters are fetched at boot, OpenCode's native binary (large) when someone asks for it. A user
 // adds any other ACP agent in ~/.toyon/agents.json (per machine and possibly holding keys, so not in
-// the repo's settings).
+// the repo's settings). A daemon given another daemon's agents dir links an adapter from there
+// instead of fetching it, while that copy is at the version pinned here; its own dir takes over the
+// moment the pins part, so no daemon ever installs into another's.
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { rm, symlink } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { type AgentInfo, MANAGED_DEFAULTS, type ManagedPolicy } from "@toyon/shared";
@@ -292,6 +295,8 @@ export class AgentRegistry {
     private sandbox: SandboxCheck = { problem: () => null },
     /** the clock the retry window is measured on; tests move it */
     private now: () => number = Date.now,
+    /** another daemon's agents dir, linked from rather than fetched while its copy matches the pin */
+    private borrowFrom: string | null = null,
   ) {
     for (const s of specs) this.specs.set(s.id, s);
   }
@@ -335,9 +340,14 @@ export class AgentRegistry {
   /** what an installed adapter runs: the script an npm adapter's `bin` entry points at, or the
    * native binary; null while it is not installed */
   private installed(spec: AgentSpec): string | null {
+    return this.installedIn(this.dir, spec);
+  }
+
+  /** the same, in any agents dir: the one this registry owns, or the one it may borrow from */
+  private installedIn(base: string, spec: AgentSpec): string | null {
     const name = this.packageName(spec);
     if (!name || spec.run.kind === "command") return null;
-    const pkgDir = join(this.dir, spec.id, "node_modules", name);
+    const pkgDir = join(base, spec.id, "node_modules", name);
     if (spec.run.kind === "npm-native") {
       const bin = join(pkgDir, spec.run.bin);
       return existsSync(bin) ? bin : null;
@@ -426,6 +436,15 @@ export class AgentRegistry {
     const dir = join(this.dir, id);
     const p = (async () => {
       try {
+        const borrowed = await this.borrow(spec, version);
+        if (borrowed) {
+          this.installErrors.delete(id);
+          this.failures.delete(id);
+          log.info("agents", `${id} ready, linked from ${borrowed}`);
+          return;
+        }
+        // a link left from a borrow would carry this install into the other daemon's dir
+        disown(dir);
         mkdirSync(dir, { recursive: true });
         writeFileSync(
           join(dir, "package.json"),
@@ -454,6 +473,23 @@ export class AgentRegistry {
     return p;
   }
 
+  /** Link <dir>/<id> to the other daemon's copy when that copy runs and is at the pinned version:
+   * the path of what was linked, or null when there is nothing fit to link and a fetch is the way.
+   * Whatever this registry had of its own for the agent (an older fetch, a stale link) goes, since
+   * the link takes its place. */
+  private async borrow(spec: AgentSpec, version: string): Promise<string | null> {
+    const from = this.borrowFrom;
+    if (!from || resolve(from) === resolve(this.dir)) return null;
+    if (!this.installedIn(from, spec) || this.installedVersionIn(from, spec) !== version) return null;
+    const src = join(from, spec.id);
+    const own = join(this.dir, spec.id);
+    disown(own);
+    await rm(own, { recursive: true, force: true });
+    mkdirSync(this.dir, { recursive: true });
+    await symlink(src, own);
+    return src;
+  }
+
   private fail(id: string, why: string): void {
     this.installErrors.set(id, why);
     this.failures.set(id, { at: this.now(), retries: this.failures.get(id)?.retries ?? 0 });
@@ -461,9 +497,13 @@ export class AgentRegistry {
   }
 
   private installedVersion(spec: AgentSpec): string | null {
+    return this.installedVersionIn(this.dir, spec);
+  }
+
+  private installedVersionIn(base: string, spec: AgentSpec): string | null {
     const name = this.packageName(spec);
     if (!name) return null;
-    const pkgJson = join(this.dir, spec.id, "node_modules", name, "package.json");
+    const pkgJson = join(base, spec.id, "node_modules", name, "package.json");
     try {
       return (JSON.parse(readFileSync(pkgJson, "utf8")) as { version?: string }).version ?? null;
     } catch {
@@ -635,10 +675,26 @@ export function loadAgentRegistry(
   agentsDir: string,
   sandbox?: SandboxCheck,
   managed: ManagedAgents = MANAGED_DEFAULTS,
+  agentsFrom: string | null = null,
 ): AgentRegistry {
   const specs =
     managed.customAgents && existsSync(agentsFile)
       ? parseAgentsFile(readFileSync(agentsFile, "utf8"), BUILTIN_AGENTS)
       : BUILTIN_AGENTS;
-  return new AgentRegistry(managedSpecs(specs, managed), agentsDir, undefined, undefined, sandbox);
+  return new AgentRegistry(
+    managedSpecs(specs, managed),
+    agentsDir,
+    undefined,
+    undefined,
+    sandbox,
+    undefined,
+    agentsFrom,
+  );
+}
+
+/** remove <dir>/<id> when it is a link, never what it points at; a real dir or nothing stays.
+ * One stat, done in line: a fetch at boot has to reach the installer before the first tick. */
+function disown(dir: string): void {
+  // lstat, not exists: a link whose target has gone is still a link in the way of a mkdir
+  if (lstatSync(dir, { throwIfNoEntry: false })?.isSymbolicLink()) unlinkSync(dir);
 }

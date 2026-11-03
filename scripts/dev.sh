@@ -13,11 +13,17 @@
 # held this daemon's token and would otherwise knock with nobody to answer: Vite reads the token
 # from there and writes it into the page (vite.config.ts). Both roles derive the dir here so the
 # two cannot drift apart.
+#
+# The agent adapters are the exception to keeping state apart: a fresh state dir would download
+# every one again, minutes before the nested composer takes a message. The nested daemon links
+# each adapter from the running daemon's dir while both pin the same version, and fetches its own
+# only once this worktree moves a pin.
 set -eu
 : "${PORT:?no PORT in the environment: run this through Toyon, not by hand}"
 home="${TOYON_DEV_HOME:-$HOME/.toyon-dev/$(basename "$(pwd)")}"
+agents_from="${TOYON_AGENTS_FROM:-$HOME/.toyon/agents}"
 case "${1:-}" in
-  daemon) exec env TOYON_PORT="$PORT" TOYON_HOME="$home" bun run --cwd packages/daemon dev ;;
+  daemon) exec env TOYON_PORT="$PORT" TOYON_HOME="$home" TOYON_AGENTS_FROM="$agents_from" bun run --cwd packages/daemon dev ;;
   shell)
     : "${DAEMON_URL:?no DAEMON_URL in the environment: the daemon proc has to run beside this one}"
     exec env TOYON_DAEMON_URL="$DAEMON_URL" TOYON_HOME="$home" bun run --cwd packages/shell dev

@@ -1,5 +1,14 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { UserError } from "../core/errors.ts";
@@ -398,6 +407,79 @@ describe("agent registry", () => {
     await installer(join(dir, "claude"), "@toyon-dev/claude-agent-acp", "0.99.1-toyon.1");
     await reg.install("claude");
     expect(reg.adapters()[0]).toEqual({ id: "claude", installed: "0.99.1-toyon.1", pinned: "0.99.1-toyon.1" });
+  });
+
+  describe("borrowing another daemon's adapters", () => {
+    const CLAUDE = "@toyon-dev/claude-agent-acp";
+    const PIN = "0.99.1-toyon.1";
+    const withPin = (version: string) =>
+      BUILTIN_AGENTS.map((a) => (a.id === "claude" ? { ...a, run: { ...a.run, version } } : a)) as AgentSpec[];
+    const borrowing = (dir: string, from: string, installer: Installer, specs = BUILTIN_AGENTS) =>
+      new AgentRegistry(specs, dir, installer, undefined, undefined, undefined, from);
+    /** the other daemon's dir with claude at `version`: put there by its own fetch, not the one under test */
+    const seeded = async (version: string) => {
+      const from = tmp();
+      await fakeInstaller().installer(join(from, "claude"), CLAUDE, version);
+      return from;
+    };
+
+    test("an adapter at the pinned version in the other dir is linked, not fetched, and runs from there", async () => {
+      const from = await seeded(PIN);
+      const dir = tmp();
+      const { installer, calls } = fakeInstaller();
+      const reg = borrowing(dir, from, installer);
+      await reg.installMissing();
+      // codex was not there to borrow, so it alone was fetched
+      expect(calls).toEqual(["@agentclientprotocol/codex-acp@2.5.0"]);
+      expect(lstatSync(join(dir, "claude")).isSymbolicLink()).toBe(true);
+      expect(lstatSync(join(dir, "codex")).isDirectory()).toBe(true);
+      expect(reg.adapters()[0]).toEqual({ id: "claude", installed: PIN, pinned: PIN });
+      expect(realpathSync(reg.launch(reg.require("claude"), prepared).args[0]!)).toBe(
+        realpathSync(join(from, "claude", "node_modules", CLAUDE, "dist", "index.js")),
+      );
+    });
+
+    test("a copy at another version, or one short of its bin, is left alone and the adapter is fetched", async () => {
+      const { installer, calls } = fakeInstaller();
+      const older = await seeded("0.75.1");
+      await borrowing(tmp(), older, installer).install("claude");
+      expect(calls).toEqual([`${CLAUDE}@${PIN}`]);
+      const broken = await seeded(PIN);
+      rmSync(join(broken, "claude", "node_modules", CLAUDE, "dist"), { recursive: true });
+      await borrowing(tmp(), broken, installer).install("claude");
+      expect(calls).toEqual([`${CLAUDE}@${PIN}`, `${CLAUDE}@${PIN}`]);
+    });
+
+    test("a link takes the place of an older fetch of its own", async () => {
+      const from = await seeded(PIN);
+      const dir = tmp();
+      const { installer } = fakeInstaller();
+      await new AgentRegistry(withPin("0.75.1"), dir, installer).install("claude");
+      expect(lstatSync(join(dir, "claude")).isDirectory()).toBe(true);
+      const reg = borrowing(dir, from, installer);
+      await reg.install("claude");
+      expect(lstatSync(join(dir, "claude")).isSymbolicLink()).toBe(true);
+      expect(reg.adapters()[0]).toEqual({ id: "claude", installed: PIN, pinned: PIN });
+    });
+
+    test("a pin moved after a borrow fetches into this dir's own folder and leaves the other dir as it was", async () => {
+      const from = await seeded("0.75.1");
+      const dir = tmp();
+      const { installer, calls } = fakeInstaller();
+      await borrowing(dir, from, installer, withPin("0.75.1")).install("claude");
+      expect(lstatSync(join(dir, "claude")).isSymbolicLink()).toBe(true);
+      expect(calls).toEqual([]);
+      const reg = borrowing(dir, from, installer);
+      await reg.install("claude");
+      expect(calls).toEqual([`${CLAUDE}@${PIN}`]);
+      expect(lstatSync(join(dir, "claude")).isDirectory()).toBe(true);
+      expect(reg.adapters()[0]).toEqual({ id: "claude", installed: PIN, pinned: PIN });
+      // the other daemon's copy: still its version, and never given this install's manifest
+      expect(
+        JSON.parse(readFileSync(join(from, "claude", "node_modules", CLAUDE, "package.json"), "utf8")).version,
+      ).toBe("0.75.1");
+      expect(existsSync(join(from, "claude", "package.json"))).toBe(false);
+    });
   });
 
   test("bun's output becomes its first error line, with the way out for a certificate it will not trust", () => {

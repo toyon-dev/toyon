@@ -35,6 +35,9 @@ export interface Paths {
   themesDir: string;
   /** one npm install per agent adapter (<id>/node_modules/...), fetched on demand */
   agentsDir: string;
+  /** another daemon's agents dir this one may link an adapter from instead of fetching it, when
+   * that copy is at the version pinned here (agent/registry.ts); null fetches every one */
+  agentsFrom: string | null;
   /** the user's own ACP agents (agent/registry.ts); commands the daemon runs, so no agent touches it */
   agentsFile: string;
   /** where an agent runs with no worktree behind it (a model probe, a sign-out), confined like any other */
@@ -68,6 +71,9 @@ export function makePaths(home = process.env.TOYON_HOME ?? join(homedir(), ".toy
     cacheDir: join(home, "cache.noindex"),
     themesDir: join(home, "themes"),
     agentsDir: process.env.TOYON_AGENTS_DIR ?? join(home, "agents"),
+    // a nested daemon (scripts/dev.sh) points this at the daemon running it, so a new worktree's
+    // preview does not download the adapters that daemon already has
+    agentsFrom: process.env.TOYON_AGENTS_FROM || null,
     agentsFile: join(home, "agents.json"),
     scratchDir: join(home, "scratch"),
     gitCredentialsFile: join(home, "git-credentials"),

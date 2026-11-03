@@ -112,9 +112,10 @@ export const CHORDS: readonly Chord[] = [
   { id: "files", key: "e", shift: true },
   // ⌥←/→ walk the panel's tabs the way ⌥↑/↓ walk the worktrees beside it. Anywhere text is typed
   // (the composer, the commit box, the editor, the terminal, a field on the page) keeps it as the
-  // word jump it is there.
-  { id: "panel-tab-prev", key: "ArrowLeft", alt: true, textKeeps: true },
-  { id: "panel-tab-next", key: "ArrowRight", alt: true, textKeeps: true },
+  // word jump it is there; an empty field has no word to jump over, so there the pair walks, as
+  // ⌘←/→ and ⌥⌫ do.
+  { id: "panel-tab-prev", key: "ArrowLeft", alt: true, textKeeps: true, emptyGives: true },
+  { id: "panel-tab-next", key: "ArrowRight", alt: true, textKeeps: true, emptyGives: true },
   // ⌘L is Cursor's key for the chat, so it is the one a hand already reaches for, and the chat's only
   // chord: it opens the panel with the caret in the box, and shuts a panel that is open
   // (app/keys.ts). From the editor it brings the selection along as Cursor's does (the editor

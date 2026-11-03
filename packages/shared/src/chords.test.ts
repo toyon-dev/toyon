@@ -114,6 +114,13 @@ describe("matchChord", () => {
     expect(matchChord(ev("ArrowLeft", { meta: false, alt: true }))).toEqual({ id: "panel-tab-prev" });
     expect(matchChord(ev("ArrowRight", { meta: false, alt: true }))).toEqual({ id: "panel-tab-next" });
     expect(matchChord(ev("ArrowRight", { meta: false, alt: true, shift: true }))).toBeNull();
+    // a field with a word keeps the pair as the word jump; an empty one has nothing to jump over
+    const field = (value: string, inside = false) => ({ tagName: "TEXTAREA", value, closest: () => inside });
+    for (const id of ["panel-tab-prev", "panel-tab-next"] as const) {
+      expect(fieldKeeps(id, field("a draft"))).toBe(true);
+      expect(fieldKeeps(id, field(""))).toBe(false);
+      expect(fieldKeeps(id, field("", true))).toBe(true); // Monaco's and xterm's textarea is always empty
+    }
     // the arrows without ⌥ are the focused list's own
     expect(matchChord(ev("ArrowUp", { meta: false }))).toBeNull();
     expect(matchChord(ev("ArrowUp"))).toBeNull();

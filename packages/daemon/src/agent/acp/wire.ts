@@ -151,6 +151,24 @@ const CLAUDE: AdapterWire = {
         "serves it behind the AIR `nativeSubagentSessions` capability only.",
       open: true,
     },
+    mcpServerIcon: {
+      gap:
+        "An MCP server's tool arrives under its wire name (`mcp__<server>__<tool>`) with the server repeated " +
+        "as `_meta.claudeCode.mcpServer: { name, source }` and nothing of the server itself: not the `icons` " +
+        "or `websiteUrl` the server sent at MCP initialize (spec 2025-11-25). The adapter forwards the SDK's " +
+        "`mcpServer` whole; the SDK's `mcpServerStatus().serverInfo` is `{ name, version }`, so the icons " +
+        "are dropped inside Claude Code, before the adapter sees them.",
+      here:
+        "agent-tools.ts mcpTool reads the server off the wire name and toolCall.ts draws the cube beside it; " +
+        "the meta's `name` and `source` go unread. No flag.",
+      upstream:
+        "Not asked. First anthropics/claude-code: `serverInfo` and the per-call `mcpServer` carry `icons` " +
+        "and `websiteUrl` from the handshake. Then one adapter PR forwards them under the same meta key " +
+        "(the fork can carry it meanwhile), and map.ts passes the icon that matches the theme to the row. " +
+        "A second handshake from toyon or the adapter to fetch them is ruled out: it doubles every " +
+        "connection, OAuth included, for a glyph.",
+      open: true,
+    },
     rateLimitMeta: {
       gap: 'The account\'s rate-limit windows ride `usage_update._meta["_claude/rateLimit"]`, a private key.',
       here: "ratelimit.ts reads it. No flag: a key that moves is a parse that returns null.",

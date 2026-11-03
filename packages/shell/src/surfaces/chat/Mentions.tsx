@@ -109,7 +109,7 @@ export function MentionText({
               // biome-ignore lint/suspicious/noArrayIndexKey: same
               key={i}
               className="chat-url"
-              href={s.text}
+              href={s.href}
               target="_blank"
               rel="noreferrer"
               tabIndex={inField ? -1 : undefined}

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { Marked } from "marked";
-import { codeLink, githubRef, linkedCodespan } from "./markdownGithub.ts";
+import { codeLink, githubRef, githubRefRanges, linkedCodespan } from "./markdownGithub.ts";
 
 const link = (repo: string, n: string) => `<a href="https://github.com/${repo}/issues/${n}">${repo}#${n}</a>`;
 
@@ -49,5 +49,9 @@ describe("a code span that is a place whole", () => {
     expect(codeLink("a/b#1")).toBe("https://github.com/a/b/issues/1");
     expect(codeLink("https://x.test/a b")).toBeNull();
     expect(codeLink("src/App.tsx")).toBeNull();
+  });
+  test("githubRefRanges finds the bare references in a line, by the prose rule", () => {
+    const text = "a/b#1, c/d#2 but /x/y#3 and e.f/g#4";
+    expect(githubRefRanges(text).map((r) => text.slice(r.start, r.end))).toEqual(["a/b#1", "c/d#2"]);
   });
 });

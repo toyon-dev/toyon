@@ -6,6 +6,7 @@ import type { AgentCommand } from "@toyon/shared";
 import { commandScore } from "../overlays/commands.ts";
 import { when } from "../recap.ts";
 import { ago, type DotState, folderList } from "../util.ts";
+import { githubIssueUrl, githubRefRanges } from "./markdownGithub.ts";
 import { linkRanges } from "./syntax.ts";
 
 export interface Trigger {
@@ -132,8 +133,8 @@ export type MentionSpan =
   | { kind: "changes"; text: string }
   /** `text` is the reference as written, the branch or the title; `branch` is what the agent is sent */
   | ({ kind: "worktree"; text: string; branch: string } & WorktreeMention)
-  /** an address, the link out it reads as in the agent's prose */
-  | { kind: "url"; text: string }
+  /** an address, or an issue by `owner/repo#123`: the link out it reads as in the agent's prose */
+  | { kind: "url"; text: string; href: string }
   /** backticked text, a span or a fenced block: `text` is as written, backticks and all, so the
    * spans still add up to the message; `code` is what the backticks hold */
   | { kind: "code"; text: string; code: string }
@@ -314,8 +315,15 @@ function proseSpans(text: string, opens: boolean, index: MentionIndex, out: Ment
   }
   // an address ends where it does in a fenced block: before the sentence's punctuation, and
   // before a bracket that opened ahead of it
-  for (const r of linkRanges(text))
-    hits.push({ start: r.start, span: { kind: "url", text: text.slice(r.start, r.end) } });
+  for (const r of linkRanges(text)) {
+    const url = text.slice(r.start, r.end);
+    hits.push({ start: r.start, span: { kind: "url", text: url, href: url } });
+  }
+  // an issue named by its reference links as it does in the agent's prose (markdownGithub.ts)
+  for (const r of githubRefRanges(text)) {
+    const ref = text.slice(r.start, r.end);
+    hits.push({ start: r.start, span: { kind: "url", text: ref, href: githubIssueUrl(ref) ?? ref } });
+  }
   hits.sort((a, b) => a.start - b.start);
   let last = 0;
   const push = (s: string) => {

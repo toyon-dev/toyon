@@ -13,7 +13,19 @@ const REF = `(${OWNER}\\/${REPO})#(\\d+)`;
 const START = new RegExp(`(^|[^\\w./@-])${REF}(?![\\w-])`);
 const TOKEN = new RegExp(`^${REF}(?![\\w-])`);
 const WHOLE = new RegExp(`^${REF}$`);
+const RUN = new RegExp(START.source, "g");
 const ADDRESS = /^https?:\/\/\S+$/;
+
+/** where the bare references in a line of prose start and end, for the person's own words,
+ * which are not markdown: the same shape the agent's prose links by */
+export function githubRefRanges(text: string): { start: number; end: number }[] {
+  const out: { start: number; end: number }[] = [];
+  for (const m of text.matchAll(RUN)) {
+    const start = m.index + (m[1] ?? "").length;
+    out.push({ start, end: m.index + m[0].length });
+  }
+  return out;
+}
 
 /** the address of the issue or pull request `owner/repo#123` names; GitHub serves a pull request
  * at the issue's address too, so one address covers both */

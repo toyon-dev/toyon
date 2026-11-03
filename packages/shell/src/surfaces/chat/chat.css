@@ -1375,8 +1375,13 @@
      link blue, the browser's underline, and the word's focus ring on a button's corner */
   .chat-url {
     color: var(--link);
+    text-decoration-color: color-mix(in srgb, currentColor 55%, transparent);
+    text-underline-offset: 2px;
     overflow-wrap: anywhere;
     border-radius: var(--radius);
+  }
+  :where([data-hover]) .chat-url:hover {
+    text-decoration-color: currentColor;
   }
   /* A worktree's mark reads as its row in the rail does, the title with the row's dot: the sigil
      glued to the name as every mention is, the dot trailing the word, and one underline under

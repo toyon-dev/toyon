@@ -197,20 +197,32 @@ describe("mentionSpans: the references in a sent message", () => {
   test("a web address is a link out, the sentence's punctuation and a bracket left outside", () => {
     expect(spans("see https://github.com/anthropics/claude-code/issues/95558, then @README.md")).toEqual([
       { kind: "text", text: "see " },
-      { kind: "url", text: "https://github.com/anthropics/claude-code/issues/95558" },
+      {
+        kind: "url",
+        text: "https://github.com/anthropics/claude-code/issues/95558",
+        href: "https://github.com/anthropics/claude-code/issues/95558",
+      },
       { kind: "text", text: ", then " },
       { kind: "file", text: "@README.md", path: "README.md" },
     ]);
     expect(spans("(http://x.test/a_(b))")).toEqual([
       { kind: "text", text: "(" },
-      { kind: "url", text: "http://x.test/a_(b)" },
+      { kind: "url", text: "http://x.test/a_(b)", href: "http://x.test/a_(b)" },
       { kind: "text", text: ")" },
     ]);
     // in a code span it is code, and a sigil on an address names nothing
     expect(spans("`https://x.test` @https://x.test")).toEqual([
       { kind: "code", text: "`https://x.test`", code: "https://x.test" },
       { kind: "text", text: " @" },
-      { kind: "url", text: "https://x.test" },
+      { kind: "url", text: "https://x.test", href: "https://x.test" },
+    ]);
+  });
+
+  test("an issue by its reference links as it does in the agent's prose; a path segment does not", () => {
+    expect(spans("see toyon-dev/toyon#12, not /a/b#1")).toEqual([
+      { kind: "text", text: "see " },
+      { kind: "url", text: "toyon-dev/toyon#12", href: "https://github.com/toyon-dev/toyon/issues/12" },
+      { kind: "text", text: ", not /a/b#1" },
     ]);
   });
 

@@ -782,9 +782,16 @@
     }
     & a {
       color: var(--link);
+      /* the underline is quiet at rest and goes solid under the pointer, the one hover every link
+         in the shell has; the blue is already the word's colour, so nothing lifts it */
+      text-decoration-color: color-mix(in srgb, currentColor 55%, transparent);
+      text-underline-offset: 2px;
       /* a link is a word, and its focus ring takes the corner a button's has; the word itself
          draws no box for the radius to touch */
       border-radius: var(--radius);
+    }
+    :where([data-hover]) & a:hover {
+      text-decoration-color: currentColor;
     }
     /* A file is a place inside Toyon, not a trip out to the web, so it never takes the link blue,
        whether it sits in this worktree or anywhere else the daemon can open it. It is set in the

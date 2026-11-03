@@ -1,6 +1,7 @@
 import type { DragEvent as ReactDragEvent } from "react";
 import { mentionRun } from "../../state/attach.ts";
 import type { Store } from "../../state/context.tsx";
+import { useTouch } from "../../state/selectors.ts";
 import { dropBox, endFileDrag, fileDragRefused, noteFileDrag } from "./useIntake.ts";
 
 /** What a row of toyon's own carries while it is dragged: files of one worktree (a files-tab row,
@@ -16,6 +17,11 @@ export const MENTION_MIME = "application/x-toyon-mention";
 /** The drag in flight. A drag's data is only readable at the drop, and the panel has to decide at
  * dragover whether it takes this one, so the row says here what it carries. */
 let carried: Carried | null = null;
+
+/** Whether a row drags at all. Not on touch: a long press is the finger's right-click, and a
+ * draggable element takes that press for the drag, so the row's menu never opens. The mention a
+ * drag would have written is in the composer's `@` menu either way. */
+export const useCarries = (): boolean => !useTouch();
 
 /** the words a carried drag writes, each a mention, with the space that ends the last one: a
  * worktree by its title, as the `@` menu writes it */

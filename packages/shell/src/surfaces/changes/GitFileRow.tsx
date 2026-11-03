@@ -3,6 +3,7 @@ import { type DragEvent, memo } from "react";
 import { useTowardCentre } from "../../state/selectors.ts";
 import { type MenuEntry, useContextMenu } from "../../ui/menu.ts";
 import { rowState } from "../../ui/rowState.ts";
+import { useCarries } from "../chat/carried.ts";
 import { splitPath, xyClass, xyLetter } from "../util.ts";
 
 export function LineCounts({ f }: { f: GitFileStatus }) {
@@ -55,6 +56,7 @@ export const GitFileRow = memo(function GitFileRow({
   onDragEnd?: () => void;
 }) {
   const cm = useContextMenu("changes");
+  const carries = useCarries();
   const tipSide = useTowardCentre("changes");
   const { name, dir } = splitPath(f.path);
   return (
@@ -67,7 +69,7 @@ export const GitFileRow = memo(function GitFileRow({
       // the list owns the keyboard: tab reaches the panel, not each of fifty files in it
       tabIndex={-1}
       onClick={(e) => (onCheck && (checking || e.shiftKey) ? onCheck(f.path) : onOpen(f.path))}
-      draggable={!!onDragStart}
+      draggable={carries && !!onDragStart}
       onDragStart={onDragStart && ((e) => onDragStart(f.path, e))}
       onDragEnd={onDragEnd}
       {...cm.contextMenu(() => menu(f.path))}

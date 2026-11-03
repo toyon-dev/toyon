@@ -31,7 +31,7 @@ import { Button, IconButton } from "../../ui/Button.tsx";
 import { Icon } from "../../ui/Icon.tsx";
 import { useContextMenu, useMenu } from "../../ui/menu.ts";
 import { tip } from "../../ui/Tooltip.tsx";
-import { endCarry, startCarry } from "../chat/carried.ts";
+import { endCarry, startCarry, useCarries } from "../chat/carried.ts";
 import { hasFiles } from "../chat/useIntake.ts";
 import { hhmm } from "../chips/baseNote.ts";
 import { ago, dotClass, procTrouble, rowLabel, shipLabel, shipShown, stateLabel } from "../util.ts";
@@ -86,6 +86,7 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
   // no hover: the kebab that shows on it never shows, so the seat it shares with the time takes a
   // tap for the row's menu, and the strip takes a tap to open the drawer it would have peeked
   const touch = useTouch();
+  const carries = useCarries();
   // a row's tip stands off the rail toward the centre, whichever edge the rail is at
   const tipSide = useTowardCentre("chat");
   const dispatch = useDispatch();
@@ -513,7 +514,7 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
             ))}
         data-wt={id}
         // the row dragged to the chat names its worktree by title, as the `@` menu does (carried)
-        draggable={carried !== null}
+        draggable={carries && carried !== null}
         onDragStart={
           carried !== null ? (e) => startCarry(e, { kind: "worktree", worktreeId: id, ...carried }) : undefined
         }

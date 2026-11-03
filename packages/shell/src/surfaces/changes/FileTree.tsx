@@ -26,7 +26,7 @@ import { type MenuEntry, useContextMenu } from "../../ui/menu.ts";
 import { rowState } from "../../ui/rowState.ts";
 import { tip } from "../../ui/Tooltip.tsx";
 import { treeKey } from "../../ui/treeNav.ts";
-import { endCarry, startCarry } from "../chat/carried.ts";
+import { endCarry, startCarry, useCarries } from "../chat/carried.ts";
 import { ancestors, xyClass, xyLetter } from "../util.ts";
 import { buildTree, marks, newFilePath, parentOf, type TreeRow, visibleRows } from "./fileTree.ts";
 import "./tree.css";
@@ -469,6 +469,7 @@ const TreeItem = memo(function TreeItem({
   onDragEnd: () => void;
 }) {
   const cm = useContextMenu("tree");
+  const carries = useCarries();
   const tipSide = useTowardCentre("changes");
   const submodule = row.kind === "submodule";
   // what opens as nothing says why on hover; an ignored file needs no word, it opens as any file
@@ -493,7 +494,7 @@ const TreeItem = memo(function TreeItem({
       data-kind={row.kind}
       data-path={row.path}
       style={{ "--tree-depth": row.depth } as CSSProperties}
-      draggable={!submodule}
+      draggable={carries && !submodule}
       onDragStart={(e) => onDragStart(row, e)}
       onDragEnd={onDragEnd}
       onClick={() => onPress(row)}

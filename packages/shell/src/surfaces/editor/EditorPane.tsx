@@ -25,7 +25,7 @@ import { ErrorBoundary } from "../../ui/ErrorBoundary.tsx";
 import { useOnChange, useSettled } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { Pane } from "../../ui/Pane.tsx";
-import { endCarry, startCarry } from "../chat/carried.ts";
+import { endCarry, startCarry, useCarries } from "../chat/carried.ts";
 import { defaultTab, listPage, openHandoff } from "../chat/handoff.ts";
 import { usePlanTitle } from "../chat/usePlanTitle.ts";
 import { splitPath } from "../util.ts";
@@ -82,6 +82,7 @@ function EditorTitle({
   worktreeId?: string;
 }) {
   const store = useStoreInstance();
+  const carries = useCarries();
   const split = splitPath(path);
   const name = title ?? split.name;
   const dir = title ? "" : split.dir;
@@ -89,7 +90,7 @@ function EditorTitle({
     <span
       className="editor-title"
       data-tip={dir || title ? path : undefined}
-      draggable={!!worktreeId}
+      draggable={carries && !!worktreeId}
       onDragStart={
         worktreeId ? (e) => startCarry(e, { kind: "paths", worktreeId, items: [{ path, folder: false }] }) : undefined
       }

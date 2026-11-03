@@ -91,23 +91,32 @@ export type DotState =
   | "asleep"
   | "idle";
 
+/** proc states with a process behind them: up, coming up, or up and broken */
+const UP: ReadonlySet<ProcStatus> = new Set(["running", "starting", "crashed", "unreachable"]);
+
 export function dotClass(w: WorktreeStatus): DotState {
   // a worktree that needs you outranks one that is merely busy
   if (w.agent === "waiting") return "waiting";
   // asked to stop and still winding down: busy, and the press should show from across the rail
   if (w.agent === "working" && w.stopping) return "stopping";
   if (w.agent === "working") return "working";
+  // The two colours that come from a record rather than a process, failed and landed, hold only
+  // while something runs under the row. The dots say what a row is doing, and a row the idle
+  // clock put to sleep is doing nothing, like any quiet row, until opening it brings its servers
+  // back; the tip and the row's line still say how the last turn ended. Old and not running is
+  // quiet, whatever happened there, and a person comes back to it when they want to.
+  const up = w.procs.some((p) => UP.has(p.status));
   // a turn that stopped on an error needs a person until the next one starts. The record outlives
   // the process and the daemon, which only the status does not; without it a server still running
   // underneath paints the row green, the colour of work going fine.
-  if (w.agent === "error" || w.worktree?.lastTurn?.end === "failed") return "failed";
+  if (up && (w.agent === "error" || w.worktree?.lastTurn?.end === "failed")) return "failed";
   // the turn is over and the agent idle, and something it started is still going under it: a
   // command sent to the background, a wakeup booked. Not working: a message sent now starts a
   // turn as usual, and the stop is the row's own. Not idle either: the worktree is not done.
   if (w.background) return "background";
   // edits since the land are work again: the daemon's mark reads commits only, and a landed dot
   // over uncommitted files read as finished
-  if (w.worktree?.landed && !w.dirty) return "landed";
+  if (up && w.worktree?.landed && !w.dirty) return "landed";
   // unreachable wears the crashed colour: alive, but nothing to show, and it needs a person
   if (w.procs.some((p) => p.status === "crashed" || p.status === "unreachable")) return "crashed";
   if (w.procs.some((p) => p.status === "running")) return "running";

@@ -433,7 +433,8 @@
       background: var(--red);
     }
     /* the agent's turn ended on an error: broken and waiting on a person, as a crash is, so it takes
-   the crash's red rather than a colour the rail would have to teach. The tip tells the two apart. */
+   the crash's red rather than a colour the rail would have to teach. The tip tells the two apart.
+   Like landed, it goes with the servers: asleep, the row is the gray of any quiet row. */
     &.failed {
       background: var(--red);
     }
@@ -452,6 +453,8 @@
       background: transparent;
       box-shadow: inset 0 0 0 1.5px var(--ink2);
     }
+    /* on main, with servers up under it: the colour goes with the servers, so a landed row the idle
+   clock put to sleep is the gray of any quiet row until it is opened again (dotClass in util.ts) */
     &.landed {
       background: var(--aqua);
     }

@@ -119,6 +119,18 @@ describe("stateLabel", () => {
     expect(stateLabel({ ...failed, agent: "working" })).toBe("Agent working");
   });
 
+  test("a failed turn goes quiet with its servers: asleep or nothing up, the row reads like any other", () => {
+    const failed = (...procs: ProcState[]): WorktreeStatus =>
+      ({
+        ...status("idle", ...procs),
+        worktree: { kind: "worktree", lastTurn: { at: 1, end: "failed" } },
+      }) as unknown as WorktreeStatus;
+    expect(stateLabel(failed(proc("web", "asleep")))).toBe("Asleep");
+    expect(stateLabel(failed())).toBe("Idle");
+    expect(stateLabel({ ...failed(), agent: "error" })).toBe("Idle");
+    expect(stateLabel(failed(proc("web", "crashed")))).toBe("Agent failed");
+  });
+
   test("idle on a repo with no confirmed config says why nothing runs", () => {
     expect(stateLabel(status("idle"))).toBe("Idle");
     expect(stateLabel(status("idle"), true)).toBe("Not set up");
@@ -132,6 +144,17 @@ describe("stateLabel", () => {
     expect(stateLabel(status("idle"), true)).toBe("Not set up");
   });
 
+  test("landed shows while a server is up under it, and sleeps gray with the row", () => {
+    const landed = (...procs: ProcState[]): WorktreeStatus =>
+      ({ ...status("idle", ...procs), worktree: { kind: "worktree", landed: true } }) as unknown as WorktreeStatus;
+    expect(stateLabel(landed(proc("web", "running")))).toBe("Landed");
+    expect(stateLabel(landed(proc("web", "starting")))).toBe("Landed");
+    expect(stateLabel(landed(proc("web", "crashed")))).toBe("Landed");
+    expect(stateLabel(landed(proc("web", "asleep")))).toBe("Asleep");
+    expect(stateLabel(landed())).toBe("Idle");
+    expect(stateLabel({ ...landed(proc("web", "running")), dirty: 2 } as WorktreeStatus)).toBe("Running");
+  });
+
   test("a git op out from the row is its word, unless a person is needed or a turn is in flight", () => {
     // the row swapped its dot for the op's, so a tip saying "Running" named a dot nobody could see
     expect(shipShown(status("idle", proc("web", "running")), "land")).toBe("land");
@@ -143,8 +166,10 @@ describe("stateLabel", () => {
     expect(shipShown({ ...status("working"), stopping: true } as WorktreeStatus, "land")).toBeNull();
     // a person being needed outranks an op that finishes on its own
     expect(shipShown(status("waiting"), "land")).toBeNull();
-    expect(shipShown(status("error"), "land")).toBeNull();
+    expect(shipShown(status("error", proc("web", "running")), "land")).toBeNull();
     expect(shipShown(status("idle", proc("web", "crashed")), "land")).toBeNull();
+    // an error with nothing running under it is quiet, so the op's dot takes the slot
+    expect(shipShown(status("error"), "land")).toBe("land");
     expect(shipShown(status("idle"), undefined)).toBeNull();
     expect(shipLabel("land")).toBe("Landing");
     expect(shipLabel("sync-main")).toBe("Syncing with main");

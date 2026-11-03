@@ -110,7 +110,8 @@ describe("the line under a row's name", () => {
     const turn = { ...done, recap: { at: 2, text: "Dropped the second handler" } };
     expect(rowLine(owned({ agent: "waiting" }, { lastTurn: turn }), ctx())).toBe("Waiting for you");
     expect(rowLine(owned({ agent: "working" }, { lastTurn: turn }), ctx())).toBe("Agent working");
-    expect(rowLine(owned({}, { lastTurn: { ...done, end: "failed" } }), ctx())).toBe("Agent failed");
+    const web = [{ name: "web", status: "running" } as never];
+    expect(rowLine(owned({ procs: web }, { lastTurn: { ...done, end: "failed" } }), ctx())).toBe("Agent failed");
     // a command still running under an idle agent, or a wakeup booked, is happening now too; a
     // wakeup says when, and a turn in flight outranks either
     expect(rowLine(owned({ background: 1 }, { lastTurn: turn }), ctx())).toBe("Running in the background");
@@ -167,7 +168,11 @@ describe("a row's tier on a screen", () => {
     expect(rowQuiet(owned({ agent: "waiting" }))).toBe(false);
     expect(rowQuiet(owned({ procs: running }))).toBe(false);
     expect(rowQuiet(owned({ procs: [{ name: "web", status: "crashed" } as never] }))).toBe(false);
-    expect(rowQuiet(owned({}, { landed: true }))).toBe(false);
+    expect(rowQuiet(owned({ procs: running }, { landed: true }))).toBe(false);
+  });
+  test("a landed row with nothing up under it is as quiet as its gray dot", () => {
+    expect(rowQuiet(owned({}, { landed: true }))).toBe(true);
+    expect(rowQuiet(owned({ procs: [{ name: "web", status: "asleep" } as never] }, { landed: true }))).toBe(true);
   });
   test("a turn nobody has looked at, or a git op out, keeps it too", () => {
     expect(rowQuiet(owned({ unseen: true }))).toBe(false);

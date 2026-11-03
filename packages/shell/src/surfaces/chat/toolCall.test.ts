@@ -266,7 +266,8 @@ describe("toolLabel", () => {
   test("a load names the tool its call is for, the first where several came at once", () => {
     const load = (query: string) => ({ name: "ToolSearch", toolKind: "other" as const, input: { query } });
     expect(loadedTool(load("select:WebFetch"))).toEqual({ name: "WebFetch", kind: "fetch" });
-    expect(loadedTool(load("select:WebSearch,WebFetch"))).toEqual({ name: "WebSearch", kind: "search" });
+    // a web search opens as the fetch it lands as, so its row never swaps the lens for the globe
+    expect(loadedTool(load("select:WebSearch,WebFetch"))).toEqual({ name: "WebSearch", kind: "fetch" });
     // a tool the adapter kinds for itself: the row wears the glyph its name picks, or the cube
     expect(loadedTool(load("select:Monitor"))).toEqual({ name: "Monitor" });
     expect(loadedTool(load("select:mcp__toyon__worktrees"))).toEqual({ name: "mcp__toyon__worktrees" });

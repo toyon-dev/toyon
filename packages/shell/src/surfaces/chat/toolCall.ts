@@ -109,7 +109,7 @@ const CLAUDE_TOOL_KIND = new Map<string, ToolKind>([
   ["Bash", "execute"],
   ["Grep", "search"],
   ["Glob", "search"],
-  ["WebSearch", "search"],
+  ["WebSearch", "fetch"],
   ["WebFetch", "fetch"],
   ["EnterPlanMode", "switch_mode"],
   ["ExitPlanMode", "switch_mode"],

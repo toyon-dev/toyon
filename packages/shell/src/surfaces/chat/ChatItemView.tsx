@@ -1222,13 +1222,16 @@ export const ChatItemView = memo(function ChatItemView({
               {...cm.contextMenu(() => messageItems(bubble, worktreeId ?? null, deps))}
             >
               {/* each pick on its line, and under it what the option said beneath its label on the
-                  card, in the same ink: the card is gone, and the label was read beside it */}
+                  card, a rung down as it sat there: the pick is the person's word, the description
+                  is what they read before saying it, and in one ink the bubble had no first line */}
               {said.questions.map((qq, i) => (
                 <div key={qq.id}>
                   {lines[i]}
                   {pickedDescriptions(qq, said.answers?.[i]).map((d, j) => (
                     // biome-ignore lint/suspicious/noArrayIndexKey: a fixed list, built whole from the record
-                    <div key={j}>{d}</div>
+                    <div key={j} className="row-dim">
+                      {d}
+                    </div>
                   ))}
                 </div>
               ))}

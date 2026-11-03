@@ -421,6 +421,28 @@ describe("agent registry", () => {
     expect(installErrorLine("")).toBe("no output");
   });
 
+  test("a company mirror's 404 names the scope rule, and a release-age block names the exempt list", () => {
+    // a mirror that does not carry the fork; the scope's slash arrives encoded
+    expect(
+      installErrorLine(
+        "error: GET https://artifacts.example.dev/artifactory/api/npm/npm-packages/@toyon-dev%2fclaude-agent-acp - 404\nerror: @toyon-dev/claude-agent-acp@0.99.1-toyon.1 failed to resolve",
+      ),
+    ).toBe(
+      "GET https://artifacts.example.dev/artifactory/api/npm/npm-packages/@toyon-dev%2fclaude-agent-acp - 404. The registry at artifacts.example.dev does not carry the package; if the public registry is allowed here, `npm config set @toyon-dev:registry https://registry.npmjs.org/` sends the scope there (bun reads ~/.npmrc), then install again",
+    );
+    // an unscoped package has no scope rule to offer
+    expect(installErrorLine("error: GET https://mirror.example.dev/npm/opencode-darwin-arm64 - 404")).toBe(
+      "GET https://mirror.example.dev/npm/opencode-darwin-arm64 - 404. The registry at mirror.example.dev does not carry the package",
+    );
+    expect(
+      installErrorLine(
+        'error: No version matching "0.99.1-toyon.1" found for specifier "@toyon-dev/claude-agent-acp" (blocked by minimum-release-age: 691200 seconds)',
+      ),
+    ).toBe(
+      'No version matching "0.99.1-toyon.1" found for specifier "@toyon-dev/claude-agent-acp" (blocked by minimum-release-age: 691200 seconds). bun\'s minimumReleaseAge in ~/.bunfig.toml holds the version back: add @toyon-dev/claude-agent-acp to minimumReleaseAgeExcludes there, or wait it out, then install again',
+    );
+  });
+
   test("an agent in toyon's sandbox launches inside it; its own command line stays unwrapped for a login", () => {
     const boxed: AgentSpec = {
       id: "boxed",

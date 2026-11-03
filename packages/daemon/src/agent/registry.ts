@@ -206,11 +206,29 @@ export function installErrorLine(stderr: string): string {
   const line = first || lines.at(-1) || "no output";
   if (UNTRUSTED_CA.test(line))
     return `${line}. A certificate bun does not trust, usually a proxy's: set NODE_EXTRA_CA_CERTS to its file and restart Toyon`;
+  const mirror = MIRROR_404.exec(line);
+  if (mirror && mirror[1] !== "registry.npmjs.org") {
+    const scope = /(?:^|\/)(@[^/%\s]+)(?:%2f|\/)/i.exec(mirror[2] ?? "")?.[1];
+    const way = scope
+      ? `; if the public registry is allowed here, \`npm config set ${scope}:registry https://registry.npmjs.org/\` sends the scope there (bun reads ~/.npmrc), then install again`
+      : "";
+    return `${line}. The registry at ${mirror[1]} does not carry the package${way}`;
+  }
+  if (AGE_BLOCK.test(line)) {
+    const pkg = /specifier "([^"]+)"/.exec(line)?.[1] ?? "the package";
+    return `${line}. bun's minimumReleaseAge in ~/.bunfig.toml holds the version back: add ${pkg} to minimumReleaseAgeExcludes there, or wait it out, then install again`;
+  }
   return line;
 }
 
 const UNTRUSTED_CA =
   /UNKNOWN_CERTIFICATE_VERIFICATION_ERROR|SELF_SIGNED_CERT|UNABLE_TO_GET_ISSUER_CERT|UNABLE_TO_VERIFY_LEAF_SIGNATURE/;
+/** bun's `GET <url> - 404` from a registry other than npm's own is a company mirror that does not
+ * carry the package; the manifest URL carries the name, with its scope's slash often as %2f */
+const MIRROR_404 = /^GET https?:\/\/([^/\s]+)\/(\S*) - 404$/;
+/** bun refusing a version younger than ~/.bunfig.toml's minimumReleaseAge; Toyon pins versions
+ * days old, so the list of exempt packages is the way through, not a lower age */
+const AGE_BLOCK = /blocked by minimum-release-age/;
 
 const bunInstall: Installer = async (dir) => {
   // plain output: a daemon launched from a shell that forces colour would wrap bun's `error:`

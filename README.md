@@ -4,7 +4,7 @@ Toyon is where you ask for changes to your web app and try them as they happen. 
 
 Each copy runs on your own machine, and the next one is pre-warmed. Works with Claude Code, Codex and OpenCode over the Agent Client Protocol (ACP).
 
-[How it works](#how-it-works) · [Install](#install) · [Under the hood](#under-the-hood) · [Trust](#trust) · [Uninstall](#uninstall)
+[toyon.dev](https://toyon.dev) · [How it works](#how-it-works) · [Install](#install) · [Under the hood](#under-the-hood) · [Trust](#trust) · [Uninstall](#uninstall)
 
 ![Toyon with four chats on a plant shop, each changing its own copy. The desk opens a code, a phone signs in with it and starts a copy of its own, both screens follow that chat, and both end on the last copy with its Wildflowers filter pressed, ready to land](https://raw.githubusercontent.com/toyon-dev/toyon/main/docs/images/toyon.gif)
 

@@ -1,4 +1,4 @@
-import { LATEST_RELEASE_URL, REPO_URL, releaseUrl } from "../../app/versionRow.ts";
+import { LATEST_RELEASE_URL, REPO_URL, releaseUrl, SITE_URL } from "../../app/versionRow.ts";
 import { grouped, type MenuEntry } from "../../ui/menu.ts";
 import { copyText } from "./deps.ts";
 
@@ -28,6 +28,7 @@ export function versionItems(
         ? { id: "release-notes", label: "release notes", onClick: notes }
         : { id: "release-notes", label: `release notes for ${version}`, onClick: out(releaseUrl(version)) },
       { id: "latest-release", label: "latest release", onClick: out(LATEST_RELEASE_URL) },
+      { id: "site", label: "toyon.dev", onClick: out(SITE_URL) },
       { id: "repo", label: "Toyon on GitHub", onClick: out(REPO_URL) },
       { id: "report", label: "report a problem", onClick: out(`${REPO_URL}/issues/new`) },
     ],

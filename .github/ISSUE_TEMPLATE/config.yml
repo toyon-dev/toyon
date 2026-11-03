@@ -1,5 +1,8 @@
 blank_issues_enabled: true
 contact_links:
+  - name: What Toyon is
+    url: https://toyon.dev
+    about: The site, with the install line and what to expect.
   - name: Questions and ideas
     url: https://github.com/toyon-dev/toyon/discussions
     about: Anything that is not a bug goes in Discussions.

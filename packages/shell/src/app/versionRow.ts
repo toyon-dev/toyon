@@ -43,8 +43,9 @@ const installText = (install: InstallMethod, registry: string | null): string =>
   }
 };
 
-/** Where the project lives, for the chip's menu: the notes for one release, the newest one, and
- * the source. */
+/** Where the project lives, for the chip's menu: the notes for one release, the newest one, the
+ * source, and the site. */
+export const SITE_URL = "https://toyon.dev";
 export const REPO_URL = "https://github.com/toyon-dev/toyon";
 export const releaseUrl = (version: string): string => `${REPO_URL}/releases/tag/v${version}`;
 export const LATEST_RELEASE_URL = `${REPO_URL}/releases/latest`;

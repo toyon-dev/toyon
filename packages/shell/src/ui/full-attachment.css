@@ -8,6 +8,8 @@
     align-items: center;
     justify-content: center;
     padding: 24px;
+    /* a zoomed picture grows past the window; what is past it is panned to, never scrolled to */
+    overflow: hidden;
     & img {
       display: block;
       max-width: 100%;
@@ -15,15 +17,25 @@
       border-radius: var(--radius-md);
       box-shadow: var(--elevation-overlay);
       background: var(--surface2);
+      /* the pinch is the picture's (fullGestures.ts), so the browser must not take it for the page */
+      touch-action: none;
+      /* where the hand has it: zoomed about its centre and carried, and the swipe's travel on top.
+         Rest is the identity, so a picture nobody has touched is drawn as it was. */
+      transform: translate(var(--zoom-x, 0px), calc(var(--zoom-y, 0px) + var(--swipe-y, 0px))) scale(var(--zoom-s, 1));
     }
-    /* a finger carrying the picture off (swipeAway.ts): it follows, and the scrim thins the further
-       it goes, so what is under shows before the box is gone. Thrown, it flies off at the finger's
-       speed; put down, it drops back with a little give, so the hand reads that it was held. */
+    /* let go of a pinch or double-tapped, it eases to where it settles */
+    &[data-zoom="settle"] img {
+      transition: transform 0.26s ease-out;
+      @media (prefers-reduced-motion: reduce) {
+        transition: none;
+      }
+    }
+    /* a finger carrying the picture off (fullGestures.ts): it follows, and the scrim thins the
+       further it goes, so what is under shows before the box is gone. Thrown, it flies off at the
+       finger's speed; put down, it drops back with a little give, so the hand reads that it was
+       held. */
     &[data-swipe] {
       background: color-mix(in srgb, var(--scrim) calc((1 - var(--swipe-fade, 0)) * 100%), transparent);
-      & img {
-        transform: translateY(var(--swipe-y, 0));
-      }
     }
     &[data-swipe="settle"] {
       transition: background-color 0.26s ease-out;

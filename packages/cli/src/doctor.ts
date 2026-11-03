@@ -136,12 +136,15 @@ export function agentLines(agents: NonNullable<Health["agents"]>): Line[] {
       a.installed === null
         ? `${a.id} ${a.pinned} is not installed`
         : `${a.id} runs ${a.installed}, not the pinned ${a.pinned}`;
+    // a fetch a rule of the machine's held fails the same on a restart; only the press past it lands
     if (a.error)
       lines.push(
         line(
           false,
           "agents",
-          `${state}: ${a.error}. The agent's install button in Settings or \`${restartCmd}\` tries again`,
+          a.held
+            ? `${state}: ${a.error}. The agent's install anyway button in Settings runs it past the rule`
+            : `${state}: ${a.error}. The agent's install button in Settings or \`${restartCmd}\` tries again`,
         ),
       );
     else lines.push(line(true, "agents", `${state}; it may still be installing`));

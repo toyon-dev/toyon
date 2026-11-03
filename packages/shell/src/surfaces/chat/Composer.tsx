@@ -31,6 +31,7 @@ import { clipboardOfferDone, useCopied } from "../../app/clipboardOffer.ts";
 import { globalOfferDue } from "../../app/globalInstall.ts";
 import { installOfferDone, installOfferDue, useInstallOffered, useInstallPrompt } from "../../app/installOffer.ts";
 import { previewBus, togglePick } from "../../app/previewBus.ts";
+import { installMsg } from "../../state/actions/agent.ts";
 import { copyText } from "../../state/actions/deps.ts";
 import { daemonHost, openedOnDaemonMachine } from "../../state/actions/editor.ts";
 import { listFiles, openFile, openPrComments } from "../../state/actions/file.ts";
@@ -2160,7 +2161,7 @@ export function Composer({
               {(readiness.retry || otherAgent) && (
                 <span className="composer-note-actions">
                   {readiness.retry && (
-                    <Button variant="outline" onClick={() => sock?.send({ t: "install-agent", agent: agentInfo.id })}>
+                    <Button variant="outline" onClick={() => sock?.send(installMsg(agentInfo))}>
                       {readiness.retry}
                     </Button>
                   )}

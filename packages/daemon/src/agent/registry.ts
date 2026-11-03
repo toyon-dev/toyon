@@ -7,7 +7,7 @@
 // instead of fetching it, while that copy is at the version pinned here; its own dir takes over the
 // moment the pins part, so no daemon ever installs into another's.
 
-import { existsSync, lstatSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { rm, symlink } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
@@ -187,16 +187,23 @@ export interface AdapterVersion {
   pinned: string;
   /** why the last install did not land */
   error?: string;
+  /** a rule of the machine's held it, which only the person's press sets aside */
+  held?: true;
 }
 
-/** installs `pkg@version` into `dir`(a package.json is already there); tests fake it */
-export type Installer = (dir: string, pkg: string, version: string) => Promise<{ ok: boolean; err: string }>;
+/** installs `pkg@version` into `dir` (a package.json is already there), `err` as one line; tests
+ * fake it. `pastAge` runs it with bun's minimum release age off: a person's press, never the
+ * daemon's own idea, since the rule is a supply chain guard of the machine's. */
+export type Installer = (
+  dir: string,
+  pkg: string,
+  version: string,
+  opts?: { pastAge?: boolean },
+) => Promise<{ ok: boolean; err: string }>;
 
-/** What a failed `bun install` printed, as one line a person can act on: bun's first `error:` line
- * (the cause; the ones after it only say the package then failed to resolve), or the last line
- * when it named none. A certificate bun cannot chain to a root it trusts is nearly always a
- * proxy's, and bun reads NODE_EXTRA_CA_CERTS for it, so those codes say so; an expired or
- * mismatched one is the registry's problem and no CA file helps. */
+/** What a failed `bun install` printed, as one line: bun's first `error:` line (the cause; the
+ * ones after it only say the package then failed to resolve), or the last line when it named
+ * none. */
 export function installErrorLine(stderr: string): string {
   const lines = stderr
     .split("\n")
@@ -206,40 +213,61 @@ export function installErrorLine(stderr: string): string {
     .find((l) => l.startsWith("error:"))
     ?.slice("error:".length)
     .trim();
-  const line = first || lines.at(-1) || "no output";
-  if (UNTRUSTED_CA.test(line))
-    return `${line}. A certificate bun does not trust, usually a proxy's: set NODE_EXTRA_CA_CERTS to its file and restart Toyon`;
-  const mirror = MIRROR_404.exec(line);
-  if (mirror && mirror[1] !== "registry.npmjs.org") {
-    const scope = /(?:^|\/)(@[^/%\s]+)(?:%2f|\/)/i.exec(mirror[2] ?? "")?.[1];
-    const way = scope
-      ? `; if the public registry is allowed here, \`npm config set ${scope}:registry https://registry.npmjs.org/\` sends the scope there (bun reads ~/.npmrc), then install again`
-      : "";
-    return `${line}. The registry at ${mirror[1]} does not carry the package${way}`;
+  return first || lines.at(-1) || "no output";
+}
+
+/** The failed line with the way out, where there is one a person can take. A certificate bun
+ * cannot chain to a root it trusts is nearly always a proxy's, and bun reads NODE_EXTRA_CA_CERTS
+ * for it, so those codes say so; an expired or mismatched one is the registry's problem and no CA
+ * file helps. A version younger than ~/.bunfig.toml's minimumReleaseAge is `held`: the rule is
+ * the person's to set aside, so the shell offers the install past it instead of a plain retry. */
+export function explainInstallError(line: string): { text: string; held?: true } {
+  if (UNTRUSTED_CA.test(line)) {
+    return {
+      text: `${line}. A certificate bun does not trust, usually a proxy's: set NODE_EXTRA_CA_CERTS to its file and restart Toyon`,
+    };
   }
   if (AGE_BLOCK.test(line)) {
-    const pkg = /specifier "([^"]+)"/.exec(line)?.[1] ?? "the package";
-    return `${line}. bun's minimumReleaseAge in ~/.bunfig.toml holds the version back: add ${pkg} to minimumReleaseAgeExcludes there, or wait it out, then install again`;
+    return {
+      text: `${line}. bun's minimumReleaseAge rule in ~/.bunfig.toml holds this version back: wait it out, or install anyway to set the rule aside for this download`,
+      held: true,
+    };
   }
-  return line;
+  return { text: line };
+}
+
+/** the host that answered bun's `GET <url> - 404` when it is not npm's own: a company mirror that
+ * does not carry the package, which the public registry does */
+export function mirrorWithout(line: string): string | null {
+  const m = MIRROR_404.exec(line);
+  return m?.[1] && m[1] !== PUBLIC_REGISTRY_HOST ? m[1] : null;
 }
 
 const UNTRUSTED_CA =
   /UNKNOWN_CERTIFICATE_VERIFICATION_ERROR|SELF_SIGNED_CERT|UNABLE_TO_GET_ISSUER_CERT|UNABLE_TO_VERIFY_LEAF_SIGNATURE/;
-/** bun's `GET <url> - 404` from a registry other than npm's own is a company mirror that does not
- * carry the package; the manifest URL carries the name, with its scope's slash often as %2f */
-const MIRROR_404 = /^GET https?:\/\/([^/\s]+)\/(\S*) - 404$/;
-/** bun refusing a version younger than ~/.bunfig.toml's minimumReleaseAge; Toyon pins versions
- * days old, so the list of exempt packages is the way through, not a lower age */
+const MIRROR_404 = /^GET https?:\/\/([^/\s]+)\/\S* - 404$/;
 const AGE_BLOCK = /blocked by minimum-release-age/;
+const PUBLIC_REGISTRY_HOST = "registry.npmjs.org";
+const PUBLIC_REGISTRY = `https://${PUBLIC_REGISTRY_HOST}/`;
 
-const bunInstall: Installer = async (dir) => {
+/** The `.npmrc` the daemon writes beside an adapter's package.json once the registry ~/.npmrc
+ * names has answered 404 for it: bun reads the install directory's file over the home one, for
+ * the default registry and a scope alike, so this sends the whole fetch to the public registry
+ * without touching anything of the person's. The adapters are published nowhere else, so where
+ * public npm is allowed this is the only way the fetch lands, and where it is blocked the retry
+ * fails the same and the line says so. */
+function publicRegistryRc(pkg: string): string {
+  const scope = pkg.startsWith("@") ? pkg.slice(0, pkg.indexOf("/")) : null;
+  return `registry=${PUBLIC_REGISTRY}\n${scope ? `${scope}:registry=${PUBLIC_REGISTRY}\n` : ""}`;
+}
+
+const bunInstall: Installer = async (dir, _pkg, _version, opts = {}) => {
   // plain output: a daemon launched from a shell that forces colour would wrap bun's `error:`
   // in escapes, and the line is read, not shown
   // its own ceiling: an adapter pulls a whole SDK, which on a slow link outlasts a git call's
   const r = await run(
     process.execPath,
-    ["install", "--no-progress", "--no-summary"],
+    ["install", "--no-progress", "--no-summary", ...(opts.pastAge ? ["--minimum-release-age=0"] : [])],
     dir,
     { NO_COLOR: "1", FORCE_COLOR: "0" },
     { timeoutMs: 30 * 60_000 },
@@ -277,7 +305,9 @@ function jsRuntime(): string {
 export class AgentRegistry {
   private specs = new Map<string, AgentSpec>();
   private installing = new Map<string, Promise<void>>();
-  private installErrors = new Map<string, string>();
+  /** why the last fetch did not land, and whether a rule of the machine's held it, which the
+   * person's press can set aside (`install anyway`) where a plain retry would fail the same */
+  private installErrors = new Map<string, { why: string; held: boolean }>();
   /** when each remembered failure happened and how many automatic retries have failed since, so
    * a retry does not follow every reconnect and a failure that will not change is not downloaded
    * for ever */
@@ -388,10 +418,13 @@ export class AgentRegistry {
     // the download is the state every surface names while it runs; the sandbox takes over once it lands
     if (this.installing.has(spec.id)) return { reason: "installing" };
     const failed = this.installErrors.get(spec.id);
-    const missing = failed !== undefined ? failedReason(failed) : spec.onDemand ? "not installed" : "not installed yet";
+    const missing = failed ? failedReason(failed.why) : spec.onDemand ? "not installed" : "not installed yet";
     // what the fetch printed is still worth reading beside the sandbox: both may need fixing
-    if (boxed) return { reason: failed !== undefined ? `${missing}; ${boxed}` : boxed };
-    return { reason: missing, install: failed !== undefined ? { failed } : "missing" };
+    if (boxed) return { reason: failed ? `${missing}; ${boxed}` : boxed };
+    return {
+      reason: missing,
+      install: failed ? { failed: failed.why, ...(failed.held ? { held: true } : {}) } : "missing",
+    };
   }
 
   /** the adapter's own command line, unconfined: what a terminal login types */
@@ -417,14 +450,19 @@ export class AgentRegistry {
   }
 
   /** Install (or upgrade) an npm adapter into its own directory. Idempotent; concurrent calls share
-   * one install. Resolves when done; failures are remembered as the unavailable reason. */
-  install(id: string): Promise<void> {
+   * one install. Resolves when done; failures are remembered as the unavailable reason. A
+   * registry that does not carry the package is retried through the public one on the daemon's
+   * own; `anyway` is the person's press that runs the fetch past the machine's minimum release
+   * age, and is never assumed. */
+  install(id: string, opts: { anyway?: boolean } = {}): Promise<void> {
     const spec = this.specs.get(id);
     if (!spec) throw new UserError(`unknown agent "${id}"`);
     const pkg = this.packageName(spec);
     if (spec.run.kind === "command" || !pkg) return Promise.resolve();
     const running = this.installing.get(id);
-    if (running) return running;
+    // the press past the rule is not absorbed into a plain fetch already on its way (a shell's
+    // reconnect retry), which would fail on the rule again with nothing to say the press was lost
+    if (running) return opts.anyway ? running.then(() => this.install(id, opts)) : running;
     if (this.installed(spec) && this.installedVersion(spec) === spec.run.version) {
       // landed by another route (a script, another daemon on the same directory): a failure
       // remembered from before would otherwise be reported, and retried, for ever
@@ -451,18 +489,42 @@ export class AgentRegistry {
           `${JSON.stringify({ name: `toyon-agent-${id}`, private: true, dependencies: { [pkg]: version } }, null, 2)}\n`,
         );
         log.info("agents", `installing ${pkg}@${version} for ${id}`);
-        const r = await this.installer(dir, pkg, version);
+        // every fetch starts from the person's own registry: the .npmrc a past fallback left
+        // would otherwise send this one to the public registry for ever, on a network where
+        // only the mirror answers now (a VPN joined since) and the mirror has since picked it up
+        const rc = join(dir, ".npmrc");
+        rmSync(rc, { force: true });
+        const fetch = () => this.installer(dir, pkg, version, { pastAge: opts.anyway === true });
+        let r = await fetch();
+        let why = r.ok ? null : explainInstallError(r.err);
+        const mirror = r.ok ? null : mirrorWithout(r.err);
+        if (mirror) {
+          // the registry ~/.npmrc names has never heard of the adapter; the public one is where it
+          // is published, so the install directory's own .npmrc sends the fetch there, for this
+          // fetch alone
+          log.info("agents", `${mirror} does not carry ${pkg}; fetching it from the public registry`);
+          writeFileSync(rc, publicRegistryRc(pkg));
+          r = await fetch();
+          if (!r.ok) {
+            rmSync(rc, { force: true });
+            const again = explainInstallError(r.err);
+            why = {
+              ...again,
+              text: `${mirror} does not carry the package, and from the public registry: ${again.text}`,
+            };
+          } else why = null;
+        }
         if (r.ok && this.installed(spec)) {
           this.installErrors.delete(id);
           this.failures.delete(id);
           log.info("agents", `${id} ready`);
           return;
         }
-        this.fail(id, r.err || "no bin after install");
+        this.fail(id, why?.text || "no bin after install", why?.held === true);
       } catch (e) {
         // a directory that cannot be written is a failure the shell shows like any other, and
         // the promise settles, so a retry loop over several agents reaches the next one
-        this.fail(id, e instanceof Error ? e.message : String(e));
+        this.fail(id, e instanceof Error ? e.message : String(e), false);
       }
     })().finally(() => {
       this.installing.delete(id);
@@ -490,8 +552,8 @@ export class AgentRegistry {
     return src;
   }
 
-  private fail(id: string, why: string): void {
-    this.installErrors.set(id, why);
+  private fail(id: string, why: string, held: boolean): void {
+    this.installErrors.set(id, { why, held });
     this.failures.set(id, { at: this.now(), retries: this.failures.get(id)?.retries ?? 0 });
     log.warn("agents", `${id}: ${failedReason(why)}`);
   }
@@ -551,7 +613,7 @@ export class AgentRegistry {
         id: spec.id,
         installed,
         pinned: spec.run.version,
-        ...(failed !== undefined ? { error: failedReason(failed) } : {}),
+        ...(failed ? { error: failedReason(failed.why), ...(failed.held ? { held: true } : {}) } : {}),
       });
     }
     return out;

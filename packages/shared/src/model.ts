@@ -772,8 +772,10 @@ export interface AgentInfo {
   /** the adapter is not on disk and a fetch is the way: `missing` while none was tried (fetched on
    * demand, or boot has not reached it), or what the last one printed. Absent while it is
    * installed or mid-download, and when no install would help (no build for this machine, a
-   * sandbox that cannot start), so a surface offers the fetch on this and nothing else. */
-  install?: "missing" | { failed: string };
+   * sandbox that cannot start), so a surface offers the fetch on this and nothing else. `held`
+   * says a rule of the machine's (bun's minimum release age) stopped it, which the person can set
+   * aside for one download, so the offer reads install anyway rather than install again. */
+  install?: "missing" | { failed: string; held?: true };
   /** fetched only when someone asks for it (a large download), so "not installed" is its resting state */
   onDemand?: boolean;
   /** runs shell commands under an OS sandbox confined to the worktree */

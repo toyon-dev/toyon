@@ -938,8 +938,9 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
     value: z.string().max(100),
   }),
   z.object({ t: z.literal("set-keep-awake"), mode: z.enum(KEEP_AWAKE_MODES) }),
-  /** (re)download an agent's adapter; progress arrives as `agents` broadcasts */
-  z.object({ t: z.literal("install-agent"), agent: id }),
+  /** (re)download an agent's adapter; progress arrives as `agents` broadcasts. `anyway` is the
+   * press that runs it past the machine's minimum release age rule, on a `held` failure */
+  z.object({ t: z.literal("install-agent"), agent: id, anyway: z.boolean().optional() }),
   /** log the worktree's agent in with one of the methods it offered; a key rides along when asked for */
   z.object({
     t: z.literal("agent-auth"),

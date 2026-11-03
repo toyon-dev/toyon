@@ -41,7 +41,7 @@ export interface Health {
   };
   /** each agent adapter's version on disk beside the one the daemon pins, and why the last install
    * did not land */
-  agents?: { id: string; installed: string | null; pinned: string; error?: string }[];
+  agents?: { id: string; installed: string | null; pinned: string; error?: string; held?: true }[];
   /** the managed policy the daemon booted under: where it came from, and a hash of it */
   managed?: { source: string | null; hash: string | null };
 }

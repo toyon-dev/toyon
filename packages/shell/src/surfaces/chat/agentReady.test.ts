@@ -76,6 +76,17 @@ describe("agentReadiness", () => {
     // the other agent has to be able to run
     const broken = agent("codex", { available: false, reason: "not installed yet", install: "missing" });
     expect(agentReadiness(claude, [claude, broken], true)).not.toHaveProperty("other");
+    // a rule of the machine's held the fetch: the press sets it aside rather than trying the same again
+    const held = agent("claude", {
+      available: false,
+      reason: "install failed: blocked by minimum-release-age",
+      install: { failed: "blocked by minimum-release-age", held: true },
+    });
+    expect(agentReadiness(held, [held], false)).toEqual({
+      kind: "failed",
+      text: "Claude Code did not install: blocked by minimum-release-age",
+      retry: "install anyway",
+    });
   });
 
   test("one never fetched offers the first install; one the daemon says no install can fix offers none", () => {

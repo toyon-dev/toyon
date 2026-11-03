@@ -9,9 +9,10 @@ import { installVerb, notReady } from "../../state/actions/agent.ts";
 export interface AgentReadiness {
   kind: "installing" | "failed" | "unready";
   text: string;
-  /** the verb that fetches the adapter, after a failure only; null where the daemon says no
-   * install would change anything (no build for this machine, a sandbox that cannot start) */
-  retry: "install" | "install again" | null;
+  /** the verb that fetches the adapter, after a failure only (`install anyway` where a rule of
+   * the machine's held it); null where the daemon says no install would change anything (no
+   * build for this machine, a sandbox that cannot start) */
+  retry: "install" | "install again" | "install anyway" | null;
   /** an agent that can run instead, named only while the agent is still being chosen: a
    * worktree's agent is fixed at birth. A download in flight can be sidestepped the same way. */
   other?: AgentInfo;

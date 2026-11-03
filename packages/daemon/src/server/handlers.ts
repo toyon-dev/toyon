@@ -758,7 +758,7 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
 
   "install-agent"(msg, _ctx, s) {
     if (!s.agents.get(msg.agent)) throw new UserError(`unknown agent "${msg.agent}"`);
-    fireAndForget(msg.agent, s.agents.install(msg.agent), "agent install");
+    fireAndForget(msg.agent, s.agents.install(msg.agent, { anyway: msg.anyway === true }), "agent install");
   },
 
   async "agent-auth"(msg, _ctx, s) {

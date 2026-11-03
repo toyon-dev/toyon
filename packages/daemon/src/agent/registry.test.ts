@@ -16,12 +16,21 @@ import {
   AgentRegistry,
   type AgentSpec,
   BUILTIN_AGENTS,
+  explainInstallError,
   type Installer,
   installErrorLine,
   managedSpecs,
+  mirrorWithout,
   parseAgentsFile,
 } from "./registry.ts";
 import type { Prepared } from "./sandbox.ts";
+
+/** a company mirror that does not carry the fork, the scope's slash encoded as bun prints it */
+const MIRROR_404 =
+  "GET https://artifacts.example.dev/artifactory/api/npm/npm-packages/@toyon-dev%2fclaude-agent-acp - 404";
+const AGE_BLOCKED =
+  'No version matching "0.99.1-toyon.1" found for specifier "@toyon-dev/claude-agent-acp" (blocked by minimum-release-age: 691200 seconds)';
+const AGE_HELD = `${AGE_BLOCKED}. bun's minimumReleaseAge rule in ~/.bunfig.toml holds this version back: wait it out, or install anyway to set the rule aside for this download`;
 
 const prepared: Prepared = {
   bounds: { root: "/w", allowWrite: ["/w"], denyWrite: [], denyRead: [], gitDir: null },
@@ -482,47 +491,83 @@ describe("agent registry", () => {
     });
   });
 
-  test("bun's output becomes its first error line, with the way out for a certificate it will not trust", () => {
+  test("bun's output becomes its first error line; the explanation adds the way out for a certificate it will not trust, and holds a version its release age refuses", () => {
     expect(
       installErrorLine(
         "Resolving dependencies\nResolved, downloaded and extracted [1]\nerror: GET https://registry.npmjs.org/x - 404\nerror: x@1.0.0 failed to resolve\n",
       ),
     ).toBe("GET https://registry.npmjs.org/x - 404");
-    expect(
-      installErrorLine(
-        "error: UNKNOWN_CERTIFICATE_VERIFICATION_ERROR downloading package manifest x\nerror: x@1 failed to resolve",
-      ),
-    ).toBe(
-      "UNKNOWN_CERTIFICATE_VERIFICATION_ERROR downloading package manifest x. A certificate bun does not trust, usually a proxy's: set NODE_EXTRA_CA_CERTS to its file and restart Toyon",
-    );
-    // an expired or mismatched certificate is the registry's, and no CA file would help
-    expect(installErrorLine("error: CERT_HAS_EXPIRED downloading package manifest x")).toBe(
-      "CERT_HAS_EXPIRED downloading package manifest x",
-    );
     expect(installErrorLine("something odd\n")).toBe("something odd");
     expect(installErrorLine("")).toBe("no output");
+    expect(explainInstallError("UNKNOWN_CERTIFICATE_VERIFICATION_ERROR downloading package manifest x")).toEqual({
+      text: "UNKNOWN_CERTIFICATE_VERIFICATION_ERROR downloading package manifest x. A certificate bun does not trust, usually a proxy's: set NODE_EXTRA_CA_CERTS to its file and restart Toyon",
+    });
+    // an expired or mismatched certificate is the registry's, and no CA file would help
+    expect(explainInstallError("CERT_HAS_EXPIRED downloading package manifest x")).toEqual({
+      text: "CERT_HAS_EXPIRED downloading package manifest x",
+    });
+    expect(explainInstallError(AGE_BLOCKED)).toEqual({ text: AGE_HELD, held: true });
+    // a 404 from a company mirror, the scope's slash encoded; npm's own 404 is not one
+    expect(mirrorWithout(MIRROR_404)).toBe("artifacts.example.dev");
+    expect(mirrorWithout("GET https://registry.npmjs.org/@toyon-dev%2fclaude-agent-acp - 404")).toBeNull();
+    expect(mirrorWithout("ConnectionRefused downloading package manifest x")).toBeNull();
   });
 
-  test("a company mirror's 404 names the scope rule, and a release-age block names the exempt list", () => {
-    // a mirror that does not carry the fork; the scope's slash arrives encoded
-    expect(
-      installErrorLine(
-        "error: GET https://artifacts.example.dev/artifactory/api/npm/npm-packages/@toyon-dev%2fclaude-agent-acp - 404\nerror: @toyon-dev/claude-agent-acp@0.99.1-toyon.1 failed to resolve",
-      ),
-    ).toBe(
-      "GET https://artifacts.example.dev/artifactory/api/npm/npm-packages/@toyon-dev%2fclaude-agent-acp - 404. The registry at artifacts.example.dev does not carry the package; if the public registry is allowed here, `npm config set @toyon-dev:registry https://registry.npmjs.org/` sends the scope there (bun reads ~/.npmrc), then install again",
+  test("a registry that does not carry the adapter is retried through the public one, with an .npmrc in the install directory and nothing of the person's touched", async () => {
+    const dir = tmp();
+    const { installer, calls } = fakeInstaller();
+    const mirrored: Installer = (d, pkg, version, opts) => {
+      if (!existsSync(join(d, ".npmrc"))) return Promise.resolve({ ok: false, err: MIRROR_404 });
+      return installer(d, pkg, version, opts);
+    };
+    const reg = new AgentRegistry(BUILTIN_AGENTS, dir, mirrored);
+    await reg.install("claude");
+    expect(calls).toEqual(["@toyon-dev/claude-agent-acp@0.99.1-toyon.1"]);
+    expect(readFileSync(join(dir, "claude", ".npmrc"), "utf8")).toBe(
+      "registry=https://registry.npmjs.org/\n@toyon-dev:registry=https://registry.npmjs.org/\n",
     );
-    // an unscoped package has no scope rule to offer
-    expect(installErrorLine("error: GET https://mirror.example.dev/npm/opencode-darwin-arm64 - 404")).toBe(
-      "GET https://mirror.example.dev/npm/opencode-darwin-arm64 - 404. The registry at mirror.example.dev does not carry the package",
-    );
-    expect(
-      installErrorLine(
-        'error: No version matching "0.99.1-toyon.1" found for specifier "@toyon-dev/claude-agent-acp" (blocked by minimum-release-age: 691200 seconds)',
-      ),
-    ).toBe(
-      'No version matching "0.99.1-toyon.1" found for specifier "@toyon-dev/claude-agent-acp" (blocked by minimum-release-age: 691200 seconds). bun\'s minimumReleaseAge in ~/.bunfig.toml holds the version back: add @toyon-dev/claude-agent-acp to minimumReleaseAgeExcludes there, or wait it out, then install again',
-    );
+    expect(reg.infos()[0]).toMatchObject({ id: "claude", available: true });
+    // an unscoped package gets the default registry alone
+    await reg.install("opencode");
+    expect(readFileSync(join(dir, "opencode", ".npmrc"), "utf8")).toBe("registry=https://registry.npmjs.org/\n");
+    expect(reg.infos()[2]).toMatchObject({ id: "opencode", available: true });
+  });
+
+  test("when the public registry fails too the line says both and the .npmrc goes; a release-age hold is set aside only by the install anyway press", async () => {
+    const dir = tmp();
+    const { installer } = fakeInstaller();
+    const pastAge: boolean[] = [];
+    const blocked: Installer = (d, pkg, version, opts) => {
+      if (!existsSync(join(d, ".npmrc"))) return Promise.resolve({ ok: false, err: MIRROR_404 });
+      pastAge.push(opts?.pastAge === true);
+      if (!opts?.pastAge) return Promise.resolve({ ok: false, err: AGE_BLOCKED });
+      return installer(d, pkg, version, opts);
+    };
+    const reg = new AgentRegistry(BUILTIN_AGENTS, dir, blocked);
+    await reg.install("claude");
+    expect(existsSync(join(dir, "claude", ".npmrc"))).toBe(false);
+    expect(reg.infos()[0]).toMatchObject({
+      id: "claude",
+      available: false,
+      install: {
+        failed: `artifacts.example.dev does not carry the package, and from the public registry: ${AGE_HELD}`,
+        held: true,
+      },
+    });
+    expect(reg.adapters()[0]).toMatchObject({ id: "claude", held: true });
+    // a plain retry (a shell arriving, the button on another failure) keeps the rule
+    await reg.install("claude");
+    expect(pastAge).toEqual([false, false]);
+    // the press while that plain fetch is still running is not absorbed into it
+    const plain = reg.install("claude");
+    const pressed = reg.install("claude", { anyway: true });
+    await plain;
+    expect(pastAge).toEqual([false, false, false]);
+    await pressed;
+    expect(pastAge).toEqual([false, false, false, true]);
+    expect(reg.infos()[0]).toMatchObject({ id: "claude", available: true });
+    expect(reg.infos()[0]).not.toHaveProperty("install");
+    expect(reg.adapters()[0]).not.toHaveProperty("held");
   });
 
   test("an agent in toyon's sandbox launches inside it; its own command line stays unwrapped for a login", () => {

@@ -82,6 +82,7 @@ describe("parseClientMsg", () => {
       { t: "set-repo-pick", repoId: "r", field: "mode", value: "ask" },
       { t: "set-repo-pick", repoId: "r", field: "profile", value: "" },
       { t: "install-agent", agent: "codex" },
+      { t: "install-agent", agent: "codex", anyway: true },
       { t: "agent-auth", worktreeId: "a", methodId: "api-key", apiKey: "sk-x" },
       { t: "agent-retry", worktreeId: "a" },
       { t: "agent-answer", worktreeId: "a", askId: "k1", answers: [{ selected: ["yes"], note: "with a caveat" }] },

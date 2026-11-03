@@ -103,6 +103,25 @@ describe("agentLines", () => {
           "claude runs 0.75.1, not the pinned 0.84.0: install failed: blocked by minimum-release-age. The agent's install button in Settings or `toyon restart` tries again",
       },
     ]);
+    // a fetch the machine's rule held fails the same on a restart, so only the press is named
+    expect(
+      agentLines([
+        {
+          id: "claude",
+          installed: null,
+          pinned: "0.84.0",
+          error: "install failed: blocked by minimum-release-age",
+          held: true,
+        },
+      ]),
+    ).toEqual([
+      {
+        ok: false,
+        label: "agents",
+        detail:
+          "claude 0.84.0 is not installed: install failed: blocked by minimum-release-age. The agent's install anyway button in Settings runs it past the rule",
+      },
+    ]);
   });
   test("an adapter off the pin with no failure recorded is still installing, which is not a fault", () => {
     expect(agentLines([{ id: "claude", installed: null, pinned: "0.84.0" }])).toEqual([

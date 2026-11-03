@@ -564,6 +564,14 @@ export default function Editor({
       onNote = false;
       setCard(null);
     };
+    const isNote = (e: monaco.editor.IEditorMouseEvent) =>
+      e.target.element?.classList.contains("editor-blame") ?? false;
+    /** the commit the note names: the note is only ever drawn after the caret's line */
+    const noteCommit = () => {
+      const b = blameRef.current;
+      const pos = code.getPosition();
+      return b && pos ? blameCommit(b, pos.lineNumber) : null;
+    };
     // line hover -> highlight what that line renders on the page
     let lastLine: number | null = null;
     const subMove = code.onMouseMove((e) => {
@@ -572,7 +580,7 @@ export default function Editor({
         lastLine = hovered;
         hoverRef.current?.(hovered);
       }
-      const over = e.target.element?.classList.contains("editor-blame") ?? false;
+      const over = isNote(e);
       if (over === onNote) return;
       if (!over) {
         dropCard();
@@ -580,9 +588,7 @@ export default function Editor({
       }
       onNote = true;
       cardTimer = setTimeout(() => {
-        const b = blameRef.current;
-        const pos = code.getPosition();
-        const commit = b && pos ? blameCommit(b, pos.lineNumber) : null;
+        const commit = noteCommit();
         const anchor = noteRect(el);
         if (commit && anchor) setCard({ commit, anchor });
       }, CARD_DELAY);
@@ -591,6 +597,28 @@ export default function Editor({
       lastLine = null;
       hoverRef.current?.(null);
       dropCard();
+    });
+    // A press on the note opens the commit's page, for a commit origin has. Down and up both on
+    // the note, so a drag that ends over it opens nothing. Monaco still takes the press as a click
+    // past the line's end and puts the caret there: the note sits on the caret's own line, so that
+    // is a few columns at most, and the note is still there for the up. A press with a modifier is
+    // Monaco's own (shift extends the selection to the line's end, alt and cmd add a cursor) and
+    // opens nothing. While its own press is active Monaco names the line as the up's element, not
+    // what is under the pointer, so the up is placed against the note's box instead.
+    let pressOnNote = false;
+    const subDown = code.onMouseDown((e) => {
+      const k = e.event;
+      pressOnNote = k.leftButton && !k.shiftKey && !k.ctrlKey && !k.altKey && !k.metaKey && isNote(e);
+    });
+    const subUp = code.onMouseUp((e) => {
+      const press = pressOnNote;
+      pressOnNote = false;
+      if (!press) return;
+      const { clientX: x, clientY: y } = e.event.browserEvent;
+      const r = noteRect(el);
+      if (!r || x < r.left || x > r.right || y < r.top || y > r.bottom) return;
+      const url = noteCommit()?.url;
+      if (url) window.open(url, "_blank");
     });
 
     // Both views copy out of `code`: the file view is that editor, and the diff view's deleted lines
@@ -650,13 +678,15 @@ export default function Editor({
         return;
       }
       const col = m.modified.getLineMaxColumn(pos.lineNumber);
+      // a commit with a page to open is a link, and the note looks like one under the pointer
+      const link = b && blameCommit(b, pos.lineNumber)?.url;
       ghosts.set([
         {
           range: new monaco.Range(pos.lineNumber, col, pos.lineNumber, col),
           options: {
             after: {
               content: text,
-              inlineClassName: "editor-blame",
+              inlineClassName: link ? "editor-blame editor-blame-link" : "editor-blame",
               cursorStops: monaco.editor.InjectedTextCursorStops.None,
             },
             stickiness: monaco.editor.TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges,
@@ -680,6 +710,8 @@ export default function Editor({
         scrolled.dispose();
         subMove.dispose();
         subLeave.dispose();
+        subDown.dispose();
+        subUp.dispose();
         subCursor.dispose();
         dropCard();
         ghosts.clear();
@@ -751,7 +783,8 @@ export default function Editor({
       <div ref={ref} className="editor-monaco" onWheelCapture={passPinch} />
       {card && (
         // the tooltip's own card, in its parts: who at the head with their address as the name,
-        // what the commit said as the detail, and the sha and the date as the figures at the foot
+        // what the commit said as the detail, and the sha and the date as the figures at the foot,
+        // with the pull request a press on the note opens between them when there is one
         <Float className="tooltip tooltip-card" anchor={() => card.anchor} placement={CARD_PLACEMENT} aria-hidden>
           <div className="tooltip-head">
             <span>{card.commit.author || card.commit.sha.slice(0, 7)}</span>
@@ -760,6 +793,7 @@ export default function Editor({
           <div className="tooltip-detail">{card.commit.subject || "no message"}</div>
           <div className="tooltip-foot">
             <span className="editor-blame-sha">{card.commit.sha.slice(0, 7)}</span>
+            {card.commit.pr !== undefined && <span>PR #{card.commit.pr}</span>}
             <span>{CARD_DATE.format(card.commit.at)}</span>
           </div>
         </Float>

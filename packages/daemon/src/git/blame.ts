@@ -2,7 +2,8 @@
 // Read-only; nothing here writes a ref.
 
 import type { BlameCommit, FileBlame } from "@toyon/shared";
-import { gitRaw } from "./exec.ts";
+import { git, gitRaw } from "./exec.ts";
+import { commitPage, githubRepoUrl } from "./forge.ts";
 
 const NONE: FileBlame = { commits: [], lines: [] };
 
@@ -10,10 +11,37 @@ const NONE: FileBlame = { commits: [], lines: [] };
 const UNCOMMITTED = "0".repeat(40);
 
 /** The working tree's copy of `file` line by line, or the copy `ref` left. Empty for a file git
- * cannot blame: untracked, gone, or a path that is not a file. */
+ * cannot blame: untracked, gone, or a path that is not a file. Each commit the origin has carries
+ * its page on GitHub, when the origin is there. */
 export async function blameFile(cwd: string, file: string, ref?: string): Promise<FileBlame> {
-  const r = await gitRaw(cwd, "blame", "--porcelain", ...(ref ? [ref] : []), "--", file);
-  return r.ok ? parseBlame(r.out) : NONE;
+  const [r, origin, fetched] = await Promise.all([
+    gitRaw(cwd, "blame", "--porcelain", ...(ref ? [ref] : []), "--", file),
+    git(cwd, "remote", "get-url", "origin"),
+    git(cwd, "for-each-ref", "--count=1", "refs/remotes/origin"),
+  ]);
+  if (!r.ok) return NONE;
+  const blame = parseBlame(r.out);
+  const repoUrl = origin.ok ? githubRepoUrl(origin.out) : null;
+  // an origin nothing has been fetched from or pushed to has none of the commits, and a walk
+  // against its no refs would print the whole history to say so
+  if (repoUrl && fetched.ok && fetched.out && blame.commits.length > 0) {
+    const local = await unpushed(
+      cwd,
+      blame.commits.map((c) => c.sha),
+    );
+    for (const c of blame.commits) if (!local.has(c.sha)) Object.assign(c, commitPage(repoUrl, c));
+  }
+  return blame;
+}
+
+/** Which of `shas` no ref under origin reaches: a page on GitHub for one of those would be a 404,
+ * since the commit is only here. One walk for all of them: the output is every commit behind the
+ * given ones that origin lacks, and the given ones among it are the answer. */
+async function unpushed(cwd: string, shas: string[]): Promise<Set<string>> {
+  const r = await git(cwd, "rev-list", ...shas, "--not", "--remotes=origin");
+  // a walk that failed says nothing about what is pushed, so nothing is linked
+  if (!r.ok) return new Set(shas);
+  return new Set(r.out.split("\n").filter(Boolean));
 }
 
 /** `--porcelain`: a header `<sha> <line in that commit> <line here> [<lines in this run>]`, then the

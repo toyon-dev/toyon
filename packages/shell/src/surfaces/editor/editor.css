@@ -46,6 +46,15 @@
     & .monaco-editor :is(.editor-blame:first-child, :not(.editor-blame) + .editor-blame) {
       padding-left: 24px;
     }
+    /* a note for a commit with a page on origin opens it on a press: the pointer says so over it,
+     and the underline reaches every span of the note, since Monaco may have cut it into several
+     and the pointer rests on one */
+    & .monaco-editor .editor-blame-link {
+      cursor: pointer;
+    }
+    :where([data-hover]) & .monaco-editor .view-line:has(.editor-blame-link:hover) .editor-blame-link {
+      text-decoration: underline;
+    }
   }
   /* the head's title: the file's name, then its directory a tier down, as the changes panel's row
    has them. The name never shrinks: the directory gives way until nothing of it is left, and only

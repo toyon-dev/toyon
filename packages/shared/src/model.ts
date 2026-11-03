@@ -1195,6 +1195,11 @@ export interface BlameCommit {
   /** author date, epoch ms */
   at: number;
   subject: string;
+  /** where to read it on the web: its pull request when the subject names one, the commit's own
+   * page otherwise. Absent when the origin is not on GitHub, or origin does not have the commit */
+  url?: string;
+  /** the pull request `url` opens, when it is one */
+  pr?: number;
 }
 
 /** Who last touched each line of a file. `lines[i]` indexes `commits` for line i+1, or is -1 for

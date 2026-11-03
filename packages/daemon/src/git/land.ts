@@ -14,6 +14,7 @@ import {
   type TrunkStatus,
 } from "@toyon/shared";
 import { GIT, git, NO_PROMPT, RUN_CEILING_MS, run, runWatched, type Watched } from "./exec.ts";
+import { githubRepoUrl } from "./forge.ts";
 import { enqueuePr, gh, ghMethod, prNumberOf, viewQueue } from "./gh.ts";
 import { aheadBehind, behindUpstream, statusFiles } from "./status.ts";
 
@@ -771,8 +772,7 @@ export async function mergePr(
 }
 
 function compareUrl(remoteUrl: string, base: string, branch: string): string | null {
-  const m =
-    remoteUrl.match(/^git@github\.com:(.+?)(?:\.git)?$/) ?? remoteUrl.match(/^https:\/\/github\.com\/(.+?)(?:\.git)?$/);
-  if (!m) return null;
-  return `https://github.com/${m[1]}/compare/${encodeURIComponent(base)}...${encodeURIComponent(branch)}?expand=1`;
+  const repo = githubRepoUrl(remoteUrl);
+  if (!repo) return null;
+  return `${repo}/compare/${encodeURIComponent(base)}...${encodeURIComponent(branch)}?expand=1`;
 }

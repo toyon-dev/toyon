@@ -42,6 +42,38 @@ describe("blameFile", () => {
     expect(await blameFile(repo, "new.ts")).toEqual({ commits: [], lines: [] });
     expect(await blameFile(repo, "missing.ts")).toEqual({ commits: [], lines: [] });
   });
+
+  const unlinked = async () => (await blameFile(repo, "a.ts")).commits.every((c) => c.url === undefined);
+
+  test("with no origin, one off GitHub, or one nothing was fetched from, no commit has a page", async () => {
+    expect(await unlinked()).toBe(true);
+    try {
+      sh(repo, GIT, "remote", "add", "origin", "git@gitlab.com:o/r.git");
+      expect(await unlinked()).toBe(true);
+      sh(repo, GIT, "remote", "set-url", "origin", "git@github.com:o/r.git");
+      expect(await unlinked()).toBe(true);
+    } finally {
+      sh(repo, GIT, "remote", "remove", "origin");
+    }
+  });
+
+  test("an origin on GitHub gives the commits it has a page, the pull request when the subject names one", async () => {
+    sh(repo, GIT, "remote", "add", "origin", "git@github.com:o/r.git");
+    const third = commit("merged upstream (#9)", { "a.ts": "one\ntwo\nthree\nfour\n" });
+    // origin has the first two commits, as if fetched; the third is only here
+    sh(repo, GIT, "update-ref", "refs/remotes/origin/main", second);
+    const b = await blameFile(repo, "a.ts");
+    expect(b.commits.map((c) => c.sha)).toEqual([first, second, third]);
+    expect(b.commits.map((c) => [c.url, c.pr])).toEqual([
+      [`https://github.com/o/r/commit/${first}`, undefined],
+      [`https://github.com/o/r/commit/${second}`, undefined],
+      [undefined, undefined],
+    ]);
+    // pushed since: the subject's pull request is the page
+    sh(repo, GIT, "update-ref", "refs/remotes/origin/main", third);
+    const pushed = (await blameFile(repo, "a.ts")).commits[2];
+    expect([pushed?.url, pushed?.pr]).toEqual(["https://github.com/o/r/pull/9", 9]);
+  });
 });
 
 describe("parseBlame", () => {

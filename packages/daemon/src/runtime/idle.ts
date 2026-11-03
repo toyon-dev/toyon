@@ -12,7 +12,10 @@ import { type MemorySignal, memoryTight, sampleCosts } from "./memory.ts";
 import type { RuntimeRegistry } from "./registry.ts";
 
 export interface IdleDeps {
-  runtime: Pick<RuntimeRegistry, "get" | "busy" | "sleep" | "awake" | "awaitPreview" | "borrows">;
+  runtime: Pick<
+    RuntimeRegistry,
+    "get" | "busy" | "agentFor" | "lapse" | "sleep" | "awake" | "awaitPreview" | "borrows"
+  >;
   state: StateStore;
   hub: Hub;
   /** bring a worktree up: cold or asleep it comes back, up already nothing happens, unknown
@@ -237,7 +240,7 @@ export class IdlePolicy {
     const signal = await (this.d.memory ?? memoryTight)();
     if (!signal?.tight) return;
     const pick = this.d.state.worktrees
-      .filter((w) => this.candidate(w.id))
+      .filter((w) => this.candidate(w.id) && this.awakeProcs(w.id))
       .sort((a, b) => this.entry(a.id).activeAt - this.entry(b.id).activeAt)[0];
     if (!pick) return;
     // the numbers go to the log; the person reads the one reason that is theirs to act on
@@ -289,14 +292,19 @@ export class IdlePolicy {
     }
   }
 
-  /** everything but the clock: nobody looking, nothing running or queued, procs up and settled */
+  /** everything but the clock: nobody looking, nothing running or queued, and something to take
+   * down: procs up and settled, or a card open for a person. A card is a state the shell brings
+   * back, not work, so a row carrying one sleeps like an idle one, and a row whose servers were
+   * already evicted still has the card to close. */
   private candidate(id: string): boolean {
     const wt = this.d.state.worktree(id);
     if (!wt || this.isViewed(id) || this.busy(id)) return false;
+    const card = this.d.runtime.agentFor(id)?.status === "waiting";
     const procs = this.d.runtime.get(id)?.procs;
-    if (!procs || procs.asleep) return false;
+    if (!procs || procs.asleep) return card;
     const states = procs.states();
-    if (states.length === 0 || states.some((s) => s.status === "starting")) return false;
+    if (states.length === 0 && !card) return false;
+    if (states.some((s) => s.status === "starting")) return false;
     // a spare rests with its repo: a sibling mid-turn may claim it any moment
     if (wt.kind === "spare") {
       return !this.d.state.worktrees.some((w) => w.repoId === wt.repoId && w.id !== id && this.busy(w.id));
@@ -314,6 +322,12 @@ export class IdlePolicy {
 
   private busy(id: string): boolean {
     return this.d.runtime.busy(id);
+  }
+
+  /** whether the row has servers up to free: what the pressure check is for */
+  private awakeProcs(id: string): boolean {
+    const procs = this.d.runtime.get(id)?.procs;
+    return !!procs && !procs.asleep;
   }
 
   private reconsider(id: string): void {
@@ -362,6 +376,12 @@ export class IdlePolicy {
       this.arm(id, this.sleepMs - idle);
       return;
     }
+    // A card nobody answered for the window lapses with the row: the person is stuck on it or done
+    // with the row, and the question is back in the box when they open it again. The clock alone
+    // does this, never short memory or a port taken: a question asked a minute ago is not what
+    // opening another row should drop. The card first: closing it turns the agent idle, which
+    // stamps the clock and arms it again, and the sleep right after takes that timer down.
+    fireAndForget(id, this.d.runtime.lapse(id, `nobody answered for ${humanMs(this.sleepMs)}`), "lapse");
     this.sleep(id, `nobody looked for ${humanMs(this.sleepMs)}`);
   }
 

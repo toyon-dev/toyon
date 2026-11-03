@@ -537,7 +537,8 @@ export type AgentEvent =
       ts: number;
     }
   /** the card closed. "cancelled": the turn was stopped, or the agent's process went away.
-   * "expired": the daemon restarted under an open card, so nothing is listening for an answer */
+   * "expired": nothing is listening for an answer any more, because the daemon restarted under
+   * the open card or nobody answered it for the idle window and the agent was put to sleep */
   | {
       type: "agent-ask-end";
       id: string;

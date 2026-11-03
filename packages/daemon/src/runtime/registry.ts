@@ -501,13 +501,23 @@ export class RuntimeRegistry {
     this.recordGroups(id);
   }
 
-  /** Work someone is waiting on: an agent that is not idle or still owes a person something (a
-   * message queued, steered or refused, a card open), or a turn or command holding the worktree.
-   * What idle sleep, an automatic update and an archive of a worktree's own accord all leave alone. */
+  /** Work someone is waiting on: an agent mid-turn or stopped on an error, a message of the
+   * person's still owed a turn (queued, steered or refused), or a turn or command holding the
+   * worktree. What idle sleep, an automatic update and an archive of a worktree's own accord all
+   * leave alone. A card open for a person is not work: the shell brings an expired card back and
+   * the answer goes as a message, so a waiting row is as free to sleep, stop or archive as an idle
+   * one. */
   busy(id: string): boolean {
     const agent = this.agentFor(id);
-    if (agent && (agent.status !== "idle" || agent.unsettled)) return true;
+    if (agent && ((agent.status !== "idle" && agent.status !== "waiting") || agent.unsettled)) return true;
     return this.holdCount(id) > 0;
+  }
+
+  /** the card nobody answered closes and the agent's process goes; nothing happens to a row that
+   * carries no card, so the idle clock calls this on every row it puts to sleep */
+  async lapse(id: string, why: string): Promise<void> {
+    const agent = this.agentFor(id);
+    if (agent?.status === "waiting") await agent.lapse(why);
   }
 
   /** whether any worktree is busy */

@@ -45,6 +45,12 @@ export class FakeAgent implements AgentAdapter {
     this.restarts++;
     this.runningAgent = null;
   }
+  lapses: string[] = [];
+  async lapse(why: string) {
+    this.lapses.push(why);
+    this.status = "idle";
+    this.runningAgent = null;
+  }
   modeChanges = 0;
   modeChanged() {
     this.modeChanges++;

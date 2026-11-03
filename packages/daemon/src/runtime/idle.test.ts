@@ -55,8 +55,16 @@ class FakeRuntime {
   }
   busy(id: string) {
     const agent = this.agents.get(id);
-    if (agent && (agent.status !== "idle" || agent.queueItems.length > 0)) return true;
+    if (agent && ((agent.status !== "idle" && agent.status !== "waiting") || agent.queueItems.length > 0)) return true;
     return this.holdCount(id) > 0;
+  }
+  /** the reason each lapse carried, by worktree */
+  lapsed: Array<[string, string]> = [];
+  async lapse(id: string, why: string) {
+    const agent = this.agents.get(id);
+    if (agent?.status !== "waiting") return;
+    agent.status = "idle";
+    this.lapsed.push([id, why]);
   }
   async sleep(id: string, why: string) {
     const p = this.procs.get(id);
@@ -182,6 +190,49 @@ describe("IdlePolicy clock", () => {
     expect(runtime.isAsleep("a")).toBe(false);
     advance(S * 3);
     expect(runtime.slept).toEqual(["a"]);
+  });
+
+  test("a card nobody answers lapses on the clock and the row sleeps under it; a tab or a queued message keeps it", () => {
+    const { runtime, hub, policy, advance } = make();
+    runtime.agents.set("a", { status: "waiting", queueItems: [] });
+    hub.emit("agentStatus", "a", "waiting");
+    policy.view("s", "a");
+    advance(S * 2);
+    expect(runtime.lapsed).toEqual([]);
+    runtime.agents.set("a", { status: "waiting", queueItems: ["next"] });
+    policy.view("s", null);
+    advance(S * 2);
+    expect(runtime.lapsed).toEqual([]);
+    expect(runtime.slept).toEqual([]);
+    runtime.agents.set("a", { status: "waiting", queueItems: [] });
+    hub.emit("agentStatus", "a", "waiting");
+    advance(S - 1);
+    expect(runtime.lapsed).toEqual([]);
+    advance(2);
+    expect(runtime.lapsed).toEqual([["a", "nobody answered for 10 s"]]);
+    expect(runtime.slept).toEqual(["a"]);
+    expect(runtime.why.get("a")).toBe("nobody looked for 10 s");
+    expect(runtime.agents.get("a")?.status).toBe("idle");
+  });
+
+  test("short memory sleeps a waiting row's servers and leaves its card; the card lapses on the clock all the same", async () => {
+    const { runtime, hub, policy, advance } = make({
+      memory: async () => ({ tight: true, why: "memory pressure" }),
+    });
+    runtime.agents.set("a", { status: "waiting", queueItems: [] });
+    hub.emit("agentStatus", "a", "waiting");
+    await policy.checkPressure();
+    expect(runtime.slept).toEqual(["a"]);
+    expect(runtime.lapsed).toEqual([]);
+    // nothing awake is left to free, so the next check picks nothing
+    await policy.checkPressure();
+    expect(runtime.slept).toEqual(["a"]);
+    // the registry announces the sleep, and the clock arms for the card that is still open
+    hub.emit("worktreesChanged");
+    advance(S - 1);
+    expect(runtime.lapsed).toEqual([]);
+    advance(2);
+    expect(runtime.lapsed).toEqual([["a", "nobody answered for 10 s"]]);
   });
 
   test("a working agent, a queued message, or a hold keeps it awake; the clock starts when they end", () => {

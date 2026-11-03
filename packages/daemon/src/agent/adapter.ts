@@ -85,7 +85,8 @@ export interface AgentAdapter {
   readonly queueLength: number;
   /** the waiting messages the shell draws as queued: those not yet shown in the transcript */
   readonly queueItems: QueuedMessage[];
-  /** something is still owed a person: a message queued, steered or refused, or a card open */
+  /** a message of the person's is still owed a turn: queued, steered or refused. An open card is
+   * not counted: `status` says `waiting`, and the card is a state the shell brings back */
   readonly unsettled: boolean;
   /** notified whenever the pending queue changes (send/consume/unqueue/stop) */
   onQueueChange: (() => void) | null;
@@ -140,6 +141,11 @@ export interface AgentAdapter {
   /** answer (or skip) an open ask card. An id that already settled is a no-op: two shells can
    * be watching the same worktree, and the other one may have answered first. */
   answer(askId: string, reply: AskReply, followUp?: FollowUp): void;
+  /** a card nobody answered for the idle window: it closes as expired and the process goes, the
+   * session kept, so the row can sleep like any other. The next message resumes the agent with
+   * the question still in its context, so an answer typed then reads as the answer. A handoff
+   * card stays: no process waits on it, and declining a plan is the person's to do. */
+  lapse(why: string): Promise<void>;
   /** the worktree (or the daemon) is going away: stop the turn and kill the agent's process */
   close(): Promise<void>;
 }

@@ -1887,8 +1887,8 @@ function runningOf(chat: ChatItem[], was: WorktreeLocal["running"]): WorktreeLoc
 /** The box's answers and the parked ask belong to one card. A new card starts over and takes the box
  * back from a parked or a revived one; the close of the card they belong to ends them; anything
  * else leaves them be. A stop closes the ask and keeps its answers, since the question can still
- * be answered as a message. A card that expired was closed by a restart and not by a press, so it
- * comes back revived, open in the box, the way the person left it; a cancelled one was stopped
+ * be answered as a message. A card that expired was closed by a restart or by the idle clock, not
+ * by a press, so it comes back revived, open in the box, the way the person left it; a cancelled one was stopped
  * on purpose and waits folded. Toyon's own handoff card is one of these: its note is the box's
  * draft, and it closes with the go or the decline that answers it. */
 function askSettled(l: WorktreeLocal, ev: AgentEvent): WorktreeLocal {

@@ -155,7 +155,7 @@ What this costs in disk depends on the filesystem. On APFS, btrfs and XFS an ent
 
 ## Sleep
 
-Copies start when you open them, not when the daemon boots. A copy nobody has looked at for two hours stops running its servers (five minutes on a deployed machine), and sooner when the machine runs low on memory. It starts again when you open it or visit its preview. The chat and the agent keep going either way.
+Copies start when you open them, not when the daemon boots. A copy nobody has looked at for two hours stops running its servers (five minutes on a deployed machine), and sooner when the machine runs low on memory. It starts again when you open it or visit its preview. The chat and the agent keep going either way, with one exception: a question the agent asked that nobody answered in that time lapses with the servers. The question is back in the box when you open the copy again, and an answer typed then still reaches the agent.
 
 `TOYON_PROC_SLEEP_MS` sets the delay in milliseconds, and `off` turns the clock off.
 

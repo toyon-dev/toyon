@@ -611,6 +611,16 @@ export class AcpSession implements AgentAdapter {
     await this.dropConn("restart");
   }
 
+  /** the same path a restart takes under an open card, so the shell revives the question the same
+   * way: expired, the turn stopped before the answer on the wire can start it again, the process
+   * gone with the session id kept */
+  async lapse(why: string): Promise<void> {
+    this.clearReaper();
+    this.cancelAsks("expired");
+    this.stop();
+    await this.dropConn(why);
+  }
+
   private setCommands(next: AgentCommand[]) {
     // adapters re-push an unchanged list on every session start; do not wake the shell for it
     if (sameCommands(this.commandList, next)) return;
@@ -624,7 +634,7 @@ export class AcpSession implements AgentAdapter {
   }
 
   get unsettled(): boolean {
-    return this.queue.length > 0 || this.steered.length > 0 || this.refused !== null || this.asks.size > 0;
+    return this.queue.length > 0 || this.steered.length > 0 || this.refused !== null;
   }
 
   get queueItems(): QueuedMessage[] {

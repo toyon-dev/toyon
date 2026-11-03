@@ -24,6 +24,7 @@ import { diffFit, FOLD_MIN, type Hunk, type Pane } from "./diffFit.ts";
 import { registerGrammars } from "./grammar.ts";
 import { minimalEdit } from "./minimalEdit.ts";
 import { toMonacoTheme } from "./monacoTheme.ts";
+import { SPLIT_MIN } from "./SplitToggle.tsx";
 import { languageFor, registerTsx } from "./tsx.ts";
 
 // monaco 0.56 moved the TS language API off `monaco.languages.typescript` (now a deprecated stub)
@@ -270,6 +271,7 @@ export default function Editor({
   readOnly,
   numbers,
   wrap,
+  split,
   theme,
   sync,
   onLineHover,
@@ -294,6 +296,8 @@ export default function Editor({
   numbers: boolean;
   /** whether a long line folds at the pane's edge, or runs on and the pane scrolls sideways */
   wrap: boolean;
+  /** whether the diff draws the old text beside the new, given the room, or in one column */
+  split: boolean;
   theme: Theme;
   sync: EditorSync;
   onLineHover?: (line: number | null) => void;
@@ -326,6 +330,8 @@ export default function Editor({
   readOnlyRef.current = readOnly;
   const wrapRef = useRef(wrap);
   wrapRef.current = wrap;
+  const splitRef = useRef(split);
+  splitRef.current = split;
   const lineRef = useRef(line);
   lineRef.current = line;
   const blameRef = useRef(blame);
@@ -458,7 +464,11 @@ export default function Editor({
       diffEditor = monaco.editor.createDiffEditor(el, {
         ...options,
         originalEditable: false,
-        renderSideBySide: false,
+        // a split too narrow for two readable columns falls back to one, and comes back as the
+        // room does: the head's switch says what was asked for, the width says what is drawn
+        renderSideBySide: splitRef.current,
+        useInlineViewWhenSpaceIsLimited: true,
+        renderSideBySideInlineBreakpoint: SPLIT_MIN,
         // a change within one line reads on that line: added text highlighted, removed text struck
         // through in place, instead of the whole old line drawn again above the new one
         experimental: { useTrueInlineView: true },
@@ -706,6 +716,12 @@ export default function Editor({
 
   useOnChange([wrap], () => {
     instance.current?.editor.updateOptions({ wordWrap: wrap ? "on" : "off" });
+  });
+
+  // the split is the diff editor's; the file view's plain editor has no other side to draw
+  useOnChange([split], () => {
+    const editor = instance.current?.editor;
+    if (editor && "getOriginalEditor" in editor) editor.updateOptions({ renderSideBySide: split });
   });
 
   // a jump is made once per open: the same line on a later render is not another request to go there

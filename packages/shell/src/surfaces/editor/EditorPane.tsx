@@ -1,5 +1,5 @@
 import { renderedAs, viewerOf } from "@toyon/shared";
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { writeCopiedSource } from "../../app/copiedSource.ts";
 import { previewBus } from "../../app/previewBus.ts";
 import { fileItems, viewsOf } from "../../state/actions/file.ts";
@@ -14,6 +14,7 @@ import {
   type EditorDisk,
   type EditorFile,
   type EditorView,
+  isChatCentred,
   localOf,
   routeTarget,
   worktreeById,
@@ -33,6 +34,7 @@ import { HandoffTrack, PiecePage, usePieceTabs } from "./Handoff.tsx";
 import { HtmlPreview, servedPath } from "./HtmlPreview.tsx";
 import { MarkdownPreview } from "./MarkdownPreview.tsx";
 import { PrCommentsPage } from "./PrCommentsPage.tsx";
+import { SPLIT_MIN, SplitToggle, useSplit } from "./SplitToggle.tsx";
 import { useWrap, WrapToggle } from "./WrapToggle.tsx";
 import "./editor.css";
 
@@ -228,6 +230,41 @@ export function EditorPane({
   const [wrap, setWrap] = useWrap();
   // the toggle is for text in Monaco: a picture, a rendered preview and a file not shown have no lines to fold
   const wrappable = !!disk && !prPage && !viewer && !disk.binary && !disk.tooLarge && view !== "preview";
+  // the split is the diff's alone; a phone's screen is one column wide whatever is asked
+  const splittable = wrappable && view === "diff" && !noDiff && !onScreen;
+  const [split, setSplit] = useSplit();
+  const bodyRef = useRef<HTMLDivElement>(null);
+  // whether the split shut the chat dock for its room: the chat comes back when the split is
+  // turned off or the pane closes, and only then. A chat the person opened again meanwhile is
+  // theirs to keep, and one they shut themselves is not the split's to reopen.
+  const tookChat = useRef(false);
+  const chatOpen = useStore((s) => s.layout.chat);
+  useOnChange([chatOpen], () => {
+    if (chatOpen) tookChat.current = false;
+  });
+  const giveChatBack = useCallback(() => {
+    if (!tookChat.current) return;
+    tookChat.current = false;
+    const s = store.getState();
+    if (!s.layout.chat && !isChatCentred(s)) dispatch({ a: "toggle-chat" });
+  }, [store, dispatch]);
+  const onSplit = (on: boolean) => {
+    setSplit(on);
+    if (!on) {
+      giveChatBack();
+      return;
+    }
+    // two columns need the room the chat has: shut it when the pane is too narrow for both, and
+    // only then, so a wide window keeps the chat beside the split
+    const s = store.getState();
+    const width = bodyRef.current?.clientWidth ?? Number.POSITIVE_INFINITY;
+    if (s.layout.chat && !isChatCentred(s) && width < SPLIT_MIN) {
+      tookChat.current = true;
+      dispatch({ a: "toggle-chat" });
+    }
+  };
+  // the pane closing takes the split's reason with it
+  useEffect(() => giveChatBack, [giveChatBack]);
   // a line the page reported is only placed once its offset is known
   const line = editor.line && !editor.line.fiber ? editor.line.n : undefined;
   // an html page on the working tree can be run as well as read: the rendered view keeps its
@@ -311,6 +348,7 @@ export function EditorPane({
               <Icon name="zen" className="icon-inline" /> full size
             </Button>
           )}
+          {splittable && <SplitToggle split={split} onSplit={onSplit} />}
           {wrappable && <WrapToggle wrap={wrap} onWrap={setWrap} />}
           {/* not a view of the text, so outside the cluster: it sends the page to the preview */}
           {runnable && (
@@ -332,7 +370,7 @@ export function EditorPane({
       {/* what the plan hands off, under the head that names the file, holding still while the
           text scrolls */}
       {tabs && <HandoffTrack tabs={tabs} />}
-      <div className="editor-body">
+      <div className="editor-body" ref={bodyRef}>
         {prPage ? (
           <PrCommentsPage worktreeId={worktreeId} openSeq={editor.seq} focus={editor.focus} />
         ) : !disk ? (
@@ -407,6 +445,7 @@ export function EditorPane({
                 readOnly={history || !disk.writable || onScreen}
                 numbers={!onScreen}
                 wrap={wrap}
+                split={split}
                 theme={theme}
                 sync={sync}
                 // the editor knows the lines; whose file they are, and at which commit, is the

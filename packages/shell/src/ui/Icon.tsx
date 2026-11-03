@@ -18,6 +18,7 @@ export type IconName =
   | "edit"
   | "check"
   | "split"
+  | "columns"
   | "full"
   | "more"
   | "caret"
@@ -84,6 +85,8 @@ const ICON_PATHS: Record<IconName, string> = {
   check: "M3.4 8.4 6.4 11.4 12.6 4.6",
   // a pane with a divider (split) and the same pane without one (full height)
   split: "M2.5 2.5h11v11h-11z M2.5 8h11",
+  // the same pane divided the other way: two columns, for a diff drawn side by side
+  columns: "M2.5 2.5h11v11h-11z M8 2.5v11",
   full: "M2.5 2.5h11v11h-11z",
   // three tiny rings, each closed by the stroke into a 2.2px dot. As zero-length segments the round
   // caps drew them at the stroke's own 1.3px, the thinnest mark in any row, and they went faint on

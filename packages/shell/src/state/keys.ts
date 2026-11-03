@@ -32,6 +32,8 @@ export const STORAGE = {
   editorFull: "toyon-dfull",
   /** "1" while the editor folds long lines at the pane's edge instead of scrolling sideways */
   editorWrap: "toyon-dwrap",
+  /** "1" while a diff draws the old text beside the new instead of in one column */
+  editorSplit: "toyon-dsplit",
   designHeight: "toyon-dsh",
   designFull: "toyon-dsfull",
   termHeight: "toyon-th",
@@ -72,6 +74,7 @@ export const WINDOW_KEYS: readonly Key[] = [
   STORAGE.editorHeight,
   STORAGE.editorFull,
   STORAGE.editorWrap,
+  STORAGE.editorSplit,
   STORAGE.designHeight,
   STORAGE.designFull,
   STORAGE.termHeight,

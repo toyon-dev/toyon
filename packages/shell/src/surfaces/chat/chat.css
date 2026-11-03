@@ -1371,6 +1371,13 @@
     color: var(--text0);
     text-decoration-color: currentColor;
   }
+  /* an address in the person's own words is the link out it is in the agent's prose (.md a): the
+     link blue, the browser's underline, and the word's focus ring on a button's corner */
+  .chat-url {
+    color: var(--link);
+    overflow-wrap: anywhere;
+    border-radius: var(--radius);
+  }
   /* A worktree's mark reads as its row in the rail does, the title with the row's dot: the sigil
      glued to the name as every mention is, the dot trailing the word, and one underline under
      all of it. The title is words, so the mark wears the prose's face and not the mono a path's
@@ -1437,6 +1444,19 @@
     }
     :where([data-hover]) & .chat-mention:hover {
       text-decoration-color: var(--text0);
+    }
+    /* an address over the field: the same underline, in the link's blue */
+    & .chat-url {
+      color: transparent;
+      overflow-wrap: inherit;
+      pointer-events: auto;
+      position: relative;
+      z-index: 2;
+      text-decoration: underline;
+      text-decoration-color: color-mix(in srgb, var(--link) 55%, transparent);
+    }
+    :where([data-hover]) & .chat-url:hover {
+      text-decoration-color: var(--link);
     }
     /* a row in the archive wears a hollow dot once sent, and no dot fits over the field, so here
        it is the underline that says so, a tier down */

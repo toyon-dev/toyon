@@ -6,6 +6,7 @@ import { STREAM_TICK_MS } from "../../state/coalesce.ts";
 import type { DaemonUrls } from "../../ws.ts";
 import { closePendingLink, PENDING_LINK } from "./linkTail.ts";
 import { dunder } from "./markdownDunder.ts";
+import { githubRef, linkedCodespan } from "./markdownGithub.ts";
 import { escapeHtml, htmlAsText } from "./markdownHtml.ts";
 import { assetPath, codePath, fromFileUrl, outsidePath, worktreeLink } from "./markdownPaths.ts";
 import { table } from "./markdownTable.ts";
@@ -18,7 +19,7 @@ import { LINK, languageOf, linkLines, openTail, paintCode, paintPlain } from "./
 // block over before it escapes it, and returning false hands one back that has nothing to paint.
 marked.use({
   // the namer is read as each token renders, so it is the render in progress's (set below)
-  extensions: [dunder, worktreeMention(() => rendering?.worktrees)],
+  extensions: [dunder, githubRef, worktreeMention(() => rendering?.worktrees)],
   renderer: {
     code({ text, lang }) {
       const language = languageOf((lang ?? "").trim().toLowerCase().split(/\s+/)[0] ?? "", "");
@@ -41,6 +42,8 @@ marked.use({
         .join("\n");
       return `<pre><code>${body}</code></pre>\n`;
     },
+    // a code span that is an address or an issue whole is the link to it (markdownGithub.ts)
+    codespan: linkedCodespan,
     // a tag in prose is text (markdownHtml.ts); a document a person wrote keeps its HTML
     html(token) {
       return rendering?.keepHtml ? false : htmlAsText(token);

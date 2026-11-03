@@ -187,11 +187,31 @@ describe("mentionSpans: the references in a sent message", () => {
     expect(spans("(@src/App.tsx)")).toEqual([{ kind: "text", text: "(@src/App.tsx)" }]);
   });
 
-  test("what the index does not know, an address, or a sigil mid-word is prose", () => {
+  test("what the index does not know, a mail address, or a sigil mid-word is prose", () => {
     expect(spans("ask @kyle or me@example.com about @gone.ts")).toEqual([
       { kind: "text", text: "ask @kyle or me@example.com about @gone.ts" },
     ]);
     expect(spans("")).toEqual([]);
+  });
+
+  test("a web address is a link out, the sentence's punctuation and a bracket left outside", () => {
+    expect(spans("see https://github.com/anthropics/claude-code/issues/95558, then @README.md")).toEqual([
+      { kind: "text", text: "see " },
+      { kind: "url", text: "https://github.com/anthropics/claude-code/issues/95558" },
+      { kind: "text", text: ", then " },
+      { kind: "file", text: "@README.md", path: "README.md" },
+    ]);
+    expect(spans("(http://x.test/a_(b))")).toEqual([
+      { kind: "text", text: "(" },
+      { kind: "url", text: "http://x.test/a_(b)" },
+      { kind: "text", text: ")" },
+    ]);
+    // in a code span it is code, and a sigil on an address names nothing
+    expect(spans("`https://x.test` @https://x.test")).toEqual([
+      { kind: "code", text: "`https://x.test`", code: "https://x.test" },
+      { kind: "text", text: " @" },
+      { kind: "url", text: "https://x.test" },
+    ]);
   });
 
   test("backticks hold code, as written, and a sigil inside them names nothing", () => {

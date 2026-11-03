@@ -6,6 +6,7 @@ import type { AgentCommand } from "@toyon/shared";
 import { commandScore } from "../overlays/commands.ts";
 import { when } from "../recap.ts";
 import { ago, type DotState, folderList } from "../util.ts";
+import { linkRanges } from "./syntax.ts";
 
 export interface Trigger {
   kind: "file" | "command";
@@ -131,6 +132,8 @@ export type MentionSpan =
   | { kind: "changes"; text: string }
   /** `text` is the reference as written, the branch or the title; `branch` is what the agent is sent */
   | ({ kind: "worktree"; text: string; branch: string } & WorktreeMention)
+  /** an address, the link out it reads as in the agent's prose */
+  | { kind: "url"; text: string }
   /** backticked text, a span or a fenced block: `text` is as written, backticks and all, so the
    * spans still add up to the message; `code` is what the backticks hold */
   | { kind: "code"; text: string; code: string }
@@ -276,10 +279,10 @@ export function settled(text: string, from: number, index: MentionIndex): boolea
   return false;
 }
 
-/** a message split at every `@` reference that names something in the project: a file or folder
- * the index holds, the uncommitted set, or another worktree by its branch or its title. Anything
- * else stays prose, an address included, so the mark says the agent has somewhere to look rather
- * than that a sigil was typed. */
+/** a message split at every `@` reference that names something in the project, a file or folder
+ * the index holds, the uncommitted set, or another worktree by its branch or its title, and at
+ * every address, which is a link out. Anything else stays prose, a sigil on an unknown word
+ * included, so a mark says the agent has somewhere to look rather than that a sigil was typed. */
 export function mentionSpans(text: string, index: MentionIndex): MentionSpan[] {
   const out: MentionSpan[] = [];
   for (const seg of codeSegments(text)) {
@@ -292,18 +295,10 @@ export function mentionSpans(text: string, index: MentionIndex): MentionSpan[] {
 /** the prose between the backticks, split at its references onto `out`; `opens` says the prose
  * is the message's start, so a sigil at its first character opens a word there and nowhere else */
 function proseSpans(text: string, opens: boolean, index: MentionIndex, out: MentionSpan[]) {
-  let last = 0;
-  const push = (s: string) => {
-    if (!s) return;
-    const prev = out.at(-1);
-    if (prev?.kind === "text") prev.text += s;
-    else out.push({ kind: "text", text: s });
-  };
+  const hits: { start: number; span: MentionSpan }[] = [];
   for (const m of text.matchAll(MENTION)) {
     if (m.index === 0 && !m[1] && !opens) continue;
     const start = m.index + (m[1] ?? "").length;
-    // a reference inside the one before it is that one's words: `@Code review again` is one row
-    if (start < last) continue;
     // a title runs past the word's space; one of a single word yields to a file or a branch of
     // its name, the way a branch yields to a file
     const titled = resolveTitle(text.slice(start + 1), index);
@@ -315,10 +310,26 @@ function proseSpans(text: string, opens: boolean, index: MentionIndex, out: Ment
       hit = word ? resolve(word, index) : null;
     }
     hit ??= titled;
-    if (!hit) continue;
+    if (hit) hits.push({ start, span: hit });
+  }
+  // an address ends where it does in a fenced block: before the sentence's punctuation, and
+  // before a bracket that opened ahead of it
+  for (const r of linkRanges(text))
+    hits.push({ start: r.start, span: { kind: "url", text: text.slice(r.start, r.end) } });
+  hits.sort((a, b) => a.start - b.start);
+  let last = 0;
+  const push = (s: string) => {
+    if (!s) return;
+    const prev = out.at(-1);
+    if (prev?.kind === "text") prev.text += s;
+    else out.push({ kind: "text", text: s });
+  };
+  for (const { start, span } of hits) {
+    // a reference inside the one before it is that one's words: `@Code review again` is one row
+    if (start < last) continue;
     push(text.slice(last, start));
-    out.push(hit);
-    last = start + hit.text.length;
+    out.push(span);
+    last = start + span.text.length;
   }
   push(text.slice(last));
 }

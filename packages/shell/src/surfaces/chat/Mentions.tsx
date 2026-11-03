@@ -5,6 +5,7 @@ import { useSock, useStore, useStoreInstance } from "../../state/context.tsx";
 import { worktreeById } from "../../state/store.ts";
 import { tip } from "../../ui/Tooltip.tsx";
 import { openChatLink } from "./chatLink.ts";
+import { codeLink } from "./markdownGithub.ts";
 import { mentionableWorktrees, mentionIndex, mentionSpans, mentionTip } from "./mentions.ts";
 import { Painted } from "./Painted.tsx";
 import { siblingWorktrees } from "./siblings.ts";
@@ -82,12 +83,40 @@ export function MentionText({
         // over the field the marks are the draft's characters, backticks included, so every mark
         // after a span stays on its word; the sent bubble draws the code the backticks named
         if (s.kind === "code") {
+          if (inField) return s.text;
+          // an address or an issue in backticks is the link to it, as it is in the agent's prose
+          const href = codeLink(s.code);
           // biome-ignore lint/suspicious/noArrayIndexKey: spans are positional and rebuilt whole with the text
-          return inField ? s.text : <code key={i}>{s.code}</code>;
+          const code = <code key={i}>{s.code}</code>;
+          return href ? (
+            // biome-ignore lint/suspicious/noArrayIndexKey: same
+            <a key={i} className="chat-url" href={href} target="_blank" rel="noreferrer">
+              {code}
+            </a>
+          ) : (
+            code
+          );
         }
         if (s.kind === "block") {
           // biome-ignore lint/suspicious/noArrayIndexKey: same
           return inField ? s.text : <CodeBlock key={i} code={s.code} lang={s.lang} />;
+        }
+        // a link out, opened beside the shell as one in the agent's prose is; the row's router
+        // leaves it to the browser (chatLink.ts)
+        if (s.kind === "url") {
+          return (
+            <a
+              // biome-ignore lint/suspicious/noArrayIndexKey: same
+              key={i}
+              className="chat-url"
+              href={s.text}
+              target="_blank"
+              rel="noreferrer"
+              tabIndex={inField ? -1 : undefined}
+            >
+              {s.text}
+            </a>
+          );
         }
         if (s.kind === "changes") {
           const changesTip = tip("this worktree's uncommitted files", undefined, { placement: "follow" });

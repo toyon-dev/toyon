@@ -19,6 +19,7 @@ export function WorktreeChip({ id, title, inert }: { id: string; title?: string;
   const sock = useSock();
   const dispatch = useDispatch();
   const rows = useStore((s) => s.visible);
+  const shipping = useStore((s) => s.shipping);
   const row = useStore((s) => worktreeById(s, id));
   // the archive's record, read only once the row is gone: the lists are stable until they change
   const archived = useStore((s) =>
@@ -29,8 +30,8 @@ export function WorktreeChip({ id, title, inert }: { id: string; title?: string;
           .find((a) => a.id === id) ?? null),
   );
   const live = useMemo(
-    () => (row ? (siblingWorktrees(rows, row.worktree.repoId, null).find((w) => w.id === id) ?? null) : null),
-    [rows, row, id],
+    () => (row ? (siblingWorktrees(rows, row.worktree.repoId, null, shipping).find((w) => w.id === id) ?? null) : null),
+    [rows, shipping, row, id],
   );
   const branch = live?.branch ?? archived?.branch;
   if (!branch) return <span>{title ?? id}</span>;

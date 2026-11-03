@@ -184,6 +184,19 @@ export function shipLabel(op: ShipOp): string {
   return SHIP_LABEL[op];
 }
 
+/** The dot the row's slot shows: the background dot while a git op stands in (shipShown), else
+ * what the worktree is doing. One reading for the rail's row and for every mark that restates it
+ * (the `@` menu, a mention in the transcript, a chip), so a row landing is purple in all of them. */
+export function shownDot(w: WorktreeStatus, op: ShipOp | null | undefined): DotState {
+  return shipShown(w, op ?? undefined) ? "background" : dotClass(w);
+}
+
+/** the slot's dot in words: the op's verb while it stands in, else the state */
+export function shownLabel(w: WorktreeStatus, op: ShipOp | null | undefined, needsSetup = false): string {
+  const shown = shipShown(w, op ?? undefined);
+  return shown ? shipLabel(shown) : stateLabel(w, needsSetup);
+}
+
 /** what the composer's terminal badge says. "crashed" and "unreachable" count as trouble:
  * "stopped" is a clean exit or one you killed in the proc's own tab, and "starting" resolves on
  * its own (or turns into unreachable, which is when it becomes trouble). */

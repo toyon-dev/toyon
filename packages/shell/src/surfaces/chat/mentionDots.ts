@@ -32,11 +32,12 @@ export function stampMentions(root: ParentNode, rows: readonly Sibling[]) {
  * reply streaming in, a row the cache brings back), caught by watching the log's children */
 export function useMentionDots(logRef: RefObject<HTMLElement | null>, worktreeId: string | null) {
   const rows = useStore((s) => s.visible);
+  const shipping = useStore((s) => s.shipping);
   const repoId = useStore((s) => worktreeById(s, worktreeId)?.worktree.repoId);
   useEffect(() => {
     const root = logRef.current;
     if (!root || !repoId) return;
-    const siblings = siblingWorktrees(rows, repoId, null);
+    const siblings = siblingWorktrees(rows, repoId, null, shipping);
     stampMentions(root, siblings);
     let frame = 0;
     const observer = new MutationObserver((records) => {
@@ -50,5 +51,5 @@ export function useMentionDots(logRef: RefObject<HTMLElement | null>, worktreeId
       observer.disconnect();
       cancelAnimationFrame(frame);
     };
-  }, [logRef, rows, repoId]);
+  }, [logRef, rows, shipping, repoId]);
 }

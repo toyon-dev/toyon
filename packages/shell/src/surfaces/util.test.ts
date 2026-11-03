@@ -11,6 +11,8 @@ import {
   rowLabel,
   shipLabel,
   shipShown,
+  shownDot,
+  shownLabel,
   splitPath,
   stateLabel,
 } from "./util.ts";
@@ -146,6 +148,16 @@ describe("stateLabel", () => {
     expect(shipShown(status("idle"), undefined)).toBeNull();
     expect(shipLabel("land")).toBe("Landing");
     expect(shipLabel("sync-main")).toBe("Syncing with main");
+  });
+
+  test("the slot's dot and word are the op's while it stands in, the row's own otherwise", () => {
+    const running = status("idle", proc("web", "running"));
+    expect(shownDot(running, "commit")).toBe("background");
+    expect(shownLabel(running, "commit")).toBe("Committing");
+    expect(shownDot(running, undefined)).toBe("running");
+    expect(shownLabel(running, undefined)).toBe("Running");
+    expect(shownDot(status("waiting"), "land")).toBe("waiting");
+    expect(shownLabel(status("waiting"), "land")).toBe("Waiting for you");
   });
 });
 

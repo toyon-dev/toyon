@@ -34,7 +34,7 @@ import { tip } from "../../ui/Tooltip.tsx";
 import { endCarry, startCarry, useCarries } from "../chat/carried.ts";
 import { hasFiles } from "../chat/useIntake.ts";
 import { hhmm } from "../chips/baseNote.ts";
-import { ago, dotClass, procTrouble, rowLabel, shipLabel, shipShown, stateLabel } from "../util.ts";
+import { ago, dotClass, procTrouble, rowLabel, shipShown, shownDot, shownLabel } from "../util.ts";
 import "./rail.css";
 import { cx } from "../../ui/cx.ts";
 import { useOnChange } from "../../ui/hooks.ts";
@@ -482,7 +482,7 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
         // in the fault colour, a green "Running" over an orange dot: the tip names the fault
         // instead, with no dot, since there is no live state for one to restate.
         {...(owned
-          ? tip(offline ? OFFLINE_LINE : op ? shipLabel(op) : stateLabel(w, asksSetup(repoOf(owned))), undefined, {
+          ? tip(offline ? OFFLINE_LINE : shownLabel(w, op, asksSetup(repoOf(owned))), undefined, {
               placement: tipSide,
               card: true,
               aside: cardFigures(w),
@@ -499,7 +499,7 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
                         : []),
                     ...cardLines(owned),
                   ],
-              dot: offline ? undefined : op ? "background" : dotClass(w),
+              dot: offline ? undefined : shownDot(w, op),
             })
           : tip(
               offline ? OFFLINE_LINE : w.locked ? `Held by ${w.lockReason ?? "another tool"}` : FOUND_LINE,

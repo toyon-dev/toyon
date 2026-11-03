@@ -40,6 +40,15 @@ describe("siblingWorktrees", () => {
     ]);
   });
 
+  test("a git op out from a row takes its dot and its word, as the rail's slot does", () => {
+    const shipping = { b: { op: "commit" as const }, a: { op: "land" as const } };
+    expect(siblingWorktrees(rows, "r1", null, shipping).map((w) => [w.id, w.dot, w.state])).toEqual([
+      // a turn in flight keeps its own dot: the op's said the agent was idle
+      ["a", "working", "Agent working"],
+      ["b", "background", "Committing"],
+    ]);
+  });
+
   test("main, the spare and another project's rows are not chats to point at", () => {
     expect(siblingWorktrees(rows, "r2", "c")).toEqual([]);
     expect(siblingWorktrees(rows, undefined, "a")).toEqual([]);

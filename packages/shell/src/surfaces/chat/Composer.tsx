@@ -432,7 +432,8 @@ export function Composer({
   // the project's other rows with a chat, in the rail's order, so `@` can point the agent at what
   // another worktree did and offers the ones last sent to first
   const railRows = useStore((s) => s.visible);
-  const siblings = useMemo(() => siblingWorktrees(railRows, repoId, id), [railRows, repoId, id]);
+  const shipping = useStore((s) => s.shipping);
+  const siblings = useMemo(() => siblingWorktrees(railRows, repoId, id, shipping), [railRows, repoId, id, shipping]);
   // the archive, which a reference written while the row was open still names, as does a paste
   // of its branch or its `wt-xxxx` directory copied from a terminal
   const archivedRows = useStore((s) => (repoId ? s.archived[repoId] : undefined));

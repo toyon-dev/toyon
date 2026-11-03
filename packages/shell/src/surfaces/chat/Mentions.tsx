@@ -59,11 +59,12 @@ export function MentionText({
   // the project's other open rows, then its archive, as the agent's own reference to a row
   // resolves. A chat with no project resolves none.
   const rows = useStore((s) => s.visible);
+  const shipping = useStore((s) => s.shipping);
   const repoId = useStore((s) => worktreeById(s, worktreeId)?.worktree.repoId);
   const archived = useStore((s) => (repoId ? s.archived[repoId] : undefined));
   const worktrees = useMemo(
-    () => mentionableWorktrees(siblingWorktrees(rows, repoId, worktreeId), archived),
-    [rows, archived, repoId, worktreeId],
+    () => mentionableWorktrees(siblingWorktrees(rows, repoId, worktreeId, shipping), archived),
+    [rows, shipping, archived, repoId, worktreeId],
   );
   const index = useMemo(() => mentionIndex(files, worktrees), [files, worktrees]);
   const spans = useMemo(() => mentionSpans(text, index), [text, index]);

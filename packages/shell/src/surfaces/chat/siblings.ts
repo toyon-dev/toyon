@@ -1,6 +1,6 @@
-import type { OwnedWorktree } from "@toyon/shared";
+import type { OwnedWorktree, ShipOp } from "@toyon/shared";
 import { sentAt } from "@toyon/shared";
-import { type DotState, dotClass, stateLabel } from "../util.ts";
+import { type DotState, shownDot, shownLabel } from "../util.ts";
 
 /** a worktree of the project a message can name, in the rail's order */
 export interface Sibling {
@@ -17,27 +17,33 @@ export interface Sibling {
   at: number;
 }
 
+/** the git ops out, by row id, as the store keeps them: the rail's slot shows one over the dot */
+export type ShippingOps = Readonly<Record<string, { readonly op: ShipOp }>>;
+
 /** The project's other worktrees with a chat to point at, in the rail's order (the rows the rail
  * shows, which are already sorted so): the rows Toyon runs, less main and the spare (neither has
  * a chat of its own) and the row the message is written in. Nothing for a message with no
- * project: a found worktree, a draft, an archive. */
+ * project: a found worktree, a draft, an archive. The dot and its word are the rail's slot's,
+ * so a row with a git op out reads as it does on the rail. */
 export function siblingWorktrees(
   rows: readonly OwnedWorktree[],
   repoId: string | undefined,
   self: string | null | undefined,
+  shipping: ShippingOps = {},
 ): Sibling[] {
   if (!repoId) return [];
   const out: Sibling[] = [];
   for (const r of rows) {
     const w = r.worktree;
     if (w.repoId !== repoId || w.id === self || w.kind !== "worktree") continue;
+    const op = shipping[w.id]?.op;
     out.push({
       id: w.id,
       title: w.title,
       branch: w.branch,
       dir: w.path.slice(w.path.lastIndexOf("/") + 1),
-      dot: dotClass(r),
-      state: stateLabel(r),
+      dot: shownDot(r, op),
+      state: shownLabel(r, op),
       at: sentAt(w),
     });
   }

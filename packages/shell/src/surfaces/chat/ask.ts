@@ -139,9 +139,29 @@ export function answerParts(q: AskQuestion, a: AskAnswer | undefined): { pick: s
  * reads them back by position and the person by name. The label is set off by a middot rather
  * than a colon, because the answer's own colon is what joins a note to its pick. */
 export function answerLines(questions: AskQuestion[], answers: AskAnswer[] | undefined): string[] {
+  return questions.map((q, i) => headed(questions, q, answerText(q, answers?.[i])));
+}
+
+function headed(questions: AskQuestion[], q: AskQuestion, text: string): string {
+  return questions.length > 1 && q.header ? `${q.header} · ${text}` : text;
+}
+
+/** the answer as the bubble stacks it, one entry a question: the pick, under it what the picked
+ * options said beneath their labels on the card, and last what the person typed. With nothing
+ * read back the line is `answerLines`' own, the note on its pick after a colon. With a description
+ * between them the colon has nothing to join, so the description stands under the label as it did
+ * on the card and the note takes a line of its own after it: the note was typed after reading the
+ * description, and the agent's words placed after the person's read as a reply to them. */
+export function answerStack(
+  questions: AskQuestion[],
+  answers: AskAnswer[] | undefined,
+): { pick: string; descriptions: string[]; note?: string }[] {
   return questions.map((q, i) => {
-    const text = answerText(q, answers?.[i]);
-    return questions.length > 1 && q.header ? `${q.header} · ${text}` : text;
+    const a = answers?.[i];
+    const descriptions = pickedDescriptions(q, a);
+    if (descriptions.length === 0) return { pick: headed(questions, q, answerText(q, a)), descriptions };
+    const parts = answerParts(q, a);
+    return { pick: headed(questions, q, parts.pick), descriptions, note: parts.note };
   });
 }
 

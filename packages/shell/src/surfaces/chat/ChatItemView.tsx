@@ -30,7 +30,7 @@ import { ended, landedWhat } from "../recap.ts";
 import { elapsed, spanWords } from "../util.ts";
 import { AskRow } from "./AskRow.tsx";
 import { AttachmentSet } from "./AttachmentSet.tsx";
-import { answeredQuestion, answerLines, decidedPlan, pickedDescriptions } from "./ask.ts";
+import { answeredQuestion, answerLines, answerStack, decidedPlan } from "./ask.ts";
 import { chatLink, openChatLink } from "./chatLink.ts";
 import { DaemonRow, useAgo } from "./DaemonRow.tsx";
 import { FileChip } from "./FileChip.tsx";
@@ -1221,18 +1221,20 @@ export const ChatItemView = memo(function ChatItemView({
               data-state={rowState({ cursor: marked })}
               {...cm.contextMenu(() => messageItems(bubble, worktreeId ?? null, deps))}
             >
-              {/* each pick on its line, and under it what the option said beneath its label on the
-                  card, a rung down as it sat there: the pick is the person's word, the description
-                  is what they read before saying it, and in one ink the bubble had no first line */}
-              {said.questions.map((qq, i) => (
-                <div key={qq.id}>
-                  {lines[i]}
-                  {pickedDescriptions(qq, said.answers?.[i]).map((d, j) => (
+              {/* each pick on its line, under it what the option said beneath its label on the
+                  card, at the tier it sat there (chat.css), and last what was typed: the pick is
+                  the person's word, the description what they read before saying it, and in one
+                  ink the bubble had no first line */}
+              {answerStack(said.questions, said.answers).map((s, i) => (
+                <div key={said.questions[i]?.id ?? i}>
+                  {s.pick}
+                  {s.descriptions.map((d, j) => (
                     // biome-ignore lint/suspicious/noArrayIndexKey: a fixed list, built whole from the record
-                    <div key={j} className="row-dim">
+                    <div key={j} className="msg-pick-desc">
                       {d}
                     </div>
                   ))}
+                  {s.note && <div>{s.note}</div>}
                 </div>
               ))}
             </div>

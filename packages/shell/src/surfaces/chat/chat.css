@@ -377,6 +377,15 @@
       border-start-start-radius: 0;
       border-end-start-radius: 0;
     }
+    /* what a picked option said under its label on the card, read back under the pick: the card's
+       own tier for it, the scan tier one rung under the label, held still as the card holds it
+       (.choice-desc) because the cursor's lift would carry it up to the pick's ink and the bubble
+       would have no first line again. .row-dim is the rung below a row, two under the pick: the
+       agent's words were the faintest text on the screen, and the bubble is the only record of
+       what the pick meant. */
+    & .msg-pick-desc {
+      color: var(--ink1);
+    }
   }
 
   /* a message the agent does not have yet: the sent bubble's box, the whole row a rung down the

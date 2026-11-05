@@ -6,6 +6,7 @@ import {
   answeredQuestion,
   answerLines,
   answerParts,
+  answerStack,
   answerText,
   askLine,
   canSubmit,
@@ -275,6 +276,28 @@ describe("answerLines", () => {
       "skipped",
     ]);
     expect(answerLines(headed, undefined)).toEqual(["Fix · skipped", "skipped"]);
+  });
+});
+
+describe("answerStack", () => {
+  const described = [q("fix", ["Keep as is", "Re-run"], { header: "Fix" }), q("where", ["Here"], { header: "Where" })];
+  described[0]!.options[1]!.description = "with the flag";
+
+  test("a pick with nothing read back is its answerLines line", () => {
+    expect(answerStack(described, [{ selected: ["keep as is"], note: "later" }, { selected: [] }])).toEqual([
+      { pick: "Fix · Keep as is: later", descriptions: [] },
+      { pick: "Where · skipped", descriptions: [] },
+    ]);
+  });
+
+  test("a description stands under the pick, and the note typed after reading it comes last", () => {
+    expect(answerStack(described, [{ selected: ["re-run"], note: "is this real?" }, { selected: ["here"] }])).toEqual([
+      { pick: "Fix · Re-run", descriptions: ["with the flag"], note: "is this real?" },
+      { pick: "Where · Here", descriptions: [] },
+    ]);
+    expect(answerStack([described[0]!], [{ selected: ["re-run"] }])).toEqual([
+      { pick: "Re-run", descriptions: ["with the flag"], note: undefined },
+    ]);
   });
 });
 

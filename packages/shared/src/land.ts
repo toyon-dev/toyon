@@ -127,6 +127,16 @@ export function shipNoun(op: ShipOp): string {
 
 type Standing = Landed & Pick<WorktreeInfo, "landed">;
 
+/** The row as the shell reads it: the daemon's landed mark holds through uncommitted files, since
+ * the landed work stays on the base whatever is left in the tree, but what is left is work to
+ * land or discard, so a row with files counted is read as not landed. One reading for every
+ * place the word and the PR are derived from, so the composer, the rail and the changes tab
+ * cannot part: a merged PR behind a dirty tree is history on all three, and the press that
+ * commits and opens a new PR says so. */
+export function standingOf<T extends Standing>(wt: T, dirty: number | undefined): T {
+  return wt.landed && (dirty ?? 0) > 0 ? { ...wt, landed: false } : wt;
+}
+
 /** The PR the row still shows and acts on. A merged PR a landing has taken stays on the record
  * until a commit moves past it, so an edit undone brings the landed row back with its link; but
  * while the row is not landed, new work has begun over it and the PR is history: the foot offers

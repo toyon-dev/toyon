@@ -25,6 +25,7 @@ import {
   numbersAfter,
   prStanding,
   shipNoun,
+  standingOf,
 } from "@toyon/shared";
 import { Fragment, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { clipboardOfferDone, useCopied } from "../../app/clipboardOffer.ts";
@@ -509,9 +510,11 @@ export function Composer({
   // the archive word while any are counted, since they are work to land or discard first
   const hasLanded = !!active?.worktree.landed && dirty === 0;
   const landed = atRest && hasLanded;
-  // the PR still standing between the work and main; a merged one left behind by new work is
-  // history and the box reads as a fresh row, from the same frame the landed mark is withheld
-  const shown = active ? prStanding({ ...active.worktree, landed: hasLanded }) : undefined;
+  // the row as the shell reads it, the landed mark withheld while files are counted: the PR still
+  // standing between the work and main and the ship word both come off it, so a merged one left
+  // behind by new work is history and the box reads as a fresh row
+  const row = active ? standingOf(active.worktree, dirty) : undefined;
+  const shown = row ? prStanding(row) : undefined;
   const pr = atRest && !landed ? shown : undefined;
   // work since the PR opened, uncommitted or committed here only: what the PR is missing, and
   // what a merge now would leave behind. It goes through the check and then up to the PR, so the
@@ -801,7 +804,7 @@ export function Composer({
   // the ship word and where it sends the work: onto main by the repo's route, or up to the open
   // PR when the branch on origin is behind what is here. Creating the PR is the one press that
   // lands nothing yet, so it says so instead of land.
-  const shipWord = prMissing ? "update" : landWord(policy, active?.worktree ?? {});
+  const shipWord = prMissing ? "update" : landWord(policy, row ?? {});
   // what the branch is measured against and takes in: main here, or origin's main where the
   // route lands there
   const base = repo ? baseOf(repo) : "main";

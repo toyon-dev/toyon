@@ -8,6 +8,7 @@ import {
   landPolicy,
   landWord as landWordOf,
   prStanding,
+  standingOf,
   type WorktreeStatus,
 } from "@toyon/shared";
 import { useRef, useState } from "react";
@@ -132,9 +133,10 @@ export function CommitBox({
   // the daemon's rule decides landed, and uncommitted files do not unland a row; the foot withholds
   // the archive word while any are counted, as the composer does: they are work to land or discard
   const hasLanded = !!owned?.landed && !dirty;
-  // the PR the row still shows: a merged one left behind by new work is history, and the foot
-  // reads as a fresh row with it gone
-  const pr = owned ? prStanding({ ...owned, landed: hasLanded }) : undefined;
+  // the row as the shell reads it, the PR and the button's word both off it: a merged PR left
+  // behind by new work is history, and the foot reads as a fresh row with it gone
+  const standing = owned ? standingOf(owned, dirty ? 1 : 0) : undefined;
+  const pr = standing ? prStanding(standing) : undefined;
   const prOpen = pr?.state === "open";
   // work since the PR opened: the same press sends it up to the PR, and merge waits until the
   // branch on origin has all of it, since merging now would leave it behind
@@ -156,7 +158,7 @@ export function CommitBox({
   const policy = landPolicy(repo?.config ?? {});
   const landTip = describeLand(policy, repo?.defaultBranch);
   // the button's word: land, or create PR for the one press that lands nothing yet
-  const routeWord = landWordOf(policy, owned ?? {});
+  const routeWord = landWordOf(policy, standing ?? {});
   // what the counts here are against: main here, or origin's main where the route lands there
   const base = repo ? baseOf(repo) : "main";
   const behindLine = canSync(active) ? behindNote(base, behind) : null;

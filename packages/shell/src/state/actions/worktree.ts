@@ -16,6 +16,7 @@ import {
   type OwnedWorktree,
   type RepoInfo,
   type ShipOp,
+  standingOf,
   type WorktreeStatus,
 } from "@toyon/shared";
 import { chord } from "../../surfaces/util.ts";
@@ -249,10 +250,12 @@ export function worktreeItems(
   // a landed row has nothing to land, however far ahead a squash on GitHub leaves it counting
   if (canLand(w.worktree) && !(w.worktree.landed && w.dirty === 0)) {
     // the repo's route, whatever the settings say it is: there is one way work lands here. The
-    // word is land, except for creating the PR, which is the one press that lands nothing yet.
+    // word is land, except for creating the PR, which is the one press that lands nothing yet;
+    // read off the row as the shell reads it, so a merged PR behind a dirty tree is history here
+    // as it is in the composer and the changes tab
     ship.push({
       id: "land",
-      label: landWord(landPolicy(repo?.config ?? {}), w.worktree),
+      label: landWord(landPolicy(repo?.config ?? {}), standingOf(w.worktree, w.dirty)),
       detail: landDetail(repo),
       disabled: busy,
       onClick: () => shipOp(sock, dispatch, { t: "land", worktreeId: id }),

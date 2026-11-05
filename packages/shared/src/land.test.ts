@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { landedNow, landWord, movedPastLand, notLandedWhy, prStanding, prTaken } from "./land.ts";
+import { landedNow, landWord, movedPastLand, notLandedWhy, prStanding, prTaken, standingOf } from "./land.ts";
 
 // The one rule every landing path shares: a row is landed when the base has its work, read
 // from the recorded landings and the tree, never from an ahead count alone.
@@ -78,6 +78,25 @@ describe("landWord", () => {
     expect(landWord({ land: "pr" }, { ...taken, landed: true })).toBe("land");
     expect(landWord({ land: "pr" }, taken)).toBe("create pr");
     expect(landWord({ land: "merge" }, taken)).toBe("land");
+  });
+
+  test("uncommitted files over a landed row: the merged PR is history and the press creates one", () => {
+    // the daemon's landed mark holds through a dirty tree; the shell reads the row through
+    // standingOf, so the word says what the press does on every surface
+    const row = { pr: merged, lands: [{ ...land, pr: 7 }], landed: true };
+    expect(landWord({ land: "pr" }, standingOf(row, 0))).toBe("land");
+    expect(landWord({ land: "pr" }, standingOf(row, undefined))).toBe("land");
+    expect(landWord({ land: "pr" }, standingOf(row, 2))).toBe("create pr");
+  });
+});
+
+describe("standingOf", () => {
+  test("files counted withhold the landed mark; nothing else on the row moves", () => {
+    const row = { pr: merged, lands: [land], landed: true };
+    expect(standingOf(row, 0)).toBe(row);
+    expect(standingOf(row, 1)).toEqual({ ...row, landed: false });
+    expect(standingOf({ landed: false }, 3)).toEqual({ landed: false });
+    expect(standingOf({}, 3)).toEqual({});
   });
 });
 

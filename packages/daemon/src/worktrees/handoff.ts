@@ -773,14 +773,19 @@ export class HandoffService implements ToolProvider {
       const became = new Map<string, Became>();
       for (const piece of proposed.pieces) {
         const fate = effectiveFate(entries, proposed, piece);
+        let outcome: PieceOutcome;
         try {
-          outcomes.push(await this.actOn(wt, origin, proposed, piece, fate, note, became));
+          outcome = await this.actOn(wt, origin, proposed, piece, fate, note, became);
         } catch (e) {
           const error = e instanceof Error ? e.message : String(e);
           log.warn(worktreeId, `piece "${piece.title}" (${fate}) failed`, e);
           became.set(piece.id, { fate: "skip" });
-          outcomes.push({ pieceId: piece.id, fate, error });
+          outcome = { pieceId: piece.id, fate, error };
         }
+        outcomes.push(outcome);
+        // the row names each worktree as it comes up, so the person watches the list start
+        // rather than reading one sentence once it is all done
+        agent.note({ type: "handoff-piece", id, outcome, ts: Date.now() });
       }
       // the origin's own pieces wait for what the rest of the list became, which is known only
       // once the whole list was acted on: a here piece may name any other piece, later ones too

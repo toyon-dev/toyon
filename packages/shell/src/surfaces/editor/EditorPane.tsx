@@ -26,7 +26,7 @@ import { useOnChange, useSettled } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { Pane } from "../../ui/Pane.tsx";
 import { endCarry, startCarry, useCarries } from "../chat/carried.ts";
-import { defaultTab, listPage, openHandoff } from "../chat/handoff.ts";
+import { defaultTab, handoffOn, listPage } from "../chat/handoff.ts";
 import { usePlanTitle } from "../chat/usePlanTitle.ts";
 import { splitPath } from "../util.ts";
 import { FileViewer } from "./FileViewer.tsx";
@@ -160,12 +160,10 @@ export function EditorPane({
   // the worktree's own plan is titled by its heading, as the line under the box names it
   const ownPlan = !loose && !history && planPath === path;
   const planTitle = usePlanTitle(ownPlan ? worktreeId : undefined, ownPlan ? path : undefined);
-  const open = useStore((s) => openHandoff(localOf(s, worktreeId).chat ?? NO_CHAT));
-  const pieces = useMemo(() => {
-    if (history || loose || editor.view !== "preview" || !open) return null;
-    const on = open.plan ?? planPath;
-    return on && path === on ? open : null;
-  }, [history, loose, editor.view, planPath, path, open]);
+  // the list by the file it sits on, not the newest: a second list's page leaves the first its
+  // track, since the worktrees the first made are still read from there
+  const open = useStore((s) => handoffOn(localOf(s, worktreeId).chat ?? NO_CHAT, path, planPath));
+  const pieces = history || loose || editor.view !== "preview" ? null : open;
   // the tab open in the head, with a list on the page: the pane's own state, so a sibling's dot
   // or age changing redraws no tab. It starts over with a new list or file, and until a tab is
   // pressed it is the page's own default (chat/handoff.ts), which on the list page moves to the

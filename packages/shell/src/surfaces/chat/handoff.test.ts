@@ -11,6 +11,7 @@ import {
   handoffAnswer,
   handoffCounts,
   handoffLine,
+  handoffOn,
   handoffQuestion,
   handoffSaid,
   hereWaits,
@@ -21,6 +22,7 @@ import {
   pieceMark,
   pieceOrder,
   pieceStanding,
+  startingPieces,
   waitOf,
 } from "./handoff.ts";
 
@@ -219,6 +221,51 @@ describe("openHandoff", () => {
     expect(openHandoff([done, declined])?.id).toBe("l1");
     expect(openHandoff([declined])).toBeNull();
     expect(openHandoff([list([], {}, { state: "held" })])?.state).toBe("held");
+  });
+});
+
+describe("handoffOn", () => {
+  test("the list by the file it sits on: an older list keeps its page once a newer one is proposed", () => {
+    const first = list([], {}, { id: "l1", state: "done", plan: ".toyon/plans/1.md" });
+    const second = list([], {}, { id: "l2", state: "proposed", plan: ".toyon/plans/2.md" });
+    expect(handoffOn([first, second], ".toyon/plans/1.md", undefined)?.id).toBe("l1");
+    expect(handoffOn([first, second], ".toyon/plans/2.md", undefined)?.id).toBe("l2");
+    expect(handoffOn([first, second], ".toyon/plans/3.md", undefined)).toBeNull();
+    // a held list with no file yet sits on the worktree's own plan; a sent-back one is nobody's
+    const held = list([], {}, { id: "l3", state: "held" });
+    expect(handoffOn([first, held], ".toyon/plans/plan.md", ".toyon/plans/plan.md")?.id).toBe("l3");
+    expect(handoffOn([first, held], ".toyon/plans/plan.md", undefined)).toBeNull();
+    const back = list([], {}, { id: "l4", state: "declined", plan: ".toyon/plans/4.md" });
+    expect(handoffOn([back], ".toyon/plans/4.md", undefined)).toBeNull();
+  });
+});
+
+describe("startingPieces", () => {
+  test("the worktrees go makes now, by name, each with its row once the daemon reports it", () => {
+    const now = piece("p1");
+    const here = piece("p2", { fate: "here" });
+    const queued = piece("p3", { after: { id: "b", branch: "toyon/b", title: "B" } });
+    const sent = piece("p4", { fate: "send", to });
+    const moved = piece("p5", { fate: "here" });
+    const going = list([now, here, queued, sent, moved], { p5: "worktree" }, { state: "going" });
+    expect(startingPieces(going)).toEqual([
+      { pieceId: "p1", title: "Piece p1" },
+      { pieceId: "p5", title: "Piece p5" },
+    ]);
+    // the row it became, under the title the namer gave it; a queued piece whose wait had landed
+    // is made now too and joins as its outcome comes
+    const partly = {
+      ...going,
+      outcomes: [
+        { pieceId: "p1", fate: "worktree" as const, worktreeId: "g", title: "Rail fixes" },
+        { pieceId: "p3", fate: "worktree" as const, worktreeId: "h", title: "B work", repoName: "acp" },
+      ],
+    };
+    expect(startingPieces(partly)).toEqual([
+      { pieceId: "p1", title: "Rail fixes", worktreeId: "g" },
+      { pieceId: "p3", title: "B work", worktreeId: "h", repoName: "acp" },
+      { pieceId: "p5", title: "Piece p5" },
+    ]);
   });
 });
 

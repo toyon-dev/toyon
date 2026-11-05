@@ -1143,6 +1143,18 @@
       min-width: 0;
       overflow-wrap: anywhere;
     }
+    /* a worktree the handed-off row is still making: its title with the idle dot, set as the
+       mention's dot is, so the name reads as the row it is about to be and the dot turns in place
+       once it is one. Kept to one line like a mention with a dot, or the dot was left alone at
+       the start of a line. */
+    & .handoff-wait {
+      white-space: nowrap;
+      & > .dot {
+        display: inline-block;
+        vertical-align: 0;
+        margin-left: 4px;
+      }
+    }
     /* the line under the head wraps rather than truncating, since it is the whole reason the row
        is here: toyon's rule, under the call it refused. The agent is told only that its request was
        refused, so it reports one as the person declining; this line is where the person reads

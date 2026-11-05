@@ -5,12 +5,13 @@
 // a queued piece became when its sibling landed is a row of its own, since it comes long after,
 // and so is a sibling's landing, which another project reports back the same way.
 
+import { Fragment } from "react";
 import { openFile } from "../../state/actions/file.ts";
 import { useDispatch, useSock } from "../../state/context.tsx";
 import type { ChatItem } from "../../state/store.ts";
 import { Button } from "../../ui/Button.tsx";
 import { DaemonRow } from "./DaemonRow.tsx";
-import type { HandoffItem } from "./handoff.ts";
+import { type HandoffItem, startingPieces } from "./handoff.ts";
 import { WorktreeChip } from "./WorktreeChip.tsx";
 
 export function HandoffRow({ item, worktreeId }: { item: HandoffItem; worktreeId?: string | null }) {
@@ -30,12 +31,34 @@ export function HandoffRow({ item, worktreeId }: { item: HandoffItem; worktreeId
       </Button>
     ) : null;
   if (item.state === "going") {
+    // the worktrees being made, by name, the same sentence the done row reads: a title with the
+    // idle dot until the daemon says its worktree is up, then the row's own chip, whose dot is
+    // the rail's. The dots say where the list stands, so no word says it is starting; one shines
+    // only where there is nothing to name, since the sentence cannot be empty
+    const names = startingPieces(item);
     return (
       <DaemonRow icon="handoff" word="handed off" tone="accent" at={item.ts}>
-        {/* the shine rides an inline span: the text column fills the row, and a band sized to
-            that is wider than the words, so they lit all at once rather than sweeping */}
         <span className="daemon-text">
-          <span className="live-text">starting the worktrees</span>
+          {names.length === 0 ? (
+            /* the shine rides an inline span: the text column fills the row, and a band sized to
+               that is wider than the word, so it lit all at once rather than sweeping */
+            <span className="live-text">starting</span>
+          ) : (
+            names.map((n, i) => (
+              <Fragment key={n.pieceId}>
+                {i > 0 && (i === names.length - 1 ? " and " : ", ")}
+                {n.worktreeId ? (
+                  <WorktreeChip id={n.worktreeId} title={n.title} />
+                ) : (
+                  <span className="handoff-wait">
+                    {n.title}
+                    <span className="dot idle" />
+                  </span>
+                )}
+                {n.repoName ? ` in ${n.repoName}` : ""}
+              </Fragment>
+            ))
+          )}
         </span>
       </DaemonRow>
     );

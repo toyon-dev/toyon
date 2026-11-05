@@ -465,11 +465,14 @@ describe("go", () => {
     expect(recorded(a.id, "handoff-go")).toHaveLength(1);
     const made = madeTitled("Rail fixes")!;
     expect(made).toBeDefined();
-    expect(outcomesOf(a.id)).toEqual([
+    const outcomes = [
       { pieceId: "p1", fate: "here" },
       { pieceId: "p2", fate: "worktree", worktreeId: made.id, title: "Rail fixes" },
       { pieceId: "p3", fate: "skip" },
-    ] satisfies PieceOutcome[]);
+    ] satisfies PieceOutcome[];
+    expect(outcomesOf(a.id)).toEqual(outcomes);
+    // each piece's word went out as go reached it, in list order, before the list's own
+    expect(recorded(a.id, "handoff-piece").map((e) => (e as { outcome: PieceOutcome }).outcome)).toEqual(outcomes);
     // born with the piece's text as its own plan, on its record and in its plans folder, and on
     // the origin's agent, model and effort rather than the agent's own defaults
     expect(made).toMatchObject({

@@ -14,6 +14,37 @@ export function openHandoff(chat: readonly ChatItem[]): HandoffItem | null {
   return item?.kind === "handoff" ? item : null;
 }
 
+/** The list the page at `path` draws at its head: the newest one not sent back that names that
+ * file, else, on the worktree's own plan, the newest held one with no file of its own yet, which
+ * sits on that plan until its card comes. An older list keeps its track once a newer one is
+ * proposed, since its page is still the one its worktrees were born from. */
+export function handoffOn(chat: readonly ChatItem[], path: string, planPath: string | undefined): HandoffItem | null {
+  const item = chat.findLast((i) => i.kind === "handoff" && i.state !== "declined" && (i.plan ?? planPath) === path);
+  return item?.kind === "handoff" ? item : null;
+}
+
+/** The worktrees go is making, as the going row names them: every piece going to a new worktree
+ * now, in list order, with the row it became once the daemon says so (`handoff-piece`), so each
+ * name's dot turns from the idle grey to the row's own as its worktree comes up. A piece whose
+ * wait had landed already is made now too, and joins the names as its outcome arrives. */
+export function startingPieces(
+  item: Pick<HandoffItem, "pieces" | "fates" | "outcomes">,
+): Array<{ pieceId: string; title: string; worktreeId?: string; repoName?: string }> {
+  return item.pieces.flatMap((p) => {
+    const o = item.outcomes.find((o) => o.pieceId === p.id);
+    const made = o?.fate === "worktree" ? o.worktreeId : undefined;
+    if (!made && (effectiveFate(item, p) !== "worktree" || p.after)) return [];
+    return [
+      {
+        pieceId: p.id,
+        title: o?.title ?? p.title,
+        ...(made ? { worktreeId: made } : {}),
+        ...(o?.repoName ? { repoName: o.repoName } : {}),
+      },
+    ];
+  });
+}
+
 /** Whether the file the list sits on is the page Toyon wrote for it (each piece's text under its
  * own heading), rather than an agent's plan. A held list has no file of its own: it sits on the
  * worktree's plan and takes the plan card's path when the card comes, as its `companion`; a list

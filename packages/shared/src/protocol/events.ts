@@ -493,6 +493,9 @@ export type AgentEvent =
   /** the plan was approved, or go pressed: the card closes here and Toyon acts. `note` is what
    * the person typed with go on Toyon's own card, read back in their bubble */
   | { type: "handoff-go"; id: string; note?: string; ts: number }
+  /** what became of one piece, as go reaches it: the list is acted on in order and a worktree
+   * takes seconds to make, so the row names each one as it comes up rather than all at the end */
+  | { type: "handoff-piece"; id: string; outcome: PieceOutcome; ts: number }
   /** what became of each piece */
   | { type: "handoff"; id: string; outcomes: PieceOutcome[]; ts: number }
   /** the card closed with nothing done: the plan was sent back, or `outcome` says what failed.

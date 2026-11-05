@@ -4435,8 +4435,19 @@ describe("a pieces list", () => {
     });
     const going = reducer(asked, agent("a", { type: "handoff-go", id: "l1", ts: 3 }));
     expect(chatOf(going)[0]).toMatchObject({ state: "going" });
-    const done = reducer(
+    // each piece's word as go reaches it, read by the going row; the list's own word replaces them
+    const partly = reducer(
       going,
+      agent("a", {
+        type: "handoff-piece",
+        id: "l1",
+        outcome: { pieceId: "p1", fate: "worktree", worktreeId: "g", title: "Rail" },
+        ts: 3,
+      }),
+    );
+    expect(chatOf(partly)[0]).toMatchObject({ state: "going", outcomes: [{ pieceId: "p1", worktreeId: "g" }] });
+    const done = reducer(
+      partly,
       agent("a", {
         type: "handoff",
         id: "l1",

@@ -3734,6 +3734,14 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
       const answered = { go: true, ...(event.note ? { note: event.note } : {}) };
       return answeredAtEnd(items, idx, { ...card, state: "going", answered, ts: event.ts });
     }
+    case "handoff-piece": {
+      // one piece's outcome as go reaches it, read by the going row alone: the list's own word
+      // on every piece comes whole with `handoff`, which stands over these
+      const idx = handoffIndex(items, event.id, ["going"]);
+      if (idx === -1) return items;
+      const card = items[idx] as HandoffCard;
+      return items.with(idx, { ...card, outcomes: [...card.outcomes, event.outcome] });
+    }
     case "handoff": {
       const idx = handoffIndex(items, event.id, ["held", "proposed", "going"]);
       // what became of the pieces belongs on the chat whether or not the list was seen (a torn

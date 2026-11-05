@@ -85,8 +85,8 @@ const NAME_ICON = new Map<string, IconName>([
   [WAKEUP_TOOL, "clock"],
   // what a background command or subagent printed
   ["TaskOutput", "terminal"],
-  // a packaged set of instructions loaded over the agent's own
-  [SKILL_TOOL, "layers"],
+  // a packaged set of instructions loaded over the agent's own, typed as a slash command
+  [SKILL_TOOL, "slash"],
   // Toyon's own tools reach the shell under their bare names (the daemon folds the MCP prefix
   // off), so the cube, which says a call went to a service of its own, would be wrong for a call
   // that went to the thing the person is sitting in. The handoff wears the glyph of the "handed

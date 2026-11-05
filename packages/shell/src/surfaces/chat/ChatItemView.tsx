@@ -1292,13 +1292,13 @@ export const ChatItemView = memo(function ChatItemView({
         </DaemonRow>
       );
     case "grafted":
-      // layers is the rail's glyph for a worktree merged from several: this divider is where one of
-      // those merges shows in the transcript. The title is the sentence and the branch its byline,
-      // the way the rail shows a row and the way a landing reads: side by side, a narrow column
-      // wrapped the title and cut the branch.
+      // pull is the arrow that brings work from elsewhere into this worktree, which is what a graft
+      // does with another worktree's chat: this divider is where one shows in the transcript. The
+      // title is the sentence and the branch its byline, the way the rail shows a row and the way
+      // a landing reads: side by side, a narrow column wrapped the title and cut the branch.
       return (
         <DaemonRow
-          icon="layers"
+          icon="pull"
           word="grafted"
           tone="accent"
           below={item.branch}

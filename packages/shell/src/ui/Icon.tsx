@@ -28,7 +28,6 @@ export type IconName =
   | "plus"
   | "download"
   | "copy"
-  | "layers"
   | "pull"
   | "text"
   | "wrap"
@@ -41,6 +40,7 @@ export type IconName =
   | "move"
   | "search"
   | "run"
+  | "slash"
   | "bulb"
   | "spawn"
   | "handoff"
@@ -104,11 +104,9 @@ const ICON_PATHS: Record<IconName, string> = {
   download: "M8 2.5v7.4 M4.9 6.8 8 9.9l3.1-3.1 M3 13h10",
   // two sheets, the front one whole and the back one showing its top-left edge behind it
   copy: "M5.5 5.5h8v8h-8z M10.5 5.5v-3h-8v8h3",
-  // plain down arrow: bring main's commits into this worktree (download has the tray, and means
-  // saving a file)
+  // plain down arrow: bring work from elsewhere into this worktree, main's commits or another
+  // worktree's chat (download has the tray, and means saving a file)
   pull: "M8 3.2v7.4 M4.9 7.4 8 10.6l3.1-3.2",
-  // two stacked panes: a worktree that is a local merge of several branches
-  layers: "M6 2.5h7.5V10 M2.5 6h8v7.5h-8z",
   text: "M3.5 3.5h9 M3.5 6.5h9 M3.5 9.5h9 M3.5 12.5h5",
   // `text` with its second line turning back under itself: a long line folded at the edge
   wrap: "M3.5 4h9 M3.5 8h7a2 2 0 0 1 0 4H8 M9.5 10.5 8 12l1.5 1.5 M3.5 12h2.5",
@@ -133,6 +131,9 @@ const ICON_PATHS: Record<IconName, string> = {
   // a bare prompt: the chevron and cursor of `terminal` without the pane, so a run row and the
   // terminal button do not read as the same control
   run: "M3.4 4.2 7.6 8l-4.2 3.8 M9 11.8h4",
+  // a slash command at the prompt: `run`'s cursor line with a slash in the chevron's place, for a
+  // skill, which is typed as /name. Not two stacked panes: at 13px those are `copy` mirrored
+  slash: "M8.4 3.2 4.6 12.2 M9.6 11.8h3.4",
   // a bulb for a thought: the glass as one arc over two shoulders, the base as one line under
   // it. At 13px a filament or a second base line is a smudge, so there is neither.
   bulb: "M4.8 8.8a4 4 0 1 1 6.4 0L9.5 10.6v1.4H6.5v-1.4z M6.7 13.8h2.6",

@@ -618,6 +618,59 @@ describe("config reload", () => {
     expect(repos).toBe(1);
   });
 
+  test("a worktree runs the commands of its own settings file, and keeps them when main's moves on", async () => {
+    writeFileSync(join(w.repo, "toyon.json"), JSON.stringify({ run: { web: "true" } }));
+    sh(w.repo, GIT, "add", "toyon.json");
+    sh(w.repo, GIT, "commit", "-q", "-m", "settings");
+    const repoId = await registered();
+    const wt = await w.worktrees.create(repoId, "task");
+    await settle();
+    expect(w.procs.get(wt.id)!.started.map((p) => [p.name, p.command])).toEqual([["web", "true"]]);
+
+    // main renames the command: the branch's file still says `true`, and that is what runs,
+    // without so much as a restart, since nothing of main's reaches it
+    const own = w.procs.get(wt.id)!;
+    writeFileSync(join(w.repo, "toyon.json"), JSON.stringify({ run: { web: "false", api: "true" } }));
+    w.repos.reloadConfig(repoId);
+    await settle();
+    expect(w.state.requireRepo(repoId).config.run).toEqual({ web: "false", api: "true" });
+    expect(w.procs.get(wt.id)).toBe(own);
+    expect(own.started.map((p) => [p.name, p.command])).toEqual([["web", "true"]]);
+
+    // the person's local file in the main checkout reaches the branch over its own file
+    writeFileSync(join(w.repo, "toyon.local.json"), JSON.stringify({ run: { api: "echo mine" } }));
+    w.repos.reloadConfig(repoId);
+    await settle();
+    expect(w.procs.get(wt.id)!.started.map((p) => [p.name, p.command])).toEqual([
+      ["api", "echo mine"],
+      ["web", "true"],
+    ]);
+  });
+
+  test("a change to the worktree's own file restarts its procs; a touch or a broken file does not", async () => {
+    writeFileSync(join(w.repo, "toyon.json"), JSON.stringify({ run: { web: "true" } }));
+    sh(w.repo, GIT, "add", "toyon.json");
+    sh(w.repo, GIT, "commit", "-q", "-m", "settings");
+    const repoId = await registered();
+    const wt = await w.worktrees.create(repoId, "task");
+    await settle();
+    const before = w.procs.get(wt.id)!;
+    writeFileSync(join(wt.path, "toyon.json"), JSON.stringify({ run: { web: "false" } }));
+    await until(() => w.procs.get(wt.id)?.started[0]?.command === "false");
+    expect(before.stopped).toBe(true);
+
+    const same = w.procs.get(wt.id)!;
+    const lines: string[] = [];
+    w.hub.on("log", (id, proc, line) => id === wt.id && proc === "setup" && lines.push(line));
+    writeFileSync(join(wt.path, "toyon.json"), JSON.stringify({ run: { web: "false" } }));
+    await new Promise((r) => setTimeout(r, 500));
+    expect(w.procs.get(wt.id)).toBe(same);
+    writeFileSync(join(wt.path, "toyon.json"), "{ broken");
+    await until(() => lines.length > 0);
+    expect(lines[0]).toMatch(/not valid JSON.*keeping the procs/);
+    expect(w.procs.get(wt.id)).toBe(same);
+  });
+
   test("a key toyon does not know is named in main's log, even when nothing else changed", async () => {
     const repoId = await registered();
     const lines: string[] = [];

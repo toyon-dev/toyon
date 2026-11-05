@@ -25,6 +25,7 @@ import { commitOf } from "../git/archive.ts";
 import { git, gitOrThrow, lockfileHash } from "../git/exec.ts";
 import { withLock, withRepoLock } from "../git/lock.ts";
 import { filesBetween } from "../git/status.ts";
+import { configFor } from "../repos/config.ts";
 import type { RunService } from "../runs/service.ts";
 import { STAGGER_MS } from "../runtime/idle.ts";
 import { allocateProxyPort, releasePort } from "../runtime/ports.ts";
@@ -179,6 +180,7 @@ export class SparePool {
       // stands on the row as a setup stage, the one line a reserved row has to show, and the one
       // a claim of it keeps showing.
       const run = this.d.runs.begin(wt.id, "setup", {
+        // the tree is not written yet, so the ceiling is the repo's; setup's own is the base's
         timeoutMs: timeoutFor(repo.config, "setup"),
         stage: "checking out",
       });
@@ -281,7 +283,10 @@ export class SparePool {
         wt.lockfile = h;
         this.d.state.save();
         await this.d.teardown?.(wt, repo);
-        for (const cmd of repo.config.setup ?? []) {
+        // the base's file: on the push and PR routes the spare stands on origin/main, which can
+        // be ahead of or behind the checkout's
+        const { config } = configFor(wt, repo);
+        for (const cmd of config.setup ?? []) {
           // nobody is watching a spare, so its output goes to the daemon log rather than the hub
           const tail: string[] = [];
           // the spare keeps its id when claimed, so a database this names is the task's later
@@ -294,7 +299,7 @@ export class SparePool {
               if (tail.length > 20) tail.shift();
             },
             worktreeEnv(wt, repo),
-            { timeoutMs: timeoutFor(repo.config, "setup") },
+            { timeoutMs: timeoutFor(config, "setup") },
           );
           if (code !== 0) log.warn(wt.id, `spare setup failed (exit ${code}): ${cmd}`, tail.join("\n"));
         }

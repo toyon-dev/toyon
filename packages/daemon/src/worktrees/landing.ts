@@ -35,6 +35,7 @@ import type { StateStore } from "../core/state.ts";
 import type { ExecOpts, ExecResult } from "../exec/service.ts";
 import { git } from "../git/exec.ts";
 import { aheadBehind, committedFiles, statusFiles, treeFingerprint } from "../git/status.ts";
+import { configFor } from "../repos/config.ts";
 import type { RunService } from "../runs/service.ts";
 import { migrationMatch } from "./backend.ts";
 import type { WorktreeService } from "./service.ts";
@@ -337,11 +338,13 @@ export class LandingService {
     // The check still decides the word; the message is on the row as soon as it is written, so a
     // commit can take it while the check is out, and it stays on a failed check for the commit
     // that fixes it. A run that goes stale under either answer writes nothing more.
-    const command = repo.config.check?.trim();
+    // the check is the branch's own: its file names the suite its code passes
+    const { config } = configFor(wt, repo);
+    const command = config.check?.trim();
     let checkDone = false;
     const checked = async (): Promise<Checked | undefined> => {
       if (!command) return { check: "none" };
-      const ceiling = timeoutFor(repo.config, "check");
+      const ceiling = timeoutFor(config, "check");
       // a check from an earlier run of the verdict is still going: its answer is moot now
       this.d.runs.drop(worktreeId, "check");
       const run = this.d.runs.begin(worktreeId, "check", {

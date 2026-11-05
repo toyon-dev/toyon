@@ -1,17 +1,15 @@
 import { describe, expect, test } from "bun:test";
-import type { RepoInfo } from "@toyon/shared";
-import { expandEnv, resolveRun } from "./profile.ts";
+import type { WorktreeConfig } from "../repos/config.ts";
+import { expandEnv, resolveRun as resolve, trunkOf } from "./profile.ts";
 
-const base: RepoInfo = {
-  id: "r",
-  path: "/nowhere",
-  name: "x",
-  defaultBranch: "main",
+const base: WorktreeConfig = {
   config: { run: { api: "a", web: "w", worker: "k" } },
-  configFile: ".toyon/settings.json",
-  needsSetup: false,
+  file: ".toyon/settings.json",
 };
-const withProfiles: RepoInfo = {
+/** the worktree's file is the repo's, as it is until a branch changes it */
+const resolveRun = (cfg: WorktreeConfig, wt: Parameters<typeof resolve>[1]) =>
+  resolve(cfg, wt, trunkOf({ config: cfg.config, configFile: cfg.file }));
+const withProfiles: WorktreeConfig = {
   ...base,
   config: {
     ...base.config,
@@ -60,7 +58,7 @@ describe("resolveRun", () => {
 });
 
 describe("resolveRun and the shared tier", () => {
-  const tiered: RepoInfo = {
+  const tiered: WorktreeConfig = {
     ...base,
     config: {
       run: {
@@ -85,6 +83,36 @@ describe("resolveRun and the shared tier", () => {
     expect(resolveRun(tiered, { id: "w", kind: "spare" }).borrowed).toEqual(["api", "db"]);
     expect(resolveRun(tiered, { id: "m", kind: "main" }).borrowed).toEqual([]);
     expect(resolveRun(tiered, { id: "m", kind: "main" }).shared).toEqual(["api", "db"]);
+  });
+
+  test("a proc the worktree's file shares is borrowed only when main's file shares it too", () => {
+    // the branch marks api and db shared; main's file has renamed api to server and kept db
+    const trunk = new Set(["server", "db"]);
+    const r = resolve(tiered, { id: "w", kind: "worktree" }, trunk);
+    expect(r.shared).toEqual(["api", "db"]);
+    expect(r.borrowed).toEqual(["db"]);
+    expect(resolve(tiered, { id: "w", kind: "worktree", owns: ["db"] }, trunk).borrowed).toEqual([]);
+    expect(trunkOf({ config: tiered.config, configFile: tiered.file })).toEqual(new Set(["api", "db"]));
+  });
+
+  test("the trunk is what main runs: a shared proc main's own profile leaves out is nobody's to borrow", () => {
+    const profiled = {
+      config: {
+        ...tiered.config,
+        profiles: { fe: { run: ["web", "api"] }, full: { run: ["web", "api", "db"] } },
+        defaultProfile: "full",
+      },
+      configFile: tiered.file,
+    };
+    expect(trunkOf(profiled, { id: "m", profile: "fe" })).toEqual(new Set(["api"]));
+    expect(trunkOf(profiled)).toEqual(new Set(["api", "db"]));
+    const r = resolve(
+      { config: profiled.config, file: tiered.file },
+      { id: "w", kind: "worktree" },
+      trunkOf(profiled, { id: "m", profile: "fe" }),
+    );
+    expect(r.shared).toEqual(["api", "db"]);
+    expect(r.borrowed).toEqual(["api"]);
   });
 
   test("a profile narrows the shared tier with the rest", () => {

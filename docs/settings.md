@@ -8,6 +8,8 @@ The settings live in `.toyon/settings.json`, or in `toyon.json` at the root for 
 
 The first open guesses a file from `package.json` and asks you to confirm it. Other stacks start from an empty guess the agent can fill in.
 
+Each copy runs under the file in its own tree, with your local overrides on top. An older branch keeps the commands it was written with after the main checkout renames a script, and a branch that changes how the app starts previews that change before it lands. A copy without a file of its own runs under the main checkout's.
+
 ```json
 {
   "setup": ["npm install"],

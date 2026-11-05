@@ -2,9 +2,10 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { configFileKind, configSibling } from "@toyon/shared";
+import { configFileKind, configSibling, type RepoInfo, type WorktreeKind } from "@toyon/shared";
 import {
   configBody,
+  configFor,
   configTarget,
   configText,
   detectConfig,
@@ -359,5 +360,72 @@ describe("settings files", () => {
     const r = readConfigFile(broken);
     if (r && !r.ok) expect(r.reason).toMatch(/toyon\.json is not valid JSON: .* at line 4/);
     else throw new Error("expected a refusal");
+  });
+});
+
+describe("configFor", () => {
+  const info = (path: string, over: Partial<RepoInfo> = {}): RepoInfo => ({
+    id: "r",
+    path,
+    name: "x",
+    defaultBranch: "main",
+    config: { run: { web: "repo" } },
+    configFile: ".toyon/settings.json",
+    needsSetup: false,
+    ...over,
+  });
+  const wt = (path: string, kind: WorktreeKind = "worktree") => ({ id: "w", path, kind });
+  const file = (body: unknown) => ({ ".toyon/settings.json": JSON.stringify(body) });
+
+  test("the worktree's own shared file wins over the repo's config", () => {
+    const r = info(repo(file({ run: { web: "main" } })));
+    const own = repo(file({ run: { web: "branch" }, check: "c" }));
+    expect(configFor(wt(own), r)).toEqual({
+      config: { run: { web: "branch" }, check: "c" },
+      file: ".toyon/settings.json",
+    });
+    // the place is the worktree's own: a branch that keeps the file at the root reads from there
+    const root = repo({ "toyon.json": JSON.stringify({ run: { web: "root" } }) });
+    expect(configFor(wt(root), r)).toEqual({ config: { run: { web: "root" } }, file: "toyon.json" });
+  });
+
+  test("the person's local file layers over the worktree's shared one, and one in the worktree over that", () => {
+    const r = info(
+      repo({ ...file({ run: { web: "main" } }), ".toyon/settings.local.json": JSON.stringify({ run: { api: "a" } }) }),
+      {
+        configFile: ".toyon/settings.local.json",
+      },
+    );
+    const own = repo(file({ run: { web: "branch" }, setup: ["make"] }));
+    expect(configFor(wt(own), r).config).toEqual({ run: { web: "branch", api: "a" }, setup: ["make"] });
+    const twice = repo({
+      ...file({ run: { web: "branch" } }),
+      ".toyon/settings.local.json": JSON.stringify({ run: { api: "mine" } }),
+    });
+    expect(configFor(wt(twice), r).config).toEqual({ run: { web: "branch", api: "mine" } });
+  });
+
+  test("no shared file in the worktree, no directory, or an unconfirmed repo: the repo's", () => {
+    const r = info(repo(file({ run: { web: "main" } })));
+    const repos = { config: r.config, file: r.configFile };
+    expect(configFor(wt(repo({})), r)).toEqual(repos);
+    expect(configFor(wt(join(r.path, "gone")), r)).toEqual(repos);
+    // a local file alone in the worktree is this person's, not the branch's
+    expect(configFor(wt(repo({ ".toyon/settings.local.json": JSON.stringify({ run: { web: "x" } }) })), r)).toEqual(
+      repos,
+    );
+    const own = repo(file({ run: { web: "branch" } }));
+    expect(configFor(wt(own), { ...r, needsSetup: true })).toEqual(repos);
+    expect(configFor(wt(own, "main"), r)).toEqual(repos);
+    expect(configFor(wt(r.path), r)).toEqual(repos);
+  });
+
+  test("a worktree file that will not read is passed over, with the reason", () => {
+    const r = info(repo(file({ run: { web: "main" } })));
+    const broken = configFor(wt(repo({ ".toyon/settings.json": "{ nope" })), r);
+    expect(broken.config).toEqual(r.config);
+    expect(broken.reason).toMatch(/not valid JSON/);
+    const both = repo({ ...file({ run: {} }), "toyon.json": JSON.stringify({ run: {} }) });
+    expect(configFor(wt(both), r).reason).toMatch(/two places/);
   });
 });

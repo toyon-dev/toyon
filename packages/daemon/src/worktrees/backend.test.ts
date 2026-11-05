@@ -5,6 +5,7 @@ import type { RepoInfo, WorktreeInfo } from "@toyon/shared";
 import { tmpRepo } from "../../test/helpers/tmp-repo.ts";
 import { Hub } from "../core/hub.ts";
 import { StateStore } from "../core/state.ts";
+import { resolveRun, trunkOf } from "../runtime/profile.ts";
 import { BackendShare, DEBOUNCE_MS, migrationMatch, rootMatch, touching } from "./backend.ts";
 
 let cleanup = () => {};
@@ -80,13 +81,15 @@ describe("BackendShare", () => {
   function make(files: () => string[]) {
     const t = tmpRepo();
     cleanup = t.cleanup;
-    // the repo's tree, for the paths read off the commands
-    mkdirSync(join(t.repo, "server"), { recursive: true });
-    writeFileSync(join(t.repo, "server/index.js"), "");
-    writeFileSync(join(t.repo, "worker.js"), "");
+    // the worktree's tree, for the paths read off the commands
+    const a = join(t.repo, "..", "a");
+    mkdirSync(join(a, "server"), { recursive: true });
+    writeFileSync(join(a, "server/index.js"), "");
+    writeFileSync(join(a, "worker.js"), "");
+    const cfg = { config: repo.config, file: repo.configFile };
     const state = new StateStore(t.paths, {
       repos: [{ ...repo, path: t.repo }],
-      worktrees: [row("a"), row("m", { kind: "main" })],
+      worktrees: [row("a", { path: a }), row("m", { kind: "main" })],
       sessions: {},
     });
     const hub = new Hub();
@@ -94,7 +97,10 @@ describe("BackendShare", () => {
     const share = new BackendShare({
       state,
       hub,
-      runtime: { borrows: (id) => id === "a" && (state.worktree("a")?.owns?.length ?? 0) < 3 },
+      runtime: {
+        borrows: (id) => id === "a" && (state.worktree("a")?.owns?.length ?? 0) < 3,
+        runOf: (id) => resolveRun(cfg, state.requireWorktree(id), trunkOf(repo)),
+      },
       own: async (id, names) => {
         owned.push([id, names]);
         const wt = state.requireWorktree(id);

@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { LOGIN_STREAM, type Remote, type RepoInfo, SHELL_STREAM, type WorktreeInfo } from "@toyon/shared";
 import { fakeAgents, fakeFactories } from "../../test/helpers/fakes.ts";
 import { tmpRepo } from "../../test/helpers/tmp-repo.ts";
@@ -182,8 +184,38 @@ describe("RuntimeRegistry", () => {
     expect(procs.size).toBe(0);
   });
 
+  test("a worktree with a settings file of its own starts under it, and runs a proc main does not share", async () => {
+    const t = tmpRepo();
+    const own = join(t.paths.worktreesDir, "own");
+    mkdirSync(join(own, ".toyon"), { recursive: true });
+    writeFileSync(
+      join(own, ".toyon/settings.json"),
+      JSON.stringify({ run: { web: "echo branch", api: { cmd: "echo api", from: "trunk" } } }),
+    );
+    const { registry, procs } = make({
+      worktrees: [
+        { ...wt, path: own },
+        { ...wt, id: "m", kind: "main" },
+      ],
+    });
+    const made = cleanup;
+    cleanup = () => {
+      made();
+      t.cleanup();
+    };
+    await registry.start({ ...wt, path: own }, repo);
+    // main's file shares nothing by that name, so the branch runs its api itself
+    expect(procs.get(wt.id)!.started.map((p) => [p.name, p.command])).toEqual([
+      ["api", "echo api"],
+      ["web", "echo branch"],
+    ]);
+    expect(registry.runOf(wt.id)?.borrowed).toEqual([]);
+    // the record is the branch's file as its procs came up, even after main's file moves on
+    await registry.stopProcs(wt.id);
+    expect(registry.runOf(wt.id)).toBeUndefined();
+  });
+
   test("a profile narrows and orders the procs, and its env reaches every proc with $API_URL expanded", async () => {
-    const { registry, procs } = make();
     const profiled: RepoInfo = {
       ...repo,
       config: {
@@ -202,6 +234,7 @@ describe("RuntimeRegistry", () => {
         defaultProfile: "fe",
       },
     };
+    const { registry, procs } = make({ repo: profiled });
     await registry.start({ ...wt, profile: "full" }, profiled);
     const started = procs.get(wt.id)!.started;
     expect(started.map((p) => p.name)).toEqual(["api", "web"]);
@@ -301,7 +334,11 @@ describe("RuntimeRegistry", () => {
     const names = (p: { started: Array<{ name: string }> } | undefined) => p?.started.map((s) => s.name);
 
     test("main behind a spare runs the shared tier alone: no page, no proxy, no port", async () => {
-      const { registry, procs, proxies, forwards } = make({ worktrees: [main, wt], mainLeads: () => false });
+      const { registry, procs, proxies, forwards } = make({
+        worktrees: [main, wt],
+        mainLeads: () => false,
+        repo: tiered,
+      });
       await registry.start(main, tiered);
       expect(names(procs.get(main.id))).toEqual(["api", "db"]);
       expect(proxies.get(main.id)).toBeUndefined();
@@ -315,7 +352,7 @@ describe("RuntimeRegistry", () => {
     });
 
     test("a worktree spawns only its page and reaches the shared tier on main through its forwarders", async () => {
-      const { registry, procs, forwards } = make({ worktrees: [main, wt], mainLeads: () => false });
+      const { registry, procs, forwards } = make({ worktrees: [main, wt], mainLeads: () => false, repo: tiered });
       await registry.start(main, tiered);
       await registry.start(wt, tiered);
       expect(names(procs.get(wt.id))).toEqual(["web"]);

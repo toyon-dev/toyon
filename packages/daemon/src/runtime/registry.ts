@@ -1,6 +1,7 @@
 // One Runtime per worktree: its agent session (from the moment the worktree exists) plus, once
 // setup has run, its process group and preview proxy.
 
+import { existsSync } from "node:fs";
 import type {
   ArchivedWorktree,
   LogLine,
@@ -39,12 +40,14 @@ import { fireAndForget, log } from "../core/log.ts";
 import type { Paths } from "../core/paths.ts";
 import type { PreviewGate } from "../core/remote.ts";
 import type { GroupEntry, StateStore } from "../core/state.ts";
+import { configFor, settingsLines, type WorktreeConfig } from "../repos/config.ts";
+import { watchConfigFile } from "../repos/watcher.ts";
 import { type ForwardOpts, type ForwardTarget, type ProcForwarder, startForward } from "./forward.ts";
 import { groupAlive, reclaimGroup } from "./kill.ts";
 import { bootId, type PsRow, psGroups } from "./memory.ts";
 import { type Orphan, orphansIn, strayAdapters, strayProcs } from "./orphans.ts";
 import { type PortLease, proxyPorts } from "./ports.ts";
-import { EMPTY_RUN, expandEnv, type ResolvedRun, resolveRun } from "./profile.ts";
+import { EMPTY_RUN, expandEnv, type ResolvedRun, resolveRun, trunkOf } from "./profile.ts";
 import { type ProxyTarget, startProxy, type WorktreeProxy } from "./proxy.ts";
 import { type PtyHandle, type PtyOpts, PtyStream } from "./pty.ts";
 import { WorktreeProcs } from "./supervisor.ts";
@@ -56,6 +59,13 @@ export interface Runtime {
   procs: WorktreeProcs | null;
   proxy: WorktreeProxy | null;
   previewName: string | undefined;
+  /** the settings the procs came up under, and the run resolved from them: what a take-over
+   * starts a proc with, so a file edited under running procs cannot give one a command its
+   * siblings did not start with. Gone with the procs. */
+  cfg: WorktreeConfig | null;
+  run: ResolvedRun | null;
+  /** the worktree's own settings file, watched while its procs run; main's is the repo's watcher */
+  configWatch: (() => void) | null;
   /** one per non-preview proc, by name: the fixed address its siblings and the shell reach it
    * at. Bound before any proc spawns, kept through sleep, gone with the procs. */
   forwards: Map<string, ProcForwarder>;
@@ -753,6 +763,9 @@ export class RuntimeRegistry {
       procs: null,
       proxy: null,
       previewName: undefined,
+      cfg: null,
+      run: null,
+      configWatch: null,
       forwards: new Map(),
       shared: new Set(),
       borrowed: new Set(),
@@ -763,8 +776,8 @@ export class RuntimeRegistry {
     return rt;
   }
 
-  /** Start the worktree's procs and proxy under the repo's config, narrowed by the worktree's
-   * profile; no-op if already running. Main is two tiers: the shared one (`from: "trunk"`) it
+  /** Start the worktree's procs and proxy under its settings (its own file, else the repo's),
+   * narrowed by the worktree's profile; no-op if already running. Main is two tiers: the shared one (`from: "trunk"`) it
    * runs whatever stands in for it, once for every worktree of the repo, and its page and proxy
    * only as the lead (setup unconfirmed, an empty project, a warm-up that failed), which keeps the
    * setup pane and the first-run preview working. A main that ran the shared tier alone and leads
@@ -777,13 +790,17 @@ export class RuntimeRegistry {
     // this one's preview
     if (record.parked) return;
     // unconfirmed detection: no procs until the user confirms the setup pane
-    const run = repo.needsSetup ? EMPTY_RUN : resolveRun(repo, wt);
+    const cfg = configFor(wt, repo);
+    const run = repo.needsSetup ? EMPTY_RUN : resolveRun(cfg, wt, this.trunkOf(repo));
     const leads = wt.kind !== "main" || !this.deps.mainLeads || this.deps.mainLeads(wt.repoId);
     if (rt.procs) {
       if (leads && wt.kind === "main" && !rt.proxy) await this.startPage(rt, wt, repo, run);
       return;
     }
     if (!leads && run.shared.length === 0) return;
+    // setup's own start says nothing: the setup runner said it, where the setup lines are
+    if (!this.settingUp.has(wt.id))
+      for (const line of settingsLines(cfg, repo)) this.deps.hub.emit("log", wt.id, "setup", line);
 
     // before anything starts, so running out of preview ports leaves nothing half up. The record
     // keeps the port it got, and the rows frame sent once the proxy is up carries it to the shell
@@ -796,6 +813,8 @@ export class RuntimeRegistry {
 
     const procs = (this.deps.makeProcs ?? defaultProcs)(wt, this.deps);
     rt.procs = procs;
+    rt.cfg = cfg;
+    rt.run = run;
     rt.previewName = leads ? run.preview : undefined;
     rt.shared = new Set(run.shared);
     rt.borrowed = new Set(run.borrowed);
@@ -811,6 +830,27 @@ export class RuntimeRegistry {
     }
     if (port !== null) this.openProxy(rt, live, port);
     this.deps.hub.emit("worktreesChanged");
+    // armed once the start is whole, since a stop under a start in flight would leave it opening
+    // a proxy on procs that are gone; a write during the spawns is caught by the look that follows
+    if (wt.kind !== "main") {
+      rt.configWatch = this.watchConfig(rt, wt);
+      this.settingsChanged(rt, wt.id);
+    }
+  }
+
+  /** the shared tier as main runs it, for what a worktree may borrow */
+  private trunkOf(repo: RepoInfo): Set<string> {
+    const mainId = this.mainIdOf(repo.id);
+    return trunkOf(repo, mainId ? this.deps.state.worktree(mainId) : undefined);
+  }
+
+  /** whether the worktree's procs would come up differently now: its settings or the trunk moved
+   * under it. False while nothing runs. What the repo's reload asks before restarting a row. */
+  runChanged(wt: WorktreeInfo, repo: RepoInfo): boolean {
+    const now = this.runOf(wt.id);
+    if (!now) return false;
+    const next = repo.needsSetup ? EMPTY_RUN : resolveRun(configFor(wt, repo), wt, this.trunkOf(repo));
+    return JSON.stringify(next) !== JSON.stringify(now);
   }
 
   /** main's page beside the shared tier it already runs: the spare that stood in for it is gone */
@@ -831,6 +871,34 @@ export class RuntimeRegistry {
     if (this.runtimes.get(wt.id) !== rt) return;
     this.openProxy(rt, live, port);
     this.deps.hub.emit("worktreesChanged");
+  }
+
+  /** The worktree's own settings file, while its procs run: a checkout, a rebase or an edit that
+   * changes it brings the procs back under the new one, the way the repo's watcher does for
+   * main's. A write that leaves the config as it was (a touch, a checkout that kept the file)
+   * changes nothing, and a file that will not read keeps the procs as they are, since it is
+   * mid-edit more often than not. An asleep worktree only goes cold, so idle sleep is not undone:
+   * the next look starts it under the new file. */
+  private watchConfig(rt: Runtime, { id, path }: WorktreeInfo): (() => void) | null {
+    if (!existsSync(path)) return null;
+    return watchConfigFile(path, () => this.settingsChanged(rt, id));
+  }
+
+  /** the look at the worktree's file the watcher takes, and the start takes once for the spawns */
+  private settingsChanged(rt: Runtime, id: string): void {
+    if (this.runtimes.get(id) !== rt || !rt.procs || !rt.cfg || this.starting.has(id)) return;
+    const wt = this.deps.state.worktree(id);
+    const repo = wt && this.deps.state.repos.find((r) => r.id === wt.repoId);
+    if (!wt || !repo) return;
+    const next = configFor(wt, repo);
+    if (next.reason) {
+      this.deps.hub.emit("log", id, "setup", `${next.reason}; keeping the procs as they are`);
+      return;
+    }
+    if (JSON.stringify(next.config) === JSON.stringify(rt.cfg.config)) return;
+    log.info(id, `${next.file} changed: restarting`);
+    const restart = rt.procs.asleep ? this.stopProcs(id) : this.stopProcs(id).then(() => this.wake(id));
+    fireAndForget(id, restart, "settings restart");
   }
 
   /** Spawn `spawn` of the run's procs, the preview last, with a forwarder in front of every
@@ -889,6 +957,13 @@ export class RuntimeRegistry {
   /** whether the worktree reaches any of the shared tier on main rather than running it */
   borrows(id: string): boolean {
     return (this.runtimes.get(id)?.borrowed.size ?? 0) > 0;
+  }
+
+  /** the run the worktree's procs came up under, with what it borrows as it stands now (a
+   * take-over shrinks it); undefined while nothing runs */
+  runOf(id: string): ResolvedRun | undefined {
+    const rt = this.runtimes.get(id);
+    return rt?.run ? { ...rt.run, borrowed: [...rt.borrowed] } : undefined;
   }
 
   /** The forwarder in front of one proc: it dials the proc where it answers, waits while the proc
@@ -986,8 +1061,8 @@ export class RuntimeRegistry {
   async own(id: string, names: string[]): Promise<void> {
     const rt = this.runtimes.get(id);
     const wt = this.deps.state.worktree(id);
-    if (!rt?.procs || !wt) return;
-    const run = resolveRun(this.deps.state.requireRepo(wt.repoId), wt);
+    if (!rt?.procs || !rt.run || !wt) return;
+    const run = rt.run;
     const started: string[] = [];
     for (const name of names) {
       if (!rt.borrowed.has(name) || !run.procs[name]) continue;
@@ -1012,8 +1087,8 @@ export class RuntimeRegistry {
   async share(id: string): Promise<void> {
     const rt = this.runtimes.get(id);
     const wt = this.deps.state.worktree(id);
-    if (!rt?.procs || !wt) return;
-    const run = resolveRun(this.deps.state.requireRepo(wt.repoId), wt);
+    if (!rt?.procs || !rt.run || !wt) return;
+    const run = rt.run;
     for (const name of run.borrowed) {
       if (rt.borrowed.has(name)) continue;
       rt.borrowed.add(name);
@@ -1090,6 +1165,10 @@ export class RuntimeRegistry {
     const { procs, proxy } = rt;
     rt.procs = null;
     rt.proxy = null;
+    rt.cfg = null;
+    rt.run = null;
+    rt.configWatch?.();
+    rt.configWatch = null;
     proxy?.stop();
     this.stopForwards(rt);
     this.returnLease(id);
@@ -1105,6 +1184,8 @@ export class RuntimeRegistry {
     if (!rt) return;
     this.runtimes.delete(id);
     this.stopping.set(id, rt);
+    rt.configWatch?.();
+    rt.configWatch = null;
     rt.proxy?.stop();
     this.stopForwards(rt);
     this.returnLease(id);
@@ -1282,7 +1363,9 @@ export class RuntimeRegistry {
     const wt = this.deps.state.worktree(id);
     if (wt?.parked) {
       const repo = this.deps.state.repos.find((r) => r.id === wt.repoId);
-      return repo && !repo.needsSetup && resolveRun(repo, wt).preview ? { status: "parked" } : null;
+      return repo && !repo.needsSetup && resolveRun(configFor(wt, repo), wt, this.trunkOf(repo)).preview
+        ? { status: "parked" }
+        : null;
     }
     if (this.settingUp.has(id)) return { status: "setup" };
     const rt = this.runtimes.get(id);

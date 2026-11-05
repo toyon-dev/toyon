@@ -108,10 +108,11 @@ import { logCommits, rangeSubjects, commitFiles as readCommitFiles } from "../gi
 import { aheadBehind, aheadUpstream, statusFiles, treeEmpty, treeFingerprint } from "../git/status.ts";
 import { dropTurnRefs, markTurn } from "../git/turn.ts";
 import { listWorktrees } from "../git/worktrees.ts";
+import { configFor, settingsLines } from "../repos/config.ts";
 import { isInside } from "../repos/create.ts";
 import { type RunHandle, RunService } from "../runs/service.ts";
 import { allocateProxyPort, releasePort } from "../runtime/ports.ts";
-import { resolveRun } from "../runtime/profile.ts";
+import { resolveRun, trunkOf } from "../runtime/profile.ts";
 import { DEFAULT_AGENT_ID, type Runtime, type RuntimeRegistry, worktreeEnv } from "../runtime/registry.ts";
 import { runSetup } from "../runtime/setup.ts";
 import {
@@ -524,7 +525,10 @@ export class WorktreeService {
     // is a proposal's, not a send from the row, so it takes a checkout of its own: the spare stays
     // the person's, draft and all, and a row meant to wait for a look does not arrive running.
     const spare = opts.cold ? undefined : this.d.state.worktrees.find((w) => w.repoId === repoId && w.kind === "spare");
-    const restart = !!spare && profile !== undefined && profile !== resolveRun(repo, spare).profile;
+    const restart =
+      !!spare &&
+      profile !== undefined &&
+      profile !== resolveRun(configFor(spare, repo), spare, this.trunkOf(repo)).profile;
     let carriedIn: Carried | undefined;
     let release: (() => void) | undefined;
     const stamps: ClaimStamps = {
@@ -941,7 +945,7 @@ export class WorktreeService {
   async ownProcs(worktreeId: string, names?: string[]): Promise<void> {
     const { wt, repo } = this.d.state.requireWorktreeWithRepo(worktreeId);
     if (wt.kind === "main") throw new UserError("main runs the shared tier for everyone already");
-    const run = resolveRun(repo, wt);
+    const run = this.d.runtime.runOf(wt.id) ?? resolveRun(configFor(wt, repo), wt, this.trunkOf(repo));
     const take = (names ?? run.borrowed).filter((n) => run.borrowed.includes(n));
     if (take.length === 0) throw new UserError("nothing here runs on main");
     wt.owns = [...(wt.owns ?? []), ...take];
@@ -960,11 +964,21 @@ export class WorktreeService {
     await this.d.runtime.share(wt.id);
   }
 
-  /** a profile name the repo actually has, or undefined for "the default"; a typo is a refusal */
-  private checkProfile(repo: RepoInfo, name: string | undefined): string | undefined {
+  /** a profile name the settings actually have, or undefined for "the default"; a typo is a
+   * refusal. The worktree's own file when there is a worktree, the repo's for one not yet made. */
+  private checkProfile(repo: RepoInfo, name: string | undefined, wt?: WorktreeInfo): string | undefined {
     if (name === undefined) return undefined;
-    if (!repo.config.profiles?.[name]) throw new UserError(`no profile "${name}" in ${repo.configFile}`);
+    const { config, file } = wt ? configFor(wt, repo) : { config: repo.config, file: repo.configFile };
+    if (!config.profiles?.[name]) throw new UserError(`no profile "${name}" in ${file}`);
     return name;
+  }
+
+  /** the shared tier as main runs it, for what a worktree may borrow */
+  private trunkOf(repo: RepoInfo): Set<string> {
+    return trunkOf(
+      repo,
+      this.d.state.worktrees.find((w) => w.repoId === repo.id && w.kind === "main"),
+    );
   }
 
   /** procs and proxy come back under the worktree's current profile; the agent is untouched */
@@ -983,7 +997,7 @@ export class WorktreeService {
   setProfile(worktreeId: string, name: string) {
     const { wt, repo } = this.d.state.requireWorktreeWithRepo(worktreeId);
     if (wt.kind === "spare") throw new UserError("no profile for a spare worktree");
-    const profile = this.checkProfile(repo, name);
+    const profile = this.checkProfile(repo, name, wt);
     if (profile === wt.profile) return;
     wt.profile = profile;
     this.d.state.save();
@@ -1153,15 +1167,18 @@ export class WorktreeService {
    * checkout. A failure is logged and the removal goes on, since a database left behind is the
    * lesser surprise than a directory that will not go. */
   private async teardown(wt: WorktreeInfo, repo: RepoInfo): Promise<void> {
-    const cmds = repo.config.teardown ?? [];
-    if (cmds.length === 0 || !existsSync(wt.path)) return;
+    if (!existsSync(wt.path)) return;
+    // the branch's own teardown: what its setup made is what its file knows how to drop
+    const { config } = configFor(wt, repo);
+    const cmds = config.teardown ?? [];
+    if (cmds.length === 0) return;
     for (const cmd of cmds) {
       const code = await runSetup(
         cmd,
         wt.path,
         (line) => this.d.hub.emit("log", wt.id, "setup", line),
         worktreeEnv(wt, repo),
-        { timeoutMs: timeoutFor(repo.config, "setup") },
+        { timeoutMs: timeoutFor(config, "setup") },
       );
       if (code !== 0) log.warn(wt.id, `teardown failed (exit ${code}): ${cmd}`);
     }
@@ -1814,7 +1831,10 @@ export class WorktreeService {
     { setupCommands = true, start = true }: { setupCommands?: boolean; start?: boolean },
   ): Promise<void> {
     await this.mirrorBaseIgnore(repo);
-    const ceiling = timeoutFor(repo.config, "setup");
+    // the tree's own file: an older branch installs and runs what its scripts answer to
+    const cfg = configFor(wt, repo);
+    for (const line of settingsLines(cfg, repo)) this.d.hub.emit("log", wt.id, "setup", line);
+    const ceiling = timeoutFor(cfg.config, "setup");
     // what an earlier worktree built to pass the check comes first: keyed by this tree's own
     // lockfiles, it matches when main's copy would not, and a hit makes the copy below and the
     // install after it no-ops. It stands on the row as a setup stage of its own, since a clone of
@@ -1847,7 +1867,7 @@ export class WorktreeService {
     // `bun install` and friends can take a minute: async, so every preview and agent stream keeps
     // flowing while a new worktree warms up. Each command runs under the settings' setup ceiling
     // and stands on the row while it does, so the wait for it says how long and on what.
-    const cmds = setupCommands ? (repo.config.setup ?? []) : [];
+    const cmds = setupCommands ? (cfg.config.setup ?? []) : [];
     for (const [i, cmd] of cmds.entries()) {
       const stage = cmds.length > 1 ? `${cmd} (${i + 1} of ${cmds.length})` : cmd;
       const run = this.runs.begin(wt.id, "setup", { timeoutMs: ceiling, stage });

@@ -10,7 +10,6 @@ import { fireAndForget, log } from "../core/log.ts";
 import type { StateStore } from "../core/state.ts";
 import { committedFiles, statusFiles } from "../git/status.ts";
 import { inferPaths, previewPaths } from "../repos/config.ts";
-import { resolveRun } from "../runtime/profile.ts";
 import type { RuntimeRegistry } from "../runtime/registry.ts";
 
 /** files that change what every shared proc runs on: deps, env, containers */
@@ -63,7 +62,7 @@ async function changedFiles(wt: WorktreeInfo, repo: RepoInfo, committed: boolean
 export interface BackendDeps {
   state: StateStore;
   hub: Hub;
-  runtime: Pick<RuntimeRegistry, "borrows">;
+  runtime: Pick<RuntimeRegistry, "borrows" | "runOf">;
   /** take the named procs over: the service persists `owns` and starts them */
   own: (worktreeId: string, names: string[]) => Promise<void>;
   /** the worktree's changed files; git when absent */
@@ -143,16 +142,18 @@ export class BackendShare {
     const wt = this.d.state.worktree(id);
     if (!wt || wt.kind === "main" || !this.d.runtime.borrows(id)) return;
     const repo = this.d.state.requireRepo(wt.repoId);
-    const run = resolveRun(repo, wt);
-    if (run.borrowed.length === 0) return;
+    // the run the procs came up under, so the take-over starts the command its siblings run with
+    const run = this.d.runtime.runOf(id);
+    if (!run || run.borrowed.length === 0) return;
     const files = await (this.d.changed ?? changedFiles)(wt, repo, committed);
     if (files.length === 0) return;
-    const page = run.preview ? previewPaths(run.procs[run.preview]!, repo.path) : [];
+    // the commands are the worktree's own, so a script that exists only on its branch counts
+    const page = run.preview ? previewPaths(run.procs[run.preview]!, wt.path) : [];
     const take: string[] = [];
     const why: string[] = [];
     for (const name of run.borrowed) {
       const declared = run.paths[name];
-      const hit = touching(files, declared ?? inferPaths(run.procs[name]!, repo.path), declared !== undefined, page);
+      const hit = touching(files, declared ?? inferPaths(run.procs[name]!, wt.path), declared !== undefined, page);
       if (hit) {
         take.push(name);
         why.push(hit);

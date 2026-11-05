@@ -423,9 +423,10 @@ export class RepoRegistry {
       }
       return;
     }
-    // only what is running comes back under the new file; a cold worktree stays cold and reads
-    // the file when it is opened
-    for (const wt of this.d.state.worktrees.filter((w) => w.repoId === repoId && this.d.runtime.get(w.id)?.procs)) {
+    // only what is running comes back under the new file, and only where the file reaches it: a
+    // worktree on a file of its own runs on; a cold worktree stays cold and reads the file when
+    // it is opened
+    for (const wt of this.d.state.worktrees.filter((w) => w.repoId === repoId && this.d.runtime.runChanged(w, repo))) {
       fireAndForget(
         wt.id,
         this.d.runtime.stopProcs(wt.id).then(() => this.d.runtime.start(wt, repo)),

@@ -1,10 +1,11 @@
-// Which procs a worktree runs and with what environment: the repo's config, narrowed by the
+// Which procs a worktree runs and with what environment: its settings, narrowed by the
 // worktree's profile, and split into what it runs itself and what it reaches on main. Pure so the
 // registry's start path and the tests share one answer.
 
 import type { RepoInfo, WorktreeInfo } from "@toyon/shared";
 import { runCmd, runPaths, runShared } from "@toyon/shared";
 import { log } from "../core/log.ts";
+import type { WorktreeConfig } from "../repos/config.ts";
 
 export interface ResolvedRun {
   /** name -> command, in start order: the whole set, borrowed procs included */
@@ -42,8 +43,26 @@ function previewOf(procs: Record<string, string>, preferred: string | undefined)
   return procs.web ? "web" : Object.keys(procs)[0];
 }
 
-export function resolveRun(repo: RepoInfo, wt: Pick<WorktreeInfo, "id" | "profile" | "kind" | "owns">): ResolvedRun {
-  const cfg = repo.config;
+/** the shared tier as main runs it: the repo's file, narrowed by main's own profile, since a
+ * shared proc main's profile leaves out is one nobody started */
+export function trunkOf(
+  repo: Pick<RepoInfo, "config" | "configFile">,
+  main: Pick<WorktreeInfo, "id" | "profile"> = { id: "main" },
+): Set<string> {
+  const cfg = { config: repo.config, file: repo.configFile };
+  return new Set(resolveRun(cfg, { ...main, kind: "main" }, NOTHING).shared);
+}
+
+const NOTHING: ReadonlySet<string> = new Set();
+
+/** `trunk` is the tier main runs, from the repo's file: a worktree whose own file marks a proc
+ * shared borrows it only when main has one by that name to reach, and runs it itself otherwise,
+ * since a forwarder with no proc behind it would hang the page on a server nobody started. */
+export function resolveRun(
+  { config: cfg, file }: WorktreeConfig,
+  wt: Pick<WorktreeInfo, "id" | "profile" | "kind" | "owns">,
+  trunk: ReadonlySet<string>,
+): ResolvedRun {
   let names = Object.keys(cfg.run);
   let env: Record<string, string> = {};
   let profile: string | undefined;
@@ -52,7 +71,7 @@ export function resolveRun(repo: RepoInfo, wt: Pick<WorktreeInfo, "id" | "profil
     let name = wt.profile ?? cfg.defaultProfile;
     if (!(name in cfg.profiles)) {
       // the file changed under a running worktree: run the default rather than nothing
-      log.warn(wt.id, `profile "${name}" is not in ${repo.configFile}; running "${cfg.defaultProfile}"`);
+      log.warn(wt.id, `profile "${name}" is not in ${file}; running "${cfg.defaultProfile}"`);
       name = cfg.defaultProfile;
     }
     const p = cfg.profiles[name]!;
@@ -73,7 +92,7 @@ export function resolveRun(repo: RepoInfo, wt: Pick<WorktreeInfo, "id" | "profil
     if (p) paths[n] = p;
   }
   const owns = new Set(wt.owns ?? []);
-  const borrowed = wt.kind === "main" ? [] : shared.filter((n) => !owns.has(n));
+  const borrowed = wt.kind === "main" ? [] : shared.filter((n) => trunk.has(n) && !owns.has(n));
   return { procs, env, preview: previewOf(procs, preferred), profile, shared, borrowed, paths };
 }
 

@@ -3,12 +3,15 @@ import { join } from "node:path";
 import {
   CONFIG_FILES,
   cacheConfigSchema,
+  configSibling,
   issueReason,
   landConfigSchema,
+  type RepoInfo,
   type SharedServices,
   type ToyonConfig,
   timeoutsSchema,
   toyonConfigSchema,
+  type WorktreeInfo,
 } from "@toyon/shared";
 import { applyEdits, type JSONPath, modify, type ParseError, parse, printParseErrorCode } from "jsonc-parser";
 import { log } from "../core/log.ts";
@@ -57,28 +60,110 @@ function parseSettings(text: string): unknown {
  * invalid with a one-line reason; or null when there are none. Files in both places are invalid
  * too, since which one wins is the question nobody reading the repo could answer. */
 export function readConfigFile(repoPath: string): ConfigFile {
-  const found = PLACES.map((p) => present(repoPath, p)).filter((files) => files.length > 0);
-  const [files] = found;
-  if (!files) return null;
+  const found = placeOf(repoPath);
+  if (!found) return null;
+  if ("conflict" in found) return { ok: false, conflict: true, reason: found.conflict };
+  const read = readFiles(repoPath, found.files);
+  if (!read.ok) return read;
+  return validate(read.raw, found.files, read.ignored);
+}
+
+/** the place a tree keeps its settings in, with the files present there, shared first; null with
+ * none; the reason when both places are used */
+function placeOf(root: string): { place: Place; files: string[] } | { conflict: string } | null {
+  const found = PLACES.map((place) => ({ place, files: present(root, place) })).filter((f) => f.files.length > 0);
+  const [first] = found;
+  if (!first) return null;
   if (found.length > 1) {
-    return { ok: false, conflict: true, reason: `settings are in two places (${found.flat().join(", ")}); keep one` };
+    return { conflict: `settings are in two places (${found.flatMap((f) => f.files).join(", ")}); keep one` };
   }
-  let merged: unknown = {};
+  return first;
+}
+
+type RawFiles =
+  | { ok: true; raw: Record<string, unknown>; ignored: string[] }
+  | { ok: false; reason: string; conflict?: never };
+
+/** `rels` parsed and merged in order, each over the last; the first file that will not parse is
+ * the reason */
+function readFiles(root: string, rels: string[]): RawFiles {
+  let merged: Record<string, unknown> = {};
   const ignored: string[] = [];
-  for (const rel of files) {
+  for (const rel of rels) {
     let raw: unknown;
     try {
-      raw = parseSettings(readFileSync(join(repoPath, rel), "utf8"));
+      raw = parseSettings(readFileSync(join(root, rel), "utf8"));
     } catch (e) {
       return { ok: false, reason: `${rel} is not valid JSON: ${e instanceof Error ? e.message : String(e)}` };
     }
     if (!isObject(raw)) return { ok: false, reason: `${rel} must hold a JSON object` };
     ignored.push(...unknownKeys(raw).map((k) => `${rel}: ${k}`));
-    merged = mergePatch(merged, raw);
+    merged = mergePatch(merged, raw) as Record<string, unknown>;
   }
-  const r = toyonConfigSchema.safeParse(merged);
+  return { ok: true, raw: merged, ignored };
+}
+
+function validate(raw: unknown, files: string[], ignored: string[]): Exclude<ConfigFile, null> {
+  const r = toyonConfigSchema.safeParse(raw);
   if (r.success) return { ok: true, config: r.data, ...(ignored.length > 0 ? { ignored } : {}) };
   return { ok: false, reason: `${files.join(" + ")}: ${issueReason(r.error, "invalid")}` };
+}
+
+/** the settings a worktree runs under, and the file they were read from */
+export interface WorktreeConfig {
+  config: ToyonConfig;
+  file: string;
+  /** why the worktree's own file was passed over for the repo's, when it was */
+  reason?: string;
+  /** keys in the worktree's files that toyon does not know, as "<file>: <key>" */
+  ignored?: string[];
+}
+
+/** The settings a worktree runs under: the shared file in its own tree, with the person's local
+ * file over it, else the repo's config. A branch carries the commands its scripts answer to, so
+ * an older one keeps running after main renames a script, and one that changes how the app
+ * starts previews that change before it lands. The local file is one person's and lives only in
+ * the main checkout (excluded by name, never copied into a worktree), so it is read from there;
+ * one an agent wrote in the worktree comes over that. Main is the repo. An unconfirmed repo runs
+ * nothing a branch's file says either, since nobody has seen it. A worktree file that will not
+ * read is passed over with the reason, for the caller that acts on the answer to say where the
+ * person is looking: a read is not the place to log, since the agent's prompt reads this too. */
+export function configFor(wt: Pick<WorktreeInfo, "id" | "path" | "kind">, repo: RepoInfo): WorktreeConfig {
+  const repos: WorktreeConfig = { config: repo.config, file: repo.configFile };
+  if (repo.needsSetup || wt.kind === "main" || wt.path === repo.path) return repos;
+  const found = placeOf(wt.path);
+  if (!found) return repos;
+  if ("conflict" in found) return { ...repos, reason: found.conflict };
+  // a local file alone in the worktree is this person's, not the branch's: nothing to run from
+  if (!found.files.includes(found.place.shared)) return repos;
+  const local = configSibling(repo.configFile, "local");
+  const layers: Array<[root: string, rel: string]> = [[wt.path, found.place.shared]];
+  if (existsSync(join(repo.path, local))) layers.push([repo.path, local]);
+  if (found.files.includes(found.place.local)) layers.push([wt.path, found.place.local]);
+  let raw: Record<string, unknown> = {};
+  const ignored: string[] = [];
+  for (const [root, rel] of layers) {
+    const read = readFiles(root, [rel]);
+    if (!read.ok) return { ...repos, reason: read.reason };
+    raw = mergePatch(raw, read.raw) as Record<string, unknown>;
+    // the same name in two trees: say which holds the key
+    ignored.push(...read.ignored.map((k) => (root === repo.path ? `the main checkout's ${k}` : k)));
+  }
+  const file = validate(
+    raw,
+    layers.map(([, rel]) => rel),
+    ignored,
+  );
+  if (!file.ok) return { ...repos, reason: file.reason };
+  return { config: file.config, file: found.place.shared, ...(file.ignored ? { ignored: file.ignored } : {}) };
+}
+
+/** what the worktree's log says about its settings when they are not simply its own file */
+export function settingsLines(cfg: WorktreeConfig, repo: Pick<RepoInfo, "configFile">): string[] {
+  const out: string[] = [];
+  if (cfg.reason) out.push(`${cfg.reason}; running under ${repo.configFile}`);
+  if (cfg.ignored) out.push(`ignoring ${cfg.ignored.join(", ")}, which Toyon does not know`);
+  return out;
 }
 
 /** Keys toyon does not know, named so a typo is visible rather than silently doing nothing. Never a

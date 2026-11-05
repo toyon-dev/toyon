@@ -27,7 +27,7 @@ npm i -g toyon
 toyon ~/projects/app
 ```
 
-`toyon .` opens the folder you are in and `toyon --help` lists the rest. Started with npx, Toyon offers this install above the chat box once it has answered you. The install button in the top bar makes Toyon an app of its own in Chrome, Arc, Brave or Edge, with a Dock icon and no browser bar; from then on `toyon .` opens that.
+`toyon .` opens the folder you are in and `toyon --help` lists the other commands: start, stop, restart, update, doctor, logs, version, uninstall, remote, pair and deploy. Started with npx, Toyon offers this install above the chat box once it has answered you. The install button in the top bar makes Toyon an app of its own in Chrome, Arc, Brave or Edge, with a Dock icon and no browser bar; from then on `toyon .` opens that.
 
 ## Staying current
 

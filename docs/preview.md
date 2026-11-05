@@ -2,7 +2,7 @@
 
 What the preview tells the agent, how the picker finds a line, and where the frame stops.
 
-The frame is a browser showing your copy's dev server. The keys that drive it (reload, back and forward, the page list, the picker, the design pane) are listed with the rest under cmd+, in the shell. This page is about what you cannot see from the frame.
+The frame is a browser showing your copy's dev server. The keys that drive it (reload, back and forward, the page list, the picker, the design pane) are in the shortcut list under cmd+, in the shell, with every other key the shell takes. This page is about what you cannot see from the frame.
 
 ## What the agent is told
 

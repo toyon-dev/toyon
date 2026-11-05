@@ -22,7 +22,7 @@ Who builds the sandbox differs by agent:
 
 File tools bypass the shell, so a permission policy applies the same boundary to every write they ask for; refusals show up in the transcript.
 
-An agent cannot widen its own sandbox or another's. Deny-listed in the worktree is everything an agent would loosen itself with: its settings, hooks, plugin code and agent definitions (`.claude/settings.json`, `.claude/hooks/`, `.codex/config.toml`, `opencode.json`, `.opencode/plugins/` and the like). Skills, commands and prompts in those directories, and the scripts they ship with, are ordinary edits.
+An agent cannot widen its own sandbox or another's. Deny-listed in the worktree is everything an agent would loosen itself with: its settings, hooks, plugin code, tools and agent definitions. For Claude Code that is `.claude/settings.json`, `.claude/settings.local.json`, `.claude/hooks/` and `.claude/agents/`; for Codex, `.codex/config.toml`, `.codex/hooks.json`, `.codex/hooks/` and `.codex/rules/`; for OpenCode, `opencode.json` or `opencode.jsonc` at the root or inside `.opencode/`, and `.opencode/plugin/`, `tool/` and `agent/` in either spelling. Skills, commands and prompts in those directories, and the scripts they ship with, are ordinary edits.
 
 No agent can read or write Toyon's own token or `agents.json`, with one exception: Codex's sandbox takes no such list, so its shell commands can still read the token.
 

@@ -61,7 +61,8 @@ import { ExecService } from "./exec/service.ts";
 import { OpenService } from "./files/open.ts";
 import { FileService } from "./files/service.ts";
 import { run } from "./git/exec.ts";
-import { ghLogin, readPrComments, viewPr } from "./git/gh.ts";
+import { findPr, ghLogin, readPrComments, viewPr } from "./git/gh.ts";
+import { reaches, remoteHead } from "./git/status.ts";
 import { PageErrorService } from "./preview/errors.ts";
 import { AfterLand } from "./repos/afterLand.ts";
 import { RepoRegistry } from "./repos/registry.ts";
@@ -337,6 +338,9 @@ const prs = new PrService({
   hub,
   worktrees,
   view: viewPr,
+  find: findPr,
+  remoteHead,
+  reaches,
   comments: readPrComments,
   login: ghLogin,
   // read on the timer's ticks, long after boot has built the exit watch below

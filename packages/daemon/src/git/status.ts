@@ -308,6 +308,20 @@ export async function aheadUpstream(worktreePath: string, branch?: string): Prom
   return o.ok ? Number(o.out) || 0 : null;
 }
 
+/** where origin's copy of the branch stands as of the last push or fetch, by the upstream first
+ * and the ref under origin next, as aheadUpstream reads it; null when the branch was never pushed */
+export async function remoteHead(worktreePath: string, branch: string): Promise<string | null> {
+  const up = await git(worktreePath, "rev-parse", "--verify", "--quiet", `${branch}@{upstream}`);
+  if (up.ok && up.out) return up.out;
+  const o = await git(worktreePath, "rev-parse", "--verify", "--quiet", `refs/remotes/origin/${branch}`);
+  return o.ok && o.out ? o.out : null;
+}
+
+/** whether `sha` is in HEAD's own history (HEAD itself included); a commit git does not hold is not */
+export async function reaches(worktreePath: string, sha: string): Promise<boolean> {
+  return (await git(worktreePath, "merge-base", "--is-ancestor", sha, "HEAD")).ok;
+}
+
 export async function aheadBehind(worktreePath: string, defaultBr: string): Promise<{ ahead: number; behind: number }> {
   const [a, b] = await Promise.all([
     git(worktreePath, "rev-list", "--count", `${defaultBr}..HEAD`),

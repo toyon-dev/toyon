@@ -6,6 +6,7 @@ import type { PrComment, PrState, RepoInfo, WorktreeInfo } from "@toyon/shared";
 import { Hub } from "../core/hub.ts";
 import { ensureDirs, makePaths, type Paths } from "../core/paths.ts";
 import { StateStore } from "../core/state.ts";
+import type { FoundPr } from "../git/gh.ts";
 import { heldByGitHub, PrService, type PrServiceDeps } from "./prs.ts";
 
 // GitHub is a stub that answers what the test says; the worktree service is two recorded calls.
@@ -21,10 +22,19 @@ const open = (over: Partial<PrState> = {}): PrState => ({
   ...over,
 });
 
+/** what the stubbed GitHub and git say for discovery: the PR a branch is the head of, where origin's
+ * copy of each branch stands, and which commits each row's history reaches */
+interface Discovery {
+  route?: "pr";
+  find?: (branch: string) => FoundPr | null;
+  pushed?: Record<string, string>;
+  reach?: Record<string, string[]>;
+}
+
 function world(
   answers: Array<PrState | null>,
   rows: Partial<WorktreeInfo>[] = [{}],
-  opts: { fastMs?: number; looking?: () => boolean } = {},
+  opts: { fastMs?: number; looking?: () => boolean } & Discovery = {},
 ) {
   const paths = makePaths(mkdtempSync(join(home, "w-")));
   ensureDirs(paths);
@@ -33,7 +43,7 @@ function world(
     path: "/nowhere",
     name: "r",
     defaultBranch: "main",
-    config: { run: {} },
+    config: { run: {}, ...(opts.route ? { land: { route: opts.route } } : {}) },
     configFile: ".toyon/settings.json",
     needsSetup: false,
   };
@@ -52,6 +62,7 @@ function world(
   const state = new StateStore(paths, { repos: [repo], worktrees, sessions: {} });
   const hub = new Hub();
   const asked: number[] = [];
+  const sought: string[] = [];
   const set: Array<PrState | undefined> = [];
   const merged: string[] = [];
   const prs = new PrService({
@@ -64,6 +75,16 @@ function world(
       asked.push(number);
       return answers.shift() ?? null;
     },
+    ...(opts.find
+      ? {
+          find: async (_path, branch) => {
+            sought.push(branch);
+            return opts.find?.(branch) ?? null;
+          },
+          remoteHead: async (_path, branch) => opts.pushed?.[branch] ?? null,
+          reaches: async (path, sha) => (opts.reach?.[path] ?? []).includes(sha),
+        }
+      : {}),
     worktrees: {
       setPr: (id, pr) => {
         set.push(pr);
@@ -82,7 +103,7 @@ function world(
       },
     },
   });
-  return { prs, state, hub, asked, set, merged, wt: (id: string) => state.worktree(id) };
+  return { prs, state, hub, asked, sought, set, merged, wt: (id: string) => state.worktree(id) };
 }
 
 describe("PrService", () => {
@@ -131,6 +152,104 @@ describe("PrService", () => {
     await Bun.sleep(20);
     expect(w.asked.sort()).toEqual([12, 14]);
     expect(w.merged).toEqual(["w2"]);
+    w.prs.stop();
+  });
+});
+
+describe("PrService discovery", () => {
+  const found = (over: Partial<PrState> = {}, head: string | null = "h1"): FoundPr => ({
+    pr: open({ number: 40, url: "https://github.com/o/r/pull/40", ...over }),
+    head,
+  });
+  const turn = { at: 0, end: "done" as const, facts: { turns: 1, edits: 0, toolErrors: 0 } };
+
+  test("a turn settling on a pushed branch with no PR takes the open PR GitHub has for it", async () => {
+    const w = world([], [{ pr: undefined }, { pr: undefined }, {}], {
+      route: "pr",
+      pushed: { "toyon/w1": "s1" },
+      find: () => found(),
+    });
+    for (const id of ["w1", "w2", "w3"]) w.hub.emit("turnSettled", id, turn);
+    await Bun.sleep(20);
+    // w2 was never pushed, w3 has its PR already: neither is asked about
+    expect(w.sought).toEqual(["toyon/w1"]);
+    expect(w.wt("w1")?.pr).toMatchObject({ number: 40, state: "open" });
+    expect(w.merged).toEqual([]);
+    w.prs.stop();
+  });
+
+  test("a merged PR whose head the row's history reaches lands the row; a stranger's does not", async () => {
+    const w = world([], [{ pr: undefined }, { pr: undefined }], {
+      route: "pr",
+      pushed: { "toyon/w1": "s1", "toyon/w2": "s2" },
+      // the same branch name once carried another PR, squashed long ago: w2 never had h1
+      reach: { "/nowhere/w1": ["h1"] },
+      find: () => found({ state: "merged" }),
+    });
+    w.hub.emit("repoTick", "r1");
+    await Bun.sleep(20);
+    expect(w.sought.sort()).toEqual(["toyon/w1", "toyon/w2"]);
+    expect(w.wt("w1")?.pr?.state).toBe("merged");
+    expect(w.merged).toEqual(["w1"]);
+    expect(w.wt("w2")?.pr).toBeUndefined();
+    w.prs.stop();
+  });
+
+  test("a PR on the row's landings is not taken again, nor a closed one, nor one off the PR route", async () => {
+    const landed = { base: "b", tip: "t", at: 1, subjects: [], pr: 40 };
+    const w = world([], [{ pr: undefined, lands: [landed] }, { pr: undefined }], {
+      route: "pr",
+      pushed: { "toyon/w1": "s1", "toyon/w2": "s2" },
+      reach: { "/nowhere/w1": ["h1"], "/nowhere/w2": ["h1"] },
+      find: (branch) => found({ state: branch === "toyon/w1" ? "merged" : "closed" }),
+    });
+    w.hub.emit("repoTick", "r1");
+    await Bun.sleep(20);
+    expect(w.sought.sort()).toEqual(["toyon/w1", "toyon/w2"]);
+    expect(w.wt("w1")?.pr).toBeUndefined();
+    expect(w.wt("w2")?.pr).toBeUndefined();
+    expect(w.merged).toEqual([]);
+    const local = world([], [{ pr: undefined }], { pushed: { "toyon/w1": "s1" }, find: () => found() });
+    local.hub.emit("repoTick", "r1");
+    local.hub.emit("turnSettled", "w1", turn);
+    await Bun.sleep(20);
+    expect(local.sought).toEqual([]);
+    w.prs.stop();
+    local.prs.stop();
+  });
+
+  test("a push GitHub had no PR for is asked about once per poll; a new push, or a turn, asks again", async () => {
+    const pushed = { "toyon/w1": "s1" };
+    const w = world([], [{ pr: undefined }], { route: "pr", pushed, find: () => null });
+    w.hub.emit("repoTick", "r1");
+    await Bun.sleep(20);
+    w.hub.emit("repoTick", "r1");
+    await Bun.sleep(20);
+    expect(w.sought).toEqual(["toyon/w1"]);
+    pushed["toyon/w1"] = "s2";
+    w.hub.emit("repoTick", "r1");
+    await Bun.sleep(20);
+    expect(w.sought).toEqual(["toyon/w1", "toyon/w1"]);
+    // the PR can be created in a turn after the push that was asked about
+    w.hub.emit("turnSettled", "w1", turn);
+    await Bun.sleep(20);
+    expect(w.sought).toEqual(["toyon/w1", "toyon/w1", "toyon/w1"]);
+    w.prs.stop();
+  });
+
+  test("the poll looks for nothing while no shell is connected", async () => {
+    const w = world([], [{ pr: undefined }], {
+      route: "pr",
+      pushed: { "toyon/w1": "s1" },
+      find: () => found(),
+      looking: () => false,
+    });
+    w.prs.refreshAll();
+    await Bun.sleep(20);
+    expect(w.sought).toEqual([]);
+    w.hub.emit("repoTick", "r1");
+    await Bun.sleep(20);
+    expect(w.sought).toEqual(["toyon/w1"]);
     w.prs.stop();
   });
 });

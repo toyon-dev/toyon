@@ -57,26 +57,45 @@ export const PR_VIEW_FIELDS =
   "number,url,title,state,mergedAt,reviewDecision,statusCheckRollup,mergeable,autoMergeRequest,headRefOid";
 
 export async function viewPr(repoPath: string, number: number): Promise<PrState | null> {
-  const r = await gh(["pr", "view", String(number), "--json", PR_VIEW_FIELDS], repoPath, 20_000);
+  return (await viewPrRef(repoPath, String(number)))?.pr ?? null;
+}
+
+/** a PR looked up by the branch it is the head of, with that head's commit beside it */
+export interface FoundPr {
+  pr: PrState;
+  /** the commit the PR's head stood at, as GitHub has it; null when gh left it out */
+  head: string | null;
+}
+
+/** The PR whose head is `branch`, as gh picks it: an open one first, else the newest, merged or
+ * closed. The head commit comes with it so a merged PR can be told from one a branch of the same
+ * name carried before: the row's own history reaches its head, a stranger's does not. */
+export function findPr(repoPath: string, branch: string): Promise<FoundPr | null> {
+  return viewPrRef(repoPath, branch);
+}
+
+/** one PR by either name gh takes, its number or its head branch */
+async function viewPrRef(repoPath: string, ref: string): Promise<FoundPr | null> {
+  const r = await gh(["pr", "view", ref, "--json", PR_VIEW_FIELDS], repoPath, 20_000);
   if (!r.ok || !r.out) return null;
   const parsed = parsePrView(r.out);
   if (!parsed) return null;
+  const head = headOf(r.out);
   // Two more reads while the PR is open, side by side, since each is a gh process bounded at 20s
   // and a poll over several PRs runs them all. `pr view` says nothing about merge queues, and the
   // queue decides whether the land press merges or queues; a host that registers a deployment
   // instead of a status is asked for separately. A merged or closed PR is past both: the queue
   // is behind it and its preview is torn down.
   if (parsed.state === "open") {
-    const head = headOf(r.out);
     const [q, preview] = await Promise.all([
-      viewQueue(repoPath, number),
+      viewQueue(repoPath, parsed.number),
       parsed.preview || !head ? null : viewDeploymentPreview(repoPath, head),
     ]);
     if (q?.queue) parsed.queue = true;
     if (q?.queued) parsed.queued = q.queued;
     if (preview) parsed.preview = preview;
   }
-  return { ...parsed, at: Date.now() };
+  return { pr: { ...parsed, at: Date.now() }, head };
 }
 
 /** the merge queue of the PR's base branch: whether the branch has one, and the PR's standing in

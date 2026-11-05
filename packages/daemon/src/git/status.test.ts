@@ -9,6 +9,8 @@ import {
   countEntries,
   foldDropped,
   parsePorcelain,
+  reaches,
+  remoteHead,
   statusEntries,
   statusFiles,
   statusFilesWithCounts,
@@ -177,5 +179,16 @@ describe("aheadUpstream", () => {
     expect(await aheadUpstream(repo, "feat")).toBe(0);
     sh(repo, GIT, "commit", "-q", "--allow-empty", "-m", "three");
     expect(await aheadUpstream(repo)).toBe(1);
+  });
+
+  test("remoteHead is where origin's copy stands; reaches says whether HEAD descends from a commit", async () => {
+    // feat was pushed one commit ago: origin's copy is HEAD~1, which HEAD reaches, as it does itself
+    const pushed = sh(repo, GIT, "rev-parse", "HEAD~1");
+    expect(await remoteHead(repo, "feat")).toBe(pushed);
+    expect(await remoteHead(repo, "nowhere")).toBeNull();
+    expect(await reaches(repo, pushed)).toBe(true);
+    expect(await reaches(repo, sh(repo, GIT, "rev-parse", "HEAD"))).toBe(true);
+    // a commit git here never saw (a stranger's PR head) is not reached, and is not an error
+    expect(await reaches(repo, "0123456789012345678901234567890123456789")).toBe(false);
   });
 });

@@ -1,17 +1,26 @@
-// What GitHub says about the PRs toyon opened: read after a PR opens or is merged, when the window
-// comes back (repoTick), and every few minutes while any PR of a repo is open. A PR GitHub itself
-// is about to merge (in the merge queue, or on auto-merge with its checks still running) is asked
-// about every half minute instead, while a shell is connected to see the answer: nobody presses
-// anything for that merge, so the poll is the only way the row hears of it. A merged PR is the
-// landing on the PR route, wherever it was merged from: the row is marked landed and main here
+// What GitHub says about the PRs of toyon's rows: read after a PR opens or is merged, when the
+// window comes back (repoTick), and every few minutes while any PR of a repo is open. A PR GitHub
+// itself is about to merge (in the merge queue, or on auto-merge with its checks still running) is
+// asked about every half minute instead, while a shell is connected to see the answer: nobody
+// presses anything for that merge, so the poll is the only way the row hears of it. A merged PR is
+// the landing on the PR route, wherever it was merged from: the row is marked landed and main here
 // follows origin as far as it can, the same ending as the local routes. While a PR is open the same
 // read brings in what reviewers wrote on it, for the page the line over the box opens; a remark
 // someone else wrote rings the worktree, once.
+//
+// A PR the land press did not open is found the same way. An agent that pushes its branch and runs
+// `gh pr create` in the chat, or a person doing so in a terminal, leaves the row with no record,
+// and the box offers to create a PR over one that exists, or over work a squash merge already put
+// on main, which git alone cannot see (the branch stays ahead for good). So a row on the PR route
+// with no PR, whose branch origin has a copy of, is asked about when its turn settles, when the
+// window comes back, and on the poll; what GitHub answers goes on the record and the rest follows
+// as for a PR toyon opened.
 
-import { type PrComment, type PrState, prTaken } from "@toyon/shared";
+import { landPolicy, type PrComment, type PrState, prTaken } from "@toyon/shared";
 import type { Hub } from "../core/hub.ts";
-import { fireAndForget } from "../core/log.ts";
+import { fireAndForget, log } from "../core/log.ts";
 import type { StateStore } from "../core/state.ts";
+import type { FoundPr } from "../git/gh.ts";
 import type { WorktreeService } from "./service.ts";
 
 export interface PrServiceDeps {
@@ -20,6 +29,12 @@ export interface PrServiceDeps {
   worktrees: Pick<WorktreeService, "setPr" | "prMerged">;
   /** one PR as GitHub has it now, or null when gh cannot say (tests feed JSON here) */
   view: (repoPath: string, number: number) => Promise<PrState | null>;
+  /** the PR a branch is the head of, when GitHub has one; discovery is off without it */
+  find?: (repoPath: string, branch: string) => Promise<FoundPr | null>;
+  /** where origin's copy of a row's branch stands, or null when it was never pushed */
+  remoteHead?: (worktreePath: string, branch: string) => Promise<string | null>;
+  /** whether a commit is in the row's own history */
+  reaches?: (worktreePath: string, sha: string) => Promise<boolean>;
   /** the PR's line comments and reviews, oldest first, or null when gh cannot say */
   comments?: (repoPath: string, number: number) => Promise<PrComment[] | null>;
   /** who gh is signed in as on a host: their own remarks are not news to them */
@@ -53,9 +68,16 @@ export class PrService {
   private commenting = new Set<string>();
   /** the signed-in login per host, asked once; a failed ask is asked again next time */
   private me = new Map<string, Promise<string | null>>();
+  /** rows whose branch is being looked up now */
+  private finding = new Set<string>();
+  /** rows asked for a PR GitHub had none of, or none the row could take, by the push they were
+   * asked at and when: the same push is not asked about again until the poll comes round */
+  private missed = new Map<string, { sha: string; at: number }>();
 
   constructor(private d: PrServiceDeps) {
     d.hub.on("repoTick", (repoId) => this.refreshRepo(repoId));
+    // the push and the `gh pr create` happen inside a turn: its end is when the PR is there
+    d.hub.on("turnSettled", (id) => fireAndForget(id, this.discover(id, "turn"), "pr discovery"));
     // unref'd: a daemon with nothing else to do should still exit, and the ticks matter only while
     // someone is looking anyway (the frame they push reaches no one otherwise)
     this.timer = setInterval(() => this.refreshAll(), d.everyMs ?? POLL_MS);
@@ -72,7 +94,7 @@ export class PrService {
   }
 
   refreshAll() {
-    for (const repo of this.d.state.repos) this.refreshRepo(repo.id);
+    for (const repo of this.d.state.repos) this.refreshRepo(repo.id, "poll");
   }
 
   /** the PRs GitHub is about to merge, asked about again; nothing when no shell would see it */
@@ -83,15 +105,67 @@ export class PrService {
     }
   }
 
-  refreshRepo(repoId: string) {
+  refreshRepo(repoId: string, why: "tick" | "poll" = "tick") {
     for (const wt of this.d.state.worktrees) {
-      if (wt.repoId !== repoId || !wt.pr) continue;
-      if (wt.pr.state === "open") fireAndForget(wt.id, this.refresh(wt.id), "pr refresh");
+      if (wt.repoId !== repoId) continue;
+      if (!wt.pr) fireAndForget(wt.id, this.discover(wt.id, why), "pr discovery");
+      else if (wt.pr.state === "open") fireAndForget(wt.id, this.refresh(wt.id), "pr refresh");
       // merged while an op was out on the row, so its landing was left to that press: taken now,
       // with nothing to ask GitHub
       else if (wt.pr.state === "merged" && !prTaken(wt)) {
         fireAndForget(wt.id, this.d.worktrees.prMerged(wt.id), "pr landing");
       }
+    }
+  }
+
+  /** Look for the PR a row's branch is the head of, when the row has no record of one and the
+   * branch has been pushed. An open PR is taken as it is: the branch is its head, wherever HEAD
+   * here stands against it. A merged one is taken only when its head is in the row's own history,
+   * since gh answers for the branch name, which a row landed and archived before may have carried
+   * too; and never once a landing on the record names it, which is the row moved past its own
+   * merge. A closed one is left: it changes nothing the box says, and the next PR on the branch
+   * would be hidden behind it. A turn's end always asks; the ticks ask once per push and again
+   * after the poll's interval, so a branch pushed for safekeeping costs one gh read a poll. */
+  async discover(worktreeId: string, why: "turn" | "tick" | "poll"): Promise<void> {
+    const { find, remoteHead, reaches } = this.d;
+    if (!find || !remoteHead || !reaches) return;
+    const wt = this.d.state.worktree(worktreeId);
+    if (!wt || this.finding.has(worktreeId)) return;
+    if (wt.kind !== "worktree" || wt.pr) return;
+    const repo = this.d.state.repo(wt.repoId);
+    if (!repo || landPolicy(repo.config).land !== "pr") return;
+    // the poll's answer reaches no one; the window coming back asks for itself
+    if (why === "poll" && this.d.looking && !this.d.looking()) return;
+    this.finding.add(worktreeId);
+    try {
+      const sha = await remoteHead(wt.path, wt.branch);
+      if (!sha) {
+        this.missed.delete(worktreeId);
+        return;
+      }
+      const miss = this.missed.get(worktreeId);
+      if (why !== "turn" && miss?.sha === sha && Date.now() - miss.at < (this.d.everyMs ?? POLL_MS)) return;
+      const found = await find(repo.path, wt.branch);
+      // removed, or a land press opened one while gh was answering
+      const now = this.d.state.worktree(worktreeId);
+      if (!now || now.pr) return;
+      const taken = !!found && (now.lands ?? []).some((l) => l.pr === found.pr.number);
+      const own =
+        !!found &&
+        !taken &&
+        (found.pr.state === "open" ||
+          (found.pr.state === "merged" && !!found.head && (await reaches(wt.path, found.head))));
+      if (!found || !own) {
+        this.missed.set(worktreeId, { sha, at: Date.now() });
+        return;
+      }
+      this.missed.delete(worktreeId);
+      log.info(worktreeId, `PR #${found.pr.number} for ${wt.branch} was opened outside toyon; taking it`);
+      this.d.worktrees.setPr(worktreeId, found.pr);
+      if (found.pr.state === "open") fireAndForget(worktreeId, this.readComments(worktreeId), "pr comments");
+      if (found.pr.state === "merged") await this.d.worktrees.prMerged(worktreeId);
+    } finally {
+      this.finding.delete(worktreeId);
     }
   }
 

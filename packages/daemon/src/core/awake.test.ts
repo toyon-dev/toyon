@@ -83,6 +83,20 @@ describe("KeepAwake", () => {
     expect(held()).toBe(0);
   });
 
+  test("a command in the background or a wakeup booked holds it past the turn's end", () => {
+    let demand: Demand = "working";
+    const { hub, held, advance } = make({ demand: () => demand });
+    hub.emit("agentStatus", "a", "working");
+    // the turn ends with the command running: the status drops to idle, the demand does not
+    hub.emit("agentStatus", "a", "idle");
+    advance(3 * 60 * MIN);
+    expect(held()).toBe(1);
+    // the command ends, or the wakeup fires into a turn, with no status move of its own
+    demand = null;
+    hub.emit("agentHolding", "a");
+    expect(held()).toBe(0);
+  });
+
   test("one assertion however many times the work is reported", () => {
     const { status, hub, held, taken } = make();
     status("working");

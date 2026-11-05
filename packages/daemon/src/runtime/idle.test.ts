@@ -33,7 +33,7 @@ const row = (id: string, extra: Partial<WorktreeInfo> = {}): WorktreeInfo => ({
  * it was told to sleep */
 class FakeRuntime {
   procs = new Map<string, { asleep: boolean; states: ProcState[] }>();
-  agents = new Map<string, { status: AgentStatus; queueItems: string[] }>();
+  agents = new Map<string, { status: AgentStatus; queueItems: string[]; holding?: number }>();
   holds = new Map<string, number>();
   slept: string[] = [];
   /** the reason each sleep carried, by worktree */
@@ -55,7 +55,13 @@ class FakeRuntime {
   }
   busy(id: string) {
     const agent = this.agents.get(id);
-    if (agent && ((agent.status !== "idle" && agent.status !== "waiting") || agent.queueItems.length > 0)) return true;
+    if (
+      agent &&
+      ((agent.status !== "idle" && agent.status !== "waiting") ||
+        agent.queueItems.length > 0 ||
+        (agent.holding ?? 0) > 0)
+    )
+      return true;
     return this.holdCount(id) > 0;
   }
   /** the reason each lapse carried, by worktree */
@@ -252,6 +258,24 @@ describe("IdlePolicy clock", () => {
     expect(runtime.slept).toEqual([]);
     runtime.holds.set("a", 0);
     hub.emit("holdsChanged", "a", 0);
+    advance(S - 1);
+    expect(runtime.slept).toEqual([]);
+    advance(2);
+    expect(runtime.slept).toEqual(["a"]);
+  });
+
+  test("a command in the background or a wakeup booked under an idle agent keeps it awake; the clock starts when it ends", () => {
+    const { runtime, hub, advance } = make();
+    runtime.agents.set("a", { status: "working", queueItems: [] });
+    hub.emit("agentStatus", "a", "working");
+    // the turn ends with the command still running: the status drops, the row stays held
+    runtime.agents.set("a", { status: "idle", queueItems: [], holding: 1 });
+    hub.emit("agentStatus", "a", "idle");
+    hub.emit("agentHolding", "a");
+    advance(S * 3);
+    expect(runtime.slept).toEqual([]);
+    runtime.agents.set("a", { status: "idle", queueItems: [], holding: 0 });
+    hub.emit("agentHolding", "a");
     advance(S - 1);
     expect(runtime.slept).toEqual([]);
     advance(2);

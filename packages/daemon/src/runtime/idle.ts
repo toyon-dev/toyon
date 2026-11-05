@@ -84,6 +84,9 @@ export class IdlePolicy {
     // a turn starting or ending is activity either way: the clock starts over when it ends
     d.hub.on("agentStatus", (id) => this.stamp(id));
     d.hub.on("holdsChanged", (id) => this.stamp(id));
+    // a background command ending or a wakeup firing is activity under an idle status: the turn
+    // it prompts is moments away, so the clock starts over rather than sleeping the row under it
+    d.hub.on("agentHolding", (id) => this.stamp(id));
     // the preview is up by the time the recap is read, on a worktree someone was reading
     d.hub.on("turnSettled", (id) => {
       if (this.recentlyViewed(id)) d.wake(id);

@@ -794,6 +794,21 @@ describe("RuntimeRegistry sleep and wake", () => {
     expect(registry.holdCount(wt.id)).toBe(0);
   });
 
+  test("a command in the background or a wakeup booked keeps an idle agent busy and the machine wanted", () => {
+    const { registry, agents } = make();
+    registry.ensureAgent(wt);
+    const agent = agents.get(wt.id)!;
+    expect(registry.busy(wt.id)).toBe(false);
+    expect(registry.demand()).toBeNull();
+    agent.holding = 1;
+    expect(registry.busy(wt.id)).toBe(true);
+    expect(registry.anyBusy()).toBe(true);
+    expect(registry.demand()).toBe("working");
+    agent.holding = 0;
+    expect(registry.busy(wt.id)).toBe(false);
+    expect(registry.demand()).toBeNull();
+  });
+
   test("awaitPreview answers once the preview runs, and at once when nothing is coming", async () => {
     const { registry, procs } = make();
     expect(await registry.awaitPreview(wt.id, 1000)).toBeNull();

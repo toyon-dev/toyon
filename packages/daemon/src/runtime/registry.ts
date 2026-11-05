@@ -502,14 +502,15 @@ export class RuntimeRegistry {
   }
 
   /** Work someone is waiting on: an agent mid-turn or stopped on an error, a message of the
-   * person's still owed a turn (queued, steered or refused), or a turn or command holding the
-   * worktree. What idle sleep, an automatic update and an archive of a worktree's own accord all
-   * leave alone. A card open for a person is not work: the shell brings an expired card back and
-   * the answer goes as a message, so a waiting row is as free to sleep, stop or archive as an idle
-   * one. */
+   * person's still owed a turn (queued, steered or refused), a command the agent sent to the
+   * background or a wakeup it booked, or a turn or command holding the worktree. What idle sleep,
+   * an automatic update and an archive of a worktree's own accord all leave alone. A card open for
+   * a person is not work: the shell brings an expired card back and the answer goes as a message,
+   * so a waiting row is as free to sleep, stop or archive as an idle one. */
   busy(id: string): boolean {
     const agent = this.agentFor(id);
-    if (agent && ((agent.status !== "idle" && agent.status !== "waiting") || agent.unsettled)) return true;
+    if (agent && ((agent.status !== "idle" && agent.status !== "waiting") || agent.unsettled || agent.holding > 0))
+      return true;
     return this.holdCount(id) > 0;
   }
 
@@ -529,12 +530,14 @@ export class RuntimeRegistry {
 
   /** What the machine itself is needed for: something running on its own (a turn, a command), a
    * card that only a person can move, or nothing. Narrower than `busy`: an agent in error or one
-   * with a message still queued is owed something, but nothing is running that sleep would stop. */
+   * with a message still queued is owed something, but nothing is running that sleep would stop.
+   * An idle agent with a command in the background or a wakeup booked is working: the command runs
+   * under its process, and the wakeup is a turn the machine has to be up for. */
   demand(): "working" | "waiting" | null {
     if (this.holds.size > 0) return "working";
     let waiting = false;
     for (const rt of this.runtimes.values()) {
-      if (rt.agent.status === "working") return "working";
+      if (rt.agent.status === "working" || rt.agent.holding > 0) return "working";
       if (rt.agent.status === "waiting") waiting = true;
     }
     return waiting ? "waiting" : null;

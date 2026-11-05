@@ -2,8 +2,9 @@
 // or two after the last key or touch, whatever its processes are doing, and a sleeping machine
 // stops everything at once: the turn under way, and the daemon a phone is talking to, which then
 // takes every tap in silence. The machine's own idea of idle is its keyboard, so the daemon holds
-// the OS's idle-sleep assertion for what the keyboard cannot see: something running on its own,
-// a shell open from another device, and for a while after an agent has asked a person something
+// the OS's idle-sleep assertion for what the keyboard cannot see: something running on its own
+// (a turn, a command, one the agent sent to the background, a wakeup it booked), a shell open
+// from another device, and for a while after an agent has asked a person something
 // or that device went away, since the next word may come from it. Settings can make that always
 // (a Mac left open as a server) or never. Only idle sleep: a closed lid still sleeps.
 
@@ -126,6 +127,8 @@ export class KeepAwake {
       this.reconsider();
     });
     d.hub.on("holdsChanged", () => this.reconsider());
+    // a command sent to the background or a wakeup booked outlives the turn under an idle status
+    d.hub.on("agentHolding", () => this.reconsider());
     d.hub.on("keepAwakeChanged", () => this.reconsider());
     // a name turned on makes a question answerable from elsewhere, and the hold starts then
     d.hub.on("remoteChanged", () => this.reconsider());

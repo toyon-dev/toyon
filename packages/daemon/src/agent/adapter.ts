@@ -78,7 +78,8 @@ export interface AgentAdapter {
   readonly stopping: boolean;
   /** rows held open past the turn for something still going under an idle agent: commands sent
    * to the background and running, wakeups booked and not yet back from. The rail reads it as
-   * the worktree not being done. */
+   * the worktree not being done, and the runtime as busy: the machine stays awake and the
+   * worktree is not put to sleep for it. */
   readonly holding: number;
   /** the earliest wakeup booked, as a time, or null while none is */
   readonly wakes: number | null;

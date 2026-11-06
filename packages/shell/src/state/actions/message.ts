@@ -1,5 +1,5 @@
 import type { PickMeta } from "@toyon/shared";
-import { grouped, type MenuEntry, type MenuItem } from "../../ui/menu.ts";
+import { grouped, type MenuEntry, type MenuFrom, type MenuItem } from "../../ui/menu.ts";
 import { openByPath } from "../openOutside.ts";
 import { copyImage, copyText, copyTextFrom, type Deps, openOutItem } from "./deps.ts";
 import { daemonHost, openedOnDaemonMachine, revealItems } from "./editor.ts";
@@ -149,13 +149,27 @@ export function codeItems(code: string | null | undefined): MenuItem[] {
 /** a message in the transcript: what was under the pointer first, when that was a fenced block
  * or a link, then its text as text, and for one the person wrote, back into the composer to be
  * said again with a change: the daemon rebuilds the box from the transcript, so what the message
- * carried comes back with its words. */
+ * carried comes back with its words. A finger on the prose itself gets no menu (`null`): a
+ * long-press on text is how a phone selects it, and the browser gives that up when the event is
+ * answered. Only a caller that says how the menu was asked for can get that answer. */
+type MessageOf = { kind: "user" | "assistant" | "error"; text: string; seq?: number };
+type MessageAt = { link?: ChatLink | null; code?: string | null };
+export function messageItems(item: MessageOf, worktreeId: string | null, deps: Deps, at?: MessageAt): MenuEntry[];
 export function messageItems(
-  item: { kind: "user" | "assistant" | "error"; text: string; seq?: number },
+  item: MessageOf,
   worktreeId: string | null,
   deps: Deps,
-  at: { link?: ChatLink | null; code?: string | null } = {},
-): MenuEntry[] {
+  at: MessageAt,
+  from: MenuFrom,
+): MenuEntry[] | null;
+export function messageItems(
+  item: MessageOf,
+  worktreeId: string | null,
+  deps: Deps,
+  at: MessageAt = {},
+  from: MenuFrom = "pointer",
+): MenuEntry[] | null {
+  if (from === "touch" && !at.link && !at.code) return null;
   const { dispatch, sock } = deps;
   const link = at.link;
   const lead: MenuItem[][] = !link

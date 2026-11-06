@@ -5,6 +5,7 @@ import {
   isItem,
   type MenuItem,
   type MenuSpec,
+  menuFrom,
   menuPlacement,
   menuStore,
   SEP,
@@ -103,6 +104,14 @@ describe("where a menu opens", () => {
     const pointer = (pointerType: string) => ({ pointerType }) as unknown as Event;
     expect(fromKeyboard({ clientX: 40, clientY: 12, nativeEvent: pointer("") })).toBe(true);
     expect(fromKeyboard({ clientX: 40, clientY: 12, nativeEvent: pointer("mouse") })).toBe(false);
+  });
+
+  test("a long-press is touch, a right-click the pointer, and no pointer at all the keyboard", () => {
+    const pointer = (pointerType: string) => ({ pointerType }) as unknown as Event;
+    expect(menuFrom({ clientX: 40, clientY: 12, nativeEvent: pointer("touch") })).toBe("touch");
+    expect(menuFrom({ clientX: 40, clientY: 12, nativeEvent: pointer("mouse") })).toBe("pointer");
+    expect(menuFrom({ clientX: 40, clientY: 12, nativeEvent: pointer("") })).toBe("keyboard");
+    expect(menuFrom({ clientX: 0, clientY: 0 })).toBe("keyboard");
   });
 
   test("the box follows the pointer or hangs off the anchor's chosen edge", () => {

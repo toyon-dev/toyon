@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { isItem } from "../../ui/menu.ts";
+import { isItem, type MenuEntry } from "../../ui/menu.ts";
 import type { Deps } from "./deps.ts";
 import { fileItems, imageItems, linkOpener, messageItems, pasteItems } from "./message.ts";
 
@@ -14,6 +14,19 @@ describe("message menus", () => {
   test("a message on its own copies, and one the person wrote goes back to the composer", () => {
     expect(ids(messageItems({ kind: "assistant", text: "hi" }, "w", deps))).toEqual(["copy"]);
     expect(ids(messageItems({ kind: "user", text: "hi" }, "w", deps))).toEqual(["copy", "draft"]);
+  });
+
+  test("a finger on the prose gets no menu, so the phone selects the text; on a link or a fenced block the row's stays", () => {
+    const user = { kind: "user", text: "hi" } as const;
+    expect(messageItems(user, "w", deps, {}, "touch")).toBeNull();
+    expect(ids(messageItems(user, "w", deps, { code: "ls" }, "touch") ?? [])).toEqual(["copy-code", "copy", "draft"]);
+    const link = { kind: "out", href: "https://example.com" } as const;
+    expect(ids(messageItems(user, "w", deps, { link }, "touch") ?? [])).toEqual([
+      "open-out",
+      "copy-link",
+      "copy",
+      "draft",
+    ]);
   });
 
   test("a worktree named in a message opens its row, or an archived one its page, and gives its branch", () => {
@@ -52,7 +65,7 @@ describe("message menus", () => {
     Object.defineProperty(globalThis, "location", { value: { hostname: "localhost" }, configurable: true });
   const sockTo = (host: string, sent: unknown[]) =>
     ({ send: (m: unknown) => sent.push(m), urls: { host } }) as unknown as Deps["sock"];
-  const press = (items: ReturnType<typeof messageItems>, id: string) =>
+  const press = (items: MenuEntry[], id: string) =>
     items
       .filter(isItem)
       .find((i) => i.id === id)

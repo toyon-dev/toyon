@@ -21,7 +21,7 @@ import { Field } from "../../ui/Field.tsx";
 import { FullAttachment } from "../../ui/FullAttachment.tsx";
 import { useLiveHtml, useOnChange, useReveal, useSecondsSince, useTail } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
-import { grouped, type MenuEntry, useContextMenu } from "../../ui/menu.ts";
+import { grouped, type MenuEntry, type MenuFrom, useContextMenu } from "../../ui/menu.ts";
 import { rowState } from "../../ui/rowState.ts";
 import { Spinner } from "../../ui/Spinner.tsx";
 import { treeKey } from "../../ui/treeNav.ts";
@@ -83,10 +83,10 @@ function Markdown({
   pictures,
 }: {
   text: string;
-  /** the row's menu, told which link the pointer was on, if any, and the text of the fenced block
-   * it was in, if any: the rendered markup is the row's, so nothing inside it has a handler of
-   * its own */
-  menu: (link: ChatLink | null, code: string | null) => MenuEntry[];
+  /** the row's menu, told which link the pointer was on, if any, the text of the fenced block
+   * it was in, if any, and how it was asked for: the rendered markup is the row's, so nothing
+   * inside it has a handler of its own */
+  menu: (link: ChatLink | null, code: string | null, from: MenuFrom) => MenuEntry[] | null;
   marked?: boolean;
   worktreeId?: string | null;
   fileRoot?: string;
@@ -165,11 +165,11 @@ function Markdown({
       ref={root}
       className="msg-assistant md row-edge"
       data-state={rowState({ cursor: marked })}
-      {...cm.contextMenu((_from, target) => {
+      {...cm.contextMenu((from, target) => {
         const still = stillAt(target);
         return still
           ? imageItems(still.src, { open: () => setFull(still) }, still.kept)
-          : menu(chatLink(target, fileRoot), codeAt(target));
+          : menu(chatLink(target, fileRoot), codeAt(target), from);
       })}
       onClick={(e) => {
         const still = stillAt(e.target as Element);
@@ -1157,8 +1157,8 @@ export const ChatItemView = memo(function ChatItemView({
         <div
           className="msg-user row-edge"
           data-state={rowState({ cursor: marked })}
-          {...cm.contextMenu((_from, target) =>
-            messageItems(item, worktreeId ?? null, deps, { link: chatLink(target, root) }),
+          {...cm.contextMenu((from, target) =>
+            messageItems(item, worktreeId ?? null, deps, { link: chatLink(target, root) }, from),
           )}
           onClick={(e) => openMention(e, root, worktreeId, deps)}
         >
@@ -1171,7 +1171,7 @@ export const ChatItemView = memo(function ChatItemView({
       return (
         <Markdown
           text={item.text}
-          menu={(link, code) => messageItems(item, worktreeId ?? null, deps, { link, code })}
+          menu={(link, code, from) => messageItems(item, worktreeId ?? null, deps, { link, code }, from)}
           marked={marked}
           worktreeId={worktreeId}
           fileRoot={fileRoot()}
@@ -1183,7 +1183,7 @@ export const ChatItemView = memo(function ChatItemView({
       return (
         <div
           className="msg-assistant msg-error"
-          {...cm.contextMenu(() => messageItems(item, worktreeId ?? null, deps))}
+          {...cm.contextMenu((from) => messageItems(item, worktreeId ?? null, deps, {}, from))}
         >
           {item.text}
         </div>
@@ -1207,11 +1207,8 @@ export const ChatItemView = memo(function ChatItemView({
           <>
             <Markdown
               text={said.message}
-              menu={(link, code) =>
-                messageItems({ kind: "assistant", text: said.message }, worktreeId ?? null, deps, {
-                  link,
-                  code,
-                })
+              menu={(link, code, from) =>
+                messageItems({ kind: "assistant", text: said.message }, worktreeId ?? null, deps, { link, code }, from)
               }
               worktreeId={worktreeId}
               fileRoot={fileRoot()}
@@ -1219,7 +1216,7 @@ export const ChatItemView = memo(function ChatItemView({
             <div
               className="msg-user row-edge"
               data-state={rowState({ cursor: marked })}
-              {...cm.contextMenu(() => messageItems(bubble, worktreeId ?? null, deps))}
+              {...cm.contextMenu((from) => messageItems(bubble, worktreeId ?? null, deps, {}, from))}
             >
               {/* each pick on its line, under it what the option said beneath its label on the
                   card, at the tier it sat there (chat.css), and last what was typed: the pick is
@@ -1260,18 +1257,18 @@ export const ChatItemView = memo(function ChatItemView({
             plan.text && (
               <Markdown
                 text={plan.text}
-                menu={(link, code) =>
-                  messageItems({ kind: "assistant", text: plan.text }, worktreeId ?? null, deps, {
-                    link,
-                    code,
-                  })
+                menu={(link, code, from) =>
+                  messageItems({ kind: "assistant", text: plan.text }, worktreeId ?? null, deps, { link, code }, from)
                 }
                 worktreeId={worktreeId}
                 fileRoot={fileRoot()}
               />
             )
           )}
-          <div className="msg-user" {...cm.contextMenu(() => messageItems(bubble, worktreeId ?? null, deps))}>
+          <div
+            className="msg-user"
+            {...cm.contextMenu((from) => messageItems(bubble, worktreeId ?? null, deps, {}, from))}
+          >
             {plan.choice}
           </div>
         </>
@@ -1354,7 +1351,10 @@ export const ChatItemView = memo(function ChatItemView({
       const bubble = { kind: "assistant" as const, text: said };
       return (
         <>
-          <div className="msg-user" {...cm.contextMenu(() => messageItems(bubble, worktreeId ?? null, deps))}>
+          <div
+            className="msg-user"
+            {...cm.contextMenu((from) => messageItems(bubble, worktreeId ?? null, deps, {}, from))}
+          >
             {said}
           </div>
           <HandoffRow item={item} worktreeId={worktreeId} />

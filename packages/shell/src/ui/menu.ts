@@ -183,8 +183,16 @@ export function menuPlacement(spec: Pick<MenuSpec, "at" | "anchor" | "align" | "
 }
 
 /** how a context menu was asked for; a listbox answers only the keyboard, since a right-click
- * lands on one of its rows and the row answers that itself */
-export type MenuFrom = "pointer" | "keyboard";
+ * lands on one of its rows and the row answers that itself. A finger's long-press is `touch`: on
+ * Android it is also how text gets selected, and the browser drops the selection the moment the
+ * event is prevented, so a row whose text a finger would select answers it with `null`. */
+export type MenuFrom = "pointer" | "keyboard" | "touch";
+
+export function menuFrom(e: { clientX: number; clientY: number; nativeEvent?: Event }): MenuFrom {
+  if (fromKeyboard(e)) return "keyboard";
+  const n = e.nativeEvent;
+  return n && "pointerType" in n && (n as PointerEvent).pointerType === "touch" ? "touch" : "pointer";
+}
 
 /** What a surface spreads on a row or a trigger. `build` runs when the menu opens, so it reads
  * whatever is current then; the items are a snapshot, and a menu lives about a second. It is
@@ -194,11 +202,18 @@ export type MenuFrom = "pointer" | "keyboard";
 export function useContextMenu(owner: string) {
   return useMemo(
     () => ({
-      /** right-click, shift+F10 or the menu key on the element */
-      contextMenu(build: (from: MenuFrom, target: Element) => MenuEntry[], key?: string) {
+      /** right-click, shift+F10, the menu key or a long-press on the element. `build` answers
+       * `null` to leave the gesture to the browser outright: no menu of the row's, and none from
+       * the chrome behind it either, where an empty list would let that one answer. */
+      contextMenu(build: (from: MenuFrom, target: Element) => MenuEntry[] | null, key?: string) {
         return {
           onContextMenu: (e: ReactMouseEvent) => {
-            const items = tidy(build(fromKeyboard(e) ? "keyboard" : "pointer", e.target as Element));
+            const built = build(menuFrom(e), e.target as Element);
+            if (built === null) {
+              e.stopPropagation();
+              return;
+            }
+            const items = tidy(built);
             if (items.length === 0) return;
             e.preventDefault();
             // the dock behind the row must not answer as well, and the app's fallback checks

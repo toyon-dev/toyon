@@ -114,23 +114,30 @@ export function snippet(text: string, ranges: Array<[number, number]>): Pick<Cha
   return { text: `${head}${text.slice(start, end)}${tail}`, match };
 }
 
-/** one chat's hits for the query's terms, newest first; `more` when the limit left some out */
+/** one chat's hits for the query's terms: the messages that say a term as a word first, then the ones
+ * that only have it inside a longer word, newest first within each; `more` when the limit left some
+ * out, and `word` when any hit says a term as a word. A short query sits inside many words ("rips"
+ * is in "trips" and "strips"), and the message that says the word itself is the one looked for;
+ * the inside matches stay, under it, since an identifier is often found by one of its parts. */
 export function searchRows(
   rows: SaidRow[],
   terms: string[],
   chat: Pick<ChatHit, "worktreeId" | "archived">,
   limit = CHAT_HITS_PER_WORKTREE,
-): { hits: ChatHit[]; more: boolean } {
-  const hits: ChatHit[] = [];
-  if (terms.length === 0) return { hits, more: false };
+): { hits: ChatHit[]; more: boolean; word: boolean } {
+  if (terms.length === 0) return { hits: [], more: false, word: false };
+  const found: Array<{ row: SaidRow; ranges: Array<[number, number]>; word: boolean }> = [];
   for (let i = rows.length - 1; i >= 0; i--) {
     const row = rows[i]!;
-    const ranges = termRanges(row.lower, terms);
-    if (!ranges) continue;
-    if (hits.length === limit) return { hits, more: true };
-    hits.push({ ...chat, seq: row.seq, role: row.role, ts: row.ts, ...snippet(row.text, ranges) });
+    const at = termRanges(row.lower, terms);
+    if (at) found.push({ row, ...at });
   }
-  return { hits, more: false };
+  // the sort is stable, so each tier keeps the newest first
+  found.sort((a, b) => Number(b.word) - Number(a.word));
+  const hits = found
+    .slice(0, limit)
+    .map(({ row, ranges }) => ({ ...chat, seq: row.seq, role: row.role, ts: row.ts, ...snippet(row.text, ranges) }));
+  return { hits, more: found.length > limit, word: found[0]?.word ?? false };
 }
 
 /** what a chat was asked for: the first thing the person sent there, which is true of the whole
@@ -140,16 +147,35 @@ export function firstAsk(rows: SaidRow[]): string | undefined {
   return rows.find((r) => r.role === "user")?.text.slice(0, ASK);
 }
 
-/** each term where it first appears in `lower`, or null when one is absent. A phrase is a plain
- * substring too: the row's whitespace is already one space each, as the term's is. */
-function termRanges(lower: string, terms: string[]): Array<[number, number]> | null {
+/** each term where it appears in `lower`, or null when one is absent: where it starts a word when
+ * it does anywhere, else where it first sits inside one, with `word` saying which the row got for
+ * every term. A phrase is a plain substring too: the row's whitespace is already one space each,
+ * as the term's is. */
+function termRanges(lower: string, terms: string[]): { ranges: Array<[number, number]>; word: boolean } | null {
   const ranges: Array<[number, number]> = [];
+  let word = true;
   for (const term of terms) {
-    const at = lower.indexOf(term);
-    if (at < 0) return null;
+    let at = wordStart(lower, term);
+    if (at < 0) {
+      word = false;
+      at = lower.indexOf(term);
+      if (at < 0) return null;
+    }
     ranges.push([at, term.length]);
   }
-  return ranges;
+  return { ranges, word };
+}
+
+const WORD = /[\p{L}\p{N}]/u;
+
+/** where `term` sits in `lower` with nothing of a word before it, or -1. A term that opens with a
+ * mark rather than a letter (`.tsx`, `--text1`) is a word wherever it sits. */
+function wordStart(lower: string, term: string): number {
+  if (!WORD.test(term[0] ?? "")) return lower.indexOf(term);
+  for (let at = lower.indexOf(term); at >= 0; at = lower.indexOf(term, at + 1)) {
+    if (at === 0 || !WORD.test(lower[at - 1]!)) return at;
+  }
+  return -1;
 }
 
 export class ChatSearch {
@@ -186,10 +212,11 @@ export class ChatSearch {
     );
     // a chat no longer listed (restored, deleted, its worktree gone) is not read again
     for (const key of this.said.keys()) if (!read.has(key)) this.said.delete(key);
-    // the chat where it was said most recently first; the rail's order where nobody knows when
+    // the chats that say a term as a word before the ones that only have it inside a longer one,
+    // and in each tier the chat where it was said most recently first, that being its first hit
     const all = found
       .filter((f) => f.hits.length > 0)
-      .sort((a, b) => b.hits[0]!.ts - a.hits[0]!.ts)
+      .sort((a, b) => Number(b.word) - Number(a.word) || b.hits[0]!.ts - a.hits[0]!.ts)
       .flatMap((f) => f.hits);
     const hits = all.slice(0, CHAT_HITS_MAX);
     // the ask of each chat with a hit still in after the cut; its rows were read for the hits anyway

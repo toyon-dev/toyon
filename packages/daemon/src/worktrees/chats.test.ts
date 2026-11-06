@@ -108,6 +108,36 @@ describe("searchRows", () => {
     expect(hits).toHaveLength(1);
     expect(hits[0]).toMatchObject({ seq: 1, text: "the footer link alone", match: [[4, 11]] });
   });
+  test("a message that says the word ranks above a newer one that has it inside a longer word, and is marked where the word is", () => {
+    const rows = saidRows([
+      said(0, "it isn't on the RIPS allowlist", 1),
+      said(1, "strips, then rips", 2),
+      said(2, "fewer model round trips", 3),
+    ]);
+    const { hits, word } = searchRows(rows, ["rips"], { worktreeId: "a", archived: false });
+    expect(word).toBe(true);
+    expect(hits.map((h) => [h.seq, h.match[0]![0]])).toEqual([
+      [1, 13],
+      [0, 16],
+      [2, 19],
+    ]);
+  });
+  test("a term that opens with a mark is a word wherever it sits, and a chat with only inside matches says so", () => {
+    const rows = saidRows([said(0, "see footer.tsx", 1)]);
+    expect(searchRows(rows, [".tsx"], { worktreeId: "a", archived: false }).word).toBe(true);
+    expect(searchRows(rows, ["oter"], { worktreeId: "a", archived: false }).word).toBe(false);
+  });
+  test("the limit keeps the words over the newer inside matches", () => {
+    const rows = saidRows([
+      said(0, "the RIPS allowlist", 0),
+      ...Array.from({ length: 25 }, (_, i) => said(i + 1, `round trips, take ${i}`, i + 1)),
+    ]);
+    const { hits, more } = searchRows(rows, ["rips"], { worktreeId: "a", archived: false });
+    expect(hits).toHaveLength(CHAT_HITS_PER_WORKTREE);
+    expect(more).toBe(true);
+    expect(hits[0]).toMatchObject({ seq: 0 });
+    expect(hits[1]).toMatchObject({ seq: 25 });
+  });
 });
 
 describe("ChatSearch", () => {
@@ -116,6 +146,7 @@ describe("ChatSearch", () => {
       ["/t/m.jsonl", { text: jsonl([said(0, "the footer on main", 30)]), mtimeMs: 1 }],
       ["/t/x.jsonl", { text: jsonl([said(0, "the footer elsewhere", 40)]), mtimeMs: 1 }],
       ["/t/b.jsonl", { text: jsonl([said(0, "the footer, cold", 15)]), mtimeMs: 1 }],
+      ["/t/c.jsonl", { text: jsonl([said(0, "the nonfooter, newest", 50)]), mtimeMs: 1 }],
       ["/arch/z.jsonl", { text: jsonl([said(0, "the footer again", 20)]), mtimeMs: 1 }],
     ]);
     let reads = 0;
@@ -134,6 +165,7 @@ describe("ChatSearch", () => {
       worktrees: [
         { id: "a", repoId: "r", kind: "worktree" },
         { id: "b", repoId: "r", kind: "worktree" },
+        { id: "c", repoId: "r", kind: "worktree" },
         { id: "m", repoId: "r", kind: "main" },
         { id: "x", repoId: "other", kind: "worktree" },
       ],
@@ -148,16 +180,22 @@ describe("ChatSearch", () => {
     return { search, files, reads: () => reads };
   };
 
-  test("the project's worktrees and archived chats, main and other projects left out, where it was said last first", async () => {
+  test("the project's worktrees and archived chats, main and other projects left out, where it was said last first, and a chat that has the word only inside another after them all", async () => {
     const { search } = make();
     const { hits, truncated, asks } = await search.search("r", "Footer");
     expect(hits.map((h) => [h.worktreeId, h.archived])).toEqual([
       ["z", true],
       ["b", false],
       ["a", false],
+      ["c", false],
     ]);
     expect(truncated).toBe(false);
-    expect(asks).toEqual({ z: "the footer again", b: "the footer, cold", a: "fix the footer" });
+    expect(asks).toEqual({
+      z: "the footer again",
+      b: "the footer, cold",
+      a: "fix the footer",
+      c: "the nonfooter, newest",
+    });
   });
 
   test("a chat's first message comes with its hits, and only a chat with a hit says one", async () => {
@@ -170,13 +208,13 @@ describe("ChatSearch", () => {
   test("a chat's file is read again only when it changes, and a short query reads nothing", async () => {
     const { search, files, reads } = make();
     await search.search("r", "footer");
-    expect(reads()).toBe(2);
+    expect(reads()).toBe(3);
     await search.search("r", "footer again");
-    expect(reads()).toBe(2);
+    expect(reads()).toBe(3);
     files.get("/t/b.jsonl")!.mtimeMs = 2;
     await search.search("r", "footer");
-    expect(reads()).toBe(3);
+    expect(reads()).toBe(4);
     expect(await search.search("r", "f")).toEqual({ hits: [], truncated: false, asks: {} });
-    expect(reads()).toBe(3);
+    expect(reads()).toBe(4);
   });
 });

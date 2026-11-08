@@ -266,8 +266,10 @@ function field(call: ToolCall, key: string): string {
 
 /** the handoff names its pieces the way a teammate would ("sticky header"), and those titles are
  * the row's sentence: the call has no description, path or command of its own, so without this
- * the row said only the tool's name, and that is what the running shine crossed. Read off the
- * input as sent, since the card that draws the list is a row of its own and comes later. */
+ * the row said only the tool's name, and that is what the running shine crossed. The verb is what
+ * the call did and no more: the agent offered the pieces and the person decides, and a title on
+ * its own under the glyph ("hold main pick") read as a thing rather than as an offer of it. Read
+ * off the input as sent, since the card that draws the list is a row of its own and comes later. */
 function handoffPieces(call: ToolCall): string {
   if (call.name !== HANDOFF_TOOL) return "";
   const input = call.input as { pieces?: unknown } | null;
@@ -276,8 +278,9 @@ function handoffPieces(call: ToolCall): string {
     .map((p) => (p && typeof p === "object" ? (p as { title?: unknown }).title : undefined))
     .filter((t): t is string => typeof t === "string" && t.trim() !== "")
     .map((t) => t.trim());
-  if (titles.length <= 1) return titles[0] ?? "";
-  return `${titles.slice(0, -1).join(", ")} and ${titles.at(-1)}`;
+  if (titles.length === 0) return "";
+  const list = titles.length === 1 ? titles[0] : `${titles.slice(0, -1).join(", ")} and ${titles.at(-1)}`;
+  return `offered ${list}`;
 }
 
 /** the worktrees tool with a query reads the query, as any search does; without one it lists the

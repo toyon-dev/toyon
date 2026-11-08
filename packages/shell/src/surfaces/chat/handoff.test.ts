@@ -12,6 +12,7 @@ import {
   handoffCounts,
   handoffLine,
   handoffOn,
+  handoffPage,
   handoffQuestion,
   handoffSaid,
   hereWaits,
@@ -210,6 +211,18 @@ describe("listPage", () => {
     expect(listPage(list([], {}, { held: true, plan: ".toyon/plans/1.md" }))).toBe(true);
     expect(listPage(list([], {}, { held: true, state: "held" }))).toBe(false);
     expect(listPage(list([], {}, { held: true, plan: ".toyon/plans/2.md", companion: "k1" }))).toBe(false);
+  });
+});
+
+describe("handoffPage", () => {
+  test("the file the list a call handed over sits on: the first list after the call, once it has one", () => {
+    const call = { kind: "tool" as const, id: "t1", name: "handoff", input: {}, done: true };
+    const older = list([], {}, { id: "l0", state: "done", plan: ".toyon/plans/0.md" });
+    const shown = list([], {}, { id: "l1", plan: ".toyon/plans/1.md" });
+    expect(handoffPage([older, call, shown], "t1")).toBe(".toyon/plans/1.md");
+    expect(handoffPage([older, call, list([], {}, { id: "l2", state: "held" })], "t1")).toBeUndefined();
+    expect(handoffPage([older, call], "t1")).toBeUndefined();
+    expect(handoffPage([older, call, shown], "t9")).toBeUndefined();
   });
 });
 

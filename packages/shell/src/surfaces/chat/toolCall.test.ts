@@ -445,8 +445,8 @@ describe("toolLabel", () => {
       name: "handoff",
       icon: "handoff",
     });
-    // a handoff with pieces reads their titles, the way a run reads its description: the glyph
-    // says handoff, so the name goes and the titles are the line the shine crosses
+    // a handoff with pieces says it offered them, by title, the way a run reads its description:
+    // the glyph says handoff, so the name goes and the sentence is the line the shine crosses
     const pieces = [
       { title: "sticky header", plan: "x", where: "worktree" },
       { title: "api route", plan: "y", where: "worktree" },
@@ -455,10 +455,10 @@ describe("toolLabel", () => {
     expect(toolLabel({ name: "handoff", title: "handoff", input: { pieces } })).toMatchObject({
       name: "",
       icon: "handoff",
-      hint: "sticky header, api route and marked dependency",
+      hint: "offered sticky header, api route and marked dependency",
     });
     expect(toolLabel({ name: "handoff", title: "handoff", input: { pieces: pieces.slice(0, 1) } }).hint).toBe(
-      "sticky header",
+      "offered sticky header",
     );
     // the worktrees tool reads its query, and with none says what the bare call lists
     expect(toolLabel({ name: "worktrees", title: "worktrees", input: {} })).toMatchObject({

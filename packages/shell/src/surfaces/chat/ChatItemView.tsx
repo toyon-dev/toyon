@@ -1,5 +1,6 @@
 import {
   type AttachmentRef,
+  HANDOFF_TOOL,
   LOGIN_STREAM,
   type PickMeta,
   type ReplyPicture,
@@ -14,7 +15,7 @@ import { openFile } from "../../state/actions/file.ts";
 import { type ChatLink, codeItems, imageItems, messageItems, pathItems } from "../../state/actions/message.ts";
 import { useDispatch, useSock, useStore, useStoreInstance, useUrls } from "../../state/context.tsx";
 import { openSource } from "../../state/openSource.ts";
-import { type ChatItem, worktreeById } from "../../state/store.ts";
+import { type ChatItem, localOf, worktreeById } from "../../state/store.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { Field } from "../../ui/Field.tsx";
@@ -47,7 +48,7 @@ import {
 } from "./group.ts";
 import { HandedRow } from "./HandedRow.tsx";
 import { HandoffRow, PieceLandedRow, PieceLaterRow } from "./HandoffRow.tsx";
-import { handoffSaid } from "./handoff.ts";
+import { handoffPage, handoffSaid } from "./handoff.ts";
 import { SentImageChip } from "./ImageChip.tsx";
 import { MentionText, openMention } from "./Mentions.tsx";
 import { useMarkdown } from "./markdown.ts";
@@ -826,6 +827,11 @@ export const ToolRow = memo(
     // square that is always red is the agent's alone.
     const op = useStore((s) => (worktreeId ? s.shipping[worktreeId]?.op : undefined));
     const stoppable = streaming && head.name === SHELL_TOOL && worktreeId ? { worktreeId, toolId: last.id } : null;
+    // a handoff's call names no file, and the thing to read from its row is the list it put on
+    // the plan: the page is the list's, which the daemon names after the call, so it is read live
+    const page = useStore((s) =>
+      head.name === HANDOFF_TOOL ? handoffPage(localOf(s, worktreeId).chat, head.id) : undefined,
+    );
     // the file the row names, opened in the pane: the first thing its menu offers, as a control on
     // the line. Not until the call has returned: a write's file is not on disk before that, and a
     // press on it answered "does not exist" for a file the row was plainly making.
@@ -833,7 +839,8 @@ export const ToolRow = memo(
       ? null
       : (() => {
           const w = worktreeById(store.getState(), worktreeId);
-          return toolRowOpen(tools, roots ?? [], w ? { id: w.worktree.id } : null, { sock, dispatch: store.dispatch });
+          const deps = { sock, dispatch: store.dispatch };
+          return toolRowOpen(tools, roots ?? [], w ? { id: w.worktree.id } : null, deps, page);
         })();
     return (
       <Fold
@@ -856,7 +863,7 @@ export const ToolRow = memo(
           // read a file link against, and its output links out alone
           const link = chatLink(target, null);
           const href = link?.kind === "out" ? link.href : null;
-          return toolRowItems(tools, roots ?? [], wt, { sock, dispatch: store.dispatch }, fold, href);
+          return toolRowItems(tools, roots ?? [], wt, { sock, dispatch: store.dispatch }, fold, href, page);
         }}
         summary={
           <>

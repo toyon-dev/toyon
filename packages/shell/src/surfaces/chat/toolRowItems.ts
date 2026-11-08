@@ -30,11 +30,19 @@ const TIPS: Record<EditorView, string> = {
  * this order, as a file's menu does everywhere else in the shell, so the button is always the
  * menu's first item. Empty for a row that named no file or a worktree that is gone. A file
  * outside the worktree (a mock under /tmp) is asked for by its place on the daemon's disk, which
- * decides the reading, so it has one entry. */
-export function toolRowOpens(tools: ToolItem[], roots: string[], wt: { id: string } | null, deps: Deps): ToolRowOpen[] {
+ * decides the reading, so it has one entry. `page` is the file a row stands for when its call
+ * named none in its input: the list a handoff put on the plan, which is what the person reading
+ * that row comes to see. */
+export function toolRowOpens(
+  tools: ToolItem[],
+  roots: string[],
+  wt: { id: string } | null,
+  deps: Deps,
+  page?: string,
+): ToolRowOpen[] {
   const head = tools[0];
   if (!head || !wt) return [];
-  const rel = relPath(callPath(head), roots);
+  const rel = relPath(page || callPath(head), roots);
   if (!rel) return [];
   if (rel.startsWith("/")) {
     return [{ label: "open", tip: TIPS.file, open: () => openByPath(deps, wt.id, { href: rel, path: rel }) }];
@@ -69,14 +77,16 @@ export function toolRowItems(
   ui: { open: boolean; leaf: boolean; toggle: () => void },
   /** the address under the pointer, where the row's output printed one: its items lead */
   href?: string | null,
+  /** the file the row stands for where its call named none (toolRowOpens) */
+  page?: string,
 ): MenuEntry[] {
   const { sock } = deps;
   const head = tools[0];
   if (!head) return [];
   const link: MenuItem[] = href ? linkItems(href) : [];
   const open: MenuItem[] = [];
-  const rel = relPath(callPath(head), roots);
-  const opens = toolRowOpens(tools, roots, wt, deps).map((o) => ({
+  const rel = relPath(page || callPath(head), roots);
+  const opens = toolRowOpens(tools, roots, wt, deps, page).map((o) => ({
     id: o.label.replace(" ", "-"),
     label: o.label,
     onClick: o.open,
@@ -92,7 +102,7 @@ export function toolRowItems(
   const copies: MenuItem[] = [];
   // the path as the call named it, which is where the file is on disk: what a file's own menu
   // copies, offered on every row that names one and not only on a file outside the worktree
-  const named = callPath(head);
+  const named = page || callPath(head);
   if (rel && named) copies.push({ id: "copy-path", label: "copy path", onClick: () => copyText(named) });
   const command = toolLabel(head, roots).command;
   // the row's line is cut at the edge and has no other copy; a description that is the command

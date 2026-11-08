@@ -54,6 +54,17 @@ export function listPage(item: Pick<HandoffItem, "plan" | "companion">): boolean
   return !!item.plan && !item.companion;
 }
 
+/** The file the list a tool call handed over sits on, for that call's row to open: the agent's
+ * plan while the list is held beside a plan card, else the page Toyon wrote for it. The list is
+ * the first one in the chat after the call, since the daemon notes it while the call runs and
+ * gives it an id of its own; nothing, until the daemon has said where it sits. */
+export function handoffPage(chat: readonly ChatItem[], toolId: string): string | undefined {
+  const at = chat.findIndex((i) => i.kind === "tool" && i.id === toolId);
+  if (at < 0) return undefined;
+  const item = chat.slice(at + 1).find((i) => i.kind === "handoff");
+  return item?.kind === "handoff" ? item.plan : undefined;
+}
+
 /** where the piece stands: the person's last press, else what the agent proposed */
 export function effectiveFate(item: Pick<HandoffItem, "fates">, piece: Piece): PieceFate {
   return item.fates[piece.id] ?? piece.fate;

@@ -39,6 +39,13 @@ describe("tool row opens", () => {
     expect(labels({ ...call("execute", ""), input: { command: "ls" } })).toEqual([]);
     expect(labels(call("edit", "/w/src/a.ts"), null)).toEqual([]);
   });
+
+  test("a handoff's row stands for the list page the call put on the plan, read rendered first", () => {
+    const handoff: ToolItem = { kind: "tool", id: "t", name: "handoff", input: { pieces: [] }, done: true };
+    const opens = toolRowOpens([handoff], roots, wt, deps, ".toyon/plans/1.md").map((o) => o.label);
+    expect(opens).toEqual(["open preview", "open file"]);
+    expect(toolRowOpens([handoff], roots, wt, deps)).toEqual([]);
+  });
 });
 
 describe("tool row items", () => {

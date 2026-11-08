@@ -77,6 +77,7 @@ const IN_FLIGHT: ReadonlySet<DotState> = new Set([
   "working",
   "background",
   "starting",
+  "preparing",
   "failed",
   "crashed",
 ]);

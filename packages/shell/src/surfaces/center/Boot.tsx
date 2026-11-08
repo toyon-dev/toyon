@@ -124,6 +124,9 @@ export function Boot({ worktree, log }: { worktree: OwnedWorktree; log: LogLine[
 
 function statusText(p: ProcState): string {
   switch (p.status) {
+    // the step it is on is the detail line under this
+    case "preparing":
+      return `setting up for :${p.port}`;
     case "starting":
       return `starting on :${p.port}`;
     case "running":

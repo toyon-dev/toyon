@@ -126,8 +126,8 @@ import { configFor, settingsLines } from "../repos/config.ts";
 import { isInside } from "../repos/create.ts";
 import { type RunHandle, RunService } from "../runs/service.ts";
 import { allocateProxyPort, releasePort } from "../runtime/ports.ts";
-import { type OwnWhy, resolveRun, spawnsOf } from "../runtime/profile.ts";
 import { DEFAULT_AGENT_ID, type Runtime, type RuntimeRegistry, worktreeEnv } from "../runtime/registry.ts";
+import { type OwnWhy, resolveRun, spawnsOf } from "../runtime/run.ts";
 import { runSetup } from "../runtime/setup.ts";
 import {
   type ArchiveRecord,
@@ -980,7 +980,7 @@ export class WorktreeService {
   /** The named procs' own setup, for those that have one and have not run it here, in run order,
    * each command under the setup ceiling with the worktree's variables and on the row as a setup
    * stage. `sink` is where the output goes: the `setup` stream at birth, when no proc has a tab
-   * yet, or the proc's own tab at a flip, where the proc stands `starting` with the step as its
+   * yet, or the proc's own tab at a flip, where the proc stands `preparing` with the step as its
    * detail until it spawns. A proc whose setup fails is not prepared and is not started: at a
    * flip it stays main's, at birth it is left for the person to read, and the line that says so
    * goes where the output went and onto the transcript. Returns what is ready to run, and the
@@ -1170,6 +1170,8 @@ export class WorktreeService {
         ...(ownedBy(wt.sources?.[name]?.at) ? { reason: ownedBy(wt.sources?.[name]?.at) } : {}),
         ...(behind.has(name) ? { behind: true as const } : {}),
         ...(status ? { status } : {}),
+        // its own setup is running here while the record still says main's
+        ...(source === "main" && own.get(name) === "preparing" ? { preparing: true as const } : {}),
       };
     });
     return { procs, mainDirty };

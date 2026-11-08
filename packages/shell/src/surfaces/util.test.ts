@@ -7,6 +7,7 @@ import {
   folderList,
   pageErrorText,
   previewUrl,
+  procLabel,
   procTrouble,
   rowLabel,
   shipLabel,
@@ -135,6 +136,18 @@ describe("stateLabel", () => {
     expect(stateLabel(status("idle"))).toBe("Idle");
     expect(stateLabel(status("idle"), true)).toBe("Not set up");
     expect(stateLabel(status("idle", proc("web", "running")), true)).toBe("Running");
+  });
+
+  test("a proc whose own setup runs ahead of its spawn is setting up: below starting, above asleep", () => {
+    expect(shownDot(status("idle", proc("api", "preparing")), undefined)).toBe("preparing");
+    expect(stateLabel(status("idle", proc("api", "preparing")))).toBe("Setting up");
+    expect(stateLabel(status("idle", proc("web", "starting"), proc("api", "preparing")))).toBe("Starting");
+    expect(stateLabel(status("idle", proc("web", "asleep"), proc("api", "preparing")))).toBe("Setting up");
+    // the setup is something running under the row, so a failed turn holds its colour over it
+    expect(stateLabel({ ...status("error", proc("api", "preparing")) })).toBe("Agent failed");
+    expect(shipShown(status("idle", proc("api", "preparing")), "commit")).toBe("commit");
+    expect(procLabel("preparing")).toBe("Setting up");
+    expect(procLabel("starting")).toBe("Starting");
   });
 
   test("asleep sits below starting and above idle, and a repo not set up still says so", () => {

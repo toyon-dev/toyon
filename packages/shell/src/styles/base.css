@@ -396,7 +396,10 @@
     &.running {
       background: var(--green);
     }
-    &.starting {
+    /* preparing is starting one step earlier (the proc's own setup, before its spawn): the same
+   gray, since both say "on its way" and the tip tells the two apart */
+    &.starting,
+    &.preparing {
       background: var(--ink2);
     }
     /* the same green as `running`, told apart by the pulse alone: a worktree with its server up

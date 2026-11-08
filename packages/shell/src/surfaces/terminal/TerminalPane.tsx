@@ -1,4 +1,4 @@
-import { type Borrowed, LOGIN_STREAM, remoteOf, runRemotes, SHELL_STREAM } from "@toyon/shared";
+import { type Borrowed, LOGIN_STREAM, remoteOf, runRemotes, SHELL_STREAM, upOrComing } from "@toyon/shared";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { useActive, useLocalField, useTheme } from "../../state/selectors.ts";
@@ -130,7 +130,7 @@ export function TerminalPane({
               ...(dirty > 0
                 ? [`${dirtyNote(dirty, stream)[0]!.toUpperCase()}${dirtyNote(dirty, stream).slice(1)}.`]
                 : []),
-              ...(main.status !== "running" && main.status !== "starting" && main.status !== "cold"
+              ...(!upOrComing(main.status)
                 ? [`Main's ${stream} is ${main.status}; every worktree reaching it is down until it is back.`]
                 : []),
             ].join(" ")}

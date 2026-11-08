@@ -6,7 +6,7 @@ import { tmpRepo } from "../../test/helpers/tmp-repo.ts";
 import { Hub } from "../core/hub.ts";
 import { StateStore } from "../core/state.ts";
 import { tierOf } from "../repos/config.ts";
-import { resolveRun } from "../runtime/profile.ts";
+import { resolveRun } from "../runtime/run.ts";
 import { BackendShare, DEBOUNCE_MS, migrationMatch, rootMatch, touching } from "./backend.ts";
 
 let cleanup = () => {};

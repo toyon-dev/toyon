@@ -2,7 +2,7 @@
 // on main, and the ones its page points at a remote. Pure, so the order and the words are tested
 // without the pane; useTermTabs draws them.
 
-import type { Borrowed, ProcState, ProcStatus } from "@toyon/shared";
+import { type Borrowed, type ProcState, type ProcStatus, upOrComing } from "@toyon/shared";
 import { dirtyNote } from "../chips/baseNote.ts";
 import { procLabel } from "../util.ts";
 
@@ -15,7 +15,7 @@ export type StreamTab =
 export function borrowedTip(b: Borrowed, dirty: number): string {
   const parts = [`${b.name} runs on main for every worktree; this one reaches it at its usual address.`];
   if (dirty > 0) parts.push(`${dirtyNote(dirty, b.name)[0]!.toUpperCase()}${dirtyNote(dirty, b.name).slice(1)}.`);
-  if (b.status !== "running" && b.status !== "starting" && b.status !== "cold") {
+  if (!upOrComing(b.status)) {
     parts.push(`Main's ${b.name} is ${procLabel(b.status).toLowerCase()}.`);
   }
   return parts.join(" ");
@@ -36,14 +36,13 @@ export function streamTabs({
   /** main's uncommitted file count */
   dirty: number;
 }): StreamTab[] {
-  const up = (s: ProcStatus | "cold") => s === "running" || s === "starting" || s === "cold";
   return [
     ...procs.map((proc): StreamTab => ({ kind: "proc", proc })),
     ...borrowed.map(
       (b): StreamTab => ({
         kind: "borrowed",
         name: b.name,
-        dot: up(b.status) ? "borrowed" : b.status,
+        dot: upOrComing(b.status) ? "borrowed" : b.status,
         tip: borrowedTip(b, dirty),
       }),
     ),

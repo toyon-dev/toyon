@@ -36,12 +36,13 @@ export interface ManagedProc {
   /** set by the first keystroke since this spawn: a proc you drove is yours, so its exit means
    * you stopped it rather than that it crashed */
   handInput: boolean;
-  /** a place held before the spawn, while the proc's own setup runs: no pty, `starting` with the
-   * step as its detail. `start()` of the name spawns into it. */
-  pending: boolean;
-  /** what the setup printed while pending, for a tab that opens mid-way; capped like the ring */
+  /** what the setup printed while the proc was `preparing`, for a tab that opens mid-way; capped
+   * like the ring */
   prelude: string;
 }
+
+/** a place held before the spawn, while the proc's own setup runs: no pty, no process yet */
+const preparing = (mp: ManagedProc): boolean => mp.state.status === "preparing";
 
 export type ProcListener = (proc: ProcState) => void;
 export type LogListener = (proc: string, line: string, retract: number) => void;
@@ -69,9 +70,9 @@ export class WorktreeProcs {
 
   async start(name: string, command: string, extraEnv: Record<string, string> = {}) {
     const held = this.procs.get(name);
-    if (held?.pending) {
-      // the place `pending()` made: same port, same tab, the setup's output already on it
-      held.pending = false;
+    if (held && preparing(held)) {
+      // the place `pending()` made: same port, same tab, the setup's output already on it; the
+      // spawn moves it to `starting`
       held.state.command = command;
       held.env = extraEnv;
       this.spawnProc(held);
@@ -85,7 +86,6 @@ export class WorktreeProcs {
       restarts: 0,
       lastStart: 0,
       handInput: false,
-      pending: false,
       prelude: "",
     };
     this.procs.set(name, mp);
@@ -93,26 +93,25 @@ export class WorktreeProcs {
     return mp.state;
   }
 
-  /** A proc's place before its spawn, while its own setup runs: `starting` with `detail` naming
+  /** A proc's place before its spawn, while its own setup runs: `preparing` with `detail` naming
    * the step, a port of its own already, no pty. `start()` of the same name spawns into it; a
    * second `pending()` only moves the detail. The tab, the row and the chip read it as a proc that
    * is on its way, which is what it is. */
   async pending(name: string, command: string, detail: string): Promise<ProcState> {
     const had = this.procs.get(name);
-    if (had?.pending) {
+    if (had && preparing(had)) {
       had.state.detail = detail;
       this.onProc({ ...had.state });
       return had.state;
     }
     const port = await allocatePort();
     const mp: ManagedProc = {
-      state: { name, command, port, status: "starting", detail },
+      state: { name, command, port, status: "preparing", detail },
       lines: new LineSplitter(),
       env: {},
       restarts: 0,
       lastStart: 0,
       handInput: false,
-      pending: true,
       prelude: "",
     };
     this.procs.set(name, mp);
@@ -120,25 +119,20 @@ export class WorktreeProcs {
     return mp.state;
   }
 
-  /** a setup step's output for a pending proc: its tab, the log ring, and the prelude a tab
+  /** a setup step's output for a preparing proc: its tab, the log ring, and the prelude a tab
    * opening later starts from */
   setupOutput(name: string, data: string): void {
     const mp = this.procs.get(name);
-    if (!mp?.pending) return;
+    if (!mp || !preparing(mp)) return;
     mp.prelude = (mp.prelude + data).slice(-PROC_RING);
     this.onData(name, data);
     for (const ev of mp.lines.feed(data)) this.pushLine(name, ev.line, ev.retract);
   }
 
-  /** whether the name is a place held before its spawn: no process answers there yet */
-  isPending(name: string): boolean {
-    return this.procs.get(name)?.pending === true;
-  }
-
-  /** what a pending proc has printed so far; undefined for a proc that is not pending */
+  /** what a preparing proc has printed so far; undefined for a proc that is spawned or absent */
   prelude(name: string): string | undefined {
     const mp = this.procs.get(name);
-    return mp?.pending ? mp.prelude : undefined;
+    return mp && preparing(mp) ? mp.prelude : undefined;
   }
 
   private spawnProc(mp: ManagedProc) {
@@ -298,7 +292,9 @@ export class WorktreeProcs {
    * the exit handler reads `stopped` and schedules nothing. */
   async stop(name: string): Promise<void> {
     const mp = this.procs.get(name);
-    if (!mp) return;
+    // a held place has no process to stop, and marking it stopped would lose it: start() would
+    // no longer spawn into it and its port would never go back. The setup's end spawns or drops it.
+    if (!mp || preparing(mp)) return;
     mp.restarts = 0;
     mp.state.status = "stopped";
     mp.state.pid = undefined;
@@ -319,9 +315,9 @@ export class WorktreeProcs {
   restart(name: string) {
     const mp = this.procs.get(name);
     // asleep, every proc comes back together through wake(): one up on its own would be a copy
-    // half awake, which no tier the policy reads has a word for. A pending proc has nothing to
+    // half awake, which no tier the policy reads has a word for. A preparing proc has nothing to
     // restart yet; its setup's end spawns it.
-    if (!mp || this.asleep || mp.pending) return;
+    if (!mp || this.asleep || preparing(mp)) return;
     mp.restarts = 0;
     if (mp.state.status === "crashed") {
       this.spawnProc(mp);
@@ -353,8 +349,8 @@ export class WorktreeProcs {
     this.asleep = true;
     const exits: Promise<void>[] = [];
     for (const mp of this.procs.values()) {
-      // a pending proc stays on its way: its setup is still running and spawns it when done
-      if (mp.pending) continue;
+      // a preparing proc stays on its way: its setup is still running and spawns it when done
+      if (preparing(mp)) continue;
       mp.state.status = "asleep";
       mp.state.pid = undefined;
       mp.state.detail = why;
@@ -370,7 +366,7 @@ export class WorktreeProcs {
     if (!this.asleep || this.stopped) return;
     this.asleep = false;
     for (const mp of this.procs.values()) {
-      if (mp.pending) continue;
+      if (preparing(mp)) continue;
       mp.restarts = 0;
       this.spawnProc(mp);
     }

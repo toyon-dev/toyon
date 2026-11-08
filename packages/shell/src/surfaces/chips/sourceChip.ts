@@ -3,7 +3,7 @@
 // SourceChip.tsx draws them.
 
 import type { ClientMsg, OwnedWorktree, RepoInfo, TrunkStatus } from "@toyon/shared";
-import { ownedBy, remoteOf, runRemotes } from "@toyon/shared";
+import { ownedBy, remoteOf, runRemotes, upOrComing } from "@toyon/shared";
 import type { ChipOption } from "../../ui/ChipPicker.tsx";
 import { dirtyNote } from "./baseNote.ts";
 
@@ -26,7 +26,7 @@ export function sourceOf(name: string, wt: Pick<OwnedWorktree, "worktree">): Sou
  * edits), its tooltip, and the rows it opens into, in the order they are reached for */
 export function sourceOptions(
   name: string,
-  wt: Pick<OwnedWorktree, "worktree" | "borrowed" | "remoteBehind">,
+  wt: Pick<OwnedWorktree, "worktree" | "borrowed" | "remoteBehind" | "procs">,
   repo: Pick<RepoInfo, "config">,
   trunk: Pick<TrunkStatus, "dirty"> | null,
 ): { value: Source; held: boolean; hint: string; options: SourceOption[] } {
@@ -34,18 +34,22 @@ export function sourceOptions(
   const held = wt.remoteBehind?.includes(name) ?? false;
   const dirty = trunk?.dirty ?? 0;
   const mainState = wt.borrowed?.find((b) => b.name === name)?.status;
-  const down = mainState !== undefined && mainState !== "running" && mainState !== "starting" && mainState !== "cold";
+  const down = mainState !== undefined && !upOrComing(mainState);
+  // the proc's own setup is running here ahead of its spawn: the record still says main, and the
+  // page still reaches main's, so both rows say where that stands
+  const preparing = wt.procs?.some((p) => p.name === name && p.status === "preparing") ?? false;
   const mainDesc = [
     "main runs it for every worktree",
     ...(dirty > 0 ? [dirtyNote(dirty, name)] : []),
     ...(down ? [`main's ${name} is ${mainState}`] : []),
+    ...(preparing ? [`${name} is setting up here and takes over once it answers`] : []),
   ].join("; ");
   const main: SourceOption = { id: "main", label: "main", chip: `${name} · main`, description: mainDesc };
   const here: SourceOption = {
     id: "here",
     label: "here",
     chip: `${name} · here`,
-    description: "this worktree runs its own",
+    description: preparing ? "this worktree is setting up its own" : "this worktree runs its own",
   };
   const remotes: SourceOption[] = Object.entries(runRemotes(repo.config.run[name] ?? "")).map(([r, url]) => ({
     id: `remote:${r}`,
@@ -57,7 +61,10 @@ export function sourceOptions(
   let hint: string;
   if (held) hint = `${name} edits here are not what the page is talking to; pick here to run them`;
   else if (value === "main") {
-    hint = `${name} runs on main for every worktree${dirty > 0 ? `; ${dirtyNote(dirty, name)}` : ""}. Click to change`;
+    // the chip is the control for this very question, so its hover says the setup is under way
+    // rather than leaving that to the rows inside
+    const note = preparing ? `; its own is setting up here` : dirty > 0 ? `; ${dirtyNote(dirty, name)}` : "";
+    hint = `${name} runs on main for every worktree${note}. Click to change`;
   } else if (value === "here") hint = `${name} runs here: this worktree's own. Click to change`;
   else hint = `${name} points at ${remoteIn(value)} for this worktree. Click to change`;
   return { value, held, hint, options };

@@ -393,6 +393,14 @@ describe("tierContext", () => {
     expect(tierContext({ procs: [{ ...api, source: "here", status: "starting" }], mainDirty: 0 })).toBe(
       "This worktree runs its own api. api is starting here; until it answers the page still reaches main's.",
     );
+    expect(tierContext({ procs: [{ ...api, source: "here", status: "preparing" }], mainDirty: 0 })).toBe(
+      "This worktree runs its own api. api is setting up here; until it answers the page still reaches main's.",
+    );
+  });
+  test("a borrowed proc whose own setup is running here says so, after what main's does for the page", () => {
+    expect(tierContext({ procs: [{ ...api, source: "main", status: "running", preparing: true }], mainDirty: 0 })).toBe(
+      "Main runs api for every worktree, this one included; the page here reaches it at API_URL. A change under app/**, or to a lockfile, env, compose or migration file, makes this worktree run its own api. When you are about to change what a shared command runs on, call the toyon own tool first, so the server is up by the time the edit lands. api is setting up here; until it answers the page still reaches main's.",
+    );
   });
   test("a pointed proc says where the page talks, and when the edits here are not it", () => {
     const stage = { remote: "stage", url: "https://api.stage.example.com" };

@@ -25,7 +25,10 @@ const info: WorktreeInfo = {
   createdAt: 0,
 };
 const row = (extra: Partial<WorktreeInfo> = {}, status: Partial<OwnedWorktree> = {}) =>
-  ({ worktree: { ...info, ...extra }, ...status }) as Pick<OwnedWorktree, "worktree" | "borrowed" | "remoteBehind">;
+  ({ worktree: { ...info, ...extra }, ...status }) as Pick<
+    OwnedWorktree,
+    "worktree" | "borrowed" | "remoteBehind" | "procs"
+  >;
 
 describe("sourceOf", () => {
   test("a remote the page points at wins, then the worktree's own, else main's", () => {
@@ -64,6 +67,36 @@ describe("sourceOptions", () => {
     expect(down.options[0]?.description).toBe("main runs it for every worktree; main's api is crashed");
     const cold = sourceOptions("api", row({}, { borrowed: [{ name: "api", status: "cold" }] }), repo, null);
     expect(cold.options[0]?.description).toBe("main runs it for every worktree");
+  });
+
+  test("while the command's own setup runs here, the chip stays main's and both rows say it is setting up", () => {
+    const preparing = sourceOptions(
+      "api",
+      row(
+        {},
+        {
+          borrowed: [{ name: "api", status: "running" }],
+          procs: [{ name: "api", command: "a", port: 4000, status: "preparing", detail: "setup: uv sync" }],
+        },
+      ),
+      repo,
+      { dirty: 0 },
+    );
+    expect(preparing.value).toBe("main");
+    expect(preparing.hint).toBe("api runs on main for every worktree; its own is setting up here. Click to change");
+    expect(preparing.options[0]?.description).toBe(
+      "main runs it for every worktree; api is setting up here and takes over once it answers",
+    );
+    expect(preparing.options[1]?.description).toBe("this worktree is setting up its own");
+    // spawned, the rows read as before
+    const starting = sourceOptions(
+      "api",
+      row({}, { procs: [{ name: "api", command: "a", port: 4000, status: "starting" }] }),
+      repo,
+      { dirty: 0 },
+    );
+    expect(starting.options[0]?.description).toBe("main runs it for every worktree");
+    expect(starting.options[1]?.description).toBe("this worktree runs its own");
   });
 
   test("here and a remote read as what they are", () => {

@@ -14,8 +14,8 @@ import type { McpTool, McpToolResult, ToolProvider } from "../agent/mcp.ts";
 import { fireAndForget } from "../core/log.ts";
 import type { StateStore } from "../core/state.ts";
 import { configFor } from "../repos/config.ts";
-import { resolveRun } from "../runtime/profile.ts";
 import { urlVarOf } from "../runtime/registry.ts";
+import { resolveRun } from "../runtime/run.ts";
 
 export interface OwnDeps {
   state: StateStore;

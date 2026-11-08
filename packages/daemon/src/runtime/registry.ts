@@ -50,9 +50,9 @@ import { groupAlive, reclaimGroup } from "./kill.ts";
 import { bootId, type PsRow, psGroups } from "./memory.ts";
 import { type Orphan, orphansIn, strayAdapters, strayProcs } from "./orphans.ts";
 import { type PortLease, proxyPorts } from "./ports.ts";
-import { EMPTY_RUN, type ResolvedRun, resolveRun, spawnsOf } from "./profile.ts";
 import { type ProxyTarget, startProxy, type WorktreeProxy } from "./proxy.ts";
 import { type PtyHandle, type PtyOpts, PtyStream } from "./pty.ts";
+import { EMPTY_RUN, type ResolvedRun, resolveRun, spawnsOf } from "./run.ts";
 import { WorktreeProcs } from "./supervisor.ts";
 
 export interface Runtime {
@@ -668,8 +668,9 @@ export class RuntimeRegistry {
       if (!rt?.procs) return null;
       const st = previewProcOf(rt.procs, rt.previewName);
       if (st?.status === "running") return previewTargetOf(rt.procs, rt.previewName);
-      // no proc yet while start() is still spawning them counts as starting
-      const coming = st ? st.status === "starting" : this.starting.has(id);
+      // no proc yet while start() is still spawning them counts as starting, and so does a place
+      // held while the proc's own setup runs
+      const coming = st ? st.status === "starting" || st.status === "preparing" : this.starting.has(id);
       if (!coming || Date.now() >= deadline) return null;
       await Bun.sleep(PREVIEW_POLL_MS);
     }
@@ -798,7 +799,7 @@ export class RuntimeRegistry {
   }
 
   /** Start the worktree's procs and proxy under its settings (its own file, else the repo's),
-   * narrowed by the worktree's profile; no-op if already running. Main is two tiers: the shared one (`from: "trunk"`) it
+   * resolved to the worktree's run; no-op if already running. Main is two tiers: the shared one (`from: "trunk"`) it
    * runs whatever stands in for it, once for every worktree of the repo, and its page and proxy
    * only as the lead (setup unconfirmed, an empty project, a warm-up that failed), which keeps the
    * setup pane and the first-run preview working. A main that ran the shared tier alone and leads
@@ -1019,7 +1020,7 @@ export class RuntimeRegistry {
   }
 
   /** The named borrowed proc is about to be set up here before it runs: it takes its place among
-   * the worktree's procs as `starting` with `detail` saying which setup step, so its tab, the row
+   * the worktree's procs as `preparing` with `detail` saying which setup step, so its tab, the row
    * and the chip can say why it is not up, while its forwarder keeps reaching main's until `own()`
    * spawns into the place this made. A second call on the same name only moves the detail. */
   preparing(id: string, name: string, command: string, detail: string): void {
@@ -1048,7 +1049,10 @@ export class RuntimeRegistry {
    * so a crash of its own reads as a crash and never as main's page. */
   private openForward(wt: WorktreeInfo, procs: WorktreeProcs, name: string): ProcForwarder {
     // a place held for the proc while its setup runs is not its own yet: main's keeps answering
-    const own = () => (procs.isPending(name) ? undefined : procs.states().find((p) => p.name === name));
+    const own = () => {
+      const o = procs.states().find((p) => p.name === name);
+      return o?.status === "preparing" ? undefined : o;
+    };
     const trunk = () => {
       if (!this.runtimes.get(wt.id)?.borrowed.has(name)) return undefined;
       const mainId = this.mainIdOf(wt.repoId);
@@ -1059,6 +1063,7 @@ export class RuntimeRegistry {
             .find((p) => p.name === name)
         : undefined;
     };
+    // no preparing here: own() has already turned a held place into main's, and main never holds one
     const waiting = (st: ProcState | undefined) => st?.status === "starting" || st?.status === "asleep";
     return (this.deps.makeForward ?? startForward)({
       port: 0,
@@ -1126,7 +1131,8 @@ export class RuntimeRegistry {
         ?.procs?.states()
         .find((p) => p.name === name);
       if (st?.status === "running") return targetOf(st);
-      if (st?.status !== "starting" || Date.now() >= deadline) return null;
+      const coming = st?.status === "starting" || st?.status === "preparing";
+      if (!coming || Date.now() >= deadline) return null;
       await Bun.sleep(PREVIEW_POLL_MS);
     }
   }

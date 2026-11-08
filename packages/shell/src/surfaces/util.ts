@@ -88,11 +88,12 @@ export type DotState =
   | "crashed"
   | "running"
   | "starting"
+  | "preparing"
   | "asleep"
   | "idle";
 
-/** proc states with a process behind them: up, coming up, or up and broken */
-const UP: ReadonlySet<ProcStatus> = new Set(["running", "starting", "crashed", "unreachable"]);
+/** proc states with a process behind them: up, coming up (its own setup counts), or up and broken */
+const UP: ReadonlySet<ProcStatus> = new Set(["running", "starting", "preparing", "crashed", "unreachable"]);
 
 export function dotClass(w: WorktreeStatus): DotState {
   // a worktree that needs you outranks one that is merely busy
@@ -121,6 +122,8 @@ export function dotClass(w: WorktreeStatus): DotState {
   if (w.procs.some((p) => p.status === "crashed" || p.status === "unreachable")) return "crashed";
   if (w.procs.some((p) => p.status === "running")) return "running";
   if (w.procs.some((p) => p.status === "starting")) return "starting";
+  // its own setup is running ahead of the spawn: on its way, a step further back than starting
+  if (w.procs.some((p) => p.status === "preparing")) return "preparing";
   // stopped by toyon because nobody was looking; it comes back when someone does
   if (w.procs.some((p) => p.status === "asleep")) return "asleep";
   return "idle";
@@ -136,6 +139,7 @@ const DOT_LABEL: Record<DotState, string> = {
   crashed: "Crashed",
   running: "Running",
   starting: "Starting",
+  preparing: "Setting up",
   asleep: "Asleep",
   idle: "Idle",
 };
@@ -153,6 +157,7 @@ export function stateLabel(w: WorktreeStatus, needsSetup = false): string {
 /** a proc's status in words, for its tab's tip: the same words the rail's dot uses where the two
  * share a state, and its own for the two states only a proc has */
 const PROC_LABEL: Record<ProcStatus, string> = {
+  preparing: "Setting up",
   starting: "Starting",
   running: "Running",
   unreachable: "Not answering",
@@ -168,7 +173,15 @@ export function procLabel(status: ProcStatus): string {
 /** the dot states a git op may stand in for: the row is idle, or something runs under it that
  * neither needs a person nor is the agent's turn. The op takes the background dot, which says
  * the same of a row: not mid-turn, something going on underneath, over on its own. */
-const SHIP_OVER: ReadonlySet<DotState> = new Set(["idle", "asleep", "running", "starting", "background", "landed"]);
+const SHIP_OVER: ReadonlySet<DotState> = new Set([
+  "idle",
+  "asleep",
+  "running",
+  "starting",
+  "preparing",
+  "background",
+  "landed",
+]);
 
 /** the git op a row is showing in its dot's slot, when one is out: the op was started from this
  * row, and the control that started it may be off screen. A dot that needs a person (waiting,

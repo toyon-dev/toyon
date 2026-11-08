@@ -151,7 +151,7 @@ describe("WorktreeProcs supervision", () => {
 // A proc that never answers on $PORT used to stay "starting" forever. After the deadline the
 // supervisor asks what the process actually bound and says so, one way or the other.
 describe("WorktreeProcs pending", () => {
-  test("a place held before the spawn: starting with its step, no process, the setup's bytes on its tab; start() spawns into it", async () => {
+  test("a place held before the spawn: preparing with its step, no process, the setup's bytes on its tab; start() spawns into it as starting", async () => {
     const states: ProcState[] = [];
     const data: string[] = [];
     const procs = new WorktreeProcs(
@@ -161,24 +161,32 @@ describe("WorktreeProcs pending", () => {
       (_name, d) => data.push(d),
     );
     const held = await procs.pending("api", "true", "setup: uv sync");
-    expect([held.status, held.detail, held.pid]).toEqual(["starting", "setup: uv sync", undefined]);
+    expect([held.status, held.detail, held.pid]).toEqual(["preparing", "setup: uv sync", undefined]);
     procs.setupOutput("api", "Resolved 12 packages\r\n");
     await procs.pending("api", "true", "setup: createdb");
-    expect(procs.states().map((p) => [p.name, p.status, p.detail])).toEqual([["api", "starting", "setup: createdb"]]);
+    expect(procs.states().map((p) => [p.name, p.status, p.detail])).toEqual([["api", "preparing", "setup: createdb"]]);
     expect(procs.prelude("api")).toBe("Resolved 12 packages\r\n");
     expect(data).toEqual(["Resolved 12 packages\r\n"]);
     expect(procs.recentLogs().map((l) => l.line)).toEqual(["Resolved 12 packages"]);
-    // nothing restarts or sleeps a place with no process in it
+    // nothing restarts, sleeps or stops a place with no process in it: it stays held for the spawn
     procs.restart("api");
     await procs.sleep("test");
-    expect(procs.states()[0]?.status).toBe("starting");
+    await procs.stop("api");
+    expect(procs.states()[0]?.status).toBe("preparing");
     procs.wake();
-    // the start keeps the port and the tab, and the detail goes with the spawn
+    // the start keeps the port and the tab, moves the place to starting, and the detail goes with
+    // the spawn; the status then walks preparing, starting, running
     const st = await procs.start("api", SERVER);
     expect(st.port).toBe(held.port);
+    expect(st.status).toBe("starting");
     expect(procs.states().length).toBe(1);
     expect(procs.prelude("api")).toBeUndefined();
     expect(await until(() => procs.states()[0]?.status === "running", 8000)).toBe(true);
+    expect(states.map((s) => s.status).filter((s, i, all) => all.indexOf(s) === i)).toEqual([
+      "preparing",
+      "starting",
+      "running",
+    ]);
     expect(procs.states()[0]?.detail).toBeUndefined();
     await procs.stopAll();
   }, 15_000);

@@ -14,7 +14,7 @@ import type {
   ProcStatus,
   PrState,
 } from "@toyon/shared";
-import { attachmentLabel, clipOutput, fmtBytes, lineSpan } from "@toyon/shared";
+import { attachmentLabel, clipOutput, fmtBytes, lineSpan, upOrComing } from "@toyon/shared";
 import { NAME_SHAPE } from "../worktrees/naming.ts";
 import type { Stored } from "./attachments.ts";
 
@@ -542,6 +542,9 @@ export interface TierProcStanding {
   behind?: true;
   /** main's state of a borrowed proc, or this worktree's own state of one it runs */
   status?: ProcStatus | "cold";
+  /** borrowed: this worktree's own setup for it is running, and it takes over once spawned; the
+   * record says main's until then, so the source does too */
+  preparing?: true;
 }
 
 /** the shared tier as it stands for one worktree */
@@ -550,6 +553,9 @@ export interface TierStanding {
   /** main's uncommitted file count: what main's shared procs run on */
   mainDirty: number;
 }
+
+/** the proc's own setup is running here: said the same whether the record has flipped yet */
+const settingUp = (name: string) => `${name} is setting up here; until it answers the page still reaches main's.`;
 
 /** the variable a proc's address is read from, as `procUrlEnv` names it */
 function urlVar(name: string): string {
@@ -587,11 +593,12 @@ export function tierContext(t: TierStanding | null): string | undefined {
           "When you are about to change what a shared command runs on, call the toyon own tool first, so the server is up by the time the edit lands.",
         );
       }
-      if (p.status && p.status !== "running" && p.status !== "starting" && p.status !== "cold") {
+      if (p.status && !upOrComing(p.status)) {
         out.push(
           `Main's ${p.name} is ${p.status} right now, so nothing answers at ${urlVar(p.name)} until it is back.`,
         );
       }
+      if (p.preparing) out.push(settingUp(p.name));
     } else if (p.source === "here") {
       const why =
         p.reason?.by === "edit"
@@ -602,7 +609,9 @@ export function tierContext(t: TierStanding | null): string | undefined {
               ? " (the user asked for it)"
               : "";
       out.push(`This worktree runs its own ${p.name}${why}.`);
-      if (p.status === "starting") {
+      if (p.status === "preparing") {
+        out.push(settingUp(p.name));
+      } else if (p.status === "starting") {
         out.push(`${p.name} is starting here; until it answers the page still reaches main's.`);
       }
     } else {

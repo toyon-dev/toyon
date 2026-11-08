@@ -673,11 +673,21 @@ export function isUnseen(wt: WorktreeInfo): boolean {
   return wt.unread === true || (wt.lastTurn != null && (wt.seenAt == null || wt.seenAt < wt.lastTurn.at));
 }
 
-/** `unreachable`: alive, but nothing answered on its port before the deadline and it bound no
- * other port either (a server that never listens, or listens somewhere toyon cannot see).
- * `asleep`: stopped by toyon because nobody had looked at the worktree for a while; it keeps its
- * port and comes back on the same one the next time something needs it. */
-export type ProcStatus = "starting" | "running" | "unreachable" | "crashed" | "stopped" | "asleep";
+/** `preparing`: the proc's own setup is running here and no process has been spawned yet; a
+ * worktree taking a shared command over from main holds its place this way, and its page keeps
+ * reaching main's until the spawn. `unreachable`: alive, but nothing answered on its port before
+ * the deadline and it bound no other port either (a server that never listens, or listens
+ * somewhere toyon cannot see). `asleep`: stopped by toyon because nobody had looked at the
+ * worktree for a while; it keeps its port and comes back on the same one the next time something
+ * needs it. */
+export type ProcStatus = "preparing" | "starting" | "running" | "unreachable" | "crashed" | "stopped" | "asleep";
+
+/** a proc's state that nobody has to be told about: up, on its way (spawned, or its own setup
+ * still running), or main's not started yet ("cold", which the first request wakes). Everything
+ * else is down with a reason worth a sentence. No return annotation: the inferred predicate is
+ * what lets a caller's else branch drop "cold". */
+export const upOrComing = (s: ProcStatus | "cold") =>
+  s === "running" || s === "starting" || s === "preparing" || s === "cold";
 
 export interface ProcState {
   name: string;

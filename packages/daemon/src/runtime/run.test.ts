@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { TierProc } from "@toyon/shared";
 import type { WorktreeConfig } from "../repos/config.ts";
-import { resolveRun, spawnsOf } from "./profile.ts";
+import { resolveRun, spawnsOf } from "./run.ts";
 
 const base: WorktreeConfig = {
   config: { run: { api: "a", web: "w", worker: "k" } },

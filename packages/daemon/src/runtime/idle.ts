@@ -92,7 +92,7 @@ export class IdlePolicy {
       if (this.recentlyViewed(id)) d.wake(id);
     });
     d.hub.on("proc", (id, p) => {
-      if (p.status !== "starting") this.reconsider(id);
+      if (p.status !== "starting" && p.status !== "preparing") this.reconsider(id);
     });
     d.hub.on("worktreesChanged", () => this.reconsiderAll());
     const every =
@@ -307,7 +307,8 @@ export class IdlePolicy {
     if (!procs || procs.asleep) return card;
     const states = procs.states();
     if (states.length === 0 && !card) return false;
-    if (states.some((s) => s.status === "starting")) return false;
+    // on its way up, or its own setup still running ahead of the spawn: not a row to put down
+    if (states.some((s) => s.status === "starting" || s.status === "preparing")) return false;
     // a spare rests with its repo: a sibling mid-turn may claim it any moment
     if (wt.kind === "spare") {
       return !this.d.state.worktrees.some((w) => w.repoId === wt.repoId && w.id !== id && this.busy(w.id));

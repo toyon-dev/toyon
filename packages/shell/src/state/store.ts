@@ -1355,7 +1355,7 @@ export function previewIdOf(s: PreviewPick): string | null {
 
 /** the worktree's app is running or on its way up, so its preview can be told where to go */
 export function previewUp(wt: OwnedWorktree): boolean {
-  return wt.procs.some((p) => p.status === "running" || p.status === "starting");
+  return wt.procs.some((p) => p.status === "running" || p.status === "starting" || p.status === "preparing");
 }
 
 /** where the address bar, ⌘U and ⌘P's `/` send a path: the active worktree's preview, while it is up.

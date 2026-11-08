@@ -398,7 +398,7 @@ describe("RuntimeRegistry", () => {
       expect(registry.points(pointed.id)).toBe(false);
     });
 
-    test("preparing() holds a proc's place as starting with its step, keeps main's for the page, and own() spawns into it", async () => {
+    test("preparing() holds a proc's place as preparing with its step, keeps main's for the page, and own() spawns into it", async () => {
       const { registry, procs, forwards } = make({ worktrees: [main, wt], mainLeads: () => false, repo: tiered });
       await registry.start(main, tiered);
       await registry.start(wt, tiered);
@@ -414,16 +414,18 @@ describe("RuntimeRegistry", () => {
         .get(wt.id)!
         .states()
         .find((p) => p.name === "api")!;
-      expect([held.status, held.detail]).toEqual(["starting", "setup: createdb"]);
+      expect([held.status, held.detail]).toEqual(["preparing", "setup: createdb"]);
       expect(procs.get(wt.id)!.pendings.map((p) => p.detail)).toEqual(["setup: uv sync", "setup: createdb"]);
       // the tab opens on what the setup printed, alive
       expect(registry.openTerminal(wt.id, "api", 80, 24)).toEqual({
         snapshot: "Resolved 12 packages\r\n",
         alive: true,
       });
-      // the page still reaches main's api while the setup runs
+      // the page still reaches main's api while the setup runs: the forwarder reads the status
+      // alone (the fake has no isPending to ask), and is not waiting, since main's answers
       expect(registry.borrows(wt.id)).toBe(true);
       expect(f.target()).toEqual({ host: "127.0.0.1", port: mainApi.port });
+      expect(f.coming()).toBe(false);
       expect(registry.borrowedStates(wt.id).map((b) => [b.name, b.status])).toEqual([
         ["api", "running"],
         ["db", "running"],

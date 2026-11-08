@@ -6,7 +6,7 @@ import { runCmd } from "@toyon/shared";
 import type { ChipOption } from "../../ui/ChipPicker.tsx";
 
 /** who runs a command, as the file says it: nothing (main, when Toyon can place its files), the
- * trunk whatever the paths say, or every copy its own */
+ * trunk whether or not it can (no change flips one it cannot), or every copy its own */
 export type From = "auto" | "trunk" | "copy";
 
 export const SHARING: ChipOption<From>[] = [
@@ -21,7 +21,8 @@ export const SHARING: ChipOption<From>[] = [
     id: "trunk",
     label: "always",
     chip: "shared: always",
-    description: "main runs it for every worktree; a worktree that changes it runs its own",
+    description:
+      "main runs it for every worktree; a worktree that changes a folder the command names runs its own, and nothing flips a command that names none",
   },
   { id: "copy", label: "never", chip: "shared: never", description: "every worktree runs its own" },
 ];
@@ -39,10 +40,10 @@ export function tierHint(
   if (saved === undefined || runCmd(saved) !== cmd.trim()) return null;
   if (from === "copy") return null;
   const tier = repo.tier?.[name.trim()];
-  if (tier) {
-    if (tier.paths.length > 0) return `main runs it; a worktree that changes ${tier.paths.join(", ")} runs its own`;
-    return "main runs it for every worktree; no change here flips it";
+  if (tier && tier.paths.length > 0) {
+    return `main runs it; a worktree that changes ${tier.paths.join(", ")} runs its own`;
   }
-  if (from === "trunk") return "main runs it; a worktree that changes anything outside the page's folders runs its own";
+  // the trunk's word shares a command that names nothing to watch, and then nothing flips it
+  if (tier || from === "trunk") return "main runs it for every worktree; no change here flips it";
   return "every worktree runs its own: the command names nothing Toyon can watch";
 }

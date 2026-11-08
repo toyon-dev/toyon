@@ -1397,7 +1397,7 @@ describe("handlers", () => {
         api: { cmd: "true", paths: ["server/**"], remotes: { stage: "https://api.stage.example.com" } },
       },
     };
-    r.tier = { api: { paths: ["server/**"], declared: true } };
+    r.tier = { api: { paths: ["server/**"] } };
     services.state.save();
     await dispatch({ t: "create-worktree", repoId: r.id, prompt: "x" }, ctx, services);
     const made = services.state.worktrees.find((x) => x.kind === "worktree")!;

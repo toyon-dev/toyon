@@ -11,7 +11,6 @@ import type { Hub } from "../core/hub.ts";
 import { fireAndForget, log } from "../core/log.ts";
 import type { StateStore } from "../core/state.ts";
 import { committedFiles, statusFiles } from "../git/status.ts";
-import { previewPaths } from "../repos/config.ts";
 import type { RuntimeRegistry } from "../runtime/registry.ts";
 
 /** files that change what every shared proc runs on: deps, env, containers */
@@ -45,13 +44,12 @@ export const rootMatch = matcher(ROOT_PATHS);
 export const migrationMatch = matcher(MIGRATION_DIRS.flatMap((d) => [`${d}/**`, `**/${d}/**`]));
 
 /** The changed file that calls for running a shared proc here, if any. `paths` are the proc's,
- * declared or inferred; a declared `[]` never flips. Deps, env, containers and migrations flip
- * every proc that can. A proc with no paths at all flips on anything outside the page. */
-export function touching(files: string[], paths: string[], declared: boolean, pagePaths: string[]): string | undefined {
-  if (declared && paths.length === 0) return undefined;
+ * written or inferred; deps, env, containers and migrations flip every proc that has some. A proc
+ * with none has nothing of its own to rebuild, so no change flips it. */
+export function touching(files: string[], paths: string[]): string | undefined {
+  if (paths.length === 0) return undefined;
   const own = matcher(paths);
-  const page = matcher(pagePaths);
-  return files.find((f) => rootMatch(f) || migrationMatch(f) || (paths.length > 0 ? own(f) : !page(f)));
+  return files.find((f) => rootMatch(f) || migrationMatch(f) || own(f));
 }
 
 /** the worktree's changed files: uncommitted, and, when asked, committed ahead of main */
@@ -161,15 +159,13 @@ export class BackendShare {
       this.d.runtime.markRemoteBehind(id, []);
       return;
     }
-    // the commands are the worktree's own, so a script that exists only on its branch counts
-    const page = run.preview ? previewPaths(run.procs[run.preview]!, wt.path) : [];
     const take: string[] = [];
     const why: Record<string, string> = {};
     const behind: string[] = [];
     for (const name of [...run.borrowed, ...pointed]) {
       const tier = repo.tier?.[name];
       if (!tier) continue;
-      const hit = touching(files, tier.paths, tier.declared, page);
+      const hit = touching(files, tier.paths);
       if (!hit) continue;
       if (name in run.pointed) behind.push(name);
       else {

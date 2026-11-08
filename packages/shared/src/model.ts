@@ -20,11 +20,12 @@ export interface LandConfig {
  * forwarder until its own changed files match `paths`, when it starts its own. */
 export interface RunProc {
   cmd: string;
-  /** "trunk": main runs it for every copy whatever its paths say; "copy": every copy runs its own.
-   * Absent: shared when `paths` is declared or the command names a folder of the tree. */
+  /** "trunk": main runs it for every copy; with no folder to watch, no change flips it (a database
+   * container whose databases are per copy). "copy": every copy runs its own. Absent: shared when
+   * `paths` is declared or the command names a folder of the tree. */
   from?: "trunk" | "copy";
-  /** globs from the root that make a copy run its own; `[]` never flips (a database container
-   * whose databases are per copy); absent infers them from the command */
+  /** globs from the root that make a copy run its own, for a command whose files inference cannot
+   * place; never empty, and absent infers them from the command */
   paths?: string[];
   /** shell commands run once in a copy before this proc first runs there; never on main */
   setup?: string[];
@@ -36,10 +37,9 @@ export interface RunProc {
 export type RunEntry = string | RunProc;
 
 /** one proc of the shared tier, as the settings and the tree decide it: the globs that flip a
- * copy to its own, and whether they were written or read off the command */
+ * copy to its own, written or read off the command; none means no change flips it */
 export interface TierProc {
   paths: string[];
-  declared: boolean;
 }
 
 /** why a copy runs a shared proc itself: its changes touched it (the file that did), the agent

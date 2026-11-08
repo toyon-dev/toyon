@@ -492,14 +492,10 @@ export function detectServices(repoPath: string): SharedServices | undefined {
   return out.compose || out.envUrl ? out : undefined;
 }
 
-/** what the page proc draws from, beside whatever its command names: a change here is the page's */
-const PAGE_PATHS = ["src/**", "public/**", "index.html", "vite.config.*", "next.config.*", "astro.config.*"];
-
 /** The paths a command runs on, read off the command and the tree: a `cd` into a folder, any
  * token that is a file or folder of the repo (`server/index.js`, `./start.sh`), the first segment
  * of a Python module path (`uvicorn app.main:app` names `app/`), and a shell script's own
- * contents one level down. A folder is its whole subtree. What toyon cannot place is left out,
- * and a shared proc with nothing here flips on anything outside the page. */
+ * contents one level down. A folder is its whole subtree. What toyon cannot place is left out. */
 export function inferPaths(cmd: string, repoPath: string, depth = 1): string[] {
   const out = new Set<string>();
   const add = (rel: string) => {
@@ -542,11 +538,6 @@ export function inferPaths(cmd: string, repoPath: string, depth = 1): string[] {
   return [...out];
 }
 
-/** the page's paths: what its command names, and the folders a front end lives in */
-export function previewPaths(cmd: string, repoPath: string): string[] {
-  return [...new Set([...inferPaths(cmd, repoPath), ...PAGE_PATHS])];
-}
-
 /** The inferred paths a shared proc can be trusted to flip on. A folder's subtree stays; a file
  * in a subfolder widens to its folder's subtree, since `node server/index.js` runs on all of
  * `server/` and an edit to `server/routes.js` would otherwise never flip; a file at the root
@@ -567,10 +558,11 @@ export function confidentPaths(inferred: string[]): string[] {
 
 /** The shared tier as the settings and the tree decide it: every proc but the preview that main
  * runs for the copies, with the globs that flip a copy to its own. `from: "trunk"` shares whatever
- * the paths say (none inferable means it flips on anything outside the page); `from: "copy"`
+ * the paths say, and with none inferable shares with no paths at all, so that nothing flips it
+ * (a container main runs once while each copy keeps its own database inside); `from: "copy"`
  * never shares; otherwise written paths share, and so does a command whose folder can be placed
- * in the tree. A command that names nothing is left to every copy, since it would flip on
- * anything. A statSync per token, so once per config read and never per resolve. */
+ * in the tree. A command that names nothing is left to every copy, since it could only be flipped
+ * by hand. A statSync per token, so once per config read and never per resolve. */
 export function tierOf(config: ToyonConfig, repoPath: string): Record<string, TierProc> {
   const names = Object.keys(config.run);
   const preview = previewProc(names, config.preview);
@@ -580,13 +572,13 @@ export function tierOf(config: ToyonConfig, repoPath: string): Record<string, Ti
     const entry = config.run[name]!;
     const from = runFrom(entry);
     if (from === "copy") continue;
-    const declared = runPaths(entry);
-    if (declared !== undefined) {
-      out[name] = { paths: declared, declared: true };
+    const written = runPaths(entry);
+    if (written !== undefined) {
+      out[name] = { paths: written };
       continue;
     }
     const inferred = confidentPaths(inferPaths(runCmd(entry), repoPath));
-    if (from === "trunk" || inferred.length > 0) out[name] = { paths: inferred, declared: false };
+    if (from === "trunk" || inferred.length > 0) out[name] = { paths: inferred };
   }
   return out;
 }

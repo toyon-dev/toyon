@@ -528,7 +528,7 @@ describe("the shared tier", () => {
         api: { cmd: "true", paths: ["server/**"], setup, ...extra },
       },
     };
-    repo.tier = { api: { paths: ["server/**"], declared: true } };
+    repo.tier = { api: { paths: ["server/**"] } };
     w.state.save();
     return repoId;
   }
@@ -659,7 +659,8 @@ describe("the shared tier", () => {
     await counted();
     const t = w.worktrees.tierStanding(wt.id)!;
     expect(t.mainDirty).toBe(1);
-    expect(t.procs[0]).toMatchObject({ name: "api", source: "main", paths: ["server/**"], declared: true });
+    expect(t.procs[0]).toMatchObject({ name: "api", source: "main", paths: ["server/**"] });
+    expect(t.procs[0]).not.toHaveProperty("declared");
     // main's tier is cold until main is started for the borrower
     expect(["cold", "running"]).toContain(t.procs[0]?.status ?? "cold");
     const main = w.state.worktrees.find((x) => x.kind === "main")!;

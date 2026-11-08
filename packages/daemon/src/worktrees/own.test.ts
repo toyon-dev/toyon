@@ -18,13 +18,13 @@ const repo: RepoInfo = {
     run: {
       web: "w",
       api: { cmd: "a", paths: ["server/**"], setup: ["uv sync"], remotes: { stage: "https://api.stage.example.com" } },
-      db: { cmd: "d", paths: [] },
+      db: { cmd: "d", from: "trunk" },
       cron: "c",
     },
   },
   configFile: ".toyon/settings.json",
   needsSetup: false,
-  tier: { api: { paths: ["server/**"], declared: true }, db: { paths: [], declared: true } },
+  tier: { api: { paths: ["server/**"] }, db: { paths: [] } },
 };
 const row = (id: string, extra: Partial<WorktreeInfo> = {}): WorktreeInfo => ({
   id,

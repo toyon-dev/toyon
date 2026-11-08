@@ -34,19 +34,14 @@ describe("the sets every shared proc flips on", () => {
 });
 
 describe("touching", () => {
-  const page = ["src/**", "index.html"];
-  test("declared paths: those, plus the root and migration sets", () => {
-    expect(touching(["server/index.ts"], ["server/**"], true, page)).toBe("server/index.ts");
-    expect(touching(["src/App.tsx"], ["server/**"], true, page)).toBeUndefined();
-    expect(touching(["src/App.tsx", "bun.lock"], ["server/**"], true, page)).toBe("bun.lock");
-    expect(touching(["migrations/2.sql"], ["server/**"], true, page)).toBe("migrations/2.sql");
+  test("the proc's paths, plus the root and migration sets", () => {
+    expect(touching(["server/index.ts"], ["server/**"])).toBe("server/index.ts");
+    expect(touching(["src/App.tsx"], ["server/**"])).toBeUndefined();
+    expect(touching(["src/App.tsx", "bun.lock"], ["server/**"])).toBe("bun.lock");
+    expect(touching(["migrations/2.sql"], ["server/**"])).toBe("migrations/2.sql");
   });
-  test("a declared empty list never flips, whatever changed", () => {
-    expect(touching(["bun.lock", "migrations/2.sql", "server/x.ts"], [], true, page)).toBeUndefined();
-  });
-  test("nothing declared and nothing inferred: anything outside the page", () => {
-    expect(touching(["src/App.tsx"], [], false, page)).toBeUndefined();
-    expect(touching(["lib/util.ts"], [], false, page)).toBe("lib/util.ts");
+  test("no paths never flips, whatever changed: the root and migration sets included", () => {
+    expect(touching(["bun.lock", "migrations/2.sql", "server/x.ts", "lib/util.ts"], [])).toBeUndefined();
   });
 });
 
@@ -61,7 +56,7 @@ describe("BackendShare", () => {
         web: "vite --port $PORT",
         api: { cmd: "node --watch server/index.js", remotes: { stage: "https://api.stage.example.com" } },
         worker: { cmd: "node worker.js", paths: ["jobs/**"] },
-        db: { cmd: "docker compose up db", paths: [] },
+        db: { cmd: "docker compose up db", from: "trunk" },
         cron: "node cron.js",
       },
     },
@@ -89,8 +84,9 @@ describe("BackendShare", () => {
     writeFileSync(join(t.repo, "worker.js"), "");
     writeFileSync(join(t.repo, "cron.js"), "");
     const config = { ...repo, path: t.repo };
-    // the tier as the daemon settles it off the file and the tree: api by its folder, worker and db
-    // by their written paths; cron names a root file alone and is every copy's
+    // the tier as the daemon settles it off the file and the tree: api by its folder, worker by its
+    // written paths, db by the trunk's word with nothing to flip it; cron names a root file alone
+    // and is every copy's
     const state = new StateStore(t.paths, {
       repos: [{ ...config, tier: tierOf(config.config, t.repo) }],
       worktrees: [row("a", extra), row("m", { kind: "main" })],
@@ -165,7 +161,9 @@ describe("BackendShare", () => {
   });
 
   test("a lockfile takes over every proc that can flip; a migration too; the page alone takes none", async () => {
-    const { share, owned } = make(() => ["bun.lock"]);
+    // the trunk's db has nothing of its own to rebuild, so neither counts for it
+    const { share, owned, state } = make(() => ["bun.lock"]);
+    expect(state.requireRepo("r").tier?.db).toEqual({ paths: [] });
     await share.check("a");
     expect(owned.map((o) => o[1])).toEqual([["api", "worker"]]);
     const m = make(() => ["src/migrations/1.sql"]);

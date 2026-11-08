@@ -1156,7 +1156,7 @@ export class WorktreeService {
     const main = this.mainOf(repo.id);
     const mainDirty = main ? (this.tree.counts(main.id)?.dirty ?? 0) : 0;
     const procs = run.shared.map((name): TierProcStanding => {
-      const tier = repo.tier?.[name] ?? { paths: [], declared: false };
+      const tier = repo.tier?.[name] ?? { paths: [] };
       const source: TierProcStanding["source"] =
         name in run.pointed
           ? { remote: remoteOf(wt.sources?.[name]?.at) ?? "", url: run.pointed[name]! }
@@ -1168,7 +1168,6 @@ export class WorktreeService {
         name,
         source,
         paths: tier.paths,
-        declared: tier.declared,
         ...(ownedBy(wt.sources?.[name]?.at) ? { reason: ownedBy(wt.sources?.[name]?.at) } : {}),
         ...(behind.has(name) ? { behind: true as const } : {}),
         ...(status ? { status } : {}),

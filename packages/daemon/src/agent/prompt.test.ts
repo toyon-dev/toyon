@@ -347,7 +347,7 @@ describe("SYSTEM_APPEND", () => {
 });
 
 describe("tierContext", () => {
-  const api = { name: "api", paths: ["app/**"], declared: false };
+  const api = { name: "api", paths: ["app/**"] };
   test("nothing for main, a spare or a repo with nothing shared", () => {
     expect(tierContext(null)).toBeUndefined();
     expect(tierContext({ procs: [], mainDirty: 3 })).toBeUndefined();
@@ -357,20 +357,20 @@ describe("tierContext", () => {
     expect(text).toBe(
       "Main runs api for every worktree, this one included; the page here reaches it at API_URL. A change under app/**, or to a lockfile, env, compose or migration file, makes this worktree run its own api. When you are about to change what a shared command runs on, call the toyon own tool first, so the server is up by the time the edit lands.",
     );
-    // the tool sentence once, however many are borrowed; a declared [] never flips; nothing
-    // inferable flips on anything outside the page
+    // the tool sentence once, however many are borrowed; a proc with no paths runs here only when
+    // asked for
     const two = tierContext({
       procs: [
         { ...api, source: "main" },
-        { name: "db", source: "main", paths: [], declared: true },
-        { name: "worker", source: "main", paths: [], declared: false },
+        { name: "db", source: "main", paths: [] },
       ],
       mainDirty: 0,
     })!;
     expect(two.split("call the toyon own tool first").length).toBe(2);
-    expect(two).toContain("It never runs here on its own; the own tool starts one here.");
-    expect(two).toContain("Any change outside the page makes this worktree run its own worker.");
-    expect(two).toContain("reaches it at DB_URL");
+    expect(two).toContain(
+      "reaches it at DB_URL. No change flips it; it runs here only when asked, by the chip under the box or the own tool.",
+    );
+    expect(two).not.toContain("outside the page");
   });
   test("main's state and main's dirty tree are said where they matter", () => {
     const down = tierContext({ procs: [{ ...api, source: "main", status: "crashed" }], mainDirty: 0 })!;
@@ -381,7 +381,7 @@ describe("tierContext", () => {
     const dirty = tierContext({
       procs: [
         { ...api, source: "main" },
-        { name: "db", source: "main", paths: [], declared: true },
+        { name: "db", source: "main", paths: [] },
       ],
       mainDirty: 1,
     })!;

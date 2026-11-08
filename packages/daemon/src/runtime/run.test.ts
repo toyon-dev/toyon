@@ -37,14 +37,14 @@ describe("resolveRun and the shared tier", () => {
       run: {
         web: "w",
         api: { cmd: "a", paths: ["server/**"], remotes: { stage: "https://api.stage.example.com" } },
-        db: { cmd: "d", paths: [] },
+        db: { cmd: "d", from: "trunk" },
         worker: "k",
       },
     },
   };
   const tier: Record<string, TierProc> = {
-    api: { paths: ["server/**"], declared: true },
-    db: { paths: [], declared: true },
+    api: { paths: ["server/**"] },
+    db: { paths: [] },
   };
 
   test("the tier comes off the repo in run order, with its paths; a command outside it is every copy's", () => {

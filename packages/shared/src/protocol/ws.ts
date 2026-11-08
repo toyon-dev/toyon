@@ -572,13 +572,21 @@ export const toyonConfigSchema = z
     if (Object.keys(runRemotes(page)).length > 0) {
       ctx.addIssue({ code: "custom", path: ["run", top!], message: `the preview "${top}" cannot point at a remote` });
     }
-    // paths say what flips a copy to its own; a proc every copy runs has nothing to flip
+    // paths say what flips a copy to its own; a proc every copy runs has nothing to flip, and
+    // "no change flips it" is said by the trunk alone rather than by an empty list
     for (const [name, entry] of Object.entries(c.run)) {
-      if (runFrom(entry) === "copy" && runPaths(entry) !== undefined) {
+      const paths = runPaths(entry);
+      if (runFrom(entry) === "copy" && paths !== undefined) {
         ctx.addIssue({
           code: "custom",
           path: ["run", name],
           message: `"${name}" is from the copy and has paths; drop one`,
+        });
+      } else if (paths !== undefined && paths.length === 0) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["run", name],
+          message: `"${name}" has an empty paths list; use "from": "trunk" for a command no change should flip`,
         });
       }
     }

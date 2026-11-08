@@ -281,9 +281,9 @@ describe("RuntimeRegistry", () => {
     const tiered: RepoInfo = {
       ...repo,
       config: {
-        run: { web: "true", api: { cmd: "true", from: "trunk" }, db: { cmd: "true", paths: [] } },
+        run: { web: "true", api: { cmd: "true", from: "trunk" }, db: { cmd: "true", from: "trunk" } },
       },
-      tier: { api: { paths: [], declared: false }, db: { paths: [], declared: true } },
+      tier: { api: { paths: [] }, db: { paths: [] } },
     };
     const main: WorktreeInfo = { ...wt, id: "m", kind: "main", branch: "main", path: "/nowhere/m", title: "m" };
     const names = (p: { started: Array<{ name: string }> } | undefined) => p?.started.map((s) => s.name);

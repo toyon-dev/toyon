@@ -52,19 +52,19 @@ Anything Toyon runs should stay in the foreground, listen on `$PORT`, and reload
 
 Most changes touch the page and not the API behind it, so by default the main checkout runs every command but the page once, on its own working tree, and every copy's page reaches that one at its usual `<NAME>_URL`. A copy whose own changes touch that command's files starts its own and the address quietly points there instead; a copy that only changes the page never pays for an API of its own. The page itself is never shared.
 
-A command is shared when Toyon can tell what it runs on: `paths` you wrote, else the folder the command names (`server/**` for `node server/index.js`, `app/**` for `uvicorn app.main:app`, a folder a `cd` steps into). A command that names nothing Toyon can watch, or a file at the root alone (`node server.js`), runs in every copy, and the setup pane says so under it; give it `paths` to share it.
+A command is shared when Toyon can tell what it runs on: `paths` you wrote, else the folder the command names (`server/**` for `node server/index.js`, `app/**` for `uvicorn app.main:app`, a folder a `cd` steps into). A command that names nothing Toyon can watch, or a file at the root alone (`node server.js`), runs in every copy, and the setup pane says so under it; give it `paths` to share it, or `"from": "trunk"` to share it with nothing that flips it.
 
 ```json
 {
   "run": {
     "web": "vite --port $PORT --strictPort",
     "api": { "cmd": "node --watch server/index.js", "paths": ["server/**", "lib/**"] },
-    "db": { "cmd": "docker compose up db", "paths": [] }
+    "db": { "cmd": "docker compose up db", "from": "trunk" }
   }
 }
 ```
 
-`paths` are globs from the root that make a copy run its own. `[]` shares a command no change ever flips, which suits a database container whose databases are per copy (below). Lockfiles, `.env` files, compose files and migration folders count for every command that can flip. `"from": "trunk"` shares a command inference would not, which then flips on anything outside the page's folders; `"from": "copy"` keeps one in every copy.
+`paths` are globs from the root that make a copy run its own. Lockfiles, `.env` files, compose files and migration folders count for every command that has some. `"from": "trunk"` shares a command whatever its paths say; with no folder Toyon can watch, no change ever flips it, and a copy runs its own only when asked (the chip under the box, or the agent's `own` tool), which suits a database container whose databases are per copy (below). `"from": "copy"` keeps one in every copy.
 
 Main runs what is in its working tree, uncommitted files included. When main has uncommitted files, or main's copy of a command is down, every copy that reaches it says so where the command is named: the chip under the box, the command's terminal tab, and the paragraph the agent reads with each message.
 
@@ -139,7 +139,7 @@ A compose stack per copy, under its own project name, marked `"from": "copy"` so
 }
 ```
 
-A compose stack every copy shares, with a database per copy inside it, is `{ "cmd": "docker compose up db", "paths": [] }` instead: main runs the container once, and each copy's `api` makes and drops its own database in it.
+A compose stack every copy shares, with a database per copy inside it, is `{ "cmd": "docker compose up db", "from": "trunk" }` instead: main runs the container once, no change flips it, and each copy's `api` makes and drops its own database in it.
 
 A SQLite file copied from the main checkout:
 

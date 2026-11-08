@@ -34,13 +34,15 @@ export function runCmd(entry: RunEntry): string {
   return typeof entry === "string" ? entry : entry.cmd;
 }
 
-/** what a `run` entry says about who runs it: the trunk for everyone, every copy its own, or
- * nothing (shared when its files can be placed in the tree) */
+/** what a `run` entry says about who runs it: the trunk for everyone (and, when its files cannot
+ * be placed in the tree, no change flips it), every copy its own, or nothing (shared when its
+ * files can be placed in the tree) */
 export function runFrom(entry: RunEntry): "trunk" | "copy" | undefined {
   return typeof entry === "string" ? undefined : entry.from;
 }
 
-/** the paths a shared proc flips on, as written; undefined means infer them from the command */
+/** the paths a shared proc flips on, as written (the schema refuses an empty list); undefined
+ * means infer them from the command */
 export function runPaths(entry: RunEntry): string[] | undefined {
   return typeof entry === "string" ? undefined : entry.paths;
 }

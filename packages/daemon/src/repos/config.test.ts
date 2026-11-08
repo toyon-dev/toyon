@@ -13,9 +13,9 @@ import {
   inferPaths,
   isLocalDatabase,
   mergePatch,
-  previewPaths,
   procCommand,
   readConfigFile,
+  tierOf,
 } from "./config.ts";
 
 // a test can make several repos, so each one is kept for cleanup, not only the last
@@ -99,11 +99,41 @@ describe("inferPaths", () => {
     expect(inferPaths("vite --port $PORT --strictPort", dir)).toEqual([]);
     expect(inferPaths("cd ../elsewhere && make", dir)).toEqual([]);
   });
+});
 
-  test("the page's paths add the folders a front end lives in", () => {
-    const dir = repo({ "web/index.html": "" });
-    expect(previewPaths("cd web && vite", dir)).toEqual(["web/**", ...previewPaths("vite", dir)]);
-    expect(previewPaths("vite", dir)).toContain("src/**");
+describe("tierOf", () => {
+  test("shares a command by the folder it names or the paths written; the page and the copy's never", () => {
+    const dir = repo({ "server/index.js": "", "cron.js": "" });
+    const tier = tierOf(
+      {
+        run: {
+          web: "vite",
+          api: "node server/index.js",
+          worker: { cmd: "node worker.js", paths: ["jobs/**"] },
+          cron: "node cron.js",
+          jobs: { cmd: "node server/jobs.js", from: "copy" },
+        },
+      },
+      dir,
+    );
+    expect(tier).toEqual({ api: { paths: ["server/**"] }, worker: { paths: ["jobs/**"] } });
+  });
+
+  test("the trunk's with no folder to watch is shared with no paths, so no change flips it", () => {
+    const dir = repo({ "server/index.js": "", "compose.yaml": "" });
+    const tier = tierOf(
+      {
+        run: {
+          web: "vite",
+          db: { cmd: "docker compose up db", from: "trunk" },
+          api: { cmd: "node server/index.js", from: "trunk" },
+        },
+      },
+      dir,
+    );
+    expect(tier).toEqual({ db: { paths: [] }, api: { paths: ["server/**"] } });
+    // a compose command the file says nothing about is every copy's: it names nothing to watch
+    expect(tierOf({ run: { web: "vite", db: "docker compose up db" } }, dir)).toEqual({});
   });
 });
 

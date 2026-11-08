@@ -120,7 +120,7 @@ export function handoffTool(worktrees: readonly string[], projects: readonly str
     : "";
   return {
     name: HANDOFF_TOOL,
-    description: `Hand Toyon the pieces of the work you are planning, or one piece you came across: each goes on this worktree, a new worktree of this project or of another open one, or an open worktree already on that part; the person decides on the list beside your plan. Nothing starts. ${open}${elsewhere}`,
+    description: `Hand Toyon the pieces of the work you are planning, or one piece you came across: each goes on this worktree, a new worktree of this project or of another open one, or an open worktree already on that part; the person decides on the list beside your plan. Nothing starts. When the person asks to split off, spin off or break out part of the work, or to put it in its own worktree, this is the tool. ${open}${elsewhere}`,
     inputSchema: {
       type: "object",
       properties: {

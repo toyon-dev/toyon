@@ -147,9 +147,55 @@ export class FakeProcs {
   private states_: ProcState[] = [];
   async start(name: string, command: string, env: Record<string, string> = {}): Promise<ProcState> {
     this.started.push({ name, command, env });
+    // a pending place of that name is spawned into, the way the supervisor keeps its port and tab
+    const held = this.states_.find((s) => s.name === name && this.pending_.has(name));
+    if (held) {
+      this.pending_.delete(name);
+      held.command = command;
+      held.status = "running";
+      held.host = "127.0.0.1";
+      held.detail = undefined;
+      return held;
+    }
     const st: ProcState = { name, command, port: 40000 + this.started.length, status: "running", host: "127.0.0.1" };
     this.states_.push(st);
     return st;
+  }
+  /** the places held before a spawn, in order, with every detail they were given */
+  pendings: Array<{ name: string; command: string; detail: string }> = [];
+  private pending_ = new Set<string>();
+  async pending(name: string, command: string, detail: string): Promise<ProcState> {
+    this.pendings.push({ name, command, detail });
+    const had = this.states_.find((s) => s.name === name && this.pending_.has(name));
+    if (had) {
+      had.detail = detail;
+      return had;
+    }
+    this.pending_.add(name);
+    const st: ProcState = {
+      name,
+      command,
+      port: 40000 + this.started.length + this.pendings.length,
+      status: "starting",
+      detail,
+    };
+    this.states_.push(st);
+    return st;
+  }
+  /** setup output per pending proc, as given */
+  outputs: Array<[string, string]> = [];
+  setupOutput(name: string, data: string) {
+    this.outputs.push([name, data]);
+  }
+  isPending(name: string): boolean {
+    return this.pending_.has(name);
+  }
+  prelude(name: string): string | undefined {
+    if (!this.pending_.has(name)) return undefined;
+    return this.outputs
+      .filter(([n]) => n === name)
+      .map(([, d]) => d)
+      .join("");
   }
   async stopAll() {
     this.stopped = true;
@@ -190,6 +236,7 @@ export class FakeProcs {
   dropped: string[] = [];
   async drop(name: string) {
     this.dropped.push(name);
+    this.pending_.delete(name);
     this.states_ = this.states_.filter((p) => p.name !== name);
   }
   recentLogs(): LogLine[] {

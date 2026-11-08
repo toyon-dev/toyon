@@ -48,6 +48,11 @@ export const HANDOFF_TOOL = "handoff";
  * what `git worktree list` cannot say, since git knows neither titles nor chats. */
 export const WORKTREES_TOOL = "worktrees";
 
+/** The agent asks Toyon to run a shared-tier proc in its worktree now, ahead of the edit that
+ * would flip it: what the deterministic flip does a moment later, so the server is up by the time
+ * the edit lands. No card, since nothing a person decides is in it; the transcript gets a note. */
+export const OWN_TOOL = "own";
+
 /** where one piece of a plan goes: the agent proposes one of the first three, the person may
  * change it, and `skip` is theirs alone */
 export type PieceFate = "here" | "worktree" | "send" | "skip";
@@ -514,6 +519,12 @@ export type AgentEvent =
   /** toyon took over a worktree it did not make: the daemon's word on it, the first thing on the
    * transcript, so the chat says how the row came to be here and on whose `branch` */
   | { type: "adopted"; branch: string; ts: number }
+  /** this worktree started running shared-tier procs itself: the daemon's word on it, on the
+   * transcript, so the chat says why the page's addresses answer from here now. `by` is who
+   * flipped it; `file` the changed file that did, when a change did. */
+  | { type: "owned"; names: string[]; by: "edit" | "agent" | "hand"; file?: string; ts: number }
+  /** a flip did not happen: the proc's own setup failed here, so the page keeps reaching main's */
+  | { type: "own-failed"; name: string; cmd: string; exit: number | "timeout"; ts: number }
   /** the agent asked something and its turn is blocked until the answer goes back. `toolId` ties
    * the card to the tool row the agent emitted just before it, which the card then replaces.
    * Always followed by an agent-ask-end. */

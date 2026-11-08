@@ -390,37 +390,55 @@ describe("a worktree's actions", () => {
     expect(quiet.filter(isItem).find((i) => i.id === "unread")?.disabled).toBeUndefined();
   });
 
-  test("the profile running now is on the list with its check", () => {
+  test("a copy offers to run its borrowed procs here and to hand its own back; main offers neither", () => {
     const repo = {
       id: "r",
       path: "/r",
       name: "r",
       defaultBranch: "main",
-      config: {
-        run: { web: "w" },
-        profiles: { fe: { run: ["web"] }, full: { run: ["web"] } },
-        defaultProfile: "fe",
-      },
+      config: { run: { web: "w", api: "a", db: "d" } },
       configFile: ".toyon/settings.json",
       needsSetup: false,
     };
+    const ui = {
+      layout: { ...defaultLayout, changes: true },
+      shipping: {},
+      frame: "desk" as const,
+      repos: [],
+      drafted: () => false,
+    };
+    const copy = owned();
     const items = worktreeItems(
-      owned(),
-      repo,
       {
-        layout: { ...defaultLayout, changes: true },
-        shipping: {},
-        frame: "desk" as const,
-        repos: [],
-        drafted: () => false,
+        ...copy,
+        borrowed: [{ name: "api", status: "running" as const }],
+        worktree: { ...copy.worktree, sources: { db: { at: { by: "hand" as const } } } },
       },
+      repo,
+      ui,
       deps,
       here,
     );
-    const run = items.filter(isItem).filter((i) => i.id.startsWith("profile:"));
-    expect(run.map((i) => `${i.label}${i.checked ? " *" : ""}`)).toEqual(["run with fe *", "run with full"]);
-    // picked once and read after, so the pair sits last but one, above the remove alone
-    expect(labels(items).slice(-5)).toEqual(["|", "run with fe", "run with full", "|", "archive"]);
+    const run = items.filter(isItem).filter((i) => i.id === "own-procs" || i.id === "share-procs");
+    expect(run.map((i) => [i.label, i.detail, i.danger ?? false])).toEqual([
+      ["run api here", "on main now", false],
+      ["use main's db…", "runs here now", true],
+    ]);
+    // the run rows sit last but one, above the remove alone
+    expect(labels(items).slice(-5)).toEqual(["|", "run api here", "use main's db…", "|", "archive"]);
+    const main = owned();
+    const onMain = worktreeItems(
+      {
+        ...main,
+        borrowed: [{ name: "api", status: "running" as const }],
+        worktree: { ...main.worktree, kind: "main" as const, sources: { db: { at: { by: "hand" as const } } } },
+      },
+      repo,
+      ui,
+      deps,
+      here,
+    );
+    expect(onMain.filter(isItem).some((i) => i.id === "own-procs" || i.id === "share-procs")).toBe(false);
   });
 
   test("the handoff is live under one project, since a new worktree here is a target, and absent on the lead", () => {

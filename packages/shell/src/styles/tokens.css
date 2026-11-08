@@ -42,7 +42,6 @@
     --green: #78c945;
     --red: #ff4929;
     --yellow: #fcbe03;
-    --blue: #69a9e8;
     --aqua: #4dc7a7;
     /* the theme's seventh accent (its magenta in the terminal), which applyTheme sets with the
      others; named here too so the boot stylesheet has it before a theme lands. The rail's dot

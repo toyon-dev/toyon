@@ -6,8 +6,13 @@ import {
   configSibling,
   issueReason,
   landConfigSchema,
+  previewProc,
   type RepoInfo,
+  runCmd,
+  runFrom,
+  runPaths,
   type SharedServices,
+  type TierProc,
   type ToyonConfig,
   timeoutsSchema,
   toyonConfigSchema,
@@ -540,6 +545,50 @@ export function inferPaths(cmd: string, repoPath: string, depth = 1): string[] {
 /** the page's paths: what its command names, and the folders a front end lives in */
 export function previewPaths(cmd: string, repoPath: string): string[] {
   return [...new Set([...inferPaths(cmd, repoPath), ...PAGE_PATHS])];
+}
+
+/** The inferred paths a shared proc can be trusted to flip on. A folder's subtree stays; a file
+ * in a subfolder widens to its folder's subtree, since `node server/index.js` runs on all of
+ * `server/` and an edit to `server/routes.js` would otherwise never flip; a file at the root
+ * alone (`server.js`, `start.sh`) says nothing about where the rest of the backend lives, so it
+ * counts as nothing and the proc is left to every copy unless its paths are written. */
+export function confidentPaths(inferred: string[]): string[] {
+  const out = new Set<string>();
+  for (const p of inferred) {
+    if (p.endsWith("/**")) {
+      out.add(p);
+      continue;
+    }
+    const slash = p.lastIndexOf("/");
+    if (slash > 0) out.add(`${p.slice(0, slash)}/**`);
+  }
+  return [...out];
+}
+
+/** The shared tier as the settings and the tree decide it: every proc but the preview that main
+ * runs for the copies, with the globs that flip a copy to its own. `from: "trunk"` shares whatever
+ * the paths say (none inferable means it flips on anything outside the page); `from: "copy"`
+ * never shares; otherwise written paths share, and so does a command whose folder can be placed
+ * in the tree. A command that names nothing is left to every copy, since it would flip on
+ * anything. A statSync per token, so once per config read and never per resolve. */
+export function tierOf(config: ToyonConfig, repoPath: string): Record<string, TierProc> {
+  const names = Object.keys(config.run);
+  const preview = previewProc(names, config.preview);
+  const out: Record<string, TierProc> = {};
+  for (const name of names) {
+    if (name === preview) continue;
+    const entry = config.run[name]!;
+    const from = runFrom(entry);
+    if (from === "copy") continue;
+    const declared = runPaths(entry);
+    if (declared !== undefined) {
+      out[name] = { paths: declared, declared: true };
+      continue;
+    }
+    const inferred = confidentPaths(inferPaths(runCmd(entry), repoPath));
+    if (from === "trunk" || inferred.length > 0) out[name] = { paths: inferred, declared: false };
+  }
+  return out;
 }
 
 /** Tools that take their port from a flag and never read $PORT, with the flag each one wants. A

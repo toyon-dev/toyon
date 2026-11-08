@@ -7,7 +7,7 @@
 import { z } from "zod";
 import { ATTACHMENTS_PER_MESSAGE, limitMessage, overLimit } from "../attachment.ts";
 import { cachePathReason } from "../cache.ts";
-import { runShared } from "../config.ts";
+import { previewProc, runFrom, runPaths, runRemotes } from "../config.ts";
 import type { PairedMachine, Remote, TailscaleReadiness } from "../daemon.ts";
 import { MAX_DURATION_MS, MIN_DURATION_MS, parseDuration } from "../duration.ts";
 import type { Knock } from "../knock.ts";
@@ -481,25 +481,27 @@ const procName = z.string().max(100);
 const declaredProcName = procName
   .refine((n) => n !== SHELL_STREAM, `"${SHELL_STREAM}" is reserved for the shell tab`)
   .refine((n) => n !== LOGIN_STREAM, `"${LOGIN_STREAM}" is reserved for the login tab`);
-const runProfileSchema = z.object({
-  run: z.array(procName).max(50),
-  env: z.record(z.string().max(100), z.string().max(2_000)).optional(),
-  preview: procName.optional(),
-});
-/** a proc: the command alone, or the long form that marks it the trunk's to run for everyone */
+/** a proc: the command alone, or the long form with who runs it, what flips a copy to its own,
+ * its own setup and teardown, and the addresses a copy's page may point it at */
 const runEntrySchema = z.union([
   shellCommand,
   z.object({
     cmd: shellCommand,
-    from: z.literal("trunk").optional(),
+    from: z.enum(["trunk", "copy"]).optional(),
     paths: z.array(z.string().max(500)).max(50).optional(),
+    setup: z.array(shellCommand).max(50).optional(),
+    teardown: z.array(shellCommand).max(50).optional(),
+    remotes: z
+      .record(
+        z.string().max(100),
+        z
+          .string()
+          .max(2_000)
+          .refine((u) => /^https?:\/\/\S+$/i.test(u), "a remote is an http(s) URL"),
+      )
+      .optional(),
   }),
 ]);
-/** the proc a run's preview shows: the one named, else `web`, else the first */
-function previewOf(procs: string[], preferred: string | undefined): string | undefined {
-  if (preferred && procs.includes(preferred)) return preferred;
-  return procs.includes("web") ? "web" : procs[0];
-}
 
 export const landConfigSchema = z.object({
   route: z.enum(["merge", "push", "pr"]).optional(),
@@ -551,49 +553,31 @@ export const toyonConfigSchema = z
     timeouts: timeoutsSchema.optional(),
     cache: z.union([cachePaths, cacheConfigSchema]).optional(),
     preview: procName.optional(),
-    profiles: z.record(procName, runProfileSchema).optional(),
-    defaultProfile: procName.optional(),
   })
   .superRefine((c, ctx) => {
     // auto-merge is GitHub's; on a local route it would promise something nothing does
     if (c.land?.automerge !== undefined && c.land.route !== "pr")
       ctx.addIssue({ code: "custom", path: ["land", "automerge"], message: 'automerge needs "route": "pr"' });
     // the preview is the one proc every worktree runs itself: a page served from main would show
-    // main's code in a worktree's frame
-    const shared = (name: string | undefined) => name !== undefined && runShared(c.run[name] ?? "");
-    const top = previewOf(Object.keys(c.run), c.preview);
-    if (shared(top)) {
+    // main's code in a worktree's frame, and a page pointed elsewhere would show no frame at all
+    const top = previewProc(Object.keys(c.run), c.preview);
+    const page = top === undefined ? "" : (c.run[top] ?? "");
+    if (runFrom(page) === "trunk") {
       ctx.addIssue({ code: "custom", path: ["run", top!], message: `the preview "${top}" cannot be from the trunk` });
     }
-    for (const [name, p] of Object.entries(c.profiles ?? {})) {
-      const preview = previewOf(p.run, p.preview ?? c.preview);
-      if (shared(preview) && preview !== top) {
+    if (Object.keys(runRemotes(page)).length > 0) {
+      ctx.addIssue({ code: "custom", path: ["run", top!], message: `the preview "${top}" cannot point at a remote` });
+    }
+    // paths say what flips a copy to its own; a proc every copy runs has nothing to flip
+    for (const [name, entry] of Object.entries(c.run)) {
+      if (runFrom(entry) === "copy" && runPaths(entry) !== undefined) {
         ctx.addIssue({
           code: "custom",
-          path: ["profiles", name, "preview"],
-          message: `the preview "${preview}" cannot be from the trunk`,
+          path: ["run", name],
+          message: `"${name}" is from the copy and has paths; drop one`,
         });
       }
     }
-    // a profile may only name processes that exist, and the default must be a profile: caught here
-    // so a typo is a refusal at confirm/reload time, not a worktree that silently runs nothing
-    if (!c.profiles) {
-      if (c.defaultProfile !== undefined)
-        ctx.addIssue({ code: "custom", path: ["defaultProfile"], message: "defaultProfile without profiles" });
-      return;
-    }
-    for (const [name, p] of Object.entries(c.profiles)) {
-      for (const proc of p.run) {
-        if (!(proc in c.run))
-          ctx.addIssue({ code: "custom", path: ["profiles", name, "run"], message: `"${proc}" is not in run` });
-      }
-      if (p.preview !== undefined && !p.run.includes(p.preview))
-        ctx.addIssue({ code: "custom", path: ["profiles", name, "preview"], message: "preview is not in run" });
-    }
-    if (c.defaultProfile === undefined)
-      ctx.addIssue({ code: "custom", path: ["defaultProfile"], message: "required when profiles are set" });
-    else if (!(c.defaultProfile in c.profiles))
-      ctx.addIssue({ code: "custom", path: ["defaultProfile"], message: `unknown profile "${c.defaultProfile}"` });
   });
 
 export const themePrefsSchema = z.object({
@@ -635,8 +619,6 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
     attachments,
     /** registry id; the daemon's default when absent */
     agent: id.optional(),
-    /** one of the repo's profiles; its defaultProfile when absent */
-    profile: z.string().max(100).optional(),
     /** what the agent may do without asking; the default mode when absent */
     mode: permissionModeSchema.optional(),
     /** move main's uncommitted changes into the new worktree */
@@ -649,13 +631,15 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   z.object({ t: z.literal("set-worktree-model"), worktreeId: id, model: z.string().max(200) }),
   /** ask the agent to run at another of its effort levels here; takes effect on its next turn */
   z.object({ t: z.literal("set-worktree-effort"), worktreeId: id, effort: z.string().max(100) }),
-  /** run this worktree under another of the repo's profiles: its procs restart, the agent stays */
-  z.object({ t: z.literal("set-worktree-profile"), worktreeId: id, profile: z.string().max(100) }),
-  /** run the named shared-tier procs here rather than reaching main's; every borrowed one when
-   * `names` is absent */
-  z.object({ t: z.literal("own-procs"), worktreeId: id, names: z.array(procName).max(50).optional() }),
-  /** stop the shared-tier procs this worktree runs itself and reach main's again */
-  z.object({ t: z.literal("share-procs"), worktreeId: id }),
+  /** where this worktree's page reaches one shared proc: main's, its own (its setup first, the
+   * page on main's meanwhile), or one of the proc's remotes (nothing runs here for it, and the
+   * worktree's procs restart for the URL). A remote wins over the flip until moved again. */
+  z.object({
+    t: z.literal("set-proc-source"),
+    worktreeId: id,
+    name: procName,
+    source: z.union([z.literal("main"), z.literal("here"), z.object({ remote: z.string().max(100) })]),
+  }),
   /** archive a worktree: its directory and branch go, its chat and work are kept, and the rail's
    * archived section offers to restore it */
   z.object({ t: z.literal("archive-worktree"), worktreeId: id }),
@@ -929,12 +913,12 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
     field: z.enum(["model", "effort"]),
     value: z.string().max(200),
   }),
-  /** what new worktrees of this repo start with, picked in the composer: one of the three modes, or
-   * one of the repo's profiles; the empty value the default again */
+  /** what new worktrees of this repo start with, picked in the composer: one of the three modes;
+   * the empty value the default again */
   z.object({
     t: z.literal("set-repo-pick"),
     repoId: id,
-    field: z.enum(["mode", "profile"]),
+    field: z.literal("mode"),
     value: z.string().max(100),
   }),
   z.object({ t: z.literal("set-keep-awake"), mode: z.enum(KEEP_AWAKE_MODES) }),

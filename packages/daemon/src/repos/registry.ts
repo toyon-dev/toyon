@@ -13,6 +13,7 @@ import {
   landPolicy,
   type PendingRepo,
   type RepoInfo,
+  runFrom,
   type ToyonConfig,
   type WorktreeInfo,
 } from "@toyon/shared";
@@ -27,12 +28,13 @@ import { excludeFromGit, unexcludeFromGit } from "../git/exclude.ts";
 import { defaultBranch, git, isGitRepo, repoRoot } from "../git/exec.ts";
 import { isTracked, statusFiles, treeEmpty } from "../git/status.ts";
 import { allocateProxyPort, releasePort, reservePort } from "../runtime/ports.ts";
+import { resolveRun, spawnsOf } from "../runtime/profile.ts";
 import type { RuntimeRegistry } from "../runtime/registry.ts";
 import { shortId } from "../worktrees/naming.ts";
 import type { WorktreeService } from "../worktrees/service.ts";
 import type { AfterLand } from "./afterLand.ts";
 import { expandTilde } from "./browse.ts";
-import { configTarget, configText, detectConfig, detectServices, readConfigFile } from "./config.ts";
+import { configFor, configTarget, configText, detectConfig, detectServices, readConfigFile, tierOf } from "./config.ts";
 import {
   type CreateOpts,
   cloneInto,
@@ -102,9 +104,12 @@ export class RepoRegistry {
     for (const repo of state.repos) {
       this.placeConfig(repo);
       this.applyConfigFile(repo, false);
+      // a record from before the field, or a tree that moved while the daemon was down
+      if (!repo.needsSetup) this.settleTier(repo, repo.path);
       repo.remote = await hasOrigin(repo.path);
       await this.settleBase(repo);
     }
+    this.tierOnce();
     for (const wt of state.worktrees) reservePort(wt.proxyPort);
     state.save();
     for (const repo of state.repos) {
@@ -294,6 +299,7 @@ export class RepoRegistry {
       guess: detected.from,
       assumed: detected.assumed,
       services: detectServices(root),
+      tier: tierOf(detected.config, root),
       ...(made ? { made } : {}),
       remote: await hasOrigin(root),
     };
@@ -386,6 +392,7 @@ export class RepoRegistry {
     repo.needsSetup = false;
     repo.guess = undefined;
     repo.assumed = undefined;
+    this.settleTier(repo, repo.path);
     this.d.state.save();
     fireAndForget(repoId, this.refreshBase(repo), "base refresh");
     // (re)start procs for this repo's worktrees — spares included, or a spare warmed under the old
@@ -455,8 +462,16 @@ export class RepoRegistry {
    * moved, everything measured against it moves with it in one frame: every row's counts, the
    * spare (reset onto the new base), and the shell's word for it. The one writer of `base`. */
   async refreshBase(repo: RepoInfo): Promise<void> {
-    if (!(await this.settleBase(repo))) return;
+    const moved = await this.settleBase(repo);
+    // main moved: a folder a command names may be there now, and the tier with it
+    const tiered = !repo.needsSetup && this.settleTier(repo, repo.path);
+    if (!moved && !tiered) return;
     this.d.state.save();
+    if (!moved) {
+      this.d.hub.emit("reposChanged");
+      this.d.hub.emit("worktreesChanged");
+      return;
+    }
     this.d.worktrees.invalidateCounts();
     this.d.hub.emit("reposChanged");
     this.d.hub.emit("repoTick", repo.id);
@@ -491,8 +506,56 @@ export class RepoRegistry {
     repo.guess = detected.from;
     repo.assumed = detected.assumed;
     repo.services = services;
+    this.settleTier(repo, wt.path);
     this.d.state.save();
     this.d.hub.emit("reposChanged");
+  }
+
+  /** Before sharing was the default (0.23), a copy ran every proc the file did not mark the
+   * trunk's itself, against state of its own: a database its setup made, a port its page knows.
+   * Borrowing main's now would hide that state, and a later flip's setup would collide with what
+   * is already there. So, once, every copy from before keeps running what it ran: the procs the
+   * tier now shares and the file did not mark `from: "trunk"` become its own, as if pressed for,
+   * and every proc it spawns counts as prepared. */
+  private tierOnce(): void {
+    const { state } = this.d;
+    if (state.tiered) return;
+    for (const wt of state.worktrees) {
+      if (wt.kind === "main" || wt.kind === "spare") continue;
+      const repo = state.repo(wt.repoId);
+      if (!repo || repo.needsSetup) continue;
+      for (const name of Object.keys(repo.tier ?? {})) {
+        if (runFrom(repo.config.run[name] ?? "") === "trunk" || wt.sources?.[name]?.at) continue;
+        wt.sources = { ...wt.sources, [name]: { ...wt.sources?.[name], at: { by: "hand" } } };
+      }
+      for (const name of spawnsOf(resolveRun(configFor(wt, repo), wt, repo.tier ?? {}))) {
+        wt.sources = { ...wt.sources, [name]: { ...wt.sources?.[name], prepared: true } };
+      }
+    }
+    state.markTiered();
+  }
+
+  /** The shared tier as the settings and the tree now decide it, read against `root`: main's tree,
+   * or the worktree a scaffold is in. A name that went unshared to shared is given to every live
+   * copy already running it, so nothing a copy runs is yanked onto main's by a folder that landed.
+   * True when the tier changed. */
+  private settleTier(repo: RepoInfo, root: string): boolean {
+    const before = repo.tier ?? {};
+    const after = tierOf(repo.config, root);
+    repo.tier = after;
+    if (JSON.stringify(before) === JSON.stringify(after)) return false;
+    const fresh = Object.keys(after).filter((n) => before[n] === undefined);
+    if (fresh.length > 0) {
+      for (const wt of this.d.state.worktrees) {
+        if (wt.repoId !== repo.id || wt.kind === "main") continue;
+        for (const name of fresh) {
+          if (this.d.runtime.runs(wt.id, name)) {
+            wt.sources = { ...wt.sources, [name]: { ...wt.sources?.[name], at: { by: "hand" } } };
+          }
+        }
+      }
+    }
+    return true;
   }
 
   /** A new project's first turn runs in a worktree, so the settings file it writes is there and
@@ -508,6 +571,7 @@ export class RepoRegistry {
     repo.needsSetup = false;
     repo.guess = undefined;
     repo.assumed = undefined;
+    this.settleTier(repo, wt.path);
     this.d.state.save();
     fireAndForget(
       wt.id,
@@ -554,6 +618,7 @@ export class RepoRegistry {
     repo.needsSetup = false;
     repo.guess = undefined;
     repo.assumed = undefined;
+    this.settleTier(repo, repo.path);
     this.d.state.save();
     return true;
   }

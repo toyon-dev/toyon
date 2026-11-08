@@ -165,6 +165,39 @@ describe("state", () => {
     expect(loaded.from).toMatchObject({ after: { id: "b" } });
   });
 
+  test("a profile on a record goes, an owns list reads as presses, and the repo's profile pick goes with it", () => {
+    const repo = {
+      id: "r1",
+      path: "/tmp/r",
+      name: "r",
+      defaultBranch: "main",
+      config: { run: {} },
+      configFile: "x",
+      needsSetup: false,
+    };
+    writeFileSync(
+      paths.stateFile,
+      JSON.stringify({
+        repos: [
+          { ...repo, picks: { mode: "ask", profile: "fe" } },
+          { ...repo, id: "r2", picks: { profile: "fe" } },
+        ],
+        worktrees: [
+          { ...wt("a"), profile: "full", owns: ["api", "db"] },
+          { ...wt("b"), sources: { api: { at: { by: "agent" } } } },
+        ],
+        sessions: {},
+      }),
+    );
+    const s = loadState(paths);
+    expect("profile" in s.worktrees[0]!).toBe(false);
+    expect("owns" in s.worktrees[0]!).toBe(false);
+    expect(s.worktrees[0]!.sources).toEqual({ api: { at: { by: "hand" } }, db: { at: { by: "hand" } } });
+    expect(s.worktrees[1]!.sources).toEqual({ api: { at: { by: "agent" } } });
+    expect(s.repos[0]!.picks).toEqual({ mode: "ask" });
+    expect(s.repos[1]!.picks).toBeUndefined();
+  });
+
   test("corrupt file is backed up, not silently discarded", () => {
     writeFileSync(paths.stateFile, '{"repos": [');
     const s = loadState(paths);

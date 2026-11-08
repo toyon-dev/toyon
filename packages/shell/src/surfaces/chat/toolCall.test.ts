@@ -471,6 +471,12 @@ describe("toolLabel", () => {
       icon: "worktrees",
       hint: "sticky header",
     });
+    // the own tool starts a proc here: the run glyph, and the line names what it runs
+    expect(toolLabel({ name: "own", title: "own", input: { names: ["api"] } })).toMatchObject({
+      icon: "run",
+      hint: "run api here",
+    });
+    expect(toolLabel({ name: "own", title: "own", input: {} }).hint).toBe("run it here");
     expect(toolLabel({ name: "EnterPlanMode", title: "EnterPlanMode", input: {} }).icon).toBe("swap");
   });
 

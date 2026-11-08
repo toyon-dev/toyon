@@ -17,12 +17,14 @@ import {
   DEFAULT_PERMISSION_MODE,
   describeLand,
   isBusy,
+  isMain,
   isProvisional,
   landPolicy,
   landWord,
   nextNumbers,
   numbered,
   numbersAfter,
+  ownedBy,
   prStanding,
   shipNoun,
   standingOf,
@@ -68,6 +70,7 @@ import { canPull, originNote } from "../chips/baseNote.ts";
 import { EffortChip } from "../chips/EffortChip.tsx";
 import { ModeChip } from "../chips/ModeChip.tsx";
 import { AgentModelChip, ModelChip } from "../chips/ModelChip.tsx";
+import { SourceChip } from "../chips/SourceChip.tsx";
 import { commentsLine } from "../editor/prComments.ts";
 import { CommandRow } from "../overlays/CommandRow.tsx";
 import { PaletteRow } from "../overlays/PaletteRow.tsx";
@@ -124,6 +127,7 @@ import {
   ownCommands,
   parseHandoffArgs,
 } from "./ownCommands.ts";
+import { ownsNotice } from "./ownsNotice.ts";
 import { PermissionCard } from "./PermissionCard.tsx";
 import { PickChip } from "./PickChip.tsx";
 import { QuestionCard } from "./QuestionCard.tsx";
@@ -241,8 +245,8 @@ function insertionFor(r: Row): string {
  *
  * Three ways to send from here. A message to the worktree's own agent. The lead row's message,
  * where `draft` is set, which starts a worktree: the row itself becomes it when it is the spare,
- * or one is made from main when main is the lead. The intro's profile applies, main's
- * uncommitted files move with it when the intro's note says so, and the draft gives way as the row
+ * or one is made from main when main is the lead. Main's uncommitted files move with it when the
+ * intro's note says so, and the draft gives way as the row
  * becomes the task. And a message into an `archived` worktree's chat, which restores it and then
  * goes to its agent: the box is that worktree's under the id it comes back with, and nothing here
  * that needs a running worktree is offered. A `found` worktree's chat is the same send with
@@ -288,14 +292,23 @@ export function Composer({
   const attachments = useLocalField(boxId, "attachments");
   const notice = useLocalField(boxId, "notice");
   // a proc the worktree took over from main, said once under the box when it happens: the page's
-  // api is this branch's from here, which whoever is reading the preview would not otherwise learn
-  const owns = active?.worktree.owns?.join(", ") ?? "";
-  const ownsSeen = useRef({ id, owns });
-  useOnChange([id, owns], () => {
+  // api is this branch's from here, which whoever is reading the preview would not otherwise learn.
+  // Nothing for a press: the person did it.
+  const ownsKey = Object.entries(active?.worktree.sources ?? {})
+    .filter(([, src]) => ownedBy(src.at))
+    .map(([n]) => n)
+    .join(",");
+  const ownsSeen = useRef({ id, owns: ownsKey });
+  useOnChange([id, ownsKey], () => {
     const seen = ownsSeen.current;
-    ownsSeen.current = { id, owns };
-    if (seen.id !== id || seen.owns === owns || !owns || !boxId || archived) return;
-    dispatch({ a: "notice", id: boxId, text: `Running its own ${owns} here now: this branch changed it.` });
+    ownsSeen.current = { id, owns: ownsKey };
+    if (seen.id !== id || seen.owns === ownsKey || !ownsKey || !boxId || archived) return;
+    const had = new Set(seen.owns.split(",").filter(Boolean));
+    const text = ownsNotice(
+      ownsKey.split(",").filter((n) => !had.has(n)),
+      active?.worktree.sources,
+    );
+    if (text) dispatch({ a: "notice", id: boxId, text });
   });
   // up and down in a blank box walk back through what was sent from it (recall.ts): this is where
   // they have got to, and the draft holds that entry until it is touched
@@ -414,7 +427,7 @@ export function Composer({
   const usage = useLocalField(id, "usage") ?? active?.usage;
 
   // the mode a new worktree starts in is the repo's pick, the daemon's memory per repo (as the
-  // profile picked on the draft's row is, and the model and effort per agent), so every create of
+  // model and effort per agent are), so every create of
   // the repo and every shell start from one answer
   const newMode = repo?.picks?.mode ?? DEFAULT_PERMISSION_MODE;
   const setNewMode = (mode: PermissionMode) => {
@@ -1249,7 +1262,6 @@ export function Composer({
         context,
         agent: spawnAgent,
         // what was chosen for this one send rides along; the repo's picks fill the rest daemon side
-        ...(draft?.profile ? { profile: draft.profile } : {}),
         ...(mode ? { mode } : {}),
         ...(draft?.carry ? { carry: true } : {}),
       };
@@ -2001,6 +2013,17 @@ export function Composer({
                     onClose={refocus}
                   />
                 )}
+            {/* where each shared command runs for this worktree's page: main's, its own, or a remote.
+                One chip per command the repo shares; none on main, which runs them for everyone, and
+                none while drafting, since a new worktree starts on main's */}
+            {active &&
+              !spawning &&
+              !outside &&
+              repo &&
+              !isMain(active.worktree) &&
+              Object.keys(repo.tier ?? {}).map((name) => (
+                <SourceChip key={name} name={name} wt={active} repo={repo} trunk={trunk} onClose={refocus} />
+              ))}
             {ringShown && (
               // the panel is a DOM child of this wrapper even in the top layer, so leaving it and
               // the ring together is the one mouseleave
@@ -2127,7 +2150,7 @@ export function Composer({
           do about it now, each on its own line so the row above keeps its shape. Main against
           origin while drafting, with the pull, since a new worktree starts from main as it is and
           a main nobody has pulled today hands the agent stale code. What the message will be
-          (the profile, main's files coming along) is the intro's, above the box. How far a
+          (main's files coming along) is the intro's, above the box. How far a
           worktree trails main is not a row here: land takes main in first, so the count is a fact
           on the verb's tooltip, and a row that left as the land ran moved the verb from under the
           cursor before archive took its place. The sync itself stays in the changes tab's foot and

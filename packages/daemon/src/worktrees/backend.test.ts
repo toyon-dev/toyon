@@ -5,7 +5,8 @@ import type { RepoInfo, WorktreeInfo } from "@toyon/shared";
 import { tmpRepo } from "../../test/helpers/tmp-repo.ts";
 import { Hub } from "../core/hub.ts";
 import { StateStore } from "../core/state.ts";
-import { resolveRun, trunkOf } from "../runtime/profile.ts";
+import { tierOf } from "../repos/config.ts";
+import { resolveRun } from "../runtime/profile.ts";
 import { BackendShare, DEBOUNCE_MS, migrationMatch, rootMatch, touching } from "./backend.ts";
 
 let cleanup = () => {};
@@ -58,9 +59,10 @@ describe("BackendShare", () => {
     config: {
       run: {
         web: "vite --port $PORT",
-        api: { cmd: "node --watch server/index.js", from: "trunk" },
-        worker: { cmd: "node worker.js", from: "trunk", paths: ["jobs/**"] },
-        db: { cmd: "docker compose up db", from: "trunk", paths: [] },
+        api: { cmd: "node --watch server/index.js", remotes: { stage: "https://api.stage.example.com" } },
+        worker: { cmd: "node worker.js", paths: ["jobs/**"] },
+        db: { cmd: "docker compose up db", paths: [] },
+        cron: "node cron.js",
       },
     },
     configFile: ".toyon/settings.json",
@@ -78,55 +80,97 @@ describe("BackendShare", () => {
     ...extra,
   });
 
-  function make(files: () => string[]) {
+  function make(files: () => string[], extra: Partial<WorktreeInfo> = {}) {
     const t = tmpRepo();
     cleanup = t.cleanup;
-    // the worktree's tree, for the paths read off the commands
-    const a = join(t.repo, "..", "a");
-    mkdirSync(join(a, "server"), { recursive: true });
-    writeFileSync(join(a, "server/index.js"), "");
-    writeFileSync(join(a, "worker.js"), "");
-    const cfg = { config: repo.config, file: repo.configFile };
+    // the repo's tree, for the paths read off the commands
+    mkdirSync(join(t.repo, "server"), { recursive: true });
+    writeFileSync(join(t.repo, "server/index.js"), "");
+    writeFileSync(join(t.repo, "worker.js"), "");
+    writeFileSync(join(t.repo, "cron.js"), "");
+    const config = { ...repo, path: t.repo };
+    // the tier as the daemon settles it off the file and the tree: api by its folder, worker and db
+    // by their written paths; cron names a root file alone and is every copy's
     const state = new StateStore(t.paths, {
-      repos: [{ ...repo, path: t.repo }],
-      worktrees: [row("a", { path: a }), row("m", { kind: "main" })],
+      repos: [{ ...config, tier: tierOf(config.config, t.repo) }],
+      worktrees: [row("a", extra), row("m", { kind: "main" })],
       sessions: {},
     });
     const hub = new Hub();
-    const owned: Array<[string, string[]]> = [];
+    const owned: Array<[string, string[], Record<string, string>]> = [];
+    const behind: string[][] = [];
+    const cfg = { config: config.config, file: config.configFile };
+    const runOf = (id: string) => resolveRun(cfg, state.requireWorktree(id), state.requireRepo("r").tier ?? {});
+    const borrowedOf = (id: string) => runOf(id).borrowed;
     const share = new BackendShare({
       state,
       hub,
       runtime: {
-        borrows: (id) => id === "a" && (state.worktree("a")?.owns?.length ?? 0) < 3,
-        runOf: (id) => resolveRun(cfg, state.requireWorktree(id), trunkOf(repo)),
+        borrows: (id) => id === "a" && borrowedOf(id).length > 0,
+        points: (id) =>
+          id === "a" && Object.values(state.worktree("a")?.sources ?? {}).some((s) => s.at && "remote" in s.at),
+        markRemoteBehind: (_id, names) => {
+          behind.push(names);
+        },
+        runOf: (id) => runOf(id),
       },
-      own: async (id, names) => {
-        owned.push([id, names]);
+      own: async (id, names, why) => {
+        owned.push([id, names, why]);
         const wt = state.requireWorktree(id);
-        wt.owns = [...(wt.owns ?? []), ...names];
+        for (const n of names) wt.sources = { ...wt.sources, [n]: { at: { by: "edit" as const, file: why[n] } } };
       },
       changed: async () => files(),
     });
-    return { share, hub, state, owned };
+    return { share, hub, state, owned, behind };
   }
 
   test("a change under a proc's inferred paths takes that proc over, and only that one", async () => {
     const { share, owned } = make(() => ["server/index.js"]);
     await share.check("a");
-    expect(owned).toEqual([["a", ["api"]]]);
+    expect(owned).toEqual([["a", ["api"], { api: "server/index.js" }]]);
     // nothing flips twice: the proc is its own now
     await share.check("a");
     expect(owned.length).toBe(1);
   });
 
+  test("a change under a sibling file of the command's folder flips it too: the folder is the proc's", async () => {
+    const { share, owned } = make(() => ["server/routes.js"]);
+    await share.check("a");
+    expect(owned.map((o) => o[1])).toEqual([["api"]]);
+  });
+
+  test("a command that names a root file alone is every copy's: nothing to flip", async () => {
+    const { share, owned, state } = make(() => ["cron.js"]);
+    expect(state.requireRepo("r").tier?.cron).toBeUndefined();
+    await share.check("a");
+    expect(owned).toEqual([]);
+  });
+
+  test("a pointed proc whose files change is marked behind, never taken; a change elsewhere clears the mark", async () => {
+    const { share, owned, behind } = make(() => ["server/index.js"], { sources: { api: { at: { remote: "stage" } } } });
+    await share.check("a");
+    expect(owned).toEqual([]);
+    expect(behind).toEqual([["api"]]);
+    const clean = make(() => ["src/App.tsx"], { sources: { api: { at: { remote: "stage" } } } });
+    await clean.share.check("a");
+    expect(clean.behind).toEqual([[]]);
+  });
+
+  test("a worktree that only points is still checked", async () => {
+    const { share, behind } = make(() => ["server/index.js"], {
+      sources: { api: { at: { remote: "stage" } }, worker: { at: { by: "hand" } }, db: { at: { by: "hand" } } },
+    });
+    await share.check("a");
+    expect(behind).toEqual([["api"]]);
+  });
+
   test("a lockfile takes over every proc that can flip; a migration too; the page alone takes none", async () => {
     const { share, owned } = make(() => ["bun.lock"]);
     await share.check("a");
-    expect(owned).toEqual([["a", ["api", "worker"]]]);
+    expect(owned.map((o) => o[1])).toEqual([["api", "worker"]]);
     const m = make(() => ["src/migrations/1.sql"]);
     await m.share.check("a");
-    expect(m.owned).toEqual([["a", ["api", "worker"]]]);
+    expect(m.owned.map((o) => o[1])).toEqual([["api", "worker"]]);
     const p = make(() => ["src/App.tsx", "index.html"]);
     await p.share.check("a");
     expect(p.owned).toEqual([]);
@@ -135,7 +179,7 @@ describe("BackendShare", () => {
   test("declared paths are read as written", async () => {
     const { share, owned } = make(() => ["jobs/mail.js"]);
     await share.check("a");
-    expect(owned).toEqual([["a", ["worker"]]]);
+    expect(owned.map((o) => o[1])).toEqual([["worker"]]);
   });
 
   test("main, and a worktree that borrows nothing, are left alone", async () => {
@@ -151,7 +195,7 @@ describe("BackendShare", () => {
     hub.emit("turnSettled", "a", { end: "done", at: 0 } as never);
     expect(owned).toEqual([]);
     await Bun.sleep(DEBOUNCE_MS + 50);
-    expect(owned).toEqual([["a", ["api"]]]);
+    expect(owned.map((o) => o[1])).toEqual([["api"]]);
     expect(share).toBeDefined();
   });
 });

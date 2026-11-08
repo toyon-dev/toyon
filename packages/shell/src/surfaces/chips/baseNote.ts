@@ -50,3 +50,9 @@ export function originNote(
 export function canPull(trunk: { stale?: "dirty" | "diverged" | "no-upstream" }): boolean {
   return trunk.stale !== "diverged";
 }
+
+/** what main's uncommitted files mean for a command main runs for every worktree: it runs on them
+ * too, so a copy's page may be talking to code that is on no branch yet */
+export function dirtyNote(dirty: number, name: string): string {
+  return `main has ${dirty} uncommitted ${dirty === 1 ? "file" : "files"}; ${name} runs on them too`;
+}

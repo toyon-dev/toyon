@@ -1394,18 +1394,7 @@ describe("drafting a worktree", () => {
       found(wt("main", "main")),
     );
     expect(localOf(s, "main").draft).toBe("hi");
-    expect(
-      run(
-        [
-          { a: "draft-agent", id: "codex" },
-          { a: "draft-profile", profile: "web" },
-        ],
-        s,
-      ).draft,
-    ).toEqual({
-      agent: "codex",
-      profile: "web",
-    });
+    expect(run([{ a: "draft-agent", id: "codex" }], s).draft).toEqual({ agent: "codex" });
   });
 
   test("the lead's preview is its own app while it drafts, and the trunk rides beside the rows", () => {

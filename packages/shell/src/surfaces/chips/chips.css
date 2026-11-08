@@ -1,4 +1,4 @@
-/* The composer's chips: where a message goes, and what runs there. */
+/* The composer's chips: where a message goes, what runs there, and where a copy's backend is. */
 @layer tokens, base, surfaces;
 @layer surfaces {
   /* a mode that holds the agent for a person (ask, plan) reads in the rail badge's colour */
@@ -7,10 +7,16 @@
   }
   /* a model id can be a long slug; the chip keeps the row's height and cuts the tail instead */
   .model-chip,
-  .effort-chip {
+  .effort-chip,
+  .source-chip {
     max-width: 16em;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  /* the page is not talking to the edits made here: the held colour, as a mode that waits on a
+     person reads */
+  .source-chip.source-held {
+    color: var(--yellow);
   }
 }

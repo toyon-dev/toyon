@@ -302,7 +302,6 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
       context: msg.context,
       attachments: msg.attachments,
       agent: msg.agent,
-      profile: msg.profile,
       mode: msg.mode,
       carry: msg.carry,
     };
@@ -311,16 +310,8 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     });
   },
 
-  "set-worktree-profile"(msg, _ctx, s) {
-    s.worktrees.setProfile(msg.worktreeId, msg.profile);
-  },
-
-  async "own-procs"(msg, _ctx, s) {
-    await s.worktrees.ownProcs(msg.worktreeId, msg.names);
-  },
-
-  async "share-procs"(msg, _ctx, s) {
-    await s.worktrees.shareProcs(msg.worktreeId);
+  async "set-proc-source"(msg, _ctx, s) {
+    await s.worktrees.setProcSource(msg.worktreeId, msg.name, msg.source);
   },
 
   "set-worktree-mode"(msg, _ctx, s) {

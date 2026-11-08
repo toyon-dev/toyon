@@ -180,6 +180,9 @@ export interface AcpSessionDeps {
   /** where the preview stands, as a block after every message; read as each goes out, since the
    * port belongs to the runtime and not to this session */
   preview?: () => string | undefined;
+  /** which commands this worktree reaches on main, runs itself or points at a remote, as a
+   * paragraph after every message; read as each goes out, since a flip moves it mid-session */
+  tier?: () => string | undefined;
   /** what the preview's page has thrown since it last loaded, as a paragraph after every message,
    * read as each goes out: what the person's browser met is what the agent should hear */
   pageErrors?: () => string | undefined;
@@ -1237,6 +1240,7 @@ export class AcpSession implements AgentAdapter {
       standing,
       ...(this.d.mentioned?.(item.text) ?? []),
       this.d.preview?.(),
+      this.d.tier?.(),
       this.d.pageErrors?.(),
       ...this.landedSince(),
     ]);

@@ -150,6 +150,53 @@ describe("WorktreeProcs supervision", () => {
 
 // A proc that never answers on $PORT used to stay "starting" forever. After the deadline the
 // supervisor asks what the process actually bound and says so, one way or the other.
+describe("WorktreeProcs pending", () => {
+  test("a place held before the spawn: starting with its step, no process, the setup's bytes on its tab; start() spawns into it", async () => {
+    const states: ProcState[] = [];
+    const data: string[] = [];
+    const procs = new WorktreeProcs(
+      process.cwd(),
+      (p) => states.push({ ...p }),
+      noop,
+      (_name, d) => data.push(d),
+    );
+    const held = await procs.pending("api", "true", "setup: uv sync");
+    expect([held.status, held.detail, held.pid]).toEqual(["starting", "setup: uv sync", undefined]);
+    procs.setupOutput("api", "Resolved 12 packages\r\n");
+    await procs.pending("api", "true", "setup: createdb");
+    expect(procs.states().map((p) => [p.name, p.status, p.detail])).toEqual([["api", "starting", "setup: createdb"]]);
+    expect(procs.prelude("api")).toBe("Resolved 12 packages\r\n");
+    expect(data).toEqual(["Resolved 12 packages\r\n"]);
+    expect(procs.recentLogs().map((l) => l.line)).toEqual(["Resolved 12 packages"]);
+    // nothing restarts or sleeps a place with no process in it
+    procs.restart("api");
+    await procs.sleep("test");
+    expect(procs.states()[0]?.status).toBe("starting");
+    procs.wake();
+    // the start keeps the port and the tab, and the detail goes with the spawn
+    const st = await procs.start("api", SERVER);
+    expect(st.port).toBe(held.port);
+    expect(procs.states().length).toBe(1);
+    expect(procs.prelude("api")).toBeUndefined();
+    expect(await until(() => procs.states()[0]?.status === "running", 8000)).toBe(true);
+    expect(procs.states()[0]?.detail).toBeUndefined();
+    await procs.stopAll();
+  }, 15_000);
+
+  test("a held place dropped before its spawn gives its port back", async () => {
+    const procs = new WorktreeProcs(process.cwd(), noop, noop);
+    const held = await procs.pending("api", "true", "setup: x");
+    await procs.drop("api");
+    expect(procs.states()).toEqual([]);
+    // the port is free again: the next allocation may hand it out
+    const again = await allocatePort();
+    releasePort(again);
+    expect(typeof again).toBe("number");
+    expect(held.port).toBeGreaterThan(0);
+    await procs.stopAll();
+  });
+});
+
 describe("WorktreeProcs port diagnosis", () => {
   test("nothing listening anywhere: unreachable, with the reason in the state and the log", async () => {
     const states: ProcState[] = [];

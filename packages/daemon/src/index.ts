@@ -85,6 +85,7 @@ import { FixService } from "./worktrees/fix.ts";
 import { HandoffService } from "./worktrees/handoff.ts";
 import { LandingService } from "./worktrees/landing.ts";
 import { WorktreeLookup } from "./worktrees/lookup.ts";
+import { OwnTool } from "./worktrees/own.ts";
 import { PrService } from "./worktrees/prs.ts";
 import { RefSearch } from "./worktrees/refs.ts";
 import { WorktreeService } from "./worktrees/service.ts";
@@ -237,6 +238,7 @@ const runtime: RuntimeRegistry = new RuntimeRegistry({
   turnStarting: (id): Promise<void> => worktrees.turnStarted(id),
   archived: (repoId): ArchivedWorktree[] => worktrees.archived(repoId),
   standing: (id): Promise<WorkStanding | null> => worktrees.standing(id),
+  tier: (id) => worktrees.tierStanding(id),
   remote: () => setting.get(),
   gate: previewGate,
   // asked only once the policy exists: the first view comes from a socket, after boot
@@ -285,7 +287,12 @@ const worktrees = new WorktreeService({
 interest.onFirst((id) => worktrees.tree.watch(id));
 interest.onLast((id) => worktrees.tree.unwatch(id));
 // a worktree whose changes touch a proc it reaches on main takes that proc over
-new BackendShare({ state, hub, runtime, own: (id, names) => worktrees.ownProcs(id, names) });
+new BackendShare({
+  state,
+  hub,
+  runtime,
+  own: (id, names, files) => worktrees.ownProcs(id, names, { by: "edit", files }),
+});
 // a plan's pieces across worktrees, here and in other open projects, made through the service's
 // own create
 const handoff = new HandoffService({
@@ -304,6 +311,8 @@ tools.add(handoff);
 tools.add(
   new WorktreeLookup({ state, transcriptsDir: paths.transcriptsDir, archived: (repoId) => worktrees.archived(repoId) }),
 );
+// a shared proc taken over ahead of the edit that would flip it, so the server is up when it lands
+tools.add(new OwnTool({ state, own: (id, names) => worktrees.ownProcs(id, names, { by: "agent" }) }));
 // before the server: its agentStatus listener has to run ahead of the one that broadcasts the rows
 const turns = new TurnService({
   state,

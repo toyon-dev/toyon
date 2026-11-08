@@ -1,110 +1,79 @@
-// Which procs a worktree runs and with what environment: its settings, narrowed by the
-// worktree's profile, and split into what it runs itself and what it reaches on main. Pure so the
-// registry's start path and the tests share one answer.
+// Which procs a worktree runs, which it reaches on main, and which its page points away from: its
+// settings (its own file, else the repo's) and the repo's shared tier, read against the worktree's
+// record. Pure so the registry's start path, the flip, the tool and the tests share one answer.
 
-import type { RepoInfo, WorktreeInfo } from "@toyon/shared";
-import { runCmd, runPaths, runShared } from "@toyon/shared";
+import type { TierProc, WorktreeInfo } from "@toyon/shared";
+import { ownedBy, previewProc, remoteOf, runCmd, runRemotes } from "@toyon/shared";
 import { log } from "../core/log.ts";
 import type { WorktreeConfig } from "../repos/config.ts";
 
 export interface ResolvedRun {
-  /** name -> command, in start order: the whole set, borrowed procs included */
+  /** name -> command, in config order: the whole set, borrowed and pointed procs included */
   procs: Record<string, string>;
-  /** extra environment for every proc of the run (before `$VAR` expansion) */
-  env: Record<string, string>;
   /** which proc the preview iframe shows */
   preview: string | undefined;
-  /** the profile in effect, when the repo has profiles */
-  profile: string | undefined;
-  /** the shared tier: the procs marked `from: "trunk"`, in start order. Main runs these for
-   * every worktree of the repo. */
+  /** the shared tier as it reaches this worktree: the procs main runs for every worktree of the
+   * repo that this worktree's own file names too, in config order */
   shared: string[];
-  /** the shared procs this worktree reaches on main rather than running: the shared tier minus
-   * what it owns; always empty on main */
+  /** the shared procs this worktree reaches on main rather than running: the tier minus what it
+   * runs itself and what it points away; always empty on main */
   borrowed: string[];
-  /** the paths each shared proc flips on, as written; a proc absent here infers them */
+  /** proc -> the remote URL this worktree's page reaches instead of main's or its own, for the
+   * procs the record points at a remote the file still names; always empty on main */
+  pointed: Record<string, string>;
+  /** the globs each shared proc flips on, from the tier */
   paths: Record<string, string[]>;
 }
 
 /** the run of a worktree with nothing confirmed to run */
 export const EMPTY_RUN: ResolvedRun = {
   procs: {},
-  env: {},
   preview: undefined,
-  profile: undefined,
   shared: [],
   borrowed: [],
+  pointed: {},
   paths: {},
 };
 
-/** config.preview if it is one of the procs, else "web", else the first */
-function previewOf(procs: Record<string, string>, preferred: string | undefined): string | undefined {
-  if (preferred && preferred in procs) return preferred;
-  return procs.web ? "web" : Object.keys(procs)[0];
-}
-
-/** the shared tier as main runs it: the repo's file, narrowed by main's own profile, since a
- * shared proc main's profile leaves out is one nobody started */
-export function trunkOf(
-  repo: Pick<RepoInfo, "config" | "configFile">,
-  main: Pick<WorktreeInfo, "id" | "profile"> = { id: "main" },
-): Set<string> {
-  const cfg = { config: repo.config, file: repo.configFile };
-  return new Set(resolveRun(cfg, { ...main, kind: "main" }, NOTHING).shared);
-}
-
-const NOTHING: ReadonlySet<string> = new Set();
-
-/** `trunk` is the tier main runs, from the repo's file: a worktree whose own file marks a proc
- * shared borrows it only when main has one by that name to reach, and runs it itself otherwise,
- * since a forwarder with no proc behind it would hang the page on a server nobody started. */
+/** `tier` is what main runs for everyone, settled from the repo's file and main's tree: a proc the
+ * worktree's own file names is borrowed only when main has one by that name to reach, and runs
+ * here otherwise, since a forwarder with no proc behind it would hang the page on a server nobody
+ * started. */
 export function resolveRun(
   { config: cfg, file }: WorktreeConfig,
-  wt: Pick<WorktreeInfo, "id" | "profile" | "kind" | "owns">,
-  trunk: ReadonlySet<string>,
+  wt: Pick<WorktreeInfo, "id" | "kind" | "sources">,
+  tier: Record<string, TierProc>,
 ): ResolvedRun {
-  let names = Object.keys(cfg.run);
-  let env: Record<string, string> = {};
-  let profile: string | undefined;
-  let preferred = cfg.preview;
-  if (cfg.profiles && cfg.defaultProfile) {
-    let name = wt.profile ?? cfg.defaultProfile;
-    if (!(name in cfg.profiles)) {
-      // the file changed under a running worktree: run the default rather than nothing
-      log.warn(wt.id, `profile "${name}" is not in ${file}; running "${cfg.defaultProfile}"`);
-      name = cfg.defaultProfile;
-    }
-    const p = cfg.profiles[name]!;
-    names = p.run.filter((n) => cfg.run[n] !== undefined);
-    env = p.env ?? {};
-    profile = name;
-    preferred = p.preview ?? cfg.preview;
-  }
+  const names = Object.keys(cfg.run);
   const procs: Record<string, string> = {};
-  const shared: string[] = [];
+  for (const n of names) procs[n] = runCmd(cfg.run[n]!);
+  const shared = names.filter((n) => tier[n] !== undefined);
   const paths: Record<string, string[]> = {};
-  for (const n of names) {
-    const entry = cfg.run[n]!;
-    procs[n] = runCmd(entry);
-    if (!runShared(entry)) continue;
-    shared.push(n);
-    const p = runPaths(entry);
-    if (p) paths[n] = p;
+  for (const n of shared) paths[n] = tier[n]!.paths;
+  const pointed: Record<string, string> = {};
+  const owned = new Set<string>();
+  if (wt.kind !== "main") {
+    for (const [name, src] of Object.entries(wt.sources ?? {})) {
+      const entry = cfg.run[name];
+      if (entry === undefined) continue;
+      const remote = remoteOf(src.at);
+      if (remote !== undefined) {
+        const url = runRemotes(entry)[remote];
+        if (url) pointed[name] = url;
+        // the file lost the remote under a pointed worktree: main's is the one address that is there
+        else log.warn(wt.id, `"${name}" has no remote "${remote}" in ${file}; reaching it on main`);
+      } else if (ownedBy(src.at)) owned.add(name);
+    }
   }
-  const owns = new Set(wt.owns ?? []);
-  const borrowed = wt.kind === "main" ? [] : shared.filter((n) => trunk.has(n) && !owns.has(n));
-  return { procs, env, preview: previewOf(procs, preferred), profile, shared, borrowed, paths };
+  const borrowed = wt.kind === "main" ? [] : shared.filter((n) => !owned.has(n) && !(n in pointed));
+  return { procs, preview: previewProc(names, cfg.preview), shared, borrowed, pointed, paths };
 }
 
-/** `$VAR` / `${VAR}` in env values replaced from `vars` (the sibling-URL variables); references to
- * anything else stay as written, so a value meant for the shell to expand survives untouched */
-export function expandEnv(env: Record<string, string>, vars: Record<string, string>): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const [k, v] of Object.entries(env)) {
-    out[k] = v.replace(/\$(?:\{([A-Za-z_][A-Za-z0-9_]*)\}|([A-Za-z_][A-Za-z0-9_]*))/g, (m, a?: string, b?: string) => {
-      const name = a ?? b ?? "";
-      return name in vars ? vars[name]! : m;
-    });
-  }
-  return out;
+/** why a take-over happens: a person pressed, the agent asked ahead of an edit, or the worktree's
+ * changes touched the procs (the changed file per proc) */
+export type OwnWhy = { by: "hand" } | { by: "agent" } | { by: "edit"; files: Record<string, string> };
+
+/** the procs the worktree spawns itself: everything but what it borrows and what it points away */
+export function spawnsOf(run: ResolvedRun): string[] {
+  return Object.keys(run.procs).filter((n) => !run.borrowed.includes(n) && !(n in run.pointed));
 }

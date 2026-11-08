@@ -6,6 +6,7 @@ import {
   clientMsgSchema,
   FILE_MAX_CHARS,
   LOGIN_STREAM,
+  parseClientMsg,
   type RepoInfo,
   type ServerMsg,
   SHELL_STREAM,
@@ -1383,6 +1384,30 @@ describe("handlers", () => {
     await dispatch({ t: "create-worktree", repoId: r.id, prompt: "next" }, ctx, services);
     const next = services.state.worktrees.find((x) => x.kind === "worktree" && x.id !== fresh.id && x.id !== made.id)!;
     expect(agents.get(next.id)?.sent[0]?.context).toBeUndefined();
+  });
+
+  test("set-proc-source moves a worktree's page to a command's remote and back; the frame that picked a profile is gone", async () => {
+    const { services, ctx, repo } = make();
+    const r = await services.repos.register(repo);
+    r.needsSetup = false;
+    r.config = {
+      run: {
+        web: "true",
+        api: { cmd: "true", paths: ["server/**"], remotes: { stage: "https://api.stage.example.com" } },
+      },
+    };
+    r.tier = { api: { paths: ["server/**"], declared: true } };
+    services.state.save();
+    await dispatch({ t: "create-worktree", repoId: r.id, prompt: "x" }, ctx, services);
+    const made = services.state.worktrees.find((x) => x.kind === "worktree")!;
+    const move = (source: "main" | "here" | { remote: string }) =>
+      dispatch({ t: "set-proc-source", worktreeId: made.id, name: "api", source }, ctx, services);
+    await move({ remote: "stage" });
+    expect(services.state.requireWorktree(made.id).sources).toEqual({ api: { at: { remote: "stage" } } });
+    await expect(move({ remote: "prod" })).rejects.toBeInstanceOf(UserError);
+    await move("main");
+    expect(services.state.requireWorktree(made.id).sources).toBeUndefined();
+    expect(parseClientMsg({ t: "set-worktree-profile", worktreeId: made.id, profile: "x" }).ok).toBe(false);
   });
 
   test("create-worktree forwards the agent and takes the agent's picks; set-default-agent and the picks validate and persist", async () => {

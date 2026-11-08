@@ -182,6 +182,10 @@ export type ChatItem =
   | { kind: "restored"; archivedAt: number; branch: string; uncommitted: boolean; ts: number }
   /** the daemon's word on a take-over: the branch the worktree was found on, which stays its own */
   | { kind: "adopted"; branch: string; ts: number }
+  /** the daemon's word on a shared proc this worktree runs itself from here, and why */
+  | { kind: "owned"; names: string[]; by: "edit" | "agent" | "hand"; file?: string; ts: number }
+  /** a proc's own setup failed here, so the page keeps reaching main's */
+  | { kind: "own-failed"; name: string; cmd: string; exit: number | "timeout"; ts: number }
   /** the agent wants credentials; `done` once a login went through. `rejected`: it had a
    * credential and the provider refused it, so the error above this card says what went wrong */
   | {
@@ -426,8 +430,6 @@ export interface WorktreeLocal {
 export interface Draft {
   /** the agent that works on it: the daemon's default when main is selected */
   agent: string;
-  /** one of the repo's profiles; the repo's default when absent */
-  profile?: string;
   /** main's uncommitted changes move into the worktree */
   carry?: boolean;
 }
@@ -1662,7 +1664,6 @@ export type Action =
   /** main's uncommitted changes go into the worktree the box starts */
   | { a: "draft-carry"; v: boolean }
   | { a: "draft-agent"; id: string }
-  | { a: "draft-profile"; profile: string }
   /** show an archived worktree's page in the centre: what was kept, and the restore button */
   | { a: "open-archived"; id: string }
   | { a: "close-archived" }
@@ -1984,7 +1985,7 @@ function freshDraft(s: State): Draft {
  * an archived worktree's page, which is about something else. Checked after every action, so a
  * snapshot, a reload or a click that lands on the lead opens it the same way, and leaving it for
  * anything else drops it, the send included: the row becomes the task under the same id, and what
- * was chosen (the profile, moving main's changes) is spent. */
+ * was chosen (moving main's changes) is spent. */
 function withLauncher(s: State): State {
   const active = worktreeById(s, s.activeId);
   const launching = !!active && isLead(active.worktree) && !s.archivedPage && !isFirstRun(s);
@@ -2115,8 +2116,6 @@ function reduce(s: State, action: Action): State {
       return s.draft ? { ...s, draft: { ...s.draft, carry: action.v } } : s;
     case "draft-agent":
       return s.draft ? { ...s, draft: { ...s.draft, agent: action.id } } : s;
-    case "draft-profile":
-      return s.draft ? { ...s, draft: { ...s.draft, profile: action.profile } } : s;
     case "open-archived":
       return openArchivedPage(s, action.id);
     case "close-archived":
@@ -3807,6 +3806,13 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
       ];
     case "adopted":
       return [...items, { kind: "adopted", branch: event.branch, ts: event.ts }];
+    case "owned":
+      return [
+        ...items,
+        { kind: "owned", names: event.names, by: event.by, ...(event.file ? { file: event.file } : {}), ts: event.ts },
+      ];
+    case "own-failed":
+      return [...items, { kind: "own-failed", name: event.name, cmd: event.cmd, exit: event.exit, ts: event.ts }];
     case "agent-auth-required":
       return [
         ...items,

@@ -4,6 +4,7 @@
 import { existsSync } from "node:fs";
 import type {
   ArchivedWorktree,
+  Borrowed,
   LogLine,
   ManagedPolicy,
   ProcState,
@@ -26,6 +27,8 @@ import {
   previewContext,
   selfContext,
   standingContext,
+  type TierStanding,
+  tierContext,
   type WorkStanding,
   worktreeContext,
 } from "../agent/prompt.ts";
@@ -47,7 +50,7 @@ import { groupAlive, reclaimGroup } from "./kill.ts";
 import { bootId, type PsRow, psGroups } from "./memory.ts";
 import { type Orphan, orphansIn, strayAdapters, strayProcs } from "./orphans.ts";
 import { type PortLease, proxyPorts } from "./ports.ts";
-import { EMPTY_RUN, expandEnv, type ResolvedRun, resolveRun, trunkOf } from "./profile.ts";
+import { EMPTY_RUN, type ResolvedRun, resolveRun, spawnsOf } from "./profile.ts";
 import { type ProxyTarget, startProxy, type WorktreeProxy } from "./proxy.ts";
 import { type PtyHandle, type PtyOpts, PtyStream } from "./pty.ts";
 import { WorktreeProcs } from "./supervisor.ts";
@@ -74,6 +77,11 @@ export interface Runtime {
   /** the shared procs this worktree reaches on main rather than running; shrinks as it takes
    * them over, and is empty on main */
   borrowed: Set<string>;
+  /** proc -> the remote URL its page reaches instead of main's or its own; empty on main */
+  pointed: Map<string, string>;
+  /** pointed procs whose files this worktree has changed since: the page is not talking to those
+   * edits. Set by the flip's check, cleared by a take-over, a repoint or a stop. */
+  remoteBehind: Set<string>;
   /** null until a pane first opens it; survives hiding the pane, dies with the worktree */
   shell: PtyHandle | null;
   /** the agent's terminal login while it runs, and after it fails so its tab can say why */
@@ -103,6 +111,9 @@ export interface RuntimeDeps {
   /** where a worktree's work stands (its tree read now, its landed and PR marks), for the
    * paragraph behind every message; absent in tests */
   standing?: (worktreeId: string) => Promise<WorkStanding | null>;
+  /** what the worktree borrows, owns and points away, for the paragraph behind every message;
+   * absent in tests that have no tier */
+  tier?: (worktreeId: string) => TierStanding | null;
   /** the public name a front may forward preview ports under, and the gate they check
    * (core/remote.ts), as they stand now; absent in tests, where previews answer loopback only */
   remote?: () => Remote | null;
@@ -152,18 +163,24 @@ export interface RuntimeDeps {
   ) => PtyHandle;
 }
 
+/** the variable a proc's address is read from: `<NAME>_URL`, and `API_URL` for the one named api */
+export function urlVarOf(name: string): string {
+  return name === "api" ? "API_URL" : `${name.toUpperCase().replace(/[^A-Z0-9]/g, "_")}_URL`;
+}
+
 /** the sibling-URL variables a proc (or a shell) gets: `<NAME>_URL` and `VITE_<NAME>_URL` per
  * non-preview proc, plus `API_URL` for the one named api. A proc with a forwarder is reached
- * there, whether or not it is up yet; one without is reached where it runs, once it does. */
+ * there, whether or not it is up yet; one the page points at a remote is reached at that URL;
+ * one with neither is reached where it runs, once it does. */
 export function procUrlEnv(
   states: ProcState[],
   previewName: string | undefined,
   forwards: ReadonlyMap<string, number> = new Map(),
+  remotes: ReadonlyMap<string, string> = new Map(),
 ): Record<string, string> {
   const env: Record<string, string> = {};
-  const add = (name: string, port: number) => {
+  const add = (name: string, url: string) => {
     const urlVar = `${name.toUpperCase().replace(/[^A-Z0-9]/g, "_")}_URL`;
-    const url = `http://127.0.0.1:${port}`;
     env[urlVar] = url;
     env[`VITE_${urlVar}`] = url;
     if (name === "api") {
@@ -171,11 +188,12 @@ export function procUrlEnv(
       env.VITE_API_URL = url;
     }
   };
-  for (const [name, port] of forwards) add(name, port);
+  for (const [name, port] of forwards) add(name, `http://127.0.0.1:${port}`);
+  for (const [name, url] of remotes) add(name, url);
   for (const st of states) {
-    if (st.name === previewName || forwards.has(st.name)) continue;
+    if (st.name === previewName || forwards.has(st.name) || remotes.has(st.name)) continue;
     // a proc that ignored $PORT is reachable where it actually bound, not where it was told to
-    add(st.name, st.boundPort ?? st.port);
+    add(st.name, `http://127.0.0.1:${st.boundPort ?? st.port}`);
   }
   return env;
 }
@@ -249,6 +267,7 @@ function defaultAgent(
     worktreeId: wt.id,
     cwd: wt.path,
     preview: () => previewContext(preview()),
+    tier: () => tierContext(d.tier?.(wt.id) ?? null),
     // the live record, not `wt`: the title and branch move after the session is made
     self: () => {
       const w = d.state.worktrees.find((w) => w.id === wt.id);
@@ -769,6 +788,8 @@ export class RuntimeRegistry {
       forwards: new Map(),
       shared: new Set(),
       borrowed: new Set(),
+      pointed: new Map(),
+      remoteBehind: new Set(),
       shell: null,
       login: null,
     };
@@ -791,7 +812,7 @@ export class RuntimeRegistry {
     if (record.parked) return;
     // unconfirmed detection: no procs until the user confirms the setup pane
     const cfg = configFor(wt, repo);
-    const run = repo.needsSetup ? EMPTY_RUN : resolveRun(cfg, wt, this.trunkOf(repo));
+    const run = repo.needsSetup ? EMPTY_RUN : resolveRun(cfg, wt, repo.tier ?? {});
     const leads = wt.kind !== "main" || !this.deps.mainLeads || this.deps.mainLeads(wt.repoId);
     if (rt.procs) {
       if (leads && wt.kind === "main" && !rt.proxy) await this.startPage(rt, wt, repo, run);
@@ -818,7 +839,9 @@ export class RuntimeRegistry {
     rt.previewName = leads ? run.preview : undefined;
     rt.shared = new Set(run.shared);
     rt.borrowed = new Set(run.borrowed);
-    const spawn = leads ? Object.keys(run.procs).filter((n) => !rt.borrowed.has(n)) : run.shared;
+    rt.pointed = new Map(Object.entries(run.pointed));
+    rt.remoteBehind.clear();
+    const spawn = leads ? spawnsOf(run) : run.shared;
     await this.bringUp(rt, wt, repo, run, spawn);
 
     if (!this.deps.state.worktree(wt.id) || this.runtimes.get(wt.id) !== rt) {
@@ -838,18 +861,12 @@ export class RuntimeRegistry {
     }
   }
 
-  /** the shared tier as main runs it, for what a worktree may borrow */
-  private trunkOf(repo: RepoInfo): Set<string> {
-    const mainId = this.mainIdOf(repo.id);
-    return trunkOf(repo, mainId ? this.deps.state.worktree(mainId) : undefined);
-  }
-
   /** whether the worktree's procs would come up differently now: its settings or the trunk moved
    * under it. False while nothing runs. What the repo's reload asks before restarting a row. */
   runChanged(wt: WorktreeInfo, repo: RepoInfo): boolean {
     const now = this.runOf(wt.id);
     if (!now) return false;
-    const next = repo.needsSetup ? EMPTY_RUN : resolveRun(configFor(wt, repo), wt, this.trunkOf(repo));
+    const next = repo.needsSetup ? EMPTY_RUN : resolveRun(configFor(wt, repo), wt, repo.tier ?? {});
     return JSON.stringify(next) !== JSON.stringify(now);
   }
 
@@ -866,7 +883,7 @@ export class RuntimeRegistry {
       wt,
       repo,
       run,
-      Object.keys(run.procs).filter((n) => !up.has(n)),
+      spawnsOf(run).filter((n) => !up.has(n)),
     );
     if (this.runtimes.get(wt.id) !== rt) return;
     this.openProxy(rt, live, port);
@@ -921,32 +938,24 @@ export class RuntimeRegistry {
     this.starting.add(wt.id);
     try {
       for (const name of spawn) {
-        if (name !== previewName) await procs.start(name, run.procs[name]!, this.envFor(rt, wt, repo, run, name));
+        if (name !== previewName) await procs.start(name, run.procs[name]!, this.envFor(rt, wt, repo, name));
       }
       if (previewName && spawn.includes(previewName)) {
-        await procs.start(previewName, run.procs[previewName]!, this.envFor(rt, wt, repo, run, previewName));
+        await procs.start(previewName, run.procs[previewName]!, this.envFor(rt, wt, repo, previewName));
       }
     } finally {
       this.starting.delete(wt.id);
     }
   }
 
-  /** Every proc gets the profile env; a `$API_URL` in it resolves against the siblings'
-   * addresses, and the api proc itself gets no address of its own, so it sees the reference
-   * unexpanded. The worktree's own variables ride along, and the profile env may reference them
-   * the same way it references a sibling's URL. */
-  private envFor(
-    rt: Runtime,
-    wt: WorktreeInfo,
-    repo: RepoInfo,
-    run: ResolvedRun,
-    name: string,
-  ): Record<string, string> {
-    const urls = {
-      ...procUrlEnv(rt.procs?.states() ?? [], rt.previewName, forwardPorts(rt.forwards, name)),
+  /** Every proc gets its siblings' addresses, the forwarder's for one that has one and the remote
+   * URL for one the page points away, and the proc itself gets no address of its own. The
+   * worktree's own variables ride along. */
+  private envFor(rt: Runtime, wt: WorktreeInfo, repo: RepoInfo, name: string): Record<string, string> {
+    return {
+      ...procUrlEnv(rt.procs?.states() ?? [], rt.previewName, forwardPorts(rt.forwards, name), rt.pointed),
       ...worktreeEnv(wt, repo),
     };
-    return { ...urls, ...expandEnv(run.env, urls) };
   }
 
   /** the id of the repo's main checkout, whose shared tier a worktree borrows */
@@ -966,12 +975,80 @@ export class RuntimeRegistry {
     return rt?.run ? { ...rt.run, borrowed: [...rt.borrowed] } : undefined;
   }
 
+  /** whether the worktree's page points any proc at a remote */
+  points(id: string): boolean {
+    return (this.runtimes.get(id)?.pointed.size ?? 0) > 0;
+  }
+
+  /** whether the worktree has a live proc of that name, pending or spawned */
+  runs(id: string, name: string): boolean {
+    return (
+      this.runtimes
+        .get(id)
+        ?.procs?.states()
+        .some((p) => p.name === name) ?? false
+    );
+  }
+
+  /** the pointed procs whose files the worktree has changed since: what the chip warns about */
+  remoteBehind(id: string): string[] {
+    return [...(this.runtimes.get(id)?.remoteBehind ?? [])];
+  }
+
+  /** the flip's reading of the pointed procs, replacing the last; a row fact, so a change is a frame */
+  markRemoteBehind(id: string, names: string[]): void {
+    const rt = this.runtimes.get(id);
+    if (!rt) return;
+    const next = new Set(names.filter((n) => rt.pointed.has(n)));
+    if (next.size === rt.remoteBehind.size && [...next].every((n) => rt.remoteBehind.has(n))) return;
+    rt.remoteBehind = next;
+    this.deps.hub.emit("worktreesChanged");
+  }
+
+  /** what the worktree borrows, each with main's state of it: "cold" while main has not started
+   * its tier, so a copy's row can say that main's api is down rather than hide the proc */
+  borrowedStates(id: string): Borrowed[] {
+    const rt = this.runtimes.get(id);
+    if (!rt || rt.borrowed.size === 0) return [];
+    const mainId = this.mainIdOf(rt.info.repoId);
+    const states = mainId ? (this.runtimes.get(mainId)?.procs?.states() ?? []) : [];
+    return [...rt.borrowed].map((name) => {
+      const st = states.find((p) => p.name === name);
+      return st ? { name, status: st.status, ...(st.detail ? { detail: st.detail } : {}) } : { name, status: "cold" };
+    });
+  }
+
+  /** The named borrowed proc is about to be set up here before it runs: it takes its place among
+   * the worktree's procs as `starting` with `detail` saying which setup step, so its tab, the row
+   * and the chip can say why it is not up, while its forwarder keeps reaching main's until `own()`
+   * spawns into the place this made. A second call on the same name only moves the detail. */
+  preparing(id: string, name: string, command: string, detail: string): void {
+    const rt = this.runtimes.get(id);
+    if (!rt?.procs) return;
+    rt.procs.pending(name, command, detail);
+    this.deps.hub.emit("worktreesChanged");
+  }
+
+  /** a setup step's output for a pending proc: its tab and the log ring */
+  setupOutput(id: string, name: string, data: string): void {
+    this.runtimes.get(id)?.procs?.setupOutput(name, data);
+  }
+
+  /** the pending place goes: the setup failed and the proc stays main's */
+  async unprepare(id: string, name: string): Promise<void> {
+    const rt = this.runtimes.get(id);
+    if (!rt?.procs) return;
+    await rt.procs.drop(name);
+    this.deps.hub.emit("worktreesChanged");
+  }
+
   /** The forwarder in front of one proc: it dials the proc where it answers, waits while the proc
    * is starting or the worktree is waking, and a connection while asleep is the wake. A borrowed
    * proc is main's until the worktree runs one of its own, from which moment only its own counts,
    * so a crash of its own reads as a crash and never as main's page. */
   private openForward(wt: WorktreeInfo, procs: WorktreeProcs, name: string): ProcForwarder {
-    const own = () => procs.states().find((p) => p.name === name);
+    // a place held for the proc while its setup runs is not its own yet: main's keeps answering
+    const own = () => (procs.isPending(name) ? undefined : procs.states().find((p) => p.name === name));
     const trunk = () => {
       if (!this.runtimes.get(wt.id)?.borrowed.has(name)) return undefined;
       const mainId = this.mainIdOf(wt.repoId);
@@ -1067,11 +1144,8 @@ export class RuntimeRegistry {
     for (const name of names) {
       if (!rt.borrowed.has(name) || !run.procs[name]) continue;
       rt.borrowed.delete(name);
-      await rt.procs.start(
-        name,
-        run.procs[name]!,
-        this.envFor(rt, wt, this.deps.state.requireRepo(wt.repoId), run, name),
-      );
+      rt.remoteBehind.delete(name);
+      await rt.procs.start(name, run.procs[name]!, this.envFor(rt, wt, this.deps.state.requireRepo(wt.repoId), name));
       started.push(name);
     }
     if (started.length === 0) return;
@@ -1169,6 +1243,8 @@ export class RuntimeRegistry {
     rt.run = null;
     rt.configWatch?.();
     rt.configWatch = null;
+    rt.pointed.clear();
+    rt.remoteBehind.clear();
     proxy?.stop();
     this.stopForwards(rt);
     this.returnLease(id);
@@ -1298,8 +1374,12 @@ export class RuntimeRegistry {
   private openProcStream(id: string, stream: string, cols: number, rows: number): { snapshot: string; alive: boolean } {
     const procs = this.runtimes.get(id)?.procs;
     const pty = procs?.stream(stream);
-    // a tab can open before its proc has spawned (setup still running, or mid-restart): an empty
-    // snapshot is right, and the tab fills in when the proc starts streaming
+    // a proc being set up before its spawn has no pty yet: its tab starts from what the setup has
+    // printed and is not drawn as exited
+    const prelude = procs?.prelude(stream);
+    if (prelude !== undefined) return { snapshot: prelude, alive: true };
+    // a tab can open before its proc has spawned (mid-restart): an empty snapshot is right, and the
+    // tab fills in when the proc starts streaming
     if (!pty) return { snapshot: "", alive: false };
     if (pty.cols !== cols || pty.rows !== rows) procs?.resize(stream, cols, rows);
     return { snapshot: pty.snapshot(), alive: pty.alive };
@@ -1314,7 +1394,7 @@ export class RuntimeRegistry {
     return terminalEnv(
       process.env,
       worktreeEnv(wt, repo),
-      procUrlEnv(rt?.procs?.states() ?? [], rt?.previewName, forwardPorts(rt?.forwards ?? new Map())),
+      procUrlEnv(rt?.procs?.states() ?? [], rt?.previewName, forwardPorts(rt?.forwards ?? new Map()), rt?.pointed),
     );
   }
 
@@ -1363,7 +1443,7 @@ export class RuntimeRegistry {
     const wt = this.deps.state.worktree(id);
     if (wt?.parked) {
       const repo = this.deps.state.repos.find((r) => r.id === wt.repoId);
-      return repo && !repo.needsSetup && resolveRun(configFor(wt, repo), wt, this.trunkOf(repo)).preview
+      return repo && !repo.needsSetup && resolveRun(configFor(wt, repo), wt, repo.tier ?? {}).preview
         ? { status: "parked" }
         : null;
     }

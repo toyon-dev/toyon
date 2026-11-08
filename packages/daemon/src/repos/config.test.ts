@@ -231,11 +231,9 @@ describe("detectConfig", () => {
     });
   });
 
-  test("a valid toyon.json is confirmed as written, profiles included", () => {
+  test("a valid toyon.json is confirmed as written, the long form included", () => {
     const cfg = {
-      run: { api: "a", web: "w" },
-      profiles: { full: { run: ["api", "web"] }, fe: { run: ["web"], env: { X: "1" } } },
-      defaultProfile: "fe",
+      run: { api: { cmd: "a", setup: ["uv sync"], remotes: { stage: "https://api.stage.example.com" } }, web: "w" },
     };
     expect(detectConfig(repo({ "toyon.json": JSON.stringify(cfg) }))).toEqual({ config: cfg, needsSetup: false });
   });
@@ -248,9 +246,10 @@ describe("detectConfig", () => {
     expect(detectConfig(bad).needsSetup).toBe(true);
     expect(detectConfig(bad).config.run.web).toBe("npm run dev");
 
-    const typo = repo({ "toyon.json": JSON.stringify({ run: { web: "w" }, profiles: { a: { run: ["nope"] } } }) });
+    const typo = repo({ "toyon.json": JSON.stringify({ run: { web: "w", api: { cmd: "a", from: "main" } } }) });
     const t = readConfigFile(typo);
-    if (t && !t.ok) expect(t.reason).toMatch(/profiles\.a\.run: "nope" is not in run/);
+    expect(t?.ok).toBe(false);
+    if (t && !t.ok) expect(t.reason).toMatch(/run\.api/);
     expect(readConfigFile(repo({}))).toBeNull();
   });
 });

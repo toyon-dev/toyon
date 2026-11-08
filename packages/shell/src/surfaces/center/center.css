@@ -104,9 +104,21 @@
     gap: 6px;
     align-items: center;
   }
-  /* the shared choice reads under its command, the width of the row */
-  .setup-shared {
+  /* who runs a command, under its line and the width of the row: the chip, then what the saved
+     file comes to */
+  .setup-source {
     flex-basis: 100%;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .setup-source-hint {
+    min-width: 0;
+  }
+  /* a repo with one command has nothing to share: said once, where the second row would start */
+  .setup-tier-hint {
+    margin: 0;
   }
   /* what the worktrees would share, under the title: a sentence with its one action inline */
   .setup-shared-note {

@@ -21,7 +21,7 @@ Each agent signs in with its own login, from the chat. MCP servers run as each a
 
 ## Toyon's own tools
 
-Toyon serves two tools of its own to each agent over MCP, from the daemon on this machine. An agent gets them when it announces at session start that it takes an HTTP MCP server. Claude Code and Codex do; OpenCode gets them only if its own agent says so.
+Toyon serves three tools of its own to each agent over MCP, from the daemon on this machine. An agent gets them when it announces at session start that it takes an HTTP MCP server. Claude Code and Codex do; OpenCode gets them only if its own agent says so.
 
 **`worktrees`** lists the project's other worktrees, open and archived: title, branch, where the chat is on disk, and what the person first asked there. With a query it keeps only the worktrees whose title, branch or chat mention it, so an agent asked about a ticket finds the worktree that worked on it without knowing the branch.
 
@@ -34,6 +34,8 @@ Toyon serves two tools of its own to each agent over MCP, from the daemon on thi
 In plan mode the list shows at the head of the plan on the right, one line per piece, and you can read each piece and move it before you approve. Outside plan mode it is a card of its own. Nothing starts until you approve.
 
 A piece's text becomes the plan its worktree is born with: the new worktree starts with it as an approved plan, and its first message says who wrote it. A worktree made this way starts its agent at once, and its dev servers the first time you look at it.
+
+**`own`** takes a shared command over for this worktree before the edit that would flip it: the agent about to change the backend asks for its own `api` first, so the page it tests is already talking to its branch by the time the edit lands. The command's own setup runs first, on its terminal tab, and the chat says what moved and why. It cannot hand a command back to main or point it at a remote; those are the chip's under the box, and the row menu's. It refuses in plan mode, where nothing runs.
 
 The `/handoff` verb raises the same card from your own words, with no tool involved. `/handoff fix the footer` makes a piece for this project; leading with another open project's name, as the rail lists it, sends the piece there.
 

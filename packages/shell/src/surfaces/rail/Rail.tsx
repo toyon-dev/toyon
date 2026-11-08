@@ -13,7 +13,6 @@ import { type CSSProperties, useEffect, useMemo, useRef, useState } from "react"
 import { archivedItems, archivedState } from "../../state/actions/archive.ts";
 import { archiveWorktrees, discoveredItems, shipOp, worktreeItems } from "../../state/actions/worktree.ts";
 import { useDispatch, useSock, useStore, useStoreInstance, useUrls } from "../../state/context.tsx";
-import { profileOf } from "../../state/profiles.ts";
 import {
   useActiveId,
   useArchivedOpen,
@@ -609,17 +608,6 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
             {owned.worktree.mode}
           </span>
         )}
-        {owned &&
-          (() => {
-            // only the non-default profile is worth a tag: it is the one you need to notice
-            const repo = repoOf(owned);
-            const p = profileOf(owned.worktree, repo);
-            return p && p !== repo?.config.defaultProfile ? (
-              <span className="rail-badge badge-profile" data-tip={`runs the ${p} profile`}>
-                {p}
-              </span>
-            ) : null;
-          })()}
         {/* another project's name, in the dim tier before the counts: the one place the row says it
             is not this project's. No glyph; the name is the mark. */}
         {otherRepo && <span className="rail-guest row-dim">{otherRepo.name}</span>}

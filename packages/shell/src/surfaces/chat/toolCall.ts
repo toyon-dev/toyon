@@ -5,6 +5,7 @@ import {
   HANDOFF_TOOL,
   isWrittenKind,
   mcpTool,
+  OWN_TOOL,
   SHELL_TOOL,
   type Span,
   splitSpanLines,
@@ -93,6 +94,8 @@ const NAME_ICON = new Map<string, IconName>([
   // off" row it becomes; the worktrees tool lists the rail's rows and wears the rail's glyph.
   [HANDOFF_TOOL, "handoff"],
   [WORKTREES_TOOL, "worktrees"],
+  // the own tool starts a proc here: the glyph a command that runs wears
+  [OWN_TOOL, "run"],
   // the other half of ExitPlanMode, which the adapter kinds as a mode switch
   ["EnterPlanMode", "swap"],
 ]);
@@ -114,6 +117,13 @@ const CLAUDE_TOOL_KIND = new Map<string, ToolKind>([
   ["EnterPlanMode", "switch_mode"],
   ["ExitPlanMode", "switch_mode"],
 ]);
+
+/** what the own tool was asked to run here, as the row's line: `run api here` */
+function ownWords(call: ToolCall): string {
+  const names = call.input && typeof call.input === "object" ? (call.input as { names?: unknown }).names : undefined;
+  const list = Array.isArray(names) ? names.filter((n): n is string => typeof n === "string") : [];
+  return list.length > 0 ? `run ${list.join(", ")} here` : "run it here";
+}
 
 /** The tool a load fetched the schema of, which is the call that most likely comes next: Claude
  * keeps a seldom-used tool out of its prompt and loads it the moment before calling it. The first
@@ -333,7 +343,9 @@ export function toolLabel(call: ToolCall, roots: string[] = []): ToolRowText {
   const query = call.name === TOOL_SEARCH ? "" : field(call, "query");
   // a wakeup's line is what the agent said it was waiting on; the booked time is the row's status
   const reason = call.name === WAKEUP_TOOL ? field(call, "reason") : "";
-  const v = filePathOf(call) || command || field(call, "path") || field(call, "pattern") || query || reason;
+  // the own tool's line is what it runs here, which its input names; every borrowed proc when none
+  const owning = call.name === OWN_TOOL ? ownWords(call) : "";
+  const v = filePathOf(call) || command || field(call, "path") || field(call, "pattern") || query || reason || owning;
   // An MCP server's tool arrives with no kind and its wire name for a title (`mcp__Amplitude__
   // search_amp_entities`), which the adapter never replaces with words. The row reads it as two: the
   // server where the tool's name would go, and the tool's own name as words where the path or

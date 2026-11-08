@@ -28,7 +28,7 @@ Each copy runs under the file in its own tree, with your local overrides on top.
 
 - **`setup`**: commands run once, in order, when a copy is created.
 - **`teardown`**: commands run once, in order, when a copy is removed or archived, before its directory goes. A restored copy runs `setup` again.
-- **`run`**: the commands that keep running, by name. Each one is a process with its own terminal tab. A value is the command, or `{ "cmd": ..., "from": "trunk", "paths": [...] }` for one the main checkout runs for every copy; see "Sharing the backend".
+- **`run`**: the commands that keep running, by name. Each one is a process with its own terminal tab. A value is the command, or `{ "cmd": ..., "from": ..., "paths": [...], "setup": [...], "teardown": [...], "remotes": {...} }`: who runs it, what flips a copy to its own, the command's own setup and teardown, and the addresses a copy's page may point it at; see "Sharing the backend".
 - **`preview`**: which of them the preview shows. `web` when there is one, otherwise the first.
 - **`check`**: a command that must exit 0 before a copy is offered to land. It runs in the copy after every finished turn, and its output shows in the chat. A pass stands through a turn that leaves the files as they were checked, so it does not run again for a message that changed nothing.
 - **`land`**: how work lands.
@@ -38,81 +38,108 @@ Each copy runs under the file in its own tree, with your local overrides on top.
 - **`afterLand`**: commands run in the main checkout, in order, once work has landed: the build, the migration, the install you would otherwise remember to run. Nothing waits on them, and a failure stops the rest: the line that stopped it reads on the chat. Work that lands while they are running gets one more run once they finish.
 - **`timeouts`**: how long each kind of run may take before Toyon kills it, as `setup`, `check` and `commit`, each a duration like `"30m"`, `"90s"` or `"1h"`. Ten minutes each when unset. `setup` is per command; `commit` covers a commit with the hooks it runs, which is where a pre-commit suite lives. A suite that takes twenty minutes needs `"check": "30m"` and, if a hook runs it again, `"commit": "30m"`. While one runs, the word that waits on it says what it is on, how long it has been against the ceiling, and whether the daemon is still watching it; a run killed at the ceiling says what it gave up after.
 - **`cache`**: paths a copy builds that the next copy starts from, such as `node_modules`, `.mypy_cache` or `.testmondata`. Kept once `check` passes and cloned into every new copy before `setup` runs; see "Keeping what a copy built".
-- **`profiles`** and **`defaultProfile`**: named ways to run the project, such as the full stack or the page against staging. Each profile lists which `run` commands it starts, an `env` merged into each of them, and its own `preview`. `defaultProfile` is required once there are profiles, and each chat picks one from its profile menu.
 
 ## The contract
 
 Anything Toyon runs should stay in the foreground, listen on `$PORT`, and reload itself however it likes.
 
 - Each command gets its own `$PORT`.
-- Each command also gets the addresses of the others that are already up: `<NAME>_URL` and `VITE_<NAME>_URL`, plus `API_URL` for one named `api`. A profile's `env` can use them (`"BACKEND": "$API_URL"`).
+- Each command also gets the addresses of the others: `<NAME>_URL` and `VITE_<NAME>_URL`, plus `API_URL` for one named `api`. The address holds for the copy's life, whether the command runs here, on main, or at a remote the page points at.
 - A tool that takes its port from a flag gets the flag from the first guess: `--port $PORT --strictPort` for Vite, `--port $PORT` for Astro.
 - If a server still comes up on some other port, the preview follows it there and the process log says which flag to add. If it never listens at all, the preview says so instead of waiting.
 
 ## Sharing the backend
 
-Most changes touch the page and not the API behind it. A `run` entry with `"from": "trunk"` is the shared tier: the main checkout runs it once, on main's code, and every copy's page reaches that one at its usual `<NAME>_URL`. A copy whose own changes touch that command's files starts its own and the address quietly points there instead; a copy that only changes the page never pays for an API of its own. The page itself is never shared.
+Most changes touch the page and not the API behind it, so by default the main checkout runs every command but the page once, on its own working tree, and every copy's page reaches that one at its usual `<NAME>_URL`. A copy whose own changes touch that command's files starts its own and the address quietly points there instead; a copy that only changes the page never pays for an API of its own. The page itself is never shared.
+
+A command is shared when Toyon can tell what it runs on: `paths` you wrote, else the folder the command names (`server/**` for `node server/index.js`, `app/**` for `uvicorn app.main:app`, a folder a `cd` steps into). A command that names nothing Toyon can watch, or a file at the root alone (`node server.js`), runs in every copy, and the setup pane says so under it; give it `paths` to share it.
 
 ```json
 {
   "run": {
     "web": "vite --port $PORT --strictPort",
-    "api": { "cmd": "node --watch server.js", "from": "trunk", "paths": ["server/**"] },
-    "db": { "cmd": "docker compose up db", "from": "trunk", "paths": [] }
+    "api": { "cmd": "node --watch server/index.js", "paths": ["server/**", "lib/**"] },
+    "db": { "cmd": "docker compose up db", "paths": [] }
   }
 }
 ```
 
-`paths` are globs from the root that make a copy run its own. Left out, they are read off the command (`server.js`, a `cd` into a folder), and a command that names nothing flips on anything outside the page's folders. `[]` means the copy never runs its own, which suits a database container whose databases are per copy (below). Lockfiles, `.env` files, compose files and migration folders count for every command that can flip. A copy's row menu also offers the switch by hand, either way.
+`paths` are globs from the root that make a copy run its own. `[]` shares a command no change ever flips, which suits a database container whose databases are per copy (below). Lockfiles, `.env` files, compose files and migration folders count for every command that can flip. `"from": "trunk"` shares a command inference would not, which then flips on anything outside the page's folders; `"from": "copy"` keeps one in every copy.
 
-Main's shared tier is awake while any copy using it is, and sleeps with them. Nothing is shared until you say so: the setup pane has a "shared from main" box under each command but the page, off until you tick it.
+Main runs what is in its working tree, uncommitted files included. When main has uncommitted files, or main's copy of a command is down, every copy that reaches it says so where the command is named: the chip under the box, the command's terminal tab, and the paragraph the agent reads with each message.
+
+A copy's composer shows a chip per shared command: `api · main` while it reaches main's, `api · here` once it runs its own. Picking `here` starts it here, its own `setup` first if it has one; picking `main` stops the copy's own and reaches main's again, and anything it held of its own, a database, is not carried over. The row menu offers the same two for every command at once. The agent can ask for `here` too, through its `own` tool, so the server is already up when its edit lands.
+
+`remotes` names addresses the page can point at instead:
+
+```json
+{
+  "run": {
+    "api": { "cmd": "uv run uvicorn app.main:app --port $PORT", "remotes": { "stage": "https://api.stage.example.com" } }
+  }
+}
+```
+
+Each remote is a row on the chip. A copy pointed at a remote runs nothing for that command and its page talks to the address; its procs restart for the new URL. A pick wins over the flip, so once the copy's own changes touch the command the chip turns the held colour and says the page is not talking to them, with `here` the first row.
+
+Main's shared tier is awake while any copy using it is, and sleeps with them.
 
 ## Keeping copies apart
 
-Toyon does not know what a database is. Each copy runs your setup and your commands on its own, so a database, a compose stack or a cache they all point at is shared, migrations included. When the tree names one (a `DATABASE_URL` in an env file, a compose file at the root) and the settings name no copy, the setup pane says so and can ask the agent to write the recipe below; a land whose work changes migrations says so beside the word.
+Toyon does not know what a database is. A copy that runs a command itself runs it against whatever that command points at, so a database, a compose stack or a cache every copy points at is shared, migrations included. When the tree names one (a `DATABASE_URL` in an env file, a compose file at the root) and the settings name no copy, the setup pane says so and can ask the agent to write the recipe below; a land whose work changes migrations says so beside the word.
+
+A command's own `setup` and `teardown` run where the command runs: never on main, in a copy once it runs its own (at birth for a command every copy runs, at the flip for a shared one, with the page still reaching main's while it runs), and nowhere while the copy points the command at a remote. The top-level `setup` is the page's. A copy whose command's setup fails stays on main's and says so on the command's tab and in the chat.
 
 Every command, setup step, teardown step and terminal gets two variables to keep them apart:
 
 - `TOYON_WORKTREE`: the copy's id, for naming a database or a compose project of its own. Empty in the main checkout, which never runs `setup`, so `app${TOYON_WORKTREE:+_$TOYON_WORKTREE}` names the base database there and a copy's own everywhere else.
 - `TOYON_ROOT`: the main checkout, for copying over what git leaves behind.
 
-A Postgres database per copy, copied from a template and dropped when the copy goes. The copy is made while the spare warms, so it is there before you type; it takes as long and as much disk as the template is big, so keep the template seed-sized rather than a production dump. Postgres refuses to copy a database with connections open, which is why the template is its own database that nothing serves:
+A Postgres database per copy, copied from a template and dropped when the copy goes. It takes as long and as much disk as the template is big, so keep the template seed-sized rather than a production dump. Postgres refuses to copy a database with connections open, which is why the template is its own database that nothing serves:
 
 ```json
 {
-  "setup": ["npm install", "createdb -T app_template \"app_$TOYON_WORKTREE\""],
-  "teardown": ["dropdb --if-exists \"app_$TOYON_WORKTREE\""],
+  "setup": ["npm install"],
   "run": {
-    "web": "DATABASE_URL=\"postgres://localhost/app${TOYON_WORKTREE:+_$TOYON_WORKTREE}\" npm run dev"
+    "web": "npm run dev",
+    "api": {
+      "cmd": "DATABASE_URL=\"postgres://localhost/app${TOYON_WORKTREE:+_$TOYON_WORKTREE}\" node server/index.js",
+      "setup": ["createdb -T app_template \"app_$TOYON_WORKTREE\"", "DATABASE_URL=\"postgres://localhost/app_$TOYON_WORKTREE\" npm run migrate"],
+      "teardown": ["dropdb --if-exists \"app_$TOYON_WORKTREE\""]
+    }
   }
 }
 ```
 
-A migration step in `setup` needs the same `DATABASE_URL` in front of it, since `setup` does not see what `run` sets.
+A migration step in `setup` needs the same `DATABASE_URL` in front of it, since `setup` does not see what `cmd` sets.
 
 A Neon branch per copy is the same recipe with a branch in place of a copy: instant, copy-on-write, data included. The commands need to know the project: run `neon link` once in the checkout, or add `--project-id` to each. The `neonctl` package installs both `neon` and `neonctl`.
 
 ```json
 {
-  "setup": ["neonctl branches create --name \"wt_$TOYON_WORKTREE\" --parent main"],
-  "teardown": ["neonctl branches delete \"wt_$TOYON_WORKTREE\""],
   "run": {
-    "web": "DATABASE_URL=\"$(neonctl connection-string \"wt_$TOYON_WORKTREE\")\" npm run dev"
+    "web": "npm run dev",
+    "api": {
+      "cmd": "DATABASE_URL=\"$(neonctl connection-string \"wt_$TOYON_WORKTREE\")\" node server/index.js",
+      "setup": ["neonctl branches create --name \"wt_$TOYON_WORKTREE\" --parent main"],
+      "teardown": ["neonctl branches delete \"wt_$TOYON_WORKTREE\""]
+    }
   }
 }
 ```
 
-A compose stack per copy, under its own project name. Ports the stack publishes on the host still collide, so leave them unpublished or take them from the environment:
+A compose stack per copy, under its own project name, marked `"from": "copy"` so main never runs one for everyone. Ports the stack publishes on the host still collide, so leave them unpublished or take them from the environment:
 
 ```json
 {
-  "teardown": ["docker compose -p \"app_$TOYON_WORKTREE\" down -v"],
   "run": {
-    "db": "docker compose -p \"app_$TOYON_WORKTREE\" up",
+    "db": { "cmd": "docker compose -p \"app_$TOYON_WORKTREE\" up", "from": "copy", "teardown": ["docker compose -p \"app_$TOYON_WORKTREE\" down -v"] },
     "web": "npm run dev"
   }
 }
 ```
+
+A compose stack every copy shares, with a database per copy inside it, is `{ "cmd": "docker compose up db", "paths": [] }` instead: main runs the container once, and each copy's `api` makes and drops its own database in it.
 
 A SQLite file copied from the main checkout:
 

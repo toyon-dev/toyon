@@ -4,6 +4,7 @@ import { basename, dirname, join } from "node:path";
 import { sh } from "../../test/helpers/tmp-repo.ts";
 import {
   adoptDir,
+  counted,
   foreignWorktree,
   foundId,
   noSelf,
@@ -21,7 +22,7 @@ import { withRepoLock } from "../git/lock.ts";
 import { RepoRegistry } from "../repos/registry.ts";
 import { WorktreeService } from "./service.ts";
 
-// Real git in a throwaway repo, the world in test/helpers/world.ts. A project's rows from registering on: creating, removing, its settings and profiles, and what a turn's end redetects.
+// Real git in a throwaway repo, the world in test/helpers/world.ts. A project's rows from registering on: creating, removing, its settings, and what a turn's end redetects.
 
 useWorld();
 
@@ -515,73 +516,154 @@ describe("confirmConfig", () => {
   });
 });
 
-describe("profiles", () => {
-  const profiled = {
-    run: { api: "true", web: "true" },
-    profiles: { full: { run: ["api", "web"] }, fe: { run: ["web"] } },
-    defaultProfile: "fe",
-  };
-  async function registeredWithProfiles(): Promise<string> {
+describe("the shared tier", () => {
+  const names = (id: string) => w.procs.get(id)!.started.map((p) => p.name);
+  /** a repo whose api main runs for every copy, with its own setup writing where and as whom it ran */
+  async function tiered(setup: string[], extra: Record<string, unknown> = {}): Promise<string> {
     const repoId = await registered();
-    w.state.requireRepo(repoId).config = profiled;
+    const repo = w.state.requireRepo(repoId);
+    repo.config = {
+      run: {
+        web: "true",
+        api: { cmd: "true", paths: ["server/**"], setup, ...extra },
+      },
+    };
+    repo.tier = { api: { paths: ["server/**"], declared: true } };
     w.state.save();
     return repoId;
   }
-  const names = (id: string) => w.procs.get(id)!.started.map((p) => p.name);
+  const seen = (file: string) => readFileSync(join(w.repo, file), "utf8");
 
-  test("create runs the requested profile; a claimed spare restarts under it and keeps its agent", async () => {
-    const repoId = await registeredWithProfiles();
-    await w.worktrees.spare.ensure(repoId);
-    const spare = w.state.worktrees.find((x) => x.kind === "spare")!;
-    expect(names(spare.id)).toEqual(["web"]); // warmed under the default
-    const spareProcs = w.procs.get(spare.id)!;
-    const spareAgent = w.agents.get(spare.id)!;
-    const wt = await w.worktrees.create(repoId, "full stack task", { profile: "full" });
+  test("ownProcs runs the proc's setup on its tab first, then records why and starts it; the page kept main's meanwhile", async () => {
+    const repoId = await tiered([`printf '%s' "$TOYON_WORKTREE" > "$TOYON_ROOT/PREPARED"`, "true"]);
+    const wt = await w.worktrees.create(repoId, "task");
     await settle();
-    expect(wt.id).toBe(spare.id);
-    expect(wt.profile).toBe("full");
-    expect(spareProcs.stopped).toBe(true);
-    expect(names(wt.id)).toEqual(["api", "web"]);
-    expect(w.runtime.get(wt.id)?.agent).toBe(spareAgent);
-    expect(spareAgent.sent[0]?.text).toBe("full stack task");
-    // the default profile claims without a restart
-    await settle();
-    const wt2 = await w.worktrees.create(repoId, "fe task");
-    await settle();
-    expect(wt2.profile).toBeUndefined();
-    expect(w.procs.get(wt2.id)!.stopped).toBe(false);
+    expect(names(wt.id)).toEqual(["web"]);
+    expect(w.worktrees.tierStanding(wt.id)?.procs.map((p) => [p.name, p.source])).toEqual([["api", "main"]]);
+    await w.worktrees.ownProcs(wt.id, ["api"], { by: "agent" });
+    expect(seen("PREPARED")).toBe(wt.id);
+    expect(wt.sources).toEqual({ api: { at: { by: "agent" }, prepared: true } });
+    const procs = w.procs.get(wt.id)!;
+    expect(procs.pendings.map((p) => p.detail)).toEqual([
+      'setup: printf \'%s\' "$TOYON_WORKTREE" > "$TOYON_ROOT/PREPARED"',
+      "setup: true",
+    ]);
+    expect(names(wt.id)).toEqual(["web", "api"]);
+    const notes = w.agents.get(wt.id)!.recorded.filter((e) => e.type === "owned");
+    expect(notes).toMatchObject([{ type: "owned", names: ["api"], by: "agent" }]);
+    expect(w.worktrees.tierStanding(wt.id)?.procs[0]).toMatchObject({ source: "here", reason: { by: "agent" } });
   });
 
-  test("an unknown profile is a UserError before anything is created", async () => {
-    const repoId = await registeredWithProfiles();
-    const before = w.state.worktrees.length;
-    await expect(w.worktrees.create(repoId, "x", { profile: "nope" })).rejects.toBeInstanceOf(UserError);
-    expect(w.state.worktrees.length).toBe(before);
-    const wt = await w.worktrees.create(repoId, "x");
-    expect(() => w.worktrees.setProfile(wt.id, "nope")).toThrow(UserError);
+  test("a setup that fails leaves the proc main's, says so on the tab and the transcript, and the press reads it as a toast", async () => {
+    const repoId = await tiered(["exit 3"]);
+    const wt = await w.worktrees.create(repoId, "task");
+    await settle();
+    await expect(w.worktrees.ownProcs(wt.id, ["api"])).rejects.toThrow(/api setup failed \(exit 3\): exit 3/);
+    expect(wt.sources).toBeUndefined();
+    expect(names(wt.id)).toEqual(["web"]);
+    expect(w.procs.get(wt.id)!.dropped).toEqual(["api"]);
+    expect(w.procs.get(wt.id)!.outputs.at(-1)?.[1]).toContain(
+      "api setup failed (exit 3): exit 3; the page still reaches main's api",
+    );
+    expect(w.agents.get(wt.id)!.recorded.filter((e) => e.type === "own-failed")).toMatchObject([
+      { name: "api", cmd: "exit 3", exit: 3 },
+    ]);
+    // the flip's path swallows it: the transcript already says
+    await w.worktrees.ownProcs(wt.id, ["api"], { by: "edit", files: { api: "server/x.js" } });
+    expect(wt.sources).toBeUndefined();
   });
 
-  test("setProfile restarts only that worktree's procs and persists the choice", async () => {
-    const repoId = await registeredWithProfiles();
+  test("a command every copy runs gets its setup at birth; a shared one waits for the flip; a re-own skips what ran", async () => {
+    const repoId = await tiered([`printf '%s\n' api >> "$TOYON_ROOT/RAN"`], {});
+    const repo = w.state.requireRepo(repoId);
+    repo.config.run.worker = { cmd: "true", from: "copy", setup: [`printf '%s\n' worker >> "$TOYON_ROOT/RAN"`] };
+    w.state.save();
+    const wt = await w.worktrees.create(repoId, "task");
+    await settle();
+    expect(wt.sources).toEqual({ worker: { prepared: true } });
+    expect(seen("RAN")).toBe("worker\n");
+    expect(names(wt.id)).toEqual(["worker", "web"]);
+    await w.worktrees.ownProcs(wt.id, ["api"]);
+    expect(seen("RAN")).toBe("worker\napi\n");
+    expect(wt.sources).toEqual({ worker: { prepared: true }, api: { at: { by: "hand" }, prepared: true } });
+    await w.worktrees.setProcSource(wt.id, "api", "main");
+    expect(wt.sources).toEqual({ worker: { prepared: true }, api: { prepared: true } });
+    await w.worktrees.setProcSource(wt.id, "api", "here");
+    // the database it made is still there: no second setup
+    expect(seen("RAN")).toBe("worker\napi\n");
+    expect(wt.sources?.api).toEqual({ at: { by: "hand" }, prepared: true });
+  });
+
+  test("a remote persists the pick, drops an own flag, restarts only that worktree's procs, and refuses what it must", async () => {
+    const repoId = await tiered([], { remotes: { stage: "https://api.stage.example.com" } });
     const a = await w.worktrees.create(repoId, "a");
     const b = await w.worktrees.create(repoId, "b");
     await settle();
+    await w.worktrees.ownProcs(a.id, ["api"]);
     const aProcs = w.procs.get(a.id)!;
     const bProcs = w.procs.get(b.id)!;
     const agent = w.runtime.get(a.id)!.agent;
-    w.worktrees.setProfile(a.id, "full");
+    await expect(w.worktrees.setProcSource(a.id, "api", { remote: "prod" })).rejects.toBeInstanceOf(UserError);
+    await expect(w.worktrees.setProcSource(a.id, "nope", { remote: "stage" })).rejects.toBeInstanceOf(UserError);
+    const main = w.state.worktrees.find((x) => x.kind === "main")!;
+    await expect(w.worktrees.setProcSource(main.id, "api", { remote: "stage" })).rejects.toBeInstanceOf(UserError);
+    await w.worktrees.setProcSource(a.id, "api", { remote: "stage" });
     await settle();
-    expect(a.profile).toBe("full");
+    expect(a.sources).toEqual({ api: { at: { remote: "stage" } } });
     expect(aProcs.stopped).toBe(true);
-    expect(names(a.id)).toEqual(["api", "web"]);
     expect(bProcs.stopped).toBe(false);
     expect(w.runtime.get(a.id)!.agent).toBe(agent);
-    expect(w.state.worktree(a.id)?.profile).toBe("full");
-    // same profile again: nothing happens
+    expect(w.procs.get(a.id)!.started[0]?.env.API_URL).toBe("https://api.stage.example.com");
+    expect(w.worktrees.tierStanding(a.id)?.procs[0]?.source).toEqual({
+      remote: "stage",
+      url: "https://api.stage.example.com",
+    });
+    // the flip's own path refuses a pointed proc; the chip's move to here goes through the pick
+    await expect(w.worktrees.ownProcs(a.id, ["api"])).rejects.toThrow(/points at stage here/);
+    // the same pick again changes nothing
     const after = w.procs.get(a.id)!;
-    w.worktrees.setProfile(a.id, "full");
+    await w.worktrees.setProcSource(a.id, "api", { remote: "stage" });
     await settle();
     expect(w.procs.get(a.id)).toBe(after);
+    await w.worktrees.setProcSource(a.id, "api", "main");
+    await settle();
+    expect(a.sources).toBeUndefined();
+    expect(w.worktrees.tierStanding(a.id)?.procs[0]?.source).toBe("main");
+    // from a remote to its own: the setup runs where birth's would, and the procs restart with it
+    await w.worktrees.setProcSource(a.id, "api", { remote: "stage" });
+    await settle();
+    await w.worktrees.setProcSource(a.id, "api", "here");
+    await settle();
+    expect(a.sources).toEqual({ api: { at: { by: "hand" } } });
+    expect(names(a.id)).toContain("api");
+  });
+
+  test("teardown runs a prepared proc's own steps before the repo's, and forgets what was prepared", async () => {
+    const repoId = await tiered(["true"], { teardown: [`printf '%s\n' api >> "$TOYON_ROOT/TORN"`] });
+    const repo = w.state.requireRepo(repoId);
+    repo.config.teardown = [`printf '%s\n' repo >> "$TOYON_ROOT/TORN"`];
+    w.state.save();
+    const wt = await w.worktrees.create(repoId, "task");
+    await settle();
+    await w.worktrees.ownProcs(wt.id, ["api"]);
+    expect(wt.sources?.api?.prepared).toBe(true);
+    await w.worktrees.archiveWorktree(wt.id);
+    expect(seen("TORN")).toBe("api\nrepo\n");
+  });
+
+  test("tierStanding carries main's dirty count and main's state of what is borrowed", async () => {
+    const repoId = await tiered([]);
+    const wt = await w.worktrees.create(repoId, "task");
+    await settle();
+    writeFileSync(join(w.repo, "scratch.txt"), "x");
+    await counted();
+    const t = w.worktrees.tierStanding(wt.id)!;
+    expect(t.mainDirty).toBe(1);
+    expect(t.procs[0]).toMatchObject({ name: "api", source: "main", paths: ["server/**"], declared: true });
+    // main's tier is cold until main is started for the borrower
+    expect(["cold", "running"]).toContain(t.procs[0]?.status ?? "cold");
+    const main = w.state.worktrees.find((x) => x.kind === "main")!;
+    expect(w.worktrees.tierStanding(main.id)).toBeNull();
   });
 });
 

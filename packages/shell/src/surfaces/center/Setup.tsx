@@ -13,15 +13,13 @@ import {
   type MergeMethod,
   PR_MERGERS,
   type RepoInfo,
-  runCmd,
-  runShared,
+  type RunProc,
 } from "@toyon/shared";
 import { useEffect, useState } from "react";
 import { useSock, useStore, useStoreInstance } from "../../state/context.tsx";
 import { openSource } from "../../state/openSource.ts";
 import { trunkOf } from "../../state/store.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
-import { Check } from "../../ui/Check.tsx";
 import { ChipPicker } from "../../ui/ChipPicker.tsx";
 import { Field, TextArea } from "../../ui/Field.tsx";
 import { FormRow } from "../../ui/FormRow.tsx";
@@ -29,14 +27,29 @@ import { Icon } from "../../ui/Icon.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
 import { View } from "../../ui/View.tsx";
 import { keepApartPrompt, setupFixPrompt } from "./fixPrompt.ts";
+import { type From, SHARING, tierHint } from "./setupHints.ts";
 
-/** `shared`: main runs it once for every worktree (`from: "trunk"` in the file); off unless the
- * file says so, since whether a worktree's backend edit shows is then a guess about paths */
-type Proc = { id: number; name: string; cmd: string; shared: boolean };
+/** `from`: who runs it, as the file says it (`auto` when the file says nothing: main runs it when
+ * Toyon can place its files). `rest` is what else the file's long form carries (paths, setup,
+ * teardown, remotes): the pane edits none of it, and a save writes it back as it was, since the
+ * agent and the file are where a recipe is written. */
+type Proc = { id: number; name: string; cmd: string; from: From; rest: Omit<RunProc, "cmd" | "from"> };
 
 /** rows are added and removed while the form is open, so each carries an identity of its own */
 let nextProcId = 1;
-const proc = (name: string, cmd: string, shared = false): Proc => ({ id: nextProcId++, name, cmd, shared });
+const proc = (name: string, cmd: string, from: From = "auto", rest: Proc["rest"] = {}): Proc => ({
+  id: nextProcId++,
+  name,
+  cmd,
+  from,
+  rest,
+});
+/** a row from the file's entry, whichever form it took */
+function procOf(name: string, entry: RunProc | string): Proc {
+  if (typeof entry === "string") return proc(name, entry);
+  const { cmd, from, ...rest } = entry;
+  return proc(name, cmd, from ?? "auto", rest);
+}
 
 /** committed or kept local: the one setup answer that is about the file rather than the project.
  * Said as the outcome, since the file names alone (settings.json, settings.local.json) do not say
@@ -72,11 +85,7 @@ export function Setup({ repo, onClose }: { repo: RepoInfo; onClose?: () => void 
   // read once: the form remounts on a fresh guess (see Center), so mount is the guess
   const [guessed] = useState(() => Object.keys(repo.config.run).length > 0);
   const [procs, setProcs] = useState<Proc[]>(() => {
-    // sharing is opted into per proc: a fresh confirm runs everything in every worktree, the way
-    // it always has, and a file says which procs the trunk runs for everyone
-    const detected = Object.entries(repo.config.run).map(([name, entry]) =>
-      proc(name, runCmd(entry), runShared(entry)),
-    );
+    const detected = Object.entries(repo.config.run).map(([name, entry]) => procOf(name, entry));
     return detected.length > 0 ? detected : [proc("web", "")];
   });
   const [install, setInstall] = useState(() => (repo.config.setup ?? []).join("\n"));
@@ -109,7 +118,7 @@ export function Setup({ repo, onClose }: { repo: RepoInfo; onClose?: () => void 
       .filter(Boolean);
   const setupLines = () => lines(install);
   const teardownLines = () => lines(teardown);
-  // keys the pane does not edit (preview, profiles) survive a hand-written file; a value at its
+  // keys the pane does not edit (preview) survive a hand-written file; a value at its
   // default leaves the file rather than being written out, so the file stays as short as it was
   const edited = (): typeof repo.config => {
     const { check: _check, land: _land, teardown: _teardown, ...rest } = repo.config;
@@ -139,7 +148,16 @@ export function Setup({ repo, onClose }: { repo: RepoInfo; onClose?: () => void 
         run: Object.fromEntries(
           procs
             .filter((p) => p.name.trim() && p.cmd.trim())
-            .map((p, i) => [p.name.trim(), p.shared && i > 0 ? { cmd: p.cmd.trim(), from: "trunk" } : p.cmd.trim()]),
+            .map((p, i) => {
+              // the first row is the page, which no `from` applies to; the string form where the
+              // long one would carry nothing
+              const entry: RunProc = {
+                ...p.rest,
+                cmd: p.cmd.trim(),
+                ...(i > 0 && p.from !== "auto" ? { from: p.from } : {}),
+              };
+              return [p.name.trim(), Object.keys(entry).length === 1 ? entry.cmd : entry];
+            }),
         ),
       },
       kind,
@@ -161,8 +179,9 @@ export function Setup({ repo, onClose }: { repo: RepoInfo; onClose?: () => void 
   // what a database is), so the line says what will happen and hands the writing to the agent.
   const services = repo.services;
   const apart =
-    [install, teardown, ...procs.map((p) => p.cmd)].some((c) => c.includes("TOYON_WORKTREE")) ||
-    keepsCopiesApart(repo.config);
+    [install, teardown, ...procs.flatMap((p) => [p.cmd, ...(p.rest.setup ?? []), ...(p.rest.teardown ?? [])])].some(
+      (c) => c.includes("TOYON_WORKTREE"),
+    ) || keepsCopiesApart(repo.config);
   const sharedWhat = services
     ? [
         services.envUrl ? `the database at ${services.envUrl.name} in ${services.envUrl.file}` : null,
@@ -171,9 +190,15 @@ export function Setup({ repo, onClose }: { repo: RepoInfo; onClose?: () => void 
         .filter(Boolean)
         .join(" and ")
     : "";
+  const shared = procs.filter((p, i) => i > 0 && p.from !== "copy" && p.name.trim()).map((p) => p.name.trim());
   const askApart = () =>
     services &&
-    sock?.send({ t: "create-worktree", clientId, repoId: repo.id, prompt: keepApartPrompt(repo, file, services) });
+    sock?.send({
+      t: "create-worktree",
+      clientId,
+      repoId: repo.id,
+      prompt: keepApartPrompt(repo, file, services, shared),
+    });
 
   const procRow = (p: Proc, i: number) => (
     <div className="setup-proc" key={p.id}>
@@ -197,15 +222,22 @@ export function Setup({ repo, onClose }: { repo: RepoInfo; onClose?: () => void 
         onChange={(e) => edit(i, { cmd: e.target.value })}
       />
       {multi && <IconButton icon="close" label="Remove" onClick={() => setProcs(procs.filter((_, j) => j !== i))} />}
+      {/* who runs it, under its line: main for everyone by default when Toyon can place its files,
+          and the file's word when it has one; the hint says what the saved file comes to */}
       {multi && i > 0 && (
-        <Check
-          className="setup-shared"
-          checked={p.shared}
-          onChange={(e) => edit(i, { shared: e.target.checked })}
-          tip="Main runs it once for every worktree; a worktree whose changes touch it runs its own"
-        >
-          shared from main
-        </Check>
+        <div className="setup-source">
+          <ChipPicker<From>
+            value={p.from}
+            options={SHARING}
+            onChange={(from) => edit(i, { from })}
+            hint="whether main runs it once for every worktree"
+            placeholder="who runs it"
+          />
+          {(() => {
+            const hint = tierHint(p.name, p.cmd, p.from, repo);
+            return hint ? <span className="hint setup-source-hint">{hint}</span> : null;
+          })()}
+        </div>
       )}
     </div>
   );
@@ -331,6 +363,12 @@ export function Setup({ repo, onClose }: { repo: RepoInfo; onClose?: () => void 
           <div className="form-control">{procRow(p, i + 1)}</div>
         </div>
       ))}
+      {!multi && (
+        <div className="form-row">
+          <span className="form-label" />
+          <span className="hint setup-tier-hint">one command: every worktree runs its own</span>
+        </div>
+      )}
       <div className="form-row">
         <span className="form-label" />
         <Button tone="quiet" onClick={() => setProcs([...procs, proc("", "")])}>
@@ -383,9 +421,7 @@ export function Setup({ repo, onClose }: { repo: RepoInfo; onClose?: () => void 
             variant="outline"
             size="lg"
             disabled={!canStart}
-            {...(onClose
-              ? tip("Restarts every worktree of this repo. Profiles and other keys in the file are kept.")
-              : {})}
+            {...(onClose ? tip("Restarts every worktree of this repo. Other keys in the file are kept.") : {})}
             onClick={start}
           >
             {onClose ? "save + restart" : "start"} <Icon name="forward" className="icon-inline" />

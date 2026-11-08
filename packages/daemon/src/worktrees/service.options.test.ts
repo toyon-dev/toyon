@@ -100,27 +100,19 @@ describe("the picks for new worktrees", () => {
     expect([other.agent, other.model, other.effort]).toEqual(["codex", "gpt", undefined]);
   });
 
-  test("a repo's picks fill the mode and profile a create leaves blank; a profile the file lost is left out", async () => {
+  test("a repo's picks fill the mode a create leaves blank", async () => {
     const repo = await w.repos.register(w.repo);
     repo.needsSetup = false;
-    repo.config = {
-      run: { web: "true", api: "true" },
-      profiles: { full: { run: ["api", "web"] }, fe: { run: ["web"] } },
-    };
+    repo.config = { run: { web: "true", api: "true" } };
     w.state.save();
     expect(() => w.state.setRepoPick(repo.id, "mode", "loud")).toThrow(UserError);
-    expect(() => w.state.setRepoPick(repo.id, "profile", "nope")).toThrow(UserError);
     w.state.setRepoPick(repo.id, "mode", "ask");
-    w.state.setRepoPick(repo.id, "profile", "fe");
     const picked = await w.worktrees.create(repo.id, "task", { title: "Picked" });
-    expect([picked.mode, picked.profile]).toEqual(["ask", "fe"]);
-    const named = await w.worktrees.create(repo.id, "task", { title: "Named", mode: "plan", profile: "full" });
-    expect([named.mode, named.profile]).toEqual(["plan", "full"]);
-    delete repo.config.profiles?.fe;
-    const lost = await w.worktrees.create(repo.id, "task", { title: "Lost" });
-    expect([lost.mode, lost.profile]).toEqual(["ask", undefined]);
+    expect(picked.mode).toBe("ask");
+    const named = await w.worktrees.create(repo.id, "task", { title: "Named", mode: "plan" });
+    expect(named.mode).toBe("plan");
     w.state.setRepoPick(repo.id, "mode", "");
-    expect(w.state.requireRepo(repo.id).picks).toEqual({ profile: "fe" });
+    expect(w.state.requireRepo(repo.id).picks).toBeUndefined();
   });
 
   test("a pick is relisted against the agent's list as last learned: a renamed model is followed, a dropped one is left out", () => {

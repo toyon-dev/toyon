@@ -3,7 +3,17 @@
 // it; the others get it prepended to the first prompt of a session.
 
 import type { ContentBlock } from "@agentclientprotocol/sdk/unstable";
-import type { FileRef, ImageRef, LogLine, PasteRef, PickRef, ProcState, ProcStatus, PrState } from "@toyon/shared";
+import type {
+  FileRef,
+  ImageRef,
+  LogLine,
+  Owned,
+  PasteRef,
+  PickRef,
+  ProcState,
+  ProcStatus,
+  PrState,
+} from "@toyon/shared";
 import { attachmentLabel, clipOutput, fmtBytes, lineSpan } from "@toyon/shared";
 import { NAME_SHAPE } from "../worktrees/naming.ts";
 import type { Stored } from "./attachments.ts";
@@ -24,7 +34,8 @@ export const SYSTEM_APPEND = [
   "`@some/path` in a message means read that file or directory first; `@changes` means this worktree's uncommitted files, which `git status` lists; `@<branch>` names another worktree of this project, and the context attached to the message says where its chat is on disk.",
   "Toyon knows every worktree by a title and a branch; its directory, `wt-xxxx`, is an id that outlives both. When you name this worktree or another in prose, use its title in quotes or its branch, never the directory: the context attached to each message gives this worktree's title and branch, and a sibling's when the message names it.",
   "To find which worktree of this project worked on a topic, a ticket or a feature, or to see what is open and what was archived, call the `worktrees` tool when you have one: it lists them by title and branch with where each chat is on disk, and with a `query` it keeps only those whose title, branch or chat mention it. `git worktree list` knows neither titles nor chats, so it cannot answer that.",
-  'Toyon previews the project in a browser panel by running the commands in its settings file, .toyon/settings.json (or toyon.json at the repo root, in a repo that keeps it there), shaped like {"setup": ["bun install"], "run": {"web": "bun run dev --port $PORT"}, "check": "bun run check"}: setup runs once in every new worktree, teardown (optional) runs once when a worktree is removed, every command in run keeps running and must listen on $PORT, which toyon sets differently for each worktree, and check (optional) runs after each of your turns and must pass before the work can land. A settings.local.json beside it (toyon.local.json at the root) holds one person\'s overrides and is never committed. Both files may carry comments and trailing commas; leave any you find.',
+  "To run a command this worktree still reaches on main here, call the `own` tool when you have one, before you edit what that command runs on; Toyon would switch it on the edit anyway, and calling first means the server is up when the edit lands.",
+  'Toyon previews the project in a browser panel by running the commands in its settings file, .toyon/settings.json (or toyon.json at the repo root, in a repo that keeps it there), shaped like {"setup": ["bun install"], "run": {"web": "bun run dev --port $PORT", "api": {"cmd": "uv run uvicorn app.main:app --port $PORT", "setup": ["uv sync"], "remotes": {"stage": "https://api.stage.example.com"}}}, "check": "bun run check"}: setup runs once in every new worktree, teardown (optional) runs once when a worktree is removed, every command in run keeps running and must listen on $PORT, which toyon sets differently for each worktree, and check (optional) runs after each of your turns and must pass before the work can land. A run command may take the object form: cmd is the command; a command whose folder Toyon can place in the tree (or whose paths are listed) runs once in the main checkout and every worktree\'s page reaches it at its <NAME>_URL until the worktree changes those files, when it starts its own; "from": "copy" makes every worktree run its own and "from": "trunk" makes main run it whatever the paths say; its setup and teardown run in a worktree before it first runs that command there and when the worktree goes; remotes names addresses the page may point it at instead. The paragraph attached to each message says which commands this worktree reaches on main. A settings.local.json beside it (toyon.local.json at the root) holds one person\'s overrides and is never committed. Both files may carry comments and trailing commas; leave any you find.',
   "Toyon runs those commands itself in every worktree, and the user watches the result live in a preview beside this chat, so never start a dev server or open a browser of your own to check your work. Each message says where this worktree's preview answers; fetch a page from there when you want to see it.",
   "A command meant to outlive your turn (a long eval, a build you will check on later) goes through your shell tool's background option when it has one, never nohup, setsid or a trailing ampersand: a backgrounded command keeps its row in the chat with its output and its end, and the rail says the worktree is still busy, while a process detached by hand is invisible to Toyon and to the user.",
   "When you scaffold a project, write its .gitignore (dependencies, build output, local env files) before installing anything, so an install never leaves thousands of untracked files for the user to wade through or commit.",
@@ -515,6 +526,101 @@ export function previewContext(p: PreviewStanding | null): string | undefined {
       line = `The preview is ${p.status}${p.detail ? `: ${p.detail}` : ""}; nothing answers${at} until it is back.`;
   }
   return line;
+}
+
+/** one shared proc as it stands for this worktree, for the paragraph that tells the agent */
+export interface TierProcStanding {
+  name: string;
+  /** who runs it for this worktree's page: main, this worktree, or a remote the page points at */
+  source: "main" | "here" | { remote: string; url: string };
+  /** the globs that flip it to this worktree's own, declared or inferred */
+  paths: string[];
+  declared: boolean;
+  /** why this worktree runs it itself, when it does */
+  reason?: Owned;
+  /** pointed: files it runs on have changed here since the pick */
+  behind?: true;
+  /** main's state of a borrowed proc, or this worktree's own state of one it runs */
+  status?: ProcStatus | "cold";
+}
+
+/** the shared tier as it stands for one worktree */
+export interface TierStanding {
+  procs: TierProcStanding[];
+  /** main's uncommitted file count: what main's shared procs run on */
+  mainDirty: number;
+}
+
+/** the variable a proc's address is read from, as `procUrlEnv` names it */
+function urlVar(name: string): string {
+  return name === "api" ? "API_URL" : `${name.toUpperCase().replace(/[^A-Z0-9]/g, "_")}_URL`;
+}
+
+/** The paragraph after every message that says what this worktree reaches on main, what it runs
+ * itself and what its page points away, with what flips each: the agent otherwise cannot tell
+ * that an edit to the backend is not what the page is talking to, and the `own` tool only makes
+ * sense to an agent that knows a proc is main's. Nothing for main, a spare, or a repo with no
+ * shared tier. */
+export function tierContext(t: TierStanding | null): string | undefined {
+  if (!t || t.procs.length === 0) return undefined;
+  const out: string[] = [];
+  let toldTool = false;
+  const borrowed: string[] = [];
+  for (const p of t.procs) {
+    if (p.source === "main") {
+      borrowed.push(p.name);
+      out.push(
+        `Main runs ${p.name} for every worktree, this one included; the page here reaches it at ${urlVar(p.name)}.`,
+      );
+      if (p.declared && p.paths.length === 0) {
+        out.push(`It never runs here on its own; the own tool starts one here.`);
+      } else if (p.paths.length > 0) {
+        out.push(
+          `A change under ${p.paths.join(", ")}, or to a lockfile, env, compose or migration file, makes this worktree run its own ${p.name}.`,
+        );
+      } else {
+        out.push(`Any change outside the page makes this worktree run its own ${p.name}.`);
+      }
+      if (!toldTool) {
+        toldTool = true;
+        out.push(
+          "When you are about to change what a shared command runs on, call the toyon own tool first, so the server is up by the time the edit lands.",
+        );
+      }
+      if (p.status && p.status !== "running" && p.status !== "starting" && p.status !== "cold") {
+        out.push(
+          `Main's ${p.name} is ${p.status} right now, so nothing answers at ${urlVar(p.name)} until it is back.`,
+        );
+      }
+    } else if (p.source === "here") {
+      const why =
+        p.reason?.by === "edit"
+          ? ` (it changed ${p.reason.file ?? "a file it runs on"})`
+          : p.reason?.by === "agent"
+            ? " (you asked for it)"
+            : p.reason?.by === "hand"
+              ? " (the user asked for it)"
+              : "";
+      out.push(`This worktree runs its own ${p.name}${why}.`);
+      if (p.status === "starting") {
+        out.push(`${p.name} is starting here; until it answers the page still reaches main's.`);
+      }
+    } else {
+      out.push(
+        `The page here points ${p.name} at ${p.source.remote} (${p.source.url}); ${p.name} edits here are not what the page talks to.`,
+      );
+      if (p.behind) {
+        out.push(`Files ${p.name} runs on have changed in this worktree; the user may want it moved to here.`);
+      }
+    }
+  }
+  if (borrowed.length > 0 && t.mainDirty > 0) {
+    const names = borrowed.join(" and ");
+    out.push(
+      `Main's tree has ${plural(t.mainDirty, "uncommitted file")}, and main's ${names} ${borrowed.length === 1 ? "runs" : "run"} on that tree.`,
+    );
+  }
+  return out.join(" ");
 }
 
 /** where the worktree's work stands as a message goes out, read from the tree and the record for

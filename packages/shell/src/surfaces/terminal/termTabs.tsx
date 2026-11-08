@@ -1,10 +1,11 @@
-import { LOGIN_STREAM, type ProcState, SHELL_STREAM } from "@toyon/shared";
+import { type Borrowed, LOGIN_STREAM, type ProcState, SHELL_STREAM } from "@toyon/shared";
 import { procItems, shellItems } from "../../state/actions/proc.ts";
 import { useDispatch, useSock } from "../../state/context.tsx";
 import { IconButton } from "../../ui/Button.tsx";
 import type { TabItem } from "../../ui/Tabs.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
 import { procLabel } from "../util.ts";
+import { streamTabs } from "./termTabs.ts";
 
 /** the pane's header as tab items: the shell first, the agent's login while it has one, then the
  * procs in config order. Each proc carries the `.dot` the rail uses for its status. Restart is a
@@ -15,6 +16,8 @@ export function useTermTabs({
   worktreeId,
   procs,
   borrowed,
+  pointed,
+  dirty,
   login,
   current,
   onRestart,
@@ -22,7 +25,11 @@ export function useTermTabs({
   worktreeId: string;
   procs: ProcState[];
   /** the shared-tier procs this worktree reaches on main: a tab each, with nothing to stream */
-  borrowed: string[];
+  borrowed: Borrowed[];
+  /** the procs this worktree's page points at a remote: a tab each, with nothing to stream */
+  pointed: Record<string, string>;
+  /** main's uncommitted file count, said on a borrowed tab */
+  dirty: number;
   login: boolean;
   current: string;
   onRestart: (stream: string) => void;
@@ -48,30 +55,34 @@ export function useTermTabs({
       trail: trail(SHELL_STREAM, "Restart the shell"),
     },
     ...(login ? [loginTab] : []),
-    ...procs.map((p) => ({
-      id: p.name,
-      label: p.name,
-      lead: <span className={`dot ${p.status}`} />,
-      // the rail row's card, for a proc: its state with the dot, its name, its command as the
-      // detail and its port as the figure at the foot
-      tip: tip(procLabel(p.status), undefined, {
-        placement: "top",
-        dot: p.status,
-        name: p.name,
-        detail: p.command,
-        aside: [`:${p.port}`],
-      }),
-      menu: () => procItems(p, worktreeId, deps),
-      trail: trail(p.name, `Restart ${p.name}`),
-    })),
-    // a borrowed proc has no output here: its tab says where it runs, and the body offers to run it here
-    ...borrowed.map((name) => ({
-      id: name,
-      label: name,
-      lead: <span className="dot borrowed" />,
-      tip: tip(`${name} runs on main for every worktree; this one reaches it at its usual address`, undefined, {
-        placement: "top",
-      }),
-    })),
+    ...streamTabs({ procs, borrowed, pointed, dirty }).map((t) => {
+      if (t.kind === "proc") {
+        const p = t.proc;
+        return {
+          id: p.name,
+          label: p.name,
+          lead: <span className={`dot ${p.status}`} />,
+          // the rail row's card, for a proc: its state with the dot, its name, its command as the
+          // detail and its port as the figure at the foot
+          tip: tip(procLabel(p.status), undefined, {
+            placement: "top",
+            dot: p.status,
+            name: p.name,
+            detail: p.command,
+            aside: [`:${p.port}`],
+          }),
+          menu: () => procItems(p, worktreeId, deps),
+          trail: trail(p.name, `Restart ${p.name}`),
+        };
+      }
+      // a borrowed or pointed proc has no output here: its tab says where it runs, and the body
+      // offers to run it here
+      return {
+        id: t.name,
+        label: t.name,
+        lead: <span className={`dot ${t.kind === "borrowed" ? t.dot : "borrowed"}`} />,
+        tip: tip(t.tip, undefined, { placement: "top" }),
+      };
+    }),
   ];
 }

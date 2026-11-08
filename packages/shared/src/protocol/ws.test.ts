@@ -80,7 +80,7 @@ describe("parseClientMsg", () => {
       { t: "set-agent-pick", agent: "codex", field: "model", value: "big" },
       { t: "set-agent-pick", agent: "codex", field: "effort", value: "" },
       { t: "set-repo-pick", repoId: "r", field: "mode", value: "ask" },
-      { t: "set-repo-pick", repoId: "r", field: "profile", value: "" },
+      { t: "set-repo-pick", repoId: "r", field: "mode", value: "" },
       { t: "install-agent", agent: "codex" },
       { t: "install-agent", agent: "codex", anyway: true },
       { t: "agent-auth", worktreeId: "a", methodId: "api-key", apiKey: "sk-x" },
@@ -96,19 +96,28 @@ describe("parseClientMsg", () => {
         t: "confirm-config",
         repoId: "r",
         config: {
-          run: { web: "w", api: "a" },
-          profiles: { full: { run: ["api", "web"], env: { X: "$API_URL" } }, fe: { run: ["web"], preview: "web" } },
-          defaultProfile: "fe",
+          run: {
+            web: "w",
+            api: {
+              cmd: "a",
+              setup: ["uv sync", 'createdb -T app_template "app_$TOYON_WORKTREE"'],
+              teardown: ['dropdb --if-exists "app_$TOYON_WORKTREE"'],
+              remotes: { stage: "https://api.stage.example.com" },
+            },
+            worker: { cmd: "w2", from: "copy" },
+            db: { cmd: "docker compose up db", paths: [] },
+          },
         },
         kind: "shared",
       },
-      { t: "create-worktree", repoId: "r", prompt: "x", profile: "fe" },
+      { t: "set-proc-source", worktreeId: "a", name: "api", source: "here" },
+      { t: "set-proc-source", worktreeId: "a", name: "api", source: "main" },
+      { t: "set-proc-source", worktreeId: "a", name: "api", source: { remote: "stage" } },
       { t: "set-worktree-effort", worktreeId: "a", effort: "high" },
       { t: "chat", worktreeId: "a", text: "hi", attachments: [{ kind: "paste", text: "a\nb" }] },
       { t: "chat", worktreeId: "a", text: "hi", attachments: [{ kind: "paste", text: "x", name: "App.tsx" }] },
       { t: "create-worktree", repoId: "r", prompt: "x", attachments: [{ kind: "paste", text: "x" }] },
       { t: "list-commands", worktreeId: "a" },
-      { t: "set-worktree-profile", worktreeId: "a", profile: "full" },
       { t: "set-theme", prefs: { mode: "system", light: "l", dark: "d" } },
       { t: "rescan-themes" },
       { t: "term-open", worktreeId: "a", stream: "shell", cols: 80, rows: 24 },
@@ -155,31 +164,34 @@ describe("parseClientMsg", () => {
     expect(parseClientMsg({ t: "agent-decide", worktreeId: "a", askId: "k" }).ok).toBe(false);
   });
 
-  test("profiles must name real processes, a default, and a preview inside the profile", () => {
+  test("profiles are gone: a file that still has them loses them, and the frames that picked one are refused", () => {
     const cfg = (config: unknown) => parseClientMsg({ t: "confirm-config", repoId: "r", config, kind: "local" });
     const run = { web: "w", api: "a" };
-    const bad = [
-      { run, profiles: { a: { run: ["nope"] } }, defaultProfile: "a" },
-      { run, profiles: { a: { run: ["web"] } } },
-      { run, profiles: { a: { run: ["web"] } }, defaultProfile: "b" },
-      { run, profiles: { a: { run: ["web"], preview: "api" } }, defaultProfile: "a" },
-      { run, defaultProfile: "a" },
-    ];
-    for (const c of bad) expect(cfg(c).ok, JSON.stringify(c)).toBe(false);
-    const r = cfg(bad[0]);
-    if (!r.ok) expect(r.reason).toMatch(/profiles\.a\.run: "nope" is not in run/);
+    const r = cfg({ run, profiles: { a: { run: ["web"] } }, defaultProfile: "a" });
+    expect(r.ok).toBe(true);
+    if (r.ok && r.msg.t === "confirm-config") expect(Object.keys(r.msg.config)).toEqual(["run"]);
+    expect(parseClientMsg({ t: "set-worktree-profile", worktreeId: "a", profile: "a" }).ok).toBe(false);
+    const create = parseClientMsg({ t: "create-worktree", repoId: "r", prompt: "x", profile: "fe" });
+    expect(create.ok).toBe(true);
+    if (create.ok) expect("profile" in create.msg).toBe(false);
+    expect(parseClientMsg({ t: "set-repo-pick", repoId: "r", field: "profile", value: "" }).ok).toBe(false);
   });
 
-  test("a run entry may take the long form, and the preview is never the trunk's", () => {
+  test("a run entry may take the long form, and the preview is never the trunk's or a remote's", () => {
     const cfg = (config: unknown) => parseClientMsg({ t: "confirm-config", repoId: "r", config, kind: "local" });
     expect(cfg({ run: { web: "w", api: { cmd: "a", from: "trunk", paths: ["server/**"] } } }).ok).toBe(true);
     expect(cfg({ run: { web: "w", api: { cmd: "a" } } }).ok).toBe(true);
+    expect(cfg({ run: { web: { cmd: "w", from: "copy" }, api: "a" } }).ok).toBe(true);
+    expect(cfg({ run: { web: "w", api: { cmd: "a", remotes: { stage: "http://localhost:8000" } } } }).ok).toBe(true);
     const bad = [
       { run: { web: { cmd: "w", from: "trunk" }, api: "a" } },
       { run: { api: { cmd: "a", from: "trunk" } } },
       { run: { web: "w", api: { cmd: "a", from: "trunk" } }, preview: "api" },
-      { run: { web: "w", api: { cmd: "a", from: "trunk" } }, profiles: { p: { run: ["api"] } }, defaultProfile: "p" },
       { run: { web: "w", api: { cmd: "a", from: "main" } } },
+      { run: { web: { cmd: "w", remotes: { stage: "https://x.example" } }, api: "a" } },
+      { run: { web: "w", api: { cmd: "a", remotes: { stage: "ftp://x.example" } } } },
+      { run: { web: "w", api: { cmd: "a", remotes: { stage: "api.stage.example.com" } } } },
+      { run: { web: "w", api: { cmd: "a", from: "copy", paths: ["server/**"] } } },
     ];
     for (const c of bad) expect(cfg(c).ok, JSON.stringify(c)).toBe(false);
     const r = cfg(bad[0]);

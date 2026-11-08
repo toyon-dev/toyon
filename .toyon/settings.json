@@ -1,15 +1,9 @@
 {
   "setup": ["bun install", "bun run --cwd packages/bridge build"],
   "run": {
-    "daemon": "./scripts/dev.sh daemon",
-    "web": "./scripts/dev.sh shell",
-    "app": "bun run build && ./scripts/dev.sh daemon"
+    "daemon": { "cmd": "./scripts/dev.sh daemon", "from": "copy" },
+    "web": "./scripts/dev.sh shell"
   },
   "afterLand": ["./scripts/after-land.sh"],
-  "land": { "method": "rebase" },
-  "profiles": {
-    "dev": { "run": ["daemon", "web"], "preview": "web" },
-    "built": { "run": ["app"], "preview": "app" }
-  },
-  "defaultProfile": "dev"
+  "land": { "method": "rebase" }
 }

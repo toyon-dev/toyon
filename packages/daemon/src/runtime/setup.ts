@@ -17,6 +17,8 @@ export interface SetupOpts {
   timeoutMs?: number;
   /** the command is up: its process group, and the kill a stop presses */
   onSpawn?: (pid: number, stop: () => void) => void;
+  /** the pty's bytes as they come, for a terminal tab; `onLine` gets the lines either way */
+  onData?: (data: string) => void;
 }
 
 /** Run one setup command, streaming its lines as they land. Resolves with the exit code. `extra`
@@ -45,6 +47,7 @@ export function runSetup(
           ring: SETUP_RING,
         },
         (data) => {
+          opts.onData?.(data);
           for (const ev of lines.feed(data)) onLine(ev.line, ev.retract);
         },
         (code) => {

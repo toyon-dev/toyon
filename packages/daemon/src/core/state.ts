@@ -68,6 +68,9 @@ export interface PersistedState {
   updateFailed?: { version: string; at: number };
   /** when an npx start's offer of a global install was answered, by installing or turning it down */
   globalInstallAt?: number;
+  /** the one-time pass that gave every copy from before sharing was the default its own shared
+   * procs has run (repos/registry.ts boot) */
+  tiered?: true;
   /** when a device opening this machine's own address was first let in; the desk's bar stops
    * offering the address in words after that */
   letInAt?: number;
@@ -182,6 +185,23 @@ export function loadState(paths: Paths): PersistedState {
     for (const a of w.awaits ?? []) idOnly(a);
     for (const q of w.queued ?? []) if (!("piece" in q.after)) idOnly(q.after);
     if (w.from?.kind === "worktree" && w.from.after) idOnly(w.from.after);
+    // run profiles went in 0.23: the field is dropped once here. A take-over was a list of names
+    // in `owns` until then; it lives on `sources` with why since, and one from before reads as a press
+    const old = w as { profile?: unknown; owns?: unknown; sources?: Record<string, unknown> };
+    delete old.profile;
+    if (Array.isArray(old.owns)) {
+      for (const n of old.owns) {
+        if (typeof n === "string") old.sources = { ...old.sources, [n]: { at: { by: "hand" } } };
+      }
+    }
+    delete old.owns;
+  }
+  // the repo's remembered profile pick went with them
+  for (const r of state.repos) {
+    const picks = r.picks as { profile?: unknown } | undefined;
+    if (!picks) continue;
+    delete picks.profile;
+    if (Object.keys(picks).length === 0) delete r.picks;
   }
   // sessions belong to worktrees; a removed worktree's entry is an orphan
   const ids = new Set(state.worktrees.map((w) => w.id));
@@ -511,19 +531,15 @@ export class StateStore {
     if (!id || choices.length === 0) return id;
     return relist(id, choices);
   }
-  /** What a new worktree of the repo starts with, as picked in the composer: its mode, and its
-   * profile. The empty value is the default again. A mode is one of the three; a profile is one
-   * the settings file has now, and one the file later loses is left out at the create. */
+  /** What a new worktree of the repo starts with, as picked in the composer: its mode. The empty
+   * value is the default again; otherwise one of the three. */
   setRepoPick(repoId: string, field: keyof RepoPicks, value: string) {
     const repo = this.requireRepo(repoId);
     const picks = repo.picks ?? {};
     if (!value) delete picks[field];
-    else if (field === "mode") {
+    else {
       if (!PERMISSION_MODES.some((m) => m.id === value)) throw new UserError(`"${value}" is not a mode`);
       picks.mode = value as PermissionMode;
-    } else {
-      if (!repo.config.profiles?.[value]) throw new UserError(`no profile "${value}" in ${repo.configFile}`);
-      picks.profile = value;
     }
     if (Object.keys(picks).length > 0) repo.picks = picks;
     else delete repo.picks;
@@ -556,6 +572,15 @@ export class StateStore {
   }
   setTheme(prefs: ThemePrefs) {
     this.state.theme = prefs;
+    this.save();
+  }
+
+  /** whether the one-time pass over copies from before sharing was the default has run */
+  get tiered(): boolean {
+    return this.state.tiered === true;
+  }
+  markTiered() {
+    this.state.tiered = true;
     this.save();
   }
 

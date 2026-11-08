@@ -1683,36 +1683,17 @@
       font: var(--type-mono);
     }
   }
-  /* whether main's files come along, under the choice when the repo offers one: a rule and no
-   ground, since the composer's ground means a place to type, and two boxes of it stacked read as
-   one box with a seam. Alone, the line stands with no rule over it. */
+  /* whether main's files come along: no ground, since the composer's ground means a place to type,
+   and two boxes of it stacked read as one box with a seam */
   .draft-notes {
     display: flex;
     flex-direction: column;
     gap: 6px;
   }
-  .draft-row + .draft-notes {
-    margin-top: 4px;
-    padding-top: 8px;
-    border-top: 1px solid var(--border0);
-  }
   .draft-note {
     /* the count ticks with the status; `font` on the hint resets the variant */
     font-variant-numeric: tabular-nums;
   }
-  /* the one birth-time choice, the profile, at the left of its row, where the knobs row's chips
-   start under the box: alone at the right end it read as a stray word. The chip's padding hangs
-   into the gutter so its word starts where the text in the box does; the pull is on its wrapper,
-   for the reason .spawn-left gives: the panel is placed against the wrapper, and a button hanging
-   out of it lands the panel's lead 8px off the chip. */
-  .draft-row {
-    display: flex;
-    align-items: center;
-    & > .chip-picker {
-      margin-left: -8px;
-    }
-  }
-
   /* ---- attachment chips ----
    An attachment is a row, the band the rail and the files tab use: a leading slot (an icon, a
    thumbnail), a name, its meta a tier down, and the remove at the end. It draws no card and no

@@ -2,17 +2,6 @@
 
 import type { AttachmentRef } from "./protocol/events.ts";
 
-/** one way to run a repo: which of its procs, with what extra environment */
-export interface RunProfile {
-  /** keys of ToyonConfig.run, started in this order */
-  run: string[];
-  /** merged into every proc of the profile; `$API_URL` / `${API_URL}` expand to the sibling-URL
-   * variables the daemon computes for the procs already up (unknown refs are left as written) */
-  env?: Record<string, string>;
-  /** preview proc for this profile; must be one of `procs` */
-  preview?: string;
-}
-
 /** how a repo lands work on main; every field has a default, see land.ts */
 export interface LandConfig {
   /** where landed work ends up: merged into main here (the default), merged here and pushed, or
@@ -25,17 +14,60 @@ export interface LandConfig {
   method?: "merge" | "squash" | "rebase";
 }
 
-/** a proc in the long form. `from: "trunk"` makes it the shared tier: the main checkout runs it
- * once, on main's code, and every worktree reaches that one through a forwarder until its own
- * changed files match `paths`, when it starts its own. `paths` are globs relative to the root;
- * absent, they are inferred from the command, and `[]` means the proc never flips (a database
- * container whose databases are per worktree). Main ignores `from`. */
+/** A proc in the long form. A proc that is not the preview is the shared tier's by default when
+ * Toyon can place its files in the tree (`paths` written, or a folder the command names): the main
+ * checkout runs it once, on its working tree, and every worktree reaches that one through a
+ * forwarder until its own changed files match `paths`, when it starts its own. */
 export interface RunProc {
   cmd: string;
-  from?: "trunk";
+  /** "trunk": main runs it for every copy whatever its paths say; "copy": every copy runs its own.
+   * Absent: shared when `paths` is declared or the command names a folder of the tree. */
+  from?: "trunk" | "copy";
+  /** globs from the root that make a copy run its own; `[]` never flips (a database container
+   * whose databases are per copy); absent infers them from the command */
   paths?: string[];
+  /** shell commands run once in a copy before this proc first runs there; never on main */
+  setup?: string[];
+  /** shell commands run in a copy that ran this proc's setup, when the copy goes */
+  teardown?: string[];
+  /** addresses a copy's page may point this proc at instead of main's or its own: name to URL */
+  remotes?: Record<string, string>;
 }
 export type RunEntry = string | RunProc;
+
+/** one proc of the shared tier, as the settings and the tree decide it: the globs that flip a
+ * copy to its own, and whether they were written or read off the command */
+export interface TierProc {
+  paths: string[];
+  declared: boolean;
+}
+
+/** why a copy runs a shared proc itself: its changes touched it (the file that did), the agent
+ * asked ahead of an edit, or a person pressed for it */
+export interface Owned {
+  by: "edit" | "agent" | "hand";
+  file?: string;
+}
+
+/** one proc as it stands for one copy: where its page reaches it when not main's, and whether the
+ * proc's own setup ran here */
+export interface ProcSource {
+  /** the copy runs it itself, with why (its changes touched it, the agent asked, a person pressed),
+   * or its page points at one of the proc's `remotes`. Absent: main's for a shared proc. Never
+   * shrinking on its own; a pick of a remote wins over the flip. */
+  at?: Owned | { remote: string };
+  /** the proc's own `setup` ran here: its `teardown` runs when the worktree goes, a spare's refresh
+   * runs the setup again, and a re-own skips it */
+  prepared?: true;
+}
+
+/** a shared proc a copy reaches on main, with main's state of it; "cold" while main has not
+ * started its tier */
+export interface Borrowed {
+  name: string;
+  status: ProcStatus | "cold";
+  detail?: string;
+}
 
 /** what the worktrees of a repo would share unless the settings keep them apart */
 export interface SharedServices {
@@ -114,8 +146,8 @@ export interface ToyonConfig {
    * removal goes on; a restored worktree runs `setup` again. */
   teardown?: string[];
   /** what keeps running: name -> foreground shell command, each a process with its own terminal
-   * tab; one serving HTTP must listen on $PORT. The object form marks a proc the trunk runs for
-   * every worktree. */
+   * tab; one serving HTTP must listen on $PORT. The object form carries a proc's paths, setup,
+   * teardown and remotes, and says whether the trunk runs it for every worktree. */
   run: Record<string, RunEntry>;
   /** a command that must exit 0 before a worktree is offered to land: run in the worktree after
    * every finished turn, its output on the transcript */
@@ -132,10 +164,6 @@ export interface ToyonConfig {
   cache?: string[] | CacheConfig;
   /** proc that the preview iframe should show (defaults to "web", else first proc) */
   preview?: string;
-  /** named subsets of procs a worktree can run (full stack vs frontend-against-staging) */
-  profiles?: Record<string, RunProfile>;
-  /** the profile a worktree runs when it has none; required when profiles exist */
-  defaultProfile?: string;
 }
 
 export interface RepoInfo {
@@ -160,6 +188,10 @@ export interface RepoInfo {
    * on each detection: a compose file at the root, or a database URL in an env file. What the
    * setup pane warns about while the settings keep no copy apart. Never written anywhere. */
   services?: SharedServices;
+  /** the shared tier by proc: what main runs for every worktree, with the globs that flip a copy
+   * to its own. Settled from the settings and the tree at every config read and at boot, and
+   * again when main moves; absent means nothing is shared. Never written anywhere. */
+  tier?: Record<string, TierProc>;
   /** toyon made this project from nothing: the whole folder, or only the `.git` in a folder the
    * person already had. What going back from the first-run screen may take away again, and only
    * while the project is still exactly as it was made. Absent on a repo that was opened. */
@@ -176,16 +208,15 @@ export interface RepoInfo {
    * were all landed and archived would otherwise sink to the bottom the moment the work was
    * tidied away. A record from before the field takes it from the archive at boot. */
   promptedAt?: number;
-  /** what a new worktree of it starts with, as picked in the composer: the permission mode, and
-   * the profile from a draft's row. The defaults where absent. The daemon's memory, so every
-   * create of the repo and every shell read the same one. */
+  /** what a new worktree of it starts with, as picked in the composer: the permission mode. The
+   * default where absent. The daemon's memory, so every create of the repo and every shell read
+   * the same one. */
   picks?: RepoPicks;
 }
 
-/** the mode and profile a new worktree of a repo starts with, where the create names none */
+/** the mode a new worktree of a repo starts with, where the create names none */
 export interface RepoPicks {
   mode?: PermissionMode;
-  profile?: string;
 }
 
 /** Toyon running out of a checkout that is also one of its own projects: what landing work on
@@ -441,11 +472,9 @@ export interface WorktreeInfo {
   createdBy?: string;
   /** registry id of the agent working here (stamped at creation, or on first use for older rows) */
   agent?: string;
-  /** which of the repo's profiles this worktree runs (the repo's defaultProfile when absent) */
-  profile?: string;
-  /** the shared-tier procs this worktree runs itself rather than reaching on main: set when its
-   * changes touched one, or when asked, and never shrinking on its own */
-  owns?: string[];
+  /** per proc, who this worktree's page talks to when not main's, and what the worktree holds of
+   * it: see ProcSource. Absent for a proc main runs for it (shared) or that every copy runs (not). */
+  sources?: Record<string, ProcSource>;
   /** what the agent may do here without asking; DEFAULT_PERMISSION_MODE when absent */
   mode?: PermissionMode;
   /** the model id the agent is asked to run here (one of its advertised choices); its own default
@@ -1026,8 +1055,12 @@ export interface WorktreeStatus {
   worktree?: WorktreeInfo;
   /** empty for a row toyon does not run */
   procs: ProcState[];
-  /** the shared-tier procs this row reaches on main rather than running; absent when none */
-  borrowed?: string[];
+  /** the shared-tier procs this row reaches on main rather than running, with main's state of
+   * each; absent when none */
+  borrowed?: Borrowed[];
+  /** procs this row points at a remote whose files it has since changed: the page is not talking
+   * to those edits. Read off the runtime, never persisted; absent when none. */
+  remoteBehind?: string[];
   /** "idle" for a row toyon does not run */
   agent: AgentStatus;
   /** a stop was pressed and the turn has not ended yet: the agent is asked to stop and may still be

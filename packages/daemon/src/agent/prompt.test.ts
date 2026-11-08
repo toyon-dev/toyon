@@ -17,6 +17,7 @@ import {
   SYSTEM_APPEND,
   selfContext,
   standingContext,
+  tierContext,
   worktreeContext,
 } from "./prompt.ts";
 
@@ -289,6 +290,10 @@ describe("SYSTEM_APPEND", () => {
     // stops at check rather than teach routes, methods, automerge and timeouts it never writes
     expect(SYSTEM_APPEND).not.toContain("automerge");
     expect(SYSTEM_APPEND).toContain("must pass before the work can land");
+    // the object form of a run command, and the tool that moves one here ahead of an edit
+    expect(SYSTEM_APPEND).toContain('"from": "copy"');
+    expect(SYSTEM_APPEND).toContain("call the `own` tool when you have one");
+    expect(SYSTEM_APPEND).not.toContain("profile");
   });
   test("says the preview is already running, so the agent starts no server of its own", () => {
     expect(SYSTEM_APPEND).toContain("never start a dev server");
@@ -326,6 +331,77 @@ describe("SYSTEM_APPEND", () => {
     // a reply that says "behind wt-d486's eval" names a row by its id, the one handle the agent
     // had; the directory is an id so that a rename never restarts the procs or the session
     expect(SYSTEM_APPEND).toContain("use its title in quotes or its branch, never the directory");
+  });
+});
+
+describe("tierContext", () => {
+  const api = { name: "api", paths: ["app/**"], declared: false };
+  test("nothing for main, a spare or a repo with nothing shared", () => {
+    expect(tierContext(null)).toBeUndefined();
+    expect(tierContext({ procs: [], mainDirty: 3 })).toBeUndefined();
+  });
+  test("a borrowed proc: main runs it, what flips it, and the tool to call first", () => {
+    const text = tierContext({ procs: [{ ...api, source: "main" }], mainDirty: 0 })!;
+    expect(text).toBe(
+      "Main runs api for every worktree, this one included; the page here reaches it at API_URL. A change under app/**, or to a lockfile, env, compose or migration file, makes this worktree run its own api. When you are about to change what a shared command runs on, call the toyon own tool first, so the server is up by the time the edit lands.",
+    );
+    // the tool sentence once, however many are borrowed; a declared [] never flips; nothing
+    // inferable flips on anything outside the page
+    const two = tierContext({
+      procs: [
+        { ...api, source: "main" },
+        { name: "db", source: "main", paths: [], declared: true },
+        { name: "worker", source: "main", paths: [], declared: false },
+      ],
+      mainDirty: 0,
+    })!;
+    expect(two.split("call the toyon own tool first").length).toBe(2);
+    expect(two).toContain("It never runs here on its own; the own tool starts one here.");
+    expect(two).toContain("Any change outside the page makes this worktree run its own worker.");
+    expect(two).toContain("reaches it at DB_URL");
+  });
+  test("main's state and main's dirty tree are said where they matter", () => {
+    const down = tierContext({ procs: [{ ...api, source: "main", status: "crashed" }], mainDirty: 0 })!;
+    expect(down).toContain("Main's api is crashed right now, so nothing answers at API_URL until it is back.");
+    expect(tierContext({ procs: [{ ...api, source: "main", status: "cold" }], mainDirty: 0 })).not.toContain(
+      "right now",
+    );
+    const dirty = tierContext({
+      procs: [
+        { ...api, source: "main" },
+        { name: "db", source: "main", paths: [], declared: true },
+      ],
+      mainDirty: 1,
+    })!;
+    expect(dirty).toContain("Main's tree has 1 uncommitted file, and main's api and db run on that tree.");
+    expect(tierContext({ procs: [{ ...api, source: "main" }], mainDirty: 3 })).toContain(
+      "Main's tree has 3 uncommitted files, and main's api runs on that tree.",
+    );
+    // nothing borrowed: main's tree is not what the page talks to
+    expect(tierContext({ procs: [{ ...api, source: "here" }], mainDirty: 3 })).not.toContain("uncommitted");
+  });
+  test("an owned proc says why, and that the page still reaches main's while it starts", () => {
+    expect(
+      tierContext({ procs: [{ ...api, source: "here", reason: { by: "edit", file: "app/x.py" } }], mainDirty: 0 }),
+    ).toBe("This worktree runs its own api (it changed app/x.py).");
+    expect(tierContext({ procs: [{ ...api, source: "here", reason: { by: "agent" } }], mainDirty: 0 })).toBe(
+      "This worktree runs its own api (you asked for it).",
+    );
+    expect(tierContext({ procs: [{ ...api, source: "here", reason: { by: "hand" } }], mainDirty: 0 })).toBe(
+      "This worktree runs its own api (the user asked for it).",
+    );
+    expect(tierContext({ procs: [{ ...api, source: "here", status: "starting" }], mainDirty: 0 })).toBe(
+      "This worktree runs its own api. api is starting here; until it answers the page still reaches main's.",
+    );
+  });
+  test("a pointed proc says where the page talks, and when the edits here are not it", () => {
+    const stage = { remote: "stage", url: "https://api.stage.example.com" };
+    expect(tierContext({ procs: [{ ...api, source: stage }], mainDirty: 0 })).toBe(
+      "The page here points api at stage (https://api.stage.example.com); api edits here are not what the page talks to.",
+    );
+    expect(tierContext({ procs: [{ ...api, source: stage, behind: true }], mainDirty: 0 })).toContain(
+      "Files api runs on have changed in this worktree; the user may want it moved to here.",
+    );
   });
 });
 

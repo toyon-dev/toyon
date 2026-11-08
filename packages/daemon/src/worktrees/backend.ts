@@ -2,14 +2,16 @@
 // its changed files touch that proc. Watches every sign a file may have changed (a tool call
 // ending, a turn settling, an editor save, the shell going quiet, a preview coming up), reads git
 // once per burst, and hands the take-over to the service, which persists it and starts the proc.
-// A take-over is one way: what a worktree runs itself stays its own until asked.
+// A take-over is one way: what a worktree runs itself stays its own until asked. A proc the page
+// points at a remote is never taken over, since the pick was a person's; its touched files are
+// marked instead, so the chip can say the page is not talking to them.
 
 import { baseOf, type RepoInfo, SHELL_STREAM, type WorktreeInfo } from "@toyon/shared";
 import type { Hub } from "../core/hub.ts";
 import { fireAndForget, log } from "../core/log.ts";
 import type { StateStore } from "../core/state.ts";
 import { committedFiles, statusFiles } from "../git/status.ts";
-import { inferPaths, previewPaths } from "../repos/config.ts";
+import { previewPaths } from "../repos/config.ts";
 import type { RuntimeRegistry } from "../runtime/registry.ts";
 
 /** files that change what every shared proc runs on: deps, env, containers */
@@ -62,9 +64,10 @@ async function changedFiles(wt: WorktreeInfo, repo: RepoInfo, committed: boolean
 export interface BackendDeps {
   state: StateStore;
   hub: Hub;
-  runtime: Pick<RuntimeRegistry, "borrows" | "runOf">;
-  /** take the named procs over: the service persists `owns` and starts them */
-  own: (worktreeId: string, names: string[]) => Promise<void>;
+  runtime: Pick<RuntimeRegistry, "borrows" | "points" | "markRemoteBehind" | "runOf">;
+  /** take the named procs over, with the changed file that called for each: the service persists
+   * the record and starts them */
+  own: (worktreeId: string, names: string[], files: Record<string, string>) => Promise<void>;
   /** the worktree's changed files; git when absent */
   changed?: (wt: WorktreeInfo, repo: RepoInfo, committed: boolean) => Promise<string[]>;
 }
@@ -103,8 +106,13 @@ export class BackendShare {
     });
   }
 
+  /** whether the worktree has anything the check could move: a borrowed proc, or a pointed one */
+  private watched(id: string): boolean {
+    return this.d.runtime.borrows(id) || this.d.runtime.points(id);
+  }
+
   schedule(id: string, committed: boolean): void {
-    if (!this.d.runtime.borrows(id)) return;
+    if (!this.watched(id)) return;
     this.pending.set(id, (this.pending.get(id) ?? false) || committed);
     if (this.timers.has(id)) return;
     this.timers.set(
@@ -137,30 +145,41 @@ export class BackendShare {
     }
   }
 
-  /** what the worktree's changes touch, and the take-over of every borrowed proc they touch */
+  /** what the worktree's changes touch: the take-over of every borrowed proc they touch, and the
+   * mark on every pointed one */
   async check(id: string, committed = true): Promise<void> {
     const wt = this.d.state.worktree(id);
-    if (!wt || wt.kind === "main" || !this.d.runtime.borrows(id)) return;
+    if (!wt || wt.kind === "main" || !this.watched(id)) return;
     const repo = this.d.state.requireRepo(wt.repoId);
     // the run the procs came up under, so the take-over starts the command its siblings run with
     const run = this.d.runtime.runOf(id);
-    if (!run || run.borrowed.length === 0) return;
+    if (!run) return;
+    const pointed = Object.keys(run.pointed);
+    if (run.borrowed.length === 0 && pointed.length === 0) return;
     const files = await (this.d.changed ?? changedFiles)(wt, repo, committed);
-    if (files.length === 0) return;
+    if (files.length === 0) {
+      this.d.runtime.markRemoteBehind(id, []);
+      return;
+    }
     // the commands are the worktree's own, so a script that exists only on its branch counts
     const page = run.preview ? previewPaths(run.procs[run.preview]!, wt.path) : [];
     const take: string[] = [];
-    const why: string[] = [];
-    for (const name of run.borrowed) {
-      const declared = run.paths[name];
-      const hit = touching(files, declared ?? inferPaths(run.procs[name]!, wt.path), declared !== undefined, page);
-      if (hit) {
+    const why: Record<string, string> = {};
+    const behind: string[] = [];
+    for (const name of [...run.borrowed, ...pointed]) {
+      const tier = repo.tier?.[name];
+      if (!tier) continue;
+      const hit = touching(files, tier.paths, tier.declared, page);
+      if (!hit) continue;
+      if (name in run.pointed) behind.push(name);
+      else {
         take.push(name);
-        why.push(hit);
+        why[name] = hit;
       }
     }
+    this.d.runtime.markRemoteBehind(id, behind);
     if (take.length === 0) return;
-    log.info(id, `owns ${take.join(", ")}: changed ${why[0]}`);
-    await this.d.own(id, take);
+    log.info(id, `owns ${take.join(", ")}: changed ${why[take[0]!]}`);
+    await this.d.own(id, take, why);
   }
 }

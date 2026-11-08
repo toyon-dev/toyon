@@ -10,10 +10,10 @@ import {
   isBusy,
   isLead,
   isMain,
-  isProvisional,
   landPolicy,
   landWord,
   type OwnedWorktree,
+  ownedBy,
   type RepoInfo,
   type ShipOp,
   standingOf,
@@ -22,12 +22,17 @@ import {
 import { chord } from "../../surfaces/util.ts";
 import { grouped, type MenuEntry, type MenuItem } from "../../ui/menu.ts";
 import type { DaemonSocket } from "../../ws.ts";
-import { profileNames, profileOf } from "../profiles.ts";
 import type { Action, State } from "../store.ts";
 import { copyText, type Deps } from "./deps.ts";
 import { openedOnDaemonMachine, revealItems } from "./editor.ts";
 
 type Dispatch = (a: Action) => void;
+
+/** the shared procs this worktree runs itself, as its record says */
+const ownedNames = (w: OwnedWorktree): string[] =>
+  Object.entries(w.worktree.sources ?? {})
+    .filter(([, src]) => ownedBy(src.at))
+    .map(([n]) => n);
 
 /** the land row's second line: the repo's route, so the one verb says what it does here */
 const landDetail = (repo: RepoInfo | null) =>
@@ -80,20 +85,19 @@ export function worktreeActions(sock: DaemonSocket | null, dispatch: Dispatch, d
       const title = window.prompt("Rename worktree (its branch follows as a slug):", w.worktree.title);
       if (title?.trim()) sock?.send({ t: "rename-worktree", worktreeId: w.worktree.id, title: title.trim() });
     },
-    /** run under another profile: only its procs restart, so no confirm */
-    setProfile(w: OwnedWorktree, profile: string) {
-      sock?.send({ t: "set-worktree-profile", worktreeId: w.worktree.id, profile });
-    },
     /** run the shared tier here: its procs start beside the page, nothing stops, so no confirm */
     ownProcs(w: OwnedWorktree) {
-      sock?.send({ t: "own-procs", worktreeId: w.worktree.id });
+      for (const b of w.borrowed ?? []) {
+        sock?.send({ t: "set-proc-source", worktreeId: w.worktree.id, name: b.name, source: "here" });
+      }
     },
     shareProcs(w: OwnedWorktree) {
-      const names = (w.worktree.owns ?? []).join(", ");
+      const owned = ownedNames(w);
       const ok = window.confirm(
-        `Stop this worktree's own ${names} and use main's?\n\nWhat they hold that main's do not (a database of their own) is not carried over.`,
+        `Stop this worktree's own ${owned.join(", ")} and use main's?\n\nWhat they hold that main's do not (a database of their own) is not carried over.`,
       );
-      if (ok) sock?.send({ t: "share-procs", worktreeId: w.worktree.id });
+      if (!ok) return;
+      for (const name of owned) sock?.send({ t: "set-proc-source", worktreeId: w.worktree.id, name, source: "main" });
     },
     archive(w: OwnedWorktree) {
       if (!canArchive(w.worktree)) return;
@@ -131,9 +135,9 @@ export function worktreeItems(
   // six groups, in the order they are reached for: what is going on now (stop, the changes
   // written), what it is (its branch and its directory), change it, ship it (sync, land, hand
   // on), run it, and remove on its own. The first group comes and goes with the row's state, so
-  // its rows share one rule rather than each standing alone. The profile rows sit last but one,
-  // since a profile is picked once and read after; no terminal row, since on the row you are on
-  // it is ⌘J and on any other it is a click and ⌘J
+  // its rows share one rule rather than each standing alone. The run rows sit last but one, above
+  // the remove alone; no terminal row, since on the row you are on it is ⌘J and on any other it
+  // is a click and ⌘J
   const now: MenuItem[] = [];
   const about: MenuItem[] = [];
   const change: MenuItem[] = [];
@@ -183,32 +187,22 @@ export function worktreeItems(
   if (plumbing && sessionId) {
     about.push({ id: "copy-session", label: "copy session id", onClick: () => copyText(sessionId) });
   }
-  // main runs procs too, and is where switching is wanted most; flat items, the menu has no
-  // submenus. The one running now is on the list with its check, so the list also answers which.
-  // Not on the provisional row: the worktree it starts takes its profile from the intro's chip.
-  const current = profileOf(w.worktree, repo);
-  for (const name of isProvisional(w.worktree) ? [] : profileNames(repo)) {
-    run.push({
-      id: `profile:${name}`,
-      label: `run with ${name}`,
-      checked: name === current,
-      onClick: () => acts.setProfile(w, name),
-    });
-  }
   // what runs on main for this row, and what it took over: the row says which, and offers the
-  // other. Never on main, which runs the shared tier for everyone.
+  // other. Never on main, which runs the shared tier for everyone. The chip under the box moves
+  // one proc at a time; these move them all, for the palette and the keyboard.
   if (!isMain(w.worktree) && w.borrowed?.length) {
     run.push({
       id: "own-procs",
-      label: `run ${w.borrowed.join(", ")} here`,
+      label: `run ${w.borrowed.map((b) => b.name).join(", ")} here`,
       detail: "on main now",
       onClick: () => acts.ownProcs(w),
     });
   }
-  if (!isMain(w.worktree) && w.worktree.owns?.length) {
+  const owned = ownedNames(w);
+  if (!isMain(w.worktree) && owned.length > 0) {
     run.push({
       id: "share-procs",
-      label: `use main's ${w.worktree.owns.join(", ")}…`,
+      label: `use main's ${owned.join(", ")}…`,
       detail: "runs here now",
       danger: true,
       onClick: () => acts.shareProcs(w),

@@ -37,12 +37,20 @@ import {
   type ModelChoice,
   movedPastLand,
   notLandedWhy,
+  type Owned,
+  ownedBy,
   type PermissionMode,
+  type ProcSource,
   type PrState,
+  runSetup as procSetup,
+  runTeardown as procTeardown,
   prStanding,
   prTaken,
   type RefKind,
   type RepoInfo,
+  remoteOf,
+  runCmd,
+  runRemotes,
   type ShipOp,
   type Shipping,
   sentAt,
@@ -57,7 +65,13 @@ import type { Handed } from "../agent/adapter.ts";
 import { attachmentsDirFor, isAttachmentFile } from "../agent/attachments.ts";
 import { canonical } from "../agent/bounds.ts";
 import { PLANS_DIR, writePlanDocNow } from "../agent/planDoc.ts";
-import { type Failure, fixPrompt, type WorkStanding } from "../agent/prompt.ts";
+import {
+  type Failure,
+  fixPrompt,
+  type TierProcStanding,
+  type TierStanding,
+  type WorkStanding,
+} from "../agent/prompt.ts";
 import { firstAskOf } from "../agent/recap.ts";
 import type { AgentRegistry } from "../agent/registry.ts";
 import { makeNamer, taskText } from "../agent/tasks.ts";
@@ -112,7 +126,7 @@ import { configFor, settingsLines } from "../repos/config.ts";
 import { isInside } from "../repos/create.ts";
 import { type RunHandle, RunService } from "../runs/service.ts";
 import { allocateProxyPort, releasePort } from "../runtime/ports.ts";
-import { resolveRun, trunkOf } from "../runtime/profile.ts";
+import { type OwnWhy, resolveRun, spawnsOf } from "../runtime/profile.ts";
 import { DEFAULT_AGENT_ID, type Runtime, type RuntimeRegistry, worktreeEnv } from "../runtime/registry.ts";
 import { runSetup } from "../runtime/setup.ts";
 import {
@@ -210,8 +224,6 @@ export interface CreateOpts {
   context?: string[];
   /** in the order they were attached */
   attachments?: AttachmentInput[];
-  /** one of the repo's profiles; the repo's default when absent */
-  profile?: string;
   /** what the agent may do without asking; the default mode when absent */
   mode?: PermissionMode;
   /** one of the agent's advertised model ids; its default when absent */
@@ -422,6 +434,9 @@ export class WorktreeService {
       runs: this.runs,
       setupAndStart: (wt, repo) => this.setupAndStart(wt, repo),
       teardown: (wt, repo) => this.teardown(wt, repo),
+      prepare: async (wt, repo) => {
+        await this.prepareProcs(wt, repo, spawnsOf(resolveRun(configFor(wt, repo), wt, repo.tier ?? {})), "setup");
+      },
       discard: async (id) => {
         await this.discardWorktree(id);
       },
@@ -505,13 +520,8 @@ export class WorktreeService {
     const agent = this.d.agents.require(opts.agent ?? this.d.state.defaultAgent ?? DEFAULT_AGENT_ID).id;
     // what the create names wins over what the composer picked for new worktrees of the agent
     const { model, effort } = this.d.state.fillPicks(agent, { model: opts.model, effort: opts.effort });
-    // the repo's picks the same way; a picked profile the settings file has since lost is left out
+    // the repo's picks the same way
     const mode = opts.mode ?? repo.picks?.mode;
-    const picked = repo.picks?.profile;
-    const profile = this.checkProfile(
-      repo,
-      opts.profile ?? (picked && repo.config.profiles?.[picked] ? picked : undefined),
-    );
     // a message that is attachments alone is named from what they carry
     const task = taskText(prompt, attachments);
     // the title is the prompt's first words until the agent names it. The branch is born on the
@@ -520,15 +530,10 @@ export class WorktreeService {
     const title = given ?? titleFrom(task);
 
     // fast path: claim the pre-warmed spare. Its runtime — agent included — already exists, so the
-    // task's first message goes to the spare's agent. The spare was warmed under the default
-    // profile; another one means its procs restart once the tree is on its branch. A cold create
-    // is a proposal's, not a send from the row, so it takes a checkout of its own: the spare stays
-    // the person's, draft and all, and a row meant to wait for a look does not arrive running.
+    // task's first message goes to the spare's agent. A cold create is a proposal's, not a send
+    // from the row, so it takes a checkout of its own: the spare stays the person's, draft and all,
+    // and a row meant to wait for a look does not arrive running.
     const spare = opts.cold ? undefined : this.d.state.worktrees.find((w) => w.repoId === repoId && w.kind === "spare");
-    const restart =
-      !!spare &&
-      profile !== undefined &&
-      profile !== resolveRun(configFor(spare, repo), spare, this.trunkOf(repo)).profile;
     let carriedIn: Carried | undefined;
     let release: (() => void) | undefined;
     const stamps: ClaimStamps = {
@@ -539,7 +544,6 @@ export class WorktreeService {
       model,
       effort,
       from: opts.from,
-      profile,
       // the claim stamped the prompt's words as a name still to be found; a given name is final
       unnamed: given ? undefined : (true as const),
     };
@@ -586,7 +590,6 @@ export class WorktreeService {
         this.firstPrompt.delete(wt.id);
       }
       release?.();
-      if (restart) this.restartProcs(wt);
       await this.nameOrAsk(wt, task, given);
       if (carriedIn?.unmoved) throw new UserError(carriedIn.unmoved, { delivered: true });
       return wt;
@@ -625,7 +628,6 @@ export class WorktreeService {
       agent,
       ...(opts.from ? { from: opts.from } : {}),
       ...(opts.createdBy ? { createdBy: opts.createdBy } : {}),
-      ...(profile !== undefined ? { profile } : {}),
       ...(mode ? { mode } : {}),
       ...(model ? { model } : {}),
       ...(effort ? { effort } : {}),
@@ -940,69 +942,237 @@ export class WorktreeService {
   }
 
   /** Run the named shared-tier procs here rather than reaching main's; every borrowed one when
-   * `names` is absent. The record says so before anything starts, so a flip cut short comes back
-   * with the post-turn restart. */
-  async ownProcs(worktreeId: string, names?: string[]): Promise<void> {
+   * `names` is absent. Each proc's own setup runs first, on its tab, while the page keeps reaching
+   * main's; the record says so only once that setup is through, so a setup that fails leaves the
+   * proc main's with a word on why, and a daemon that dies mid-setup leaves nothing half owned
+   * (the next edit signal runs the check again). `why` is who asked: it is written on the record
+   * and said on the transcript. */
+  async ownProcs(worktreeId: string, names?: string[], why: OwnWhy = { by: "hand" }): Promise<void> {
     const { wt, repo } = this.d.state.requireWorktreeWithRepo(worktreeId);
     if (wt.kind === "main") throw new UserError("main runs the shared tier for everyone already");
-    const run = this.d.runtime.runOf(wt.id) ?? resolveRun(configFor(wt, repo), wt, this.trunkOf(repo));
+    const run = this.d.runtime.runOf(wt.id) ?? resolveRun(configFor(wt, repo), wt, repo.tier ?? {});
+    const pointed = (names ?? []).find((n) => n in run.pointed);
+    if (pointed) {
+      throw new UserError(
+        `${pointed} points at ${remoteOf(wt.sources?.[pointed]?.at)} here; move it back to main first`,
+      );
+    }
     const take = (names ?? run.borrowed).filter((n) => run.borrowed.includes(n));
     if (take.length === 0) throw new UserError("nothing here runs on main");
-    wt.owns = [...(wt.owns ?? []), ...take];
-    this.d.state.save();
-    this.d.hub.emit("worktreesChanged");
-    await this.d.runtime.own(wt.id, take);
+    const { ready, failed } = await this.prepareProcs(wt, repo, take, "tab");
+    if (ready.length > 0) {
+      const file = why.by === "edit" ? ready.map((n) => why.files[n]).find(Boolean) : undefined;
+      for (const n of ready) {
+        const at: Owned = { by: why.by, ...(why.by === "edit" && why.files[n] ? { file: why.files[n] } : {}) };
+        this.setSource(wt, n, { at });
+      }
+      this.d.state.save();
+      this.d.hub.emit("worktreesChanged");
+      this.d.runtime
+        .get(wt.id)
+        ?.agent.note({ type: "owned", names: ready, by: why.by, ...(file ? { file } : {}), ts: Date.now() });
+      await this.d.runtime.own(wt.id, ready);
+    }
+    // the hand path reads the failure as a toast; the flip and the tool read the transcript
+    if (failed && why.by === "hand") throw new UserError(failed);
   }
 
-  /** the shared-tier procs this worktree ran itself stop, and main's are reached again */
-  async shareProcs(worktreeId: string): Promise<void> {
+  /** The named procs' own setup, for those that have one and have not run it here, in run order,
+   * each command under the setup ceiling with the worktree's variables and on the row as a setup
+   * stage. `sink` is where the output goes: the `setup` stream at birth, when no proc has a tab
+   * yet, or the proc's own tab at a flip, where the proc stands `starting` with the step as its
+   * detail until it spawns. A proc whose setup fails is not prepared and is not started: at a
+   * flip it stays main's, at birth it is left for the person to read, and the line that says so
+   * goes where the output went and onto the transcript. Returns what is ready to run, and the
+   * first failure's line. */
+  private async prepareProcs(
+    wt: WorktreeInfo,
+    repo: RepoInfo,
+    names: string[],
+    sink: "setup" | "tab",
+  ): Promise<{ ready: string[]; failed?: string }> {
+    // the worktree's own file: its commands carry their setup
+    const { config } = configFor(wt, repo);
+    const ceiling = timeoutFor(config, "setup");
+    const ready: string[] = [];
+    let failed: string | undefined;
+    for (const name of names) {
+      const entry = config.run[name];
+      if (entry === undefined) continue;
+      const cmds = procSetup(entry);
+      if (cmds.length === 0 || wt.sources?.[name]?.prepared) {
+        ready.push(name);
+        continue;
+      }
+      const toTab = sink === "tab";
+      const say = (line: string) => {
+        if (toTab) this.d.runtime.setupOutput(wt.id, name, `${line}\r\n`);
+        else this.d.hub.emit("log", wt.id, "setup", line);
+      };
+      let broke: string | undefined;
+      for (const cmd of cmds) {
+        if (toTab) this.d.runtime.preparing(wt.id, name, runCmd(entry), `setup: ${cmd}`);
+        const run = this.runs.begin(wt.id, "setup", { timeoutMs: ceiling, stage: `${name}: ${cmd}` });
+        const code = await runSetup(
+          cmd,
+          wt.path,
+          (line, retract) => {
+            if (!toTab) this.d.hub.emit("log", wt.id, "setup", line, retract);
+          },
+          worktreeEnv(wt, repo),
+          {
+            timeoutMs: ceiling,
+            onSpawn: run.spawned,
+            ...(toTab ? { onData: (data: string) => this.d.runtime.setupOutput(wt.id, name, data) } : {}),
+          },
+        );
+        run.finish(code);
+        if (code === 0) continue;
+        broke =
+          code === "timeout"
+            ? `${name} setup gave up after ${describeDuration(ceiling)}: ${cmd}`
+            : `${name} setup failed (exit ${code}): ${cmd}`;
+        say(toTab ? `${broke}; the page still reaches main's ${name}` : broke);
+        this.d.runtime.get(wt.id)?.agent.note({ type: "own-failed", name, cmd, exit: code, ts: Date.now() });
+        break;
+      }
+      if (broke) {
+        failed ??= broke;
+        if (toTab) await this.d.runtime.unprepare(wt.id, name);
+        continue;
+      }
+      this.setSource(wt, name, { prepared: true });
+      this.d.state.save();
+      ready.push(name);
+    }
+    return { ready, ...(failed ? { failed } : {}) };
+  }
+
+  /** the named shared-tier procs this worktree ran itself stop, and main's are reached again;
+   * every owned one when `names` is absent. What their setup made here stays made, so a later
+   * take-over skips it. */
+  async shareProcs(worktreeId: string, names?: string[]): Promise<void> {
     const { wt } = this.d.state.requireWorktreeWithRepo(worktreeId);
-    if (!wt.owns?.length) throw new UserError("nothing here runs its own copy of the shared tier");
-    delete wt.owns;
+    const owned = Object.entries(wt.sources ?? {})
+      .filter(([, src]) => ownedBy(src.at))
+      .map(([n]) => n);
+    const drop = (names ?? owned).filter((n) => owned.includes(n));
+    if (drop.length === 0) throw new UserError("nothing here runs its own copy of the shared tier");
+    for (const n of drop) this.setSource(wt, n, { at: undefined });
     this.d.state.save();
     this.d.hub.emit("worktreesChanged");
     await this.d.runtime.share(wt.id);
   }
 
-  /** a profile name the settings actually have, or undefined for "the default"; a typo is a
-   * refusal. The worktree's own file when there is a worktree, the repo's for one not yet made. */
-  private checkProfile(repo: RepoInfo, name: string | undefined, wt?: WorktreeInfo): string | undefined {
-    if (name === undefined) return undefined;
-    const { config, file } = wt ? configFor(wt, repo) : { config: repo.config, file: repo.configFile };
-    if (!config.profiles?.[name]) throw new UserError(`no profile "${name}" in ${file}`);
-    return name;
-  }
-
-  /** the shared tier as main runs it, for what a worktree may borrow */
-  private trunkOf(repo: RepoInfo): Set<string> {
-    return trunkOf(
-      repo,
-      this.d.state.worktrees.find((w) => w.repoId === repo.id && w.kind === "main"),
-    );
-  }
-
-  /** procs and proxy come back under the worktree's current profile; the agent is untouched */
-  /** a wake rather than a start, so a profile set while setup still runs (a claimed spare's, or
-   * the seconds after a cold create) starts nothing on a tree with no deps: the start at the end
-   * of setup reads the record, and so the profile */
+  /** Procs and proxy come back under the worktree's record; the agent is untouched. A wake rather
+   * than a start, so a record changed while setup still runs (a claimed spare's, or the seconds
+   * after a cold create) starts nothing on a tree with no deps: the start at the end of setup
+   * reads the record. */
   private restartProcs(wt: WorktreeInfo) {
     fireAndForget(
       wt.id,
       this.d.runtime.stopProcs(wt.id).then(() => this.d.runtime.wake(wt.id)),
-      "profile restart",
+      "point restart",
     );
   }
 
-  /** Run this worktree under another of the repo's profiles. Only its procs restart. */
-  setProfile(worktreeId: string, name: string) {
+  /** one proc's entry on the record, merged; an entry with nothing left in it goes, and so does
+   * the map. `at: undefined` in the patch clears the source. */
+  private setSource(wt: WorktreeInfo, name: string, patch: Partial<ProcSource>) {
+    const next: ProcSource = { ...wt.sources?.[name], ...patch };
+    if (next.at === undefined) delete next.at;
+    if (!next.prepared) delete next.prepared;
+    const sources = { ...wt.sources };
+    if (Object.keys(next).length === 0) delete sources[name];
+    else sources[name] = next;
+    if (Object.keys(sources).length === 0) delete wt.sources;
+    else wt.sources = sources;
+  }
+
+  /** Where this worktree's page reaches one shared proc: main's, its own, or one of the proc's
+   * remotes. Its own runs its setup first and starts beside the page (ownProcs); main's stops what
+   * ran here and reaches main's again, what its setup made kept; a remote is a pick that wins over
+   * the flip, with the proc neither run here nor borrowed and the worktree's procs restarted for
+   * the address, since the addresses are spawn-time env. Moving from a remote to its own runs the
+   * setup where the birth setup would, then restarts the procs with it among them. */
+  async setProcSource(worktreeId: string, name: string, source: "main" | "here" | { remote: string }): Promise<void> {
     const { wt, repo } = this.d.state.requireWorktreeWithRepo(worktreeId);
-    if (wt.kind === "spare") throw new UserError("no profile for a spare worktree");
-    const profile = this.checkProfile(repo, name, wt);
-    if (profile === wt.profile) return;
-    wt.profile = profile;
+    if (wt.kind === "main") throw new UserError("main runs its own procs; move a worktree's instead");
+    // the worktree's own file names its commands and their remotes
+    const { config, file } = configFor(wt, repo);
+    const entry = config.run[name];
+    if (entry === undefined) throw new UserError(`no "${name}" in ${file}`);
+    const at = wt.sources?.[name]?.at;
+    const remote = remoteOf(at);
+    if (typeof source === "object") {
+      if (!(source.remote in runRemotes(entry))) {
+        throw new UserError(`"${name}" has no remote "${source.remote}" in ${file}`);
+      }
+      if (remote === source.remote) return;
+      this.setSource(wt, name, { at: { remote: source.remote } });
+      this.d.state.save();
+      this.d.hub.emit("worktreesChanged");
+      this.restartProcs(wt);
+      return;
+    }
+    if (source === "main") {
+      if (remote === undefined) {
+        if (ownedBy(at)) await this.shareProcs(worktreeId, [name]);
+        return;
+      }
+      this.setSource(wt, name, { at: undefined });
+      this.d.state.save();
+      this.d.hub.emit("worktreesChanged");
+      this.restartProcs(wt);
+      return;
+    }
+    if (remote === undefined) {
+      if (!ownedBy(at)) await this.ownProcs(worktreeId, [name]);
+      return;
+    }
+    const { failed } = await this.prepareProcs(wt, repo, [name], "setup");
+    if (failed) throw new UserError(failed);
+    this.setSource(wt, name, { at: { by: "hand" } });
     this.d.state.save();
     this.d.hub.emit("worktreesChanged");
     this.restartProcs(wt);
+  }
+
+  /** The shared tier as it stands for one worktree, for the paragraph behind every message: each
+   * shared proc with who runs it for this page, what flips it, why it runs here when it does, and
+   * main's state of what is borrowed. Null for main, a spare, an unconfirmed repo or a repo with
+   * nothing shared. */
+  tierStanding(worktreeId: string): TierStanding | null {
+    const wt = this.d.state.worktree(worktreeId);
+    const repo = wt && this.d.state.repo(wt.repoId);
+    if (!wt || !repo || wt.kind !== "worktree" || repo.needsSetup) return null;
+    const run = this.d.runtime.runOf(wt.id) ?? resolveRun(configFor(wt, repo), wt, repo.tier ?? {});
+    if (run.shared.length === 0) return null;
+    const behind = new Set(this.d.runtime.remoteBehind(wt.id));
+    const borrowed = new Map(this.d.runtime.borrowedStates(wt.id).map((b) => [b.name, b.status]));
+    const own = new Map((this.d.runtime.get(wt.id)?.procs?.states() ?? []).map((p) => [p.name, p.status]));
+    const main = this.mainOf(repo.id);
+    const mainDirty = main ? (this.tree.counts(main.id)?.dirty ?? 0) : 0;
+    const procs = run.shared.map((name): TierProcStanding => {
+      const tier = repo.tier?.[name] ?? { paths: [], declared: false };
+      const source: TierProcStanding["source"] =
+        name in run.pointed
+          ? { remote: remoteOf(wt.sources?.[name]?.at) ?? "", url: run.pointed[name]! }
+          : run.borrowed.includes(name)
+            ? "main"
+            : "here";
+      const status = source === "main" ? borrowed.get(name) : source === "here" ? own.get(name) : undefined;
+      return {
+        name,
+        source,
+        paths: tier.paths,
+        declared: tier.declared,
+        ...(ownedBy(wt.sources?.[name]?.at) ? { reason: ownedBy(wt.sources?.[name]?.at) } : {}),
+        ...(behind.has(name) ? { behind: true as const } : {}),
+        ...(status ? { status } : {}),
+      };
+    });
+    return { procs, mainDirty };
   }
 
   /** what the agent may do here without asking. Nothing restarts: the session reads the record
@@ -1167,11 +1337,25 @@ export class WorktreeService {
    * checkout. A failure is logged and the removal goes on, since a database left behind is the
    * lesser surprise than a directory that will not go. */
   private async teardown(wt: WorktreeInfo, repo: RepoInfo): Promise<void> {
-    if (!existsSync(wt.path)) return;
-    // the branch's own teardown: what its setup made is what its file knows how to drop
+    // a proc's own teardown first: what its setup made sat on what the repo's setup made, so it
+    // unwinds in the reverse order. The branch's own file: what its setup made is what its file
+    // knows how to drop.
     const { config } = configFor(wt, repo);
-    const cmds = config.teardown ?? [];
-    if (cmds.length === 0) return;
+    const prepared = Object.entries(wt.sources ?? {})
+      .filter(([, src]) => src.prepared)
+      .map(([n]) => n);
+    const cmds = [
+      ...prepared.flatMap((n) => {
+        const entry = config.run[n];
+        return entry === undefined ? [] : procTeardown(entry);
+      }),
+      ...(config.teardown ?? []),
+    ];
+    // the record forgets what was prepared either way: a spare's refresh prepares again, and a
+    // removed worktree's record is about to go
+    for (const n of prepared) this.setSource(wt, n, { prepared: undefined });
+    if (cmds.length === 0 || !existsSync(wt.path)) return;
+    if (prepared.length > 0) this.d.state.save();
     for (const cmd of cmds) {
       const code = await runSetup(
         cmd,
@@ -1510,6 +1694,9 @@ export class WorktreeService {
       parked: true,
       ...(createdBy ? { createdBy } : {}),
     };
+    // teardown ran when it went: what its procs' setup had made is gone, and the setup below
+    // makes it again
+    for (const n of Object.keys(wt.sources ?? {})) this.setSource(wt, n, { prepared: undefined });
     // the chat moves out of the archive now, since the live page reads it from where a running
     // worktree keeps it; the plans wait beside the archive until there is a tree to land in
     const chat: ChatFiles = { ...this.chatFiles(old.id), plans: this.plansScratch(old.id) };
@@ -1883,6 +2070,9 @@ export class WorktreeService {
         this.d.hub.emit("log", wt.id, "setup", `setup gave up after ${describeDuration(ceiling)}: ${cmd}`);
       } else if (code !== 0) this.d.hub.emit("log", wt.id, "setup", `setup failed (exit ${code}): ${cmd}`);
     }
+    // each proc the copy will run itself gets its own setup, the shared ones it borrows none: theirs
+    // runs on the day the copy takes one over
+    if (setupCommands) await this.prepareProcs(wt, repo, spawnsOf(resolveRun(cfg, wt, repo.tier ?? {})), "setup");
     // a cold worktree stops here: the first look at it, or the first request for its preview,
     // wakes it through the runtime, which starts a worktree whose setup is done and procs are not up
     if (start) await this.d.runtime.start(wt, repo);
@@ -3235,6 +3425,12 @@ export class WorktreeService {
       .map((wt) => {
         const rt = this.d.runtime.get(wt.id);
         const { ahead, behind, unpushed, dirty } = this.tree.counts(wt.id) ?? {};
+        const procs = rt?.procs?.states() ?? [];
+        // a proc being set up here before its spawn has a tab of its own, so it is not drawn as
+        // main's as well
+        const live = new Set(procs.map((p) => p.name));
+        const borrowed = this.d.runtime.borrowedStates(wt.id).filter((b) => !live.has(b.name));
+        const remoteBehind = this.d.runtime.remoteBehind(wt.id);
         return {
           id: wt.id,
           repoId: wt.repoId,
@@ -3242,8 +3438,9 @@ export class WorktreeService {
           name: wt.title,
           branch: wt.branch,
           worktree: wt,
-          procs: rt?.procs?.states() ?? [],
-          borrowed: rt?.borrowed.size ? [...rt.borrowed] : undefined,
+          procs,
+          borrowed: borrowed.length > 0 ? borrowed : undefined,
+          remoteBehind: remoteBehind.length > 0 ? remoteBehind : undefined,
           agent: rt?.agent.status ?? "idle",
           stopping: rt?.agent.stopping || undefined,
           background: rt?.agent.holding || undefined,

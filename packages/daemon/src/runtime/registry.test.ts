@@ -215,52 +215,6 @@ describe("RuntimeRegistry", () => {
     expect(registry.runOf(wt.id)).toBeUndefined();
   });
 
-  test("a profile narrows and orders the procs, and its env reaches every proc with $API_URL expanded", async () => {
-    const profiled: RepoInfo = {
-      ...repo,
-      config: {
-        run: { api: "true", web: "true", worker: "true" },
-        profiles: {
-          full: {
-            run: ["api", "web"],
-            env: {
-              VITE_BACKEND_URL: "$API_URL",
-              MODE: "local",
-              DATABASE_URL: "postgres://localhost/app_$TOYON_WORKTREE",
-            },
-          },
-          fe: { run: ["web"], env: { VITE_ENVIRONMENT: "staging" } },
-        },
-        defaultProfile: "fe",
-      },
-    };
-    const { registry, procs } = make({ repo: profiled });
-    await registry.start({ ...wt, profile: "full" }, profiled);
-    const started = procs.get(wt.id)!.started;
-    expect(started.map((p) => p.name)).toEqual(["api", "web"]);
-    // nothing is up when api starts: the reference stays literal; the worktree's own are always there
-    expect(started[0]?.env).toEqual({
-      VITE_BACKEND_URL: "$API_URL",
-      MODE: "local",
-      TOYON_WORKTREE: wt.id,
-      TOYON_ROOT: repo.path,
-      DATABASE_URL: `postgres://localhost/app_${wt.id}`,
-    });
-    expect(started[1]?.env.VITE_BACKEND_URL).toBe(started[1]?.env.API_URL);
-    expect(started[1]?.env.MODE).toBe("local");
-    expect(started[1]?.env.TOYON_WORKTREE).toBe(wt.id);
-    expect(registry.get(wt.id)?.previewName).toBe("web");
-
-    await registry.stopProcs(wt.id);
-    await registry.start(wt, profiled); // no profile on the row → the default
-    expect(procs.get(wt.id)!.started.map((p) => p.name)).toEqual(["web"]);
-    expect(procs.get(wt.id)!.started[0]?.env).toEqual({
-      VITE_ENVIRONMENT: "staging",
-      TOYON_WORKTREE: wt.id,
-      TOYON_ROOT: repo.path,
-    });
-  });
-
   test("previewTarget() is the running preview proc", async () => {
     const { registry } = make();
     await registry.start(wt, repo);
@@ -327,8 +281,9 @@ describe("RuntimeRegistry", () => {
     const tiered: RepoInfo = {
       ...repo,
       config: {
-        run: { web: "true", api: { cmd: "true", from: "trunk" }, db: { cmd: "true", from: "trunk", paths: [] } },
+        run: { web: "true", api: { cmd: "true", from: "trunk" }, db: { cmd: "true", paths: [] } },
       },
+      tier: { api: { paths: [], declared: false }, db: { paths: [], declared: true } },
     };
     const main: WorktreeInfo = { ...wt, id: "m", kind: "main", branch: "main", path: "/nowhere/m", title: "m" };
     const names = (p: { started: Array<{ name: string }> } | undefined) => p?.started.map((s) => s.name);
@@ -383,7 +338,7 @@ describe("RuntimeRegistry", () => {
       await registry.start(main, tiered);
       await registry.start(wt, tiered);
       const f = forwards.find((x) => x.port === registry.get(wt.id)!.forwards.get("api")!.port)!;
-      state.requireWorktree(wt.id).owns = ["api"];
+      state.requireWorktree(wt.id).sources = { api: { at: { by: "hand" } } };
       await registry.own(wt.id, ["api"]);
       expect(names(procs.get(wt.id))).toEqual(["web", "api"]);
       const ownApi = procs
@@ -393,7 +348,7 @@ describe("RuntimeRegistry", () => {
       expect(f.target()).toEqual({ host: "127.0.0.1", port: ownApi.port });
       expect(f.retargets).toBe(1);
       expect(registry.borrows(wt.id)).toBe(true); // db is still main's
-      delete state.requireWorktree(wt.id).owns;
+      delete state.requireWorktree(wt.id).sources;
       await registry.share(wt.id);
       expect(procs.get(wt.id)!.dropped).toEqual(["api"]);
       expect(f.retargets).toBe(2);
@@ -402,6 +357,114 @@ describe("RuntimeRegistry", () => {
         .states()
         .find((p) => p.name === "api")!;
       expect(f.target()).toEqual({ host: "127.0.0.1", port: mainApi.port });
+    });
+
+    test("a pointed proc is neither spawned nor borrowed, gets no forwarder, and its address is the remote's", async () => {
+      const remote: RepoInfo = {
+        ...tiered,
+        config: {
+          run: {
+            web: "true",
+            api: { cmd: "true", from: "trunk", remotes: { stage: "https://api.stage.example.com" } },
+            db: { cmd: "true", paths: [] },
+          },
+        },
+      };
+      const pointed = { ...wt, sources: { api: { at: { remote: "stage" } } } };
+      const { registry, procs } = make({ worktrees: [main, pointed], mainLeads: () => false, repo: remote });
+      await registry.start(main, remote);
+      await registry.start(pointed, remote);
+      expect(names(procs.get(pointed.id))).toEqual(["web"]);
+      expect([...registry.get(pointed.id)!.forwards.keys()]).toEqual(["db"]);
+      expect(registry.points(pointed.id)).toBe(true);
+      expect(registry.borrows(pointed.id)).toBe(true); // db
+      const env = procs.get(pointed.id)!.started[0]!.env;
+      expect(env.API_URL).toBe("https://api.stage.example.com");
+      expect(env.VITE_API_URL).toBe("https://api.stage.example.com");
+      expect(env.DB_URL).toBe(`http://127.0.0.1:${registry.get(pointed.id)!.forwards.get("db")!.port}`);
+      // the shell sees the same addresses
+      expect(registry.shellEnv(pointed).API_URL).toBe("https://api.stage.example.com");
+      // the flip's mark on a pointed proc is a row fact, cleared with the procs
+      let frames = 0;
+      registry.get(pointed.id); // the hub listener below counts only from here
+      const { hub } = { hub: (registry as unknown as { deps: { hub: Hub } }).deps.hub };
+      hub.on("worktreesChanged", () => frames++);
+      registry.markRemoteBehind(pointed.id, ["api", "db"]);
+      expect(registry.remoteBehind(pointed.id)).toEqual(["api"]); // db is not pointed
+      registry.markRemoteBehind(pointed.id, ["api"]);
+      expect(frames).toBe(1);
+      await registry.stopProcs(pointed.id);
+      expect(registry.remoteBehind(pointed.id)).toEqual([]);
+      expect(registry.points(pointed.id)).toBe(false);
+    });
+
+    test("preparing() holds a proc's place as starting with its step, keeps main's for the page, and own() spawns into it", async () => {
+      const { registry, procs, forwards } = make({ worktrees: [main, wt], mainLeads: () => false, repo: tiered });
+      await registry.start(main, tiered);
+      await registry.start(wt, tiered);
+      const f = forwards.find((x) => x.port === registry.get(wt.id)!.forwards.get("api")!.port)!;
+      const mainApi = procs
+        .get(main.id)!
+        .states()
+        .find((p) => p.name === "api")!;
+      registry.preparing(wt.id, "api", "true", "setup: uv sync");
+      registry.setupOutput(wt.id, "api", "Resolved 12 packages\r\n");
+      registry.preparing(wt.id, "api", "true", "setup: createdb");
+      const held = procs
+        .get(wt.id)!
+        .states()
+        .find((p) => p.name === "api")!;
+      expect([held.status, held.detail]).toEqual(["starting", "setup: createdb"]);
+      expect(procs.get(wt.id)!.pendings.map((p) => p.detail)).toEqual(["setup: uv sync", "setup: createdb"]);
+      // the tab opens on what the setup printed, alive
+      expect(registry.openTerminal(wt.id, "api", 80, 24)).toEqual({
+        snapshot: "Resolved 12 packages\r\n",
+        alive: true,
+      });
+      // the page still reaches main's api while the setup runs
+      expect(registry.borrows(wt.id)).toBe(true);
+      expect(f.target()).toEqual({ host: "127.0.0.1", port: mainApi.port });
+      expect(registry.borrowedStates(wt.id).map((b) => [b.name, b.status])).toEqual([
+        ["api", "running"],
+        ["db", "running"],
+      ]);
+      registry.runs(wt.id, "api");
+      expect(registry.runs(wt.id, "api")).toBe(true);
+      // the start spawns into the place: same port, no second proc
+      await registry.own(wt.id, ["api"]);
+      const own = procs
+        .get(wt.id)!
+        .states()
+        .filter((p) => p.name === "api");
+      expect(own.length).toBe(1);
+      expect([own[0]!.status, own[0]!.port, own[0]!.detail]).toEqual(["running", held.port, undefined]);
+      expect(f.target()).toEqual({ host: "127.0.0.1", port: held.port });
+      // a setup that fails lets the place go, and the proc is main's as before
+      registry.preparing(wt.id, "db", "true", "setup: x");
+      await registry.unprepare(wt.id, "db");
+      expect(
+        procs
+          .get(wt.id)!
+          .states()
+          .some((p) => p.name === "db"),
+      ).toBe(false);
+      expect(registry.borrowedStates(wt.id).map((b) => b.name)).toEqual(["db"]);
+    });
+
+    test("borrowedStates() reads main's state of each borrowed proc, cold while main has not started", async () => {
+      const { registry } = make({ worktrees: [main, wt], mainLeads: () => false, repo: tiered });
+      await registry.start(wt, tiered);
+      expect(registry.borrowedStates(wt.id)).toEqual([
+        { name: "api", status: "cold" },
+        { name: "db", status: "cold" },
+      ]);
+      await registry.start(main, tiered);
+      expect(registry.borrowedStates(wt.id).map((b) => b.status)).toEqual(["running", "running"]);
+      await registry.sleep(main.id, "test");
+      expect(registry.borrowedStates(wt.id).map((b) => [b.status, b.detail])).toEqual([
+        ["asleep", "test"],
+        ["asleep", "test"],
+      ]);
     });
 
     test("stopPage() drops main's page and proxy and keeps its shared tier; leading again brings the page back", async () => {
@@ -452,6 +515,20 @@ describe("RuntimeRegistry", () => {
 });
 
 describe("terminal env", () => {
+  test("procUrlEnv reaches a pointed proc at its remote, ahead of anything it runs", () => {
+    const st = (name: string, port: number) => ({ name, command: "x", port, status: "running" as const });
+    const env = procUrlEnv(
+      [st("api", 1), st("web", 3)],
+      "web",
+      new Map(),
+      new Map([["api", "https://api.stage.example.com"]]),
+    );
+    expect(env).toEqual({
+      API_URL: "https://api.stage.example.com",
+      VITE_API_URL: "https://api.stage.example.com",
+    });
+  });
+
   test("procUrlEnv names every non-preview proc and doubles api as API_URL", () => {
     const st = (name: string, port: number) => ({ name, command: "x", port, status: "running" as const });
     expect(procUrlEnv([st("api", 1), st("job-runner", 2), st("web", 3)], "web")).toEqual({

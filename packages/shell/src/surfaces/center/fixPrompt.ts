@@ -2,24 +2,34 @@ import type { RepoInfo, SharedServices } from "@toyon/shared";
 
 /** What "ask the agent to keep them apart" sends from the setup pane when the tree names a
  * database or a compose stack and the settings keep no worktree apart from the others. Toyon does
- * not know what a database is; the agent does, and the file it writes is picked up on landing. */
-export function keepApartPrompt(repo: RepoInfo, file: string, services: SharedServices): string {
+ * not know what a database is; the agent does, and the file it writes is picked up on landing.
+ * `shared` names the commands main runs for every worktree, where the recipe belongs. */
+export function keepApartPrompt(repo: RepoInfo, file: string, services: SharedServices, shared: string[]): string {
   const what = [
     services.envUrl ? `\`${services.envUrl.name}\` in \`${services.envUrl.file}\`` : null,
     services.compose ? `the compose stack in \`${services.compose}\`` : null,
   ]
     .filter(Boolean)
     .join(" and ");
+  const target = shared[0] ?? "api";
+  const where =
+    shared.length > 0
+      ? `the shared command${shared.length > 1 ? "s" : ""} \`${shared.join("`, `")}\``
+      : "the command that serves the database";
   return [
     `Toyon runs several worktrees of this repo (${repo.name}) at once, each with its own copy of the code, and right now they would all share ${what}: a migration run in one worktree changes the database every other worktree is using.`,
     "",
-    `Give each worktree its own. Every command Toyon runs gets \`TOYON_WORKTREE\` (the worktree's id, empty in the main checkout, which never runs setup) and \`TOYON_ROOT\` (the main checkout). Edit \`${file}\` so that:`,
+    `Give each worktree its own. Every command Toyon runs gets \`TOYON_WORKTREE\` (the worktree's id, empty in the main checkout) and \`TOYON_ROOT\` (the main checkout). A command's own \`setup\` and \`teardown\` run where that command runs: never on main, in a worktree once it runs its own, and nowhere while the worktree points the command at a remote. Edit \`${file}\` so that ${where} carries the recipe, in this shape:`,
+    "```json",
+    `{ "run": { "${target}": { "cmd": "<its command>", "setup": ["uv sync", "createdb -T app_template \\"app_$TOYON_WORKTREE\\""], "teardown": ["dropdb --if-exists \\"app_$TOYON_WORKTREE\\""] } } }`,
+    "```",
     '- `setup` makes the worktree\'s own database with the same schema and seed data. Postgres refuses to copy a database with connections open, so copy from a template nothing serves: `createdb -T <db>_template "<db>_$TOYON_WORKTREE"`, making `<db>_template` once from the seed if it does not exist. Keep it seed-sized, since every worktree copies it. A hosted database that branches (the repo already uses one, or its README says so) gets a branch named for the worktree instead. A compose stack: bring it up under `-p "<name>_$TOYON_WORKTREE"` and seed it the way the README does.',
     "- `teardown` drops it again (`dropdb --if-exists ...`, the branch deleted, or `docker compose -p ... down -v`).",
     // split so the `${...}` reads as the shell syntax it is, not a template hole
-    "- the running commands point at it, with the base database in the main checkout: put the URL in front of the command in `run`, or in a profile's `env`, named `<db>$" +
-      "{TOYON_WORKTREE:+_$TOYON_WORKTREE}`. `setup` does not see what `run` sets, so a migration step in `setup` needs the URL in front of it too.",
-    '- a database container the worktrees share (each with its own database inside it) is marked `{ "cmd": ..., "from": "trunk", "paths": [] }` in `run`, so the main checkout runs it once for everyone.',
+    "- the command points at it, with the base database on main: put the URL in front of `cmd`, named `<db>$" +
+      "{TOYON_WORKTREE:+_$TOYON_WORKTREE}`. `setup` does not see what `cmd` sets, so a migration step in `setup` needs the URL in front of it too.",
+    '- a database container every worktree shares (each with its own database inside it) is `{ "cmd": "docker compose up db", "paths": [] }` in `run`: main runs it once for everyone and no worktree ever runs its own.',
+    "- the top-level `setup` is for the page: leave the install there and put what the backend needs under the backend's own `setup`.",
     "",
     "Read the README and the existing env files for the database's name and credentials. Do not run any migration yourself, and do not start any server; Toyon picks the file up as soon as it is written.",
   ].join("\n");

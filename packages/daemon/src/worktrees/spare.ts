@@ -53,6 +53,8 @@ export interface SparePoolDeps {
   setupAndStart: (wt: WorktreeInfo, repo: RepoInfo) => Promise<void>;
   /** the repo's teardown commands, before setup runs again on a spare main has moved under */
   teardown?: (wt: WorktreeInfo, repo: RepoInfo) => Promise<void>;
+  /** each proc's own setup, after the repo's has run again (WorktreeService owns it) */
+  prepare?: (wt: WorktreeInfo, repo: RepoInfo) => Promise<void>;
   /** discard a worktree, spares allowed (WorktreeService owns it) */
   discard: (worktreeId: string) => Promise<void>;
   /** a warm-up failed under someone's fingers: whatever was typed into the spare's box goes to the
@@ -303,6 +305,7 @@ export class SparePool {
           );
           if (code !== 0) log.warn(wt.id, `spare setup failed (exit ${code}): ${cmd}`, tail.join("\n"));
         }
+        await this.d.prepare?.(wt, repo);
       }
     })().finally(() => {
       this.refreshing.delete(repoId);
@@ -406,7 +409,7 @@ export class SparePool {
 
 /** what the send stamps on the task at birth, so the first frame carries it */
 export type ClaimStamps = Partial<
-  Pick<WorktreeInfo, "createdBy" | "agent" | "mode" | "model" | "effort" | "from" | "profile" | "unnamed">
+  Pick<WorktreeInfo, "createdBy" | "agent" | "mode" | "model" | "effort" | "from" | "unnamed">
 >;
 
 /** a claimed spare: the row, already the task, and the git side of it */

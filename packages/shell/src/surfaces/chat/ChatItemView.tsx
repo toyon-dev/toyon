@@ -1372,6 +1372,30 @@ export const ChatItemView = memo(function ChatItemView({
           <span className="daemon-text">on {item.branch}, its own branch</span>
         </DaemonRow>
       );
+    case "owned": {
+      // a shared proc runs here from this point: the page's address answers from this branch now
+      const why =
+        item.by === "agent"
+          ? "the agent asked for it before changing the backend"
+          : item.by === "hand"
+            ? "asked for"
+            : `this branch changed ${item.file ?? "what it runs on"}`;
+      return (
+        <DaemonRow icon="run" word="runs here" tone="quiet" at={item.ts}>
+          <span className="daemon-text">
+            {item.names.join(", ")}: {why}
+          </span>
+        </DaemonRow>
+      );
+    }
+    case "own-failed":
+      return (
+        <DaemonRow icon="run" word="setup failed" tone="quiet" at={item.ts}>
+          <span className="daemon-text">
+            {item.name} (exit {item.exit}): {item.cmd}; the page still reaches main's {item.name}
+          </span>
+        </DaemonRow>
+      );
   }
 });
 

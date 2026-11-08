@@ -500,6 +500,35 @@ function Fold({
   );
 }
 
+/** The hint on a row's line, shining while the call runs. The shine's band is a share of the span
+ * it rides (base.css, .live-text), and the span holds the whole hint while the line shows what fits
+ * before the ellipsis: on a command of several screens the band was wider than the line, and the
+ * line went from all dim to all lit at once, twice a cycle, where a short hint showed a travel. The
+ * hint measures its own box as `--line` while it shines, and the sweep reads that instead
+ * (chat.css), so a long command shines as a hint of the line's width would. The shine rides a span
+ * inside the one that truncates because the ellipsis is painted with the truncating box's fill,
+ * and `.live-text` clears that fill to show its band. */
+function LiveHint({ text, live, className }: { text: string; live: boolean; className?: string }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!live || !el) return;
+    const ro = new ResizeObserver(([entry]) => {
+      if (entry) el.style.setProperty("--line", `${entry.contentRect.width}px`);
+    });
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+      el.style.removeProperty("--line");
+    };
+  }, [live]);
+  return (
+    <span ref={ref} className={cx("tool-hint", className)}>
+      {live ? <span className="live-text">{text}</span> : text}
+    </span>
+  );
+}
+
 /** A thought's body, parsed where the body mounts (Fold): a closed row's reasoning is turned into
  * markup the first time someone opens it, not on every paint of the log. */
 function ThoughtBody({
@@ -605,9 +634,7 @@ export const ThoughtRow = memo(function ThoughtRow({
         summary={
           <>
             <Icon name="bulb" className="tool-icon" />
-            <span className="tool-hint thought-line">
-              {streaming ? <span className="live-text">{line}</span> : line}
-            </span>
+            <LiveHint className="thought-line" text={line} live={!!streaming} />
           </>
         }
       >
@@ -849,10 +876,7 @@ export const ToolRow = memo(
                 <Spinner />
               </span>
             ) : (
-              // the shine rides a span inside the one that truncates: the ellipsis is painted with
-              // the truncating box's fill, and `.live-text` clears that fill to show its band,
-              // which the browser does not paint through the ellipsis, so a long hint ended blank
-              hint && <span className="tool-hint">{running ? <span className="live-text">{hint}</span> : hint}</span>
+              hint && <LiveHint text={hint} live={running} />
             )}
             {status && <span className="tool-status">{status}</span>}
             {/* the row is faint and still (chat.css), and the word says what the faintness means */}

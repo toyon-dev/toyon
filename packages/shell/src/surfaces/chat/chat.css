@@ -753,6 +753,25 @@
     white-space: nowrap;
     color: var(--text2);
   }
+  /* the shine on a hint sweeps the line, not the text under the ellipsis: the hint measures its
+     box as `--line` while it shines (LiveHint), and this is the base sweep with the line's width
+     in place of the span's, so a hint that fits the line shines exactly as it does without it.
+     The media query is the base rule's own: a name set here would bring the sweep back where
+     base.css has turned it off. */
+  @media (prefers-reduced-motion: no-preference) {
+    .tool-row .tool-hint > .live-text {
+      background-size: calc(var(--line, 100%) * 3) 100%;
+      animation-name: line-shine;
+    }
+  }
+  @keyframes line-shine {
+    from {
+      background-position: calc(var(--line) * -3) 0;
+    }
+    to {
+      background-position: calc(var(--line) * 3) 0;
+    }
+  }
   .tool-row {
     /* the hint gives way but never grows: it is the one thing on the line allowed to shrink, so a
      long path is what truncates, and the count after it keeps its place on the line */

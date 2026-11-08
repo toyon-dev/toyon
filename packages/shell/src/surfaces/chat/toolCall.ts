@@ -254,6 +254,29 @@ function field(call: ToolCall, key: string): string {
   return typeof v === "string" ? v : "";
 }
 
+/** the handoff names its pieces the way a teammate would ("sticky header"), and those titles are
+ * the row's sentence: the call has no description, path or command of its own, so without this
+ * the row said only the tool's name, and that is what the running shine crossed. Read off the
+ * input as sent, since the card that draws the list is a row of its own and comes later. */
+function handoffPieces(call: ToolCall): string {
+  if (call.name !== HANDOFF_TOOL) return "";
+  const input = call.input as { pieces?: unknown } | null;
+  if (!Array.isArray(input?.pieces)) return "";
+  const titles = input.pieces
+    .map((p) => (p && typeof p === "object" ? (p as { title?: unknown }).title : undefined))
+    .filter((t): t is string => typeof t === "string" && t.trim() !== "")
+    .map((t) => t.trim());
+  if (titles.length <= 1) return titles[0] ?? "";
+  return `${titles.slice(0, -1).join(", ")} and ${titles.at(-1)}`;
+}
+
+/** the worktrees tool with a query reads the query, as any search does; without one it lists the
+ * open worktrees and the newest archived, and the row says so rather than printing the tool's name
+ * for the shine to cross */
+function worktreesScope(call: ToolCall): string {
+  return call.name === WORKTREES_TOOL && !field(call, "query").trim() ? "the open ones and the newest archived" : "";
+}
+
 export interface ToolRowText {
   /** what happened, as a word: the row's accessible name, since the glyph carries it on screen */
   label: string;
@@ -319,7 +342,12 @@ export function toolLabel(call: ToolCall, roots: string[] = []): ToolRowText {
   // since on a kinded tool the word could be anything.
   const mcp = mcpTool(call.name);
   const raw =
-    v || skillForm(call) || (call.title && call.title !== call.name ? call.title : "") || (mcp ? mcp.tool : "");
+    v ||
+    skillForm(call) ||
+    handoffPieces(call) ||
+    worktreesScope(call) ||
+    (call.title && call.title !== call.name ? call.title : "") ||
+    (mcp ? mcp.tool : "");
   // Claude's Bash tool sends a sentence of its own ("Build the project"); it beats the command as
   // the row's label, and the command still shows inside
   const detail = relPath(field(call, "description") || (mcp ? field(call, "rationale") : "") || raw, roots);

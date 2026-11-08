@@ -445,7 +445,32 @@ describe("toolLabel", () => {
       name: "handoff",
       icon: "handoff",
     });
-    expect(toolLabel({ name: "worktrees", title: "worktrees", input: {} }).icon).toBe("worktrees");
+    // a handoff with pieces reads their titles, the way a run reads its description: the glyph
+    // says handoff, so the name goes and the titles are the line the shine crosses
+    const pieces = [
+      { title: "sticky header", plan: "x", where: "worktree" },
+      { title: "api route", plan: "y", where: "worktree" },
+      { title: "marked dependency", plan: "z", where: "here" },
+    ];
+    expect(toolLabel({ name: "handoff", title: "handoff", input: { pieces } })).toMatchObject({
+      name: "",
+      icon: "handoff",
+      hint: "sticky header, api route and marked dependency",
+    });
+    expect(toolLabel({ name: "handoff", title: "handoff", input: { pieces: pieces.slice(0, 1) } }).hint).toBe(
+      "sticky header",
+    );
+    // the worktrees tool reads its query, and with none says what the bare call lists
+    expect(toolLabel({ name: "worktrees", title: "worktrees", input: {} })).toMatchObject({
+      name: "",
+      icon: "worktrees",
+      hint: "the open ones and the newest archived",
+    });
+    expect(toolLabel({ name: "worktrees", title: "worktrees", input: { query: "sticky header" } })).toMatchObject({
+      name: "",
+      icon: "worktrees",
+      hint: "sticky header",
+    });
     expect(toolLabel({ name: "EnterPlanMode", title: "EnterPlanMode", input: {} }).icon).toBe("swap");
   });
 

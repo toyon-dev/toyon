@@ -4,7 +4,7 @@ import { ListPicker } from "../../ui/ListPicker.tsx";
 import { byName } from "./commands.ts";
 import { PaletteRow } from "./PaletteRow.tsx";
 
-/** dev builds only: which candidate mono face the chat, the editor and the terminal are read in.
+/** which candidate mono face the chat, the editor and the terminal are read in.
  * No preview on the active row: a face is a download, and the pick shows the moment it is in. */
 export function MonoFacePicker() {
   const dispatch = useDispatch();

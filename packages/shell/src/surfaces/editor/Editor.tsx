@@ -751,7 +751,7 @@ export default function Editor({
     instance.current?.editor.updateOptions({ wordWrap: wrap ? "on" : "off" });
   });
 
-  // the face was switched under the token (a dev build reading a candidate): Monaco holds the
+  // the face was switched under the token (a candidate being read): Monaco holds the
   // family as a string and caches its glyph widths, so both are redone off the loaded face
   const monoFaceApplied = useMonoFaceApplied();
   useOnChange([monoFaceApplied], () => {

@@ -267,7 +267,7 @@ export default function XTerm({
     };
   }, [worktreeId, stream, sock, terminalBus]);
 
-  // The face was switched under the token (a dev build reading a candidate). xterm holds the family
+  // The face was switched under the token (a candidate being read). xterm holds the family
   // as a string, so it is read again; a new family re-measures the cell, whose height is the face's
   // own ascent and descent and not the one SF Mono gave, and the fit redoes cols and rows from it.
   const monoFaceApplied = useMonoFaceApplied();

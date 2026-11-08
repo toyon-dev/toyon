@@ -103,15 +103,13 @@ export function KeysHelp() {
               {resolveTheme(prefs, themes, dark).name}
             </Button>
           </div>
-          {/* a dev build's alone: the shell read in a candidate mono face, served by the type project */}
-          {import.meta.env.DEV && (
-            <div className="keys-setting">
-              <span className="keys-d">mono face</span>
-              <Button variant="field" mono onClick={() => open({ a: "open", overlay: { kind: "mono-face" } })}>
-                {monoFaceLabel(monoFace)}
-              </Button>
-            </div>
-          )}
+          {/* the shell read in a candidate mono face, served by the type project */}
+          <div className="keys-setting">
+            <span className="keys-d">mono face</span>
+            <Button variant="field" mono onClick={() => open({ a: "open", overlay: { kind: "mono-face" } })}>
+              {monoFaceLabel(monoFace)}
+            </Button>
+          </div>
           {/* two values, so the row is the switch: a press flips it and nothing opens */}
           <div className="keys-setting">
             <span className="keys-d">chat side</span>

@@ -31,8 +31,8 @@ migrateStorage(location.origin);
 // paint the last-used theme before React mounts: the daemon's hello replaces it moments later
 const cached = cachedTheme();
 applyTheme(cached);
-// a dev build's alone: the candidate mono face this browser was reading the shell in
-if (import.meta.env.DEV) restoreMonoFace();
+// the candidate mono face this browser was reading the shell in, if any
+restoreMonoFace();
 
 function read(storage: Storage, key: string): string | null {
   try {

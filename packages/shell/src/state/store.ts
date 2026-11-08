@@ -478,7 +478,7 @@ export type Overlay =
   | { kind: "theme"; slot: "theme" | "light" | "dark" }
   | { kind: "appearance" }
   | { kind: "keep-awake" }
-  /** dev builds only: the candidate mono face picker (app/monoFace.ts) */
+  /** the candidate mono face picker (app/monoFace.ts) */
   | { kind: "mono-face" }
   /** default-agent picker */
   | { kind: "agent" }

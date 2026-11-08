@@ -42,7 +42,7 @@ export function Overlays() {
       {overlay?.kind === "theme" && <ThemePicker slot={overlay.slot} />}
       {overlay?.kind === "appearance" && <AppearancePicker />}
       {overlay?.kind === "keep-awake" && <KeepAwakePicker />}
-      {import.meta.env.DEV && overlay?.kind === "mono-face" && <MonoFacePicker />}
+      {overlay?.kind === "mono-face" && <MonoFacePicker />}
       {overlay?.kind === "agent" && <AgentPicker />}
       {overlay?.kind === "agent-page" && <AgentPage agentId={overlay.agent} />}
       {overlay?.kind === "handoff" && <HandoffPicker worktreeId={overlay.worktreeId} />}

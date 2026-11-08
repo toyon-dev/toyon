@@ -1,8 +1,7 @@
-// A dev-only switch of the shell's mono face, so a candidate typeface is read in the running shell
-// (the chat's code, the editor, the terminal) rather than on a specimen page. The files come from
-// the Toyon Mono project's local server (tools/serve.py on 8765), which allows cross-origin font
-// loads. Nothing here reaches a build: every entry point sits behind import.meta.env.DEV, and the
-// pick is kept in this browser alone.
+// A switch of the shell's mono face, so a candidate typeface is read in the running shell (the
+// chat's code, the editor, the terminal) rather than on a specimen page. The files come from the
+// Toyon Mono project's local server (tools/serve.py on 8765), which allows cross-origin font
+// loads; with it down a pick falls back to system. The pick is kept in this browser alone.
 
 import { useSyncExternalStore } from "react";
 import { STORAGE } from "../state/keys.ts";

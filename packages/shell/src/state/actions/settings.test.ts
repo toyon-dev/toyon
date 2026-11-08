@@ -28,6 +28,7 @@ describe("the settings menu", () => {
     expect(items.map(line)).toEqual([
       "theme… [Night]",
       "theme: light or dark… [follow system]",
+      "theme: mono face… [system]",
       "|",
       "default agent… [Claude]",
       "|",
@@ -44,7 +45,7 @@ describe("the settings menu", () => {
         .filter(isItem)
         .filter((i) => i.sub)
         .map((i) => i.id),
-    ).toEqual(["theme", "appearance", "agent", "theme-dark", "theme-light"]);
+    ).toEqual(["theme", "appearance", "mono-face", "agent", "theme-dark", "theme-light"]);
   });
 
   test("the keep-awake line shows where the daemon has it, naming the current value", () => {

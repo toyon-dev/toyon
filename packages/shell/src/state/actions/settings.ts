@@ -68,19 +68,15 @@ export function settingsItems(s: SettingsState, { sock, dispatch }: Deps): MenuE
         sub: true,
         onClick: () => dispatch({ a: "open", overlay: { kind: "appearance" } }),
       },
-      // a dev build's alone: the shell read in a candidate mono face, served by the type project
-      ...(import.meta.env.DEV
-        ? [
-            {
-              id: "mono-face",
-              topic: "theme",
-              label: "mono face…",
-              detail: monoFaceLabel(monoFaceNow()),
-              sub: true,
-              onClick: () => dispatch({ a: "open", overlay: { kind: "mono-face" } }),
-            },
-          ]
-        : []),
+      // the shell read in a candidate mono face, served by the type project
+      {
+        id: "mono-face",
+        topic: "theme",
+        label: "mono face…",
+        detail: monoFaceLabel(monoFaceNow()),
+        sub: true,
+        onClick: () => dispatch({ a: "open", overlay: { kind: "mono-face" } }),
+      },
     ],
     [
       {

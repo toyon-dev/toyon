@@ -25,6 +25,11 @@ const FACES: readonly Face[] = [
     files: { regular: "/fonts/toyon-mono-regular.woff2", bold: "/fonts/toyon-mono-bold.woff2" },
   },
   { id: "menlo", label: "Menlo", files: { regular: "/ref/menlo-regular.ttf", bold: "/ref/menlo-bold.ttf" } },
+  // Chromium cannot find SF Mono by name (macOS registers it as a hidden system font, which only
+  // the Apple font API hands out), but it renders the file like any other; the server reads it
+  // from /System/Library/Fonts. One variable file with its wght axis from Light to 900, so the
+  // "100 900" range below is what makes 400 and 700 land instead of the file's Light default.
+  { id: "sf-mono", label: "SF Mono", files: { variable: "/ref/sf-mono.ttf" } },
   {
     id: "dejavu",
     label: "DejaVu Sans Mono",

@@ -47,6 +47,8 @@ export const STORAGE = {
   clipboardOffer: "toyon-clipboard-offer",
   /** "1" while the phone frame stands its dark theme on black, for an OLED panel */
   blackGround: "toyon-black",
+  /** dev builds only: the candidate mono face the shell is being read in (app/monoFace.ts) */
+  monoFace: "toyon-mono-face",
   /** "1" once the composer's one-time offer to install Toyon as an app was pressed or turned down */
   installOffered: "toyon-install-offered",
   /** every project's layout, keyed by repo id: {"<repo>":{changes,changesTab,chat,term,design}} */
@@ -83,6 +85,7 @@ export const WINDOW_KEYS: readonly Key[] = [
   STORAGE.chatSide,
   STORAGE.clipboardOffer,
   STORAGE.blackGround,
+  STORAGE.monoFace,
   STORAGE.installOffered,
   STORAGE.layouts,
   STORAGE.token,

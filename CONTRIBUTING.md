@@ -11,6 +11,8 @@ bun run shell:dev       # shell UI dev server with HMR
 bun run check           # typecheck, lint, tests, bridge size gate
 ```
 
+A dev build's settings carry one row more than a release's, "mono face": the chat's code, the editor and the terminal read in a candidate typeface instead of the system stack, so a face is judged in the running shell rather than on a specimen page. The files come from the Toyon Mono project's own server, `tools/serve.py 8765` in that checkout; with it down a pick falls back to system. The choice is this browser's alone and nothing of it reaches a build.
+
 `check` is the bar for every commit, and CI runs it on every pull request. `bun run pack` assembles the npm package under `packages/cli/dist`, which is what `npm publish` ships. A release's notes are a section at the top of `CHANGELOG.md`, written before `bun run version`, which refuses without one; the package carries the file and Toyon shows it after it updates itself.
 
 ## How it fits together

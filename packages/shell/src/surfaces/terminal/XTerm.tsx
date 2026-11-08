@@ -7,6 +7,7 @@ import { type ISearchOptions, SearchAddon } from "@xterm/addon-search";
 import { type ITheme, Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import { useEffect, useRef, useState } from "react";
+import { useMonoFaceApplied } from "../../app/monoFace.ts";
 import { useTerminalBus } from "../../state/context.tsx";
 import { FindBox } from "../../ui/FindBox.tsx";
 import { isFind } from "../../ui/find.ts";
@@ -120,6 +121,7 @@ export default function XTerm({
   const box = useRef<HTMLDivElement>(null);
   const terminalBus = useTerminalBus();
   const termRef = useRef<Terminal | null>(null);
+  const fitRef = useRef<FitAddon | null>(null);
   const searchRef = useRef<SearchAddon | null>(null);
   // ⌘F in the pane: the browser's find reads only the rows on screen, and the rail and the chat
   // with them; this one reads the scrollback. A selection at the press is what is looked for.
@@ -161,6 +163,7 @@ export default function XTerm({
     term.open(el);
     fit.fit();
     termRef.current = term;
+    fitRef.current = fit;
     searchRef.current = search;
     const counted = search.onDidChangeResults((r) => setFound({ at: r.resultIndex, count: r.resultCount }));
     // The key is taken on the pane, so a hand on the tab strip means the terminal too. The box
@@ -259,9 +262,22 @@ export default function XTerm({
       sock.send({ t: "term-close", worktreeId, stream });
       term.dispose();
       termRef.current = null;
+      fitRef.current = null;
       searchRef.current = null;
     };
   }, [worktreeId, stream, sock, terminalBus]);
+
+  // The face was switched under the token (a dev build reading a candidate). xterm holds the family
+  // as a string, so it is read again; a new family re-measures the cell, whose height is the face's
+  // own ascent and descent and not the one SF Mono gave, and the fit redoes cols and rows from it.
+  const monoFaceApplied = useMonoFaceApplied();
+  useOnChange([monoFaceApplied], () => {
+    const term = termRef.current;
+    if (!term) return;
+    term.options.fontFamily = monoFont();
+    term.options.fontSize = monoSize();
+    fitRef.current?.fit();
+  });
 
   // (re)open on every connection: the first time this mounts, and after a reconnect, when the
   // daemon may have restarted (fresh shell) or only the socket dropped (same shell, replayed)

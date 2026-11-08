@@ -554,6 +554,18 @@ describe("the shared tier", () => {
     expect(w.worktrees.tierStanding(wt.id)?.procs[0]).toMatchObject({ source: "here", reason: { by: "agent" } });
   });
 
+  test("the flip records the file that did it and notes it on the transcript, where the card reads the shape", async () => {
+    const repoId = await tiered([]);
+    const wt = await w.worktrees.create(repoId, "task");
+    await settle();
+    await w.worktrees.ownProcs(wt.id, ["api"], { by: "edit", files: { api: "server/x.js" } });
+    expect(wt.sources).toEqual({ api: { at: { by: "edit", file: "server/x.js" } } });
+    expect(names(wt.id)).toEqual(["web", "api"]);
+    expect(w.agents.get(wt.id)!.recorded.filter((e) => e.type === "owned")).toEqual([
+      { type: "owned", names: ["api"], by: "edit", file: "server/x.js", ts: expect.any(Number) },
+    ]);
+  });
+
   test("a setup that fails leaves the proc main's, says so on the tab and the transcript, and the press reads it as a toast", async () => {
     const repoId = await tiered(["exit 3"]);
     const wt = await w.worktrees.create(repoId, "task");

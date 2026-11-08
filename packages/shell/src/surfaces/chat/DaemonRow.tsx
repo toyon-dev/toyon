@@ -42,6 +42,9 @@ type Props = Omit<HTMLAttributes<HTMLDivElement>, "className"> & {
    * refused, how a landing went and when, the branch a grafted chat was on. The row draws the
    * lines, so every caller's byline is the same byline. */
   below?: ReactNode | ReactNode[];
+  /** what stands under the sentence and its lines in the sentence's own column and tier: the rows
+   * a card in the transcript offers. A line is read; this is pressed. */
+  under?: ReactNode;
   children?: ReactNode;
 };
 
@@ -51,7 +54,7 @@ type Props = Omit<HTMLAttributes<HTMLDivElement>, "className"> & {
  * is not the odd row out in a scrolled-back turn. The word is a column of its own: the sentence
  * and every line under it start where the sentence starts, so a byline reads as the sentence's
  * and not as a second thing said beside the word. */
-export function DaemonRow({ icon, word, tone, at, below, children, ...rest }: Props) {
+export function DaemonRow({ icon, word, tone, at, below, under, children, ...rest }: Props) {
   const tip = at !== undefined ? { "data-tip": `${word} ${AT.format(at)}`, "data-tip-placement": "top" } : null;
   const lines = (Array.isArray(below) ? below : [below]).filter((l) => l !== undefined && l !== null && l !== false);
   return (
@@ -69,6 +72,7 @@ export function DaemonRow({ icon, word, tone, at, below, children, ...rest }: Pr
               {line}
             </div>
           ))}
+          {under}
         </div>
       </div>
     </div>

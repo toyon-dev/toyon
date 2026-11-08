@@ -75,6 +75,7 @@ export function Choices({
   onPick,
   onHint,
   hover = false,
+  plain = false,
 }: {
   rows: Choice[];
   cursor?: number;
@@ -84,8 +85,12 @@ export function Choices({
   onHint?: (i: number) => void;
   /** no cursor walks these rows, so the pointer's seat is theirs to draw */
   hover?: boolean;
+  /** no keys reach these rows (a card in the transcript owns no keyboard), so no digit or key
+   * is drawn on them and the digit's gutter closes, as on touch */
+  plain?: boolean;
 }) {
   const touch = useTouch();
+  const keyed = !touch && !plain;
   const list = useRef<HTMLDivElement>(null);
   const [slide, setSlide] = useState<{ key: string; step: number } | null>(null);
   const slides = touch && !!onHint;
@@ -112,7 +117,10 @@ export function Choices({
   return (
     // the digits are a hardware keyboard's idiom: on a touch window the rows are tapped, and the
     // gutter goes with the digit
-    <div className={cx("choices", hover && "choices-hover", touch && "choices-touch")} ref={list}>
+    <div
+      className={cx("choices", hover && "choices-hover", touch && "choices-touch", plain && "choices-plain")}
+      ref={list}
+    >
       {rows.map((row, i) => {
         const on = !touch && cursor === i;
         const state = rowState({ cursor: on, checked: row.checked });
@@ -142,9 +150,9 @@ export function Choices({
         };
         const body = (
           <>
-            {!touch && <Kbd k={String(i + 1)} className="choice-num row-dim" />}
+            {keyed && <Kbd k={String(i + 1)} className="choice-num row-dim" />}
             <span className="choice-label">{row.label}</span>
-            {!touch && row.hint && (
+            {keyed && row.hint && (
               <span className={cx("choice-hint row-dim", on && row.hint.on !== false && "on")}>
                 <Kbd k={row.hint.k} /> {row.hint.label}
               </span>

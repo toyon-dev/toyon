@@ -34,6 +34,7 @@ import { answeredQuestion, answerLines, answerStack, decidedPlan } from "./ask.t
 import { chatLink, openChatLink } from "./chatLink.ts";
 import { DaemonRow, useAgo } from "./DaemonRow.tsx";
 import { FileChip } from "./FileChip.tsx";
+import { FlipCard } from "./FlipCard.tsx";
 import {
   queuedRows,
   runCalls,
@@ -1397,13 +1398,11 @@ export const ChatItemView = memo(function ChatItemView({
         </DaemonRow>
       );
     case "owned": {
-      // a shared proc runs here from this point: the page's address answers from this branch now
-      const why =
-        item.by === "agent"
-          ? "the agent asked for it before changing the backend"
-          : item.by === "hand"
-            ? "asked for"
-            : `this branch changed ${item.file ?? "what it runs on"}`;
+      // a shared proc runs here from this point: the page's address answers from this branch now.
+      // The flip Toyon made on its own gets the card with the alternatives; a pick on the chip and
+      // the agent's own tool were decisions already, and their notes stay lines.
+      if (item.by === "edit") return <FlipCard item={item} worktreeId={worktreeId} />;
+      const why = item.by === "agent" ? "the agent asked for it before changing the backend" : "asked for";
       return (
         <DaemonRow icon="run" word="runs here" tone="quiet" at={item.ts}>
           <span className="daemon-text">

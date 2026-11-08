@@ -11,7 +11,8 @@ import { dirtyNote } from "./baseNote.ts";
 export type Source = "main" | "here" | `remote:${string}`;
 export type SourceOption = ChipOption<Source>;
 
-const remoteIn = (s: Source): string | null => (s.startsWith("remote:") ? s.slice("remote:".length) : null);
+/** the remote a source names, when it is one */
+export const remoteIn = (s: Source): string | null => (s.startsWith("remote:") ? s.slice("remote:".length) : null);
 
 /** where the named command runs for this worktree, as the record says: a remote it was pointed
  * at, its own, else main's */

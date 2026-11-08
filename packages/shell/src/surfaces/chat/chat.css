@@ -1171,6 +1171,18 @@
       min-width: 0;
       overflow-wrap: anywhere;
     }
+    /* the rows a card in the transcript offers (the flip's), under the sentence: at the row's own
+       face, since a card's rows at the card's size stood a tier above the sentence they answer,
+       and bled by the head's gap so their bands start where the word's column ends while their
+       labels stay in the sentence's column */
+    & .choices {
+      --picker-inset: 8px;
+      --picker-bleed: -8px;
+      margin-top: 4px;
+    }
+    & .picker-item.choice {
+      font: var(--type-ui-sm);
+    }
     /* a worktree the handed-off row is still making: its title with the idle dot, set as the
        mention's dot is, so the name reads as the row it is about to be and the dot turns in place
        once it is one. Kept to one line like a mention with a dot, or the dot was left alone at
